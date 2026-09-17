@@ -9,7 +9,7 @@ import { apply, diff, key as recKey, type Change, type Kind, type Record_, type 
 import { nextAccession, DEFAULT_SCHEME, type NumberingScheme } from '$core/accession';
 import { allChanges, appendChanges, deviceId, requestPersistence, getMeta, setMeta, putPhotoBlobs, getPhotoBlobs, deletePhotoBlobs } from './vault';
 import type { Accession, PlantEvent, Taxon, Location, Sowing, Provenance, Photo } from './types';
-import { PROP_METHODS } from './types';
+import { PROP_METHODS, accNo, sowNo } from './types';
 import { slugify } from '$core/names';
 
 class Collection {
@@ -39,11 +39,26 @@ class Collection {
 
   /* ---- reads ---- */
   get accessions(): Accession[] {
-    return this.live<Accession>('accession').sort((a, b) => b.id.localeCompare(a.id));
+    return this.live<Accession>('accession').sort((a, b) => accNo(b).localeCompare(accNo(a)));
   }
-  accession(id: string): Accession | undefined {
-    const r = this.state.get(recKey('accession', id));
-    return r && !r._deleted ? (r as unknown as Accession) : undefined;
+  /** By identity, or, failing that, by the number people see (URLs and QR codes carry the identity; people type numbers). */
+  accession(idOrNo: string): Accession | undefined {
+    const r = this.state.get(recKey('accession', idOrNo));
+    if (r && !r._deleted) return r as unknown as Accession;
+    return this.live<Accession>('accession').find((a) => a.acc === idOrNo);
+  }
+  /** Every number ever given to a plant on this device, live or dead: a number is never reused. */
+  private takenNumbers(kind: 'accession' | 'sowing'): Set<string> {
+    const out = new Set<string>();
+    for (const r of this.state.values()) if (r.kind === kind) out.add(kind === 'accession' ? accNo(r as unknown as Accession) : sowNo(r as unknown as Sowing));
+    return out;
+  }
+  isNumberTaken(no: string): boolean {
+    return this.takenNumbers('accession').has(no.trim());
+  }
+  /** An identity for a new record: unique per change on every device (wall time, counter, device tag), never shown. */
+  private newId(prefix: 'r' | 's'): string {
+    return prefix + this.eventId().slice(1);
   }
   events(acc: string): PlantEvent[] {
     return this.live<PlantEvent>('event')
@@ -83,11 +98,29 @@ class Collection {
   locationName(id: string): string {
     return this.locationPath(id).map((l) => l.name).join(' › ');
   }
-  /** Every node under `id`, including itself. */
+  /** Every node under `id`, including itself. Cycle-safe: a damaged log cannot make this spin. */
   subtree(id: string): string[] {
     const out = [id];
-    for (let i = 0; i < out.length; i++) for (const c of this.children(out[i])) out.push(c.id);
+    const seen = new Set(out);
+    for (let i = 0; i < out.length; i++)
+      for (const c of this.children(out[i]))
+        if (!seen.has(c.id)) {
+          seen.add(c.id);
+          out.push(c.id);
+        }
     return out;
+  }
+  /** Would putting `id` under `parentId` make a loop? (Its own descendant, or itself.) */
+  wouldCycle(id: string, parentId: string | null | undefined): boolean {
+    if (!parentId) return false;
+    if (parentId === id) return true;
+    return this.subtree(id).includes(parentId);
+  }
+  /** Move a node; refused when it would make a loop. */
+  async moveLocation(id: string, parentId: string | null): Promise<void> {
+    if (this.wouldCycle(id, parentId)) throw new Error('A place cannot be put inside itself.');
+    if (parentId && !this.location(parentId)) throw new Error('That parent place does not exist.');
+    await this.put('location', id, { parentId });
   }
   /** Conditions as they apply at a node: the nearest ancestor's value wins for anything the node leaves null. */
   conditions(id: string): { indoor: boolean | null; floorC: number | null; ppfd: number | null; lightHours: number | null; lat: number | null; lon: number | null; altM: number | null; from: Record<string, string> } {
@@ -115,8 +148,10 @@ class Collection {
     for (const a of this.accessions) if (!a.locationId && a.location) m.set(a.location, (m.get(a.location) ?? 0) + 1);
     return [...m.entries()].map(([text, n]) => ({ text, n })).sort((a, b) => b.n - a.n);
   }
+  /** A new place. Its identity is minted, never derived from the name: two shelves called "Shelf 1" in different rooms are two places. */
   async addLocation(l: Omit<Location, 'id'> & { id?: string }): Promise<Location> {
-    const id = l.id ?? 'l-' + slugify(l.name).slice(0, 24) + '-' + this.tick().slice(-6);
+    if (l.parentId && !this.location(l.parentId)) throw new Error('That parent place does not exist.');
+    const id = l.id ?? 'l' + this.eventId().slice(1);
     const rec: Location = { ...l, id };
     await this.put('location', id, rec as unknown as Record<string, unknown>);
     return rec;
@@ -145,9 +180,10 @@ class Collection {
   get sowings(): Sowing[] {
     return this.live<Sowing>('sowing').sort((a, b) => b.sown.localeCompare(a.sown) || b.id.localeCompare(a.id));
   }
-  sowing(id: string): Sowing | undefined {
-    const r = this.state.get(recKey('sowing', id));
-    return r && !r._deleted ? (r as unknown as Sowing) : undefined;
+  sowing(idOrNo: string): Sowing | undefined {
+    const r = this.state.get(recKey('sowing', idOrNo));
+    if (r && !r._deleted) return r as unknown as Sowing;
+    return this.live<Sowing>('sowing').find((x) => x.no === idOrNo);
   }
   /** Plants that were potted up from a sowing. */
   raisedFrom(sowingId: string): Accession[] {
@@ -180,19 +216,18 @@ class Collection {
     };
   }
   nextSowingNumber(year = new Date().getFullYear()): string {
-    return nextAccession(
-      [...this.state.values()].filter((r) => r.kind === 'sowing').map((r) => r.id),
-      { mode: 'prefix', prefix: `S${year}`, width: 3 }
-    );
+    return nextAccession(this.takenNumbers('sowing'), { mode: 'prefix', prefix: `S${year}`, width: 3 });
   }
   async addSowing(sw: Omit<Sowing, 'id' | 'status'> & { id?: string; status?: Sowing['status'] }): Promise<Sowing> {
-    const id = sw.id ?? this.nextSowingNumber(Number(sw.sown.slice(0, 4)) || undefined);
-    const rec: Sowing = { status: 'active', ...sw, id };
+    const no = sw.no?.trim() || this.nextSowingNumber(Number(sw.sown.slice(0, 4)) || undefined);
+    if (sw.no && this.takenNumbers('sowing').has(no)) throw new Error(`Batch number ${no} is already used.`);
+    const id = sw.id ?? this.newId('s');
+    const rec: Sowing = { status: 'active', ...sw, id, no };
     await this.put('sowing', id, rec as unknown as Record<string, unknown>);
     // The parent plant's timeline records that material was taken.
     if (rec.parentAcc && this.accession(rec.parentAcc)) {
       const m = PROP_METHODS.find((x) => x.k === rec.method);
-      await this.addEvent({ acc: rec.parentAcc, d: rec.sown, t: 'propagate', n: rec.count, note: `${rec.count} ${m?.unit ?? 'pieces'} → ${id}` });
+      await this.addEvent({ acc: rec.parentAcc, d: rec.sown, t: 'propagate', n: rec.count, note: `${rec.count} ${m?.unit ?? 'pieces'} → ${no}` });
     }
     return rec;
   }
@@ -209,14 +244,16 @@ class Collection {
     const parent = s.parentAcc ? this.accession(s.parentAcc) : undefined;
     // Seed keeps the provenance the seed carried; a wild-collected seed lot raises F1 plants. Vegetative material is 'veg'.
     const provenance: Provenance = veg ? 'veg' : s.provenance === 'wild' ? 'f1' : s.provenance === 'f1' ? 'fn' : (s.provenance ?? 'unknown');
-    const taken = new Set([...this.state.values()].filter((r) => r.kind === 'accession').map((r) => r.id));
+    const taken = this.takenNumbers('accession');
     const changes: Change[] = [];
     const made: Accession[] = [];
     for (let i = 0; i < n; i++) {
-      const id = nextAccession(taken, this.scheme, Number(date.slice(0, 4)) || undefined);
-      taken.add(id);
+      const no = nextAccession(taken, this.scheme, Number(date.slice(0, 4)) || undefined);
+      taken.add(no);
+      const id = this.newId('r');
       const rec: Accession = {
         id,
+        acc: no,
         taxonName: s.taxonName,
         taxonKey: s.taxonKey ?? null,
         cultivar: s.cultivar ?? parent?.cultivar ?? null,
@@ -226,7 +263,7 @@ class Collection {
         provenance,
         status: 'growing',
         acquired: date,
-        sourceFrom: veg ? (parent ? `own plant ${parent.id}` : null) : (s.sourceFrom ?? null),
+        sourceFrom: veg ? (parent ? `own plant ${accNo(parent)}` : null) : (s.sourceFrom ?? null),
         sourceRef: s.sourceRef ?? null,
         sourceForm: veg ? (m?.k === 'graft' ? 'graft' : 'cutting') : 'seedling',
         locationId: opts.locationId ?? s.locationId ?? null,
@@ -235,11 +272,11 @@ class Collection {
       };
       changes.push(...diff('accession', id, rec as unknown as Record<string, unknown>, undefined, this.tick));
       const eid = this.eventId();
-      changes.push(...diff('event', eid, { acc: id, d: date, t: 'acquire', note: `potted up from ${s.id}` }, undefined, this.tick));
+      changes.push(...diff('event', eid, { acc: id, d: date, t: 'acquire', note: `potted up from ${sowNo(s)}` }, undefined, this.tick));
       made.push(rec);
     }
     const pid = this.eventId();
-    changes.push(...diff('event', pid, { acc: s.id, d: date, t: 'potup', n, note: [made.map((a) => a.id).join(', '), opts.note?.trim() || null].filter(Boolean).join(' · ') }, undefined, this.tick));
+    changes.push(...diff('event', pid, { acc: s.id, d: date, t: 'potup', n, note: [made.map((a) => accNo(a)).join(', '), opts.note?.trim() || null].filter(Boolean).join(' · ') }, undefined, this.tick));
     await this.commit(changes);
     return made;
   }
@@ -331,7 +368,12 @@ class Collection {
     return 'e' + h.wall.toString(36) + h.count.toString(36).padStart(2, '0') + h.device.slice(0, 4);
   }
 
-  private async commit(changes: Change[], local = true): Promise<void> {
+  /**
+   * `source`: 'local' (an edit here; listeners are told, sync will push),
+   * 'import' (a backup or v2 file: not an edit, but the server has never seen
+   * it, so it is pushed too), 'server' (came down through sync: already there).
+   */
+  private async commit(changes: Change[], source: 'local' | 'import' | 'server' = 'local'): Promise<void> {
     if (!changes.length) return;
     apply(this.state, changes, this.seen);
     // apply() mutates records in place; re-set a copy so the reactive map notices.
@@ -339,11 +381,11 @@ class Collection {
       const r = this.state.get(k);
       if (r) this.state.set(k, { ...r });
     }
-    await appendChanges(changes);
-    if (local) for (const fn of this.listeners) fn(changes);
+    await appendChanges(changes, source === 'server');
+    if (source !== 'server') for (const fn of this.listeners) fn(changes);
   }
 
-  /** Called after every local write (not after an ingest); sync uses it to schedule a push. */
+  /** Called after every write the server has not seen (local edits and imports, not pulls); sync uses it to schedule a push. */
   private listeners = new Set<(changes: Change[]) => void>();
   onLocalChange(fn: (changes: Change[]) => void): () => void {
     this.listeners.add(fn);
@@ -368,15 +410,15 @@ class Collection {
   }
 
   nextAccessionNumber(): string {
-    return nextAccession(
-      [...this.state.values()].filter((r) => r.kind === 'accession').map((r) => r.id),
-      this.scheme
-    );
+    return nextAccession(this.takenNumbers('accession'), this.scheme);
   }
 
+  /** A new plant. Its number is minted, or taken from `acc` when the grower brings one; a number already in use is refused, never overwritten. */
   async addAccession(a: Omit<Accession, 'id' | 'status'> & { id?: string; status?: Accession['status'] }): Promise<Accession> {
-    const id = a.id ?? this.nextAccessionNumber();
-    const rec: Accession = { status: 'growing', ...a, id };
+    const no = a.acc?.trim() || this.nextAccessionNumber();
+    if (a.acc && this.takenNumbers('accession').has(no)) throw new Error(`Accession number ${no} is already used. A number is never reused; pick another.`);
+    const id = a.id ?? this.newId('r');
+    const rec: Accession = { status: 'growing', ...a, id, acc: no };
     await this.put('accession', id, rec as unknown as Record<string, unknown>);
     if (rec.acquired) await this.addEvent({ acc: id, d: rec.acquired, t: 'acquire', note: rec.sourceFrom ? `from ${rec.sourceFrom}` : null });
     return rec;
@@ -406,10 +448,46 @@ class Collection {
     await setMeta('scheme', s);
   }
 
-  /** Bulk append of already-formed changes (imports, sync). */
-  async ingest(changes: Change[]): Promise<void> {
+  /** Bulk append of already-formed changes. Say where they came from: an import still has to be pushed; a sync pull does not. */
+  async ingest(changes: Change[], source: 'import' | 'server' = 'import'): Promise<void> {
     for (const c of changes) this.clock?.observe(c.t);
-    await this.commit(changes, false);
+    await this.commit(changes, source);
+    await this.resolveDuplicateNumbers();
+  }
+
+  /**
+   * Two devices offline at once can each mint the same next number for
+   * different plants. They are different records (different identities), so
+   * nothing is lost; after a merge the one created later is given the next
+   * free number and a note says so. Every device applies the same rule to
+   * the same log, and the record's `acc` field settles by the usual
+   * latest-wins, so they agree.
+   */
+  async resolveDuplicateNumbers(): Promise<number> {
+    const changes: Change[] = [];
+    let renumbered = 0;
+    for (const kind of ['accession', 'sowing'] as const) {
+      const byNo = new Map<string, Array<Accession | Sowing>>();
+      for (const r of kind === 'accession' ? this.accessions : this.sowings) {
+        const no = kind === 'accession' ? accNo(r as Accession) : sowNo(r as Sowing);
+        byNo.set(no, [...(byNo.get(no) ?? []), r]);
+      }
+      const taken = this.takenNumbers(kind);
+      for (const [no, recs] of byNo) {
+        if (recs.length < 2) continue;
+        recs.sort((a, b) => a.id.localeCompare(b.id)); // earliest creation keeps the number
+        for (const r of recs.slice(1)) {
+          const fresh = kind === 'accession' ? nextAccession(taken, this.scheme, Number((r as Accession).acquired?.slice(0, 4)) || undefined) : nextAccession(taken, { mode: 'prefix', prefix: `S${(r as Sowing).sown.slice(0, 4)}`, width: 3 });
+          taken.add(fresh);
+          changes.push({ t: this.tick(), kind, id: r.id, field: kind === 'accession' ? 'acc' : 'no', value: fresh });
+          const eid = this.eventId();
+          changes.push(...diff('event', eid, { acc: r.id, d: new Date().toISOString().slice(0, 10), t: 'note', note: `Renumbered from ${no} to ${fresh}: another plant had been given ${no} on a device that was offline at the time.` }, undefined, this.tick));
+          renumbered++;
+        }
+      }
+    }
+    if (changes.length) await this.commit(changes, 'local');
+    return renumbered;
   }
 
   /** Everything, for export and for sync. */

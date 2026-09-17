@@ -217,3 +217,35 @@ describe('cultivars and hybrids', () => {
     expect(parseName('Welwitschia mirabilis').kind).toBe('species');
   });
 });
+
+describe('delete merging is order-independent', () => {
+  const ch = (t: string, id: string, field: string, value: unknown): Change => ({ t: `170000000000${t}-0000-dev`, kind: 'accession', id, field, value });
+  it('an older delete and a newer edit leave the record live whichever arrives first', () => {
+    const del = ch('2', 'x', '_deleted', true), edit = ch('3', 'x', 'name', 'B'), first = ch('1', 'x', 'name', 'A');
+    const a = materialise([first, del, edit]).state;
+    const b = materialise([first, edit, del]).state;
+    expect(live(a, 'accession')).toHaveLength(1);
+    expect(live(b, 'accession')).toHaveLength(1);
+    expect(a.get('accession:x')?.name).toBe('B');
+  });
+  it('a newer delete and an older edit leave the record deleted whichever arrives first', () => {
+    const del = ch('5', 'x', '_deleted', true), edit = ch('3', 'x', 'name', 'B'), first = ch('1', 'x', 'name', 'A');
+    expect(live(materialise([first, del, edit]).state, 'accession')).toHaveLength(0);
+    expect(live(materialise([first, edit, del]).state, 'accession')).toHaveLength(0);
+  });
+  it('a restore (later _deleted=false) wins over an earlier delete in any order, and an even later delete wins again', () => {
+    const first = ch('1', 'x', 'name', 'A'), del = ch('2', 'x', '_deleted', true), restore = ch('4', 'x', '_deleted', false), del2 = ch('6', 'x', '_deleted', true);
+    expect(live(materialise([first, restore, del]).state, 'accession')).toHaveLength(1);
+    expect(live(materialise([first, del, restore]).state, 'accession')).toHaveLength(1);
+    expect(live(materialise([del2, first, restore, del]).state, 'accession')).toHaveLength(0);
+  });
+  it('incremental apply with a shared seen map agrees with a fresh fold', () => {
+    const first = ch('1', 'x', 'name', 'A'), del = ch('4', 'x', '_deleted', true), edit = ch('3', 'x', 'pot', '7');
+    const { state, seen } = materialise([first, edit]);
+    apply(state, [del], seen);
+    expect(live(state, 'accession')).toHaveLength(0);
+    apply(state, [ch('5', 'x', 'pot', '9')], seen);
+    expect(live(state, 'accession')).toHaveLength(1);
+    expect(state.get('accession:x')?.pot).toBe('9');
+  });
+});

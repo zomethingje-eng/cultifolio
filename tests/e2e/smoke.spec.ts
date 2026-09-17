@@ -396,10 +396,15 @@ test('labels: pick plants, choose a sheet, print at true size with a code that o
   const acc = page.url().split('/').pop()!;
   // from a plant page, its own label
   await page.getByRole('link', { name: 'Label' }).click();
-  await expect(page).toHaveURL(`/labels?acc=${acc}`);
+  await expect(page).toHaveURL(/\/labels\?acc=r[a-z0-9]+$/); // the label is tied to the plant's identity, not its number
   await expect(page.locator('.pick input:checked')).toHaveCount(1);
-  await expect(page.locator('.page .label .no')).toHaveCount(1);
+  await expect(page.locator('.page .label .no')).toHaveText(new RegExp(acc));
   await expect(page.locator('.page .label .qr svg')).toHaveCount(1);
+  // the printed code carries the identity, which survives a renumbering; the number is what is printed in words
+  const rid = page.url().split('acc=')[1];
+  await page.goto(`/plants/${rid}`);
+  await expect(page.locator('h1.sci .accno')).toHaveText(acc);
+  await expect(page.locator('h1.sci')).toContainText('Welwitschia');
   // all growing plants, on a 30-up sheet, skipping three used cells; the fourth cell is the first printed
   await page.goto('/labels');
   await expect(page.locator('.pick input:checked')).toHaveCount(2);
@@ -552,6 +557,103 @@ test('sync: two devices share one encrypted vault; changes and photos cross both
   await A.close();
   await B.close();
   await C.close();
+});
+
+test('sync: an offline edit uploaded late is still discovered, and a backup merged into a synced device reaches the other device', async ({ browser }) => {
+  test.setTimeout(150_000);
+  const syncNow = async (p: import('@playwright/test').Page) => {
+    await p.goto('/sync');
+    await p.click('#sync-now');
+    await expect(p.locator('.card', { hasText: 'Status' })).toContainText('Synced');
+    await expect(p.locator('.card', { hasText: 'Waiting to send' })).toContainText('0');
+  };
+  // A makes a plant and a vault; B joins.
+  const A = await browser.newContext();
+  const a = await A.newPage();
+  await a.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await a.getByRole('button', { name: /^Add/ }).click();
+  await expect(a).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
+  const acc = a.url().split('/').pop()!;
+  await a.goto('/sync');
+  await a.click('#sync-start');
+  const key = (await a.locator('#vault-key').textContent())!.trim();
+  await a.check('#key-saved');
+  await a.click('#sync-create');
+  await expect(a.locator('.card', { hasText: 'Status' })).toContainText('Synced');
+  const B = await browser.newContext();
+  const b = await B.newPage();
+  await b.goto('/sync');
+  await b.click('#sync-have-key');
+  await b.fill('#sync-key', key);
+  await b.click('#sync-join');
+  await expect(b.locator('.card', { hasText: 'Status' })).toContainText('Synced');
+
+  // B goes offline and records an event (an older HLC); A then records one and syncs, moving its cursor past B's time.
+  await b.goto(`/plants/${acc}`);
+  await B.setOffline(true);
+  await b.getByRole('button', { name: 'Water', exact: true }).click();
+  await b.fill('#ev-note', 'B, offline, first');
+  await b.getByRole('button', { name: 'Record' }).click();
+  await expect(b.locator('.tlrow', { hasText: 'B, offline, first' })).toBeVisible();
+  await a.goto(`/plants/${acc}`);
+  await a.getByRole('button', { name: 'Feed', exact: true }).click();
+  await a.fill('#ev-note', 'A, online, second');
+  await a.getByRole('button', { name: 'Record' }).click();
+  await syncNow(a);
+  // B comes back and uploads its older change late. A must still receive it.
+  await B.setOffline(false);
+  await syncNow(b);
+  await syncNow(a);
+  await a.goto(`/plants/${acc}`);
+  await expect(a.locator('.tlrow', { hasText: 'B, offline, first' })).toBeVisible();
+  await b.goto(`/plants/${acc}`);
+  await expect(b.locator('.tlrow', { hasText: 'A, online, second' })).toBeVisible();
+
+  // A third, unsynced device makes its own plant and exports a backup; A merges that file. B must get the plant.
+  const C = await browser.newContext();
+  const c = await C.newPage();
+  await c.goto('/plants/new?species=Welwitschia%20mirabilis&key=5411106');
+  await c.getByRole('button', { name: /^Add/ }).click();
+  await expect(c).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
+  await c.goto('/backup');
+  const dl = c.waitForEvent('download');
+  await c.click('#bk-export');
+  const path = await (await dl).path();
+  await a.goto('/backup');
+  await a.locator('#bk-file').setInputFiles(path!);
+  await expect(a.locator('.preview')).toContainText('1 plants');
+  await a.click('#bk-merge');
+  await expect(a.locator('#bk-done')).toBeVisible();
+  await syncNow(a);
+  await syncNow(b);
+  await b.goto('/plants');
+  await expect(b.locator('a.accrow', { hasText: 'Welwitschia' })).toBeVisible();
+  await A.close();
+  await B.close();
+  await C.close();
+});
+
+test('a number already in use cannot be given to a second plant', async ({ page }) => {
+  await page.goto('/plants/new');
+  await page.fill('#species-name', 'Copiapoa cinerea');
+  await page.locator('#species-name').blur();
+  await page.locator('details.own summary').click();
+  await page.check('#f-own');
+  await page.fill('#f-own-no', '2019-0147');
+  await page.getByRole('button', { name: /^Add/ }).click();
+  await expect(page).toHaveURL(/\/plants\/2019-0147$/);
+  await expect(page.locator('h1.sci .accno')).toHaveText('2019-0147');
+  await page.goto('/plants/new');
+  await page.fill('#species-name', 'Welwitschia mirabilis');
+  await page.locator('#species-name').blur();
+  await page.locator('details.own summary').click();
+  await page.check('#f-own');
+  await page.fill('#f-own-no', '2019-0147');
+  await expect(page.locator('#f-own-taken')).toContainText('already used by');
+  await expect(page.locator('#f-own-taken a')).toHaveText('Copiapoa cinerea');
+  await expect(page.getByRole('button', { name: /^Add/ })).toBeDisabled();
+  await page.goto('/plants/2019-0147');
+  await expect(page.locator('h1.sci')).toContainText('Copiapoa'); // untouched
 });
 
 test('the about pages are served without JavaScript and say what the app refuses to guess', async ({ browser }) => {

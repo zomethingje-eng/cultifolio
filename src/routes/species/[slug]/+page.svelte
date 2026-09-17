@@ -1,5 +1,6 @@
 <script lang="ts">
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
+  import { accNo, sowNo } from '$lib/db/types';
   import Photos from '$lib/ui/Photos.svelte';
   import PhotoImg from '$lib/ui/PhotoImg.svelte';
   import Lightbox from '$lib/ui/Lightbox.svelte';
@@ -120,7 +121,7 @@
         {#if growing.length}<span class="pill a">you grow {growing.length}</span>{/if}
       </div>
       {#if mine.length}
-        <p class="vern mine">Yours: {#each mine as a, i}{#if i}, {/if}<a class="accno" href="/plants/{a.id}">{a.id}</a>{#if a.status !== 'growing'} <span class="small muted">({a.status})</span>{/if}{/each}</p>
+        <p class="vern mine">Yours: {#each mine as a, i}{#if i}, {/if}<a class="accno" href="/plants/{accNo(a)}">{accNo(a)}</a>{#if a.status !== 'growing'} <span class="small muted">({a.status})</span>{/if}{/each}</p>
       {/if}
     </div>
     <div class="acts">
@@ -241,9 +242,9 @@
     <h2 class="sec" id="s-photos">Your photographs</h2>
     <div class="myph">
       {#each myPhotos.slice(0, 12) as ph, i (ph.id)}
-        <button class="ph" type="button" onclick={() => (lightbox = i)} title="{ph.plant.id} · {ph.d}">
-          <PhotoImg id={ph.id} alt="{d.name.scientific}, {ph.plant.id}" loading="lazy" />
-          <span class="pd">{ph.plant.id}</span>
+        <button class="ph" type="button" onclick={() => (lightbox = i)} title="{accNo(ph.plant)} · {ph.d}">
+          <PhotoImg id={ph.id} alt="{d.name.scientific}, {accNo(ph.plant)}" loading="lazy" />
+          <span class="pd">{accNo(ph.plant)}</span>
         </button>
       {/each}
     </div>

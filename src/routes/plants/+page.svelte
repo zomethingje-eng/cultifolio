@@ -1,5 +1,6 @@
 <script lang="ts">
   import { collection } from '$lib/db/collection.svelte';
+  import { accNo, sowNo } from '$lib/db/types';
   import { kindOf } from '$lib/db/types';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
   import { slugify } from '$core/names';
@@ -20,7 +21,7 @@
   const sinceWater = (id: string) => { const d = collection.events(id).find((e) => e.t === 'water')?.d; return d ? Math.floor((Date.now() - Date.parse(d)) / dayMs) : null; };
   const dueN = $derived(collection.accessions.filter((a) => a.status === 'growing' && (sinceWater(a.id) ?? 999) > 21).length);
   const list = $derived(
-    collection.accessions.filter((a) => (show === 'all' || a.status === 'growing') && (show !== 'due' || (sinceWater(a.id) ?? 999) > 21) && (!q || `${a.taxonName} ${a.id} ${a.fieldNumber ?? ''} ${a.locationId ? collection.locationName(a.locationId) : (a.location ?? '')}`.toLowerCase().includes(q.toLowerCase())))
+    collection.accessions.filter((a) => (show === 'all' || a.status === 'growing') && (show !== 'due' || (sinceWater(a.id) ?? 999) > 21) && (!q || `${a.taxonName} ${accNo(a)} ${a.fieldNumber ?? ''} ${a.locationId ? collection.locationName(a.locationId) : (a.location ?? '')}`.toLowerCase().includes(q.toLowerCase())))
   );
 </script>
 
@@ -57,10 +58,10 @@
       {@const w = sinceWater(a.id)}
       {@const th = thumbs.get(slugify(a.taxonName))}
       {@const own = collection.cover(a.id)}
-      <a class="azrow accrow" href="/plants/{a.id}">
+      <a class="azrow accrow" href="/plants/{accNo(a)}">
         <span class="im" class:own={!!own}>{#if own}<PhotoImg id={own.id} alt="" loading="lazy" />{:else if th}<img src={th} alt="" loading="lazy" />{:else}<span>–</span>{/if}</span>
         <span>
-          <span class="nm"><span class="accno lead">{a.id}</span><SpeciesName name={a.taxonName} />{#if a.cultivar} ‘{a.cultivar}’{/if}</span>
+          <span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} />{#if a.cultivar} ‘{a.cultivar}’{/if}</span>
           <span class="fam">{#if kindOf(a) !== 'species'}<span class="pill c">{kindOf(a)}</span>{/if}{#if a.fieldNumber}<span class="fnchip">{a.fieldNumber}</span>{/if}{#if a.locationId}<span>{collection.locationName(a.locationId)}</span>{:else if a.location}<span>{a.location}</span>{/if}{#if a.status !== 'growing'}<span class="pill">{a.status}</span>{/if}</span>
         </span>
         <span class="fig" class:due={w != null && w > 21 && a.status === 'growing'}>{w == null ? 'not watered yet' : w === 0 ? 'watered today' : `watered ${w} d ago`}</span>

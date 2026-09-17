@@ -3,6 +3,7 @@
   import { collection } from '$lib/db/collection.svelte';
   import { getMeta, setMeta, photoBlobIds } from '$lib/db/vault';
   import { exportBackup, openBackup, restoreBackup, type Opened } from '$lib/backup/io';
+  import { sync } from '$lib/sync/engine.svelte';
   import { importV2, type ImportReport } from '$lib/import/v2';
   import { setCrumb } from '$lib/ui/crumb.svelte';
 
@@ -160,7 +161,7 @@
       <div class="row acts">
         <button id="bk-merge" class="btn pri" onclick={() => doRestore('merge')} disabled={!!busy || opened.merge.fresh.length === 0 && opened.newPhotos === 0}>Merge into this device</button>
         {#if confirmReplace}
-          <span class="bad">Everything on this device is wiped first. Sure?</span>
+          <span class="bad">Everything on this device is wiped first{#if sync.configured}, and sync is turned off (a synced vault would merge straight back in; you can create a new vault or re-join afterwards){/if}. Sure?</span>
           <button id="bk-replace-yes" class="btn danger" onclick={() => doRestore('replace')} disabled={!!busy}>Yes, replace</button>
           <button class="btn" onclick={() => (confirmReplace = false)}>Keep</button>
         {:else}

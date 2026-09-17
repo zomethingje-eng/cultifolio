@@ -1,6 +1,7 @@
 /** Browser wiring for backups: the vault in, a download out, and a file back in. */
 import { collection } from '$lib/db/collection.svelte';
 import { getPhotoBlobs, putPhotoBlobs, photoBlobIds, getMeta, wipeVault, appendChanges } from '$lib/db/vault';
+import { sync } from '$lib/sync/engine.svelte';
 import { buildBackup, readBackup, previewMerge, summarise, type ReadBackup } from './backup';
 import { backupName } from './format';
 
@@ -48,11 +49,18 @@ export async function openBackup(f: File): Promise<Opened> {
 
 /**
  * Merge: add what the file has that this device lacks; nothing here is lost.
- * Replace: wipe this device first, so it ends up exactly the file. The page
- * reloads afterwards because the in-memory collection was folded from the old log.
+ * Replace: wipe this device first, so it ends up exactly the file. If sync is
+ * on, it is turned off first: a synced vault is a union of every device's
+ * log, so "replace" while joined would only merge the vault straight back in.
+ * After a replace the device can create a new vault or re-join the old one
+ * (which merges). The page reloads afterwards because the in-memory
+ * collection was folded from the old log.
  */
 export async function restoreBackup(o: Opened, mode: 'merge' | 'replace', onProgress?: (done: number, total: number) => void): Promise<{ changes: number; photos: number }> {
-  if (mode === 'replace') await wipeVault();
+  if (mode === 'replace') {
+    if (sync.configured) await sync.forget();
+    await wipeVault();
+  }
   const changes = mode === 'replace' ? o.file.changes : o.merge.fresh;
   const have = mode === 'replace' ? new Set<string>() : new Set(await photoBlobIds());
   let photos = 0;
@@ -65,7 +73,7 @@ export async function restoreBackup(o: Opened, mode: 'merge' | 'replace', onProg
     onProgress?.(i + 1, ids.length);
   }
   if (mode === 'replace') {
-    await appendChanges(changes);
+    await appendChanges(changes); // not from the server: if sync is set up again, these are what gets pushed
     if (o.file.manifest?.scheme) await collection.setScheme(o.file.manifest.scheme as typeof collection.scheme);
   } else {
     await collection.ingest(changes);

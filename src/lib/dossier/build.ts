@@ -31,6 +31,8 @@ export interface BuildOptions {
   now?: () => Date;
   /** Skip slow, non-load-bearing sources (literature, commons) for a quick first pass. */
   quick?: boolean;
+  /** Sources to leave out of this build, recorded as skipped so a later pass can fill them. */
+  skip?: Array<'openalex'>;
 }
 
 export type BuildResult = { ok: true; dossier: Dossier } | { ok: false; reason: 'name-unresolved' | 'higher-rank-only' | 'backbone-refused'; detail?: string };
@@ -215,7 +217,7 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
 
   /* ---- 7. Literature (not load-bearing) ---- */
   let papers: Dossier['literature'] = [];
-  if (!o.quick) {
+  if (!o.quick && !o.skip?.includes('openalex')) {
     const l = await literature(f, scientific);
     mark('openalex', l);
     if (l.status === 'ok') papers = l.data;

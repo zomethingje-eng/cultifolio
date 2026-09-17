@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from '$app/state';
+  import { accNo, sowNo } from '$lib/db/types';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { collection } from '$lib/db/collection.svelte';
@@ -14,8 +15,9 @@
   import PhotoAdd from '$lib/ui/PhotoAdd.svelte';
   import Lightbox from '$lib/ui/Lightbox.svelte';
   onMount(() => collection.load());
-  const id = $derived(page.params.id!);
-  const s = $derived(collection.sowing(id));
+  const param = $derived(page.params.id!);
+  const s = $derived(collection.sowing(param));
+  const id = $derived(s?.id ?? param);
   const m = $derived(PROP_METHODS.find((x) => x.k === s?.method) ?? PROP_METHODS[0]);
   const st = $derived(collection.sowingStats(id));
   const events = $derived(collection.events(id));
@@ -27,7 +29,7 @@
   let idx = $state<IndexEntry | undefined>(undefined);
   $effect(() => {
     if (s) {
-      setCrumb([{ label: 'Sowings', href: '/sowings' }, { label: `${s.id} · ${s.taxonName}` }]);
+      setCrumb([{ label: 'Sowings', href: '/sowings' }, { label: `${sowNo(s)} · ${s.taxonName}` }]);
       bySlug(slugify(s.taxonName)).then((e) => (idx = e));
     }
     return () => setCrumb([]);
@@ -64,7 +66,7 @@
     e.preventDefault();
     if (pn < 1) return;
     const made = await collection.potUp(id, pn, { date: pd, locationId: ploc, note: pnote.trim() || null });
-    potted = made.map((a) => a.id);
+    potted = made.map((a) => accNo(a));
     potting = false;
     pnote = '';
   }
@@ -106,12 +108,12 @@
   const pct = (r: number | null) => (r == null ? '–' : `${Math.round(r * 100)}%`);
 </script>
 
-<svelte:head><title>{s ? `${s.id} ${s.taxonName}` : id} — Cultifolio</title></svelte:head>
+<svelte:head><title>{s ? `${sowNo(s)} ${s.taxonName}` : param} — Cultifolio</title></svelte:head>
 
 {#if !collection.ready}
   <p class="muted">Opening your collection…</p>
 {:else if !s}
-  <h1 class="q" style="margin-top: 24px">{id}</h1>
+  <h1 class="q" style="margin-top: 24px">{param}</h1>
   <p class="muted">No sowing with this number on this device.</p>
 {:else}
   <div class="hero">
@@ -119,11 +121,11 @@
   </div>
   <div class="idcard">
     <div class="who">
-      <h1 class="sci"><span class="accno big lead">{s.id}</span><SpeciesName name={s.taxonName} />{#if s.cultivar}{' '}<span style="font-style: normal">‘{s.cultivar}’</span>{/if}{#if kindOf(s) !== 'species'}{' '}<span class="pill c" style="vertical-align: middle">{kindOf(s)}</span>{/if}</h1>
+      <h1 class="sci"><span class="accno big lead">{sowNo(s)}</span><SpeciesName name={s.taxonName} />{#if s.cultivar}{' '}<span style="font-style: normal">‘{s.cultivar}’</span>{/if}{#if kindOf(s) !== 'species'}{' '}<span class="pill c" style="vertical-align: middle">{kindOf(s)}</span>{/if}</h1>
       {#if kindOf(s) === 'hybrid' && s.parentage}<p class="vern"><SpeciesName name={s.parentage} /></p>{/if}
       <p class="vern">
         {s.count} {m.unit} on {s.sown}
-        {#if parent} from <a class="mono" href="/plants/{parent.id}">{parent.id}</a>{:else if s.sourceFrom} from {s.sourceFrom}{/if}{#if s.sourceRef} · <span class="fnchip">{s.sourceRef}</span>{/if}
+        {#if parent} from <a class="mono" href="/plants/{accNo(parent)}">{accNo(parent)}</a>{:else if s.sourceFrom} from {s.sourceFrom}{/if}{#if s.sourceRef} · <span class="fnchip">{s.sourceRef}</span>{/if}
         {#if !m.veg} · {s.provenance === 'wild' ? 'wild-collected seed' : s.provenance === 'f1' ? 'seed from ex-habitat plants' : s.provenance === 'fn' ? 'seed from cultivated plants' : 'seed provenance not stated'}{/if}
       </p>
       <div class="pills">
@@ -215,7 +217,7 @@
     <div class="rows">
       {#each raised as a}
         {@const own = collection.cover(a.id)}
-        <a class="azrow accrow" href="/plants/{a.id}"><span class="im">{#if own}<PhotoImg id={own.id} alt="" loading="lazy" />{:else}–{/if}</span><span><span class="nm"><span class="accno lead">{a.id}</span><SpeciesName name={a.taxonName} /></span><span class="fam">{a.acquired ?? ''}{#if a.locationId} · {collection.locationName(a.locationId)}{/if}</span></span><span class="fig">{a.status}</span></a>
+        <a class="azrow accrow" href="/plants/{accNo(a)}"><span class="im">{#if own}<PhotoImg id={own.id} alt="" loading="lazy" />{:else}–{/if}</span><span><span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} /></span><span class="fam">{a.acquired ?? ''}{#if a.locationId} · {collection.locationName(a.locationId)}{/if}</span></span><span class="fig">{a.status}</span></a>
       {/each}
     </div>
   {/if}

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from '$app/state';
+  import { accNo, sowNo } from '$lib/db/types';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { collection } from '$lib/db/collection.svelte';
@@ -18,8 +19,10 @@
   import PhotoAdd from '$lib/ui/PhotoAdd.svelte';
   import Lightbox from '$lib/ui/Lightbox.svelte';
   onMount(() => collection.load());
-  const id = $derived(page.params.acc!);
-  const a = $derived(collection.accession(id));
+  /** The URL carries the number people know (or an identity, from a printed code); everything below works on the record's identity. */
+  const param = $derived(page.params.acc!);
+  const a = $derived(collection.accession(param));
+  const id = $derived(a?.id ?? param);
   const events = $derived(collection.events(id));
   /* ---- photos ---- */
   const photos = $derived(collection.photos(id));
@@ -42,7 +45,7 @@
   let parentLinks = $state<Array<{ name: string; slug: string | null }>>([]);
   $effect(() => {
     if (a) {
-      setCrumb([{ label: 'My plants', href: '/plants' }, { label: `${a.id} · ${a.taxonName}${a.cultivar ? ` ‘${a.cultivar}’` : ''}` }]);
+      setCrumb([{ label: 'My plants', href: '/plants' }, { label: `${accNo(a)} · ${a.taxonName}${a.cultivar ? ` ‘${a.cultivar}’` : ''}` }]);
       bySlug(slugify(a.taxonName)).then(async (e) => {
         idx = e;
         if (e && !dossier) dossier = await fetch(`/api/dossier/${e.key}`).then((r) => (r.ok ? (r.json() as Promise<Dossier>) : null)).catch(() => null);
@@ -174,12 +177,12 @@
   }
 </script>
 
-<svelte:head><title>{a ? `${a.id} ${a.taxonName}` : id} — Cultifolio</title></svelte:head>
+<svelte:head><title>{a ? `${accNo(a)} ${a.taxonName}` : param} — Cultifolio</title></svelte:head>
 
 {#if !collection.ready}
   <p class="muted">Opening your collection…</p>
 {:else if !a}
-  <h1 class="q" style="margin-top: 24px">{id}</h1>
+  <h1 class="q" style="margin-top: 24px">{param}</h1>
   <p class="muted">No plant with this number on this device.</p>
 {:else}
   <div class="hero" class:own={!!cover}>
@@ -194,13 +197,13 @@
   </div>
   <div class="idcard">
     <div class="who">
-      <h1 class="sci"><span class="accno big lead">{a.id}</span><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}<span style="font-style: normal">‘{a.cultivar}’</span>{/if}</h1>
+      <h1 class="sci"><span class="accno big lead">{accNo(a)}</span><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}<span style="font-style: normal">‘{a.cultivar}’</span>{/if}</h1>
       <p class="vern">
         {#if a.nameAsReceived}received as <i>{a.nameAsReceived}</i> · {/if}
         {#if a.fieldNumber}<span class="fnchip">{a.fieldNumber}</span> · {/if}
         {provLabel(a.provenance)}
         {#if a.acquired} · {a.sourceForm ?? 'acquired'} {a.sourceFrom ? `from ${a.sourceFrom}` : ''} {a.acquired}{/if}
-        {#if a.sowingId} · raised from <a class="mono" href="/sowings/{a.sowingId}">{a.sowingId}</a>{#if sowing && sowing.parentAcc} (from <a class="mono" href="/plants/{sowing.parentAcc}">{sowing.parentAcc}</a>){/if}{/if}
+        {#if a.sowingId} · raised from <a class="mono" href="/sowings/{a.sowingId}">{sowing ? sowNo(sowing) : a.sowingId}</a>{#if sowing && sowing.parentAcc} (from <a class="mono" href="/plants/{sowing.parentAcc}">{collection.accession(sowing.parentAcc) ? accNo(collection.accession(sowing.parentAcc)!) : sowing.parentAcc}</a>){/if}{/if}
       </p>
       {#if kind === 'hybrid'}
         <p class="vern parentage">{#if parentLinks.length}{#each parentLinks as pl, i}{#if i}{' × '}{/if}{#if pl.slug}<a href="/species/{pl.slug}"><SpeciesName name={pl.name} /></a>{:else}<SpeciesName name={pl.name} />{/if}{/each}{:else}A hybrid; parentage not stated. <button class="linkish" type="button" onclick={startEdit}>Add it</button> if you know it.{/if}</p>
@@ -366,7 +369,7 @@
     <div class="tl">
       {#each propagations as p}
         {@const st = collection.sowingStats(p.id)}
-        <a class="tlrow" href="/sowings/{p.id}"><span class="d">{p.sown}</span><span class="t"><span class="mono">{p.id}</span> · {p.count} {(PROP_METHODS.find((m) => m.k === p.method) ?? PROP_METHODS[0]).unit}</span><span class="x">{st.germinated} struck · {st.potted} potted · {p.status}</span></a>
+        <a class="tlrow" href="/sowings/{sowNo(p)}"><span class="d">{p.sown}</span><span class="t"><span class="mono">{sowNo(p)}</span> · {p.count} {(PROP_METHODS.find((m) => m.k === p.method) ?? PROP_METHODS[0]).unit}</span><span class="x">{st.germinated} struck · {st.potted} potted · {p.status}</span></a>
       {/each}
     </div>
   {/if}
@@ -376,7 +379,7 @@
     <div><b>Source</b>{[a.sourceFrom, a.sourceForm, a.acquired].filter(Boolean).join(' · ') || 'not stated'}{#if a.price} · {a.price}{/if}</div>
     <div><b>Field number</b>{a.fieldNumber ?? 'none'}</div>
     <div><b>Provenance</b>{provLabel(a.provenance)}</div>
-    {#if a.sowingId}<div><b>Raised from</b><a href="/sowings/{a.sowingId}">{a.sowingId}</a>{#if sowing} · {sowing.count} started, {collection.sowingStats(sowing.id).germinated} up, {collection.sowingStats(sowing.id).potted} potted{/if}</div>{/if}
+    {#if a.sowingId}<div><b>Raised from</b><a href="/sowings/{a.sowingId}">{sowing ? sowNo(sowing) : a.sowingId}</a>{#if sowing} · {sowing.count} started, {collection.sowingStats(sowing.id).germinated} up, {collection.sowingStats(sowing.id).potted} potted{/if}</div>{/if}
     {#if a.nameAsReceived}<div><b>Name as received</b>{a.nameAsReceived}</div>{/if}
     {#if kind === 'hybrid'}<div><b>Parentage</b>{a.parentage ?? 'not stated'}</div>{/if}
   </div>

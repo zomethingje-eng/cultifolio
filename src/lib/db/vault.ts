@@ -17,21 +17,26 @@ interface VaultDB extends DBSchema {
   changes: { key: string; value: Change; indexes: { byRecord: [string, string] } };
   meta: { key: string; value: unknown };
   photos: { key: string; value: PhotoBlobs };
+  /** HLCs of changes the server has not acknowledged: every local edit, import and restore lands here; a pull does not. */
+  outbox: { key: string; value: { t: string } };
 }
 
 const DB_NAME = 'cultifolio';
-const DB_V = 1;
+const DB_V = 2;
 
 let dbp: Promise<IDBPDatabase<VaultDB>> | null = null;
 
 export function openVault(): Promise<IDBPDatabase<VaultDB>> {
   if (!dbp)
     dbp = openDB<VaultDB>(DB_NAME, DB_V, {
-      upgrade(db) {
-        const ch = db.createObjectStore('changes', { keyPath: 't' });
-        ch.createIndex('byRecord', ['kind', 'id']);
-        db.createObjectStore('meta');
-        db.createObjectStore('photos', { keyPath: 'id' });
+      upgrade(db, oldV) {
+        if (oldV < 1) {
+          const ch = db.createObjectStore('changes', { keyPath: 't' });
+          ch.createIndex('byRecord', ['kind', 'id']);
+          db.createObjectStore('meta');
+          db.createObjectStore('photos', { keyPath: 'id' });
+        }
+        if (oldV < 2) db.createObjectStore('outbox', { keyPath: 't' });
       }
     });
   return dbp;
@@ -42,11 +47,43 @@ export async function allChanges(): Promise<Change[]> {
   return db.getAll('changes');
 }
 
-export async function appendChanges(changes: Change[]): Promise<void> {
+/** Append changes; unless they came from the server (`fromServer`), they also go in the outbox to be pushed. One transaction, so the two stores cannot disagree. */
+export async function appendChanges(changes: Change[], fromServer = false): Promise<void> {
   if (!changes.length) return;
   const db = await openVault();
-  const tx = db.transaction('changes', 'readwrite');
-  await Promise.all([...changes.map((c) => tx.store.put(c)), tx.done]);
+  const tx = db.transaction(['changes', 'outbox'], 'readwrite');
+  const ch = tx.objectStore('changes'), ob = tx.objectStore('outbox');
+  await Promise.all([...changes.map((c) => ch.put(c)), ...(fromServer ? [] : changes.map((c) => ob.put({ t: c.t }))), tx.done]);
+}
+
+/** HLCs waiting to be pushed, in order. */
+export async function outboxKeys(): Promise<string[]> {
+  const db = await openVault();
+  return db.getAllKeys('outbox');
+}
+export async function outboxAck(ts: string[]): Promise<void> {
+  if (!ts.length) return;
+  const db = await openVault();
+  const tx = db.transaction('outbox', 'readwrite');
+  await Promise.all([...ts.map((t) => tx.store.delete(t)), tx.done]);
+}
+/** Put every change on this device in the outbox: the first push after sync is set up sends the whole collection. */
+export async function outboxFill(): Promise<number> {
+  const db = await openVault();
+  const ts = await db.getAllKeys('changes');
+  const tx = db.transaction('outbox', 'readwrite');
+  await Promise.all([...ts.map((t) => tx.store.put({ t })), tx.done]);
+  return ts.length;
+}
+export async function outboxClear(): Promise<void> {
+  const db = await openVault();
+  await db.clear('outbox');
+}
+export async function changesByKeys(ts: string[]): Promise<Change[]> {
+  const db = await openVault();
+  const tx = db.transaction('changes');
+  const out = await Promise.all(ts.map((t) => tx.store.get(t)));
+  return out.filter((c): c is Change => !!c);
 }
 
 export async function getMeta<T>(k: string): Promise<T | undefined> {
@@ -101,5 +138,5 @@ export async function photoBlobIds(): Promise<string[]> {
 
 export async function wipeVault(): Promise<void> {
   const db = await openVault();
-  await Promise.all([db.clear('changes'), db.clear('photos')]);
+  await Promise.all([db.clear('changes'), db.clear('photos'), db.clear('outbox')]);
 }

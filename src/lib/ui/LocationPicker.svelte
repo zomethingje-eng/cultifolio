@@ -11,8 +11,11 @@
   // Flatten the tree depth-first with indentation for a <select>.
   const flat = $derived.by(() => {
     const out: Array<{ id: string; label: string; depth: number }> = [];
+    const seen = new Set<string>();
     const walk = (parent: string | null, depth: number) => {
       for (const l of collection.children(parent)) {
+        if (seen.has(l.id)) continue;
+        seen.add(l.id);
         out.push({ id: l.id, label: l.name, depth });
         walk(l.id, depth + 1);
       }

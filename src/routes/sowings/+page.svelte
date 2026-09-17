@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { accNo, sowNo } from '$lib/db/types';
   import PageHead from '$lib/ui/PageHead.svelte';
   import { collection } from '$lib/db/collection.svelte';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
@@ -32,9 +33,9 @@
         <tbody>
           {#each rows as { s, st, m }}
             <tr>
-              <td><a class="mono" href="/sowings/{s.id}">{s.id}</a></td>
+              <td><a class="mono" href="/sowings/{sowNo(s)}">{sowNo(s)}</a></td>
               <td class="left"><SpeciesName name={s.taxonName} />{#if s.cultivar} ‘{s.cultivar}’{/if}</td>
-              <td class="left">{m.label}{#if s.parentAcc} <span class="faint">from <a class="mono" href="/plants/{s.parentAcc}">{s.parentAcc}</a></span>{/if}</td>
+              <td class="left">{m.label}{#if s.parentAcc} <span class="faint">from <a class="mono" href="/plants/{s.parentAcc}">{collection.accession(s.parentAcc) ? accNo(collection.accession(s.parentAcc)!) : s.parentAcc}</a></span>{/if}</td>
               <td class="left">{s.sown}</td>
               <td>{st.days}</td>
               <td>{s.count}</td>

@@ -4,7 +4,14 @@ export type Provenance = 'wild' | 'f1' | 'fn' | 'veg' | 'unknown';
 export type AccStatus = 'growing' | 'archived' | 'dead';
 
 export interface Accession {
-  id: string; // the accession number, e.g. 2026-0001
+  /**
+   * The record's identity: opaque, minted once, never shown. Records made
+   * before numbers and identities were separated used the accession number
+   * itself as the id; `accNo()` reads either shape.
+   */
+  id: string;
+  /** The accession number people see and print, e.g. 2026-0001. Unique among live and dead plants alike; never reused. */
+  acc?: string | null;
   taxonName: string; // as accepted by the backbone, or as typed if unresolved
   taxonKey?: number | null; // GBIF key, when resolved
   nameAsReceived?: string | null;
@@ -117,7 +124,10 @@ export type PropMethod = 'seed' | 'cutting' | 'offset' | 'leaf' | 'division' | '
 export type SowingStatus = 'active' | 'done' | 'failed';
 
 export interface Sowing {
-  id: string; // e.g. S2026-0001
+  /** Opaque identity (older records: the batch number itself). */
+  id: string;
+  /** The batch number people see, e.g. S2026-001. */
+  no?: string | null;
   taxonName: string;
   taxonKey?: number | null;
   cultivar?: string | null;
@@ -202,3 +212,8 @@ export const LOCATION_KINDS: Array<{ k: LocationKind; label: string }> = [
   { k: 'outdoor', label: 'Outdoors' },
   { k: 'other', label: 'Other' }
 ];
+
+/** The number a plant is known by: its `acc`, or, for records made before identity and number were separate, its id. */
+export const accNo = (a: { id: string; acc?: string | null }): string => a.acc ?? a.id;
+/** The number a sowing batch is known by. */
+export const sowNo = (s: { id: string; no?: string | null }): string => s.no ?? s.id;

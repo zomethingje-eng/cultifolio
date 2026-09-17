@@ -1,5 +1,6 @@
 <script lang="ts">
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
+  import { accNo } from '$lib/db/types';
   import PageHead from '$lib/ui/PageHead.svelte';
   import { collection } from '$lib/db/collection.svelte';
   import { onMount } from 'svelte';
@@ -28,7 +29,7 @@
   const owned = $derived.by(() => {
     const m = new Map<string, string[]>();
     if (!collection.ready) return m;
-    for (const a of collection.accessions) if (a.status === 'growing') m.set(slugify(a.taxonName), [...(m.get(slugify(a.taxonName)) ?? []), a.id]);
+    for (const a of collection.accessions) if (a.status === 'growing') m.set(slugify(a.taxonName), [...(m.get(slugify(a.taxonName)) ?? []), accNo(a)]);
     return m;
   });
   const ownedN = $derived([...owned.keys()].filter((k) => data.groups.some((g) => g.items.some((c) => c.slug === k))).length);

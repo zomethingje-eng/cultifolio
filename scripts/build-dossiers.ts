@@ -5,6 +5,10 @@
  *   npx tsx scripts/build-dossiers.ts names.txt                 # one name per line
  *   npx tsx scripts/build-dossiers.ts names.txt --grid climate  # with habitat climate from the packed grid
  *   npx tsx scripts/build-dossiers.ts names.txt --force         # rebuild species that already have a clean dossier (by default they are kept)
+ *   npx tsx scripts/build-dossiers.ts names.txt --skip openalex # leave literature out of this run (marked skipped; a later run without --skip fills it)
+ *
+ * OPENALEX_KEY in the environment gives OpenAlex requests their own allowance
+ * (anonymous ones share a per-address pool that closes after ~100 calls).
  *
  * A species whose dossier is on disk and clean (no refusals, climate settled)
  * is kept, so a run that dies is restarted with the same command and picks
@@ -37,6 +41,7 @@ const upload = args.includes('--upload');
 const fixtures = args.includes('--fixtures');
 const quick = args.includes('--quick');
 const force = args.includes('--force');
+const skip = (() => { const i = args.indexOf('--skip'); return i >= 0 ? (args[i + 1] ?? '').split(',').filter((x): x is 'openalex' => x === 'openalex') : []; })();
 const gridDir = (() => { const i = args.indexOf('--grid'); return i >= 0 ? args[i + 1] : undefined; })();
 const bulkDir = (() => { const i = args.indexOf('--bulk'); return i >= 0 ? args[i + 1] : undefined; })();
 const outDir = fixtures ? 'fixtures/dossiers' : 'static'; // static/s/v1/<key>.json is served by the app and mirrors the R2 key
@@ -85,7 +90,8 @@ function needsRebuild(key: number): boolean {
     const d = JSON.parse(readFileSync(p, 'utf8')) as { climate?: { status: string }; upstream?: Record<string, { status: string }> };
     // 'none' too: the evidence rules can loosen between builds, and the rebuild of a thin species is cheap.
     if (d.climate?.status === 'pending' || d.climate?.status === 'refused' || d.climate?.status === 'none') return true;
-    return Object.values(d.upstream ?? {}).some((u) => u.status === 'refused' || u.status === 'error');
+    // A source this run is skipping anyway cannot be the reason to rebuild.
+    return Object.entries(d.upstream ?? {}).some(([k, u]) => !skip.includes(k as 'openalex') && (u.status === 'refused' || u.status === 'error'));
   } catch {
     return true;
   }
@@ -142,7 +148,7 @@ async function main() {
     report.push(line);
     console.log(`[${report.length}/${jobs.length}] ${line}`);
   };
-  console.log(`Building ${jobs.length} species${quick ? ' (quick)' : ''}…`);
+  console.log(`Building ${jobs.length} species${quick ? ' (quick)' : ''}${skip.length ? ` (skipping ${skip.join(', ')})` : ''}${process.env.OPENALEX_KEY ? ' with an OpenAlex key' : ''}…`);
   // Existing dossiers by name, so a clean one is kept rather than rebuilt (unless --force).
   const onDisk = fixtures ? [] : scanDossiers();
   const existing = new Map<string, number>(onDisk.map((e) => [e.name.toLowerCase(), e.key]));
@@ -161,7 +167,7 @@ async function main() {
     }
     let r;
     try {
-      r = await buildDossier(j.name, { fetcher: j.fetcher, builtBy: 'node', quick, climate });
+      r = await buildDossier(j.name, { fetcher: j.fetcher, builtBy: 'node', quick, climate, skip });
     } catch (e) {
       const issues = (e as { issues?: Array<{ path?: Array<{ key: unknown }>; message: string }> }).issues;
       const where = issues?.map((i) => (i.path ?? []).map((p) => String(p.key)).join('.') + ': ' + i.message).join('; ');

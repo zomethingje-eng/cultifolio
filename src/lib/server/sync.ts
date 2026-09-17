@@ -7,9 +7,14 @@
  *   vault/<id>/log/<hlc>.bin      one sealed batch of changes; <hlc> is the batch's last change
  *   vault/<id>/photo/<photoId>.bin one sealed photo (full + thumb)
  *
- * Batches are listed in key order, which is HLC order, so "everything after
- * cursor X" is one list call. Nothing is ever rewritten; a vault only grows,
- * which is what makes the merge on every device idempotent.
+ * Batches are handed out in ARRIVAL order (R2's upload time), not in HLC
+ * order: a device that edited offline at t1 and uploads after another device
+ * has already pulled past t1 must still be discovered. The client's cursor is
+ * an arrival time; it re-reads a minute of overlap and skips batches it has
+ * applied, so a put that landed slightly out of order is never missed. The
+ * HLCs inside a batch are for merging, which is a separate job. Nothing is
+ * ever rewritten; a vault only grows, which is what makes the merge on every
+ * device idempotent.
  */
 import { error } from '@sveltejs/kit';
 import { tokenHash } from '$lib/sync/crypto';
@@ -63,7 +68,7 @@ export async function ensureVault(r2: R2Bucket, id: string, token: string, open:
     return { created: false, meta: existing };
   }
   const meta: VaultMeta = { tokenHash: h, created: new Date().toISOString(), entitlement: open ? 'open' : 'none', bytes: 0 };
-  await r2.put(`vault/${id}/meta.json`, JSON.stringify(meta), { httpMetadata: { contentType: 'application/json' } });
+  await writeMeta(r2, id, meta);
   return { created: true, meta };
 }
 
@@ -76,18 +81,92 @@ export const photoKey = (id: string, photoId: string) => {
   return `vault/${id}/photo/${photoId}.bin`;
 };
 
-/** Batches after a cursor, oldest first. */
-export async function listBatches(r2: R2Bucket, id: string, after: string | null, limit = 500): Promise<{ keys: string[]; more: boolean }> {
+export interface BatchRef {
+  key: string;
+  /** Arrival at the server, ms since the epoch. */
+  at: number;
+}
+
+/** How far behind its cursor a client re-reads, so a put that committed a little late is still seen. */
+export const OVERLAP_MS = 60_000;
+
+/**
+ * Every batch that arrived at or after (cursor − overlap), oldest arrival
+ * first. The whole prefix is listed (a vault has hundreds to a few thousand
+ * batches over its life; a page holds a thousand) and filtered by upload time,
+ * because R2 can only list in key order and key order is the wrong order.
+ */
+export async function listBatches(r2: R2Bucket, id: string, sinceMs: number | null, limit = 500): Promise<{ batches: BatchRef[]; more: boolean }> {
   const prefix = `vault/${id}/log/`;
-  const r = await r2.list({ prefix, limit, startAfter: after ? `${prefix}${after}.bin` : undefined });
-  return { keys: r.objects.map((o) => o.key.slice(prefix.length, -'.bin'.length)), more: r.truncated };
+  const from = sinceMs == null ? 0 : Math.max(0, sinceMs - OVERLAP_MS);
+  const all: BatchRef[] = [];
+  let cursor: string | undefined;
+  for (;;) {
+    const r = await r2.list({ prefix, limit: 1000, cursor });
+    for (const o of r.objects) {
+      const at = o.uploaded.getTime();
+      if (at >= from) all.push({ key: o.key.slice(prefix.length, -'.bin'.length), at });
+    }
+    if (!r.truncated) break;
+    cursor = r.cursor;
+  }
+  all.sort((a, b) => a.at - b.at || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+  return { batches: all.slice(0, limit), more: all.length > limit };
 }
 
 /** A generous per-vault ceiling until quotas are real: 2 GB. */
 export const MAX_BYTES = 2 * 1024 * 1024 * 1024;
 
-export async function addBytes(r2: R2Bucket, id: string, meta: VaultMeta, n: number): Promise<void> {
-  meta.bytes += n;
-  if (meta.bytes > MAX_BYTES) error(413, 'this vault is over its storage allowance');
+/**
+ * Store an object against the vault's allowance. The bytes are reserved in
+ * the meta BEFORE the object is written, so a refused upload never lands; if
+ * the write then fails the reservation is released. Two simultaneous uploads
+ * can still each read the same starting total (R2 has no atomic counter), so
+ * `recount` puts the total right from a listing when a vault is (re)joined.
+ */
+export async function storeCounted(r2: R2Bucket, id: string, meta: VaultMeta, key: string, body: Uint8Array): Promise<void> {
+  if (meta.bytes + body.length > MAX_BYTES) error(413, 'this vault is over its storage allowance');
+  meta.bytes += body.length;
+  await writeMeta(r2, id, meta);
+  try {
+    await r2.put(key, body, { httpMetadata: { contentType: 'application/octet-stream' } });
+  } catch (e) {
+    meta.bytes -= body.length;
+    await writeMeta(r2, id, meta).catch(() => {});
+    throw e;
+  }
+}
+
+export async function writeMeta(r2: R2Bucket, id: string, meta: VaultMeta): Promise<void> {
   await r2.put(`vault/${id}/meta.json`, JSON.stringify(meta), { httpMetadata: { contentType: 'application/json' } });
+}
+
+/** The true byte total from a listing; written back when it disagrees with the running one. */
+export async function recount(r2: R2Bucket, id: string, meta: VaultMeta): Promise<number> {
+  let bytes = 0;
+  for (const sub of ['log', 'photo']) {
+    let cursor: string | undefined;
+    for (;;) {
+      const r = await r2.list({ prefix: `vault/${id}/${sub}/`, limit: 1000, cursor });
+      for (const o of r.objects) bytes += o.size;
+      if (!r.truncated) break;
+      cursor = r.cursor;
+    }
+  }
+  if (bytes !== meta.bytes) {
+    meta.bytes = bytes;
+    await writeMeta(r2, id, meta);
+  }
+  return bytes;
+}
+
+/** New vaults per address per day. A random key stops anyone reading a stranger's vault; this stops a stranger making ten thousand of them. */
+export const MAX_NEW_VAULTS_PER_DAY = 20;
+export async function allowCreation(kv: KVNamespace | undefined, ip: string): Promise<boolean> {
+  if (!kv) return true; // no KV bound (local dev): no cap
+  const k = `vaults:${ip}:${new Date().toISOString().slice(0, 10)}`;
+  const n = Number((await kv.get(k)) ?? 0);
+  if (n >= MAX_NEW_VAULTS_PER_DAY) return false;
+  await kv.put(k, String(n + 1), { expirationTtl: 2 * 86400 });
+  return true;
 }

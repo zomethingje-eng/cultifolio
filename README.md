@@ -27,6 +27,8 @@ npm run dossier -- names.txt --grid climate
 
 `npm run export` packages a built corpus as a dataset bundle (the species JSON, `species.csv`, `climate.csv`, a README and the licence terms per source) so the reference data can be published and cited without the app.
 
+Literature comes from OpenAlex; set `OPENALEX_KEY` (a free key from openalex.org) for a build of more than a hundred species, or pass `--skip openalex` and fill it in later.
+
 `docs/DEVLOG.md` has the full account: the climate grid (a one-time pack of CHELSA with `scripts/pack-climate.py`), the bulk path for thousands of species (`npm run bulk`), and how to derive a large names list from what people actually grow (`npm run derive -- --inat 2500`, after `npm run bulk -- wcvp`).
 
 ## Deploying

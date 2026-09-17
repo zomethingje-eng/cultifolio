@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { store, vaultId, authed, photoKey, addBytes } from '$lib/server/sync';
+import { store, vaultId, authed, photoKey, storeCounted } from '$lib/server/sync';
 
 export const GET: RequestHandler = async ({ request, url, params, platform }) => {
   const r2 = store(platform);
@@ -20,8 +20,7 @@ export const PUT: RequestHandler = async ({ request, url, params, platform }) =>
   const body = new Uint8Array(await request.arrayBuffer());
   if (!body.length || body.length > 12 * 1024 * 1024) return json({ error: 'photo must be 1 byte to 12 MB' }, { status: 400 });
   if (await r2.head(key)) return json({ stored: false, reason: 'already there' });
-  await r2.put(key, body, { httpMetadata: { contentType: 'application/octet-stream' } });
-  await addBytes(r2, id, meta, body.length);
+  await storeCounted(r2, id, meta, key, body);
   return json({ stored: true });
 };
 

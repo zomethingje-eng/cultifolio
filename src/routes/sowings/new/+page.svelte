@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import { accNo, sowNo } from '$lib/db/types';
   import { page } from '$app/state';
   import { onMount } from 'svelte';
   import { collection } from '$lib/db/collection.svelte';
@@ -57,7 +58,7 @@
     const p = page.url.searchParams.get('parent');
     if (p && collection.accession(p)) {
       const a = collection.accession(p)!;
-      parentAcc = p;
+      parentAcc = a.id;
       name = a.taxonName;
       taxonKey = a.taxonKey ?? null;
       cultivar = a.cultivar ?? null;
@@ -99,7 +100,7 @@
       notes: notes.trim() || null
     });
     try { if (locationId) localStorage.setItem('cultifolio.lastSowLocation', locationId); } catch { /* fine */ }
-    goto(`/sowings/${rec.id}`);
+    goto(`/sowings/${sowNo(rec)}`);
   }
 </script>
 
@@ -119,7 +120,7 @@
     <label class="field"><span>From which plant</span>
       <select id="s-parent" bind:value={parentAcc}>
         <option value={null}>Not one of my plants</option>
-        {#each collection.accessions.filter((a) => a.status === 'growing') as a}<option value={a.id}>{a.id} · {a.taxonName}{a.cultivar ? ` ‘${a.cultivar}’` : ''}</option>{/each}
+        {#each collection.accessions.filter((a) => a.status === 'growing') as a}<option value={a.id}>{accNo(a)} · {a.taxonName}{a.cultivar ? ` ‘${a.cultivar}’` : ''}</option>{/each}
       </select>
       {#if parent}<span class="faint small">The species is taken from the parent; its field number and cultivar carry to every plant raised.</span>{/if}
     </label>

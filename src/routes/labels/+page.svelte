@@ -6,6 +6,7 @@
    * opens the plant's page on this site.
    */
   import { onMount } from 'svelte';
+  import { accNo, sowNo } from '$lib/db/types';
   import { page } from '$app/state';
   import QRCode from 'qrcode';
   import { collection } from '$lib/db/collection.svelte';
@@ -42,7 +43,7 @@
     await collection.load();
     const acc = page.url.searchParams.get('acc');
     const loc = page.url.searchParams.get('loc');
-    if (acc) chosen = new Set(acc.split(',').filter((id) => collection.accession(id)));
+    if (acc) chosen = new Set(acc.split(',').map((x) => collection.accession(x)?.id).filter((x): x is string => !!x)); // numbers or ids in the URL; identities inside
     else if (loc) chosen = new Set(collection.plantsAt(loc, true).map((a) => a.id));
     else chosen = new Set(collection.accessions.filter((a) => a.status === 'growing').map((a) => a.id));
     try {
@@ -71,7 +72,7 @@
   });
 
   const all = $derived(collection.accessions.filter((a) => a.status === 'growing' || chosen.has(a.id)));
-  const filtered = $derived(all.filter((a) => !q.trim() || `${a.id} ${a.taxonName} ${a.cultivar ?? ''} ${a.fieldNumber ?? ''}`.toLowerCase().includes(q.trim().toLowerCase())));
+  const filtered = $derived(all.filter((a) => !q.trim() || `${accNo(a)} ${a.taxonName} ${a.cultivar ?? ''} ${a.fieldNumber ?? ''}`.toLowerCase().includes(q.trim().toLowerCase())));
   const picked = $derived(all.filter((a) => chosen.has(a.id)));
   const toggle = (id: string) => {
     const n = new Set(chosen);
@@ -137,7 +138,7 @@
   </div>
   <div class="cult picklist">
     {#each filtered as a (a.id)}
-      <label class="pick"><input type="checkbox" checked={chosen.has(a.id)} onchange={() => toggle(a.id)} /><span class="accno">{a.id}</span><span class="nm"><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}‘{a.cultivar}’{/if}</span>{#if a.fieldNumber}<span class="fnchip">{a.fieldNumber}</span>{/if}{#if a.locationId}<span class="faint">{collection.locationName(a.locationId)}</span>{/if}</label>
+      <label class="pick"><input type="checkbox" checked={chosen.has(a.id)} onchange={() => toggle(a.id)} /><span class="accno">{accNo(a)}</span><span class="nm"><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}‘{a.cultivar}’{/if}</span>{#if a.fieldNumber}<span class="fnchip">{a.fieldNumber}</span>{/if}{#if a.locationId}<span class="faint">{collection.locationName(a.locationId)}</span>{/if}</label>
     {:else}
       <div class="none">No plants match.</div>
     {/each}
@@ -156,7 +157,7 @@
           {#if a}
             {#if withQr && sheet.qr && qrs[a.id]}<div class="qr">{@html qrs[a.id]}</div>{/if}
             <div class="txt">
-              <div class="no">{a.id}{#if a.fieldNumber} <span class="fn">{a.fieldNumber}</span>{/if}</div>
+              <div class="no">{accNo(a)}{#if a.fieldNumber} <span class="fn">{a.fieldNumber}</span>{/if}</div>
               <div class="sci"><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}<span class="cv">‘{a.cultivar}’</span>{/if}{#if kindOf(a) === 'hybrid' && a.parentage}{' '}<span class="cv">({a.parentage})</span>{/if}</div>
               {#if withCare && care[a.id]}<div class="care">{care[a.id]}</div>{/if}
               {#if withSource && sourceLine(a)}<div class="src">{sourceLine(a)}</div>{/if}

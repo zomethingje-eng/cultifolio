@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import { accNo } from '$lib/db/types';
   import { onMount } from 'svelte';
   import { page } from '$app/state';
   import { setCrumb } from '$lib/ui/crumb.svelte';
@@ -46,12 +47,14 @@
   let count = $state(1);
   let useOwnNumber = $state(false);
   let ownNumber = $state('');
+  const ownTaken = $derived(useOwnNumber && !!ownNumber.trim() && collection.isNumberTaken(ownNumber));
   let busy = $state(false);
   const nextNo = $derived(collection.ready ? collection.nextAccessionNumber() : '…');
 
   async function save(e: SubmitEvent) {
     e.preventDefault();
     if (!name.trim() || busy) return;
+    if (ownTaken) return;
     busy = true;
     const p = parseName(name);
     const taxonName = p.scientific;
@@ -61,7 +64,7 @@
     let firstId = '';
     for (let i = 0; i < Math.max(1, count); i++) {
       const rec = await collection.addAccession({
-        id: useOwnNumber && ownNumber.trim() && i === 0 ? ownNumber.trim() : undefined,
+        acc: useOwnNumber && ownNumber.trim() && i === 0 ? ownNumber.trim() : undefined,
         taxonName,
         taxonKey,
         cultivar: cultivar ?? p.cultivar ?? null,
@@ -76,7 +79,7 @@
         locationId,
         notes: notes.trim() || null
       });
-      if (!firstId) firstId = rec.id;
+      if (!firstId) firstId = accNo(rec);
     }
     try { if (locationId) localStorage.setItem('cultifolio.lastLocation', locationId); } catch { /* fine */ }
     goto(count > 1 ? '/plants' : `/plants/${firstId}`);
@@ -134,13 +137,14 @@
 
   <details class="own">
     <summary class="faint">Use my own number</summary>
-    <label class="ownrow"><input id="f-own" type="checkbox" bind:checked={useOwnNumber} /> <input type="text" bind:value={ownNumber} placeholder="e.g. 2019-0147" disabled={!useOwnNumber} /></label>
+    <label class="ownrow"><input id="f-own" type="checkbox" bind:checked={useOwnNumber} /> <input id="f-own-no" type="text" bind:value={ownNumber} placeholder="e.g. 2019-0147" disabled={!useOwnNumber} aria-invalid={ownTaken} /></label>
+    {#if ownTaken}<p class="bad small" id="f-own-taken">{ownNumber.trim()} is already used by <a href="/plants/{collection.accession(ownNumber.trim())?.id}">{collection.accession(ownNumber.trim())?.taxonName ?? 'a plant no longer growing'}</a>. A number is never reused; pick another.</p>{/if}
   </details>
   </div>
 
   <div class="actions">
     <a class="btn" href="/plants">Cancel</a>
-    <button class="btn pri" type="submit" disabled={!name.trim() || busy}>Add{count > 1 ? ` ${count} plants` : ''}</button>
+    <button class="btn pri" type="submit" disabled={!name.trim() || busy || ownTaken}>Add{count > 1 ? ` ${count} plants` : ''}</button>
   </div>
 </form>
 

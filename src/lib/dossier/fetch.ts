@@ -47,8 +47,14 @@ const STRIKES_TO_TRIP = 3;
 const COOLDOWN_MS = 10 * 60_000;
 const strikes = new Map<string, number>();
 const coolUntil = new Map<string, number>();
+const RECENT_MS = 60 * 60_000;
 export function hostCooling(host: string, now = Date.now()): boolean {
   return (coolUntil.get(host) ?? 0) > now;
+}
+/** Cooled within the last hour: the host is known to be throttling this address, so a 429 goes straight back to cooling rather than through slow retries. */
+function hostTouchy(host: string, now = Date.now()): boolean {
+  const until = coolUntil.get(host) ?? 0;
+  return until > 0 && now - until < RECENT_MS;
 }
 function strike(host: string): void {
   const n = (strikes.get(host) ?? 0) + 1;
@@ -63,6 +69,10 @@ export function resetPacing(): void {
   lastAt.clear();
   strikes.clear();
   coolUntil.clear();
+}
+/** For tests: pretend a host finished cooling a moment ago. */
+export function markCooledRecently(host: string): void {
+  coolUntil.set(host, Date.now() - 1000);
 }
 
 async function pace(host: string): Promise<void> {
@@ -86,6 +96,12 @@ export function makeFetcher(fetchImpl: typeof fetch = fetch): JsonFetcher {
         signal: ctl.signal
       });
       if (res.status === 404 && opts.noneOn404 !== false) return { status: 'none' };
+      if (res.status === 429 && hostTouchy(host)) {
+        // Still throttled after a cooldown: back to cooling at once; --only-refused (or a key) is the way through.
+        coolUntil.set(host, Date.now() + COOLDOWN_MS);
+        strikes.set(host, 0);
+        return { status: 'refused', detail: `${host} 429 again after a cooldown; not asked for a while` };
+      }
       if ((res.status === 429 || res.status === 503) && (opts.attempt ?? 0) < 3) {
         // Polite retries after the server's own Retry-After (capped), backing off, then give up honestly.
         const attempt = (opts.attempt ?? 0) + 1;

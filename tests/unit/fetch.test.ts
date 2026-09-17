@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { makeFetcher, resetPacing, hostCooling } from '$dossier/fetch';
+import { makeFetcher, resetPacing, hostCooling, markCooledRecently } from '$dossier/fetch';
 
 const res = (status: number, body: unknown = {}) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'retry-after': '0' } });
 
@@ -32,5 +32,29 @@ describe('the fetch layer', () => {
     const other = await f<{ fine: boolean }>('https://calm.example/y');
     expect(other.status).toBe('ok');
     expect(hostCooling('calm.example')).toBe(false);
+  });
+});
+
+describe('a host that just finished cooling', () => {
+  beforeEach(() => resetPacing());
+  it('goes straight back to cooling on the first 429, with no slow retries', async () => {
+    let calls = 0;
+    const f = makeFetcher(async () => (++calls, res(429)));
+    markCooledRecently('rate.example');
+    const r = await f('https://rate.example/x');
+    expect(r.status).toBe('refused');
+    expect('detail' in r && r.detail).toMatch(/again after a cooldown/);
+    expect(calls).toBe(1);
+    expect(hostCooling('rate.example')).toBe(true);
+    const r2 = await f('https://rate.example/y');
+    expect(calls).toBe(1); // not even asked
+    expect(r2.status).toBe('refused');
+  });
+  it('still serves a host that recovered', async () => {
+    let calls = 0;
+    const f = makeFetcher(async () => (++calls, res(200, { ok: 1 })));
+    markCooledRecently('fine.example');
+    const r = await f('https://fine.example/x');
+    expect(r.status).toBe('ok');
   });
 });

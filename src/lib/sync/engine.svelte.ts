@@ -2,34 +2,36 @@
  * Sync: this device's changes up, everyone else's down, both sealed with the
  * vault key. The server is a dumb store of ciphertext (see server/sync.ts).
  *
- * Push: local changes not yet pushed, in HLC order, sealed as one batch whose
- * name is the HLC of its last change. On the first push everything goes (so
- * a collection that lived on one device for a year arrives whole). After
- * that only changes stamped by this device's clock go, since anything else
- * came in through a pull and is already up there.
+ * Push: whatever is in the outbox, in HLC order, sealed as batches whose
+ * name is the HLC of their last change. The outbox is every change the
+ * server has not acknowledged: local edits, imports, restores; when sync is
+ * first set up it is filled with the whole log, so a collection that lived
+ * on one device for a year arrives whole. Nothing is inferred from device
+ * ids: a change from another device that came in through a backup file is
+ * still ours to push.
  *
- * Pull: list batches after our cursor, skip our own, download, open, ingest.
- * The log's merge rule makes this idempotent, so a pull interrupted halfway
- * costs nothing but a repeat.
+ * Pull: batches by ARRIVAL time at the server, from a minute before our
+ * cursor, skipping any we already hold (ours, or applied earlier); download,
+ * open, ingest as 'server' so they do not go back up. The log's merge rule
+ * makes this idempotent, so an interrupted pull costs nothing but a repeat.
  *
  * Photos: by id, immutable. Push what we have that the server lacks; pull
  * what records mention that we lack.
  */
 import { collection } from '$lib/db/collection.svelte';
-import { allChanges, getMeta, setMeta, getPhotoBlobs, putPhotoBlobs, photoBlobIds } from '$lib/db/vault';
+import { getMeta, setMeta, getPhotoBlobs, putPhotoBlobs, photoBlobIds, outboxKeys, outboxAck, outboxFill, outboxClear, changesByKeys } from '$lib/db/vault';
 import { deriveKeys, sealJson, openJson, seal, open, packPhoto, unpackPhoto, parseVaultKey, type VaultKeys } from './crypto';
-import { hlcDecode } from '$core/hlc';
 import type { Change } from '$core/log';
 import type { Photo } from '$lib/db/types';
 
 interface SyncMeta {
   key: string; // the vault key, kept on this device so it can sync without asking
-  pushedUpTo: string; // HLC of the last local change pushed
-  cursor: string; // last batch key pulled
-  own: string[]; // batch keys this device wrote (skipped on pull)
+  /** Arrival time (ms) of the newest batch we have taken from the server. */
+  since: number;
+  /** Batch keys this device holds: pushed by it or applied from a pull. Skipped when listed again. */
+  have: string[];
   photosPushed: string[];
   lastSync: string | null;
-  firstPushDone: boolean;
 }
 
 const META = 'sync';
@@ -52,9 +54,14 @@ class Sync {
   async init(base = ''): Promise<void> {
     this.base = base;
     if (this.meta) return;
-    const m = await getMeta<SyncMeta>(META);
+    const m = await getMeta<SyncMeta & { own?: string[]; cursor?: string; firstPushDone?: boolean }>(META);
     if (m?.key) {
-      this.meta = m;
+      // Meta written by the HLC-cursor engine: carry the key, start the arrival cursor from zero (a re-list is idempotent).
+      if (!Array.isArray(m.have)) {
+        this.meta = { key: m.key, since: 0, have: m.own ?? [], photosPushed: m.photosPushed ?? [], lastSync: m.lastSync ?? null };
+        if (m.firstPushDone === false) await outboxFill();
+        await setMeta(META, this.meta);
+      } else this.meta = m;
       this.keys = await deriveKeys(m.key);
       this.vaultId = this.keys.id;
       this.lastSync = m.lastSync;
@@ -91,8 +98,9 @@ class Sync {
     if (!r.ok) throw new Error(r.status === 404 ? 'No vault answers to that key. Check it against the other device; one wrong letter is a different vault.' : r.status === 403 ? 'That key does not open its vault.' : r.status === 503 ? 'Sync is not available on this server.' : `The server said ${r.status}.`);
     this.keys = keys;
     this.vaultId = keys.id;
-    this.meta = { key, pushedUpTo: '', cursor: '', own: [], photosPushed: [], lastSync: null, firstPushDone: false };
+    this.meta = { key, since: 0, have: [], photosPushed: [], lastSync: null };
     await setMeta(META, this.meta);
+    await outboxFill(); // everything on this device goes up first
     this.configured = true;
     this.hook();
     await this.run();
@@ -109,20 +117,18 @@ class Sync {
     this.lastSync = null;
     this.pending = 0;
     await setMeta(META, null);
+    await outboxClear();
   }
 
   private async countPending(): Promise<void> {
     if (!this.meta) return;
-    const all = await allChanges();
-    this.pending = this.toPush(all).length;
+    this.pending = (await outboxKeys()).length;
   }
 
-  private toPush(all: Change[]): Change[] {
-    const m = this.meta!;
-    const mine = collection.device;
-    return all
-      .filter((c) => (m.firstPushDone ? hlcDecode(c.t).device === mine && c.t > m.pushedUpTo : true))
-      .sort((a, b) => (a.t < b.t ? -1 : a.t > b.t ? 1 : 0));
+  /** The outbox, as changes, in HLC order. */
+  private async toPush(): Promise<Change[]> {
+    const ts = (await outboxKeys()).sort();
+    return changesByKeys(ts);
   }
 
   private h(): Record<string, string> {
@@ -150,24 +156,19 @@ class Sync {
 
   private async push(): Promise<void> {
     const m = this.meta!;
-    const all = await allChanges();
-    const todo = this.toPush(all);
+    const todo = await this.toPush();
     this.pending = todo.length;
     for (let i = 0; i < todo.length; i += BATCH_MAX) {
       const batch = todo.slice(i, i + BATCH_MAX);
       const last = batch[batch.length - 1].t;
       this.busy = `Sending ${Math.min(i + batch.length, todo.length)} of ${todo.length} changes…`;
       const body = await sealJson(this.keys!, 'log', { v: 1, device: collection.device, changes: batch });
+      // The batch key is its last HLC: the same changes pushed twice land on the same key and the server says "already there".
       const r = await fetch(`${this.base}/api/sync/log?vault=${this.keys!.id}`, { method: 'POST', headers: { ...this.h(), 'x-batch': last }, body: body as BodyInit });
       if (!r.ok) throw new Error(`push failed: ${r.status}`);
-      m.own.push(last);
-      m.pushedUpTo = last > m.pushedUpTo ? last : m.pushedUpTo;
-      m.firstPushDone = true;
+      if (!m.have.includes(last)) m.have.push(last);
+      await outboxAck(batch.map((c) => c.t)); // acknowledged: out of the outbox, whatever device stamped them
       this.pending = todo.length - (i + batch.length);
-      await setMeta(META, m);
-    }
-    if (!m.firstPushDone) {
-      m.firstPushDone = true;
       await setMeta(META, m);
     }
     // Photos we have that the server may not.
@@ -192,20 +193,23 @@ class Sync {
     const m = this.meta!;
     for (;;) {
       this.busy = 'Checking for changes…';
-      const r = await fetch(`${this.base}/api/sync/log?vault=${this.keys!.id}&after=${encodeURIComponent(m.cursor)}`, { headers: this.h() });
+      const r = await fetch(`${this.base}/api/sync/log?vault=${this.keys!.id}&since=${m.since || ''}`, { headers: this.h() });
       if (!r.ok) throw new Error(`pull failed: ${r.status}`);
-      const { keys, more } = (await r.json()) as { keys: string[]; more: boolean };
-      const own = new Set(m.own);
+      const { batches, more } = (await r.json()) as { batches: Array<{ key: string; at: number }>; more: boolean };
+      const have = new Set(m.have);
+      const fresh = batches.filter((b) => !have.has(b.key));
       let n = 0;
-      for (const k of keys) {
-        if (!own.has(k)) {
-          this.busy = `Receiving ${++n} of ${keys.length - own.size}…`;
-          const b = await fetch(`${this.base}/api/sync/log/${k}?vault=${this.keys!.id}`, { headers: this.h() });
-          if (!b.ok) throw new Error(`batch ${k}: ${b.status}`);
-          const batch = await openJson<{ v: number; device: string; changes: Change[] }>(this.keys!, 'log', new Uint8Array(await b.arrayBuffer()));
-          await collection.ingest(batch.changes);
+      for (const b of batches) {
+        if (!have.has(b.key)) {
+          this.busy = `Receiving ${++n} of ${fresh.length}…`;
+          const res = await fetch(`${this.base}/api/sync/log/${b.key}?vault=${this.keys!.id}`, { headers: this.h() });
+          if (!res.ok) throw new Error(`batch ${b.key}: ${res.status}`);
+          const batch = await openJson<{ v: number; device: string; changes: Change[] }>(this.keys!, 'log', new Uint8Array(await res.arrayBuffer()));
+          await collection.ingest(batch.changes, 'server');
+          m.have.push(b.key);
+          have.add(b.key);
         }
-        m.cursor = k;
+        if (b.at > m.since) m.since = b.at;
         await setMeta(META, m);
       }
       if (!more) break;

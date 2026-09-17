@@ -6,7 +6,7 @@
 import { zip, unzip, strToU8, strFromU8, type Zippable } from 'fflate';
 import * as v from 'valibot';
 import { materialise, live, type Change, type Record_ } from '$core/log';
-import { kindOf, type Accession, type Photo } from '$lib/db/types';
+import { kindOf, accNo, sowNo, type Accession, type Photo, type Sowing } from '$lib/db/types';
 import { BACKUP_FORMAT, BACKUP_V, Manifest, ChangeRow, LegacyChanges, photoPath, thumbPath } from './format';
 
 export interface PhotoBytes {
@@ -124,16 +124,17 @@ const csvCell = (x: unknown) => {
 
 /** The plants as a flat sheet: one row each, the fields a person would want in a spreadsheet. */
 export function plantsCsv(accs: Array<Accession & Record_>, state: Map<string, Record_>): string {
-  const loc = (id: string | null | undefined): string => {
-    if (!id) return '';
+  const loc = (id: string | null | undefined, seen = new Set<string>()): string => {
+    if (!id || seen.has(id)) return ''; // a cycle in a damaged log ends here rather than never
+    seen.add(id);
     const r = state.get(`location:${id}`);
     if (!r || r._deleted) return '';
-    const parent = loc(r.parentId as string | null);
+    const parent = loc(r.parentId as string | null, seen);
     return parent ? `${parent} › ${r.name}` : String(r.name);
   };
   const head = ['number', 'species', 'cultivar', 'kind', 'parentage', 'name as received', 'field number', 'provenance', 'status', 'location', 'acquired', 'from', 'form', 'price', 'sowing', 'notes'];
   const rows = [...accs]
-    .sort((a, b) => a.id.localeCompare(b.id))
-    .map((a) => [a.id, a.taxonName, a.cultivar, kindOf(a), a.parentage, a.nameAsReceived, a.fieldNumber, a.provenance, a.status, a.locationId ? loc(a.locationId) : a.location, a.acquired, a.sourceFrom, a.sourceForm, a.price, a.sowingId, a.notes].map(csvCell).join(','));
+    .sort((a, b) => accNo(a).localeCompare(accNo(b)))
+    .map((a) => [accNo(a), a.taxonName, a.cultivar, kindOf(a), a.parentage, a.nameAsReceived, a.fieldNumber, a.provenance, a.status, a.locationId ? loc(a.locationId) : a.location, a.acquired, a.sourceFrom, a.sourceForm, a.price, a.sowingId ? sowNo((state.get(`sowing:${a.sowingId}`) as unknown as Sowing | undefined) ?? { id: a.sowingId }) : null, a.notes].map(csvCell).join(','));
   return '﻿' + [head.join(','), ...rows].join('\r\n') + '\r\n';
 }
