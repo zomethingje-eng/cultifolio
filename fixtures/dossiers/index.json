@@ -1,0 +1,42 @@
+[
+ {
+  "key": 5384013,
+  "slug": "copiapoa-cinerea",
+  "name": "Copiapoa cinerea",
+  "family": "Cactaceae",
+  "origin": [
+   "Chile North"
+  ],
+  "thumb": "https://inaturalist-open-data.s3.amazonaws.com/photos/900/medium.jpg",
+  "photos": 20,
+  "open": 52,
+  "climate": "ok"
+ },
+ {
+  "key": 999,
+  "slug": "refusia-testii",
+  "name": "Refusia testii",
+  "family": "Testaceae",
+  "origin": [
+   "Namibia"
+  ],
+  "photos": 0,
+  "open": 0,
+  "climate": "refused"
+ },
+ {
+  "key": 5411106,
+  "slug": "welwitschia-mirabilis",
+  "name": "Welwitschia mirabilis",
+  "family": "Welwitschiaceae",
+  "common": "Welwitschia",
+  "origin": [
+   "Namibia",
+   "Angola"
+  ],
+  "thumb": "https://inaturalist-open-data.s3.amazonaws.com/photos/700/medium.jpg",
+  "photos": 12,
+  "open": 210,
+  "climate": "pending"
+ }
+]

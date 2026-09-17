@@ -1,0 +1,2 @@
+{ "name": "Cultifolio", "short_name": "Cultifolio", "start_url": "/plants", "display": "standalone", "background_color": "#f3f5f4", "theme_color": "#12795a",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }] }

@@ -1,0 +1,17 @@
+node_modules
+.svelte-kit
+.wrangler
+dist
+test-results
+playwright-report
+*.local
+.env
+static/s/
+corpus/
+climate/
+bulk/
+*.cultifolio.zip
+names-derived.txt*
+names-5000.txt*
+__pycache__/
+names.txt

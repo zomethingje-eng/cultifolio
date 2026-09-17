@@ -1,0 +1,14 @@
+import { chromium } from '@playwright/test';
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+const p = await b.newPage({ viewport: { width: 1180, height: 900 } });
+await p.goto('http://127.0.0.1:4173/benches'); await p.getByRole('button', { name: 'New location' }).click();
+await p.fill('#loc-name', 'Laundry room'); await p.selectOption('#loc-kind', 'room'); await p.getByRole('button', { name: 'Add', exact: true }).click();
+await p.goto('http://127.0.0.1:4173/plants/new'); await p.fill('#species-name', 'Copiapoa cinerea'); await p.locator('#species-name').blur();
+const v = await p.locator('#f-loc option', { hasText: 'Laundry room' }).getAttribute('value'); await p.selectOption('#f-loc', v); await p.getByRole('button', { name: /^Add/ }).click();
+await p.waitForURL(/plants\/\d/);
+await p.goto('http://127.0.0.1:4173/sowings/new'); await p.fill('#species-name', 'Copiapoa cinerea'); await p.locator('#species-name').blur(); await p.fill('#s-count', '12'); await p.fill('#s-from', 'Mesa Garden'); await p.fill('#s-ref', 'MG 123'); await p.getByRole('button', { name: 'Start batch' }).click();
+await p.waitForURL(/sowings\/S/); await p.fill('#g-n', '5'); await p.getByRole('button', { name: 'Record count' }).click(); await p.waitForTimeout(300);
+await p.screenshot({ path: '/tmp/sow.png', fullPage: true });
+await p.goto('http://127.0.0.1:4173/benches'); await p.locator('.tree .row').first().click(); await p.waitForTimeout(500);
+await p.screenshot({ path: '/tmp/bench.png', fullPage: true });
+await b.close();

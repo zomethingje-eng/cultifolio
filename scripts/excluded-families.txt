@@ -1,0 +1,26 @@
+# Families whose cultivated species are cereals, turf, vegetables, timber or street trees rather than what a plant
+# collector keeps. Applied to the iNaturalist-derived names only; specialist genera are never excluded.
+# One family per line; case-insensitive. Edit freely; derive-names.ts reads it on every run. names-derived.txt.csv
+# lists the family of every name kept, so widen or narrow this after looking at the result.
+Poaceae
+Cyperaceae
+Juncaceae
+Brassicaceae
+Apiaceae
+Amaranthaceae
+Chenopodiaceae
+Polygonaceae
+Fagaceae
+Betulaceae
+Salicaceae
+Ulmaceae
+Juglandaceae
+Platanaceae
+Cannabaceae
+Hamamelidaceae
+Altingiaceae
+Pinaceae
+Cupressaceae
+Taxaceae
+Typhaceae
+Equisetaceae

@@ -1,0 +1,25 @@
+Cultifolio
+Copyright (C) 2026 Jonathan Farnham
+
+The application (everything under src/ and tests/) is licensed under the
+GNU Affero General Public License v3.0; see LICENSE.
+
+The data tooling (everything under scripts/) is licensed under the MIT
+License; see scripts/LICENSE. It is separately licensed so that the corpus
+build can be reused without AGPL obligations.
+
+The species reference the app serves is derived from public data whose
+licences are carried through to every page and every record:
+
+  GBIF Backbone Taxonomy and occurrence data     CC BY 4.0 / CC0 per record
+  World Checklist of Vascular Plants, RBG Kew     CC BY 4.0
+  CHELSA V2.1 climatologies                       CC0 1.0
+  NASA POWER                                      public domain (US Government)
+  iNaturalist photographs                         CC0, CC BY, CC BY-SA per photo
+  Wikimedia Commons photographs                   CC0, CC BY, CC BY-SA per file
+  Wikipedia summaries                             CC BY-SA 4.0
+  OpenAlex                                        CC0 1.0
+  Natural Earth coastlines                        public domain
+
+No other data is used. Nothing on a species page is written by a person or
+a language model; see /about/how in the running app.

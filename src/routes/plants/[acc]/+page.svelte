@@ -1,0 +1,441 @@
+<script lang="ts">
+  import { page } from '$app/state';
+  import { goto } from '$app/navigation';
+  import { onMount } from 'svelte';
+  import { collection } from '$lib/db/collection.svelte';
+  import SpeciesName from '$lib/ui/SpeciesName.svelte';
+  import LocationPicker from '$lib/ui/LocationPicker.svelte';
+  import type { Provenance } from '$lib/db/types';
+  import { slugify } from '$core/names';
+  import { setCrumb } from '$lib/ui/crumb.svelte';
+  import { bySlug } from '$lib/ui/index.svelte';
+  import type { IndexEntry } from '$lib/server/dossiers';
+  import type { Dossier } from '$dossier/schema';
+  import { cultivationSheet } from '$core/sheet';
+  import { EVENT_LABEL, MEASURES, PROP_METHODS, kindOf, type EventType, type Photo } from '$lib/db/types';
+  import { parents } from '$core/names';
+  import PhotoImg from '$lib/ui/PhotoImg.svelte';
+  import PhotoAdd from '$lib/ui/PhotoAdd.svelte';
+  import Lightbox from '$lib/ui/Lightbox.svelte';
+  onMount(() => collection.load());
+  const id = $derived(page.params.acc!);
+  const a = $derived(collection.accession(id));
+  const events = $derived(collection.events(id));
+  /* ---- photos ---- */
+  const photos = $derived(collection.photos(id));
+  const cover = $derived(collection.cover(id));
+  let lightbox = $state<number | null>(null);
+  let adding = $state(false);
+  const openPhoto = (ph: Photo) => (lightbox = Math.max(0, photos.findIndex((x) => x.id === ph.id)));
+  /** Events and photos on one timeline, newest first. */
+  const timeline = $derived(
+    [...events.map((e) => ({ k: 'e' as const, d: e.d, id: e.id, e })), ...photos.map((ph) => ({ k: 'p' as const, d: ph.d, id: ph.id, ph }))].sort((a, b) => b.d.localeCompare(a.d) || b.id.localeCompare(a.id))
+  );
+  const taxon = $derived(a ? collection.taxon(slugify(a.taxonName)) : undefined);
+  const sowing = $derived(a?.sowingId ? collection.sowing(a.sowingId) : undefined);
+  let idx = $state<IndexEntry | undefined>(undefined);
+  let dossier = $state<Dossier | null>(null);
+  /** true once the index has been asked and had nothing (a hybrid under its genus, or a species with no dossier yet). */
+  let noDossier = $state(false);
+  const kind = $derived(a ? kindOf(a) : 'species');
+  /** A hybrid's parents, each with a species page when the corpus has one. */
+  let parentLinks = $state<Array<{ name: string; slug: string | null }>>([]);
+  $effect(() => {
+    if (a) {
+      setCrumb([{ label: 'My plants', href: '/plants' }, { label: `${a.id} · ${a.taxonName}${a.cultivar ? ` ‘${a.cultivar}’` : ''}` }]);
+      bySlug(slugify(a.taxonName)).then(async (e) => {
+        idx = e;
+        if (e && !dossier) dossier = await fetch(`/api/dossier/${e.key}`).then((r) => (r.ok ? (r.json() as Promise<Dossier>) : null)).catch(() => null);
+        if (!e) noDossier = true;
+      });
+      const ps = parents(a.parentage);
+      Promise.all(ps.map(async (name) => ({ name, slug: (await bySlug(slugify(name))) ? slugify(name) : null }))).then((r) => (parentLinks = r));
+    }
+    return () => setCrumb([]);
+  });
+  // Habitat versus here: the plant's own climate figures against the place it sits in.
+  const habitat = $derived.by(() => {
+    if (!dossier || dossier.climate.status !== 'ok') return null;
+    const m = dossier.climate.months;
+    const dlis = m.map((x) => x.dli).filter((x): x is number => x != null);
+    const ex = dossier.climate.extremes ?? null;
+    const sheet = cultivationSheet({ scientific: dossier.name.scientific, family: dossier.name.family, months: m, extremes: ex, lat: dossier.centroid?.lat ?? null });
+    return { dli: dlis.length ? { lo: Math.min(...dlis), hi: Math.max(...dlis) } : null, floor: ex ? ex.minP01 : Math.min(...m.map((x) => x.tmin)), year: sheet.year, arch: sheet.arch };
+  });
+  const cond = $derived(a?.locationId ? collection.conditions(a.locationId) : null);
+  const hereDli = $derived(cond?.ppfd != null ? (cond.ppfd * (cond.lightHours ?? 12) * 3600) / 1e6 : null);
+  const lightVerdict = $derived.by(() => {
+    if (!habitat?.dli) return null;
+    if (hereDli == null) return { k: '', text: `wants ${habitat.dli.lo.toFixed(0)}–${habitat.dli.hi.toFixed(0)} DLI; no light figure for this place` };
+    const want = habitat.arch?.arch.exposure === 'shade' ? habitat.dli.hi * 0.25 : habitat.arch?.arch.exposure === 'part' ? habitat.dli.hi * 0.5 : habitat.dli.lo;
+    if (hereDli < want * 0.5) return { k: 'b', text: `${hereDli.toFixed(0)} DLI here against ${want.toFixed(0)}+ at home: far short, expect stretch` };
+    if (hereDli < want) return { k: 'w', text: `${hereDli.toFixed(0)} DLI here against ${want.toFixed(0)}+ at home: under it, it will live not thrive` };
+    return { k: 'a', text: `${hereDli.toFixed(0)} DLI here against ${want.toFixed(0)}+ at home: enough` };
+  });
+  const coldVerdict = $derived.by(() => {
+    if (!habitat) return null;
+    const floor = habitat.arch?.arch.minC != null && habitat.floor < habitat.arch.arch.minC ? habitat.arch.arch.minC : habitat.floor;
+    if (cond?.floorC == null) return { k: '', text: `keep above ${floor.toFixed(0)} °C; no floor set for this place` };
+    return cond.floorC < floor ? { k: 'b', text: `this place bottoms out at ${cond.floorC} °C, below its ${floor.toFixed(0)} °C floor` } : { k: 'a', text: `this place holds ${cond.floorC} °C, clear of its ${floor.toFixed(0)} °C floor` };
+  });
+  // The season as it falls on this plant's own calendar (the grower's hemisphere is taken as the place's, else the north).
+  const seasonNow = $derived.by(() => {
+    if (!habitat?.year || habitat.year.grow === 'even') return null;
+    const y = habitat.year;
+    const southHere = (cond?.lat ?? 40) < 0;
+    const months = southHere === y.south ? y.growMonths : y.shifted;
+    const now = new Date().getMonth() + 1;
+    const growing = months.includes(now);
+    const next = (now % 12) + 1;
+    const starts = !growing && months.includes(next);
+    const ends = growing && !months.includes(next);
+    return { growing, starts, ends, label: starts ? 'Growth expected next month' : ends ? 'Winding down' : growing ? 'Growth expected' : 'Rest expected', note: starts ? 'First water when new growth actually shows, not on the calendar.' : ends ? 'The recorded season ends this month. Taper water now and stop feeding.' : growing ? `A ${y.grow} grower at home, in season now. What yours is actually doing beats the calendar.` : 'Dry, bright, moving air. Water when it wakes, not before.' };
+  });
+  /* ---- move ---- */
+  let moving = $state(false);
+  let moveTo = $state<string | null>(null);
+  async function doMove() {
+    if (!a || (moveTo ?? null) === (a.locationId ?? null)) { moving = false; return; }
+    await collection.put('accession', id, { locationId: moveTo ?? null, location: moveTo ? null : a.location ?? null });
+    if (moveTo) await collection.addEvent({ acc: id, d: new Date().toISOString().slice(0, 10), t: 'move', note: `to ${collection.locationName(moveTo)}` });
+    moving = false;
+  }
+  const dayMs = 86_400_000;
+  const daysAgo = (d: string | null | undefined) => (d ? Math.floor((Date.now() - Date.parse(d)) / dayMs) : null);
+  const lastOf = (t: string) => events.find((e) => e.t === t)?.d ?? null;
+  const sinceWater = $derived(daysAgo(lastOf('water')));
+  const seen = $derived(daysAgo(collection.lastSeen(id)));
+  const lastMeasure = $derived(events.find((e) => e.t === 'measure' && e.measures));
+  const firstMeasure = $derived([...events].reverse().find((e) => e.t === 'measure' && e.measures));
+  const sizeKey = $derived(lastMeasure ? (['diam', 'h', 'caudex', 'spread', 'heads', 'leaves'].find((k) => lastMeasure.measures?.[k] != null) ?? null) : null);
+  const growth = $derived(sizeKey && lastMeasure && firstMeasure && firstMeasure !== lastMeasure && firstMeasure.measures?.[sizeKey] != null ? lastMeasure.measures![sizeKey] - firstMeasure.measures![sizeKey] : null);
+  const provLabel = (p: string | null | undefined) => (p === 'wild' ? 'wild-collected' : p === 'f1' ? 'ex-habitat seed (F1)' : p === 'fn' ? 'cultivated seed' : p === 'veg' ? 'vegetative' : 'provenance not stated');
+  let logOpen = $state(false);
+  function quick(t: EventType) {
+    et = t;
+    logOpen = true;
+    setTimeout(() => document.getElementById('ev-note')?.focus(), 0);
+  }
+  const propagations = $derived(collection.propagationsOf(id));
+
+  let et = $state<EventType>('water');
+  let ed = $state(new Date().toISOString().slice(0, 10));
+  let enote = $state('');
+  let eused = $state('');
+  let ecause = $state('');
+  let measures = $state<Record<string, string>>({});
+  let editingNotes = $state(false);
+  let notesDraft = $state('');
+  let myNotesDraft = $state('');
+  let editingMy = $state(false);
+
+  /* ---- edit the record ---- */
+  let editing = $state(false);
+  let f = $state({ taxonName: '', cultivar: '', nameKind: 'species' as 'species' | 'cultivar' | 'hybrid', parentage: '', nameAsReceived: '', fieldNumber: '', provenance: 'unknown' as Provenance, acquired: '', sourceFrom: '', sourceForm: '', price: '', locationId: null as string | null });
+  function startEdit() {
+    if (!a) return;
+    f = { taxonName: a.taxonName, cultivar: a.cultivar ?? '', nameKind: kindOf(a), parentage: a.parentage ?? '', nameAsReceived: a.nameAsReceived ?? '', fieldNumber: a.fieldNumber ?? '', provenance: a.provenance ?? 'unknown', acquired: a.acquired ?? '', sourceFrom: a.sourceFrom ?? '', sourceForm: a.sourceForm ?? '', price: a.price ?? '', locationId: a.locationId ?? null };
+    editing = true;
+  }
+  async function saveEdit() {
+    if (!a) return;
+    const moved = (f.locationId ?? null) !== (a.locationId ?? null);
+    await collection.put('accession', id, { taxonName: f.taxonName.trim() || a.taxonName, cultivar: f.cultivar.trim() || null, nameKind: f.nameKind, parentage: f.nameKind === 'hybrid' ? f.parentage.trim() || null : null, nameAsReceived: f.nameAsReceived.trim() || null, fieldNumber: f.fieldNumber.trim() || null, provenance: f.provenance, acquired: f.acquired || null, sourceFrom: f.sourceFrom.trim() || null, sourceForm: f.sourceForm.trim() || null, price: f.price.trim() || null, locationId: f.locationId ?? null, location: f.locationId ? null : a.location ?? null });
+    if (moved && f.locationId) await collection.addEvent({ acc: id, d: new Date().toISOString().slice(0, 10), t: 'move', note: `to ${collection.locationName(f.locationId)}` });
+    editing = false;
+  }
+
+  async function addEvent(e: SubmitEvent) {
+    e.preventDefault();
+    const m: Record<string, number> = {};
+    for (const [k, v] of Object.entries(measures)) if (v !== '' && !Number.isNaN(Number(v))) m[k] = Number(v);
+    await collection.addEvent({ acc: id, d: ed, t: et, note: enote.trim() || null, used: et === 'treat' || et === 'feed' ? eused.trim() || null : null, cause: et === 'death' ? ecause.trim() || null : null, measures: Object.keys(m).length ? m : null, followUp: et === 'treat' ? 10 : null });
+    if (et === 'death') await collection.put('accession', id, { status: 'dead' });
+    enote = '';
+    eused = '';
+    ecause = '';
+    measures = {};
+  }
+  async function setStatus(s: 'growing' | 'archived' | 'dead') {
+    await collection.put('accession', id, { status: s });
+  }
+  async function saveNotes() {
+    await collection.put('accession', id, { notes: notesDraft.trim() || null });
+    editingNotes = false;
+  }
+  async function saveMyNotes() {
+    if (!a) return;
+    await collection.put('taxon', slugify(a.taxonName), { name: a.taxonName, gbifKey: a.taxonKey ?? null, myNotes: myNotesDraft.trim() || null });
+    editingMy = false;
+  }
+  async function remove() {
+    await collection.remove('accession', id);
+    goto('/plants');
+  }
+</script>
+
+<svelte:head><title>{a ? `${a.id} ${a.taxonName}` : id} — Cultifolio</title></svelte:head>
+
+{#if !collection.ready}
+  <p class="muted">Opening your collection…</p>
+{:else if !a}
+  <h1 class="q" style="margin-top: 24px">{id}</h1>
+  <p class="muted">No plant with this number on this device.</p>
+{:else}
+  <div class="hero" class:own={!!cover}>
+    {#if cover}
+      <button class="heroimg" type="button" onclick={() => openPhoto(cover)} aria-label="Open photograph">{#key cover.id}<PhotoImg id={cover.id} size="full" alt="{a.taxonName}, {cover.d}" />{/key}</button>
+      <span class="cred">{cover.caption ? cover.caption + ' · ' : ''}{cover.d}{photos.length > 1 ? ` · ${photos.length} photos` : ''}</span>
+    {:else if idx?.thumb}
+      <img src={idx.thumb} alt={a.taxonName} style="max-height: 260px" onerror={(e) => ((e.currentTarget as HTMLImageElement).style.display = 'none')} /><button class="cred" type="button" onclick={() => { adding = true; setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0); }}>species photograph · add your own</button>
+    {:else}
+      <div class="ph" style="height: 150px"><PhotoAdd acc={id} id="hero-photo" compact /></div>
+    {/if}
+  </div>
+  <div class="idcard">
+    <div class="who">
+      <h1 class="sci"><span class="accno big lead">{a.id}</span><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}<span style="font-style: normal">‘{a.cultivar}’</span>{/if}</h1>
+      <p class="vern">
+        {#if a.nameAsReceived}received as <i>{a.nameAsReceived}</i> · {/if}
+        {#if a.fieldNumber}<span class="fnchip">{a.fieldNumber}</span> · {/if}
+        {provLabel(a.provenance)}
+        {#if a.acquired} · {a.sourceForm ?? 'acquired'} {a.sourceFrom ? `from ${a.sourceFrom}` : ''} {a.acquired}{/if}
+        {#if a.sowingId} · raised from <a class="mono" href="/sowings/{a.sowingId}">{a.sowingId}</a>{#if sowing && sowing.parentAcc} (from <a class="mono" href="/plants/{sowing.parentAcc}">{sowing.parentAcc}</a>){/if}{/if}
+      </p>
+      {#if kind === 'hybrid'}
+        <p class="vern parentage">{#if parentLinks.length}{#each parentLinks as pl, i}{#if i}{' × '}{/if}{#if pl.slug}<a href="/species/{pl.slug}"><SpeciesName name={pl.name} /></a>{:else}<SpeciesName name={pl.name} />{/if}{/each}{:else}A hybrid; parentage not stated. <button class="linkish" type="button" onclick={startEdit}>Add it</button> if you know it.{/if}</p>
+      {/if}
+      <div class="pills">
+        <span class="pill {a.status === 'growing' ? 'a' : a.status === 'dead' ? 'b' : ''}">{a.status}</span>
+        {#if kind === 'hybrid'}<span class="pill c">hybrid</span>{:else if kind === 'cultivar'}<span class="pill c">cultivar</span>{/if}
+        {#if a.locationId}<a class="pill" href="/benches/{a.locationId}">{collection.locationName(a.locationId)}</a>{:else if a.location}<span class="pill">{a.location}</span>{/if}
+        {#if sinceWater != null && sinceWater > 21 && a.status === 'growing'}<span class="pill w">not watered for {sinceWater} d</span>{/if}
+      </div>
+    </div>
+    <div class="acts">
+      {#if kind !== 'hybrid'}<a class="btn" href="/species/{slugify(a.taxonName)}">Species page</a>{/if}
+      <button class="btn" onclick={startEdit}>Edit</button>
+      <a class="btn" href="/labels?acc={a.id}">Label</a>
+      {#if a.status === 'growing'}<a class="btn" href="/sowings/new?parent={a.id}">Propagate</a>{/if}
+    </div>
+  </div>
+
+  {#if editing}
+    <form class="cult editform" onsubmit={(e) => { e.preventDefault(); saveEdit(); }}>
+      <label><span>Species</span><input id="ed-name" type="text" bind:value={f.taxonName} /></label>
+      <label><span>Cultivar</span><input id="ed-cv" type="text" bind:value={f.cultivar} /></label>
+      <label><span>What it is</span><select id="ed-kind" bind:value={f.nameKind}><option value="species">A species</option><option value="cultivar">A cultivar of that species</option><option value="hybrid">A hybrid (filed under the genus)</option></select></label>
+      {#if f.nameKind === 'hybrid'}<label><span>Parentage</span><input id="ed-parentage" type="text" bind:value={f.parentage} placeholder="Seed parent × pollen parent" /></label>{/if}
+      <label><span>Name as received</span><input id="ed-recv" type="text" bind:value={f.nameAsReceived} /></label>
+      <label><span>Field number</span><input id="ed-fn" type="text" bind:value={f.fieldNumber} /></label>
+      <label><span>Provenance</span><select id="ed-prov" bind:value={f.provenance}><option value="unknown">Not stated</option><option value="wild">Wild-collected</option><option value="f1">Ex-habitat seed (F1)</option><option value="fn">Cultivated seed (Fn)</option><option value="veg">Vegetative</option></select></label>
+      <label><span>Acquired</span><input id="ed-date" type="date" bind:value={f.acquired} /></label>
+      <label><span>From</span><input id="ed-from" type="text" bind:value={f.sourceFrom} /></label>
+      <label><span>Form</span><input id="ed-form" type="text" bind:value={f.sourceForm} placeholder="plant, seedling, seed, cutting" /></label>
+      <label><span>Price</span><input id="ed-price" type="text" bind:value={f.price} /></label>
+      <div class="wide"><span class="lbl">Location</span><LocationPicker bind:value={f.locationId} id="ed-loc" /></div>
+      <div class="actions wide"><button class="btn" type="button" onclick={() => (editing = false)}>Cancel</button><button class="btn pri" type="submit">Save</button></div>
+    </form>
+  {/if}
+
+  <div class="quickbar">
+    <button class="btn pri" onclick={() => quick('water')}>Water</button>
+    <button class="btn" onclick={() => quick('feed')}>Feed</button>
+    <button class="btn" onclick={() => quick('repot')}>Repot</button>
+    <button class="btn" onclick={() => quick('measure')}>Measure</button>
+    <button class="btn" onclick={() => quick('treat')}>Treat</button>
+    <button class="btn" onclick={() => quick('flower')}>Flower</button>
+    <button class="btn" onclick={() => quick('note')}>Note</button>
+    <button class="btn" onclick={() => { adding = !adding; if (adding) setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0); }}>Photo</button>
+    <button class="btn" onclick={() => { moveTo = a.locationId ?? null; moving = !moving; }}>Move</button>
+    {#if a.status === 'growing'}<button class="btn" onclick={() => setStatus('archived')}>Archive</button>{:else}<button class="btn" onclick={() => setStatus('growing')}>Mark growing</button>{/if}
+  </div>
+
+  {#if moving}
+    <div class="cult evform">
+      <div class="sum">Move to <span class="hint">records a move on the timeline</span></div>
+      <div class="fields"><LocationPicker bind:value={moveTo} id="mv-loc" /><div class="actions"><button class="btn" type="button" onclick={() => (moving = false)}>Cancel</button><button class="btn pri" type="button" onclick={doMove}>Move</button></div></div>
+    </div>
+  {/if}
+
+  {#if logOpen}
+    <form class="cult evform" onsubmit={(e) => { addEvent(e); logOpen = false; }}>
+      <div class="sum">Record: {EVENT_LABEL[et]} <span class="hint">goes on the timeline below</span></div>
+      <div class="fields">
+        <div class="row">
+          <select id="ev-type" bind:value={et}>
+            {#each Object.entries(EVENT_LABEL).filter(([k]) => !['audit', 'germinate', 'potup', 'loss', 'propagate', 'acquire'].includes(k)) as [k, label]}<option value={k}>{label}</option>{/each}
+          </select>
+          <input id="ev-date" type="date" bind:value={ed} />
+        </div>
+        {#if et === 'treat' || et === 'feed'}<input id="ev-used" type="text" bind:value={eused} placeholder={et === 'treat' ? 'Product and rate, e.g. Safari 20SG drench' : 'Feed, e.g. Grow More 17-8-22 ¼ tsp/gal'} />{/if}
+        {#if et === 'death'}<input id="ev-cause" type="text" bind:value={ecause} placeholder="Cause, if known" />{/if}
+        {#if et === 'measure'}
+          <div class="measures">
+            {#each MEASURES as m}
+              <label><span class="lab">{m.label}{m.unit ? ` (${m.unit})` : ''}</span><input type="number" step="any" bind:value={measures[m.k]} /></label>
+            {/each}
+          </div>
+        {/if}
+        <input id="ev-note" type="text" bind:value={enote} placeholder="Note (optional)" />
+        <div class="actions"><button class="btn" type="button" onclick={() => (logOpen = false)}>Cancel</button><button class="btn pri" type="submit">Record</button></div>
+      </div>
+    </form>
+  {/if}
+
+  <div class="cards">
+    <div class="card"><div class="lab">Since watered</div><div class="val">{sinceWater == null ? '–' : sinceWater}<span class="u">{sinceWater == null ? '' : ' d'}</span></div><div class="sub">{lastOf('water') ? `last ${lastOf('water')}` : 'no watering recorded'}</div></div>
+    <div class="card"><div class="lab">Last seen</div><div class="val">{seen == null ? '–' : seen}<span class="u">{seen == null ? '' : ' d'}</span></div><div class="sub">{collection.lastSeen(id) ? `audit or arrival, ${collection.lastSeen(id)}` : 'never audited'}</div></div>
+    <div class="card"><div class="lab">{sizeKey ? (MEASURES.find((m) => m.k === sizeKey)?.label ?? 'Size') : 'Size'}</div><div class="val">{sizeKey && lastMeasure ? lastMeasure.measures![sizeKey] : '–'}<span class="u">{sizeKey ? ' ' + (MEASURES.find((m) => m.k === sizeKey)?.unit ?? '') : ''}</span></div>{#if growth != null}<div class="gauge"><i style="width: {Math.min(100, Math.max(8, (growth / Math.max(1, lastMeasure!.measures![sizeKey!])) * 100))}%"></i></div>{/if}<div class="sub">{growth != null ? `${growth >= 0 ? '+' : ''}${growth} since ${firstMeasure!.d}` : lastMeasure ? `measured ${lastMeasure.d}` : 'not measured yet'}</div></div>
+    <div class="card"><div class="lab">Its year</div><div class="val" style="font-family: var(--ui); font-size: 17px; font-weight: 700">{seasonNow ? seasonNow.label : habitat?.year ? 'No strict rest' : dossier ? 'No habitat climate' : noDossier ? (kind === 'hybrid' ? 'A hybrid' : 'No species page') : '…'}</div><div class="sub">{seasonNow ? seasonNow.note : habitat?.year ? 'Slows in the extremes rather than stopping.' : dossier ? 'Nothing to derive a season from.' : noDossier ? (kind === 'hybrid' ? (parentLinks.some((p) => p.slug) ? 'No habitat of its own; read its parents’ pages.' : 'No habitat of its own; grow it by its genus.') : 'Not in the reference yet.') : 'reading the species dossier'}</div></div>
+  </div>
+
+  {#if habitat}
+    <div class="secrule"><h2>Habitat versus here</h2><div class="line"></div><span class="n">{a.locationId ? collection.locationName(a.locationId) : 'no place set'}</span></div>
+    <div class="factgrid hvh">
+      {#if lightVerdict}<div><b>Light</b><span class="pill {lightVerdict.k}" style="margin-right: 6px">{lightVerdict.k === 'a' ? 'enough' : lightVerdict.k === 'w' ? 'short' : lightVerdict.k === 'b' ? 'far short' : 'not compared'}</span>{lightVerdict.text}.{#if !lightVerdict.k}{#if a.locationId}{' '}<a href="/benches/{a.locationId}?edit=1">Set its light</a>.{:else}{' '}<button type="button" class="linkish" onclick={() => (moving = true)}>Give it a place</button> first.{/if}{/if}</div>{/if}
+      {#if coldVerdict}<div><b>Cold</b><span class="pill {coldVerdict.k}" style="margin-right: 6px">{coldVerdict.k === 'a' ? 'safe' : coldVerdict.k === 'b' ? 'too cold' : 'not compared'}</span>{coldVerdict.text}.{#if !coldVerdict.k}{#if a.locationId}{' '}<a href="/benches/{a.locationId}?edit=1">Set its floor</a>.{:else}{' '}<button type="button" class="linkish" onclick={() => (moving = true)}>Give it a place</button> first.{/if}{/if}</div>{/if}
+      <div class="wide small muted">Habitat figures from the species dossier (CHELSA, NASA POWER); this place's figures from its bench settings, inherited from parents where set. <a href="/species/{slugify(a.taxonName)}#s-cultivation">The full cultivation sheet</a>.</div>
+    </div>
+  {/if}
+
+  <div class="secrule" id="photos"><h2>Photographs</h2><div class="line"></div><span class="n">{photos.length ? `${photos.length}` : ''}</span></div>
+  {#if adding || !photos.length}
+    <div class="cult addrow"><PhotoAdd acc={id} id="acc-photo" onadded={() => (adding = true)} /></div>
+  {/if}
+  {#if photos.length}
+    <div class="phgrid">
+      {#each photos as ph, i (ph.id)}
+        <button class="ph" type="button" class:cov={cover?.id === ph.id} onclick={() => (lightbox = i)} title={ph.caption ?? ph.d}>
+          <PhotoImg id={ph.id} alt={ph.caption ?? ph.d} loading="lazy" />
+          <span class="pd">{ph.d}</span>
+          {#if cover?.id === ph.id}<span class="tag">cover</span>{/if}
+        </button>
+      {/each}
+    </div>
+  {/if}
+
+  <div class="secrule"><h2>Log</h2><div class="line"></div><span class="n">{timeline.length} {timeline.length === 1 ? 'entry' : 'entries'}</span></div>
+  {#if !events.length}
+    <div class="cult"><div class="none">Nothing recorded yet. The verbs above each add a line here.</div></div>
+  {:else}
+    <div class="tl">
+      {#each timeline as row (row.k + row.id)}
+        {#if row.k === 'e'}
+          {@const e = row.e}
+          <div class="tlrow">
+            <span class="d">{e.d}</span>
+            <span class="t">{EVENT_LABEL[e.t] ?? e.t}{#if e.used}<span class="x2"> · {e.used}</span>{/if}{#if e.cause}<span class="x2"> · {e.cause}</span>{/if}{#if e.measures}<span class="x2"> · {Object.entries(e.measures).map(([k, v]) => `${MEASURES.find((m) => m.k === k)?.label ?? k} ${v}`).join(', ')}</span>{/if}{#if e.note}<span class="x2"> · {e.note}</span>{/if}</span>
+            <button class="rm" title="Remove this entry" onclick={() => collection.remove('event', e.id)}>×</button>
+          </div>
+        {:else}
+          {@const ph = row.ph}
+          <button class="tlrow tlphoto" type="button" onclick={() => openPhoto(ph)}>
+            <span class="d">{ph.d}</span>
+            <span class="t"><span class="thumb"><PhotoImg id={ph.id} alt="" loading="lazy" /></span>Photographed{#if ph.caption}<span class="x2"> · {ph.caption}</span>{/if}</span>
+            <span class="x">{ph.dFrom === 'exif' ? 'camera date' : ''}</span>
+          </button>
+        {/if}
+      {/each}
+    </div>
+  {/if}
+
+  <div class="secrule"><h2>Notes on this plant</h2><div class="line"></div></div>
+  <div class="cult">
+    {#if editingNotes}
+      <div class="fields"><textarea id="acc-notes" rows="4" bind:value={notesDraft}></textarea><div class="actions"><button class="btn" onclick={() => (editingNotes = false)}>Cancel</button><button class="btn pri" onclick={saveNotes}>Save</button></div></div>
+    {:else if a.notes}
+      <div class="body">{a.notes}</div><div class="foot"><button class="linkish" onclick={() => { notesDraft = a.notes ?? ''; editingNotes = true; }}>Edit</button></div>
+    {:else}
+      <div class="none">Nothing yet. <button class="linkish" onclick={() => { notesDraft = ''; editingNotes = true; }}>Add a note</button></div>
+    {/if}
+  </div>
+  <div class="cult">
+    <div class="sum">My notes on <i>{a.taxonName}</i> <span class="hint">shared by every plant of this species you own; shown on the species page</span></div>
+    {#if editingMy}
+      <div class="fields"><textarea id="taxon-notes" rows="4" bind:value={myNotesDraft}></textarea><div class="actions"><button class="btn" onclick={() => (editingMy = false)}>Cancel</button><button class="btn pri" onclick={saveMyNotes}>Save</button></div></div>
+    {:else if taxon?.myNotes}
+      <div class="body">{taxon.myNotes}</div><div class="foot"><button class="linkish" onclick={() => { myNotesDraft = taxon?.myNotes ?? ''; editingMy = true; }}>Edit</button></div>
+    {:else}
+      <div class="none">Nothing yet. <button class="linkish" onclick={() => { myNotesDraft = ''; editingMy = true; }}>Write cultivation notes</button></div>
+    {/if}
+  </div>
+
+  {#if propagations.length}
+    <div class="secrule"><h2>Propagated from this plant</h2><div class="line"></div><span class="n">{propagations.length}</span></div>
+    <div class="tl">
+      {#each propagations as p}
+        {@const st = collection.sowingStats(p.id)}
+        <a class="tlrow" href="/sowings/{p.id}"><span class="d">{p.sown}</span><span class="t"><span class="mono">{p.id}</span> · {p.count} {(PROP_METHODS.find((m) => m.k === p.method) ?? PROP_METHODS[0]).unit}</span><span class="x">{st.germinated} struck · {st.potted} potted · {p.status}</span></a>
+      {/each}
+    </div>
+  {/if}
+
+  <div class="secrule"><h2>Provenance</h2><div class="line"></div></div>
+  <div class="factgrid">
+    <div><b>Source</b>{[a.sourceFrom, a.sourceForm, a.acquired].filter(Boolean).join(' · ') || 'not stated'}{#if a.price} · {a.price}{/if}</div>
+    <div><b>Field number</b>{a.fieldNumber ?? 'none'}</div>
+    <div><b>Provenance</b>{provLabel(a.provenance)}</div>
+    {#if a.sowingId}<div><b>Raised from</b><a href="/sowings/{a.sowingId}">{a.sowingId}</a>{#if sowing} · {sowing.count} started, {collection.sowingStats(sowing.id).germinated} up, {collection.sowingStats(sowing.id).potted} potted{/if}</div>{/if}
+    {#if a.nameAsReceived}<div><b>Name as received</b>{a.nameAsReceived}</div>{/if}
+    {#if kind === 'hybrid'}<div><b>Parentage</b>{a.parentage ?? 'not stated'}</div>{/if}
+  </div>
+
+  <div class="dangerrow">
+    <span class="small muted">Removing keeps the number reserved and the entry recoverable until you export.</span>
+    <button class="btn danger" onclick={remove}>Remove this plant</button>
+  </div>
+  {#if lightbox != null && photos.length}
+    <Lightbox {photos} bind:index={lightbox} acc={id} onclose={() => (lightbox = null)} />
+  {/if}
+{/if}
+
+<style>
+  .hero { margin-top: 14px; }
+  .parentage { margin-top: 2px; }
+  .parentage a { color: inherit; }
+  .hero.own { background: #0d1211; }
+  .hero.own .cred { top: 10px; bottom: auto; }
+  .heroimg { display: block; width: 100%; padding: 0; border: 0; background: transparent; cursor: zoom-in; }
+  .heroimg :global(img) { width: 100%; max-height: 430px; object-fit: cover; display: block; }
+  .hero .ph { padding: 16px; }
+  button.cred { border: 0; cursor: pointer; font: inherit; font-size: 10.5px; }
+  .addrow { padding: 14px 17px; margin-top: 12px; }
+  .phgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-top: 12px; }
+  .phgrid .ph { position: relative; display: block; padding: 0; border: 0; background: var(--sunk); border-radius: 10px; overflow: hidden; aspect-ratio: 1; cursor: zoom-in; box-shadow: var(--sh); }
+  .phgrid .ph :global(img) { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .phgrid .ph.cov { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .phgrid .pd { position: absolute; left: 8px; bottom: 7px; font-family: var(--mono); font-size: 10.5px; color: #fff; background: rgba(8, 20, 16, 0.6); padding: 2px 6px; border-radius: 5px; }
+  .phgrid .tag { position: absolute; right: 8px; top: 7px; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 700; color: var(--on-accent); background: var(--accent); padding: 2px 7px; border-radius: 5px; }
+  .tlphoto { width: 100%; text-align: left; background: transparent; border: 0; border-top: 1px solid var(--rule); font: inherit; color: inherit; cursor: pointer; align-items: center; }
+  .tlphoto:first-child { border-top: 0; }
+  .tlphoto .thumb { display: inline-block; width: 44px; height: 44px; border-radius: 7px; overflow: hidden; vertical-align: middle; margin-right: 10px; background: var(--sunk); }
+  .tlphoto .thumb :global(img) { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .tlphoto:hover .t { color: var(--accent); }
+  .hvh { grid-template-columns: 1fr 1fr; }
+  .linkish { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-decoration: underline; }
+  @media (max-width: 520px) { .hvh { grid-template-columns: 1fr; } }
+  .muted { color: var(--ink3); }
+  .editform, .evform { margin-top: 16px; }
+  .editform { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 12px; padding: 14px 17px; }
+  .editform label { display: grid; gap: 4px; }
+  .editform label > span, .editform .lbl { font-size: 10.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink3); font-weight: 700; }
+  .editform input, .editform select, .fields input, .fields select, .fields textarea { width: 100%; font: inherit; font-size: 14px; padding: 8px 11px; border: 1px solid var(--rule); border-radius: 9px; background: var(--card); color: var(--ink); }
+  .wide { grid-column: 1 / -1; }
+  .fields { display: grid; gap: 8px; padding: 13px 17px 15px; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .measures { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+  .measures label { display: grid; gap: 3px; }
+  .measures .lab { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink3); font-weight: 700; }
+  .actions { display: flex; justify-content: flex-end; gap: 8px; margin: 0; }
+  .tlrow .x2 { font-weight: 400; color: var(--ink2); font-size: 12.5px; }
+  .rm { border: 0; background: transparent; color: var(--ink3); cursor: pointer; font-size: 16px; line-height: 1; padding: 0 4px; }
+  .rm:hover { color: var(--bad); }
+  a.tlrow { color: inherit; }
+  a.tlrow:hover { text-decoration: none; }
+  a.tlrow:hover .t { color: var(--accent); }
+  .linkish { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font: inherit; font-size: 13px; }
+  .dangerrow { margin: 46px 0 10px; padding: 15px 17px; border: 1px dashed var(--rule2); border-radius: var(--r); display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  a.pill { color: inherit; }
+  @media (max-width: 640px) { .editform { grid-template-columns: 1fr 1fr; } .hero { margin-top: 0; } .heroimg :global(img) { max-height: 260px; } }
+</style>

@@ -1,0 +1,27 @@
+{
+ "compilerOptions": {
+  "module": "esnext",
+  "moduleResolution": "bundler",
+  "target": "es2022",
+  "strict": true,
+  "resolveJsonModule": true,
+  "skipLibCheck": true,
+  "paths": {
+   "$core/*": [
+    "./src/lib/core/*"
+   ],
+   "$dossier/*": [
+    "./src/lib/dossier/*"
+   ],
+   "$climate/*": [
+    "./src/lib/climate/*"
+   ],
+   "$lib/*": [
+    "./src/lib/*"
+   ]
+  },
+  "types": [
+   "node"
+  ]
+ }
+}

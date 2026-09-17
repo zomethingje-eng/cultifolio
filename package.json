@@ -1,0 +1,45 @@
+{
+  "name": "cultifolio",
+  "version": "3.0.0-m1",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "wrangler dev",
+    "deploy": "npm run check && npm run test && vite build && wrangler deploy",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "e2e": "playwright test",
+    "dossier": "tsx scripts/build-dossiers.ts",
+    "bulk": "tsx scripts/bulk-fetch.ts",
+    "derive": "tsx scripts/derive-names.ts"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260914.1",
+    "@playwright/test": "^1.63.0",
+    "@sveltejs/adapter-cloudflare": "^7.2.9",
+    "@sveltejs/kit": "^2.70.3",
+    "@sveltejs/vite-plugin-svelte": "^7.3.0",
+    "@types/node": "^22.20.2",
+    "@types/qrcode": "^1.5.6",
+    "svelte": "^5.57.0",
+    "svelte-check": "^4.7.6",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "vite": "^8.3.0",
+    "vitest": "^5.0.0",
+    "wrangler": "^4.131.0"
+  },
+  "dependencies": {
+    "@fontsource-variable/newsreader": "^5.3.0",
+    "@fontsource-variable/public-sans": "^5.3.0",
+    "@fontsource/dm-mono": "^5.3.0",
+    "fflate": "^0.8.3",
+    "idb": "^8.0.3",
+    "qrcode": "^1.5.4",
+    "valibot": "^1.5.0"
+  }
+}

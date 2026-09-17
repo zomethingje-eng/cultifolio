@@ -1,0 +1,28 @@
+import { chromium } from '@playwright/test';
+import fs from 'node:fs';
+const B = 'http://127.0.0.1:4173';
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+const p = await b.newPage({ viewport: { width: 1180, height: 900 } });
+await p.goto(B + '/plants/new?species=Copiapoa%20cinerea&key=5384013'); await p.getByRole('button', { name: /^Add/ }).click(); await p.waitForURL(/plants\/\d/); await p.waitForTimeout(500);
+await p.screenshot({ path: '/tmp/p0-before.png', fullPage: false });
+// two "photos": crops of a species page screenshot so they look like pictures rather than UI
+await p.goto(B + '/species/copiapoa-cinerea'); await p.waitForTimeout(400);
+const shot = await p.screenshot({ type: 'jpeg', quality: 85, clip: { x: 100, y: 630, width: 980, height: 520 } });
+const shot2 = await p.screenshot({ type: 'jpeg', quality: 85, clip: { x: 100, y: 780, width: 980, height: 400 } });
+await p.goBack(); await p.waitForTimeout(400);
+await p.locator('#acc-photo-file').setInputFiles([{ name: 'a.jpg', mimeType: 'image/jpeg', buffer: shot }, { name: 'b.jpg', mimeType: 'image/jpeg', buffer: shot2 }]);
+await p.waitForSelector('.phgrid .ph:nth-child(2)'); await p.waitForTimeout(600);
+await p.screenshot({ path: '/tmp/p1-plant.png', fullPage: true });
+await p.locator('.phgrid .ph').nth(1).click(); await p.waitForTimeout(500);
+await p.screenshot({ path: '/tmp/p2-lightbox.png' });
+await p.getByRole('button', { name: 'Caption / date' }).click(); await p.waitForTimeout(200);
+await p.screenshot({ path: '/tmp/p3-lightbox-edit.png' });
+await p.keyboard.press('Escape');
+await p.goto(B + '/plants'); await p.waitForTimeout(600);
+await p.screenshot({ path: '/tmp/p4-list.png' });
+await p.goto(B + '/species/copiapoa-cinerea#s-photos'); await p.waitForTimeout(600);
+await p.screenshot({ path: '/tmp/p5-species.png' });
+await p.setViewportSize({ width: 390, height: 844 });
+await p.goto(B + '/plants/2026-0001'); await p.waitForTimeout(600);
+await p.screenshot({ path: '/tmp/p6-mobile.png', fullPage: true });
+await b.close();
