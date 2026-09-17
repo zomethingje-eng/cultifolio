@@ -10,6 +10,13 @@ Run on a machine with ~25 GB free disk and ~6 GB free RAM:
   pip install rasterio numpy requests
   python scripts/pack-climate.py            # downloads to ./climate/src, resumable
   python scripts/pack-climate.py --probe -24.877 -70.504   # read one cell back and print it
+  python scripts/pack-climate.py --inspect rsds 1          # print what one raster says about its own units, and sample stats
+
+Units: each raster's own scale/offset tags are used when it states them, the
+technical specification's table otherwise, and every layer's scaling and its
+source are written into climate.json. Radiation (rsds) is packed only from
+stated tags or an explicit --trust-rsds-scale, because its tabulated scale
+disagreed with a plausibility probe and plausibility is not a unit check.
 
 Resumable: each downloaded file is kept; each finished layer is recorded in
 climate/progress.json, so a crash or a Ctrl+C costs at most one layer.
@@ -28,11 +35,61 @@ NODATA = -32768
 VARS = ["tasmax", "tasmin", "tas", "pr", "rsds", "hurs", "vpd", "sfcWind"]
 # quantisation written to the file (physical = raw * scale); mirrors src/lib/climate/grid.ts QUANT
 QUANT = {"tasmax": (0.1, "°C"), "tasmin": (0.1, "°C"), "tas": (0.1, "°C"), "pr": (1, "mm/month"), "rsds": (0.01, "MJ/m²/day"), "hurs": (0.1, "%"), "vpd": (1, "Pa"), "sfcWind": (0.01, "m/s"), "elev": (1, "m")}
-# CHELSA storage: physical = raw * scale + offset (tech spec v1.3, table 7.1)
+# CHELSA storage: physical = raw * scale + offset, as the technical specification tabulates it. This table is
+# a FALLBACK: the GeoTIFF's own scale/offset tags are read first and win when present, and the header records
+# which was used for every layer, so the unit question is settled by the file, not by what looks plausible.
 CHELSA = {"tas": (0.1, -273.15), "tasmax": (0.1, -273.15), "tasmin": (0.1, -273.15), "pr": (0.1, 0.0),
-          # rsds: unit MJ m-2 d-1. The published scale 0.001 gives 0.3 MJ for the Atacama coast in January;
-          # 0.1 gives 30 MJ, which is what the clear-sky × cloud model produces there. Verified by probe.
-          "rsds": (0.1, 0.0), "hurs": (0.01, 0.0), "vpd": (0.1, 0.0), "sfcWind": (0.001, 0.0)}
+          # rsds is tabulated as scale 0.001 in MJ m-2 d-1; a probe on the Atacama coast gave 0.3 MJ under it and
+          # 30 MJ under 0.1. Plausibility is not a unit check, so the packer now refuses to pack rsds unless the
+          # raster tags state its scale, or --trust-rsds-scale is given with the value to use. Run --inspect first.
+          "rsds": (0.001, 0.0), "hurs": (0.01, 0.0), "vpd": (0.1, 0.0), "sfcWind": (0.001, 0.0)}
+
+# Physical ranges a whole-earth monthly layer must fall inside; a layer outside them is a unit mistake, not weather.
+SANE = {"tas": (-70, 50), "tasmax": (-60, 60), "tasmin": (-80, 45), "pr": (0, 5000), "rsds": (0, 45), "hurs": (0, 100), "vpd": (0, 8000), "sfcWind": (0, 30)}
+
+
+def raster_scaling(path):
+    """What the file itself says: (scale, offset, unit, tags) or (None, None, None, tags) when it says nothing."""
+    import rasterio
+    with rasterio.open(path) as src:
+        sc = src.scales[0] if src.scales else None
+        off = src.offsets[0] if src.offsets else None
+        unit = src.units[0] if src.units else None
+        tags = {**src.tags(), **src.tags(1)}
+        # GDAL keeps a default of scale 1 / offset 0 when the tags are absent; treat that as "not stated".
+        stated = not (sc in (None, 1.0) and off in (None, 0.0))
+        return (sc if stated else None, off if stated else None, unit, tags)
+
+
+def inspect(path, var):
+    """Print everything the raster says about its units plus sample statistics under each candidate scaling."""
+    import numpy as np, rasterio
+    sc, off, unit, tags = raster_scaling(path)
+    print(f"{os.path.basename(path)}")
+    print(f"  raster tags: scale={sc} offset={off} unit={unit}")
+    for k, v in sorted(tags.items()):
+        if any(w in k.lower() for w in ("scale", "offset", "unit", "long_name", "standard_name", "description")):
+            print(f"  tag {k} = {v}")
+    with rasterio.open(path) as src:
+        h, w = src.height, src.width
+        win = rasterio.windows.Window(w // 2 - 500, h // 2 - 250, 1000, 500)  # a slab of the tropics/subtropics
+        raw = src.read(1, window=win).astype("float64")
+        nod = src.nodata if src.nodata is not None else 65535
+        raw = raw[raw != nod]
+    candidates = {"raster tags": (sc, off), "spec table": CHELSA.get(var, (1, 0))}
+    if var == "rsds":
+        # If the raw numbers sit around 100–350, they are a daily-mean flux in W m-2, and the way to a daily
+        # integral in MJ m-2 is ×0.0864 (86,400 s in a day), not ×0.1: a 16% difference in every DLI figure.
+        candidates["W m-2 → MJ m-2 d-1 (×0.0864)"] = (0.0864, 0.0)
+        candidates["×0.1 (what the grid was first packed with)"] = (0.1, 0.0)
+    print(f"  raw sample: median {np.median(raw):.4g}, p1 {np.percentile(raw, 1):.4g}, p99 {np.percentile(raw, 99):.4g}")
+    for label, (s2, o2) in candidates.items():
+        if s2 is None:
+            print(f"  under {label}: not stated")
+            continue
+        phys = raw * s2 + o2
+        lo, hi = SANE.get(var, (-1e9, 1e9))
+        print(f"  under {label} (×{s2} + {o2}): median {np.median(phys):.3g}, p1 {np.percentile(phys, 1):.3g}, p99 {np.percentile(phys, 99):.3g}, sane range {lo}..{hi}: {'OK' if lo <= np.percentile(phys, 1) and np.percentile(phys, 99) <= hi else 'OUT OF RANGE'}")
 
 CHELSA_URL = "https://os.zhdk.cloud.switch.ch/chelsav2/GLOBAL/climatologies/1981-2010/{var}/CHELSA_{var}_{mm}_1981-2010_V.2.1.tif"
 CHELSA_URL_ALT = "https://os.unil.cloud.switch.ch/chelsa02/chelsa/global/climatologies/{var}/1981-2010/CHELSA_{var}_{mm}_1981-2010_V.2.1.tif"
@@ -124,7 +181,15 @@ def main():
     ap.add_argument("--probe", nargs=2, type=float, metavar=("LAT", "LON"), help="print one cell from an existing grid and exit")
     ap.add_argument("--keep-src", action="store_true", help="keep downloaded GeoTIFFs (default: delete each after packing to save disk)")
     ap.add_argument("--redo", metavar="VAR", action="append", default=[], help="repack every layer of this variable even if already done (repeatable)")
+    ap.add_argument("--inspect", nargs=2, metavar=("VAR", "MM"), help="download one CHELSA layer, print its unit metadata and sample statistics under each candidate scaling, and exit")
+    ap.add_argument("--trust-rsds-scale", type=float, metavar="SCALE", help="pack rsds with this scale when the raster tags state none (only after --inspect has settled it)")
     args = ap.parse_args()
+    if args.inspect:
+        v, mm_ = args.inspect[0], f"{int(args.inspect[1]):02d}"
+        os.makedirs(os.path.join(args.out, "src"), exist_ok=True)
+        path = download(CHELSA_URL.format(var=v, mm=mm_), os.path.join(args.out, "src", f"CHELSA_{v}_{mm_}.tif"), alt=CHELSA_URL_ALT.format(var=v, mm=mm_))
+        inspect(path, v)
+        return
     os.makedirs(args.out, exist_ok=True)
     grid_path = os.path.join(args.out, "climate.grid")
     hdr_path = os.path.join(args.out, "climate.json")
@@ -175,8 +240,23 @@ def main():
         else:
             v, mm_ = spec["var"], f"{spec['month']:02d}"
             path = download(CHELSA_URL.format(var=v, mm=mm_), os.path.join(src_dir, f"CHELSA_{v}_{mm_}.tif"), alt=CHELSA_URL_ALT.format(var=v, mm=mm_))
-            sc, off = CHELSA[v]
+            rsc, roff, runit, _ = raster_scaling(path)
+            if rsc is not None:
+                sc, off, how = rsc, roff, "raster tags"
+            elif v == "rsds" and args.trust_rsds_scale is not None:
+                sc, off, how = args.trust_rsds_scale, 0.0, "--trust-rsds-scale"
+            elif v == "rsds":
+                raise SystemExit("rsds: the raster states no scale/offset and its tabulated scale is in doubt. Run `pack-climate.py --inspect rsds 01`, read the output, then pass --trust-rsds-scale with the value the evidence supports.")
+            else:
+                sc, off, how = CHELSA[v][0], CHELSA[v][1], "spec table"
             arr = resample_to_grid(path, sc, off, nodata_in=65535)
+            import numpy as np
+            lo, hi = SANE[v]
+            p1, p99 = np.nanpercentile(arr, 1), np.nanpercentile(arr, 99)
+            if not (lo <= p1 and p99 <= hi):
+                raise SystemExit(f"{spec['id']}: values {p1:.3g}..{p99:.3g} (1st–99th percentile) fall outside {lo}..{hi} under {how} (×{sc} + {off}); a unit mistake, not weather. Not packed.")
+            spec["srcScale"], spec["srcOffset"], spec["srcUnit"], spec["scalingFrom"] = sc, off, runit, how
+            print(f"  {spec['id']}: scaled ×{sc} + {off} ({how}{', unit ' + runit if runit else ''}); p1 {p1:.3g}, p99 {p99:.3g}")
         mm[:, :, i] = quantise(arr, spec["scale"])
         mm.flush()
         done.add(spec["id"]); json.dump(sorted(done), open(prog_path, "w"))
@@ -186,7 +266,15 @@ def main():
         elapsed = time.time() - t_start
         print(f"[{len(done)}/{n}] {spec['id']} packed in {time.time()-t0:.0f}s (elapsed {elapsed/60:.0f} min)")
 
-    json.dump(header(), open(hdr_path, "w"), indent=1)
+    h = header()
+    # Carry the per-layer provenance (which scale was used and where it came from) into the header, merging with any earlier run's.
+    prev = json.load(open(hdr_path)) if os.path.exists(hdr_path) else {"layers": []}
+    prevBy = {l["id"]: l for l in prev.get("layers", [])}
+    for i, spec in enumerate(L):
+        for k in ("srcScale", "srcOffset", "srcUnit", "scalingFrom"):
+            if k in spec: h["layers"][i][k] = spec[k]
+            elif k in prevBy.get(spec["id"], {}): h["layers"][i][k] = prevBy[spec["id"]][k]
+    json.dump(h, open(hdr_path, "w"), indent=1)
     print(f"\ndone → {grid_path} ({os.path.getsize(grid_path)/1e9:.2f} GB) and {hdr_path}")
     print("upload with:  npx wrangler r2 object put cultifolio/climate/v1/climate.grid --file=climate/climate.grid")
     print("              npx wrangler r2 object put cultifolio/climate/v1/climate.json --file=climate/climate.json --content-type=application/json")

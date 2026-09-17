@@ -31,9 +31,12 @@ export interface BuildOptions {
   now?: () => Date;
   /** Skip slow, non-load-bearing sources (literature, commons) for a quick first pass. */
   quick?: boolean;
-  /** Sources to leave out of this build, recorded as skipped so a later pass can fill them. */
-  skip?: Array<'openalex'>;
+  /** Sources to leave out of this build, recorded as skipped so a later pass (or a carry from the previous build) can fill them. */
+  skip?: SkippableSource[];
 }
+export type SkippableSource = 'openalex' | 'wikidata' | 'wikipedia' | 'inat' | 'commons' | 'gbif.media';
+/** Everything that is not the backbone, the range, the records or the climate: what a re-derivation can carry over from the previous build. */
+export const NETWORK_EXTRAS: SkippableSource[] = ['wikidata', 'wikipedia', 'inat', 'commons', 'gbif.media', 'openalex'];
 
 export type BuildResult = { ok: true; dossier: Dossier } | { ok: false; reason: 'name-unresolved' | 'higher-rank-only' | 'backbone-refused'; detail?: string };
 
@@ -89,6 +92,7 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   mark('wcvp.distribution', dist);
   const native: Dossier['distribution']['native'] = [];
   const introduced: Dossier['distribution']['native'] = [];
+  const reported: Dossier['distribution']['native'] = [];
   const boxes: Box[] = [];
   const fromWcvp = dist.status === 'ok' && dist.data.wcvp;
   if (dist.status === 'ok') {
@@ -96,10 +100,17 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
       const code = fromWcvp ? tdwgCode(d.locationId, d.locality) : null;
       const region = { code: code ?? undefined, name: code ? tdwgLabel(code) : countryName(d.country) ?? d.locality ?? '?', box: code ? TDWG3[code] : undefined };
       const intro = /introduced|naturali[sz]ed|cultivated|invasive|managed/i.test(`${d.establishmentMeans ?? ''} ${d.status ?? ''}`);
-      (intro ? introduced : native).push(region);
-      if (!intro && region.box) boxes.push(region.box);
+      const nativeSaid = /native|indigenous|endemic/i.test(`${d.establishmentMeans ?? ''} ${d.status ?? ''}`);
+      // WCVP states native or introduced for every row. A national checklist that says neither is a
+      // report of presence, not a native range: it is kept as such and never promoted to native.
+      if (intro) introduced.push(region);
+      else if (fromWcvp || nativeSaid) {
+        native.push(region);
+        if (region.box) boxes.push(region.box);
+      } else reported.push(region);
     }
   }
+  const verified = fromWcvp && native.length > 0;
 
   /* ---- 3. Occurrences, licence-filtered, corroborated against the range ---- */
   const occ = await gbif.occurrences(f, key);
@@ -145,15 +156,17 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   let centroid: Dossier['centroid'] | undefined;
   let climate: Climate = { status: 'none', detail: 'no habitat centroid' };
   if (occ.status === 'refused' || occ.status === 'error') climate = { status: 'refused', detail: 'occurrence source did not answer' };
+  // No verified native range means no way to tell a habitat record from a garden one, so no habitat climate: the map stays, the advice does not.
+  else if (!verified || !boxes.length) climate = { status: 'none', detail: !verified ? 'native range not verified: no WCVP distribution with native status for this name, so records cannot be told from cultivation and no habitat climate is derived' : 'native range is stated at country level only, with no region boxes to test records against' };
   // Three agreeing records are enough to place a habitat centre for a narrow endemic; the page says how thin the evidence is.
   else if (cluster && cluster.dominant && allPts.length >= 3) {
-    const at = habitatCentre(cluster);
+    const at = habitatCentre(cluster, openPts);
     centroid = {
       lat: +at.lat.toFixed(3),
       lon: +at.lon.toFixed(3),
       n: cluster.n,
       share: +cluster.share.toFixed(2),
-      how: `the record nearest the middle of the densest ${at.refined ? `1° population inside the densest ${cluster.cell}° block` : `${cluster.cell}° cluster`} of all ${allPts.length} in-range records ${boxes.length ? 'inside the stated native range' : '(no stated range to test against)'}`
+      how: `${at.snapped === 'open-record' ? 'the openly licensed record nearest' : 'the tenth-degree grid point nearest (no openly licensed record lies in the cluster, so no record\'s coordinates are published as the centre)'} the middle of the densest ${at.refined ? `1° population inside the densest ${cluster.cell}° block` : `${cluster.cell}° cluster`} of all ${allPts.length} in-range records inside the stated native range`
     };
     climate = await (o.climate ?? noClimate).at(centroid.lat, centroid.lon);
   } else if (cluster && !cluster.dominant && allPts.length >= 3) climate = { status: 'none', detail: 'records form disjunct populations; no cluster dominates even at 4°' };
@@ -164,8 +177,11 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   /* ---- 5. Identifiers, summary ---- */
   const ids: Dossier['ids'] = { gbif: key };
   const links: Record<string, string> = { gbif: `https://www.gbif.org/species/${key}` };
-  const x = await wm.crossIds(f, scientific);
-  mark('wikidata', x);
+  const skip = (k: SkippableSource) => !!o.skip?.includes(k);
+  const skipped = (k: string) => (upstream[k] = { status: 'skipped', at: now() });
+  const x = skip('wikidata') ? ({ status: 'skipped' } as const) : await wm.crossIds(f, scientific);
+  if (x.status === 'skipped') skipped('wikidata');
+  else mark('wikidata', x);
   let enTitle = scientific;
   if (x.status === 'ok') {
     Object.assign(ids, { wikidata: x.data.wikidata, powo: x.data.powo, ipni: x.data.ipni, inat: x.data.inat, wfo: x.data.wfo });
@@ -176,8 +192,9 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     links.wikidata = `https://www.wikidata.org/wiki/${x.data.wikidata}`;
   }
   let summary: Dossier['summary'];
-  const w = await wm.summary(f, enTitle);
-  mark('wikipedia', w);
+  const w = skip('wikipedia') ? ({ status: 'skipped' } as const) : await wm.summary(f, enTitle);
+  if (w.status === 'skipped') skipped('wikipedia');
+  else mark('wikipedia', w);
   if (w.status === 'ok') {
     summary = { text: w.data.text, source: 'wikipedia', url: w.data.url, licence: 'CC BY-SA 4.0', title: w.data.title };
     ids.wikipedia = w.data.title;
@@ -187,12 +204,15 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   /* ---- 6. Photographs: iNat (open licences only), then Commons, then GBIF media ---- */
   const photos: Photo[] = [];
   let inatId = ids.inat;
-  if (!inatId) {
+  if (!inatId && !skip('inat')) {
     const t = await inat.taxon(f, scientific);
     mark('inat.taxon', t);
     if (t.status === 'ok') inatId = ids.inat = t.data.id;
   }
-  if (inatId) {
+  if (skip('inat')) {
+    skipped('inat.photos.wild');
+    skipped('inat.photos.cultivated');
+  } else if (inatId) {
     links.inat = `https://www.inaturalist.org/taxa/${inatId}`;
     const wild = await inat.photos(f, inatId, true, 24);
     mark('inat.photos.wild', wild);
@@ -201,13 +221,15 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     mark('inat.photos.cultivated', cult);
     if (cult.status === 'ok') photos.push(...cult.data);
   }
-  if (!o.quick && photos.length < 12) {
+  if (skip('commons')) skipped('commons');
+  else if (!o.quick && photos.length < 12) {
     const cat = x.status === 'ok' && x.data.commonsCategory ? x.data.commonsCategory : scientific;
     const c = await wm.commonsPhotos(f, cat, 12);
     mark('commons', c);
     if (c.status === 'ok') photos.push(...c.data);
   }
-  if (!o.quick && photos.length < 6) {
+  if (skip('gbif.media')) skipped('gbif.media');
+  else if (!o.quick && photos.length < 6) {
     const m = await gbif.media(f, key);
     mark('gbif.media', m);
     if (m.status === 'ok')
@@ -217,7 +239,7 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
 
   /* ---- 7. Literature (not load-bearing) ---- */
   let papers: Dossier['literature'] = [];
-  if (!o.quick && !o.skip?.includes('openalex')) {
+  if (!o.quick && !skip('openalex')) {
     const l = await literature(f, scientific);
     mark('openalex', l);
     if (l.status === 'ok') papers = l.data;
@@ -249,7 +271,7 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     },
     ids,
     summary,
-    distribution: { native, introduced, source: dist.status !== 'ok' ? 'not available' : fromWcvp ? 'WCVP (Govaerts, RBG Kew) via GBIF' : 'national checklists via GBIF (country level; no WCVP entry for this name)', boxes },
+    distribution: { native, introduced, reported: reported.length ? reported : undefined, source: dist.status !== 'ok' ? 'not available' : fromWcvp ? 'WCVP (Govaerts, RBG Kew) via GBIF' : 'national checklists via GBIF (presence reported, native status not stated; no WCVP entry for this name)', boxes, verified },
     occurrences: {
       open,
       nOpenInRange: open.length,

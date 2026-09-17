@@ -67,19 +67,23 @@
   });
   const cond = $derived(a?.locationId ? collection.conditions(a.locationId) : null);
   const hereDli = $derived(cond?.ppfd != null ? (cond.ppfd * (cond.lightHours ?? 12) * 3600) / 1e6 : null);
-  const lightVerdict = $derived.by(() => {
+  // Side by side, no verdict: a regional radiation estimate and a climate percentile are facts about
+  // the place the species comes from, not measured tolerances of this plant. The comparison is shown;
+  // the judgement is the grower's.
+  const lightCompare = $derived.by(() => {
     if (!habitat?.dli) return null;
-    if (hereDli == null) return { k: '', text: `wants ${habitat.dli.lo.toFixed(0)}–${habitat.dli.hi.toFixed(0)} DLI; no light figure for this place` };
-    const want = habitat.arch?.arch.exposure === 'shade' ? habitat.dli.hi * 0.25 : habitat.arch?.arch.exposure === 'part' ? habitat.dli.hi * 0.5 : habitat.dli.lo;
-    if (hereDli < want * 0.5) return { k: 'b', text: `${hereDli.toFixed(0)} DLI here against ${want.toFixed(0)}+ at home: far short, expect stretch` };
-    if (hereDli < want) return { k: 'w', text: `${hereDli.toFixed(0)} DLI here against ${want.toFixed(0)}+ at home: under it, it will live not thrive` };
-    return { k: 'a', text: `${hereDli.toFixed(0)} DLI here against ${want.toFixed(0)}+ at home: enough` };
+    const sky = `open sky over its habitat ${habitat.dli.lo.toFixed(0)}–${habitat.dli.hi.toFixed(0)} mol/m²/day across the year`;
+    const exp = habitat.arch?.arch.exposure;
+    const under = exp === 'shade' ? ' (it grows in shade there, so it sees a fraction of that)' : exp === 'part' ? ' (it grows in partial shade there)' : '';
+    if (hereDli == null) return { here: null, text: `${sky}${under}; no light figure for this place` };
+    return { here: hereDli, text: `${hereDli.toFixed(0)} mol/m²/day here, from this place's settings, against ${sky}${under}` };
   });
-  const coldVerdict = $derived.by(() => {
+  const coldCompare = $derived.by(() => {
     if (!habitat) return null;
-    const floor = habitat.arch?.arch.minC != null && habitat.floor < habitat.arch.arch.minC ? habitat.arch.arch.minC : habitat.floor;
-    if (cond?.floorC == null) return { k: '', text: `keep above ${floor.toFixed(0)} °C; no floor set for this place` };
-    return cond.floorC < floor ? { k: 'b', text: `this place bottoms out at ${cond.floorC} °C, below its ${floor.toFixed(0)} °C floor` } : { k: 'a', text: `this place holds ${cond.floorC} °C, clear of its ${floor.toFixed(0)} °C floor` };
+    const ex = dossier?.climate.status === 'ok' ? dossier.climate.extremes : null;
+    const what = ex ? `its habitat's 1st-percentile night is ${habitat.floor.toFixed(0)} °C` : `its habitat's coldest monthly mean minimum is ${habitat.floor.toFixed(0)} °C`;
+    if (cond?.floorC == null) return { here: null, text: `${what}; no floor set for this place` };
+    return { here: cond.floorC, text: `this place is set to bottom out at ${cond.floorC} °C; ${what}` };
   });
   // The season as it falls on this plant's own calendar (the grower's hemisphere is taken as the place's, else the north).
   const seasonNow = $derived.by(() => {
@@ -296,9 +300,9 @@
   {#if habitat}
     <div class="secrule"><h2>Habitat versus here</h2><div class="line"></div><span class="n">{a.locationId ? collection.locationName(a.locationId) : 'no place set'}</span></div>
     <div class="factgrid hvh">
-      {#if lightVerdict}<div><b>Light</b><span class="pill {lightVerdict.k}" style="margin-right: 6px">{lightVerdict.k === 'a' ? 'enough' : lightVerdict.k === 'w' ? 'short' : lightVerdict.k === 'b' ? 'far short' : 'not compared'}</span>{lightVerdict.text}.{#if !lightVerdict.k}{#if a.locationId}{' '}<a href="/benches/{a.locationId}?edit=1">Set its light</a>.{:else}{' '}<button type="button" class="linkish" onclick={() => (moving = true)}>Give it a place</button> first.{/if}{/if}</div>{/if}
-      {#if coldVerdict}<div><b>Cold</b><span class="pill {coldVerdict.k}" style="margin-right: 6px">{coldVerdict.k === 'a' ? 'safe' : coldVerdict.k === 'b' ? 'too cold' : 'not compared'}</span>{coldVerdict.text}.{#if !coldVerdict.k}{#if a.locationId}{' '}<a href="/benches/{a.locationId}?edit=1">Set its floor</a>.{:else}{' '}<button type="button" class="linkish" onclick={() => (moving = true)}>Give it a place</button> first.{/if}{/if}</div>{/if}
-      <div class="wide small muted">Habitat figures from the species dossier (CHELSA, NASA POWER); this place's figures from its bench settings, inherited from parents where set. <a href="/species/{slugify(a.taxonName)}#s-cultivation">The full cultivation sheet</a>.</div>
+      {#if lightCompare}<div><b>Light</b>{lightCompare.text}.{#if lightCompare.here == null}{#if a.locationId}{' '}<a href="/benches/{a.locationId}?edit=1">Set its light</a>.{:else}{' '}<button type="button" class="linkish" onclick={() => (moving = true)}>Give it a place</button> first.{/if}{/if}</div>{/if}
+      {#if coldCompare}<div><b>Cold</b>{coldCompare.text}.{#if coldCompare.here == null}{#if a.locationId}{' '}<a href="/benches/{a.locationId}?edit=1">Set its floor</a>.{:else}{' '}<button type="button" class="linkish" onclick={() => (moving = true)}>Give it a place</button> first.{/if}{/if}</div>{/if}
+      <div class="wide small muted">A comparison, not a verdict: the habitat figures are what the sky and the weather do where the species comes from (CHELSA, NASA POWER), not measured tolerances of this plant; a plant under a rock or a shrub sees a fraction of the sky, and a dry plant takes cold a wet one does not. This place's figures are its bench settings, inherited from parents where set. <a href="/species/{slugify(a.taxonName)}#s-cultivation">The full cultivation sheet</a>.</div>
     </div>
   {/if}
 

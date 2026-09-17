@@ -20,7 +20,7 @@
 {#if hero && !strip}
   <figure class="hero card">
     <a href={hero.page ?? hero.url} rel="noopener"><img src={hero.url} alt="{name}{hero.place ? ', ' + hero.place : ''}" loading="eager" fetchpriority="high" /></a>
-    <figcaption class="faint small">{hero.attribution}{hero.captive ? ' · in cultivation' : ' · in habitat'}{hero.observedOn ? ' · ' + hero.observedOn : ''}</figcaption>
+    <figcaption class="faint small">{hero.attribution}{hero.captive ? ' · in cultivation' : ' · observed growing wild'}{hero.observedOn ? ' · ' + hero.observedOn : ''}</figcaption>
   </figure>
 {/if}
 {#if hero}

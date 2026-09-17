@@ -62,8 +62,12 @@ export const Region = v.object({ code: v.optional(v.string()), name: v.string(),
 export const Distribution = v.object({
   native: v.array(Region),
   introduced: v.array(Region),
+  /** Regions a national checklist lists without saying native or introduced: reported, not verified. Never used for the range test. */
+  reported: v.optional(v.array(Region)),
   source: v.string(),
-  boxes: v.array(BoxSchema)
+  boxes: v.array(BoxSchema),
+  /** True only when the native regions come from WCVP with native status stated. Habitat climate is derived only then. */
+  verified: v.optional(v.boolean())
 });
 
 /** [lat, lon, year|null, country|null, basisOfRecord|null, licence tag]. Open records only. */

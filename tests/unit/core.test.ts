@@ -158,10 +158,26 @@ describe('geo', () => {
     for (let i = 0; i < 16; i++) pts.push([-24 + (i % 4) * 0.05, 30 + Math.floor(i / 4) * 0.05]);
     const c = habitatCluster(pts)!;
     expect(c.cell).toBeGreaterThan(1);
-    const at = habitatCentre(c);
+    const at = habitatCentre(c, pts); // every point openly licensed
     expect(pts.some((p) => p[0] === at.lat && p[1] === at.lon)).toBe(true);
+    expect(at.snapped).toBe('open-record');
     expect(at.lat).toBeLessThan(-29); // the 30-point population, not the gap
     expect(at.refined).toBe(true);
+  });
+  it('the centre is never a restricted record: with no open record in the cluster it is a tenth-degree grid point', () => {
+    const pts: Array<[number, number]> = [];
+    for (let i = 0; i < 12; i++) pts.push([-30.123 + (i % 4) * 0.01, 30.456 + Math.floor(i / 4) * 0.01]);
+    const c = habitatCluster(pts)!;
+    const at = habitatCentre(c, []); // all restricted
+    expect(at.snapped).toBe('cell-centre');
+    expect(pts.some((p) => p[0] === at.lat && p[1] === at.lon)).toBe(false);
+    expect(Math.round(at.lat * 10) / 10).toBe(at.lat);
+    expect(Math.round(at.lon * 10) / 10).toBe(at.lon);
+    // one open record in the cluster, and it is chosen even if a restricted one is nearer the middle
+    const open: Array<[number, number]> = [pts[11]];
+    const at2 = habitatCentre(c, open);
+    expect([at2.lat, at2.lon]).toEqual(pts[11]);
+    expect(at2.snapped).toBe('open-record');
   });
   it('distance and antimeridian boxes', () => {
     expect(haversineKm(0, 0, 0, 1)).toBeCloseTo(111.2, 0);

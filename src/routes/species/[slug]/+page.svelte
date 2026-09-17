@@ -34,6 +34,10 @@
     const o = d.occurrences;
     const up = d.upstream['gbif.occurrences']?.status;
     if (up === 'refused' || up === 'error') return { tone: 'warn', text: 'The occurrence source did not answer when this dossier was built. Nothing here is derived from records, and this is not a statement that none exist.' };
+    if (d.distribution.verified === false || (!d.distribution.native.length && d.distribution.reported?.length)) {
+      const all = o.nOpenInRange + o.nRestrictedInRange;
+      return { tone: 'warn', text: `No verified native range for this name: WCVP has no entry with native status, and a checklist that only reports presence cannot tell a wild record from a garden one. The map shows ${o.nOpenInRange} openly licensed record${o.nOpenInRange === 1 ? '' : 's'}${all > o.nOpenInRange ? ` of ${all}` : ''} untested against any range; no habitat centre or climate is derived from them, and nothing below is cultivation advice.` };
+    }
     if (!o.nOpenInRange && !o.nRestrictedInRange) return { tone: 'muted', text: 'No georeferenced records inside the stated native range.' };
     const all = o.nOpenInRange + o.nRestrictedInRange;
     let t = `The habitat centre and its climate rest on all ${all} georeferenced record${all === 1 ? '' : 's'} inside the native range`;
@@ -101,7 +105,7 @@
   {#if hero}
     <div class="hero">
       <a href={hero.page ?? hero.url} rel="noopener"><img src={hero.url} alt="{d.name.scientific}{hero.place ? ', ' + hero.place : ''}" loading="eager" fetchpriority="high" onerror={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = 'hidden')} /></a>
-      <a class="cred" href={hero.page ?? hero.url} rel="noopener">{hero.attribution}{hero.captive ? ' · in cultivation' : ' · in habitat'}{hero.observedOn ? ' · ' + hero.observedOn : ''}</a>
+      <a class="cred" href={hero.page ?? hero.url} rel="noopener">{hero.attribution}{hero.captive ? ' · in cultivation' : ' · observed growing wild'}{hero.observedOn ? ' · ' + hero.observedOn : ''}</a>
     </div>
   {:else}
     <div class="hero"><div class="ph">No openly licensed photograph yet. If you grow this plant, add your own photo to your record.</div></div>
@@ -136,7 +140,7 @@
     <a href="#s-habitat">Habitat</a>
     <a href="#s-cultivation">Cultivation</a>
     {#if d.photos.length > 1}<a href="#s-photos">Photographs</a>{/if}
-    {#if d.literature.length}<a href="#s-research">Research</a>{/if}
+    {#if d.literature.length}<a href="#s-research">Papers</a>{/if}
     <a href="#s-registers">Registers</a>
   </nav>
 
@@ -190,7 +194,7 @@
     <div class="mapbox">{@html data.regionSvg}<div class="mapcap">Openly licensed records inside the range, framed on where they fall.</div></div>
   </div>
   <div class="factgrid">
-    <div><b>Native</b>{#if d.distribution.native.length}{d.distribution.native.map((r) => r.name).join(', ')}{:else}{d.upstream['wcvp.distribution']?.status === 'none' ? 'No published distribution for this name.' : 'Distribution source did not answer.'}{/if}{#if d.distribution.introduced.length}<span class="small muted"> · introduced: {d.distribution.introduced.map((r) => r.name).join(', ')}</span>{/if}</div>
+    <div><b>Native</b>{#if d.distribution.native.length}{d.distribution.native.map((r) => r.name).join(', ')}{#if d.distribution.verified === false}<span class="small muted"> · stated native by a national checklist, not by WCVP: unverified</span>{/if}{:else if d.distribution.reported?.length}<span class="muted">Not verified.</span><span class="small muted"> Reported present (native status not stated): {d.distribution.reported.map((r) => r.name).join(', ')}</span>{:else}{d.upstream['wcvp.distribution']?.status === 'none' ? 'No published distribution for this name.' : 'Distribution source did not answer.'}{/if}{#if d.distribution.introduced.length}<span class="small muted"> · introduced: {d.distribution.introduced.map((r) => r.name).join(', ')}</span>{/if}</div>
     {#if d.centroid}<div><b>Habitat centre</b>{d.centroid.lat}, {d.centroid.lon}<span class="small muted"> · {d.centroid.n} records ({Math.round(d.centroid.share * 100)}% of those in range)</span></div>{/if}
     <div class="wide"><b>Evidence used</b>{evidence.text}</div>
     {#if d.centroid}<div><b>How the centre was chosen</b>{d.centroid.how}</div>{/if}
@@ -212,7 +216,7 @@
       {/if}
     </div>
     {#if sheet.year && sheet.year.grow !== 'even'}
-      <p class="small muted" style="margin: 4px 0 12px">{sheet.year.grow === 'winter' ? 'A winter grower' : 'A summer grower'} in habitat{sheet.year.south ? ' (southern hemisphere)' : ''}. {#if sheet.arch}Treated as a {sheet.arch.arch.lab.toLowerCase()}, inferred from {sheet.arch.why}.{/if}</p>
+      <p class="small muted" style="margin: 4px 0 12px">{sheet.year.fog ? 'Growing months read from the temperature curve (too little rain for a rainy season)' : sheet.year.grow === 'winter' ? 'A winter grower by the rainfall curve' : 'A summer grower by the rainfall curve'}{sheet.year.south ? ' (southern hemisphere)' : ''}. {#if sheet.arch}Treated as a {sheet.arch.arch.lab.toLowerCase()}, inferred from {sheet.arch.why}.{/if}</p>
     {:else if sheet.arch}
       <p class="small muted" style="margin: 4px 0 12px">Treated as a {sheet.arch.arch.lab.toLowerCase()}, inferred from {sheet.arch.why}.</p>
     {/if}
@@ -234,7 +238,7 @@
     {#if d.note}
       <div class="cult"><div class="sum">Written from the climate above <span class="hint">generated · not verified by a person</span></div><div class="body">{d.note.text}</div><div class="foot">Written by a language model from the evidence on this page, {d.note.built.slice(0, 10)}. <a href="/about/how#notes">How these are made</a>.</div></div>
     {:else if note}
-      <div class="cult" id="gen-note"><div class="sum">In short <span class="hint">condensed by rule from the cards above · not written by a person</span></div><div class="body">{note.text}</div><div class="foot">Every sentence comes from one of the cards above ({note.from.join(', ')}); nothing is added. {#if note.hab}Months are given for {readerLat != null && readerLat < 0 ? 'the southern' : 'the northern'} hemisphere{readerLat == null ? ' (set coordinates on a bench to change this)' : ', from your benches'}.{/if}</div></div>
+      <div class="cult" id="gen-note"><div class="sum">In short <span class="hint">condensed by rule from the cards above · not written by a person</span></div><div class="body">{note.text}</div><div class="foot">Each sentence is one card's own one-line form, written by the same rule as the card ({note.from.join(', ')}); the note cannot say what a card does not. {#if note.hab}Months are given for {readerLat != null && readerLat < 0 ? 'the southern' : 'the northern'} hemisphere{readerLat == null ? ' (set coordinates on a bench to change this)' : ', from your benches'}.{/if}</div></div>
     {/if}
   </div>
 
@@ -259,11 +263,11 @@
   {/if}
 
   {#if d.literature.length}
-    <h2 class="sec" id="s-research">Latest research</h2>
+    <h2 class="sec" id="s-research">Papers naming this species</h2>
+    <p class="small muted" style="margin: 0 0 8px">Works whose title or abstract names <i>{d.name.scientific}</i>, most cited first, from OpenAlex (CC0). A mention, not a cultivation source: nothing on this page is drawn from them.</p>
     {#each d.literature as p}
       <div class="paper"><a href={p.url} rel="noopener">{p.title}</a><div class="meta">{p.authors?.join(', ')}{p.year ? ` (${p.year})` : ''}{p.venue ? ` · ${p.venue}` : ''}</div></div>
     {/each}
-    <p class="small muted">Via OpenAlex (CC0).</p>
   {/if}
 
   <h2 class="sec" id="s-registers">History &amp; registers</h2>

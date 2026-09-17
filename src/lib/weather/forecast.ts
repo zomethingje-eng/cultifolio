@@ -47,10 +47,17 @@ export function metUrl(lat: number, lon: number, altitudeM?: number): string {
 export function reduceMet(res: MetResponse, lon: number, fetched = new Date().toISOString(), expires?: string): Forecast {
   const offsetH = Math.round(lon / 15);
   const byDay = new Map<string, DayForecast>();
-  for (const t of res.properties?.timeseries ?? []) {
-    const local = new Date(new Date(t.time).getTime() + offsetH * 3600_000);
-    const date = local.toISOString().slice(0, 10);
-    const d = byDay.get(date) ?? { date, tmin: Infinity, tmax: -Infinity, precipMm: 0, steps: 0 };
+  const day = (ms: number) => new Date(ms + offsetH * 3600_000).toISOString().slice(0, 10);
+  const at = (date: string) => {
+    let d = byDay.get(date);
+    if (!d) byDay.set(date, (d = { date, tmin: Infinity, tmax: -Infinity, precipMm: 0, steps: 0 }));
+    return d;
+  };
+  const series = res.properties?.timeseries ?? [];
+  for (let i = 0; i < series.length; i++) {
+    const t = series[i];
+    const start = new Date(t.time).getTime();
+    const d = at(day(start));
     const inst = t.data.instant?.details?.air_temperature;
     const six = t.data.next_6_hours?.details;
     if (typeof inst === 'number') {
@@ -61,11 +68,23 @@ export function reduceMet(res: MetResponse, lon: number, fetched = new Date().to
       if (typeof six.air_temperature_min === 'number') d.tmin = Math.min(d.tmin, six.air_temperature_min);
       if (typeof six.air_temperature_max === 'number') d.tmax = Math.max(d.tmax, six.air_temperature_max);
     }
+    // Precipitation belongs to the interval a step covers, counted once. The series is hourly at
+    // first (next_1_hours) and six-hourly later (next_6_hours only); the interval is the gap to the
+    // next step, and its rain is spread over the hours it spans, so an interval across midnight is
+    // shared between the two dates rather than handed whole to the first.
     const p1 = t.data.next_1_hours?.details?.precipitation_amount;
-    if (typeof p1 === 'number') d.precipMm += p1;
-    else if (typeof six?.precipitation_amount === 'number') d.precipMm += six.precipitation_amount / 6; // 6-hourly steps repeat; approximate
+    const p6 = six?.precipitation_amount;
+    const next = series[i + 1] ? new Date(series[i + 1].time).getTime() : start + (typeof p1 === 'number' ? 1 : 6) * 3600_000;
+    const hours = Math.max(1, Math.min(6, Math.round((next - start) / 3600_000)));
+    let amount: number | null = null;
+    if (hours === 1 && typeof p1 === 'number') amount = p1;
+    else if (typeof p6 === 'number') amount = (p6 * hours) / 6; // a six-hour total for the hours this step covers
+    else if (typeof p1 === 'number') amount = p1;
+    if (amount != null) {
+      const perHour = amount / hours;
+      for (let h = 0; h < hours; h++) at(day(start + h * 3600_000)).precipMm += perHour;
+    }
     d.steps++;
-    byDay.set(date, d);
   }
   const days = [...byDay.values()].filter((d) => Number.isFinite(d.tmin)).map((d) => ({ ...d, precipMm: Math.round(d.precipMm * 10) / 10 }));
   return { source: 'met.no', fetched, expires, days, firstFrost: days.find((d) => d.tmin <= 0)?.date, firstCold: days.find((d) => d.tmin <= 3)?.date };

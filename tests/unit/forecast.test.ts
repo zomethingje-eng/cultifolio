@@ -58,3 +58,24 @@ describe('NWS reducer and risk', () => {
     expect(isUS(-24.9, -70.4)).toBe(false);
   });
 });
+
+describe('precipitation accounting', () => {
+  const step = (isoTime: string, p6: number, p1?: number) => ({ time: isoTime, data: { instant: { details: { air_temperature: 10 } }, ...(p1 != null ? { next_1_hours: { details: { precipitation_amount: p1 } } } : {}), next_6_hours: { details: { air_temperature_max: 11, air_temperature_min: 9, precipitation_amount: p6 } } } });
+  it('counts each six-hourly interval once: four intervals of 6 mm are 24 mm, not 4', () => {
+    const ts = [0, 6, 12, 18].map((h) => step(`2026-03-10T${String(h).padStart(2, '0')}:00:00Z`, 6));
+    const f = reduceMet({ properties: { timeseries: ts } } as never, 0);
+    expect(f.days.find((d) => d.date === '2026-03-10')!.precipMm).toBe(24);
+  });
+  it('uses the hourly amount while the series is hourly, and does not double count the overlapping six-hour window', () => {
+    const ts = [...Array(6).keys()].map((h) => step(`2026-03-10T0${h}:00:00Z`, 6, 1));
+    const f = reduceMet({ properties: { timeseries: ts } } as never, 0);
+    expect(f.days.find((d) => d.date === '2026-03-10')!.precipMm).toBe(6);
+  });
+  it('splits an interval that crosses local midnight between the two dates', () => {
+    // one six-hour interval 21:00–03:00 UTC at longitude 0 with 6 mm: 3 mm to each day
+    const ts = [step('2026-03-10T21:00:00Z', 6), step('2026-03-11T03:00:00Z', 0)];
+    const f = reduceMet({ properties: { timeseries: ts } } as never, 0);
+    expect(f.days.find((d) => d.date === '2026-03-10')!.precipMm).toBe(3);
+    expect(f.days.find((d) => d.date === '2026-03-11')!.precipMm).toBe(3);
+  });
+});

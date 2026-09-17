@@ -6,6 +6,12 @@
  *   npx tsx scripts/build-dossiers.ts names.txt --grid climate  # with habitat climate from the packed grid
  *   npx tsx scripts/build-dossiers.ts names.txt --force         # rebuild species that already have a clean dossier (by default they are kept)
  *   npx tsx scripts/build-dossiers.ts names.txt --skip openalex # leave literature out of this run (marked skipped; a later run without --skip fills it)
+ *   npx tsx scripts/build-dossiers.ts --fill openalex           # literature only: for every dossier on disk whose literature is missing, refused or
+ *                                                                # skipped, one OpenAlex call, patched into the file. Stops cleanly when the day's
+ *                                                                # allowance is spent (free keys: 1,000 species a day) and says when it resets.
+ *   npx tsx scripts/build-dossiers.ts names.txt --rederive     # rebuild range, records, centre and climate under the current rules (bulk files
+ *                                                                # and the local grid; only the backbone is asked), carrying photos, summary,
+ *                                                                # identifiers and literature from each species' previous build. About a second a species.
  *
  * OPENALEX_KEY in the environment gives OpenAlex requests their own allowance
  * (anonymous ones share a per-address pool that closes after ~100 calls).
@@ -25,7 +31,8 @@
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs';
 import { execSync } from 'node:child_process';
-import { buildDossier } from '../src/lib/dossier/build';
+import { buildDossier, NETWORK_EXTRAS, type SkippableSource } from '../src/lib/dossier/build';
+import { literature } from '../src/lib/dossier/sources/openalex';
 import { makeFetcher, fixtureFetcher } from '../src/lib/dossier/fetch';
 import { dossierPath } from '../src/lib/dossier/schema';
 import { welwitschia, copiapoa, refused } from '../fixtures/upstream';
@@ -40,8 +47,10 @@ const args = process.argv.slice(2);
 const upload = args.includes('--upload');
 const fixtures = args.includes('--fixtures');
 const quick = args.includes('--quick');
-const force = args.includes('--force');
-const skip = (() => { const i = args.indexOf('--skip'); return i >= 0 ? (args[i + 1] ?? '').split(',').filter((x): x is 'openalex' => x === 'openalex') : []; })();
+const rederive = args.includes('--rederive');
+const fill = (() => { const i = args.indexOf('--fill'); return i >= 0 ? args[i + 1] : undefined; })();
+const force = args.includes('--force') || rederive;
+const skip: SkippableSource[] = rederive ? [...NETWORK_EXTRAS] : (() => { const i = args.indexOf('--skip'); return i >= 0 ? (args[i + 1] ?? '').split(',').filter((x): x is SkippableSource => (NETWORK_EXTRAS as string[]).includes(x)) : []; })();
 const gridDir = (() => { const i = args.indexOf('--grid'); return i >= 0 ? args[i + 1] : undefined; })();
 const bulkDir = (() => { const i = args.indexOf('--bulk'); return i >= 0 ? args[i + 1] : undefined; })();
 const outDir = fixtures ? 'fixtures/dossiers' : 'static'; // static/s/v1/<key>.json is served by the app and mirrors the R2 key
@@ -91,7 +100,7 @@ function needsRebuild(key: number): boolean {
     // 'none' too: the evidence rules can loosen between builds, and the rebuild of a thin species is cheap.
     if (d.climate?.status === 'pending' || d.climate?.status === 'refused' || d.climate?.status === 'none') return true;
     // A source this run is skipping anyway cannot be the reason to rebuild.
-    return Object.entries(d.upstream ?? {}).some(([k, u]) => !skip.includes(k as 'openalex') && (u.status === 'refused' || u.status === 'error'));
+    return Object.entries(d.upstream ?? {}).some(([k, u]) => !skip.some((x) => k === x || k.startsWith(x + '.')) && (u.status === 'refused' || u.status === 'error'));
   } catch {
     return true;
   }
@@ -99,8 +108,44 @@ function needsRebuild(key: number): boolean {
 
 let bulkStats: { wcvp: number; occ: number; through: number } | null = null;
 
+/** Patch one section into every dossier that lacks it, without rebuilding anything else. */
+async function fillLiterature(): Promise<void> {
+  const dir = `${outDir}/s/v1`;
+  const files = existsSync(dir) ? readdirSync(dir).filter((f) => /^\d+\.json$/.test(f)) : [];
+  const todo: Array<{ path: string; d: Record<string, unknown> & { name: { scientific: string }; upstream: Record<string, { status: string; at?: string; detail?: string }>; literature: unknown[] } }> = [];
+  for (const f of files) {
+    const d = JSON.parse(readFileSync(`${dir}/${f}`, 'utf8'));
+    const st = d.upstream?.openalex?.status;
+    if (st !== 'ok' && st !== 'none') todo.push({ path: `${dir}/${f}`, d });
+  }
+  console.log(`${files.length} dossiers on disk; ${todo.length} without literature${process.env.OPENALEX_KEY ? ' (with an OpenAlex key)' : ' (no OPENALEX_KEY set: the anonymous pool closes after ~100)'}…`);
+  const f = makeFetcher();
+  let done = 0, none = 0;
+  for (const { path, d } of todo) {
+    const r = await literature(f, d.name.scientific);
+    if (r.status === 'refused') {
+      // The fetch layer has already retried and backed off; a refusal now is the allowance, not a blip.
+      console.log(`\n  OpenAlex refused (${'detail' in r ? r.detail : ''}). ${done} filled${none ? `, ${none} with nothing to find` : ''}; ${todo.length - done - none} still to do. A free key allows about 1,000 a day; run this again after the window resets, or add prepaid credits at openalex.org.`);
+      return;
+    }
+    if (r.status === 'ok') {
+      d.literature = r.data;
+      done++;
+    } else {
+      d.literature = [];
+      none++;
+    }
+    d.upstream.openalex = { status: r.status === 'ok' ? 'ok' : 'none', at: new Date().toISOString(), detail: `filled ${new Date().toISOString().slice(0, 10)}` };
+    writeFileSync(path, JSON.stringify(d));
+    if ((done + none) % 25 === 0) process.stdout.write(`\r  ${done + none} of ${todo.length}…   `);
+  }
+  console.log(`\n  ${done} filled, ${none} with nothing to find. Every dossier has its literature.`);
+}
+
 async function main() {
   mkdirSync(outDir, { recursive: true });
+  if (fill === 'openalex') return fillLiterature();
+  if (fill) throw new Error(`--fill ${fill}: only openalex can be filled on its own`);
   let climate: ClimateProvider | undefined;
   if (gridDir) {
     if (!existsSync(`${gridDir}/climate.grid`) || !existsSync(`${gridDir}/climate.json`)) {
@@ -148,7 +193,7 @@ async function main() {
     report.push(line);
     console.log(`[${report.length}/${jobs.length}] ${line}`);
   };
-  console.log(`Building ${jobs.length} species${quick ? ' (quick)' : ''}${skip.length ? ` (skipping ${skip.join(', ')})` : ''}${process.env.OPENALEX_KEY ? ' with an OpenAlex key' : ''}…`);
+  console.log(`Building ${jobs.length} species${quick ? ' (quick)' : ''}${rederive ? ' (re-deriving range, records, centre and climate; photos, summary and literature carried from the previous build)' : skip.length ? ` (skipping ${skip.join(', ')})` : ''}${process.env.OPENALEX_KEY && !rederive ? ' with an OpenAlex key' : ''}…`);
   // Existing dossiers by name, so a clean one is kept rather than rebuilt (unless --force).
   const onDisk = fixtures ? [] : scanDossiers();
   const existing = new Map<string, number>(onDisk.map((e) => [e.name.toLowerCase(), e.key]));
@@ -194,6 +239,16 @@ async function main() {
       carry('openalex', () => (d.literature = prev.literature));
       carry('wikipedia', () => (d.summary = prev.summary));
       for (const src of ['inat.photos.wild', 'inat.photos.cultivated', 'commons']) carry(src, () => { if (prev.photos.length > d.photos.length) d.photos = prev.photos; });
+      // A re-derivation asked no network extra at all: every one of those sections is the previous build's, and says so.
+      if (rederive) {
+        const from = `carried from build of ${prev.built?.slice(0, 10) ?? '?'} (rederive)`;
+        d.photos = prev.photos;
+        d.literature = prev.literature;
+        d.summary = prev.summary;
+        d.ids = { ...prev.ids, gbif: d.ids.gbif };
+        d.links = { ...prev.links, gbif: d.links.gbif };
+        for (const k of Object.keys(prev.upstream ?? {})) if (d.upstream[k]?.status === 'skipped' && prev.upstream[k]) d.upstream[k] = { ...prev.upstream[k], detail: from };
+      }
     }
     mkdirSync(path.slice(0, path.lastIndexOf('/')), { recursive: true });
     writeFileSync(path, JSON.stringify(d));

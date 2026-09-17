@@ -5,6 +5,7 @@
   import { collection } from '$lib/db/collection.svelte';
   import { onMount } from 'svelte';
   import { slugify } from '$core/names';
+  import { groupFor } from '$core/regions';
   let { data } = $props();
   let q = $state('');
   let chip = $state<'all' | 'owned' | 'climate' | 'noclimate'>('all');
@@ -32,17 +33,58 @@
     for (const a of collection.accessions) if (a.status === 'growing') m.set(slugify(a.taxonName), [...(m.get(slugify(a.taxonName)) ?? []), accNo(a)]);
     return m;
   });
-  const ownedN = $derived([...owned.keys()].filter((k) => data.groups.some((g) => g.items.some((c) => c.slug === k))).length);
-  const matches = (c: (typeof data.groups)[number]['items'][number]) => {
+  type Item = (typeof data.groups)[number]['items'][number];
+  // The full catalogue, fetched once and only when something needs more than the first page of a group.
+  let full = $state<Item[] | null>(null);
+  let loadingFull = $state(false);
+  let opened = $state<Set<string>>(new Set());
+  async function loadFull() {
+    if (full || loadingFull) return;
+    loadingFull = true;
+    try {
+      const r = await fetch('/api/index');
+      if (r.ok) {
+        const idx = (await r.json()) as Array<{ key: number; slug: string; name: string; family?: string; common?: string; origin?: string[]; thumb?: string; photos: number; open: number; climate: string }>;
+        full = idx.map((e) => ({ key: e.key, slug: e.slug, name: e.name, family: e.family, common: e.common, origin: e.origin ?? [], thumb: e.thumb, alt: e.thumb ? e.name : undefined, photos: e.photos, open: e.open, climate: e.climate }));
+      }
+    } finally {
+      loadingFull = false;
+    }
+  }
+  const needsFull = $derived(!!q.trim() || chip !== 'all' || opened.size > 0);
+  $effect(() => {
+    if (needsFull) loadFull();
+  });
+  const ownedN = $derived.by(() => {
+    if (full) return [...owned.keys()].filter((k) => full!.some((c) => c.slug === k)).length;
+    return [...owned.keys()].length; // until the full index is here, count what you grow, not what the corpus has of it
+  });
+  const matches = (c: Item) => {
     if (q && !`${c.name} ${c.family ?? ''} ${c.common ?? ''} ${c.origin.join(' ')}`.toLowerCase().includes(q.toLowerCase())) return false;
     if (chip === 'owned') return owned.has(c.slug);
     if (chip === 'climate') return c.climate === 'ok';
     if (chip === 'noclimate') return c.climate !== 'ok';
     return true;
   };
-  const shown = $derived(data.groups.map((g) => ({ ...g, items: g.items.filter(matches) })).filter((g) => g.items.length));
-  const total = $derived(shown.reduce((n, g) => n + g.items.length, 0));
-
+  // Every group, with its items: the page's first tiles when browsing, the full list when searching, filtering or opened.
+  const shown = $derived.by(() => {
+    const groupOf = new Map<string, Item[]>();
+    if (needsFull && full) {
+      for (const c of full) {
+        const key = groupFor(c.origin);
+        groupOf.set(key, [...(groupOf.get(key) ?? []), c]);
+      }
+    }
+    return data.groups
+      .map((g) => {
+        const all = needsFull && full ? (groupOf.get(g.origin) ?? []).sort((a, b) => a.name.localeCompare(b.name)) : g.items;
+        const items = all.filter(matches);
+        const complete = needsFull ? !!full : items.length >= g.count;
+        return { ...g, items: opened.has(g.origin) || q.trim() || chip !== 'all' ? items : items.slice(0, data.page), matching: items.length, complete };
+      })
+      .filter((g) => g.items.length);
+  });
+  const total = $derived(shown.reduce((n, g) => n + g.matching, 0));
 </script>
 
 <svelte:head>
@@ -50,7 +92,7 @@
   <meta name="description" content="A species reference that shows its sources, and a collection record that stays on your device." />
 </svelte:head>
 
-<PageHead title="Species" sub="What plants are, and what they want. Anything you own turns up here too." count="{data.total} kinds · {data.groups.reduce((n, g) => n + g.withClimate, 0)} with habitat climate{ownedN ? ` · ${ownedN} you grow` : ''}">
+<PageHead title="Species" sub="What plants are, and what they want. Anything you own turns up here too." count="{data.total} kinds · {data.withClimate} with habitat climate{ownedN ? ` · ${ownedN} you grow` : ''}">
   <a class="btn pri" href="/plants/new">Add a plant</a>
 </PageHead>
 
@@ -76,8 +118,8 @@
 <div class="chiprow">
   <button class="chipbtn" class:on={chip === 'all'} onclick={() => (chip = 'all')}>All<span class="n">{data.total}</span></button>
   <button class="chipbtn" class:on={chip === 'owned'} onclick={() => (chip = 'owned')}>You grow<span class="n">{ownedN}</span></button>
-  <button class="chipbtn" class:on={chip === 'climate'} onclick={() => (chip = 'climate')}>Climate known<span class="n">{data.groups.reduce((n, g) => n + g.withClimate, 0)}</span></button>
-  <button class="chipbtn" class:on={chip === 'noclimate'} onclick={() => (chip = 'noclimate')}>No climate yet<span class="n">{data.total - data.groups.reduce((n, g) => n + g.withClimate, 0)}</span></button>
+  <button class="chipbtn" class:on={chip === 'climate'} onclick={() => (chip = 'climate')}>Climate known<span class="n">{data.withClimate}</span></button>
+  <button class="chipbtn" class:on={chip === 'noclimate'} onclick={() => (chip = 'noclimate')}>No climate yet<span class="n">{data.total - data.withClimate}</span></button>
 </div>
 
 {#if !shown.length}
@@ -88,8 +130,8 @@
     <div class="gmap">{@html g.map}</div>
     <div>
       <h2>{g.origin}</h2>
-      <div class="d">{[...new Set(g.items.flatMap((c) => c.origin))].slice(0, 6).join(', ')}{[...new Set(g.items.flatMap((c) => c.origin))].length > 6 ? ' …' : ''}</div>
-      <div class="st">{g.items.length} species{ownedN ? ` · ${g.items.filter((c) => owned.has(c.slug)).length} you grow` : ''} · {g.items.filter((c) => c.climate === 'ok').length} with climate</div>
+      <div class="d">{g.origins.slice(0, 6).join(', ')}{g.origins.length > 6 ? ' …' : ''}</div>
+      <div class="st">{g.count} species{ownedN ? ` · ${g.items.filter((c) => owned.has(c.slug)).length} you grow` : ''} · {g.withClimate} with climate</div>
     </div>
   </div>
   <div class="hgrid">
@@ -106,8 +148,11 @@
       </a>
     {/each}
   </div>
+  {#if !opened.has(g.origin) && !q.trim() && chip === 'all' && g.count > g.items.length}
+    <p class="seccount" style="margin: 6px 0 14px"><button class="linkish" type="button" onclick={() => (opened = new Set([...opened, g.origin]))}>{loadingFull ? 'Loading…' : `Show all ${g.count} in ${g.origin}`}</button></p>
+  {/if}
 {/each}
-<p class="seccount" style="margin-top: 14px">{total} of {data.total} shown.</p>
+<p class="seccount" style="margin-top: 14px">{needsFull && !full ? 'Loading the whole catalogue…' : `${total} of ${data.total} shown.`}</p>
 
 <style>
   .welcome { margin: 14px 0 4px; border-left: 3px solid var(--accent); }

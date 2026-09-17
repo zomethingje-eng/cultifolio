@@ -58,3 +58,10 @@ export function broadRegion(unitName: string): string {
   if (lon > 110) return 'Australia & Oceania';
   return unitName;
 }
+
+/** The broad region most of a species' native units fall in; ties go to the first listed. The homepage groups by this, on the server and again on the client for the full list. */
+export function groupFor(origin: string[]): string {
+  const tally = new Map<string, number>();
+  for (const u of origin) tally.set(broadRegion(u), (tally.get(broadRegion(u)) ?? 0) + 1);
+  return [...tally.entries()].sort((x, y) => y[1] - x[1])[0]?.[0] ?? 'Origin not stated';
+}

@@ -42,7 +42,9 @@ describe('the growing year', () => {
     expect(y.grow).toBe('winter');
     expect(span(y.growMonths)).toBe('May to October');
     const { rows } = cultivationSheet({ scientific: 'Copiapoa cinerea', family: 'Cactaceae', months: atacama, lat: -26 });
-    expect(rows.find((r) => r.k === 'Its year')!.s).toContain('Rain is not what drives its year');
+    expect(rows.find((r) => r.k === 'Its year')!.s).toContain('too little to have a rainy season to read');
+    expect(rows.find((r) => r.k === 'Its year')!.s).toContain('a reading of two curves, not a record of when this plant grows');
+    expect(rows.map((r) => r.s + (r.short ?? '')).join(' ')).not.toMatch(/fog the plant drinks|lives on fog/);
   });
   it('rain spread through the year is not a season', () => {
     const karoo = mk([28, 28, 26, 23, 20, 17, 17, 18, 21, 23, 25, 27], [14, 14, 12, 9, 6, 3, 3, 4, 6, 9, 11, 13], [30, 32, 40, 30, 22, 18, 16, 20, 25, 30, 35, 30]);

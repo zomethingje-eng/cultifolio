@@ -16,7 +16,10 @@ export interface InatTaxon {
 export async function taxon(f: JsonFetcher, name: string): Promise<FetchResult<InatTaxon>> {
   const r = await f<{ results: InatTaxon[] }>(`${INAT}/taxa?q=${encodeURIComponent(name)}&rank=species,subspecies,variety,form&per_page=5`);
   if (r.status !== 'ok') return r;
-  const exact = r.data.results.find((t) => t.name.toLowerCase() === name.toLowerCase()) ?? r.data.results[0];
+  // Exact name only. The first search hit for "Albuca nana" can be Albuca namaquensis; a photo of the
+  // wrong species on a species page is worse than no photo. (iNat resolves accepted synonyms itself:
+  // a taxon whose name differs is not a match we can verify here.)
+  const exact = r.data.results.find((t) => t.name.toLowerCase() === name.toLowerCase());
   return exact ? { status: 'ok', data: exact } : { status: 'none' };
 }
 

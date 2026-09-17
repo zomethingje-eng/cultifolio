@@ -1,7 +1,8 @@
 <script lang="ts">
   import '@fontsource-variable/public-sans';
   import '@fontsource-variable/newsreader';
-  import '@fontsource-variable/newsreader/opsz-italic.css';
+  // Italic (botanical names) from the weight-only Latin file, 64 KB, not the optical-size one at 147 KB: the difference is invisible at text sizes and the file is on every first visit.
+  import newsreaderItalic from '@fontsource-variable/newsreader/files/newsreader-latin-wght-italic.woff2?url';
   import '@fontsource/dm-mono';
   import '$lib/ui/theme.css';
   import { page } from '$app/state';
@@ -12,6 +13,8 @@
   let { children } = $props();
   // Sync wakes with the app when a vault key is on this device; it does nothing otherwise.
   onMount(async () => {
+    // The app shell offline: registered after load so it never competes with the page's own requests.
+    if ('serviceWorker' in navigator && !import.meta.env.DEV) navigator.serviceWorker.register('/service-worker.js', { type: 'module' }).catch(() => {});
     await collection.load();
     await sync.init();
     if (sync.configured) sync.schedule(1500);
@@ -30,6 +33,7 @@
 </script>
 
 <svelte:head>
+  {@html `<style>@font-face{font-family:'Newsreader Variable';font-style:italic;font-display:swap;font-weight:200 800;src:url(${newsreaderItalic}) format('woff2-variations');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}</style>`}
   <title>Cultifolio</title>
 </svelte:head>
 
@@ -50,7 +54,7 @@
 </main>
 
 <footer class="credits">
-  <p>Taxonomy: GBIF Backbone (CC BY). Distributions: WCVP, RBG Kew (CC BY 4.0). Climate: CHELSA V2.1 (CC0), NASA POWER. Photographs carry their own licence and credit. Summaries: Wikipedia (CC BY-SA 4.0). Coastlines: Natural Earth. Nothing on this site is stored about you; your collection lives on your device{#if sync.configured}, and in an encrypted vault only your key opens{/if}. <a href="/about/how">How it is made</a> · <a href="/about/formats">Formats</a>.</p>
+  <p>Taxonomy: GBIF Backbone (CC BY). Distributions: WCVP, RBG Kew (CC BY 4.0). Climate: CHELSA V2.1 (CC0), NASA POWER. Photographs carry their own licence and credit. Summaries: Wikipedia (CC BY-SA 4.0). Coastlines: Natural Earth. Nothing on this site is stored about you; your collection lives on your device{#if sync.configured}, and in an encrypted vault only your key opens{/if}. <a href="/about/how">How it is made</a> · <a href="/about/formats">Formats</a> · <a href="https://github.com/zomethingje-eng/cultifolio">Source</a>.</p>
 </footer>
 
 <nav id="tabbar" aria-label="Places">

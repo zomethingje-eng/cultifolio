@@ -36,7 +36,15 @@ for (const [path, json] of Object.entries(fixtureFiles)) {
 
 type Platform = App.Platform | undefined;
 
-const merge = (a: IndexEntry[], b: IndexEntry[]) => [...a, ...b.filter((x) => !a.some((y) => y.key === x.key))];
+/** Union by key; the first list wins a collision. Linear, not quadratic: a corpus is thousands of species. */
+const merge = (a: IndexEntry[], b: IndexEntry[]) => {
+  const seen = new Set(a.map((y) => y.key));
+  return [...a, ...b.filter((x) => !seen.has(x.key))];
+};
+
+/** The parsed index, kept for a minute per isolate: the homepage, slug resolution and the API all read it, and parsing thousands of rows per request is waste. */
+let cached: { at: number; idx: IndexEntry[]; bySlug: Map<string, number> } | null = null;
+const CACHE_MS = 60_000;
 
 async function staticJson<T>(fetch: Fetch, path: string): Promise<T | null> {
   try {
@@ -49,6 +57,7 @@ async function staticJson<T>(fetch: Fetch, path: string): Promise<T | null> {
 }
 
 export async function getIndex(platform: Platform, fetch: Fetch): Promise<IndexEntry[]> {
+  if (cached && Date.now() - cached.at < CACHE_MS) return cached.idx;
   let idx: IndexEntry[] = [];
   const store = platform?.env?.STORE;
   if (store) {
@@ -58,7 +67,9 @@ export async function getIndex(platform: Platform, fetch: Fetch): Promise<IndexE
   const stat = await staticJson<IndexEntry[]>(fetch, `s/v${DOSSIER_V}/index.json`);
   if (stat) idx = merge(idx, stat);
   // Fixtures only fill in when nothing real exists, so a real corpus never shows synthetic species.
-  return idx.length ? idx : fixtureIndex;
+  const out = idx.length ? idx : fixtureIndex;
+  cached = { at: Date.now(), idx: out, bySlug: new Map(out.map((e) => [e.slug, e.key])) };
+  return out;
 }
 
 export async function getDossier(platform: Platform, fetch: Fetch, key: number): Promise<Dossier | null> {
@@ -87,8 +98,8 @@ export async function getDossier(platform: Platform, fetch: Fetch, key: number):
 
 export async function resolveSlug(platform: Platform, fetch: Fetch, slug: string): Promise<number | null> {
   const idx = await getIndex(platform, fetch);
-  const hit = idx.find((e) => e.slug === slug);
-  if (hit) return hit.key;
+  const hit = cached?.bySlug.get(slug);
+  if (hit != null) return hit;
   // Synthetic species are reachable only while no real corpus exists.
   if (idx === fixtureIndex) for (const d of fixturesByKey.values()) if (d.slug === slug) return d.key;
   return null;

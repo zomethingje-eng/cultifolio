@@ -181,9 +181,12 @@ test('the path species → my plants → bench is prefilled at every step and lo
   await expect(page.locator('#e-name')).toHaveValue('East sill');
   await page.fill('#e-floor', '2');
   await page.getByRole('button', { name: 'Save' }).click();
-  // back on the plant, the comparison now has a verdict
+  // back on the plant, the comparison shows both figures and no verdict: the judgement is the grower's
   await page.goto(`/plants/${acc}`);
-  await expect(page.locator('.hvh .pill', { hasText: 'too cold' })).toBeVisible();
+  await expect(page.locator('.hvh')).toContainText('this place is set to bottom out at 2 °C');
+  await expect(page.locator('.hvh')).toContainText(/its habitat's (1st-percentile night|coldest monthly mean minimum) is/);
+  await expect(page.locator('.hvh .pill')).toHaveCount(0);
+  await expect(page.locator('.hvh')).toContainText('A comparison, not a verdict');
   // the next add-plant form remembers the last place used
   await page.goto('/plants/new');
   await expect(page.locator('#f-loc option:checked')).toHaveText('East sill');
@@ -431,9 +434,14 @@ test('labels: pick plants, choose a sheet, print at true size with a code that o
 test('the species page condenses its cultivation sheet into a note by rule', async ({ page }) => {
   await page.goto('/species/copiapoa-cinerea');
   await expect(page.locator('#gen-note')).toContainText('condensed by rule');
-  await expect(page.locator('#gen-note .body')).toContainText('fog desert');
+  await expect(page.locator('#gen-note .body')).toContainText('growing months are read from temperature');
+  await expect(page.locator('#gen-note .body')).not.toContainText(/fog/);
   await expect(page.locator('#gen-note .body')).toContainText('Keep it above 7 °C');
   await expect(page.locator('#gen-note .foot')).toContainText('Its year, Water, Light, Temperature, Feeding, Repotting');
+  // every sentence of the note is a card's own short: the water sentence opens the way the water card opens
+  const water = (await page.locator('.cult', { hasText: /^Water/ }).first().locator('.body').textContent())!.trim();
+  const note = (await page.locator('#gen-note .body').textContent())!;
+  expect(note).toContain(water.split('. ')[0]);
 });
 
 test('first run: the front page explains itself once, and stops once there is a plant or it is dismissed', async ({ page }) => {
@@ -654,6 +662,48 @@ test('a number already in use cannot be given to a second plant', async ({ page 
   await expect(page.getByRole('button', { name: /^Add/ })).toBeDisabled();
   await page.goto('/plants/2019-0147');
   await expect(page.locator('h1.sci')).toContainText('Copiapoa'); // untouched
+});
+
+test('the app shell is installed for offline use: collection pages, a species page once read, and an offline page are all in the cache', async ({ browser }) => {
+  // Playwright's offline emulation does not reach a service worker's own fetches in Chromium, so this
+  // checks what the worker put in the cache, which is what offline navigation is served from.
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+  await page.goto('/');
+  await page.evaluate(() => navigator.serviceWorker.ready); // the first-ever load registers the worker; pages after it are served through it
+  await page.goto('/species/copiapoa-cinerea');
+  const cached = await page.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+    for (let i = 0; i < 100; i++) {
+      const keys = await caches.keys();
+      if (keys.length) {
+        const c = await caches.open(keys[0]);
+        const urls = (await c.keys()).map((r) => new URL(r.url).pathname);
+        if (urls.includes('/plants') && urls.includes('/offline')) return urls;
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return [] as string[];
+  });
+  for (const p of ['/plants', '/benches', '/sowings', '/labels', '/backup', '/sync', '/offline']) expect(cached).toContain(p);
+  expect(cached.some((u) => u.startsWith('/_app/immutable/'))).toBe(true);
+  expect(cached).toContain('/species/copiapoa-cinerea'); // read once, kept
+  expect(cached).not.toContain('/species/welwitschia-mirabilis'); // never read: the offline page would answer for it
+  await page.goto('/offline');
+  await expect(page.locator('h1')).toContainText('No connection');
+  await ctx.close();
+});
+
+test('the front page carries a first page per group and fetches the whole catalogue only when searched', async ({ page }) => {
+  await page.goto('/');
+  const calls: string[] = [];
+  page.on('request', (r) => { if (r.url().includes('/api/index')) calls.push(r.url()); });
+  await expect(page.locator('a.tile')).toHaveCount(3);
+  expect(calls).toHaveLength(0);
+  await page.fill('.searchbar', 'welwit');
+  await expect(page.locator('a.tile')).toHaveCount(1);
+  expect(calls.length).toBeGreaterThan(0);
+  await expect(page.locator('.seccount').last()).toContainText('1 of 3 shown');
 });
 
 test('the about pages are served without JavaScript and say what the app refuses to guess', async ({ browser }) => {

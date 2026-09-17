@@ -1,5 +1,5 @@
 import { getIndex } from '$lib/server/dossiers';
-import { broadRegion } from '$core/regions';
+import { groupFor } from '$core/regions';
 import { worldSvg } from '$lib/map/still';
 import tdwg from '$dossier/tdwg3.json';
 import type { PageServerLoad } from './$types';
@@ -24,10 +24,7 @@ export const load: PageServerLoad = async ({ platform, fetch, setHeaders }) => {
   // Grouped by broad region of the first native unit (Southern Africa, Andes & Chile…), largest groups first.
   const groups = new Map<string, typeof list>();
   for (const c of list) {
-    // The region most of its native units fall in; ties go to the first listed.
-    const tally = new Map<string, number>();
-    for (const u of c.origin) tally.set(broadRegion(u), (tally.get(broadRegion(u)) ?? 0) + 1);
-    const g = [...tally.entries()].sort((x, y) => y[1] - x[1])[0]?.[0] ?? 'Origin not stated';
+    const g = groupFor(c.origin);
     groups.set(g, [...(groups.get(g) ?? []), c]);
   }
   setHeaders({ 'cache-control': 'public, max-age=60, stale-while-revalidate=600' });
@@ -38,11 +35,19 @@ export const load: PageServerLoad = async ({ platform, fetch, setHeaders }) => {
     const boxes = [...new Set(items.flatMap((c) => c.origin))].map((u) => boxByName.get(u)).filter((b): b is { s: number; w: number; n: number; e: number } => !!b);
     return worldSvg(boxes, undefined, 'Where this group grows');
   };
+  // The page carries each group's first tiles and its counts, not the whole catalogue: with thousands of
+  // species the full list is fetched from /api/index only when someone searches, filters or opens a group.
+  const PAGE = 24;
   return {
     featured,
     groups: [...groups.entries()]
-      .map(([origin, items]) => ({ origin, items: items.sort((a, b) => a.name.localeCompare(b.name)), map: groupMap(items), owned: 0, withClimate: items.filter((c) => c.climate === 'ok').length }))
-      .sort((a, b) => (a.origin === 'Origin not stated' ? 1 : 0) - (b.origin === 'Origin not stated' ? 1 : 0) || b.items.length - a.items.length || a.origin.localeCompare(b.origin)),
-    total: index.length
+      .map(([origin, items]) => {
+        const sorted = items.sort((a, b) => a.name.localeCompare(b.name));
+        return { origin, items: sorted.slice(0, PAGE), count: sorted.length, map: groupMap(sorted), owned: 0, withClimate: sorted.filter((c) => c.climate === 'ok').length, origins: [...new Set(sorted.flatMap((c) => c.origin))].slice(0, 7) };
+      })
+      .sort((a, b) => (a.origin === 'Origin not stated' ? 1 : 0) - (b.origin === 'Origin not stated' ? 1 : 0) || b.count - a.count || a.origin.localeCompare(b.origin)),
+    total: index.length,
+    withClimate: list.filter((c) => c.climate === 'ok').length,
+    page: PAGE
   };
 };

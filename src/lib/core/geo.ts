@@ -125,10 +125,14 @@ export function habitatCluster(points: Array<[number, number]>, scales = [1, 2, 
  * Where to sample climate for a cluster. The median of a broad cluster can be
  * a place no record is (the median of eastern South Africa is the Lesotho
  * highlands). So: within the winning cluster find the densest 1° sub-cluster,
- * then snap to the record nearest its median. The result is always a place the
- * plant has actually been recorded.
+ * then snap to the nearest record that may be republished (an open licence),
+ * so the centre is a place the plant has been recorded AND a coordinate the
+ * dossier is allowed to carry. When no open record lies in the cluster, the
+ * centre is the middle of the 1° sub-cluster, rounded to a tenth of a
+ * degree (about 10 km): a grid point, not anyone's record, and close enough
+ * that the climate cell is still the population's. `how` says which.
  */
-export function habitatCentre(c: Cluster): { lat: number; lon: number; refined: boolean } {
+export function habitatCentre(c: Cluster, openPoints: Array<[number, number]>): { lat: number; lon: number; refined: boolean; snapped: 'open-record' | 'cell-centre' } {
   let lat = c.lat,
     lon = c.lon,
     refined = false;
@@ -136,6 +140,11 @@ export function habitatCentre(c: Cluster): { lat: number; lon: number; refined: 
     const sub = densestCluster(c.points, 1);
     if (sub) (lat = sub.lat), (lon = sub.lon), (refined = true);
   }
-  const p = nearestPoint(c.points, lat, lon);
-  return { lat: p[0], lon: p[1], refined };
+  const inCluster = new Set(c.points.map((p) => `${p[0]},${p[1]}`));
+  const candidates = openPoints.filter((p) => inCluster.has(`${p[0]},${p[1]}`));
+  if (candidates.length) {
+    const p = nearestPoint(candidates, lat, lon);
+    return { lat: p[0], lon: p[1], refined, snapped: 'open-record' };
+  }
+  return { lat: Math.round(lat * 10) / 10, lon: Math.round(lon * 10) / 10, refined, snapped: 'cell-centre' };
 }

@@ -24,7 +24,7 @@ describe('dataset bundle', () => {
     expect(lines).toHaveLength(4);
     const head = lines[0].split(',');
     const cop = Object.fromEntries(lines.find((l) => l.includes('Copiapoa cinerea'))!.split(',').map((v, i) => [head[i], v]));
-    expect(cop.habitat_lat).toBe('-28.588');
+    expect(cop.habitat_lat).toBe('-28.6'); // a grid point: the fixture's densest cluster holds no openly licensed record
     expect(cop.growing_season).toBe('winter');
     expect(cop.climate_status).toBe('ok');
     const ref = Object.fromEntries(lines.find((l) => l.includes('Refusia testii'))!.split(',').map((v, i) => [head[i], v]));

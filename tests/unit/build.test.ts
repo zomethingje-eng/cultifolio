@@ -45,6 +45,33 @@ describe('dossier builder', () => {
     expect(d.occurrences.datasets.find((x) => x.licence === 'nc')?.n).toBe(300);
   });
 
+  it('a range that is only reported, never stated native, gets a map but no habitat climate', async () => {
+    // The Haworthia limifolia case from the review: national checklists list presence with no native status.
+    const fx = copiapoa();
+    const key = 5384013;
+    fx[`https://api.gbif.org/v1/species/${key}/distributions`] = { results: [{ country: 'CL', locality: 'Chile', source: 'Checklist of the plants of Chile' }, { country: 'TW', locality: 'Taiwan', establishmentMeans: 'INTRODUCED', source: 'Checklist of Taiwan' }] };
+    const r = await buildDossier('Copiapoa cinerea', opts(fx));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const d = r.dossier;
+    expect(d.distribution.native).toHaveLength(0); // an unmarked checklist row is not promoted to native
+    expect(d.distribution.reported?.map((x) => x.name)).toEqual(['Chile']);
+    expect(d.distribution.introduced.map((x) => x.name)).toEqual(['Taiwan']);
+    expect(d.distribution.verified).toBe(false);
+    expect(d.centroid).toBeUndefined();
+    expect(d.climate.status).toBe('none');
+    expect('detail' in d.climate && d.climate.detail).toMatch(/native range not verified/);
+    expect(d.occurrences.open.length).toBeGreaterThan(0); // the map still has its points
+  });
+  it('the published centre is an openly licensed record or a grid point, never a restricted coordinate', async () => {
+    const r = await buildDossier('Copiapoa cinerea', opts(copiapoa()));
+    if (!r.ok) throw new Error('build failed');
+    const d = r.dossier;
+    // The densest cluster is the 300 restricted records; no open record lies in it, so the centre is a grid point.
+    expect(d.centroid?.how).toMatch(/tenth-degree grid point/);
+    expect(Math.round(d.centroid!.lat * 10) / 10).toBe(d.centroid!.lat);
+    expect(d.occurrences.open.some((p) => p[0] === d.centroid!.lat && p[1] === d.centroid!.lon)).toBe(false);
+  });
   it('a refusal is not an absence', async () => {
     const r = await buildDossier('Refusia testii', opts(refused()));
     expect(r.ok).toBe(true);
