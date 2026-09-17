@@ -19,7 +19,7 @@ const genera: Candidate[] = [
 
 describe('deriving the list', () => {
   it('takes every specialist-genus species, then the most-cultivated the budget allows, skipping crops, hybrids and unresolved names', () => {
-    const { list, report } = mergeLists(inat, genera, { target: 6, excludedFamilies: new Set(['poaceae', 'geraniaceae']) });
+    const { list, report } = mergeLists(inat, genera, { inat: 3, excludedFamilies: new Set(['poaceae', 'geraniaceae']) });
     expect(list).toEqual(['Epipremnum aureum', 'Haworthiopsis limifolia', 'Lithops aucampiae', 'Lithops karasmontana', 'Pelargonium carnosum', 'Sedum morganianum']);
     // maize is excluded by family; the Echeveria cross is a hybrid; the unresolved name never resolved;
     // the specialist Pelargonium is kept despite its family being excluded for the iNat side;
@@ -30,8 +30,45 @@ describe('deriving the list', () => {
     expect(report.find((r) => r.name === 'Epipremnum aureum')?.count).toBe(90000);
     expect(list).not.toContain('Crassula ovata');
   });
-  it('the target bounds the iNat share, not the specialist genera', () => {
-    const { list } = mergeLists(inat, genera, { target: 1, excludedFamilies: new Set() });
+  it('the iNat share is on top of the specialist genera, which come whole', () => {
+    const { list } = mergeLists(inat, genera, { inat: 0, excludedFamilies: new Set() });
     expect(list).toEqual(['Lithops aucampiae', 'Lithops karasmontana', 'Pelargonium carnosum']);
+  });
+});
+
+import { indexWcvp } from '../../scripts/derive-names-lib';
+
+describe('indexWcvp', () => {
+  const H = 'plant_name_id|taxon_rank|taxon_status|family|genus_hybrid|genus|species_hybrid|species|taxon_name|accepted_plant_name_id';
+  const lines = [
+    H,
+    '1|Species|Accepted|Cactaceae||Mammillaria||plumosa|Mammillaria plumosa|1',
+    '2|Species|Synonym|Cactaceae||Mammillaria||schiedeana|Mammillaria schiedeana|3',
+    '3|Species|Accepted|Cactaceae||Mammillaria||magnimamma|Mammillaria magnimamma|3',
+    '4|Species|Unplaced|Cactaceae||Mammillaria||dubia|Mammillaria dubia|',
+    '5|Species|Accepted|Cactaceae||Mammillaria|×|hybrida|Mammillaria × hybrida|5',
+    '6|Variety|Accepted|Cactaceae||Mammillaria||plumosa|Mammillaria plumosa var. minor|6',
+    '7|Species|Accepted|Crassulaceae||Aeonium||arboreum|Aeonium arboreum|7',
+    '8|Species|Synonym|Crassulaceae||Sempervivum||arboreum|Sempervivum arboreum|7',
+    '9|Species|Accepted|Rosaceae||Rosa||canina|Rosa canina|9'
+  ];
+  const w = indexWcvp(lines, new Set(['Mammillaria', 'Aeonium', 'Nothere']));
+
+  it('keeps only accepted, non-hybrid species of the wanted genera', () => {
+    expect(w.genera.map((c) => c.name)).toEqual(['Mammillaria plumosa', 'Mammillaria magnimamma', 'Aeonium arboreum']);
+    expect(w.genera[0].family).toBe('Cactaceae');
+    expect(w.names).toBe(9);
+  });
+
+  it('resolves synonyms and infraspecific names to the accepted species', () => {
+    expect(w.resolve('Mammillaria schiedeana')).toEqual({ accepted: 'Mammillaria magnimamma', family: 'Cactaceae' });
+    expect(w.resolve('Sempervivum arboreum')).toEqual({ accepted: 'Aeonium arboreum', family: 'Crassulaceae' });
+    expect(w.resolve('Mammillaria plumosa var. minor')).toEqual({ accepted: 'Mammillaria plumosa', family: 'Cactaceae' });
+    expect(w.resolve('Rosa canina')).toEqual({ accepted: 'Rosa canina', family: 'Rosaceae' });
+    expect(w.resolve('Nothing here')).toBeNull();
+  });
+
+  it('refuses a file without the WCVP columns', () => {
+    expect(() => indexWcvp(['a|b|c', '1|2|3'], new Set())).toThrow(/not a WCVP names file/);
   });
 });

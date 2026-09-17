@@ -3,7 +3,8 @@
  * Node-only (readline over files); the parsing and the indexes are in
  * src/lib/dossier/bulk.ts where they are unit-tested.
  */
-import { createReadStream, existsSync, statSync } from 'node:fs';
+import { createReadStream, existsSync, statSync, readFileSync } from 'node:fs';
+import { execSync, spawn, spawnSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { WcvpIndex, OccIndex, parseWcvpName, parseWcvpDist, occHeader, parseOccRow } from '../src/lib/dossier/bulk';
 
@@ -44,23 +45,67 @@ export async function loadWcvp(dir: string, names: string[]): Promise<WcvpIndex 
   return idx;
 }
 
-/** The GBIF occurrence download, sampled per species as it streams. */
-export async function loadOccurrences(dir: string, cap = 4000): Promise<OccIndex | null> {
-  const csv = `${dir}/occurrence.csv`;
-  if (!existsSync(csv)) return null;
-  const idx = new OccIndex(cap);
+/** The taxon keys bulk-fetch resolved for these names (bulk/keys.json), so the occurrence index keeps only what this run builds. */
+export function wantedKeys(dir: string, names: string[]): Set<number> | undefined {
+  const p = `${dir}/keys.json`;
+  if (!existsSync(p)) return undefined;
+  const cache = JSON.parse(readFileSync(p, 'utf8')) as Record<string, number | null>;
+  const out = new Set<number>();
+  for (const n of names) {
+    const k = cache[n];
+    if (typeof k === 'number') out.add(k);
+  }
+  return out;
+}
+
+/**
+ * The GBIF occurrence download, sampled per species as it streams. Read
+ * straight out of occurrence.zip with `tar -xOf` (bsdtar; Windows 10+, macOS,
+ * Linux all ship it), so a download of tens of GB never lands on disk as
+ * text. A plain occurrence.csv is read too, for the small case.
+ */
+export async function loadOccurrences(dir: string, cap = 2000, wanted?: Set<number>): Promise<OccIndex | null> {
+  const csv = `${dir}/occurrence.csv`, zip = `${dir}/occurrence.zip`, meta = `${dir}/download.json`;
+  let input: NodeJS.ReadableStream;
+  let what: string;
+  let exit: Promise<number | null> = Promise.resolve(0);
+  if (existsSync(csv)) {
+    input = createReadStream(csv, { encoding: 'utf8' });
+    what = `${csv} (${mb(statSync(csv).size)})`;
+  } else if (existsSync(zip)) {
+    const inner = existsSync(meta) ? (JSON.parse(readFileSync(meta, 'utf8')) as { csv?: string }).csv : undefined;
+    const member = inner ?? execSync(`tar -tf "${zip}"`, { encoding: 'utf8' }).trim().split(/\r?\n/).find((f) => f.endsWith('.csv'));
+    if (!member) return null;
+    // Windows ships bsdtar, which reads zips; GNU tar on Linux does not, so prefer unzip there.
+    const [cmd, cmdArgs] = process.platform === 'win32' || !hasCmd('unzip') ? ['tar', ['-xOf', zip, member]] : ['unzip', ['-p', zip, member]];
+    const child = spawn(cmd, cmdArgs, { stdio: ['ignore', 'pipe', 'inherit'] });
+    child.stdout.setEncoding('utf8');
+    input = child.stdout;
+    exit = new Promise((res) => child.on('close', res));
+    what = `${zip} (${mb(statSync(zip).size)} zipped, streamed with ${cmd})`;
+  } else return null;
+  const idx = new OccIndex(cap, wanted);
   let h: string[] = [];
   let n = 0;
-  console.log(`  GBIF occurrences (${mb(statSync(csv).size)})…`);
-  await eachLine(csv, (line, i) => {
-    if (i === 0) h = occHeader(line);
+  console.log(`  GBIF occurrences from ${what}${wanted ? `, keeping ${wanted.size} species` : ''}…`);
+  const rl = createInterface({ input, crlfDelay: Infinity });
+  let i = 0;
+  for await (const line of rl) {
+    if (i++ === 0) h = occHeader(line);
     else if (line) {
       const o = parseOccRow(h, line);
       if (o) idx.add(o);
-      if (++n % 500_000 === 0) process.stdout.write(`\r  ${(n / 1e6).toFixed(1)} M rows…   `);
+      if (++n % 500_000 === 0) process.stdout.write(`\r  ${(n / 1e6).toFixed(1)} M rows, ${idx.species} taxa, ${idx.kept} kept…   `);
     }
-  });
+  }
+  const code = await exit;
+  if (code) throw new Error(`reading ${zip} failed (exit ${code}); is the archive complete?`);
+  if (n === 0) throw new Error(`no occurrence rows read from ${what}`);
   idx.seal();
-  console.log(`\r  ${n} rows → ${idx.species} taxa (≤${cap} each)      `);
+  console.log(`\r  ${n} rows → ${idx.species} taxa, ${idx.kept} rows kept (≤${cap} each)      `);
   return idx;
+}
+
+function hasCmd(c: string): boolean {
+  return spawnSync(process.platform === 'win32' ? 'where' : 'which', [c], { stdio: 'ignore' }).status === 0;
 }

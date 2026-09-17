@@ -147,40 +147,78 @@ export function idHash(id: number): number {
 
 /**
  * Occurrences by species key, capped per species. The API path returns at
- * most 900; a download can hold half a million for a weed. Each species keeps
- * the `cap` rows with the smallest id-hash: a uniform sample, decided row by
- * row so memory stays bounded while the file streams, and deterministic so a
- * rebuild finds the same habitat centre.
+ * most 900; a download can hold a hundred thousand for one species. Each
+ * species keeps the `cap` rows with the smallest id-hash: a uniform sample,
+ * decided row by row so memory stays bounded while the file streams, and
+ * deterministic so a rebuild finds the same habitat centre. Once a species
+ * is full, a row is only admitted if its hash beats the current worst, so
+ * the buffer never exceeds cap × 1.25 and admissions become rare quickly.
+ *
+ * Memory is the whole game: a download for 9,000 species is 28 M rows, so
+ * only species in `wanted` (when given) are kept at all, and a kept row is a
+ * flat array with its strings interned, about a tenth of an object per row.
  */
+type Row = [h: number, key: number, lat: number, lon: number, year: number, cc: string, basis: string, lic: string, ds: string, est: string];
+
 export class OccIndex {
-  private by = new Map<number, Array<GbifOccurrence & { h: number }>>();
-  constructor(private cap = 4000) {}
+  private by = new Map<number, Row[]>();
+  private worst = new Map<number, number>(); // per species, the largest hash still inside the cap (Infinity until full)
+  private strings = new Map<string, string>();
+  constructor(private cap = 2000, private wanted?: Set<number>) {}
+  private intern(s: string | undefined): string {
+    if (!s) return '';
+    let v = this.strings.get(s);
+    if (!v) this.strings.set(s, (v = s));
+    return v;
+  }
   add(o: GbifOccurrence & { speciesKey?: number; taxonKey?: number }): void {
     const h = idHash(o.key);
     for (const k of new Set([o.speciesKey, o.taxonKey])) {
       if (!k) continue;
+      if (this.wanted && !this.wanted.has(k)) continue;
+      if (h >= (this.worst.get(k) ?? Infinity)) continue;
       const arr = this.by.get(k) ?? [];
-      arr.push({ ...o, h });
-      if (arr.length > this.cap * 2) this.trim(arr);
+      arr.push([h, o.key, o.decimalLatitude ?? NaN, o.decimalLongitude ?? NaN, o.year ?? 0, this.intern(o.countryCode), this.intern(o.basisOfRecord), this.intern(o.license), this.intern(o.datasetKey), this.intern(o.establishmentMeans)]);
+      if (arr.length > this.cap * 1.25) this.trim(k, arr);
       this.by.set(k, arr);
     }
   }
-  private trim(arr: Array<GbifOccurrence & { h: number }>): void {
-    arr.sort((a, b) => a.h - b.h);
-    arr.length = Math.min(arr.length, this.cap);
+  private trim(k: number, arr: Row[]): void {
+    arr.sort((a, b) => a[0] - b[0]);
+    if (arr.length > this.cap) {
+      arr.length = this.cap;
+      this.worst.set(k, arr[this.cap - 1][0]);
+    }
   }
   /** Finish: apply the cap to every species and put rows in id order. */
   seal(): void {
-    for (const arr of this.by.values()) {
-      this.trim(arr);
-      arr.sort((a, b) => a.key - b.key);
+    for (const [k, arr] of this.by) {
+      this.trim(k, arr);
+      arr.sort((a, b) => a[1] - b[1]);
     }
   }
   get(key: number): GbifOccurrence[] | undefined {
-    return this.by.get(key);
+    const arr = this.by.get(key);
+    return arr?.map((r) => ({
+      key: r[1],
+      decimalLatitude: r[2],
+      decimalLongitude: r[3],
+      year: r[4] || undefined,
+      countryCode: r[5] || undefined,
+      basisOfRecord: r[6] || undefined,
+      license: r[7] || undefined,
+      datasetKey: r[8] || undefined,
+      establishmentMeans: r[9] || undefined
+    }));
   }
   get species(): number {
     return this.by.size;
+  }
+  /** Rows currently held, over every species. */
+  get kept(): number {
+    let n = 0;
+    for (const a of this.by.values()) n += a.length;
+    return n;
   }
 }
 

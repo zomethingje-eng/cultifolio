@@ -144,3 +144,34 @@ describe('a build through the bulk path', () => {
     expect(f.stats.occ).toBe(1);
   });
 });
+
+describe('OccIndex memory bound', () => {
+  it('holds at most cap × 1.25 rows per species while streaming and the same sample as an unbounded sort', () => {
+    const cap = 40;
+    const idx = new OccIndex(cap);
+    const all: number[] = [];
+    let peak = 0;
+    for (let id = 1; id <= 5000; id++) {
+      all.push(id);
+      idx.add({ key: id, decimalLatitude: 0, decimalLongitude: 0, speciesKey: 7 });
+      peak = Math.max(peak, idx.kept);
+    }
+    expect(peak).toBeLessThanOrEqual(Math.ceil(cap * 1.25));
+    idx.seal();
+    const want = all.sort((a, b) => idHash(a) - idHash(b)).slice(0, cap).sort((a, b) => a - b);
+    expect(idx.get(7)!.map((o) => o.key)).toEqual(want);
+  });
+});
+
+describe('OccIndex wanted set', () => {
+  it('keeps only the species asked for and drops everything else on the floor', () => {
+    const idx = new OccIndex(10, new Set([7]));
+    for (let id = 1; id <= 50; id++) idx.add({ key: id, decimalLatitude: 1, decimalLongitude: 2, countryCode: 'CL', speciesKey: id % 2 ? 7 : 8, taxonKey: id % 2 ? 7 : 9 });
+    idx.seal();
+    expect(idx.species).toBe(1);
+    expect(idx.get(8)).toBeUndefined();
+    expect(idx.get(7)).toHaveLength(10);
+    expect(idx.get(7)![0]).toMatchObject({ decimalLatitude: 1, decimalLongitude: 2, countryCode: 'CL' });
+    expect(idx.get(7)![0].year).toBeUndefined();
+  });
+});

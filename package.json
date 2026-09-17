@@ -13,7 +13,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test",
-    "dossier": "tsx scripts/build-dossiers.ts",
+    "dossier": "node --max-old-space-size=8192 --import tsx scripts/build-dossiers.ts",
     "bulk": "tsx scripts/bulk-fetch.ts",
     "derive": "tsx scripts/derive-names.ts",
     "export": "tsx scripts/export-corpus.ts"

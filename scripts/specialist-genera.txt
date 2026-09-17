@@ -15,10 +15,8 @@ Coryphantha
 Discocactus
 Echinocactus
 Echinocereus
-Echinomastus
 Epithelantha
 Eriosyce
-Escobaria
 Ferocactus
 Frailea
 Geohintonia
@@ -31,16 +29,13 @@ Matucana
 Melocactus
 Neolloydia
 Obregonia
-Oroya
 Parodia
 Pediocactus
 Pelecyphora
-Puna
 Rebutia
 Sclerocactus
 Stenocactus
 Strombocactus
-Sulcorebutia
 Tephrocactus
 Thelocactus
 Turbinicarpus
@@ -61,7 +56,6 @@ Diplosoma
 Fenestraria
 Frithia
 Gibbaeum
-Ihlenfeldtia
 Lapidaria
 Lithops
 Meyerophytum
@@ -70,7 +64,6 @@ Monilaria
 Muiria
 Nananthus
 Oophytum
-Phyllobolus
 Pleiospilos
 Schwantesia
 Tanquana
@@ -103,7 +96,6 @@ Trachyandra
 
 # Apocynaceae (stapeliads and caudiciforms)
 Adenium
-Brachystelma
 Caralluma
 Duvalia
 Echidnopsis
@@ -120,17 +112,13 @@ Stapelia
 Stapelianthus
 Tavaresia
 Tromotriche
-Whitesloanea
 
 # Other succulents and caudiciforms
 Adenia
 Anacampseros
-Avonia
 Beaucarnea
 Boswellia
 Bowiea
-Calibanus
-Ceraria
 Commiphora
 Cyphostemma
 Dorstenia
@@ -138,7 +126,6 @@ Gerrardanthus
 Ibervillea
 Kedrostis
 Momordica
-Monadenium
 Monsonia
 Operculicarya
 Othonna
@@ -157,7 +144,6 @@ Xerosicyos
 # Winter-growing and other collector bulbs
 Albuca
 Ammocharis
-Androcymbium
 Babiana
 Boophone
 Brunsvigia
@@ -178,13 +164,10 @@ Ledebouria
 Massonia
 Namaquanula
 Nerine
-Polyxena
 Resnova
 Romulea
-Schizobasis
 Scilla
 Sparaxis
-Stellarioides
 Strumaria
 Veltheimia
 
@@ -207,3 +190,10 @@ Heliamphora
 Nepenthes
 Pinguicula
 Sarracenia
+# WCVP-current names for genera that older lists carry separately: Phyllobolus → Mesembryanthemum, Brachystelma → Ceropegia, Androcymbium → Colchicum.
+# (Escobaria → Pelecyphora, Sulcorebutia → Weingartia, Avonia → Anacampseros, Oroya → Matucana, Echinomastus → Sclerocactus,
+#  Ihlenfeldtia → Cheiridopsis, Calibanus → Beaucarnea, Ceraria → Portulacaria, Polyxena → Lachenalia, Schizobasis → Drimia,
+#  Stellarioides → Albuca are already covered by those genera. Monadenium → Euphorbia is not taken whole.)
+Mesembryanthemum
+Ceropegia
+Colchicum
