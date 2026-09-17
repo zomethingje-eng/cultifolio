@@ -179,3 +179,5 @@ tests/unit, tests/e2e
 ## Licences
 
 Client: MIT. Worker/server code: AGPL-3.0 (to be split when sync lands). Data: see the footer on every page and each photograph's credit.
+
+**Dataset bundle** (`npm run export -- --dir static --version 2026.09 --out cultifolio-corpus-2026.09.zip`): everything the build wrote, packaged for people who are not running the app. `species/<slug>.json` verbatim; `species.csv` one row per species with the habitat centre, growing season, cold figures and counts, empty where the build could not derive; `climate.csv` twelve rows per species; `index.json`; `build-report.txt`; a README saying how it was derived and a LICENSE.md that gives the derived figures CC BY 4.0 and lists which fields keep their source licence (Wikipedia summaries are CC BY-SA; occurrence rows carry their own code; photos are links and credits only). `scripts/export-corpus-lib.ts` is the pure builder, `tests/unit/export.test.ts` runs it on the fixtures.

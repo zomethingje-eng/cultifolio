@@ -6,7 +6,7 @@ Cultifolio is for people who grow plants seriously: cacti, succulents, bulbs, ca
 
 Your own collection is the other half: every plant under its own accession number with its timeline, photographs, provenance and place; benches with conditions; sowings that mint numbered plants when you pot them up; labels with QR codes; frost watch. It lives in your browser's storage and nowhere else. There are no accounts and no analytics. Sync between your devices is end-to-end encrypted with a key only you hold; the server stores ciphertext and cannot read a plant name.
 
-`/about/how` in the running app is the methodology. `/about/formats` documents the backup file, the change log and the sync wire format so you can read your data without this app.
+Source: https://github.com/zomethingje-eng/cultifolio. `/about/how` in the running app is the methodology. `/about/formats` documents the backup file, the change log and the sync wire format so you can read your data without this app.
 
 ## Running it
 
@@ -24,6 +24,8 @@ Out of the box the app serves a three-species fixture corpus (`fixtures/dossiers
 ```
 npm run dossier -- names.txt --grid climate
 ```
+
+`npm run export` packages a built corpus as a dataset bundle (the species JSON, `species.csv`, `climate.csv`, a README and the licence terms per source) so the reference data can be published and cited without the app.
 
 `docs/DEVLOG.md` has the full account: the climate grid (a one-time pack of CHELSA with `scripts/pack-climate.py`), the bulk path for thousands of species (`npm run bulk`), and how to derive a large names list from what people actually grow (`npm run derive`).
 

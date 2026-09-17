@@ -15,7 +15,8 @@
     "e2e": "playwright test",
     "dossier": "tsx scripts/build-dossiers.ts",
     "bulk": "tsx scripts/bulk-fetch.ts",
-    "derive": "tsx scripts/derive-names.ts"
+    "derive": "tsx scripts/derive-names.ts",
+    "export": "tsx scripts/export-corpus.ts"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260914.1",
