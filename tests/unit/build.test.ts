@@ -45,6 +45,36 @@ describe('dossier builder', () => {
     expect(d.occurrences.datasets.find((x) => x.licence === 'nc')?.n).toBe(300);
   });
 
+  it('a name the backbone holds as a synonym is followed to the species it accepts, and the page says so', async () => {
+    // Asked for Echinocactus cinereus: the backbone places it (a synonym, key 999) and points at Copiapoa cinerea.
+    const fx = copiapoa();
+    const GBIF = 'https://api.gbif.org/v1';
+    fx[`${GBIF}/species/match?strict=false&name=Echinocactus%20cinereus`] = { usageKey: 999, scientificName: 'Echinocactus cinereus Phil.', canonicalName: 'Echinocactus cinereus', matchType: 'EXACT', rank: 'SPECIES', status: 'SYNONYM', acceptedUsageKey: 5384013 };
+    fx[`${GBIF}/species/999`] = { key: 999, scientificName: 'Echinocactus cinereus Phil.', canonicalName: 'Echinocactus cinereus', rank: 'SPECIES', taxonomicStatus: 'SYNONYM', acceptedKey: 5384013, family: 'Cactaceae', genus: 'Echinocactus' };
+    const r = await buildDossier('Echinocactus cinereus', opts(fx));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.dossier.key).toBe(5384013);
+    expect(r.dossier.name.scientific).toBe('Copiapoa cinerea');
+    expect(r.dossier.name.status).toBe('accepted');
+    expect(r.dossier.upstream['gbif.accepted']?.detail).toMatch(/followed from Echinocactus cinereus/);
+    expect(r.dossier.occurrences.nOpenInRange).toBe(52); // the accepted taxon's records, not the synonym's
+  });
+
+  it('an accepted subspecies reached through a synonym is taken up to its species', async () => {
+    const fx = copiapoa();
+    const GBIF = 'https://api.gbif.org/v1';
+    fx[`${GBIF}/species/match?strict=false&name=Copiapoa%20columna-alba`] = { usageKey: 998, scientificName: 'Copiapoa columna-alba Ritter', canonicalName: 'Copiapoa columna-alba', matchType: 'EXACT', rank: 'SPECIES', status: 'SYNONYM', acceptedUsageKey: 997 };
+    fx[`${GBIF}/species/998`] = { key: 998, scientificName: 'Copiapoa columna-alba Ritter', canonicalName: 'Copiapoa columna-alba', rank: 'SPECIES', taxonomicStatus: 'SYNONYM', acceptedKey: 997 };
+    fx[`${GBIF}/species/997`] = { key: 997, scientificName: 'Copiapoa cinerea subsp. columna-alba (Ritter) D.R.Hunt', canonicalName: 'Copiapoa cinerea columna-alba', rank: 'SUBSPECIES', taxonomicStatus: 'ACCEPTED', speciesKey: 5384013, species: 'Copiapoa cinerea' };
+    const r = await buildDossier('Copiapoa columna-alba', opts(fx));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.dossier.key).toBe(5384013);
+    expect(r.dossier.name.scientific).toBe('Copiapoa cinerea');
+    expect(r.dossier.upstream['gbif.accepted']?.detail).toMatch(/followed from Copiapoa columna-alba, which the backbone holds as a synonym, a synonym of Copiapoa cinerea columna-alba/);
+  });
+
   it('a range that is only reported, never stated native, gets a map but no habitat climate', async () => {
     // The Haworthia limifolia case from the review: national checklists list presence with no native status.
     const fx = copiapoa();

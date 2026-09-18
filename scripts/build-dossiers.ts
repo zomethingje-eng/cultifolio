@@ -2,7 +2,7 @@
  * Offline corpus build. Runs on your PC against the real upstreams, writes one
  * JSON per species to ./corpus/s/v1/<key>.json, and (optionally) uploads to R2.
  *
- *   npx tsx scripts/build-dossiers.ts names.txt                 # one name per line
+ *   npx tsx scripts/build-dossiers.ts names.txt                 # one name per line (or "<backbone key> <name>" to build by key)
  *   npx tsx scripts/build-dossiers.ts names.txt --grid climate  # with habitat climate from the packed grid
  *   npx tsx scripts/build-dossiers.ts names.txt --force         # rebuild species that already have a clean dossier (by default they are kept)
  *   npx tsx scripts/build-dossiers.ts names.txt --skip openalex # leave literature out of this run (marked skipped; a later run without --skip fills it)
@@ -26,12 +26,17 @@
  * thousands to five.
  *   npx tsx scripts/build-dossiers.ts names.txt --bulk bulk     # distributions and occurrences from the files in bulk/ (see bulk-fetch.ts); the APIs only for the rest
  *   npx tsx scripts/build-dossiers.ts names.txt --upload        # also `wrangler r2 object put`
+ *   npx tsx scripts/build-dossiers.ts --index                   # only rewrite the index from the dossiers on disk (after deleting or hand-editing files);
+ *                                                                # lists dossiers under names the backbone holds as synonyms in not-accepted.txt
+ *   npx tsx scripts/build-dossiers.ts not-accepted.txt --grid climate --bulk bulk --force --skip inat,openalex
+ *                                                                # rebuilds those by key: each is followed to its accepted species (a new file)
+ *   npx tsx scripts/build-dossiers.ts --prune-followed          # then deletes the old synonym-name files that an accepted page says it was followed from
  *   npx tsx scripts/build-dossiers.ts --fixtures                # synthetic dossiers for dev
  *
  * The same buildDossier() runs in the Worker for the tail; this script exists
  * so you see every dossier before anyone else does.
  */
-import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, unlinkSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { buildDossier, NETWORK_EXTRAS, type SkippableSource } from '../src/lib/dossier/build';
 import { literature } from '../src/lib/dossier/sources/openalex';
@@ -73,21 +78,26 @@ function diskPowerCache(dir: string): PowerCache {
 }
 
 type IndexEntry = { key: number; slug: string; name: string; family?: string; common?: string; origin: string[]; thumb?: string; photos: number; open: number; climate: string };
-type Dossierish = { key: number; slug: string; name: { scientific: string; family?: string; vernacular: Array<{ name: string; lang?: string }> }; distribution: { native: Array<{ name: string }> }; photos: Array<{ thumb: string; captive?: boolean }>; occurrences: { nOpenInRange: number }; climate: { status: string } };
+type Dossierish = { key: number; slug: string; name: { scientific: string; family?: string; status?: string; vernacular: Array<{ name: string; lang?: string }> }; distribution: { native: Array<{ name: string }> }; photos: Array<{ thumb: string; captive?: boolean }>; occurrences: { nOpenInRange: number; nRestrictedInRange?: number; nOutsideRange?: number }; climate: { status: string } };
 function indexEntry(d: Dossierish): IndexEntry {
   const hero = d.photos.find((p) => !p.captive) ?? d.photos[0];
   return { key: d.key, slug: d.slug, name: d.name.scientific, family: d.name.family, common: d.name.vernacular.find((v) => v.lang === 'eng')?.name, origin: d.distribution.native.map((n) => n.name), thumb: hero?.thumb, photos: d.photos.length, open: d.occurrences.nOpenInRange, climate: d.climate.status };
 }
 
 /** Every dossier on disk, as index entries. The corpus is the files; the index is derived from them. */
+/** Dossiers under a name the backbone does not accept: seen on the last scan, so --index can list them. */
+let notAccepted: Array<{ key: number; name: string; status: string; records: number }> = [];
 function scanDossiers(): IndexEntry[] {
   const dir = `${outDir}/s/v1`;
   if (!existsSync(dir)) return [];
   const out: IndexEntry[] = [];
+  notAccepted = [];
   for (const f of readdirSync(dir)) {
     if (!/^\d+\.json$/.test(f)) continue;
     try {
-      out.push(indexEntry(JSON.parse(readFileSync(`${dir}/${f}`, 'utf8')) as Dossierish));
+      const d = JSON.parse(readFileSync(`${dir}/${f}`, 'utf8')) as Dossierish;
+      out.push(indexEntry(d));
+      if (d.name.status && d.name.status !== 'accepted') notAccepted.push({ key: d.key, name: d.name.scientific, status: d.name.status, records: d.occurrences.nOpenInRange + (d.occurrences.nRestrictedInRange ?? 0) + (d.occurrences.nOutsideRange ?? 0) });
     } catch {
       /* a half-written file from a killed run: rebuilt when its name comes round */
     }
@@ -198,6 +208,38 @@ async function fillPhotos(): Promise<void> {
   }
 }
 
+/**
+ * After a rebuild that followed synonyms to their accepted species, the old files under the synonym
+ * names are still on disk. Delete exactly those: a non-accepted dossier whose name some accepted
+ * dossier says it was "followed from". Anything else under a non-accepted name is left and listed.
+ */
+function pruneFollowed(): void {
+  const dir = `${outDir}/s/v1`;
+  const followed = new Set<string>();
+  const files = readdirSync(dir).filter((f) => /^\d+\.json$/.test(f));
+  type D = { key: number; name: { scientific: string; status?: string }; upstream: Record<string, { detail?: string }> };
+  const all: Array<{ f: string; d: D }> = [];
+  for (const f of files) {
+    try {
+      const d = JSON.parse(readFileSync(`${dir}/${f}`, 'utf8')) as D;
+      all.push({ f, d });
+      const m = /^followed from (.+?), which the backbone holds as a synonym/.exec(d.upstream?.['gbif.accepted']?.detail ?? '');
+      if (m && d.name.status === 'accepted') followed.add(m[1].toLowerCase());
+    } catch {
+      /* half-written */
+    }
+  }
+  let gone = 0;
+  for (const { f, d } of all) {
+    if (d.name.status && d.name.status !== 'accepted' && followed.has(d.name.scientific.toLowerCase())) {
+      unlinkSync(`${dir}/${f}`);
+      gone++;
+    }
+  }
+  console.log(`  ${gone} dossiers under synonym names deleted; each has an accepted species' page that says it was followed from that name.`);
+  writeIndexFromDisk();
+}
+
 /** The index is derived from the files; after a fill the thumbnails have changed, so it is written again. */
 function writeIndexFromDisk(): void {
   const index = scanDossiers().sort((a, b) => a.name.localeCompare(b.name));
@@ -205,10 +247,18 @@ function writeIndexFromDisk(): void {
   mkdirSync(idxDir, { recursive: true });
   writeFileSync(`${idxDir}/index.json`, JSON.stringify(index, null, 1));
   console.log(`  index: ${index.length} species`);
+  // A dossier under a synonym or doubtful name is a page the backbone would not put its records under. Listed, not deleted.
+  if (notAccepted.length) {
+    notAccepted.sort((a, b) => a.name.localeCompare(b.name));
+    writeFileSync('not-accepted.txt', notAccepted.map((x) => `${x.key}\t${x.name}\t${x.status}\t${x.records} records`).join('\n') + '\n');
+    console.log(`  ${notAccepted.length} dossiers are under a name the backbone holds as a synonym or doubtful → not-accepted.txt (rebuild those names to follow them to the accepted species, then delete the old files and run --index)`);
+  }
 }
 
 async function main() {
   mkdirSync(outDir, { recursive: true });
+  if (args.includes('--prune-followed')) return pruneFollowed();
+  if (args.includes('--index')) return writeIndexFromDisk();
   if (fill === 'openalex') return fillLiterature();
   if (fill === 'inat') return fillPhotos();
   if (fill) throw new Error(`--fill ${fill}: openalex or inat`);
@@ -220,7 +270,7 @@ async function main() {
     }
     climate = makeClimateProvider({ grid: fileGridSource(`${gridDir}/climate.grid`, `${gridDir}/climate.json`), fetcher: makeFetcher(), powerCache: diskPowerCache(`${gridDir}/power-cache`), noExtremes: quick });
   }
-  const jobs: Array<{ name: string; fetcher: ReturnType<typeof makeFetcher> }> = [];
+  const jobs: Array<{ name: string; key?: number; fetcher: ReturnType<typeof makeFetcher> }> = [];
   if (fixtures) {
     // A synthetic Atacama-coast climate for the Chilean fixture only, so the plant page's habitat comparison
     // and the cultivation sheet can be exercised offline. Marked as fixture in its source field.
@@ -241,18 +291,34 @@ async function main() {
       console.error('usage: tsx scripts/build-dossiers.ts <names.txt> [--upload] [--quick]');
       process.exit(2);
     }
-    const names = readFileSync(file, 'utf8').split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
+    // A line is a name, or "<backbone key> <name>" (tab-separated notes after the name are ignored, so
+    // not-accepted.txt works as it is): the key is what is built, so a name the match endpoint refuses as
+    // ambiguous (homonyms) still resolves; the name is for the log and for choosing which WCVP genera to load.
+    const lines = readFileSync(file, 'utf8').split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
+    const parsed = lines.map((line) => {
+      const m = /^(\d+)\s+([^\t]+)/.exec(line);
+      return m ? { name: m[2].trim(), key: Number(m[1]) } : { name: line.split('\t')[0].trim(), key: undefined };
+    });
+    const seenLine = new Set<string>();
+    const unique = parsed.filter((p) => {
+      const k = p.key ? `k${p.key}` : p.name.toLowerCase();
+      if (seenLine.has(k)) return false;
+      seenLine.add(k);
+      return true;
+    });
+    if (unique.length < parsed.length) console.log(`  ${parsed.length - unique.length} repeated line${parsed.length - unique.length === 1 ? '' : 's'} in ${file} skipped`);
+    const names = unique.map((p) => p.name);
     let f = makeFetcher();
     if (bulkDir) {
       console.log(`Loading bulk files from ${bulkDir}/…`);
       const [wcvp, occ] = await Promise.all([loadWcvp(bulkDir, names), loadOccurrences(bulkDir, 2000, wantedKeys(bulkDir, names))]);
       if (!wcvp) console.log('  no WCVP files: distributions will come from the API');
-      if (!occ) console.log('  no occurrence.zip: occurrences will come from the API');
+      if (!occ && !existsSync(`${bulkDir}/occurrence.zip`) && !existsSync(`${bulkDir}/occurrence.csv`)) console.log('  no occurrence.zip: occurrences will come from the API');
       const bf = bulkFetcher(f, { wcvp: wcvp ?? undefined, occ: occ ?? undefined });
       bulkStats = bf.stats;
       f = bf;
     }
-    for (const name of names) jobs.push({ name, fetcher: f });
+    for (const p of unique) jobs.push({ name: p.name, key: p.key, fetcher: f });
   }
   const report: string[] = [];
   const say = (line: string) => {
@@ -269,7 +335,7 @@ async function main() {
   for (const j of jobs) {
     const t0 = Date.now();
     if (!force) {
-      const k = existing.get(j.name.toLowerCase());
+      const k = j.key ?? existing.get(j.name.toLowerCase());
       if (k && !needsRebuild(k)) {
         say(`· ${j.name}: kept (clean)`);
         keptN++;
@@ -278,7 +344,7 @@ async function main() {
     }
     let r;
     try {
-      r = await buildDossier(j.name, { fetcher: j.fetcher, builtBy: 'node', quick, climate, skip });
+      r = await buildDossier(j.key ?? j.name, { fetcher: j.fetcher, builtBy: 'node', quick, climate, skip });
     } catch (e) {
       const issues = (e as { issues?: Array<{ path?: Array<{ key: unknown }>; message: string }> }).issues;
       const where = issues?.map((i) => (i.path ?? []).map((p) => String(p.key)).join('.') + ': ' + i.message).join('; ');
@@ -322,7 +388,10 @@ async function main() {
     const refusedSrcs = Object.entries(d.upstream)
       .filter(([, u]) => u.status === 'refused' || u.status === 'error')
       .map(([k, u]) => `${k}:${u.status}${u.detail ? ' (' + u.detail + ')' : ''}`);
-    say(`✓ ${d.name.scientific} [${d.key}] ${d.photos.length} photos, ${d.occurrences.nOpenInRange} open/${d.occurrences.nRestrictedInRange} restricted in range, climate ${d.climate.status}${refusedSrcs.length ? ' — refused: ' + refusedSrcs.join(', ') : ''} (${Date.now() - t0} ms)`);
+    // Many records and none inside the stated range: either a cultivated plant, or the range itself is miscoded upstream. Worth a look either way.
+    const inRange = d.occurrences.nOpenInRange + d.occurrences.nRestrictedInRange;
+    const disagree = !inRange && d.occurrences.nOutsideRange >= 20 ? ` — range disagrees with records: all ${d.occurrences.nOutsideRange} outside it` : '';
+    say(`✓ ${d.name.scientific} [${d.key}] ${d.photos.length} photos, ${d.occurrences.nOpenInRange} open/${d.occurrences.nRestrictedInRange} restricted in range, climate ${d.climate.status}${disagree}${refusedSrcs.length ? ' — refused: ' + refusedSrcs.join(', ') : ''} (${Date.now() - t0} ms)`);
     thisRun.set(d.key, indexEntry(d as unknown as Dossierish));
     built++;
     if (upload) execSync(`npx wrangler r2 object put cultifolio/${dossierPath(d.key)} --file="${path}" --content-type=application/json`, { stdio: 'inherit' });

@@ -36,6 +36,9 @@ export interface GbifSpecies {
   taxonomicStatus?: string;
   acceptedKey?: number;
   accepted?: string;
+  /** For an infraspecific taxon: the species it belongs to. */
+  speciesKey?: number;
+  species?: string;
   family?: string;
   genus?: string;
   order?: string;

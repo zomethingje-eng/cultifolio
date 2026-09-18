@@ -10,7 +10,7 @@ describe('the fetch layer', () => {
     const f = makeFetcher(async () => (++calls, res(429)));
     const r = await f('https://rate.example/x');
     expect(r.status).toBe('refused');
-    expect(calls).toBe(4); // first try + 3 retries
+    expect(calls).toBe(6); // first try + 5 retries
   });
   it('retries a dropped connection once', async () => {
     let calls = 0;
@@ -32,6 +32,28 @@ describe('the fetch layer', () => {
     const other = await f<{ fine: boolean }>('https://calm.example/y');
     expect(other.status).toBe('ok');
     expect(hostCooling('calm.example')).toBe(false);
+  });
+});
+
+describe('a host that makes every call wait', () => {
+  beforeEach(() => resetPacing());
+  it('is called a spent quota after eight throttled calls in a row, and cooled', async () => {
+    // Each call: 429 first, then 200 on the retry. Never a refusal, so strikes would never trip.
+    let calls = 0;
+    const f = makeFetcher(async () => (++calls % 2 === 1 ? res(429) : res(200, { ok: 1 })));
+    for (let i = 0; i < 7; i++) expect((await f('https://slow.example/' + i)).status).toBe('ok');
+    expect(hostCooling('slow.example')).toBe(false);
+    const r = await f('https://slow.example/8');
+    expect(r.status).toBe('refused');
+    expect('detail' in r && r.detail).toMatch(/quota for the day is spent/);
+    expect(hostCooling('slow.example')).toBe(true);
+  });
+  it('forgets the run when a call is answered first time', async () => {
+    let calls = 0;
+    // Six throttled calls, one clean one, then six more: never reaches eight in a row.
+    const f = makeFetcher(async () => (++calls, calls === 13 || calls % 2 === 0 ? res(200, { ok: 1 }) : res(429)));
+    for (let i = 0; i < 13; i++) expect((await f('https://slow.example/' + i)).status).toBe('ok');
+    expect(hostCooling('slow.example')).toBe(false);
   });
 });
 

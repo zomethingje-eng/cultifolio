@@ -16,7 +16,8 @@
     "dossier": "node --max-old-space-size=8192 --import tsx scripts/build-dossiers.ts",
     "bulk": "tsx scripts/bulk-fetch.ts",
     "derive": "tsx scripts/derive-names.ts",
-    "export": "tsx scripts/export-corpus.ts"
+    "export": "tsx scripts/export-corpus.ts",
+    "reconcile": "tsx scripts/reconcile-names.ts"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260914.1",

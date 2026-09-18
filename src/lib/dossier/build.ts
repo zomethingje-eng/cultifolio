@@ -76,9 +76,30 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
       return { ok: false, reason: 'higher-rank-only', detail: `backbone offered ${m.data.canonicalName ?? m.data.scientificName} (${m.data.rank?.toLowerCase() ?? '?'})` };
     key = m.data.usageKey;
   }
-  const sp = await gbif.species(f, key);
+  let sp = await gbif.species(f, key);
   mark('gbif.species', sp);
   if (sp.status !== 'ok') return { ok: false, reason: sp.status === 'none' ? 'name-unresolved' : 'backbone-refused', detail: sp.status === 'none' ? undefined : sp.detail };
+  // A name the backbone holds as a synonym is followed to the species it accepts: the records, the
+  // range and the photographs are indexed under that name, and a page under the synonym would be
+  // empty. The page says which name was asked for; the synonym stays in the synonym list.
+  if (/synonym/i.test(sp.data.taxonomicStatus ?? '') && sp.data.acceptedKey && sp.data.acceptedKey !== key) {
+    const from = sp.data.canonicalName ?? sp.data.scientificName;
+    let acc = await gbif.species(f, sp.data.acceptedKey);
+    if (acc.status === 'refused' || acc.status === 'error') return { ok: false, reason: 'backbone-refused', detail: acc.detail };
+    // The accepted taxon may be a subspecies or variety (Epilobium angustifolium → Chamaenerion angustifolium subsp.
+    // angustifolium): the page is the species', so go one more step up.
+    let via = '';
+    if (acc.status === 'ok' && !/^species$/i.test(acc.data.rank ?? '') && acc.data.speciesKey && acc.data.speciesKey !== acc.data.key) {
+      via = `, a synonym of ${acc.data.canonicalName ?? acc.data.scientificName}`;
+      acc = await gbif.species(f, acc.data.speciesKey);
+      if (acc.status === 'refused' || acc.status === 'error') return { ok: false, reason: 'backbone-refused', detail: acc.detail };
+    }
+    if (acc.status === 'ok' && /^species$/i.test(acc.data.rank ?? '')) {
+      upstream['gbif.accepted'] = { status: 'ok', at: now(), detail: `followed from ${from}, which the backbone holds as a synonym${via}` };
+      key = acc.data.key;
+      sp = acc;
+    }
+  }
   const s = sp.data;
   const scientific = s.canonicalName ?? s.scientificName;
   const status = /accepted/i.test(s.taxonomicStatus ?? '') ? 'accepted' : /synonym/i.test(s.taxonomicStatus ?? '') ? 'synonym' : /doubtful/i.test(s.taxonomicStatus ?? '') ? 'doubtful' : 'unknown';

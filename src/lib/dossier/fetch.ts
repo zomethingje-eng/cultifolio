@@ -47,6 +47,15 @@ const STRIKES_TO_TRIP = 3;
 const COOLDOWN_MS = 10 * 60_000;
 const strikes = new Map<string, number>();
 const coolUntil = new Map<string, number>();
+/**
+ * A host that makes every call wait (429 with Retry-After, then success) is
+ * not refusing, so the strikes never trip, and a fill can crawl at a call a
+ * minute for hours. That many waits in a row is a quota spent for the day:
+ * the host is cooled and the caller gets an honest refusal to stop on.
+ */
+const THROTTLED_RUN = 8;
+const RETRIES = 5;
+const throttledRun = new Map<string, number>();
 const RECENT_MS = 60 * 60_000;
 export function hostCooling(host: string, now = Date.now()): boolean {
   return (coolUntil.get(host) ?? 0) > now;
@@ -69,6 +78,7 @@ export function resetPacing(): void {
   lastAt.clear();
   strikes.clear();
   coolUntil.clear();
+  throttledRun.clear();
 }
 /** For tests: pretend a host finished cooling a moment ago. */
 export function markCooledRecently(host: string): void {
@@ -102,12 +112,25 @@ export function makeFetcher(fetchImpl: typeof fetch = fetch): JsonFetcher {
         strikes.set(host, 0);
         return { status: 'refused', detail: `${host} 429 again after a cooldown; not asked for a while` };
       }
-      if ((res.status === 429 || res.status === 503) && (opts.attempt ?? 0) < 3) {
+      // Up to five polite retries: GBIF's occurrence search answers 429 with a Retry-After of 3 s under load, and three
+      // tries at that were giving up on a host that was about to answer.
+      if ((res.status === 429 || res.status === 503) && (opts.attempt ?? 0) < RETRIES) {
+        if (!(opts.attempt ?? 0)) {
+          const run = (throttledRun.get(host) ?? 0) + 1;
+          throttledRun.set(host, run);
+          if (run >= THROTTLED_RUN) {
+            coolUntil.set(host, Date.now() + COOLDOWN_MS);
+            throttledRun.set(host, 0);
+            return { status: 'refused', detail: `${host} made ${run} calls in a row wait; its quota for the day is spent` };
+          }
+        }
         // Polite retries after the server's own Retry-After (capped), backing off, then give up honestly.
         const attempt = (opts.attempt ?? 0) + 1;
         const ra = Number(res.headers.get('retry-after'));
         const wait = Math.min(30000, res.headers.has('retry-after') && Number.isFinite(ra) && ra >= 0 ? ra * 1000 : 4000 * attempt);
         clearTimeout(timer);
+        // Say so on a terminal, so a run that is waiting out a throttle does not look hung.
+        if (typeof process !== 'undefined' && process.stdout?.isTTY) process.stdout.write(`\n  ${host} ${res.status}: waiting ${Math.round(wait / 1000)} s (retry ${attempt} of ${RETRIES})…`);
         await new Promise((r) => setTimeout(r, wait));
         return makeFetcher(fetchImpl)<T>(url, { ...opts, attempt });
       }
@@ -117,6 +140,7 @@ export function makeFetcher(fetchImpl: typeof fetch = fetch): JsonFetcher {
       }
       if (!res.ok) return { status: 'error', detail: `${host} ${res.status}` };
       strikes.set(host, 0);
+      if (!(opts.attempt ?? 0)) throttledRun.set(host, 0); // answered first time: the host is not throttling
       const data = (await res.json()) as T;
       return { status: 'ok', data };
     } catch (e) {

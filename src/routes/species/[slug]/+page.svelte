@@ -144,6 +144,9 @@
     <a href="#s-registers">Registers</a>
   </nav>
 
+  {#if d.upstream['gbif.accepted']?.detail}
+    <p class="small muted">This page was reached by a name the GBIF Backbone holds as a synonym: {d.upstream['gbif.accepted'].detail}.</p>
+  {/if}
   {#if d.name.synonyms.length}
     <p class="small muted">Also known as {d.name.synonyms.slice(0, 5).join('; ')}{d.name.synonyms.length > 5 ? ` and ${d.name.synonyms.length - 5} more` : ''}.</p>
   {/if}

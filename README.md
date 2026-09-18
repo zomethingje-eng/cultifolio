@@ -25,7 +25,7 @@ Out of the box the app serves a three-species fixture corpus (`fixtures/dossiers
 npm run dossier -- names.txt --grid climate
 ```
 
-`npm run export` packages a built corpus as a dataset bundle (the species JSON, `species.csv`, `climate.csv`, a README and the licence terms per source) so the reference data can be published and cited without the app.
+`npm run reconcile` retries the names a build refused under the other spellings WCVP knows them by. `npm run export` packages a built corpus as a dataset bundle (the species JSON, `species.csv`, `climate.csv`, a README and the licence terms per source) so the reference data can be published and cited without the app.
 
 Literature comes from OpenAlex, whose free key allows about 1,000 species a day: build with `--skip openalex`, then `npm run dossier -- --fill openalex` (with `OPENALEX_KEY` set) once a day until every dossier has its papers.
 
