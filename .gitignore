@@ -4,9 +4,9 @@
 .svelte-kit
 .wrangler
 __pycache__/
-bulk/
-climate/
-corpus/
+/bulk/
+/climate/
+/corpus/
 cultifolio-corpus-*.zip
 dist
 names-5000.txt*
