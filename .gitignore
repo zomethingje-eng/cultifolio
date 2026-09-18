@@ -18,3 +18,4 @@ playwright-report
 static/s/
 test*.txt
 test-results
+names-extra.txt

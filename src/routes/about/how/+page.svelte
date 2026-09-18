@@ -31,7 +31,7 @@
   <p>Restricted-licence records (CC BY-NC) are used for this clustering and for nothing else: every in-range coordinate may inform where the cluster is, but only openly licensed records are published on the map, in the data, or as the centre itself. Three agreeing records are enough for a narrow endemic; under a dozen the page says the evidence is thin.</p>
 
   <h2 id="climate">Climate at the centre</h2>
-  <p>Monthly figures are read from the packed CHELSA grid at the centre's cell. Radiation is converted to a daily light integral (PAR taken as 45% of shortwave at 4.6 µmol per joule, so 1 MJ/m²/day ≈ 2.07 mol/m²/day), because that is the unit a grower can compare with a window or a lamp.</p>
+  <p>Monthly figures are read from the packed CHELSA grid at the centre's cell. Radiation is CHELSA's daily-mean shortwave flux (its files state W m⁻²), taken to a daily total by the 86,400 seconds in a day, then converted to a daily light integral (PAR taken as 45% of shortwave at 4.6 µmol per joule, so 1 MJ/m²/day ≈ 2.07 mol/m²/day), because that is the unit a grower can compare with a window or a lamp.</p>
   <p>Extremes need daily data, which CHELSA does not give, so the app fetches the NASA POWER daily series for the centre's 0.5° cell and reduces it: the absolute minimum, the 1st-percentile night, the 99th-percentile day, and frost nights per year over the whole record. POWER's cell elevation and the centre's elevation differ, so the series is lapse-corrected at 6.5 °C per 1,000 m of the difference, and the page says by how much. A series is used only if it covers twenty years at 95% completeness.</p>
 
   <h2 id="year">The growing year</h2>

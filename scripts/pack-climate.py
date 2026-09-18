@@ -39,9 +39,9 @@ QUANT = {"tasmax": (0.1, "°C"), "tasmin": (0.1, "°C"), "tas": (0.1, "°C"), "p
 # a FALLBACK: the GeoTIFF's own scale/offset tags are read first and win when present, and the header records
 # which was used for every layer, so the unit question is settled by the file, not by what looks plausible.
 CHELSA = {"tas": (0.1, -273.15), "tasmax": (0.1, -273.15), "tasmin": (0.1, -273.15), "pr": (0.1, 0.0),
-          # rsds is tabulated as scale 0.001 in MJ m-2 d-1; a probe on the Atacama coast gave 0.3 MJ under it and
-          # 30 MJ under 0.1. Plausibility is not a unit check, so the packer now refuses to pack rsds unless the
-          # raster tags state its scale, or --trust-rsds-scale is given with the value to use. Run --inspect first.
+          # rsds: the tabulated 0.001 (MJ m-2 d-1) does not match the files, whose variable_unit tag says W m-2
+          # (a daily-mean flux, raw values around 200). The packer reads that tag and converts with ×0.0864
+          # (86,400 s in a day). The grid was first packed with ×0.1, 16% high; --redo rsds repacks it.
           "rsds": (0.001, 0.0), "hurs": (0.01, 0.0), "vpd": (0.1, 0.0), "sfcWind": (0.001, 0.0)}
 
 # Physical ranges a whole-earth monthly layer must fall inside; a layer outside them is a unit mistake, not weather.
@@ -240,13 +240,18 @@ def main():
         else:
             v, mm_ = spec["var"], f"{spec['month']:02d}"
             path = download(CHELSA_URL.format(var=v, mm=mm_), os.path.join(src_dir, f"CHELSA_{v}_{mm_}.tif"), alt=CHELSA_URL_ALT.format(var=v, mm=mm_))
-            rsc, roff, runit, _ = raster_scaling(path)
+            rsc, roff, runit, rtags = raster_scaling(path)
+            unit_tag = (rtags.get("variable_unit") or runit or "").strip()
             if rsc is not None:
                 sc, off, how = rsc, roff, "raster tags"
+            elif v == "rsds" and unit_tag == "W m-2":
+                # The file states a daily-mean flux in W m-2 (CHELSA V2.1 rsds does, in its variable_unit tag);
+                # a day is 86,400 s, so ×0.0864 gives the daily integral in MJ m-2.
+                sc, off, how = 0.0864, 0.0, "unit tag W m-2 → MJ m-2 d-1"
             elif v == "rsds" and args.trust_rsds_scale is not None:
                 sc, off, how = args.trust_rsds_scale, 0.0, "--trust-rsds-scale"
             elif v == "rsds":
-                raise SystemExit("rsds: the raster states no scale/offset and its tabulated scale is in doubt. Run `pack-climate.py --inspect rsds 01`, read the output, then pass --trust-rsds-scale with the value the evidence supports.")
+                raise SystemExit("rsds: the raster states no scale/offset and no unit, and its tabulated scale is in doubt. Run `pack-climate.py --inspect rsds 01`, read the output, then pass --trust-rsds-scale with the value the evidence supports.")
             else:
                 sc, off, how = CHELSA[v][0], CHELSA[v][1], "spec table"
             arr = resample_to_grid(path, sc, off, nodata_in=65535)

@@ -66,6 +66,11 @@ export function wantedKeys(dir: string, names: string[]): Set<number> | undefine
  */
 export async function loadOccurrences(dir: string, cap = 2000, wanted?: Set<number>): Promise<OccIndex | null> {
   const csv = `${dir}/occurrence.csv`, zip = `${dir}/occurrence.zip`, meta = `${dir}/download.json`;
+  // A names file with nothing in the download (a handful of extras) should not cost a pass over 28 M rows.
+  if (wanted && wanted.size === 0) {
+    console.log('  none of these species are in the occurrence download: occurrences will come from the API');
+    return null;
+  }
   let input: NodeJS.ReadableStream;
   let what: string;
   let exit: Promise<number | null> = Promise.resolve(0);

@@ -9,6 +9,8 @@
  *   npx tsx scripts/build-dossiers.ts --fill openalex           # literature only: for every dossier on disk whose literature is missing, refused or
  *                                                                # skipped, one OpenAlex call, patched into the file. Stops cleanly when the day's
  *                                                                # allowance is spent (free keys: 1,000 species a day) and says when it resets.
+ *   npx tsx scripts/build-dossiers.ts --fill inat               # photographs only, the same way: iNaturalist allows 10,000 calls a day, about
+ *                                                                # 3,300 species; a long run leaves photos out (--skip inat) and fills them daily.
  *   npx tsx scripts/build-dossiers.ts names.txt --rederive     # rebuild range, records, centre and climate under the current rules (bulk files
  *                                                                # and the local grid; only the backbone is asked), carrying photos, summary,
  *                                                                # identifiers and literature from each species' previous build. About a second a species.
@@ -33,6 +35,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 
 import { execSync } from 'node:child_process';
 import { buildDossier, NETWORK_EXTRAS, type SkippableSource } from '../src/lib/dossier/build';
 import { literature } from '../src/lib/dossier/sources/openalex';
+import * as inat from '../src/lib/dossier/sources/inat';
 import { makeFetcher, fixtureFetcher } from '../src/lib/dossier/fetch';
 import { dossierPath } from '../src/lib/dossier/schema';
 import { welwitschia, copiapoa, refused } from '../fixtures/upstream';
@@ -97,8 +100,9 @@ function needsRebuild(key: number): boolean {
   if (!existsSync(p)) return true;
   try {
     const d = JSON.parse(readFileSync(p, 'utf8')) as { climate?: { status: string }; upstream?: Record<string, { status: string }> };
-    // 'none' too: the evidence rules can loosen between builds, and the rebuild of a thin species is cheap.
-    if (d.climate?.status === 'pending' || d.climate?.status === 'refused' || d.climate?.status === 'none') return true;
+    // 'none' is a settled answer (too few records, no verified range, a cultigen), not a failure: it is redone by
+    // --rederive when the rules change, not on every run. 'pending' and 'refused' are unfinished and are retried.
+    if (d.climate?.status === 'pending' || d.climate?.status === 'refused') return true;
     // A source this run is skipping anyway cannot be the reason to rebuild.
     return Object.entries(d.upstream ?? {}).some(([k, u]) => !skip.some((x) => k === x || k.startsWith(x + '.')) && (u.status === 'refused' || u.status === 'error'));
   } catch {
@@ -142,10 +146,72 @@ async function fillLiterature(): Promise<void> {
   console.log(`\n  ${done} filled, ${none} with nothing to find. Every dossier has its literature.`);
 }
 
+/** Photographs from iNaturalist for every dossier that has none of them yet: the taxon lookup (unless Wikidata already gave the id), then the wild and cultivated sets. */
+async function fillPhotos(): Promise<void> {
+  const dir = `${outDir}/s/v1`;
+  const files = existsSync(dir) ? readdirSync(dir).filter((f) => /^\d+\.json$/.test(f)) : [];
+  type D = { name: { scientific: string }; ids: { inat?: number }; links: Record<string, string>; photos: Array<{ src: string }>; upstream: Record<string, { status: string; at?: string; detail?: string }> };
+  const todo: Array<{ path: string; d: D }> = [];
+  for (const f of files) {
+    const d = JSON.parse(readFileSync(`${dir}/${f}`, 'utf8')) as D;
+    const st = d.upstream?.['inat.photos.wild']?.status;
+    if (st !== 'ok' && st !== 'none') todo.push({ path: `${dir}/${f}`, d });
+  }
+  console.log(`${files.length} dossiers on disk; ${todo.length} without iNaturalist photographs…`);
+  const f = makeFetcher();
+  let done = 0;
+  const t0 = Date.now();
+  for (const { path, d } of todo) {
+    let id = d.ids.inat;
+    if (!id) {
+      const t = await inat.taxon(f, d.name.scientific);
+      if (t.status === 'refused') return stop(t.detail);
+      d.upstream['inat.taxon'] = { status: t.status, at: new Date().toISOString(), detail: 'detail' in t ? t.detail : undefined };
+      if (t.status === 'ok') id = d.ids.inat = t.data.id;
+    }
+    if (!id) {
+      d.upstream['inat.photos.wild'] = { status: 'none', at: new Date().toISOString(), detail: 'no iNaturalist taxon of exactly this name' };
+      d.upstream['inat.photos.cultivated'] = { status: 'none', at: new Date().toISOString() };
+      writeFileSync(path, JSON.stringify(d));
+      done++;
+      continue;
+    }
+    d.links.inat = `https://www.inaturalist.org/taxa/${id}`;
+    const wild = await inat.photos(f, id, true, 24);
+    if (wild.status === 'refused') return stop(wild.detail);
+    const cult = await inat.photos(f, id, false, 12);
+    if (cult.status === 'refused') return stop(cult.detail);
+    const fresh = [...(wild.status === 'ok' ? wild.data : []), ...(cult.status === 'ok' ? cult.data : [])];
+    // iNat photos lead; whatever Commons or GBIF media gave earlier stays behind them.
+    d.photos = [...fresh, ...d.photos.filter((p) => p.src !== 'inat')];
+    d.upstream['inat.photos.wild'] = { status: wild.status, at: new Date().toISOString(), detail: `filled ${new Date().toISOString().slice(0, 10)}` };
+    d.upstream['inat.photos.cultivated'] = { status: cult.status, at: new Date().toISOString(), detail: `filled ${new Date().toISOString().slice(0, 10)}` };
+    writeFileSync(path, JSON.stringify(d));
+    done++;
+    if (done % 25 === 0) process.stdout.write(`\r  ${done} of ${todo.length} (${((Date.now() - t0) / done / 1000).toFixed(1)} s each)…   `);
+  }
+  console.log(`\n  ${done} filled. Every dossier has been asked for its photographs.`);
+  writeIndexFromDisk();
+  function stop(detail?: string) {
+    console.log(`\n  iNaturalist refused (${detail ?? ''}). ${done} filled; ${todo.length - done} still to do. iNaturalist allows about 10,000 calls a day; run this again tomorrow.`);
+    writeIndexFromDisk();
+  }
+}
+
+/** The index is derived from the files; after a fill the thumbnails have changed, so it is written again. */
+function writeIndexFromDisk(): void {
+  const index = scanDossiers().sort((a, b) => a.name.localeCompare(b.name));
+  const idxDir = `${outDir}/s/v1`;
+  mkdirSync(idxDir, { recursive: true });
+  writeFileSync(`${idxDir}/index.json`, JSON.stringify(index, null, 1));
+  console.log(`  index: ${index.length} species`);
+}
+
 async function main() {
   mkdirSync(outDir, { recursive: true });
   if (fill === 'openalex') return fillLiterature();
-  if (fill) throw new Error(`--fill ${fill}: only openalex can be filled on its own`);
+  if (fill === 'inat') return fillPhotos();
+  if (fill) throw new Error(`--fill ${fill}: openalex or inat`);
   let climate: ClimateProvider | undefined;
   if (gridDir) {
     if (!existsSync(`${gridDir}/climate.grid`) || !existsSync(`${gridDir}/climate.json`)) {
@@ -231,14 +297,15 @@ async function main() {
       const prev = JSON.parse(readFileSync(path, 'utf8')) as typeof d;
       const carry = (src: string, copy: () => void) => {
         const now = d.upstream[src]?.status, before = prev.upstream?.[src]?.status;
-        if ((now === 'refused' || now === 'error') && (before === 'ok' || before === 'none')) {
+        // Skipped this build (a --skip source) counts the same as refused: what the last build had is kept.
+        if ((now === 'refused' || now === 'error' || now === 'skipped') && (before === 'ok' || before === 'none')) {
           copy();
           d.upstream[src] = { ...prev.upstream[src], detail: `carried from build of ${prev.built?.slice(0, 10) ?? '?'}; this build: ${d.upstream[src].detail ?? now}` };
         }
       };
       carry('openalex', () => (d.literature = prev.literature));
       carry('wikipedia', () => (d.summary = prev.summary));
-      for (const src of ['inat.photos.wild', 'inat.photos.cultivated', 'commons']) carry(src, () => { if (prev.photos.length > d.photos.length) d.photos = prev.photos; });
+      for (const src of ['inat.photos.wild', 'inat.photos.cultivated', 'commons', 'gbif.media']) carry(src, () => { if (prev.photos.length > d.photos.length) { d.photos = prev.photos; if (prev.ids?.inat) { d.ids.inat = prev.ids.inat; d.links.inat = prev.links.inat; } } });
       // A re-derivation asked no network extra at all: every one of those sections is the previous build's, and says so.
       if (rederive) {
         const from = `carried from build of ${prev.built?.slice(0, 10) ?? '?'} (rederive)`;
