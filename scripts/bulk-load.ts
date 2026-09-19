@@ -74,9 +74,9 @@ function streamMember(zip: string, member: string): { input: NodeJS.ReadableStre
 
 /** Which members the archive holds: a SIMPLE_CSV download has one .csv; a DWCA has occurrence.txt and multimedia.txt. */
 function members(zip: string, meta: string): { records: string; media?: string } | null {
-  const m = existsSync(meta) ? (JSON.parse(readFileSync(meta, 'utf8')) as { csv?: string; records?: string; media?: string }) : {};
-  if (m.records) return { records: m.records, media: m.media };
-  if (m.csv) return { records: m.csv };
+  // download.json: `csv` is the records member (occurrence.txt or <key>.csv), `media` the multimedia member; `records` is the row count.
+  const m = existsSync(meta) ? (JSON.parse(readFileSync(meta, 'utf8')) as { csv?: string; media?: string }) : {};
+  if (typeof m.csv === 'string') return { records: m.csv, media: typeof m.media === 'string' ? m.media : undefined };
   const listed = execSync(`tar -tf "${zip}"`, { encoding: 'utf8' }).trim().split(/\r?\n/);
   const records = listed.find((f) => f === 'occurrence.txt') ?? listed.find((f) => f.endsWith('.csv'));
   if (!records) return null;
