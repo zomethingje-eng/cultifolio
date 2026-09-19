@@ -5,6 +5,9 @@
   import PhotoImg from '$lib/ui/PhotoImg.svelte';
   import Lightbox from '$lib/ui/Lightbox.svelte';
   import Provenance from '$lib/ui/Provenance.svelte';
+  import Climograph from '$lib/ui/Climograph.svelte';
+  import FollowButton from '$lib/ui/FollowButton.svelte';
+  import { firstSentences } from '$core/text';
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import { generatedNote } from '$core/note';
   import { cultivationSheet, CARD_ORDER } from '$core/sheet';
@@ -80,6 +83,8 @@
   /** The grower's hemisphere, from the first place with coordinates, else north. Only the months in the note depend on it. */
   const readerLat = $derived(collection.ready ? (collection.locations.map((l) => l.lat).find((x): x is number => x != null) ?? null) : null);
   const note = $derived(generatedNote(sheetIn, { readerLat }));
+  /** Four sentences of the quoted lead; the rest is a link, never a mid-sentence cut. */
+  const excerpt = $derived(d.summary ? firstSentences(d.summary.text, 4) : null);
   const sheetCards = $derived(CARD_ORDER.map((c) => ({ title: c, rows: sheet.rows.filter((r) => r.card === c) })).filter((c) => c.rows.length));
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   // The numbers a grower reads first, each with the month it belongs to.
@@ -142,14 +147,15 @@
     <div class="acts">
       <a class="btn pri" href="/plants/new?species={encodeURIComponent(d.name.scientific)}&key={d.key}">Add one to my plants</a>
       <a class="btn" href="/sowings/new?species={encodeURIComponent(d.name.scientific)}&key={d.key}">Sow seed</a>
+      <FollowButton slug={d.slug} name={d.name.scientific} gbifKey={d.key} />
     </div>
   </div>
 
   <nav class="tabs" aria-label="Sections">
     {#if d.summary || refused('wikipedia')}<a href="#s-summary">Summary</a>{/if}
+    <a href="#s-cultivation">Cultivation</a>
     <a href="#s-climate">Climate</a>
     <a href="#s-habitat">Habitat</a>
-    <a href="#s-cultivation">Cultivation</a>
     {#if d.photos.length > 1}<a href="#s-photos">Photographs</a>{/if}
     {#if d.literature.length || refused('openalex')}<a href="#s-research">Papers</a>{/if}
     <a href="#s-registers">Registers</a>
@@ -164,12 +170,51 @@
 
   {#if d.summary}
     <h2 class="sec" id="s-summary">Summary</h2>
-    <div class="sumbody"><p>{d.summary.text}</p></div>
-    <p class="small muted">Text from <a href={d.summary.url} rel="noopener">Wikipedia, “{d.summary.title}”</a>, {d.summary.licence}. Kept separate from everything written here.</p>
+    <div class="sumbody"><p>{excerpt?.text}{#if excerpt?.more}{' '}<a class="more" href={d.summary.url} rel="noopener">More on Wikipedia ›</a>{/if}</p></div>
+    <p class="small muted">{excerpt?.more ? 'The opening of' : 'Text from'} <a href={d.summary.url} rel="noopener">Wikipedia, “{d.summary.title}”</a>, {d.summary.licence}, quoted as written. Kept separate from everything derived here.</p>
   {:else if refused('wikipedia')}
     <h2 class="sec" id="s-summary">Summary</h2>
     <div class="notice"><b>Not checked.</b> Wikipedia did not answer when this page was built. Not a statement that it has no article.</div>
   {/if}
+
+  <h2 class="sec" id="s-cultivation">Cultivation</h2>
+  <div class="note-slot" data-key={d.key}>
+    {#if note}
+      <div class="cult" id="gen-note"><div class="sum">In short <span class="hint">condensed by rule from the cards below · not written by a person</span></div><div class="body">{note.text}</div><div class="foot">Each sentence is one card's own one-line form, written by the same rule as the card ({note.from.join(', ')}); the note cannot say what a card does not. {#if note.hab}Months are given for {readerLat != null && readerLat < 0 ? 'the southern' : 'the northern'} hemisphere{readerLat == null ? ' (set coordinates on a bench to change this)' : ', from your benches'}, and the habitat's own alongside.{/if}</div></div>
+    {/if}
+    {#if editingMy}
+      <div class="cult">
+        <div class="sum">Your notes <span class="hint">yours alone, on this device; shown on every plant of this species you own</span></div>
+        <div class="fields"><textarea id="my-notes" rows="4" bind:value={myDraft}></textarea><div class="end"><button class="btn" onclick={() => (editingMy = false)}>Cancel</button><button class="btn pri" onclick={saveMy}>Save</button></div></div>
+      </div>
+    {:else if myTaxon?.myNotes}
+      <div class="cult">
+        <div class="sum">Your notes <span class="hint">yours alone, on this device; shown on every plant of this species you own</span></div>
+        <div class="body">{myTaxon.myNotes}</div><div class="foot"><button class="linkish" onclick={() => { myDraft = myTaxon?.myNotes ?? ''; editingMy = true; }}>Edit</button></div>
+      </div>
+    {:else if collection.ready}
+      <p class="small muted notesline">Your notes: none yet. <button class="linkish" onclick={() => { myDraft = ''; editingMy = true; }}>Write what you know</button> · yours alone, on this device.</p>
+    {/if}
+    {#if sheet.arch}
+      <p class="small muted" style="margin: 4px 0 12px">Grouped as a {sheet.arch.arch.lab.toLowerCase()} by {sheet.arch.why} (archetype table). The table supplies one figure, a conventional group minimum for the cold floor, and no prose.</p>
+    {/if}
+    {#each sheetCards as c}
+      <div class="cult">
+        <div class="sum">{c.title} <span class="hint">{c.rows.some((r) => r.hab) ? 'this species’ habitat figures, and what two fixed rules read from them' : 'the archetype table’s figure; no habitat figure for this species'}</span></div>
+        <div class="body sheet">
+          {#each c.rows as r}
+            {#if c.rows.length > 1}<div class="rowk" role="heading" aria-level="3">{r.k}</div>{/if}
+            <p>{r.s}</p>
+            <p class="why">{r.why}</p>
+          {/each}
+        </div>
+      </div>
+    {/each}
+    {#if !sheetCards.length}
+      <div class="cult"><div class="none">{#if d.climate.status === 'refused'}Not checked: {sentence(d.climate.detail, 'a source did not answer when this page was built')} No sheet is derived from an answer that was not given, and the archetype table has no figure for this genus or family.{:else if d.climate.status === 'pending'}Pending: the habitat climate has not been derived yet, and the archetype table has no figure for this genus or family.{:else}Nothing derived: no habitat climate for this species, and the archetype table has no figure for its genus or family.{/if}</div></div>
+    {/if}
+    {#if sheetCards.length}<p class="small muted">The figures the cards read from are in <a href="#s-climate">Climate</a> below, and where they came from in <a href="#s-habitat">Natural habitat</a>.</p>{/if}
+  </div>
 
   <h2 class="sec" id="s-climate">Climate across the habitat</h2>
   {#if d.climate.status === 'ok'}
@@ -181,6 +226,9 @@
         {#if glance.dli}<div class="card"><div class="lab">Light</div><div class="val">{glance.dli.lo.toFixed(0)}–{glance.dli.hi.toFixed(0)}<span class="u">DLI</span></div><div class="gauge"><i class="w" style="width:{Math.min(100, glance.dli.hi / 0.7)}%"></i></div><div class="sub">mol/m²/day, winter to summer</div></div>{/if}
       </div>
     {/if}
+    <Climograph climate={{ months: d.climate.months, p10: d.climate.p10, p90: d.climate.p90, cells: d.climate.cells, extremes: d.climate.extremes ?? null }} />
+    <details class="figures">
+      <summary>Figures by month</summary>
     <div class="scroll-x">
       <table class="wx">
         <thead><tr><th></th>{#each months as m}<th>{m}</th>{/each}</tr></thead>
@@ -193,6 +241,7 @@
         </tbody>
       </table>
     </div>
+    </details>
     <p class="small muted">
       Each figure is the median across the {d.climate.cells} grid cells holding the {d.climate.records} in-range records, with the 10th–90th percentile span across those cells after the slash where it differs. Extremes and elevation were read at the typical cell {d.climate.cell} ({d.climate.at.lat}, {d.climate.at.lon}).
       {#if d.climate.extremes}Over {d.climate.extremes.years} years there: absolute minimum {d.climate.extremes.minAbs.toFixed(1)} °C, 1st-percentile night {d.climate.extremes.minP01.toFixed(1)} °C, 99th-percentile day {d.climate.extremes.maxP99.toFixed(1)} °C.{/if}
@@ -220,43 +269,6 @@
     <div class="wide"><b>Evidence used</b>{evidence.text}{#if d.occurrences.nVague}{' '}{d.occurrences.nVague} in-range record{d.occurrences.nVague === 1 ? ' is' : 's are'} placed to worse than 10 km and stay{d.occurrences.nVague === 1 ? 's' : ''} on the map but off the climate.{/if}</div>
     {#if d.centroid}<div class="wide"><b>The map marker</b>{d.centroid.how}.</div>{/if}
     {#if d.distribution.native.length && !d.distribution.boxes.length}<div><b>Range source</b>{d.distribution.source}: country level only, so records are not tested against it.</div>{/if}
-  </div>
-
-  <h2 class="sec" id="s-cultivation">Cultivation</h2>
-  <div class="note-slot" data-key={d.key}>
-    <div class="cult">
-      <div class="sum">Your notes <span class="hint">yours alone, on this device; shown on every plant of this species you own</span></div>
-      {#if editingMy}
-        <div class="fields"><textarea id="my-notes" rows="4" bind:value={myDraft}></textarea><div class="end"><button class="btn" onclick={() => (editingMy = false)}>Cancel</button><button class="btn pri" onclick={saveMy}>Save</button></div></div>
-      {:else if myTaxon?.myNotes}
-        <div class="body">{myTaxon.myNotes}</div><div class="foot"><button class="linkish" onclick={() => { myDraft = myTaxon?.myNotes ?? ''; editingMy = true; }}>Edit</button></div>
-      {:else if collection.ready}
-        <div class="none">Nothing yet. <button class="linkish" onclick={() => { myDraft = ''; editingMy = true; }}>Write what you know</button>.</div>
-      {:else}
-        <div class="none">Your own notes for this species go here.</div>
-      {/if}
-    </div>
-    {#if sheet.arch}
-      <p class="small muted" style="margin: 4px 0 12px">Grouped as a {sheet.arch.arch.lab.toLowerCase()} by {sheet.arch.why} (archetype table). The table supplies one figure, a conventional group minimum for the cold floor, and no prose.</p>
-    {/if}
-    {#each sheetCards as c}
-      <div class="cult">
-        <div class="sum">{c.title} <span class="hint">{c.rows.some((r) => r.hab) ? 'this species’ habitat figures, and what two fixed rules read from them' : 'the archetype table’s figure; no habitat figure for this species'}</span></div>
-        <div class="body sheet">
-          {#each c.rows as r}
-            {#if c.rows.length > 1}<div class="rowk" role="heading" aria-level="3">{r.k}</div>{/if}
-            <p>{r.s}</p>
-            <p class="why">{r.why}</p>
-          {/each}
-        </div>
-      </div>
-    {/each}
-    {#if !sheetCards.length}
-      <div class="cult"><div class="none">{#if d.climate.status === 'refused'}Not checked: {sentence(d.climate.detail, 'a source did not answer when this page was built')} No sheet is derived from an answer that was not given, and the archetype table has no figure for this genus or family.{:else if d.climate.status === 'pending'}Pending: the habitat climate has not been derived yet, and the archetype table has no figure for this genus or family.{:else}Nothing derived: no habitat climate for this species, and the archetype table has no figure for its genus or family.{/if}</div></div>
-    {/if}
-    {#if note}
-      <div class="cult" id="gen-note"><div class="sum">In short <span class="hint">condensed by rule from the cards above · not written by a person</span></div><div class="body">{note.text}</div><div class="foot">Each sentence is one card's own one-line form, written by the same rule as the card ({note.from.join(', ')}); the note cannot say what a card does not. {#if note.hab}Months are given for {readerLat != null && readerLat < 0 ? 'the southern' : 'the northern'} hemisphere{readerLat == null ? ' (set coordinates on a bench to change this)' : ', from your benches'}, and the habitat's own alongside.{/if}</div></div>
-    {/if}
   </div>
 
   {#if myPhotos.length}
@@ -315,6 +327,12 @@
   .factgrid .wide { grid-column: 1 / -1; }
   .sheet { white-space: normal; }
   .mine { margin-top: 8px; }
+  .sumbody .more { font-family: var(--ui); font-size: 13px; white-space: nowrap; }
+  .notesline { margin: 2px 0 12px; }
+  .figures { margin: 10px 0 0; }
+  .figures summary { cursor: pointer; font-size: 12.5px; color: var(--ink2); font-weight: 600; padding: 6px 0; }
+  .figures summary:hover { color: var(--accent); }
+  .figures table.wx { margin-top: 6px; }
   .mine .accno { margin-right: 2px; }
   .fields { display: grid; gap: 8px; padding: 13px 17px 15px; }
   .fields textarea { width: 100%; font: inherit; font-size: 15px; font-family: var(--serif); line-height: 1.55; padding: 9px 12px; border: 1px solid var(--rule); border-radius: 9px; background: var(--card); color: var(--ink); min-height: 96px; }

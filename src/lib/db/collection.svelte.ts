@@ -11,6 +11,7 @@ import { allChanges, appendChanges, deviceId, requestPersistence, getMeta, setMe
 import type { Accession, PlantEvent, Taxon, Location, Sowing, Provenance, Photo } from './types';
 import { PROP_METHODS, accNo, sowNo } from './types';
 import { slugify } from '$core/names';
+import { mySpeciesOf, type MySpecies } from './species-list';
 
 class Collection {
   ready = $state(false);
@@ -71,6 +72,14 @@ class Collection {
   taxon(id: string): Taxon | undefined {
     const r = this.state.get(recKey('taxon', id));
     return r && !r._deleted ? (r as unknown as Taxon) : undefined;
+  }
+  /** Keep a species on your list without a plant of it (or stop). Diffed like any other write, so sync carries it unchanged. */
+  async follow(slug: string, name: string, gbifKey: number | null | undefined, on: boolean): Promise<void> {
+    await this.put('taxon', slug, { name, gbifKey: gbifKey ?? null, followed: on || null });
+  }
+  /** Your species: every kind you grow or follow, by slug. */
+  get mySpecies(): Map<string, MySpecies> {
+    return mySpeciesOf(this.live<Accession>('accession'), this.live<Taxon>('taxon'));
   }
   /* ---- locations ---- */
   get locations(): Location[] {

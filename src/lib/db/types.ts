@@ -85,6 +85,8 @@ export interface Taxon {
   gbifKey?: number | null;
   myNotes?: string | null;
   removed?: boolean | null;
+  /** On the grower's species list without a plant of it yet: wanted, or worth knowing more about. */
+  followed?: boolean | null;
 }
 
 /** What a plant is, for records from before `nameKind` existed too. (Named nameKind because `kind` is the log's record type.) */
