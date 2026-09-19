@@ -18,11 +18,14 @@ import { habitatCluster, habitatCentre, haversineKm, inBox, type Box } from '$co
 import { DOSSIER_V, parseDossier, type Dossier, type OccPoint, type Photo, type Climate, type Upstream } from './schema';
 
 export interface ClimateProvider {
-  /** Given a habitat centroid, return climate or a pending/none/refused state. */
+  /** The envelope across every in-range record's grid cell: what a species page carries. */
+  envelope(points: Array<[number, number]>): Promise<Climate>;
+  /** One point's cell (a bench, a garden): median and percentiles coincide. */
   at(lat: number, lon: number): Promise<Climate>;
 }
 
-export const noClimate: ClimateProvider = { at: async () => ({ status: 'pending', detail: 'climate provider not configured' }) };
+const pending = async (): Promise<Climate> => ({ status: 'pending', detail: 'climate provider not configured' });
+export const noClimate: ClimateProvider = { envelope: pending, at: pending };
 
 export interface BuildOptions {
   fetcher: JsonFetcher;
@@ -33,6 +36,8 @@ export interface BuildOptions {
   quick?: boolean;
   /** Sources to leave out of this build, recorded as skipped so a later pass (or a carry from the previous build) can fill them. */
   skip?: SkippableSource[];
+  /** GBIF's media (the photographs on occurrence records) is asked for first, not only when other sources gave under six: set when a download supplies it at no cost. */
+  mediaFirst?: boolean;
 }
 export type SkippableSource = 'openalex' | 'wikidata' | 'wikipedia' | 'inat' | 'commons' | 'gbif.media';
 /** Everything that is not the backbone, the range, the records or the climate: what a re-derivation can carry over from the previous build. */
@@ -98,6 +103,11 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
       upstream['gbif.accepted'] = { status: 'ok', at: now(), detail: `followed from ${from}, which the backbone holds as a synonym${via}` };
       key = acc.data.key;
       sp = acc;
+    } else if (acc.status === 'none') {
+      // The backbone points at an accepted taxon it then cannot serve: no page can be built under the synonym either.
+      return { ok: false, reason: 'name-unresolved', detail: `${from} is a synonym of backbone key ${sp.data.acceptedKey}, which the backbone did not serve` };
+    } else if (acc.status === 'ok') {
+      upstream['gbif.accepted'] = { status: 'none', at: now(), detail: `${from} is a synonym of ${acc.data.canonicalName ?? acc.data.scientificName} (${acc.data.rank?.toLowerCase() ?? 'rank unknown'}), which is not a species; the page stays under the synonym` };
     }
   }
   const s = sp.data;
@@ -114,6 +124,7 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   const native: Dossier['distribution']['native'] = [];
   const introduced: Dossier['distribution']['native'] = [];
   const reported: Dossier['distribution']['native'] = [];
+  const extinct: Dossier['distribution']['native'] = [];
   const boxes: Box[] = [];
   const fromWcvp = dist.status === 'ok' && dist.data.wcvp;
   if (dist.status === 'ok') {
@@ -124,7 +135,9 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
       const nativeSaid = /native|indigenous|endemic/i.test(`${d.establishmentMeans ?? ''} ${d.status ?? ''}`);
       // WCVP states native or introduced for every row. A national checklist that says neither is a
       // report of presence, not a native range: it is kept as such and never promoted to native.
+      // A region where WCVP says the plant is extinct is part of its history, not its habitat.
       if (intro) introduced.push(region);
+      else if (/extinct/i.test(`${d.establishmentMeans ?? ''} ${d.status ?? ''}`)) extinct.push(region);
       else if (fromWcvp || nativeSaid) {
         native.push(region);
         if (region.box) boxes.push(region.box);
@@ -132,25 +145,39 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     }
   }
   const verified = fromWcvp && native.length > 0;
+  const ambiguous = dist.status === 'ok' ? dist.data.ambiguous : undefined;
+  const kew = dist.status === 'ok' && dist.data.kew && (dist.data.kew.lifeform || dist.data.kew.climate) ? dist.data.kew : undefined;
 
   /* ---- 3. Occurrences, licence-filtered, corroborated against the range ---- */
   const occ = await gbif.occurrences(f, key);
   mark('gbif.occurrences', occ);
+  // Records from a GBIF download are cited by its DOI; records from the search API by the API.
+  if (occ.status === 'ok') {
+    const doi = occ.data.find((r) => r.downloadDoi)?.downloadDoi;
+    upstream['gbif.occurrences'].detail = doi ? `GBIF occurrence download https://doi.org/${doi}` : 'GBIF occurrence search API';
+  }
   const open: OccPoint[] = [];
   const restrictedInRange: Array<[number, number]> = [];
-  let nOutside = 0;
+  /** In-range coordinates precise enough to read climate at (uncertainty under 10 km, or unstated). */
+  const forClimate: Array<[number, number]> = [];
+  let nOutside = 0,
+    nVague = 0;
   const datasets = new Map<string, { title?: string; licence: string; n: number }>();
   if (occ.status === 'ok') {
-    const seen = new Set<string>();
+    // Same coordinate to three decimals is one place; when an open and a restricted record share it, the
+    // open one is the one kept, so a licence never hides a record the map could show.
+    const byCoord = new Map<string, (typeof occ.data)[number]>();
     for (const r of occ.data) {
       if (r.decimalLatitude == null || r.decimalLongitude == null) continue;
       if (r.basisOfRecord === 'LIVING_SPECIMEN') continue; // a plant somebody planted
       if (/introduced|managed|cultivated/i.test(`${r.establishmentMeans ?? ''} ${r.degreeOfEstablishment ?? ''}`)) continue;
-      const lat = +r.decimalLatitude.toFixed(3),
-        lon = +r.decimalLongitude.toFixed(3);
-      const dk = `${lat},${lon}`;
-      if (seen.has(dk)) continue;
-      seen.add(dk);
+      const dk = `${+r.decimalLatitude.toFixed(3)},${+r.decimalLongitude.toFixed(3)}`;
+      const held = byCoord.get(dk);
+      if (!held || (!isOpen(licenceTag(held.license)) && isOpen(licenceTag(r.license)))) byCoord.set(dk, r);
+    }
+    for (const r of byCoord.values()) {
+      const lat = +r.decimalLatitude!.toFixed(3),
+        lon = +r.decimalLongitude!.toFixed(3);
       const tag = licenceTag(r.license);
       const dsKey = r.datasetKey ?? '?';
       const ds = datasets.get(dsKey) ?? { title: r.datasetName ?? undefined, licence: tag ?? 'unstated', n: 0 };
@@ -163,35 +190,41 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
       }
       if (isOpen(tag)) open.push([lat, lon, r.year ?? null, r.countryCode ?? null, r.basisOfRecord ?? null, tag!]);
       else restrictedInRange.push([lat, lon]);
+      if ((r.coordinateUncertaintyInMeters ?? 0) <= 10_000) forClimate.push([lat, lon]);
+      else nVague++;
     }
   }
-  // The habitat centre is a derived number, so every in-range coordinate may inform it, whatever its
-  // licence; only the open records themselves are published (on the map and in the dossier).
+  // The envelope and the map marker are derived numbers, so every in-range coordinate may inform them,
+  // whatever its licence; only the open records themselves are published (on the map and in the dossier).
   const openPts = open.map((p) => [p[0], p[1]] as [number, number]);
   const allPts = [...openPts, ...restrictedInRange];
   const cluster = habitatCluster(allPts);
   const openCluster = cluster && openPts.length ? habitatCluster(openPts, [cluster.cell]) : null;
   const restrictedShiftKm = cluster && openCluster && restrictedInRange.length ? Math.round(haversineKm(openCluster.lat, openCluster.lon, cluster.lat, cluster.lon)) : null;
 
-  /* ---- 4. Centroid and climate ---- */
+  /* ---- 4. The map marker, and the climate envelope ---- */
+  // The marker is where the records are densest: a place to put the pin, nothing more. The climate is
+  // read across every in-range record's cell, so no single population decides it.
   let centroid: Dossier['centroid'] | undefined;
-  let climate: Climate = { status: 'none', detail: 'no habitat centroid' };
-  if (occ.status === 'refused' || occ.status === 'error') climate = { status: 'refused', detail: 'occurrence source did not answer' };
-  // No verified native range means no way to tell a habitat record from a garden one, so no habitat climate: the map stays, the advice does not.
-  else if (!verified || !boxes.length) climate = { status: 'none', detail: !verified ? 'native range not verified: no WCVP distribution with native status for this name, so records cannot be told from cultivation and no habitat climate is derived' : 'native range is stated at country level only, with no region boxes to test records against' };
-  // Three agreeing records are enough to place a habitat centre for a narrow endemic; the page says how thin the evidence is.
-  else if (cluster && cluster.dominant && allPts.length >= 3) {
+  // Without a verified range the records cannot be told from cultivation, so there is no population to mark either.
+  if (cluster && cluster.n >= 3 && verified && boxes.length) {
     const at = habitatCentre(cluster, openPts);
     centroid = {
-      lat: +at.lat.toFixed(3),
-      lon: +at.lon.toFixed(3),
+      lat: at.lat,
+      lon: at.lon,
       n: cluster.n,
       share: +cluster.share.toFixed(2),
-      how: `${at.snapped === 'open-record' ? 'the openly licensed record nearest' : 'the tenth-degree grid point nearest (no openly licensed record lies in the cluster, so no record\'s coordinates are published as the centre)'} the middle of the densest ${at.refined ? `1° population inside the densest ${cluster.cell}° block` : `${cluster.cell}° cluster`} of all ${allPts.length} in-range records inside the stated native range`
+      how: `the map marker: ${at.snapped === 'open-record' ? 'the openly licensed record nearest' : 'the centre of the tenth-degree cell nearest (no openly licensed record lies in the population, so no record\'s coordinates are published)'} the middle of the densest ${at.refined ? `1° population inside the densest ${cluster.cell}° block` : `${cluster.cell}° population`} of the ${allPts.length} in-range records; the climate is not read here but across every record's cell`
     };
-    climate = await (o.climate ?? noClimate).at(centroid.lat, centroid.lon);
-  } else if (cluster && !cluster.dominant && allPts.length >= 3) climate = { status: 'none', detail: 'records form disjunct populations; no cluster dominates even at 4°' };
-  else if (allPts.length && allPts.length < 3) climate = { status: 'none', detail: `only ${allPts.length} georeferenced record${allPts.length === 1 ? '' : 's'} inside the range` };
+  }
+  let climate: Climate = { status: 'none', detail: 'no georeferenced record inside the range' };
+  if (occ.status === 'refused' || occ.status === 'error') climate = { status: 'refused', detail: 'occurrence source did not answer' };
+  else if (dist.status === 'refused' || dist.status === 'error') climate = { status: 'refused', detail: 'distribution source did not answer, so the range could not be verified' };
+  // No verified native range means no way to tell a habitat record from a garden one, so no habitat climate: the map stays, the advice does not.
+  else if (ambiguous) climate = { status: 'none', detail: `native range not verified: ${ambiguous}` };
+  else if (!verified || !boxes.length) climate = { status: 'none', detail: !verified ? 'native range not verified: no WCVP distribution with native status for this name, so records cannot be told from cultivation and no habitat climate is derived' : 'native range is stated at country level only, with no region boxes to test records against' };
+  else if (forClimate.length) climate = await (o.climate ?? noClimate).envelope(forClimate);
+  else if (allPts.length) climate = { status: 'none', detail: `${allPts.length} in-range record${allPts.length === 1 ? '' : 's'}, none placed to within 10 km` };
   if (climate.status === 'pending') upstream.climate = { status: 'skipped', at: now(), detail: climate.detail };
   else mark('climate', climate.status === 'ok' ? { status: 'ok' } : { status: climate.status, detail: climate.detail });
 
@@ -200,7 +233,7 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   const links: Record<string, string> = { gbif: `https://www.gbif.org/species/${key}` };
   const skip = (k: SkippableSource) => !!o.skip?.includes(k);
   const skipped = (k: string) => (upstream[k] = { status: 'skipped', at: now() });
-  const x = skip('wikidata') ? ({ status: 'skipped' } as const) : await wm.crossIds(f, scientific);
+  const x = skip('wikidata') ? ({ status: 'skipped' } as const) : await wm.crossIds(f, scientific, key);
   if (x.status === 'skipped') skipped('wikidata');
   else mark('wikidata', x);
   let enTitle = scientific;
@@ -250,12 +283,16 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     if (c.status === 'ok') photos.push(...c.data);
   }
   if (skip('gbif.media')) skipped('gbif.media');
-  else if (!o.quick && photos.length < 6) {
+  else if (!o.quick && (o.mediaFirst || photos.length < 6)) {
     const m = await gbif.media(f, key);
     mark('gbif.media', m);
     if (m.status === 'ok')
-      for (const im of m.data)
-        photos.push({ src: 'gbif', id: im.id, url: im.url, thumb: `https://api.gbif.org/v1/image/cache/fit-in/400x/${encodeURIComponent(im.url)}`, licence: im.licence as Photo['licence'], attribution: `${im.creator ?? im.rightsHolder ?? 'unknown'}, ${im.licence.toUpperCase()} via GBIF`, page: im.page });
+      for (const im of m.data.slice(0, 24)) {
+        // iNaturalist's open-data bucket serves sizes by name; anything else goes through GBIF's image cache.
+        const inat = /^https:\/\/inaturalist-open-data\.s3\.amazonaws\.com\/photos\/\d+\/original\.(\w+)$/.exec(im.url);
+        const thumb = inat ? im.url.replace(/original\.(\w+)$/, 'medium.$1') : `https://api.gbif.org/v1/image/cache/fit-in/400x/${encodeURIComponent(im.url)}`;
+        photos.push({ src: 'gbif', id: im.id, url: im.url, thumb, licence: im.licence as Photo['licence'], attribution: `${im.creator ?? im.rightsHolder ?? 'unknown'}, ${im.licence.toUpperCase()}, ${inat ? 'iNaturalist via GBIF' : 'via GBIF'}`, page: im.page });
+      }
   }
 
   /* ---- 7. Literature (not load-bearing) ---- */
@@ -292,12 +329,13 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     },
     ids,
     summary,
-    distribution: { native, introduced, reported: reported.length ? reported : undefined, source: dist.status !== 'ok' ? 'not available' : fromWcvp ? 'WCVP (Govaerts, RBG Kew) via GBIF' : 'national checklists via GBIF (presence reported, native status not stated; no WCVP entry for this name)', boxes, verified },
+    distribution: { native, introduced, reported: reported.length ? reported : undefined, extinct: extinct.length ? extinct : undefined, kew, ambiguous, source: dist.status !== 'ok' ? 'not available' : ambiguous ? 'WCVP (Govaerts, RBG Kew): homonyms, unresolved' : fromWcvp ? 'WCVP (Govaerts, RBG Kew) via GBIF' : 'national checklists via GBIF (presence reported, native status not stated; no WCVP entry for this name)', boxes, verified },
     occurrences: {
       open,
       nOpenInRange: open.length,
       nRestrictedInRange: restrictedInRange.length,
       nOutsideRange: nOutside,
+      nVague,
       restrictedShiftKm,
       thin: allPts.length < 12,
       datasets: [...datasets.entries()].map(([k, d]) => ({ key: k, title: u(d.title), licence: d.licence, n: d.n }))

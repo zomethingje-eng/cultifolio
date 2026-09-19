@@ -5,9 +5,27 @@
  */
 import { zip, unzip, strToU8, strFromU8, type Zippable } from 'fflate';
 import * as v from 'valibot';
-import { materialise, live, type Change, type Record_ } from '$core/log';
+import { materialise, live, changeError, type Change, type Record_ } from '$core/log';
 import { kindOf, accNo, sowNo, type Accession, type Photo, type Sowing } from '$lib/db/types';
+import { MAX_PHOTO_BYTES, SEAL_OVERHEAD } from '$lib/sync/limits';
 import { BACKUP_FORMAT, BACKUP_V, Manifest, ChangeRow, LegacyChanges, photoPath, thumbPath } from './format';
+
+/** Why a photo's bytes cannot be stored, or null: both files must be JPEGs (the app only ever writes JPEGs) and small enough to sync. */
+export function photoBytesError(full: Uint8Array, thumb: Uint8Array): string | null {
+  const jpeg = (b: Uint8Array) => b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff;
+  if (!jpeg(full) || !jpeg(thumb)) return 'not a JPEG';
+  if (full.length + thumb.length + SEAL_OVERHEAD > MAX_PHOTO_BYTES) return `${Math.round((full.length + thumb.length) / 1048576)} MB, over the ${MAX_PHOTO_BYTES / 1048576} MB limit`;
+  return null;
+}
+
+/** Every row must be a change the fold can take; the first that is not names itself. */
+function checkRows(rows: unknown[]): Change[] {
+  for (let i = 0; i < rows.length; i++) {
+    const e = changeError(rows[i]);
+    if (e) throw new Error(`Change ${i + 1} in that backup cannot be read (${e}); the file may be damaged or from a newer version.`);
+  }
+  return rows as Change[];
+}
 
 export interface PhotoBytes {
   id: string;
@@ -79,7 +97,7 @@ export async function readBackup(bytes: Uint8Array): Promise<ReadBackup> {
     const json = JSON.parse(strFromU8(bytes));
     const r = v.safeParse(LegacyChanges, json);
     if (!r.success) throw new Error('That JSON is not a Cultifolio backup.');
-    return { manifest: null, changes: r.output.changes as Change[], photoIds: [], readPhoto: () => null };
+    return { manifest: null, changes: checkRows(r.output.changes), photoIds: [], readPhoto: () => null };
   }
   if (!(bytes[0] === 0x50 && bytes[1] === 0x4b)) throw new Error('That file is neither a Cultifolio backup zip nor a JSON export.');
   const files = await new Promise<Record<string, Uint8Array>>((resolve, reject) => unzip(bytes, (err, out) => (err ? reject(err) : resolve(out))));
@@ -93,9 +111,14 @@ export async function readBackup(bytes: Uint8Array): Promise<ReadBackup> {
     .filter((k) => k.startsWith('photos/') && k.endsWith('.jpg') && !k.endsWith('.t.jpg'))
     .map((k) => k.slice('photos/'.length, -'.jpg'.length))
     .filter((id) => files[thumbPath(id)]);
+  for (const id of photoIds) {
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) throw new Error(`That backup has a photo entry with an impossible name (${photoPath(id)}).`);
+    const e = photoBytesError(files[photoPath(id)], files[thumbPath(id)]);
+    if (e) throw new Error(`Photo ${id} in that backup cannot be restored: ${e}.`);
+  }
   return {
     manifest: m.output,
-    changes: rows.output as Change[],
+    changes: checkRows(rows.output),
     photoIds,
     readPhoto: (id) => (files[photoPath(id)] && files[thumbPath(id)] ? { id, full: files[photoPath(id)], thumb: files[thumbPath(id)] } : null)
   };

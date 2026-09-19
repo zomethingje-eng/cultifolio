@@ -191,9 +191,9 @@ describe('bulk parsing', () => {
     const idx = new WcvpIndex();
     idx.addName({ id: '1', name: 'Testus extinctus', status: 'Accepted', acceptedId: '1', rank: 'Species' }, () => true);
     idx.addDist(parseWcvpDist(['plant_name_id', 'area_code_l3', 'area', 'introduced', 'extinct', 'location_doubtful'], '1|CLN|Chile North|0|1|0'));
-    const rows = idx.distributions('Testus extinctus')!;
-    // build.ts:123-124 tests /introduced|.../ then /native/: 'NATIVE (extinct)' becomes a native region with a box.
-    expect(rows[0].establishmentMeans).not.toMatch(/native/i);
+    const got = idx.distributions('Testus extinctus');
+    if (!got || got === 'ambiguous') throw new Error('expected rows');
+    expect(got.rows[0].establishmentMeans).not.toMatch(/native/i);
   });
 });
 

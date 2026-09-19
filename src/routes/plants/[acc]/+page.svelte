@@ -12,7 +12,7 @@
   import { bySlug } from '$lib/ui/index.svelte';
   import type { IndexEntry } from '$lib/server/dossiers';
   import type { Dossier } from '$dossier/schema';
-  import { cultivationSheet } from '$core/sheet';
+  import { cultivationSheet, runs, forReader } from '$core/sheet';
   import { EVENT_LABEL, MEASURES, PROP_METHODS, kindOf, type EventType, type Photo } from '$lib/db/types';
   import { parents } from '$core/names';
   import PhotoImg from '$lib/ui/PhotoImg.svelte';
@@ -29,6 +29,10 @@
   const cover = $derived(collection.cover(id));
   let lightbox = $state<number | null>(null);
   let adding = $state(false);
+  let thumbFailed = $state(false);
+  let confirmRemove = $state(false);
+  /** The log entry whose × was pressed once; a second press removes it. */
+  let confirmEvent = $state<string | null>(null);
   const openPhoto = (ph: Photo) => (lightbox = Math.max(0, photos.findIndex((x) => x.id === ph.id)));
   /** Events and photos on one timeline, newest first. */
   const timeline = $derived(
@@ -38,8 +42,8 @@
   const sowing = $derived(a?.sowingId ? collection.sowing(a.sowingId) : undefined);
   let idx = $state<IndexEntry | undefined>(undefined);
   let dossier = $state<Dossier | null>(null);
-  /** true once the index has been asked and had nothing (a hybrid under its genus, or a species with no dossier yet). */
-  let noDossier = $state(false);
+  /** What the reference said about this plant's species: still being asked, could not be reached (a different fact from absent), not there, or read. */
+  let ref = $state<'loading' | 'unreachable' | 'none' | 'ok'>('loading');
   const kind = $derived(a ? kindOf(a) : 'species');
   /** A hybrid's parents, each with a species page when the corpus has one. */
   let parentLinks = $state<Array<{ name: string; slug: string | null }>>([]);
@@ -47,56 +51,68 @@
     if (a) {
       setCrumb([{ label: 'My plants', href: '/plants' }, { label: `${accNo(a)} · ${a.taxonName}${a.cultivar ? ` ‘${a.cultivar}’` : ''}` }]);
       bySlug(slugify(a.taxonName)).then(async (e) => {
+        if (e === null) { ref = 'unreachable'; return; }
         idx = e;
-        if (e && !dossier) dossier = await fetch(`/api/dossier/${e.key}`).then((r) => (r.ok ? (r.json() as Promise<Dossier>) : null)).catch(() => null);
-        if (!e) noDossier = true;
+        if (!e) { ref = 'none'; return; }
+        if (!dossier) dossier = await fetch(`/api/dossier/${e.key}`).then((r) => (r.ok ? (r.json() as Promise<Dossier>) : null)).catch(() => null);
+        ref = dossier ? 'ok' : 'unreachable';
       });
       const ps = parents(a.parentage);
       Promise.all(ps.map(async (name) => ({ name, slug: (await bySlug(slugify(name))) ? slugify(name) : null }))).then((r) => (parentLinks = r));
     }
     return () => setCrumb([]);
   });
-  // Habitat versus here: the plant's own climate figures against the place it sits in.
+  // Habitat versus here: the species' habitat figures, median with the 10th–90th span across the envelope cells, beside the bench's.
   const habitat = $derived.by(() => {
     if (!dossier || dossier.climate.status !== 'ok') return null;
-    const m = dossier.climate.months;
-    const dlis = m.map((x) => x.dli).filter((x): x is number => x != null);
-    const ex = dossier.climate.extremes ?? null;
-    const sheet = cultivationSheet({ scientific: dossier.name.scientific, family: dossier.name.family, months: m, extremes: ex, lat: dossier.centroid?.lat ?? null });
-    return { dli: dlis.length ? { lo: Math.min(...dlis), hi: Math.max(...dlis) } : null, floor: ex ? ex.minP01 : Math.min(...m.map((x) => x.tmin)), year: sheet.year, arch: sheet.arch };
+    const c = dossier.climate;
+    const m = c.months;
+    const dli = (y: typeof m) => y.map((x) => x.dli).filter((x): x is number => x != null);
+    const dlis = dli(m), dli10 = dli(c.p10), dli90 = dli(c.p90);
+    const ex = c.extremes ?? null;
+    const coldI = m.reduce((b, x, j) => (x.tmin < m[b].tmin ? j : b), 0);
+    const sheet = cultivationSheet({ scientific: dossier.name.scientific, family: dossier.name.family, months: m, p10: c.p10, p90: c.p90, extremes: ex, lat: dossier.centroid?.lat ?? c.at.lat });
+    return {
+      dli: dlis.length ? { lo: Math.min(...dlis), hi: Math.max(...dlis), lo10: dli10.length ? Math.min(...dli10) : null, hi90: dli90.length ? Math.max(...dli90) : null } : null,
+      night: { v: m[coldI].tmin, mo: coldI + 1, lo: c.p10[coldI].tmin, hi: c.p90[coldI].tmin },
+      ex,
+      year: sheet.year,
+      cells: c.cells
+    };
   });
   const cond = $derived(a?.locationId ? collection.conditions(a.locationId) : null);
   const hereDli = $derived(cond?.ppfd != null ? (cond.ppfd * (cond.lightHours ?? 12) * 3600) / 1e6 : null);
-  // Side by side, no verdict: a regional radiation estimate and a climate percentile are facts about
-  // the place the species comes from, not measured tolerances of this plant. The comparison is shown;
-  // the judgement is the grower's.
+  const r0 = (x: number) => x.toFixed(0);
+  // Side by side, no verdict: a regional radiation figure and a climate percentile are facts about the
+  // places the species is recorded, not measured tolerances of this plant. The comparison is shown; the judgement is the grower's.
   const lightCompare = $derived.by(() => {
     if (!habitat?.dli) return null;
-    const sky = `open sky over its habitat ${habitat.dli.lo.toFixed(0)}–${habitat.dli.hi.toFixed(0)} mol/m²/day across the year`;
-    const exp = habitat.arch?.arch.exposure;
-    const under = exp === 'shade' ? ' (it grows in shade there, so it sees a fraction of that)' : exp === 'part' ? ' (it grows in partial shade there)' : '';
-    if (hereDli == null) return { here: null, text: `${sky}${under}; no light figure for this place` };
-    return { here: hereDli, text: `${hereDli.toFixed(0)} mol/m²/day here, from this place's settings, against ${sky}${under}` };
+    const d = habitat.dli;
+    const sky = `open sky over the habitat ${r0(d.lo)}–${r0(d.hi)} mol/m²/day across the year (median year${d.lo10 != null && d.hi90 != null ? `; across the ${habitat.cells} envelope cells ${r0(d.lo10)} to ${r0(d.hi90)}` : ''}; CHELSA)`;
+    if (hereDli == null) return { here: null, text: `${sky}; no light figure for this place` };
+    return { here: hereDli, text: `${r0(hereDli)} mol/m²/day here, from this place's settings; ${sky}` };
   });
   const coldCompare = $derived.by(() => {
     if (!habitat) return null;
-    const ex = dossier?.climate.status === 'ok' ? dossier.climate.extremes : null;
-    const what = ex ? `its habitat's 1st-percentile night is ${habitat.floor.toFixed(0)} °C` : `its habitat's coldest monthly mean minimum is ${habitat.floor.toFixed(0)} °C`;
-    if (cond?.floorC == null) return { here: null, text: `${what}; no floor set for this place` };
-    return { here: cond.floorC, text: `this place is set to bottom out at ${cond.floorC} °C; ${what}` };
+    const n = habitat.night;
+    const night = `coldest month's mean night at the habitat ${r0(n.v)} °C in ${MONTHS[n.mo - 1]} (median year; across the ${habitat.cells} envelope cells ${r0(n.lo)} to ${r0(n.hi)}; CHELSA)`;
+    const p01 = habitat.ex ? `; 1st-percentile night over ${habitat.ex.years} years at the typical cell ${habitat.ex.minP01.toFixed(1)} °C (NASA POWER)` : '';
+    if (cond?.floorC == null) return { here: null, text: `${night}${p01}; no floor set for this place` };
+    return { here: cond.floorC, text: `this place is set to bottom out at ${cond.floorC} °C; ${night}${p01}` };
   });
-  // The season as it falls on this plant's own calendar (the grower's hemisphere is taken as the place's, else the north).
-  const seasonNow = $derived.by(() => {
-    if (!habitat?.year || habitat.year.grow === 'even') return null;
+  const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  // The habitat rain season as a figure: the rain rule's reading in habitat months and shifted to this place's hemisphere. No verdict.
+  const season = $derived.by(() => {
+    if (!habitat?.year) return null;
     const y = habitat.year;
     const southHere = (cond?.lat ?? 40) < 0;
-    const months = southHere === y.south ? y.growMonths : y.shifted;
-    const now = new Date().getMonth() + 1;
-    const growing = months.includes(now);
-    const next = (now % 12) + 1;
-    const starts = !growing && months.includes(next);
-    const ends = growing && !months.includes(next);
-    return { growing, starts, ends, label: starts ? 'Growth expected next month' : ends ? 'Winding down' : growing ? 'Growth expected' : 'Rest expected', note: starts ? 'First water when new growth actually shows, not on the calendar.' : ends ? 'The recorded season ends this month. Taper water now and stop feeding.' : growing ? `A ${y.grow} grower at home, in season now. What yours is actually doing beats the calendar.` : 'Dry, bright, moving air. Water when it wakes, not before.' };
+    const here = runs(forReader(y, cond?.lat ?? 40), 'short');
+    const home = `${runs(y.growMonths, 'short')} (${y.south ? 'S' : 'N'})`;
+    const shift = `shifted to ${cond?.lat != null ? 'this place' : 'the north'}${cond?.lat == null ? ' (no coordinates set)' : ''}: ${here}`;
+    if (y.fog) return { label: 'No rainy season to read', note: `${Math.round(y.annualMm)} mm a year; the temperature rule's cooler half ${home}, ${southHere === y.south ? 'the same here' : shift} (CHELSA).` };
+    if (y.spread) return { label: 'Rain spread, no season', note: `70% of the rain takes ${y.growMonths.length} months, ${home} (CHELSA).` };
+    if (y.flat) return { label: `Rain ${home}, flat temperature`, note: `a sharp rainy season, but the temperature curve moves ${y.rangeT.toFixed(1)} °C, so no growing season is inferred; ${southHere === y.south ? 'the same months here' : shift} (CHELSA).` };
+    return { label: `${y.grow === 'winter' ? 'Winter' : 'Summer'} rain ${home}`, note: `${southHere === y.south ? 'the same months here' : shift} (rain rule, CHELSA).` };
   });
   /* ---- move ---- */
   let moving = $state(false);
@@ -193,8 +209,10 @@
     {#if cover}
       <button class="heroimg" type="button" onclick={() => openPhoto(cover)} aria-label="Open photograph">{#key cover.id}<PhotoImg id={cover.id} size="full" alt="{a.taxonName}, {cover.d}" />{/key}</button>
       <span class="cred">{cover.caption ? cover.caption + ' · ' : ''}{cover.d}{photos.length > 1 ? ` · ${photos.length} photos` : ''}</span>
+    {:else if idx?.thumb && !thumbFailed}
+      <img src={idx.thumb} alt={a.taxonName} style="max-height: 260px" onerror={() => (thumbFailed = true)} /><button class="cred" type="button" onclick={() => { adding = true; setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0); }}>species photograph · add your own</button>
     {:else if idx?.thumb}
-      <img src={idx.thumb} alt={a.taxonName} style="max-height: 260px" onerror={(e) => ((e.currentTarget as HTMLImageElement).style.display = 'none')} /><button class="cred" type="button" onclick={() => { adding = true; setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0); }}>species photograph · add your own</button>
+      <div class="ph" style="height: 150px">species photograph did not load · <PhotoAdd acc={id} id="hero-photo" compact /></div>
     {:else}
       <div class="ph" style="height: 150px"><PhotoAdd acc={id} id="hero-photo" compact /></div>
     {/if}
@@ -240,7 +258,7 @@
       <label><span>From</span><input id="ed-from" type="text" bind:value={f.sourceFrom} /></label>
       <label><span>Form</span><input id="ed-form" type="text" bind:value={f.sourceForm} placeholder="plant, seedling, seed, cutting" /></label>
       <label><span>Price</span><input id="ed-price" type="text" bind:value={f.price} /></label>
-      <div class="wide"><span class="lbl">Location</span><LocationPicker bind:value={f.locationId} id="ed-loc" /></div>
+      <div class="wide"><span class="lbl">Location</span><LocationPicker bind:value={f.locationId} id="ed-loc" label="Location" /></div>
       <div class="actions wide"><button class="btn" type="button" onclick={() => (editing = false)}>Cancel</button><button class="btn pri" type="submit">Save</button></div>
     </form>
   {/if}
@@ -261,7 +279,7 @@
   {#if moving}
     <div class="cult evform">
       <div class="sum">Move to <span class="hint">records a move on the timeline</span></div>
-      <div class="fields"><LocationPicker bind:value={moveTo} id="mv-loc" /><div class="actions"><button class="btn" type="button" onclick={() => (moving = false)}>Cancel</button><button class="btn pri" type="button" onclick={doMove}>Move</button></div></div>
+      <div class="fields"><LocationPicker bind:value={moveTo} id="mv-loc" label="Move to" /><div class="actions"><button class="btn" type="button" onclick={() => (moving = false)}>Cancel</button><button class="btn pri" type="button" onclick={doMove}>Move</button></div></div>
     </div>
   {/if}
 
@@ -270,13 +288,13 @@
       <div class="sum">Record: {EVENT_LABEL[et]} <span class="hint">goes on the timeline below</span></div>
       <div class="fields">
         <div class="row">
-          <select id="ev-type" bind:value={et}>
+          <select id="ev-type" bind:value={et} aria-label="What to record">
             {#each Object.entries(EVENT_LABEL).filter(([k]) => !['audit', 'germinate', 'potup', 'loss', 'propagate', 'acquire'].includes(k)) as [k, label]}<option value={k}>{label}</option>{/each}
           </select>
-          <input id="ev-date" type="date" bind:value={ed} />
+          <input id="ev-date" type="date" aria-label="Date" bind:value={ed} />
         </div>
-        {#if et === 'treat' || et === 'feed'}<input id="ev-used" type="text" bind:value={eused} placeholder={et === 'treat' ? 'Product and rate, e.g. Safari 20SG drench' : 'Feed, e.g. Grow More 17-8-22 ¼ tsp/gal'} />{/if}
-        {#if et === 'death'}<input id="ev-cause" type="text" bind:value={ecause} placeholder="Cause, if known" />{/if}
+        {#if et === 'treat' || et === 'feed'}<input id="ev-used" type="text" aria-label="What was used" bind:value={eused} placeholder={et === 'treat' ? 'Product and rate, e.g. Safari 20SG drench' : 'Feed, e.g. Grow More 17-8-22 ¼ tsp/gal'} />{/if}
+        {#if et === 'death'}<input id="ev-cause" type="text" aria-label="Cause" bind:value={ecause} placeholder="Cause, if known" />{/if}
         {#if et === 'measure'}
           <div class="measures">
             {#each MEASURES as m}
@@ -284,7 +302,7 @@
             {/each}
           </div>
         {/if}
-        <input id="ev-note" type="text" bind:value={enote} placeholder="Note (optional)" />
+        <input id="ev-note" type="text" aria-label="Note" bind:value={enote} placeholder="Note (optional)" />
         <div class="actions"><button class="btn" type="button" onclick={() => (logOpen = false)}>Cancel</button><button class="btn pri" type="submit">Record</button></div>
       </div>
     </form>
@@ -294,7 +312,7 @@
     <div class="card"><div class="lab">Since watered</div><div class="val">{sinceWater == null ? '–' : sinceWater}<span class="u">{sinceWater == null ? '' : ' d'}</span></div><div class="sub">{lastOf('water') ? `last ${lastOf('water')}` : 'no watering recorded'}</div></div>
     <div class="card"><div class="lab">Last seen</div><div class="val">{seen == null ? '–' : seen}<span class="u">{seen == null ? '' : ' d'}</span></div><div class="sub">{collection.lastSeen(id) ? `audit or arrival, ${collection.lastSeen(id)}` : 'never audited'}</div></div>
     <div class="card"><div class="lab">{sizeKey ? (MEASURES.find((m) => m.k === sizeKey)?.label ?? 'Size') : 'Size'}</div><div class="val">{sizeKey && lastMeasure ? lastMeasure.measures![sizeKey] : '–'}<span class="u">{sizeKey ? ' ' + (MEASURES.find((m) => m.k === sizeKey)?.unit ?? '') : ''}</span></div>{#if growth != null}<div class="gauge"><i style="width: {Math.min(100, Math.max(8, (growth / Math.max(1, lastMeasure!.measures![sizeKey!])) * 100))}%"></i></div>{/if}<div class="sub">{growth != null ? `${growth >= 0 ? '+' : ''}${growth} since ${firstMeasure!.d}` : lastMeasure ? `measured ${lastMeasure.d}` : 'not measured yet'}</div></div>
-    <div class="card"><div class="lab">Its year</div><div class="val" style="font-family: var(--ui); font-size: 17px; font-weight: 700">{seasonNow ? seasonNow.label : habitat?.year ? 'No strict rest' : dossier ? 'No habitat climate' : noDossier ? (kind === 'hybrid' ? 'A hybrid' : 'No species page') : '…'}</div><div class="sub">{seasonNow ? seasonNow.note : habitat?.year ? 'Slows in the extremes rather than stopping.' : dossier ? 'Nothing to derive a season from.' : noDossier ? (kind === 'hybrid' ? (parentLinks.some((p) => p.slug) ? 'No habitat of its own; read its parents’ pages.' : 'No habitat of its own; grow it by its genus.') : 'Not in the reference yet.') : 'reading the species dossier'}</div></div>
+    <div class="card"><div class="lab">Habitat rain season</div><div class="val" style="font-family: var(--ui); font-size: 17px; font-weight: 700">{season ? season.label : dossier?.climate.status === 'refused' ? 'Climate not checked' : dossier?.climate.status === 'pending' ? 'Climate pending' : dossier ? 'No habitat climate' : ref === 'unreachable' ? 'Reference not reached' : ref === 'none' ? (kind === 'hybrid' ? 'A hybrid' : 'No species page') : '…'}</div><div class="sub">{#if season}{season.note} <a href="/species/{slugify(a.taxonName)}#s-cultivation">The sheet</a>.{:else if dossier?.climate.status === 'refused'}A source did not answer when the species page was built{dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}. Not a statement that no climate exists.{:else if dossier?.climate.status === 'pending'}The habitat climate for this species has not been derived yet.{:else if dossier}Nothing to read a season from{dossier.climate.status === 'none' && dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}.{:else if ref === 'unreachable'}The species reference could not be reached from here; nothing is known either way.{:else if ref === 'none'}{kind === 'hybrid' ? (parentLinks.some((p) => p.slug) ? 'No habitat of its own; its parents have species pages.' : 'No habitat of its own.') : 'Not in the reference.'}{:else}reading the species dossier{/if}</div></div>
   </div>
 
   {#if habitat}
@@ -302,7 +320,7 @@
     <div class="factgrid hvh">
       {#if lightCompare}<div><b>Light</b>{lightCompare.text}.{#if lightCompare.here == null}{#if a.locationId}{' '}<a href="/benches/{a.locationId}?edit=1">Set its light</a>.{:else}{' '}<button type="button" class="linkish" onclick={() => (moving = true)}>Give it a place</button> first.{/if}{/if}</div>{/if}
       {#if coldCompare}<div><b>Cold</b>{coldCompare.text}.{#if coldCompare.here == null}{#if a.locationId}{' '}<a href="/benches/{a.locationId}?edit=1">Set its floor</a>.{:else}{' '}<button type="button" class="linkish" onclick={() => (moving = true)}>Give it a place</button> first.{/if}{/if}</div>{/if}
-      <div class="wide small muted">A comparison, not a verdict: the habitat figures are what the sky and the weather do where the species comes from (CHELSA, NASA POWER), not measured tolerances of this plant; a plant under a rock or a shrub sees a fraction of the sky, and a dry plant takes cold a wet one does not. This place's figures are its bench settings, inherited from parents where set. <a href="/species/{slugify(a.taxonName)}#s-cultivation">The full cultivation sheet</a>.</div>
+      <div class="wide small muted">A comparison, not a verdict: the habitat figures are what the sky and the weather do where the species is recorded (CHELSA across every envelope cell, NASA POWER at the typical cell), not measured tolerances of this plant. This place's figures are its bench settings, inherited from parents where set. <a href="/species/{slugify(a.taxonName)}#s-cultivation">The full cultivation sheet</a>.</div>
     </div>
   {/if}
 
@@ -333,7 +351,7 @@
           <div class="tlrow">
             <span class="d">{e.d}</span>
             <span class="t">{EVENT_LABEL[e.t] ?? e.t}{#if e.used}<span class="x2"> · {e.used}</span>{/if}{#if e.cause}<span class="x2"> · {e.cause}</span>{/if}{#if e.measures}<span class="x2"> · {Object.entries(e.measures).map(([k, v]) => `${MEASURES.find((m) => m.k === k)?.label ?? k} ${v}`).join(', ')}</span>{/if}{#if e.note}<span class="x2"> · {e.note}</span>{/if}</span>
-            <button class="rm" title="Remove this entry" onclick={() => collection.remove('event', e.id)}>×</button>
+            {#if confirmEvent === e.id}<button class="rm confirm" type="button" onclick={() => { collection.remove('event', e.id); confirmEvent = null; }}>Remove?</button>{:else}<button class="rm" type="button" title="Remove this entry" aria-label="Remove this entry" onclick={() => (confirmEvent = e.id)}>×</button>{/if}
           </div>
         {:else}
           {@const ph = row.ph}
@@ -389,8 +407,8 @@
   </div>
 
   <div class="dangerrow">
-    <span class="small muted">Removing keeps the number reserved and the entry recoverable until you export.</span>
-    <button class="btn danger" onclick={remove}>Remove this plant</button>
+    <span class="small muted">Removing keeps the number reserved; the record stays in the change log and in any backup taken before.</span>
+    {#if confirmRemove}<span><button class="btn danger" onclick={remove}>Yes, remove {accNo(a)}</button> <button class="btn" onclick={() => (confirmRemove = false)}>Keep</button></span>{:else}<button class="btn danger" onclick={() => (confirmRemove = true)}>Remove this plant</button>{/if}
   </div>
   {#if lightbox != null && photos.length}
     <Lightbox {photos} bind:index={lightbox} acc={id} onclose={() => (lightbox = null)} />
@@ -438,6 +456,7 @@
   .tlrow .x2 { font-weight: 400; color: var(--ink2); font-size: 12.5px; }
   .rm { border: 0; background: transparent; color: var(--ink3); cursor: pointer; font-size: 16px; line-height: 1; padding: 0 4px; }
   .rm:hover { color: var(--bad); }
+  .rm.confirm { font-size: 12px; color: var(--bad); font-weight: 600; }
   a.tlrow { color: inherit; }
   a.tlrow:hover { text-decoration: none; }
   a.tlrow:hover .t { color: var(--accent); }

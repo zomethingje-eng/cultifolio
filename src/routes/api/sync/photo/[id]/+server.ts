@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { store, vaultId, authed, photoKey, storeCounted } from '$lib/server/sync';
+import { store, vaultId, authed, photoKey, storeOnce, readBody, MAX_PHOTO_BYTES } from '$lib/server/sync';
 
 export const GET: RequestHandler = async ({ request, url, params, platform }) => {
   const r2 = store(platform);
@@ -11,17 +11,16 @@ export const GET: RequestHandler = async ({ request, url, params, platform }) =>
   return new Response(o.body, { headers: { 'content-type': 'application/octet-stream', 'cache-control': 'private, max-age=31536000, immutable' } });
 };
 
-/** Store a sealed photo. Photos are immutable by id; a second put of the same id is a no-op. */
+/** Store a sealed photo. Photos are immutable by id: the same bytes again is a no-op, different bytes under a held id are refused. */
 export const PUT: RequestHandler = async ({ request, url, params, platform }) => {
   const r2 = store(platform);
   const id = vaultId(url.searchParams.get('vault'));
   const meta = await authed(r2, id, request);
   const key = photoKey(id, params.id);
-  const body = new Uint8Array(await request.arrayBuffer());
-  if (!body.length || body.length > 12 * 1024 * 1024) return json({ error: 'photo must be 1 byte to 12 MB' }, { status: 400 });
-  if (await r2.head(key)) return json({ stored: false, reason: 'already there' });
-  await storeCounted(r2, id, meta, key, body);
-  return json({ stored: true });
+  const body = await readBody(request, MAX_PHOTO_BYTES, 'a photo');
+  const r = await storeOnce(r2, id, meta, key, body);
+  if (r === 'different') return json({ error: 'a different photo already has that id' }, { status: 409 });
+  return json({ stored: r === 'stored', reason: r === 'same' ? 'already there' : undefined });
 };
 
 export const HEAD: RequestHandler = async ({ request, url, params, platform }) => {

@@ -27,10 +27,11 @@
   const parent = $derived(s?.parentAcc ? collection.accession(s.parentAcc) : undefined);
   const today = () => new Date().toISOString().slice(0, 10);
   let idx = $state<IndexEntry | undefined>(undefined);
+  let thumbFailed = $state(false);
   $effect(() => {
     if (s) {
       setCrumb([{ label: 'Sowings', href: '/sowings' }, { label: `${sowNo(s)} · ${s.taxonName}` }]);
-      bySlug(slugify(s.taxonName)).then((e) => (idx = e));
+      bySlug(slugify(s.taxonName)).then((e) => (idx = e ?? undefined));
     }
     return () => setCrumb([]);
   });
@@ -117,7 +118,7 @@
   <p class="muted">No sowing with this number on this device.</p>
 {:else}
   <div class="hero">
-    {#if idx?.thumb}<img src={idx.thumb} alt={s.taxonName} style="max-height: 220px" /><span class="cred">species photograph</span>{:else}<div class="ph" style="height: 120px">{m.label}</div>{/if}
+    {#if idx?.thumb && !thumbFailed}<img src={idx.thumb} alt={s.taxonName} style="max-height: 220px" onerror={() => (thumbFailed = true)} /><span class="cred">species photograph</span>{:else if idx?.thumb}<div class="ph" style="height: 120px">species photograph did not load</div>{:else}<div class="ph" style="height: 120px">{m.label}</div>{/if}
   </div>
   <div class="idcard">
     <div class="who">
@@ -163,7 +164,7 @@
       <label><span>Pre-treatment</span><input id="se-treat" type="text" bind:value={f.treatment} /></label>
       <label><span>Bottom heat °C</span><input id="se-heat" type="number" step="0.5" bind:value={f.bottomHeatC} /></label>
       <label class="row"><input id="se-covered" type="checkbox" bind:checked={f.covered} /> Covered</label>
-      <div class="wide"><span class="lbl">Where</span><LocationPicker bind:value={f.locationId} id="se-loc" /></div>
+      <div class="wide"><span class="lbl">Where</span><LocationPicker bind:value={f.locationId} id="se-loc" label="Where" /></div>
       <label class="wide"><span>Notes</span><textarea id="se-notes" rows="3" bind:value={f.notes}></textarea></label>
       <div class="actions wide"><button class="btn" type="button" onclick={() => (editing = false)}>Cancel</button><button class="btn pri" type="submit">Save</button></div>
     </form>
@@ -184,16 +185,16 @@
     <form class="cult act" onsubmit={count}>
       <div class="sum">{m.veg ? 'Count what has struck' : 'Count seedlings'} <span class="hint">the total up so far</span></div>
       <div class="fields">
-        <div class="row"><input id="g-date" type="date" bind:value={gd} /><input id="g-n" type="number" min="0" max={s.count * 2} placeholder="up so far" bind:value={gn} /></div>
-        <input id="g-note" type="text" placeholder="note (optional)" bind:value={gnote} />
+        <div class="row"><input id="g-date" type="date" aria-label="Date counted" bind:value={gd} /><input id="g-n" type="number" min="0" max={s.count * 2} placeholder="up so far" aria-label="Up so far" bind:value={gn} /></div>
+        <input id="g-note" type="text" placeholder="note (optional)" aria-label="Note" bind:value={gnote} />
         <div class="end"><button class="btn pri" type="submit" disabled={gn === ''}>Record count</button></div>
       </div>
     </form>
     <form class="cult act" onsubmit={loss}>
       <div class="sum">Record losses <span class="hint">damping off, drying out, eaten, rot</span></div>
       <div class="fields">
-        <div class="row"><input id="l-date" type="date" bind:value={ld} /><input id="l-n" type="number" min="1" placeholder="how many" bind:value={ln} /></div>
-        <input id="l-cause" type="text" placeholder="cause" bind:value={lcause} />
+        <div class="row"><input id="l-date" type="date" aria-label="Date of loss" bind:value={ld} /><input id="l-n" type="number" min="1" placeholder="how many" aria-label="How many lost" bind:value={ln} /></div>
+        <input id="l-cause" type="text" placeholder="cause" aria-label="Cause" bind:value={lcause} />
         <div class="end"><button class="btn" type="submit" disabled={ln === ''}>Record loss</button></div>
       </div>
     </form>
@@ -201,9 +202,9 @@
       <div class="sum">Pot up <span class="hint">each plant gets its own number</span></div>
       {#if potting}
         <form onsubmit={potUp} class="fields">
-          <div class="row"><input id="p-date" type="date" bind:value={pd} /><input id="p-n" type="number" min="1" max="500" bind:value={pn} /></div>
-          <LocationPicker bind:value={ploc} id="p-loc" />
-          <input id="p-note" type="text" placeholder="note (optional)" bind:value={pnote} />
+          <div class="row"><input id="p-date" type="date" aria-label="Date potted up" bind:value={pd} /><input id="p-n" type="number" min="1" max="500" aria-label="How many to pot up" bind:value={pn} /></div>
+          <LocationPicker bind:value={ploc} id="p-loc" label="Where they go" />
+          <input id="p-note" type="text" placeholder="note (optional)" aria-label="Note" bind:value={pnote} />
           <div class="end"><button class="btn" type="button" onclick={() => (potting = false)}>Cancel</button><button class="btn pri" type="submit">Pot up {pn}</button></div>
         </form>
       {:else}
@@ -235,7 +236,7 @@
 
   <div class="secrule"><h2>Log</h2><div class="line"></div><span class="n">{events.length} {events.length === 1 ? 'entry' : 'entries'}</span></div>
   <form class="noteform" onsubmit={note}>
-    <input id="n-date" type="date" bind:value={nd} /><input id="n-text" type="text" placeholder="Add a note to the log" bind:value={ntext} /><button class="btn" type="submit" disabled={!ntext.trim()}>Add</button>
+    <input id="n-date" type="date" aria-label="Date of the note" bind:value={nd} /><input id="n-text" type="text" placeholder="Add a note to the log" aria-label="Note" bind:value={ntext} /><button class="btn" type="submit" disabled={!ntext.trim()}>Add</button>
   </form>
   {#if !events.length}
     <div class="cult"><div class="none">Nothing recorded yet.</div></div>

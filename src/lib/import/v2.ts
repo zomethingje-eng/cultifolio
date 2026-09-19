@@ -7,7 +7,7 @@
  * v2 numbers are preserved. Nothing in v2 is modified.
  */
 import type { Change } from '$core/log';
-import { hlcEncode } from '$core/hlc';
+import { hlcEncode, MAX_COUNT } from '$core/hlc';
 import { slugify } from '$core/names';
 
 interface V2Event {
@@ -76,8 +76,11 @@ export function importV2(json: unknown, opts: { device?: string; now?: number; s
   const device = opts.device ?? 'v2imp';
   // Stamp imports one hour before now: any edit made after the import wins on every device.
   const base = (opts.now ?? Date.now()) - 3600_000;
-  let n = 0;
-  const t = () => hlcEncode({ wall: base, count: n++, device });
+  let wall = base, n = 0;
+  const t = () => {
+    if (n > MAX_COUNT) (wall++, (n = 0)); // a very large collection spills into the next millisecond rather than past the counter's width
+    return hlcEncode({ wall, count: n++, device });
+  };
   const push = (kind: Change['kind'], id: string, fields: Record<string, unknown>) => {
     for (const [field, value] of Object.entries(fields)) if (value !== undefined) changes.push({ t: t(), kind, id, field, value });
   };

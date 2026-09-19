@@ -15,7 +15,7 @@ export type LicenceTag = 'cc0' | 'by' | 'by-sa' | 'nc' | 'nd' | 'other';
 const NC = /by-nc|by_nc|bync|noncommercial|non-commercial/;
 const ND = /by-nd|by_nd|bynd|nc-nd|no-?deriv/;
 const CC0 = /publicdomain|cc0|cc-zero|\bzero\b|pdm|public domain/;
-const SA = /by-sa|by_sa|bysa|sharealike|share-alike/;
+const SA = /by-sa|by_sa|bysa|share[ -]?alike/;
 const BY = /\/by\/|\bcc-by\b|\bcc_by(?:\b|_)|\bccby\b|^by$|^cc by\b|attribution/; // GBIF downloads write CC_BY_4_0
 
 /** Normalise any licence string GBIF, iNaturalist, Commons or a user might hand us. */
@@ -40,7 +40,8 @@ export interface OpenPolicy {
 
 export const DEFAULT_POLICY: OpenPolicy = { allowShareAlike: true };
 
-export function isOpen(tag: LicenceTag | null | undefined, policy: OpenPolicy = DEFAULT_POLICY): boolean {
+export type OpenTag = 'cc0' | 'by' | 'by-sa';
+export function isOpen(tag: LicenceTag | null | undefined, policy: OpenPolicy = DEFAULT_POLICY): tag is OpenTag {
   if (tag === 'cc0' || tag === 'by') return true;
   if (tag === 'by-sa') return policy.allowShareAlike;
   return false;

@@ -26,6 +26,18 @@ const DB_V = 2;
 
 let dbp: Promise<IDBPDatabase<VaultDB>> | null = null;
 
+/** What the person should be told about the vault itself (another tab holding an old version open); null when there is nothing to say. */
+export const vaultNotice: { text: string | null } = { text: null };
+const listeners = new Set<(text: string | null) => void>();
+export function onVaultNotice(fn: (text: string | null) => void): () => void {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
+function notify(text: string | null) {
+  vaultNotice.text = text;
+  for (const fn of listeners) fn(text);
+}
+
 export function openVault(): Promise<IDBPDatabase<VaultDB>> {
   if (!dbp)
     dbp = openDB<VaultDB>(DB_NAME, DB_V, {
@@ -37,6 +49,21 @@ export function openVault(): Promise<IDBPDatabase<VaultDB>> {
           db.createObjectStore('photos', { keyPath: 'id' });
         }
         if (oldV < 2) db.createObjectStore('outbox', { keyPath: 't' });
+      },
+      // This tab is newer than one still open: say so, rather than wait in silence for it to close.
+      blocked() {
+        notify('Another tab has an older Cultifolio open. Close it, or reload it, to carry on here.');
+      },
+      // This tab is the old one: let go of the vault so the new tab can upgrade it, then reload into the new code.
+      blocking(_cur, _next, ev) {
+        (ev.target as IDBDatabase | null)?.close();
+        dbp = null;
+        notify('Cultifolio has been updated in another tab. Reloading…');
+        if (typeof location !== 'undefined') setTimeout(() => location.reload(), 800);
+      },
+      terminated() {
+        dbp = null;
+        notify('The browser closed the vault; reload the page.');
       }
     });
   return dbp;

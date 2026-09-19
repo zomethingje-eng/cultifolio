@@ -18,7 +18,7 @@ playwright-report
 static/s/
 test*.txt
 test-results
-names-extra.txt
 names-reconciled.txt
 not-accepted.txt
+names-extra.txt
 names-followed.txt

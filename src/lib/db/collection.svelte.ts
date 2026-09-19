@@ -5,7 +5,7 @@
  */
 import { SvelteMap } from 'svelte/reactivity';
 import { Clock, hlcDecode } from '$core/hlc';
-import { apply, diff, key as recKey, type Change, type Kind, type Record_, type State } from '$core/log';
+import { apply, diff, validateChanges, key as recKey, type Change, type Kind, type Record_, type State } from '$core/log';
 import { nextAccession, DEFAULT_SCHEME, type NumberingScheme } from '$core/accession';
 import { allChanges, appendChanges, deviceId, requestPersistence, getMeta, setMeta, putPhotoBlobs, getPhotoBlobs, deletePhotoBlobs } from './vault';
 import type { Accession, PlantEvent, Taxon, Location, Sowing, Provenance, Photo } from './types';
@@ -80,18 +80,72 @@ class Collection {
     const r = this.state.get(recKey('location', id));
     return r && !r._deleted ? (r as unknown as Location) : undefined;
   }
-  children(parentId: string | null): Location[] {
-    return this.locations.filter((l) => (l.parentId ?? null) === parentId);
+  /**
+   * The tree as it is shown, derived from the log so every device draws the
+   * same one: each live node's effective parent. A parent that was removed is
+   * skipped to the nearest live ancestor. A loop (two devices moving places
+   * into each other while offline) is cut at its lowest id: that node becomes
+   * a root and is flagged as needing a home, so the person can move it.
+   */
+  private tree(): { parent: Map<string, string | null>; needsHome: Set<string> } {
+    const parent = new Map<string, string | null>();
+    const needsHome = new Set<string>();
+    const live = this.live<Location>('location');
+    for (const l of live) parent.set(l.id, this.nearestLive(l.parentId ?? null, l.id));
+    const done = new Set<string>();
+    for (const l of live) {
+      if (done.has(l.id)) continue;
+      const path: string[] = [];
+      let cur: string | null = l.id;
+      while (cur && !done.has(cur) && !path.includes(cur)) {
+        path.push(cur);
+        cur = parent.get(cur) ?? null;
+      }
+      if (cur && !done.has(cur)) {
+        const root = [...path.slice(path.indexOf(cur))].sort()[0];
+        parent.set(root, null);
+        needsHome.add(root);
+      }
+      for (const p of path) done.add(p);
+    }
+    return { parent, needsHome };
   }
-  /** Root → node. */
+  /** `id` itself when it is a live place, else its nearest live ancestor by the raw parent chain (through removed nodes), else null. */
+  private nearestLive(id: string | null | undefined, from?: string): string | null {
+    const seen = new Set<string>(from ? [from] : []);
+    let cur = id ?? null;
+    while (cur && !seen.has(cur)) {
+      const r = this.state.get(recKey('location', cur));
+      if (!r) return null;
+      if (!r._deleted) return cur;
+      seen.add(cur);
+      cur = (r.parentId as string | null | undefined) ?? null;
+    }
+    return null;
+  }
+  /** Where a plant or sowing with this locationId is shown: the place itself, or, if it was removed, the nearest place above it. */
+  placeOf(locationId: string | null | undefined): string | null {
+    return this.nearestLive(locationId);
+  }
+  /** A place cut free from a loop, waiting to be put somewhere. */
+  needsHome(id: string): boolean {
+    return this.tree().needsHome.has(id);
+  }
+  children(parentId: string | null): Location[] {
+    const { parent } = this.tree();
+    return this.locations.filter((l) => (parent.get(l.id) ?? null) === parentId);
+  }
+  /** Root → node, along the shown tree; a removed node's path is that of the nearest place above it. */
   locationPath(id: string): Location[] {
+    const { parent } = this.tree();
     const out: Location[] = [];
-    let cur = this.location(id);
+    let cur = this.location(this.placeOf(id) ?? '');
     const seen = new Set<string>();
     while (cur && !seen.has(cur.id)) {
       seen.add(cur.id);
       out.unshift(cur);
-      cur = cur.parentId ? this.location(cur.parentId) : undefined;
+      const p = parent.get(cur.id);
+      cur = p ? this.location(p) : undefined;
     }
     return out;
   }
@@ -137,10 +191,10 @@ class Collection {
     };
     return { indoor: g('indoor') as boolean | null, floorC: g('floorC') as number | null, ppfd: g('ppfd') as number | null, lightHours: g('lightHours') as number | null, lat: g('lat') as number | null, lon: g('lon') as number | null, altM: g('altM') as number | null, from };
   }
-  /** Growing plants at a node (deep: including every node beneath it). */
+  /** Growing plants at a node (deep: including every node beneath it). A plant whose own place was removed counts at the nearest place above it. */
   plantsAt(id: string, deep = true): Accession[] {
     const ids = new Set(deep ? this.subtree(id) : [id]);
-    return this.accessions.filter((a) => a.status === 'growing' && a.locationId && ids.has(a.locationId));
+    return this.accessions.filter((a) => a.status === 'growing' && a.locationId && ids.has(this.placeOf(a.locationId) ?? ''));
   }
   /** Free-text locations still on plants, with counts, for one-click conversion. */
   get legacyLocations(): Array<{ text: string; n: number }> {
@@ -164,7 +218,7 @@ class Collection {
     await this.commit(changes);
     return loc;
   }
-  /** Removing a node moves its plants and children up to its parent; nothing is orphaned. */
+  /** Removing a node moves its plants, sowings and children up to its parent; nothing is orphaned. */
   async removeLocation(id: string): Promise<void> {
     const node = this.location(id);
     if (!node) return;
@@ -172,6 +226,7 @@ class Collection {
     const changes: Change[] = [];
     for (const c of this.children(id)) changes.push({ t: this.tick(), kind: 'location', id: c.id, field: 'parentId', value: parent });
     for (const a of this.accessions) if (a.locationId === id) changes.push({ t: this.tick(), kind: 'accession', id: a.id, field: 'locationId', value: parent });
+    for (const s of this.sowings) if (s.locationId === id) changes.push({ t: this.tick(), kind: 'sowing', id: s.id, field: 'locationId', value: parent });
     changes.push({ t: this.tick(), kind: 'location', id, field: '_deleted', value: true });
     await this.commit(changes);
   }
@@ -362,10 +417,10 @@ class Collection {
     if (!this.clock) throw new Error('collection not loaded');
     return this.clock.tick();
   };
-  /** A short id that is unique per change on every device: wall time and counter in base 36 plus a device tag. */
+  /** A short id that is unique per change on every device: wall time and counter in base 36 plus the whole device id (older ids carried its first four characters, which two devices could share). */
   private eventId(): string {
     const h = hlcDecode(this.tick());
-    return 'e' + h.wall.toString(36) + h.count.toString(36).padStart(2, '0') + h.device.slice(0, 4);
+    return 'e' + h.wall.toString(36) + h.count.toString(36).padStart(2, '0') + h.device;
   }
 
   /**
@@ -448,8 +503,9 @@ class Collection {
     await setMeta('scheme', s);
   }
 
-  /** Bulk append of already-formed changes. Say where they came from: an import still has to be pushed; a sync pull does not. */
+  /** Bulk append of already-formed changes. Say where they came from: an import still has to be pushed; a sync pull does not. Everything is checked before anything is applied, so a bad batch changes nothing. */
   async ingest(changes: Change[], source: 'import' | 'server' = 'import'): Promise<void> {
+    validateChanges(changes);
     for (const c of changes) this.clock?.observe(c.t);
     await this.commit(changes, source);
     await this.resolveDuplicateNumbers();

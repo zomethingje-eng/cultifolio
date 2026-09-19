@@ -3,7 +3,7 @@
  * knows them by.
  *
  *   npm run reconcile -- bulk/report-rederive-2026-09-18.txt
- *   npm run reconcile -- static/s/v1/report.txt --out names-reconciled.txt
+ *   npm run reconcile -- static/s/v2/report.txt --out names-reconciled.txt
  *
  * A build refuses a name when GBIF's backbone offers only the genus for it
  * or nothing at all. Kew and GBIF do not always spell a species the same
@@ -26,6 +26,7 @@
  * does; the WCVP name is among its synonyms. Nothing is invented: a name
  * with no spelling the backbone accepts stays refused, and the report says so.
  */
+import { DOSSIER_V } from '../src/lib/dossier/schema';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { makeFetcher } from '../src/lib/dossier/fetch';
 import { matchName, species } from '../src/lib/dossier/sources/gbif';
@@ -69,7 +70,7 @@ async function main() {
   const lines: string[] = [`# Names the backbone refused under their WCVP spelling, offered under a spelling it accepts. ${new Date().toISOString().slice(0, 10)}.`];
   let found = 0, none = 0, unknown = 0, already = 0, refusedByHost = 0;
   // What the corpus already has, so a synonym that resolves to a species on disk is reported, not rebuilt.
-  const idxPath = 'static/s/v1/index.json';
+  const idxPath = `static/s/v${DOSSIER_V}/index.json`;
   const onDisk = new Set<string>(existsSync(idxPath) ? (JSON.parse(readFileSync(idxPath, 'utf8')) as Array<{ key: number; name: string }>).flatMap((r) => [r.name.toLowerCase(), String(r.key)]) : []);
   const listed = new Set<number>(); // keys already written this run, so four synonyms of one species make one line
   for (const { name, reason } of refused) {

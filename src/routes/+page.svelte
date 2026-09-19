@@ -85,6 +85,8 @@
       .filter((g) => g.items.length);
   });
   const total = $derived(shown.reduce((n, g) => n + g.matching, 0));
+  /** The climate state in words: a refusal is never shown as an absence. */
+  const climateWord = (c: string) => (c === 'ok' ? 'habitat climate known' : c === 'pending' ? 'habitat climate pending' : c === 'refused' ? 'habitat climate not checked: a source did not answer' : 'no habitat climate derived');
 </script>
 
 <svelte:head>
@@ -112,14 +114,13 @@
 
 <div class="toolrow">
   <input class="searchbar" type="search" placeholder="Filter by name, genus, family or origin…" bind:value={q} aria-label="Filter species" />
-  <span class="toollab">Group</span>
-  <div class="seg"><button class="on" type="button">Origin</button></div>
+  <span class="toollab">Grouped by origin</span>
 </div>
 <div class="chiprow">
   <button class="chipbtn" class:on={chip === 'all'} onclick={() => (chip = 'all')}>All<span class="n">{data.total}</span></button>
   <button class="chipbtn" class:on={chip === 'owned'} onclick={() => (chip = 'owned')}>You grow<span class="n">{ownedN}</span></button>
   <button class="chipbtn" class:on={chip === 'climate'} onclick={() => (chip = 'climate')}>Climate known<span class="n">{data.withClimate}</span></button>
-  <button class="chipbtn" class:on={chip === 'noclimate'} onclick={() => (chip = 'noclimate')}>No climate yet<span class="n">{data.total - data.withClimate}</span></button>
+  <button class="chipbtn" class:on={chip === 'noclimate'} onclick={() => (chip = 'noclimate')}>Without climate<span class="n">{data.total - data.withClimate}</span></button>
 </div>
 
 {#if !shown.length}
@@ -137,13 +138,13 @@
   <div class="hgrid">
     {#each g.items as c (c.slug)}
       <a class="tile" href="/species/{c.slug}">
-        {#if owned.get(c.slug)?.length}<span class="ownchip">{owned.get(c.slug)!.length === 1 ? owned.get(c.slug)![0] : `× ${owned.get(c.slug)!.length}`}</span>{/if}
-        <span class="statedot dot {c.climate === 'ok' ? 'grow' : ''}" title={c.climate === 'ok' ? 'habitat climate known' : 'no habitat climate'}></span>
-        {#if c.thumb}<div class="im"><img src={c.thumb} alt={c.alt} loading="lazy" onerror={(e) => { const im = e.currentTarget as HTMLImageElement; im.style.display = 'none'; im.parentElement?.classList.add('ph'); im.parentElement && (im.parentElement.textContent = 'photograph did not load'); }} /></div>{:else}<div class="im ph">no open photograph yet</div>{/if}
+        {#if owned.get(c.slug)?.length}<span class="ownchip" title="You grow {owned.get(c.slug)!.length === 1 ? owned.get(c.slug)![0] : owned.get(c.slug)!.length + ' of these'}" aria-label="You grow {owned.get(c.slug)!.length === 1 ? owned.get(c.slug)![0] : owned.get(c.slug)!.length + ' of these'}">{owned.get(c.slug)!.length === 1 ? owned.get(c.slug)![0] : `× ${owned.get(c.slug)!.length}`}</span>{/if}
+        <span class="statedot dot {c.climate === 'ok' ? 'grow' : c.climate === 'refused' ? 'wake' : ''}" role="img" aria-label={climateWord(c.climate)} title={climateWord(c.climate)}></span>
+        {#if c.thumb}<div class="im"><img src={c.thumb} alt={c.alt} loading="lazy" onerror={(e) => { const im = e.currentTarget as HTMLImageElement; im.style.display = 'none'; im.parentElement?.classList.add('ph'); im.parentElement && (im.parentElement.textContent = 'photograph did not load'); }} /></div>{:else}<div class="im ph">no open photograph on file</div>{/if}
         <div class="tx">
           <div class="nm"><SpeciesName name={c.name} /></div>
           <div class="fam">{c.common ?? c.family ?? ''}</div>
-          <div class="fig">{c.climate === 'ok' ? 'climate' : c.climate === 'pending' ? 'climate soon' : 'no climate'}{c.open ? ` · ${c.open} records` : ''}</div>
+          <div class="fig">{c.climate === 'ok' ? 'climate' : c.climate === 'pending' ? 'climate pending' : c.climate === 'refused' ? 'climate not checked' : 'no climate'}{c.open ? ` · ${c.open} records` : ''}</div>
         </div>
       </a>
     {/each}

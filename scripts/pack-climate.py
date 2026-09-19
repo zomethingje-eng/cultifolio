@@ -22,7 +22,7 @@ Resumable: each downloaded file is kept; each finished layer is recorded in
 climate/progress.json, so a crash or a Ctrl+C costs at most one layer.
 
 Sources: CHELSA V2.1 1981–2010 climatologies (Karger et al. 2017; CC0),
-ETOPO 2022 60″ surface (NOAA NCEI, public domain). The app's grid.ts is the
+ETOPO 2022 60″ surface (NOAA NCEI, public domain), sea masked before averaging. The app's grid.ts is the
 authority on the layer order and quantisation; this script mirrors it.
 """
 import argparse, json, os, sys, time
@@ -111,7 +111,7 @@ def header():
         "built": datetime.now(timezone.utc).isoformat(),
         "cell": CELL, "cols": COLS, "rows": ROWS, "north": NORTH, "west": WEST,
         "nodata": NODATA, "bytesPerValue": 2, "layers": layers(),
-        "sources": ["CHELSA V2.1 climatologies 1981–2010 (Karger et al. 2017; EnviDat, CC0)", "ETOPO 2022 60″ surface (NOAA NCEI, public domain)"],
+        "sources": ["CHELSA V2.1 climatologies 1981–2010 (Karger et al. 2017; EnviDat, CC0)", "ETOPO 2022 60″ surface (NOAA NCEI, public domain), sea pixels masked so a cell mean is its land's"],
     }
 
 
@@ -147,15 +147,40 @@ def download(url, dest, alt=None):
 
 
 def resample_to_grid(path, scale, offset, nodata_in=None, is_elev=False):
-    """Read a global GeoTIFF decimated to the 0.05° grid by mean, return float32 (ROWS, COLS) with NaN for nodata."""
+    """Read a global GeoTIFF decimated to the 0.05° grid by mean, return float32 (ROWS, COLS) with NaN for nodata.
+
+    Elevation is the land's: ETOPO's "surface" is the sea floor over water, so a coastal cell averaged
+    whole comes out below sea level and would warm every lapse-corrected extreme. Sea pixels are masked
+    out before averaging (ETOPO surface < 0 is bathymetry; the Dead Sea and the Caspian are the
+    exceptions, and they are not where anyone collects cacti), so a coastal cell's elevation is the mean
+    of its land, and a cell with no land at all is nodata.
+    """
     import numpy as np, rasterio
     from rasterio.enums import Resampling
     from rasterio.warp import reproject
     from rasterio.transform import from_origin
+    from rasterio.io import MemoryFile
     with rasterio.open(path) as src:
         nod = src.nodata if src.nodata is not None else nodata_in
         dst = np.full((ROWS, COLS), np.nan, dtype="float32")
         dst_transform = from_origin(WEST, NORTH, CELL, CELL)
+        if is_elev:
+            # Mask the sea in memory, then average what is left: reproject() ignores nodata pixels in the mean.
+            band = src.read(1).astype("float32")
+            band[band < 0] = np.nan
+            if nod is not None:
+                band[band == nod] = np.nan
+            with MemoryFile() as mem:
+                with mem.open(driver="GTiff", height=band.shape[0], width=band.shape[1], count=1, dtype="float32", crs=src.crs, transform=src.transform, nodata=np.nan) as tmp:
+                    tmp.write(band, 1)
+                with mem.open() as land:
+                    reproject(
+                        source=rasterio.band(land, 1), destination=dst,
+                        src_transform=land.transform, src_crs=land.crs, src_nodata=np.nan,
+                        dst_transform=dst_transform, dst_crs="EPSG:4326", dst_nodata=np.nan,
+                        resampling=Resampling.average, num_threads=4,
+                    )
+            return dst
         # Reproject by area average onto exactly our grid; rasterio handles the half-pixel offset CHELSA inherits from GMTED.
         reproject(
             source=rasterio.band(src, 1), destination=dst,
@@ -163,9 +188,7 @@ def resample_to_grid(path, scale, offset, nodata_in=None, is_elev=False):
             dst_transform=dst_transform, dst_crs="EPSG:4326", dst_nodata=np.nan,
             resampling=Resampling.average, num_threads=4,
         )
-        if not is_elev:
-            dst = dst * scale + offset
-        return dst
+        return dst * scale + offset
 
 
 def quantise(arr, scale):

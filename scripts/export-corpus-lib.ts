@@ -38,7 +38,7 @@ export interface Bundle {
 const csvCell = (v: unknown): string => {
   if (v == null) return '';
   const s = String(v);
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 const row = (cells: unknown[]) => cells.map(csvCell).join(',') + '\n';
 
@@ -57,8 +57,8 @@ export function buildBundle(c: Corpus, opts: { version: string; homepage: string
   const today = opts.today ?? new Date().toISOString().slice(0, 10);
   const rows = [...c.index].sort((a, b) => a.name.localeCompare(b.name));
 
-  let speciesCsv = row(['key', 'gbif_id', 'inat_id', 'wikidata', 'scientific_name', 'authorship', 'family', 'genus', 'order', 'status', 'native_regions', 'introduced_regions', 'habitat_lat', 'habitat_lon', 'habitat_records', 'habitat_share', 'climate_status', 'annual_precip_mm', 'growing_season', 'growing_months', 'coldest_month_tmin_c', 'extreme_min_p01_c', 'frost_days_per_year', 'in_range_records', 'photos', 'literature', 'built']);
-  let climateCsv = row(['key', 'scientific_name', 'month', 'tmax_c', 'tmin_c', 'tmean_c', 'precip_mm', 'dli_mol_m2_day', 'rh_pct']);
+  let speciesCsv = row(['key', 'gbif_id', 'inat_id', 'wikidata', 'scientific_name', 'authorship', 'family', 'genus', 'order', 'status', 'native_regions', 'introduced_regions', 'marker_lat', 'marker_lon', 'marker_records', 'marker_share', 'climate_status', 'climate_cells', 'climate_records', 'annual_precip_mm', 'growing_season', 'growing_months', 'coldest_month_tmin_c', 'extreme_min_p01_c', 'frost_days_per_year', 'in_range_records', 'photos', 'literature', 'built']);
+  let climateCsv = row(['key', 'scientific_name', 'month', 'tmax_c', 'tmin_c', 'tmean_c', 'precip_mm', 'dli_mol_m2_day', 'rh_pct', 'tmin_p10_c', 'tmin_p90_c', 'tmax_p10_c', 'tmax_p90_c', 'precip_p10_mm', 'precip_p90_mm']);
   let withClimate = 0;
   const builds: string[] = [];
 
@@ -68,13 +68,15 @@ export function buildBundle(c: Corpus, opts: { version: string; homepage: string
     files[`species/${r.slug}.json`] = JSON.stringify(d);
     const built = get<string>(d, 'built');
     if (built) builds.push(built);
-    const months = get<Array<{ tmax: number; tmin: number; tmean: number; precipMm: number; dli?: number; rh?: number }>>(d, 'climate.months');
-    const lat = get<number>(d, 'centroid.lat');
+    type M = { tmax: number; tmin: number; tmean: number; precipMm: number; dli?: number; rh?: number };
+    const months = get<M[]>(d, 'climate.months');
+    const p10 = get<M[]>(d, 'climate.p10'), p90 = get<M[]>(d, 'climate.p90');
+    const lat = get<number>(d, 'climate.at.lat') ?? get<number>(d, 'centroid.lat'); // hemisphere for the growing year
     const year = months && months.length === 12 ? growingYear(months, lat) : null;
     if (months && months.length === 12) {
       withClimate++;
       months.forEach((m, i) => {
-        climateCsv += row([r.key, r.name, i + 1, m.tmax, m.tmin, m.tmean, m.precipMm, m.dli, m.rh]);
+        climateCsv += row([r.key, r.name, i + 1, m.tmax, m.tmin, m.tmean, m.precipMm, m.dli, m.rh, p10?.[i]?.tmin, p90?.[i]?.tmin, p10?.[i]?.tmax, p90?.[i]?.tmax, p10?.[i]?.precipMm, p90?.[i]?.precipMm]);
       });
     }
     const native = (get<Array<{ name: string }>>(d, 'distribution.native') ?? []).map((x) => x.name).join('; ');
@@ -93,11 +95,13 @@ export function buildBundle(c: Corpus, opts: { version: string; homepage: string
       get(d, 'name.status'),
       native,
       introduced,
-      lat,
+      get(d, 'centroid.lat'),
       get(d, 'centroid.lon'),
       get(d, 'centroid.n'),
       get(d, 'centroid.share'),
       get(d, 'climate.status') ?? r.climate,
+      get(d, 'climate.cells'),
+      get(d, 'climate.records'),
       year ? Math.round(year.annualMm) : '',
       year ? year.grow : '',
       year ? span(year.growMonths) : '',
@@ -127,13 +131,13 @@ This is the reference data behind ${opts.homepage}, packaged so it can be read, 
 ## What is here
 
 \`species/<slug>.json\`
-One file per species, exactly as the build wrote it: the accepted name and its synonyms (GBIF Backbone), native and introduced regions at TDWG level 3 (WCVP), the sampled in-range occurrence records the habitat centre was found from and how it was found, the climate at that centre month by month (CHELSA V2.1 normals; daily extremes from NASA POWER where they were usable), photo references with their licence and credit (links only; no image files are redistributed), literature references (OpenAlex), a Wikipedia summary, and an \`upstream\` section recording every request the build made, with its status, so a refusal can be told from an absence.
+One file per species, exactly as the build wrote it: the accepted name and its synonyms (GBIF Backbone), native and introduced regions at TDWG level 3 (WCVP), the sampled in-range occurrence records, the map marker and how it was placed, the climate envelope (CHELSA V2.1 normals read at every distinct grid cell holding an in-range record: the median year and the 10th–90th percentile range; daily extremes from NASA POWER at the typical cell where they were usable), photo references with their licence and credit (links only; no image files are redistributed), literature references (OpenAlex), a Wikipedia summary, and an \`upstream\` section recording every request the build made, with its status, so a refusal can be told from an absence.
 
 \`species.csv\`
-One row per species: identifiers, name, family, regions, the habitat centre (latitude, longitude, how many records it rests on and what share of in-range records fell in its cluster), the climate status, annual precipitation at the centre, the growing season read from the rain and temperature curves (\`summer\`, \`winter\` or \`even\`; the months given in habitat time), the coldest month's mean minimum, the 1st-percentile daily minimum and frost days per year where extremes were usable, and counts. Empty cells are values the build could not derive.
+One row per species: identifiers, name, family, regions, the map marker (the densest population of in-range records: latitude, longitude, how many records and what share), the climate status and how many distinct grid cells and records the climate envelope rests on, annual precipitation of the median year, the growing season read from the rain and temperature curves (\`summer\`, \`winter\` or \`even\`; the months given in habitat time), the coldest month's mean minimum, the 1st-percentile daily minimum and frost days per year where extremes were usable, and counts. Empty cells are values the build could not derive.
 
 \`climate.csv\`
-Twelve rows per species with climate: mean daily maximum, minimum and mean temperature (°C), precipitation (mm), daily light integral (mol/m²/day) and relative humidity (%) at the habitat centre, month by month.
+Twelve rows per species with climate: the median year across every grid cell holding an in-range record (mean daily maximum, minimum and mean temperature in °C, precipitation in mm, daily light integral in mol/m²/day, relative humidity in %), and the 10th and 90th percentiles across those cells for night and day temperature and rainfall, month by month.
 
 \`index.json\`
 The list the app serves: key, slug, name, family, origin, photo count, count of open records and climate status.
@@ -143,7 +147,7 @@ The build's own log for this corpus, when it was kept: which species were built,
 
 ## How the numbers were derived
 
-The method is written up at ${opts.homepage}/about/how and is what the build implements. In short: names are matched to the GBIF Backbone; the native range comes from WCVP; occurrence records inside the native range are clustered at 1°, and the habitat centre is the record nearest the middle of the densest cluster, requiring at least three agreeing records; the climate is read at that point from CHELSA V2.1; the growing season is the smallest set of months carrying 70% of annual rain (or, under 120 mm a year, the cooler half of the year). Restricted-licence (CC BY-NC) records may inform the clustering but are never redistributed; every coordinate in \`species/*.json\` carries its own licence code.
+The method is written up at ${opts.homepage}/about/how and is what the build implements. In short: names are matched to the GBIF Backbone; the native range comes from WCVP; occurrence records inside the native range, placed to within 10 km, are read against CHELSA V2.1 one grid cell each (a cell holding many records counts once), and the climate is the median and 10th–90th percentile of each month across those cells, requiring at least three cells; the map marker is the densest population's middle and decides nothing; the growing season is read from the median year: the smallest set of months is the smallest set of months carrying 70% of annual rain (or, under 120 mm a year, the cooler half of the year). Restricted-licence (CC BY-NC) records may inform the clustering but are never redistributed; every coordinate in \`species/*.json\` carries its own licence code.
 
 ## Citing
 
@@ -165,7 +169,7 @@ The bundle carries data from the sources below unchanged or lightly reshaped. Ea
 | \`name\`, \`ids\`, synonyms, vernacular names | GBIF Backbone Taxonomy | CC BY 4.0 |
 | \`occurrences.open\` (coordinates; each row's last field is its own licence code: \`cc0\` or \`by\`) | GBIF occurrence records, dataset-by-dataset; the download DOI is under \`upstream\` | CC0 1.0 or CC BY 4.0 per record. CC BY-NC records were used to find the centre and are not included. |
 | \`distribution\` (regions, boxes) | World Checklist of Vascular Plants, Royal Botanic Gardens, Kew (Govaerts et al.) | CC BY 4.0 |
-| \`climate.months\`, \`climate.cell\` and \`climate.csv\` | CHELSA V2.1 (Karger et al.), read at one cell | CC0 1.0 |
+| \`climate.months\`, \`climate.p10\`, \`climate.p90\` and \`climate.csv\` | CHELSA V2.1 (Karger et al.), read at every cell holding an in-range record | CC0 1.0 |
 | \`climate.extremes\` | NASA POWER daily data | Public domain (United States Government) |
 | \`summary.text\` | Wikipedia, the article named in \`summary.url\` | CC BY-SA 4.0. Reuse of the text carries share-alike. Delete the \`summary\` field for a bundle free of it. |
 | \`photos\` (URL, credit, licence; no image files) | iNaturalist and Wikimedia Commons, per photo | The licence named on each record: CC0, CC BY or CC BY-SA. The image itself is the photographer's and is not redistributed here. |

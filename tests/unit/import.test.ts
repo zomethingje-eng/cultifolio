@@ -63,6 +63,17 @@ describe('v2 importer', () => {
   });
 });
 
+describe('v2 import at scale', () => {
+  it('a collection of more than 65,536 field values stamps every change with a readable HLC', () => {
+    const accessions: Record<string, unknown> = {};
+    for (let i = 0; i < 700; i++) accessions[`2020-${i}`] = { acc: `2020-${i}`, taxonId: 'x', status: 'growing', events: Array.from({ length: 20 }, (_, j) => ({ id: 'e' + j, d: '2020-01-01', t: 'water' })) };
+    const { changes } = importV2({ collection: { accessions } });
+    expect(changes.length).toBeGreaterThan(0xffff);
+    expect(changes.every((c) => /^\d{13}-[0-9a-f]{4,6}-[a-z0-9]{1,16}$/.test(c.t))).toBe(true);
+    expect(new Set(changes.map((c) => c.t)).size).toBe(changes.length);
+  });
+});
+
 describe('v2 benches', () => {
   it('become location nodes and plants land on them by id or by name', () => {
     const b = {

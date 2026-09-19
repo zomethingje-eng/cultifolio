@@ -2,7 +2,7 @@
   /** Pick a location node from the tree, or make a new one in place. */
   import { collection } from '$lib/db/collection.svelte';
   import { LOCATION_KINDS, type LocationKind } from '$lib/db/types';
-  let { value = $bindable<string | null>(null), id = 'loc' }: { value?: string | null; id?: string } = $props();
+  let { value = $bindable<string | null>(null), id = 'loc', label = 'Location' }: { value?: string | null; id?: string; label?: string } = $props();
   let adding = $state(false);
   let newName = $state('');
   let newKind = $state<LocationKind>('shelf');
@@ -35,16 +35,16 @@
 
 <div class="picker">
   {#if !adding}
-    <select {id} bind:value>
+    <select {id} bind:value aria-label={label}>
       <option value={null}>No location</option>
       {#each flat as f}<option value={f.id}>{'  '.repeat(f.depth)}{f.depth ? '› ' : ''}{f.label}</option>{/each}
     </select>
     <button class="btn small" type="button" onclick={() => { newParent = value; adding = true; }}>New…</button>
   {:else}
     <div class="new card">
-      <input id="{id}-new-name" type="text" placeholder="Name, e.g. Shelf 2" bind:value={newName} />
-      <select id="{id}-new-kind" bind:value={newKind}>{#each LOCATION_KINDS as k}<option value={k.k}>{k.label}</option>{/each}</select>
-      <select id="{id}-new-parent" bind:value={newParent}>
+      <input id="{id}-new-name" type="text" placeholder="Name, e.g. Shelf 2" aria-label="Name of the new location" bind:value={newName} />
+      <select id="{id}-new-kind" bind:value={newKind} aria-label="Kind of location">{#each LOCATION_KINDS as k}<option value={k.k}>{k.label}</option>{/each}</select>
+      <select id="{id}-new-parent" bind:value={newParent} aria-label="Inside which location">
         <option value={null}>Top level</option>
         {#each flat as f}<option value={f.id}>{'  '.repeat(f.depth)}{f.label}</option>{/each}
       </select>

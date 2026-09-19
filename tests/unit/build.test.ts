@@ -39,7 +39,7 @@ describe('dossier builder', () => {
     expect(d.occurrences.nRestrictedInRange).toBe(300);
     expect(d.centroid?.lat).toBeCloseTo(-28.6, 0); // the 300 restricted records outweigh the 52 open ones
     expect(d.centroid?.n).toBeGreaterThan(52);
-    expect(d.centroid?.how).toMatch(/all 352 in-range records/);
+    expect(d.centroid?.how).toMatch(/of the 352 in-range records/);
     expect(d.occurrences.restrictedShiftKm).toBeGreaterThan(300);
     expect(d.occurrences.restrictedShiftKm).toBeLessThan(500);
     expect(d.occurrences.datasets.find((x) => x.licence === 'nc')?.n).toBe(300);
@@ -98,8 +98,8 @@ describe('dossier builder', () => {
     if (!r.ok) throw new Error('build failed');
     const d = r.dossier;
     // The densest cluster is the 300 restricted records; no open record lies in it, so the centre is a grid point.
-    expect(d.centroid?.how).toMatch(/tenth-degree grid point/);
-    expect(Math.round(d.centroid!.lat * 10) / 10).toBe(d.centroid!.lat);
+    expect(d.centroid?.how).toMatch(/tenth-degree cell/);
+    expect(Math.round(Math.abs(d.centroid!.lat) * 100) % 10).toBe(5); // a cell centre, x.x5
     expect(d.occurrences.open.some((p) => p[0] === d.centroid!.lat && p[1] === d.centroid!.lon)).toBe(false);
   });
   it('a refusal is not an absence', async () => {

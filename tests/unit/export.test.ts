@@ -5,7 +5,7 @@ import { buildBundle, type Corpus } from '../../scripts/export-corpus-lib';
 function fixtures(): Corpus {
   const index = JSON.parse(readFileSync('fixtures/dossiers/index.json', 'utf8'));
   const dossiers = new Map<number, Record<string, unknown>>();
-  for (const r of index) dossiers.set(r.key, JSON.parse(readFileSync(`fixtures/dossiers/s/v1/${r.key}.json`, 'utf8')));
+  for (const r of index) dossiers.set(r.key, JSON.parse(readFileSync(`fixtures/dossiers/s/v2/${r.key}.json`, 'utf8')));
   return { index, dossiers, report: 'fixture report' };
 }
 
@@ -24,8 +24,8 @@ describe('dataset bundle', () => {
     expect(lines).toHaveLength(4);
     const head = lines[0].split(',');
     const cop = Object.fromEntries(lines.find((l) => l.includes('Copiapoa cinerea'))!.split(',').map((v, i) => [head[i], v]));
-    expect(cop.habitat_lat).toBe('-28.6'); // a grid point: the fixture's densest cluster holds no openly licensed record
-    expect(cop.growing_season).toBe('winter');
+    expect(cop.marker_lat).toBe('-28.55'); // a grid point: the fixture's densest cluster holds no openly licensed record
+    expect(cop.growing_season).toBe('cool'); // under 120 mm: the temperature rule's cooler half, not a rain season
     expect(cop.climate_status).toBe('ok');
     const ref = Object.fromEntries(lines.find((l) => l.includes('Refusia testii'))!.split(',').map((v, i) => [head[i], v]));
     expect(ref.climate_status).toBe('refused');

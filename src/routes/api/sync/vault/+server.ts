@@ -10,8 +10,8 @@ export const POST: RequestHandler = async ({ request, platform, getClientAddress
   if (!body.token || !/^[0-9a-f]{64}$/.test(body.token)) return json({ error: 'token required' }, { status: 400 });
   // Joining a second device must not quietly make a fresh empty vault out of a mistyped key.
   if (body.create === false && !(await readMeta(r2, id))) return json({ error: 'no vault answers to that key' }, { status: 404 });
-  // SYNC_OPEN=1 (dev, and the launch before licences) lets any vault sync; otherwise a licence must be attached later.
-  const open = platform?.env?.SYNC_OPEN === '1' || !platform?.env?.SYNC_OPEN;
+  // SYNC_OPEN=1 (dev, and the launch before licences) lets any vault sync; anything else, including an unset variable, means a licence must be attached later.
+  const open = platform?.env?.SYNC_OPEN === '1';
   const existing = await readMeta(r2, id);
   if (!existing && !(await allowCreation(platform?.env?.QUEUE, getClientAddress()))) return json({ error: 'too many new vaults from this address today' }, { status: 429 });
   const { created, meta } = await ensureVault(r2, id, body.token, open);

@@ -64,9 +64,11 @@ export function defaultLayers(): LayerSpec[] {
 }
 
 export function cellOf(h: GridHeader, lat: number, lon: number): { row: number; col: number; index: number; id: string } {
-  const row = Math.min(h.rows - 1, Math.max(0, Math.floor((h.north - lat) / h.cell)));
+  // A point on a grid line belongs to the cell it is the edge of; a hair of tolerance keeps float error from moving it north or west.
+  const EPS = 1e-9;
+  const row = Math.min(h.rows - 1, Math.max(0, Math.floor((h.north - lat) / h.cell + EPS)));
   let l = ((((lon + 180) % 360) + 360) % 360) - 180;
-  const col = Math.min(h.cols - 1, Math.max(0, Math.floor((l - h.west) / h.cell)));
+  const col = Math.min(h.cols - 1, Math.max(0, Math.floor((l - h.west) / h.cell + EPS)));
   return { row, col, index: row * h.cols + col, id: `${row}:${col}` };
 }
 

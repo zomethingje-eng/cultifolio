@@ -1,6 +1,6 @@
 /**
  * Where dossiers come from, in order: the R2 bucket (production and any dev
- * session with a bucket bound), then the static corpus under /s/v1/ (what
+ * session with a bucket bound), then the static corpus under /s/v2/ (what
  * scripts/build-dossiers.ts writes, served as assets), then the fixture
  * corpus compiled into the build (so tests work with nothing else present).
  */
@@ -21,7 +21,7 @@ export interface IndexEntry {
 
 type Fetch = typeof fetch;
 
-const fixtureFiles = import.meta.glob('/fixtures/dossiers/s/v1/*.json', { eager: true, import: 'default' }) as Record<string, unknown>;
+const fixtureFiles = import.meta.glob('/fixtures/dossiers/s/v2/*.json', { eager: true, import: 'default' }) as Record<string, unknown>;
 const fixtureIndex = (import.meta.glob('/fixtures/dossiers/index.json', { eager: true, import: 'default' }) as Record<string, IndexEntry[]>)['/fixtures/dossiers/index.json'] ?? [];
 
 const fixturesByKey = new Map<number, Dossier>();

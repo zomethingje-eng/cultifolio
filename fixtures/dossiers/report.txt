@@ -1,3 +1,3 @@
-✓ Welwitschia mirabilis [5411106] 12 photos, 210 open/80 restricted in range, climate pending (9 ms)
-✓ Copiapoa cinerea [5384013] 20 photos, 52 open/300 restricted in range, climate ok (2 ms)
+✓ Welwitschia mirabilis [5411106] 12 photos, 210 open/80 restricted in range, climate pending (12 ms)
+✓ Copiapoa cinerea [5384013] 20 photos, 52 open/300 restricted in range, climate ok (4 ms)
 ✓ Refusia testii [999] 0 photos, 0 open/0 restricted in range, climate refused — refused: gbif.occurrences:refused (api.gbif.org 429), climate:refused (occurrence source did not answer), gbif.media:refused (api.gbif.org 429) (1 ms)

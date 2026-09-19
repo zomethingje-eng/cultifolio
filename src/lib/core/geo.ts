@@ -54,42 +54,63 @@ export interface Cluster {
   points: Array<[number, number]>;
 }
 
-/** Points are [lat, lon]. cell is the grid size in degrees. */
+/** Circular median of longitudes: unwrap onto [0, 360) when the set straddles the antimeridian, so Fiji's median is near 180, not 0. */
+export function medianLon(lons: number[]): number {
+  const straddles = lons.some((x) => x > 90) && lons.some((x) => x < -90);
+  if (!straddles) return median(lons);
+  const m = median(lons.map((x) => (x < 0 ? x + 360 : x)));
+  return m > 180 ? m - 360 : m;
+}
+
+/**
+ * Points are [lat, lon]. cell is the grid size in degrees. Longitude bins wrap
+ * at ±180 so a population astride the antimeridian is one cluster. The
+ * runner-up is the largest window sharing no bin with the winner: overlapping
+ * windows contain the same points and are not a rival population.
+ */
 export function densestCluster(points: Array<[number, number]>, cell = 1): Cluster | null {
   if (!points.length) return null;
+  const nLon = Math.round(360 / cell);
   const bins = new Map<string, Array<[number, number]>>();
+  const key = (i: number, j: number) => `${i}:${((j % nLon) + nLon) % nLon}`;
   for (const p of points) {
-    const k = `${Math.floor(p[0] / cell)}:${Math.floor(p[1] / cell)}`;
+    const k = key(Math.floor(p[0] / cell), Math.floor(p[1] / cell));
     let b = bins.get(k);
     if (!b) bins.set(k, (b = []));
     b.push(p);
   }
   // Grow each bin by its 8 neighbours so a cluster straddling a grid line still counts as one.
-  let best: Array<[number, number]> = [];
-  let second = 0;
+  const windows: Array<{ bins: string[]; pts: Array<[number, number]> }> = [];
   for (const k of bins.keys()) {
     const [i, j] = k.split(':').map(Number);
+    const used: string[] = [];
     const grown: Array<[number, number]> = [];
     for (let di = -1; di <= 1; di++)
       for (let dj = -1; dj <= 1; dj++) {
-        const b = bins.get(`${i + di}:${j + dj}`);
-        if (b) grown.push(...b);
+        const kk = key(i + di, j + dj);
+        const b = bins.get(kk);
+        if (b) {
+          used.push(kk);
+          grown.push(...b);
+        }
       }
-    if (grown.length > best.length) {
-      second = best.length;
-      best = grown;
-    } else if (grown.length > second && grown !== best) second = grown.length;
+    windows.push({ bins: used, pts: grown });
   }
-  const share = best.length / points.length;
-  const dominant = share >= 0.5 || best.length >= 2 * Math.max(1, second);
+  windows.sort((a, b) => b.pts.length - a.pts.length);
+  const best = windows[0];
+  const bestBins = new Set(best.bins);
+  const rival = windows.find((w) => !w.bins.some((b) => bestBins.has(b)));
+  const second = rival ? rival.pts.length : 0;
+  const share = best.pts.length / points.length;
+  const dominant = share >= 0.5 || best.pts.length >= 2 * Math.max(1, second);
   return {
-    lat: median(best.map((p) => p[0])),
-    lon: median(best.map((p) => p[1])),
-    n: best.length,
+    lat: median(best.pts.map((p) => p[0])),
+    lon: medianLon(best.pts.map((p) => p[1])),
+    n: best.pts.length,
     share,
     dominant,
     cell,
-    points: best
+    points: best.pts
   };
 }
 
@@ -146,5 +167,11 @@ export function habitatCentre(c: Cluster, openPoints: Array<[number, number]>): 
     const p = nearestPoint(candidates, lat, lon);
     return { lat: p[0], lon: p[1], refined, snapped: 'open-record' };
   }
-  return { lat: Math.round(lat * 10) / 10, lon: Math.round(lon * 10) / 10, refined, snapped: 'cell-centre' };
+  // The centre of the tenth-degree cell, never its corner: a record given to 0.1° sits on the corner, so
+  // the centre is a coordinate no record has, whatever precision the restricted records carry.
+  const open = new Set(openPoints.map((p) => `${p[0]},${p[1]}`));
+  let cl = Math.floor(lat * 10) / 10 + 0.05,
+    cn = Math.floor(lon * 10) / 10 + 0.05;
+  if (c.points.some((p) => !open.has(`${p[0]},${p[1]}`) && p[0] === cl && p[1] === cn)) cl += 0.01;
+  return { lat: +cl.toFixed(3), lon: +cn.toFixed(3), refined, snapped: 'cell-centre' };
 }

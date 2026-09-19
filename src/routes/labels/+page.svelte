@@ -132,7 +132,7 @@
 
   <div class="secrule"><h2>Plants</h2><div class="line"></div><span class="n">{picked.length} of {all.length} picked</span></div>
   <div class="toolrow" style="position: static">
-    <input class="searchbar" type="search" placeholder="Filter by name, number, field number…" bind:value={q} />
+    <input id="lb-q" class="searchbar" type="search" placeholder="Filter by name, number, field number…" aria-label="Filter plants" bind:value={q} />
     <button class="chipbtn" onclick={() => pickAll(true)}>Pick all shown</button>
     <button class="chipbtn" onclick={() => pickAll(false)}>Clear shown</button>
   </div>
@@ -145,6 +145,7 @@
   </div>
 
   <div class="secrule"><h2>Preview</h2><div class="line"></div><span class="n">{pages.length} {pages.length === 1 ? 'page' : 'pages'}</span></div>
+  <p class="small muted previewnote">The sheet is shown at its true size, {sheet.page[0]} mm wide; on a narrow screen it scrolls sideways.</p>
 </div>
 
 <div class="sheets" style="--pw: {sheet.page[0]}mm; --ph: {sheet.page[1]}mm; --lw: {sheet.w}mm; --lh: {sheet.h}mm; --left: {sheet.left}mm; --top: {sheet.top}mm; --gx: {sheet.gapX}mm; --gy: {sheet.gapY}mm; --cols: {sheet.cols}">

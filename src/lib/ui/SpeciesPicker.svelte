@@ -1,7 +1,8 @@
 <script lang="ts">
   /**
    * Type a name; get suggestions from the dossier index first (instant, local
-   * to this site) and from the GBIF backbone as you type. Picking sets the
+   * to this site) and from the GBIF backbone as you type, through this site's
+   * /api/names so the browser talks to no third-party host. Picking sets the
    * accepted name and the GBIF key; typing a name nobody resolves is allowed
    * and flagged, never silently guessed.
    */
@@ -40,7 +41,8 @@
     open = true;
     if (needle.length < 3) return;
     try {
-      const r = await fetch(`https://api.gbif.org/v1/species/suggest?datasetKey=d7dddbf4-2cf0-4f39-9b2a-bb099caae36c&limit=8&q=${encodeURIComponent(p.scientific)}`);
+      // /api/names proxies GBIF's species/suggest (same JSON shape) from the Worker, so no name you type leaves this site from the browser.
+      const r = await fetch(`/api/names?q=${encodeURIComponent(p.scientific)}`);
       if (!r.ok) return;
       const rows = (await r.json()) as Array<{ key: number; canonicalName?: string; scientificName: string; family?: string; rank?: string; status?: string }>;
       const remote: Sugg[] = rows
@@ -70,11 +72,14 @@
     if (taxonKey || value.trim().length < 4) return;
     const p = parseName(value);
     try {
-      const r = await fetch(`https://api.gbif.org/v1/species/match?strict=false&name=${encodeURIComponent(p.scientific)}`);
-      const m = (await r.json()) as { usageKey?: number; matchType?: string; canonicalName?: string };
-      // A genus-only name (a hybrid, a cultivar of unstated parentage) is correctly matched at genus rank.
-      if (m.usageKey && m.matchType !== 'NONE' && (m.matchType !== 'HIGHERRANK' || !p.epithet)) {
-        taxonKey = m.usageKey;
+      // An exact spelling among the suggestions resolves the name; a genus-only name (a hybrid, a cultivar of unstated parentage) resolves at genus rank.
+      const r = await fetch(`/api/names?q=${encodeURIComponent(p.scientific)}`);
+      if (!r.ok) throw new Error(String(r.status));
+      const rows = (await r.json()) as Array<{ key: number; canonicalName?: string; scientificName?: string; rank?: string }>;
+      const want = p.scientific.toLowerCase();
+      const m = rows.find((x) => (x.canonicalName ?? x.scientificName ?? '').toLowerCase() === want && (p.epithet ? /SPECIES|SUBSPECIES|VARIETY|FORM/.test(x.rank ?? '') : x.rank === 'GENUS'));
+      if (m) {
+        taxonKey = m.key;
         resolved = 'yes';
       } else resolved = 'no';
     } catch {

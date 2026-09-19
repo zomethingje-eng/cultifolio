@@ -50,3 +50,16 @@ describe('sealing', () => {
     expect([...back.thumb]).toEqual([9, 8]);
   });
 });
+
+describe('photos are bound to their id', () => {
+  it('a photo sealed under one id does not open under another; one sealed without an id (older) still opens', async () => {
+    const k = await deriveKeys(newVaultKey());
+    const px = new TextEncoder().encode('pixels');
+    const named = await seal(k, 'photo', px, 'pone');
+    expect(new TextDecoder().decode(await open(k, 'photo', named, 'pone'))).toBe('pixels');
+    await expect(open(k, 'photo', named, 'ptwo')).rejects.toThrow(/could not decrypt/);
+    await expect(open(k, 'photo', named)).rejects.toThrow(/could not decrypt/);
+    const unnamed = await seal(k, 'photo', px);
+    expect(new TextDecoder().decode(await open(k, 'photo', unnamed, 'pone'))).toBe('pixels');
+  });
+});

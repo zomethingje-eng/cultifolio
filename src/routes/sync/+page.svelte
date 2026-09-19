@@ -143,6 +143,9 @@
   <div class="cards">
     <div class="card"><div class="lab">Status</div><div class="val" style="font-family: var(--ui); font-size: 17px; font-weight: 700">{sync.busy ?? (sync.lastError ? 'Not synced' : 'Synced')}</div><div class="sub">{sync.busy ? '' : sync.lastError ? sync.lastError : sync.lastSync ? `last ${ago(sync.lastSync)}` : 'not yet'}</div></div>
     <div class="card"><div class="lab">Waiting to send</div><div class="val">{sync.pending}</div><div class="sub">{sync.pending === 1 ? 'change' : 'changes'} made here and not yet up</div></div>
+    {#if sync.quarantined.length || sync.refused.length}
+      <div class="card"><div class="lab">Set aside</div><div class="val">{sync.quarantined.length + sync.refused.length}</div><div class="sub">{#if sync.quarantined.length}{sync.quarantined.length} {sync.quarantined.length === 1 ? 'batch' : 'batches'} on the server could not be read here{/if}{#if sync.quarantined.length && sync.refused.length}; {/if}{#if sync.refused.length}the server refused {sync.refused.length} {sync.refused.length === 1 ? 'item' : 'items'} from this device{/if}. Syncing carries on around them.</div></div>
+    {/if}
     <div class="card"><div class="lab">Encryption</div><div class="val" style="font-family: var(--ui); font-size: 17px; font-weight: 700">AES-256-GCM</div><div class="sub">key never leaves your devices</div></div>
   </div>
   <div class="quickbar">
@@ -211,7 +214,7 @@
         <video bind:this={video} class="scan" playsinline muted></video>
         <div class="actions"><button class="btn" onclick={stopScan}>Stop scanning</button></div>
       {:else}
-        <input id="sync-key" class="keyin mono" type="text" bind:value={typed} placeholder="XXXXX-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX" autocomplete="off" spellcheck="false" />
+        <input id="sync-key" class="keyin mono" type="text" bind:value={typed} placeholder="XXXXX-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX" aria-label="Vault key" autocomplete="off" spellcheck="false" />
         {#if err}<p class="bad">{err}</p>{/if}
         {#if scanErr}<p class="bad">{scanErr}</p>{/if}
         <div class="actions">

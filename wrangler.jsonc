@@ -7,12 +7,12 @@
   "compatibility_flags": ["nodejs_compat"],
   "assets": { "directory": ".svelte-kit/cloudflare", "binding": "ASSETS" },
   "observability": { "enabled": true },
+  // SYNC_OPEN must be exactly "1" for any vault to sync without a licence; unset or anything else closes it.
   "vars": { "DOSSIER_V": "1", "SYNC_OPEN": "1" },
   // R2 holds dossiers (s/v1/<gbifKey>.json), climate cells, and later encrypted photos.
   // Create it once:  npx wrangler r2 bucket create cultifolio
   "r2_buckets": [{ "binding": "STORE", "bucket_name": "cultifolio" }],
   // KV holds only queues and small counters.
   // Create it once:  npx wrangler kv namespace create QUEUE   (then paste the id below)
-  "kv_namespaces": [{ "binding": "QUEUE", "id": "PASTE_KV_ID_HERE" }],
-  "triggers": { "crons": ["*/5 * * * *"] }
+  "kv_namespaces": [{ "binding": "QUEUE", "id": "PASTE_KV_ID_HERE" }]
 }

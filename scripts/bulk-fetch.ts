@@ -163,7 +163,9 @@ async function gbifRequest(file: string, maxRecords: number): Promise<string> {
     creator: u,
     notificationAddresses: [email],
     sendNotification: false,
-    format: 'SIMPLE_CSV',
+    // DWCA rather than SIMPLE_CSV: the archive then carries multimedia.txt, the photographs on the records with
+    // their per-image licence and creator, so the wild photographs cost no API calls at all.
+    format: 'DWCA',
     predicate: {
       type: 'and',
       predicates: [
@@ -194,11 +196,13 @@ async function gbifStatus(wait: boolean): Promise<void> {
     if (d.status === 'SUCCEEDED' && d.downloadLink) {
       const zip = `${DIR}/occurrence.zip`;
       await download(d.downloadLink, zip);
-      // The archive holds one file named <key>.csv. It stays zipped; the build streams it with `tar -xOf`.
+      // The archive stays zipped; the build streams its members with `tar -xOf` (or unzip).
       const listed = execSync(`tar -tf "${zip}"`, { encoding: 'utf8' }).trim().split(/\r?\n/);
-      const csv = listed.find((f) => f.endsWith('.csv'));
-      if (!csv) throw new Error(`no .csv inside ${zip} (found: ${listed.join(', ')})`);
-      writeFileSync(p, JSON.stringify({ key, doi: d.doi, records: d.totalRecords, csv, fetched: new Date().toISOString() }, null, 1));
+      // A DWCA holds occurrence.txt and multimedia.txt; an older SIMPLE_CSV download holds one .csv.
+      const csv = listed.find((f) => f === 'occurrence.txt') ?? listed.find((f) => f.endsWith('.csv'));
+      const media = listed.find((f) => f === 'multimedia.txt');
+      if (!csv) throw new Error(`no occurrence.txt or .csv inside ${zip} (found: ${listed.join(', ')})`);
+      writeFileSync(p, JSON.stringify({ key, doi: d.doi, records: d.totalRecords, csv, media, fetched: new Date().toISOString() }, null, 1));
       console.log(`  ${zip} ready (${mb(statSync(zip).size)}, ${d.totalRecords} records). Cite as https://doi.org/${d.doi}`);
       return;
     }

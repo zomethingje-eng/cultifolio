@@ -1,20 +1,21 @@
 import { describe, it, expect } from 'vitest';
-import { listBatches, storeCounted, recount, MAX_BYTES, OVERLAP_MS, allowCreation, type VaultMeta } from '$lib/server/sync';
+import { listBatches, storeCounted, storeOnce, readBody, batchKey, recount, MAX_BYTES, OVERLAP_MS, allowCreation, type VaultMeta } from '$lib/server/sync';
 
 /** Just enough of R2 for the sync store: keys, bytes, upload times we control. */
 function fakeR2(now = { t: 1_000_000 }) {
-  const objs = new Map<string, { body: Uint8Array; uploaded: number }>();
+  const objs = new Map<string, { body: Uint8Array; uploaded: number; sha?: string }>();
   const r2 = {
-    async put(key: string, body: unknown) {
+    async put(key: string, body: unknown, opts?: { customMetadata?: Record<string, string> }) {
       const bytes = body instanceof Uint8Array ? body : new TextEncoder().encode(String(body));
-      objs.set(key, { body: bytes, uploaded: now.t });
+      objs.set(key, { body: bytes, uploaded: now.t, sha: opts?.customMetadata?.sha });
     },
     async head(key: string) {
-      return objs.has(key) ? {} : null;
+      const o = objs.get(key);
+      return o ? { customMetadata: o.sha ? { sha: o.sha } : {} } : null;
     },
     async get(key: string) {
       const o = objs.get(key);
-      return o ? { json: async () => JSON.parse(new TextDecoder().decode(o.body)) } : null;
+      return o ? { json: async () => JSON.parse(new TextDecoder().decode(o.body)), arrayBuffer: async () => o.body.slice().buffer } : null;
     },
     async list(o: { prefix: string; limit?: number; cursor?: string }) {
       const keys = [...objs.keys()].filter((k) => k.startsWith(o.prefix)).sort();
@@ -102,5 +103,32 @@ describe('vault creation is bounded per address', () => {
     expect(ok).toBe(20);
     expect(await allowCreation(fake as never, '5.6.7.8')).toBe(true);
     expect(await allowCreation(undefined, '1.2.3.4')).toBe(true); // no KV bound: no cap
+  });
+});
+
+describe('a name stands for one content', () => {
+  it('storeOnce: stored, then same, then different; an old object without a recorded hash is compared by bytes', async () => {
+    const r2 = fakeR2();
+    const m = meta();
+    expect(await storeOnce(r2 as never, 'v', m, 'vault/v/log/a.bin', new Uint8Array([1, 2]))).toBe('stored');
+    expect(await storeOnce(r2 as never, 'v', m, 'vault/v/log/a.bin', new Uint8Array([1, 2]))).toBe('same');
+    expect(await storeOnce(r2 as never, 'v', m, 'vault/v/log/a.bin', new Uint8Array([1, 3]))).toBe('different');
+    expect(r2.objs.get('vault/v/log/a.bin')!.body).toEqual(new Uint8Array([1, 2]));
+    expect(m.bytes).toBe(2);
+    r2.objs.set('vault/v/log/old.bin', { body: new Uint8Array([7]), uploaded: 1 });
+    expect(await storeOnce(r2 as never, 'v', m, 'vault/v/log/old.bin', new Uint8Array([7]))).toBe('same');
+    expect(await storeOnce(r2 as never, 'v', m, 'vault/v/log/old.bin', new Uint8Array([8]))).toBe('different');
+  });
+  it('batch names: an HLC, with or without a 12-hex content hash; the counter may be four to six digits', () => {
+    expect(batchKey('v', '1700000000000-0000-dev')).toBe('vault/v/log/1700000000000-0000-dev.bin');
+    expect(batchKey('v', '1700000000000-0f0000-dev-0123456789ab')).toMatch(/dev-0123456789ab\.bin$/);
+    for (const bad of ['1700000000000-000-dev', '1700000000000-0000-dev-0123', '1700000000000-0000-dev-0123456789abc', '../x', '1700000000000-0000-Dev']) expect(() => batchKey('v', bad)).toThrow();
+  });
+  it('readBody refuses an oversize body from its declared length, and an empty one', async () => {
+    const req = (len: string | null, body: Uint8Array) => new Request('http://x/', { method: 'POST', headers: len ? { 'content-length': len } : {}, body: body as BodyInit });
+    await expect(readBody(req(String(10 * 1024 * 1024), new Uint8Array(1)), 1024, 'a batch')).rejects.toMatchObject({ status: 413 });
+    await expect(readBody(req(null, new Uint8Array(0)), 1024, 'a batch')).rejects.toMatchObject({ status: 400 });
+    await expect(readBody(req(null, new Uint8Array(2000)), 1024, 'a batch')).rejects.toMatchObject({ status: 413 });
+    expect((await readBody(req(null, new Uint8Array(3)), 1024, 'a batch')).length).toBe(3);
   });
 });

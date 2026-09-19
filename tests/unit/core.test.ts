@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { licenceTag, isOpen } from '$core/licence';
 import { slugify, parseName, tidyName, nameParts, parents } from '$core/names';
-import { Clock, hlcCompare, hlcDecode } from '$core/hlc';
-import { materialise, apply, live, diff, type Change } from '$core/log';
+import { Clock, hlcCompare, hlcDecode, hlcEncode, MAX_AHEAD_MS } from '$core/hlc';
+import { materialise, apply, live, diff, validateChanges, type Change } from '$core/log';
 import { nextAccession } from '$core/accession';
 import { densestCluster, habitatCluster, habitatCentre, haversineKm, inBox } from '$core/geo';
 import { reduceExtremes, extremesUsable } from '$core/extremes';
@@ -71,6 +71,43 @@ describe('hlc', () => {
     const remote = new Clock('dev2', () => 5000).tick();
     c.observe(remote);
     expect(hlcCompare(c.tick(), remote)).toBe(1);
+  });
+  it('does not follow a peer whose clock is far ahead', () => {
+    let now = 1_700_000_000_000;
+    const c = new Clock('dev1', () => now);
+    c.observe('1900000000000-0000-badclock'); // six years ahead
+    c.observe(hlcEncode({ wall: now + MAX_AHEAD_MS - 1, count: 3, device: 'near' })); // within the allowance: followed
+    now += 3600_000;
+    expect(hlcDecode(c.tick()).wall).toBe(now);
+  });
+  it('the counter widens past ffff and still parses and orders; past six digits the wall takes a millisecond', () => {
+    const c = new Clock('dev1', () => 1_700_000_000_000);
+    let last = '';
+    for (let i = 0; i <= 0xffff; i++) last = c.tick();
+    const next = c.tick();
+    expect(hlcDecode(next).count).toBe(0x10000);
+    expect(hlcCompare(next, last)).toBe(1);
+    expect(hlcCompare(last, next)).toBe(-1);
+    for (let i = 0x10001; i <= 0xffffff; i++) c.tick();
+    const rolled = hlcDecode(c.tick());
+    expect(rolled).toMatchObject({ wall: 1_700_000_000_001, count: 0 });
+    expect(hlcCompare('1700000000000-0001-a', '1700000000000-0000-b')).toBe(1); // then device breaks ties
+    expect(hlcCompare('1700000000000-0000-a', '1700000000000-0000-b')).toBe(-1);
+  });
+});
+
+describe('change validation', () => {
+  it('names the first bad change and refuses the reserved and bookkeeping field names', () => {
+    const ok = { t: '1700000000000-0000-x', kind: 'accession', id: 'r1', field: 'notes', value: 'x' };
+    expect(validateChanges([ok])).toHaveLength(1);
+    expect(() => validateChanges(null)).toThrow(/not a list/);
+    expect(() => validateChanges([ok, { ...ok, t: '~' }])).toThrow(/change 1: bad timestamp/);
+    expect(() => validateChanges([{ ...ok, kind: 'plant' }])).toThrow(/unknown kind/);
+    expect(() => validateChanges([{ ...ok, value: undefined }])).toThrow(/no value/);
+    for (const field of ['id', 'kind', '_t', '_deleted=', '*']) expect(() => validateChanges([{ ...ok, field }])).toThrow(/reserved/);
+    // The fold refuses them too, so a record cannot be resurrected or made undeletable by a change to a bookkeeping name.
+    expect(() => materialise([{ ...ok, field: '_deleted=' } as Change])).toThrow(/reserved/);
+    expect(() => materialise([{ ...ok, field: '*' } as Change])).toThrow(/reserved/);
   });
 });
 
@@ -171,8 +208,10 @@ describe('geo', () => {
     const at = habitatCentre(c, []); // all restricted
     expect(at.snapped).toBe('cell-centre');
     expect(pts.some((p) => p[0] === at.lat && p[1] === at.lon)).toBe(false);
-    expect(Math.round(at.lat * 10) / 10).toBe(at.lat);
-    expect(Math.round(at.lon * 10) / 10).toBe(at.lon);
+    // the centre of a tenth-degree cell: x.x5, a coordinate a 0.1°-precision record never has
+    expect(Math.abs(at.lat * 100 - Math.round(at.lat * 100))).toBeLessThan(1e-6);
+    expect(Math.round(Math.abs(at.lat) * 100) % 10).toBe(5);
+    expect(Math.round(Math.abs(at.lon) * 100) % 10).toBe(5);
     // one open record in the cluster, and it is chosen even if a restricted one is nearer the middle
     const open: Array<[number, number]> = [pts[11]];
     const at2 = habitatCentre(c, open);

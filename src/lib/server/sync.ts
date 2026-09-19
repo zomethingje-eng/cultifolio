@@ -4,7 +4,8 @@
  * what it stores. Layout in R2:
  *
  *   vault/<id>/meta.json          { tokenHash, created, entitlement }
- *   vault/<id>/log/<hlc>.bin      one sealed batch of changes; <hlc> is the batch's last change
+ *   vault/<id>/log/<hlc>-<hash>.bin  one sealed batch of changes; <hlc> is the batch's last change, <hash> the
+ *                                    first 12 hex of the sealed bytes' SHA-256 (older batches have no hash part)
  *   vault/<id>/photo/<photoId>.bin one sealed photo (full + thumb)
  *
  * Batches are handed out in ARRIVAL order (R2's upload time), not in HLC
@@ -17,7 +18,8 @@
  * device idempotent.
  */
 import { error } from '@sveltejs/kit';
-import { tokenHash } from '$lib/sync/crypto';
+import { tokenHash, sha256hex } from '$lib/sync/crypto';
+export { MAX_BATCH_BYTES, MAX_PHOTO_BYTES } from '$lib/sync/limits';
 
 export interface VaultMeta {
   tokenHash: string;
@@ -29,7 +31,8 @@ export interface VaultMeta {
 }
 
 const ID = /^[A-HJKMNP-TV-Z2-9]{26}$/;
-const HLC = /^\d{13}-[0-9a-f]{4}-[a-z0-9]{1,16}$/;
+/** An HLC, optionally followed by the content hash newer clients add. Two batches that differ in content differ in name. */
+const BATCH = /^\d{13}-[0-9a-f]{4,6}-[a-z0-9]{1,16}(-[0-9a-f]{12})?$/;
 const PHOTO = /^p[a-z0-9]{6,32}$/;
 
 export function store(platform: App.Platform | undefined): R2Bucket {
@@ -72,9 +75,9 @@ export async function ensureVault(r2: R2Bucket, id: string, token: string, open:
   return { created: true, meta };
 }
 
-export const batchKey = (id: string, hlc: string) => {
-  if (!HLC.test(hlc)) error(400, 'batch key must be an HLC');
-  return `vault/${id}/log/${hlc}.bin`;
+export const batchKey = (id: string, name: string) => {
+  if (!BATCH.test(name)) error(400, 'batch key must be an HLC with an optional content hash');
+  return `vault/${id}/log/${name}.bin`;
 };
 export const photoKey = (id: string, photoId: string) => {
   if (!PHOTO.test(photoId)) error(400, 'bad photo id');
@@ -124,17 +127,49 @@ export const MAX_BYTES = 2 * 1024 * 1024 * 1024;
  * can still each read the same starting total (R2 has no atomic counter), so
  * `recount` puts the total right from a listing when a vault is (re)joined.
  */
-export async function storeCounted(r2: R2Bucket, id: string, meta: VaultMeta, key: string, body: Uint8Array): Promise<void> {
+export async function storeCounted(r2: R2Bucket, id: string, meta: VaultMeta, key: string, body: Uint8Array, sha?: string): Promise<void> {
   if (meta.bytes + body.length > MAX_BYTES) error(413, 'this vault is over its storage allowance');
   meta.bytes += body.length;
   await writeMeta(r2, id, meta);
   try {
-    await r2.put(key, body, { httpMetadata: { contentType: 'application/octet-stream' } });
+    await r2.put(key, body, { httpMetadata: { contentType: 'application/octet-stream' }, customMetadata: { sha: sha ?? (await sha256hex(body)) } });
   } catch (e) {
     meta.bytes -= body.length;
     await writeMeta(r2, id, meta).catch(() => {});
     throw e;
   }
+}
+
+/**
+ * Store an immutable object once. 'same' when the name already holds these
+ * exact bytes (a client re-sending after a lost reply), 'different' when it
+ * holds something else: the caller answers 409 and nothing is overwritten,
+ * so a name can never quietly stand for two contents.
+ */
+export async function storeOnce(r2: R2Bucket, id: string, meta: VaultMeta, key: string, body: Uint8Array): Promise<'stored' | 'same' | 'different'> {
+  const sha = await sha256hex(body);
+  const existing = await r2.head(key);
+  if (existing) {
+    let had = existing.customMetadata?.sha;
+    if (!had) {
+      // Written before hashes were kept: compare the bytes themselves.
+      const o = await r2.get(key);
+      had = o ? await sha256hex(new Uint8Array(await o.arrayBuffer())) : undefined;
+    }
+    return had === sha ? 'same' : 'different';
+  }
+  await storeCounted(r2, id, meta, key, body, sha);
+  return 'stored';
+}
+
+/** Refuse an oversize body from its declared length, before reading it; the read itself is capped too. */
+export async function readBody(request: Request, max: number, what: string): Promise<Uint8Array> {
+  const declared = Number(request.headers.get('content-length'));
+  if (declared > max) error(413, `${what} must be at most ${Math.round(max / 1048576)} MB`);
+  const body = new Uint8Array(await request.arrayBuffer());
+  if (!body.length) error(400, `${what} is empty`);
+  if (body.length > max) error(413, `${what} must be at most ${Math.round(max / 1048576)} MB`);
+  return body;
 }
 
 export async function writeMeta(r2: R2Bucket, id: string, meta: VaultMeta): Promise<void> {

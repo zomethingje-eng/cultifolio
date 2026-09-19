@@ -10,11 +10,14 @@
   import { onMount } from 'svelte';
   import { sync } from '$lib/sync/engine.svelte';
   import { collection } from '$lib/db/collection.svelte';
+  import { onVaultNotice } from '$lib/db/vault';
   let { children } = $props();
+  let vaultNote = $state<string | null>(null);
   // Sync wakes with the app when a vault key is on this device; it does nothing otherwise.
   onMount(async () => {
     // The app shell offline: registered after load so it never competes with the page's own requests.
     if ('serviceWorker' in navigator && !import.meta.env.DEV) navigator.serviceWorker.register('/service-worker.js', { type: 'module' }).catch(() => {});
+    onVaultNotice((t) => (vaultNote = t));
     await collection.load();
     await sync.init();
     if (sync.configured) sync.schedule(1500);
@@ -48,6 +51,7 @@
   <a class="iconbtn sync" href="/sync" title={sync.configured ? (sync.busy ?? (sync.lastError ? 'Sync: ' + sync.lastError : 'Synced')) : 'Sync'} aria-label="Sync" class:on={sync.configured} class:busy={!!sync.busy} class:err={!!sync.lastError}>⟳</a>
   <a class="iconbtn" href="/plants/new" title="Add a plant" aria-label="Add a plant">+</a>
 </div>
+{#if vaultNote}<p class="vaultnote">{vaultNote}</p>{/if}
 
 <main class="wrap">
   {@render children()}
@@ -74,6 +78,7 @@
 
 <style>
   .iconbtn.sync { color: var(--ink3); }
+  .vaultnote { margin: 0; padding: 8px 16px; background: var(--bad); color: #fff; font-size: 14px; }
   .iconbtn.sync.on { color: var(--accent); }
   .iconbtn.sync.busy { animation: spin 1.2s linear infinite; }
   .iconbtn.sync.err { color: var(--bad); }

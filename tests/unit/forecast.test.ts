@@ -79,3 +79,25 @@ describe('precipitation accounting', () => {
     expect(f.days.find((d) => d.date === '2026-03-11')!.precipMm).toBe(3);
   });
 });
+
+describe('what "no frost" is a statement about', () => {
+  const step = (isoTime: string, T: number, six?: { min: number; max: number }) => ({ time: isoTime, data: { instant: { details: { air_temperature: T } }, ...(six ? { next_6_hours: { details: { air_temperature_max: six.max, air_temperature_min: six.min, precipitation_amount: 0 } } } : { next_1_hours: { details: { precipitation_amount: 0 } } }) } });
+  it('names the hours covered and when the coldest reading falls, in local time', () => {
+    // 36 hours of hourly steps at longitude 0, coldest at 05:00 on the second day (a Thursday).
+    const ts = [...Array(36).keys()].map((h) => step(new Date(Date.UTC(2026, 9, 14, h)).toISOString(), h === 29 ? 4 : 10));
+    const f = reduceMet({ properties: { timeseries: ts } } as never, 0);
+    expect(f.hoursCovered).toBe(36);
+    const r = frostRisk(f, []);
+    expect(r.level).toBe('none');
+    expect(r.text).toBe('No frost in the next 36 hours of forecast; coldest 4.0 °C at 05:00 Thursday (MET Norway).');
+  });
+  it('a six-hour minimum across local midnight belongs to the later night and is reported with its interval', () => {
+    // At longitude 0: an interval 21:00 Wed – 03:00 Thu whose minimum is -1 °C; the instant readings are mild.
+    const ts = [step('2026-10-14T15:00:00Z', 8, { min: 6, max: 10 }), step('2026-10-14T21:00:00Z', 5, { min: -1, max: 6 }), step('2026-10-15T03:00:00Z', 2, { min: 1, max: 5 }), step('2026-10-15T09:00:00Z', 6, { min: 4, max: 9 })];
+    const f = reduceMet({ properties: { timeseries: ts } } as never, 0);
+    expect(f.firstFrost).toBe('2026-10-15');
+    expect(f.days.find((d) => d.date === '2026-10-14')!.tmin).toBe(5);
+    expect(frostRisk(f, []).text).toBe('Frost forecast: -1.0 °C between 21:00 Wednesday and 03:00 Thursday (2026-10-15, MET Norway).');
+    expect(f.hoursCovered).toBe(24);
+  });
+});

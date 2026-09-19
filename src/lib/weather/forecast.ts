@@ -13,6 +13,8 @@ export interface DayForecast {
   precipMm: number;
   /** How many hourly/6-hourly steps informed this day; low counts at the end of the horizon mean "partial". */
   steps: number;
+  /** When the minimum was forecast: an instant (ISO), or "start/end" for a six-hour interval the series only gives a minimum over. */
+  tminAt?: string;
 }
 
 export interface Forecast {
@@ -23,6 +25,10 @@ export interface Forecast {
   /** Ordered nearest-first; a frost night is a min at or below 0 °C, a cold night at or below 3 °C. */
   firstFrost?: string;
   firstCold?: string;
+  /** Hours from the first step to the end of the last interval: what "no frost" is a statement about. */
+  hoursCovered: number;
+  /** The site's local offset from UTC in whole hours, from its longitude, so times can be printed as local. */
+  offsetH: number;
 }
 
 interface MetTimeseries {
@@ -61,11 +67,22 @@ export function reduceMet(res: MetResponse, lon: number, fetched = new Date().to
     const inst = t.data.instant?.details?.air_temperature;
     const six = t.data.next_6_hours?.details;
     if (typeof inst === 'number') {
-      d.tmin = Math.min(d.tmin, inst);
+      if (inst < d.tmin) {
+        d.tmin = inst;
+        d.tminAt = t.time;
+      }
       d.tmax = Math.max(d.tmax, inst);
     }
     if (six) {
-      if (typeof six.air_temperature_min === 'number') d.tmin = Math.min(d.tmin, six.air_temperature_min);
+      // A six-hour minimum belongs to the interval it covers, not to the step's date: an interval from
+      // 21:00 to 03:00 is the night of the later date, so it is filed by its midpoint and reported with its span.
+      if (typeof six.air_temperature_min === 'number') {
+        const mid = at(day(start + 3 * 3600_000));
+        if (six.air_temperature_min < mid.tmin) {
+          mid.tmin = six.air_temperature_min;
+          mid.tminAt = `${t.time}/${new Date(start + 6 * 3600_000).toISOString()}`;
+        }
+      }
       if (typeof six.air_temperature_max === 'number') d.tmax = Math.max(d.tmax, six.air_temperature_max);
     }
     // Precipitation belongs to the interval a step covers, counted once. The series is hourly at
@@ -87,7 +104,14 @@ export function reduceMet(res: MetResponse, lon: number, fetched = new Date().to
     d.steps++;
   }
   const days = [...byDay.values()].filter((d) => Number.isFinite(d.tmin)).map((d) => ({ ...d, precipMm: Math.round(d.precipMm * 10) / 10 }));
-  return { source: 'met.no', fetched, expires, days, firstFrost: days.find((d) => d.tmin <= 0)?.date, firstCold: days.find((d) => d.tmin <= 3)?.date };
+  let hoursCovered = 0;
+  if (series.length) {
+    const first = new Date(series[0].time).getTime();
+    const last = series[series.length - 1];
+    const lastEnd = new Date(last.time).getTime() + (last.data.next_6_hours ? 6 : last.data.next_1_hours ? 1 : 0) * 3600_000;
+    hoursCovered = Math.max(0, Math.round((lastEnd - first) / 3600_000));
+  }
+  return { source: 'met.no', fetched, expires, days, firstFrost: days.find((d) => d.tmin <= 0)?.date, firstCold: days.find((d) => d.tmin <= 3)?.date, hoursCovered, offsetH };
 }
 
 /* ---------- NWS alerts (US only) ---------- */
@@ -119,20 +143,35 @@ export function reduceNws(res: { features?: Array<{ properties?: Record<string, 
 
 export const isUS = (lat: number, lon: number) => (lat > 24 && lat < 50 && lon > -125 && lon < -66) || (lat > 51 && lat < 72 && lon > -170 && lon < -130) || (lat > 18 && lat < 23 && lon > -161 && lon < -154);
 
-/** What the frost panel says. Thresholds are in °C at 2 m; a bench under glass or indoors adjusts them itself. */
+const WEEKDAY = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const localHM = (ms: number, offsetH: number) => new Date(ms + offsetH * 3600_000).toISOString().slice(11, 16);
+const localDay = (ms: number, offsetH: number) => WEEKDAY[new Date(ms + offsetH * 3600_000).getUTCDay()];
+
+/** "at 05:00 Thursday", or for a six-hour minimum "between 21:00 Wednesday and 03:00 Thursday". Local time by the site's longitude. */
+export function whenText(tminAt: string | undefined, offsetH: number): string {
+  if (!tminAt) return '';
+  const [a, b] = tminAt.split('/');
+  const ta = new Date(a).getTime();
+  if (!b) return `at ${localHM(ta, offsetH)} ${localDay(ta, offsetH)}`;
+  const tb = new Date(b).getTime();
+  const da = localDay(ta, offsetH), db = localDay(tb, offsetH);
+  return `between ${localHM(ta, offsetH)} ${da} and ${localHM(tb, offsetH)}${db === da ? '' : ' ' + db}`;
+}
+
+/** What the frost panel says. Thresholds are in °C at 2 m; a bench under glass or indoors adjusts them itself. Every sentence names the hours it covers or the night it is about. */
 export function frostRisk(f: Forecast, alerts: Alert[]): { level: 'none' | 'cold' | 'frost' | 'warning'; text: string } {
   const warn = alerts.find((a) => /Freeze Warning|Hard Freeze Warning|Extreme Cold Warning/.test(a.event));
   if (warn) return { level: 'warning', text: `${warn.event} in force${warn.ends ? ` until ${warn.ends.slice(0, 16).replace('T', ' ')}` : ''} (NOAA/NWS).` };
   const adv = alerts.find((a) => /Frost Advisory|Freeze Watch|Cold Weather Advisory/.test(a.event));
   if (f.firstFrost) {
     const d = f.days.find((x) => x.date === f.firstFrost)!;
-    return { level: 'frost', text: `Frost forecast: ${d.tmin.toFixed(1)} °C on ${d.date}${adv ? `; ${adv.event} issued (NOAA/NWS)` : ''}. Bring tender plants in or cover them.` };
+    return { level: 'frost', text: `Frost forecast: ${d.tmin.toFixed(1)} °C ${whenText(d.tminAt, f.offsetH)} (${d.date}, MET Norway)${adv ? `; ${adv.event} issued (NOAA/NWS)` : ''}.` };
   }
   if (adv) return { level: 'frost', text: `${adv.event} issued (NOAA/NWS).` };
   if (f.firstCold) {
     const d = f.days.find((x) => x.date === f.firstCold)!;
-    return { level: 'cold', text: `Cold night ahead: ${d.tmin.toFixed(1)} °C on ${d.date}. Watch anything that dislikes wet cold.` };
+    return { level: 'cold', text: `Cold night ahead: ${d.tmin.toFixed(1)} °C ${whenText(d.tminAt, f.offsetH)} (${d.date}, MET Norway).` };
   }
-  const lo = f.days.length ? Math.min(...f.days.map((d) => d.tmin)) : NaN;
-  return { level: 'none', text: Number.isFinite(lo) ? `No frost in the next ${f.days.length} days; coldest night ${lo.toFixed(1)} °C.` : 'No forecast available.' };
+  const coldest = f.days.length ? f.days.reduce((a, b) => (b.tmin < a.tmin ? b : a)) : null;
+  return { level: 'none', text: coldest ? `No frost in the next ${f.hoursCovered} hours of forecast; coldest ${coldest.tmin.toFixed(1)} °C ${whenText(coldest.tminAt, f.offsetH)} (MET Norway).` : 'No forecast available.' };
 }

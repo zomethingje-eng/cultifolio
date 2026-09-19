@@ -68,8 +68,9 @@
         taxonName,
         taxonKey,
         cultivar: cultivar ?? p.cultivar ?? null,
-        nameKind: kind,
-        parentage: kind === 'hybrid' ? (parentage?.trim() || null) : null,
+        // The picker parses the name on a debounce; the form parses it again here so a quick Add cannot file a hybrid as a species.
+        nameKind: p.kind !== 'species' ? p.kind : kind,
+        parentage: p.kind === 'hybrid' || kind === 'hybrid' ? (parentage?.trim() || p.parentage || null) : null,
         nameAsReceived: nameAsReceived.trim() || (nameAsReceived !== name ? null : null),
         fieldNumber: fieldNumber.trim() || null,
         provenance,
@@ -129,7 +130,7 @@
   </div>
 
   <div class="two">
-    <div class="field"><span>Location</span><LocationPicker bind:value={locationId} id="f-loc" /></div>
+    <div class="field"><span>Location</span><LocationPicker bind:value={locationId} id="f-loc" label="Location" /></div>
     <label class="field"><span>How many</span><input id="f-count" type="number" min="1" max="200" bind:value={count} /><span class="faint small">Each gets its own number.</span></label>
   </div>
 

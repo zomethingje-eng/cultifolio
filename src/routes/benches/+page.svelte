@@ -21,7 +21,7 @@
     walk(null, 0);
     return out;
   });
-  const unplaced = $derived(collection.accessions.filter((a) => a.status === 'growing' && !a.locationId).length);
+  const unplaced = $derived(collection.accessions.filter((a) => a.status === 'growing' && !collection.placeOf(a.locationId)).length);
   const kindLabel = (k?: LocationKind | null) => LOCATION_KINDS.find((x) => x.k === k)?.label ?? '';
 
   async function add() {
@@ -39,9 +39,9 @@
 
 {#if adding}
   <form class="cult form" onsubmit={(e) => { e.preventDefault(); add(); }}>
-    <input id="loc-name" type="text" placeholder="Name" bind:value={name} />
-    <select id="loc-kind" bind:value={kind}>{#each LOCATION_KINDS as k}<option value={k.k}>{k.label}</option>{/each}</select>
-    <select id="loc-parent" bind:value={parent}>
+    <input id="loc-name" type="text" placeholder="Name" aria-label="Name of the new location" bind:value={name} />
+    <select id="loc-kind" bind:value={kind} aria-label="Kind of location">{#each LOCATION_KINDS as k}<option value={k.k}>{k.label}</option>{/each}</select>
+    <select id="loc-parent" bind:value={parent} aria-label="Inside which location">
       <option value={null}>Top level</option>
       {#each rows as r}<option value={r.loc.id}>{'  '.repeat(r.depth)}{r.loc.name}</option>{/each}
     </select>
@@ -64,12 +64,12 @@
     </div>
   {/if}
   {#if !rows.length}
-    <div class="emptybox"><h3 class="q" style="font-size: 22px">No locations yet</h3><p class="muted">Start with the room or greenhouse, then the shelves or benches inside it.</p></div>
+    <div class="emptybox"><h2 class="q" style="font-size: 22px">No locations yet</h2><p class="muted">Start with the room or greenhouse, then the shelves or benches inside it.</p></div>
   {:else}
     <div class="tree">
       {#each rows as r (r.loc.id)}
         <a class="row card" href="/benches/{r.loc.id}" style="--d:{r.depth}">
-          <span class="name">{r.loc.name}</span>
+          <span class="name">{r.loc.name}{#if collection.needsHome(r.loc.id)} <span class="faint">· needs a home: two devices moved places into each other; move this one where it belongs</span>{/if}</span>
           <span class="faint kind">{kindLabel(r.loc.type)}</span>
           <span class="n mono">{r.deepN}{r.deepN !== r.n ? ` (${r.n} here)` : ''}</span>
         </a>

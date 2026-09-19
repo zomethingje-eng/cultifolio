@@ -5,26 +5,17 @@
  *                    each row's own one-sentence `short`, in card order. The
  *                    sentence is written by the rule that writes the row, at
  *                    the same moment, so the note cannot contradict a card.
- *   careLine()       one line for a plant label: season, floor, light, water.
+ *   careLine()       one line for a plant label: season, cold floor, light.
  *
  * Neither invents anything the sheet does not say; when the sheet has nothing
- * on a topic the sentence is left out rather than filled in.
+ * on a topic the sentence is left out rather than filled in. Months on both
+ * come from the sheet's own `runs()`, so a label and a sheet agree.
  */
-import { cultivationSheet, span, type SheetInput, type Year } from './sheet';
-import type { ArchGuess } from './arch';
+import { cultivationSheet, runs, forReader, coldFloor, type SheetInput } from './sheet';
+import { archFor, type ArchGuess } from './arch';
 
-const MON3 = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-/** "Nov–Feb" style span for a label; wraps the year. */
-export function span3(ms: number[]): string {
-  if (!ms.length) return '';
-  if (ms.length === 12) return 'all year';
-  const sorted = [...new Set(ms)].sort((a, b) => a - b);
-  // Find the start: the month whose predecessor is not in the set.
-  let start = sorted.find((m) => !sorted.includes(((m + 10) % 12) + 1)) ?? sorted[0];
-  let end = start;
-  while (sorted.includes((end % 12) + 1) && (end % 12) + 1 !== start) end = (end % 12) + 1;
-  return start === end ? MON3[start - 1] : `${MON3[start - 1]}–${MON3[end - 1]}`;
-}
+/** "Nov–Feb" style span for a label; wraps the year and lists a bimodal season as two runs. */
+export const span3 = (ms: number[]) => runs(ms, 'short');
 
 export interface Condensed {
   text: string;
@@ -34,33 +25,22 @@ export interface Condensed {
   hab: boolean;
 }
 
-/** The floor the sheet states, if it states one, in °C. */
-function floorC(rows: Array<{ k: string; s: string }>): number | null {
-  const t = rows.find((r) => r.k === 'Temperature');
-  const m = t && /Keep it above (-?\d+) ?°C/.exec(t.s);
-  return m ? Number(m[1]) : null;
-}
-
 /** Which hemisphere the reader is in decides which months to print. Default north. */
 export interface NoteOpts {
   /** Latitude of the grower's place, when known; the months are shifted for the reader. */
   readerLat?: number | null;
 }
 
-const seasonFor = (year: Year, readerSouth: boolean) => (readerSouth === year.south ? year.growMonths : year.shifted);
-
 export function generatedNote(input: SheetInput, o: NoteOpts = {}): Condensed | null {
   const { rows, arch, year } = cultivationSheet({ ...input, readerLat: o.readerLat ?? input.readerLat });
   if (!rows.length) return null;
   // The note IS the rows: each row's own one-sentence short, in card order, and nothing else. There is
   // no second rule here that could disagree with the card it summarises.
-  const order = ['Its year', 'Water', 'What you water it with', 'Light', 'Temperature', 'Air', 'Feeding', 'Repotting'];
+  const order = ['Its year', 'Rain', 'Light', 'Temperature', 'Humidity'];
   const picked = rows.filter((r) => r.short).sort((a, b) => (order.indexOf(a.k) === -1 ? 99 : order.indexOf(a.k)) - (order.indexOf(b.k) === -1 ? 99 : order.indexOf(b.k)));
   const s: string[] = [];
   const from: string[] = [];
-  const lab = arch ? arch.arch.lab.toLowerCase() : null;
-  if (lab && !year) s.push(`A ${lab}; no habitat climate is on file for this species, so what follows is what the group usually wants.`);
-  else if (lab && year) s.push(`A ${lab}.`);
+  if (arch) s.push(`Grouped as a ${arch.arch.lab.toLowerCase()} by ${arch.why} (archetype table)${year ? '.' : '; no habitat climate is on file for this species.'}`);
   for (const r of picked) {
     s.push(r.short!);
     from.push(r.k);
@@ -68,23 +48,23 @@ export function generatedNote(input: SheetInput, o: NoteOpts = {}): Condensed | 
   return { text: s.join(' '), from, hab: rows.some((r) => r.hab) };
 }
 
-/** One line for a label. Empty when nothing is known. */
+/** One line for a label: the rain rule's season in the reader's hemisphere, the cold floor, the open-sky light. Empty when nothing is known. */
 export function careLine(input: SheetInput, o: NoteOpts = {}): string {
-  const { rows, arch, year } = cultivationSheet(input);
+  const { rows, year } = cultivationSheet(input);
   if (!rows.length) return '';
-  const readerSouth = (o.readerLat ?? 40) < 0;
   const bits: string[] = [];
-  if (year && year.grow !== 'even') {
-    const grow = seasonFor(year, readerSouth);
-    bits.push(`${year.fog ? 'cool-season' : year.grow} grower ${span3(grow)}`);
-  } else if (year) bits.push('no strict rest');
-  const fl = floorC(rows);
-  if (fl != null) bits.push(`>${fl} °C`);
-  const exp = arch?.arch.exposure;
-  if (exp) bits.push(exp === 'full' ? 'full sun' : exp === 'part' ? 'bright shade' : 'shade');
-  if (arch?.arch.dry === 'through') bits.push('dry between');
-  else if (arch?.arch.dry === 'never') bits.push('never dry');
-  if (arch?.arch.waterQ === 'pure') bits.push('rain/RO water');
+  if (year) {
+    const months = span3(forReader(year, o.readerLat));
+    if (year.fog) bits.push(`cooler half ${months}`);
+    else if (year.spread) bits.push('rain spread, no season');
+    else if (year.flat) bits.push(`rain ${months}, flat T`);
+    else bits.push(`${year.grow} rain ${months}`);
+  }
+  const m = input.months && input.months.length === 12 ? input.months : null;
+  const fl = coldFloor(m, input.extremes ?? null, archFor(input.scientific, input.family));
+  if (fl) bits.push(`floor ${Math.round(fl.floor)} °C`);
+  const dlis = m ? m.map((x) => x.dli).filter((x): x is number => x != null) : [];
+  if (dlis.length) bits.push(`sky ${Math.round(Math.min(...dlis))}–${Math.round(Math.max(...dlis))} DLI`);
   return bits.join(' · ');
 }
 

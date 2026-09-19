@@ -50,8 +50,8 @@ const coolUntil = new Map<string, number>();
 /**
  * A host that makes every call wait (429 with Retry-After, then success) is
  * not refusing, so the strikes never trip, and a fill can crawl at a call a
- * minute for hours. That many waits in a row is a quota spent for the day:
- * the host is cooled and the caller gets an honest refusal to stop on.
+ * minute for hours. That many waits in a row is persistent throttling, whatever
+ * its cause: the host is cooled and the caller gets an honest refusal to stop on.
  */
 const THROTTLED_RUN = 8;
 const RETRIES = 5;
@@ -85,13 +85,28 @@ export function markCooledRecently(host: string): void {
   coolUntil.set(host, Date.now() - 1000);
 }
 
+/** Reserve the next slot for a host before waiting for it, so two concurrent callers take two slots, not the same one. */
 async function pace(host: string): Promise<void> {
   const gap = MIN_GAP_MS[host] ?? 100;
   const prev = lastAt.get(host) ?? 0;
-  const wait = prev + gap - Date.now();
+  const slot = Math.max(prev + gap, Date.now());
+  lastAt.set(host, slot);
+  const wait = slot - Date.now();
   if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-  lastAt.set(host, Date.now());
 }
+
+/** Retry-After as seconds or as an HTTP date; undefined when absent or unreadable. */
+function retryAfterMs(res: Response): number | undefined {
+  const h = res.headers.get('retry-after');
+  if (!h) return undefined;
+  const n = Number(h);
+  if (Number.isFinite(n) && n >= 0) return n * 1000;
+  const t = Date.parse(h);
+  return Number.isFinite(t) ? Math.max(0, t - Date.now()) : undefined;
+}
+
+/** The longest a single retry will wait in place. A host asking for more is honoured by refusing now and saying when to come back. */
+const MAX_WAIT_MS = 120_000;
 
 export function makeFetcher(fetchImpl: typeof fetch = fetch): JsonFetcher {
   return async <T>(url: string, opts: FetchOptions = {}): Promise<FetchResult<T>> => {
@@ -121,13 +136,18 @@ export function makeFetcher(fetchImpl: typeof fetch = fetch): JsonFetcher {
           if (run >= THROTTLED_RUN) {
             coolUntil.set(host, Date.now() + COOLDOWN_MS);
             throttledRun.set(host, 0);
-            return { status: 'refused', detail: `${host} made ${run} calls in a row wait; its quota for the day is spent` };
+            return { status: 'refused', detail: `${host} throttled ${run} calls in a row (${res.status}); not asked again for ${COOLDOWN_MS / 60_000} minutes` };
           }
         }
-        // Polite retries after the server's own Retry-After (capped), backing off, then give up honestly.
+        // Polite retries after the server's own Retry-After, backing off, then give up honestly. A wait longer
+        // than a retry can sit through is not shortened: the host is refused now with its own time named.
         const attempt = (opts.attempt ?? 0) + 1;
-        const ra = Number(res.headers.get('retry-after'));
-        const wait = Math.min(30000, res.headers.has('retry-after') && Number.isFinite(ra) && ra >= 0 ? ra * 1000 : 4000 * attempt);
+        const asked = retryAfterMs(res);
+        if (asked !== undefined && asked > MAX_WAIT_MS) {
+          coolUntil.set(host, Date.now() + asked);
+          return { status: 'refused', detail: `${host} ${res.status}: asked to wait ${Math.round(asked / 60_000)} minutes; not asked again until then` };
+        }
+        const wait = asked ?? 4000 * attempt;
         clearTimeout(timer);
         // Say so on a terminal, so a run that is waiting out a throttle does not look hung.
         if (typeof process !== 'undefined' && process.stdout?.isTTY) process.stdout.write(`\n  ${host} ${res.status}: waiting ${Math.round(wait / 1000)} s (retry ${attempt} of ${RETRIES})…`);

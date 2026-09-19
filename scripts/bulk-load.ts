@@ -6,7 +6,7 @@
 import { createReadStream, existsSync, statSync, readFileSync } from 'node:fs';
 import { execSync, spawn, spawnSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
-import { WcvpIndex, OccIndex, parseWcvpName, parseWcvpDist, occHeader, parseOccRow } from '../src/lib/dossier/bulk';
+import { WcvpIndex, OccIndex, MediaIndex, parseWcvpName, parseWcvpDist, occHeader, parseOccRow, parseMediaRow } from '../src/lib/dossier/bulk';
 
 const mb = (n: number) => `${(n / 1048576).toFixed(0)} MB`;
 
@@ -64,7 +64,26 @@ export function wantedKeys(dir: string, names: string[]): Set<number> | undefine
  * Linux all ship it), so a download of tens of GB never lands on disk as
  * text. A plain occurrence.csv is read too, for the small case.
  */
-export async function loadOccurrences(dir: string, cap = 2000, wanted?: Set<number>): Promise<OccIndex | null> {
+/** Stream one member of the archive (or a plain file) line by line. bsdtar reads zips on Windows and macOS; GNU tar does not, so unzip on Linux. */
+function streamMember(zip: string, member: string): { input: NodeJS.ReadableStream; exit: Promise<number | null>; how: string } {
+  const [cmd, cmdArgs] = process.platform === 'win32' || !hasCmd('unzip') ? ['tar', ['-xOf', zip, member]] : ['unzip', ['-p', zip, member]];
+  const child = spawn(cmd, cmdArgs, { stdio: ['ignore', 'pipe', 'inherit'] });
+  child.stdout.setEncoding('utf8');
+  return { input: child.stdout, exit: new Promise((res) => child.on('close', res)), how: cmd };
+}
+
+/** Which members the archive holds: a SIMPLE_CSV download has one .csv; a DWCA has occurrence.txt and multimedia.txt. */
+function members(zip: string, meta: string): { records: string; media?: string } | null {
+  const m = existsSync(meta) ? (JSON.parse(readFileSync(meta, 'utf8')) as { csv?: string; records?: string; media?: string }) : {};
+  if (m.records) return { records: m.records, media: m.media };
+  if (m.csv) return { records: m.csv };
+  const listed = execSync(`tar -tf "${zip}"`, { encoding: 'utf8' }).trim().split(/\r?\n/);
+  const records = listed.find((f) => f === 'occurrence.txt') ?? listed.find((f) => f.endsWith('.csv'));
+  if (!records) return null;
+  return { records, media: listed.find((f) => f === 'multimedia.txt') };
+}
+
+export async function loadOccurrences(dir: string, cap = 2000, wanted?: Set<number>): Promise<{ occ: OccIndex; media: MediaIndex | null } | null> {
   const csv = `${dir}/occurrence.csv`, zip = `${dir}/occurrence.zip`, meta = `${dir}/download.json`;
   // A names file with nothing in the download (a handful of extras) should not cost a pass over 28 M rows.
   if (wanted && wanted.size === 0) {
@@ -74,28 +93,26 @@ export async function loadOccurrences(dir: string, cap = 2000, wanted?: Set<numb
   let input: NodeJS.ReadableStream;
   let what: string;
   let exit: Promise<number | null> = Promise.resolve(0);
+  let mediaMember: string | undefined;
   if (existsSync(csv)) {
     input = createReadStream(csv, { encoding: 'utf8' });
     what = `${csv} (${mb(statSync(csv).size)})`;
   } else if (existsSync(zip)) {
-    const inner = existsSync(meta) ? (JSON.parse(readFileSync(meta, 'utf8')) as { csv?: string }).csv : undefined;
-    const member = inner ?? execSync(`tar -tf "${zip}"`, { encoding: 'utf8' }).trim().split(/\r?\n/).find((f) => f.endsWith('.csv'));
-    if (!member) return null;
-    // Windows ships bsdtar, which reads zips; GNU tar on Linux does not, so prefer unzip there.
-    const [cmd, cmdArgs] = process.platform === 'win32' || !hasCmd('unzip') ? ['tar', ['-xOf', zip, member]] : ['unzip', ['-p', zip, member]];
-    const child = spawn(cmd, cmdArgs, { stdio: ['ignore', 'pipe', 'inherit'] });
-    child.stdout.setEncoding('utf8');
-    input = child.stdout;
-    exit = new Promise((res) => child.on('close', res));
-    what = `${zip} (${mb(statSync(zip).size)} zipped, streamed with ${cmd})`;
+    const mm = members(zip, meta);
+    if (!mm) return null;
+    const st = streamMember(zip, mm.records);
+    input = st.input;
+    exit = st.exit;
+    mediaMember = mm.media;
+    what = `${zip} (${mb(statSync(zip).size)} zipped, ${mm.records} streamed with ${st.how})`;
   } else return null;
   const idx = new OccIndex(cap, wanted);
+  if (existsSync(meta)) idx.doi = (JSON.parse(readFileSync(meta, 'utf8')) as { doi?: string }).doi;
   let h: string[] = [];
   let n = 0;
   console.log(`  GBIF occurrences from ${what}${wanted ? `, keeping ${wanted.size} species` : ''}…`);
-  const rl = createInterface({ input, crlfDelay: Infinity });
   let i = 0;
-  for await (const line of rl) {
+  for await (const line of createInterface({ input, crlfDelay: Infinity })) {
     if (i++ === 0) h = occHeader(line);
     else if (line) {
       const o = parseOccRow(h, line);
@@ -108,7 +125,28 @@ export async function loadOccurrences(dir: string, cap = 2000, wanted?: Set<numb
   if (n === 0) throw new Error(`no occurrence rows read from ${what}`);
   idx.seal();
   console.log(`\r  ${n} rows → ${idx.species} taxa, ${idx.kept} rows kept (≤${cap} each)      `);
-  return idx;
+
+  // A DWCA download carries the photographs too: one more pass, over multimedia.txt, for the records marked as having images.
+  let media: MediaIndex | null = null;
+  if (mediaMember && idx.withMedia.size) {
+    media = new MediaIndex(idx.withMedia);
+    const st = streamMember(zip, mediaMember);
+    let mh: string[] = [];
+    let j = 0, rows = 0;
+    console.log(`  GBIF photographs from ${mediaMember} for ${idx.withMedia.size} observation records…`);
+    for await (const line of createInterface({ input: st.input, crlfDelay: Infinity })) {
+      if (j++ === 0) mh = occHeader(line);
+      else if (line) {
+        const m = parseMediaRow(mh, line);
+        if (m) media.add(m);
+        if (++rows % 500_000 === 0) process.stdout.write(`\r  ${(rows / 1e6).toFixed(1)} M image rows, ${media.species} species with photographs…   `);
+      }
+    }
+    const mc = await st.exit;
+    if (mc) throw new Error(`reading ${mediaMember} failed (exit ${mc})`);
+    console.log(`\r  ${rows} image rows → ${media.species} species with openly licensed photographs      `);
+  }
+  return { occ: idx, media };
 }
 
 function hasCmd(c: string): boolean {

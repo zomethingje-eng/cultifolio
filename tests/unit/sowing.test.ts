@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Change } from '$core/log';
+import { hlcEncode } from '$core/hlc';
 import { accNo, sowNo } from '$lib/db/types';
 
 // The collection store against an in-memory vault: what a page sees, without IndexedDB.
@@ -9,7 +10,7 @@ vi.mock('$lib/db/vault', () => ({
   appendChanges: async (c: Change[]) => void mem.changes.push(...c),
   getMeta: async (k: string) => mem.meta.get(k),
   setMeta: async (k: string, v: unknown) => void mem.meta.set(k, v),
-  deviceId: async () => 'test-device',
+  deviceId: async () => 'testdevice',
   requestPersistence: async () => true
 }));
 
@@ -144,15 +145,40 @@ describe('places', () => {
     expect(collection.children(house.id)).toHaveLength(2);
     await expect(collection.addLocation({ name: 'Orphan', parentId: 'nope' })).rejects.toThrow(/does not exist/);
   });
-  it('a loop already in the log (from an older version or a damaged file) does not hang a traversal', async () => {
+  it('a loop in the log (two devices moving places into each other offline) is cut at its lowest id, which needs a home', async () => {
     await collection.ingest([
       { t: '1700000000000-0000-x', kind: 'location', id: 'la', field: 'name', value: 'A' },
       { t: '1700000000001-0000-x', kind: 'location', id: 'la', field: 'parentId', value: 'lb' },
       { t: '1700000000002-0000-x', kind: 'location', id: 'lb', field: 'name', value: 'B' },
-      { t: '1700000000003-0000-x', kind: 'location', id: 'lb', field: 'parentId', value: 'la' }
+      { t: '1700000000003-0000-x', kind: 'location', id: 'lb', field: 'parentId', value: 'la' },
+      { t: '1700000000004-0000-x', kind: 'location', id: 'lc', field: 'name', value: 'C' },
+      { t: '1700000000005-0000-x', kind: 'location', id: 'lc', field: 'parentId', value: 'lb' }
     ]);
-    expect(collection.subtree('la').sort()).toEqual(['la', 'lb']);
-    expect(collection.locationPath('la').map((l) => l.name)).toEqual(['B', 'A']);
-    expect(collection.locationName('la')).toBe('B › A');
+    expect(collection.children(null).map((l) => l.id)).toContain('la'); // shown at the top, not hidden
+    expect(collection.needsHome('la')).toBe(true);
+    expect(collection.needsHome('lb')).toBe(false);
+    expect(collection.subtree('la').sort()).toEqual(['la', 'lb', 'lc']);
+    expect(collection.locationPath('lc').map((l) => l.name)).toEqual(['A', 'B', 'C']);
+    expect(collection.locationName('la')).toBe('A');
+    await collection.moveLocation('la', null); // the person gives it a home; the flag clears
+    expect(collection.needsHome('la')).toBe(false);
+  });
+  it('removing a place moves its sowings too, and a plant put into a removed place by another device shows at the place above', async () => {
+    const room = await collection.addLocation({ name: 'Room', parentId: null, type: 'room' });
+    const shelf = await collection.addLocation({ name: 'Shelf', parentId: room.id, type: 'shelf' });
+    const s = await collection.addSowing({ taxonName: 'Copiapoa', method: 'seed', sown: '2026-03-01', count: 10, locationId: shelf.id });
+    const a = await collection.addAccession({ taxonName: 'Copiapoa', acc: 'LOC-1', locationId: room.id });
+    await collection.removeLocation(shelf.id);
+    expect(collection.sowing(s.id)!.locationId).toBe(room.id);
+    // The other device's move, stamped after the removal, arrives through a pull.
+    await collection.ingest([{ t: hlcEncode({ wall: Date.now() + 5000, count: 0, device: 'bbbbbbbbbbbb' }), kind: 'accession', id: a.id, field: 'locationId', value: shelf.id }], 'server');
+    expect(collection.accession(a.id)!.locationId).toBe(shelf.id);
+    expect(collection.placeOf(shelf.id)).toBe(room.id);
+    expect(collection.plantsAt(room.id, false).map((p) => p.id)).toContain(a.id);
+    expect(collection.locationName(shelf.id)).toBe('Room');
+  });
+  it('record ids carry the whole device id', async () => {
+    const a = await collection.addAccession({ taxonName: 'X', acc: 'ID-1' });
+    expect(a.id).toMatch(/^r[0-9a-z]+testdevice$/);
   });
 });

@@ -3,10 +3,12 @@
  * Taxonomy itself is never decided here; that is the backbone's job.
  */
 
+/** A nothospecies keeps its cross in the slug ("echeveria-x-imbricata"), so it never shares one with the plain species. */
 export function slugify(name: string): string {
   return name
     .normalize('NFKD')
     .replace(/[̀-ͯ]/g, '')
+    .replace(/×/g, ' x ')
     .toLowerCase()
     .replace(/['’"]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
@@ -21,7 +23,10 @@ export function tidyName(raw: string): string {
     .replace(/\b(ssp|subsp)\.?\s/gi, 'subsp. ')
     .replace(/\b(var|v)\.?\s/gi, 'var. ')
     .replace(/\b(f|fa|forma)\.?\s/gi, 'f. ')
-    .replace(/\bcv\.?\s/gi, "'")
+    // "cv. Blue Curls" → 'Blue Curls': the rest of the line is the cultivar name, closed as well as opened.
+    .replace(/\bcv\.?\s+(.+)$/i, (_, c: string) => (/^['‘"]/.test(c) ? c : `'${c.trim()}'`))
+    // "xGraptoveria" / "XGraptoveria": a nothogenus written without its space.
+    .replace(/^[xX](?=[A-Z][a-z])/, '× ')
     .replace(/^([a-z])/, (m) => m.toUpperCase());
 }
 
@@ -50,7 +55,8 @@ export function parseName(raw: string): ParsedName {
   let s = tidyName(raw);
   let cultivar: string | undefined;
   let aside: string | undefined;
-  s = s.replace(/[‘'"]([^'’"]+)[’'"]/g, (_, c) => {
+  // The cultivar is everything between the first quote and the last: "Haworthia 'Bev's Wonder'" keeps its apostrophe.
+  s = s.replace(/[‘'"](.+)[’'"]/, (_, c) => {
     cultivar = c.trim();
     return '';
   });
@@ -81,6 +87,7 @@ export function parseName(raw: string): ParsedName {
     if (right.length === 0) rightName = '';
     else if (/^[A-Z]\.?$/.test(right[0]) && right[1]) rightName = [genus, ...right.slice(1).map((w) => w.toLowerCase())].join(' '); // "A. trigonus"
     else if (/^[A-Z]/.test(right[0]) && right[1]) rightName = [cap(right[0]), ...right.slice(1).map((w) => w.toLowerCase())].join(' '); // "Ariocarpus trigonus"
+    else if (/^[A-Z]/.test(right[0])) rightName = cap(right[0]); // "Aloe vera × Gasteria": a bare genus on the right stays a genus
     else rightName = [genus, ...right.map((w) => w.toLowerCase())].join(' '); // "trigonus"
     const parentage = rightName ? `${leftName} × ${rightName}` : undefined;
     return { scientific: genus, cultivar, aside, genus, epithet: undefined, kind: 'hybrid', parentage };

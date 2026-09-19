@@ -40,7 +40,7 @@ npx wrangler r2 bucket create cultifolio
 npx wrangler kv namespace create QUEUE        # paste the id into wrangler.jsonc
 ```
 
-then `npm run deploy`. `SYNC_OPEN=1` in `wrangler.jsonc` lets any vault sync; remove it when licensing is wired in.
+then `npm run deploy`. Sync is closed unless `SYNC_OPEN` is exactly `1` in `wrangler.jsonc` (it is, for now: any vault can sync); remove the variable when licensing is wired in, and new vaults will need an entitlement.
 
 ## Layout
 

@@ -25,8 +25,15 @@ export function broadRegion(unitName: string): string {
   if (SPECIAL[unitName]) return SPECIAL[unitName];
   const r = byName.get(unitName);
   if (!r) return unitName;
-  const lat = (r[2] + r[4]) / 2,
-    lon = (r[3] + r[5]) / 2;
+  const lat = (r[2] + r[4]) / 2;
+  // A box that wraps the antimeridian is stored west > east; its middle is on the far side of 180, not at 0.
+  let lon = r[3] > r[5] ? (r[3] + r[5] + 360) / 2 : (r[3] + r[5]) / 2;
+  if (lon > 180) lon -= 360;
+  if (lat < -60) return 'Antarctica & subantarctic islands';
+  // The Pacific: everything between the Americas and Asia at tropical and temperate latitudes, including Hawaii,
+  // the Aleutians and the islands east of the antimeridian, is Oceania, not the continent whose longitude it shares.
+  if ((lon < -125 && lat < 30 && lat > -50) || ((lon >= 165 || lon <= -165) && lat < 45)) return 'Australia & Oceania';
+  if (lat > 50 && lon > 60) return 'Siberia & the Russian Far East';
   // Americas
   if (lon < -30) {
     if (lat > 49) return 'Northern North America';

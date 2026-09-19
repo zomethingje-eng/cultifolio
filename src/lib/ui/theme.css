@@ -1,7 +1,7 @@
 /* Cultifolio — the "Bench" look, carried over from v2 as tokens. */
 :root {
   --bg: #f3f5f4; --card: #fff; --sunk: #e8ecea;
-  --ink: #16211d; --ink2: #586761; --ink3: #8a9891;
+  --ink: #16211d; --ink2: #586761; --ink3: #5f6d67; /* --ink3 is every hint and source line: 5.4:1 on the card, 4.6:1 on the sunk field */
   --rule: #dfe5e2; --rule2: #c6cfcb;
   --accent: #12795a; --accent-soft: #e2f1eb; --on-accent: #fff;
   --warm: #a8702a; --warm-soft: #f7ecdc;
@@ -20,7 +20,7 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     --bg: #121614; --card: #1a201d; --sunk: #0d1211;
-    --ink: #e8eeeb; --ink2: #9daaa4; --ink3: #6f7d77;
+    --ink: #e8eeeb; --ink2: #9daaa4; --ink3: #8c9a94;
     --rule: #28302d; --rule2: #3a4440;
     --accent: #5fb894; --accent-soft: #17332a; --on-accent: #0d1211;
     --warm: #d3a05e; --warm-soft: #2e2718;
@@ -33,7 +33,7 @@
 }
 :root[data-theme='dark'] {
   --bg: #121614; --card: #1a201d; --sunk: #0d1211;
-  --ink: #e8eeeb; --ink2: #9daaa4; --ink3: #6f7d77;
+  --ink: #e8eeeb; --ink2: #9daaa4; --ink3: #8c9a94;
   --rule: #28302d; --rule2: #3a4440;
   --accent: #5fb894; --accent-soft: #17332a; --on-accent: #0d1211;
   --warm: #d3a05e; --warm-soft: #2e2718;
@@ -56,6 +56,8 @@ body {
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; text-underline-offset: 3px; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+/* A label the screen reader gets and the eye does not, for a field whose placeholder is its visible name. */
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 img { max-width: 100%; display: block; }
 button, input, select, textarea { font: inherit; color: inherit; }
 h1, h2, h3, h4 { margin: 0; font-weight: 500; text-wrap: balance; }
@@ -111,7 +113,8 @@ table.data th:first-child, table.data td:first-child { text-align: left; }
    tiles in mono; fact grids; cards for anything you read.
    ===================================================================== */
 .kick { font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink3); font-weight: 700; }
-h1.sci { font-family: var(--serif); font-style: italic; font-size: 32px; line-height: 1.14; font-weight: 600; letter-spacing: -0.015em; }
+h1.sci { font-family: var(--serif); font-style: italic; font-size: 32px; line-height: 1.14; font-weight: 600; letter-spacing: -0.015em; overflow-wrap: anywhere; }
+.azrow .nm, .tile .nm { overflow-wrap: anywhere; }
 h1.sci i { font-style: italic; }
 h1.sci .auth { font-family: var(--ui); font-style: normal; font-size: 13px; color: var(--ink3); font-weight: 400; letter-spacing: 0; white-space: nowrap; }
 h1.q, h3.q { font-family: var(--serif); font-size: 30px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.15; margin: 0 0 14px; }
@@ -245,7 +248,7 @@ nav.tabs a.on { background: var(--ink); color: var(--bg); }
 .azrow.accrow .fam { display: flex; gap: 7px; align-items: center; flex-wrap: wrap; text-transform: none; letter-spacing: 0; font-weight: 400; font-size: 12px; color: var(--ink2); }
 .azrow .fig { font-family: var(--mono); font-size: 11.5px; color: var(--ink2); text-align: right; white-space: nowrap; display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
 .azrow .fig.due { color: var(--bad); font-weight: 600; }
-.accno { font-family: var(--mono); font-size: 11px; letter-spacing: 0.02em; background: var(--sunk); color: var(--ink2); padding: 2px 7px; border-radius: 5px; font-weight: 500; font-style: normal; }
+.accno { font-family: var(--mono); font-size: 11px; letter-spacing: 0.02em; background: var(--sunk); color: var(--ink2); padding: 2px 7px; border-radius: 5px; font-weight: 500; font-style: normal; white-space: nowrap; }
 .accno.big { font-size: 13px; padding: 3px 10px; }
 .accno.lead { margin-right: 9px; vertical-align: 4px; }
 .fnchip { font-family: var(--mono); font-size: 11px; background: var(--accent-soft); color: var(--accent); padding: 2px 7px; border-radius: 5px; font-weight: 500; }
@@ -275,7 +278,7 @@ table.wx tr:last-child td { border-bottom: 0; }
 
 @media (max-width: 640px) {
   body { font-size: 15px; }
-  .hero { border-radius: 0 0 12px 12px; min-height: 0; }
+  .hero { border-radius: 0 0 12px 12px; min-height: 60px; }
   .hero img { max-height: 150px; }
   .idcard { margin: -30px 15px 0; padding: 14px 16px; gap: 12px; }
   h1.sci { font-size: 25px; }
@@ -299,5 +302,5 @@ table.wx tr:last-child td { border-bottom: 0; }
   .cult .sum { flex-wrap: wrap; row-gap: 2px; }
   .cult .sum .hint { margin-left: 0; text-align: left; flex-basis: 100%; }
   .searchbar { font-size: 16px; }
-  .ownchip { font-size: 0; padding: 0; width: 13px; height: 13px; border-radius: 4px; }
+  .ownchip { font-size: 9px; padding: 2px 5px; }
 }

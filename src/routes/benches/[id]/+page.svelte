@@ -33,15 +33,21 @@
 
   /* ---- edit conditions ---- */
   let editing = $state(false);
-  let f = $state<{ name: string; kind: LocationKind | ''; indoor: '' | 'yes' | 'no'; floorC: string; ppfd: string; lightHours: string; lat: string; lon: string; altM: string; notes: string }>({ name: '', kind: '', indoor: '', floorC: '', ppfd: '', lightHours: '', lat: '', lon: '', altM: '', notes: '' });
+  let f = $state<{ name: string; kind: LocationKind | ''; parent: string | null; indoor: '' | 'yes' | 'no'; floorC: string; ppfd: string; lightHours: string; lat: string; lon: string; altM: string; notes: string }>({ name: '', kind: '', parent: null, indoor: '', floorC: '', ppfd: '', lightHours: '', lat: '', lon: '', altM: '', notes: '' });
+  /** Places this one could sit inside: everything but itself and what is under it. */
+  const homes = $derived.by(() => {
+    const under = new Set(collection.subtree(id));
+    return collection.locations.filter((l) => !under.has(l.id)).map((l) => ({ id: l.id, name: collection.locationName(l.id) }));
+  });
   function startEdit() {
     if (!loc) return;
-    f = { name: loc.name, kind: loc.type ?? '', indoor: loc.indoor == null ? '' : loc.indoor ? 'yes' : 'no', floorC: loc.floorC?.toString() ?? '', ppfd: loc.ppfd?.toString() ?? '', lightHours: loc.lightHours?.toString() ?? '', lat: loc.lat?.toString() ?? '', lon: loc.lon?.toString() ?? '', altM: loc.altM?.toString() ?? '', notes: loc.notes ?? '' };
+    f = { name: loc.name, kind: loc.type ?? '', parent: path.length > 1 ? path[path.length - 2].id : null, indoor: loc.indoor == null ? '' : loc.indoor ? 'yes' : 'no', floorC: loc.floorC?.toString() ?? '', ppfd: loc.ppfd?.toString() ?? '', lightHours: loc.lightHours?.toString() ?? '', lat: loc.lat?.toString() ?? '', lon: loc.lon?.toString() ?? '', altM: loc.altM?.toString() ?? '', notes: loc.notes ?? '' };
     editing = true;
   }
   const num = (s: string) => (s.trim() === '' || Number.isNaN(Number(s)) ? null : Number(s));
   async function save() {
     await collection.put('location', id, { name: f.name.trim() || loc?.name, type: f.kind || null, indoor: f.indoor === '' ? null : f.indoor === 'yes', floorC: num(f.floorC), ppfd: num(f.ppfd), lightHours: num(f.lightHours), lat: num(f.lat), lon: num(f.lon), altM: num(f.altM), notes: f.notes.trim() || null });
+    if ((f.parent ?? null) !== (loc?.parentId ?? null) || collection.needsHome(id)) await collection.moveLocation(id, f.parent ?? null);
     editing = false;
     forecast = null;
   }
@@ -93,9 +99,10 @@
     const floor = cond.floorC;
     if (floor == null) return forecast.risk;
     const nights = forecast.forecast.days.filter((d) => d.tmin < floor);
-    return nights.length ? { level: 'frost', text: `Forecast drops below this place's ${floor} °C floor on ${nights[0].date} (${nights[0].tmin.toFixed(1)} °C outside).` } : { level: 'none', text: `Outside stays above the ${floor} °C floor for ${forecast.forecast.days.length} days.` };
+    return nights.length ? { level: 'frost', text: `Forecast drops below this place's ${floor} °C floor on ${nights[0].date} (${nights[0].tmin.toFixed(1)} °C outside).` } : { level: 'none', text: `Outside stays above the ${floor} °C floor for the ${forecast.forecast.hoursCovered} hours of forecast.` };
   });
 
+  let confirmRemove = $state(false);
   async function remove() {
     await collection.removeLocation(id);
     goto('/benches');
@@ -123,17 +130,25 @@
     </div>
     <div class="acts">
       <button class="btn" onclick={startEdit}>Edit</button>
-      <button class="btn danger" onclick={remove}>Remove place</button>
+      {#if confirmRemove}
+        <span class="small">Remove this place? Its plants keep their records and lose only the place.</span><button class="btn danger" onclick={remove}>Yes, remove</button><button class="btn" onclick={() => (confirmRemove = false)}>Keep</button>
+      {:else}
+        <button class="btn danger" onclick={() => (confirmRemove = true)}>Remove place</button>
+      {/if}
     </div>
   </div>
 
+  {#if collection.needsHome(id)}
+    <p class="small muted">This place needs a home: two devices moved places into each other while offline, so it was set free at the top level. <button type="button" class="linkish" onclick={startEdit}>Move it</button> where it belongs.</p>
+  {/if}
   {#if editing}
     <form class="cult form" onsubmit={(e) => { e.preventDefault(); save(); }}>
       <label><span>Name</span><input id="e-name" type="text" bind:value={f.name} /></label>
       <label><span>Kind</span><select id="e-kind" bind:value={f.kind}><option value="">—</option>{#each LOCATION_KINDS as k}<option value={k.k}>{k.label}</option>{/each}</select></label>
+      <label><span>Inside</span><select id="e-parent" bind:value={f.parent}><option value={null}>Top level</option>{#each homes as h}<option value={h.id}>{h.name}</option>{/each}</select></label>
       <label><span>Indoors?</span><select id="e-indoor" bind:value={f.indoor}><option value="">Inherit</option><option value="yes">Yes</option><option value="no">No</option></select></label>
       <label><span>Temperature floor °C</span><input id="e-floor" type="text" inputmode="decimal" bind:value={f.floorC} placeholder="heater set-point, or what it bottoms out at" /></label>
-      <label><span>Light µmol/m²/s</span><input id="e-ppfd" type="text" inputmode="decimal" bind:value={f.ppfd} /></label>
+      <label><span><span style="text-transform: none">µ</span>mol/m²/s of light</span><input id="e-ppfd" type="text" inputmode="decimal" bind:value={f.ppfd} /></label>
       <label><span>Light hours/day</span><input id="e-hours" type="text" inputmode="decimal" bind:value={f.lightHours} /></label>
       <label><span>Latitude</span><input id="e-lat" type="text" inputmode="decimal" bind:value={f.lat} /></label>
       <label><span>Longitude</span><input id="e-lon" type="text" inputmode="decimal" bind:value={f.lon} /></label>
@@ -200,7 +215,7 @@
           <label class="azrow accrow row"><input type="checkbox" bind:checked={present[a.id]} /><span><span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} /></span></span><span class="fig">{a.locationId !== id ? collection.location(a.locationId!)?.name ?? '' : ''}</span></label>
         {:else}
           <a class="azrow accrow row" href="/plants/{accNo(a)}">
-            <span class="dot statedot {ds == null ? '' : ds > 90 ? 'wake' : 'grow'}"></span>
+            <span class="dot statedot {ds == null ? '' : ds > 90 ? 'wake' : 'grow'}" role="img" aria-label={ds == null ? 'never audited' : ds > 90 ? `not seen for ${ds} days` : `seen ${ds} days ago`} title={ds == null ? 'never audited' : ds > 90 ? `not seen for ${ds} days` : `seen ${ds} days ago`}></span>
             <span><span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} /></span><span class="fam">{a.locationId !== id ? collection.location(a.locationId!)?.name ?? '' : ''}</span></span>
             <span class="fig" class:due={ds != null && ds > 90}>{ds == null ? 'never audited' : ds > 90 ? `not seen for ${ds} days` : `seen ${ds} d ago`}</span>
           </a>

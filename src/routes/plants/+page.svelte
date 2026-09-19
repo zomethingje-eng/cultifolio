@@ -14,14 +14,14 @@
   let show = $state<'growing' | 'all' | 'due'>('growing');
   let thumbs = $state<Map<string, string>>(new Map());
   onMount(async () => {
-    const idx = await speciesIndex();
+    const idx = (await speciesIndex()) ?? [];
     thumbs = new Map(idx.filter((e: IndexEntry) => e.thumb).map((e: IndexEntry) => [e.slug, e.thumb!]));
   });
   const dayMs = 86_400_000;
   const sinceWater = (id: string) => { const d = collection.events(id).find((e) => e.t === 'water')?.d; return d ? Math.floor((Date.now() - Date.parse(d)) / dayMs) : null; };
   const dueN = $derived(collection.accessions.filter((a) => a.status === 'growing' && (sinceWater(a.id) ?? 999) > 21).length);
   const list = $derived(
-    collection.accessions.filter((a) => (show === 'all' || a.status === 'growing') && (show !== 'due' || (sinceWater(a.id) ?? 999) > 21) && (!q || `${a.taxonName} ${accNo(a)} ${a.fieldNumber ?? ''} ${a.locationId ? collection.locationName(a.locationId) : (a.location ?? '')}`.toLowerCase().includes(q.toLowerCase())))
+    collection.accessions.filter((a) => (show === 'all' || a.status === 'growing') && (show !== 'due' || (sinceWater(a.id) ?? 999) > 21) && (!q || `${a.taxonName} ${a.cultivar ?? ''} ${a.parentage ?? ''} ${a.nameAsReceived ?? ''} ${accNo(a)} ${a.fieldNumber ?? ''} ${a.locationId ? collection.locationName(a.locationId) : (a.location ?? '')}`.toLowerCase().includes(q.toLowerCase())))
   );
 </script>
 
@@ -35,7 +35,7 @@
 </PageHead>
 
 <div class="toolrow">
-  <input id="plants-q" class="searchbar" type="search" placeholder="Search name, number, field number, place…" bind:value={q} />
+  <input id="plants-q" class="searchbar" type="search" placeholder="Search name, number, field number, place…" aria-label="Search your plants" bind:value={q} />
   <div class="chiprow" style="margin: 0">
     <button class="chipbtn" class:on={show === 'growing'} onclick={() => (show = 'growing')}>Growing<span class="n">{collection.accessions.filter((a) => a.status === 'growing').length}</span></button>
     <button class="chipbtn" class:on={show === 'due'} onclick={() => (show = 'due')}>Water overdue<span class="n">{dueN}</span></button>
@@ -47,7 +47,7 @@
   <p class="muted">Opening your collection…</p>
 {:else if !collection.accessions.length}
   <div class="emptybox">
-    <h3 class="q" style="font-size: 22px">Nothing here yet</h3>
+    <h2 class="q" style="font-size: 22px">Nothing here yet</h2>
     <p class="muted">Your plants are recorded on this device and nowhere else until you choose to sync. <a href="/plants/new">Add the first plant</a>, or <a href="/backup">restore a backup or import from the v2 Herbarium app</a>.</p>
   </div>
 {:else if !list.length}

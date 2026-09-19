@@ -40,14 +40,14 @@
     <p class="small">Watched places: {#each watched as w, i}{i ? ', ' : ''}<a href="/benches/{w.id}">{w.name}</a>{/each}</p>
   {/if}
   <form class="row" onsubmit={(e) => { e.preventDefault(); if (lat && lon) load(+lat, +lon); }}>
-    <input id="frost-lat" type="text" inputmode="decimal" placeholder="Latitude" bind:value={lat} />
-    <input id="frost-lon" type="text" inputmode="decimal" placeholder="Longitude" bind:value={lon} />
+    <label class="sr" for="frost-lat">Latitude</label><input id="frost-lat" type="text" inputmode="decimal" placeholder="Latitude" bind:value={lat} />
+    <label class="sr" for="frost-lon">Longitude</label><input id="frost-lon" type="text" inputmode="decimal" placeholder="Longitude" bind:value={lon} />
     <button class="btn primary" type="submit" disabled={busy || !lat || !lon}>Check</button>
     <button class="btn" type="button" onclick={locate} disabled={busy}>Use my location</button>
   </form>
   {#if err}<p class="bad">{err}</p>{/if}
   {#if data}
-    <div class="risk card {data.risk.level}"><span class="k">{data.risk.level === 'none' ? 'All clear' : data.risk.level}</span> {data.risk.text}</div>
+    <div class="risk card {data.risk.level}"><span class="k">{data.risk.level === 'none' ? 'No frost in the forecast' : data.risk.level}</span> {data.risk.text}</div>
     <div class="scroll-x">
       <table class="data">
         <thead><tr><th>Night</th><th>Min °C</th><th>Max °C</th><th>Rain mm</th></tr></thead>
@@ -60,7 +60,12 @@
     </div>
     {#if data.alerts.length}
       <ul class="alerts">{#each data.alerts as a}<li><strong>{a.event}</strong>{a.headline ? ` — ${a.headline}` : ''}</li>{/each}</ul>
+    {:else if data.alertsStatus === 'refused'}
+      <p class="small"><b>Alerts not checked.</b> The National Weather Service did not answer; the forecast above stands on its own, and this is not a statement that no alert is in force.</p>
+    {:else if data.alertsStatus === 'none'}
+      <p class="small muted">No frost or freeze alert in force (NOAA/NWS).</p>
     {/if}
+    <p class="faint small">The forecast covers the next {data.forecast.hoursCovered} hours; a night at the end of it is partial.</p>
     <p class="faint small">{data.attribution.join(' · ')}. Fetched {data.forecast.fetched.slice(0, 16).replace('T', ' ')} UTC for {data.lat}, {data.lon}.</p>
   {/if}
 </div>

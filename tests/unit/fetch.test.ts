@@ -37,7 +37,7 @@ describe('the fetch layer', () => {
 
 describe('a host that makes every call wait', () => {
   beforeEach(() => resetPacing());
-  it('is called a spent quota after eight throttled calls in a row, and cooled', async () => {
+  it('is called throttled after eight throttled calls in a row, and cooled', async () => {
     // Each call: 429 first, then 200 on the retry. Never a refusal, so strikes would never trip.
     let calls = 0;
     const f = makeFetcher(async () => (++calls % 2 === 1 ? res(429) : res(200, { ok: 1 })));
@@ -45,7 +45,7 @@ describe('a host that makes every call wait', () => {
     expect(hostCooling('slow.example')).toBe(false);
     const r = await f('https://slow.example/8');
     expect(r.status).toBe('refused');
-    expect('detail' in r && r.detail).toMatch(/quota for the day is spent/);
+    expect('detail' in r && r.detail).toMatch(/throttled 8 calls in a row/);
     expect(hostCooling('slow.example')).toBe(true);
   });
   it('forgets the run when a call is answered first time', async () => {
@@ -54,6 +54,27 @@ describe('a host that makes every call wait', () => {
     const f = makeFetcher(async () => (++calls, calls === 13 || calls % 2 === 0 ? res(200, { ok: 1 }) : res(429)));
     for (let i = 0; i < 13; i++) expect((await f('https://slow.example/' + i)).status).toBe('ok');
     expect(hostCooling('slow.example')).toBe(false);
+  });
+});
+
+describe('Retry-After', () => {
+  beforeEach(() => resetPacing());
+  it('a long Retry-After is honoured by refusing now and cooling the host for that long, not by a shorter wait', async () => {
+    let calls = 0;
+    const f = makeFetcher(async () => (++calls, new Response('{}', { status: 429, headers: { 'retry-after': '600' } })));
+    const r = await f('https://slow.example/x');
+    expect(r.status).toBe('refused');
+    expect('detail' in r && r.detail).toMatch(/10 minutes/);
+    expect(calls).toBe(1);
+    expect(hostCooling('slow.example')).toBe(true);
+  });
+  it('an HTTP-date Retry-After is read', async () => {
+    let calls = 0;
+    const when = new Date(Date.now() + 15 * 60_000).toUTCString();
+    const f = makeFetcher(async () => (++calls, new Response('{}', { status: 503, headers: { 'retry-after': when } })));
+    const r = await f('https://slow.example/y');
+    expect(r.status).toBe('refused');
+    expect('detail' in r && r.detail).toMatch(/1[45] minutes/);
   });
 });
 

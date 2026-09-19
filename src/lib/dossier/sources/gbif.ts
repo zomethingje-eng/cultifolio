@@ -85,12 +85,18 @@ export interface GbifDistribution {
   source?: string;
 }
 
-/** WCVP rows as republished through GBIF (the checklist Kew's POWO runs on). */
-export async function distributions(f: JsonFetcher, key: number): Promise<FetchResult<{ rows: GbifDistribution[]; wcvp: boolean }>> {
-  const r = await f<{ results: GbifDistribution[] }>(`${GBIF}/species/${key}/distributions?limit=200`);
+export interface KewDescription {
+  lifeform?: string;
+  climate?: string;
+}
+
+/** WCVP rows as republished through GBIF (the checklist Kew's POWO runs on), or served from Kew's own files by the bulk path. */
+export async function distributions(f: JsonFetcher, key: number): Promise<FetchResult<{ rows: GbifDistribution[]; wcvp: boolean; kew?: KewDescription; ambiguous?: string }>> {
+  const r = await f<{ results: GbifDistribution[]; kew?: KewDescription; ambiguous?: string }>(`${GBIF}/species/${key}/distributions?limit=200`);
   if (r.status !== 'ok') return r;
+  if (r.data.ambiguous) return { status: 'ok', data: { rows: [], wcvp: false, ambiguous: r.data.ambiguous } };
   const wcvp = r.data.results.filter((d) => /wcvp|world checklist|plants of the world|kew/i.test(d.source ?? ''));
-  if (wcvp.length) return { status: 'ok', data: { rows: wcvp, wcvp: true } };
+  if (wcvp.length) return { status: 'ok', data: { rows: wcvp, wcvp: true, kew: r.data.kew } };
   // No WCVP entry: fall back to whatever national checklists GBIF holds, one row per country and status.
   const seen = new Map<string, GbifDistribution>();
   for (const d of r.data.results) {
@@ -112,6 +118,12 @@ export interface GbifOccurrence {
   datasetName?: string;
   establishmentMeans?: string;
   degreeOfEstablishment?: string;
+  /** Metres; a record vaguer than the climate grid (5 km) is kept on the map but not read for climate. */
+  coordinateUncertaintyInMeters?: number;
+  /** Set on records served from a GBIF occurrence download: its DOI, which the dossier cites. */
+  downloadDoi?: string;
+  /** DWCA downloads: 'StillImage' when the record carries images (their rows are in multimedia.txt). */
+  mediaType?: string;
   media?: Array<{ type?: string; identifier?: string; license?: string; rightsHolder?: string; creator?: string; references?: string }>;
 }
 
@@ -121,7 +133,12 @@ export interface OccPage {
   count: number;
 }
 
-/** Up to `pages` × 300 georeferenced records with licence and dataset on each. */
+/**
+ * Up to `pages` × 300 georeferenced records with licence and dataset on each.
+ * A page that is refused after an earlier one succeeded is a refusal: the
+ * sample is not the one asked for, and a climate read from it would say
+ * nothing about what was not fetched.
+ */
 export async function occurrences(f: JsonFetcher, key: number, pages = 3): Promise<FetchResult<GbifOccurrence[]>> {
   const out: GbifOccurrence[] = [];
   for (let p = 0; p < pages; p++) {
@@ -129,7 +146,8 @@ export async function occurrences(f: JsonFetcher, key: number, pages = 3): Promi
       `${GBIF}/occurrence/search?taxonKey=${key}&hasCoordinate=true&hasGeospatialIssue=false&occurrenceStatus=PRESENT` +
       `&limit=300&offset=${p * 300}`;
     const r = await f<OccPage>(url);
-    if (r.status !== 'ok') return out.length ? { status: 'ok', data: out } : r;
+    if (r.status === 'refused' || r.status === 'error') return { status: r.status, detail: `${r.detail}${out.length ? ` (after ${out.length} records: partial, not used)` : ''}` };
+    if (r.status !== 'ok') break;
     out.push(...r.data.results);
     if (r.data.endOfRecords) break;
   }

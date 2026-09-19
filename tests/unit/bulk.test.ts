@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { WcvpIndex, OccIndex, parseWcvpName, parseWcvpDist, occHeader, parseOccRow, bulkFetcher, idHash } from '$lib/dossier/bulk';
+import { WcvpIndex, OccIndex, MediaIndex, parseMediaRow, parseWcvpName, parseWcvpDist, occHeader, parseOccRow, bulkFetcher, idHash } from '$lib/dossier/bulk';
 import type { JsonFetcher } from '$lib/dossier/fetch';
 
 const NAMES_H = 'plant_name_id|ipni_id|taxon_rank|taxon_status|family|genus_hybrid|genus|species_hybrid|species|infraspecific_rank|infraspecies|parenthetical_author|primary_author|publication_author|place_of_publication|volume_and_page|first_published|nomenclatural_remarks|geographic_area|lifeform_description|climate_description|taxon_name|taxon_authors|accepted_plant_name_id|basionym_plant_name_id|replaced_synonym_author|homotypic_synonym|parent_plant_name_id|powo_id|hybrid_formula|reviewed'.split('|');
@@ -15,13 +15,45 @@ describe('WCVP index', () => {
     expect(w.size).toBe(2);
     expect(w.acceptedIds()).toEqual(new Set(['1']));
     for (const l of ['1|2|AFRICA|27|Southern Africa|NAM|Namibia|0|0|0', '1|2|AFRICA|27|Southern Africa|CPP|Cape Provinces|0|0|0', '1|8|NORTHERN AMERICA|76|Southwestern U.S.A.|CAL|California|1|0|0', '1|2|AFRICA|27|Southern Africa|BOT|Botswana|0|0|1']) w.addDist(parseWcvpDist(DIST_H, l));
-    const rows = w.distributions('Cotyledon pearsonii')!; // the synonym finds the accepted record's range
-    expect(rows.map((r) => r.locationId)).toEqual(['TDWG:NAM', 'TDWG:CPP', 'TDWG:CAL']); // the doubtful one is dropped
-    expect(rows[2].establishmentMeans).toBe('INTRODUCED');
-    expect(rows[0].source).toMatch(/WCVP/);
+    const got = w.distributions('Cotyledon pearsonii'); // the synonym finds the accepted record's range
+    if (!got || got === 'ambiguous') throw new Error('expected rows');
+    expect(got.rows.map((r) => r.locationId)).toEqual(['TDWG:NAM', 'TDWG:CPP', 'TDWG:CAL']); // the doubtful one is dropped
+    expect(got.rows[2].establishmentMeans).toBe('INTRODUCED');
+    expect(got.rows[0].source).toMatch(/WCVP/);
+    expect(got.kew).toEqual({ lifeform: 'succulent shrub', climate: 'desert or dry shrubland' }); // Kew's own words ride along
     expect(w.distributions('Tylecodon wallichii')).toBeNull(); // accepted but not wanted, no rows kept
     expect(w.distributions('Nobody knowsii')).toBeNull();
-    expect(w.accepted('Tylecodon pearsonii')?.lifeform).toBe('succulent shrub');
+    const a = w.accepted('Tylecodon pearsonii');
+    expect(a && a !== 'ambiguous' ? a.lifeform : undefined).toBe('succulent shrub');
+  });
+  it('an accepted name outside the wanted genera (the target of a followed synonym) is still found, and its range kept', () => {
+    const w = new WcvpIndex();
+    const wanted = (n: string) => n.startsWith('Cotyledon ');
+    for (const l of [row('1', 'Accepted', 'Adromischus mckayi', '1'), row('2', 'Synonym', 'Cotyledon mckayi', '1')]) w.addName(parseWcvpName(NAMES_H, l), wanted);
+    expect(w.acceptedIds()).toEqual(new Set(['1'])); // the second pass keeps the accepted target's rows
+    w.addDist(parseWcvpDist(DIST_H, '1|2|AFRICA|27|Southern Africa|CPP|Cape Provinces|0|0|0'));
+    const got = w.distributions('Adromischus mckayi'); // asked by the accepted name the backbone followed to
+    expect(got && got !== 'ambiguous' ? got.rows.length : 0).toBe(1);
+  });
+  it('homonyms: two accepted rows with one spelling resolve by authorship, and are ambiguous without it', () => {
+    const w = new WcvpIndex();
+    const wanted = () => true;
+    const l1 = row('1', 'Accepted', 'Homonymus example', '1').replace('|Schönland|1|', '|L.|1|');
+    const l2 = row('2', 'Accepted', 'Homonymus example', '2').replace('|Schönland|2|', '|Mill.|2|');
+    for (const l of [l1, l2]) w.addName(parseWcvpName(NAMES_H, l), wanted);
+    w.addDist(parseWcvpDist(DIST_H, '1|2|AFRICA|27|Southern Africa|NAM|Namibia|0|0|0'));
+    w.addDist(parseWcvpDist(DIST_H, '2|8|NORTHERN AMERICA|76|Southwestern U.S.A.|CAL|California|0|0|0'));
+    expect(w.distributions('Homonymus example')).toBe('ambiguous');
+    const mill = w.distributions('Homonymus example', 'Mill.');
+    expect(mill && mill !== 'ambiguous' ? mill.rows[0].locationId : null).toBe('TDWG:CAL');
+    expect(w.distributions('Homonymus example', 'Nobody')).toBe('ambiguous');
+  });
+  it('a region where WCVP says the plant is extinct is marked so, never plain native', () => {
+    const w = new WcvpIndex();
+    w.addName(parseWcvpName(NAMES_H, row('1', 'Accepted', 'Gonus lostii', '1')), () => true);
+    w.addDist(parseWcvpDist(DIST_H, '1|2|AFRICA|27|Southern Africa|NAM|Namibia|0|1|0'));
+    const got = w.distributions('Gonus lostii');
+    expect(got && got !== 'ambiguous' ? got.rows[0].establishmentMeans : null).toBe('EXTINCT');
   });
 });
 
@@ -101,9 +133,39 @@ describe('the bulk fetcher', () => {
     await f('https://api.gbif.org/v1/occurrence/search?taxonKey=100&mediaType=StillImage&limit=100');
     // a species the files lack falls through too
     await f('https://api.gbif.org/v1/species/200/distributions?limit=200');
-    expect(f.stats).toEqual({ wcvp: 1, occ: 1, through: 3 }); // species/100, media, species/200/distributions (its name lookup goes to base directly)
+    expect(f.stats).toEqual({ wcvp: 1, occ: 1, media: 0, through: 3 }); // species/100, media, species/200/distributions (its name lookup goes to base directly)
     expect(calls.filter((u) => /\/species\/200$/.test(u))).toHaveLength(1);
     expect(calls.filter((u) => u.includes('/species/100/distributions'))).toHaveLength(0);
+  });
+});
+
+describe('photographs from a DWCA download', () => {
+  const MH = 'gbifID\ttype\tformat\tidentifier\treferences\ttitle\tdescription\tsource\taudience\tcreated\tcreator\tcontributor\tpublisher\tlicense\trightsHolder'.split('\t');
+  const mrow = (id: number, url: string, lic: string, creator = 'A. Grower', type = 'StillImage', format = 'image/jpeg') => [id, type, format, url, `https://www.inaturalist.org/observations/${id}`, '', '', '', '', '', creator, '', '', lic, creator].join('\t');
+  it('keeps images of observation records the occurrence pass marked, open licences only, and serves them in the media search shape', async () => {
+    const occ = new OccIndex();
+    const h = occHeader('gbifID\tdecimalLatitude\tdecimalLongitude\tspeciesKey\tbasisOfRecord\tlicense\tmediaType');
+    occ.add(parseOccRow(h, '10\t-30\t17\t100\tHUMAN_OBSERVATION\tCC_BY_NC_4_0\tStillImage')!);
+    occ.add(parseOccRow(h, '11\t-30.1\t17.1\t100\tPRESERVED_SPECIMEN\tCC_BY_4_0\tStillImage')!); // a herbarium sheet: not a photograph of the plant
+    occ.add(parseOccRow(h, '12\t-30.2\t17.2\t100\tHUMAN_OBSERVATION\tCC_BY_4_0\t')!); // no images
+    occ.seal();
+    expect([...occ.withMedia.keys()]).toEqual([10]);
+    const media = new MediaIndex(occ.withMedia);
+    for (const l of [mrow(10, 'https://inaturalist-open-data.s3.amazonaws.com/photos/1/original.jpg', 'http://creativecommons.org/licenses/by/4.0/'), mrow(10, 'https://inaturalist-open-data.s3.amazonaws.com/photos/2/original.jpg', 'http://creativecommons.org/licenses/by-nc/4.0/'), mrow(11, 'https://x/sheet.jpg', 'http://creativecommons.org/licenses/by/4.0/'), mrow(10, 'https://x/clip.mp4', 'cc0', 'B', 'MovingImage', 'video/mp4')]) media.add(parseMediaRow(MH, l)!);
+    const f = bulkFetcher(async () => ({ status: 'none' }), { occ, media });
+    const r = await f<{ results: Array<{ key: number; media: Array<{ identifier: string; license?: string }> }> }>('https://api.gbif.org/v1/occurrence/search?taxonKey=100&mediaType=StillImage&limit=100');
+    expect(r.status).toBe('ok');
+    if (r.status !== 'ok') return;
+    expect(r.data.results).toHaveLength(1);
+    expect(r.data.results[0].media.map((m) => m.identifier)).toEqual(['https://inaturalist-open-data.s3.amazonaws.com/photos/1/original.jpg', 'https://inaturalist-open-data.s3.amazonaws.com/photos/2/original.jpg']);
+    // the media adapter then keeps the CC BY one and drops the NC one, as it does on the API path
+    const { media: adapter } = await import('$dossier/sources/gbif');
+    const got = await adapter(f, 100);
+    expect(got.status).toBe('ok');
+    if (got.status !== 'ok') return;
+    expect(got.data.map((m) => m.url)).toEqual(['https://inaturalist-open-data.s3.amazonaws.com/photos/1/original.jpg']);
+    expect(got.data[0].creator).toBe('A. Grower');
+    expect(f.stats.media).toBe(2); // once for the raw page, once through the adapter
   });
 });
 

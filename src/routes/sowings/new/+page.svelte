@@ -82,8 +82,9 @@
       taxonName,
       taxonKey,
       cultivar: cultivar ?? p.cultivar ?? null,
-      nameKind: kind,
-      parentage: kind === 'hybrid' ? (parentage?.trim() || null) : null,
+      // The picker parses the name on a debounce; the form parses it again here so a quick Add cannot file a hybrid as a species.
+        nameKind: p.kind !== 'species' ? p.kind : kind,
+      parentage: p.kind === 'hybrid' || kind === 'hybrid' ? (parentage?.trim() || p.parentage || null) : null,
       method,
       parentAcc: m.veg ? parentAcc : null,
       sown,
@@ -162,7 +163,7 @@
   </div>
   <label class="check"><input id="s-covered" type="checkbox" bind:checked={covered} /> Covered (bag, lid, propagator)</label>
 
-  <div class="field"><span>Where</span><LocationPicker bind:value={locationId} id="s-loc" /></div>
+  <div class="field"><span>Where</span><LocationPicker bind:value={locationId} id="s-loc" label="Where" /></div>
   <label class="field"><span>Notes</span><textarea id="s-notes" rows="3" bind:value={notes}></textarea></label>
   </div>
 

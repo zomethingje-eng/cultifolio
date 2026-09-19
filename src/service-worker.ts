@@ -40,6 +40,8 @@ self.addEventListener('activate', (e) => {
 });
 
 const isShell = (path: string) => SHELLS.includes(path) || /^\/(plants|benches|sowings)\/[^/]+$/.test(path);
+/** Only our own server's HTML goes in the cache: a captive portal's 200 must not become the app shell until the next build. */
+const cacheableHtml = (r: Response) => r.ok && r.type === 'basic' && (r.headers.get('content-type') ?? '').startsWith('text/html');
 
 self.addEventListener('fetch', (e) => {
   const { request } = e;
@@ -62,9 +64,10 @@ self.addEventListener('fetch', (e) => {
         if (exact) return exact;
         try {
           const r = await fetch(request);
-          if (r.ok) cache.put(request, r.clone());
+          if (cacheableHtml(r)) cache.put(request, r.clone());
           return r;
         } catch {
+          // The section's shell renders the same page from the vault; asset URLs are absolute (paths.relative is off), so it works from a nested path.
           const section = '/' + url.pathname.split('/')[1];
           return (await cache.match(section)) ?? (await cache.match('/offline')) ?? Response.error();
         }
@@ -73,7 +76,7 @@ self.addEventListener('fetch', (e) => {
       if (url.pathname.startsWith('/species/') || url.pathname.startsWith('/api/dossier/') || url.pathname.startsWith('/s/') || url.pathname.startsWith('/about/') || url.pathname === '/') {
         try {
           const r = await fetch(request);
-          if (r.ok) cache.put(request, r.clone());
+          if (request.mode === 'navigate' ? cacheableHtml(r) : r.ok && r.type === 'basic') cache.put(request, r.clone());
           return r;
         } catch {
           return (await cache.match(request)) ?? (request.mode === 'navigate' ? ((await cache.match('/offline')) ?? Response.error()) : Response.error());

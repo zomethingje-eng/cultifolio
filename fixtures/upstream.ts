@@ -72,6 +72,7 @@ export function welwitschia(): Record<string, unknown> {
       results: [...pts(180, -21.5, 14.6, 1.2, BY, 11), ...pts(30, -16.2, 12.3, 0.6, CC0, 12), ...pts(80, -22.6, 17.1, 0.3, NC, 13), ...pts(10, -33.9, 18.4, 0.1, BY, 14)]
     },
     [`re:${GBIF.replace(/\./g, '\\.')}/occurrence/search\\?taxonKey=${key}&mediaType`]: { count: 0, endOfRecords: true, results: [] },
+    'https://www.wikidata.org/w/api.php?action=query&format=json&list=search': { query: { search: [{ title: 'Q159760' }] } }, // found by GBIF key (P846)
     'https://www.wikidata.org/w/api.php?action=wbsearchentities': { search: [{ id: 'Q159760', label: 'Welwitschia mirabilis' }] },
     'https://www.wikidata.org/w/api.php?action=wbgetentities': {
       entities: { Q159760: { claims: { P5037: [{ mainsnak: { datavalue: { value: 'urn:lsid:ipni.org:names:30001306-2' } } }], P3151: [{ mainsnak: { datavalue: { value: '75434' } } }], P373: [{ mainsnak: { datavalue: { value: 'Welwitschia mirabilis' } } }] }, sitelinks: { enwiki: { title: 'Welwitschia' } } } }
@@ -95,6 +96,7 @@ export function copiapoa(): Record<string, unknown> {
     // 52 open records in habitat, 300 restricted records 400 km south (roadsides, gardens) — the README's clean case.
     [`re:${GBIF.replace(/\./g, '\\.')}/occurrence/search\\?taxonKey=${key}&hasCoordinate`]: { count: 352, endOfRecords: true, results: [...pts(52, -24.9, -70.4, 0.4, BY, 21), ...pts(300, -28.6, -70.8, 0.5, NC, 22)] },
     [`re:${GBIF.replace(/\./g, '\\.')}/occurrence/search\\?taxonKey=${key}&mediaType`]: { count: 0, endOfRecords: true, results: [] },
+    'https://www.wikidata.org/w/api.php?action=query&format=json&list=search': { query: { search: [{ title: 'Q5168360' }] } },
     'https://www.wikidata.org/w/api.php?action=wbsearchentities': { search: [{ id: 'Q5168360', label: 'Copiapoa cinerea' }] },
     'https://www.wikidata.org/w/api.php?action=wbgetentities': { entities: { Q5168360: { claims: { P3151: [{ mainsnak: { datavalue: { value: '135254' } } }] }, sitelinks: { enwiki: { title: 'Copiapoa cinerea' } } } } },
     'https://en.wikipedia.org/api/rest_v1/page/summary/Copiapoa_cinerea': { title: 'Copiapoa cinerea', type: 'standard', extract: 'Copiapoa cinerea is a species of cactus from northern Chile. (Fixture text.)', content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/Copiapoa_cinerea' } } },
@@ -114,6 +116,7 @@ export function refused(): Record<string, unknown> {
     [`${GBIF}/species/${key}/distributions`]: { results: [{ locationId: 'TDWG:NAM', locality: 'Namibia', establishmentMeans: 'NATIVE', source: 'WCVP' }] },
     [`${GBIF}/species/${key}`]: { key, scientificName: 'Refusia testii', canonicalName: 'Refusia testii', rank: 'SPECIES', taxonomicStatus: 'ACCEPTED', family: 'Testaceae', genus: 'Refusia' },
     [`re:${GBIF.replace(/\./g, '\\.')}/occurrence/search`]: { __status: 'refused', status: 'refused', detail: 'api.gbif.org 429' },
+    'https://www.wikidata.org/w/api.php?action=query&format=json&list=search': { query: { search: [] } },
     'https://www.wikidata.org/w/api.php?action=wbsearchentities': { search: [] },
     'https://en.wikipedia.org/api/rest_v1/page/summary/Refusia_testii': null,
     [`${INAT}/taxa?q=Refusia%20testii`]: { results: [] },
