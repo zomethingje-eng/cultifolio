@@ -284,12 +284,16 @@ function writeIndexFromDisk(): void {
   mkdirSync(idxDir, { recursive: true });
   writeFileSync(`${idxDir}/index.json`, JSON.stringify(index, null, 1));
   console.log(`  index: ${index.length} species`);
-  // A dossier under a synonym or doubtful name is a page the backbone would not put its records under. Listed, not deleted.
-  if (notAccepted.length) {
-    notAccepted.sort((a, b) => a.name.localeCompare(b.name));
-    writeFileSync('not-accepted.txt', notAccepted.map((x) => `${x.key}\t${x.name}\t${x.status}\t${x.records} records`).join('\n') + '\n');
-    console.log(`  ${notAccepted.length} dossiers are under a name the backbone holds as a synonym or doubtful → not-accepted.txt (rebuild those names to follow them to the accepted species, then delete the old files and run --index)`);
-  }
+  // A dossier under a synonym is a page the backbone would not put its records under: a rebuild follows it to
+  // the accepted species. A doubtful name has nothing to follow to (the backbone holds it as doubtful, with no
+  // accepted name in its place), so the page stays under it and says so; listed for information, not for rebuilding.
+  const syn = notAccepted.filter((x) => x.status === 'synonym').sort((a, b) => a.name.localeCompare(b.name));
+  const doubtful = notAccepted.filter((x) => x.status !== 'synonym').sort((a, b) => a.name.localeCompare(b.name));
+  if (syn.length) {
+    writeFileSync('not-accepted.txt', syn.map((x) => `${x.key}\t${x.name}\t${x.status}\t${x.records} records`).join('\n') + '\n');
+    console.log(`  ${syn.length} dossiers are under a name the backbone holds as a synonym → not-accepted.txt (rebuild those names to follow them to the accepted species, then --prune-followed and --index)`);
+  } else if (existsSync('not-accepted.txt')) unlinkSync('not-accepted.txt');
+  if (doubtful.length) console.log(`  ${doubtful.length} dossiers are under a name the backbone holds as doubtful, with no accepted name in its place; their pages say so: ${doubtful.map((x) => x.name).join(', ')}`);
 }
 
 async function main() {
