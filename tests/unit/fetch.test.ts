@@ -101,3 +101,25 @@ describe('a host that just finished cooling', () => {
     expect(r.status).toBe('ok');
   });
 });
+
+describe('round five: blocks and past dates', () => {
+  beforeEach(() => resetPacing());
+  it('a 403 strikes and cools the host like a 429', async () => {
+    let calls = 0;
+    const f = makeFetcher(async () => (++calls, res(403)));
+    for (let i = 0; i < 3; i++) await f('https://blocked.example/' + i);
+    expect(hostCooling('blocked.example')).toBe(true);
+    const before = calls;
+    await f('https://blocked.example/again');
+    expect(calls).toBe(before);
+  });
+  it('a Retry-After date in the past does not shorten the backoff', async () => {
+    let calls = 0;
+    const past = new Date(Date.now() - 60_000).toUTCString();
+    const t0 = Date.now();
+    const f = makeFetcher(async () => (++calls, calls === 1 ? new Response('{}', { status: 429, headers: { 'retry-after': past } }) : res(200, { ok: 1 })));
+    const r = await f('https://slow.example/x');
+    expect(r.status).toBe('ok');
+    expect(Date.now() - t0).toBeGreaterThanOrEqual(3900);
+  }, 10_000);
+});

@@ -27,7 +27,8 @@ export const load: PageServerLoad = async ({ platform, fetch, setHeaders }) => {
     const g = groupFor(c.origin);
     groups.set(g, [...(groups.get(g) ?? []), c]);
   }
-  setHeaders({ 'cache-control': 'public, max-age=60, stale-while-revalidate=600' });
+  // Short and never stale: HTML names the build's hashed chunks, and a stale page after a deploy would import chunks that are gone.
+  setHeaders({ 'cache-control': 'public, max-age=60' });
   // A small world map per group with the member units' boxes, drawn once on the server.
   type Row = [string, string, number, number, number, number];
   const boxByName = new Map((tdwg as Row[]).map((r) => [r[1], { s: r[2], w: r[3], n: r[4], e: r[5] }]));

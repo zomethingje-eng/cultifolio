@@ -95,14 +95,18 @@ async function pace(host: string): Promise<void> {
   if (wait > 0) await new Promise((r) => setTimeout(r, wait));
 }
 
-/** Retry-After as seconds or as an HTTP date; undefined when absent or unreadable. */
-function retryAfterMs(res: Response): number | undefined {
+/**
+ * Retry-After as seconds or as an HTTP date; undefined when absent or unreadable. A number of seconds is the host's
+ * explicit instruction, honoured as given (0 means now). A date already in the past says nothing about how long to
+ * wait, only that the moment passed, so it is floored to the backoff rather than read as "at once, five times".
+ */
+function retryAfterMs(res: Response, attempt: number): number | undefined {
   const h = res.headers.get('retry-after');
   if (!h) return undefined;
   const n = Number(h);
   if (Number.isFinite(n) && n >= 0) return n * 1000;
   const t = Date.parse(h);
-  return Number.isFinite(t) ? Math.max(0, t - Date.now()) : undefined;
+  return Number.isFinite(t) ? Math.max(4000 * attempt, t - Date.now()) : undefined;
 }
 
 /** The longest a single retry will wait in place. A host asking for more is honoured by refusing now and saying when to come back. */
@@ -142,7 +146,7 @@ export function makeFetcher(fetchImpl: typeof fetch = fetch): JsonFetcher {
         // Polite retries after the server's own Retry-After, backing off, then give up honestly. A wait longer
         // than a retry can sit through is not shortened: the host is refused now with its own time named.
         const attempt = (opts.attempt ?? 0) + 1;
-        const asked = retryAfterMs(res);
+        const asked = retryAfterMs(res, attempt);
         if (asked !== undefined && asked > MAX_WAIT_MS) {
           coolUntil.set(host, Date.now() + asked);
           return { status: 'refused', detail: `${host} ${res.status}: asked to wait ${Math.round(asked / 60_000)} minutes; not asked again until then` };
@@ -155,7 +159,8 @@ export function makeFetcher(fetchImpl: typeof fetch = fetch): JsonFetcher {
         return makeFetcher(fetchImpl)<T>(url, { ...opts, attempt });
       }
       if (res.status === 429 || res.status === 403 || res.status === 503) {
-        if (res.status === 429) strike(host);
+        // A 403 is a block (a WAF, a key revoked), and a blocked host asked three thousand more times is a ban: it strikes like a 429.
+        if (res.status === 429 || res.status === 403) strike(host);
         return { status: 'refused', detail: `${host} ${res.status}` };
       }
       if (!res.ok) return { status: 'error', detail: `${host} ${res.status}` };

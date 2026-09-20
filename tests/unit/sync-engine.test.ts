@@ -85,6 +85,8 @@ function fakeR2() {
   };
 }
 
+let kv = new Map<string, string>();
+
 /** A fresh collection + engine (module singletons) for one "device", and the real route handlers behind global fetch. */
 async function boot(m: Mem, r2: ReturnType<typeof fakeR2>) {
   mem = m;
@@ -95,7 +97,11 @@ async function boot(m: Mem, r2: ReturnType<typeof fakeR2>) {
     batch: await import('../../src/routes/api/sync/log/[key]/+server'),
     photo: await import('../../src/routes/api/sync/photo/[id]/+server')
   };
-  const platform = { env: { STORE: r2, SYNC_OPEN: '1' } } as unknown as App.Platform;
+  // A KV for the counters and the rate limit: without one the Worker refuses every creation (finding 39a).
+  kv = new Map<string, string>();
+  const kvm = kv;
+  const QUEUE = { get: async (k: string, type?: string) => (type === 'json' ? JSON.parse(kvm.get(k) ?? 'null') : (kvm.get(k) ?? null)), put: async (k: string, v: string) => void kvm.set(k, v) };
+  const platform = { env: { STORE: r2, QUEUE, SYNC_OPEN: '1' } } as unknown as App.Platform;
   const calls: string[] = [];
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(String(input), 'http://x');
@@ -131,6 +137,8 @@ async function fillVault(r2: ReturnType<typeof fakeR2>, bytes = MAX_BYTES - 10) 
   const meta = await metaOf(r2);
   meta.bytes = bytes;
   r2.objs.set(key, { body: new TextEncoder().encode(JSON.stringify(meta)), uploaded: 1 });
+  // The live figure the Worker checks against is the KV counter; the meta is only its snapshot.
+  kv.set(`bytes:${(await deriveKeys(KEY)).id}`, JSON.stringify({ bytes, day: new Date().toISOString().slice(0, 10) }));
 }
 
 /** A device that already holds a key, as the layout boots it: load, then init picks the key up. */

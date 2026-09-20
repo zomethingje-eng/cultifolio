@@ -300,10 +300,20 @@ class Sync {
       await setMeta(META, this.meta);
     } catch (e) {
       this.lastError = e instanceof Error ? e.message : String(e);
+      const wait = (e as { retryAfterMs?: number })?.retryAfterMs;
+      if (wait) this.schedule(wait);
       throw e;
     } finally {
       this.busy = null;
     }
+  }
+
+  /** A 429 from the server: not a refusal of the item, a request to come back later. The run stops and is rescheduled for then. */
+  private limited(r: Response): never {
+    const secs = Math.max(5, Math.min(600, Number(r.headers.get('retry-after')) || 60));
+    const e = new Error(`the server asked this device to wait ${secs} s before syncing again`);
+    (e as Error & { retryAfterMs?: number }).retryAfterMs = secs * 1000;
+    throw e;
   }
 
   private setFull(full: { bytes: number; limit: number } | null): void {
@@ -362,6 +372,7 @@ class Sync {
         return;
       }
       if (r.ok) m.photosPushed.push(id);
+      else if (r.status === 429) this.limited(r);
       else if (r.status >= 400 && r.status < 500 && r.status !== 401 && r.status !== 403) this.note('refused', id, `photo refused: ${r.status}`);
       else throw new Error(`photo push failed: ${r.status}`);
       await setMeta(META, m);
@@ -401,6 +412,7 @@ class Sync {
       this.setFull(full);
       return 0;
     }
+    if (r.status === 429) this.limited(r);
     if ((r.status === 400 || r.status === 409 || r.status === 413) && mayResplit && batch.length > 1) {
       const mid = Math.ceil(batch.length / 2);
       const a = await this.pushBatch(batch.slice(0, mid));
@@ -423,6 +435,7 @@ class Sync {
       // `since` goes with every page so a server that does not know `after` still answers the old way.
       const q = `since=${m.since || ''}` + (after ? `&after=${after.at}:${encodeURIComponent(after.key)}` : '');
       const r = await fetch(`${this.base}/api/sync/log?vault=${this.keys!.id}&${q}`, { headers: this.h() });
+      if (r.status === 429) this.limited(r);
       if (!r.ok) throw new Error(`pull failed: ${r.status}`);
       const { batches, more, next } = (await r.json()) as { batches: Array<{ key: string; at: number }>; more: boolean; next?: { at: number; key: string } };
       const have = new Set(m.have);

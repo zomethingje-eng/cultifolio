@@ -12,7 +12,9 @@
   // R2 holds dossiers (s/v1/<gbifKey>.json), climate cells, and later encrypted photos.
   // Create it once:  npx wrangler r2 bucket create cultifolio
   "r2_buckets": [{ "binding": "STORE", "bucket_name": "cultifolio" }],
-  // KV holds only queues and small counters.
+  // KV holds only small counters: per-vault and per-address bytes, vaults per address per day, the rate limit
+  // (keys listed at the top of src/lib/server/sync.ts). The binding is load-bearing: without it the Worker
+  // refuses every vault creation (it fails closed) and the rate limit counts in memory alone.
   // Create it once:  npx wrangler kv namespace create QUEUE   (then paste the id below)
   "kv_namespaces": [{ "binding": "QUEUE", "id": "PASTE_KV_ID_HERE" }]
 }

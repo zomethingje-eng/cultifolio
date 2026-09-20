@@ -22,15 +22,24 @@ const SHELLS = ['/plants', '/plants/new', '/benches', '/sowings', '/sowings/new'
 const PRECACHE = [...build, ...files.filter((f) => !f.startsWith('/s/')), ...SHELLS];
 
 self.addEventListener('install', (e) => {
+  // Each file on its own: one shell that answers with a redirect or a 500 must not fail the whole install and leave the
+  // app with no offline shell at all. What could not be cached is logged; the next install tries again.
   e.waitUntil(
-    caches
-      .open(CACHE)
-      .then((c) => c.addAll(PRECACHE))
-      .then(() => self.skipWaiting())
+    caches.open(CACHE).then(async (c) => {
+      const failed: string[] = [];
+      await Promise.all(PRECACHE.map((p) => c.add(p).catch(() => failed.push(p))));
+      if (failed.length) console.warn(`service worker: ${failed.length} of ${PRECACHE.length} files not cached at install`, failed.slice(0, 5));
+    })
   );
+  // No skipWaiting: the new worker waits until every page of the old build is gone. Activating under an open page
+  // would delete the old build's cache while that page still lazily imports the old build's chunks, and a chunk the
+  // network no longer has kills client-side navigation until a reload. SvelteKit's version poll reloads open pages
+  // on their next navigation after a deploy, and this worker takes over then.
 });
 
 self.addEventListener('activate', (e) => {
+  // claim() is safe without skipWaiting: on a first install it lets the very first visit work offline, and on an
+  // update the worker only reaches this point once every page of the old build has gone.
   e.waitUntil(
     caches
       .keys()

@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { listBatches, parseAfter, storeCounted, storeOnce, batchMeta, readBody, batchKey, recount, MAX_BYTES, OVERLAP_MS, allowCreation, VaultFull, type VaultMeta } from '$lib/server/sync';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { listBatches, parseAfter, storeCounted, storeOnce, batchMeta, readBody, batchKey, recount, vaultBytes, vaultIdFor, ensureVault, MAX_BYTES, MAX_IP_BYTES_PER_DAY, MAX_LIST_PAGES, META_FLUSH_BYTES, META_FLUSH_MS, OVERLAP_MS, allowCreation, rateLimit, resetRateLimits, resetMetaFlush, resetKvWarning, tooMany, VaultFull, DayQuota, type VaultMeta } from '$lib/server/sync';
+import { deriveKeys, newVaultKey } from '$lib/sync/crypto';
 
 /** Just enough of R2 for the sync store: keys, bytes, upload times we control. */
 function fakeR2(now = { t: 1_000_000 }) {
@@ -29,6 +30,27 @@ function fakeR2(now = { t: 1_000_000 }) {
   return r2;
 }
 const meta = (): VaultMeta => ({ tokenHash: 'h', created: 'c', entitlement: 'open', bytes: 0 });
+
+/** Just enough of KV: strings (and 'json' reads), a put we can make fail, every write counted. */
+function fakeKV() {
+  const m = new Map<string, string>();
+  const kv = {
+    puts: 0,
+    fail: false,
+    async get(k: string, type?: string) {
+      const v = m.get(k) ?? null;
+      return type === 'json' && v != null ? JSON.parse(v) : v;
+    },
+    async put(k: string, v: string) {
+      kv.puts++;
+      if (kv.fail) throw new Error('kv: too many writes');
+      m.set(k, v);
+    },
+    m
+  };
+  return kv;
+}
+const T0 = Date.UTC(2026, 8, 20, 12, 0, 0);
 
 describe('batch listing is by arrival, not by name', () => {
   it('a batch with an older HLC that arrives later is still handed out', async () => {
@@ -132,14 +154,179 @@ describe('storage accounting', () => {
 });
 
 describe('vault creation is bounded per address', () => {
+  beforeEach(() => resetKvWarning());
   it('allows the cap and refuses the next', async () => {
-    const kv = new Map<string, string>();
-    const fake = { get: async (k: string) => kv.get(k) ?? null, put: async (k: string, v: string) => void kv.set(k, v) };
+    const kv = fakeKV();
     let ok = 0;
-    for (let i = 0; i < 25; i++) if (await allowCreation(fake as never, '1.2.3.4')) ok++;
+    for (let i = 0; i < 25; i++) if (await allowCreation(kv as never, '1.2.3.4')) ok++;
     expect(ok).toBe(20);
-    expect(await allowCreation(fake as never, '5.6.7.8')).toBe(true);
-    expect(await allowCreation(undefined, '1.2.3.4')).toBe(true); // no KV bound: no cap
+    expect(await allowCreation(kv as never, '5.6.7.8')).toBe(true);
+  });
+  it('FAILS CLOSED: no KV bound refuses every creation and logs once; a KV that throws refuses too', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(await allowCreation(undefined, '1.2.3.4')).toBe(false);
+    expect(await allowCreation(undefined, '1.2.3.4')).toBe(false);
+    expect(err).toHaveBeenCalledTimes(1);
+    const kv = fakeKV();
+    kv.fail = true;
+    expect(await allowCreation(kv as never, '9.9.9.9')).toBe(false);
+    err.mockRestore();
+  });
+  it('the id must be the one the token derives, exactly as the client derives it', async () => {
+    const keys = await deriveKeys(newVaultKey());
+    expect(await vaultIdFor(keys.token)).toBe(keys.id);
+    const r2 = fakeR2();
+    await expect(ensureVault(r2 as never, keys.id, keys.token, true)).resolves.toMatchObject({ created: true });
+    const other = await deriveKeys(newVaultKey());
+    // An existing vault with a token that is not its own: 403, as ever (the client has words for it).
+    await expect(ensureVault(r2 as never, keys.id, other.token, true)).rejects.toMatchObject({ status: 403 });
+    // A new name with a token that does not derive it: 400, and nothing is written.
+    await expect(ensureVault(r2 as never, other.id, keys.token, true)).rejects.toMatchObject({ status: 400 });
+    expect(r2.objs.has(`vault/${other.id}/meta.json`)).toBe(false);
+    // The right pair again: opened, not remade.
+    await expect(ensureVault(r2 as never, keys.id, keys.token, true)).resolves.toMatchObject({ created: false });
+  });
+});
+
+describe('the live byte counter in KV', () => {
+  beforeEach(() => resetMetaFlush());
+  const q = (kv: ReturnType<typeof fakeKV>, ip = '1.2.3.4', now = T0) => ({ kv: kv as never, ip, now });
+  it('counts each stored object and refuses at the limit with 507; the meta snapshot is not written per object', async () => {
+    const r2 = fakeR2();
+    const kv = fakeKV();
+    const m = meta();
+    await storeCounted(r2 as never, 'v', m, 'vault/v/log/a.bin', new Uint8Array(10), undefined, {}, q(kv));
+    expect(await kv.get('bytes:v', 'json')).toEqual({ bytes: 10, day: '2026-09-20' });
+    const metaWrites = () => [...r2.objs.keys()].filter((k) => k.endsWith('meta.json')).length;
+    // The first object flushes the snapshot (nothing flushed yet this isolate); the next ones inside 30 s and 16 MB do not.
+    expect(metaWrites()).toBe(1);
+    r2.objs.delete('vault/v/meta.json');
+    for (let i = 0; i < 5; i++) await storeCounted(r2 as never, 'v', m, `vault/v/log/b${i}.bin`, new Uint8Array(10), undefined, {}, q(kv, '1.2.3.4', T0 + 1000 * i));
+    expect(metaWrites()).toBe(0);
+    expect(await kv.get('bytes:v', 'json')).toEqual({ bytes: 60, day: '2026-09-20' });
+    expect(m.bytes).toBe(60); // in memory it follows; the snapshot lags
+    // Past 30 s, or across a 16 MB step, it is flushed.
+    await storeCounted(r2 as never, 'v', m, 'vault/v/log/c.bin', new Uint8Array(10), undefined, {}, q(kv, '1.2.3.4', T0 + META_FLUSH_MS));
+    expect(metaWrites()).toBe(1);
+    expect(JSON.parse(new TextDecoder().decode(r2.objs.get('vault/v/meta.json')!.body)).bytes).toBe(70);
+    r2.objs.delete('vault/v/meta.json');
+    kv.m.set('bytes:v', JSON.stringify({ bytes: META_FLUSH_BYTES - 5, day: '2026-09-20' }));
+    await storeCounted(r2 as never, 'v', m, 'vault/v/log/d.bin', new Uint8Array(10), undefined, {}, q(kv, '1.2.3.4', T0 + META_FLUSH_MS + 1));
+    expect(metaWrites()).toBe(1);
+    // At the limit: 507 with the live figure; nothing lands, the counter does not move.
+    kv.m.set('bytes:v', JSON.stringify({ bytes: MAX_BYTES - 1, day: '2026-09-20' }));
+    const p = storeCounted(r2 as never, 'v', m, 'vault/v/log/e.bin', new Uint8Array(2), undefined, {}, q(kv));
+    await expect(p).rejects.toBeInstanceOf(VaultFull);
+    await expect(p).rejects.toMatchObject({ status: 507, bytes: MAX_BYTES - 1, limit: MAX_BYTES });
+    expect(r2.objs.has('vault/v/log/e.bin')).toBe(false);
+    expect(await kv.get('bytes:v', 'json')).toEqual({ bytes: MAX_BYTES - 1, day: '2026-09-20' });
+  });
+  it('a failed write puts the counter back; a KV write that fails does not stop the store (the day\'s listing puts it right)', async () => {
+    const r2 = fakeR2();
+    const kv = fakeKV();
+    const m = meta();
+    const orig = r2.put.bind(r2);
+    r2.put = async (k: string, b: unknown, o?: never) => {
+      if (k.endsWith('/log/y.bin')) throw new Error('r2 down');
+      return orig(k, b, o);
+    };
+    await expect(storeCounted(r2 as never, 'v', m, 'vault/v/log/y.bin', new Uint8Array(10), undefined, {}, q(kv))).rejects.toThrow(/r2 down/);
+    expect(await kv.get('bytes:v', 'json')).toEqual({ bytes: 0, day: '2026-09-20' });
+    kv.fail = true;
+    await storeCounted(r2 as never, 'v', m, 'vault/v/log/z.bin', new Uint8Array(10), undefined, {}, q(kv));
+    expect(r2.objs.has('vault/v/log/z.bin')).toBe(true);
+  });
+  it('the counter is put right from the R2 listing when absent, on another day, and on a vault open', async () => {
+    const r2 = fakeR2();
+    const kv = fakeKV();
+    const m = meta();
+    await r2.put('vault/v/log/a.bin', new Uint8Array(7));
+    await r2.put('vault/v/photo/p1.bin', new Uint8Array(5));
+    expect(await vaultBytes(r2 as never, kv as never, 'v', m, T0)).toBe(12); // absent: listed
+    expect(m.bytes).toBe(12);
+    kv.m.set('bytes:v', JSON.stringify({ bytes: 999, day: '2026-09-20' }));
+    expect(await vaultBytes(r2 as never, kv as never, 'v', m, T0)).toBe(999); // same day: trusted
+    expect(await vaultBytes(r2 as never, kv as never, 'v', m, T0 + 86_400_000)).toBe(12); // next day: listed again
+    kv.m.set('bytes:v', JSON.stringify({ bytes: 999, day: '2026-09-21' }));
+    expect(await vaultBytes(r2 as never, kv as never, 'v', m, T0 + 86_400_000, true)).toBe(12); // vault open: forced
+  });
+  it('an address has a day\'s allowance across its vaults: 429 with Retry-After to midnight UTC, nothing stored', async () => {
+    const r2 = fakeR2();
+    const kv = fakeKV();
+    kv.m.set('ipbytes:1.2.3.4:2026-09-20', String(MAX_IP_BYTES_PER_DAY - 5));
+    await storeCounted(r2 as never, 'v', meta(), 'vault/v/log/a.bin', new Uint8Array(5), undefined, {}, q(kv));
+    expect(kv.m.get('ipbytes:1.2.3.4:2026-09-20')).toBe(String(MAX_IP_BYTES_PER_DAY));
+    const p = storeCounted(r2 as never, 'w', meta(), 'vault/w/log/a.bin', new Uint8Array(1), undefined, {}, q(kv));
+    await expect(p).rejects.toBeInstanceOf(DayQuota);
+    const res = (await p.then(() => null, (e: DayQuota) => e))!.response();
+    expect(res.status).toBe(429);
+    expect(res.headers.get('retry-after')).toBe(String(12 * 3600));
+    expect(res.headers.get('cache-control')).toBe('no-store');
+    expect(await res.json()).toMatchObject({ error: expect.stringMatching(/allowance/), bytes: MAX_IP_BYTES_PER_DAY, limit: MAX_IP_BYTES_PER_DAY });
+    expect(r2.objs.has('vault/w/log/a.bin')).toBe(false);
+    // Another address is unaffected.
+    await storeCounted(r2 as never, 'w', meta(), 'vault/w/log/a.bin', new Uint8Array(1), undefined, {}, q(kv, '5.6.7.8'));
+  });
+  it('a listing walks at most MAX_LIST_PAGES pages: a vault past that is refused with 503, not listed short', async () => {
+    const r2 = fakeR2();
+    const pages: number[] = [];
+    const orig = r2.list.bind(r2);
+    let n = 0;
+    r2.list = async (o: { prefix: string; limit?: number; cursor?: string }) => {
+      pages.push(++n);
+      const r = await orig(o);
+      return { ...r, truncated: true, cursor: 'x' }; // never ends
+    };
+    await expect(listBatches(r2 as never, 'v', null)).rejects.toMatchObject({ status: 503 });
+    expect(pages).toHaveLength(MAX_LIST_PAGES);
+  });
+});
+
+describe('the rate limit', () => {
+  beforeEach(() => {
+    resetRateLimits();
+    resetKvWarning();
+  });
+  it('trips at the limit with Retry-After to the end of the window, and recovers in the next window', async () => {
+    const kv = fakeKV();
+    let ok = 0;
+    for (let i = 0; i < 305; i++) if ((await rateLimit(kv as never, 'names', '1.2.3.4', T0 + i)).ok) ok++;
+    expect(ok).toBe(300);
+    const r = await rateLimit(kv as never, 'names', '1.2.3.4', T0 + 1000);
+    expect(r).toEqual({ ok: false, retryAfter: 599 });
+    expect((await rateLimit(kv as never, 'names', '5.6.7.8', T0 + 1000)).ok).toBe(true);
+    expect((await rateLimit(kv as never, 'sync', '1.2.3.4', T0 + 1000)).ok).toBe(true); // another bucket
+    expect((await rateLimit(kv as never, 'names', '1.2.3.4', T0 + 600_000)).ok).toBe(true); // next window
+    // The count reached KV at the limit, so a fresh isolate refuses at once.
+    resetRateLimits();
+    expect((await rateLimit(kv as never, 'names', '1.2.3.4', T0 + 2000)).ok).toBe(false);
+  });
+  it('folds into KV every few seconds, not per request, and reads what another isolate wrote', async () => {
+    const kv = fakeKV();
+    for (let i = 0; i < 50; i++) await rateLimit(kv as never, 'names', '1.2.3.4', T0 + i);
+    expect(kv.puts).toBe(0);
+    await rateLimit(kv as never, 'names', '1.2.3.4', T0 + 5000);
+    expect(kv.puts).toBe(1);
+    expect(kv.m.get(`rl:names:1.2.3.4:${Math.floor(T0 / 600_000)}`)).toBe('51');
+    kv.m.set(`rl:names:1.2.3.4:${Math.floor(T0 / 600_000)}`, '299');
+    resetRateLimits();
+    expect((await rateLimit(kv as never, 'names', '1.2.3.4', T0 + 6000)).ok).toBe(true);
+    expect((await rateLimit(kv as never, 'names', '1.2.3.4', T0 + 6000)).ok).toBe(false);
+  });
+  it('fails open without KV (counting in memory alone) and on a KV error', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect((await rateLimit(undefined, 'sync', '1.2.3.4', T0)).ok).toBe(true);
+    const kv = fakeKV();
+    kv.fail = true;
+    for (let i = 0; i < 10; i++) expect((await rateLimit(kv as never, 'sync', '1.2.3.4', T0 + i * 5000)).ok).toBe(true);
+    err.mockRestore();
+  });
+  it('tooMany is plain JSON with Retry-After and no-store', async () => {
+    const r = tooMany('too many', 42);
+    expect(r.status).toBe(429);
+    expect(r.headers.get('retry-after')).toBe('42');
+    expect(r.headers.get('cache-control')).toBe('no-store');
+    expect(await r.json()).toEqual({ error: 'too many', retryAfter: 42 });
   });
 });
 

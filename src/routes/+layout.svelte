@@ -16,7 +16,7 @@
   // Sync wakes with the app when a vault key is on this device; it does nothing otherwise.
   onMount(async () => {
     // The app shell offline: registered after load so it never competes with the page's own requests.
-    if ('serviceWorker' in navigator && !import.meta.env.DEV) navigator.serviceWorker.register('/service-worker.js', { type: 'module' }).catch(() => {});
+    if ('serviceWorker' in navigator && !import.meta.env.DEV) navigator.serviceWorker.register('/service-worker.js', { type: 'module' }).catch((e) => console.warn('service worker not registered; offline use is off', e));
     onVaultNotice((t) => (vaultNote = t));
     await collection.load();
     await sync.init();

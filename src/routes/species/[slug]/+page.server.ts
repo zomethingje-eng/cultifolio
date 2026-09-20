@@ -11,7 +11,8 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   const pts = d.occurrences.open.map((p) => [p[0], p[1]] as [number, number]);
   // Short for HTML: a deploy changes the hashed asset names the page references, so a page cached for an hour
   // would point at assets that no longer exist. The assets themselves are immutable and cached for a year.
-  setHeaders({ 'cache-control': 'public, max-age=60, stale-while-revalidate=600' });
+  // Short and never stale: HTML names the build's hashed chunks, and a stale page after a deploy would import chunks that are gone.
+  setHeaders({ 'cache-control': 'public, max-age=60' });
   return {
     d,
     worldSvg: worldSvg(d.distribution.boxes, d.centroid, `Native range of ${d.name.scientific}`),
