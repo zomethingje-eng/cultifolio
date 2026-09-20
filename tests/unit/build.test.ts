@@ -154,3 +154,29 @@ describe('photographs from the download', () => {
     expect(mergeGbifPhotos(prev, [])).toBe(prev);
   });
 });
+
+describe('round five: deduplication keeps the precise record', () => {
+  it('at one coordinate, the same licence class, the lower uncertainty wins; an open record still beats a restricted one', async () => {
+    const { copiapoa } = await import('../../fixtures/upstream');
+    const { buildDossier } = await import('$dossier/build');
+    const { fixtureFetcher } = await import('$dossier/fetch');
+    const table = copiapoa();
+    const occUrl = Object.keys(table).find((k) => k.includes("occurrence/search") && k.includes("hasCoordinate"))!;
+    const page = table[occUrl] as { results: Array<Record<string, unknown>> };
+    const base = page.results[0];
+    page.results = [
+      { ...base, key: 9001, decimalLatitude: -25.3, decimalLongitude: -70.5, coordinateUncertaintyInMeters: 100000, license: 'http://creativecommons.org/licenses/by/4.0/legalcode' },
+      { ...base, key: 9002, decimalLatitude: -25.3, decimalLongitude: -70.5, coordinateUncertaintyInMeters: 1000, license: 'http://creativecommons.org/licenses/by/4.0/legalcode' },
+      { ...base, key: 9003, decimalLatitude: -25.31, decimalLongitude: -70.51, coordinateUncertaintyInMeters: 10, license: 'http://creativecommons.org/licenses/by-nc/4.0/legalcode' },
+      { ...base, key: 9004, decimalLatitude: -25.31, decimalLongitude: -70.51, coordinateUncertaintyInMeters: 50000, license: 'http://creativecommons.org/licenses/by/4.0/legalcode' }
+    ];
+    const r = await buildDossier('Copiapoa cinerea', { fetcher: fixtureFetcher(table), builtBy: 'node', quick: true });
+    if (!r.ok) throw new Error(r.reason);
+    // Two open points survive, one per coordinate: the 1 km one at the first, the open one at the second.
+    const open = r.dossier.occurrences.open.map((p) => `${p[0]},${p[1]}`);
+    expect(open).toEqual(['-25.3,-70.5', '-25.31,-70.51']);
+    expect(r.dossier.occurrences.nOpenInRange).toBe(2);
+    expect(r.dossier.occurrences.nRestrictedInRange).toBe(0); // the restricted 10 m record lost to the open one at its coordinate
+    expect(r.dossier.occurrences.nVague).toBe(1); // 9004 at 50 km stays on the map and off the climate; 9002 at 1 km does not
+  });
+});

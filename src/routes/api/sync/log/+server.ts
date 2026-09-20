@@ -1,24 +1,41 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { store, vaultId, authed, batchKey, listBatches, storeOnce, readBody, MAX_BATCH_BYTES } from '$lib/server/sync';
+import { store, vaultId, authed, batchKey, listBatches, parseAfter, storeOnce, readBody, batchMeta, VaultFull, MAX_BATCH_BYTES } from '$lib/server/sync';
 
-/** Batches that arrived at or after ?since=<ms> (less a minute of overlap), oldest arrival first. */
+/**
+ * Batches that arrived at or after ?since=<ms> (less a minute of overlap), oldest arrival first.
+ * When the page is cut short the reply carries `next: { at, key }`; the next page is asked for with
+ * ?after=<at>:<key> (strictly after that pair, no overlap). A request without `after` behaves as it always has.
+ */
 export const GET: RequestHandler = async ({ request, url, platform }) => {
   const r2 = store(platform);
   const id = vaultId(url.searchParams.get('vault'));
   await authed(r2, id, request);
   const since = url.searchParams.get('since');
-  return json(await listBatches(r2, id, since == null || since === '' ? null : Number(since)), { headers: { 'cache-control': 'no-store' } });
+  const after = parseAfter(url.searchParams.get('after'));
+  return json(await listBatches(r2, id, since == null || since === '' ? null : Number(since), 500, after), { headers: { 'cache-control': 'no-store' } });
 };
 
-/** Push one sealed batch. Header X-Batch: its name (last HLC, content hash). Body: the sealed bytes. 200 only when the server now holds exactly these bytes under that name. */
+/**
+ * Push one sealed batch. Header X-Batch: its name (last HLC, content hash). Body: the sealed bytes.
+ * Optional X-Batch-Plain (SHA-256 hex of the changes as JSON) and X-Device let a re-seal of the same
+ * batch from the same device be answered 200 as already there. 200 only when the server now holds
+ * that batch under that name; 409 when the name holds something else; 507 when the vault is full.
+ */
 export const POST: RequestHandler = async ({ request, url, platform }) => {
   const r2 = store(platform);
   const id = vaultId(url.searchParams.get('vault'));
   const meta = await authed(r2, id, request);
   const key = batchKey(id, request.headers.get('x-batch') ?? '');
+  const extra = batchMeta(request);
   const body = await readBody(request, MAX_BATCH_BYTES, 'a batch');
-  const r = await storeOnce(r2, id, meta, key, body);
+  let r: Awaited<ReturnType<typeof storeOnce>>;
+  try {
+    r = await storeOnce(r2, id, meta, key, body, extra);
+  } catch (e) {
+    if (e instanceof VaultFull) return e.response();
+    throw e;
+  }
   if (r === 'different') return json({ error: 'a different batch already has that name' }, { status: 409 });
   return json({ stored: r === 'stored', reason: r === 'same' ? 'already there' : undefined });
 };

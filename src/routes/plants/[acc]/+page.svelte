@@ -202,6 +202,9 @@
 
 <svelte:head><title>{a ? `${accNo(a)} ${a.taxonName}` : param} — Cultifolio</title></svelte:head>
 
+{#if collection.lastWriteError}
+  <div class="notice err" role="alert" id="write-error">This change was not saved: {collection.lastWriteError}. Free space or <a href="/backup">back up now</a>.</div>
+{/if}
 {#if !collection.ready}
   <p class="muted">Opening your collection…</p>
 {:else if !a}

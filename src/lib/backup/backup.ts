@@ -38,7 +38,7 @@ export interface BuildOpts {
   scheme?: unknown;
   device?: string;
   app?: string;
-  /** Called once per live photo record; return null when the pixels are missing (the record still travels). */
+  /** Called once per live photo record; return null when the pixels are missing (the record still travels, and the manifest names it under `photosMissing`). */
   readPhoto: (id: string) => Promise<PhotoBytes | null>;
   onProgress?: (done: number, total: number) => void;
 }
@@ -50,12 +50,19 @@ export function summarise(changes: Change[]) {
   return { changes: changes.length, accessions: n('accession'), events: n('event'), locations: n('location'), sowings: n('sowing'), taxa: n('taxon'), photos: n('photo'), state };
 }
 
-export async function buildBackup(o: BuildOpts): Promise<Uint8Array> {
+export interface BuiltBackup {
+  bytes: Uint8Array;
+  /** Live photo records whose pixels `readPhoto` could not supply: their records are in the file, their pixels are not, and the manifest says so. */
+  photosMissing: string[];
+}
+
+export async function buildBackup(o: BuildOpts): Promise<BuiltBackup> {
   const s = summarise(o.changes);
   const photos = live<Photo & Record_>(s.state, 'photo');
   const files: Zippable = {};
   let photoBytes = 0;
   let done = 0;
+  const photosMissing: string[] = [];
   for (const p of photos) {
     const b = await o.readPhoto(p.id);
     if (b) {
@@ -63,7 +70,7 @@ export async function buildBackup(o: BuildOpts): Promise<Uint8Array> {
       files[photoPath(p.id)] = [b.full, { level: 0 }];
       files[thumbPath(p.id)] = [b.thumb, { level: 0 }];
       photoBytes += b.full.length + b.thumb.length;
-    }
+    } else photosMissing.push(p.id);
     o.onProgress?.(++done, photos.length);
   }
   const manifest: Manifest = {
@@ -72,13 +79,15 @@ export async function buildBackup(o: BuildOpts): Promise<Uint8Array> {
     app: o.app,
     exported: new Date().toISOString(),
     device: o.device,
-    counts: { changes: s.changes, accessions: s.accessions, events: s.events, locations: s.locations, sowings: s.sowings, taxa: s.taxa, photos: s.photos, photoBytes },
+    counts: { changes: s.changes, accessions: s.accessions, events: s.events, locations: s.locations, sowings: s.sowings, taxa: s.taxa, photos: photos.length - photosMissing.length, photoBytes },
+    ...(photosMissing.length ? { photosMissing } : {}),
     scheme: o.scheme
   };
   files['manifest.json'] = strToU8(JSON.stringify(manifest, null, 1));
   files['changes.json'] = strToU8(JSON.stringify(o.changes));
   files['plants.csv'] = strToU8(plantsCsv(live<Accession & Record_>(s.state, 'accession'), s.state));
-  return new Promise((resolve, reject) => zip(files, { level: 6 }, (err, out) => (err ? reject(err) : resolve(out))));
+  const bytes = await new Promise<Uint8Array>((resolve, reject) => zip(files, { level: 6 }, (err, out) => (err ? reject(err) : resolve(out))));
+  return { bytes, photosMissing };
 }
 
 export interface ReadBackup {
@@ -87,6 +96,14 @@ export interface ReadBackup {
   /** Photo ids whose pixels are in the file. */
   photoIds: string[];
   readPhoto: (id: string) => PhotoBytes | null;
+}
+
+/** Live photo records in a backup whose pixels are not in it, counted from the file itself (the manifest's list is what the exporting device said; this is what the file holds). */
+export function photosWithoutPixels(file: Pick<ReadBackup, 'changes' | 'photoIds'>): string[] {
+  const have = new Set(file.photoIds);
+  return live<Photo & Record_>(materialise(file.changes).state, 'photo')
+    .map((p) => p.id)
+    .filter((id) => !have.has(id));
 }
 
 /** Parse a backup from bytes: a zip, or the older JSON. Throws a readable error for anything else. */

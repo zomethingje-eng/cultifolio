@@ -130,6 +130,8 @@
     const s = Math.floor((Date.now() - Date.parse(iso)) / 1000);
     return s < 60 ? 'just now' : s < 3600 ? `${Math.floor(s / 60)} min ago` : s < 86400 ? `${Math.floor(s / 3600)} h ago` : `${Math.floor(s / 86400)} d ago`;
   };
+  const mb = (n: number) => (n >= 100 * 1048576 ? Math.round(n / 1048576) : Math.round((n / 1048576) * 10) / 10);
+  const when = (ms: number) => new Date(ms).toLocaleString();
 </script>
 
 <svelte:head><title>Sync — Cultifolio</title></svelte:head>
@@ -141,13 +143,22 @@
 {#if sync.configured}
   <div class="secrule"><h2>This device</h2><div class="line"></div><span class="n">vault {sync.vaultId.slice(0, 6)}…</span></div>
   <div class="cards">
-    <div class="card"><div class="lab">Status</div><div class="val" style="font-family: var(--ui); font-size: 17px; font-weight: 700">{sync.busy ?? (sync.lastError ? 'Not synced' : 'Synced')}</div><div class="sub">{sync.busy ? '' : sync.lastError ? sync.lastError : sync.lastSync ? `last ${ago(sync.lastSync)}` : 'not yet'}</div></div>
+    <div class="card"><div class="lab">Status</div><div class="val" style="font-family: var(--ui); font-size: 17px; font-weight: 700">{sync.busy ?? (sync.lastError ? 'Not synced' : sync.vaultFull ? 'Vault full' : 'Synced')}</div><div class="sub">{sync.busy ? '' : sync.lastError ? sync.lastError : sync.lastSync ? `last ${ago(sync.lastSync)}` : 'not yet'}</div></div>
     <div class="card"><div class="lab">Waiting to send</div><div class="val">{sync.pending}</div><div class="sub">{sync.pending === 1 ? 'change' : 'changes'} made here and not yet up</div></div>
     {#if sync.quarantined.length || sync.refused.length}
       <div class="card"><div class="lab">Set aside</div><div class="val">{sync.quarantined.length + sync.refused.length}</div><div class="sub">{#if sync.quarantined.length}{sync.quarantined.length} {sync.quarantined.length === 1 ? 'batch' : 'batches'} on the server could not be read here{/if}{#if sync.quarantined.length && sync.refused.length}; {/if}{#if sync.refused.length}the server refused {sync.refused.length} {sync.refused.length === 1 ? 'item' : 'items'} from this device{/if}. Syncing carries on around them.</div></div>
     {/if}
     <div class="card"><div class="lab">Encryption</div><div class="val" style="font-family: var(--ui); font-size: 17px; font-weight: 700">AES-256-GCM</div><div class="sub">key never leaves your devices</div></div>
   </div>
+  {#if sync.vaultFull}
+    <p class="notice bad" id="vault-full">Your vault is full ({mb(sync.vaultFull.bytes)} of {mb(sync.vaultFull.limit)} MB). Delete photographs or export and start a new vault. Changes made here are kept on this device and sent once there is room; receiving carries on.</p>
+  {/if}
+  {#if sync.clockWarning}
+    <p class="notice warn" id="clock-warning">{sync.clockWarning}</p>
+  {/if}
+  {#if sync.held}
+    <p class="notice" id="held">{sync.held} {sync.held === 1 ? 'change' : 'changes'} from a device whose clock was ahead {sync.held === 1 ? 'is' : 'are'} held until {sync.heldUntil ? when(sync.heldUntil) : 'this device catches up'}. {sync.held === 1 ? 'It is' : 'They are'} stored here and will show then.</p>
+  {/if}
   <div class="quickbar">
     <button id="sync-now" class="btn pri" onclick={() => sync.run().catch(() => {})} disabled={!!sync.busy}>Sync now</button>
     <button id="sync-show-key" class="btn" onclick={() => (showKey = !showKey)}>{showKey ? 'Hide the key' : 'Add another device'}</button>
@@ -172,7 +183,7 @@
   <div class="secrule"><h2>How it works</h2><div class="line"></div></div>
   <div class="cult"><div class="body prose">
     <p>Every change you make (a watering, a note, a photograph) is sealed on this device with a key derived from your vault key, then sent as a batch. Other devices with the same key pull the batches and merge them by the same rule a backup uses: for each field, the latest change wins, wherever it was made. Nothing on the server is ever rewritten or deleted, so a sync interrupted halfway simply resumes.</p>
-    <p>The server sees a vault id, a token that proves you hold the key, and ciphertext. It cannot read a plant name, and it cannot recover a lost key. Your local copy and your backups are unaffected by anything that happens to the vault.</p>
+    <p>What the server can see: a vault id, a token that proves you hold the key, and sealed blobs. From their names and sizes it can tell how many devices share the vault, when each of them syncs, roughly how many changes were made and when, and how many photographs there are and how large each is. It cannot read a plant's name, a note, a place or a date, and it cannot recover a lost key. Your local copy and your backups are unaffected by anything that happens to the vault.</p>
   </div></div>
 
   <div class="dangerrow">
@@ -255,6 +266,9 @@
   .check { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; }
   .scan { width: 100%; max-height: 60vh; border-radius: 10px; background: #000; }
   .bad { color: var(--bad); font-size: 13.5px; margin: 8px 0 0; }
+  .notice { margin: 12px 0 0; padding: 10px 14px; border: 1px solid var(--rule); border-radius: 9px; font-family: var(--ui); font-size: 13.5px; line-height: 1.5; color: var(--ink2); }
+  .notice.bad { border-color: var(--bad); color: var(--bad); }
+  .notice.warn { border-color: var(--rule2); color: var(--ink); }
   .small { font-size: 12.5px; line-height: 1.5; }
   .dangerrow { margin: 40px 0 10px; padding: 15px 17px; border: 1px dashed var(--rule2); border-radius: var(--r); display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; font-size: 13.5px; }
   @media (max-width: 640px) { .pairrow { grid-template-columns: 1fr; } .qr { margin: 0 auto; } }

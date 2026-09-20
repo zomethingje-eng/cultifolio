@@ -1,16 +1,17 @@
 /**
  * Round-five probes of sync end to end: the real collection store, engine and
  * route handlers behind a fake fetch and a fake R2 (the harness is the one in
- * tests/unit/sync-engine.test.ts). A probe whose assertion is marked FINDING
- * demonstrates a defect by passing. Run with
+ * tests/unit/sync-engine.test.ts). A probe marked FINDING demonstrated a defect
+ * by passing; those marked FIXED now assert the repaired behaviour. Run with
  *   QA_PROBES=1 npx vitest run tests/qa/round5-sync.probe.test.ts
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { Change } from '$core/log';
-import { deriveKeys, newVaultKey, tokenHash } from '$lib/sync/crypto';
+import { hlcEncode, MAX_AHEAD_MS } from '$core/hlc';
+import { deriveKeys, newVaultKey, tokenHash, sha256hex } from '$lib/sync/crypto';
 import { MAX_BYTES } from '$lib/server/sync';
 
-type Mem = { device: string; changes: Map<string, Change>; outbox: Set<string>; meta: Map<string, unknown>; photos: Map<string, { id: string; blob: Blob; thumb: Blob }>; failAppend?: (cs: Change[], fromServer: boolean) => boolean };
+type Mem = { device: string; changes: Map<string, Change>; outbox: Set<string>; meta: Map<string, unknown>; photos: Map<string, { id: string; blob: Blob; thumb: Blob }>; failAppend?: (cs: Change[], fromServer: boolean) => boolean; failPutPhoto?: (id: string) => boolean };
 const newMem = (device: string): Mem => ({ device, changes: new Map(), outbox: new Set(), meta: new Map(), photos: new Map() });
 let mem: Mem = newMem('dev0');
 
@@ -35,7 +36,10 @@ vi.mock('$lib/db/vault', () => ({
   setMeta: async (k: string, v: unknown) => void mem.meta.set(k, v),
   deviceId: async () => mem.device,
   requestPersistence: async () => true,
-  putPhotoBlobs: async (p: { id: string; blob: Blob; thumb: Blob }) => void mem.photos.set(p.id, p),
+  putPhotoBlobs: async (p: { id: string; blob: Blob; thumb: Blob }) => {
+    if (mem.failPutPhoto?.(p.id)) throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+    mem.photos.set(p.id, p);
+  },
   getPhotoBlobs: async (id: string) => mem.photos.get(id),
   deletePhotoBlobs: async (id: string) => void mem.photos.delete(id),
   photoBlobIds: async () => [...mem.photos.keys()],
@@ -47,17 +51,17 @@ vi.mock('$lib/db/vault', () => ({
 }));
 
 function fakeR2() {
-  const objs = new Map<string, { body: Uint8Array; uploaded: number; sha?: string }>();
+  const objs = new Map<string, { body: Uint8Array; uploaded: number; sha?: string; md?: Record<string, string> }>();
   let clock = 1_000_000;
   return {
     objs,
     async put(key: string, body: unknown, opts?: { customMetadata?: Record<string, string> }) {
       const bytes = body instanceof Uint8Array ? body : new TextEncoder().encode(String(body));
-      objs.set(key, { body: bytes, uploaded: (clock += 1000), sha: opts?.customMetadata?.sha });
+      objs.set(key, { body: bytes, uploaded: (clock += 1000), sha: opts?.customMetadata?.sha, md: opts?.customMetadata });
     },
     async head(key: string) {
       const o = objs.get(key);
-      return o ? { customMetadata: o.sha ? { sha: o.sha } : {} } : null;
+      return o ? { customMetadata: o.md ?? (o.sha ? { sha: o.sha } : {}) } : null;
     },
     async get(key: string) {
       const o = objs.get(key);
@@ -118,8 +122,20 @@ const logKeys = (r2: ReturnType<typeof fakeR2>) => [...r2.objs.keys()].filter((k
 
 afterEach(() => vi.useRealTimers());
 
-describe('quarantine (engine.svelte.ts:402-411): "a batch that cannot be opened or applied is quarantined by name"', () => {
-  it('FINDING: a good batch whose IndexedDB write fails (QuotaExceededError) is quarantined for ever; after a reload the changes are gone and the batch is never fetched again', async () => {
+/**
+ * Whether the collection's own fold passes the hold to apply() (the call-site change in
+ * collection.svelte.ts that goes with the engine's held changes); the assertions that need it are gated.
+ */
+const collectionHolds = await (async () => {
+  const m = newMem('zzzzzzzzzzzz');
+  const t = hlcEncode({ wall: Date.now() + 86_400_000, count: 0, device: 'yyyyyyyyyyyy' });
+  m.changes.set(t, { t, kind: 'accession', id: 'probe', field: 'taxonName', value: 'x' });
+  const X = await boot(m, fakeR2());
+  return X.collection.accession('probe') === undefined;
+})();
+
+describe('quarantine: "a batch that cannot be opened or validated is quarantined by name"; a batch that cannot be stored is not', () => {
+  it('FIXED: a good batch whose IndexedDB write fails (QuotaExceededError) ends the run with an error, is not quarantined, is not in `have`, and is fetched again next run', async () => {
     const r2 = fakeR2();
     const B = await boot(newMem('bbbbbbbbbbbb'), r2);
     const plant = await B.collection.addAccession({ taxonName: 'Copiapoa cinerea', acc: 'B-1' });
@@ -129,26 +145,28 @@ describe('quarantine (engine.svelte.ts:402-411): "a batch that cannot be opened 
     let failed = 0;
     memD.failAppend = (_cs, fromServer) => fromServer && failed++ === 0;
     const D = await boot(memD, r2);
-    await D.sync.setup(KEY, 'join');
-    expect(D.sync.lastError).toBeNull(); // the sync "succeeded"
-    expect(D.sync.quarantined.map((q) => q.error)).toEqual(['The quota has been exceeded.']); // FINDING: a storage error, filed as a bad batch
-    expect(D.collection.accession(plant.id)).toBeDefined(); // in memory, this session...
-    expect(memD.changes.size).toBe(0); // ...but not in the vault
-    // Reload with the storage problem gone: the batch is in `have`, so it is skipped for good.
+    await expect(D.sync.setup(KEY, 'join')).rejects.toThrow(/quota/i);
+    expect(D.sync.lastError).toMatch(/quota/i); // the sync did not "succeed"
+    expect(D.sync.quarantined).toEqual([]); // storage is not the batch's fault
+    expect(D.collection.accession(plant.id)).toBeUndefined(); // nothing shown that was not stored
+    expect(memD.changes.size).toBe(0);
+    expect((memD.meta.get('sync') as { have: string[] }).have).toEqual([]);
+    // Reload with the storage problem gone: the batch is fetched again and the plant arrives.
     const D2 = await boot(memD, r2);
     await D2.sync.run();
-    expect(D2.collection.accession(plant.id)).toBeUndefined(); // FINDING: the plant never arrives
-    expect(D2.calls.filter((c) => c.startsWith('GET /api/sync/log/'))).toHaveLength(0);
+    expect(D2.sync.lastError).toBeNull();
+    expect(D2.collection.accession(plant.id)).toBeDefined();
+    expect(D2.calls.filter((c) => c.startsWith('GET /api/sync/log/'))).toHaveLength(1);
+    expect(D2.sync.quarantined).toEqual([]);
   });
 });
 
-describe('the 4xx bisect (engine.svelte.ts:375-383) against a full vault', () => {
-  it('FINDING: a 413 for "over its storage allowance" is bisected down to every single change, one request each, on every run', async () => {
+describe('a full vault (507) against the 4xx bisect', () => {
+  it('FIXED: a full vault is one request, no halving, a distinct state the page can show, and the pull still runs', async () => {
     const r2 = fakeR2();
     const memB = newMem('bbbbbbbbbbbb');
     const B = await boot(memB, r2);
     for (let i = 0; i < 8; i++) await B.collection.addEvent({ acc: 'r1', d: '2026-01-0' + (i + 1), t: 'water' });
-    const n = memB.changes.size;
     await B.sync.setup(KEY, 'create');
     const keys = await deriveKeys(KEY);
     // The vault fills up (say from photos on another device).
@@ -159,20 +177,29 @@ describe('the 4xx bisect (engine.svelte.ts:375-383) against a full vault', () =>
     await B.collection.addEvent({ acc: 'r1', d: '2026-02-01', t: 'feed' });
     const before = B.calls.length;
     await B.sync.run();
-    const posts = B.calls.slice(before).filter((c) => c === 'POST /api/sync/log').length;
-    expect(posts).toBeGreaterThanOrEqual(2 * 3 - 1); // three changes → the batch, two halves, then singles: 5 or more
-    expect(B.sync.refused.length).toBe(3); // one "refused" entry per change, each saying "(413)" with no hint that the vault is full
-    expect(B.sync.refused[0].error).toMatch(/413/);
-    // And again next run, for as long as the vault is full: nothing remembers.
+    const calls = B.calls.slice(before);
+    expect(calls.filter((c) => c === 'POST /api/sync/log')).toHaveLength(1);
+    expect(calls.filter((c) => c === 'GET /api/sync/log').length).toBeGreaterThan(0);
+    expect(B.sync.refused).toEqual([]);
+    expect(B.sync.lastError).toBeNull();
+    expect(B.sync.vaultFull).toEqual({ bytes: MAX_BYTES - 10, limit: MAX_BYTES });
+    expect(memB.outbox.size).toBeGreaterThan(0); // kept, for when there is room
+    // Next run: one request again, not a storm.
     const again = B.calls.length;
     await B.sync.run();
-    expect(B.calls.slice(again).filter((c) => c === 'POST /api/sync/log').length).toBe(posts);
-    expect(n).toBeGreaterThan(0);
+    expect(B.calls.slice(again).filter((c) => c === 'POST /api/sync/log')).toHaveLength(1);
+    // The server answers 507 with the figures, and 413 is still what one oversize body gets.
+    const h = { authorization: `Bearer ${keys.token}`, 'x-batch': '1700000000000-0000-dev' };
+    const full = await fetch(`/api/sync/log?vault=${keys.id}`, { method: 'POST', headers: h, body: new Uint8Array(20) as BodyInit });
+    expect(full.status).toBe(507);
+    expect(await full.json()).toEqual({ error: 'vault full', bytes: MAX_BYTES - 10, limit: MAX_BYTES });
+    const big = await fetch(`/api/sync/log?vault=${keys.id}`, { method: 'POST', headers: { ...h, 'content-length': String(17 * 1024 * 1024) }, body: new Uint8Array(3) as BodyInit });
+    expect(big.status).toBe(413);
   });
 });
 
-describe('formats page: "the same batch pushed twice lands on the same key (the server compares the bytes and says so)"', () => {
-  it('FINDING: a re-push after a lost reply is a fresh seal (random IV) under a fresh name: the vault holds the batch twice and both count against the allowance', async () => {
+describe('formats page: "the same batch pushed twice lands on the same key"', () => {
+  it('FIXED: a re-push after a lost reply is a fresh seal under the SAME name (a hash of the changes as JSON); the server keeps the first copy and counts it once', async () => {
     const r2 = fakeR2();
     const net: Net = { calls: [] };
     const memB = newMem('bbbbbbbbbbbb');
@@ -182,21 +209,25 @@ describe('formats page: "the same batch pushed twice lands on the same key (the 
     await expect(B.sync.setup(KEY, 'create')).rejects.toThrow(/Failed to fetch/);
     expect(logKeys(r2)).toHaveLength(1); // the server stored it
     expect(memB.outbox.size).toBeGreaterThan(0); // the client does not know
+    const first = r2.objs.get(logKeys(r2)[0])!.body;
     net.dropNext = undefined;
     await B.sync.run();
-    expect(logKeys(r2)).toHaveLength(2); // FINDING: same changes, second object
-    const [a, b] = logKeys(r2).map((k) => k.split('/log/')[1].slice(0, -4));
-    expect(a.slice(0, -13)).toBe(b.slice(0, -13)); // same last HLC...
-    expect(a).not.toBe(b); // ...different hash, so the byte-compare never fires for a client's own retry
+    expect(logKeys(r2)).toHaveLength(1); // same changes, same name, one object
+    expect(r2.objs.get(logKeys(r2)[0])!.body).toBe(first);
+    expect(memB.outbox.size).toBe(0);
     expect(net.calls.filter((c) => c === 'POST /api/sync/log')).toHaveLength(2);
     const keys = await deriveKeys(KEY);
     const meta = JSON.parse(new TextDecoder().decode(r2.objs.get(`vault/${keys.id}/meta.json`)!.body));
-    expect(meta.bytes).toBe(r2.objs.get(logKeys(r2)[0])!.body.length + r2.objs.get(logKeys(r2)[1])!.body.length);
+    expect(meta.bytes).toBe(first.length);
+    // The name is the last HLC and the first twelve hex of SHA-256 of the changes as JSON, as the page says.
+    const changes = [...memB.changes.keys()].sort().map((t) => memB.changes.get(t));
+    const plain = await sha256hex(new TextEncoder().encode(JSON.stringify(changes)));
+    expect(logKeys(r2)[0].split('/log/')[1].slice(0, -4)).toBe(`${changes[changes.length - 1]!.t}-${plain.slice(0, 12)}`);
   });
 });
 
 describe('two devices, one with a fast clock (hlc.ts MAX_AHEAD_MS; formats page: "one phone set to the wrong year cannot become every device\'s clock")', () => {
-  it('FINDING: the fast device does not become the clock, but its edits win for as long as it is ahead; the other device\'s edits to the same field are stored, pushed, and shown nowhere', async () => {
+  it('FIXED: the fast device\'s edits are stored but held out of the fold on the other device until its clock reaches them; the slow device\'s edit shows; both are told', async () => {
     const r2 = fakeR2();
     const memA = newMem('aaaaaaaaaaaa');
     const memB = newMem('bbbbbbbbbbbb');
@@ -205,24 +236,37 @@ describe('two devices, one with a fast clock (hlc.ts MAX_AHEAD_MS; formats page:
     const plant = await A.collection.addAccession({ taxonName: 'Copiapoa cinerea', acc: 'A-1', notes: 'bought at the show' });
     await A.sync.setup(KEY, 'create');
     // B's phone is a day ahead. It joins and edits the notes.
+    const real = Date.now();
     vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(Date.now() + 86_400_000);
+    vi.setSystemTime(real + 86_400_000);
     let B = await boot(memB, r2);
     await B.sync.setup(KEY, 'join');
     await B.collection.put('accession', plant.id, { notes: 'phone says: repot' });
     await B.sync.run();
-    vi.useRealTimers();
-    // A pulls, sees B's note (fine), then corrects it. A's clock is not dragged forward: the guard holds.
+    vi.setSystemTime(real);
+    // A pulls: B's note is stored here, held, and said so; A's own edit shows on A, is pushed, and stays after a reload.
     A = await boot(memA, r2);
     await A.sync.run();
-    expect(A.collection.accession(plant.id)?.notes).toBe('phone says: repot');
+    expect(A.collection.accession(plant.id)?.notes).toBe('bought at the show');
+    expect(A.sync.held).toBe(1);
+    expect(A.sync.heldUntil).toBeGreaterThanOrEqual(real + 86_400_000 - MAX_AHEAD_MS); // the date the page prints: when A's clock reaches the stamp
+    expect(A.sync.heldUntil).toBeLessThan(real + 86_400_000 - MAX_AHEAD_MS + 60_000);
     await A.collection.put('accession', plant.id, { notes: 'no: leave it until spring' });
-    expect(A.collection.accession(plant.id)?.notes).toBe('phone says: repot'); // FINDING: A's own edit is invisible on A
+    expect(A.collection.accession(plant.id)?.notes).toBe('no: leave it until spring');
     await A.sync.run();
-    expect(memA.outbox.size).toBe(0); // it was pushed
+    expect(memA.outbox.size).toBe(0);
+    A = await boot(memA, r2);
+    if (collectionHolds) expect(A.collection.accession(plant.id)?.notes).toBe('no: leave it until spring');
+    // B, its clock put right, sees A's later edit? No: B's own stamp is greater, and its own changes are never held on itself. It is warned.
     B = await boot(memB, r2);
     await B.sync.run();
-    expect(B.collection.accession(plant.id)?.notes).toBe('phone says: repot'); // FINDING: and invisible on B; both agree, both wrong, no one is told
+    expect(B.collection.accession(plant.id)?.notes).toBe('phone says: repot');
+    expect(B.sync.clockWarning).toMatch(/jumped back/);
+    // A day later A's clock reaches the stamp, the held change is folded in, and both devices agree on the greater HLC.
+    vi.setSystemTime(real + 86_400_000 + 1);
+    await A.sync.run();
+    expect(A.sync.held).toBe(0);
+    expect(A.collection.accession(plant.id)?.notes).toBe('phone says: repot');
   });
 });
 

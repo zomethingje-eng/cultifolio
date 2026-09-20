@@ -10,7 +10,10 @@
  * The change log is the truth; a backup restored on any device merges by the
  * same rule sync uses (per field, latest HLC wins), so restoring an old backup
  * over a newer collection loses nothing, and restoring the same file twice
- * changes nothing. Photos are matched by id and only ever added.
+ * changes nothing. Photos are matched by id and only ever added. A photo
+ * record whose pixels the exporting device did not hold travels without them,
+ * and the manifest names it, so the count of photographs in the file is the
+ * count of photographs in the file.
  */
 import * as v from 'valibot';
 
@@ -31,9 +34,12 @@ export const Manifest = v.object({
     locations: v.number(),
     sowings: v.number(),
     taxa: v.number(),
+    /** Photographs whose pixels are in the file (not photo records: a record whose pixels this device did not hold is in `photosMissing`). */
     photos: v.number(),
     photoBytes: v.number()
   }),
+  /** Photo records whose pixels were not on the exporting device; their records are in changes.json, their pixels are nowhere in the file. */
+  photosMissing: v.optional(v.array(v.string())),
   scheme: v.optional(v.unknown())
 });
 export type Manifest = v.InferOutput<typeof Manifest>;

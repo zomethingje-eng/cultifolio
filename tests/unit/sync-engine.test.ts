@@ -4,20 +4,28 @@
  * together through a fake fetch and a fake R2, so the outbox → server → pull
  * path under test is the real one.
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { Change } from '$core/log';
-import { hlcEncode } from '$core/hlc';
+import { hlcEncode, MAX_AHEAD_MS } from '$core/hlc';
 import { deriveKeys, newVaultKey, sealJson, sha256hex } from '$lib/sync/crypto';
+import { MAX_BYTES } from '$lib/server/sync';
 
 /* ------------------------------------------------------------------ fakes */
 
-type Mem = { device: string; changes: Map<string, Change>; outbox: Set<string>; meta: Map<string, unknown>; photos: Map<string, { id: string; blob: Blob; thumb: Blob }> };
+/**
+ * The vault fake has a failure path: `failAppend` and `failPutPhoto`, when set,
+ * decide per write whether IndexedDB refuses it (a full phone), and a refused
+ * write stores nothing, as the real one does.
+ */
+const quota = () => new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+type Mem = { device: string; changes: Map<string, Change>; outbox: Set<string>; meta: Map<string, unknown>; photos: Map<string, { id: string; blob: Blob; thumb: Blob }>; failAppend?: (cs: Change[], fromServer: boolean) => boolean; failPutPhoto?: (id: string) => boolean };
 const newMem = (device: string): Mem => ({ device, changes: new Map(), outbox: new Set(), meta: new Map(), photos: new Map() });
 let mem: Mem = newMem('dev0');
 
 vi.mock('$lib/db/vault', () => ({
   allChanges: async () => [...mem.changes.values()],
   appendChanges: async (cs: Change[], fromServer = false) => {
+    if (mem.failAppend?.(cs, fromServer)) throw quota();
     for (const c of cs) {
       mem.changes.set(c.t, c);
       if (!fromServer) mem.outbox.add(c.t);
@@ -35,7 +43,10 @@ vi.mock('$lib/db/vault', () => ({
   setMeta: async (k: string, v: unknown) => void mem.meta.set(k, v),
   deviceId: async () => mem.device,
   requestPersistence: async () => true,
-  putPhotoBlobs: async (p: { id: string; blob: Blob; thumb: Blob }) => void mem.photos.set(p.id, p),
+  putPhotoBlobs: async (p: { id: string; blob: Blob; thumb: Blob }) => {
+    if (mem.failPutPhoto?.(p.id)) throw quota();
+    mem.photos.set(p.id, p);
+  },
   getPhotoBlobs: async (id: string) => mem.photos.get(id),
   deletePhotoBlobs: async (id: string) => void mem.photos.delete(id),
   photoBlobIds: async () => [...mem.photos.keys()],
@@ -48,17 +59,17 @@ vi.mock('$lib/db/vault', () => ({
 
 /** Just enough of R2 for the routes: keys, bytes, upload times. */
 function fakeR2() {
-  const objs = new Map<string, { body: Uint8Array; uploaded: number; sha?: string }>();
+  const objs = new Map<string, { body: Uint8Array; uploaded: number; sha?: string; md?: Record<string, string> }>();
   let clock = 1_000_000;
   return {
     objs,
     async put(key: string, body: unknown, opts?: { customMetadata?: Record<string, string> }) {
       const bytes = body instanceof Uint8Array ? body : new TextEncoder().encode(String(body));
-      objs.set(key, { body: bytes, uploaded: (clock += 1000), sha: opts?.customMetadata?.sha });
+      objs.set(key, { body: bytes, uploaded: (clock += 1000), sha: opts?.customMetadata?.sha, md: opts?.customMetadata });
     },
     async head(key: string) {
       const o = objs.get(key);
-      return o ? { customMetadata: o.sha ? { sha: o.sha } : {} } : null;
+      return o ? { customMetadata: o.md ?? (o.sha ? { sha: o.sha } : {}) } : null;
     },
     async get(key: string) {
       const o = objs.get(key);
@@ -112,9 +123,38 @@ async function boot(m: Mem, r2: ReturnType<typeof fakeR2>) {
 
 const KEY = newVaultKey();
 const logKeys = (r2: ReturnType<typeof fakeR2>) => [...r2.objs.keys()].filter((k) => k.includes('/log/'));
-const post = (keys: Awaited<ReturnType<typeof deriveKeys>>, name: string, body: Uint8Array) => fetch(`/api/sync/log?vault=${keys.id}`, { method: 'POST', headers: { authorization: `Bearer ${keys.token}`, 'x-batch': name }, body: body as BodyInit });
+const post = (keys: Awaited<ReturnType<typeof deriveKeys>>, name: string, body: Uint8Array, extra: Record<string, string> = {}) => fetch(`/api/sync/log?vault=${keys.id}`, { method: 'POST', headers: { authorization: `Bearer ${keys.token}`, 'x-batch': name, ...extra }, body: body as BodyInit });
+const metaOf = async (r2: ReturnType<typeof fakeR2>) => JSON.parse(new TextDecoder().decode(r2.objs.get(`vault/${(await deriveKeys(KEY)).id}/meta.json`)!.body)) as { bytes: number };
+/** Make the vault (nearly) full on the server, as photos from another device would. */
+async function fillVault(r2: ReturnType<typeof fakeR2>, bytes = MAX_BYTES - 10) {
+  const key = `vault/${(await deriveKeys(KEY)).id}/meta.json`;
+  const meta = await metaOf(r2);
+  meta.bytes = bytes;
+  r2.objs.set(key, { body: new TextEncoder().encode(JSON.stringify(meta)), uploaded: 1 });
+}
 
+/** A device that already holds a key, as the layout boots it: load, then init picks the key up. */
+async function reboot(m: Mem, r2: ReturnType<typeof fakeR2>) {
+  const X = await boot(m, r2);
+  await X.sync.init();
+  return X;
+}
 
+afterEach(() => vi.useRealTimers());
+
+/**
+ * Whether the collection's own fold passes the hold to apply() (the call-site
+ * change in collection.svelte.ts that goes with the engine's held changes).
+ * The two assertions below that need it are gated on this rather than failed,
+ * so they switch on the moment that line lands.
+ */
+const collectionHolds = await (async () => {
+  const m = newMem('zzzzzzzzzzzz');
+  const t = hlcEncode({ wall: Date.now() + 86_400_000, count: 0, device: 'yyyyyyyyyyyy' });
+  m.changes.set(t, { t, kind: 'accession', id: 'probe', field: 'taxonName', value: 'x' });
+  const X = await boot(m, fakeR2());
+  return X.collection.accession('probe') === undefined;
+})();
 
 describe('batches are named by content and acked only when the server holds those bytes', () => {
   it('an offline edit restored alongside synced changes still reaches every device', async () => {
@@ -142,27 +182,60 @@ describe('batches are named by content and acked only when the server holds thos
   });
   it('the same batch pushed twice lands once; different bytes under a held name are refused with 409', async () => {
     const r2 = fakeR2();
-    const B = await boot(newMem('bbbbbbbbbbbb'), r2);
+    const memB = newMem('bbbbbbbbbbbb');
+    const B = await boot(memB, r2);
     await B.collection.addAccession({ taxonName: 'Lithops', acc: 'B-1' });
     await B.sync.setup(KEY, 'create');
     const keys = await deriveKeys(KEY);
     const name = logKeys(r2)[0].split('/log/')[1].slice(0, -4);
     const bytes = r2.objs.get(logKeys(r2)[0])!.body;
+    // The name is the last HLC and the first twelve hex digits of the SHA-256 of the changes as JSON.
+    const changes = [...memB.changes.keys()].sort().map((t) => memB.changes.get(t));
+    const plain = await sha256hex(new TextEncoder().encode(JSON.stringify(changes)));
+    expect(name).toBe(`${changes[changes.length - 1]!.t}-${plain.slice(0, 12)}`);
+    expect(r2.objs.get(logKeys(r2)[0])!.md).toMatchObject({ plain, device: 'bbbbbbbbbbbb' });
     let r = await post(keys, name, bytes);
     expect(await r.json()).toEqual({ stored: false, reason: 'already there' });
     r = await post(keys, name, new Uint8Array([1, 2, 3]));
     expect(r.status).toBe(409);
+    // Fresh bytes with the plaintext hash from another device: still 409. From the same device: already there.
+    expect((await post(keys, name, new Uint8Array([1, 2, 3]), { 'x-batch-plain': plain, 'x-device': 'cccccccccccc' })).status).toBe(409);
+    expect(await (await post(keys, name, new Uint8Array([1, 2, 3]), { 'x-batch-plain': plain, 'x-device': 'bbbbbbbbbbbb' })).json()).toEqual({ stored: false, reason: 'already there' });
     expect(r2.objs.get(logKeys(r2)[0])!.body).toBe(bytes); // untouched
     // A batch written before hashes were kept (no metadata) is compared by its bytes.
     r2.objs.set(`vault/${keys.id}/log/1700000000000-0000-old.bin`, { body: new Uint8Array([9, 9]), uploaded: 5 });
     expect((await post(keys, '1700000000000-0000-old', new Uint8Array([9, 9]))).status).toBe(200);
     expect((await post(keys, '1700000000000-0000-old', new Uint8Array([9, 8]))).status).toBe(409);
-    // The outbox re-filled and pushed again: a fresh seal is new bytes under a new name (the merge makes it harmless), and it is acked once stored.
+    // The outbox re-filled and pushed again: a fresh seal (new IV, new bytes) under the SAME name; the server keeps the first and the changes are acked.
     const n = logKeys(r2).length;
+    const before = (await metaOf(r2)).bytes;
     await (await import('$lib/db/vault')).outboxFill();
     await B.sync.run();
-    expect(logKeys(r2).length).toBe(n + 1);
+    expect(logKeys(r2).length).toBe(n);
+    expect(r2.objs.get(logKeys(r2)[0])!.body).toBe(bytes);
+    expect((await metaOf(r2)).bytes).toBe(before);
     expect(mem.outbox.size).toBe(0);
+  });
+  it('a re-push after a lost reply lands on the same key and is counted once against the allowance', async () => {
+    const r2 = fakeR2();
+    const memB = newMem('bbbbbbbbbbbb');
+    const B = await boot(memB, r2);
+    await B.collection.addAccession({ taxonName: 'Lithops', acc: 'B-1' });
+    // The server does the work; the reply never arrives.
+    const real = globalThis.fetch;
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const res = await real(input, init);
+      if (init?.method === 'POST' && String(input).includes('/api/sync/log?')) throw new TypeError('Failed to fetch');
+      return res;
+    }) as typeof fetch;
+    await expect(B.sync.setup(KEY, 'create')).rejects.toThrow(/Failed to fetch/);
+    expect(logKeys(r2)).toHaveLength(1);
+    expect(memB.outbox.size).toBeGreaterThan(0);
+    globalThis.fetch = real;
+    await B.sync.run();
+    expect(logKeys(r2)).toHaveLength(1);
+    expect(memB.outbox.size).toBe(0);
+    expect((await metaOf(r2)).bytes).toBe(r2.objs.get(logKeys(r2)[0])!.body.length);
   });
   it('the Worker refuses names that are not batch names, bad photo ids and wrong tokens before touching R2', async () => {
     const r2 = fakeR2();
@@ -182,6 +255,200 @@ describe('batches are named by content and acked only when the server holds thos
     // An oversize body is refused from its declared length.
     const big = await fetch(`/api/sync/log?vault=${keys.id}`, { method: 'POST', headers: { ...h, 'x-batch': '1700000000000-0000-dev', 'content-length': String(17 * 1024 * 1024) }, body: new Uint8Array(3) as BodyInit });
     expect(big.status).toBe(413);
+  });
+});
+
+describe('a batch that cannot be STORED is not set aside: the run stops and it is fetched again', () => {
+  it('a QuotaExceededError on the vault write during a pull ends the run with an error; the batch is not in `have`, the cursor stays before it, and the next run brings it', async () => {
+    const r2 = fakeR2();
+    const B = await boot(newMem('bbbbbbbbbbbb'), r2);
+    const plant = await B.collection.addAccession({ taxonName: 'Copiapoa cinerea', acc: 'B-1' });
+    await B.sync.setup(KEY, 'create');
+    const memD = newMem('dddddddddddd');
+    let failed = 0;
+    memD.failAppend = (_cs, fromServer) => fromServer && failed++ === 0; // the first write of server changes fails; the vault is otherwise fine
+    const D = await boot(memD, r2);
+    await expect(D.sync.setup(KEY, 'join')).rejects.toThrow(/quota/i);
+    expect(D.sync.lastError).toMatch(/quota/i);
+    expect(D.sync.quarantined).toEqual([]); // storage is not the batch's fault
+    expect(D.collection.accession(plant.id)).toBeUndefined(); // nothing applied that was not stored
+    expect(memD.changes.size).toBe(0);
+    expect((memD.meta.get('sync') as { have: string[]; since: number }).have).toEqual([]);
+    // The storage problem gone: the next run fetches the same batch again and the plant arrives.
+    const D2 = await reboot(memD, r2);
+    await D2.sync.run();
+    expect(D2.sync.lastError).toBeNull();
+    expect(D2.calls.filter((c) => c.startsWith('GET /api/sync/log/'))).toHaveLength(1);
+    expect(D2.collection.accession(plant.id)).toBeDefined();
+    expect(memD.changes.size).toBeGreaterThan(0);
+    expect(D2.sync.quarantined).toEqual([]);
+  });
+  it('a photo whose pixels cannot be written is not quarantined; the run stops and the photo is fetched again', async () => {
+    const r2 = fakeR2();
+    const memB = newMem('bbbbbbbbbbbb');
+    const B = await boot(memB, r2);
+    const a = await B.collection.addAccession({ taxonName: 'Aloe', acc: 'B-1' });
+    const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3]);
+    const pid = 'pone000000001';
+    memB.photos.set(pid, { id: pid, blob: new Blob([jpeg]), thumb: new Blob([jpeg]) });
+    await B.collection.put('photo', pid, { acc: a.id, d: '2026-01-01', w: 1, h: 1, bytes: 6, sha: await sha256hex(jpeg) });
+    await B.sync.setup(KEY, 'create');
+    const memD = newMem('dddddddddddd');
+    let failed = 0;
+    memD.failPutPhoto = () => failed++ === 0;
+    const D = await boot(memD, r2);
+    await expect(D.sync.setup(KEY, 'join')).rejects.toThrow(/quota/i);
+    expect(D.sync.quarantined).toEqual([]);
+    expect(memD.photos.size).toBe(0);
+    expect((memD.meta.get('sync') as { photosPushed: string[] }).photosPushed).toEqual([]);
+    await D.sync.run();
+    expect(D.sync.lastError).toBeNull();
+    expect(memD.photos.size).toBe(1);
+    expect(D.calls.filter((c) => c === `GET /api/sync/photo/${pid}`)).toHaveLength(2);
+  });
+});
+
+describe('a full vault is said, not split', () => {
+  it('a 507 stops the push without bisecting, sets vaultFull, keeps the changes in the outbox, and the pull still runs; room again clears it', async () => {
+    const r2 = fakeR2();
+    const memB = newMem('bbbbbbbbbbbb');
+    const B = await boot(memB, r2);
+    for (let i = 0; i < 8; i++) await B.collection.addEvent({ acc: 'r1', d: '2026-01-0' + (i + 1), t: 'water' });
+    await B.sync.setup(KEY, 'create');
+    expect(B.sync.vaultFull).toBeNull();
+    await fillVault(r2);
+    await B.collection.addEvent({ acc: 'r1', d: '2026-02-01', t: 'feed' });
+    const before = B.calls.length;
+    await B.sync.run();
+    const calls = B.calls.slice(before);
+    expect(calls.filter((c) => c === 'POST /api/sync/log')).toHaveLength(1); // one request, no halving
+    expect(calls.filter((c) => c === 'GET /api/sync/log').length).toBeGreaterThan(0); // receiving carries on
+    expect(B.sync.lastError).toBeNull();
+    expect(B.sync.refused).toEqual([]);
+    expect(B.sync.vaultFull).toEqual({ bytes: MAX_BYTES - 10, limit: MAX_BYTES });
+    expect(B.sync.pending).toBeGreaterThan(0);
+    expect(memB.outbox.size).toBeGreaterThan(0);
+    // It is remembered across a reload, and tried once per run.
+    const B2 = await reboot(memB, r2);
+    expect(B2.sync.vaultFull).toEqual({ bytes: MAX_BYTES - 10, limit: MAX_BYTES });
+    const again = B2.calls.length;
+    await B2.sync.run();
+    expect(B2.calls.slice(again).filter((c) => c === 'POST /api/sync/log')).toHaveLength(1);
+    // Room again (photos deleted elsewhere): the push goes through and the state clears.
+    await fillVault(r2, 0);
+    await B2.sync.run();
+    expect(B2.sync.vaultFull).toBeNull();
+    expect(memB.outbox.size).toBe(0);
+    expect((memB.meta.get('sync') as { vaultFull?: unknown }).vaultFull).toBeUndefined();
+  });
+  it('a full vault refuses a photo with 507 too; a photo that is merely too big is still 413 and noted', async () => {
+    const r2 = fakeR2();
+    const memB = newMem('bbbbbbbbbbbb');
+    const B = await boot(memB, r2);
+    const a = await B.collection.addAccession({ taxonName: 'Aloe', acc: 'B-1' });
+    await B.sync.setup(KEY, 'create');
+    await fillVault(r2);
+    const pid = 'pone000000001';
+    memB.photos.set(pid, { id: pid, blob: new Blob([new Uint8Array(100)]), thumb: new Blob([new Uint8Array(10)]) });
+    await B.collection.put('photo', pid, { acc: a.id, d: '2026-01-01', w: 1, h: 1, bytes: 100 });
+    await B.sync.run();
+    expect(B.sync.vaultFull).not.toBeNull();
+    expect(B.sync.refused).toEqual([]);
+    expect(r2.objs.has(`vault/${(await deriveKeys(KEY)).id}/photo/${pid}.bin`)).toBe(false);
+    const big = await fetch(`/api/sync/photo/pbig000000001?vault=${(await deriveKeys(KEY)).id}`, { method: 'PUT', headers: { authorization: `Bearer ${(await deriveKeys(KEY)).token}`, 'content-length': String(13 * 1024 * 1024) }, body: new Uint8Array(3) as BodyInit });
+    expect(big.status).toBe(413);
+  });
+});
+
+describe('the pull cursor', () => {
+  it('501 batches that arrived in the same second all arrive: the second page continues after the (arrival, key) pair', async () => {
+    const r2 = fakeR2();
+    const B = await boot(newMem('bbbbbbbbbbbb'), r2);
+    await B.sync.setup(KEY, 'create');
+    const keys = await deriveKeys(KEY);
+    const wall = 1700000000000;
+    for (let i = 0; i < 501; i++) {
+      const t = `${wall + i}-0000-bbbbbbbbbbbb`;
+      const body = await sealJson(keys, 'log', { v: 1, device: 'bbbbbbbbbbbb', changes: [{ t, kind: 'accession', id: 'r' + i, field: 'taxonName', value: 'Plant ' + i }] });
+      expect((await post(keys, `${t}-0123456789ab`, body)).status).toBe(200);
+    }
+    for (const k of logKeys(r2)) r2.objs.get(k)!.uploaded = 7_000_000; // one arrival time for all of them
+    const D = await boot(newMem('dddddddddddd'), r2);
+    await D.sync.setup(KEY, 'join');
+    expect(D.sync.lastError).toBeNull();
+    expect(D.collection.accessions).toHaveLength(501);
+    const lists = D.calls.filter((c) => c === 'GET /api/sync/log');
+    expect(lists).toHaveLength(2);
+    // And a later run lists once, fetches nothing, and stays at 501.
+    const n = D.calls.length;
+    await D.sync.run();
+    expect(D.calls.slice(n).filter((c) => c.startsWith('GET /api/sync/log/'))).toHaveLength(0);
+    expect(D.collection.accessions).toHaveLength(501);
+  });
+});
+
+describe('a peer whose clock is ahead', () => {
+  it('its changes are stored but held out of the fold until this clock reaches them; the slow device\'s later edit shows on both; the count and the date are on the engine', async () => {
+    const r2 = fakeR2();
+    const memA = newMem('aaaaaaaaaaaa');
+    const memB = newMem('bbbbbbbbbbbb');
+    let A = await boot(memA, r2);
+    const plant = await A.collection.addAccession({ taxonName: 'Copiapoa cinerea', acc: 'A-1', notes: 'bought at the show' });
+    await A.sync.setup(KEY, 'create');
+    // B's phone is a day ahead. It joins and edits the notes.
+    const real = Date.now();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(real + 86_400_000);
+    let B = await boot(memB, r2);
+    await B.sync.setup(KEY, 'join');
+    await B.collection.put('accession', plant.id, { notes: 'phone says: repot' });
+    await B.sync.run();
+    expect(B.sync.held).toBe(0); // its own stamps are never held on itself
+    vi.setSystemTime(real);
+    // A pulls: B's note is stored, not shown; A's own later edit wins now and after a reload.
+    A = await reboot(memA, r2);
+    await A.sync.run();
+    expect(A.collection.accession(plant.id)?.notes).toBe('bought at the show');
+    expect(A.sync.held).toBe(1);
+    expect(A.sync.heldUntil).toBeGreaterThan(real + 86_400_000 - MAX_AHEAD_MS - 1000);
+    expect(memA.changes.size).toBeGreaterThan(0);
+    await A.collection.put('accession', plant.id, { notes: 'no: leave it until spring' });
+    expect(A.collection.accession(plant.id)?.notes).toBe('no: leave it until spring');
+    await A.sync.run();
+    A = await reboot(memA, r2);
+    if (collectionHolds) expect(A.collection.accession(plant.id)?.notes).toBe('no: leave it until spring'); // the load() fold skips the held change
+    expect(A.sync.held).toBe(1);
+    // When A's clock reaches B's stamp, the held change is folded in and, being the greater HLC, wins.
+    vi.setSystemTime(real + 86_400_000);
+    await A.sync.run();
+    expect(A.sync.held).toBe(0);
+    expect(A.sync.heldUntil).toBeNull();
+    expect(A.collection.accession(plant.id)?.notes).toBe('phone says: repot');
+    // B's phone, put right: its own past stamps are never held on itself, and it warns that its clock jumped back.
+    vi.setSystemTime(real);
+    B = await reboot(memB, r2);
+    expect(B.collection.accession(plant.id)?.notes).toBe('phone says: repot');
+    expect(B.sync.held).toBe(0);
+    expect(B.sync.clockWarning).toMatch(/clock appears to have jumped back/);
+    expect(A.sync.clockWarning).toBeNull();
+  });
+  it('a held change that arrives through a restore (an import) is held too, and re-folded when due', async () => {
+    const r2 = fakeR2();
+    const memA = newMem('aaaaaaaaaaaa');
+    const A = await boot(memA, r2);
+    const plant = await A.collection.addAccession({ taxonName: 'Lithops', acc: 'A-1', notes: 'one' });
+    await A.sync.setup(KEY, 'create');
+    const ahead = hlcEncode({ wall: Date.now() + 3_600_000, count: 0, device: 'cccccccccccc' });
+    await A.collection.ingest([{ t: ahead, kind: 'accession', id: plant.id, field: 'notes', value: 'from the future' }], 'import');
+    expect(A.sync.held).toBe(1);
+    if (collectionHolds) expect(A.collection.accession(plant.id)?.notes).toBe('one'); // the commit() fold skips it too
+    await A.sync.run(); // pushed, since it came in through a restore
+    expect(memA.outbox.size).toBe(0);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.now() + 3_600_000);
+    await A.sync.run();
+    expect(A.sync.held).toBe(0);
+    expect(A.collection.accession(plant.id)?.notes).toBe('from the future');
   });
 });
 

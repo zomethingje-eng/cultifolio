@@ -1,17 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { listBatches, storeCounted, storeOnce, readBody, batchKey, recount, MAX_BYTES, OVERLAP_MS, allowCreation, type VaultMeta } from '$lib/server/sync';
+import { listBatches, parseAfter, storeCounted, storeOnce, batchMeta, readBody, batchKey, recount, MAX_BYTES, OVERLAP_MS, allowCreation, VaultFull, type VaultMeta } from '$lib/server/sync';
 
 /** Just enough of R2 for the sync store: keys, bytes, upload times we control. */
 function fakeR2(now = { t: 1_000_000 }) {
-  const objs = new Map<string, { body: Uint8Array; uploaded: number; sha?: string }>();
+  const objs = new Map<string, { body: Uint8Array; uploaded: number; sha?: string; md?: Record<string, string> }>();
   const r2 = {
     async put(key: string, body: unknown, opts?: { customMetadata?: Record<string, string> }) {
       const bytes = body instanceof Uint8Array ? body : new TextEncoder().encode(String(body));
-      objs.set(key, { body: bytes, uploaded: now.t, sha: opts?.customMetadata?.sha });
+      objs.set(key, { body: bytes, uploaded: now.t, sha: opts?.customMetadata?.sha, md: opts?.customMetadata });
     },
     async head(key: string) {
       const o = objs.get(key);
-      return o ? { customMetadata: o.sha ? { sha: o.sha } : {} } : null;
+      return o ? { customMetadata: o.md ?? (o.sha ? { sha: o.sha } : {}) } : null;
     },
     async get(key: string) {
       const o = objs.get(key);
@@ -58,14 +58,51 @@ describe('batch listing is by arrival, not by name', () => {
     const later = await listBatches(r2 as never, 'v', 10_000_000 + 4000 + OVERLAP_MS - 1);
     expect(later.batches.map((b) => b.key)).toEqual(['8996-0000-x']); // the one inside the overlap window
   });
+  it('501 batches that arrived in the same millisecond: the cursor is (arrival, key), so the second page is the one left over, not the same 500 again', async () => {
+    const now = { t: 5_000_000 };
+    const r2 = fakeR2(now);
+    for (let i = 0; i < 501; i++) await r2.put(`vault/v/log/${String(1700000000000 + i)}-0000-x.bin`, new Uint8Array(1));
+    const p1 = await listBatches(r2 as never, 'v', null);
+    expect(p1.batches).toHaveLength(500);
+    expect(p1.more).toBe(true);
+    expect(p1.next).toEqual({ at: 5_000_000, key: '1700000000499-0000-x' });
+    // The old client's move, a timestamp alone, would list the same 500 for ever.
+    const stuck = await listBatches(r2 as never, 'v', p1.batches[499].at);
+    expect(stuck.batches[0].key).toBe('1700000000000-0000-x');
+    // The new one continues from the pair.
+    const p2 = await listBatches(r2 as never, 'v', null, 500, p1.next!);
+    expect(p2.batches.map((b) => b.key)).toEqual(['1700000000500-0000-x']);
+    expect(p2.more).toBe(false);
+    expect(p2.next).toBeUndefined();
+    // `after` applies no overlap: a batch that arrived earlier than the pair is not re-listed.
+    now.t = 4_000_000;
+    await r2.put('vault/v/log/1600000000000-0000-y.bin', new Uint8Array(1));
+    expect((await listBatches(r2 as never, 'v', null, 500, p1.next!)).batches.map((b) => b.key)).toEqual(['1700000000500-0000-x']);
+    // The same arrival, a later key, is listed; the same arrival, an earlier key, is not.
+    now.t = 5_000_000;
+    await r2.put('vault/v/log/1700000000499-0001-x.bin', new Uint8Array(1));
+    await r2.put('vault/v/log/1700000000498-0009-x.bin', new Uint8Array(1));
+    expect((await listBatches(r2 as never, 'v', null, 500, p1.next!)).batches.map((b) => b.key)).toEqual(['1700000000499-0001-x', '1700000000500-0000-x']);
+  });
+  it('parseAfter: absent is null, well-formed is the pair, anything else is 400', () => {
+    expect(parseAfter(null)).toBeNull();
+    expect(parseAfter('')).toBeNull();
+    expect(parseAfter('5000000:1700000000499-0000-x')).toEqual({ at: 5_000_000, key: '1700000000499-0000-x' });
+    for (const bad of ['5000000', 'x:y', '5000000:', ':abc', '5000000:a b']) expect(() => parseAfter(bad)).toThrow();
+  });
 });
 
 describe('storage accounting', () => {
-  it('reserves before writing: a refused upload never lands and the total does not move', async () => {
+  it('reserves before writing: a full vault is refused as 507 with what it holds and the limit; nothing lands and the total does not move', async () => {
     const r2 = fakeR2();
     const m = meta();
     m.bytes = MAX_BYTES - 1;
-    await expect(storeCounted(r2 as never, 'v', m, 'vault/v/log/x.bin', new Uint8Array(2))).rejects.toMatchObject({ status: 413 });
+    const p = storeCounted(r2 as never, 'v', m, 'vault/v/log/x.bin', new Uint8Array(2));
+    await expect(p).rejects.toBeInstanceOf(VaultFull);
+    await expect(p).rejects.toMatchObject({ status: 507, bytes: MAX_BYTES - 1, limit: MAX_BYTES });
+    const res = (await p.then(() => null, (e: VaultFull) => e))!.response();
+    expect(res.status).toBe(507);
+    expect(await res.json()).toEqual({ error: 'vault full', bytes: MAX_BYTES - 1, limit: MAX_BYTES });
     expect(r2.objs.has('vault/v/log/x.bin')).toBe(false);
     expect(m.bytes).toBe(MAX_BYTES - 1);
   });
@@ -118,6 +155,31 @@ describe('a name stands for one content', () => {
     r2.objs.set('vault/v/log/old.bin', { body: new Uint8Array([7]), uploaded: 1 });
     expect(await storeOnce(r2 as never, 'v', m, 'vault/v/log/old.bin', new Uint8Array([7]))).toBe('same');
     expect(await storeOnce(r2 as never, 'v', m, 'vault/v/log/old.bin', new Uint8Array([8]))).toBe('different');
+  });
+  it('a re-seal of the same batch (same plaintext hash, same device) is "same"; a different device, a different plaintext, or a batch stored without the hash is "different"', async () => {
+    const r2 = fakeR2();
+    const m = meta();
+    const plain = 'a'.repeat(64), other = 'b'.repeat(64);
+    expect(await storeOnce(r2 as never, 'v', m, 'vault/v/log/a.bin', new Uint8Array([1, 2]), { plain, device: 'dev1' })).toBe('stored');
+    expect(r2.objs.get('vault/v/log/a.bin')!.body).toEqual(new Uint8Array([1, 2]));
+    // Fresh bytes (a new IV), same plaintext, same device: already there; the first copy is kept and nothing is counted twice.
+    expect(await storeOnce(r2 as never, 'v', m, 'vault/v/log/a.bin', new Uint8Array([3, 4]), { plain, device: 'dev1' })).toBe('same');
+    expect(r2.objs.get('vault/v/log/a.bin')!.body).toEqual(new Uint8Array([1, 2]));
+    expect(m.bytes).toBe(2);
+    expect(await storeOnce(r2 as never, 'v', m, 'vault/v/log/a.bin', new Uint8Array([3, 4]), { plain, device: 'dev2' })).toBe('different');
+    expect(await storeOnce(r2 as never, 'v', m, 'vault/v/log/a.bin', new Uint8Array([3, 4]), { plain: other, device: 'dev1' })).toBe('different');
+    expect(await storeOnce(r2 as never, 'v', m, 'vault/v/log/a.bin', new Uint8Array([3, 4]))).toBe('different'); // an older client: bytes only
+    // Stored by an older client (no plaintext hash kept): a new client's re-seal cannot match it.
+    expect(await storeOnce(r2 as never, 'v', m, 'vault/v/log/b.bin', new Uint8Array([5]))).toBe('stored');
+    expect(await storeOnce(r2 as never, 'v', m, 'vault/v/log/b.bin', new Uint8Array([6]), { plain, device: 'dev1' })).toBe('different');
+    expect(await storeOnce(r2 as never, 'v', m, 'vault/v/log/b.bin', new Uint8Array([5]), { plain, device: 'dev1' })).toBe('same');
+  });
+  it('the push headers: absent is fine, malformed is 400', () => {
+    const req = (h: Record<string, string>) => new Request('http://x/', { headers: h });
+    expect(batchMeta(req({}))).toEqual({ plain: undefined, device: undefined });
+    expect(batchMeta(req({ 'x-batch-plain': 'f'.repeat(64), 'x-device': 'abc123' }))).toEqual({ plain: 'f'.repeat(64), device: 'abc123' });
+    expect(() => batchMeta(req({ 'x-batch-plain': 'zz' }))).toThrow();
+    expect(() => batchMeta(req({ 'x-device': 'Not-A-Device' }))).toThrow();
   });
   it('batch names: an HLC, with or without a 12-hex content hash; the counter may be four to six digits', () => {
     expect(batchKey('v', '1700000000000-0000-dev')).toBe('vault/v/log/1700000000000-0000-dev.bin');

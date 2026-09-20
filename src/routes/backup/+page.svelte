@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { collection } from '$lib/db/collection.svelte';
   import { getMeta, setMeta, photoBlobIds } from '$lib/db/vault';
-  import { exportBackup, openBackup, restoreBackup, type Opened } from '$lib/backup/io';
+  import { prepareBackup, downloadBackup, openBackup, restoreBackup, type Opened, type PreparedBackup } from '$lib/backup/io';
   import { sync } from '$lib/sync/engine.svelte';
   import { importV2, type ImportReport } from '$lib/import/v2';
   import { setCrumb } from '$lib/ui/crumb.svelte';
@@ -23,19 +23,30 @@
   let exporting = $state<string | null>(null);
   let exported = $state<{ name: string; bytes: number } | null>(null);
   let exportErr = $state('');
+  /** A built file that is short of photographs, held back until the person has read what is not in it. */
+  let shortfall = $state.raw<PreparedBackup | null>(null);
   async function doExport() {
     exporting = 'Packing…';
     exportErr = '';
+    exported = null;
+    shortfall = null;
     try {
-      exported = await exportBackup((d, n) => (exporting = `Packing photos ${d} of ${n}…`));
-      const now = new Date().toISOString();
-      await setMeta('lastBackup', now);
-      lastBackup = now;
+      const p = await prepareBackup((d, n) => (exporting = `Packing photos ${d} of ${n}…`));
+      if (p.photosMissing.length) shortfall = p;
+      else await save(p);
     } catch (e) {
       exportErr = e instanceof Error ? e.message : String(e);
     } finally {
       exporting = null;
     }
+  }
+  async function save(p: PreparedBackup) {
+    downloadBackup(p);
+    exported = { name: p.name, bytes: p.bytes };
+    shortfall = null;
+    const now = new Date().toISOString();
+    await setMeta('lastBackup', now);
+    lastBackup = now;
   }
 
   /* ---- restore ---- */
@@ -66,7 +77,7 @@
         // Not ours? Perhaps a v2 Herbarium backup, which is plain JSON with accessions.
         if (f.name.endsWith('.json')) {
           const json = JSON.parse(await f.text());
-          const r = importV2(json);
+          const r = importV2(json, { exists: (kind, id) => collection.ready && collection.exists(kind, id) });
           if (!r.changes.length) throw err;
           v2 = r;
         } else throw err;
@@ -87,6 +98,8 @@
         return;
       }
       done = `Merged ${r.changes} ${r.changes === 1 ? 'change' : 'changes'} and ${r.photos} ${r.photos === 1 ? 'photo' : 'photos'}.`;
+      if (r.photosMissing) done += ` ${r.photosMissing} ${r.photosMissing === 1 ? 'photo record has' : 'photo records have'} no photograph: the file did not hold the pixels and neither does this device. The ${r.photosMissing === 1 ? 'record is' : 'records are'} kept.`;
+      if (r.schemeRestored) done += ` Numbering now follows the file: ${r.schemeRestored.mode === 'prefix' ? `${r.schemeRestored.prefix}-${'0'.repeat(r.schemeRestored.width)}` : `year-${'0'.repeat(r.schemeRestored.width)}`}.`;
       opened = null;
       photoCount = (await photoBlobIds()).length;
     } catch (err) {
@@ -101,7 +114,7 @@
     try {
       await collection.ingest(v2.changes);
       const r = v2.report;
-      done = `Imported ${r.accessions} plants, ${r.events} timeline entries, ${r.taxa} species notes${r.locations ? `, ${r.locations} places` : ''}${r.sowings ? `, ${r.sowings} sowings` : ''}.${r.skipped.length ? ` Skipped: ${r.skipped.join('; ')}.` : ''}`;
+      done = `Imported ${r.accessions} plants, ${r.events} timeline entries, ${r.taxa} species notes${r.locations ? `, ${r.locations} places` : ''}${r.sowings ? `, ${r.sowings} sowings` : ''}.${r.alreadyHere ? ` ${r.alreadyHere} ${r.alreadyHere === 1 ? 'record was' : 'records were'} already on this device and left as ${r.alreadyHere === 1 ? 'it is' : 'they are'}.` : ''}${r.skipped.length ? ` Skipped: ${r.skipped.join('; ')}.` : ''}`;
       v2 = null;
     } catch (err) {
       openErr = err instanceof Error ? err.message : String(err);
@@ -135,6 +148,10 @@
       {#if exported}<span class="ok">Saved <span class="mono">{exported.name}</span>, {mb(exported.bytes)}. Put it somewhere that is not this device.</span>{/if}
       {#if exportErr}<span class="bad">{exportErr}</span>{/if}
     </div>
+    {#if shortfall}
+      {@const n = shortfall.photosMissing.length}
+      <div class="notice err" id="bk-shortfall">{n} {n === 1 ? 'photograph had' : 'photographs had'} no pixels on this device and {n === 1 ? 'is' : 'are'} not in the file. {n === 1 ? 'Its record is' : 'Their records are'}, and the file says which.{#if sync.configured} Sync may still bring the pixels down; take the backup again afterwards.{/if} <button class="btn" type="button" onclick={() => shortfall && save(shortfall)}>Download it anyway</button></div>
+    {/if}
   </div>
 </div>
 
@@ -155,13 +172,13 @@
     {@const c = opened.counts}
     <div class="preview">
       <div class="factgrid">
-        <div><b>In the file</b>{c.accessions} plant{c.accessions === 1 ? '' : 's'} · {c.events} timeline entr{c.events === 1 ? 'y' : 'ies'} · {c.locations} place{c.locations === 1 ? '' : 's'} · {c.sowings} sowing{c.sowings === 1 ? '' : 's'} · {c.photos} photo{c.photos === 1 ? '' : 's'}{#if m}<span class="faint"> · taken {m.exported.slice(0, 10)}{m.device ? ` on device ${m.device.slice(0, 6)}` : ''}</span>{/if}</div>
-        <div><b>Merging would</b>{#if opened.merge.fresh.length === 0}change nothing: everything in the file is already here.{:else}add {opened.merge.added} {opened.merge.added === 1 ? 'record' : 'records'}, update {opened.merge.changed}, and bring in {opened.newPhotos} {opened.newPhotos === 1 ? 'photo' : 'photos'}. Nothing on this device is removed.{/if}</div>
+        <div><b>In the file</b>{c.accessions} plant{c.accessions === 1 ? '' : 's'} · {c.events} timeline entr{c.events === 1 ? 'y' : 'ies'} · {c.locations} place{c.locations === 1 ? '' : 's'} · {c.sowings} sowing{c.sowings === 1 ? '' : 's'} · {c.photos} photo{c.photos === 1 ? "" : "s"}{#if m}<span class="faint">{" · "}taken {m.exported.slice(0, 10)}{m.device ? ` on device ${m.device.slice(0, 6)}` : ''}</span>{/if}</div>
+        <div><b>Merging would</b>{#if opened.merge.fresh.length === 0}change nothing: everything in the file is already here.{:else}add {opened.merge.added} {opened.merge.added === 1 ? 'record' : 'records'}, update {opened.merge.changed}, and bring in {opened.newPhotos} {opened.newPhotos === 1 ? 'photo' : 'photos'}. Nothing on this device is removed.{/if}{#if opened.missingPixels.length} {opened.missingPixels.length} photo {opened.missingPixels.length === 1 ? 'record in the file has' : 'records in the file have'} no photograph in it or on this device.{/if}</div>
       </div>
       <div class="row acts">
         <button id="bk-merge" class="btn pri" onclick={() => doRestore('merge')} disabled={!!busy || opened.merge.fresh.length === 0 && opened.newPhotos === 0}>Merge into this device</button>
         {#if confirmReplace}
-          <span class="bad">Everything on this device is wiped first{#if sync.configured}, and sync is turned off (a synced vault would merge straight back in; you can create a new vault or re-join afterwards){/if}. Sure?</span>
+          <span class="bad">The file is stored in full first; then everything on this device is replaced by it{#if sync.configured}, and sync is turned off (a synced vault would merge straight back in; you can create a new vault or re-join afterwards){/if}. Sure?</span>
           <button id="bk-replace-yes" class="btn danger" onclick={() => doRestore('replace')} disabled={!!busy}>Yes, replace</button>
           <button class="btn" onclick={() => (confirmReplace = false)}>Keep</button>
         {:else}
@@ -175,7 +192,7 @@
   {#if v2}
     <div class="preview">
       <div class="factgrid">
-        <div><b>A v2 Herbarium backup</b>{v2.report.accessions} plants, {v2.report.events} timeline entries, {v2.report.taxa} species notes{#if v2.report.locations}, {v2.report.locations} places{/if}{#if v2.report.sowings}, {v2.report.sowings} sowings{/if}. Your numbers are kept. Nothing in the old app is changed.</div>
+        <div><b>A v2 Herbarium backup</b>{v2.report.accessions} plants, {v2.report.events} timeline entries, {v2.report.taxa} species notes{#if v2.report.locations}, {v2.report.locations} places{/if}{#if v2.report.sowings}, {v2.report.sowings} sowings{/if}.{#if v2.report.alreadyHere} {v2.report.alreadyHere} {v2.report.alreadyHere === 1 ? 'record is' : 'records are'} already on this device and will be left as {v2.report.alreadyHere === 1 ? 'it is' : 'they are'}.{/if} Your numbers are kept. Nothing in the old app is changed.</div>
       </div>
       <div class="row acts">
         <button id="bk-v2" class="btn pri" onclick={doV2} disabled={!!busy}>Import</button>

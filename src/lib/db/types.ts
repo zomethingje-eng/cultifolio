@@ -1,5 +1,8 @@
 /** Domain shapes as stored in the change log (all fields flat, JSON values). */
 
+/** The synced record that holds the accession numbering scheme: kind 'setting', id 'numbering', field 'scheme' (a NumberingScheme). */
+export const NUMBERING_SETTING = 'numbering';
+
 export type Provenance = 'wild' | 'f1' | 'fn' | 'veg' | 'unknown';
 export type AccStatus = 'growing' | 'archived' | 'dead';
 

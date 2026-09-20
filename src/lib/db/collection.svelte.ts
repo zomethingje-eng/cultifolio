@@ -1,26 +1,46 @@
 /**
  * The collection as reactive state: a fold over the change log, with the
- * write API every view uses. Loads once per page life; every write appends
- * to IndexedDB and to the in-memory state in the same call.
+ * write API every view uses. Loads once per page life; every write goes to
+ * IndexedDB first and to the in-memory state only once that has succeeded,
+ * so the page never shows an edit the vault does not hold.
  */
 import { SvelteMap } from 'svelte/reactivity';
-import { Clock, hlcDecode } from '$core/hlc';
+import { Clock, hlcDecode, hlcEncode, hlcCompare } from '$core/hlc';
 import { apply, diff, validateChanges, key as recKey, type Change, type Kind, type Record_, type State } from '$core/log';
 import { nextAccession, DEFAULT_SCHEME, type NumberingScheme } from '$core/accession';
 import { allChanges, appendChanges, deviceId, requestPersistence, getMeta, setMeta, putPhotoBlobs, getPhotoBlobs, deletePhotoBlobs } from './vault';
 import type { Accession, PlantEvent, Taxon, Location, Sowing, Provenance, Photo } from './types';
-import { PROP_METHODS, accNo, sowNo } from './types';
+import { PROP_METHODS, accNo, sowNo, NUMBERING_SETTING } from './types';
 import { slugify } from '$core/names';
 import { mySpeciesOf, type MySpecies } from './species-list';
+
+export { NUMBERING_SETTING };
+
+const isScheme = (s: unknown): s is NumberingScheme => !!s && typeof s === 'object' && ((s as NumberingScheme).mode === 'year' || (s as NumberingScheme).mode === 'prefix') && typeof (s as NumberingScheme).width === 'number';
+
+/** A short, deterministic tag for a string: two 32-bit FNV-1a hashes in base 36 (up to 14 characters, [a-z0-9]). */
+function tag36(s: string): string {
+  const fnv = (seed: number) => {
+    let h = seed >>> 0;
+    for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193) >>> 0;
+    return h.toString(36);
+  };
+  return fnv(0x811c9dc5) + fnv(0x050c5d1f);
+}
 
 class Collection {
   ready = $state(false);
   persisted = $state<boolean | null>(null);
-  scheme = $state<NumberingScheme>(DEFAULT_SCHEME);
+  /** The last vault write that failed, as a sentence, or null once a write has succeeded again. Pages show it; the edit it describes was not stored and is not shown. */
+  lastWriteError = $state<string | null>(null);
+  /** The scheme this device kept in `meta` before the scheme was a synced setting; read only when the log has no setting record. */
+  private metaScheme = $state<NumberingScheme | null>(null);
   private state: State = new SvelteMap<string, Record_>();
   private seen = new Map<string, string>();
   private clock: Clock | null = null;
   private loading: Promise<void> | null = null;
+  /** Every `parentId` a place has had, by HLC, so a loop can be cut back to where the place was before the move. */
+  private parentHist = new Map<string, Map<string, string | null>>();
 
   load(): Promise<void> {
     if (!this.loading)
@@ -28,14 +48,31 @@ class Collection {
         const dev = await deviceId();
         this.clock = new Clock(dev);
         const changes = await allChanges();
-        apply(this.state, changes, this.seen);
+        apply(this.state, changes, this.seen, { now: Date.now(), except: dev }); // a change stamped far ahead of this clock is held, not applied (round five, 4)
+        this.noteParents(changes);
         for (const c of changes) this.clock.observe(c.t);
         const scheme = await getMeta<NumberingScheme>('scheme');
-        if (scheme) this.scheme = scheme;
+        if (isScheme(scheme)) this.metaScheme = scheme;
         this.ready = true;
         this.persisted = await requestPersistence();
       })();
     return this.loading;
+  }
+
+  /**
+   * The accession numbering scheme: a synced setting record (so every device
+   * mints and repairs numbers the same way), else what this device kept in
+   * `meta` before the setting existed, else the default.
+   */
+  get scheme(): NumberingScheme {
+    const r = this.state.get(recKey('setting', NUMBERING_SETTING));
+    const s = r && !r._deleted ? r.scheme : null;
+    return isScheme(s) ? s : (this.metaScheme ?? DEFAULT_SCHEME);
+  }
+
+  /** Whether the log holds a record with this identity, live or deleted. */
+  exists(kind: Kind, id: string): boolean {
+    return this.state.has(recKey(kind, id));
   }
 
   /* ---- reads ---- */
@@ -75,7 +112,8 @@ class Collection {
   }
   /** Keep a species on your list without a plant of it (or stop). Diffed like any other write, so sync carries it unchanged. */
   async follow(slug: string, name: string, gbifKey: number | null | undefined, on: boolean): Promise<void> {
-    await this.put('taxon', slug, { name, gbifKey: gbifKey ?? null, followed: on || null });
+    // A taxon record a v2 overlay marked removed is brought back by following it; otherwise it would be followed and listed nowhere.
+    await this.put('taxon', slug, { name, gbifKey: gbifKey ?? null, followed: on || null, ...(on ? { removed: null } : {}) });
   }
   /** Your species: every kind you grow or follow, by slug. */
   get mySpecies(): Map<string, MySpecies> {
@@ -93,14 +131,40 @@ class Collection {
    * The tree as it is shown, derived from the log so every device draws the
    * same one: each live node's effective parent. A parent that was removed is
    * skipped to the nearest live ancestor. A loop (two devices moving places
-   * into each other while offline) is cut at its lowest id: that node becomes
-   * a root and is flagged as needing a home, so the person can move it.
+   * into each other while offline, or a place whose parent is itself) is cut
+   * at its lowest id: that node goes back under the parent it had before the
+   * move when that place is still live and outside the loop; otherwise it
+   * becomes a root and is flagged as needing a home, so the person can move it.
    */
   private tree(): { parent: Map<string, string | null>; needsHome: Set<string> } {
     const parent = new Map<string, string | null>();
     const needsHome = new Set<string>();
     const live = this.live<Location>('location');
-    for (const l of live) parent.set(l.id, this.nearestLive(l.parentId ?? null, l.id));
+    const liveIds = new Set(live.map((l) => l.id));
+    const selfLoops: string[] = [];
+    for (const l of live) {
+      const r = this.rawParent(l);
+      parent.set(l.id, r.parent);
+      if (r.loop) selfLoops.push(l.id);
+    }
+    /** Does walking up from `from` reach `target`? (Bounded: a damaged chain cannot spin.) */
+    const reaches = (from: string, target: string): boolean => {
+      const seen = new Set<string>();
+      let cur: string | null = from;
+      while (cur && !seen.has(cur)) {
+        if (cur === target) return true;
+        seen.add(cur);
+        cur = parent.get(cur) ?? null;
+      }
+      return false;
+    };
+    const cut = (root: string, loop: string[]) => {
+      parent.set(root, null);
+      const back = this.prevParent(root);
+      if (back && liveIds.has(back) && !loop.includes(back) && !reaches(back, root)) parent.set(root, back);
+      else needsHome.add(root);
+    };
+    for (const id of selfLoops) cut(id, [id]);
     const done = new Set<string>();
     for (const l of live) {
       if (done.has(l.id)) continue;
@@ -111,13 +175,43 @@ class Collection {
         cur = parent.get(cur) ?? null;
       }
       if (cur && !done.has(cur)) {
-        const root = [...path.slice(path.indexOf(cur))].sort()[0];
-        parent.set(root, null);
-        needsHome.add(root);
+        const loop = path.slice(path.indexOf(cur));
+        cut([...loop].sort()[0], loop);
       }
       for (const p of path) done.add(p);
     }
     return { parent, needsHome };
+  }
+  /** A live node's parent by the raw chain (through removed nodes), and whether that chain comes back to the node itself. */
+  private rawParent(l: Location): { parent: string | null; loop: boolean } {
+    const seen = new Set<string>([l.id]);
+    let cur = l.parentId ?? null;
+    while (cur) {
+      if (cur === l.id) return { parent: null, loop: true };
+      const r = this.state.get(recKey('location', cur));
+      if (!r) return { parent: null, loop: false };
+      if (!r._deleted) return { parent: cur, loop: false };
+      if (seen.has(cur)) return { parent: null, loop: false };
+      seen.add(cur);
+      cur = (r.parentId as string | null | undefined) ?? null;
+    }
+    return { parent: null, loop: false };
+  }
+  /** Remember every parentId a place has been given, so a cut loop can fall back to the previous one. Same on every device: it is read from the log, not from arrival order. */
+  private noteParents(changes: Iterable<Change>): void {
+    for (const c of changes) {
+      if (c.kind !== 'location' || c.field !== 'parentId') continue;
+      let m = this.parentHist.get(c.id);
+      if (!m) this.parentHist.set(c.id, (m = new Map()));
+      m.set(c.t, typeof c.value === 'string' ? c.value : null);
+    }
+  }
+  /** The parent a place had before its latest move, or undefined when it has had only one. */
+  private prevParent(id: string): string | null | undefined {
+    const m = this.parentHist.get(id);
+    if (!m || m.size < 2) return undefined;
+    const ts = [...m.keys()].sort(hlcCompare);
+    return m.get(ts[ts.length - 2]);
   }
   /** `id` itself when it is a live place, else its nearest live ancestor by the raw parent chain (through removed nodes), else null. */
   private nearestLive(id: string | null | undefined, from?: string): string | null {
@@ -227,11 +321,11 @@ class Collection {
     await this.commit(changes);
     return loc;
   }
-  /** Removing a node moves its plants, sowings and children up to its parent; nothing is orphaned. */
+  /** Removing a node moves its plants, sowings and children up to its parent as shown (never the raw `parentId`, which in a cut loop points back into it); nothing is orphaned. */
   async removeLocation(id: string): Promise<void> {
     const node = this.location(id);
     if (!node) return;
-    const parent = node.parentId ?? null;
+    const parent = this.tree().parent.get(id) ?? null;
     const changes: Change[] = [];
     for (const c of this.children(id)) changes.push({ t: this.tick(), kind: 'location', id: c.id, field: 'parentId', value: parent });
     for (const a of this.accessions) if (a.locationId === id) changes.push({ t: this.tick(), kind: 'accession', id: a.id, field: 'locationId', value: parent });
@@ -439,13 +533,21 @@ class Collection {
    */
   private async commit(changes: Change[], source: 'local' | 'import' | 'server' = 'local'): Promise<void> {
     if (!changes.length) return;
-    apply(this.state, changes, this.seen);
+    // The vault first. If it refuses (a full phone), nothing is applied, the page keeps showing what is stored, and the error is kept for the page to show.
+    try {
+      await appendChanges(changes, source === 'server');
+    } catch (e) {
+      this.lastWriteError = e instanceof Error ? e.message : String(e);
+      throw e;
+    }
+    this.lastWriteError = null;
+    apply(this.state, changes, this.seen, { now: Date.now(), except: this.device });
+    this.noteParents(changes);
     // apply() mutates records in place; re-set a copy so the reactive map notices.
     for (const k of new Set(changes.map((c) => recKey(c.kind, c.id)))) {
       const r = this.state.get(k);
       if (r) this.state.set(k, { ...r });
     }
-    await appendChanges(changes, source === 'server');
     if (source !== 'server') for (const fn of this.listeners) fn(changes);
   }
 
@@ -507,26 +609,44 @@ class Collection {
     return list.length;
   }
 
+  /** The numbering scheme, as a synced setting record; `meta` is written too for a build of this device that still reads it there. */
   async setScheme(s: NumberingScheme): Promise<void> {
-    this.scheme = s;
+    await this.put('setting', NUMBERING_SETTING, { scheme: s });
+    this.metaScheme = s;
     await setMeta('scheme', s);
   }
 
-  /** Bulk append of already-formed changes. Say where they came from: an import still has to be pushed; a sync pull does not. Everything is checked before anything is applied, so a bad batch changes nothing. */
+  /**
+   * Bulk append of already-formed changes. Say where they came from: an import
+   * still has to be pushed; a sync pull does not. Everything is checked before
+   * anything is stored, and stored before anything is applied: a bad batch or
+   * a refused write throws and changes nothing in memory. It throws only for
+   * the batch itself: the duplicate-number repair that follows is a separate
+   * write, and if the vault refuses that one the batch stays stored and
+   * applied, `lastWriteError` says so, and the repair runs again on the next
+   * ingest.
+   */
   async ingest(changes: Change[], source: 'import' | 'server' = 'import'): Promise<void> {
     validateChanges(changes);
     for (const c of changes) this.clock?.observe(c.t);
     await this.commit(changes, source);
-    await this.resolveDuplicateNumbers();
+    try {
+      await this.resolveDuplicateNumbers();
+    } catch {
+      /* commit() has recorded it in lastWriteError; the duplicate stays visible until a later ingest repairs it */
+    }
   }
 
   /**
    * Two devices offline at once can each mint the same next number for
    * different plants. They are different records (different identities), so
    * nothing is lost; after a merge the one created later is given the next
-   * free number and a note says so. Every device applies the same rule to
-   * the same log, and the record's `acc` field settles by the usual
-   * latest-wins, so they agree.
+   * free number and a note says so. Every device derives the same repair
+   * from the same merged log: the same number (lowest free under the synced
+   * scheme), the same note, and the same timestamps (one millisecond after the
+   * record's latest change, tagged from the record's identity rather than
+   * from this device's clock), so two devices that both run it write the
+   * same changes and the log holds one note, not two.
    */
   async resolveDuplicateNumbers(): Promise<number> {
     const changes: Change[] = [];
@@ -538,20 +658,33 @@ class Collection {
         byNo.set(no, [...(byNo.get(no) ?? []), r]);
       }
       const taken = this.takenNumbers(kind);
-      for (const [no, recs] of byNo) {
+      for (const no of [...byNo.keys()].sort()) {
+        const recs = byNo.get(no)!;
         if (recs.length < 2) continue;
         recs.sort((a, b) => a.id.localeCompare(b.id)); // earliest creation keeps the number
         for (const r of recs.slice(1)) {
-          const fresh = kind === 'accession' ? nextAccession(taken, this.scheme, Number((r as Accession).acquired?.slice(0, 4)) || undefined) : nextAccession(taken, { mode: 'prefix', prefix: `S${(r as Sowing).sown.slice(0, 4)}`, width: 3 });
+          const rec = this.state.get(recKey(kind, r.id))!;
+          const base = hlcDecode(rec._t);
+          const wall = base.wall + 1;
+          const when = new Date(wall);
+          const fresh = kind === 'accession' ? nextAccession(taken, this.scheme, Number((r as Accession).acquired?.slice(0, 4)) || when.getUTCFullYear()) : nextAccession(taken, { mode: 'prefix', prefix: `S${(r as Sowing).sown.slice(0, 4)}`, width: 3 });
           taken.add(fresh);
-          changes.push({ t: this.tick(), kind, id: r.id, field: kind === 'accession' ? 'acc' : 'no', value: fresh });
-          const eid = this.eventId();
-          changes.push(...diff('event', eid, { acc: r.id, d: new Date().toISOString().slice(0, 10), t: 'note', note: `Renumbered from ${no} to ${fresh}: another plant had been given ${no} on a device that was offline at the time.` }, undefined, this.tick));
+          // The tag is a function of the record and no real device id starts with 'zz', so the stamps collide with nothing and are identical on every device.
+          const device = ('zz' + tag36(kind + ':' + r.id)).slice(0, 16);
+          const stamp = (count: number) => hlcEncode({ wall, count, device });
+          changes.push({ t: stamp(0), kind, id: r.id, field: kind === 'accession' ? 'acc' : 'no', value: fresh });
+          const eid = 'e' + wall.toString(36) + '00' + device;
+          const note = { acc: r.id, d: when.toISOString().slice(0, 10), t: 'note', note: `Renumbered from ${no} to ${fresh}: another plant had been given ${no} on a device that was offline at the time.` };
+          let count = 1;
+          for (const [field, value] of Object.entries(note)) changes.push({ t: stamp(count++), kind: 'event', id: eid, field, value });
           renumbered++;
         }
       }
     }
-    if (changes.length) await this.commit(changes, 'local');
+    if (changes.length) {
+      for (const c of changes) this.clock?.observe(c.t);
+      await this.commit(changes, 'local');
+    }
     return renumbered;
   }
 

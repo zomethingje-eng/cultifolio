@@ -2,7 +2,13 @@
  * Import a Cultifolio v2 (Herbarium v2) backup. Accepts either the raw
  * collection object (`mc.collection`) or a backup wrapper that contains it,
  * plus the species overlay (`mc.overlay`) if present. Produces change-log
- * entries stamped just before "now" so a later edit on any device wins.
+ * entries stamped from the file's own modification times where a record
+ * carries one (`m`, milliseconds), so an edit made here after that time wins
+ * on every device and the same file imported twice yields the same stamps;
+ * a record without one is stamped an hour before the file's export time (or
+ * before now). A record whose identity is already in the log is skipped
+ * when the caller says which exist (`exists`), so a second import of the
+ * same file changes nothing.
  *
  * v2 numbers are preserved. Nothing in v2 is modified.
  */
@@ -63,26 +69,53 @@ export interface ImportReport {
   locations: number;
   sowings: number;
   skipped: string[];
+  /** Records left as they are because their identity was already in the log (a second import of the same file). */
+  alreadyHere: number;
 }
 
 const MEASURE_KEYS = ['diam', 'h', 'spread', 'caudex', 'heads', 'leaves', 'leaf', 'growths', 'spikes', 'traps', 'trap'];
 
-export function importV2(json: unknown, opts: { device?: string; now?: number; summaries?: Record<string, { gk?: number }> } = {}): { changes: Change[]; report: ImportReport } {
+export interface ImportOpts {
+  device?: string;
+  now?: number;
+  summaries?: Record<string, { gk?: number }>;
+  /** Whether a record with this identity is already in the log; such records are skipped and counted in `alreadyHere`. */
+  exists?: (kind: Change['kind'], id: string) => boolean;
+}
+
+/** A v2 modification time (`m`, ms) when it is one: a finite number from this century and not after `ceiling`. */
+const modTime = (m: unknown, ceiling: number): number | null => (typeof m === 'number' && Number.isFinite(m) && m > 946_684_800_000 && m <= ceiling ? Math.floor(m) : null);
+
+export function importV2(json: unknown, opts: ImportOpts = {}): { changes: Change[]; report: ImportReport } {
   const root = (json ?? {}) as Record<string, unknown>;
   const col = (root.collection ?? root.mcCollection ?? (root.accessions ? root : null)) as V2Collection | null;
   const overlay = (root.overlay ?? root.mcOverlay ?? null) as V2Overlay | null;
-  const report: ImportReport = { accessions: 0, events: 0, taxa: 0, locations: 0, sowings: 0, skipped: [] };
+  const report: ImportReport = { accessions: 0, events: 0, taxa: 0, locations: 0, sowings: 0, skipped: [], alreadyHere: 0 };
   const changes: Change[] = [];
   const device = opts.device ?? 'v2imp';
-  // Stamp imports one hour before now: any edit made after the import wins on every device.
-  const base = (opts.now ?? Date.now()) - 3600_000;
-  let wall = base, n = 0;
+  const now = opts.now ?? Date.now();
+  // A record without its own modification time is stamped an hour before the file was written (the file's export time when it says, else now), so any edit made after the import wins on every device.
+  const exported = modTime(root.exported ?? root.at ?? root.when, now) ?? (typeof root.exported === 'string' && !Number.isNaN(Date.parse(root.exported)) ? Math.min(Date.parse(root.exported), now) : null);
+  const base = (exported ?? now) - 3600_000;
+  // One counter per millisecond, so two records modified in the same millisecond never share a stamp; a very large record spills into the next millisecond rather than past the counter's width.
+  const counters = new Map<number, number>();
+  let wall = base;
+  const at = (ms: number) => {
+    wall = ms;
+  };
   const t = () => {
-    if (n > MAX_COUNT) (wall++, (n = 0)); // a very large collection spills into the next millisecond rather than past the counter's width
-    return hlcEncode({ wall, count: n++, device });
+    let n = counters.get(wall) ?? 0;
+    while (n > MAX_COUNT) n = counters.get(++wall) ?? 0;
+    counters.set(wall, n + 1);
+    return hlcEncode({ wall, count: n, device });
   };
   const push = (kind: Change['kind'], id: string, fields: Record<string, unknown>) => {
     for (const [field, value] of Object.entries(fields)) if (value !== undefined) changes.push({ t: t(), kind, id, field, value });
+  };
+  const here = (kind: Change['kind'], id: string) => {
+    if (!opts.exists?.(kind, id)) return false;
+    report.alreadyHere++;
+    return true;
   };
 
   const taxonNames = new Map<string, string>();
@@ -91,8 +124,11 @@ export function importV2(json: unknown, opts: { device?: string; now?: number; s
       if (!o || typeof o !== 'object') continue;
       const name = o.name ?? id;
       taxonNames.set(id, name);
+      const slug = slugify(name);
+      if (here('taxon', slug)) continue;
+      at(modTime((o as { m?: unknown }).m, now) ?? base);
       const gk = o.gk ?? opts.summaries?.[id]?.gk ?? null;
-      push('taxon', slugify(name), { name, gbifKey: gk, myNotes: o.myNotes ?? null, removed: o.removed ?? null });
+      push('taxon', slug, { name, gbifKey: gk, myNotes: o.myNotes ?? null, removed: o.removed ?? null });
       report.taxa++;
     }
 
@@ -104,6 +140,8 @@ export function importV2(json: unknown, opts: { device?: string; now?: number; s
       if (!b?.id) continue;
       const name = b.name ?? b.id;
       const lid = 'l-v2-' + slugify(name).slice(0, 24) + '-' + slugify(b.id).slice(0, 8);
+      if (here('location', lid)) continue;
+      at(modTime((b as { m?: unknown }).m, now) ?? base);
       const outdoor = /out|garden|balcon|patio|yard/i.test(`${b.where ?? ''}`);
       push('location', lid, { name, parentId: null, type: outdoor ? 'outdoor' : 'bench', indoor: outdoor ? false : b.where ? true : null, floorC: typeof b.floor === 'number' ? b.floor : null, ppfd: typeof b.ppfd === 'number' ? b.ppfd : null, lightHours: typeof b.hours === 'number' ? b.hours : null, lat: typeof b.lat === 'number' ? b.lat : null, lon: typeof b.lon === 'number' ? b.lon : null, notes: b.notes ?? null });
       benchByRef.set(b.id, lid);
@@ -125,6 +163,8 @@ export function importV2(json: unknown, opts: { device?: string; now?: number; s
         report.skipped.push('sowing without an id or date');
         continue;
       }
+      if (here('sowing', id)) continue;
+      at(modTime(w?.m, now) ?? base);
       const taxonId = str(w?.taxonId);
       const taxonName = (taxonId && taxonNames.get(taxonId)) || str(w?.name) || str(w?.taxon) || taxonId || 'Unknown';
       const count = num(w?.count) ?? num(w?.n) ?? num(w?.seeds) ?? num(w?.sownN) ?? 0;
@@ -171,6 +211,8 @@ export function importV2(json: unknown, opts: { device?: string; now?: number; s
         report.skipped.push('accession without a number');
         continue;
       }
+      if (here('accession', a.acc)) continue;
+      at(modTime(a.m, now) ?? base); // the plant and its embedded events share the plant's modification time
       const taxonName = (a.taxonId && taxonNames.get(a.taxonId)) || a.nameAsReceived || a.taxonId || 'Unknown';
       const status = a.status === 'dead' ? 'dead' : a.status === 'archived' ? 'archived' : 'growing';
       push('accession', a.acc, {
@@ -210,7 +252,10 @@ export function importV2(json: unknown, opts: { device?: string; now?: number; s
     // tombstones: "a:<id>" → deleted accession
     for (const [k, ts] of Object.entries(col.tombs ?? {})) {
       const m = /^a:(.+)$/.exec(k);
-      if (m && typeof ts === 'number') changes.push({ t: hlcEncode({ wall: Math.min(base, ts), count: 0, device }), kind: 'accession', id: m[1], field: '_deleted', value: true });
+      if (!m || typeof ts !== 'number') continue;
+      if (here('accession', m[1])) continue;
+      at(modTime(ts, now) ?? base);
+      changes.push({ t: t(), kind: 'accession', id: m[1], field: '_deleted', value: true });
     }
   }
   return { changes, report };

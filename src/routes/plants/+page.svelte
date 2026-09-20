@@ -10,6 +10,23 @@
   import type { IndexEntry } from '$lib/server/dossiers';
   import PhotoImg from '$lib/ui/PhotoImg.svelte';
   onMount(() => collection.load());
+  /** The "not persisted" notice can be put away for this tab's life only; the browser's promise has not changed, so it comes back on the next visit. */
+  let storageNoticeHidden = $state(false);
+  onMount(() => {
+    try {
+      storageNoticeHidden = sessionStorage.getItem('storage-notice-hidden') === '1';
+    } catch {
+      /* private window or storage blocked: show it */
+    }
+  });
+  function hideStorageNotice() {
+    storageNoticeHidden = true;
+    try {
+      sessionStorage.setItem('storage-notice-hidden', '1');
+    } catch {
+      /* ignore */
+    }
+  }
   let q = $state('');
   let show = $state<'growing' | 'all' | 'due'>('growing');
   let thumbs = $state<Map<string, string>>(new Map());
@@ -43,6 +60,13 @@
   </div>
 </div>
 
+{#if collection.lastWriteError}
+  <div class="notice err" role="alert" id="write-error">This change was not saved: {collection.lastWriteError}. Free space or <a href="/backup">back up now</a>.</div>
+{/if}
+{#if collection.ready && collection.persisted === false && !storageNoticeHidden}
+  <div class="notice" id="storage-notice">This browser has not promised to keep your data: it may clear this site's storage, photographs included, to make room. <a href="/backup">Back up now</a>. Installing the app to your home screen tells the browser to keep it. <button class="linkish" type="button" onclick={hideStorageNotice}>Hide for now</button></div>
+{/if}
+
 {#if !collection.ready}
   <p class="muted">Opening your collection…</p>
 {:else if !collection.accessions.length}
@@ -68,11 +92,12 @@
       </a>
     {/each}
   </div>
-  <p class="seccount">{list.length} of {collection.accessions.length}. {#if collection.persisted === false}This browser has not promised to keep your data; install the app to your home screen or <a href="/backup">take a backup</a>.{:else}<a href="/backup">Backup</a>.{/if}</p>
+  <p class="seccount">{list.length} of {collection.accessions.length}. <a href="/backup">Backup</a>.</p>
 {/if}
 
 <style>
   .muted { color: var(--ink3); }
+  .notice .linkish { background: none; border: 0; padding: 0; color: var(--ink3); font: inherit; text-decoration: underline; cursor: pointer; }
   .accrow .nm .accno { font-style: normal; vertical-align: 2px; }
   .im.own { box-shadow: inset 0 0 0 2px var(--accent); }
   .im :global(img) { width: 100%; height: 100%; object-fit: cover; }

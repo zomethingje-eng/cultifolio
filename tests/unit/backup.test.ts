@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildBackup, readBackup, previewMerge, summarise, plantsCsv, photoBytesError } from '$lib/backup/backup';
+import { buildBackup, readBackup, previewMerge, summarise, plantsCsv, photoBytesError, photosWithoutPixels } from '$lib/backup/backup';
 import { zipSync } from 'fflate';
 import { materialise, live, type Change, type Record_ } from '$core/log';
 import type { Accession } from '$lib/db/types';
@@ -33,7 +33,7 @@ const marker = (b: Uint8Array) => new TextDecoder().decode(b.subarray(4));
 describe('backup round trip', () => {
   it('writes a zip and reads back the same log, photos and manifest', async () => {
     const seen: string[] = [];
-    const bytes = await buildBackup({
+    const { bytes, photosMissing } = await buildBackup({
       changes: log,
       scheme: { mode: 'year', width: 4 },
       device: 'dev1',
@@ -44,20 +44,27 @@ describe('backup round trip', () => {
     });
     expect(bytes[0]).toBe(0x50); // PK
     expect(seen).toEqual(['p1']); // the deleted photo is not exported
+    expect(photosMissing).toEqual([]);
     const r = await readBackup(bytes);
     expect(r.manifest?.format).toBe('cultifolio-backup');
     expect(r.manifest?.counts).toMatchObject({ changes: 16, accessions: 1, events: 1, locations: 2, photos: 1, taxa: 1, photoBytes: 22 });
+    expect(r.manifest?.photosMissing).toBeUndefined();
     expect(r.manifest?.scheme).toEqual({ mode: 'year', width: 4 });
     expect(r.changes).toEqual(log);
     expect(r.photoIds).toEqual(['p1']);
     expect(marker(r.readPhoto('p1')!.full)).toBe('FULL-JPEG');
     expect(r.readPhoto('p2')).toBeNull();
   });
-  it('a photo record whose pixels are missing still travels, without pixels', async () => {
-    const bytes = await buildBackup({ changes: log, readPhoto: async () => null });
-    const r = await readBackup(bytes);
+  it('a photo record whose pixels are missing still travels, without pixels, and the file says so: the count is what is in the file and the record is named', async () => {
+    const built = await buildBackup({ changes: log, readPhoto: async () => null });
+    expect(built.photosMissing).toEqual(['p1']); // the builder tells the page before download
+    const r = await readBackup(built.bytes);
     expect(r.photoIds).toEqual([]);
-    expect(summarise(r.changes).photos).toBe(1);
+    expect(summarise(r.changes).photos).toBe(1); // the record is there
+    expect(r.manifest?.counts.photos).toBe(0); // the photograph is not
+    expect(r.manifest?.counts.photoBytes).toBe(0);
+    expect(r.manifest?.photosMissing).toEqual(['p1']);
+    expect(photosWithoutPixels(r)).toEqual(['p1']); // and a restore can say so once, from the file itself
   });
   it('reads the older changes-only JSON export', async () => {
     const json = new TextEncoder().encode(JSON.stringify({ format: 'cultifolio-changes', v: 1, changes: log }));
@@ -68,7 +75,7 @@ describe('backup round trip', () => {
   it('refuses things that are not backups, with a reason', async () => {
     await expect(readBackup(px('hello'))).rejects.toThrow(/neither/);
     await expect(readBackup(px('{"a":1}'))).rejects.toThrow(/not a Cultifolio backup/);
-    const bytes = await buildBackup({ changes: log, readPhoto: async () => null });
+    const { bytes } = await buildBackup({ changes: log, readPhoto: async () => null });
     const truncated = bytes.subarray(0, 40);
     await expect(readBackup(truncated)).rejects.toThrow();
   });
@@ -110,7 +117,7 @@ describe('a backup is checked before anything is stored', () => {
   it('a change whose timestamp is not an HLC is refused with its position', async () => {
     const bad = [...log, { t: '~', kind: 'accession', id: '2026-0001', field: 'notes', value: 'wins forever' }];
     await expect(readBackup(px(JSON.stringify({ format: 'cultifolio-changes', v: 1, changes: bad })))).rejects.toThrow(/Change 17 .*bad timestamp/);
-    const bytes = await buildBackup({ changes: bad as Change[], readPhoto: async () => null });
+    const { bytes } = await buildBackup({ changes: bad as Change[], readPhoto: async () => null });
     await expect(readBackup(bytes)).rejects.toThrow(/Change 17/);
   });
   it('photo entries must be JPEGs under the sync limit, with sane names', async () => {

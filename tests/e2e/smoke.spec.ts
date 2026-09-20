@@ -328,7 +328,7 @@ test('backup: export a zip, wipe the device, restore it, and the collection is i
   // restore by merge into the empty device
   await page.goto('/backup');
   await page.locator('#bk-file').setInputFiles(path!);
-  await expect(page.locator('.preview')).toContainText('1 plants · 2 timeline entries · 1 places · 0 sowings · 1 photos');
+  await expect(page.locator('.preview')).toContainText('1 plant · 2 timeline entries · 1 place · 0 sowings · 1 photo');
   await expect(page.locator('.preview')).toContainText('bring in 1 photo');
   await page.click('#bk-merge');
   await expect(page.locator('#bk-done')).toContainText('1 photo');
@@ -632,7 +632,7 @@ test('sync: an offline edit uploaded late is still discovered, and a backup merg
   const path = await (await dl).path();
   await a.goto('/backup');
   await a.locator('#bk-file').setInputFiles(path!);
-  await expect(a.locator('.preview')).toContainText('1 plants');
+  await expect(a.locator('.preview')).toContainText('1 plant ·');
   await a.click('#bk-merge');
   await expect(a.locator('#bk-done')).toBeVisible();
   await syncNow(a);

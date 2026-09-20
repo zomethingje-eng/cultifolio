@@ -192,7 +192,12 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
       if (/introduced|managed|cultivated/i.test(`${r.establishmentMeans ?? ''} ${r.degreeOfEstablishment ?? ''}`)) continue;
       const dk = `${+r.decimalLatitude.toFixed(3)},${+r.decimalLongitude.toFixed(3)}`;
       const held = byCoord.get(dk);
-      if (!held || (!isOpen(licenceTag(held.license)) && isOpen(licenceTag(r.license)))) byCoord.set(dk, r);
+      // One record per three-decimal coordinate: an open one over a restricted one (what may be published), and among
+      // the same licence class the more precisely placed one (what may enter the climate), so a 1 km record is not
+      // discarded for a 100 km one that happened to come first.
+      const unc = (x: typeof r) => x.coordinateUncertaintyInMeters ?? Infinity;
+      const better = !held || (!isOpen(licenceTag(held.license)) && isOpen(licenceTag(r.license))) || (isOpen(licenceTag(held.license)) === isOpen(licenceTag(r.license)) && unc(r) < unc(held));
+      if (better) byCoord.set(dk, r);
     }
     for (const r of byCoord.values()) {
       const lat = +r.decimalLatitude!.toFixed(3),

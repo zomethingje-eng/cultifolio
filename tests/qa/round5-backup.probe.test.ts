@@ -51,7 +51,7 @@ describe('export → wipe → import', () => {
     await collection.put('taxon', 'copiapoa-cinerea', { name: 'Copiapoa cinerea', gbifKey: 7, myNotes: 'keep dry in winter' });
     const p = await collection.addPhoto({ acc: a.id, d: '2026-04-02', w: 10, h: 10, bytes: 13, blob: new Blob([jpeg(10)]), thumb: new Blob([jpeg(3)]) });
     const before = { changes: mem.changes.size, photos: mem.photos.size };
-    const zip = await buildBackup({ changes: [...mem.changes.values()], scheme: collection.scheme, readPhoto: async (id) => (mem.photos.has(id) ? { id, full: jpeg(10), thumb: jpeg(3) } : null) });
+    const { bytes: zip } = await buildBackup({ changes: [...mem.changes.values()], scheme: collection.scheme, readPhoto: async (id) => (mem.photos.has(id) ? { id, full: jpeg(10), thumb: jpeg(3) } : null) });
     // Wipe (a private window) and read the file back.
     mem.changes.clear();
     mem.photos.clear();
@@ -77,21 +77,25 @@ describe('export → wipe → import', () => {
     expect(fresh.mySpecies.get('ariocarpus-retusus')?.followed).toBe(true);
     expect(fresh.photo(p.id)).toBeDefined();
     expect(mem.outbox.size).toBe(before.changes); // every restored change will be pushed if sync is set up
-    // The scheme is in the manifest but ingest() does not set it; only restoreBackup's 'replace' path does (io.ts:300). Merge leaves the device on its old scheme.
-    expect(fresh.scheme).toEqual({ mode: 'prefix', prefix: 'GH', width: 3 }); // here only because meta survived the "wipe": a real private window starts at the default
+    // FIXED (32, 37): the scheme is a setting record in the log itself, so a merge carries it; meta is only a fallback for a device that never wrote the record.
+    mem.meta.delete('scheme');
+    expect(fresh.scheme).toEqual({ mode: 'prefix', prefix: 'GH', width: 3 });
+    expect(file.changes.some((c) => c.kind === 'setting')).toBe(true);
   });
-  it('a photo record whose pixels never made it into the zip is restored as a record with no pixels; sync then asks the server for it on every run and takes the 404 in silence', async () => {
+  it('FIXED (55): a photo record whose pixels never made it into the zip travels as a record, and the manifest says so: the photo count is what the file holds and the missing one is named', async () => {
     const changes: Change[] = [
       { t: '1700000000000-0000-dev', kind: 'accession', id: 'r1', field: 'taxonName', value: 'Aloe' },
       { t: '1700000000000-0001-dev', kind: 'accession', id: 'r1', field: 'status', value: 'growing' },
       { t: '1700000000000-0002-dev', kind: 'photo', id: 'pmissing00001', field: 'acc', value: 'r1' },
       { t: '1700000000000-0003-dev', kind: 'photo', id: 'pmissing00001', field: 'd', value: '2026-01-01' }
     ];
-    const zip = await buildBackup({ changes, readPhoto: async () => null });
-    const file = await readBackup(zip);
+    const built = await buildBackup({ changes, readPhoto: async () => null });
+    expect(built.photosMissing).toEqual(['pmissing00001']); // the export page says so before the download
+    const file = await readBackup(built.bytes);
     expect(file.photoIds).toEqual([]);
     expect(file.changes.filter((c) => c.kind === 'photo')).toHaveLength(2);
-    expect(file.manifest?.counts.photos).toBe(1);
-    expect(file.manifest?.counts.photoBytes).toBe(0); // the manifest knows; the import preview does not say "1 photo has no pixels"
+    expect(file.manifest?.counts.photos).toBe(0);
+    expect(file.manifest?.counts.photoBytes).toBe(0);
+    expect(file.manifest?.photosMissing).toEqual(['pmissing00001']); // and the restore report says it once
   });
 });

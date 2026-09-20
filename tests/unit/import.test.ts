@@ -57,6 +57,37 @@ describe('v2 importer', () => {
     const later = `${String(1_800_000_000_000).padStart(13, '0')}-0000-dev`;
     expect(changes.every((c) => c.t < later)).toBe(true);
   });
+  it('a record is stamped from its own modification time (m); one without is stamped an hour before now; the same file gives the same stamps twice', () => {
+    const { changes } = importV2(backup, { now: 1_800_000_000_000 });
+    const wallOf = (c: { t: string }) => Number(c.t.slice(0, 13));
+    const withM = changes.filter((c) => c.id === '2025-0003' || c.id.startsWith('v2-2025-0003-'));
+    expect(withM.length).toBeGreaterThan(0);
+    expect(withM.every((c) => wallOf(c) === 1_700_000_000_000)).toBe(true); // the plant and its embedded events
+    const without = changes.filter((c) => c.id === '2024-0001');
+    expect(without.every((c) => wallOf(c) === 1_800_000_000_000 - 3_600_000)).toBe(true);
+    const tomb = changes.find((c) => c.id === '2024-0002');
+    expect(wallOf(tomb!)).toBe(1_710_000_000_000); // the v2 deletion time
+    // An edit here after the v2 modification time wins on every device; a second import cannot beat it.
+    const again = importV2(backup, { now: 1_800_000_000_000 + 86_400_000 });
+    expect(again.changes.filter((c) => c.id === '2025-0003').map((c) => c.t)).toEqual(withM.filter((c) => c.id === '2025-0003').map((c) => c.t));
+    expect(new Set(changes.map((c) => c.t)).size).toBe(changes.length); // unique even though two records can share a millisecond
+  });
+  it('a modification time that is not one (0, a future clock) falls back to the file base', () => {
+    const odd = { collection: { accessions: { A: { acc: 'A', taxonId: 'x', m: 0 }, B: { acc: 'B', taxonId: 'x', m: 1_900_000_000_000 } } } };
+    const { changes } = importV2(odd, { now: 1_800_000_000_000 });
+    expect(new Set(changes.map((c) => Number(c.t.slice(0, 13))))).toEqual(new Set([1_800_000_000_000 - 3_600_000]));
+  });
+  it('records already in the log are skipped and counted, so importing the same file twice changes nothing', () => {
+    const first = importV2(backup, { now: 1_800_000_000_000 });
+    const ids = new Set(first.changes.map((c) => `${c.kind}:${c.id}`));
+    const second = importV2(backup, { now: 1_800_000_000_000, exists: (kind, id) => ids.has(`${kind}:${id}`) });
+    expect(second.changes).toHaveLength(0);
+    expect(second.report).toMatchObject({ accessions: 0, events: 0, taxa: 0, alreadyHere: 5 }); // 2 plants, 2 species, 1 tombstone
+    // A partial overlap: only what is new comes in.
+    const third = importV2(backup, { now: 1_800_000_000_000, exists: (kind, id) => kind === 'accession' && id === '2025-0003' });
+    expect(third.report).toMatchObject({ accessions: 1, events: 1, taxa: 2, alreadyHere: 1 });
+    expect(third.changes.some((c) => c.id === '2025-0003' || c.id.startsWith('v2-2025-0003-'))).toBe(false);
+  });
   it('accepts a raw collection object too', () => {
     const { report } = importV2(backup.collection);
     expect(report.accessions).toBe(2);
