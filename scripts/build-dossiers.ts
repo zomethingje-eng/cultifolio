@@ -14,8 +14,10 @@
  *   npx tsx scripts/build-dossiers.ts --fill inat               # photographs only, the same way: iNaturalist allows 10,000 calls a day, about
  *                                                                # 3,300 species; a long run leaves photos out (--skip inat) and fills them daily.
  *   npx tsx scripts/build-dossiers.ts static/s/v2/index.json --offline --grid climate --bulk bulk
- *                                                                # a re-derivation that asks no upstream at all: the backbone's name block is carried from
- *                                                                # the previous build too, so the run is the files and the grid, an hour rather than a day
+ *                                                                # a re-derivation that asks no upstream: the backbone's name block is carried from the
+ *                                                                # previous build too, so the run is the files and the grid, an hour rather than a day. The
+ *                                                                # one exception is the occurrence search for species the download left to the API path
+ *                                                                # (bulk/api-path.txt): a dossier keeps only open records, so those are fetched again.
  *   npx tsx scripts/build-dossiers.ts names.txt --rederive     # rebuild range, records, centre and climate under the current rules (bulk files
  *                                                                # and the local grid; only the backbone is asked), carrying photos, summary,
  *                                                                # identifiers and literature from each species' previous build. About a second a species.
@@ -425,10 +427,15 @@ async function main() {
       // No upstream is asked. The one request the bulk fetcher makes on its own, /species/{key} for a name's authorship,
       // is answered from the previous dossier; NASA POWER is allowed through because the extremes cache is on disk and
       // a cell not yet cached is better fetched than refused. Everything else is refused as offline, and says so.
+      // One more exception: an occurrence search that reaches this fetcher has fallen through the bulk fetcher, which
+      // means the download holds nothing for the species. That is the case for every species the download request left
+      // to the API path (more records than the cut, listed in bulk/api-path.txt), and a dossier holds only its open
+      // records, so there is nothing on disk to re-derive the climate from: the API is asked for those, and only those.
       const net = makeFetcher();
       f = async <T = unknown>(url: string, opts?: Parameters<typeof net>[1]) => {
         const host = new URL(url).host;
         if (host === 'power.larc.nasa.gov') return net<T>(url, opts);
+        if (/\/occurrence\/search\?taxonKey=\d+&hasCoordinate=true/.test(url)) return net<T>(url, opts);
         const m = /\/species\/(\d+)$/.exec(url);
         if (m) {
           const prev = readPrev(Number(m[1]));
@@ -456,7 +463,7 @@ async function main() {
     report.push(line);
     console.log(`[${report.length}/${jobs.length}] ${line}`);
   };
-  console.log(`Building ${jobs.length} species${quick ? ' (quick)' : ''}${offline ? ' (offline: re-deriving range, records, marker and climate from the files and the grid; the name block, photos, summary and literature carried from the previous build; no upstream asked)' : rederive ? ' (re-deriving range, records, centre and climate; photos, summary and literature carried from the previous build)' : skip.length ? ` (skipping ${skip.join(', ')})` : ''}${process.env.OPENALEX_KEY && !rederive ? ' with an OpenAlex key' : ''}…`);
+  console.log(`Building ${jobs.length} species${quick ? ' (quick)' : ''}${offline ? ' (offline: re-deriving range, records, marker and climate from the files and the grid; the name block, photos, summary and literature carried from the previous build; no upstream asked except occurrences for species the download left to the API path)' : rederive ? ' (re-deriving range, records, centre and climate; photos, summary and literature carried from the previous build)' : skip.length ? ` (skipping ${skip.join(', ')})` : ''}${process.env.OPENALEX_KEY && !rederive ? ' with an OpenAlex key' : ''}…`);
   // Existing dossiers by name, so a clean one is kept rather than rebuilt (unless --force).
   const onDisk = fixtures ? [] : scanDossiers();
   const existing = new Map<string, number>(onDisk.map((e) => [e.name.toLowerCase(), e.key]));
