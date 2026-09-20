@@ -39,6 +39,12 @@ export interface BuildOptions {
   skip?: SkippableSource[];
   /** GBIF's media (the photographs on occurrence records) is asked for first, not only when other sources gave under six: set when a download supplies it at no cost. */
   mediaFirst?: boolean;
+  /**
+   * The previous build's name block for this key, so a re-derivation asks the backbone nothing: the name, its
+   * synonyms and vernaculars are carried, and the upstream records say so. Only honoured when the build is by key
+   * and the key matches; a build by name always asks the backbone.
+   */
+  taxon?: { key: number; name: Dossier['name']; accepted?: Upstream; builtOn?: string };
 }
 export type SkippableSource = 'openalex' | 'wikidata' | 'wikipedia' | 'inat' | 'commons' | 'gbif.media';
 /** Everything that is not the backbone, the range, the records or the climate: what a re-derivation can carry over from the previous build. */
@@ -100,13 +106,25 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
       return { ok: false, reason: 'higher-rank-only', detail: `backbone offered ${m.data.canonicalName ?? m.data.scientificName} (${m.data.rank?.toLowerCase() ?? '?'})` };
     key = m.data.usageKey;
   }
-  let sp = await gbif.species(f, key);
-  mark('gbif.species', sp);
+  // A carried taxon: the previous build's answer stands in for the backbone's, and every record says it was carried.
+  const carried = o.taxon && typeof nameOrKey === 'number' && o.taxon.key === nameOrKey ? o.taxon : null;
+  const carriedFrom = carried ? `carried from build of ${carried.builtOn?.slice(0, 10) ?? '?'} (offline re-derivation; the backbone was not asked)` : '';
+  let sp: Awaited<ReturnType<typeof gbif.species>>;
+  if (carried) {
+    const n = carried.name;
+    const cls = Object.fromEntries((n.classification ?? []).flatMap((c) => [[c.rank, c.name], [`${c.rank}Key`, c.key]]));
+    sp = { status: 'ok', data: { key: carried.key, canonicalName: n.scientific, scientificName: n.scientific, authorship: n.authorship ?? undefined, rank: n.rank ?? undefined, taxonomicStatus: n.status === 'accepted' ? 'ACCEPTED' : n.status === 'synonym' ? 'SYNONYM' : n.status === 'doubtful' ? 'DOUBTFUL' : undefined, acceptedKey: n.acceptedKey ?? undefined, accepted: n.acceptedName ?? undefined, family: n.family ?? undefined, genus: n.genus ?? undefined, order: n.order ?? undefined, ...cls } as (typeof sp & { status: 'ok' })['data'] };
+    upstream['gbif.species'] = { status: 'ok', at: now(), detail: carriedFrom };
+    if (carried.accepted) upstream['gbif.accepted'] = { ...carried.accepted, detail: `${carried.accepted.detail ?? ''}; ${carriedFrom}`.replace(/^; /, '') };
+  } else {
+    sp = await gbif.species(f, key);
+    mark('gbif.species', sp);
+  }
   if (sp.status !== 'ok') return { ok: false, reason: sp.status === 'none' ? 'name-unresolved' : 'backbone-refused', detail: sp.status === 'none' ? undefined : sp.detail };
   // A name the backbone holds as a synonym is followed to the species it accepts: the records, the
   // range and the photographs are indexed under that name, and a page under the synonym would be
   // empty. The page says which name was asked for; the synonym stays in the synonym list.
-  if (/synonym/i.test(sp.data.taxonomicStatus ?? '') && sp.data.acceptedKey && sp.data.acceptedKey !== key) {
+  if (!carried && /synonym/i.test(sp.data.taxonomicStatus ?? '') && sp.data.acceptedKey && sp.data.acceptedKey !== key) {
     const from = sp.data.canonicalName ?? sp.data.scientificName;
     let acc = await gbif.species(f, sp.data.acceptedKey);
     if (acc.status === 'refused' || acc.status === 'error') return { ok: false, reason: 'backbone-refused', detail: acc.detail };
@@ -133,9 +151,17 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   const scientific = s.canonicalName ?? s.scientificName;
   const status = /accepted/i.test(s.taxonomicStatus ?? '') ? 'accepted' : /synonym/i.test(s.taxonomicStatus ?? '') ? 'synonym' : /doubtful/i.test(s.taxonomicStatus ?? '') ? 'doubtful' : 'unknown';
 
-  const [syn, vern] = await Promise.all([gbif.synonyms(f, key), gbif.vernacular(f, key)]);
-  mark('gbif.synonyms', syn);
-  mark('gbif.vernacular', vern);
+  let syn: Awaited<ReturnType<typeof gbif.synonyms>>, vern: Awaited<ReturnType<typeof gbif.vernacular>>;
+  if (carried) {
+    syn = { status: 'ok', data: carried.name.synonyms };
+    vern = { status: 'ok', data: carried.name.vernacular };
+    upstream['gbif.synonyms'] = { status: 'ok', at: now(), detail: carriedFrom };
+    upstream['gbif.vernacular'] = { status: 'ok', at: now(), detail: carriedFrom };
+  } else {
+    [syn, vern] = await Promise.all([gbif.synonyms(f, key), gbif.vernacular(f, key)]);
+    mark('gbif.synonyms', syn);
+    mark('gbif.vernacular', vern);
+  }
 
   /* ---- 2. Distribution (WCVP via GBIF) ---- */
   const dist = await gbif.distributions(f, key);

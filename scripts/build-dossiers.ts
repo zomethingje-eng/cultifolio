@@ -13,6 +13,9 @@
  *                                                                # allowance is spent (free keys: 1,000 species a day) and says when it resets.
  *   npx tsx scripts/build-dossiers.ts --fill inat               # photographs only, the same way: iNaturalist allows 10,000 calls a day, about
  *                                                                # 3,300 species; a long run leaves photos out (--skip inat) and fills them daily.
+ *   npx tsx scripts/build-dossiers.ts static/s/v2/index.json --offline --grid climate --bulk bulk
+ *                                                                # a re-derivation that asks no upstream at all: the backbone's name block is carried from
+ *                                                                # the previous build too, so the run is the files and the grid, an hour rather than a day
  *   npx tsx scripts/build-dossiers.ts names.txt --rederive     # rebuild range, records, centre and climate under the current rules (bulk files
  *                                                                # and the local grid; only the backbone is asked), carrying photos, summary,
  *                                                                # identifiers and literature from each species' previous build. About a second a species.
@@ -61,7 +64,8 @@ const args = process.argv.slice(2);
 const upload = args.includes('--upload');
 const fixtures = args.includes('--fixtures');
 const quick = args.includes('--quick');
-const rederive = args.includes('--rederive');
+const offline = args.includes('--offline');
+const rederive = args.includes('--rederive') || offline;
 const fill = (() => { const i = args.indexOf('--fill'); return i >= 0 ? args[i + 1] : undefined; })();
 const force = args.includes('--force') || rederive;
 const skip: SkippableSource[] = rederive ? [...NETWORK_EXTRAS] : (() => { const i = args.indexOf('--skip'); return i >= 0 ? (args[i + 1] ?? '').split(',').filter((x): x is SkippableSource => (NETWORK_EXTRAS as string[]).includes(x)) : []; })();
@@ -70,6 +74,19 @@ const bulkDir = (() => { const i = args.indexOf('--bulk'); return i >= 0 ? args[
 const outDir = fixtures ? 'fixtures/dossiers' : 'static'; // static/s/v<N>/<key>.json is served by the app and mirrors the R2 key
 
 /** POWER series cached on disk so the same 0.5° cell is never requested twice across runs. */
+/** The previous build of a key, this version's file or the last version's, or null. Parsed each time; a rederive reads each once. */
+function readPrev(key: number): Dossier | null {
+  for (const p of [`${outDir}/${dossierPath(key)}`, `${outDir}/s/v${DOSSIER_V - 1}/${key}.json`]) {
+    if (!existsSync(p)) continue;
+    try {
+      return JSON.parse(readFileSync(p, 'utf8')) as Dossier;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 function diskPowerCache(dir: string): PowerCache {
   mkdirSync(dir, { recursive: true });
   return {
@@ -404,6 +421,22 @@ async function main() {
     if (unique.length < parsed.length) console.log(`  ${parsed.length - unique.length} repeated line${parsed.length - unique.length === 1 ? '' : 's'} in ${file} skipped`);
     const names = unique.map((p) => p.name);
     let f = makeFetcher();
+    if (offline) {
+      // No upstream is asked. The one request the bulk fetcher makes on its own, /species/{key} for a name's authorship,
+      // is answered from the previous dossier; NASA POWER is allowed through because the extremes cache is on disk and
+      // a cell not yet cached is better fetched than refused. Everything else is refused as offline, and says so.
+      const net = makeFetcher();
+      f = async <T = unknown>(url: string, opts?: Parameters<typeof net>[1]) => {
+        const host = new URL(url).host;
+        if (host === 'power.larc.nasa.gov') return net<T>(url, opts);
+        const m = /\/species\/(\d+)$/.exec(url);
+        if (m) {
+          const prev = readPrev(Number(m[1]));
+          if (prev) return { status: 'ok' as const, data: { key: prev.key, canonicalName: prev.name.scientific, scientificName: prev.name.scientific, authorship: prev.name.authorship ?? undefined } as unknown as T };
+        }
+        return { status: 'refused' as const, detail: `${host} not asked: offline re-derivation` };
+      };
+    }
     if (bulkDir) {
       console.log(`Loading bulk files from ${bulkDir}/…`);
       const [wcvp, loaded] = await Promise.all([loadWcvp(bulkDir, names), loadOccurrences(bulkDir, 2000, wantedKeys(bulkDir, names))]);
@@ -423,7 +456,7 @@ async function main() {
     report.push(line);
     console.log(`[${report.length}/${jobs.length}] ${line}`);
   };
-  console.log(`Building ${jobs.length} species${quick ? ' (quick)' : ''}${rederive ? ' (re-deriving range, records, centre and climate; photos, summary and literature carried from the previous build)' : skip.length ? ` (skipping ${skip.join(', ')})` : ''}${process.env.OPENALEX_KEY && !rederive ? ' with an OpenAlex key' : ''}…`);
+  console.log(`Building ${jobs.length} species${quick ? ' (quick)' : ''}${offline ? ' (offline: re-deriving range, records, marker and climate from the files and the grid; the name block, photos, summary and literature carried from the previous build; no upstream asked)' : rederive ? ' (re-deriving range, records, centre and climate; photos, summary and literature carried from the previous build)' : skip.length ? ` (skipping ${skip.join(', ')})` : ''}${process.env.OPENALEX_KEY && !rederive ? ' with an OpenAlex key' : ''}…`);
   // Existing dossiers by name, so a clean one is kept rather than rebuilt (unless --force).
   const onDisk = fixtures ? [] : scanDossiers();
   const existing = new Map<string, number>(onDisk.map((e) => [e.name.toLowerCase(), e.key]));
@@ -442,7 +475,20 @@ async function main() {
     }
     let r;
     try {
-      r = await buildDossier(j.key ?? j.name, { fetcher: j.fetcher, builtBy: 'node', quick, climate, skip, mediaFirst: mediaFromFiles });
+      const prevTaxon = offline && j.key ? readPrev(j.key) : null;
+      if (offline && !prevTaxon) {
+        say(`✗ ${j.name}: no previous dossier to carry the name from; build it online first`);
+        continue;
+      }
+      r = await buildDossier(j.key ?? j.name, {
+        fetcher: j.fetcher,
+        builtBy: 'node',
+        quick,
+        climate,
+        skip,
+        mediaFirst: mediaFromFiles,
+        taxon: prevTaxon ? { key: prevTaxon.key, name: prevTaxon.name, accepted: prevTaxon.upstream?.['gbif.accepted'], builtOn: prevTaxon.built } : undefined
+      });
     } catch (e) {
       const issues = (e as { issues?: Array<{ path?: Array<{ key: unknown }>; message: string }> }).issues;
       const where = issues?.map((i) => (i.path ?? []).map((p) => String(p.key)).join('.') + ': ' + i.message).join('; ');

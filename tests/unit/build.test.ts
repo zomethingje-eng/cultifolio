@@ -180,3 +180,26 @@ describe('round five: deduplication keeps the precise record', () => {
     expect(r.dossier.occurrences.nVague).toBe(1); // 9004 at 50 km stays on the map and off the climate; 9002 at 1 km does not
   });
 });
+
+describe('round five: an offline re-derivation carries the name block', () => {
+  it('builds by key without asking the backbone, and says so in the upstream records', async () => {
+    const { copiapoa } = await import('../../fixtures/upstream');
+    const { buildDossier } = await import('$dossier/build');
+    const { fixtureFetcher } = await import('$dossier/fetch');
+    const first = await buildDossier('Copiapoa cinerea', { fetcher: fixtureFetcher(copiapoa()), builtBy: 'node', quick: true });
+    if (!first.ok) throw new Error(first.reason);
+    const prev = first.dossier;
+    // The backbone is gone: every /species request is refused. Only the range and the records are served.
+    const table = copiapoa();
+    for (const k of Object.keys(table)) if (/\/species\/\d+$|\/species\/\d+\/(synonyms|vernacularNames)|species\/match/.test(k)) table[k] = { __status: 'refused', status: 'refused', detail: 'offline' };
+    const again = await buildDossier(prev.key, { fetcher: fixtureFetcher(table), builtBy: 'node', quick: true, taxon: { key: prev.key, name: prev.name, accepted: prev.upstream['gbif.accepted'], builtOn: prev.built } });
+    if (!again.ok) throw new Error(again.reason);
+    expect(again.dossier.name).toEqual(prev.name);
+    expect(again.dossier.upstream['gbif.species'].detail).toMatch(/carried from build of \d{4}-\d{2}-\d{2} \(offline re-derivation/);
+    expect(again.dossier.upstream['gbif.synonyms'].detail).toMatch(/carried/);
+    expect(again.dossier.occurrences.nOpenInRange).toBe(prev.occurrences.nOpenInRange);
+    // By name, the carried block is ignored and the backbone is asked (and here refused).
+    const byName = await buildDossier('Copiapoa cinerea', { fetcher: fixtureFetcher(table), builtBy: 'node', quick: true, taxon: { key: prev.key, name: prev.name } });
+    expect(byName.ok).toBe(false);
+  });
+});
