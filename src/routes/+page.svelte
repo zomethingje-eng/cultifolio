@@ -7,6 +7,8 @@
   import { slugify } from '$core/names';
   import { groupFor } from '$core/regions';
   import type { MySpecies } from '$lib/db/species-list';
+  import { prepare, search } from '$core/search';
+  import Today from '$lib/ui/Today.svelte';
   let { data } = $props();
   let q = $state('');
   let chip = $state<'all' | 'owned' | 'climate' | 'noclimate'>('all');
@@ -63,11 +65,10 @@
   const yourView = $derived(hasMine && !browsing);
   // The hint says "your species" is coming; hold the catalogue back until the collection says which view this is.
   const settling = $derived(expectMine && !collection.ready);
-  type Item = (typeof data.groups)[number]['items'][number];
-  // The full catalogue, fetched once and only when something needs more than the first page of a group.
+  type Item = NonNullable<(typeof data.rows)[number]['items']>[number];
+  // The full catalogue, fetched once and only when a search or a chip needs to cut across the grouping.
   let full = $state<Item[] | null>(null);
   let loadingFull = $state(false);
-  let opened = $state<Set<string>>(new Set());
   async function loadFull() {
     if (full || loadingFull) return;
     loadingFull = true;
@@ -81,41 +82,27 @@
       loadingFull = false;
     }
   }
-  const needsFull = $derived(!!q.trim() || chip !== 'all' || opened.size > 0);
+  const flat = $derived(!!q.trim() || chip !== 'all');
   $effect(() => {
-    if (needsFull || hasMine) loadFull();
+    if (flat || hasMine) loadFull();
   });
   const ownedN = $derived.by(() => {
     if (full) return [...owned.keys()].filter((k) => full!.some((c) => c.slug === k)).length;
     return [...owned.keys()].length; // until the full index is here, count what you grow, not what the corpus has of it
   });
-  const matchesQ = (c: Item) => !q.trim() || `${c.name} ${c.family ?? ''} ${c.common ?? ''} ${c.origin.join(' ')}`.toLowerCase().includes(q.trim().toLowerCase());
-  const matches = (c: Item) => {
-    if (!matchesQ(c)) return false;
-    if (chip === 'owned') return owned.has(c.slug);
-    if (chip === 'climate') return c.climate === 'ok';
-    if (chip === 'noclimate') return c.climate !== 'ok';
-    return true;
-  };
-  // Every group, with its items: the page's first tiles when browsing, the full list when searching, filtering or opened.
-  const shown = $derived.by(() => {
-    const groupOf = new Map<string, Item[]>();
-    if (needsFull && full) {
-      for (const c of full) {
-        const key = groupFor(c.origin);
-        groupOf.set(key, [...(groupOf.get(key) ?? []), c]);
-      }
-    }
-    return data.groups
-      .map((g) => {
-        const all = needsFull && full ? (groupOf.get(g.origin) ?? []).sort((a, b) => a.name.localeCompare(b.name)) : g.items;
-        const items = all.filter(matches);
-        const complete = needsFull ? !!full : items.length >= g.count;
-        return { ...g, items: opened.has(g.origin) || q.trim() || chip !== 'all' ? items : items.slice(0, data.page), matching: items.length, complete };
-      })
-      .filter((g) => g.items.length);
+  const prepared = $derived(full ? prepare(full) : null);
+  const chipOk = (c: Item) => (chip === 'owned' ? owned.has(c.slug) : chip === 'climate' ? c.climate === 'ok' : chip === 'noclimate' ? c.climate !== 'ok' : true);
+  // A search or a chip flattens the catalogue: matches across every group, so nothing hides inside a closed row. A search
+  // is ranked (genus first, then names, then common names, families and origins; one typing error forgiven when the
+  // exact spelling finds nothing); a chip alone is alphabetical.
+  const found = $derived.by(() => {
+    if (!flat || !full || !prepared) return [];
+    const base = q.trim() ? search(prepared, q) : [...full].sort((a, b) => a.name.localeCompare(b.name));
+    return base.filter(chipOk);
   });
-  const total = $derived(shown.reduce((n, g) => n + g.matching, 0));
+  const byLabel = { genus: 'Genus', origin: 'Origin', family: 'Family' } as const;
+  const openRow = $derived(data.rows.find((r) => r.id === data.open));
+  const rowHref = (id: string) => `?by=${data.by}${id === data.open ? '' : `&open=${id}`}`;
   /* ---- your species ---- */
   // A tile's data: a catalogue entry, or, until the index is here, the name alone. `missing`: the index is here and has no such species.
   type Tile = { slug: string; name: string; family?: string; common?: string; thumb?: string; alt?: string; open?: number; climate?: string; missing?: boolean };
@@ -128,7 +115,7 @@
   const grownN = $derived(mineTiles.grow.length);
   const followingN = $derived(mineTiles.follow.length);
   // Catalogue matches for a search typed on your species view: the whole corpus, flat and alphabetical.
-  const hits = $derived(yourView && q.trim() && full ? full.filter(matchesQ).sort((a, b) => a.name.localeCompare(b.name)) : []);
+  const hits = $derived(yourView && q.trim() && prepared ? search(prepared, q) : []);
   const startBrowsing = () => {
     browsing = true;
     q = '';
@@ -173,6 +160,8 @@
     <a class="btn pri" href="/plants/new">Add a plant</a>
   </PageHead>
 
+  <Today />
+
   <div class="toolrow">
     <input class="searchbar" type="search" placeholder="Search all {data.total} species by name, genus, family or origin…" bind:value={q} aria-label="Search the whole species catalogue" />
     <span class="toollab">{q.trim() ? 'Catalogue' : 'Your species'}</span>
@@ -205,17 +194,16 @@
     <p class="seccount" style="margin-top: 14px"><button class="linkish" type="button" onclick={startBrowsing}>Browse all {data.total} species</button></p>
   {/if}
 {:else}
-  <PageHead title="Species" sub="What plants are, and what they want. Anything you own turns up here too." count="{data.total} kinds · {data.withClimate} with habitat climate{ownedN ? ` · ${ownedN} you grow` : ''}">
+  <PageHead title="Species" count="{data.total} kinds · {data.withClimate} with habitat climate{ownedN ? ` · ${ownedN} you grow` : ''}">
     <a class="btn pri" href="/plants/new">Add a plant</a>
   </PageHead>
 
   {#if collection.ready && !hasMine && !collection.accessions.length && !welcomeHidden}
     <div class="cult welcome" id="welcome">
       <div class="body">
-        <p><b>New here.</b> The species pages are a reference: what a plant is, where it lives, what its habitat does through the year, and what that means in a pot, every figure with its source. The rest of the app is your own collection: each plant under its own number, with its timeline, photographs and place. It is recorded on this device and nowhere else.</p>
+        <p><b>New here.</b> The species pages are a reference, every figure with its source. Your own plants, each under its own number, are recorded on this device and nowhere else.</p>
         <div class="row">
           <a class="btn pri" href="/plants/new">Add your first plant</a>
-          <a class="btn" href="/benches">Make a place for it</a>
           <a class="btn" href="/backup">Restore a backup or import from v2</a>
           <button class="linkish" type="button" onclick={dismissWelcome}>Not now</button>
         </div>
@@ -224,37 +212,57 @@
   {/if}
 
   <div class="toolrow">
-    <input class="searchbar" type="search" placeholder="Filter by name, genus, family or origin…" bind:value={q} aria-label="Filter species" />
-    <span class="toollab">Grouped by origin</span>
+    <input class="searchbar" type="search" placeholder="Search by name, genus, family or origin…" bind:value={q} aria-label="Search species" />
+    <nav class="seg" aria-label="Group by">
+      {#each ['genus', 'origin', 'family'] as const as b (b)}<a href="?by={b}" class:on={data.by === b} aria-current={data.by === b ? 'true' : undefined}>{byLabel[b]}</a>{/each}
+    </nav>
     {#if hasMine}<button class="linkish" type="button" onclick={stopBrowsing}>Back to your species</button>{/if}
   </div>
   <div class="chiprow">
     <button class="chipbtn" class:on={chip === 'all'} onclick={() => (chip = 'all')}>All<span class="n">{data.total}</span></button>
-    <button class="chipbtn" class:on={chip === 'owned'} onclick={() => (chip = 'owned')}>You grow<span class="n">{ownedN}</span></button>
+    {#if ownedN}<button class="chipbtn" class:on={chip === 'owned'} onclick={() => (chip = 'owned')}>You grow<span class="n">{ownedN}</span></button>{/if}
     <button class="chipbtn" class:on={chip === 'climate'} onclick={() => (chip = 'climate')}>Climate known<span class="n">{data.withClimate}</span></button>
     <button class="chipbtn" class:on={chip === 'noclimate'} onclick={() => (chip = 'noclimate')}>Without climate<span class="n">{data.total - data.withClimate}</span></button>
   </div>
 
-  {#if !shown.length}
-    <div class="emptybox"><p class="muted">Nothing matches.</p></div>
-  {/if}
-  {#each shown as g, i (g.origin)}
-    <div class="grouphead" id="r-{i}">
-      <div class="gmap">{@html g.map}</div>
-      <div>
-        <h2>{g.origin}</h2>
-        <div class="d">{g.origins.slice(0, 6).join(', ')}{g.origins.length > 6 ? ' …' : ''}</div>
-        <div class="st">{g.count} species{ownedN ? ` · ${g.items.filter((c) => owned.has(c.slug)).length} you grow` : ''} · {g.withClimate} with climate</div>
+  {#if flat}
+    {#if !full}
+      <p class="seccount" style="margin-top: 14px">{loadingFull ? 'Loading the whole catalogue…' : 'The catalogue could not be loaded; try again.'}</p>
+    {:else if !found.length}
+      <div class="emptybox"><p class="muted">Nothing matches.</p></div>
+    {:else}
+      <div class="hgrid">
+        {#each found as c (c.slug)}{@render tile(c)}{/each}
       </div>
-    </div>
-    <div class="hgrid">
-      {#each g.items as c (c.slug)}{@render tile(c)}{/each}
-    </div>
-    {#if !opened.has(g.origin) && !q.trim() && chip === 'all' && g.count > g.items.length}
-      <p class="seccount" style="margin: 6px 0 14px"><button class="linkish" type="button" onclick={() => (opened = new Set([...opened, g.origin]))}>{loadingFull ? 'Loading…' : `Show all ${g.count} in ${g.origin}`}</button></p>
+      <p class="seccount" style="margin-top: 14px">{found.length} of {data.total} shown.</p>
     {/if}
-  {/each}
-  <p class="seccount" style="margin-top: 14px">{needsFull && !full ? 'Loading the whole catalogue…' : `${total} of ${data.total} shown.`}{#if hasMine} <button class="linkish" type="button" onclick={stopBrowsing}>Back to your species</button>{/if}</p>
+  {:else}
+    {#if data.letters.length > 1}
+      <nav class="letters" aria-label="Jump to a letter">
+        {#each data.letters as l (l)}<a href="#l-{l}">{l}</a>{/each}
+      </nav>
+    {/if}
+    <div class="rows" class:withletters={data.letters.length > 1}>
+      {#each data.rows as r, i (r.id)}
+        {#if r.letter && (i === 0 || data.rows[i - 1].letter !== r.letter)}<h2 class="letter" id="l-{r.letter}">{r.letter}</h2>{/if}
+        <a class="grow" class:open={r.id === data.open} id="g-{r.id}" href={rowHref(r.id)} data-sveltekit-noscroll aria-expanded={r.id === data.open}>
+          {#if r.map}<div class="gmap">{@html r.map}</div>{:else if r.thumb}<div class="gthumb"><img src={r.thumb} alt="" loading="lazy" onerror={(e) => ((e.currentTarget as HTMLImageElement).style.display = 'none')} /></div>{:else}<div class="gthumb ph"></div>{/if}
+          <div class="gtx">
+            <span class="gname" class:sci={data.by === 'genus'}>{r.label}</span>
+            {#if r.sub}<span class="d">{r.sub}</span>{/if}
+            <span class="st">{r.count} species · {r.withClimate} with climate</span>
+          </div>
+          <span class="chev" aria-hidden="true">{r.id === data.open ? '–' : '+'}</span>
+        </a>
+        {#if r.id === data.open && r.items}
+          <div class="hgrid opened">
+            {#each r.items as c (c.slug)}{@render tile(c)}{/each}
+          </div>
+        {/if}
+      {/each}
+    </div>
+    <p class="seccount" style="margin-top: 14px">{data.rows.length} {data.by === 'genus' ? 'genera' : data.by === 'family' ? 'families' : 'regions'}, {data.total} species{openRow ? `; ${openRow.label} open` : ''}.{#if hasMine} <button class="linkish" type="button" onclick={stopBrowsing}>Back to your species</button>{/if}</p>
+  {/if}
 {/if}
 
 <style>
@@ -271,5 +279,25 @@
   .sk.head { height: 34px; width: 40%; max-width: 220px; margin-bottom: 12px; }
   .sk.line { height: 14px; width: 70%; margin-bottom: 26px; }
   .sk.tile { aspect-ratio: 1 / 1.15; }
+  .letters { display: flex; flex-wrap: wrap; gap: 2px; margin: 6px 0 10px; }
+  .letters a { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--ink2); min-width: 30px; min-height: 30px; display: inline-flex; align-items: center; justify-content: center; border-radius: 7px; }
+  .letters a:hover { background: var(--sunk); text-decoration: none; color: var(--ink); }
+  .letter { font-family: var(--mono); font-size: 12px; letter-spacing: 0.12em; color: var(--ink3); margin: 22px 0 6px; scroll-margin-top: 120px; }
+  .rows { display: flex; flex-direction: column; gap: 6px; }
+  .grow { display: grid; grid-template-columns: 56px minmax(0, 1fr) 28px; gap: 14px; align-items: center; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); padding: 8px 12px 8px 8px; color: inherit; text-decoration: none; min-height: 56px; scroll-margin-top: 120px; }
+  .grow:hover { text-decoration: none; color: inherit; box-shadow: var(--sh2); }
+  .grow.open { outline: 2px solid var(--accent); }
+  .grow .gthumb { width: 56px; height: 56px; border-radius: 8px; overflow: hidden; background: var(--sunk); }
+  .grow .gthumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .grow .gmap { width: 56px; aspect-ratio: 2 / 1; border-radius: 6px; overflow: hidden; background: var(--map-sea); }
+  .grow .gmap :global(.map) { border-radius: 0; aspect-ratio: 2 / 1; }
+  .grow .gtx { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; min-width: 0; }
+  .grow .gname { font-family: var(--ui); font-weight: 700; font-size: 15px; color: var(--ink); }
+  .grow .gname.sci { font-family: var(--serif); font-style: italic; font-size: 17px; }
+  .grow .d { font-size: 12.5px; color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+  .grow .st { font-family: var(--mono); font-size: 11.5px; color: var(--ink3); flex-basis: 100%; }
+  .grow .chev { font-family: var(--mono); font-size: 18px; color: var(--ink3); text-align: center; }
+  .hgrid.opened { margin: 8px 0 18px; }
+  @media (max-width: 700px) { .grow { grid-template-columns: 48px minmax(0, 1fr) 24px; gap: 10px; } .grow .gthumb { width: 48px; height: 48px; } .grow .gmap { width: 48px; } }
   .ownchip.following { background: var(--card); color: var(--ink2); border: 1px solid var(--rule); box-shadow: var(--sh); }
 </style>

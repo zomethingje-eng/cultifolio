@@ -1,5 +1,6 @@
 import { error } from '@sveltejs/kit';
-import { getDossier, resolveSlug } from '$lib/server/dossiers';
+import { getDossier, resolveSlug, getIndex } from '$lib/server/dossiers';
+import { genusOf } from '$core/names';
 import { worldSvg, regionSvg } from '$lib/map/still';
 import type { PageServerLoad } from './$types';
 
@@ -13,8 +14,18 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   // would point at assets that no longer exist. The assets themselves are immutable and cached for a year.
   // Short and never stale: HTML names the build's hashed chunks, and a stale page after a deploy would import chunks that are gone.
   setHeaders({ 'cache-control': 'public, max-age=60' });
+  // Related: the rest of the genus, and the species whose habitat climate is nearest (from the index; nothing computed here).
+  const index = await getIndex(platform, fetch);
+  const byKey = new Map(index.map((e) => [e.key, e]));
+  const me = byKey.get(key);
+  const card = (e: NonNullable<typeof me>) => ({ key: e.key, slug: e.slug, name: e.name, family: e.family, common: e.common, thumb: e.thumb, open: e.open, climate: e.climate });
+  const genus = genusOf(d.name.scientific);
+  const siblings = index.filter((e) => e.key !== key && genusOf(e.name) === genus).sort((a, b) => a.name.localeCompare(b.name)).map(card);
+  const near = (me?.near ?? []).map((k) => byKey.get(k)).filter((e): e is NonNullable<typeof me> => !!e).map(card);
   return {
     d,
+    siblings,
+    near,
     worldSvg: worldSvg(d.distribution.boxes, d.centroid, `Native range of ${d.name.scientific}`),
     regionSvg: regionSvg(d.distribution.boxes, pts, d.centroid, `Openly licensed records of ${d.name.scientific}`)
   };

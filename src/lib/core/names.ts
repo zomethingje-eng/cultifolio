@@ -116,3 +116,8 @@ export function nameParts(scientific: string): Array<{ text: string; italic: boo
   }
   return out;
 }
+
+/** The genus of a scientific name: its first word, past a hybrid sign. */
+export function genusOf(name: string): string {
+  return name.trim().replace(/^[×x]\s*/i, '').split(/\s+/)[0] ?? name;
+}

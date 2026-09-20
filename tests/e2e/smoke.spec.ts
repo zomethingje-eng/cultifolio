@@ -1,11 +1,46 @@
 import { test, expect } from '@playwright/test';
 
-test('front page renders server-side with the fixture corpus', async ({ page }) => {
+test('front page renders server-side with the fixture corpus: closed genus rows, one open by URL, no JavaScript needed', async ({ browser }) => {
+  const ctx = await browser.newContext({ javaScriptEnabled: false });
+  const page = await ctx.newPage();
   const res = await page.goto('/');
   expect(res?.status()).toBe(200);
   await expect(page.locator('h1')).toContainText('Species');
-  await expect(page.locator('.tile .nm', { hasText: /Copiapoa|Welwitschia/ }).first()).toBeVisible();
-  await expect(page.locator('.grouphead').first()).toBeVisible();
+  await expect(page.locator('.grow')).toHaveCount(3); // Copiapoa, Refusia, Welwitschia: rows, not tiles
+  await expect(page.locator('a.tile')).toHaveCount(0);
+  await expect(page.locator('.seg[aria-label="Group by"] .on')).toHaveText('Genus');
+  await page.locator('.grow', { hasText: 'Copiapoa' }).click();
+  await expect(page).toHaveURL(/\?by=genus&open=copiapoa$/);
+  await expect(page.locator('.grow.open', { hasText: 'Copiapoa' })).toBeVisible();
+  await expect(page.locator('a.tile .nm', { hasText: 'Copiapoa cinerea' })).toBeVisible();
+  await expect(page.locator('a.tile')).toHaveCount(1);
+  // the same row closes it
+  await page.locator('.grow.open').click();
+  await expect(page).toHaveURL(/\?by=genus$/);
+  await expect(page.locator('a.tile')).toHaveCount(0);
+  // origin keeps its map; family its genus count
+  await page.goto('/?by=origin');
+  await expect(page.locator('.grow .gmap').first()).toBeVisible();
+  await page.goto('/?by=family&open=cactaceae');
+  await expect(page.locator('.grow.open .d')).toHaveText('1 genus');
+  await ctx.close();
+});
+
+test('the menu behind the mark reaches every place from any page', async ({ page }) => {
+  await page.goto('/species/copiapoa-cinerea');
+  await expect(page.locator('#menu')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Menu' }).click();
+  const menu = page.locator('#menu');
+  await expect(menu).toBeVisible();
+  for (const l of ['Species', 'My plants', 'Benches', 'Sowings', 'Frost', 'Compare species', 'Labels', 'Backup', 'Sync', 'How it is made', 'Formats', 'Source']) await expect(menu.getByRole('link', { name: l, exact: true })).toBeVisible();
+  await expect(menu.locator('a.on')).toHaveText('Species');
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Menu' })).toBeFocused();
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await menu.getByRole('link', { name: 'Benches' }).click();
+  await expect(page).toHaveURL(/\/benches$/);
+  await expect(page.locator('#menu')).toHaveCount(0); // closed by the navigation
 });
 
 test('species page is readable without JavaScript and states its evidence', async ({ browser }) => {
@@ -453,7 +488,7 @@ test('first run: the front page explains itself once, and stops once there is a 
   await page.getByRole('button', { name: 'Not now' }).click();
   await expect(page.locator('#welcome')).toHaveCount(0);
   await page.reload();
-  await expect(page.locator('.tile').first()).toBeVisible();
+  await expect(page.locator('.grow').first()).toBeVisible();
   await expect(page.locator('#welcome')).toHaveCount(0);
   // a fresh browser sees it again, until it owns something
   await page.evaluate(() => localStorage.removeItem('cultifolio.welcomed'));
@@ -465,7 +500,7 @@ test('first run: the front page explains itself once, and stops once there is a 
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   await page.goto('/');
-  await expect(page.locator('.tile').first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'You grow' })).toBeVisible();
   await expect(page.locator('#welcome')).toHaveCount(0);
   // and on a phone every button is a finger's size
   await page.setViewportSize({ width: 390, height: 844 });
@@ -697,16 +732,28 @@ test('the app shell is installed for offline use: collection pages, a species pa
   await ctx.close();
 });
 
-test('the front page carries a first page per group and fetches the whole catalogue only when searched', async ({ page }) => {
+test('the front page carries closed rows and fetches the whole catalogue only when a search or a chip cuts across them', async ({ page }) => {
   await page.goto('/');
   const calls: string[] = [];
   page.on('request', (r) => { if (r.url().includes('/api/index')) calls.push(r.url()); });
-  await expect(page.locator('a.tile')).toHaveCount(3);
+  await expect(page.locator('.grow')).toHaveCount(3);
+  // opening a row is a navigation, not an index fetch
+  await page.locator('.grow', { hasText: 'Welwitschia' }).click();
+  await expect(page.locator('a.tile')).toHaveCount(1);
   expect(calls).toHaveLength(0);
+  // a search flattens: every match across every genus, and the rows step aside
   await page.fill('.searchbar', 'welwit');
   await expect(page.locator('a.tile')).toHaveCount(1);
+  await expect(page.locator('.grow')).toHaveCount(0);
   expect(calls.length).toBeGreaterThan(0);
   await expect(page.locator('.seccount').last()).toContainText('1 of 3 shown');
+  // a chip does the same, and "You grow" is not offered to someone who grows nothing
+  await page.fill('.searchbar', '');
+  await expect(page.locator('.grow')).toHaveCount(3);
+  await expect(page.locator('.chipbtn', { hasText: 'You grow' })).toHaveCount(0);
+  await page.locator('.chipbtn', { hasText: 'Without climate' }).click();
+  await expect(page.locator('a.tile')).toHaveCount(2);
+  await expect(page.locator('.seccount').last()).toContainText('2 of 3 shown');
 });
 
 test('the about pages are served without JavaScript and say what the app refuses to guess', async ({ browser }) => {
@@ -740,7 +787,7 @@ test('a refused source is a distinct state on every surface: species page, front
   await expect(page.locator('.mapcap').first()).not.toContainText('marker');
   await expect(page.locator('.mapcap').nth(1)).toContainText('Records not checked: the occurrence source did not answer'); // a refusal, not an absence, on the map too
   // front page
-  await page.goto('/');
+  await page.goto('/?by=genus&open=refusia');
   const tile = page.locator('.tile', { hasText: 'Refusia' });
   await expect(tile.locator('.fig')).toContainText('climate not checked');
   await expect(tile.locator('.statedot')).toHaveAttribute('aria-label', /not checked: a source did not answer/);
@@ -1088,4 +1135,91 @@ test('at 390 px every tap target is a finger wide: top-bar icons, breadcrumb, se
   const bg = await page.evaluate(() => [getComputedStyle(document.querySelector('#topbar')!).backgroundColor, getComputedStyle(document.querySelector('nav.tabs')!).backgroundColor]);
   for (const c of bg) expect(c).not.toMatch(/rgba\(.*, 0(\.\d+)?\)$/);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+});
+
+/* ---------------------------------------------------------------- the round after deploy: search, first screen, related, compare, card, today */
+
+test('search forgives a typing error, ranks the genus first, and the picker does the same', async ({ page }) => {
+  await page.goto('/');
+  await page.fill('.searchbar', 'copiapao');
+  await expect(page.locator('a.tile .nm', { hasText: 'Copiapoa cinerea' })).toBeVisible();
+  await page.fill('.searchbar', 'welwit mirab');
+  await expect(page.locator('a.tile')).toHaveCount(1);
+  await page.fill('.searchbar', 'namibia');
+  await expect(page.locator('a.tile .nm', { hasText: 'Welwitschia' })).toBeVisible();
+  await page.goto('/plants/new');
+  await page.fill('#species-name', 'Copiapao cin');
+  await expect(page.getByRole('option', { name: /Copiapoa cinerea/ })).toBeVisible();
+});
+
+test('the species page answers in the first screen and relates the species by genus and by climate', async ({ page }) => {
+  await page.goto('/species/copiapoa-cinerea');
+  const glance = page.locator('.glance');
+  await expect(glance.locator('.card', { hasText: 'Cold floor' })).toContainText('6.5');
+  await expect(glance.locator('#gen-note')).toContainText('Cold floor 6.5 °C'); // the card and the note agree: one figure, one rule
+  await expect(glance.locator('.card', { hasText: 'Rain' })).toContainText('72');
+  // related: the nearest habitat climate from the index, with the rule beside it
+  await expect(page.locator('#s-related')).toBeVisible();
+  await expect(page.locator('.relhead', { hasText: 'Grows like' })).toContainText('in calendar order');
+  await expect(page.locator('.relstrip .reltile .rn', { hasText: 'Welwitschia' })).toBeVisible();
+  await expect(page.locator('.relhead', { hasText: 'Other' })).toHaveCount(0); // the fixture corpus has one Copiapoa
+});
+
+test('compare: three species side by side, a refusal named in every empty cell, the tray remembered in this browser', async ({ page }) => {
+  await page.goto('/species/copiapoa-cinerea');
+  await page.getByRole('button', { name: 'Compare', exact: true }).click();
+  await expect(page.locator('.tray')).toContainText('pick one more');
+  await page.goto('/species/refusia-testii');
+  await page.getByRole('button', { name: 'Compare', exact: true }).click();
+  await page.locator('.tray a', { hasText: 'Compare 2' }).click();
+  await expect(page).toHaveURL(/\/compare\?s=copiapoa-cinerea,refusia-testii$/);
+  await expect(page.locator('.head .cell')).toHaveCount(2);
+  await expect(page.locator('.tray')).toHaveCount(0); // not on the compare page itself
+  const refusia = page.locator('.row').nth(1).locator('.cell').nth(1);
+  await expect(refusia).toContainText('not checked');
+  await expect(refusia).not.toContainText('–');
+  await page.goto('/compare');
+  await expect(page.locator('.emptybox')).toContainText('Copiapoa cinerea, Refusia testii');
+  await page.goto('/compare?s=copiapoa-cinerea,no-such-plant');
+  await expect(page.locator('.notice')).toContainText('Not in the reference: no-such-plant');
+});
+
+test('the share card is a PNG with the figures and the link drawn in, and is offered only where there is a climate', async ({ page }) => {
+  await page.goto('/species/refusia-testii');
+  await expect(page.getByRole('button', { name: 'Share card' })).toHaveCount(0);
+  await page.goto('/species/copiapoa-cinerea');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Share card' }).click()]);
+  expect(dl.suggestedFilename()).toBe('copiapoa-cinerea-climate.png');
+  const path = await dl.path();
+  const { statSync } = await import('node:fs');
+  expect(statSync(path!).size).toBeGreaterThan(20_000);
+  await expect(page.getByRole('status')).toContainText('Saved as a picture');
+});
+
+test('a grower\'s home says what needs them: sowings in the tray and plants without a photograph, each a link', async ({ page }) => {
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.getByRole('button', { name: /^Add/ }).click();
+  await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
+  await page.goto('/');
+  const today = page.locator('.today');
+  await expect(today.locator('.line', { hasText: 'without a photograph this year' })).toBeVisible();
+  await expect(today).toContainText('Frost watch needs a site');
+  await today.locator('.line', { hasText: 'without a photograph' }).click();
+  await expect(page).toHaveURL(/\/plants\?show=nophoto$/);
+  await expect(page.locator('.chipbtn.on')).toContainText('No photo this year');
+});
+
+test('the install bar waits for a second visit, and stays away for thirty days once dismissed', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('.install')).toHaveCount(0);
+  await page.goto('/');
+  // no beforeinstallprompt in headless Chromium and no iOS: nothing to show, but the visit is counted
+  expect(await page.evaluate(() => localStorage.getItem('cultifolio.visits'))).toBe('2');
+  await page.evaluate(() => window.dispatchEvent(new Event('beforeinstallprompt')));
+  await expect(page.locator('.install')).toBeVisible();
+  await page.locator('.install button', { hasText: 'Not now' }).click();
+  await expect(page.locator('.install')).toHaveCount(0);
+  await page.goto('/');
+  await page.evaluate(() => window.dispatchEvent(new Event('beforeinstallprompt')));
+  await expect(page.locator('.install')).toHaveCount(0);
 });

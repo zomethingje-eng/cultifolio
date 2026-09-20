@@ -7,13 +7,15 @@
   import Provenance from '$lib/ui/Provenance.svelte';
   import Climograph from '$lib/ui/Climograph.svelte';
   import FollowButton from '$lib/ui/FollowButton.svelte';
+  import CompareButton from '$lib/ui/CompareButton.svelte';
+  import ShareCard from '$lib/ui/ShareCard.svelte';
   import { firstSentences } from '$core/text';
   import { frostWording } from '$core/extremes';
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import { generatedNote } from '$core/note';
   import { cultivationSheet, CARD_ORDER } from '$core/sheet';
   import { collection } from '$lib/db/collection.svelte';
-  import { slugify } from '$core/names';
+  import { slugify, genusOf } from '$core/names';
   import { onMount } from 'svelte';
   let { data } = $props();
   const d = $derived(data.d);
@@ -87,6 +89,8 @@
   const note = $derived(generatedNote(sheetIn, { readerLat }));
   /** Four sentences of the quoted lead; the rest is a link, never a mid-sentence cut. */
   const excerpt = $derived(d.summary ? firstSentences(d.summary.text, 4) : null);
+  const genusName = $derived(genusOf(d.name.scientific));
+  const genusSlug = $derived(slugify(genusName));
   const sheetCards = $derived(CARD_ORDER.map((c) => ({ title: c, rows: sheet.rows.filter((r) => r.card === c) })).filter((c) => c.rows.length));
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   // The numbers a grower reads first, each with the month it belongs to.
@@ -99,13 +103,21 @@
     const dlis = m.map((x) => x.dli).filter((x): x is number => x != null);
     const wetMonths = m.filter((x) => x.precipMm >= 25).length;
     return {
-      hot: { v: m[hot].tmax, mo: months[hot] }, cold: { v: m[cold].tmin, mo: months[cold] },
+      hot: { v: m[hot].tmax, mo: months[hot], night: m[hot].tmin }, cold: { v: m[cold].tmin, mo: months[cold] },
       rain, wet: { v: m[wet].precipMm, mo: months[wet] }, dry: { v: m[dry].precipMm, mo: months[dry] }, wetMonths,
       dli: dlis.length ? { lo: Math.min(...dlis), hi: Math.max(...dlis) } : null,
       ex: d.climate.extremes ?? null
     };
   });
 </script>
+
+{#snippet rel(c: (typeof data.near)[number])}
+  <a class="reltile" href="/species/{c.slug}">
+    {#if c.thumb}<img src={c.thumb} alt="" loading="lazy" onerror={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = 'hidden')} />{:else}<div class="noim"></div>{/if}
+    <span class="rn"><SpeciesName name={c.name} /></span>
+    <span class="rf">{c.common ?? c.family ?? ''}</span>
+  </a>
+{/snippet}
 
 <svelte:head>
   <title>{d.name.scientific} — Cultifolio</title>
@@ -118,6 +130,7 @@
 </svelte:head>
 
 <article class="species">
+  <div class="top" class:withhero={!!hero}>
   {#if hero && heroFailed}
     <div class="hero"><div class="ph">The photograph did not load ({hero.attribution}). <a href={hero.page ?? hero.url} rel="noopener">Its page</a>.</div></div>
   {:else if hero}
@@ -150,8 +163,27 @@
       <a class="btn pri" href="/plants/new?species={encodeURIComponent(d.name.scientific)}&key={d.key}">Add one to my plants</a>
       <a class="btn" href="/sowings/new?species={encodeURIComponent(d.name.scientific)}&key={d.key}">Sow seed</a>
       <FollowButton slug={d.slug} name={d.name.scientific} gbifKey={d.key} />
+      <CompareButton slug={d.slug} name={d.name.scientific} />
+      {#if d.climate.status === 'ok'}<ShareCard input={{ name: d.name.scientific, family: d.name.family, origin: d.distribution.native.map((r) => r.name), slug: d.slug, cells: d.climate.cells, climate: { months: d.climate.months, p10: d.climate.p10, p90: d.climate.p90, cells: d.climate.cells, extremes: d.climate.extremes ?? null } }} />{/if}
     </div>
   </div>
+  </div>
+
+  {#if glance || note}
+    <section class="glance" aria-label="At a glance">
+      {#if glance}
+        <div class="cards">
+          <div class="card"><div class="lab">Cold floor</div>{#if glance.ex}<div class="val">{glance.ex.minP01.toFixed(1)}<span class="u">°C</span></div><div class="sub">1st-percentile night over {glance.ex.years} years at the typical cell, the sheet's floor; lowest {glance.ex.minAbs.toFixed(1)} °C, {frostWording(glance.ex)} (NASA POWER)</div>{:else}<div class="val">{glance.cold.v.toFixed(0)}<span class="u">°C</span></div><div class="sub">{glance.cold.mo}, mean night (CHELSA); no extremes series for this cell</div>{/if}</div>
+          <div class="card"><div class="lab">Warmest month</div><div class="val">{glance.hot.v.toFixed(0)}<span class="u">°C</span></div><div class="sub">{glance.hot.mo}, mean day; nights {glance.hot.night.toFixed(0)} °C (CHELSA)</div></div>
+          <div class="card"><div class="lab">Rain</div><div class="val">{glance.rain.toFixed(0)}<span class="u">mm/yr</span></div><div class="gauge"><i class="c" style="width:{Math.min(100, glance.rain / 12)}%"></i></div><div class="sub">{glance.wetMonths === 0 ? 'no wet month' : glance.wetMonths + (glance.wetMonths === 1 ? ' wet month' : ' wet months')} · peak {glance.wet.mo} {glance.wet.v.toFixed(0)} mm</div></div>
+          {#if glance.dli}<div class="card"><div class="lab">Light</div><div class="val">{glance.dli.lo.toFixed(0)}–{glance.dli.hi.toFixed(0)}<span class="u">DLI</span></div><div class="gauge"><i class="w" style="width:{Math.min(100, glance.dli.hi / 0.7)}%"></i></div><div class="sub">mol/m²/day, winter to summer</div></div>{/if}
+        </div>
+      {/if}
+      {#if note}
+        <div class="cult" id="gen-note"><div class="sum">In short <span class="hint">condensed by rule from the cultivation cards · not written by a person</span></div><div class="body">{note.text}</div><div class="foot">Each sentence is one card's own one-line form, written by the same rule as the card ({note.from.join(', ')}); the note cannot say what a card does not. {#if note.hab}Months are given for {readerLat != null && readerLat < 0 ? 'the southern' : 'the northern'} hemisphere{readerLat == null ? ' (set coordinates on a bench to change this)' : ', from your benches'}, and the habitat's own alongside.{/if} <a href="#s-cultivation">The cards</a> · <a href="#s-climate">the figures</a>.</div></div>
+      {/if}
+    </section>
+  {/if}
 
   <nav class="tabs" aria-label="Sections">
     {#if d.summary || refused('wikipedia')}<a href="#s-summary">Summary</a>{/if}
@@ -160,6 +192,7 @@
     <a href="#s-habitat">Habitat</a>
     {#if d.photos.length > 1}<a href="#s-photos">Photographs</a>{/if}
     {#if d.literature.length || refused('openalex')}<a href="#s-research">Papers</a>{/if}
+    {#if data.siblings.length || data.near.length}<a href="#s-related">Related</a>{/if}
     <a href="#s-registers">Registers</a>
   </nav>
 
@@ -181,9 +214,6 @@
 
   <h2 class="sec" id="s-cultivation">Cultivation</h2>
   <div class="note-slot" data-key={d.key}>
-    {#if note}
-      <div class="cult" id="gen-note"><div class="sum">In short <span class="hint">condensed by rule from the cards below · not written by a person</span></div><div class="body">{note.text}</div><div class="foot">Each sentence is one card's own one-line form, written by the same rule as the card ({note.from.join(', ')}); the note cannot say what a card does not. {#if note.hab}Months are given for {readerLat != null && readerLat < 0 ? 'the southern' : 'the northern'} hemisphere{readerLat == null ? ' (set coordinates on a bench to change this)' : ', from your benches'}, and the habitat's own alongside.{/if}</div></div>
-    {/if}
     {#if editingMy}
       <div class="cult">
         <div class="sum">Your notes <span class="hint">yours alone, on this device; shown on every plant of this species you own</span></div>
@@ -220,14 +250,6 @@
 
   <h2 class="sec" id="s-climate">Climate across the habitat</h2>
   {#if d.climate.status === 'ok'}
-    {#if glance}
-      <div class="cards">
-        <div class="card"><div class="lab">Warmest month</div><div class="val">{glance.hot.v.toFixed(0)}<span class="u">°C</span></div><div class="sub">{glance.hot.mo}, mean day; nights {d.climate.months[months.indexOf(glance.hot.mo)].tmin.toFixed(0)} °C (CHELSA)</div></div>
-        <div class="card"><div class="lab">Coldest month</div><div class="val">{glance.cold.v.toFixed(0)}<span class="u">°C</span></div><div class="sub">{glance.cold.mo}, mean night (CHELSA){#if glance.ex}<br />{glance.ex.minAbs.toFixed(1)} °C lowest night, {frostWording(glance.ex)} (NASA POWER, typical cell){/if}</div></div>
-        <div class="card"><div class="lab">Rain</div><div class="val">{glance.rain.toFixed(0)}<span class="u">mm/yr</span></div><div class="gauge"><i class="c" style="width:{Math.min(100, glance.rain / 12)}%"></i></div><div class="sub">{glance.wetMonths === 0 ? 'no wet month' : glance.wetMonths + (glance.wetMonths === 1 ? ' wet month' : ' wet months')} · peak {glance.wet.mo} {glance.wet.v.toFixed(0)} mm</div></div>
-        {#if glance.dli}<div class="card"><div class="lab">Light</div><div class="val">{glance.dli.lo.toFixed(0)}–{glance.dli.hi.toFixed(0)}<span class="u">DLI</span></div><div class="gauge"><i class="w" style="width:{Math.min(100, glance.dli.hi / 0.7)}%"></i></div><div class="sub">mol/m²/day, winter to summer</div></div>{/if}
-      </div>
-    {/if}
     <Climograph climate={{ months: d.climate.months, p10: d.climate.p10, p90: d.climate.p90, cells: d.climate.cells, extremes: d.climate.extremes ?? null }} />
     <details class="figures">
       <summary>Figures by month</summary>
@@ -308,6 +330,23 @@
     {/each}
   {/if}
 
+  {#if data.siblings.length || data.near.length}
+    <h2 class="sec" id="s-related">Related</h2>
+    {#if data.near.length}
+      <p class="relhead"><b>Grows like</b> <span class="small muted">the {data.near.length} species whose habitat climate is nearest this one's: mean day and night, month by month, and rain on a log scale, in calendar order, so a habitat with the same seasons six months out is far, not near. Nothing else counts: not range, not family.</span></p>
+      <div class="relstrip">
+        {#each data.near as c (c.key)}{@render rel(c)}{/each}
+      </div>
+    {/if}
+    {#if data.siblings.length}
+      <p class="relhead"><b>Other <i>{genusName}</i></b> <span class="small muted">{data.siblings.length} in the reference</span></p>
+      <div class="relstrip">
+        {#each data.siblings.slice(0, 12) as c (c.key)}{@render rel(c)}{/each}
+        {#if data.siblings.length > 12}<a class="reltile more" href="/?by=genus&open={genusSlug}"><span>all {data.siblings.length + 1} ›</span></a>{/if}
+      </div>
+    {/if}
+  {/if}
+
   <h2 class="sec" id="s-registers">History &amp; registers</h2>
   <div class="links">
     {#each Object.entries(d.links) as [k, url]}
@@ -325,6 +364,25 @@
   .myph .pd { position: absolute; left: 7px; bottom: 6px; font-family: var(--mono); font-size: 10px; color: #fff; background: rgba(8, 20, 16, 0.6); padding: 2px 6px; border-radius: 5px; }
   .species { max-width: 980px; }
   .hero { margin-top: 14px; }
+  .glance { margin-top: 18px; }
+  .relhead { margin: 12px 0 6px; font-size: 14px; }
+  .relstrip { display: grid; grid-auto-flow: column; grid-auto-columns: 132px; gap: 10px; overflow-x: auto; padding: 2px 2px 10px; scroll-snap-type: x proximity; }
+  .reltile { display: block; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); overflow: hidden; color: inherit; scroll-snap-align: start; }
+  .reltile:hover { text-decoration: none; color: inherit; box-shadow: var(--sh2); }
+  .reltile img, .reltile .noim { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; background: var(--sunk); }
+  .reltile .rn { display: block; padding: 7px 9px 0; font-family: var(--serif); font-style: italic; font-size: 13.5px; line-height: 1.25; font-weight: 600; }
+  .reltile .rf { display: block; padding: 3px 9px 9px; font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink3); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .reltile.more { display: flex; align-items: center; justify-content: center; font-weight: 600; color: var(--accent); }
+  .glance .cards { margin: 0 0 12px; }
+  .glance .foot a { color: var(--accent); }
+  @media (min-width: 860px) {
+    /* The first screen answers: the photograph beside the name and the actions, the four figures and the note under them. */
+    .top.withhero { display: grid; grid-template-columns: 400px minmax(0, 1fr); gap: 20px; align-items: start; margin-top: 14px; }
+    .top.withhero .hero { margin: 0; aspect-ratio: 4 / 3; }
+    .top.withhero .hero img { height: 100%; max-height: none; }
+    .top.withhero .idcard { margin: 0; flex-direction: column; gap: 14px; }
+    .top.withhero .idcard .who { flex: 0 0 auto; }
+  }
   .muted { color: var(--ink3); }
   .factgrid .wide { grid-column: 1 / -1; }
   .sheet { white-space: normal; }

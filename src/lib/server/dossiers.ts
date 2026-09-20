@@ -17,6 +17,8 @@ export interface IndexEntry {
   photos: number;
   open: number;
   climate: string;
+  /** The six species whose habitat climate is nearest (src/lib/core/near.ts), written at index time. */
+  near?: number[];
 }
 
 type Fetch = typeof fetch;

@@ -1,0 +1,63 @@
+<script lang="ts">
+  /**
+   * What needs you, on the front page of a grower's collection: the frost watch when a site is remembered and the
+   * forecast turns, sowings still in the tray, plants not photographed in a year. Each line is a link, and a line
+   * that has nothing to say is not shown; a forecast that did not answer says so rather than nothing.
+   */
+  import { collection } from '$lib/db/collection.svelte';
+  import { accNo, sowNo } from '$lib/db/types';
+  import { onMount } from 'svelte';
+  type Risk = { level: string; text: string };
+  let frost = $state<{ risk: Risk } | 'unchecked' | null>(null);
+  let hasSite = $state(false);
+  onMount(async () => {
+    let site: { lat: number; lon: number } | null = null;
+    try {
+      const s = localStorage.getItem('cultifolio.frost.site');
+      if (s) site = JSON.parse(s);
+    } catch {
+      site = null;
+    }
+    if (!site) return;
+    hasSite = true;
+    try {
+      const r = await fetch(`/api/forecast?lat=${site.lat}&lon=${site.lon}`);
+      frost = r.ok ? { risk: ((await r.json()) as { risk: Risk }).risk } : 'unchecked';
+    } catch {
+      frost = 'unchecked';
+    }
+  });
+  const today = new Date();
+  const yearAgo = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate()).toISOString().slice(0, 10);
+  const sowings = $derived(collection.ready ? collection.sowings.filter((s) => s.status === 'active').sort((a, b) => a.sown.localeCompare(b.sown)) : []);
+  const growing = $derived(collection.ready ? collection.accessions.filter((a) => a.status === 'growing') : []);
+  const unphotographed = $derived(growing.filter((a) => !collection.photos(a.id).some((p) => p.d >= yearAgo)));
+  const frostLine = $derived(frost === 'unchecked' ? { tone: 'warn', text: 'Frost not checked: the forecast source did not answer.' } : frost && frost.risk.level !== 'none' ? { tone: 'bad', text: `${frost.risk.level}: ${frost.risk.text}` } : null);
+  const lines = $derived(
+    [
+      frostLine ? { href: '/frost', tone: frostLine.tone, text: frostLine.text } : null,
+      sowings.length ? { href: '/sowings', tone: 'ok', text: `${sowings.length} sowing${sowings.length === 1 ? '' : 's'} in the tray, the oldest ${sowNo(sowings[0])} (${sowings[0].taxonName}) sown ${sowings[0].sown}.` } : null,
+      unphotographed.length && growing.length ? { href: '/plants?show=nophoto', tone: 'muted', text: `${unphotographed.length} of ${growing.length} plants without a photograph this year${unphotographed.length <= 3 ? ': ' + unphotographed.map(accNo).join(', ') : ''}.` } : null
+    ].filter((x): x is { href: string; tone: string; text: string } => !!x)
+  );
+</script>
+
+{#if lines.length}
+  <div class="today" aria-label="Today">
+    {#each lines as l (l.href)}<a class="line {l.tone}" href={l.href}>{l.text}</a>{/each}
+    {#if !hasSite}<span class="small muted">Frost watch needs a site: <a href="/frost">set one</a>.</span>{/if}
+  </div>
+{:else if collection.ready && !hasSite && growing.length}
+  <p class="small muted todaynote">Frost watch needs a site: <a href="/frost">set one</a>, and the forecast shows here when it turns.</p>
+{/if}
+
+<style>
+  .today { display: flex; flex-direction: column; gap: 6px; margin: 12px 0 4px; }
+  .line { display: block; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); padding: 10px 14px; font-size: 13.5px; color: var(--ink); border-left: 3px solid var(--rule); }
+  .line:hover { text-decoration: none; box-shadow: var(--sh2); }
+  .line.bad { border-left-color: var(--bad); }
+  .line.warn { border-left-color: var(--warn, #b8692a); }
+  .line.ok { border-left-color: var(--accent); }
+  .muted { color: var(--ink3); }
+  .todaynote { margin: 8px 0 0; }
+</style>

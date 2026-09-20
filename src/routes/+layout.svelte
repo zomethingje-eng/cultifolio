@@ -11,7 +11,34 @@
   import { sync } from '$lib/sync/engine.svelte';
   import { collection } from '$lib/db/collection.svelte';
   import { onVaultNotice } from '$lib/db/vault';
+  import { afterNavigate } from '$app/navigation';
+  import CompareBar from '$lib/ui/CompareBar.svelte';
+  import InstallBar from '$lib/ui/InstallBar.svelte';
   let { children } = $props();
+  // The menu: everything the app has, from anywhere, behind the mark in the corner. Closes on navigation, Escape, or a tap outside.
+  let menuOpen = $state(false);
+  let menuBtn = $state<HTMLButtonElement | null>(null);
+  const menu = [
+    { href: '/', label: 'Species' },
+    { href: '/plants', label: 'My plants' },
+    { href: '/benches', label: 'Benches' },
+    { href: '/sowings', label: 'Sowings' },
+    { href: '/frost', label: 'Frost' },
+    null,
+    { href: '/compare', label: 'Compare species' },
+    { href: '/labels', label: 'Labels' },
+    { href: '/backup', label: 'Backup' },
+    { href: '/sync', label: 'Sync' },
+    null,
+    { href: '/about/how', label: 'How it is made' },
+    { href: '/about/formats', label: 'Formats' },
+    { href: 'https://github.com/zomethingje-eng/cultifolio', label: 'Source' }
+  ];
+  afterNavigate(() => (menuOpen = false));
+  const closeMenu = () => {
+    menuOpen = false;
+    menuBtn?.focus();
+  };
   let vaultNote = $state<string | null>(null);
   // Sync wakes with the app when a vault key is on this device; it does nothing otherwise.
   onMount(async () => {
@@ -40,8 +67,11 @@
   <title>Cultifolio</title>
 </svelte:head>
 
+<svelte:window onkeydown={(e) => { if (e.key === 'Escape' && menuOpen) closeMenu(); }} />
+
 <div id="topbar">
-  {#if back}<a class="iconbtn" href={back} aria-label="Back">‹</a>{:else}<a class="iconbtn brand" href="/" aria-label="Cultifolio">✳</a>{/if}
+  <button class="iconbtn brand" type="button" bind:this={menuBtn} aria-label="Menu" aria-haspopup="true" aria-expanded={menuOpen} aria-controls="menu" onclick={() => (menuOpen = !menuOpen)}>✳</button>
+  {#if back}<a class="iconbtn" href={back} aria-label="Back">‹</a>{/if}
   <div class="crumb">
     {#each parts as c, i}
       {#if i}<span class="sep">›</span>{/if}
@@ -51,11 +81,23 @@
   <a class="iconbtn sync" href="/sync" title={sync.configured ? (sync.busy ?? (sync.lastError ? 'Sync: ' + sync.lastError : 'Synced')) : 'Sync'} aria-label="Sync" class:on={sync.configured} class:busy={!!sync.busy} class:err={!!sync.lastError}>⟳</a>
   <a class="iconbtn" href="/plants/new" title="Add a plant" aria-label="Add a plant">+</a>
 </div>
+{#if menuOpen}
+  <div class="scrim" onclick={closeMenu} aria-hidden="true"></div>
+  <nav id="menu" aria-label="Everything">
+    <div class="menuhead"><span class="kick">Cultifolio</span><button class="iconbtn" type="button" aria-label="Close menu" onclick={closeMenu}>×</button></div>
+    {#each menu as m, i (i)}
+      {#if m}<a href={m.href} class:on={m.href === '/' ? page.url.pathname === '/' || page.url.pathname.startsWith('/species') : page.url.pathname.startsWith(m.href)} rel={m.href.startsWith('http') ? 'external' : undefined}>{m.label}</a>{:else}<hr />{/if}
+    {/each}
+  </nav>
+{/if}
 {#if vaultNote}<p class="vaultnote">{vaultNote}</p>{/if}
 
 <main class="wrap">
+  <InstallBar />
   {@render children()}
 </main>
+
+<CompareBar />
 
 <footer class="credits">
   <p>Taxonomy: GBIF Backbone (CC BY). Distributions: WCVP, RBG Kew (CC BY 4.0). Climate: CHELSA V2.1 (CC0), NASA POWER. Photographs carry their own licence and credit. Summaries: Wikipedia (CC BY-SA 4.0). Coastlines: Natural Earth. Nothing on this site is stored about you; your collection lives on your device{#if sync.configured}, and in an encrypted vault only your key opens{/if}. <a href="/about/how">How it is made</a> · <a href="/about/formats">Formats</a> · <a href="https://github.com/zomethingje-eng/cultifolio">Source</a>.</p>
@@ -93,7 +135,16 @@
   .crumb .last { color: var(--ink); }
   .iconbtn { border: 1px solid transparent; background: none; color: var(--ink2); font: inherit; font-size: 15px; font-weight: 600; padding: 4px 8px; border-radius: 8px; line-height: 1.2; min-width: 40px; min-height: 40px; display: inline-flex; align-items: center; justify-content: center; text-align: center; }
   .iconbtn:hover { background: var(--sunk); color: var(--ink); text-decoration: none; }
-  .iconbtn.brand { color: var(--accent); }
+  .iconbtn.brand { color: var(--accent); cursor: pointer; }
+  .iconbtn.brand[aria-expanded='true'] { background: var(--sunk); }
+  .scrim { position: fixed; inset: 0; z-index: 55; background: rgba(0, 0, 0, 0.18); }
+  #menu { position: fixed; z-index: 65; top: 48px; left: max(12px, env(safe-area-inset-left)); width: 240px; background: var(--card); border: 1px solid var(--rule); border-radius: 12px; box-shadow: var(--sh2); padding: 6px; display: flex; flex-direction: column; }
+  #menu a { display: block; padding: 10px 12px; border-radius: 8px; color: var(--ink); font-weight: 600; font-size: 14px; min-height: 40px; }
+  #menu a:hover { background: var(--sunk); text-decoration: none; }
+  #menu a.on { color: var(--accent); }
+  #menu .menuhead { display: none; align-items: center; justify-content: space-between; padding: 0 4px 4px 12px; }
+  #menu hr { border: 0; border-top: 1px solid var(--rule); margin: 6px 4px; }
+  @media (max-width: 700px) { #menu { top: 0; left: 0; bottom: 0; width: min(78vw, 300px); border-radius: 0 14px 14px 0; padding-top: max(8px, env(safe-area-inset-top)); overflow-y: auto; } #menu .menuhead { display: flex; } }
   main { padding-block: 0 3rem; max-width: 980px; }
   footer.credits { border-top: 1px solid var(--rule); margin: 44px auto 0; padding: 18px 0 40px; max-width: 980px; font-size: 11.5px; line-height: 1.75; color: var(--ink3); }
   footer.credits p { margin: 0; }

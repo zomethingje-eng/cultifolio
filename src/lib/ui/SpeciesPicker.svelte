@@ -12,13 +12,16 @@
    * grower's deliberate act and lets the form submit exactly what was typed.
    */
   import { parseName } from '$core/names';
+  import { prepare, search as searchIndex, type Prepared } from '$core/search';
   import SpeciesName from './SpeciesName.svelte';
   import type { NameKind } from '$core/names';
   let { value = $bindable(''), taxonKey = $bindable<number | null>(null), cultivar = $bindable<string | null>(null), kind = $bindable<NameKind>('species'), parentage = $bindable<string | null>(null) } = $props();
   type Sugg = { key: number; name: string; family?: string; rank?: string; status?: string; local?: boolean };
   let suggestions = $state<Sugg[]>([]);
   let open = $state(false);
-  let index: Array<{ key: number; slug: string; name: string; family?: string }> | null = null;
+  type Entry = { key: number; slug: string; name: string; family?: string; common?: string };
+  let index: Entry[] | null = null;
+  let prepared: Prepared<Entry>[] | null = null;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let resolved = $state<'yes' | 'no' | 'unknown'>('unknown');
   /** The highlighted row, or -1 for none. */
@@ -50,7 +53,8 @@
     const needle = p.scientific.toLowerCase();
     const idx = await loadIndex();
     // The corpus index is species-level; for a genus-only name (a hybrid) its rows would be wrong suggestions.
-    const local: Sugg[] = genusOnly ? [] : idx.filter((e) => e.name.toLowerCase().startsWith(needle)).slice(0, 6).map((e) => ({ key: e.key, name: e.name, family: e.family, local: true }));
+    if (!prepared) prepared = prepare(idx);
+    const local: Sugg[] = genusOnly ? [] : searchIndex(prepared!, needle, 6).map((e) => ({ key: e.key, name: e.name, family: e.family, local: true }));
     suggestions = local;
     hi = -1;
     open = true;

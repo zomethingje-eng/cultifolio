@@ -28,7 +28,15 @@
     }
   }
   let q = $state('');
-  let show = $state<'growing' | 'all' | 'due'>('growing');
+  let show = $state<'growing' | 'all' | 'due' | 'nophoto'>('growing');
+  // /plants?show=nophoto (from the front page's "today" line) opens on that chip.
+  onMount(() => {
+    const want = new URL(location.href).searchParams.get('show');
+    if (want === 'due' || want === 'all' || want === 'nophoto') show = want;
+  });
+  const yearAgo = (() => { const t = new Date(); return new Date(t.getFullYear() - 1, t.getMonth(), t.getDate()).toISOString().slice(0, 10); })();
+  const noPhoto = (id: string) => !collection.photos(id).some((p) => p.d >= yearAgo);
+  const noPhotoN = $derived(collection.accessions.filter((a) => a.status === 'growing' && noPhoto(a.id)).length);
   let thumbs = $state<Map<string, string>>(new Map());
   onMount(async () => {
     const idx = (await speciesIndex()) ?? [];
@@ -38,7 +46,7 @@
   const sinceWater = (id: string) => { const d = collection.events(id).find((e) => e.t === 'water')?.d; return d ? Math.floor((Date.now() - Date.parse(d)) / dayMs) : null; };
   const dueN = $derived(collection.accessions.filter((a) => a.status === 'growing' && (sinceWater(a.id) ?? 999) > 21).length);
   const list = $derived(
-    collection.accessions.filter((a) => (show === 'all' || a.status === 'growing') && (show !== 'due' || (sinceWater(a.id) ?? 999) > 21) && (!q || `${a.taxonName} ${a.cultivar ?? ''} ${a.parentage ?? ''} ${a.nameAsReceived ?? ''} ${accNo(a)} ${a.fieldNumber ?? ''} ${a.locationId ? collection.locationName(a.locationId) : (a.location ?? '')}`.toLowerCase().includes(q.toLowerCase())))
+    collection.accessions.filter((a) => (show === 'all' || a.status === 'growing') && (show !== 'due' || (sinceWater(a.id) ?? 999) > 21) && (show !== 'nophoto' || noPhoto(a.id)) && (!q || `${a.taxonName} ${a.cultivar ?? ''} ${a.parentage ?? ''} ${a.nameAsReceived ?? ''} ${accNo(a)} ${a.fieldNumber ?? ''} ${a.locationId ? collection.locationName(a.locationId) : (a.location ?? '')}`.toLowerCase().includes(q.toLowerCase())))
   );
 </script>
 
@@ -56,6 +64,7 @@
   <div class="chiprow" style="margin: 0">
     <button class="chipbtn" class:on={show === 'growing'} onclick={() => (show = 'growing')}>Growing<span class="n">{collection.accessions.filter((a) => a.status === 'growing').length}</span></button>
     <button class="chipbtn" class:on={show === 'due'} onclick={() => (show = 'due')}>Water overdue<span class="n">{dueN}</span></button>
+    <button class="chipbtn" class:on={show === 'nophoto'} onclick={() => (show = 'nophoto')} title="Growing plants with no photograph in the last year">No photo this year<span class="n">{noPhotoN}</span></button>
     <button class="chipbtn" class:on={show === 'all'} onclick={() => (show = 'all')}>All<span class="n">{collection.accessions.length}</span></button>
   </div>
 </div>

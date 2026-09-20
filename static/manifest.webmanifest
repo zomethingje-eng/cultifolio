@@ -1,2 +1,17 @@
-{ "name": "Cultifolio", "short_name": "Cultifolio", "start_url": "/plants", "display": "standalone", "background_color": "#f3f5f4", "theme_color": "#12795a",
-  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }] }
+{
+  "id": "/",
+  "name": "Cultifolio",
+  "short_name": "Cultifolio",
+  "description": "A species reference that shows its sources, and a collection record that stays on your device.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f3f5f4",
+  "theme_color": "#12795a",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

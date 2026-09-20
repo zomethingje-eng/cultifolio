@@ -60,6 +60,7 @@ import type { ClimateProvider } from '../src/lib/dossier/build';
 import type { Climate, Dossier } from '../src/lib/dossier/schema';
 type ClimateOk = Extract<Climate, { status: 'ok' }>;
 import { bulkFetcher } from '../src/lib/dossier/bulk';
+import { nearestByClimate } from '../src/lib/core/near';
 import { loadWcvp, loadOccurrences, wantedKeys } from './bulk-load';
 
 const args = process.argv.slice(2);
@@ -102,8 +103,8 @@ function diskPowerCache(dir: string): PowerCache {
   };
 }
 
-type IndexEntry = { key: number; slug: string; name: string; family?: string; common?: string; origin: string[]; thumb?: string; photos: number; open: number; climate: string };
-type Dossierish = { key: number; slug: string; name: { scientific: string; family?: string; status?: string; vernacular: Array<{ name: string; lang?: string }> }; distribution: { native: Array<{ name: string }> }; photos: Array<{ thumb: string; captive?: boolean }>; occurrences: { nOpenInRange: number; nRestrictedInRange?: number; nOutsideRange?: number }; climate: { status: string } };
+type IndexEntry = { key: number; slug: string; name: string; family?: string; common?: string; origin: string[]; thumb?: string; photos: number; open: number; climate: string; near?: number[] };
+type Dossierish = { key: number; slug: string; name: { scientific: string; family?: string; status?: string; vernacular: Array<{ name: string; lang?: string }> }; distribution: { native: Array<{ name: string }> }; photos: Array<{ thumb: string; captive?: boolean }>; occurrences: { nOpenInRange: number; nRestrictedInRange?: number; nOutsideRange?: number }; climate: { status: string; months?: Array<{ tmax: number; tmin: number; precipMm: number }> } };
 function indexEntry(d: Dossierish): IndexEntry {
   const hero = d.photos.find((p) => !p.captive) ?? d.photos[0];
   return { key: d.key, slug: d.slug, name: d.name.scientific, family: d.name.family, common: d.name.vernacular.find((v) => v.lang === 'eng')?.name, origin: d.distribution.native.map((n) => n.name), thumb: hero?.thumb, photos: d.photos.length, open: d.occurrences.nOpenInRange, climate: d.climate.status };
@@ -116,16 +117,28 @@ function scanDossiers(): IndexEntry[] {
   const dir = `${outDir}/s/v${DOSSIER_V}`;
   if (!existsSync(dir)) return [];
   const out: IndexEntry[] = [];
+  const withClimate: Array<{ key: number; months: Array<{ tmax: number; tmin: number; precipMm: number }> }> = [];
   notAccepted = [];
   for (const f of readdirSync(dir)) {
     if (!/^\d+\.json$/.test(f)) continue;
     try {
       const d = JSON.parse(readFileSync(`${dir}/${f}`, 'utf8')) as Dossierish;
       out.push(indexEntry(d));
+      if (d.climate.status === 'ok' && d.climate.months?.length === 12) withClimate.push({ key: d.key, months: d.climate.months });
       if (d.name.status && d.name.status !== 'accepted') notAccepted.push({ key: d.key, name: d.name.scientific, status: d.name.status, records: d.occurrences.nOpenInRange + (d.occurrences.nRestrictedInRange ?? 0) + (d.occurrences.nOutsideRange ?? 0) });
     } catch {
       /* a half-written file from a killed run: rebuilt when its name comes round */
     }
+  }
+  // "Grows like": the six nearest habitat climates per species, by the distance in src/lib/core/near.ts, into the index.
+  if (withClimate.length > 1) {
+    const t0 = Date.now();
+    const near = nearestByClimate(withClimate, 6);
+    for (const e of out) {
+      const n = near.get(e.key);
+      if (n?.length) e.near = n;
+    }
+    console.log(`  nearest habitat climates for ${withClimate.length} species (${((Date.now() - t0) / 1000).toFixed(1)} s)`);
   }
   return out;
 }
