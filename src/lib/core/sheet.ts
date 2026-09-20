@@ -12,6 +12,7 @@
  * supplies one figure: a conventional group minimum for the cold floor.
  */
 import { frostWording } from './extremes';
+import { MON3 } from './months';
 import { archFor, type ArchGuess } from './arch';
 
 export interface Month {
@@ -99,7 +100,6 @@ export interface Year {
 }
 
 const MON = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-const MON3 = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 export const mon = (m: number) => MON[(m - 1 + 12) % 12];
 
 /**

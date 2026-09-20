@@ -15,6 +15,7 @@
  * and the manifest names it, so the count of photographs in the file is the
  * count of photographs in the file.
  */
+import { KINDS } from '$core/log';
 import * as v from 'valibot';
 
 export const BACKUP_FORMAT = 'cultifolio-backup';
@@ -47,7 +48,8 @@ export type Manifest = v.InferOutput<typeof Manifest>;
 export const ChangeRow = v.object({
   t: v.string(),
   m: v.optional(v.string()),
-  kind: v.picklist(['accession', 'sowing', 'location', 'stock', 'task', 'event', 'photo', 'taxon', 'setting']),
+  kind: v.picklist(KINDS), // the one list of record kinds, shared with the log's validation
+
   id: v.string(),
   field: v.string(),
   value: v.unknown()

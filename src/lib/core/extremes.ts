@@ -32,7 +32,8 @@ export interface Extremes {
 
 export const LAPSE_C_PER_M = 0.0065;
 
-function quantile(sorted: number[], q: number): number {
+/** Linear-interpolated percentile of a sorted array; q in [0, 1]. The one quantile: the climate provider imports it too. */
+export function quantile(sorted: number[], q: number): number {
   if (!sorted.length) return NaN;
   const pos = (sorted.length - 1) * q;
   const lo = Math.floor(pos),

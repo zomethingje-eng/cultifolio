@@ -23,7 +23,7 @@ test('species page is readable without JavaScript and states its evidence', asyn
 
 test('a refusal is rendered as "not checked", never as an absence', async ({ page }) => {
   await page.goto('/species/refusia-testii');
-  await expect(page.getByText('The occurrence source did not answer')).toBeVisible();
+  await expect(page.getByText('occurrence source did not answer').first()).toBeVisible(); // said on the climate, the evidence line and the record map
   await expect(page.locator('.factgrid', { hasText: 'not a statement that none exist' })).toBeVisible();
 });
 
@@ -94,7 +94,7 @@ test('benches: make a place, put a plant there, water the bench, audit it', asyn
   // the plant's timeline has both entries
   await page.locator('.rows a.row', { hasText: 'Tylecodon' }).first().click();
   await expect(page.locator('.tlrow .t', { hasText: 'Seen at audit' })).toBeVisible();
-  await expect(page.getByText('Watered · whole room: Laundry room').or(page.getByText(/whole room: Laundry room/))).toBeVisible();
+  await expect(page.locator('.tlrow .t', { hasText: /whole room: Laundry room/ })).toBeVisible();
 });
 
 test('sowings: sow seed, count germination, pot up into numbered plants, propagate from one of them', async ({ page }) => {
@@ -828,6 +828,7 @@ test('every control has a name, headings do not jump, images have alt text, mute
   expect(findings).toEqual([]);
   // the sowing page's forms, and the bench edit form's µ
   await page.goto('/sowings/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.fill('#s-count', '10'); // a count is never assumed
   await page.getByRole('button', { name: 'Start batch' }).click();
   await expect(page).toHaveURL(/\/sowings\/S\d{4}-\d{3}$/);
   await page.getByRole('button', { name: 'Pot up…' }).click();
@@ -953,4 +954,138 @@ test('offline, a plant page not yet cached still opens from the section shell', 
   await expect(page.locator('h1.sci')).toContainText('Copiapoa cinerea', { timeout: 15_000 });
   await ctx.setOffline(false);
   await ctx.close();
+});
+
+test('the species field is a combobox: arrows and Enter pick a suggestion; Enter on a half-typed name asks before it files anything', async ({ page }) => {
+  await page.goto('/plants/new');
+  const input = page.locator('#species-name');
+  await expect(input).toHaveAttribute('role', 'combobox');
+  await input.fill('Copiapoa cin');
+  await expect(page.locator('.picker [role=option]').first()).toBeVisible();
+  await expect(input).toHaveAttribute('aria-expanded', 'true');
+  await input.press('ArrowDown');
+  const active = await input.getAttribute('aria-activedescendant');
+  expect(active).toBeTruthy();
+  await expect(page.locator(`#${active}`)).toHaveAttribute('aria-selected', 'true');
+  await input.press('Enter');
+  // the pick, not a submit: the name is whole, the key is set, the form is still here
+  await expect(input).toHaveValue('Copiapoa cinerea');
+  await expect(page.locator('.picker .pill.ok')).toContainText('GBIF');
+  await expect(page).toHaveURL(/\/plants\/new$/);
+  await input.press('Enter');
+  await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
+  await expect(page.locator('h1')).toContainText('Copiapoa cinerea');
+
+  // a partial name: Enter asks, and nothing is filed under "Welwit"
+  await page.goto('/plants/new');
+  await input.fill('Welwit');
+  await page.waitForTimeout(400); // the suggestion debounce; a genus fragment resolves to nothing local
+  await input.press('Enter');
+  await expect(page.locator('.picker .hint')).toContainText('Pick a name from the list, or press Enter again');
+  await expect(page).toHaveURL(/\/plants\/new$/);
+  await page.goto('/plants');
+  await expect(page.locator('.accrow')).toHaveCount(1);
+  await expect(page.getByText('Welwit')).toHaveCount(0);
+  // Escape closes the list and Tab leaves without losing what was typed
+  await page.goto('/plants/new');
+  await input.fill('Copiapoa cin');
+  await expect(page.locator('.picker [role=option]').first()).toBeVisible();
+  await input.press('Escape');
+  await expect(page.locator('.picker [role=listbox]')).toBeHidden();
+  await expect(input).toHaveAttribute('aria-expanded', 'false');
+  await input.press('Tab');
+  await expect(input).toHaveValue('Copiapoa cin');
+});
+
+test('a sowing without a count is refused with a sentence; a blank never becomes 20', async ({ page }) => {
+  await page.goto('/sowings/new');
+  await expect(page.locator('#s-count')).toHaveValue('');
+  await page.fill('#species-name', 'Copiapoa cinerea');
+  await page.locator('#species-name').blur();
+  await page.getByRole('button', { name: 'Start batch' }).click();
+  await expect(page.locator('#s-count-missing')).toContainText('Say how many seeds went in');
+  await expect(page.locator('#s-count')).toHaveAttribute('aria-invalid', 'true');
+  await expect(page).toHaveURL(/\/sowings\/new$/);
+  await page.fill('#s-count', '8');
+  await page.getByRole('button', { name: 'Start batch' }).click();
+  await expect(page).toHaveURL(/\/sowings\/S\d{4}-001$/);
+  await expect(page.getByText('8 seeds on')).toBeVisible();
+});
+
+test('a forecast source that does not answer is "not checked" in a plain notice on the bench and on /frost, never a status code', async ({ page }) => {
+  await page.route(/\/api\/forecast/, (r) => r.fulfill({ status: 502, contentType: 'application/json', body: JSON.stringify({ error: 'forecast source did not answer' }) }));
+  await page.goto('/frost');
+  await page.fill('#frost-lat', '40.38');
+  await page.fill('#frost-lon', '-80.05');
+  await page.getByRole('button', { name: 'Check' }).click();
+  await expect(page.locator('.notice')).toHaveText('Forecast not checked: the forecast source did not answer.');
+  await expect(page.locator('.notice')).not.toHaveClass(/err/);
+  await expect(page.locator('.bad')).toHaveCount(0);
+  // an outdoor place with coordinates watches the forecast on its own page
+  await page.goto('/benches');
+  await page.getByRole('button', { name: 'New location' }).click();
+  await page.fill('#loc-name', 'Back step');
+  await page.selectOption('#loc-kind', 'outdoor');
+  await page.getByRole('button', { name: 'Add', exact: true }).click();
+  await page.locator('.tree .row', { hasText: 'Back step' }).click();
+  await page.getByRole('button', { name: 'Edit' }).click();
+  await page.selectOption('#e-indoor', 'no');
+  await page.fill('#e-lat', '40.38');
+  await page.fill('#e-lon', '-80.05');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByRole('heading', { name: 'Frost watch' })).toBeVisible();
+  await expect(page.locator('.notice')).toHaveText('Forecast not checked: the forecast source did not answer.');
+  await expect(page.locator('.notice')).not.toHaveClass(/err/);
+  await expect(page.getByText(/forecast 50\d/)).toHaveCount(0);
+});
+
+test('a returning grower never sees the catalogue or "You grow 0" while the collection opens; a first visit sees the catalogue at once', async ({ page }) => {
+  // first visit: no hint, the server-rendered catalogue stands
+  await page.goto('/');
+  await expect(page.locator('.chiprow')).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem('cultifolio.hasMine'))).toBeNull();
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.getByRole('button', { name: /^Add/ }).click();
+  await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'You grow' })).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem('cultifolio.hasMine'))).toBe('1');
+  // next load: the collection is slow to open; the page holds a skeleton, not the catalogue
+  await page.addInitScript(() => {
+    // The database opens 1.5 s late: the open request's success listener is held back.
+    const open = IDBFactory.prototype.open;
+    IDBFactory.prototype.open = function (this: IDBFactory, ...a: Parameters<typeof open>) {
+      const req = open.apply(this, a);
+      const add = req.addEventListener.bind(req);
+      req.addEventListener = ((type: string, fn: EventListenerOrEventListenerObject, ...rest: unknown[]) => add(type, type === 'success' ? (ev: Event) => setTimeout(() => (typeof fn === 'function' ? fn(ev) : fn.handleEvent(ev)), 1500) : fn, ...(rest as []))) as typeof req.addEventListener;
+      return req;
+    } as typeof open;
+  });
+  await page.goto('/');
+  await expect(page.locator('.skeleton')).toBeVisible();
+  await expect(page.locator('.chiprow')).toHaveCount(0);
+  await expect(page.getByText('You grow 0')).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'You grow' })).toBeVisible({ timeout: 10000 });
+  await expect(page.locator('.skeleton')).toHaveCount(0);
+});
+
+test('at 390 px every tap target is a finger wide: top-bar icons, breadcrumb, section tabs, log-entry removes, footer links', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const SEL = 'a.btn, button.btn, #tabbar a, .chipbtn, #topbar .iconbtn, .crumb a, nav.tabs a, .rm, footer.credits a';
+  const sample = () => page.evaluate((sel) => [...document.querySelectorAll(sel)].map((e) => { const r = e.getBoundingClientRect(); return { t: (e.textContent ?? e.getAttribute('aria-label') ?? '').trim().slice(0, 20), h: Math.round(r.height), w: Math.round(r.width) }; }).filter((x) => x.h > 0 && (x.h < 40 || x.w < 40)), SEL);
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.getByRole('button', { name: /^Add/ }).click();
+  await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
+  await page.getByRole('button', { name: 'Water', exact: true }).click();
+  await page.getByRole('button', { name: 'Record', exact: true }).click();
+  await expect(page.locator('.tlrow', { hasText: 'Watered' })).toBeVisible();
+  await expect(page.locator('.crumb a')).toBeVisible();
+  expect(await sample()).toEqual([]);
+  await page.goto('/species/copiapoa-cinerea');
+  await expect(page.locator('nav.tabs a').first()).toBeVisible();
+  expect(await sample()).toEqual([]);
+  // the sticky bars are opaque: nothing ghosts through them
+  const bg = await page.evaluate(() => [getComputedStyle(document.querySelector('#topbar')!).backgroundColor, getComputedStyle(document.querySelector('nav.tabs')!).backgroundColor]);
+  for (const c of bg) expect(c).not.toMatch(/rgba\(.*, 0(\.\d+)?\)$/);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 });

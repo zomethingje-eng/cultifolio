@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { plural } from '$core/words';
   import { page } from '$app/state';
   import { accNo, sowNo } from '$lib/db/types';
   import { goto } from '$app/navigation';
@@ -90,8 +91,9 @@
   $effect(() => {
     if (!watchable || forecast) return;
     fetch(`/api/forecast?lat=${cond.lat}&lon=${cond.lon}${cond.altM != null ? `&alt=${cond.altM}` : ''}`)
-      .then(async (r) => { if (!r.ok) throw new Error(`forecast ${r.status}`); forecast = await r.json(); })
-      .catch((e) => (forecastErr = e.message));
+      .then(async (r) => { if (!r.ok) throw new Error('not answered'); forecast = await r.json(); })
+      // Whatever went wrong upstream, the page says the check did not happen, never a status code, and never that the nights are clear.
+      .catch(() => (forecastErr = 'Forecast not checked: the forecast source did not answer.'));
   });
   /** A heater set-point protects the plants even outdoors; the risk is only real below the floor. */
   const effectiveRisk = $derived.by(() => {
@@ -120,7 +122,7 @@
   <div class="idcard">
     <div class="who">
       <h1 class="q" style="margin: 0">{loc.name}</h1>
-      <p class="vern">{LOCATION_KINDS.find((k) => k.k === loc.type)?.label ?? 'Place'} · {deep.length} growing plant{deep.length === 1 ? '' : 's'}{kids.length ? ` in ${kids.length + 1} places` : ''}{#if cond.indoor != null} · {cond.indoor ? 'indoors' : 'outdoors'}{/if}</p>
+      <p class="vern">{LOCATION_KINDS.find((k) => k.k === loc.type)?.label ?? 'Place'} · {plural(deep.length, 'growing plant')}{kids.length ? ` in ${plural(kids.length + 1, 'place')}` : ''}{#if cond.indoor != null} · {cond.indoor ? 'indoors' : 'outdoors'}{/if}</p>
       <div class="pills">
         {#if cond.floorC != null}<span class="pill c">floor {cond.floorC} °C</span>{/if}
         {#if dli != null}<span class="pill w">DLI {dli.toFixed(0)}</span>{/if}
@@ -177,7 +179,7 @@
 
   {#if watchable}
     <div class="secrule"><h2>Frost watch</h2><div class="line"></div></div>
-    {#if forecastErr}<div class="notice err">{forecastErr}</div>
+    {#if forecastErr}<div class="notice">{forecastErr}</div>
     {:else if !forecast}<p class="muted">Fetching the forecast…</p>
     {:else}
       <div class="notice {effectiveRisk?.level === 'none' ? 'ok' : effectiveRisk?.level === 'cold' ? '' : 'err'}"><b>{effectiveRisk?.level === 'none' ? 'All clear.' : effectiveRisk?.level === 'cold' ? 'Cold night coming.' : 'Frost forecast.'}</b> {effectiveRisk?.text}</div>
@@ -198,7 +200,7 @@
     <div class="secrule"><h2>Inside</h2><div class="line"></div><span class="n">{kids.length}</span></div>
     <div class="rows">
       {#each kids as k}
-        <a class="azrow" href="/benches/{k.id}"><span class="im">{(LOCATION_KINDS.find((x) => x.k === k.type)?.label ?? 'Place').slice(0, 5)}</span><span><span class="nm" style="font-style: normal">{k.name}</span><span class="fam">{LOCATION_KINDS.find((x) => x.k === k.type)?.label ?? 'Place'}</span></span><span class="fig">{collection.plantsAt(k.id).length} plants</span></a>
+        <a class="azrow" href="/benches/{k.id}"><span class="im">{(LOCATION_KINDS.find((x) => x.k === k.type)?.label ?? 'Place').slice(0, 5)}</span><span><span class="nm" style="font-style: normal">{k.name}</span><span class="fam">{LOCATION_KINDS.find((x) => x.k === k.type)?.label ?? 'Place'}</span></span><span class="fig">{plural(collection.plantsAt(k.id).length, 'plant')}</span></a>
       {/each}
     </div>
   {/if}

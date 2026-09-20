@@ -71,7 +71,9 @@ export function buildBundle(c: Corpus, opts: { version: string; homepage: string
     type M = { tmax: number; tmin: number; tmean: number; precipMm: number; dli?: number; rh?: number };
     const months = get<M[]>(d, 'climate.months');
     const p10 = get<M[]>(d, 'climate.p10'), p90 = get<M[]>(d, 'climate.p90');
-    const lat = get<number>(d, 'climate.at.lat') ?? get<number>(d, 'centroid.lat'); // hemisphere for the growing year
+    // Hemisphere for the growing year: the map marker's latitude first, then the typical climate cell's, the same
+    // precedence as the species page (src/routes/species/[slug]/+page.svelte), so the export and the page agree.
+    const lat = get<number>(d, 'centroid.lat') ?? get<number>(d, 'climate.at.lat');
     const year = months && months.length === 12 ? growingYear(months, lat) : null;
     if (months && months.length === 12) {
       withClimate++;

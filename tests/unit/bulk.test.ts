@@ -104,6 +104,52 @@ describe('the sample', () => {
     expect(Math.max(...hs)).toBeLessThan(1);
     expect(new Set(hs).size).toBeGreaterThan(990);
   });
+  it('hashes every safe-integer bit: an id above 2^32 is not its low word', () => {
+    expect(idHash(1)).not.toBe(idHash(4294967297)); // 2^32 + 1
+    expect(idHash(4294967296)).not.toBe(idHash(0));
+    expect(idHash(Number.MAX_SAFE_INTEGER)).toBeGreaterThanOrEqual(0);
+    expect(idHash(Number.MAX_SAFE_INTEGER)).toBeLessThan(1);
+    const big = Array.from({ length: 1000 }, (_, i) => idHash(4294967296 * 3 + i));
+    expect(new Set(big).size).toBeGreaterThan(990); // still spread above 2^32
+    // ids below 2^32 hash as they always did (values from the 32-bit version), so an existing corpus's sample does not move
+    expect(idHash(12345678)).toBeCloseTo(0.2995606390759349, 15);
+    expect(idHash(1)).toBeCloseTo(0.21433574031107128, 15);
+  });
+});
+
+describe('the photograph sample', () => {
+  const still = (key: number, speciesKey: number, taxonKey = speciesKey) => ({ key, decimalLatitude: 0, decimalLongitude: 0, speciesKey, taxonKey, basisOfRecord: 'HUMAN_OBSERVATION', mediaType: 'StillImage' });
+  it('keeps the MEDIA_PER_SPECIES media-bearing records with the smallest id-hash, whatever order the file has them in', () => {
+    const n = OccIndex.MEDIA_PER_SPECIES;
+    const ids = Array.from({ length: 500 }, (_, i) => 1000 + i * 3);
+    const want = [...ids].sort((a, b) => idHash(a) - idHash(b)).slice(0, n).sort((a, b) => a - b);
+    const forward = new OccIndex(10);
+    for (const id of ids) forward.add(still(id, 7));
+    const backward = new OccIndex(10);
+    for (const id of [...ids].reverse()) backward.add(still(id, 7));
+    const shuffled = new OccIndex(10);
+    for (const id of [...ids].sort((a, b) => ((a * 7919) % 101) - ((b * 7919) % 101))) shuffled.add(still(id, 7));
+    for (const idx of [forward, backward, shuffled]) {
+      expect(idx.withMedia.size).toBe(n);
+      expect([...idx.withMedia.keys()].sort((a, b) => a - b)).toEqual(want);
+      expect([...idx.withMedia.values()].every((o) => o === 7)).toBe(true);
+    }
+    // the record sample is untouched by the photograph sample
+    forward.seal();
+    expect(forward.get(7)).toHaveLength(10);
+  });
+  it('a wanted subspecies whose species is not wanted owns its own photographs; a wanted species owns its subspecies records', () => {
+    const idx = new OccIndex(10, new Set([1001]));
+    idx.add(still(10, 100, 1001)); // species 100 not wanted, subspecies 1001 wanted
+    idx.add(still(11, 100, 100)); // the species itself: nobody wants it
+    expect([...idx.withMedia]).toEqual([[10, 1001]]);
+    const both = new OccIndex(10, new Set([100, 1001]));
+    both.add(still(12, 100, 1001));
+    expect(both.withMedia.get(12)).toBe(100); // the species' page, as before
+    const none = new OccIndex(10, new Set([555]));
+    none.add(still(13, 100, 1001));
+    expect(none.withMedia.size).toBe(0);
+  });
 });
 
 describe('the bulk fetcher', () => {

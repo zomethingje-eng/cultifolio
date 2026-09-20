@@ -11,12 +11,33 @@
   let q = $state('');
   let chip = $state<'all' | 'owned' | 'climate' | 'noclimate'>('all');
   let welcomeHidden = $state(true);
-  onMount(async () => {
-    await collection.load();
+  // A returning grower's device remembers that the page will be their species, not the catalogue: until the collection is
+  // open, the server-rendered catalogue is swapped for a light skeleton so neither the wrong head nor "You grow 0" shows.
+  // The server never sees the hint, so crawlers and first visits get the catalogue at once.
+  const HINT = 'cultifolio.hasMine';
+  let expectMine = $state(false);
+  onMount(() => {
     try {
-      welcomeHidden = localStorage.getItem('cultifolio.welcomed') === '1';
+      expectMine = localStorage.getItem(HINT) === '1';
     } catch {
-      welcomeHidden = false;
+      expectMine = false;
+    }
+    (async () => {
+      await collection.load();
+      try {
+        welcomeHidden = localStorage.getItem('cultifolio.welcomed') === '1';
+      } catch {
+        welcomeHidden = false;
+      }
+    })();
+  });
+  $effect(() => {
+    if (!collection.ready) return;
+    try {
+      if (hasMine) localStorage.setItem(HINT, '1');
+      else localStorage.removeItem(HINT);
+    } catch {
+      /* fine */
     }
   });
   const dismissWelcome = () => {
@@ -40,6 +61,8 @@
   // The page is a switch: your species when you have any, the catalogue otherwise or when you ask to browse it.
   let browsing = $state(false);
   const yourView = $derived(hasMine && !browsing);
+  // The hint says "your species" is coming; hold the catalogue back until the collection says which view this is.
+  const settling = $derived(expectMine && !collection.ready);
   type Item = (typeof data.groups)[number]['items'][number];
   // The full catalogue, fetched once and only when something needs more than the first page of a group.
   let full = $state<Item[] | null>(null);
@@ -137,7 +160,15 @@
   </a>
 {/snippet}
 
-{#if yourView}
+{#if settling}
+  <div class="skeleton" aria-busy="true" aria-label="Opening your species">
+    <div class="sk head"></div>
+    <div class="sk line"></div>
+    <div class="hgrid">
+      {#each [0, 1, 2, 3, 4, 5] as i (i)}<div class="sk tile"></div>{/each}
+    </div>
+  </div>
+{:else if yourView}
   <PageHead title="Species" sub="The kinds you grow, want, or are reading up on. The whole catalogue is a search away." count="{mine.size} {mine.size === 1 ? 'kind' : 'kinds'} · {grownN} you grow · {followingN} following">
     <a class="btn pri" href="/plants/new">Add a plant</a>
   </PageHead>
@@ -235,5 +266,10 @@
   .welcome .linkish { color: var(--ink3); }
   .muted { color: var(--ink3); }
   .grouptitle { font-size: 20px; margin: 22px 0 8px; }
+  .skeleton { margin-top: 22px; }
+  .sk { background: var(--sunk); border-radius: var(--r); }
+  .sk.head { height: 34px; width: 40%; max-width: 220px; margin-bottom: 12px; }
+  .sk.line { height: 14px; width: 70%; margin-bottom: 26px; }
+  .sk.tile { aspect-ratio: 1 / 1.15; }
   .ownchip.following { background: var(--card); color: var(--ink2); border: 1px solid var(--rule); box-shadow: var(--sh); }
 </style>

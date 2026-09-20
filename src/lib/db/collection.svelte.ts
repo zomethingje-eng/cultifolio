@@ -8,7 +8,7 @@ import { SvelteMap } from 'svelte/reactivity';
 import { Clock, hlcDecode, hlcEncode, hlcCompare } from '$core/hlc';
 import { apply, diff, validateChanges, key as recKey, type Change, type Kind, type Record_, type State } from '$core/log';
 import { nextAccession, DEFAULT_SCHEME, type NumberingScheme } from '$core/accession';
-import { allChanges, appendChanges, deviceId, requestPersistence, getMeta, setMeta, putPhotoBlobs, getPhotoBlobs, deletePhotoBlobs } from './vault';
+import { allChanges, appendChanges, deviceId, requestPersistence, getMeta, setMeta, putPhotoBlobs, getPhotoBlobs, deletePhotoBlobs, holdVault } from './vault';
 import type { Accession, PlantEvent, Taxon, Location, Sowing, Provenance, Photo } from './types';
 import { PROP_METHODS, accNo, sowNo, NUMBERING_SETTING } from './types';
 import { slugify } from '$core/names';
@@ -475,9 +475,12 @@ class Collection {
   async addPhoto(p: Omit<Photo, 'id'> & { blob: Blob; thumb: Blob }): Promise<Photo> {
     const id = 'p' + this.eventId().slice(1);
     const { blob, thumb, ...meta } = p;
-    await putPhotoBlobs({ id, blob, thumb });
     const rec: Photo = { ...meta, id };
-    await this.put('photo', id, rec as unknown as Record<string, unknown>);
+    // Held as one unit: a vault reload between the pixels and the record would leave pixels no record names.
+    await holdVault(async () => {
+      await putPhotoBlobs({ id, blob, thumb });
+      await this.put('photo', id, rec as unknown as Record<string, unknown>);
+    });
     return rec;
   }
   async removePhoto(id: string): Promise<void> {

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { plural } from '$core/words';
   import { onMount } from 'svelte';
   import PageHead from '$lib/ui/PageHead.svelte';
   import { collection } from '$lib/db/collection.svelte';
@@ -76,7 +77,7 @@
       {/each}
     </div>
   {/if}
-  {#if unplaced}<p class="faint small">{unplaced} growing plant{unplaced === 1 ? ' has' : 's have'} no location.</p>{/if}
+  {#if unplaced}<p class="faint small">{plural(unplaced, 'growing plant')} {unplaced === 1 ? 'has' : 'have'} no location.</p>{/if}
 {/if}
 
 <style>

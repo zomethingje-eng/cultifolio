@@ -13,6 +13,8 @@ import type { ClimateProvider } from '$dossier/build';
 import type { GridSource } from './source';
 import { decodeCell, cellOf, cellCentre, type ClimateVar } from './grid';
 import { fetchPowerSeries, extremesFor, powerCell, type PowerSeries } from './power';
+import { quantile } from '$core/extremes';
+import { r1 } from '$core/num';
 
 /** PAR is ~45% of shortwave and 4.6 µmol/J, so 1 MJ/m²/day of rsds ≈ 2.07 mol/m²/day of PAR. */
 export const DLI_PER_MJ = 2.07;
@@ -37,15 +39,6 @@ export interface ProviderOptions {
 
 type Month = { tmax: number; tmin: number; tmean: number; precipMm: number; dli?: number; rh?: number; vpdKpa?: number; windMs?: number };
 const VARS = ['tmax', 'tmin', 'tmean', 'precipMm', 'dli', 'rh', 'vpdKpa', 'windMs'] as const;
-
-/** Linear-interpolated percentile of a sorted array; q in [0, 1]. */
-export function quantile(sorted: number[], q: number): number {
-  if (!sorted.length) return NaN;
-  const pos = (sorted.length - 1) * q;
-  const lo = Math.floor(pos),
-    hi = Math.ceil(pos);
-  return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
-}
 
 /** Month-by-month percentile across cells: each variable independently, absent where any cell lacks it. */
 function monthStat(cells: Month[][], q: number): Month[] {
@@ -184,5 +177,4 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
   };
 }
 
-const r1 = (x: number) => Math.round(x * 10) / 10;
 const r2 = (x: number) => Math.round(x * 100) / 100;

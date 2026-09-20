@@ -52,7 +52,7 @@ import { makeClimateProvider, type PowerCache } from '../src/lib/climate/provide
 import { fileGridSource } from './file-grid';
 import type { PowerSeries } from '../src/lib/climate/power';
 import type { ClimateProvider } from '../src/lib/dossier/build';
-import type { Climate } from '../src/lib/dossier/schema';
+import type { Climate, Dossier } from '../src/lib/dossier/schema';
 type ClimateOk = Extract<Climate, { status: 'ok' }>;
 import { bulkFetcher } from '../src/lib/dossier/bulk';
 import { loadWcvp, loadOccurrences, wantedKeys } from './bulk-load';
@@ -300,7 +300,8 @@ async function fillGbifPhotos(): Promise<void> {
   }
   const doi = loaded.occ.doi;
   const f = bulkFetcher(fixtureFetcher({}, { status: 'none' }), { media: loaded.media });
-  type D = { key: number; photos: Array<{ src: string; captive?: boolean }>; upstream: Record<string, { status: string; at?: string; detail?: string }> };
+  // The parts of a dossier a fill touches, typed by the schema so mergeGbifPhotos() takes and gives real Photo rows.
+  type D = Pick<Dossier, 'key' | 'photos' | 'upstream'>;
   let filled = 0, none = 0, photos = 0;
   for (const file of files) {
     const path = `${dir}/${file}`;
@@ -311,7 +312,7 @@ async function fillGbifPhotos(): Promise<void> {
       continue; // nothing in the download for this species: what the dossier has stands, whatever source gave it
     }
     const fresh = photosFromMedia(m.data);
-    d.photos = mergeGbifPhotos(d.photos as never, fresh) as never;
+    d.photos = mergeGbifPhotos(d.photos, fresh);
     d.upstream['gbif.media'] = { status: 'ok', at: new Date().toISOString(), detail: `from the GBIF download${doi ? ` ${doi}` : ''} (multimedia.txt)` };
     // Six or more wild photographs from the download: the iNaturalist wild set need not be asked for.
     if (fresh.length >= 6 && !['ok', 'none'].includes(d.upstream['inat.photos.wild']?.status ?? '')) d.upstream['inat.photos.wild'] = { status: 'skipped', at: new Date().toISOString(), detail: `not asked: ${fresh.length} wild photographs already from the GBIF download` };
@@ -507,13 +508,15 @@ async function main() {
       // A re-derivation asked no network extra at all: every one of those sections is the previous build's, and says so.
       if (rederive) {
         const from = `carried from build of ${prev.built?.slice(0, 10) ?? '?'} (rederive)`;
+        // A carried refusal keeps its reason: "carried from build of …; that build: <why it refused>", not a bare "carried".
+        const carried = (u: { detail?: string }) => (u.detail ? `${from}; that build: ${u.detail}` : from);
         // Photographs carry over; a GBIF set read from the download this build replaces the previous GBIF set.
         d.photos = d.upstream['gbif.media']?.status === 'ok' ? mergeGbifPhotos(prev.photos, d.photos.filter((p) => p.src === 'gbif')) : prev.photos;
         d.literature = prev.literature;
         d.summary = prev.summary;
         d.ids = { ...prev.ids, gbif: d.ids.gbif };
         d.links = { ...prev.links, gbif: d.links.gbif };
-        for (const k of Object.keys(prev.upstream ?? {})) if (d.upstream[k]?.status === 'skipped' && prev.upstream[k]) d.upstream[k] = { ...prev.upstream[k], detail: from };
+        for (const k of Object.keys(prev.upstream ?? {})) if (d.upstream[k]?.status === 'skipped' && prev.upstream[k]) d.upstream[k] = { ...prev.upstream[k], detail: carried(prev.upstream[k]) };
       }
     }
     mkdirSync(path.slice(0, path.lastIndexOf('/')), { recursive: true });
@@ -525,7 +528,7 @@ async function main() {
     const inRange = d.occurrences.nOpenInRange + d.occurrences.nRestrictedInRange;
     const disagree = !inRange && d.occurrences.nOutsideRange >= 20 ? ` — range disagrees with records: all ${d.occurrences.nOutsideRange} outside it` : '';
     say(`✓ ${d.name.scientific} [${d.key}] ${d.photos.length} photos, ${d.occurrences.nOpenInRange} open/${d.occurrences.nRestrictedInRange} restricted in range, climate ${d.climate.status}${disagree}${refusedSrcs.length ? ' — refused: ' + refusedSrcs.join(', ') : ''} (${Date.now() - t0} ms)`);
-    thisRun.set(d.key, indexEntry(d as unknown as Dossierish));
+    thisRun.set(d.key, indexEntry(d));
     built++;
     if (upload) execSync(`npx wrangler r2 object put cultifolio/${dossierPath(d.key)} --file="${path}" --content-type=application/json`, { stdio: 'inherit' });
   }

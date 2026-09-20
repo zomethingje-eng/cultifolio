@@ -14,10 +14,18 @@
     busy = true; err = '';
     try {
       const r = await fetch(`/api/forecast?lat=${la}&lon=${lo}`);
-      if (!r.ok) throw new Error(((await r.json().catch(() => ({ message: r.statusText }))) as { message?: string }).message ?? `HTTP ${r.status}`);
+      if (r.status === 400) {
+        // The one refusal with a reason worth repeating: the coordinates themselves.
+        err = 'Latitude is −90 to 90 and longitude −180 to 180; check the figures.';
+        return;
+      }
+      if (!r.ok) throw new Error('not answered');
       data = await r.json();
       try { localStorage.setItem(KEY, JSON.stringify({ lat: la, lon: lo })); } catch { /* fine */ }
-    } catch (e) { err = e instanceof Error ? e.message : String(e); }
+    } catch {
+      // Whatever went wrong upstream, the page says the check did not happen: never a status code, never that the nights are clear.
+      err = 'Forecast not checked: the forecast source did not answer.';
+    }
     finally { busy = false; }
   }
   function locate() {
@@ -45,7 +53,7 @@
     <button class="btn primary" type="submit" disabled={busy || !lat || !lon}>Check</button>
     <button class="btn" type="button" onclick={locate} disabled={busy}>Use my location</button>
   </form>
-  {#if err}<p class="bad">{err}</p>{/if}
+  {#if err}<div class="notice" role="status">{err}</div>{/if}
   {#if data}
     <div class="risk card {data.risk.level}"><span class="k">{data.risk.level === 'none' ? 'No frost in the forecast' : data.risk.level}</span> {data.risk.text}</div>
     <div class="scroll-x">
@@ -81,6 +89,5 @@
   tr.frost td { color: var(--bad); font-weight: 600; }
   tr.cold td { color: var(--warm); }
   .alerts { padding-left: 1.1rem; }
-  .bad { color: var(--bad); }
   .small { font-size: 12.5px; }
 </style>

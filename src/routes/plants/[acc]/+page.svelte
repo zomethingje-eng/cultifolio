@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { plural } from '$core/words';
   import { page } from '$app/state';
   import { accNo, sowNo } from '$lib/db/types';
   import { goto } from '$app/navigation';
@@ -214,13 +215,13 @@
   <div class="hero" class:own={!!cover}>
     {#if cover}
       <button class="heroimg" type="button" onclick={() => openPhoto(cover)} aria-label="Open photograph">{#key cover.id}<PhotoImg id={cover.id} size="full" alt="{a.taxonName}, {cover.d}" />{/key}</button>
-      <span class="cred">{cover.caption ? cover.caption + ' · ' : ''}{cover.d}{photos.length > 1 ? ` · ${photos.length} photos` : ''}</span>
+      <span class="cred">{cover.caption ? cover.caption + ' · ' : ''}{cover.d}{photos.length > 1 ? ` · ${plural(photos.length, 'photo')}` : ''}</span>
     {:else if idx?.thumb && !thumbFailed}
       <img src={idx.thumb} alt={a.taxonName} style="max-height: 260px" onerror={() => (thumbFailed = true)} /><button class="cred" type="button" onclick={() => { adding = true; setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0); }}>species photograph · add your own</button>
     {:else if idx?.thumb}
-      <div class="ph" style="height: 150px">species photograph did not load · <PhotoAdd acc={id} id="hero-photo" compact /></div>
+      <div class="ph"><span class="phcap">species photograph did not load</span><PhotoAdd acc={id} id="hero-photo" compact /></div>
     {:else}
-      <div class="ph" style="height: 150px"><PhotoAdd acc={id} id="hero-photo" compact /></div>
+      <div class="ph"><PhotoAdd acc={id} id="hero-photo" compact /></div>
     {/if}
   </div>
   <div class="idcard">
@@ -346,7 +347,7 @@
     </div>
   {/if}
 
-  <div class="secrule"><h2>Log</h2><div class="line"></div><span class="n">{timeline.length} {timeline.length === 1 ? 'entry' : 'entries'}</span></div>
+  <div class="secrule"><h2>Log</h2><div class="line"></div><span class="n">{plural(timeline.length, 'entry', 'entries')}</span></div>
   {#if !events.length}
     <div class="cult"><div class="none">Nothing recorded yet. The verbs above each add a line here.</div></div>
   {:else}
@@ -356,7 +357,7 @@
           {@const e = row.e}
           <div class="tlrow">
             <span class="d">{e.d}</span>
-            <span class="t">{EVENT_LABEL[e.t] ?? e.t}{#if e.used}<span class="x2"> · {e.used}</span>{/if}{#if e.cause}<span class="x2"> · {e.cause}</span>{/if}{#if e.measures}<span class="x2"> · {Object.entries(e.measures).map(([k, v]) => `${MEASURES.find((m) => m.k === k)?.label ?? k} ${v}`).join(', ')}</span>{/if}{#if e.note}<span class="x2"> · {e.note}</span>{/if}</span>
+            <span class="t">{EVENT_LABEL[e.t] ?? e.t}{#if e.used}<span class="x2">{' · '}{e.used}</span>{/if}{#if e.cause}<span class="x2">{' · '}{e.cause}</span>{/if}{#if e.measures}<span class="x2">{' · '}{Object.entries(e.measures).map(([k, v]) => `${MEASURES.find((m) => m.k === k)?.label ?? k} ${v}`).join(', ')}</span>{/if}{#if e.note}<span class="x2">{' · '}{e.note}</span>{/if}</span>
             {#if confirmEvent === e.id}<button class="rm confirm" type="button" onclick={() => { collection.remove('event', e.id); confirmEvent = null; }}>Remove?</button>{:else}<button class="rm" type="button" title="Remove this entry" aria-label="Remove this entry" onclick={() => (confirmEvent = e.id)}>×</button>{/if}
           </div>
         {:else}
@@ -429,7 +430,9 @@
   .hero.own .cred { top: 10px; bottom: auto; }
   .heroimg { display: block; width: 100%; padding: 0; border: 0; background: transparent; cursor: zoom-in; }
   .heroimg :global(img) { width: 100%; max-height: 430px; object-fit: cover; display: block; }
-  .hero .ph { padding: 16px; }
+  /* No photograph: the box keeps a hero's height but grows with its contents, the caption on its own line above the buttons. */
+  .hero .ph { height: auto; min-height: 150px; padding: 16px; flex-direction: column; gap: 12px; }
+  .hero .ph .phcap { display: block; }
   button.cred { border: 0; cursor: pointer; font: inherit; font-size: 10.5px; }
   .addrow { padding: 14px 17px; margin-top: 12px; }
   .phgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-top: 12px; }
@@ -460,7 +463,8 @@
   .measures .lab { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink3); font-weight: 700; }
   .actions { display: flex; justify-content: flex-end; gap: 8px; margin: 0; }
   .tlrow .x2 { font-weight: 400; color: var(--ink2); font-size: 12.5px; }
-  .rm { border: 0; background: transparent; color: var(--ink3); cursor: pointer; font-size: 16px; line-height: 1; padding: 0 4px; }
+  /* The × is small; its hit area is not. Negative margins keep the row's height. */
+  .rm { border: 0; background: transparent; color: var(--ink3); cursor: pointer; font-size: 16px; line-height: 1; padding: 0 4px; min-width: 40px; min-height: 40px; margin: -12px -8px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; }
   .rm:hover { color: var(--bad); }
   .rm.confirm { font-size: 12px; color: var(--bad); font-weight: 600; }
   a.tlrow { color: inherit; }

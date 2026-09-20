@@ -1,9 +1,10 @@
 /**
  * The vault key and what it protects.
  *
- * One secret, the vault key, is made once on the first device: 128 bits of
- * randomness written as 26 base-32 letters in groups of five, the shape of a
- * 1Password secret key, so it can be read out, typed, or scanned. From it:
+ * One secret, the vault key, is made once on the first device: 30 symbols
+ * from a 30-letter alphabet (about 147 bits of randomness, each symbol drawn
+ * without bias) written in six groups of five, the shape of a 1Password
+ * secret key, so it can be read out, typed, or scanned. From it:
  *
  *   enc   AES-256-GCM key for every batch of changes and every photo
  *   auth  a token the server checks, derived so the server never sees `enc`
@@ -21,7 +22,7 @@ const B32 = 'ABCDEFGHJKMNPQRSTVWXYZ23456789'; // 30 symbols: no I, L, O, U, 0, 1
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
-export const KEY_GROUPS = 6; // 6 × 5 = 30 symbols ≈ 147 bits from 128 random
+export const KEY_GROUPS = 6; // 6 × 5 = 30 symbols from a 30-letter alphabet: log2(30^30) ≈ 147 bits
 
 /** A new vault key: "A3KQ7-...-..." Six groups of five from an unambiguous alphabet, each symbol drawn without bias. */
 export function newVaultKey(random: (n: number) => Uint8Array = (n) => crypto.getRandomValues(new Uint8Array(n))): string {

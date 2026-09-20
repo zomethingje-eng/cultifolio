@@ -16,7 +16,7 @@
  */
 import type { JsonFetcher, FetchResult, FetchOptions } from './fetch';
 import { licenceTag, isOpen } from '$core/licence';
-import type { GbifDistribution, GbifOccurrence, OccPage, GbifSpecies } from './sources/gbif';
+import type { GbifDistribution, GbifOccurrence, OccPage, GbifSpecies, KewDescription } from './sources/gbif';
 
 /* ------------------------------------------------------------------ WCVP */
 
@@ -28,12 +28,6 @@ export interface WcvpName {
   rank: string;
   /** taxon_authors, used to tell homonyms apart against the backbone's authorship. */
   authors?: string;
-  lifeform?: string;
-  climate?: string;
-}
-
-/** Kew's own one-line descriptions of a species, carried on the distribution answer. */
-export interface KewDescription {
   lifeform?: string;
   climate?: string;
 }
@@ -196,9 +190,19 @@ export function parseOccRow(h: string[], line: string): GbifOccurrence & { speci
   };
 }
 
-/** A stable hash of a gbifID into [0, 1), so the sample a rebuild keeps is the same sample. */
+/**
+ * A stable hash of a gbifID into [0, 1), so the sample a rebuild keeps is the same sample.
+ *
+ * Every safe-integer bit counts: the id's high 32 bits are folded into the low
+ * word before the mixer, so idHash(1) !== idHash(4294967297). GBIF ids passed
+ * 2^32 in 2024; an earlier version masked to 32 bits and hashed those ids as if
+ * they were small ones. For ids below 2^32 the value is unchanged (the high word
+ * is zero), so the sample changed once, for ids above 2^32, and a rebuild keeps
+ * the new sample from then on.
+ */
 export function idHash(id: number): number {
-  let x = (id ^ 0x9e3779b9) >>> 0;
+  const lo = id >>> 0, hi = Math.floor(id / 4294967296) >>> 0;
+  let x = ((lo ^ 0x9e3779b9) ^ Math.imul(hi, 0x85ebca6b)) >>> 0;
   x = Math.imul(x ^ (x >>> 16), 0x85ebca6b) >>> 0;
   x = Math.imul(x ^ (x >>> 13), 0xc2b2ae35) >>> 0;
   return ((x ^ (x >>> 16)) >>> 0) / 4294967296;
@@ -225,9 +229,13 @@ export class OccIndex {
   private strings = new Map<string, string>();
   /** The download's DOI, when known: every record served carries it so the dossier can cite it. */
   doi?: string;
-  /** gbifID → species key for observation records that carry images, a few dozen per species, so multimedia.txt can be read for them. */
+  /**
+   * gbifID → owner key for observation records that carry images, a few dozen per species, so multimedia.txt can be read
+   * for them. Kept live: a record is added when it enters a species' media sample and removed when a better hash evicts it.
+   */
   readonly withMedia = new Map<number, number>();
-  private mediaCount = new Map<number, number>();
+  /** Per owner, the media-bearing records inside the sample, sorted by hash ascending: the same rule as the record sample. */
+  private mediaBy = new Map<number, Array<[h: number, key: number]>>();
   static readonly MEDIA_PER_SPECIES = 40;
   constructor(private cap = 2000, private wanted?: Set<number>) {}
   private intern(s: string | undefined): string {
@@ -236,18 +244,34 @@ export class OccIndex {
     if (!v) this.strings.set(s, (v = s));
     return v;
   }
+  private isWanted(k: number): boolean {
+    return !this.wanted || this.wanted.has(k);
+  }
+  /**
+   * Photographs: the MEDIA_PER_SPECIES media-bearing observation records with the smallest id-hash per owner, so the set
+   * is a uniform sample of the download rather than the first forty in file order (which favours whichever dataset sorts
+   * first). A small sorted array per owner; a newcomer that beats the worst evicts it.
+   */
+  private admitMedia(owner: number, key: number, h: number): void {
+    const arr = this.mediaBy.get(owner) ?? [];
+    const full = arr.length >= OccIndex.MEDIA_PER_SPECIES;
+    if (full && h >= arr[arr.length - 1][0]) return;
+    let i = arr.length;
+    while (i > 0 && arr[i - 1][0] > h) i--;
+    arr.splice(i, 0, [h, key]);
+    this.withMedia.set(key, owner);
+    if (full) this.withMedia.delete(arr.pop()![1]);
+    this.mediaBy.set(owner, arr);
+  }
   add(o: GbifOccurrence & { speciesKey?: number; taxonKey?: number }): void {
     const h = idHash(o.key);
+    // A record identified to a subspecies belongs to its species' page, so the owner of its photographs is the species
+    // key, unless that species is not wanted and the subspecies (taxonKey) is: then the subspecies' page gets them.
+    const owner = o.speciesKey && this.isWanted(o.speciesKey) ? o.speciesKey : (o.taxonKey ?? o.speciesKey);
+    if (owner && this.isWanted(owner) && /still/i.test(o.mediaType ?? '') && o.basisOfRecord === 'HUMAN_OBSERVATION') this.admitMedia(owner, o.key, h);
     for (const k of new Set([o.speciesKey, o.taxonKey])) {
       if (!k) continue;
-      if (this.wanted && !this.wanted.has(k)) continue;
-      // Photographs: an observation (not a herbarium sheet) with still images, the first few dozen per species. A
-      // record identified to a subspecies belongs to its species' page, so the owner is the species key when there is one.
-      const owner = o.speciesKey ?? k;
-      if (k === owner && /still/i.test(o.mediaType ?? '') && o.basisOfRecord === 'HUMAN_OBSERVATION' && (this.mediaCount.get(owner) ?? 0) < OccIndex.MEDIA_PER_SPECIES) {
-        this.withMedia.set(o.key, owner);
-        this.mediaCount.set(owner, (this.mediaCount.get(owner) ?? 0) + 1);
-      }
+      if (!this.isWanted(k)) continue;
       if (h >= (this.worst.get(k) ?? Infinity)) continue;
       const arr = this.by.get(k) ?? [];
       arr.push([h, o.key, o.decimalLatitude ?? NaN, o.decimalLongitude ?? NaN, o.year ?? 0, this.intern(o.countryCode), this.intern(o.basisOfRecord), this.intern(o.license), this.intern(o.datasetKey), this.intern(o.establishmentMeans), o.coordinateUncertaintyInMeters ?? 0]);
@@ -377,6 +401,10 @@ export interface BulkSources {
  * through to the API, so a name missing from the download still builds.
  */
 export function bulkFetcher(base: JsonFetcher, src: BulkSources, stats = { wcvp: 0, occ: 0, media: 0, through: 0 }): JsonFetcher & { stats: typeof stats } {
+  // JsonFetcher is generic in what the caller expects (`f<T>(url)`), and the URL is the only thing that says what T is: a
+  // fetcher cannot prove to the type checker that a distributions URL is answered with a distributions page. The regexes
+  // below decide that, so each answer is built in the shape the matching adapter asks for and cast `as unknown as T` at
+  // this one boundary; the adapters' tests, run through this fetcher, are what keep the shapes honest.
   const names = new Map<number, { name: string; authorship?: string }>(); // key → canonical name and authorship, learned from /species/{key} on the way past
   const f = async <T = unknown>(url: string, opts?: FetchOptions): Promise<FetchResult<T>> => {
     let m: RegExpExecArray | null;

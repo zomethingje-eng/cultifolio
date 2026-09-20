@@ -18,7 +18,9 @@
   let method = $state<PropMethod>('seed');
   let parentAcc = $state<string | null>(null);
   let sown = $state(new Date().toISOString().slice(0, 10));
-  let count = $state(20);
+  // Never guessed: a count the grower did not give would become the denominator of every germination figure.
+  let count = $state<number | null>(null);
+  let countMissing = $state(false);
   let sourceFrom = $state('');
   let sourceRef = $state('');
   let provenance = $state<Provenance>('unknown');
@@ -65,14 +67,19 @@
       kind = kindOf(a);
       parentage = a.parentage ?? null;
       method = 'offset';
-      count = 3;
       locationId = a.locationId ?? null;
     }
   });
 
   async function save(e: SubmitEvent) {
     e.preventDefault();
-    if (!name.trim() || busy || count < 1) return;
+    if (!name.trim() || busy) return;
+    const n = count;
+    if (n == null || !Number.isFinite(n) || n < 1) {
+      countMissing = true;
+      document.getElementById('s-count')?.focus();
+      return;
+    }
     busy = true;
     const p = parseName(name);
     const taxonName = p.scientific;
@@ -88,7 +95,7 @@
       method,
       parentAcc: m.veg ? parentAcc : null,
       sown,
-      count,
+      count: n,
       sourceFrom: m.veg ? null : sourceFrom.trim() || null,
       sourceRef: m.veg ? null : sourceRef.trim() || null,
       provenance: m.veg ? 'veg' : provenance,
@@ -107,7 +114,7 @@
 
 <svelte:head><title>New sowing — Cultifolio</title></svelte:head>
 
-<form class="form" onsubmit={save}>
+<form class="form" novalidate onsubmit={save}>
   <div class="kick" style="margin-top: 22px">Sowings</div>
   <h1 class="q">{m.veg ? 'Start a propagation' : 'Sow seed'}</h1>
   <p class="secsub">Batch <span class="accno">{nextNo}</span>. Plants potted up from it are numbered then, not now.</p>
@@ -135,7 +142,7 @@
 
   <div class="two">
     <label class="field"><span>Date</span><input id="s-date" type="date" bind:value={sown} /></label>
-    <label class="field"><span>How many {m.unit}</span><input id="s-count" type="number" min="1" max="5000" bind:value={count} /></label>
+    <label class="field"><span>How many {m.unit}</span><input id="s-count" type="number" min="1" max="5000" required bind:value={count} oninput={() => (countMissing = false)} aria-invalid={countMissing} aria-describedby={countMissing ? 's-count-missing' : undefined} />{#if countMissing}<span class="bad small" id="s-count-missing">Say how many {m.unit} went in; the germination figures divide by it.</span>{/if}</label>
   </div>
 
   {#if !m.veg}
@@ -169,7 +176,7 @@
 
   <div class="actions">
     <a class="btn" href="/sowings">Cancel</a>
-    <button class="btn pri" type="submit" disabled={!name.trim() || busy || count < 1}>Start batch</button>
+    <button class="btn pri" type="submit" disabled={!name.trim() || busy}>Start batch</button>
   </div>
 </form>
 
@@ -181,6 +188,7 @@
   .field input[type='text'], .field input[type='date'], .field input[type='number'], .field select, .field textarea { width: 100%; font: inherit; font-size: 14px; padding: 9px 12px; border: 1px solid var(--rule); border-radius: 9px; background: var(--card); color: var(--ink); }
   .field input:focus, .field select:focus, .field textarea:focus { outline: 0; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
   .field .small { display: block; margin-top: 4px; font-size: 12px; }
+  .bad { color: var(--bad); }
   .two { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; align-items: start; }
   .check { display: flex; align-items: center; gap: 8px; font-size: 14px; margin: 12px 0; }
   .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }

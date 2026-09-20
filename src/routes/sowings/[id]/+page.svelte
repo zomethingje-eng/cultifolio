@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { plural } from '$core/words';
   import { page } from '$app/state';
   import { accNo, sowNo } from '$lib/db/types';
   import { goto } from '$app/navigation';
@@ -234,7 +235,7 @@
   {/if}
   {#if lightbox != null && photos.length}<Lightbox {photos} bind:index={lightbox} onclose={() => (lightbox = null)} />{/if}
 
-  <div class="secrule"><h2>Log</h2><div class="line"></div><span class="n">{events.length} {events.length === 1 ? 'entry' : 'entries'}</span></div>
+  <div class="secrule"><h2>Log</h2><div class="line"></div><span class="n">{plural(events.length, 'entry', 'entries')}</span></div>
   <form class="noteform" onsubmit={note}>
     <input id="n-date" type="date" aria-label="Date of the note" bind:value={nd} /><input id="n-text" type="text" placeholder="Add a note to the log" aria-label="Note" bind:value={ntext} /><button class="btn" type="submit" disabled={!ntext.trim()}>Add</button>
   </form>
@@ -245,7 +246,7 @@
       {#each events as e}
         <div class="tlrow">
           <span class="d">{e.d}</span>
-          <span class="t">{EVENT_LABEL[e.t] ?? e.t}{#if e.n != null}&nbsp;<b>{e.n}</b>{/if}{#if e.cause}<span class="x2"> · {e.cause}</span>{/if}{#if e.note}<span class="x2"> · {e.note}</span>{/if}</span>
+          <span class="t">{EVENT_LABEL[e.t] ?? e.t}{#if e.n != null}&nbsp;<b>{e.n}</b>{/if}{#if e.cause}<span class="x2">{' · '}{e.cause}</span>{/if}{#if e.note}<span class="x2">{' · '}{e.note}</span>{/if}</span>
           <span></span>
         </div>
       {/each}

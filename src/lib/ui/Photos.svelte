@@ -9,10 +9,18 @@
   let showAll = $state(false);
   const LIMIT = 8;
   const shown = $derived(showAll ? rest : rest.slice(0, LIMIT));
+  // A credit names its licence only when the attribution does not already: "J. Doe (CC BY)" is not followed by "· CC BY".
+  const credit = (p: Photo) => {
+    const lic = licenceLabel(p.licence);
+    // "CC BY", "CC-BY", "cc by 4.0" all name the same licence; "CC BY-SA" names another, so the label must end there.
+    const norm = (t: string) => t.replace(/[\s-]+/g, ' ').trim().toLowerCase();
+    const named = new RegExp(`(^|[^a-z0-9])${norm(lic).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![a-z0-9]| (?:sa|nc|nd)\\b)`).test(norm(p.attribution));
+    return named ? p.attribution : `${p.attribution} · ${lic}`;
+  };
   // One credit line for the strip instead of a caption under every thumbnail.
   const credits = $derived.by(() => {
     const m = new Map<string, number>();
-    for (const p of shown) m.set(`${p.attribution} · ${licenceLabel(p.licence)}`, (m.get(`${p.attribution} · ${licenceLabel(p.licence)}`) ?? 0) + 1);
+    for (const p of shown) m.set(credit(p), (m.get(credit(p)) ?? 0) + 1);
     return [...m.entries()].map(([k, n]) => (n > 1 ? `${k} (${n})` : k)).join('; ');
   });
 </script>
@@ -27,7 +35,7 @@
   {#if rest.length}
     <div class="grid">
       {#each shown as p (p.src + p.id)}
-        <a class="ph" href={p.page ?? p.url} rel="noopener" title="{p.attribution} · {licenceLabel(p.licence)}{p.captive ? ' · in cultivation' : ''}"><img src={p.thumb} alt="{name}{p.captive ? ', in cultivation' : ''}" loading="lazy" />{#if p.captive}<span class="tag">cultivated</span>{/if}</a>
+        <a class="ph" href={p.page ?? p.url} rel="noopener" title="{credit(p)}{p.captive ? ' · in cultivation' : ''}"><img src={p.thumb} alt="{name}{p.captive ? ', in cultivation' : ''}" loading="lazy" />{#if p.captive}<span class="tag">cultivated</span>{/if}</a>
       {/each}
     </div>
     <p class="credits faint">Photographs: {credits}.{#if rest.length > LIMIT} <button class="linkish" type="button" onclick={() => (showAll = !showAll)}>{showAll ? 'Show fewer' : `Show all ${photos.length}`}</button>{/if}</p>

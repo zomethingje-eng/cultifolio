@@ -85,10 +85,18 @@ export interface GbifDistribution {
   source?: string;
 }
 
+/** Kew's own one-line descriptions of a species, carried on the distribution answer (by the API or the bulk path). */
 export interface KewDescription {
   lifeform?: string;
   climate?: string;
 }
+
+/**
+ * The one test for "not a wild native population": a distribution row's establishment means or status, or an occurrence
+ * record's establishmentMeans plus degreeOfEstablishment, that says the plant was introduced, naturalised, cultivated,
+ * invasive or managed. Used for the range (here and in build.ts) and for the records (build.ts).
+ */
+export const CULTIVATED_RE = /introduced|naturali[sz]ed|cultivated|invasive|managed/i;
 
 /** WCVP rows as republished through GBIF (the checklist Kew's POWO runs on), or served from Kew's own files by the bulk path. */
 export async function distributions(f: JsonFetcher, key: number): Promise<FetchResult<{ rows: GbifDistribution[]; wcvp: boolean; kew?: KewDescription; ambiguous?: string }>> {
@@ -100,7 +108,7 @@ export async function distributions(f: JsonFetcher, key: number): Promise<FetchR
   // No WCVP entry: fall back to whatever national checklists GBIF holds, one row per country and status.
   const seen = new Map<string, GbifDistribution>();
   for (const d of r.data.results) {
-    const k = `${d.country ?? d.locality ?? '?'}|${/introduced|naturali[sz]ed|cultivated|invasive|managed/i.test(`${d.establishmentMeans ?? ''} ${d.status ?? ''}`) ? 'i' : 'n'}`;
+    const k = `${d.country ?? d.locality ?? '?'}|${CULTIVATED_RE.test(`${d.establishmentMeans ?? ''} ${d.status ?? ''}`) ? 'i' : 'n'}`;
     if (!seen.has(k)) seen.set(k, d);
   }
   return seen.size ? { status: 'ok', data: { rows: [...seen.values()], wcvp: false } } : { status: 'none' };

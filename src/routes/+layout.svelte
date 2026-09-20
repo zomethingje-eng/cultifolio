@@ -83,18 +83,21 @@
   .iconbtn.sync.busy { animation: spin 1.2s linear infinite; }
   .iconbtn.sync.err { color: var(--bad); }
   @keyframes spin { to { transform: rotate(360deg); } }
-  #topbar { position: sticky; top: 0; z-index: 60; background: color-mix(in srgb, var(--card) 88%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--rule); display: flex; align-items: center; gap: 8px; padding: 7px 16px; margin-inline: calc(-1 * max(16px, env(safe-area-inset-left))) calc(-1 * max(16px, env(safe-area-inset-right))); min-height: 44px; }
-  .crumb { font-size: 11px; letter-spacing: 0.11em; text-transform: uppercase; color: var(--ink3); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
-  .crumb a { color: var(--ink3); }
+  /* Opaque, not a blur: a sticky bar that lets headings ghost through reads as two lines of text. */
+  #topbar { position: sticky; top: 0; z-index: 60; background: var(--bg); border-bottom: 1px solid var(--rule); display: flex; align-items: center; gap: 8px; padding: 2px 16px; margin-inline: calc(-1 * max(16px, env(safe-area-inset-left))) calc(-1 * max(16px, env(safe-area-inset-right))); min-height: 44px; }
+  .crumb { font-size: 11px; line-height: 40px; letter-spacing: 0.11em; text-transform: uppercase; color: var(--ink3); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
+  /* A finger's hit area (40 px) around an 11 px word: the line box, not the glyph, is the target. */
+  .crumb a { color: var(--ink3); display: inline-block; padding: 0 2px; }
   .crumb a:hover { color: var(--ink); text-decoration: none; }
   .crumb .sep { opacity: 0.45; margin: 0 5px; }
   .crumb .last { color: var(--ink); }
-  .iconbtn { border: 1px solid transparent; background: none; color: var(--ink2); font: inherit; font-size: 15px; font-weight: 600; padding: 4px 10px; border-radius: 8px; line-height: 1.2; min-width: 32px; text-align: center; }
+  .iconbtn { border: 1px solid transparent; background: none; color: var(--ink2); font: inherit; font-size: 15px; font-weight: 600; padding: 4px 8px; border-radius: 8px; line-height: 1.2; min-width: 40px; min-height: 40px; display: inline-flex; align-items: center; justify-content: center; text-align: center; }
   .iconbtn:hover { background: var(--sunk); color: var(--ink); text-decoration: none; }
   .iconbtn.brand { color: var(--accent); }
   main { padding-block: 0 3rem; max-width: 980px; }
   footer.credits { border-top: 1px solid var(--rule); margin: 44px auto 0; padding: 18px 0 40px; max-width: 980px; font-size: 11.5px; line-height: 1.75; color: var(--ink3); }
   footer.credits p { margin: 0; }
+  footer.credits a { display: inline-block; padding: 11px 2px; margin: -11px 0; }
   #tabbar { display: none; }
   @media (max-width: 700px) {
     main { padding-bottom: calc(56px + 2rem + env(safe-area-inset-bottom)); }

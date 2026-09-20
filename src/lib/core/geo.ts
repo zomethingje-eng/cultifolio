@@ -30,10 +30,6 @@ export function inBox(lat: number, lon: number, b: Box): boolean {
   return lon >= b.w || lon <= b.e; // antimeridian
 }
 
-export function within(inner: Box, outer: Box): boolean {
-  return inner.s >= outer.s && inner.n <= outer.n && inner.w >= outer.w && inner.e <= outer.e;
-}
-
 export function median(xs: number[]): number {
   const a = [...xs].sort((p, q) => p - q);
   const m = a.length >> 1;

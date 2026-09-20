@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { makeHeader, cellOf, byteRange, encodeCell, decodeCell, NODATA } from '$climate/grid';
+import { makeHeader, cellOf, cellCentre, byteRange, encodeCell, decodeCell, NODATA } from '$climate/grid';
 import { memoryGridSource } from '$climate/source';
 import { makeClimateProvider } from '$climate/provider';
 import { powerCell, powerUrl } from '$climate/power';
@@ -92,6 +92,9 @@ describe('climate provider', () => {
     expect(c.extremes?.lapseAppliedM).toBe(500); // 620 m cell vs POWER's 120 m
     // freak frost of -2.5 at POWER elevation becomes -2.5 - 3.25 at the cell
     expect(c.extremes?.minAbs).toBeCloseTo(-5.75, 0);
+    // and that one night is the frost figure: one night in 44 years, as a count and as an exact rate
+    expect(c.extremes?.frostNights).toBe(1);
+    expect(c.extremes?.frostDaysPerYear).toBeCloseTo(1 / 44, 3);
     expect(c.src.normals).toContain('CHELSA');
     expect(c.src.extremes).toContain('lapse-corrected +500 m');
     expect(c.src.elevation).toContain('620 m');
@@ -108,5 +111,72 @@ describe('climate provider', () => {
     if (c.status !== 'ok') return;
     expect(c.extremes).toBeUndefined();
     expect(c.src.extremes).toContain('did not answer');
+  });
+});
+
+describe('climate envelope', () => {
+  const lat = -24.877,
+    lon = -70.504;
+  /** The Atacama cell shifted: nights `dT` warmer, rain multiplied by `rain`. */
+  function variant(dT: number, rain: number): Record<string, number> {
+    const v = atacamaCell();
+    for (let m = 1; m <= 12; m++) {
+      const mm = String(m).padStart(2, '0');
+      v[`tasmin_${mm}`] += dT;
+      v[`pr_${mm}`] = (m > 5 && m < 9 ? 5 : 1) * rain; // 24 mm a year at rain = 1
+    }
+    return v;
+  }
+  it('takes the median and the 10th-90th percentiles across cells, reads extremes at the typical cell, and carries the frost count', async () => {
+    // Five cells 0.05° apart, the POWER cell's worth: nights shifted −2, −1, 0, +1, +4 (asymmetric, so median ≠ mean), rain ×1..×5.
+    const shifts = [-2, -1, 0, 1, 4];
+    const cells = new Map<string, ArrayBuffer>();
+    const points: Array<[number, number]> = [];
+    const centres: Array<{ lat: number; lon: number; id: string }> = [];
+    shifts.forEach((dT, k) => {
+      const c = cellOf(h, lat, lon - k * h.cell);
+      cells.set(c.id, encodeCell(h, variant(dT, k + 1)));
+      centres.push({ ...cellCentre(h, c.row, c.col), id: c.id });
+      // three records in the first cell: one cell of climate, not three votes
+      for (let n = 0; n <= (k === 0 ? 2 : 0); n++) points.push([lat + n * 0.001, lon - k * h.cell]);
+    });
+    const pc = powerCell(centres[2].lat, centres[2].lon);
+    const provider = makeClimateProvider({ grid: memoryGridSource(h, cells), fetcher: fixtureFetcher(powerFixture(pc.lat, pc.lon, 120)) });
+    const c = await provider.envelope(points);
+    expect(c.status).toBe('ok');
+    if (c.status !== 'ok') return;
+    expect(c.cells).toBe(5);
+    expect(c.records).toBe(7);
+    // January nights across cells: 13, 14, 15, 16, 19 → median 15, p10 13.4, p90 17.8 (linear interpolation, four intervals)
+    expect(c.months[0].tmin).toBeCloseTo(15, 1);
+    expect(c.p10[0].tmin).toBeCloseTo(13.4, 1);
+    expect(c.p90[0].tmin).toBeCloseTo(17.8, 1);
+    // days are the same in every cell: the band collapses onto the median
+    expect(c.p10[0].tmax).toBeCloseTo(c.months[0].tmax, 1);
+    expect(c.p90[0].tmax).toBeCloseTo(c.months[0].tmax, 1);
+    // July rain across cells: 5, 10, 15, 20, 25 → median 15, p10 7, p90 23
+    expect(c.months[6].precipMm).toBe(15);
+    expect(c.p10[6].precipMm).toBe(7);
+    expect(c.p90[6].precipMm).toBe(23);
+    // annual rain is per cell first (24, 48, 72, 96, 120), then its percentiles: not a sum of monthly percentiles
+    expect(c.annualRain).toEqual({ p10: 33.6, p90: 110.4 });
+    // the typical cell: coldest month's mean night nearest the median across cells (shift 0), and `at` is its centre
+    expect(c.cell).toBe(centres[2].id);
+    expect(c.at).toEqual({ lat: centres[2].lat, lon: centres[2].lon });
+    expect(c.src.envelope).toContain(`5 distinct grid cells holding the 7 in-range records`);
+    expect(c.src.envelope).toContain(centres[2].id);
+    // extremes read at that cell, lapse-corrected 620 m vs POWER's 120 m, the one freak frost carried as a count
+    expect(c.extremes?.lapseAppliedM).toBe(500);
+    expect(c.extremes?.minAbs).toBeCloseTo(-5.75, 0);
+    expect(c.extremes?.frostNights).toBe(1);
+    expect(c.extremes?.frostDaysPerYear).toBeCloseTo(1 / 44, 3);
+  });
+  it('fewer than three land cells is "none", and says how many', async () => {
+    const a = cellOf(h, lat, lon), b = cellOf(h, lat, lon - h.cell), sea = cellOf(h, lat, lon - 2 * h.cell);
+    const cells = new Map([[a.id, encodeCell(h, variant(0, 1))], [b.id, encodeCell(h, variant(1, 1))], [sea.id, encodeCell(h, { elev: -1500 })]]);
+    const c = await makeClimateProvider({ grid: memoryGridSource(h, cells), fetcher: fixtureFetcher({}) }).envelope([[lat, lon], [lat, lon - h.cell], [lat, lon - 2 * h.cell]]);
+    expect(c.status).toBe('none');
+    expect(c.status === 'none' ? c.detail : '').toContain('only 2 distinct land cells');
+    expect(c.status === 'none' ? c.detail : '').toContain('(1 at sea or ice)');
   });
 });

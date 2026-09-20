@@ -10,6 +10,8 @@ import type { RequestHandler } from './$types';
  * an hour per 0.01° cell so a site polls MET no more than hourly however many
  * devices watch it. MET asks for ≤4 decimals and an identifying User-Agent.
  */
+const notAnswered = () => json({ error: 'forecast source did not answer' }, { status: 502, headers: { 'cache-control': 'no-store' } });
+
 export const GET: RequestHandler = async ({ url, platform, fetch }) => {
   const lat = Number(url.searchParams.get('lat')),
     lon = Number(url.searchParams.get('lon'));
@@ -23,10 +25,16 @@ export const GET: RequestHandler = async ({ url, platform, fetch }) => {
   if (hit) return hit;
 
   const headers = { 'user-agent': USER_AGENT, accept: 'application/json' };
-  const metRes = await fetch(metUrl(la, lo, alt ? Number(alt) : undefined), { headers });
-  if (metRes.status === 429 || metRes.status === 403) error(503, 'forecast source is rate-limiting; try again shortly');
-  if (!metRes.ok) error(502, `forecast source answered ${metRes.status}`);
-  const forecast = reduceMet((await metRes.json()) as MetResponse, lo, new Date().toISOString(), metRes.headers.get('expires') ?? undefined);
+  // Anything short of a well-formed answer from MET (unreachable, a non-2xx, a body that is not JSON or not a forecast) is one
+  // plain 502 with no-store: the page says "not checked", and a bad hour is never cached.
+  let forecast: ReturnType<typeof reduceMet>;
+  try {
+    const metRes = await fetch(metUrl(la, lo, alt ? Number(alt) : undefined), { headers });
+    if (!metRes.ok) return notAnswered();
+    forecast = reduceMet((await metRes.json()) as MetResponse, lo, new Date().toISOString(), metRes.headers.get('expires') ?? undefined);
+  } catch {
+    return notAnswered();
+  }
 
   let alerts: ReturnType<typeof reduceNws> = [];
   let alertsStatus: 'ok' | 'none' | 'refused' | 'n/a' = 'n/a';

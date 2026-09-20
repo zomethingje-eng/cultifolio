@@ -30,6 +30,47 @@ const STAGING_PENDING = 'staging-pending';
 
 let dbp: Promise<IDBPDatabase<VaultDB>> | null = null;
 
+/* ---- in-flight writes ----
+ * When another tab upgrades the vault this tab must let go and reload, but
+ * not in the middle of a write: a photo's pixels landing without its record,
+ * or a batch of changes without its outbox entries, would be a vault no one
+ * wrote. Every write below passes through `writing()`, which counts it; the
+ * reload waits for the count to reach zero, or five seconds, whichever comes
+ * first. `holdVault()` is the same door for a compound operation made of
+ * several writes (a photograph's blobs and then its record), so the gap
+ * between them is covered too.
+ */
+let inFlight = 0;
+const onIdle = new Set<() => void>();
+export function holdVault<T>(work: () => Promise<T>): Promise<T> {
+  inFlight++;
+  return (async () => work())().finally(() => {
+    if (--inFlight === 0) for (const fn of [...onIdle]) fn();
+  });
+}
+const writing = holdVault;
+/** How many writes (or held compound operations) are in flight; for tests. */
+export const vaultWritesInFlight = (): number => inFlight;
+/** Resolves once no write is in flight, or after `maxMs`, whichever comes first. */
+export function whenVaultIdle(maxMs: number): Promise<void> {
+  if (inFlight === 0) return Promise.resolve();
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      onIdle.delete(finish);
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(finish, maxMs);
+    onIdle.add(finish);
+  });
+}
+/** Reload once in-flight writes are done (or after `RELOAD_MAX_MS`), and not before the notice has had a moment on screen. */
+export const RELOAD_MAX_MS = 5000;
+const RELOAD_GRACE_MS = 800;
+
 /** What the person should be told about the vault itself (another tab holding an old version open); null when there is nothing to say. */
 export const vaultNotice: { text: string | null } = { text: null };
 const listeners = new Set<(text: string | null) => void>();
@@ -60,12 +101,16 @@ export function openVault(): Promise<IDBPDatabase<VaultDB>> {
       blocked() {
         notify('Another tab has an older Cultifolio open. Close it, or reload it, to carry on here.');
       },
-      // This tab is the old one: let go of the vault so the new tab can upgrade it, then reload into the new code.
+      // This tab is the old one: let go of the vault so the new tab can upgrade it, then reload into the new code, once
+      // the writes in flight have landed (close() lets open transactions finish) or five seconds have passed.
       blocking(_cur, _next, ev) {
         (ev.target as IDBDatabase | null)?.close();
         dbp = null;
         notify('Cultifolio has been updated in another tab. Reloading…');
-        if (typeof location !== 'undefined') setTimeout(() => location.reload(), 800);
+        if (typeof location !== 'undefined') {
+          const grace = new Promise<void>((r) => setTimeout(r, RELOAD_GRACE_MS));
+          Promise.all([whenVaultIdle(RELOAD_MAX_MS), grace]).then(() => location.reload());
+        }
       },
       terminated() {
         dbp = null;
@@ -73,7 +118,7 @@ export function openVault(): Promise<IDBPDatabase<VaultDB>> {
       }
     }).then(async (db) => {
       // A replace that was cut off between the wipe and the copy: finish it before anything reads the vault.
-      if (await db.get('meta', STAGING_PENDING)) await copyStagingIn(db);
+      if (await db.get('meta', STAGING_PENDING)) await writing(() => copyStagingIn(db));
       return db;
     });
   return dbp;
@@ -118,12 +163,14 @@ export async function openStaging(): Promise<StagedReplacement> {
   };
   return {
     async putPhoto(p) {
-      await need().put('photos', p);
+      await writing(() => need().put('photos', p));
     },
     async appendChanges(changes) {
       if (!changes.length) return;
-      const tx = need().transaction('changes', 'readwrite');
-      await Promise.all([...changes.map((c) => tx.store.put(c)), tx.done]);
+      await writing(async () => {
+        const tx = need().transaction('changes', 'readwrite');
+        await Promise.all([...changes.map((c) => tx.store.put(c)), tx.done]);
+      });
     },
     async counts() {
       const d = need();
@@ -138,10 +185,12 @@ export async function openStaging(): Promise<StagedReplacement> {
     async promote() {
       need().close();
       db = null;
-      const live = await openVault();
-      await live.put('meta', true, STAGING_PENDING);
-      await Promise.all([live.clear('changes'), live.clear('photos'), live.clear('outbox')]);
-      await copyStagingIn(live);
+      await writing(async () => {
+        const live = await openVault();
+        await live.put('meta', true, STAGING_PENDING);
+        await Promise.all([live.clear('changes'), live.clear('photos'), live.clear('outbox')]);
+        await copyStagingIn(live);
+      });
     }
   };
 }
@@ -176,10 +225,12 @@ export async function allChanges(): Promise<Change[]> {
 /** Append changes; unless they came from the server (`fromServer`), they also go in the outbox to be pushed. One transaction, so the two stores cannot disagree. */
 export async function appendChanges(changes: Change[], fromServer = false): Promise<void> {
   if (!changes.length) return;
-  const db = await openVault();
-  const tx = db.transaction(['changes', 'outbox'], 'readwrite');
-  const ch = tx.objectStore('changes'), ob = tx.objectStore('outbox');
-  await Promise.all([...changes.map((c) => ch.put(c)), ...(fromServer ? [] : changes.map((c) => ob.put({ t: c.t }))), tx.done]);
+  await writing(async () => {
+    const db = await openVault();
+    const tx = db.transaction(['changes', 'outbox'], 'readwrite');
+    const ch = tx.objectStore('changes'), ob = tx.objectStore('outbox');
+    await Promise.all([...changes.map((c) => ch.put(c)), ...(fromServer ? [] : changes.map((c) => ob.put({ t: c.t }))), tx.done]);
+  });
 }
 
 /** HLCs waiting to be pushed, in order. */
@@ -189,21 +240,24 @@ export async function outboxKeys(): Promise<string[]> {
 }
 export async function outboxAck(ts: string[]): Promise<void> {
   if (!ts.length) return;
-  const db = await openVault();
-  const tx = db.transaction('outbox', 'readwrite');
-  await Promise.all([...ts.map((t) => tx.store.delete(t)), tx.done]);
+  await writing(async () => {
+    const db = await openVault();
+    const tx = db.transaction('outbox', 'readwrite');
+    await Promise.all([...ts.map((t) => tx.store.delete(t)), tx.done]);
+  });
 }
 /** Put every change on this device in the outbox: the first push after sync is set up sends the whole collection. */
 export async function outboxFill(): Promise<number> {
-  const db = await openVault();
-  const ts = await db.getAllKeys('changes');
-  const tx = db.transaction('outbox', 'readwrite');
-  await Promise.all([...ts.map((t) => tx.store.put({ t })), tx.done]);
-  return ts.length;
+  return writing(async () => {
+    const db = await openVault();
+    const ts = await db.getAllKeys('changes');
+    const tx = db.transaction('outbox', 'readwrite');
+    await Promise.all([...ts.map((t) => tx.store.put({ t })), tx.done]);
+    return ts.length;
+  });
 }
 export async function outboxClear(): Promise<void> {
-  const db = await openVault();
-  await db.clear('outbox');
+  await writing(async () => (await openVault()).clear('outbox'));
 }
 export async function changesByKeys(ts: string[]): Promise<Change[]> {
   const db = await openVault();
@@ -218,8 +272,7 @@ export async function getMeta<T>(k: string): Promise<T | undefined> {
 }
 
 export async function setMeta(k: string, v: unknown): Promise<void> {
-  const db = await openVault();
-  await db.put('meta', v, k);
+  await writing(async () => (await openVault()).put('meta', v, k));
 }
 
 /** A stable per-device id, minted once. */
@@ -243,8 +296,7 @@ export async function requestPersistence(): Promise<boolean> {
 }
 
 export async function putPhotoBlobs(p: PhotoBlobs): Promise<void> {
-  const db = await openVault();
-  await db.put('photos', p);
+  await writing(async () => (await openVault()).put('photos', p));
 }
 
 export async function getPhotoBlobs(id: string): Promise<PhotoBlobs | undefined> {
@@ -253,8 +305,7 @@ export async function getPhotoBlobs(id: string): Promise<PhotoBlobs | undefined>
 }
 
 export async function deletePhotoBlobs(id: string): Promise<void> {
-  const db = await openVault();
-  await db.delete('photos', id);
+  await writing(async () => (await openVault()).delete('photos', id));
 }
 
 export async function photoBlobIds(): Promise<string[]> {
@@ -263,6 +314,8 @@ export async function photoBlobIds(): Promise<string[]> {
 }
 
 export async function wipeVault(): Promise<void> {
-  const db = await openVault();
-  await Promise.all([db.clear('changes'), db.clear('photos'), db.clear('outbox')]);
+  await writing(async () => {
+    const db = await openVault();
+    await Promise.all([db.clear('changes'), db.clear('photos'), db.clear('outbox')]);
+  });
 }

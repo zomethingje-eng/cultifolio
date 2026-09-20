@@ -7,6 +7,8 @@
  * with one cell has no band, a dry month has no bar, and an extreme is a tick
  * only when POWER answered.
  */
+import { MON3 } from '$core/months';
+import { r1 } from '$core/num';
 
 export interface MonthFigures {
   tmax: number;
@@ -79,14 +81,13 @@ export interface Climograph {
   alt: string;
 }
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTHS = MON3;
 
 /** A tick step giving roughly four to six ticks over a span, from a fixed set so the axes look alike across species. */
 function step(span: number, steps: number[]): number {
   for (const s of steps) if (span / s <= 6) return s;
   return steps[steps.length - 1];
 }
-const r1 = (n: number) => Math.round(n * 10) / 10;
 
 export function climograph(c: ClimoInput, width = 720): Climograph {
   const left = 40, right = 12, gap = 10;

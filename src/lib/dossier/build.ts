@@ -8,7 +8,7 @@
  */
 import type { JsonFetcher } from './fetch';
 import * as gbif from './sources/gbif';
-import type { OccMedia } from './sources/gbif';
+import { CULTIVATED_RE, type OccMedia } from './sources/gbif';
 import * as inat from './sources/inat';
 import * as wm from './sources/wikimedia';
 import { literature } from './sources/openalex';
@@ -150,7 +150,7 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     for (const d of dist.data.rows) {
       const code = fromWcvp ? tdwgCode(d.locationId, d.locality) : null;
       const region = { code: code ?? undefined, name: code ? tdwgLabel(code) : countryName(d.country) ?? d.locality ?? '?', box: code ? TDWG3[code] : undefined };
-      const intro = /introduced|naturali[sz]ed|cultivated|invasive|managed/i.test(`${d.establishmentMeans ?? ''} ${d.status ?? ''}`);
+      const intro = CULTIVATED_RE.test(`${d.establishmentMeans ?? ''} ${d.status ?? ''}`);
       const nativeSaid = /native|indigenous|endemic/i.test(`${d.establishmentMeans ?? ''} ${d.status ?? ''}`);
       // WCVP states native or introduced for every row. A national checklist that says neither is a
       // report of presence, not a native range: it is kept as such and never promoted to native.
@@ -189,7 +189,7 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     for (const r of occ.data) {
       if (r.decimalLatitude == null || r.decimalLongitude == null) continue;
       if (r.basisOfRecord === 'LIVING_SPECIMEN') continue; // a plant somebody planted
-      if (/introduced|managed|cultivated/i.test(`${r.establishmentMeans ?? ''} ${r.degreeOfEstablishment ?? ''}`)) continue;
+      if (CULTIVATED_RE.test(`${r.establishmentMeans ?? ''} ${r.degreeOfEstablishment ?? ''}`)) continue;
       const dk = `${+r.decimalLatitude.toFixed(3)},${+r.decimalLongitude.toFixed(3)}`;
       const held = byCoord.get(dk);
       // One record per three-decimal coordinate: an open one over a restricted one (what may be published), and among
