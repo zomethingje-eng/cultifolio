@@ -2,7 +2,7 @@
 
 A species reference that shows its sources, and a collection record that stays on your device.
 
-Cultifolio is for people who grow plants seriously: cacti, succulents, bulbs, caudiciforms, whatever you keep under a number. Each species page is built from public data (GBIF, Kew's World Checklist, CHELSA, NASA POWER, iNaturalist, Wikipedia) and every figure on it says where it came from and how it was derived: the native range, a habitat centre found from the records, the climate at that point month by month, the growing season and the cold floor worked out from that climate, and a cultivation sheet assembled by rule from those figures. Nothing on a species page is written by a person or a language model, and a number the app cannot derive is left out and said to be missing, never filled in.
+Cultifolio is for people who grow plants seriously: cacti, succulents, bulbs, caudiciforms, whatever you keep under a number. Each species page is built from public data (GBIF, Kew's World Checklist, CHELSA, NASA POWER, iNaturalist, Wikipedia) and every figure on it says where it came from and how it was derived: the native range, every georeferenced record inside it, the climate read across the grid cells those records fall in (the median year and the 10th to 90th percentile across cells, drawn as a climograph), the growing season and the cold floor worked out from that climate by two fixed rules, and a cultivation sheet assembled by rule from those figures. Nothing on a species page is written by a person or a language model, and a number the app cannot derive is left out and said to be missing, never filled in.
 
 Your own collection is the other half: every plant under its own accession number with its timeline, photographs, provenance and place; benches with conditions; sowings that mint numbered plants when you pot them up; labels with QR codes; frost watch. It lives in your browser's storage and nowhere else. There are no accounts and no analytics. Sync between your devices is end-to-end encrypted with a key only you hold; the server stores ciphertext and cannot read a plant name.
 
@@ -27,20 +27,13 @@ npm run dossier -- names.txt --grid climate
 
 `npm run reconcile` retries the names a build refused under the other spellings WCVP knows them by. `npm run export` packages a built corpus as a dataset bundle (the species JSON, `species.csv`, `climate.csv`, a README and the licence terms per source) so the reference data can be published and cited without the app.
 
-Literature comes from OpenAlex, whose free key allows about 1,000 species a day: build with `--skip openalex`, then `npm run dossier -- --fill openalex` (with `OPENALEX_KEY` set) once a day until every dossier has its papers.
+Sources with a daily allowance are filled in afterwards rather than during the long run: `npm run dossier -- --fill openalex` for literature (about 1,000 species a day on a free `OPENALEX_KEY`), `--fill inat` for iNaturalist photographs (about 3,000 a day), and `--fill gbif --bulk bulk` for the photographs a GBIF Darwin Core download carries, which costs no API calls at all. When a derivation rule changes, `npm run dossier -- static/s/v2/index.json --offline --grid climate --bulk bulk` re-derives the whole corpus from the files and the grid in about an hour, carrying the name block, photographs, summary and literature from the previous build and asking no upstream.
 
-`docs/DEVLOG.md` has the full account: the climate grid (a one-time pack of CHELSA with `scripts/pack-climate.py`), the bulk path for thousands of species (`npm run bulk`), and how to derive a large names list from what people actually grow (`npm run derive -- --inat 2500`, after `npm run bulk -- wcvp`).
+`docs/DEVLOG.md` is the engineering log, and `docs/REVIEW-ROUND-4.md` and `REVIEW-ROUND-5.md` are the two full adversarial reviews with what was done about each finding. The log has the full account: the climate grid (a one-time pack of CHELSA with `scripts/pack-climate.py`), the bulk path for thousands of species (`npm run bulk`), and how to derive a large names list from what people actually grow (`npm run derive -- --inat 2500`, after `npm run bulk -- wcvp`).
 
 ## Deploying
 
-It is a SvelteKit app on Cloudflare Workers with R2 for the corpus and encrypted vaults, and KV for small queues. Once:
-
-```
-npx wrangler r2 bucket create cultifolio
-npx wrangler kv namespace create QUEUE        # paste the id into wrangler.jsonc
-```
-
-then `npm run deploy`. Sync is closed unless `SYNC_OPEN` is exactly `1` in `wrangler.jsonc` (it is, for now: any vault can sync); remove the variable when licensing is wired in, and new vaults will need an entitlement.
+It is a SvelteKit app on Cloudflare Workers with R2 for the corpus and the encrypted vaults, and KV for small counters. `docs/DEPLOY.md` is the checklist: the bucket and namespace once, the corpus uploaded to R2 with rclone, `npm run deploy` for every release, and what to check by hand after the first one. Sync is open (`SYNC_OPEN` is `1` in `wrangler.jsonc`: any vault can sync); remove the variable when licensing is wired in, and new vaults will need an entitlement.
 
 ## Layout
 

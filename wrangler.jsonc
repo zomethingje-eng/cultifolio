@@ -8,8 +8,10 @@
   "assets": { "directory": ".svelte-kit/cloudflare", "binding": "ASSETS" },
   "observability": { "enabled": true },
   // SYNC_OPEN must be exactly "1" for any vault to sync without a licence; unset or anything else closes it.
-  "vars": { "DOSSIER_V": "1", "SYNC_OPEN": "1" },
-  // R2 holds dossiers (s/v1/<gbifKey>.json), climate cells, and later encrypted photos.
+  "vars": { "SYNC_OPEN": "1" },
+  // R2 holds the corpus (s/v<N>/<gbifKey>.json and index.json; N is DOSSIER_V in src/lib/dossier/schema.ts) and the
+  // encrypted sync vaults (vault/<id>/...). The corpus is uploaded with rclone, see docs/DEPLOY.md; static/.assetsignore
+  // keeps static/s out of the Worker's assets so the only copy the site serves is R2's.
   // Create it once:  npx wrangler r2 bucket create cultifolio
   "r2_buckets": [{ "binding": "STORE", "bucket_name": "cultifolio" }],
   // KV holds only small counters: per-vault and per-address bytes, vaults per address per day, the rate limit
