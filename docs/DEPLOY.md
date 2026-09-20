@@ -2,9 +2,11 @@
 
 The app is a SvelteKit Worker on Cloudflare. The corpus (one JSON per species plus an index) lives in R2 and is read by the Worker; encrypted sync vaults live in the same bucket under `vault/`; KV holds the small counters (storage allowance, rate limit, vaults per address). Nothing else runs anywhere. The climate grid is a build-time input only and is never uploaded.
 
-Every command below runs from the project folder in cmd or PowerShell. `npx wrangler` uses the project's own copy.
+Every command below runs from the project folder. In cmd, `npx` works as written. In Windows PowerShell 5 the `npx.ps1` shim is blocked by the default script policy: either write `npx.cmd` in place of `npx`, or run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once. PowerShell 5 also has no `&&`; separate commands with `;`.
 
 ## 1. Once: the Cloudflare side
+
+R2 has to be enabled in the dashboard before the API will create a bucket (R2 Object Storage → the one plan on offer; it asks for a payment method even though the corpus fits the free allowance, and the CLI reports `code: 10042` until it is done). Then:
 
 ```
 npx wrangler login
@@ -12,7 +14,7 @@ npx wrangler r2 bucket create cultifolio
 npx wrangler kv namespace create QUEUE
 ```
 
-The last command prints an `id`. Paste it into `wrangler.jsonc` in place of `PASTE_KV_ID_HERE`. Do not skip this: the Worker fails closed without the binding and refuses every vault creation, which is the right behaviour and also a site where sync does not work.
+Both create commands offer to add a binding to `wrangler.jsonc`. For the bucket say no: the binding is already there as `STORE`, which is the name the code uses, and wrangler would add a second one. For the namespace say yes, binding `QUEUE`, and no to "connect to the remote resource for local dev" (local dev must not write real counters); check afterwards that `kv_namespaces` holds exactly one entry and that the placeholder id is gone. Do not skip the id: the Worker fails closed without the binding and refuses every vault creation, which is the right behaviour and also a site where sync does not work.
 
 Set an R2 spend alert now, before anything is uploaded: Cloudflare dashboard → Notifications → add a notification of type "Billing usage" (or the R2 storage/operations alert your plan offers) at a threshold you would want to hear about. The storage allowance in the Worker caps each vault at 2 GB and each address at 3 GB a day, but a cap in code is not a bill you have seen.
 
@@ -20,16 +22,16 @@ Set an R2 spend alert now, before anything is uploaded: Cloudflare dashboard →
 
 The corpus on disk is `static\s\v2\` (8,947 files plus `index.json`, `report.txt`). It is gitignored and, with `static/.assetsignore`, excluded from the Worker's static assets, so the only way it reaches the site is R2. Uploading nine thousand objects one `wrangler r2 object put` at a time takes hours; rclone does it in minutes and is Cloudflare's own recommendation for bulk R2 work.
 
-Install rclone once (`winget install Rclone.Rclone`), then make an R2 API token in the dashboard (R2 → Manage R2 API tokens → Create, permission "Object Read & Write", scoped to the `cultifolio` bucket) and configure a remote:
+Install rclone once (`winget install Rclone.Rclone`, then a new terminal window so it is on the path), then make an R2 API token in the dashboard (R2 → Manage R2 API tokens → Create Account API token, permission "Object Read & Write", "Apply to specific buckets only" → `cultifolio`, no TTL). The token page shows the two keys once and the endpoint URL with the account id in it. Configure a remote:
 
 ```
 rclone config create r2 s3 provider=Cloudflare access_key_id=<key> secret_access_key=<secret> endpoint=https://<accountid>.r2.cloudflarestorage.com acl=private
 ```
 
-The account id is on the R2 overview page. Then, after `npm run dossier -- --index` has written a fresh `index.json`:
+A token scoped to one bucket cannot list buckets, so `rclone lsd r2:` answers 403; the check is `rclone ls r2:cultifolio`, which is silent on an empty bucket. Then, after `npm run dossier -- --index` has written a fresh `index.json`:
 
 ```
-rclone copy static\s\v2 r2:cultifolio/s/v2 --transfers 32 --checkers 32 --exclude report.txt --s3-no-check-bucket
+rclone copy static\s\v2 r2:cultifolio/s/v2 --transfers 32 --checkers 32 --exclude report.txt --s3-no-check-bucket -P
 ```
 
 `copy` is incremental: a second run after a fill or a rederive uploads only the files whose size or time changed, so a daily `--fill inat` followed by `--index` and this command is the whole refresh. Check it landed:
