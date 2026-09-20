@@ -132,13 +132,13 @@
     <div class="tx">
       <div class="nm"><SpeciesName name={c.name} /></div>
       <div class="fam">{c.common ?? c.family ?? ''}</div>
-      <div class="fig">{c.climate ? `${c.climate === 'ok' ? 'climate' : c.climate === 'pending' ? 'climate pending' : c.climate === 'refused' ? 'climate not checked' : 'no climate'}${c.open ? ` · ${c.open} records` : ''}` : c.missing ? 'no dossier yet' : ''}</div>
+      <div class="fig">{c.climate ? `${c.climate === 'ok' ? 'climate' : c.climate === 'pending' ? 'climate pending' : c.climate === 'refused' ? 'climate not checked' : 'no climate'}${c.open ? ` · ${c.open} open record${c.open === 1 ? '' : 's'}` : ''}` : c.missing ? 'no dossier yet' : ''}</div>
     </div>
   </a>
 {/snippet}
 
 {#if yourView}
-  <PageHead title="Species" sub="The kinds you grow, want, or are reading up on. The whole catalogue is a search away." count="{mine.size} kinds · {grownN} you grow · {followingN} following">
+  <PageHead title="Species" sub="The kinds you grow, want, or are reading up on. The whole catalogue is a search away." count="{mine.size} {mine.size === 1 ? 'kind' : 'kinds'} · {grownN} you grow · {followingN} following">
     <a class="btn pri" href="/plants/new">Add a plant</a>
   </PageHead>
 

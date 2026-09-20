@@ -11,7 +11,7 @@ import type { Climate } from '$dossier/schema';
 type ClimateOk = Extract<Climate, { status: 'ok' }>;
 import type { ClimateProvider } from '$dossier/build';
 import type { GridSource } from './source';
-import { decodeCell, cellOf, type ClimateVar } from './grid';
+import { decodeCell, cellOf, cellCentre, type ClimateVar } from './grid';
 import { fetchPowerSeries, extremesFor, powerCell, type PowerSeries } from './power';
 
 /** PAR is ~45% of shortwave and 4.6 µmol/J, so 1 MJ/m²/day of rsds ≈ 2.07 mol/m²/day of PAR. */
@@ -108,19 +108,30 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
       src.extremes = `NASA POWER series too short (${e.extremes.years} years); extremes not derived`;
       return undefined;
     }
-    src.extremes = `NASA POWER (MERRA-2) daily 1981–2024, cell ${ps.cell}${e.deltaM ? `, lapse-corrected ${e.deltaM > 0 ? '+' : ''}${e.deltaM} m at 6.5 °C/km` : elevationM != null && elevationM < 0 ? ', no lapse correction (the cell mean elevation is below sea level: a coastal cell)' : ''}`;
-    return { years: e.extremes.years, minAbs: r1(e.extremes.minAbs), minP01: r1(e.extremes.minP01), maxP99: r1(e.extremes.maxP99), frostDaysPerYear: r1(e.extremes.frostDaysPerYear), lapseAppliedM: e.deltaM };
+    // Every case says what was done about elevation: corrected, or not, and why not.
+    const lapse = e.deltaM
+      ? `, lapse-corrected ${e.deltaM > 0 ? '+' : ''}${e.deltaM} m at 6.5 °C/km`
+      : elevationM != null && elevationM < 0
+        ? ', no lapse correction (the cell mean elevation is below sea level: a coastal cell)'
+        : elevationM == null
+          ? ', no lapse correction (no cell elevation on file)'
+          : ', no lapse correction (POWER gave no cell elevation)';
+    src.extremes = `NASA POWER (MERRA-2) daily 1981–2024, cell ${ps.cell}${lapse}`;
+    // The frost figure is kept as the count and the exact rate: rounding the rate to a decimal turned one night in forty years into none.
+    return { years: e.extremes.years, minAbs: r1(e.extremes.minAbs), minP01: r1(e.extremes.minP01), maxP99: r1(e.extremes.maxP99), frostDaysPerYear: +e.extremes.frostDaysPerYear.toFixed(3), frostNights: e.extremes.frostNights, lapseAppliedM: e.deltaM };
   }
 
   return {
     async envelope(points): Promise<Climate> {
       const h = await o.grid.header().catch((e) => ({ error: e instanceof Error ? e.message : String(e) }));
       if ('error' in h) return { status: 'refused', detail: `climate grid unavailable: ${h.error}` };
-      // One read per distinct cell: a site visited a hundred times is one cell of climate, not a hundred votes.
+      // One read per distinct cell: a site visited a hundred times is one cell of climate, not a hundred votes. The cell is
+      // known by its centre, never by a record's coordinate: a restricted record's position is not published, and the
+      // typical cell's position on the page is the cell's, which any record in it shares.
       const byCell = new Map<string, { lat: number; lon: number }>();
       for (const [lat, lon] of points) {
-        const id = cellOf(h, lat, lon).id;
-        if (!byCell.has(id)) byCell.set(id, { lat, lon });
+        const c = cellOf(h, lat, lon);
+        if (!byCell.has(c.id)) byCell.set(c.id, cellCentre(h, c.row, c.col));
       }
       const read: Array<{ id: string; lat: number; lon: number; months: Month[]; elevationM?: number }> = [];
       let sea = 0;
@@ -136,17 +147,21 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
       if (read.length < 3) return { status: 'none', detail: `only ${read.length} distinct land cell${read.length === 1 ? '' : 's'} of the climate grid hold${read.length === 1 ? 's' : ''} an in-range record${sea ? ` (${sea} at sea or ice)` : ''}; three are needed for an envelope` };
       const years = read.map((c) => c.months);
       const months = monthStat(years, 0.5), p10 = monthStat(years, 0.1), p90 = monthStat(years, 0.9);
-      // The typical cell: the one whose coldest night of the year is nearest the median coldest night.
+      // Annual rain per cell, then its percentiles: a sum of monthly percentiles would be a year no cell has.
+      const annual = years.map((y) => y.reduce((a, m) => a + m.precipMm, 0)).sort((a, b) => a - b);
+      const annualRain = { p10: r1(quantile(annual, 0.1)), p90: r1(quantile(annual, 0.9)) };
+      // The typical cell: the one whose coldest month's mean night is nearest the median of that across cells. Monthly means are
+      // what the grid holds; the coldest single night is a POWER figure, read there afterwards.
       const coldest = (y: Month[]) => Math.min(...y.map((m) => m.tmin));
       const medCold = quantile(read.map((c) => coldest(c.months)).sort((a, b) => a - b), 0.5);
       const typical = read.reduce((a, b) => (Math.abs(coldest(b.months) - medCold) < Math.abs(coldest(a.months) - medCold) ? b : a));
       const src: ClimateOk['src'] = {
         normals: `CHELSA V2.1 1981–2010 climatology, ${h.cell}° cells (each the mean of ~${Math.round((h.cell / 0.008333) ** 2)} 1 km pixels)`,
-        envelope: `median and 10th–90th percentile of each month across the ${read.length} distinct grid cells holding the ${points.length} in-range records; extremes and elevation at the typical cell ${typical.id} (coldest night nearest the median)`,
+        envelope: `median and 10th–90th percentile of each month across the ${read.length} distinct grid cells holding the ${points.length} in-range records; extremes and elevation at the typical cell ${typical.id} (its coldest month's mean night nearest the median across cells); its position is the cell centre`,
         elevation: typical.elevationM != null ? `ETOPO 2022, ${Math.round(typical.elevationM)} m (cell mean)` : undefined
       };
       const extremes = await extremesAt(typical.lat, typical.lon, typical.elevationM, src);
-      return { status: 'ok', cells: read.length, records: points.length, cell: typical.id, at: { lat: +typical.lat.toFixed(3), lon: +typical.lon.toFixed(3) }, months, p10, p90, extremes, src };
+      return { status: 'ok', cells: read.length, records: points.length, cell: typical.id, at: { lat: +typical.lat.toFixed(3), lon: +typical.lon.toFixed(3) }, months, p10, p90, annualRain, extremes, src };
     },
     async at(lat, lon): Promise<Climate> {
       // One point: an envelope of one cell, for the plant page's bench comparison and for tests.

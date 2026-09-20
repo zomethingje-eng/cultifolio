@@ -24,6 +24,8 @@ export interface Extremes {
   maxAbs: number;
   maxP99: number;
   frostDaysPerYear: number;
+  /** Nights at or below 0 °C over the whole series: the count the rate is made from, so one night in forty years is one night, not 0.0. */
+  frostNights: number;
   /** Elevation delta applied, metres (target − source). 0 if none. */
   lapseAppliedM: number;
 }
@@ -67,6 +69,7 @@ export function reduceExtremes(s: DailySeries, elevDeltaM = 0): Extremes {
     maxAbs: tmax[tmax.length - 1],
     maxP99: quantile(tmax, 0.99),
     frostDaysPerYear: frost / ny,
+    frostNights: frost,
     lapseAppliedM: elevDeltaM
   };
 }
@@ -74,4 +77,15 @@ export function reduceExtremes(s: DailySeries, elevDeltaM = 0): Extremes {
 /** A series is usable when it covers at least 20 years at 95% completeness. */
 export function extremesUsable(e: Extremes): boolean {
   return e.years >= 20 && e.days >= e.years * 365 * 0.95;
+}
+
+/**
+ * The one wording of frost frequency, from the count: the page and the sheet both use it, so they cannot disagree.
+ * A series without the count (an older dossier) recovers it from the rate; the rederive writes the count.
+ */
+export function frostWording(ex: { frostDaysPerYear: number; frostNights?: number; years: number }): string {
+  const nights = ex.frostNights ?? Math.round(ex.frostDaysPerYear * ex.years);
+  if (nights === 0) return `no frost in ${ex.years} years`;
+  if (nights < ex.years) return `${nights} frost night${nights === 1 ? '' : 's'} in ${ex.years} years`;
+  return `about ${Math.round(nights / ex.years)} frost night${Math.round(nights / ex.years) === 1 ? '' : 's'} a year`;
 }

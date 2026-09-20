@@ -155,7 +155,7 @@
     {@const c = opened.counts}
     <div class="preview">
       <div class="factgrid">
-        <div><b>In the file</b>{c.accessions} plants · {c.events} timeline entries · {c.locations} places · {c.sowings} sowings · {c.photos} photos{#if m}<span class="faint"> · taken {m.exported.slice(0, 10)}{m.device ? ` on device ${m.device.slice(0, 6)}` : ''}</span>{/if}</div>
+        <div><b>In the file</b>{c.accessions} plant{c.accessions === 1 ? '' : 's'} · {c.events} timeline entr{c.events === 1 ? 'y' : 'ies'} · {c.locations} place{c.locations === 1 ? '' : 's'} · {c.sowings} sowing{c.sowings === 1 ? '' : 's'} · {c.photos} photo{c.photos === 1 ? '' : 's'}{#if m}<span class="faint"> · taken {m.exported.slice(0, 10)}{m.device ? ` on device ${m.device.slice(0, 6)}` : ''}</span>{/if}</div>
         <div><b>Merging would</b>{#if opened.merge.fresh.length === 0}change nothing: everything in the file is already here.{:else}add {opened.merge.added} {opened.merge.added === 1 ? 'record' : 'records'}, update {opened.merge.changed}, and bring in {opened.newPhotos} {opened.newPhotos === 1 ? 'photo' : 'photos'}. Nothing on this device is removed.{/if}</div>
       </div>
       <div class="row acts">

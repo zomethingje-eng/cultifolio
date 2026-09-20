@@ -40,7 +40,9 @@ export function generatedNote(input: SheetInput, o: NoteOpts = {}): Condensed | 
   const picked = rows.filter((r) => r.short).sort((a, b) => (order.indexOf(a.k) === -1 ? 99 : order.indexOf(a.k)) - (order.indexOf(b.k) === -1 ? 99 : order.indexOf(b.k)));
   const s: string[] = [];
   const from: string[] = [];
-  if (arch) s.push(`Grouped as a ${arch.arch.lab.toLowerCase()} by ${arch.why} (archetype table)${year ? '.' : '; no habitat climate is on file for this species.'}`);
+  // Without a habitat climate the sentence says which kind of without: pending, not checked, or none derivable. Three different facts.
+  const why = input.climateStatus === 'pending' ? 'the habitat climate is pending' : input.climateStatus === 'refused' ? 'the habitat climate was not checked (a source did not answer)' : 'no habitat climate could be derived for this species';
+  if (arch) s.push(`Grouped as a ${arch.arch.lab.toLowerCase()} by ${arch.why} (archetype table)${year ? '.' : `; ${why}.`}`);
   for (const r of picked) {
     s.push(r.short!);
     from.push(r.k);
@@ -55,14 +57,17 @@ export function careLine(input: SheetInput, o: NoteOpts = {}): string {
   const bits: string[] = [];
   if (year) {
     const months = span3(forReader(year, o.readerLat));
-    if (year.fog) bits.push(`cooler half ${months}`);
+    if (year.none) bits.push('no season to read');
+    else if (year.fog) bits.push(`cooler six months ${months}`);
     else if (year.spread) bits.push('rain spread, no season');
     else if (year.flat) bits.push(`rain ${months}, flat T`);
+    else if (year.grow === 'even') bits.push(`rain ${months}`);
     else bits.push(`${year.grow} rain ${months}`);
   }
   const m = input.months && input.months.length === 12 ? input.months : null;
   const fl = coldFloor(m, input.extremes ?? null, archFor(input.scientific, input.family));
-  if (fl) bits.push(`floor ${Math.round(fl.floor)} °C`);
+  // The habitat night at one decimal, as the page prints it, named as what it is; "floor" alone reads as a thermostat setting.
+  if (fl) bits.push(fl.hab ? `hab. night ${fl.floor.toFixed(1)} °C` : `group min ${Math.round(fl.floor)} °C`);
   const dlis = m ? m.map((x) => x.dli).filter((x): x is number => x != null) : [];
   if (dlis.length) bits.push(`sky ${Math.round(Math.min(...dlis))}–${Math.round(Math.max(...dlis))} DLI`);
   return bits.join(' · ');

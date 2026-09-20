@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { growingYear, cultivationSheet, span, runs, coldFloor, forReader } from '$core/sheet';
 import { archFor } from '$core/arch';
+import { careLine } from '$core/note';
 
 const mk = (tmax: number[], tmin: number[], pr: number[], dli?: number[]) => tmax.map((t, i) => ({ tmax: t, tmin: tmin[i], tmean: (t + tmin[i]) / 2, precipMm: pr[i], dli: dli?.[i], rh: 55 }));
 
@@ -68,7 +69,7 @@ describe('the growing year', () => {
     const { rows } = cultivationSheet({ scientific: 'Copiapoa cinerea', family: 'Cactaceae', months: atacama, lat: -26 });
     const s = rows.find((r) => r.k === 'Its year')!.s;
     expect(s).toContain('the rain rule reads no rainy season');
-    expect(s).toContain('The temperature rule reads the cooler half of the year as May to October');
+    expect(s).toContain('The temperature rule reads the cooler six months as May to October');
     expect(s).toContain('southern hemisphere');
     expect(s).toContain('shifted six months for a northern-hemisphere collection: November to April');
   });
@@ -113,10 +114,13 @@ describe('the sheet', () => {
   it('carries the 10th–90th span when the percentile years are given', () => {
     const p10 = namaqua.map((m) => ({ ...m, tmin: m.tmin - 2, dli: (m.dli ?? 0) - 5, precipMm: m.precipMm - 1 }));
     const p90 = namaqua.map((m) => ({ ...m, tmin: m.tmin + 2, dli: (m.dli ?? 0) + 5, precipMm: m.precipMm + 3 }));
-    const { rows } = cultivationSheet({ scientific: 'Tylecodon pearsonii', family: 'Crassulaceae', months: namaqua, p10, p90, lat: -30 });
-    expect(rows.find((r) => r.k === 'Light')!.s).toContain('across the envelope cells 15 to 63');
+    const { rows } = cultivationSheet({ scientific: 'Tylecodon pearsonii', family: 'Crassulaceae', months: namaqua, p10, p90, lat: -30, annualP10: 170, annualP90: 240 });
+    expect(rows.find((r) => r.k === 'Light')!.s).toContain('the lowest 10th-percentile month across the cells is 15, the highest 90th-percentile month 63');
     expect(rows.find((r) => r.k === 'Temperature')!.s).toContain('coldest night 6.0 °C in July (across the envelope cells 4.0 °C to 8.0 °C)');
-    expect(rows.find((r) => r.k === 'Rain')!.s).toContain("Across the envelope cells the year's total runs 182 mm to 230 mm");
+    // The annual range is the percentiles of per-cell years, carried in, never a sum of monthly percentiles.
+    expect(rows.find((r) => r.k === 'Rain')!.s).toContain("Across the envelope cells the year's total runs 170 mm to 240 mm (10th to 90th percentile of each cell's own year)");
+    const noAnnual = cultivationSheet({ scientific: 'Tylecodon pearsonii', family: 'Crassulaceae', months: namaqua, p10, p90, lat: -30 });
+    expect(noAnnual.rows.find((r) => r.k === 'Rain')!.s).not.toContain('Across the envelope cells');
   });
   it('the cold floor names its quantity, and a raising by the archetype table is in the same sentence', () => {
     const ex = { minAbs: 1.2, minP01: 4.1, maxP99: 38, frostDaysPerYear: 0, years: 44 };
@@ -149,5 +153,35 @@ describe('the sheet', () => {
       const { rows } = cultivationSheet({ scientific: name, family, months, lat, extremes: months ? ex : null, readerLat: 52 });
       for (const r of rows) for (const t of [r.s, r.why, r.short ?? '']) expect(t, `${name} · ${r.k}`).not.toMatch(FORBIDDEN);
     }
+  });
+});
+
+describe('round five: seasons the rules do not earn', () => {
+  const flat = (rain: number) => Array.from({ length: 12 }, () => ({ tmax: 30, tmin: 18, tmean: 24, precipMm: rain }));
+  it('a flat, dry year names no cooler half: the six coolest months are chosen by calendar order alone', () => {
+    const { rows, year } = cultivationSheet({ scientific: 'Testus aridus', family: 'Cactaceae', months: flat(0), lat: -25 });
+    expect(year!.none).toBe(true);
+    expect(year!.growMonths).toEqual([]);
+    const s = rows.find((r) => r.k === 'Its year')!.s;
+    expect(s).toContain('names no cooler half');
+    expect(s).not.toContain('shifted');
+    expect(careLine({ scientific: 'Testus aridus', family: 'Cactaceae', months: flat(0), lat: -25 })).toContain('no season to read');
+  });
+  it('a wet season within half a degree of the year is neither winter nor summer', () => {
+    const m = Array.from({ length: 12 }, (_, i) => ({ tmax: 28 + 3 * Math.cos((i / 12) * 2 * Math.PI), tmin: 14 + 3 * Math.cos((i / 12) * 2 * Math.PI), tmean: 21 + 3 * Math.cos((i / 12) * 2 * Math.PI), precipMm: i >= 2 && i <= 4 ? 60 : 4 }));
+    const { rows, year } = cultivationSheet({ scientific: 'Testus even', family: 'Cactaceae', months: m, lat: 30 });
+    expect(year!.grow).toBe('even');
+    expect(rows.find((r) => r.k === 'Its year')!.s).toContain('neither the cooler nor the warmer part of the year');
+    expect(rows.find((r) => r.k === 'Its year')!.s).not.toMatch(/warmer half|cooler half/);
+  });
+  it('an equatorial habitat with a sharp rainy season is not shifted for the reader', () => {
+    const m = Array.from({ length: 12 }, (_, i) => ({ tmax: 29, tmin: 17, tmean: 23, precipMm: i >= 2 && i <= 4 ? 90 : 10 }));
+    const { rows, year } = cultivationSheet({ scientific: 'Testus kenyensis', family: 'Asphodelaceae', months: m, lat: -0.5, readerLat: 51 });
+    expect(year!.shiftable).toBe(false);
+    expect(forReader(year!, 51)).toEqual(year!.growMonths);
+    const s = rows.find((r) => r.k === 'Its year')!;
+    expect(s.s).toContain('within 10° of the equator');
+    expect(s.s).not.toContain('shifted six months for');
+    expect(s.short).toContain('March to May at the habitat (not shifted)');
   });
 });

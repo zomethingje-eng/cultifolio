@@ -124,13 +124,16 @@ export class WcvpIndex {
       rows = this.acceptedByName.get(k);
     }
     if (!rows?.length) return undefined;
-    // Prefer accepted rows; among several, authorship decides.
-    let pick = rows.length === 1 ? rows : rows.filter((r) => r.status === 'Accepted');
-    if (pick.length !== 1 && authorship) {
+    // Among homonyms the backbone's authorship decides first: Aloe alba X (accepted) and Aloe alba Y (a synonym of another
+    // species) are two plants, and a caller asking for Y must not be given X's range because X is the accepted one.
+    // Only when authorship matches nothing, or was not given, does the accepted row stand in.
+    let pick = rows.length === 1 ? rows : [];
+    if (rows.length > 1 && authorship) {
       const a = authorKey(authorship);
       const byAuthor = rows.filter((r) => authorKey(r.authors) === a);
       if (byAuthor.length === 1) pick = byAuthor;
     }
+    if (pick.length !== 1) pick = rows.filter((r) => r.status === 'Accepted');
     if (pick.length !== 1) {
       const distinct = new Set(rows.map((r) => r.acceptedId));
       if (distinct.size > 1) return 'ambiguous';
@@ -184,7 +187,8 @@ export function parseOccRow(h: string[], line: string): GbifOccurrence & { speci
     basisOfRecord: g.basisOfRecord || undefined,
     license: g.license || undefined,
     datasetKey: g.datasetKey || undefined,
-    establishmentMeans: g.establishmentMeans || undefined,
+    // GBIF's two cultivation flags carried as one string: the build tests both with one pattern, and the API path sees both fields.
+    establishmentMeans: [g.establishmentMeans, g.degreeOfEstablishment].filter(Boolean).join(' ') || undefined,
     coordinateUncertaintyInMeters: Number.isFinite(unc) && unc > 0 ? unc : undefined,
     mediaType: g.mediaType || undefined,
     speciesKey: g.speciesKey ? Number(g.speciesKey) : undefined,

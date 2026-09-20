@@ -109,10 +109,13 @@
     const here = runs(forReader(y, cond?.lat ?? 40), 'short');
     const home = `${runs(y.growMonths, 'short')} (${y.south ? 'S' : 'N'})`;
     const shift = `shifted to ${cond?.lat != null ? 'this place' : 'the north'}${cond?.lat == null ? ' (no coordinates set)' : ''}: ${here}`;
-    if (y.fog) return { label: 'No rainy season to read', note: `${Math.round(y.annualMm)} mm a year; the temperature rule's cooler half ${home}, ${southHere === y.south ? 'the same here' : shift} (CHELSA).` };
+    if (y.none) return { label: 'No season to read', note: `${Math.round(y.annualMm)} mm a year and a flat temperature curve (${y.rangeT.toFixed(1)} °C of range): no rainy season and no cooler half (CHELSA).` };
+    const same = !y.shiftable ? 'not shifted: no thermal season to reverse' : southHere === y.south ? 'the same here' : shift;
+    if (y.fog) return { label: 'No rainy season to read', note: `${Math.round(y.annualMm)} mm a year; the temperature rule's cooler six months ${home}, ${same} (CHELSA).` };
     if (y.spread) return { label: 'Rain spread, no season', note: `70% of the rain takes ${y.growMonths.length} months, ${home} (CHELSA).` };
-    if (y.flat) return { label: `Rain ${home}, flat temperature`, note: `a sharp rainy season, but the temperature curve moves ${y.rangeT.toFixed(1)} °C, so no growing season is inferred; ${southHere === y.south ? 'the same months here' : shift} (CHELSA).` };
-    return { label: `${y.grow === 'winter' ? 'Winter' : 'Summer'} rain ${home}`, note: `${southHere === y.south ? 'the same months here' : shift} (rain rule, CHELSA).` };
+    if (y.flat) return { label: `Rain ${home}, flat temperature`, note: `a sharp rainy season, but the temperature curve moves ${y.rangeT.toFixed(1)} °C, so no growing season is inferred; ${same} (CHELSA).` };
+    if (y.grow === 'even') return { label: `Rain ${home}, neither winter nor summer`, note: `the wet season sits at the year's mean temperature; ${same} (rain rule, CHELSA).` };
+    return { label: `${y.grow === 'winter' ? 'Winter' : 'Summer'} rain ${home}`, note: `${same} (rain rule, CHELSA).` };
   });
   /* ---- move ---- */
   let moving = $state(false);

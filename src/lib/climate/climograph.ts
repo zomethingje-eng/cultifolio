@@ -54,9 +54,12 @@ export interface Climograph {
     dayBand: string;
     nightBand: string;
     zeroY: number | null;
-    /** POWER extremes at the typical cell: the absolute minimum under the coldest month, the 99th-percentile day over the warmest. */
-    minAbs: { x: number; y: number; label: string } | null;
-    maxP99: { x: number; y: number; label: string } | null;
+    /**
+     * POWER extremes at the typical cell, as heights only: the record minimum and the 99th-percentile day carry no
+     * date, so they are drawn as marks at the right edge of the panel, never under a month.
+     */
+    minAbs: { y: number; label: string } | null;
+    maxP99: { y: number; label: string } | null;
     /** The three consecutive months around the coldest night, shaded as the habitat's cold quarter. */
     coldQuarter: { x: number; w: number; wraps: boolean; x2?: number; w2?: number };
   };
@@ -159,11 +162,18 @@ export function climograph(c: ClimoInput, width = 720): Climograph {
 
   const hasBand = !!(dayBand || nightBand || bars.some((b) => b.lo != null));
   const rainYear = c.months.reduce((a, m) => a + m.precipMm, 0);
+  // Day and night ranges each from their own series: the coolest day is not always in the coldest-night month.
+  const dayLo = c.months.reduce((b, m, i) => (m.tmax < c.months[b].tmax ? i : b), 0);
+  const nightHi = c.months.reduce((b, m, i) => (m.tmin > c.months[b].tmin ? i : b), 0);
+  const flatT = c.months[warmest].tmax - c.months[dayLo].tmax < 1 && c.months[nightHi].tmin - c.months[coldest].tmin < 1;
   const alt =
-    `Days from ${c.months[coldest].tmax.toFixed(0)} °C in ${MONTHS[coldest]} to ${c.months[warmest].tmax.toFixed(0)} °C in ${MONTHS[warmest]}; nights from ${c.months[coldest].tmin.toFixed(0)} °C to ${c.months[warmest].tmin.toFixed(0)} °C. ` +
+    (flatT
+      ? `A flat year: mean day about ${c.months[warmest].tmax.toFixed(0)} °C and mean night about ${c.months[coldest].tmin.toFixed(0)} °C in every month, so the cold quarter is shaded by rounding only. `
+      : `Mean day from ${c.months[dayLo].tmax.toFixed(0)} °C in ${MONTHS[dayLo]} to ${c.months[warmest].tmax.toFixed(0)} °C in ${MONTHS[warmest]}; mean night from ${c.months[coldest].tmin.toFixed(0)} °C in ${MONTHS[coldest]} to ${c.months[nightHi].tmin.toFixed(0)} °C in ${MONTHS[nightHi]}. The cold quarter, ${MONTHS[q0]} to ${MONTHS[(coldest + 1) % 12]}, is the three months around the coldest night. `) +
     (dry ? 'No month reaches a millimetre of rain.' : `${rainYear.toFixed(0)} mm of rain a year, most in ${MONTHS[c.months.reduce((b, m, i) => (m.precipMm > c.months[b].precipMm ? i : b), 0)]}.`) +
     (hasBand ? ` The bands show the 10th to 90th percentile across ${c.cells} habitat cells.` : c.cells > 1 ? ` The ${c.cells} habitat cells agree to within rounding.` : '') +
-    (c.extremes ? ` Over ${c.extremes.years} years at the typical cell the absolute minimum was ${c.extremes.minAbs.toFixed(1)} °C.` : '');
+    (c.extremes ? ` Over ${c.extremes.years} years at the typical cell the absolute minimum was ${c.extremes.minAbs.toFixed(1)} °C and the 99th-percentile day ${c.extremes.maxP99.toFixed(1)} °C; neither is dated to a month.` : '') +
+    (strip ? ` Beneath: ${has('dli') ? 'daily light integral' : ''}${has('dli') && has('rh') ? ' and ' : ''}${has('rh') ? 'relative humidity' : ''} through the year, each on its own scale.` : '');
 
   return {
     width,
@@ -181,8 +191,8 @@ export function climograph(c: ClimoInput, width = 720): Climograph {
       dayBand,
       nightBand,
       zeroY: tLo < 0 && tHi > 0 ? r1(ty(0)) : null,
-      minAbs: c.extremes ? { x: monthX[coldest], y: r1(ty(c.extremes.minAbs)), label: `${c.extremes.minAbs.toFixed(1)}° lowest in ${c.extremes.years} yrs` } : null,
-      maxP99: c.extremes ? { x: monthX[warmest], y: r1(ty(c.extremes.maxP99)), label: `${c.extremes.maxP99.toFixed(1)}° 99th-pct day` } : null,
+      minAbs: c.extremes ? { y: r1(ty(c.extremes.minAbs)), label: `${c.extremes.minAbs.toFixed(1)}° lowest night in ${c.extremes.years} yrs (undated)` } : null,
+      maxP99: c.extremes ? { y: r1(ty(c.extremes.maxP99)), label: `${c.extremes.maxP99.toFixed(1)}° 99th-percentile day (undated)` } : null,
       coldQuarter: { ...coldQuarter, x: r1(coldQuarter.x), w: r1(coldQuarter.w), ...(coldQuarter.x2 != null ? { x2: r1(coldQuarter.x2), w2: r1(coldQuarter.w2!) } : {}) }
     },
     rain: { top: rainTop, height: rainH, ticks: rTicks.map((t) => ({ y: r1(t.y), label: t.label })), bars, dry, max: rMax },

@@ -426,7 +426,7 @@ test('labels: pick plants, choose a sheet, print at true size with a code that o
   expect(box!.height).toBeGreaterThan(90); // 25.4 mm ≈ 96 px
   expect(box!.height).toBeLessThan(102);
   // the care line arrives from the dossier for the species with climate
-  await expect(page.locator('.page .label .care', { hasText: 'cooler half Nov–Apr · floor 7 °C · sky 30–65 DLI' })).toHaveCount(1); // the same rules and the same month formatter as the sheet
+  await expect(page.locator('.page .label .care', { hasText: 'cooler six months Nov–Apr · hab. night 6.5 °C · sky 30–65 DLI' })).toHaveCount(1); // the same rules and the same month formatter as the sheet
   // the page size follows the sheet
   await page.selectOption('#lb-sheet', 'L7160');
   await expect(page.locator('.page').first()).toHaveCSS('width', /793|794/); // 210 mm
@@ -436,7 +436,7 @@ test('labels: pick plants, choose a sheet, print at true size with a code that o
 test('the species page condenses its cultivation sheet into a note by rule', async ({ page }) => {
   await page.goto('/species/copiapoa-cinerea');
   await expect(page.locator('#gen-note')).toContainText('condensed by rule');
-  await expect(page.locator('#gen-note .body')).toContainText("Rain rule: no rainy season to read (72 mm a year); the temperature rule's cooler half is November to April in the northern hemisphere.");
+  await expect(page.locator('#gen-note .body')).toContainText("Rain rule: no rainy season to read (72 mm a year); the temperature rule's cooler six months are November to April in the northern hemisphere.");
   await expect(page.locator('#gen-note .body')).not.toContainText(/fog/);
   await expect(page.locator('#gen-note .body')).toContainText('Cold floor 6.5 °C (1st-percentile habitat night, NASA POWER).');
   await expect(page.locator('#gen-note .foot')).toContainText('Its year, Rain, Light, Temperature');
@@ -738,7 +738,7 @@ test('a refused source is a distinct state on every surface: species page, front
   await expect(page.locator('.note-slot')).not.toContainText('no habitat climate for this species');
   // the map caption does not promise a marker there is none of
   await expect(page.locator('.mapcap').first()).not.toContainText('marker');
-  await expect(page.locator('.mapcap').nth(1)).toContainText('No openly licensed record to show');
+  await expect(page.locator('.mapcap').nth(1)).toContainText('Records not checked: the occurrence source did not answer'); // a refusal, not an absence, on the map too
   // front page
   await page.goto('/');
   const tile = page.locator('.tile', { hasText: 'Refusia' });
@@ -777,7 +777,7 @@ test('the species page carries the envelope: median with its span, the cells it 
   await expect(page.locator('table.wx tbody tr').nth(2).locator('td').nth(1)).toHaveText('4'); // rain: no spread in the fixture, so the median alone
   await expect(page.getByText('Each figure is the median across the 40 grid cells holding the 352 in-range records, with the 10th–90th percentile span')).toBeVisible();
   await expect(page.getByText(/Extremes and elevation were read at the typical cell fixture \(-25\.261, -70\.589\)/)).toBeVisible();
-  await expect(page.locator('.mapcap').first()).toContainText('the marker is where the records are densest. The climate was read across every in-range record\'s cell, not at the marker');
+  await expect(page.locator('.mapcap').first()).toContainText('the marker is where the records are densest and decides nothing: the climate was read across every in-range record\'s cell, not at the marker');
   await expect(page.locator('.factgrid b', { hasText: 'The map marker' })).toBeVisible();
   await expect(page.locator('.factgrid b', { hasText: /^Map marker$/ })).toBeVisible();
   await expect(page.locator('.factgrid')).not.toContainText('Habitat centre');
@@ -786,7 +786,7 @@ test('the species page carries the envelope: median with its span, the cells it 
   await page.getByRole('button', { name: /^Add/ }).click();
   const t = page.locator('.card', { hasText: 'Habitat rain season' });
   await expect(t).toContainText('No rainy season to read');
-  await expect(t).toContainText("72 mm a year; the temperature rule's cooler half May–Oct (S), shifted to the north (no coordinates set): Nov–Apr (CHELSA).");
+  await expect(t).toContainText("72 mm a year; the temperature rule's cooler six months May–Oct (S), shifted to the north (no coordinates set): Nov–Apr (CHELSA).");
   await expect(t.getByRole('link', { name: 'The sheet' })).toBeVisible();
   await expect(t).not.toContainText(/Rest expected|Growth expected|Water when/);
 });

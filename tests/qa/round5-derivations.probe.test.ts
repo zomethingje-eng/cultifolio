@@ -137,8 +137,9 @@ describe('provider: envelope()', () => {
     const { rows } = cultivationSheet({ scientific: 'Testus frigidus', family: 'Cactaceae', months: c.months, extremes: c.extremes, lat: -24.9 });
     const t = rows.find((r) => r.k === 'Temperature')!.s;
     // What the page glance card prints (src/routes/species/[slug]/+page.svelte:224) for the same figure:
-    const glance = c.extremes.frostDaysPerYear < 0.05 ? `no frost in ${c.extremes.years} years` : c.extremes.frostDaysPerYear < 1 ? 'frost rarer than yearly' : `${Math.round(c.extremes.frostDaysPerYear)} frost nights a year`;
-    expect({ minAbs: c.extremes.minAbs, frostDaysPerYear: c.extremes.frostDaysPerYear, sheet: /no frost recorded/.test(t), glance }).toEqual({ minAbs: -0.5, frostDaysPerYear: expect.any(Number), sheet: false, glance: 'frost rarer than yearly' });
+    const { frostWording } = await import('$core/extremes');
+    const glance = frostWording(c.extremes); // the page's own wording, from the count
+    expect({ minAbs: c.extremes.minAbs, frostDaysPerYear: c.extremes.frostDaysPerYear, sheet: /no frost recorded/.test(t), glance }).toEqual({ minAbs: -0.5, frostDaysPerYear: expect.any(Number), sheet: false, glance: '2 frost nights in 44 years' });
   });
   it('a POWER series with no elevation gets no lapse and the provenance does not say so', async () => {
     const cells = new Map([[cellOf(h, -24.9, -70.5).id, cellBuf(h, 5, 3200)]]);
@@ -182,7 +183,7 @@ describe('sheet: sentences a grower reads as advice', () => {
     const y = growingYear(mk(tmean, pr), -25)!;
     const { rows } = cultivationSheet({ scientific: 'Testus', family: 'Cactaceae', months: mk(tmean, pr), lat: -25 });
     const s = rows.find((r) => r.k === 'Its year')!.s;
-    expect({ grow: y.grow, wetT: +y.wetT.toFixed(1), meanT: +y.meanT.toFixed(1), s }).toEqual({ grow: 'winter', wetT: 18.8, meanT: 19.2, s: expect.stringMatching(/winter/) });
+    expect({ grow: y.grow, wetT: +y.wetT.toFixed(1), meanT: +y.meanT.toFixed(1), s }).toEqual({ grow: 'even', wetT: 18.8, meanT: 19.2, s: expect.stringMatching(/neither the cooler nor the warmer/) });
   });
   it('an equatorial habitat with a flat curve still has its rain months "shifted six months" for the reader', () => {
     const tmean = [24, 24, 24.5, 24.5, 24, 23.5, 23, 23, 23.5, 24, 24, 24];
@@ -198,7 +199,7 @@ describe('sheet: sentences a grower reads as advice', () => {
     const none = cultivationSheet({ scientific: 'Testus', family: 'Cactaceae', months: mk(tmean, pr), lat: -30, readerLat: null }).rows.find((r) => r.k === 'Its year')!;
     expect({ at0: at0.short, none: none.short }).toMatchInlineSnapshot(`
       {
-        "at0": "Rain rule: a winter growing season, May to July in the northern hemisphere (May to July at the habitat, northern).",
+        "at0": "Rain rule: a winter growing season, May to July at the habitat (not shifted).",
         "none": "Rain rule: a winter growing season, November to January in the northern hemisphere (May to July at the habitat, southern).",
       }
     `);
@@ -206,7 +207,7 @@ describe('sheet: sentences a grower reads as advice', () => {
   it('the label line prints a floor below zero with no source or caveat', () => {
     const months = mk([10, 10, 8, 5, 2, 0, 0, 1, 3, 6, 8, 10], [10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10]);
     const line = careLine({ scientific: 'Testus andinus', family: 'Cactaceae', months, extremes: { minAbs: -12, minP01: -8.2, maxP99: 28, frostDaysPerYear: 40, years: 44 }, lat: -18 });
-    expect(line).toMatchInlineSnapshot(`"rain spread, no season · floor -8 °C · sky 30–30 DLI"`);
+    expect(line).toMatchInlineSnapshot(`"rain spread, no season · hab. night -8.2 °C · sky 30–30 DLI"`);
   });
   it('the Temperature "why" says lapse-corrected whatever the provider did', () => {
     const months = mk(Array(12).fill(15), Array(12).fill(10));
@@ -226,7 +227,7 @@ describe('note: generatedNote', () => {
     const pr = [4, 3, 5, 5, 7, 13, 10, 5, 5, 5, 5, 5];
     const months = tmax.map((t, i) => ({ tmax: t, tmin: tmin[i], tmean: (t + tmin[i]) / 2, precipMm: pr[i], dli: 45, rh: 78 }));
     const n = generatedNote({ scientific: 'Copiapoa cinerea', family: 'Cactaceae', months, lat: -24.9 }, {});
-    expect(n?.text).toMatchInlineSnapshot(`"Grouped as a cactus or succulent by the genus Copiapoa, which is reliably one kind of plant (archetype table). Rain rule: no rainy season to read (72 mm a year); the temperature rule's cooler half is November to April in the northern hemisphere. Habitat rain 72 mm a year, wettest June at 13 mm, driest February at 3 mm (habitat calendar, southern hemisphere). Open sky over the habitat: 45 to 45 mol/m²/day. Cold floor 9.0 °C (coldest month's mean night, CHELSA)."`);
+    expect(n?.text).toMatchInlineSnapshot(`"Grouped as a cactus or succulent by the genus Copiapoa, which is reliably one kind of plant (archetype table). Rain rule: no rainy season to read (72 mm a year); the temperature rule's cooler six months are November to April in the northern hemisphere. Habitat rain 72 mm a year, wettest June at 13 mm, driest February at 3 mm (habitat calendar, southern hemisphere). Open sky over the habitat: 45 to 45 mol/m²/day. Cold floor 9.0 °C (coldest month's mean night, CHELSA)."`);
   });
 });
 
@@ -262,13 +263,13 @@ describe('climograph', () => {
   const flat = (t: number, pr: number) => Array.from({ length: 12 }, () => ({ tmax: t + 5, tmin: t - 5, precipMm: pr }));
   it('an equatorial flat year: alt text names one month as both coldest and warmest', () => {
     const g = climograph({ months: flat(25, 100), p10: flat(25, 100), p90: flat(25, 100), cells: 5, extremes: null });
-    expect(g.alt).toMatchInlineSnapshot(`"Days from 30 °C in Jan to 30 °C in Jan; nights from 20 °C to 20 °C. 1200 mm of rain a year, most in Jan. The 5 habitat cells agree to within rounding."`);
+    expect(g.alt).toMatchInlineSnapshot(`"A flat year: mean day about 30 °C and mean night about 20 °C in every month, so the cold quarter is shaded by rounding only. 1200 mm of rain a year, most in Jan. The 5 habitat cells agree to within rounding."`);
   });
   it('all-zero rain: the axis, the bars and the alt', () => {
     const g = climograph({ months: flat(25, 0), p10: flat(25, 0), p90: flat(25, 0), cells: 1 });
     expect({ dry: g.rain.dry, ticks: g.rain.ticks.map((t) => t.label), bars: g.rain.bars.filter((b) => b.h > 0).length, alt: g.alt }).toMatchInlineSnapshot(`
       {
-        "alt": "Days from 30 °C in Jan to 30 °C in Jan; nights from 20 °C to 20 °C. No month reaches a millimetre of rain.",
+        "alt": "A flat year: mean day about 30 °C and mean night about 20 °C in every month, so the cold quarter is shaded by rounding only. No month reaches a millimetre of rain.",
         "bars": 0,
         "dry": true,
         "ticks": [
@@ -325,7 +326,7 @@ describe('climograph', () => {
     m[6].tmax = 35; // warmest day in July
     m[9].tmin = 22; // warmest night in October
     const g = climograph({ months: m, p10: m, p90: m, cells: 1 });
-    expect(g.alt).toMatch(/nights from 15 °C to 22 °C/);
+    expect(g.alt).toMatch(/mean night from 15 °C in \w+ to 22 °C in \w+/);
   });
 });
 
@@ -357,7 +358,7 @@ describe('bulk: WCVP homonyms and the occurrence sample', () => {
   it('the download path does not read degreeOfEstablishment, which the API path filters cultivated records by', () => {
     const h = occHeader('gbifID\tdecimalLatitude\tdecimalLongitude\tyear\tcountryCode\tbasisOfRecord\tlicense\tdatasetKey\testablishmentMeans\tdegreeOfEstablishment\tspeciesKey\ttaxonKey');
     const o = parseOccRow(h, '1\t-24.9\t-70.4\t2020\tCL\tHUMAN_OBSERVATION\tCC_BY_4_0\tds\t\tcultivated\t5\t5')!;
-    expect((o as { degreeOfEstablishment?: string }).degreeOfEstablishment).toBe('cultivated');
+    expect(o.establishmentMeans).toMatch(/cultivated/); // carried in the one field the build's pattern tests
   });
   it('MediaIndex: an image row with no licence of its own is dropped even when the record’s dataset is CC0 (the API path falls back to the record licence)', () => {
     const mi = new MediaIndex(new Map([[1, 5]]));
@@ -374,10 +375,10 @@ describe('build: a skipped photo source on the page', () => {
     if (!r.ok) throw new Error();
     const d = r.dossier;
     // Mirror of src/routes/species/[slug]/+page.svelte:75-78,127
-    const refused = (k: string) => ['refused', 'error'].includes(d.upstream[k]?.status ?? '');
+    const refused = (k: string) => ['refused', 'error', 'skipped'].includes(d.upstream[k]?.status ?? ''); // as the page now does
     const refusedPhotoSources = ['inat.taxon', 'inat.photos.wild', 'inat.photos.cultivated', 'commons', 'gbif.media'].filter(refused);
     const hero = d.photos.length ? 'photo' : refusedPhotoSources.length ? 'not checked' : 'No openly licensed photograph on file';
-    expect({ statuses: Object.fromEntries(['inat.taxon', 'inat.photos.wild', 'inat.photos.cultivated', 'commons', 'gbif.media'].map((k) => [k, d.upstream[k]?.status])), hero }).toEqual({ statuses: expect.anything(), hero: 'not asked' });
+    expect({ statuses: Object.fromEntries(['inat.taxon', 'inat.photos.wild', 'inat.photos.cultivated', 'commons', 'gbif.media'].map((k) => [k, d.upstream[k]?.status])), hero }).toEqual({ statuses: expect.anything(), hero: 'not checked' });
   });
 });
 

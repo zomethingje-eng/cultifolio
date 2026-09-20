@@ -80,11 +80,12 @@ export function densestCluster(points: Array<[number, number]>, cell = 1): Clust
     b.push(p);
   }
   // Grow each bin by its 8 neighbours so a cluster straddling a grid line still counts as one.
-  const windows: Array<{ bins: string[]; pts: Array<[number, number]> }> = [];
+  const windows: Array<{ bins: string[]; pts: Array<[number, number]>; core: Array<[number, number]> }> = [];
   for (const k of bins.keys()) {
     const [i, j] = k.split(':').map(Number);
     const used: string[] = [];
     const grown: Array<[number, number]> = [];
+    let core: Array<[number, number]> = [];
     for (let di = -1; di <= 1; di++)
       for (let dj = -1; dj <= 1; dj++) {
         const kk = key(i + di, j + dj);
@@ -92,9 +93,10 @@ export function densestCluster(points: Array<[number, number]>, cell = 1): Clust
         if (b) {
           used.push(kk);
           grown.push(...b);
+          if (b.length > core.length) core = b;
         }
       }
-    windows.push({ bins: used, pts: grown });
+    windows.push({ bins: used, pts: grown, core });
   }
   windows.sort((a, b) => b.pts.length - a.pts.length);
   const best = windows[0];
@@ -103,9 +105,15 @@ export function densestCluster(points: Array<[number, number]>, cell = 1): Clust
   const second = rival ? rival.pts.length : 0;
   const share = best.pts.length / points.length;
   const dominant = share >= 0.5 || best.pts.length >= 2 * Math.max(1, second);
+  // The window's middle is its median, unless that median falls in a bin much emptier than the window's fullest:
+  // two populations a bin apart with one stray record between them are one window, and the median of all their
+  // records lands on the stray. Then the fullest bin's median is the middle, which is a population.
+  let lat = median(best.pts.map((p) => p[0])), lon = medianLon(best.pts.map((p) => p[1]));
+  const medBin = bins.get(key(Math.floor(lat / cell), Math.floor(lon / cell)));
+  if ((medBin?.length ?? 0) * 2 < best.core.length) (lat = median(best.core.map((p) => p[0]))), (lon = medianLon(best.core.map((p) => p[1])));
   return {
-    lat: median(best.pts.map((p) => p[0])),
-    lon: medianLon(best.pts.map((p) => p[1])),
+    lat,
+    lon,
     n: best.pts.length,
     share,
     dominant,
@@ -170,8 +178,11 @@ export function habitatCentre(c: Cluster, openPoints: Array<[number, number]>): 
   // The centre of the tenth-degree cell, never its corner: a record given to 0.1° sits on the corner, so
   // the centre is a coordinate no record has, whatever precision the restricted records carry.
   const open = new Set(openPoints.map((p) => `${p[0]},${p[1]}`));
-  let cl = Math.floor(lat * 10) / 10 + 0.05,
-    cn = Math.floor(lon * 10) / 10 + 0.05;
-  if (c.points.some((p) => !open.has(`${p[0]},${p[1]}`) && p[0] === cl && p[1] === cn)) cl += 0.01;
-  return { lat: +cl.toFixed(3), lon: +cn.toFixed(3), refined, snapped: 'cell-centre' };
+  // Compared and returned at three decimals: floor(x·10)/10 + 0.05 is −24.85000000000001 in floating point, and an
+  // exact comparison let a restricted record given to two decimals sit on the "centre" unnoticed.
+  let cl = +(Math.floor(lat * 10) / 10 + 0.05).toFixed(3);
+  const cn = +(Math.floor(lon * 10) / 10 + 0.05).toFixed(3);
+  const onIt = (a: number, b: number) => c.points.some((p) => !open.has(`${p[0]},${p[1]}`) && +p[0].toFixed(3) === a && +p[1].toFixed(3) === b);
+  if (onIt(cl, cn)) cl = +(cl + 0.01).toFixed(3);
+  return { lat: cl, lon: cn, refined, snapped: 'cell-centre' };
 }

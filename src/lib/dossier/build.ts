@@ -233,7 +233,8 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
       lon: at.lon,
       n: cluster.n,
       share: +cluster.share.toFixed(2),
-      how: `the map marker: ${at.snapped === 'open-record' ? 'the openly licensed record nearest' : 'the centre of the tenth-degree cell nearest (no openly licensed record lies in the population, so no record\'s coordinates are published)'} the middle of the densest ${at.refined ? `1° population inside the densest ${cluster.cell}° block` : `${cluster.cell}° population`} of the ${allPts.length} in-range records; the climate is not read here but across every record's cell`
+      // Says where the marker is and nothing about the climate: whether a climate was read is decided further down, and the page says which.
+      how: `the map marker: ${at.snapped === 'open-record' ? 'the openly licensed record nearest the middle' : 'the centre of the tenth-degree cell nearest the middle (no openly licensed record lies in the population, so no record\'s coordinates are published)'} of the densest ${at.refined ? `1° population inside the densest ${cluster.cell}° block` : `${cluster.cell}° population`} of the ${allPts.length} in-range records; it decides nothing`
     };
   }
   let climate: Climate = { status: 'none', detail: 'no georeferenced record inside the range' };
@@ -283,6 +284,7 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     if (t.status === 'ok') inatId = ids.inat = t.data.id;
   }
   if (skip('inat')) {
+    if (!inatId) skipped('inat.taxon'); // not asked either: a rederive carries the previous answer forward only for keys marked skipped
     skipped('inat.photos.wild');
     skipped('inat.photos.cultivated');
   } else if (inatId) {

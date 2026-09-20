@@ -139,6 +139,8 @@ export const Climate = v.variant('status', [
     months: Year,
     p10: Year,
     p90: Year,
+    /** 10th and 90th percentile of the per-cell annual rain totals: a range of years cells actually have, unlike a sum of monthly percentiles. */
+    annualRain: v.optional(v.object({ p10: v.number(), p90: v.number() })),
     extremes: v.optional(
       v.object({
         years: v.number(),
@@ -146,6 +148,7 @@ export const Climate = v.variant('status', [
         minP01: v.number(),
         maxP99: v.number(),
         frostDaysPerYear: v.number(),
+        frostNights: v.optional(v.number()),
         lapseAppliedM: v.number()
       })
     ),

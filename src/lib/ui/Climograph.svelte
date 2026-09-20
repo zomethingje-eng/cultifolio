@@ -25,15 +25,16 @@
     {#if g.temp.nightBand}<path class="band night" d={g.temp.nightBand} />{/if}
     <path class="line day" d={g.temp.dayLine} />
     <path class="line night" d={g.temp.nightLine} />
+    <!-- undated extremes: a mark at the right edge at the right height, in no month -->
     {#if g.temp.maxP99}
-      <line class="ext" x1={g.temp.maxP99.x - 6} x2={g.temp.maxP99.x + 6} y1={g.temp.maxP99.y} y2={g.temp.maxP99.y} />
-      <text class="extlab" x={g.temp.maxP99.x + (g.temp.maxP99.x > g.left + g.plotW / 2 ? -9 : 9)} y={g.temp.maxP99.y + 3.5} text-anchor={g.temp.maxP99.x > g.left + g.plotW / 2 ? 'end' : 'start'}>{g.temp.maxP99.label}</text>
+      <line class="ext" x1={g.left + g.plotW - 10} x2={g.left + g.plotW} y1={g.temp.maxP99.y} y2={g.temp.maxP99.y} />
+      <text class="extlab" x={g.left + g.plotW - 14} y={g.temp.maxP99.y + 3.5} text-anchor="end">{g.temp.maxP99.label}</text>
     {/if}
     {#if g.temp.minAbs}
-      <line class="ext" x1={g.temp.minAbs.x - 6} x2={g.temp.minAbs.x + 6} y1={g.temp.minAbs.y} y2={g.temp.minAbs.y} />
-      <text class="extlab" x={g.temp.minAbs.x + (g.temp.minAbs.x > g.left + g.plotW / 2 ? -9 : 9)} y={g.temp.minAbs.y + 3.5} text-anchor={g.temp.minAbs.x > g.left + g.plotW / 2 ? 'end' : 'start'}>{g.temp.minAbs.label}</text>
+      <line class="ext" x1={g.left + g.plotW - 10} x2={g.left + g.plotW} y1={g.temp.minAbs.y} y2={g.temp.minAbs.y} />
+      <text class="extlab" x={g.left + g.plotW - 14} y={g.temp.minAbs.y + 3.5} text-anchor="end">{g.temp.minAbs.label}</text>
     {/if}
-    <text class="panel" x={g.left + g.plotW} y={g.temp.top - 2}>°C · day and night</text>
+    <text class="panel" x={g.left + 2} y={g.temp.top - 2}>°C · day and night</text>
     <text class="quarterlab" x={g.temp.coldQuarter.x + 4} y={g.temp.top + 11}>cold quarter</text>
 
     <!-- rain panel -->
@@ -46,7 +47,7 @@
       {#if b.lo != null && b.hi != null}<line class="whisker" x1={b.x + b.w / 2} x2={b.x + b.w / 2} y1={b.hi} y2={b.lo} />{/if}
     {/each}
     {#if g.rain.dry}<text class="drylab" x={g.left + g.plotW / 2} y={g.rain.top + g.rain.height / 2 + 4}>no month reaches a millimetre</text>{/if}
-    <text class="panel" x={g.left + g.plotW} y={g.rain.top - 2}>mm rain</text>
+    <text class="panel" x={g.left + 2} y={g.rain.top - 2}>mm rain</text>
     <line class="axis" x1={g.left} x2={g.left + g.plotW} y1={rb} y2={rb} />
 
     <!-- light and humidity strip -->
@@ -66,7 +67,9 @@
     <span class="key"><i class="sw night"></i>night</span>
     <span class="key"><i class="sw bar"></i>rain</span>
     {#if g.hasBand}<span class="key"><i class="sw band"></i>10th–90th percentile across {climate.cells} habitat cells</span>{:else if climate.cells > 1}<span class="key muted">{climate.cells} habitat cells, no spread beyond rounding</span>{:else}<span class="key muted">one habitat cell, so no spread is drawn</span>{/if}
-    {#if climate.extremes}<span class="key"><i class="sw ext"></i>extremes over {climate.extremes.years} years at the typical cell</span>{/if}
+    <span class="key"><i class="sw quarter"></i>cold quarter: the three months around the coldest night</span>
+    {#if climate.extremes}<span class="key"><i class="sw ext"></i>extremes over {climate.extremes.years} years at the typical cell, marked at the edge: undated</span>{/if}
+    {#if g.strip}{#if g.strip.dli}<span class="key"><i class="sw dli"></i>DLI, mol/m²/day</span>{/if}{#if g.strip.rh}<span class="key"><i class="sw rh"></i>RH %</span>{/if}<span class="key muted">each on its own scale</span>{/if}
   </figcaption>
 </figure>
 
@@ -77,7 +80,7 @@
   .axis { stroke: var(--rule2); stroke-width: 1; }
   .tick { fill: var(--ink3); font-size: 10px; text-anchor: end; font-family: var(--mono); }
   .month { fill: var(--ink2); font-size: 10.5px; text-anchor: middle; letter-spacing: 0.04em; }
-  .panel { fill: var(--ink3); text-anchor: end; font-size: 9.5px; letter-spacing: 0.09em; text-transform: uppercase; font-weight: 700; }
+  .panel { fill: var(--ink3); text-anchor: start; font-size: 9.5px; letter-spacing: 0.09em; text-transform: uppercase; font-weight: 700; }
   .zero { stroke: var(--bad); stroke-width: 1; stroke-dasharray: 4 3; opacity: 0.75; }
   .zerolab { fill: var(--bad); font-size: 9.5px; text-anchor: end; letter-spacing: 0.06em; text-transform: uppercase; }
   .line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
@@ -94,11 +97,11 @@
   .quarterlab { fill: var(--ink3); font-size: 9.5px; letter-spacing: 0.06em; text-transform: uppercase; }
   .drylab { fill: var(--ink3); font-size: 11px; text-anchor: middle; font-style: italic; }
   .spark { fill: none; stroke-width: 1.6; stroke-linejoin: round; }
-  .spark.dli { stroke: var(--warm); }
-  .spark.rh { stroke: var(--cool); }
+  .spark.dli { stroke: var(--accent); }
+  .spark.rh { stroke: var(--ink3); stroke-dasharray: 3 3; }
   .sparklab { font-size: 9.5px; text-anchor: end; font-family: var(--mono); }
-  .sparklab.dli { fill: var(--warm); }
-  .sparklab.rh { fill: var(--cool); }
+  .sparklab.dli { fill: var(--accent); }
+  .sparklab.rh { fill: var(--ink3); }
   figcaption { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 8px 6px 2px; font-size: 12px; color: var(--ink2); }
   .key { display: inline-flex; align-items: center; gap: 6px; }
   .key.muted { color: var(--ink3); }
@@ -108,5 +111,8 @@
   .sw.bar { background: var(--cool); opacity: 0.55; height: 9px; width: 9px; }
   .sw.band { background: var(--warm); opacity: 0.3; height: 9px; }
   .sw.ext { background: var(--ink); height: 2px; }
+  .sw.quarter { background: var(--ink); opacity: 0.1; height: 9px; }
+  .sw.dli { background: var(--accent); height: 2px; }
+  .sw.rh { background: repeating-linear-gradient(90deg, var(--ink3) 0 3px, transparent 3px 6px); height: 2px; }
   @media (max-width: 640px) { .climo { padding: 8px 4px 6px; } figcaption { font-size: 11.5px; gap: 4px 12px; } }
 </style>

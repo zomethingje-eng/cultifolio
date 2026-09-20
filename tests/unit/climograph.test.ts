@@ -28,7 +28,7 @@ describe('the climograph geometry', () => {
     expect(one.temp.nightBand).toBe('');
     expect(one.rain.bars.every((b) => b.lo == null)).toBe(true);
     expect(one.hasBand).toBe(false);
-    expect(one.alt).not.toMatch(/percentile/);
+    expect(one.alt).not.toMatch(/10th to 90th percentile/);
   });
   it('places the frost line only when the temperature axis crosses zero', () => {
     expect(climograph(atacama()).temp.zeroY).toBeNull(); // minAbs 3.4: axis floor is 0, the line sits on the edge, not drawn
@@ -37,7 +37,7 @@ describe('the climograph geometry', () => {
     const g = climograph(cold);
     expect(g.temp.zeroY).not.toBeNull();
     expect(g.temp.minAbs!.y).toBeGreaterThan(g.temp.zeroY!); // below the frost line on screen
-    expect(g.temp.minAbs!.label).toMatch(/-6\.5° lowest in 30 yrs/);
+    expect(g.temp.minAbs!.label).toMatch(/-6\.5° lowest night in 30 yrs \(undated\)/);
   });
   it('marks a habitat with no measurable rain as dry rather than drawing nothing', () => {
     const dry = atacama();
@@ -93,5 +93,18 @@ describe('the first sentences of a quotation', () => {
   it('keeps a closing quote or bracket with its sentence', () => {
     const r = firstSentences('Known as "silver cactus." Next one. Third.', 1);
     expect(r.text).toBe('Known as "silver cactus."');
+  });
+});
+
+describe('round five: citations and other scripts', () => {
+  it('does not cut inside a citation', () => {
+    expect(firstSentences('Named by L. in Sp. Pl. 1753. It grows on cliffs. Third. Fourth. Fifth.', 4).text).toBe('Named by L. in Sp. Pl. 1753. It grows on cliffs. Third. Fourth.');
+    expect(firstSentences('Described in Cact. Succ. J. 4: 12. Next one. Third. Fourth. Fifth.', 4).text).toBe('Described in Cact. Succ. J. 4: 12. Next one. Third. Fourth.');
+    expect(firstSentences('Sie wächst z. B. in Namibia. Zweiter Satz. Dritter. Vierter. Fünfter.', 4).text).toBe('Sie wächst z. B. in Namibia. Zweiter Satz. Dritter. Vierter.');
+  });
+  it('counts sentences that start with an accented capital', () => {
+    const r = firstSentences('Une plante. Également rare. Elle fleurit. Elle pousse. Elle fructifie.', 4);
+    expect(r.text).toBe('Une plante. Également rare. Elle fleurit. Elle pousse.');
+    expect(r.more).toBe(true);
   });
 });

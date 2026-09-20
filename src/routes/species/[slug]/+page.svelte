@@ -8,6 +8,7 @@
   import Climograph from '$lib/ui/Climograph.svelte';
   import FollowButton from '$lib/ui/FollowButton.svelte';
   import { firstSentences } from '$core/text';
+  import { frostWording } from '$core/extremes';
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import { generatedNote } from '$core/note';
   import { cultivationSheet, CARD_ORDER } from '$core/sheet';
@@ -44,7 +45,7 @@
     const all = o.nOpenInRange + o.nRestrictedInRange;
     let t = `The map marker and the climate envelope rest on all ${all} georeferenced record${all === 1 ? '' : 's'} inside the native range`;
     if (!o.nOpenInRange) t += `; none carries a licence permitting republication, so the map shows no points.`;
-    else if (o.nRestrictedInRange) t += `; the map shows only the ${o.nOpenInRange} openly licensed one${o.nOpenInRange === 1 ? '' : 's'}` + (o.restrictedShiftKm != null ? `, which alone would put the marker ${o.restrictedShiftKm} km away` : '') + '.';
+    else if (o.nRestrictedInRange) t += `; the map shows only the ${o.nOpenInRange} openly licensed one${o.nOpenInRange === 1 ? '' : 's'}` + (o.restrictedShiftKm != null && o.restrictedShiftKm >= 1 ? `, which alone would put the marker ${o.restrictedShiftKm} km away` : o.restrictedShiftKm != null ? ', which alone would put the marker in the same place' : '') + '.';
     else t += ', all openly licensed and shown on the map.';
     if (o.nOutsideRange) t += ` ${o.nOutsideRange} record${o.nOutsideRange === 1 ? '' : 's'} outside the range (gardens, roadsides, misidentifications) ignored.`;
     if (o.thin) t += ' Under a dozen records: treat the map and the climate as indicative.';
@@ -69,10 +70,11 @@
     await collection.put('taxon', d.slug, { name: d.name.scientific, gbifKey: d.key, myNotes: myDraft.trim() || null });
     editingMy = false;
   }
-  const sheetIn = $derived({ scientific: d.name.scientific, family: d.name.family, months: d.climate.status === 'ok' ? d.climate.months : null, p10: d.climate.status === 'ok' ? d.climate.p10 : null, p90: d.climate.status === 'ok' ? d.climate.p90 : null, extremes: d.climate.status === 'ok' ? (d.climate.extremes ?? null) : null, lat: d.centroid?.lat ?? (d.climate.status === 'ok' ? d.climate.at.lat : null) });
+  const sheetIn = $derived({ scientific: d.name.scientific, climateStatus: d.climate.status, family: d.name.family, months: d.climate.status === 'ok' ? d.climate.months : null, p10: d.climate.status === 'ok' ? d.climate.p10 : null, p90: d.climate.status === 'ok' ? d.climate.p90 : null, annualP10: d.climate.status === 'ok' ? (d.climate.annualRain?.p10 ?? null) : null, annualP90: d.climate.status === 'ok' ? (d.climate.annualRain?.p90 ?? null) : null, extremes: d.climate.status === 'ok' ? (d.climate.extremes ?? null) : null, lat: d.centroid?.lat ?? (d.climate.status === 'ok' ? d.climate.at.lat : null) });
   const sheet = $derived(cultivationSheet(sheetIn));
   /** An upstream that refused or failed. Only 'none' is ever rendered as an absence; these get their own line. */
-  const refused = (k: string) => ['refused', 'error'].includes(d.upstream[k]?.status ?? '');
+  /** Not answered: refused, failed, or not asked (a skipped source). Only 'none' is ever rendered as an absence. */
+  const refused = (k: string) => ['refused', 'error', 'skipped'].includes(d.upstream[k]?.status ?? '');
   const refusedPhotoSources = $derived(['inat.taxon', 'inat.photos.wild', 'inat.photos.cultivated', 'commons', 'gbif.media'].filter(refused));
   const photoSourceName: Record<string, string> = { 'inat.taxon': 'iNaturalist', 'inat.photos.wild': 'iNaturalist', 'inat.photos.cultivated': 'iNaturalist', commons: 'Wikimedia Commons', 'gbif.media': 'GBIF media' };
   const refusedPhotoNames = $derived([...new Set(refusedPhotoSources.map((k) => photoSourceName[k]))]);
@@ -124,7 +126,7 @@
       <a class="cred" href={hero.page ?? hero.url} rel="noopener">{hero.attribution}{hero.captive ? ' · in cultivation' : ' · observed growing wild'}{hero.observedOn ? ' · ' + hero.observedOn : ''}</a>
     </div>
   {:else}
-    <div class="hero"><div class="ph">{#if refusedPhotoNames.length}Photographs: {refusedPhotoNames.join(' and ')} did not answer when this page was built. Not a statement that none exist.{:else}No openly licensed photograph on file. If you grow this plant, add your own photo to your record.{/if}</div></div>
+    <div class="hero"><div class="ph">{#if refusedPhotoNames.length}Photographs: {refusedPhotoNames.join(' and ')} {refusedPhotoSources.every((k) => d.upstream[k]?.status === 'skipped') ? 'were not asked when this page was built' : 'did not answer when this page was built'}. Not a statement that none exist.{:else}No openly licensed photograph on file. If you grow this plant, add your own photo to your record.{/if}</div></div>
   {/if}
   <div class="idcard">
     <div class="who">
@@ -165,7 +167,7 @@
     <p class="small muted">This page was reached by a name the GBIF Backbone holds as a synonym: {d.upstream['gbif.accepted'].detail}.</p>
   {/if}
   {#if d.name.synonyms.length}
-    <p class="small muted">Also known as {d.name.synonyms.slice(0, 5).join('; ')}{d.name.synonyms.length > 5 ? ` and ${d.name.synonyms.length - 5} more` : ''}.</p>
+    <p class="small muted">Also known as {d.name.synonyms.slice(0, 5).join('; ')}{d.name.synonyms.length > 5 ? ` and ${d.name.synonyms.length - 5} more` : ''}{d.name.synonyms.slice(0, 5).join('; ').endsWith('.') && d.name.synonyms.length <= 5 ? '' : '.'}</p>
   {/if}
 
   {#if d.summary}
@@ -196,11 +198,11 @@
       <p class="small muted notesline">Your notes: none yet. <button class="linkish" onclick={() => { myDraft = ''; editingMy = true; }}>Write what you know</button> · yours alone, on this device.</p>
     {/if}
     {#if sheet.arch}
-      <p class="small muted" style="margin: 4px 0 12px">Grouped as a {sheet.arch.arch.lab.toLowerCase()} by {sheet.arch.why} (archetype table). The table supplies one figure, a conventional group minimum for the cold floor, and no prose.</p>
+      <p class="small muted" style="margin: 4px 0 12px">Grouped as a {sheet.arch.arch.lab.toLowerCase()} by {sheet.arch.why} (archetype table). {sheet.arch.arch.minC != null ? 'The table supplies one figure for this group, a conventional minimum for the cold floor, and no prose.' : 'The table holds no figure for this group, which spans too much for one minimum; the cold floor is the habitat\'s alone, and no prose comes from the table.'}</p>
     {/if}
     {#each sheetCards as c}
       <div class="cult">
-        <div class="sum">{c.title} <span class="hint">{c.rows.some((r) => r.hab) ? 'this species’ habitat figures, and what two fixed rules read from them' : 'the archetype table’s figure; no habitat figure for this species'}</span></div>
+        <div class="sum">{c.title} <span class="hint">{c.rows.some((r) => r.hab) ? (c.title === 'Its year' ? 'this species’ habitat figures, and what two fixed rules read from them' : 'this species’ habitat figures, with their source') : 'the archetype table’s figure; no habitat figure for this species'}</span></div>
         <div class="body sheet">
           {#each c.rows as r}
             {#if c.rows.length > 1}<div class="rowk" role="heading" aria-level="3">{r.k}</div>{/if}
@@ -220,8 +222,8 @@
   {#if d.climate.status === 'ok'}
     {#if glance}
       <div class="cards">
-        <div class="card"><div class="lab">Warmest</div><div class="val">{glance.hot.v.toFixed(0)}<span class="u">°C</span></div><div class="sub">{glance.hot.mo} days · nights {d.climate.months[months.indexOf(glance.hot.mo)].tmin.toFixed(0)} °C</div></div>
-        <div class="card"><div class="lab">Coldest</div><div class="val">{glance.cold.v.toFixed(0)}<span class="u">°C</span></div><div class="sub">{glance.cold.mo} nights{#if glance.ex}{' · '}{glance.ex.frostDaysPerYear < 0.05 ? `no frost in ${glance.ex.years} years` : glance.ex.frostDaysPerYear < 1 ? 'frost rarer than yearly' : `${Math.round(glance.ex.frostDaysPerYear)} frost nights a year`}{/if}</div></div>
+        <div class="card"><div class="lab">Warmest month</div><div class="val">{glance.hot.v.toFixed(0)}<span class="u">°C</span></div><div class="sub">{glance.hot.mo}, mean day; nights {d.climate.months[months.indexOf(glance.hot.mo)].tmin.toFixed(0)} °C (CHELSA)</div></div>
+        <div class="card"><div class="lab">Coldest month</div><div class="val">{glance.cold.v.toFixed(0)}<span class="u">°C</span></div><div class="sub">{glance.cold.mo}, mean night (CHELSA){#if glance.ex}<br />{glance.ex.minAbs.toFixed(1)} °C lowest night, {frostWording(glance.ex)} (NASA POWER, typical cell){/if}</div></div>
         <div class="card"><div class="lab">Rain</div><div class="val">{glance.rain.toFixed(0)}<span class="u">mm/yr</span></div><div class="gauge"><i class="c" style="width:{Math.min(100, glance.rain / 12)}%"></i></div><div class="sub">{glance.wetMonths === 0 ? 'no wet month' : glance.wetMonths + (glance.wetMonths === 1 ? ' wet month' : ' wet months')} · peak {glance.wet.mo} {glance.wet.v.toFixed(0)} mm</div></div>
         {#if glance.dli}<div class="card"><div class="lab">Light</div><div class="val">{glance.dli.lo.toFixed(0)}–{glance.dli.hi.toFixed(0)}<span class="u">DLI</span></div><div class="gauge"><i class="w" style="width:{Math.min(100, glance.dli.hi / 0.7)}%"></i></div><div class="sub">mol/m²/day, winter to summer</div></div>{/if}
       </div>
@@ -257,15 +259,15 @@
 
   <h2 class="sec" id="s-habitat">Natural habitat</h2>
   <div class="maprow">
-    <div class="mapbox">{@html data.worldSvg}<div class="mapcap">Native range as published by WCVP{#if d.centroid}; the marker is where the records are densest. The climate was read across every in-range record's cell, not at the marker{/if}.</div></div>
-    <div class="mapbox">{@html data.regionSvg}<div class="mapcap">{d.occurrences.nOpenInRange ? 'Openly licensed records inside the range, framed on where they fall.' : 'No openly licensed record to show inside the range.'}</div></div>
+    <div class="mapbox">{@html data.worldSvg}<div class="mapcap">Native range as published by WCVP{#if d.centroid}; the marker is where the records are densest and decides nothing{#if d.climate.status === 'ok'}: the climate was read across every in-range record's cell, not at the marker{/if}{/if}.</div></div>
+    <div class="mapbox">{@html data.regionSvg}<div class="mapcap">{d.occurrences.nOpenInRange ? 'Openly licensed records inside the range, framed on where they fall.' : ['refused', 'error'].includes(d.upstream['gbif.occurrences']?.status ?? '') ? 'Records not checked: the occurrence source did not answer when this page was built.' : 'No openly licensed record to show inside the range.'}</div></div>
   </div>
   <div class="factgrid">
     <div><b>Native</b>{#if d.distribution.native.length}{d.distribution.native.map((r) => r.name).join(', ')}{#if d.distribution.verified === false}<span class="small muted"> · stated native by a national checklist, not by WCVP: unverified</span>{/if}{:else if d.distribution.reported?.length}<span class="muted">Not verified.</span><span class="small muted"> Reported present (native status not stated): {d.distribution.reported.map((r) => r.name).join(', ')}</span>{:else}{d.upstream['wcvp.distribution']?.status === 'none' ? 'No published distribution for this name.' : 'Distribution source did not answer.'}{/if}{#if d.distribution.introduced.length}<span class="small muted"> · introduced: {d.distribution.introduced.map((r) => r.name).join(', ')}</span>{/if}</div>
     {#if d.distribution.extinct?.length}<div><b>Extinct in</b>{d.distribution.extinct.map((r) => r.name).join(', ')}<span class="small muted"> · recorded as extinct by WCVP: history, not habitat; no records are tested against these regions</span></div>{/if}
     {#if d.distribution.kew?.lifeform || d.distribution.kew?.climate}<div class="wide"><b>Kew's description</b>{[d.distribution.kew.lifeform, d.distribution.kew.climate].filter(Boolean).map((t) => `“${t}”`).join(' · ')}<span class="small muted"> · quoted from WCVP, RBG Kew (CC BY 4.0); not derived here</span></div>{/if}
     {#if d.distribution.ambiguous}<div class="wide"><b>Name not resolved</b>{d.distribution.ambiguous}<span class="small muted"> · WCVP lists this name more than once and authorship did not decide, so no range is attached and nothing is derived from records</span></div>{/if}
-    {#if d.centroid}<div><b>Map marker</b>{d.centroid.lat}, {d.centroid.lon}<span class="small muted"> · in the densest population, {d.centroid.n} records ({Math.round(d.centroid.share * 100)}% of those in range)</span></div>{/if}
+    {#if d.centroid}<div><b>Map marker</b>{d.centroid.lat}, {d.centroid.lon}<span class="small muted">{' · '}in the densest population, {d.centroid.n} records ({Math.round(d.centroid.share * 100)}% of those in range)</span></div>{/if}
     <div class="wide"><b>Evidence used</b>{evidence.text}{#if d.occurrences.nVague}{' '}{d.occurrences.nVague} in-range record{d.occurrences.nVague === 1 ? ' is' : 's are'} placed to worse than 10 km and stay{d.occurrences.nVague === 1 ? 's' : ''} on the map but off the climate.{/if}</div>
     {#if d.centroid}<div class="wide"><b>The map marker</b>{d.centroid.how}.</div>{/if}
     {#if d.distribution.native.length && !d.distribution.boxes.length}<div><b>Range source</b>{d.distribution.source}: country level only, so records are not tested against it.</div>{/if}

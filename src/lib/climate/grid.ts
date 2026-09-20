@@ -72,6 +72,11 @@ export function cellOf(h: GridHeader, lat: number, lon: number): { row: number; 
   return { row, col, index: row * h.cols + col, id: `${row}:${col}` };
 }
 
+/** The centre of a cell, to three decimals: what a page may print for it. */
+export function cellCentre(h: GridHeader, row: number, col: number): { lat: number; lon: number } {
+  return { lat: +(h.north - (row + 0.5) * h.cell).toFixed(3), lon: +(h.west + (col + 0.5) * h.cell).toFixed(3) };
+}
+
 export function byteRange(h: GridHeader, index: number): { offset: number; length: number } {
   const length = h.layers.length * h.bytesPerValue;
   return { offset: index * length, length };
