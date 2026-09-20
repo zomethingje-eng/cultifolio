@@ -137,3 +137,20 @@ describe('dossier builder', () => {
     expect(r.reason).toBe('higher-rank-only');
   });
 });
+
+describe('photographs from the download', () => {
+  it('replace the previous GBIF set and keep iNaturalist and Commons in front; an empty set changes nothing', async () => {
+    const { photosFromMedia, mergeGbifPhotos } = await import('$dossier/build');
+    const fresh = photosFromMedia([
+      { id: '1:0', url: 'https://inaturalist-open-data.s3.amazonaws.com/photos/99/original.jpg', licence: 'by', creator: 'A', page: 'https://www.inaturalist.org/observations/1' },
+      { id: '2:0', url: 'https://example.org/p.jpg', licence: 'cc0', page: 'https://www.gbif.org/occurrence/2' }
+    ]);
+    expect(fresh[0].thumb).toBe('https://inaturalist-open-data.s3.amazonaws.com/photos/99/medium.jpg');
+    expect(fresh[0].attribution).toBe('A, CC BY, iNaturalist via GBIF');
+    expect(fresh[1].thumb).toMatch(/^https:\/\/api\.gbif\.org\/v1\/image\/cache\/fit-in\/400x\//);
+    const prev = [{ src: 'inat', id: 'i' }, { src: 'commons', id: 'c' }, { src: 'gbif', id: 'old' }] as never[];
+    const merged = mergeGbifPhotos(prev, fresh);
+    expect(merged.map((p) => p.id)).toEqual(['i', 'c', '1:0', '2:0']);
+    expect(mergeGbifPhotos(prev, [])).toBe(prev);
+  });
+});

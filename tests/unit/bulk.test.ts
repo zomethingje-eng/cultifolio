@@ -150,6 +150,10 @@ describe('photographs from a DWCA download', () => {
     occ.add(parseOccRow(h, '12\t-30.2\t17.2\t100\tHUMAN_OBSERVATION\tCC_BY_4_0\t')!); // no images
     occ.seal();
     expect([...occ.withMedia.keys()]).toEqual([10]);
+    // a record identified to a subspecies (taxonKey 1001, speciesKey 100) belongs to the species' page
+    const h2 = occHeader('gbifID\tdecimalLatitude\tdecimalLongitude\tspeciesKey\ttaxonKey\tbasisOfRecord\tlicense\tmediaType');
+    occ.add(parseOccRow(h2, '13\t-30.3\t17.3\t100\t1001\tHUMAN_OBSERVATION\tCC_BY_4_0\tStillImage')!);
+    expect(occ.withMedia.get(13)).toBe(100);
     const media = new MediaIndex(occ.withMedia);
     for (const l of [mrow(10, 'https://inaturalist-open-data.s3.amazonaws.com/photos/1/original.jpg', 'http://creativecommons.org/licenses/by/4.0/'), mrow(10, 'https://inaturalist-open-data.s3.amazonaws.com/photos/2/original.jpg', 'http://creativecommons.org/licenses/by-nc/4.0/'), mrow(11, 'https://x/sheet.jpg', 'http://creativecommons.org/licenses/by/4.0/'), mrow(10, 'https://x/clip.mp4', 'cc0', 'B', 'MovingImage', 'video/mp4')]) media.add(parseMediaRow(MH, l)!);
     const f = bulkFetcher(async () => ({ status: 'none' }), { occ, media });
@@ -157,8 +161,9 @@ describe('photographs from a DWCA download', () => {
     expect(r.status).toBe('ok');
     if (r.status !== 'ok') return;
     expect(r.data.results).toHaveLength(1);
-    expect(r.data.results[0].media.map((m) => m.identifier)).toEqual(['https://inaturalist-open-data.s3.amazonaws.com/photos/1/original.jpg', 'https://inaturalist-open-data.s3.amazonaws.com/photos/2/original.jpg']);
-    // the media adapter then keeps the CC BY one and drops the NC one, as it does on the API path
+    // the NC image is dropped at the index, so the count of species with photographs is a count of open ones
+    expect(r.data.results[0].media.map((m) => m.identifier)).toEqual(['https://inaturalist-open-data.s3.amazonaws.com/photos/1/original.jpg']);
+    // and the media adapter serves the same set it would on the API path
     const { media: adapter } = await import('$dossier/sources/gbif');
     const got = await adapter(f, 100);
     expect(got.status).toBe('ok');

@@ -15,6 +15,7 @@
  * path built it, and neither can the tests.
  */
 import type { JsonFetcher, FetchResult, FetchOptions } from './fetch';
+import { licenceTag, isOpen } from '$core/licence';
 import type { GbifDistribution, GbifOccurrence, OccPage, GbifSpecies } from './sources/gbif';
 
 /* ------------------------------------------------------------------ WCVP */
@@ -236,10 +237,12 @@ export class OccIndex {
     for (const k of new Set([o.speciesKey, o.taxonKey])) {
       if (!k) continue;
       if (this.wanted && !this.wanted.has(k)) continue;
-      // Photographs: an observation (not a herbarium sheet) with still images, the first few dozen per species.
-      if (/still/i.test(o.mediaType ?? '') && o.basisOfRecord === 'HUMAN_OBSERVATION' && (this.mediaCount.get(k) ?? 0) < OccIndex.MEDIA_PER_SPECIES) {
-        this.withMedia.set(o.key, k);
-        this.mediaCount.set(k, (this.mediaCount.get(k) ?? 0) + 1);
+      // Photographs: an observation (not a herbarium sheet) with still images, the first few dozen per species. A
+      // record identified to a subspecies belongs to its species' page, so the owner is the species key when there is one.
+      const owner = o.speciesKey ?? k;
+      if (k === owner && /still/i.test(o.mediaType ?? '') && o.basisOfRecord === 'HUMAN_OBSERVATION' && (this.mediaCount.get(owner) ?? 0) < OccIndex.MEDIA_PER_SPECIES) {
+        this.withMedia.set(o.key, owner);
+        this.mediaCount.set(owner, (this.mediaCount.get(owner) ?? 0) + 1);
       }
       if (h >= (this.worst.get(k) ?? Infinity)) continue;
       const arr = this.by.get(k) ?? [];
@@ -327,6 +330,7 @@ export class MediaIndex {
     if (!k) return;
     if (m.type && !/still/i.test(m.type)) return;
     if (m.format && !/^image\//i.test(m.format)) return;
+    if (!isOpen(licenceTag(m.license))) return; // the per-photo licence decides; a CC-BY-NC image is not served
     const arr = this.by.get(k) ?? [];
     if (arr.length >= MediaIndex.CAP) return;
     arr.push({ gbifID: m.gbifID, m });

@@ -33,6 +33,7 @@
  *   npx tsx scripts/build-dossiers.ts not-accepted.txt --grid climate --bulk bulk --force --skip inat,openalex
  *                                                                # rebuilds those by key: each is followed to its accepted species (a new file)
  *   npx tsx scripts/build-dossiers.ts --prune-followed          # then deletes the old synonym-name files that an accepted page says it was followed from
+ *   npx tsx scripts/build-dossiers.ts --fill gbif --bulk bulk    # photographs from the download's multimedia.txt into every dossier on disk; no API calls
  *   npx tsx scripts/build-dossiers.ts --fixtures                # synthetic dossiers for dev
  *
  * The same buildDossier() runs in the Worker for the tail; this script exists
@@ -40,7 +41,8 @@
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, unlinkSync } from 'node:fs';
 import { execSync } from 'node:child_process';
-import { buildDossier, NETWORK_EXTRAS, type SkippableSource } from '../src/lib/dossier/build';
+import { buildDossier, NETWORK_EXTRAS, photosFromMedia, mergeGbifPhotos, type SkippableSource } from '../src/lib/dossier/build';
+import * as gbif from '../src/lib/dossier/sources/gbif';
 import { literature } from '../src/lib/dossier/sources/openalex';
 import * as inat from '../src/lib/dossier/sources/inat';
 import { makeFetcher, fixtureFetcher } from '../src/lib/dossier/fetch';
@@ -277,6 +279,51 @@ function uniqueSlugs(index: IndexEntry[]): IndexEntry[] {
   return index;
 }
 
+/**
+ * Photographs from the download's multimedia.txt, merged into every dossier on disk. One pass over the archive, no API
+ * calls: the media index answers the same request the build makes, so the photographs come out identical to a build's.
+ * A species the download does not carry (over the record cap, or not in the names file) is left as it is.
+ */
+async function fillGbifPhotos(): Promise<void> {
+  if (!bulkDir) {
+    console.error('--fill gbif needs --bulk <dir> with occurrence.zip from a DWCA download');
+    process.exit(2);
+  }
+  const dir = `${outDir}/s/v${DOSSIER_V}`;
+  const files = existsSync(dir) ? readdirSync(dir).filter((f) => /^\d+\.json$/.test(f)) : [];
+  const keys = new Set(files.map((f) => Number(f.slice(0, -5))));
+  console.log(`${files.length} dossiers on disk; loading photographs from ${bulkDir}/occurrence.zip for them…`);
+  const loaded = await loadOccurrences(bulkDir, 1, keys);
+  if (!loaded?.media) {
+    console.error('  the archive has no multimedia.txt: request the download again as a DWCA (npm run bulk -- gbif names-big.txt --wait)');
+    process.exit(2);
+  }
+  const doi = loaded.occ.doi;
+  const f = bulkFetcher(fixtureFetcher({}, { status: 'none' }), { media: loaded.media });
+  type D = { key: number; photos: Array<{ src: string; captive?: boolean }>; upstream: Record<string, { status: string; at?: string; detail?: string }> };
+  let filled = 0, none = 0, photos = 0;
+  for (const file of files) {
+    const path = `${dir}/${file}`;
+    const d = JSON.parse(readFileSync(path, 'utf8')) as D;
+    const m = await gbif.media(f, d.key);
+    if (m.status !== 'ok') {
+      none++;
+      continue; // nothing in the download for this species: what the dossier has stands, whatever source gave it
+    }
+    const fresh = photosFromMedia(m.data);
+    d.photos = mergeGbifPhotos(d.photos as never, fresh) as never;
+    d.upstream['gbif.media'] = { status: 'ok', at: new Date().toISOString(), detail: `from the GBIF download${doi ? ` ${doi}` : ''} (multimedia.txt)` };
+    // Six or more wild photographs from the download: the iNaturalist wild set need not be asked for.
+    if (fresh.length >= 6 && !['ok', 'none'].includes(d.upstream['inat.photos.wild']?.status ?? '')) d.upstream['inat.photos.wild'] = { status: 'skipped', at: new Date().toISOString(), detail: `not asked: ${fresh.length} wild photographs already from the GBIF download` };
+    writeFileSync(path, JSON.stringify(d));
+    filled++;
+    photos += fresh.length;
+    if (filled % 500 === 0) process.stdout.write(`\r  ${filled} filled…   `);
+  }
+  console.log(`\r  ${filled} dossiers given ${photos} photographs from the download; ${none} had none there and keep what they had.`);
+  writeIndexFromDisk();
+}
+
 /** The index is derived from the files; after a fill the thumbnails have changed, so it is written again. */
 function writeIndexFromDisk(): void {
   const index = uniqueSlugs(scanDossiers().sort((a, b) => a.name.localeCompare(b.name)));
@@ -302,6 +349,7 @@ async function main() {
   if (args.includes('--index')) return writeIndexFromDisk();
   if (fill === 'openalex') return fillLiterature();
   if (fill === 'inat') return fillPhotos();
+  if (fill === 'gbif') return fillGbifPhotos();
   if (fill) throw new Error(`--fill ${fill}: openalex or inat`);
   let climate: ClimateProvider | undefined;
   if (gridDir) {
@@ -362,6 +410,8 @@ async function main() {
       if (!loaded && !existsSync(`${bulkDir}/occurrence.zip`) && !existsSync(`${bulkDir}/occurrence.csv`)) console.log('  no occurrence.zip: occurrences will come from the API');
       const bf = bulkFetcher(f, { wcvp: wcvp ?? undefined, occ: loaded?.occ, media: loaded?.media ?? undefined });
       mediaFromFiles = !!loaded?.media;
+      // The download's photographs are files, not a network extra: a re-derivation reads them and merges them in.
+      if (mediaFromFiles) skip.splice(0, skip.length, ...skip.filter((x) => x !== 'gbif.media'));
       bulkStats = bf.stats;
       f = bf;
     }
@@ -457,7 +507,8 @@ async function main() {
       // A re-derivation asked no network extra at all: every one of those sections is the previous build's, and says so.
       if (rederive) {
         const from = `carried from build of ${prev.built?.slice(0, 10) ?? '?'} (rederive)`;
-        d.photos = prev.photos;
+        // Photographs carry over; a GBIF set read from the download this build replaces the previous GBIF set.
+        d.photos = d.upstream['gbif.media']?.status === 'ok' ? mergeGbifPhotos(prev.photos, d.photos.filter((p) => p.src === 'gbif')) : prev.photos;
         d.literature = prev.literature;
         d.summary = prev.summary;
         d.ids = { ...prev.ids, gbif: d.ids.gbif };

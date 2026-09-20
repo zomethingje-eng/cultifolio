@@ -8,11 +8,12 @@
  */
 import type { JsonFetcher } from './fetch';
 import * as gbif from './sources/gbif';
+import type { OccMedia } from './sources/gbif';
 import * as inat from './sources/inat';
 import * as wm from './sources/wikimedia';
 import { literature } from './sources/openalex';
 import { tdwgCode, tdwgLabel, TDWG3 } from './tdwg';
-import { licenceTag, isOpen } from '$core/licence';
+import { licenceTag, isOpen, licenceLabel } from '$core/licence';
 import { slugify, parseName } from '$core/names';
 import { habitatCluster, habitatCentre, haversineKm, inBox, type Box } from '$core/geo';
 import { DOSSIER_V, parseDossier, type Dossier, type OccPoint, type Photo, type Climate, type Upstream } from './schema';
@@ -56,6 +57,24 @@ const countryName = (iso?: string): string | undefined => {
     return iso;
   }
 };
+
+/** GBIF media rows as dossier photographs, at most 24. iNaturalist's open-data bucket serves sizes by name; anything else goes through GBIF's image cache. */
+export function photosFromMedia(rows: OccMedia[]): Photo[] {
+  return rows.slice(0, 24).map((im) => {
+    const inat = /^https:\/\/inaturalist-open-data\.s3\.amazonaws\.com\/photos\/\d+\/original\.(\w+)$/.exec(im.url);
+    const thumb = inat ? im.url.replace(/original\.(\w+)$/, 'medium.$1') : `https://api.gbif.org/v1/image/cache/fit-in/400x/${encodeURIComponent(im.url)}`;
+    return { src: 'gbif', id: im.id, url: im.url, thumb, licence: im.licence as Photo['licence'], attribution: `${im.creator ?? im.rightsHolder ?? 'unknown'}, ${licenceLabel(im.licence as Photo['licence'])}, ${inat ? 'iNaturalist via GBIF' : 'via GBIF'}`, page: im.page };
+  });
+}
+
+/**
+ * A fresh GBIF media set merged into a dossier's photographs: iNaturalist and Commons keep their places in front, the
+ * previous GBIF set is replaced. An empty fresh set keeps what was there: the download having nothing is not the API having had nothing.
+ */
+export function mergeGbifPhotos(prev: Photo[], fresh: Photo[]): Photo[] {
+  if (!fresh.length) return prev;
+  return [...prev.filter((p) => p.src !== 'gbif'), ...fresh];
+}
 
 export async function buildDossier(nameOrKey: string | number, o: BuildOptions): Promise<BuildResult> {
   const f = o.fetcher;
@@ -286,13 +305,7 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   else if (!o.quick && (o.mediaFirst || photos.length < 6)) {
     const m = await gbif.media(f, key);
     mark('gbif.media', m);
-    if (m.status === 'ok')
-      for (const im of m.data.slice(0, 24)) {
-        // iNaturalist's open-data bucket serves sizes by name; anything else goes through GBIF's image cache.
-        const inat = /^https:\/\/inaturalist-open-data\.s3\.amazonaws\.com\/photos\/\d+\/original\.(\w+)$/.exec(im.url);
-        const thumb = inat ? im.url.replace(/original\.(\w+)$/, 'medium.$1') : `https://api.gbif.org/v1/image/cache/fit-in/400x/${encodeURIComponent(im.url)}`;
-        photos.push({ src: 'gbif', id: im.id, url: im.url, thumb, licence: im.licence as Photo['licence'], attribution: `${im.creator ?? im.rightsHolder ?? 'unknown'}, ${im.licence.toUpperCase()}, ${inat ? 'iNaturalist via GBIF' : 'via GBIF'}`, page: im.page });
-      }
+    if (m.status === 'ok') photos.push(...photosFromMedia(m.data));
   }
 
   /* ---- 7. Literature (not load-bearing) ---- */
