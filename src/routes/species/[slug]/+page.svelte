@@ -161,7 +161,6 @@
       </p>
       <div class="pills">
         {#if d.climate.status === 'ok'}<span class="pill a">Climate known</span>{:else if d.climate.status === 'pending'}<span class="pill">Climate pending</span>{:else if d.climate.status === 'refused'}<span class="pill w">Climate not checked</span>{:else}<span class="pill">No habitat climate</span>{/if}
-        {#if d.occurrences.nOpenInRange}<span class="pill c">{d.occurrences.nOpenInRange} open records</span>{/if}
         {#if d.photos.length}<span class="pill">{d.photos.length} photograph{d.photos.length === 1 ? '' : 's'}</span>{:else if refusedPhotoNames.length}<span class="pill w">Photographs not checked</span>{/if}
         {#if sheet.arch}<span class="pill" title="Grouped by {sheet.arch.why} (archetype table)">{sheet.arch.arch.lab}</span>{/if}
         {#if growing.length}<span class="pill a">you grow {growing.length}</span>{/if}
@@ -179,6 +178,7 @@
     </div>
   </div>
   </div>
+  <p class="small muted derived">Every figure on this page is derived from public data by a stated rule and says its source; nothing here is written by a person or a model. <a href="/about/how">How it is made.</a></p>
 
   {#if d.summary}
     <h2 class="sec" id="s-summary">Summary</h2>
@@ -206,7 +206,7 @@
   </div>
 
   {#if glance || note}
-    <h2 class="sec" id="s-glance">Cultivation, in short</h2>
+    <h2 class="sec" id="s-glance">At a glance</h2>
     <section class="glance" aria-label="At a glance">
       {#if glance}
         <div class="cards">
@@ -262,7 +262,7 @@
         <summary>
           <span class="t">{c.title}</span>
           <span class="one">{c.rows.find((r) => r.short)?.short ?? c.rows[0]?.s ?? ''}</span>
-          <span class="pm" aria-hidden="true"></span>
+          <span class="pm" aria-hidden="true"><span class="pmw">open</span></span>
         </summary>
         <div class="body sheet">
           <p class="small muted hintline">{c.rows.some((r) => r.hab) ? (c.title === 'Its year' ? 'This species’ habitat figures, and what two fixed rules read from them.' : 'This species’ habitat figures, with their source.') : 'The archetype table’s figure; no habitat figure for this species.'}</p>
@@ -445,13 +445,17 @@
   .acc > summary .t { font-weight: 700; font-size: 15px; color: var(--ink); }
   .acc > summary .one { font-size: 13.5px; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .acc[open] > summary .one { white-space: normal; }
-  .acc > summary .pm::before { content: '+'; font-family: var(--mono); font-size: 18px; color: var(--ink3); }
-  .acc[open] > summary .pm::before { content: '–'; }
+  .acc > summary .pm { display: inline-flex; align-items: center; gap: 4px; justify-content: flex-end; }
+  .acc > summary .pm::after { content: '+'; font-family: var(--mono); font-size: 18px; color: var(--ink3); }
+  .acc[open] > summary .pm::after { content: '–'; }
+  .acc > summary .pmw { display: none; font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink3); font-weight: 700; }
+  .acc[open] > summary .pmw { display: none; }
+  .derived { margin: 10px 0 0; }
   .acc > summary:hover .t { color: var(--accent); }
   .acc > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: var(--r); }
   .acc .body { border-top: 1px solid var(--rule); }
   .hintline { margin: 0 0 10px; font-family: var(--ui); }
-  @media (max-width: 640px) { .acc > summary { grid-template-columns: minmax(0, 1fr) 24px; } .acc > summary .one { grid-column: 1; } .acc > summary .pm { grid-column: 2; grid-row: 1; } }
+  @media (max-width: 640px) { .acc > summary { grid-template-columns: minmax(0, 1fr) 64px; } .acc > summary .one { grid-column: 1; } .acc > summary .pm { grid-column: 2; grid-row: 1; } .acc:not([open]) > summary .pmw { display: inline; } }
   .sheet .rowk { font-size: 11px; letter-spacing: 0.11em; text-transform: uppercase; color: var(--accent); font-weight: 700; margin: 14px 0 4px; font-family: var(--ui); }
   .sheet .rowk:first-child { margin-top: 0; }
   .sheet p { margin: 0 0 6px; }

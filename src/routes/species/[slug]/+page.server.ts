@@ -2,9 +2,10 @@ import { error } from '@sveltejs/kit';
 import { getDossier, resolveSlug, getIndex, getGenus } from '$lib/server/dossiers';
 import { genusOf, slugify } from '$core/names';
 import { worldSvg, regionSvg } from '$lib/map/still';
+import { unitsFor } from '$lib/server/units';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders }) => {
+export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders, cookies, request }) => {
   const key = await resolveSlug(platform, fetch, params.slug);
   if (!key) error(404, { message: `No dossier for “${params.slug}” yet` });
   const d = await getDossier(platform, fetch, key);
@@ -25,6 +26,7 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   // About the genus: its Wikipedia lead, written by `--fill genus`; null when that pass has not run for this genus.
   const genusRecord = await getGenus(platform, fetch, slugify(genus));
   return {
+    units: unitsFor(cookies, request),
     d,
     genusRecord,
     siblings,

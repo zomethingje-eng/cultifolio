@@ -11,6 +11,9 @@ describe('units', () => {
     expect(deltaT(4, 'us')).toBe('7.2 °F'); // not 39.2
     expect(deltaT(4, 'metric')).toBe('4.0 °C');
     expect(fToC(cToF(-12.3))).toBeCloseTo(-12.3, 9);
+    // a bench floor typed as 40 °F is stored in °C at two decimals and reads back as 40.0, not 39.9
+    expect(cToF(+fToC(40).toFixed(2)).toFixed(1)).toBe('40.0');
+    expect(cToF(+fToC(40).toFixed(1)).toFixed(1)).toBe('39.9');
   });
   it('prints rain in inches with the precision an inch needs, and keeps the metric threshold beside a converted rule', () => {
     expect(rain(72, 'us')).toBe('2.8 in');

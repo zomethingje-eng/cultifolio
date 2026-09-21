@@ -105,7 +105,7 @@
     await collection.put('sowing', id, {
       taxonName: f.taxonName.trim() || s.taxonName, cultivar: f.cultivar.trim() || null, method: f.method, sown: f.sown || s.sown, count: Math.max(1, Number(f.count) || s.count),
       sourceFrom: f.sourceFrom.trim() || null, sourceRef: f.sourceRef.trim() || null, provenance: f.provenance, medium: f.medium.trim() || null, container: f.container.trim() || null,
-      treatment: f.treatment.trim() || null, bottomHeatC: f.bottomHeatC !== '' && !Number.isNaN(Number(f.bottomHeatC)) ? (units.current === 'us' ? +fToC(Number(f.bottomHeatC)).toFixed(1) : Number(f.bottomHeatC)) : null, covered: f.covered, locationId: f.locationId ?? null, notes: f.notes.trim() || null
+      treatment: f.treatment.trim() || null, bottomHeatC: f.bottomHeatC !== '' && !Number.isNaN(Number(f.bottomHeatC)) ? (units.current === 'us' ? +fToC(Number(f.bottomHeatC)).toFixed(2) : Number(f.bottomHeatC)) : null, covered: f.covered, locationId: f.locationId ?? null, notes: f.notes.trim() || null
     });
     editing = false;
   }

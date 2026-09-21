@@ -6,12 +6,22 @@
  * Celsius is a choice, not a conflict.
  */
 import { browser } from '$app/environment';
-import { METRIC, type Units } from '$core/units';
+import { METRIC, parseUnits, type Units } from '$core/units';
+
+/** The cookie as this browser holds it now: the service worker serves some shells from its cache, so the HTML's own idea of the units can be stale. */
+function fromCookie(): Units | null {
+  if (!browser) return null;
+  try {
+    return parseUnits(document.cookie.match(/(?:^|;\s*)cultifolio\.units=([^;]+)/)?.[1]);
+  } catch {
+    return null;
+  }
+}
 
 class UnitsStore {
   current = $state<Units>(METRIC);
   seed(u: Units) {
-    this.current = u;
+    this.current = fromCookie() ?? u;
   }
   set(u: Units) {
     this.current = u;

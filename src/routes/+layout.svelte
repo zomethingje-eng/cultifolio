@@ -16,11 +16,14 @@
   import CompareBar from '$lib/ui/CompareBar.svelte';
   import InstallBar from '$lib/ui/InstallBar.svelte';
   import { units } from '$lib/ui/units.svelte';
-  let { children, data } = $props();
-  // Seed before anything renders, on the server and on the client, so the first paint is in the reader's units.
-  $effect.pre(() => units.seed(data.units));
+  import { METRIC } from '$core/units';
+  let { children } = $props();
+  // Seed before anything renders. A server-rendered page carries the reader's units in its data (from the cookie or the
+  // language); a client-rendered page has no server data and the store reads the cookie itself. So the first paint is in
+  // the reader's units, and no page needs the server for it, which the collection's pages, offline, must not.
+  $effect.pre(() => units.seed((page.data.units as typeof METRIC | 'us' | undefined) ?? METRIC));
   // svelte-ignore state_referenced_locally
-  if (!browser) units.seed(data.units);
+  if (!browser) units.seed((page.data.units as typeof METRIC | 'us' | undefined) ?? METRIC);
   // The menu: everything the app has, from anywhere, behind the mark in the corner. Closes on navigation, Escape, or a tap outside.
   let menuOpen = $state(false);
   let menuBtn = $state<HTMLButtonElement | null>(null);
@@ -56,6 +59,7 @@
     await sync.init();
     if (sync.configured) sync.schedule(1500);
   });
+  const hasPlants = $derived(collection.ready && collection.accessions.length > 0);
   const places = [
     { href: '/', label: 'Species', on: (p: string) => p === '/' || p.startsWith('/species') },
     { href: '/plants', label: 'Plants', on: (p: string) => p.startsWith('/plants') },
@@ -110,8 +114,8 @@
   <p>Taxonomy: GBIF Backbone (CC BY). Distributions: WCVP, RBG Kew (CC BY 4.0). Climate: CHELSA V2.1 (CC0), NASA POWER. Photographs carry their own licence and credit. Summaries: Wikipedia (CC BY-SA 4.0). Coastlines: Natural Earth. Nothing on this site is stored about you; your collection lives on your device{#if sync.configured}, and in an encrypted vault only your key opens{/if}. <a href="/about/how">How it is made</a> · <a href="/about/formats">Formats</a> · <a href="https://github.com/zomethingje-eng/cultifolio">Source</a>.</p>
 </footer>
 
-<nav id="tabbar" aria-label="Places">
-  {#each places as pl}
+<nav id="tabbar" aria-label="Places" class:two={!hasPlants}>
+  {#each places.filter((pl) => hasPlants || pl.href === '/' || pl.href === '/plants' || pl.on(page.url.pathname)) as pl}
     <a href={pl.href} class:on={pl.on(page.url.pathname)}>
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         {#if pl.label === 'Species'}<path d="M12 3v18M5 8c4 0 7 2 7 6M19 8c-4 0-7 2-7 6M7 15c3 0 5 1.5 5 4M17 15c-3 0-5 1.5-5 4" />
@@ -159,7 +163,9 @@
   #tabbar { display: none; }
   @media (max-width: 700px) {
     main { padding-bottom: calc(56px + 2rem + env(safe-area-inset-bottom)); }
-    #tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 70; display: grid; grid-template-columns: repeat(5, 1fr); background: color-mix(in srgb, var(--card) 94%, transparent); backdrop-filter: blur(10px); border-top: 1px solid var(--rule); padding-bottom: env(safe-area-inset-bottom); }
+    #tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 70; display: grid; grid-template-columns: repeat(5, 1fr);
+    }
+    #tabbar.two { grid-template-columns: repeat(2, 1fr); background: color-mix(in srgb, var(--card) 94%, transparent); backdrop-filter: blur(10px); border-top: 1px solid var(--rule); padding-bottom: env(safe-area-inset-bottom); }
     #tabbar a { color: var(--ink3); font-size: 10.5px; font-weight: 600; letter-spacing: 0.02em; min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
     #tabbar a:hover { text-decoration: none; }
     #tabbar a.on { color: var(--accent); }

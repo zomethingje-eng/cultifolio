@@ -3,12 +3,13 @@ import { groupFor } from '$core/regions';
 import { slugify, genusOf } from '$core/names';
 import { worldSvg } from '$lib/map/still';
 import tdwg from '$dossier/tdwg3.json';
+import { unitsFor } from '$lib/server/units';
 import type { PageServerLoad } from './$types';
 
 const BYS = ['genus', 'origin', 'family'] as const;
 type By = (typeof BYS)[number];
 
-export const load: PageServerLoad = async ({ platform, fetch, setHeaders, url }) => {
+export const load: PageServerLoad = async ({ platform, fetch, setHeaders, url, cookies, request }) => {
   const index = await getIndex(platform, fetch);
   const list = index.map((e) => ({
     key: e.key,
@@ -62,6 +63,7 @@ export const load: PageServerLoad = async ({ platform, fetch, setHeaders, url })
           ? `${genera} ${genera === 1 ? 'genus' : 'genera'}`
           : [...new Set(sorted.flatMap((c) => c.origin))].slice(0, 6).join(', ') + (new Set(sorted.flatMap((c) => c.origin)).size > 6 ? ' …' : '');
     return {
+    units: unitsFor(cookies, request),
       id,
       label,
       sub,

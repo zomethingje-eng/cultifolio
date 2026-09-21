@@ -104,7 +104,7 @@
       medium: medium.trim() || null,
       container: container.trim() || null,
       treatment: treatment.trim() || null,
-      bottomHeatC: bottomHeat !== '' && !Number.isNaN(Number(bottomHeat)) ? (units.current === 'us' ? +fToC(Number(bottomHeat)).toFixed(1) : Number(bottomHeat)) : null,
+      bottomHeatC: bottomHeat !== '' && !Number.isNaN(Number(bottomHeat)) ? (units.current === 'us' ? +fToC(Number(bottomHeat)).toFixed(2) : Number(bottomHeat)) : null,
       covered,
       locationId,
       notes: notes.trim() || null

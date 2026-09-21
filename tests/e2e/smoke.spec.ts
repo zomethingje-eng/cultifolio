@@ -1277,7 +1277,7 @@ test('settings: numbering is previewed and saved as the vault setting; appearanc
 test('the species page reads in reference order: summary, the genus, the facts, the figures, then the cards closed to one line each', async ({ page }) => {
   await page.goto('/species/copiapoa-cinerea');
   const order = await page.locator('h2.sec').allInnerTexts();
-  expect(order.slice(0, 4).map((t) => t.replace(/\s+/g, ' ').toLowerCase())).toEqual(['summary', 'about the genus · copiapoa', 'cultivation, in short', 'cultivation']);
+  expect(order.slice(0, 4).map((t) => t.replace(/\s+/g, ' ').toLowerCase())).toEqual(['summary', 'about the genus · copiapoa', 'at a glance', 'cultivation']);
   await expect(page.locator('#s-genus + .sumbody')).toContainText('Copiapoa is a genus of cactus');
   await expect(page.locator('.facts .fact', { hasText: 'Described by' })).toContainText('(Phil.) Britton & Rose');
   await expect(page.locator('.facts .fact', { hasText: 'Wild records' })).toContainText('352 in range');
@@ -1293,4 +1293,42 @@ test('the species page reads in reference order: summary, the genus, the facts, 
   // a genus Wikipedia refused is "not checked", not silence
   await page.goto('/species/refusia-testii');
   await expect(page.locator('#s-genus + .notice')).toContainText('Not checked');
+});
+
+test('a visitor with no plants sees two places; the other three appear with the first plant and stay in the menu meanwhile', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('.topseg a')).toHaveText(['Species', 'My plants']);
+  await page.getByRole('button', { name: 'Menu' }).click();
+  await expect(page.locator('#menu').getByRole('link', { name: 'Benches', exact: true })).toBeVisible();
+  await page.keyboard.press('Escape');
+  // the species page says what it is, once, under the name
+  await page.goto('/species/copiapoa-cinerea');
+  await expect(page.locator('.derived')).toContainText('nothing here is written by a person or a model');
+  await expect(page.locator('.pill', { hasText: 'open records' })).toHaveCount(0); // the fact strip says it
+  await expect(page.locator('.facts')).toContainText('52 open');
+  await expect(page.locator('h2.sec', { hasText: 'At a glance' })).toBeVisible();
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.getByRole('button', { name: /^Add/ }).click();
+  await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
+  await page.goto('/plants');
+  await expect(page.locator('.topseg a')).toHaveText(['Species', 'My plants', 'Benches', 'Sowings', 'Frost']);
+});
+
+test('the collection\'s pages need nothing from the server to open: a plant page loads offline, whatever the units', async ({ browser, baseURL }) => {
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.getByRole('button', { name: /^Add/ }).click();
+  await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
+  const acc = page.url().split('/').pop()!;
+  await page.goto('/plants'); // lets the service worker install and precache the shells
+  await page.waitForFunction(() => navigator.serviceWorker.controller != null, null, { timeout: 15000 });
+  await ctx.addCookies([{ name: 'cultifolio.units', value: 'us', url: baseURL! }]);
+  await ctx.setOffline(true);
+  await page.goto(`/plants/${acc}`);
+  await expect(page.getByRole('button', { name: 'Water', exact: true })).toBeVisible({ timeout: 15000 });
+  // the settings shell was cached in metric; the units came from the cookie, not from the cached HTML or a server the page could not reach
+  await page.goto('/settings');
+  await expect(page.getByRole('button', { name: '°F and inches' })).toHaveAttribute('aria-pressed', 'true');
+  await ctx.close();
 });

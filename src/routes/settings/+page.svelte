@@ -90,14 +90,16 @@
   let prefix = $state('');
   let width = $state('4');
   let numMsg = $state('');
+  /** Letters and digits, upper case: the same rule for the preview and the save, so what is previewed is what is minted. */
+  const cleanPrefix = (p: string) => p.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
   const preview = $derived.by(() => {
     const w = Math.min(6, Math.max(2, Number(width) || 4));
-    const s: NumberingScheme = mode === 'year' ? { mode, width: w } : { mode, prefix: (prefix.trim() || 'ACC').toUpperCase(), width: w };
+    const s: NumberingScheme = mode === 'year' ? { mode, width: w } : { mode, prefix: cleanPrefix(prefix) || 'ACC', width: w };
     return collection.ready ? nextAccession(collection.accessions.map((a) => a.id), s) : '';
   });
   async function saveScheme() {
     const w = Math.min(6, Math.max(2, Number(width) || 4));
-    const s: NumberingScheme = mode === 'year' ? { mode, width: w } : { mode, prefix: (prefix.trim() || 'ACC').toUpperCase().replace(/[^A-Z0-9]/g, ''), width: w };
+    const s: NumberingScheme = mode === 'year' ? { mode, width: w } : { mode, prefix: cleanPrefix(prefix), width: w };
     if (s.mode === 'prefix' && !s.prefix) {
       numMsg = 'A prefix needs at least one letter or digit.';
       return;

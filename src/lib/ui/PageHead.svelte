@@ -1,7 +1,10 @@
 <script lang="ts">
   /** The head of a list page: kicker, the segmented control between the app's places, a sentence on what the page is for, the count, the title. */
   import { page } from '$app/state';
+  import { collection } from '$lib/db/collection.svelte';
   let { title, sub, count, children }: { title: string; sub?: string; count?: string; children?: import('svelte').Snippet } = $props();
+  const hasPlants = $derived(collection.ready && collection.accessions.length > 0);
+  const shown = (pl: { href: string; on: (p: string) => boolean }) => hasPlants || pl.href === '/' || pl.href === '/plants' || pl.on(page.url.pathname);
   const places = [
     { href: '/', label: 'Species', on: (p: string) => p === '/' || p.startsWith('/species') },
     { href: '/plants', label: 'My plants', on: (p: string) => p.startsWith('/plants') },
@@ -12,8 +15,9 @@
 </script>
 
 <div class="kick" style="margin-top: 22px">Cultifolio</div>
+<!-- A visitor with no plants sees two places; benches, sowings and frost mean nothing until there is a plant, and stay in the menu. -->
 <nav class="seg topseg" aria-label="Places">
-  {#each places as pl}<a href={pl.href} class:on={pl.on(page.url.pathname)}>{pl.label}</a>{/each}
+  {#each places.filter((pl) => shown(pl)) as pl}<a href={pl.href} class:on={pl.on(page.url.pathname)}>{pl.label}</a>{/each}
 </nav>
 {#if sub}<p class="secsub">{sub}</p>{/if}
 {#if count}<p class="seccount">{count}</p>{/if}
