@@ -58,6 +58,19 @@ export const Summary = v.object({
   title: v.string()
 });
 
+/** A genus's own page: its Wikipedia lead, quoted like a species' summary, written by `--fill genus` to s/v<N>/g/<slug>.json. */
+export const GenusRecord = v.object({
+  genus: v.string(),
+  slug: v.string(),
+  summary: v.optional(Summary),
+  /** What Wikipedia answered: ok, none (no article, or a disambiguation), or a refusal with its reason. */
+  status: v.picklist(['ok', 'none', 'refused']),
+  detail: v.optional(v.string()),
+  at: v.string()
+});
+export type GenusRecord = v.InferOutput<typeof GenusRecord>;
+export const genusPath = (slug: string) => `s/v${DOSSIER_V}/g/${slug}.json`;
+
 export const Region = v.object({ code: v.optional(v.string()), name: v.string(), box: v.optional(BoxSchema) });
 
 export const Distribution = v.object({

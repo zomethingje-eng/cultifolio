@@ -39,6 +39,7 @@
  *                                                                # rebuilds those by key: each is followed to its accepted species (a new file)
  *   npx tsx scripts/build-dossiers.ts --prune-followed          # then deletes the old synonym-name files that an accepted page says it was followed from
  *   npx tsx scripts/build-dossiers.ts --fill gbif --bulk bulk    # photographs from the download's multimedia.txt into every dossier on disk; no API calls
+ *   npx tsx scripts/build-dossiers.ts --fill genus               # "About the genus": one Wikipedia lead per genus in the index, to s/v<N>/g/<slug>.json
  *   npx tsx scripts/build-dossiers.ts --fixtures                # synthetic dossiers for dev
  *
  * The same buildDossier() runs in the Worker for the tail; this script exists
@@ -50,6 +51,8 @@ import { buildDossier, NETWORK_EXTRAS, photosFromMedia, mergeGbifPhotos, type Sk
 import * as gbif from '../src/lib/dossier/sources/gbif';
 import { literature } from '../src/lib/dossier/sources/openalex';
 import * as inat from '../src/lib/dossier/sources/inat';
+import * as wm from '../src/lib/dossier/sources/wikimedia';
+import { genusOf, slugify } from '../src/lib/core/names';
 import { makeFetcher, fixtureFetcher } from '../src/lib/dossier/fetch';
 import { dossierPath, DOSSIER_V } from '../src/lib/dossier/schema';
 import { welwitschia, copiapoa, refused } from '../fixtures/upstream';
@@ -161,6 +164,48 @@ function needsRebuild(key: number): boolean {
 let bulkStats: { wcvp: number; occ: number; media: number; through: number } | null = null;
 /** The download carried photographs: GBIF media is then the first wild-photo source, not a fallback. */
 let mediaFromFiles = false;
+
+/**
+ * "About the genus": one Wikipedia lead per genus in the index, quoted like a species' summary, written to s/v<N>/g/<slug>.json.
+ * A genus with a record already is left alone unless --force; none (no article, or a disambiguation) is a settled answer and
+ * is kept too, so a rerun costs one call per new genus. Nothing on the page is drawn from it beyond the quotation.
+ */
+async function fillGenera(): Promise<void> {
+  const idx = scanDossiers();
+  const genera = [...new Set(idx.map((e) => genusOf(e.name)))].sort();
+  const dir = `${outDir}/s/v${DOSSIER_V}/g`;
+  mkdirSync(dir, { recursive: true });
+  const f = makeFetcher();
+  let ok = 0, none = 0, refused = 0, kept = 0;
+  console.log(`${genera.length} genera in the index; asking Wikipedia for each without a record…`);
+  for (const [i, g] of genera.entries()) {
+    const slug = slugify(g);
+    const p = `${dir}/${slug}.json`;
+    if (existsSync(p) && !force) {
+      try {
+        const prev = JSON.parse(readFileSync(p, 'utf8')) as { status?: string };
+        if (prev.status === 'ok' || prev.status === 'none') {
+          kept++;
+          continue;
+        }
+      } catch {
+        /* rewritten below */
+      }
+    }
+    const r = await wm.summary(f, g);
+    const rec = r.status === 'ok'
+      ? { genus: g, slug, status: 'ok' as const, summary: { text: r.data.text, source: 'wikipedia' as const, url: r.data.url, licence: 'CC BY-SA 4.0' as const, title: r.data.title }, at: new Date().toISOString() }
+      : r.status === 'none'
+        ? { genus: g, slug, status: 'none' as const, at: new Date().toISOString() }
+        : { genus: g, slug, status: 'refused' as const, detail: `${r.status}: ${r.detail}`, at: new Date().toISOString() };
+    writeFileSync(p, JSON.stringify(rec, null, 1));
+    if (rec.status === 'ok') ok++;
+    else if (rec.status === 'none') none++;
+    else refused++;
+    if ((i + 1) % 50 === 0) process.stdout.write(`\r  ${i + 1} of ${genera.length}…   `);
+  }
+  console.log(`\n  ${ok} genera with a lead, ${none} with no article, ${refused} refused, ${kept} kept from before → ${dir}/`);
+}
 
 /** Patch one section into every dossier that lacks it, without rebuilding anything else. */
 async function fillLiterature(): Promise<void> {
@@ -383,7 +428,8 @@ async function main() {
   if (fill === 'openalex') return fillLiterature();
   if (fill === 'inat') return fillPhotos();
   if (fill === 'gbif') return fillGbifPhotos();
-  if (fill) throw new Error(`--fill ${fill}: openalex or inat`);
+  if (fill === 'genus') return fillGenera();
+  if (fill) throw new Error(`--fill ${fill}: openalex, inat, gbif or genus`);
   let climate: ClimateProvider | undefined;
   if (gridDir) {
     if (!existsSync(`${gridDir}/climate.grid`) || !existsSync(`${gridDir}/climate.json`)) {

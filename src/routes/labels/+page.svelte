@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { units } from '$lib/ui/units.svelte';
+  import { site } from '$lib/ui/site.svelte';
   /**
    * Printable labels. Pick plants, pick a sheet, print. The page shows the
    * sheet at true size; @media print hides everything else and sets the page
@@ -40,6 +42,7 @@
   let care = $state<Record<string, string>>({});
 
   onMount(async () => {
+    site.load();
     await collection.load();
     const acc = page.url.searchParams.get('acc');
     const loc = page.url.searchParams.get('loc');
@@ -90,8 +93,8 @@
         care = { ...care, [a.id]: '' };
         bySlug(slugify(a.taxonName)).then(async (e) => {
           const d = e ? await fetch(`/api/dossier/${e.key}`).then((r) => (r.ok ? (r.json() as Promise<Dossier>) : null)).catch(() => null) : null;
-          const readerLat = collection.locations.map((l) => l.lat).find((x): x is number => x != null) ?? null;
-          const line = careLine({ scientific: a.taxonName, family: d?.name.family, months: d?.climate.status === 'ok' ? d.climate.months : null, extremes: d?.climate.status === 'ok' ? (d.climate.extremes ?? null) : null, lat: d?.centroid?.lat ?? null }, { readerLat });
+          const readerLat = site.current?.lat ?? collection.locations.map((l) => l.lat).find((x): x is number => x != null) ?? null;
+          const line = careLine({ scientific: a.taxonName, family: d?.name.family, months: d?.climate.status === 'ok' ? d.climate.months : null, extremes: d?.climate.status === 'ok' ? (d.climate.extremes ?? null) : null, lat: d?.centroid?.lat ?? null, units: units.current }, { readerLat });
           care = { ...care, [a.id]: line };
         });
       }

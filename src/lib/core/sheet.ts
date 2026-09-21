@@ -14,6 +14,7 @@
 import { frostWording } from './extremes';
 import { MON3 } from './months';
 import { archFor, type ArchGuess } from './arch';
+import { temp, deltaT, rain, ruleRain, METRIC, type Units } from './units';
 
 export interface Month {
   tmax: number;
@@ -50,6 +51,8 @@ export interface SheetInput {
   lat?: number | null;
   /** The grower's latitude, if known: the one-sentence shorts print months for that hemisphere. */
   readerLat?: number | null;
+  /** The reader's units; every figure in every sentence follows it. Metric when unset. */
+  units?: Units;
 }
 
 export interface Row {
@@ -184,12 +187,17 @@ export function growingYear(months: Month[], lat: number | null | undefined): Ye
   return { grow, fog, none, shiftable, spread, flat, growMonths: wet, shifted, south, wetMm, annualMm: annual, wetT, meanT, rangeT, driest, wettest };
 }
 
-const T = (c: number) => `${Math.round(c)} °C`;
-const T1 = (c: number) => `${c.toFixed(1)} °C`;
-const RAIN = (mm: number) => `${Math.round(mm)} mm`;
+// The reader's units, set at the top of cultivationSheet() from its input and read by every formatter below: one
+// setting, so a card and its short form are never in different units. Metric until a sheet says otherwise.
+let U: Units = METRIC;
+const T = (c: number) => temp(c, U, 0);
+const T1 = (c: number) => temp(c, U, 1);
+const DT = (dc: number) => deltaT(dc, U, 1);
+const RAIN = (mm: number) => rain(mm, U);
 
 /** What the cold floor is: the quantity, the figure, and any raising by the archetype table, all in one sentence. */
-export function coldFloor(m: Month[] | null, ex: Extremes | null, guess: ArchGuess | null): { floor: number; s: string; short: string; hab: boolean } | null {
+export function coldFloor(m: Month[] | null, ex: Extremes | null, guess: ArchGuess | null, units: Units = U): { floor: number; s: string; short: string; hab: boolean } | null {
+  U = units;
   const minC = guess?.arch.minC ?? null;
   let floor: number | null = null;
   let quantity = '';
@@ -215,6 +223,7 @@ export function coldFloor(m: Month[] | null, ex: Extremes | null, guess: ArchGue
 }
 
 export function cultivationSheet(input: SheetInput): { rows: Row[]; arch: ArchGuess | null; year: Year | null } {
+  U = input.units ?? METRIC;
   const rows: Row[] = [];
   const add = (card: string, k: string, s: string, why: string, hab = false, short?: string) => rows.push({ card, k, s, why, hab, short });
   const guess = archFor(input.scientific, input.family);
@@ -243,30 +252,30 @@ export function cultivationSheet(input: SheetInput): { rows: Row[]; arch: ArchGu
     let s: string;
     let short: string;
     if (year.none) {
-      s = `Rain at the habitat is ${RAIN(year.annualMm)} a year (${ENV}). Under 120 mm the rain rule reads no rainy season, and the growing-season rule infers nothing from it. The temperature curve moves ${year.rangeT.toFixed(1)} °C between the warmest and coldest month and the coolest six months are within a degree of the warmest six, so the temperature rule names no cooler half either.`;
-      short = `Rain rule: no rainy season to read (${RAIN(year.annualMm)} a year); the temperature curve is flat (${year.rangeT.toFixed(1)} °C of range), so no cooler half is named.`;
+      s = `Rain at the habitat is ${RAIN(year.annualMm)} a year (${ENV}). Under ${ruleRain(120, U)} the rain rule reads no rainy season, and the growing-season rule infers nothing from it. The temperature curve moves ${DT(year.rangeT)} between the warmest and coldest month and the coolest six months are within a degree of the warmest six, so the temperature rule names no cooler half either.`;
+      short = `Rain rule: no rainy season to read (${RAIN(year.annualMm)} a year); the temperature curve is flat (${DT(year.rangeT)} of range), so no cooler half is named.`;
     } else if (year.fog) {
-      s = `Rain at the habitat is ${RAIN(year.annualMm)} a year (${ENV}). Under 120 mm the rain rule reads no rainy season, and the growing-season rule infers nothing from it. The temperature rule reads the cooler six months as ${at}. ${hemi}`;
+      s = `Rain at the habitat is ${RAIN(year.annualMm)} a year (${ENV}). Under ${ruleRain(120, U)} the rain rule reads no rainy season, and the growing-season rule infers nothing from it. The temperature rule reads the cooler six months as ${at}. ${hemi}`;
       short = `Rain rule: no rainy season to read (${RAIN(year.annualMm)} a year); the temperature rule's cooler six months are ${forYou}.`;
     } else if (year.spread) {
-      s = `The rain rule reads no season: 70% of the year's rain (${RAIN(year.wetMm)} of ${RAIN(year.annualMm)}) takes ${year.growMonths.length} months, ${at}. Mean temperature moves ${year.rangeT.toFixed(1)} °C between the warmest and coldest month. ${hemi}`;
+      s = `The rain rule reads no season: 70% of the year's rain (${RAIN(year.wetMm)} of ${RAIN(year.annualMm)}) takes ${year.growMonths.length} months, ${at}. Mean temperature moves ${DT(year.rangeT)} between the warmest and coldest month. ${hemi}`;
       short = `Rain rule: no season, 70% of the rain takes ${year.growMonths.length} months (${forYou}).`;
     } else if (year.flat) {
-      s = `The rain rule reads a sharp season: 70% of the year's rain (${RAIN(year.wetMm)} of ${RAIN(year.annualMm)}) falls in ${at}. The temperature curve is flat, ${year.rangeT.toFixed(1)} °C between the warmest and coldest month, so the growing-season rule does not infer a growing season from it. ${hemi}`;
-      short = `Rain rule: a sharp rainy season, ${forYou}; the temperature curve is flat (${year.rangeT.toFixed(1)} °C of range), so no growing season is inferred.`;
+      s = `The rain rule reads a sharp season: 70% of the year's rain (${RAIN(year.wetMm)} of ${RAIN(year.annualMm)}) falls in ${at}. The temperature curve is flat, ${DT(year.rangeT)} between the warmest and coldest month, so the growing-season rule does not infer a growing season from it. ${hemi}`;
+      short = `Rain rule: a sharp rainy season, ${forYou}; the temperature curve is flat (${DT(year.rangeT)} of range), so no growing season is inferred.`;
     } else if (year.grow === 'even') {
-      s = `The rain rule reads a rainy season with no name: 70% of the year's rain (${RAIN(year.wetMm)} of ${RAIN(year.annualMm)}) falls in ${at}, whose mean temperature, ${T1(year.wetT)}, is within half a degree of the year's, ${T1(year.meanT)}, so it is neither the cooler nor the warmer part of the year. ${hemi}`;
+      s = `The rain rule reads a rainy season with no name: 70% of the year's rain (${RAIN(year.wetMm)} of ${RAIN(year.annualMm)}) falls in ${at}, whose mean temperature, ${T1(year.wetT)}, is within ${U === 'us' ? 'a degree Fahrenheit (half a degree Celsius)' : 'half a degree'} of the year's, ${T1(year.meanT)}, so it is neither the cooler nor the warmer part of the year. ${hemi}`;
       short = `Rain rule: a rainy season, ${forYou}, at the year's mean temperature, so called neither winter nor summer.`;
     } else {
       s = `The rain rule reads a ${year.grow} growing season: 70% of the year's rain (${RAIN(year.wetMm)} of ${RAIN(year.annualMm)}) falls in ${at}, ${year.grow === 'winter' ? 'cooler' : 'warmer'} than the year (wet-season mean ${T1(year.wetT)} against a yearly mean of ${T1(year.meanT)}). ${hemi}`;
       short = `Rain rule: a ${year.grow} growing season, ${forYou}${year.shiftable ? ` (${at} at the habitat, ${home})` : ''}.`;
     }
-    add('Its year', 'Its year', s, `Read from the median year of CHELSA monthly rainfall and mean temperature across the envelope cells: the rain rule takes the smallest set of months carrying 70% of the rain and calls it winter when its mean is more than half a degree below the year's, summer when more than half a degree above, and neither in between; the temperature rule, used only under 120 mm, names the cooler six months when they are at least a degree cooler than the other six. Months are shifted for the other hemisphere only where the temperature curve gives a season to reverse. A reading of the curves, not an observation of the plant.`, true, short);
+    add('Its year', 'Its year', s, `Read from the median year of CHELSA monthly rainfall and mean temperature across the envelope cells: the rain rule takes the smallest set of months carrying 70% of the rain and calls it winter when its mean is more than ${U === 'us' ? 'a degree Fahrenheit (0.5 °C)' : 'half a degree'} below the year's, summer when more than that above, and neither in between; the temperature rule, used only under ${ruleRain(120, U)}, names the cooler six months when they are at least ${U === 'us' ? '1.8 °F (1 °C)' : 'a degree'} cooler than the other six. Months are shifted for the other hemisphere only where the temperature curve gives a season to reverse. A reading of the curves, not an observation of the plant.`, true, short);
 
     /* ---- rain ---- */
     const dry = m.filter((x) => x.precipMm < 5).length;
     const wetSpanText = year.fog ? '' : `, ${RAIN(year.wetMm)} of it ${at}`;
-    add('Rain', 'Rain', `${RAIN(year.annualMm)} a year at the habitat${wetSpanText}. Wettest month ${mon(year.wettest)} at ${RAIN(m[year.wettest - 1].precipMm)}, driest ${mon(year.driest)} at ${RAIN(m[year.driest - 1].precipMm)}${dry ? `; ${dry} month${dry === 1 ? '' : 's'} under 5 mm` : ''}${input.annualP10 != null && input.annualP90 != null && Math.round(input.annualP10) !== Math.round(input.annualP90) ? `. Across the envelope cells the year's total runs ${RAIN(input.annualP10)} to ${RAIN(input.annualP90)} (10th to 90th percentile of each cell's own year)` : ''} (${ENV}; habitat calendar, ${home} hemisphere).`, `CHELSA monthly precipitation, ${ENV.replace(', CHELSA', '')}. The rain that falls where the species is recorded; nothing about how the plant takes water.`, true, `Habitat rain ${RAIN(year.annualMm)} a year, wettest ${mon(year.wettest)} at ${RAIN(m[year.wettest - 1].precipMm)}, driest ${mon(year.driest)} at ${RAIN(m[year.driest - 1].precipMm)} (habitat calendar, ${home} hemisphere).`);
+    add('Rain', 'Rain', `${RAIN(year.annualMm)} a year at the habitat${wetSpanText}. Wettest month ${mon(year.wettest)} at ${RAIN(m[year.wettest - 1].precipMm)}, driest ${mon(year.driest)} at ${RAIN(m[year.driest - 1].precipMm)}${dry ? `; ${dry} month${dry === 1 ? '' : 's'} under ${ruleRain(5, U)}` : ''}${input.annualP10 != null && input.annualP90 != null && Math.round(input.annualP10) !== Math.round(input.annualP90) ? `. Across the envelope cells the year's total runs ${RAIN(input.annualP10)} to ${RAIN(input.annualP90)} (10th to 90th percentile of each cell's own year)` : ''} (${ENV}; habitat calendar, ${home} hemisphere).`, `CHELSA monthly precipitation, ${ENV.replace(', CHELSA', '')}. The rain that falls where the species is recorded; nothing about how the plant takes water.`, true, `Habitat rain ${RAIN(year.annualMm)} a year, wettest ${mon(year.wettest)} at ${RAIN(m[year.wettest - 1].precipMm)}, driest ${mon(year.driest)} at ${RAIN(m[year.driest - 1].precipMm)} (habitat calendar, ${home} hemisphere).`);
   }
 
   /* ---- light ---- */

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { units } from '$lib/ui/units.svelte';
+  import { temp, tempUnit, cToF, fToC } from '$core/units';
   import { plural } from '$core/words';
   import { page } from '$app/state';
   import { accNo, sowNo } from '$lib/db/types';
@@ -95,7 +97,7 @@
   let f = $state({ taxonName: '', cultivar: '', method: 'seed' as PropMethod, sown: '', count: 0, sourceFrom: '', sourceRef: '', provenance: 'unknown' as Provenance, medium: '', container: '', treatment: '', bottomHeatC: '', covered: false, locationId: null as string | null, notes: '' });
   function startEdit() {
     if (!s) return;
-    f = { taxonName: s.taxonName, cultivar: s.cultivar ?? '', method: s.method, sown: s.sown, count: s.count, sourceFrom: s.sourceFrom ?? '', sourceRef: s.sourceRef ?? '', provenance: s.provenance ?? 'unknown', medium: s.medium ?? '', container: s.container ?? '', treatment: s.treatment ?? '', bottomHeatC: s.bottomHeatC == null ? '' : String(s.bottomHeatC), covered: s.covered ?? false, locationId: s.locationId ?? null, notes: s.notes ?? '' };
+    f = { taxonName: s.taxonName, cultivar: s.cultivar ?? '', method: s.method, sown: s.sown, count: s.count, sourceFrom: s.sourceFrom ?? '', sourceRef: s.sourceRef ?? '', provenance: s.provenance ?? 'unknown', medium: s.medium ?? '', container: s.container ?? '', treatment: s.treatment ?? '', bottomHeatC: s.bottomHeatC == null ? '' : String(units.current === 'us' ? +cToF(s.bottomHeatC).toFixed(1) : s.bottomHeatC), covered: s.covered ?? false, locationId: s.locationId ?? null, notes: s.notes ?? '' };
     editing = true;
   }
   async function saveEdit() {
@@ -103,7 +105,7 @@
     await collection.put('sowing', id, {
       taxonName: f.taxonName.trim() || s.taxonName, cultivar: f.cultivar.trim() || null, method: f.method, sown: f.sown || s.sown, count: Math.max(1, Number(f.count) || s.count),
       sourceFrom: f.sourceFrom.trim() || null, sourceRef: f.sourceRef.trim() || null, provenance: f.provenance, medium: f.medium.trim() || null, container: f.container.trim() || null,
-      treatment: f.treatment.trim() || null, bottomHeatC: f.bottomHeatC !== '' && !Number.isNaN(Number(f.bottomHeatC)) ? Number(f.bottomHeatC) : null, covered: f.covered, locationId: f.locationId ?? null, notes: f.notes.trim() || null
+      treatment: f.treatment.trim() || null, bottomHeatC: f.bottomHeatC !== '' && !Number.isNaN(Number(f.bottomHeatC)) ? (units.current === 'us' ? +fToC(Number(f.bottomHeatC)).toFixed(1) : Number(f.bottomHeatC)) : null, covered: f.covered, locationId: f.locationId ?? null, notes: f.notes.trim() || null
     });
     editing = false;
   }
@@ -134,7 +136,7 @@
         <span class="pill {s.status === 'active' ? 'a' : s.status === 'failed' ? 'b' : ''}">{s.status === 'active' ? 'in progress' : s.status}</span>
         <span class="pill">{m.label}</span>
         {#if s.locationId}<a class="pill" href="/benches/{s.locationId}">{collection.locationName(s.locationId)}</a>{/if}
-        {#if s.bottomHeatC != null}<span class="pill w">bottom heat {s.bottomHeatC} °C</span>{/if}
+        {#if s.bottomHeatC != null}<span class="pill w">bottom heat {temp(s.bottomHeatC, units.current)}</span>{/if}
         {#if s.covered}<span class="pill c">covered</span>{/if}
       </div>
     </div>
@@ -163,7 +165,7 @@
       <label><span>Medium</span><input id="se-medium" type="text" bind:value={f.medium} /></label>
       <label><span>Container</span><input id="se-container" type="text" bind:value={f.container} /></label>
       <label><span>Pre-treatment</span><input id="se-treat" type="text" bind:value={f.treatment} /></label>
-      <label><span>Bottom heat °C</span><input id="se-heat" type="number" step="0.5" bind:value={f.bottomHeatC} /></label>
+      <label><span>Bottom heat {tempUnit(units.current)}</span><input id="se-heat" type="number" step="0.5" bind:value={f.bottomHeatC} /></label>
       <label class="row"><input id="se-covered" type="checkbox" bind:checked={f.covered} /> Covered</label>
       <div class="wide"><span class="lbl">Where</span><LocationPicker bind:value={f.locationId} id="se-loc" label="Where" /></div>
       <label class="wide"><span>Notes</span><textarea id="se-notes" rows="3" bind:value={f.notes}></textarea></label>
@@ -258,7 +260,7 @@
     <div><b>Medium</b>{s.medium ?? 'not stated'}</div>
     <div><b>Container</b>{s.container ?? 'not stated'}</div>
     <div><b>Pre-treatment</b>{s.treatment ?? 'none'}</div>
-    <div><b>Warmth and cover</b>{s.bottomHeatC != null ? `bottom heat ${s.bottomHeatC} °C` : 'no bottom heat'}{s.covered ? ' · covered' : ''}</div>
+    <div><b>Warmth and cover</b>{s.bottomHeatC != null ? `bottom heat ${temp(s.bottomHeatC, units.current)}` : 'no bottom heat'}{s.covered ? ' · covered' : ''}</div>
     {#if s.notes}<div class="wide"><b>Notes</b><span style="white-space: pre-wrap">{s.notes}</span></div>{/if}
   </div>
 

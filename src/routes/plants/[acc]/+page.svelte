@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { units } from '$lib/ui/units.svelte';
+  import { temp, tempN, rain, deltaT } from '$core/units';
   import { plural } from '$core/words';
   import { page } from '$app/state';
   import { accNo, sowNo } from '$lib/db/types';
@@ -21,6 +23,7 @@
   import Lightbox from '$lib/ui/Lightbox.svelte';
   onMount(() => collection.load());
   /** The URL carries the number people know (or an identity, from a printed code); everything below works on the record's identity. */
+  const u = $derived(units.current);
   const param = $derived(page.params.acc!);
   const a = $derived(collection.accession(param));
   const id = $derived(a?.id ?? param);
@@ -72,7 +75,7 @@
     const dlis = dli(m), dli10 = dli(c.p10), dli90 = dli(c.p90);
     const ex = c.extremes ?? null;
     const coldI = m.reduce((b, x, j) => (x.tmin < m[b].tmin ? j : b), 0);
-    const sheet = cultivationSheet({ scientific: dossier.name.scientific, family: dossier.name.family, months: m, p10: c.p10, p90: c.p90, extremes: ex, lat: dossier.centroid?.lat ?? c.at.lat });
+    const sheet = cultivationSheet({ scientific: dossier.name.scientific, family: dossier.name.family, months: m, p10: c.p10, p90: c.p90, extremes: ex, lat: dossier.centroid?.lat ?? c.at.lat, units: u });
     return {
       dli: dlis.length ? { lo: Math.min(...dlis), hi: Math.max(...dlis), lo10: dli10.length ? Math.min(...dli10) : null, hi90: dli90.length ? Math.max(...dli90) : null } : null,
       night: { v: m[coldI].tmin, mo: coldI + 1, lo: c.p10[coldI].tmin, hi: c.p90[coldI].tmin },
@@ -96,10 +99,10 @@
   const coldCompare = $derived.by(() => {
     if (!habitat) return null;
     const n = habitat.night;
-    const night = `coldest month's mean night at the habitat ${r0(n.v)} °C in ${MONTHS[n.mo - 1]} (median year; across the ${habitat.cells} envelope cells ${r0(n.lo)} to ${r0(n.hi)}; CHELSA)`;
-    const p01 = habitat.ex ? `; 1st-percentile night over ${habitat.ex.years} years at the typical cell ${habitat.ex.minP01.toFixed(1)} °C (NASA POWER)` : '';
+    const night = `coldest month's mean night at the habitat ${temp(n.v, u)} in ${MONTHS[n.mo - 1]} (median year; across the ${habitat.cells} envelope cells ${tempN(n.lo, u)} to ${tempN(n.hi, u)}; CHELSA)`;
+    const p01 = habitat.ex ? `; 1st-percentile night over ${habitat.ex.years} years at the typical cell ${temp(habitat.ex.minP01, u, 1)} (NASA POWER)` : '';
     if (cond?.floorC == null) return { here: null, text: `${night}${p01}; no floor set for this place` };
-    return { here: cond.floorC, text: `this place is set to bottom out at ${cond.floorC} °C; ${night}${p01}` };
+    return { here: cond.floorC, text: `this place is set to bottom out at ${temp(cond.floorC, u)}; ${night}${p01}` };
   });
   const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   // The habitat rain season as a figure: the rain rule's reading in habitat months and shifted to this place's hemisphere. No verdict.
@@ -110,11 +113,11 @@
     const here = runs(forReader(y, cond?.lat ?? 40), 'short');
     const home = `${runs(y.growMonths, 'short')} (${y.south ? 'S' : 'N'})`;
     const shift = `shifted to ${cond?.lat != null ? 'this place' : 'the north'}${cond?.lat == null ? ' (no coordinates set)' : ''}: ${here}`;
-    if (y.none) return { label: 'No season to read', note: `${Math.round(y.annualMm)} mm a year and a flat temperature curve (${y.rangeT.toFixed(1)} °C of range): no rainy season and no cooler half (CHELSA).` };
+    if (y.none) return { label: 'No season to read', note: `${rain(y.annualMm, u)} a year and a flat temperature curve (${deltaT(y.rangeT, u)} of range): no rainy season and no cooler half (CHELSA).` };
     const same = !y.shiftable ? 'not shifted: no thermal season to reverse' : southHere === y.south ? 'the same here' : shift;
-    if (y.fog) return { label: 'No rainy season to read', note: `${Math.round(y.annualMm)} mm a year; the temperature rule's cooler six months ${home}, ${same} (CHELSA).` };
+    if (y.fog) return { label: 'No rainy season to read', note: `${rain(y.annualMm, u)} a year; the temperature rule's cooler six months ${home}, ${same} (CHELSA).` };
     if (y.spread) return { label: 'Rain spread, no season', note: `70% of the rain takes ${y.growMonths.length} months, ${home} (CHELSA).` };
-    if (y.flat) return { label: `Rain ${home}, flat temperature`, note: `a sharp rainy season, but the temperature curve moves ${y.rangeT.toFixed(1)} °C, so no growing season is inferred; ${same} (CHELSA).` };
+    if (y.flat) return { label: `Rain ${home}, flat temperature`, note: `a sharp rainy season, but the temperature curve moves ${deltaT(y.rangeT, u)}, so no growing season is inferred; ${same} (CHELSA).` };
     if (y.grow === 'even') return { label: `Rain ${home}, neither winter nor summer`, note: `the wet season sits at the year's mean temperature; ${same} (rain rule, CHELSA).` };
     return { label: `${y.grow === 'winter' ? 'Winter' : 'Summer'} rain ${home}`, note: `${same} (rain rule, CHELSA).` };
   });

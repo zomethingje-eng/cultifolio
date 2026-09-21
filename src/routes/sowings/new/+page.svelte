@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { units } from '$lib/ui/units.svelte';
+  import { temp, tempUnit, cToF, fToC } from '$core/units';
   import { goto } from '$app/navigation';
   import { accNo, sowNo } from '$lib/db/types';
   import { page } from '$app/state';
@@ -102,7 +104,7 @@
       medium: medium.trim() || null,
       container: container.trim() || null,
       treatment: treatment.trim() || null,
-      bottomHeatC: bottomHeat !== '' && !Number.isNaN(Number(bottomHeat)) ? Number(bottomHeat) : null,
+      bottomHeatC: bottomHeat !== '' && !Number.isNaN(Number(bottomHeat)) ? (units.current === 'us' ? +fToC(Number(bottomHeat)).toFixed(1) : Number(bottomHeat)) : null,
       covered,
       locationId,
       notes: notes.trim() || null
@@ -166,7 +168,7 @@
   </div>
   <div class="two">
     <label class="field"><span>Pre-treatment</span><input id="s-treat" type="text" bind:value={treatment} placeholder="soak, GA3, smoke, scarified, callused 5 days…" /></label>
-    <label class="field"><span>Bottom heat °C</span><input id="s-heat" type="number" step="0.5" bind:value={bottomHeat} placeholder="blank if none" /></label>
+    <label class="field"><span>Bottom heat {tempUnit(units.current)}</span><input id="s-heat" type="number" step="0.5" bind:value={bottomHeat} placeholder="blank if none" /></label>
   </div>
   <label class="check"><input id="s-covered" type="checkbox" bind:checked={covered} /> Covered (bag, lid, propagator)</label>
 

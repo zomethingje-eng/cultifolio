@@ -13,6 +13,7 @@
  */
 import { cultivationSheet, runs, forReader, coldFloor, type SheetInput } from './sheet';
 import { archFor, type ArchGuess } from './arch';
+import { temp, METRIC } from './units';
 
 /** "Nov–Feb" style span for a label; wraps the year and lists a bimodal season as two runs. */
 export const span3 = (ms: number[]) => runs(ms, 'short');
@@ -65,9 +66,9 @@ export function careLine(input: SheetInput, o: NoteOpts = {}): string {
     else bits.push(`${year.grow} rain ${months}`);
   }
   const m = input.months && input.months.length === 12 ? input.months : null;
-  const fl = coldFloor(m, input.extremes ?? null, archFor(input.scientific, input.family));
+  const fl = coldFloor(m, input.extremes ?? null, archFor(input.scientific, input.family), input.units ?? METRIC);
   // The habitat night at one decimal, as the page prints it, named as what it is; "floor" alone reads as a thermostat setting.
-  if (fl) bits.push(fl.hab ? `hab. night ${fl.floor.toFixed(1)} °C` : `group min ${Math.round(fl.floor)} °C`);
+  if (fl) bits.push(fl.hab ? `hab. night ${temp(fl.floor, input.units ?? METRIC, 1)}` : `group min ${temp(fl.floor, input.units ?? METRIC, 0)}`);
   const dlis = m ? m.map((x) => x.dli).filter((x): x is number => x != null) : [];
   if (dlis.length) bits.push(`sky ${Math.round(Math.min(...dlis))}–${Math.round(Math.max(...dlis))} DLI`);
   return bits.join(' · ');

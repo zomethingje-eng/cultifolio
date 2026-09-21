@@ -1,9 +1,11 @@
 <script lang="ts">
   import { climograph, type ClimoInput } from '$climate/climograph';
+  import { units } from '$lib/ui/units.svelte';
+  import { tempUnit, rainUnit } from '$core/units';
   let { climate, id = 'climograph' }: { climate: ClimoInput; id?: string } = $props();
   // Drawn at the width it is shown at, so labels keep their size on a phone instead of shrinking with the viewBox.
   let shown = $state(0);
-  const g = $derived(climograph(climate, shown >= 340 ? Math.min(shown - 20, 960) : 720));
+  const g = $derived(climograph(climate, shown >= 340 ? Math.min(shown - 20, 960) : 720, units.current));
   const range = (lo: number, hi: number) => (hi - lo < 0.5 ? lo.toFixed(0) : `${lo.toFixed(0)}–${hi.toFixed(0)}`);
   const rb = $derived(g.rain.top + g.rain.height);
 </script>
@@ -34,7 +36,7 @@
       <line class="ext" x1={g.left + g.plotW - 10} x2={g.left + g.plotW} y1={g.temp.minAbs.y} y2={g.temp.minAbs.y} />
       <text class="extlab" x={g.left + g.plotW - 14} y={g.temp.minAbs.y + 3.5} text-anchor="end">{g.temp.minAbs.label}</text>
     {/if}
-    <text class="panel" x={g.left + 2} y={g.temp.top - 2}>°C · day and night</text>
+    <text class="panel" x={g.left + 2} y={g.temp.top - 2}>{tempUnit(g.units)} · day and night</text>
     <text class="quarterlab" x={g.temp.coldQuarter.x + 4} y={g.temp.top + 11}>cold quarter</text>
 
     <!-- rain panel -->
@@ -47,7 +49,7 @@
       {#if b.lo != null && b.hi != null}<line class="whisker" x1={b.x + b.w / 2} x2={b.x + b.w / 2} y1={b.hi} y2={b.lo} />{/if}
     {/each}
     {#if g.rain.dry}<text class="drylab" x={g.left + g.plotW / 2} y={g.rain.top + g.rain.height / 2 + 4}>no month reaches a millimetre</text>{/if}
-    <text class="panel" x={g.left + 2} y={g.rain.top - 2}>mm rain</text>
+    <text class="panel" x={g.left + 2} y={g.rain.top - 2}>{rainUnit(g.units)} rain</text>
     <line class="axis" x1={g.left} x2={g.left + g.plotW} y1={rb} y2={rb} />
 
     <!-- light and humidity strip -->

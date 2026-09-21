@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { units } from '$lib/ui/units.svelte';
+  import { site } from '$lib/ui/site.svelte';
+  import { tempUnit, rainUnit, tempN, rainN } from '$core/units';
   /**
    * What needs you, on the front page of a grower's collection: the frost watch when a site is remembered and the
    * forecast turns, sowings still in the tray, plants not photographed in a year. Each line is a link, and a line
@@ -11,17 +14,12 @@
   let frost = $state<{ risk: Risk } | 'unchecked' | null>(null);
   let hasSite = $state(false);
   onMount(async () => {
-    let site: { lat: number; lon: number } | null = null;
-    try {
-      const s = localStorage.getItem('cultifolio.frost.site');
-      if (s) site = JSON.parse(s);
-    } catch {
-      site = null;
-    }
-    if (!site) return;
+    site.load();
+    const s = site.current;
+    if (!s) return;
     hasSite = true;
     try {
-      const r = await fetch(`/api/forecast?lat=${site.lat}&lon=${site.lon}`);
+      const r = await fetch(`/api/forecast?lat=${s.lat}&lon=${s.lon}&units=${units.current}`);
       frost = r.ok ? { risk: ((await r.json()) as { risk: Risk }).risk } : 'unchecked';
     } catch {
       frost = 'unchecked';
@@ -45,10 +43,10 @@
 {#if lines.length}
   <div class="today" aria-label="Today">
     {#each lines as l (l.href)}<a class="line {l.tone}" href={l.href}>{l.text}</a>{/each}
-    {#if !hasSite}<span class="small muted">Frost watch needs a site: <a href="/frost">set one</a>.</span>{/if}
+    {#if !hasSite}<span class="small muted">Frost watch needs a site: <a href="/settings#site">set one in Settings</a>.</span>{/if}
   </div>
 {:else if collection.ready && !hasSite && growing.length}
-  <p class="small muted todaynote">Frost watch needs a site: <a href="/frost">set one</a>, and the forecast shows here when it turns.</p>
+  <p class="small muted todaynote">Frost watch needs a site: <a href="/settings#site">set one in Settings</a>, and the forecast shows here when it turns.</p>
 {/if}
 
 <style>

@@ -28,7 +28,7 @@ export const load: PageServerLoad = async ({ platform, fetch, setHeaders, url })
   const by: By = (BYS as readonly string[]).includes(byParam ?? '') ? (byParam as By) : 'genus';
   const open = url.searchParams.get('open') ?? '';
   // Short and never stale: HTML names the build's hashed chunks, and a stale page after a deploy would import chunks that are gone.
-  setHeaders({ 'cache-control': 'public, max-age=60' });
+  setHeaders({ 'cache-control': 'private, max-age=60', vary: 'accept-language, cookie' }); // private: the page is rendered in the reader's units, so no shared cache may hand one reader's page to another
 
   // The catalogue is browsed as closed groups, one open at a time (`?open=`), so the page carries eight hundred rows and one
   // group's tiles rather than nine thousand tiles: a genus is what a grower thinks in, so it is the default; origin keeps

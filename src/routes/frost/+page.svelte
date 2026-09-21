@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { units } from '$lib/ui/units.svelte';
+  import { site } from '$lib/ui/site.svelte';
+  import { tempUnit, rainUnit, tempN, rainN } from '$core/units';
   import { onMount } from 'svelte';
   import PageHead from '$lib/ui/PageHead.svelte';
   import { collection } from '$lib/db/collection.svelte';
@@ -7,13 +10,11 @@
   let data = $state<Payload | null>(null);
   let err = $state('');
   let busy = $state(false);
-  let lat = $state(''), lon = $state('');
-  const KEY = 'cultifolio.frost.site';
 
   async function load(la: number, lo: number) {
     busy = true; err = '';
     try {
-      const r = await fetch(`/api/forecast?lat=${la}&lon=${lo}`);
+      const r = await fetch(`/api/forecast?lat=${la}&lon=${lo}&units=${units.current}`);
       if (r.status === 400) {
         // The one refusal with a reason worth repeating: the coordinates themselves.
         err = 'Latitude is −90 to 90 and longitude −180 to 180; check the figures.';
@@ -21,22 +22,17 @@
       }
       if (!r.ok) throw new Error('not answered');
       data = await r.json();
-      try { localStorage.setItem(KEY, JSON.stringify({ lat: la, lon: lo })); } catch { /* fine */ }
     } catch {
       // Whatever went wrong upstream, the page says the check did not happen: never a status code, never that the nights are clear.
       err = 'Forecast not checked: the forecast source did not answer.';
     }
     finally { busy = false; }
   }
-  function locate() {
-    if (!navigator.geolocation) { err = 'This browser has no location service; type coordinates instead.'; return; }
-    busy = true;
-    navigator.geolocation.getCurrentPosition((p) => { lat = p.coords.latitude.toFixed(3); lon = p.coords.longitude.toFixed(3); load(+lat, +lon); }, (e) => { busy = false; err = e.message; }, { timeout: 10000 });
-  }
   const watched = $derived(collection.locations.filter((l) => { const c = collection.conditions(l.id); return c.lat != null && c.lon != null && c.indoor !== true && (l.lat != null || !l.parentId); }));
   onMount(() => {
     collection.load();
-    try { const s = localStorage.getItem(KEY); if (s) { const { lat: la, lon: lo } = JSON.parse(s); lat = String(la); lon = String(lo); load(la, lo); } } catch { /* fine */ }
+    site.load();
+    if (site.current) load(site.current.lat, site.current.lon);
   });
 </script>
 
@@ -47,21 +43,20 @@
   {#if watched.length}
     <p class="small">Watched places: {#each watched as w, i}{i ? ', ' : ''}<a href="/benches/{w.id}">{w.name}</a>{/each}</p>
   {/if}
-  <form class="row" onsubmit={(e) => { e.preventDefault(); if (lat && lon) load(+lat, +lon); }}>
-    <label class="sr" for="frost-lat">Latitude</label><input id="frost-lat" type="text" inputmode="decimal" placeholder="Latitude" bind:value={lat} />
-    <label class="sr" for="frost-lon">Longitude</label><input id="frost-lon" type="text" inputmode="decimal" placeholder="Longitude" bind:value={lon} />
-    <button class="btn primary" type="submit" disabled={busy || !lat || !lon}>Check</button>
-    <button class="btn" type="button" onclick={locate} disabled={busy}>Use my location</button>
-  </form>
+  {#if site.current}
+    <p class="small">Your site: {site.current.name ? site.current.name + ', ' : ''}{site.current.lat}, {site.current.lon} · <a href="/settings#site">change in Settings</a>.</p>
+  {:else if site.loaded}
+    <div class="emptybox"><p class="muted" style="margin: 0">No site set. <a href="/settings#site">Set your site in Settings</a> and the forecast for it appears here, and on the front page when it turns.</p></div>
+  {/if}
   {#if err}<div class="notice" role="status">{err}</div>{/if}
   {#if data}
     <div class="risk card {data.risk.level}"><span class="k">{data.risk.level === 'none' ? 'No frost in the forecast' : data.risk.level}</span> {data.risk.text}</div>
     <div class="scroll-x">
       <table class="data">
-        <thead><tr><th>Night</th><th>Min °C</th><th>Max °C</th><th>Rain mm</th></tr></thead>
+        <thead><tr><th>Night</th><th>Min {tempUnit(units.current)}</th><th>Max {tempUnit(units.current)}</th><th>Rain {rainUnit(units.current)}</th></tr></thead>
         <tbody>
           {#each data.forecast.days as d}
-            <tr class:frost={d.tmin <= 0} class:cold={d.tmin > 0 && d.tmin <= 3}><td>{d.date}</td><td>{d.tmin.toFixed(1)}</td><td>{d.tmax.toFixed(1)}</td><td>{d.precipMm.toFixed(1)}</td></tr>
+            <tr class:frost={d.tmin <= 0} class:cold={d.tmin > 0 && d.tmin <= 3}><td>{d.date}</td><td>{tempN(d.tmin, units.current, 1)}</td><td>{tempN(d.tmax, units.current, 1)}</td><td>{rainN(d.precipMm, units.current)}</td></tr>
           {/each}
         </tbody>
       </table>
@@ -81,7 +76,6 @@
 <style>
   .page { max-width: 640px; display: grid; gap: 1rem; }
   .row { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-  .row input { flex: 1; min-width: 8rem; padding: 0.5em 0.8em; border: 1px solid var(--rule2); border-radius: 8px; background: var(--card); }
   .risk { padding: 0.9rem 1.1rem; }
   .risk .k { margin-right: 0.6em; }
   .risk.frost, .risk.warning { background: var(--bad-soft); }

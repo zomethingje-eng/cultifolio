@@ -12,7 +12,10 @@
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import { compare } from '$lib/ui/compare.svelte';
   import { onMount } from 'svelte';
+  import { units } from '$lib/ui/units.svelte';
+  import { temp, rain } from '$core/units';
   let { data } = $props();
+  const u = $derived(units.current);
   const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   type D = (typeof data.items)[number];
   type Month = { tmax: number; tmin: number; precipMm: number; dli?: number };
@@ -23,7 +26,7 @@
     const idx = (f: (x: Month) => number, hi: boolean) => (m ? m.reduce((b: number, x: Month, i: number) => ((hi ? f(x) > f(m[b]) : f(x) < f(m[b])) ? i : b), 0) : 0);
     const hot = idx((x) => x.tmax, true), cold = idx((x) => x.tmin, false), wet = idx((x) => x.precipMm, true);
     const dlis = m ? m.map((x) => x.dli).filter((x): x is number => x != null) : [];
-    const sheet = cultivationSheet({ scientific: d.name.scientific, climateStatus: cl.status, family: d.name.family, months: cl.status === 'ok' ? cl.months : null, p10: cl.status === 'ok' ? cl.p10 : null, p90: cl.status === 'ok' ? cl.p90 : null, annualP10: cl.status === 'ok' ? (cl.annualRain?.p10 ?? null) : null, annualP90: cl.status === 'ok' ? (cl.annualRain?.p90 ?? null) : null, extremes: cl.status === 'ok' ? (cl.extremes ?? null) : null, lat: d.centroid?.lat ?? (cl.status === 'ok' ? cl.at.lat : null) });
+    const sheet = cultivationSheet({ scientific: d.name.scientific, climateStatus: cl.status, family: d.name.family, months: cl.status === 'ok' ? cl.months : null, p10: cl.status === 'ok' ? cl.p10 : null, p90: cl.status === 'ok' ? cl.p90 : null, annualP10: cl.status === 'ok' ? (cl.annualRain?.p10 ?? null) : null, annualP90: cl.status === 'ok' ? (cl.annualRain?.p90 ?? null) : null, extremes: cl.status === 'ok' ? (cl.extremes ?? null) : null, lat: d.centroid?.lat ?? (cl.status === 'ok' ? cl.at.lat : null), units: u });
     const hero = d.photos.find((p) => !p.captive) ?? d.photos[0];
     return {
       d,
@@ -80,15 +83,15 @@
 
     <div class="rowlab">Cold floor</div>
     <div class="row">
-      {#each cols as c (c.d.key)}<div class="cell fig">{#if c.ex}<b>{c.ex.minP01.toFixed(1)} °C</b><span>1st-percentile night over {c.ex.years} yrs; lowest {c.ex.minAbs.toFixed(1)} °C, {frostWording(c.ex)} (NASA POWER)</span>{:else if c.cold}<b>{c.cold.v.toFixed(0)} °C</b><span>{c.cold.mo}, mean night (CHELSA); no extremes series</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
+      {#each cols as c (c.d.key)}<div class="cell fig">{#if c.ex}<b>{temp(c.ex.minP01, u, 1)}</b><span>1st-percentile night over {c.ex.years} yrs; lowest {temp(c.ex.minAbs, u, 1)}, {frostWording(c.ex)} (NASA POWER)</span>{:else if c.cold}<b>{temp(c.cold.v, u)}</b><span>{c.cold.mo}, mean night (CHELSA); no extremes series</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
     </div>
     <div class="rowlab">Warmest month</div>
     <div class="row">
-      {#each cols as c (c.d.key)}<div class="cell fig">{#if c.hot}<b>{c.hot.v.toFixed(0)} °C</b><span>{c.hot.mo}, mean day (CHELSA)</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
+      {#each cols as c (c.d.key)}<div class="cell fig">{#if c.hot}<b>{temp(c.hot.v, u)}</b><span>{c.hot.mo}, mean day (CHELSA)</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
     </div>
     <div class="rowlab">Rain</div>
     <div class="row">
-      {#each cols as c (c.d.key)}<div class="cell fig">{#if c.rain != null && c.wet}<b>{c.rain.toFixed(0)} mm/yr</b><span>{c.wet.n === 0 ? 'no wet month' : `${c.wet.n} wet month${c.wet.n === 1 ? '' : 's'}`} · peak {c.wet.mo}</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
+      {#each cols as c (c.d.key)}<div class="cell fig">{#if c.rain != null && c.wet}<b>{rain(c.rain, u)}/yr</b><span>{c.wet.n === 0 ? 'no wet month' : `${c.wet.n} wet month${c.wet.n === 1 ? '' : 's'}`} · peak {c.wet.mo}</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
     </div>
     <div class="rowlab">Light</div>
     <div class="row">

@@ -11,6 +11,6 @@ export const load: PageServerLoad = async ({ url, platform, fetch, setHeaders })
       return { slug, d };
     })
   );
-  setHeaders({ 'cache-control': 'public, max-age=60' });
+  setHeaders({ 'cache-control': 'private, max-age=60', vary: 'accept-language, cookie' }); // private: the page is rendered in the reader's units, so no shared cache may hand one reader's page to another
   return { items: found.filter((x) => x.d).map((x) => x.d!), missing: found.filter((x) => !x.d).map((x) => x.slug) };
 };

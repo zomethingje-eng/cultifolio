@@ -779,7 +779,7 @@ test('a refused source is a distinct state on every surface: species page, front
   await expect(page.locator('.hero .ph')).toContainText('GBIF media did not answer when this page was built. Not a statement that none exist.');
   await expect(page.locator('.pill', { hasText: 'Photographs not checked' })).toBeVisible();
   // climate refused: its own line, with the detail as a sentence
-  await expect(page.locator('.notice', { hasText: 'Not checked.' })).toContainText('Occurrence source did not answer. This is not a statement that no climate exists.');
+  await expect(page.locator('.notice', { hasText: 'Occurrence source' })).toContainText('Not checked. Occurrence source did not answer. This is not a statement that no climate exists.');
   // the cultivation section does not say "no habitat climate"
   await expect(page.locator('.note-slot')).toContainText('Not checked: Occurrence source did not answer. No sheet is derived from an answer that was not given');
   await expect(page.locator('.note-slot')).not.toContainText('no habitat climate for this species');
@@ -1061,10 +1061,16 @@ test('a sowing without a count is refused with a sentence; a blank never becomes
 
 test('a forecast source that does not answer is "not checked" in a plain notice on the bench and on /frost, never a status code', async ({ page }) => {
   await page.route(/\/api\/forecast/, (r) => r.fulfill({ status: 502, contentType: 'application/json', body: JSON.stringify({ error: 'forecast source did not answer' }) }));
+  // the site is set once, in Settings; the frost page reads it
   await page.goto('/frost');
-  await page.fill('#frost-lat', '40.38');
-  await page.fill('#frost-lon', '-80.05');
-  await page.getByRole('button', { name: 'Check' }).click();
+  await expect(page.locator('.emptybox')).toContainText('No site set');
+  await page.goto('/settings');
+  await page.fill('input[placeholder="40.43"]', '40.38');
+  await page.fill('input[placeholder="-80.01"]', '-80.05');
+  await page.getByRole('button', { name: 'Save', exact: true }).first().click();
+  await expect(page.getByText('Saved on this device.')).toBeVisible();
+  await page.goto('/frost');
+  await expect(page.getByText('Your site: 40.38, -80.05')).toBeVisible();
   await expect(page.locator('.notice')).toHaveText('Forecast not checked: the forecast source did not answer.');
   await expect(page.locator('.notice')).not.toHaveClass(/err/);
   await expect(page.locator('.bad')).toHaveCount(0);
@@ -1222,4 +1228,69 @@ test('the install bar waits for a second visit, and stays away for thirty days o
   await page.goto('/');
   await page.evaluate(() => window.dispatchEvent(new Event('beforeinstallprompt')));
   await expect(page.locator('.install')).toHaveCount(0);
+});
+
+test('settings: units switch every figure and sentence, survive a reload through the cookie, and a species figure flips them too', async ({ page }) => {
+  // an en-US browser with no cookie is Fahrenheit from the first byte; this British one is metric
+  const us = await page.request.get('/species/copiapoa-cinerea', { headers: { 'accept-language': 'en-US,en;q=0.9' } });
+  expect(await us.text()).toContain('43.7<span class="u">°F');
+  await page.goto('/species/copiapoa-cinerea');
+  await expect(page.locator('.glance .card', { hasText: 'Cold floor' })).toContainText('6.5');
+  await page.locator('.glance .unitbtn').click();
+  const glance = page.locator('.glance');
+  await expect(glance.locator('.card', { hasText: 'Cold floor' })).toContainText('43.7');
+  await expect(glance.locator('.card', { hasText: 'Cold floor' })).toContainText('°F');
+  await expect(glance.locator('#gen-note')).toContainText('Cold floor 43.7 °F');
+  await expect(glance.locator('#gen-note')).not.toContainText('°C');
+  await expect(glance.locator('.card', { hasText: 'Rain' })).toContainText('2.8');
+  await expect(page.locator('.climo .panel').first()).toHaveText('°F · day and night');
+  // the cookie carries it: a fresh load is Fahrenheit from the server, no flash
+  const html = await (await page.request.get('/species/copiapoa-cinerea')).text();
+  expect(html).toContain('43.7');
+  expect(html).not.toMatch(/6\.5<span class="u">°C/);
+  await page.goto('/settings');
+  await expect(page.getByRole('button', { name: '°F and inches' })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: '°C and mm' }).click();
+  await page.goto('/species/copiapoa-cinerea');
+  await expect(page.locator('.glance .card', { hasText: 'Cold floor' })).toContainText('6.5');
+});
+
+test('settings: numbering is previewed and saved as the vault setting; appearance is applied at once', async ({ page }) => {
+  await page.goto('/settings');
+  await page.getByRole('button', { name: /Prefix/ }).click();
+  await page.fill('input[placeholder="your initials or the collection\'s"]', 'jf');
+  await expect(page.locator('.accno')).toHaveText('JF-0001');
+  await page.getByRole('button', { name: 'Save', exact: true }).nth(1).click();
+  await expect(page.getByText(/the next plant is JF-0001/)).toBeVisible();
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.getByRole('button', { name: /^Add/ }).click();
+  await expect(page).toHaveURL(/\/plants\/JF-0001$/);
+  await page.goto('/settings');
+  await page.getByRole('button', { name: 'Dark' }).click();
+  expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe('dark');
+  await page.reload();
+  expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe('dark');
+  await page.getByRole('button', { name: 'Follow the system' }).click();
+  expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBeUndefined();
+});
+
+test('the species page reads in reference order: summary, the genus, the facts, the figures, then the cards closed to one line each', async ({ page }) => {
+  await page.goto('/species/copiapoa-cinerea');
+  const order = await page.locator('h2.sec').allInnerTexts();
+  expect(order.slice(0, 4).map((t) => t.replace(/\s+/g, ' ').toLowerCase())).toEqual(['summary', 'about the genus · copiapoa', 'cultivation, in short', 'cultivation']);
+  await expect(page.locator('#s-genus + .sumbody')).toContainText('Copiapoa is a genus of cactus');
+  await expect(page.locator('.facts .fact', { hasText: 'Described by' })).toContainText('(Phil.) Britton & Rose');
+  await expect(page.locator('.facts .fact', { hasText: 'Wild records' })).toContainText('352 in range');
+  // the cards: the first open, the rest closed to their one-line form, opened with a click and no JavaScript needed
+  const cards = page.locator('details.acc');
+  await expect(cards).toHaveCount(4);
+  await expect(cards.nth(0)).toHaveAttribute('open', '');
+  await expect(cards.nth(1)).not.toHaveAttribute('open', '');
+  await expect(cards.nth(1).locator('summary .one')).toContainText('Habitat rain 72 mm a year');
+  await cards.nth(1).locator('summary').click();
+  await expect(cards.nth(1)).toHaveAttribute('open', '');
+  await expect(cards.nth(1).locator('.why').first()).toBeVisible();
+  // a genus Wikipedia refused is "not checked", not silence
+  await page.goto('/species/refusia-testii');
+  await expect(page.locator('#s-genus + .notice')).toContainText('Not checked');
 });

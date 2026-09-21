@@ -9,8 +9,10 @@
  */
 import { climograph, type ClimoInput } from '$climate/climograph';
 import { frostWording } from '$core/extremes';
+import { temp, rain, tempUnit, rainUnit, METRIC, type Units } from '$core/units';
 
 export interface CardInput {
+  units?: Units;
   name: string;
   family?: string;
   origin: string[];
@@ -27,17 +29,18 @@ export function climateCardSvg(c: CardInput): string {
   const m = c.climate.months;
   const hot = m.reduce((b, x, i) => (x.tmax > m[b].tmax ? i : b), 0);
   const cold = m.reduce((b, x, i) => (x.tmin < m[b].tmin ? i : b), 0);
-  const rain = m.reduce((a, x) => a + x.precipMm, 0);
+  const rainYear = m.reduce((a, x) => a + x.precipMm, 0);
   const wetMonths = m.filter((x) => x.precipMm >= 25).length;
   const dlis = m.map((x) => x.dli).filter((x): x is number => x != null);
   const ex = c.climate.extremes ?? null;
+  const u = c.units ?? METRIC;
   const figs: Array<[string, string, string]> = [
-    ex ? ['Cold floor', `${ex.minP01.toFixed(1)} °C`, `1st-percentile night, ${ex.years} yrs · ${frostWording(ex)}`] : ['Coldest month', `${m[cold].tmin.toFixed(0)} °C`, `${MON[cold]}, mean night`],
-    ['Warmest month', `${m[hot].tmax.toFixed(0)} °C`, `${MON[hot]}, mean day`],
-    ['Rain', `${rain.toFixed(0)} mm/yr`, wetMonths === 0 ? 'no wet month' : `${wetMonths} wet month${wetMonths === 1 ? '' : 's'}`],
+    ex ? ['Cold floor', temp(ex.minP01, u, 1), `1st-percentile night, ${ex.years} yrs · ${frostWording(ex)}`] : ['Coldest month', temp(m[cold].tmin, u), `${MON[cold]}, mean night`],
+    ['Warmest month', temp(m[hot].tmax, u), `${MON[hot]}, mean day`],
+    ['Rain', `${rain(rainYear, u)}/yr`, wetMonths === 0 ? 'no wet month' : `${wetMonths} wet month${wetMonths === 1 ? '' : 's'}`],
     dlis.length ? ['Light', `${Math.min(...dlis).toFixed(0)}–${Math.max(...dlis).toFixed(0)} DLI`, 'mol/m²/day, winter to summer'] : ['Cells', String(c.cells), 'habitat grid cells read']
   ];
-  const g = climograph({ ...c.climate, extremes: ex ? { minAbs: ex.minAbs, maxP99: ex.maxP99, years: ex.years } : null }, 640);
+  const g = climograph({ ...c.climate, extremes: ex ? { minAbs: ex.minAbs, maxP99: ex.maxP99, years: ex.years } : null }, 640, u);
   const gx = 520, gy = 96, scale = Math.min(1, 500 / g.height);
   const ink = '#1b2420', ink2 = '#4a5650', ink3 = '#7d8883', warm = '#b8692a', cool = '#3a6f9e', accent = '#1e6f4f', bg = '#f6f7f6', card = '#ffffff', rule = '#dfe4e1';
   const tick = (t: { y: number; label: string }) => `<line x1="${g.left}" x2="${g.left + g.plotW}" y1="${t.y}" y2="${t.y}" stroke="${rule}" stroke-width="1"/><text x="${g.left - 6}" y="${t.y + 3.5}" text-anchor="end" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="10" fill="${ink3}">${esc(t.label)}</text>`;
@@ -53,11 +56,11 @@ export function climateCardSvg(c: CardInput): string {
     <path d="${g.temp.nightLine}" fill="none" stroke="${cool}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
     ${g.temp.minAbs ? `<line x1="${g.left + g.plotW - 10}" x2="${g.left + g.plotW}" y1="${g.temp.minAbs.y}" y2="${g.temp.minAbs.y}" stroke="${ink}" stroke-width="1.4"/><text x="${g.left + g.plotW - 14}" y="${g.temp.minAbs.y + 3.5}" text-anchor="end" font-family="system-ui, sans-serif" font-size="10" fill="${ink2}">${esc(g.temp.minAbs.label)}</text>` : ''}
     ${g.temp.maxP99 ? `<line x1="${g.left + g.plotW - 10}" x2="${g.left + g.plotW}" y1="${g.temp.maxP99.y}" y2="${g.temp.maxP99.y}" stroke="${ink}" stroke-width="1.4"/><text x="${g.left + g.plotW - 14}" y="${g.temp.maxP99.y + 3.5}" text-anchor="end" font-family="system-ui, sans-serif" font-size="10" fill="${ink2}">${esc(g.temp.maxP99.label)}</text>` : ''}
-    <text x="${g.left + 2}" y="${g.temp.top - 2}" font-family="system-ui, sans-serif" font-size="9.5" font-weight="700" letter-spacing="0.09em" fill="${ink3}">°C · DAY AND NIGHT</text>
+    <text x="${g.left + 2}" y="${g.temp.top - 2}" font-family="system-ui, sans-serif" font-size="9.5" font-weight="700" letter-spacing="0.09em" fill="${ink3}">${tempUnit(u)} · DAY AND NIGHT</text>
     ${g.rain.ticks.map(tick).join('')}
     ${g.rain.bars.map((b) => (b.h > 0 ? `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="1.5" fill="${cool}" opacity="0.55"/>` : '') + (b.lo != null && b.hi != null ? `<line x1="${b.x + b.w / 2}" x2="${b.x + b.w / 2}" y1="${b.hi}" y2="${b.lo}" stroke="${cool}" stroke-width="1.2"/>` : '')).join('')}
     ${g.rain.dry ? `<text x="${g.left + g.plotW / 2}" y="${g.rain.top + g.rain.height / 2 + 4}" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-style="italic" fill="${ink3}">no month reaches a millimetre</text>` : ''}
-    <text x="${g.left + 2}" y="${g.rain.top - 2}" font-family="system-ui, sans-serif" font-size="9.5" font-weight="700" letter-spacing="0.09em" fill="${ink3}">MM RAIN</text>
+    <text x="${g.left + 2}" y="${g.rain.top - 2}" font-family="system-ui, sans-serif" font-size="9.5" font-weight="700" letter-spacing="0.09em" fill="${ink3}">${rainUnit(u).toUpperCase()} RAIN</text>
     ${g.strip?.dli ? `<path d="${g.strip.dli.path}" fill="none" stroke="${accent}" stroke-width="1.6"/>` : ''}
     ${g.strip?.rh ? `<path d="${g.strip.rh.path}" fill="none" stroke="${ink3}" stroke-width="1.6" stroke-dasharray="3 3"/>` : ''}
     ${g.months.map((mo, i) => `<text x="${g.monthX[i]}" y="${g.height - 6}" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10.5" fill="${ink2}">${mo}</text>`).join('')}

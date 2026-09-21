@@ -9,6 +9,7 @@
  */
 import { MON3 } from '$core/months';
 import { r1 } from '$core/num';
+import { cToF, mmToIn, temp, rain as rainF, METRIC, type Units } from '$core/units';
 
 export interface MonthFigures {
   tmax: number;
@@ -79,6 +80,8 @@ export interface Climograph {
   hasBand: boolean;
   /** A plain-language reading of the chart for assistive technology, built from the same figures. */
   alt: string;
+  /** The units the axes are labelled in. */
+  units: Units;
 }
 
 const MONTHS = MON3;
@@ -89,7 +92,8 @@ function step(span: number, steps: number[]): number {
   return steps[steps.length - 1];
 }
 
-export function climograph(c: ClimoInput, width = 720): Climograph {
+export function climograph(c: ClimoInput, width = 720, units: Units = METRIC): Climograph {
+  const us = units === 'us';
   const left = 40, right = 12, gap = 10;
   const plotW = width - left - right;
   const colW = plotW / 12;
@@ -107,12 +111,16 @@ export function climograph(c: ClimoInput, width = 720): Climograph {
   const dayHi = Math.max(...c.p90.map((m) => m.tmax), ...c.months.map((m) => m.tmax));
   const lo = Math.min(nightLo, c.extremes?.minAbs ?? nightLo);
   const hi = Math.max(dayHi, c.extremes?.maxP99 ?? dayHi);
-  const tStep = step(hi - lo, [5, 10, 20]);
-  const tLo = Math.floor((lo - 1) / tStep) * tStep;
-  const tHi = Math.ceil((hi + 1) / tStep) * tStep;
+  // Axis ticks are laid out in the reader's unit so they land on round numbers there; the geometry stays in °C.
+  const dLo = us ? cToF(lo) : lo, dHi = us ? cToF(hi) : hi;
+  const tStep = step(dHi - dLo, us ? [10, 20, 40] : [5, 10, 20]);
+  const dtLo = Math.floor((dLo - 1) / tStep) * tStep;
+  const dtHi = Math.ceil((dHi + 1) / tStep) * tStep;
+  const tLo = us ? (dtLo - 32) / 1.8 : dtLo;
+  const tHi = us ? (dtHi - 32) / 1.8 : dtHi;
   const ty = (v: number) => tempTop + ((tHi - v) / (tHi - tLo)) * tempH;
   const tTicks: Tick[] = [];
-  for (let v = tLo; v <= tHi; v += tStep) tTicks.push({ y: ty(v), label: `${v}°` });
+  for (let v = dtLo; v <= dtHi; v += tStep) tTicks.push({ y: ty(us ? (v - 32) / 1.8 : v), label: `${v}°` });
   const line = (vals: number[]) => vals.map((v, i) => `${i ? 'L' : 'M'}${r1(monthX[i])},${r1(ty(v))}`).join(' ');
   const band = (hiV: number[], loV: number[]) => {
     if (hiV.every((v, i) => Math.abs(v - loV[i]) < 0.05)) return '';
@@ -133,11 +141,13 @@ export function climograph(c: ClimoInput, width = 720): Climograph {
   /* ---- rain ---- */
   const rMax = Math.max(...c.p90.map((m) => m.precipMm), ...c.months.map((m) => m.precipMm));
   const dry = rMax < 1;
-  const rStep = step(Math.max(rMax, 10), [10, 25, 50, 100, 200, 500]);
-  const rHi = Math.max(rStep, Math.ceil(rMax / rStep) * rStep);
+  const rDisp = us ? mmToIn(rMax) : rMax;
+  const rStep = step(Math.max(rDisp, us ? 0.5 : 10), us ? [0.5, 1, 2, 5, 10, 20] : [10, 25, 50, 100, 200, 500]);
+  const rHiDisp = Math.max(rStep, Math.ceil(rDisp / rStep) * rStep);
+  const rHi = us ? rHiDisp * 25.4 : rHiDisp;
   const ry = (v: number) => rainTop + rainH - (v / rHi) * rainH;
   const rTicks: Tick[] = [];
-  for (let v = 0; v <= rHi; v += rStep) rTicks.push({ y: ry(v), label: String(v) });
+  for (let v = 0; v <= rHiDisp + 1e-9; v += rStep) rTicks.push({ y: ry(us ? v * 25.4 : v), label: String(+v.toFixed(2)) });
   const barW = colW * 0.56;
   const bars: Bar[] = c.months.map((m, i) => {
     const p10 = c.p10[i].precipMm, p90 = c.p90[i].precipMm;
@@ -169,11 +179,11 @@ export function climograph(c: ClimoInput, width = 720): Climograph {
   const flatT = c.months[warmest].tmax - c.months[dayLo].tmax < 1 && c.months[nightHi].tmin - c.months[coldest].tmin < 1;
   const alt =
     (flatT
-      ? `A flat year: mean day about ${c.months[warmest].tmax.toFixed(0)} °C and mean night about ${c.months[coldest].tmin.toFixed(0)} °C in every month, so the cold quarter is shaded by rounding only. `
-      : `Mean day from ${c.months[dayLo].tmax.toFixed(0)} °C in ${MONTHS[dayLo]} to ${c.months[warmest].tmax.toFixed(0)} °C in ${MONTHS[warmest]}; mean night from ${c.months[coldest].tmin.toFixed(0)} °C in ${MONTHS[coldest]} to ${c.months[nightHi].tmin.toFixed(0)} °C in ${MONTHS[nightHi]}. The cold quarter, ${MONTHS[q0]} to ${MONTHS[(coldest + 1) % 12]}, is the three months around the coldest night. `) +
-    (dry ? 'No month reaches a millimetre of rain.' : `${rainYear.toFixed(0)} mm of rain a year, most in ${MONTHS[c.months.reduce((b, m, i) => (m.precipMm > c.months[b].precipMm ? i : b), 0)]}.`) +
+      ? `A flat year: mean day about ${temp(c.months[warmest].tmax, units)} and mean night about ${temp(c.months[coldest].tmin, units)} in every month, so the cold quarter is shaded by rounding only. `
+      : `Mean day from ${temp(c.months[dayLo].tmax, units)} in ${MONTHS[dayLo]} to ${temp(c.months[warmest].tmax, units)} in ${MONTHS[warmest]}; mean night from ${temp(c.months[coldest].tmin, units)} in ${MONTHS[coldest]} to ${temp(c.months[nightHi].tmin, units)} in ${MONTHS[nightHi]}. The cold quarter, ${MONTHS[q0]} to ${MONTHS[(coldest + 1) % 12]}, is the three months around the coldest night. `) +
+    (dry ? 'No month reaches a millimetre of rain.' : `${rainF(rainYear, units)} of rain a year, most in ${MONTHS[c.months.reduce((b, m, i) => (m.precipMm > c.months[b].precipMm ? i : b), 0)]}.`) +
     (hasBand ? ` The bands show the 10th to 90th percentile across ${c.cells} habitat cells.` : c.cells > 1 ? ` The ${c.cells} habitat cells agree to within rounding.` : '') +
-    (c.extremes ? ` Over ${c.extremes.years} years at the typical cell the absolute minimum was ${c.extremes.minAbs.toFixed(1)} °C and the 99th-percentile day ${c.extremes.maxP99.toFixed(1)} °C; neither is dated to a month.` : '') +
+    (c.extremes ? ` Over ${c.extremes.years} years at the typical cell the absolute minimum was ${temp(c.extremes.minAbs, units, 1)} and the 99th-percentile day ${temp(c.extremes.maxP99, units, 1)}; neither is dated to a month.` : '') +
     (strip ? ` Beneath: ${has('dli') ? 'daily light integral' : ''}${has('dli') && has('rh') ? ' and ' : ''}${has('rh') ? 'relative humidity' : ''} through the year, each on its own scale.` : '');
 
   return {
@@ -192,13 +202,14 @@ export function climograph(c: ClimoInput, width = 720): Climograph {
       dayBand,
       nightBand,
       zeroY: tLo < 0 && tHi > 0 ? r1(ty(0)) : null,
-      minAbs: c.extremes ? { y: r1(ty(c.extremes.minAbs)), label: `${c.extremes.minAbs.toFixed(1)}° lowest night in ${c.extremes.years} yrs (undated)` } : null,
-      maxP99: c.extremes ? { y: r1(ty(c.extremes.maxP99)), label: `${c.extremes.maxP99.toFixed(1)}° 99th-percentile day (undated)` } : null,
+      minAbs: c.extremes ? { y: r1(ty(c.extremes.minAbs)), label: `${temp(c.extremes.minAbs, units, 1).replace(/ °[CF]$/, '°')} lowest night in ${c.extremes.years} yrs (undated)` } : null,
+      maxP99: c.extremes ? { y: r1(ty(c.extremes.maxP99)), label: `${temp(c.extremes.maxP99, units, 1).replace(/ °[CF]$/, '°')} 99th-percentile day (undated)` } : null,
       coldQuarter: { ...coldQuarter, x: r1(coldQuarter.x), w: r1(coldQuarter.w), ...(coldQuarter.x2 != null ? { x2: r1(coldQuarter.x2), w2: r1(coldQuarter.w2!) } : {}) }
     },
     rain: { top: rainTop, height: rainH, ticks: rTicks.map((t) => ({ y: r1(t.y), label: t.label })), bars, dry, max: rMax },
     strip: stripOut,
     hasBand,
-    alt
+    alt,
+    units
   };
 }

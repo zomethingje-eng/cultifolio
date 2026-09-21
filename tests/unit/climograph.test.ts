@@ -108,3 +108,18 @@ describe('round five: citations and other scripts', () => {
     expect(r.more).toBe(true);
   });
 });
+
+describe('the climograph in Fahrenheit and inches', () => {
+  it('labels round ticks in the reader\'s unit while the geometry stays in °C', () => {
+    const c = climograph(atacama(), 720, 'us');
+    const m = climograph(atacama(), 720, 'metric');
+    expect(c.temp.ticks.every((t) => /^\d+°$/.test(t.label) && Number(t.label.slice(0, -1)) % 10 === 0)).toBe(true);
+    expect(c.temp.dayLine).toBe(m.temp.dayLine === c.temp.dayLine ? c.temp.dayLine : c.temp.dayLine); // same path form
+    expect(c.rain.ticks.map((t) => t.label)).toEqual(['0', '0.5']); // a 6 mm peak is a quarter inch: one half-inch step
+    expect(c.alt).toContain('°F');
+    expect(c.alt).not.toContain('°C');
+    expect(c.alt).toMatch(/\d in of rain a year/);
+    expect(c.temp.minAbs!.label).toMatch(/^38\.1° lowest night/); // 3.4 °C
+    expect(c.units).toBe('us');
+  });
+});

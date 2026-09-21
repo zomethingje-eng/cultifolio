@@ -12,9 +12,15 @@
   import { collection } from '$lib/db/collection.svelte';
   import { onVaultNotice } from '$lib/db/vault';
   import { afterNavigate } from '$app/navigation';
+  import { browser } from '$app/environment';
   import CompareBar from '$lib/ui/CompareBar.svelte';
   import InstallBar from '$lib/ui/InstallBar.svelte';
-  let { children } = $props();
+  import { units } from '$lib/ui/units.svelte';
+  let { children, data } = $props();
+  // Seed before anything renders, on the server and on the client, so the first paint is in the reader's units.
+  $effect.pre(() => units.seed(data.units));
+  // svelte-ignore state_referenced_locally
+  if (!browser) units.seed(data.units);
   // The menu: everything the app has, from anywhere, behind the mark in the corner. Closes on navigation, Escape, or a tap outside.
   let menuOpen = $state(false);
   let menuBtn = $state<HTMLButtonElement | null>(null);
@@ -27,6 +33,7 @@
     null,
     { href: '/compare', label: 'Compare species' },
     { href: '/labels', label: 'Labels' },
+    { href: '/settings', label: 'Settings' },
     { href: '/backup', label: 'Backup' },
     { href: '/sync', label: 'Sync' },
     null,

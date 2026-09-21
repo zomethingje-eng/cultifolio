@@ -4,7 +4,8 @@
  * scripts/build-dossiers.ts writes, served as assets), then the fixture
  * corpus compiled into the build (so tests work with nothing else present).
  */
-import { parseDossier, dossierPath, DOSSIER_V, type Dossier } from '$dossier/schema';
+import { parseDossier, dossierPath, genusPath, GenusRecord, DOSSIER_V, type Dossier } from '$dossier/schema';
+import * as v from 'valibot';
 
 export interface IndexEntry {
   key: number;
@@ -105,4 +106,22 @@ export async function resolveSlug(platform: Platform, fetch: Fetch, slug: string
   // Synthetic species are reachable only while no real corpus exists.
   if (idx === fixtureIndex) for (const d of fixturesByKey.values()) if (d.slug === slug) return d.key;
   return null;
+}
+
+const fixtureGenera = import.meta.glob('/fixtures/dossiers/s/v2/g/*.json', { eager: true, import: 'default' }) as Record<string, unknown>;
+
+/** A genus's record (its Wikipedia lead), or null when none was ever written. R2, then the static corpus, then the fixtures. */
+export async function getGenus(platform: Platform, fetch: Fetch, slug: string): Promise<GenusRecord | null> {
+  const parse = (x: unknown) => {
+    const r = v.safeParse(GenusRecord, x);
+    return r.success ? r.output : null;
+  };
+  const store = platform?.env?.STORE;
+  if (store) {
+    const obj = await store.get(genusPath(slug));
+    if (obj) return parse(await obj.json());
+  }
+  const stat = await staticJson<unknown>(fetch, genusPath(slug));
+  if (stat) return parse(stat);
+  return parse(fixtureGenera[`/fixtures/dossiers/s/v2/g/${slug}.json`]) ?? null;
 }

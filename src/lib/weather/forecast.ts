@@ -6,6 +6,7 @@
  * called only from the Worker so the UA is set and responses are cached.
  */
 
+import { temp, METRIC, type Units } from '$core/units';
 export interface DayForecast {
   date: string; // YYYY-MM-DD, local to the site's UTC offset approximation
   tmin: number;
@@ -159,19 +160,20 @@ export function whenText(tminAt: string | undefined, offsetH: number): string {
 }
 
 /** What the frost panel says. Thresholds are in °C at 2 m; a bench under glass or indoors adjusts them itself. Every sentence names the hours it covers or the night it is about. */
-export function frostRisk(f: Forecast, alerts: Alert[]): { level: 'none' | 'cold' | 'frost' | 'warning'; text: string } {
+export function frostRisk(f: Forecast, alerts: Alert[], units: Units = METRIC): { level: 'none' | 'cold' | 'frost' | 'warning'; text: string } {
+  const T = (c: number) => temp(c, units, 1);
   const warn = alerts.find((a) => /Freeze Warning|Hard Freeze Warning|Extreme Cold Warning/.test(a.event));
   if (warn) return { level: 'warning', text: `${warn.event} in force${warn.ends ? ` until ${warn.ends.slice(0, 16).replace('T', ' ')}` : ''} (NOAA/NWS).` };
   const adv = alerts.find((a) => /Frost Advisory|Freeze Watch|Cold Weather Advisory/.test(a.event));
   if (f.firstFrost) {
     const d = f.days.find((x) => x.date === f.firstFrost)!;
-    return { level: 'frost', text: `Frost forecast: ${d.tmin.toFixed(1)} °C ${whenText(d.tminAt, f.offsetH)} (${d.date}, MET Norway)${adv ? `; ${adv.event} issued (NOAA/NWS)` : ''}.` };
+    return { level: 'frost', text: `Frost forecast: ${T(d.tmin)} ${whenText(d.tminAt, f.offsetH)} (${d.date}, MET Norway)${adv ? `; ${adv.event} issued (NOAA/NWS)` : ''}.` };
   }
   if (adv) return { level: 'frost', text: `${adv.event} issued (NOAA/NWS).` };
   if (f.firstCold) {
     const d = f.days.find((x) => x.date === f.firstCold)!;
-    return { level: 'cold', text: `Cold night ahead: ${d.tmin.toFixed(1)} °C ${whenText(d.tminAt, f.offsetH)} (${d.date}, MET Norway).` };
+    return { level: 'cold', text: `Cold night ahead: ${T(d.tmin)} ${whenText(d.tminAt, f.offsetH)} (${d.date}, MET Norway).` };
   }
   const coldest = f.days.length ? f.days.reduce((a, b) => (b.tmin < a.tmin ? b : a)) : null;
-  return { level: 'none', text: coldest ? `No frost in the next ${f.hoursCovered} hours of forecast; coldest ${coldest.tmin.toFixed(1)} °C ${whenText(coldest.tminAt, f.offsetH)} (MET Norway).` : 'No forecast available.' };
+  return { level: 'none', text: coldest ? `No frost in the next ${f.hoursCovered} hours of forecast; coldest ${T(coldest.tmin)} ${whenText(coldest.tminAt, f.offsetH)} (MET Norway).` : 'No forecast available.' };
 }

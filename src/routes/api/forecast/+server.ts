@@ -1,3 +1,4 @@
+import { parseUnits } from '$core/units';
 import { json, error } from '@sveltejs/kit';
 import { metUrl, reduceMet, nwsAlertsUrl, reduceNws, isUS, frostRisk, type MetResponse } from '$lib/weather/forecast';
 import { USER_AGENT } from '$dossier/fetch';
@@ -16,6 +17,7 @@ export const GET: RequestHandler = async ({ url, platform, fetch }) => {
   const lat = Number(url.searchParams.get('lat')),
     lon = Number(url.searchParams.get('lon'));
   const alt = url.searchParams.get('alt');
+  const units = parseUnits(url.searchParams.get('units')) ?? 'metric';
   if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) error(400, 'lat and lon required');
   const la = Math.round(lat * 100) / 100,
     lo = Math.round(lon * 100) / 100;
@@ -49,7 +51,7 @@ export const GET: RequestHandler = async ({ url, platform, fetch }) => {
       alertsStatus = 'refused';
     }
   }
-  const body = { lat: la, lon: lo, forecast, alerts, alertsStatus, risk: frostRisk(forecast, alerts), attribution: ['Forecast data from MET Norway (CC BY 4.0)', ...(isUS(la, lo) ? ['Alerts: NOAA National Weather Service'] : [])] };
+  const body = { lat: la, lon: lo, forecast, alerts, alertsStatus, risk: frostRisk(forecast, alerts, units), attribution: ['Forecast data from MET Norway (CC BY 4.0)', ...(isUS(la, lo) ? ['Alerts: NOAA National Weather Service'] : [])] };
   const res = json(body, { headers: { 'cache-control': 'public, max-age=3600' } });
   if (cache && platform?.context) platform.context.waitUntil(cache.put(cacheKey, res.clone()));
   return res;
