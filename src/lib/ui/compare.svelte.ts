@@ -26,6 +26,8 @@ class Compare {
     if (this.loaded) return;
     this.picks = read();
     this.loaded = true;
+    // Two tabs, one tray: a pick in one shows in the other (the storage event fires only in the other tabs).
+    if (browser) window.addEventListener('storage', (e) => { if (e.key === KEY || e.key === null) this.picks = read(); });
   }
   has(slug: string) {
     return this.picks.some((p) => p.slug === slug);

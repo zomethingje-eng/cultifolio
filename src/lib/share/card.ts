@@ -9,7 +9,7 @@
  */
 import { climograph, type ClimoInput } from '$climate/climograph';
 import { frostWording } from '$core/extremes';
-import { temp, rain, tempUnit, rainUnit, METRIC, type Units } from '$core/units';
+import { temp, rain, tempUnit, rainUnit, METRIC, type Units, dryLabel } from '$core/units';
 
 export interface CardInput {
   units?: Units;
@@ -59,7 +59,7 @@ export function climateCardSvg(c: CardInput): string {
     <text x="${g.left + 2}" y="${g.temp.top - 2}" font-family="system-ui, sans-serif" font-size="9.5" font-weight="700" letter-spacing="0.09em" fill="${ink3}">${tempUnit(u)} · DAY AND NIGHT</text>
     ${g.rain.ticks.map(tick).join('')}
     ${g.rain.bars.map((b) => (b.h > 0 ? `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="1.5" fill="${cool}" opacity="0.55"/>` : '') + (b.lo != null && b.hi != null ? `<line x1="${b.x + b.w / 2}" x2="${b.x + b.w / 2}" y1="${b.hi}" y2="${b.lo}" stroke="${cool}" stroke-width="1.2"/>` : '')).join('')}
-    ${g.rain.dry ? `<text x="${g.left + g.plotW / 2}" y="${g.rain.top + g.rain.height / 2 + 4}" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-style="italic" fill="${ink3}">no month reaches a millimetre</text>` : ''}
+    ${g.rain.dry ? `<text x="${g.left + g.plotW / 2}" y="${g.rain.top + g.rain.height / 2 + 4}" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-style="italic" fill="${ink3}">${dryLabel(u)}</text>` : ''}
     <text x="${g.left + 2}" y="${g.rain.top - 2}" font-family="system-ui, sans-serif" font-size="9.5" font-weight="700" letter-spacing="0.09em" fill="${ink3}">${rainUnit(u).toUpperCase()} RAIN</text>
     ${g.strip?.dli ? `<path d="${g.strip.dli.path}" fill="none" stroke="${accent}" stroke-width="1.6"/>` : ''}
     ${g.strip?.rh ? `<path d="${g.strip.rh.path}" fill="none" stroke="${ink3}" stroke-width="1.6" stroke-dasharray="3 3"/>` : ''}

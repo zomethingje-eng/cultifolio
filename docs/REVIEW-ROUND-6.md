@@ -59,3 +59,15 @@ Untested: the settings page's site form beyond the happy path; `Today.svelte` at
 ## Before Show HN
 
 Finding 0 is the reason to redeploy today. Findings 1 to 4 change what a stranger sees in the first minute and are all in this commit. Finding 8 is the one most likely to embarrass on a busy day (a grower's own reloads tripping the forecast limit and the front page saying "Frost not checked"). Findings 9 and 10 can wait a week. The two code notes are for after the post.
+
+## 4. The outside review, and what was done with it
+
+The outside model reviewed `68419b3` with `REVIEW-PROMPT-6.md` and returned thirteen findings, a first-visitor walk and layout verdicts. Its numbering is kept here; the author's findings above are referred to by "own N".
+
+**Confirmed and fixed (12).** (1) is not code: the custom domain is not yet pointed at the Worker, and is the one step left before the post. (2) UTC dates: fixed with `localDate()`, every grower-entered or event date; the server's own stamps (sync quotas, the forecast's day cut) stay UTC and say so. (3) The forecast cache held the worded verdict without units: the edge caches the raw answer, the verdict is worded per request; unit-tested. (4) The evidence sentence and the archetype note spoke of a climate envelope and a cold floor for species with none: conditional now, and the pending, refused and none cases each say which. (5) Compare on a phone: one scroller, sticky row labels. (6) `near` at a species without climate: filtered at load, and the fixture carries a stale pointer to prove it. (7) Rain and Light cards say CHELSA. (8) The menu focuses its first item and traps Tab. (9) Settings is served network-first by the service worker. (10) The dry label converts. (11) A blank coordinate is a 400. (12) Digits is a whole number 2 to 6. (13) The tray listens for `storage`.
+
+**The two failing e2e tests.** Both the test's fault: the forecast-refusal test now runs with the service worker blocked, since a worker's fetch never passes `page.route`; the install-bar test polls for the count rather than reading it before `onMount` has written it. `npm run preview` now uses port 4173, the port the e2e suite and the README name.
+
+**Layout verdicts.** Taken: "At a glance" stays; the welcome card is one sentence; the sourcing line names the Wikipedia passage as the one thing written by people; "Grows like" is "Similar habitat climate"; the phone tray collapses to a count. The accordion's "open" is left as it is.
+
+**Own findings.** Own 8 (the forecast fetched on every front-page load) is fixed by `src/lib/weather/client.ts`, thirty minutes per site and units in session storage, shared by the three pages. Own 9 (visits as loads) is fixed with the reviewer's. Own 10 (the hemisphere flash for a southern grower) and the three code notes (the units singleton, the three glance copies, the sheet's module variable) stay open for after the post.

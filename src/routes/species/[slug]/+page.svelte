@@ -49,12 +49,14 @@
     }
     if (!o.nOpenInRange && !o.nRestrictedInRange) return { tone: 'muted', text: 'No georeferenced records inside the stated native range.' };
     const all = o.nOpenInRange + o.nRestrictedInRange;
-    let t = `The map marker and the climate envelope rest on all ${all} georeferenced record${all === 1 ? '' : 's'} inside the native range`;
+    const climateOk = d.climate.status === 'ok';
+    let t = `The map marker${climateOk ? ' and the climate envelope' : ''} rest${climateOk ? '' : 's'} on all ${all} georeferenced record${all === 1 ? '' : 's'} inside the native range`;
     if (!o.nOpenInRange) t += `; none carries a licence permitting republication, so the map shows no points.`;
     else if (o.nRestrictedInRange) t += `; the map shows only the ${o.nOpenInRange} openly licensed one${o.nOpenInRange === 1 ? '' : 's'}` + (o.restrictedShiftKm != null && o.restrictedShiftKm >= 1 ? `, which alone would put the marker ${o.restrictedShiftKm} km away` : o.restrictedShiftKm != null ? ', which alone would put the marker in the same place' : '') + '.';
     else t += ', all openly licensed and shown on the map.';
     if (o.nOutsideRange) t += ` ${o.nOutsideRange} record${o.nOutsideRange === 1 ? '' : 's'} outside the range (gardens, roadsides, misidentifications) ignored.`;
-    if (o.thin) t += ' Under a dozen records: treat the map and the climate as indicative.';
+    if (o.thin) t += ` Under a dozen records: treat the map${climateOk ? ' and the climate' : ''} as indicative.`;
+    if (!climateOk) t += d.climate.status === 'pending' ? ' No climate envelope yet: the habitat climate is pending.' : d.climate.status === 'refused' ? ' No climate envelope: the climate source did not answer.' : ' No climate envelope is derived for this species.';
     return { tone: 'ok', text: t };
   });
   $effect(() => {
@@ -178,7 +180,7 @@
     </div>
   </div>
   </div>
-  <p class="small muted derived">Every figure on this page is derived from public data by a stated rule and says its source; nothing here is written by a person or a model. <a href="/about/how">How it is made.</a></p>
+  <p class="small muted derived">Every figure on this page is derived from public data by a stated rule and says its source; nothing here is written by a person or a model, except the Wikipedia passage, which is quoted and marked as such. <a href="/about/how">How it is made.</a></p>
 
   {#if d.summary}
     <h2 class="sec" id="s-summary">Summary</h2>
@@ -212,8 +214,8 @@
         <div class="cards">
           <button class="card unitbtn" type="button" title="Switch to {u === 'us' ? 'Celsius and millimetres' : 'Fahrenheit and inches'}" onclick={() => units.toggle()}><div class="lab">Cold floor</div>{#if glance.ex}<div class="val">{tempN(glance.ex.minP01, u, 1)}<span class="u">{tempUnit(u)}</span></div><div class="sub">1st-percentile night over {glance.ex.years} years at the typical cell, the sheet's floor; lowest {temp(glance.ex.minAbs, u, 1)}, {frostWording(glance.ex)} (NASA POWER)</div>{:else}<div class="val">{tempN(glance.cold.v, u)}<span class="u">{tempUnit(u)}</span></div><div class="sub">{glance.cold.mo}, mean night (CHELSA); no extremes series for this cell</div>{/if}<span class="swap">tap for {u === 'us' ? '°C' : '°F'}</span></button>
           <div class="card"><div class="lab">Warmest month</div><div class="val">{tempN(glance.hot.v, u)}<span class="u">{tempUnit(u)}</span></div><div class="sub">{glance.hot.mo}, mean day; nights {temp(glance.hot.night, u)} (CHELSA)</div></div>
-          <div class="card"><div class="lab">Rain</div><div class="val">{rainN(glance.rain, u)}<span class="u">{rainUnit(u)}/yr</span></div><div class="gauge"><i class="c" style="width:{Math.min(100, glance.rain / 12)}%"></i></div><div class="sub">{glance.wetMonths === 0 ? 'no wet month' : glance.wetMonths + (glance.wetMonths === 1 ? ' wet month' : ' wet months')} · peak {glance.wet.mo} {rain(glance.wet.v, u)}</div></div>
-          {#if glance.dli}<div class="card"><div class="lab">Light</div><div class="val">{glance.dli.lo.toFixed(0)}–{glance.dli.hi.toFixed(0)}<span class="u">DLI</span></div><div class="gauge"><i class="w" style="width:{Math.min(100, glance.dli.hi / 0.7)}%"></i></div><div class="sub">mol/m²/day, winter to summer</div></div>{/if}
+          <div class="card"><div class="lab">Rain</div><div class="val">{rainN(glance.rain, u)}<span class="u">{rainUnit(u)}/yr</span></div><div class="gauge"><i class="c" style="width:{Math.min(100, glance.rain / 12)}%"></i></div><div class="sub">{glance.wetMonths === 0 ? 'no wet month' : glance.wetMonths + (glance.wetMonths === 1 ? ' wet month' : ' wet months')} · peak {glance.wet.mo} {rain(glance.wet.v, u)} (CHELSA)</div></div>
+          {#if glance.dli}<div class="card"><div class="lab">Light</div><div class="val">{glance.dli.lo.toFixed(0)}–{glance.dli.hi.toFixed(0)}<span class="u">DLI</span></div><div class="gauge"><i class="w" style="width:{Math.min(100, glance.dli.hi / 0.7)}%"></i></div><div class="sub">mol/m²/day, winter to summer, open sky (CHELSA shortwave)</div></div>{/if}
         </div>
       {/if}
       {#if note}
@@ -255,7 +257,7 @@
       <p class="small muted notesline">Your notes: none yet. <button class="linkish" onclick={() => { myDraft = ''; editingMy = true; }}>Write what you know</button> · yours alone, on this device.</p>
     {/if}
     {#if sheet.arch}
-      <p class="small muted" style="margin: 4px 0 12px">Grouped as a {sheet.arch.arch.lab.toLowerCase()} by {sheet.arch.why} (archetype table). {sheet.arch.arch.minC != null ? 'The table supplies one figure for this group, a conventional minimum for the cold floor, and no prose.' : 'The table holds no figure for this group, which spans too much for one minimum; the cold floor is the habitat\'s alone, and no prose comes from the table.'}</p>
+      <p class="small muted" style="margin: 4px 0 12px">Grouped as a {sheet.arch.arch.lab.toLowerCase()} by {sheet.arch.why} (archetype table). {sheet.arch.arch.minC != null ? 'The table supplies one figure for this group, a conventional minimum for the cold floor, and no prose.' : (d.climate.status === 'ok' ? 'The table holds no figure for this group, which spans too much for one minimum; the cold floor is the habitat\'s alone, and no prose comes from the table.' : 'The table holds no figure for this group, which spans too much for one minimum, and no habitat climate is derived yet; no cold floor is given, and no prose comes from the table.')}</p>
     {/if}
     {#each sheetCards as c, i (c.title)}
       <details class="cult acc" open={i === 0}>
@@ -365,7 +367,7 @@
   {#if data.siblings.length || data.near.length}
     <h2 class="sec" id="s-related">Related</h2>
     {#if data.near.length}
-      <p class="relhead"><b>Grows like</b> <span class="small muted">the {data.near.length} species whose habitat climate is nearest this one's: mean day and night, month by month, and rain on a log scale, in calendar order, so a habitat with the same seasons six months out is far, not near. Nothing else counts: not range, not family.</span></p>
+      <p class="relhead"><b>Similar habitat climate</b> <span class="small muted">the {data.near.length} species whose habitat climate is nearest this one's: mean day and night, month by month, and rain on a log scale, in calendar order, so a habitat with the same seasons six months out is far, not near. Nothing else counts: not range, not family.</span></p>
       <div class="relstrip">
         {#each data.near as c (c.key)}{@render rel(c)}{/each}
       </div>

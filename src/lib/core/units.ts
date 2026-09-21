@@ -51,6 +51,9 @@ export function ruleDeltaT(dc: number, u: Units): string {
 }
 
 /** The units a first visit gets: US for an en-US reader, metric for everyone else. */
+/** The climograph's dry-panel label: the millimetre threshold, in the reader's units, with the rule's own figure kept. */
+export const dryLabel = (u: Units) => (u === 'us' ? 'no month reaches 0.04 in (1 mm)' : 'no month reaches a millimetre');
+
 export function unitsForLocale(lang: string | null | undefined): Units {
   return /^en-US\b/i.test((lang ?? '').split(',')[0].trim()) ? 'us' : 'metric';
 }

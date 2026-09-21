@@ -67,7 +67,7 @@ self.addEventListener('fetch', (e) => {
       if (build.includes(url.pathname) || files.includes(url.pathname)) {
         return (await cache.match(request)) ?? fetch(request);
       }
-      if (request.mode === 'navigate' && isShell(url.pathname)) {
+      if (request.mode === 'navigate' && isShell(url.pathname) && url.pathname !== '/settings') {
         // A plant's own page is the /plants shell plus the vault: serve the shell of the section when the exact page is not cached.
         const exact = await cache.match(request);
         if (exact) return exact;
@@ -82,7 +82,8 @@ self.addEventListener('fetch', (e) => {
         }
       }
       // Species pages, dossiers, the climate API: network first, cache fallback, so what you have read stays readable.
-      if (url.pathname.startsWith('/species/') || url.pathname.startsWith('/api/dossier/') || url.pathname.startsWith('/s/') || url.pathname.startsWith('/about/') || url.pathname === '/') {
+      // Settings too: its HTML is rendered in the reader's units, so a cached copy from before a switch would paint the old ones first.
+      if (url.pathname.startsWith('/species/') || url.pathname.startsWith('/api/dossier/') || url.pathname.startsWith('/s/') || url.pathname.startsWith('/about/') || url.pathname === '/' || url.pathname === '/settings') {
         try {
           const r = await fetch(request);
           if (request.mode === 'navigate' ? cacheableHtml(r) : r.ok && r.type === 'basic') cache.put(request, r.clone());

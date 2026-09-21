@@ -1,5 +1,6 @@
 <script lang="ts">
   import { units } from '$lib/ui/units.svelte';
+  import { localDate } from '$core/dates';
   import { temp, tempUnit, cToF, fToC } from '$core/units';
   import { goto } from '$app/navigation';
   import { accNo, sowNo } from '$lib/db/types';
@@ -19,7 +20,7 @@
   let parentage = $state<string | null>(null);
   let method = $state<PropMethod>('seed');
   let parentAcc = $state<string | null>(null);
-  let sown = $state(new Date().toISOString().slice(0, 10));
+  let sown = $state(localDate());
   // Never guessed: a count the grower did not give would become the denominator of every germination figure.
   let count = $state<number | null>(null);
   let countMissing = $state(false);

@@ -49,6 +49,18 @@
     menuOpen = false;
     menuBtn?.focus();
   };
+  // Open: focus goes to the first item and Tab stays inside until Escape or a choice; closed: it returns to the mark.
+  let menuEl = $state<HTMLElement | null>(null);
+  $effect(() => {
+    if (menuOpen && menuEl) menuEl.querySelector<HTMLElement>('a, button')?.focus();
+  });
+  function trapTab(e: KeyboardEvent) {
+    if (e.key !== 'Tab' || !menuEl) return;
+    const items = [...menuEl.querySelectorAll<HTMLElement>('a, button')];
+    const first = items[0], last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  }
   let vaultNote = $state<string | null>(null);
   // Sync wakes with the app when a vault key is on this device; it does nothing otherwise.
   onMount(async () => {
@@ -94,7 +106,8 @@
 </div>
 {#if menuOpen}
   <div class="scrim" onclick={closeMenu} aria-hidden="true"></div>
-  <nav id="menu" aria-label="Everything">
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+  <nav id="menu" aria-label="Everything" bind:this={menuEl} onkeydown={trapTab}>
     <div class="menuhead"><span class="kick">Cultifolio</span><button class="iconbtn" type="button" aria-label="Close menu" onclick={closeMenu}>×</button></div>
     {#each menu as m, i (i)}
       {#if m}<a href={m.href} class:on={m.href === '/' ? page.url.pathname === '/' || page.url.pathname.startsWith('/species') : page.url.pathname.startsWith(m.href)} rel={m.href.startsWith('http') ? 'external' : undefined}>{m.label}</a>{:else}<hr />{/if}

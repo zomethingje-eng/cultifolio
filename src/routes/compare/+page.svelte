@@ -91,11 +91,11 @@
     </div>
     <div class="rowlab">Rain</div>
     <div class="row">
-      {#each cols as c (c.d.key)}<div class="cell fig">{#if c.rain != null && c.wet}<b>{rain(c.rain, u)}/yr</b><span>{c.wet.n === 0 ? 'no wet month' : `${c.wet.n} wet month${c.wet.n === 1 ? '' : 's'}`} · peak {c.wet.mo}</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
+      {#each cols as c (c.d.key)}<div class="cell fig">{#if c.rain != null && c.wet}<b>{rain(c.rain, u)}/yr</b><span>{c.wet.n === 0 ? 'no wet month' : `${c.wet.n} wet month${c.wet.n === 1 ? '' : 's'}`} · peak {c.wet.mo} (CHELSA)</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
     </div>
     <div class="rowlab">Light</div>
     <div class="row">
-      {#each cols as c (c.d.key)}<div class="cell fig">{#if c.dli}<b>{c.dli.lo.toFixed(0)}–{c.dli.hi.toFixed(0)} DLI</b><span>mol/m²/day, winter to summer</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
+      {#each cols as c (c.d.key)}<div class="cell fig">{#if c.dli}<b>{c.dli.lo.toFixed(0)}–{c.dli.hi.toFixed(0)} DLI</b><span>mol/m²/day, winter to summer (CHELSA shortwave)</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
     </div>
 
     <div class="rowlab">The year</div>
@@ -142,8 +142,11 @@
   .cell :global(.climo) { margin: 0; padding: 0; box-shadow: none; }
   .notice { margin: 10px 0 0; }
   @media (max-width: 700px) {
-    .row { grid-template-columns: repeat(var(--n), minmax(220px, 1fr)); overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 4px; }
+    /* One scroller for the whole table, not one per row: a thumb drags the columns and every row follows, and the row labels stay put. */
+    .cmp { overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 4px; margin-right: -16px; padding-right: 16px; }
+    .row { grid-template-columns: repeat(var(--n), minmax(220px, 1fr)); }
     .row .cell { scroll-snap-align: start; }
+    .rowlab { position: sticky; left: 0; width: max-content; }
     .head .nm { font-size: 16px; }
   }
 </style>

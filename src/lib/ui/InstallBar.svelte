@@ -1,22 +1,29 @@
 <script lang="ts">
   /**
-   * "Add to your home screen", once, after the second visit, never inside an installed app. Chrome and Edge hand us
+   * "Add to your home screen", once, on the second day the app is opened, never inside an installed app. A visit is a
+   * day, not a page load, so two loads in one sitting do not make a "second visit". Chrome and Edge hand us
    * their own prompt (beforeinstallprompt); Safari on iPhone has no such event, so the bar says which two taps do it.
    * Dismissed is remembered for thirty days in this browser. Nothing here is sent anywhere.
    */
   import { onMount } from 'svelte';
+  import { localDate } from '$core/dates';
   type BIP = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }> };
   let deferred = $state<BIP | null>(null);
   let show = $state(false);
   let ios = $state(false);
-  const VISITS = 'cultifolio.visits', SNOOZE = 'cultifolio.installSnoozedUntil';
+  const VISITS = 'cultifolio.visits', LAST = 'cultifolio.lastVisit', SNOOZE = 'cultifolio.installSnoozedUntil';
   onMount(() => {
     const standalone = matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
     if (standalone) return;
     let visits = 0, snoozed = 0;
     try {
-      visits = (Number(localStorage.getItem(VISITS)) || 0) + 1;
-      localStorage.setItem(VISITS, String(visits));
+      const today = localDate();
+      visits = Number(localStorage.getItem(VISITS)) || 0;
+      if (localStorage.getItem(LAST) !== today) {
+        visits += 1;
+        localStorage.setItem(VISITS, String(visits));
+        localStorage.setItem(LAST, today);
+      }
       snoozed = Number(localStorage.getItem(SNOOZE)) || 0;
     } catch {
       return; // no storage: no way to keep the promise of asking once, so do not ask

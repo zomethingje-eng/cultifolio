@@ -16,6 +16,7 @@
  * count of photographs in the file.
  */
 import { KINDS } from '$core/log';
+import { localDate } from '$core/dates';
 import * as v from 'valibot';
 
 export const BACKUP_FORMAT = 'cultifolio-backup';
@@ -65,4 +66,4 @@ export const LegacyChanges = v.object({
 
 export const photoPath = (id: string) => `photos/${id}.jpg`;
 export const thumbPath = (id: string) => `photos/${id}.t.jpg`;
-export const backupName = (d = new Date()) => `cultifolio-${d.toISOString().slice(0, 10)}${EXT}`;
+export const backupName = (d = new Date()) => `cultifolio-${localDate(d)}${EXT}`;

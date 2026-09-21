@@ -1,7 +1,7 @@
 <script lang="ts">
   import { climograph, type ClimoInput } from '$climate/climograph';
   import { units } from '$lib/ui/units.svelte';
-  import { tempUnit, rainUnit } from '$core/units';
+  import { tempUnit, rainUnit, dryLabel } from '$core/units';
   let { climate, id = 'climograph' }: { climate: ClimoInput; id?: string } = $props();
   // Drawn at the width it is shown at, so labels keep their size on a phone instead of shrinking with the viewBox.
   let shown = $state(0);
@@ -48,7 +48,7 @@
       {#if b.h > 0}<rect class="bar" x={b.x} y={b.y} width={b.w} height={b.h} rx="1.5" />{/if}
       {#if b.lo != null && b.hi != null}<line class="whisker" x1={b.x + b.w / 2} x2={b.x + b.w / 2} y1={b.hi} y2={b.lo} />{/if}
     {/each}
-    {#if g.rain.dry}<text class="drylab" x={g.left + g.plotW / 2} y={g.rain.top + g.rain.height / 2 + 4}>no month reaches a millimetre</text>{/if}
+    {#if g.rain.dry}<text class="drylab" x={g.left + g.plotW / 2} y={g.rain.top + g.rain.height / 2 + 4}>{dryLabel(g.units)}</text>{/if}
     <text class="panel" x={g.left + 2} y={g.rain.top - 2}>{rainUnit(g.units)} rain</text>
     <line class="axis" x1={g.left} x2={g.left + g.plotW} y1={rb} y2={rb} />
 

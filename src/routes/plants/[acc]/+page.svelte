@@ -1,5 +1,6 @@
 <script lang="ts">
   import { units } from '$lib/ui/units.svelte';
+  import { localDate } from '$core/dates';
   import { temp, tempN, rain, deltaT } from '$core/units';
   import { plural } from '$core/words';
   import { page } from '$app/state';
@@ -127,7 +128,7 @@
   async function doMove() {
     if (!a || (moveTo ?? null) === (a.locationId ?? null)) { moving = false; return; }
     await collection.put('accession', id, { locationId: moveTo ?? null, location: moveTo ? null : a.location ?? null });
-    if (moveTo) await collection.addEvent({ acc: id, d: new Date().toISOString().slice(0, 10), t: 'move', note: `to ${collection.locationName(moveTo)}` });
+    if (moveTo) await collection.addEvent({ acc: id, d: localDate(), t: 'move', note: `to ${collection.locationName(moveTo)}` });
     moving = false;
   }
   const dayMs = 86_400_000;
@@ -149,7 +150,7 @@
   const propagations = $derived(collection.propagationsOf(id));
 
   let et = $state<EventType>('water');
-  let ed = $state(new Date().toISOString().slice(0, 10));
+  let ed = $state(localDate());
   let enote = $state('');
   let eused = $state('');
   let ecause = $state('');
@@ -171,7 +172,7 @@
     if (!a) return;
     const moved = (f.locationId ?? null) !== (a.locationId ?? null);
     await collection.put('accession', id, { taxonName: f.taxonName.trim() || a.taxonName, cultivar: f.cultivar.trim() || null, nameKind: f.nameKind, parentage: f.nameKind === 'hybrid' ? f.parentage.trim() || null : null, nameAsReceived: f.nameAsReceived.trim() || null, fieldNumber: f.fieldNumber.trim() || null, provenance: f.provenance, acquired: f.acquired || null, sourceFrom: f.sourceFrom.trim() || null, sourceForm: f.sourceForm.trim() || null, price: f.price.trim() || null, locationId: f.locationId ?? null, location: f.locationId ? null : a.location ?? null });
-    if (moved && f.locationId) await collection.addEvent({ acc: id, d: new Date().toISOString().slice(0, 10), t: 'move', note: `to ${collection.locationName(f.locationId)}` });
+    if (moved && f.locationId) await collection.addEvent({ acc: id, d: localDate(), t: 'move', note: `to ${collection.locationName(f.locationId)}` });
     editing = false;
   }
 

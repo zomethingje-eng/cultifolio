@@ -201,7 +201,7 @@
   {#if collection.ready && !hasMine && !collection.accessions.length && !welcomeHidden}
     <div class="cult welcome" id="welcome">
       <div class="body">
-        <p><b>New here.</b> The species pages are a reference, every figure with its source. Your own plants, each under its own number, are recorded on this device and nowhere else.</p>
+        <p><b>New here.</b> A reference with every figure sourced, and a place for your own plants that stays on this device.</p>
         <div class="row">
           <a class="btn pri" href="/plants/new">Add your first plant</a>
           <a class="btn" href="/backup">Restore a backup or import from v2</a>

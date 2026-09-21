@@ -92,13 +92,19 @@
   let numMsg = $state('');
   /** Letters and digits, upper case: the same rule for the preview and the save, so what is previewed is what is minted. */
   const cleanPrefix = (p: string) => p.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+  /** Two to six digits, whole: 2.5 digits is not a width, and the input's own min/max are advice the keyboard ignores. */
+  const parseWidth = (v: string): number | null => (/^\s*[2-6]\s*$/.test(v) ? Number(v) : null);
   const preview = $derived.by(() => {
-    const w = Math.min(6, Math.max(2, Number(width) || 4));
+    const w = parseWidth(width) ?? 4;
     const s: NumberingScheme = mode === 'year' ? { mode, width: w } : { mode, prefix: cleanPrefix(prefix) || 'ACC', width: w };
     return collection.ready ? nextAccession(collection.accessions.map((a) => a.id), s) : '';
   });
   async function saveScheme() {
-    const w = Math.min(6, Math.max(2, Number(width) || 4));
+    const w = parseWidth(width);
+    if (w == null) {
+      numMsg = 'Digits is a whole number from 2 to 6.';
+      return;
+    }
     const s: NumberingScheme = mode === 'year' ? { mode, width: w } : { mode, prefix: cleanPrefix(prefix), width: w };
     if (s.mode === 'prefix' && !s.prefix) {
       numMsg = 'A prefix needs at least one letter or digit.';
@@ -169,7 +175,7 @@
     </div>
     <div class="fields" style="margin-top: 10px">
       {#if mode === 'prefix'}<label><span>Prefix</span><input type="text" bind:value={prefix} placeholder="your initials or the collection's" maxlength="8" /></label>{/if}
-      <label><span>Digits</span><input type="number" min="2" max="6" bind:value={width} /></label>
+      <label><span>Digits</span><input type="number" min="2" max="6" step="1" inputmode="numeric" bind:value={width} /></label>
     </div>
     <div class="row">
       <button class="btn pri" type="button" onclick={saveScheme} disabled={!collection.ready}>Save</button>

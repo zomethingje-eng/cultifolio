@@ -1,5 +1,6 @@
 <script lang="ts">
   import { units } from '$lib/ui/units.svelte';
+  import { localDate } from '$core/dates';
   import { temp, tempUnit, cToF, fToC } from '$core/units';
   import { plural } from '$core/words';
   import { page } from '$app/state';
@@ -28,7 +29,7 @@
   const photos = $derived(collection.photosOfSowing(id));
   let lightbox = $state<number | null>(null);
   const parent = $derived(s?.parentAcc ? collection.accession(s.parentAcc) : undefined);
-  const today = () => new Date().toISOString().slice(0, 10);
+  const today = () => localDate();
   let idx = $state<IndexEntry | undefined>(undefined);
   let thumbFailed = $state(false);
   $effect(() => {

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { units } from '$lib/ui/units.svelte';
+  import { localDate, localDateYearAgo } from '$core/dates';
   import { site } from '$lib/ui/site.svelte';
   import { tempUnit, rainUnit, tempN, rainN } from '$core/units';
   /**
@@ -10,6 +11,7 @@
   import { collection } from '$lib/db/collection.svelte';
   import { accNo, sowNo } from '$lib/db/types';
   import { onMount } from 'svelte';
+  import { getForecast } from '$lib/weather/client';
   type Risk = { level: string; text: string };
   let frost = $state<{ risk: Risk } | 'unchecked' | null>(null);
   let hasSite = $state(false);
@@ -19,14 +21,14 @@
     if (!s) return;
     hasSite = true;
     try {
-      const r = await fetch(`/api/forecast?lat=${s.lat}&lon=${s.lon}&units=${units.current}`);
-      frost = r.ok ? { risk: ((await r.json()) as { risk: Risk }).risk } : 'unchecked';
+      const r = await getForecast<{ risk: Risk }>(s.lat, s.lon, units.current);
+      frost = r.ok ? { risk: r.body.risk } : 'unchecked';
     } catch {
       frost = 'unchecked';
     }
   });
   const today = new Date();
-  const yearAgo = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate()).toISOString().slice(0, 10);
+  const yearAgo = localDateYearAgo(today);
   const sowings = $derived(collection.ready ? collection.sowings.filter((s) => s.status === 'active').sort((a, b) => a.sown.localeCompare(b.sown)) : []);
   const growing = $derived(collection.ready ? collection.accessions.filter((a) => a.status === 'growing') : []);
   const unphotographed = $derived(growing.filter((a) => !collection.photos(a.id).some((p) => p.d >= yearAgo)));

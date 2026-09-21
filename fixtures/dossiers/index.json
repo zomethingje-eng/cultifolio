@@ -12,6 +12,22 @@
   "open": 52,
   "climate": "ok",
   "near": [
+   5384999
+  ]
+ },
+ {
+  "key": 5384999,
+  "slug": "copiapoa-humilis",
+  "name": "Copiapoa humilis",
+  "family": "Cactaceae",
+  "origin": [
+   "Chile North"
+  ],
+  "photos": 0,
+  "open": 52,
+  "climate": "ok",
+  "near": [
+   5384013,
    5411106
   ]
  },

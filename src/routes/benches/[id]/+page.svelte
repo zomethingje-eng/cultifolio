@@ -1,5 +1,7 @@
 <script lang="ts">
   import { units } from '$lib/ui/units.svelte';
+  import { getForecast } from '$lib/weather/client';
+  import { localDate } from '$core/dates';
   import { temp, tempN, tempUnit, cToF, fToC } from '$core/units';
   import { plural } from '$core/words';
   import { page } from '$app/state';
@@ -24,7 +26,7 @@
   const here = $derived(collection.plantsAt(id, false));
   const deep = $derived(collection.plantsAt(id, true));
   const cond = $derived(collection.conditions(id));
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDate();
   $effect(() => {
     if (loc) setCrumb([{ label: 'Benches', href: '/benches' }, ...path.slice(0, -1).map((p) => ({ label: p.name, href: `/benches/${p.id}` })), { label: loc.name }]);
     return () => setCrumb([]);
@@ -92,8 +94,8 @@
   const watchable = $derived(cond.lat != null && cond.lon != null && cond.indoor !== true);
   $effect(() => {
     if (!watchable || forecast) return;
-    fetch(`/api/forecast?lat=${cond.lat}&lon=${cond.lon}${cond.altM != null ? `&alt=${cond.altM}` : ''}&units=${units.current}`)
-      .then(async (r) => { if (!r.ok) throw new Error('not answered'); forecast = await r.json(); })
+    getForecast<NonNullable<typeof forecast>>(cond.lat!, cond.lon!, units.current, cond.altM)
+      .then((r) => { if (!r.ok) throw new Error('not answered'); forecast = r.body; })
       // Whatever went wrong upstream, the page says the check did not happen, never a status code, and never that the nights are clear.
       .catch(() => (forecastErr = 'Forecast not checked: the forecast source did not answer.'));
   });

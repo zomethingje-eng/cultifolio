@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import { localDate } from '$core/dates';
   import { accNo } from '$lib/db/types';
   import { onMount } from 'svelte';
   import { page } from '$app/state';
@@ -39,7 +40,7 @@
   let nameAsReceived = $state('');
   let fieldNumber = $state('');
   let provenance = $state<Provenance>('unknown');
-  let acquired = $state(new Date().toISOString().slice(0, 10));
+  let acquired = $state(localDate());
   let sourceFrom = $state('');
   let sourceForm = $state('plant');
   let locationId = $state<string | null>(null);

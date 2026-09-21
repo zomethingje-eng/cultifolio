@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite dev",
     "build": "node scripts/clean-build.mjs && vite build",
-    "preview": "wrangler dev",
+    "preview": "wrangler dev --port 4173",
     "deploy": "npm run check && npm run test && npm run build && wrangler deploy",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run",

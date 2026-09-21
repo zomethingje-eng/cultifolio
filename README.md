@@ -14,7 +14,7 @@ Node 22, npm.
 
 ```
 npm install
-npm run build && npm run preview     # http://127.0.0.1:8787 (wrangler dev, with a local R2 and KV)
+npm run build && npm run preview     # http://127.0.0.1:4173 (wrangler dev, with a local R2 and KV; the port the e2e tests use)
 npm test                             # unit tests (vitest)
 npm run e2e                          # Playwright, against the preview server
 ```

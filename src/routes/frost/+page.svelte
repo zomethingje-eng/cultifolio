@@ -1,5 +1,6 @@
 <script lang="ts">
   import { units } from '$lib/ui/units.svelte';
+  import { getForecast } from '$lib/weather/client';
   import { site } from '$lib/ui/site.svelte';
   import { tempUnit, rainUnit, tempN, rainN } from '$core/units';
   import { onMount } from 'svelte';
@@ -14,14 +15,14 @@
   async function load(la: number, lo: number) {
     busy = true; err = '';
     try {
-      const r = await fetch(`/api/forecast?lat=${la}&lon=${lo}&units=${units.current}`);
-      if (r.status === 400) {
+      const r = await getForecast<Payload>(la, lo, units.current);
+      if (!r.ok && r.status === 400) {
         // The one refusal with a reason worth repeating: the coordinates themselves.
         err = 'Latitude is −90 to 90 and longitude −180 to 180; check the figures.';
         return;
       }
       if (!r.ok) throw new Error('not answered');
-      data = await r.json();
+      data = r.body;
     } catch {
       // Whatever went wrong upstream, the page says the check did not happen: never a status code, never that the nights are clear.
       err = 'Forecast not checked: the forecast source did not answer.';

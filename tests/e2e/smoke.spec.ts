@@ -13,7 +13,7 @@ test('front page renders server-side with the fixture corpus: closed genus rows,
   await expect(page).toHaveURL(/\?by=genus&open=copiapoa$/);
   await expect(page.locator('.grow.open', { hasText: 'Copiapoa' })).toBeVisible();
   await expect(page.locator('a.tile .nm', { hasText: 'Copiapoa cinerea' })).toBeVisible();
-  await expect(page.locator('a.tile')).toHaveCount(1);
+  await expect(page.locator('a.tile')).toHaveCount(2); // cinerea and humilis
   // the same row closes it
   await page.locator('.grow.open').click();
   await expect(page).toHaveURL(/\?by=genus$/);
@@ -746,14 +746,14 @@ test('the front page carries closed rows and fetches the whole catalogue only wh
   await expect(page.locator('a.tile')).toHaveCount(1);
   await expect(page.locator('.grow')).toHaveCount(0);
   expect(calls.length).toBeGreaterThan(0);
-  await expect(page.locator('.seccount').last()).toContainText('1 of 3 shown');
+  await expect(page.locator('.seccount').last()).toContainText('1 of 4 shown');
   // a chip does the same, and "You grow" is not offered to someone who grows nothing
   await page.fill('.searchbar', '');
   await expect(page.locator('.grow')).toHaveCount(3);
   await expect(page.locator('.chipbtn', { hasText: 'You grow' })).toHaveCount(0);
   await page.locator('.chipbtn', { hasText: 'Without climate' }).click();
   await expect(page.locator('a.tile')).toHaveCount(2);
-  await expect(page.locator('.seccount').last()).toContainText('2 of 3 shown');
+  await expect(page.locator('.seccount').last()).toContainText('2 of 4 shown');
 });
 
 test('the about pages are served without JavaScript and say what the app refuses to guess', async ({ browser }) => {
@@ -1059,6 +1059,10 @@ test('a sowing without a count is refused with a sentence; a blank never becomes
   await expect(page.getByText('8 seeds on')).toBeVisible();
 });
 
+// The service worker fetches /api/forecast itself once it controls the page, and a request made by a worker never
+// passes through page.route, so this test runs without one: it is about the pages' wording, not the shell.
+test.describe('without the service worker', () => {
+test.use({ serviceWorkers: 'block' });
 test('a forecast source that does not answer is "not checked" in a plain notice on the bench and on /frost, never a status code', async ({ page }) => {
   await page.route(/\/api\/forecast/, (r) => r.fulfill({ status: 502, contentType: 'application/json', body: JSON.stringify({ error: 'forecast source did not answer' }) }));
   // the site is set once, in Settings; the frost page reads it
@@ -1090,6 +1094,7 @@ test('a forecast source that does not answer is "not checked" in a plain notice 
   await expect(page.locator('.notice')).toHaveText('Forecast not checked: the forecast source did not answer.');
   await expect(page.locator('.notice')).not.toHaveClass(/err/);
   await expect(page.getByText(/forecast 50\d/)).toHaveCount(0);
+});
 });
 
 test('a returning grower never sees the catalogue or "You grow 0" while the collection opens; a first visit sees the catalogue at once', async ({ page }) => {
@@ -1166,9 +1171,13 @@ test('the species page answers in the first screen and relates the species by ge
   await expect(glance.locator('.card', { hasText: 'Rain' })).toContainText('72');
   // related: the nearest habitat climate from the index, with the rule beside it
   await expect(page.locator('#s-related')).toBeVisible();
-  await expect(page.locator('.relhead', { hasText: 'Grows like' })).toContainText('in calendar order');
-  await expect(page.locator('.relstrip .reltile .rn', { hasText: 'Welwitschia' })).toBeVisible();
-  await expect(page.locator('.relhead', { hasText: 'Other' })).toHaveCount(0); // the fixture corpus has one Copiapoa
+  await expect(page.locator('.relhead', { hasText: 'Similar habitat climate' })).toContainText('in calendar order');
+  await expect(page.locator('.relstrip .reltile .rn', { hasText: 'Copiapoa humilis' })).toHaveCount(2); // the one other Copiapoa, and the nearest climate: both strips
+  await expect(page.locator('.relhead', { hasText: 'Other Copiapoa' })).toBeVisible();
+  // a species without a derived climate is never "near", whatever the index says
+  await page.goto('/species/copiapoa-humilis'); // its index entry points at Welwitschia (climate pending) as well as C. cinerea
+  await expect(page.locator('.relstrip .reltile .rn', { hasText: 'Copiapoa cinerea' })).toHaveCount(2);
+  await expect(page.locator('.relstrip .reltile .rn', { hasText: 'Welwitschia' })).toHaveCount(0);
 });
 
 test('compare: three species side by side, a refusal named in every empty cell, the tray remembered in this browser', async ({ page }) => {
@@ -1215,12 +1224,18 @@ test('a grower\'s home says what needs them: sowings in the tray and plants with
   await expect(page.locator('.chipbtn.on')).toContainText('No photo this year');
 });
 
-test('the install bar waits for a second visit, and stays away for thirty days once dismissed', async ({ page }) => {
+test('the install bar waits for a second day, and stays away for thirty days once dismissed', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('.install')).toHaveCount(0);
   await page.goto('/');
-  // no beforeinstallprompt in headless Chromium and no iOS: nothing to show, but the visit is counted
-  expect(await page.evaluate(() => localStorage.getItem('cultifolio.visits'))).toBe('2');
+  // two loads in one sitting are one visit: a visit is a day
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('cultifolio.visits'))).toBe('1');
+  await page.evaluate(() => window.dispatchEvent(new Event('beforeinstallprompt')));
+  await expect(page.locator('.install')).toHaveCount(0);
+  // the next day
+  await page.evaluate(() => localStorage.setItem('cultifolio.lastVisit', '2000-01-01'));
+  await page.goto('/');
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('cultifolio.visits'))).toBe('2');
   await page.evaluate(() => window.dispatchEvent(new Event('beforeinstallprompt')));
   await expect(page.locator('.install')).toBeVisible();
   await page.locator('.install button', { hasText: 'Not now' }).click();

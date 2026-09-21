@@ -9,6 +9,7 @@
  * stored JPEG needs no orientation tag and viewers never have to guess.
  */
 import { readExif } from './exif';
+import { localDate } from '$core/dates';
 
 export const FULL_EDGE = 1600;
 export const THUMB_EDGE = 320;
@@ -84,4 +85,4 @@ export async function sha256(b: Blob): Promise<string> {
   return Array.from(new Uint8Array(d), (x) => x.toString(16).padStart(2, '0')).join('');
 }
 
-export const today = () => new Date().toISOString().slice(0, 10);
+export const today = () => localDate();

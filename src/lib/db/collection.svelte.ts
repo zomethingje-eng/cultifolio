@@ -5,6 +5,7 @@
  * so the page never shows an edit the vault does not hold.
  */
 import { SvelteMap } from 'svelte/reactivity';
+import { localDate } from '$core/dates';
 import { Clock, hlcDecode, hlcEncode, hlcCompare } from '$core/hlc';
 import { apply, diff, validateChanges, key as recKey, type Change, type Kind, type Record_, type State } from '$core/log';
 import { nextAccession, DEFAULT_SCHEME, type NumberingScheme } from '$core/accession';
@@ -370,7 +371,7 @@ class Collection {
       rate: s && s.count > 0 ? germinated / s.count : null,
       firstUp,
       daysToFirst: s && firstUp ? since(s.sown, firstUp) : null,
-      days: s ? since(s.sown, new Date().toISOString().slice(0, 10)) : 0
+      days: s ? since(s.sown, localDate()) : 0
     };
   }
   nextSowingNumber(year = new Date().getFullYear()): string {
@@ -396,7 +397,7 @@ class Collection {
   async potUp(sowingId: string, n: number, opts: { date?: string; locationId?: string | null; note?: string | null } = {}): Promise<Accession[]> {
     const s = this.sowing(sowingId);
     if (!s || n < 1) return [];
-    const date = opts.date ?? new Date().toISOString().slice(0, 10);
+    const date = opts.date ?? localDate();
     const m = PROP_METHODS.find((x) => x.k === s.method);
     const veg = m?.veg ?? false;
     const parent = s.parentAcc ? this.accession(s.parentAcc) : undefined;
@@ -677,7 +678,7 @@ class Collection {
           const stamp = (count: number) => hlcEncode({ wall, count, device });
           changes.push({ t: stamp(0), kind, id: r.id, field: kind === 'accession' ? 'acc' : 'no', value: fresh });
           const eid = 'e' + wall.toString(36) + '00' + device;
-          const note = { acc: r.id, d: when.toISOString().slice(0, 10), t: 'note', note: `Renumbered from ${no} to ${fresh}: another plant had been given ${no} on a device that was offline at the time.` };
+          const note = { acc: r.id, d: localDate(when), t: 'note', note: `Renumbered from ${no} to ${fresh}: another plant had been given ${no} on a device that was offline at the time.` };
           let count = 1;
           for (const [field, value] of Object.entries(note)) changes.push({ t: stamp(count++), kind: 'event', id: eid, field, value });
           renumbered++;

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { collection } from '$lib/db/collection.svelte';
+  import { localDate, localDateYearAgo } from '$core/dates';
   import { accNo, sowNo } from '$lib/db/types';
   import { kindOf } from '$lib/db/types';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
@@ -34,7 +35,7 @@
     const want = new URL(location.href).searchParams.get('show');
     if (want === 'due' || want === 'all' || want === 'nophoto') show = want;
   });
-  const yearAgo = (() => { const t = new Date(); return new Date(t.getFullYear() - 1, t.getMonth(), t.getDate()).toISOString().slice(0, 10); })();
+  const yearAgo = localDateYearAgo();
   const noPhoto = (id: string) => !collection.photos(id).some((p) => p.d >= yearAgo);
   const noPhotoN = $derived(collection.accessions.filter((a) => a.status === 'growing' && noPhoto(a.id)).length);
   let thumbs = $state<Map<string, string>>(new Map());
