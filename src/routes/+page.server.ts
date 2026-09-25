@@ -102,7 +102,11 @@ export const load: PageServerLoad = async ({ platform, fetch, setHeaders, url, c
     rows,
     letters,
     // `?from=L`: the server-rendered window starts at that letter, so a reader without JavaScript (and a crawler) can follow the letter index; with JavaScript the index jumps in place.
-    start: Math.max(0, rows.findIndex((r) => r.letter === (url.searchParams.get('from') ?? '').toUpperCase())),
+    start: (() => {
+      const at = Number(url.searchParams.get('at'));
+      if (Number.isInteger(at) && at > 0 && at < rows.length) return at; // "More" without JavaScript: the next window by row
+      return Math.max(0, rows.findIndex((r) => r.letter === (url.searchParams.get('from') ?? '').toUpperCase()));
+    })(),
     total: index.length,
     withClimate: list.filter((c) => c.climate === 'ok').length
   };

@@ -16,7 +16,7 @@
   import { slugify, speciesOf, speciesSlug } from '$core/names';
   import SpeciesPicker from '$lib/ui/SpeciesPicker.svelte';
   import { setCrumb } from '$lib/ui/crumb.svelte';
-  import { bySlug } from '$lib/ui/index.svelte';
+  import { entriesFor, dossierForName } from '$lib/ui/index.svelte';
   import type { IndexEntry } from '$lib/server/dossiers';
   import type { Dossier } from '$dossier/schema';
   import { cultivationSheet, runs, forReader } from '$core/sheet';
@@ -69,21 +69,16 @@
     const seq = ++asked;
     idx = undefined; dossier = null; ref = 'loading';
     (async () => {
-      // The record carries its species' key, so one small file is asked for, not the whole index: the file the offline worker keeps.
-      let d: Dossier | null | 'none' = key && speciesOf(a.taxonName) === a.taxonName ? await fetchDossier(key) : 'none';
+      // The record's own key first, checked against its name (a key can be stale after a rename, and a wrong key would
+      // put another species' habitat under this plant); else the species by hash bucket; a wrong or missing key is repaired.
+      const name = a.taxonName;
+      const d = await dossierForName<Dossier>(name, key, fetchDossier, (k) => { if (a && a.taxonName === name && a.taxonKey !== k) collection.put('accession', a.id, { taxonKey: k }); });
       if (seq !== asked) return;
-      if (d === 'none' || d === null) {
-        const e = await bySlug(slug);
-        if (seq !== asked) return;
-        idx = e ?? undefined;
-        if (e) d = await fetchDossier(e.key);
-        else if (e === null && d === 'none') d = null; // the key led nowhere and the index could not be reached: unknown, not absent
-        if (seq !== asked) return;
-      }
       dossier = d === 'none' ? null : d;
       ref = d === 'none' ? 'none' : d ? 'ok' : 'unreachable';
     })();
-    Promise.all(parents(parentage).map(async (name) => ({ name, slug: (await bySlug(slugify(name))) ? slugify(name) : null }))).then((r) => { if (seq === asked) parentLinks = r; });
+    const ps = parents(parentage);
+    entriesFor(ps.map((n) => slugify(n))).then((m) => { if (seq === asked) parentLinks = ps.map((name) => ({ name, slug: m?.has(slugify(name)) ? slugify(name) : null })); });
   });
   /** A photograph of the species for the plant without one of its own: the index's thumb when the index was read, else the dossier's own first wild photograph. */
   const speciesThumb = $derived(idx?.thumb ?? (dossier?.photos.find((p) => !p.captive) ?? dossier?.photos[0])?.thumb);

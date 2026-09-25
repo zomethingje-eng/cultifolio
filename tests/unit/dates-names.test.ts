@@ -52,3 +52,13 @@ describe('photo sizes (round seven, 17)', () => {
     expect(photoAt('https://upload.wikimedia.org/a.jpg', 'small')).toBe('https://upload.wikimedia.org/a.jpg');
   });
 });
+
+describe('index buckets (round nine, 1)', () => {
+  it('is a two-hex-digit bucket by rule, the same for the same slug, spread across the range', async () => {
+    const { bucketOf, BUCKET } = await import('$core/bucket');
+    expect(bucketOf('copiapoa-cinerea')).toMatch(BUCKET);
+    expect(bucketOf('copiapoa-cinerea')).toBe(bucketOf('copiapoa-cinerea'));
+    const seen = new Set(Array.from({ length: 2000 }, (_, i) => bucketOf(`genus-species-${i}`)));
+    expect(seen.size).toBeGreaterThan(240);
+  });
+});

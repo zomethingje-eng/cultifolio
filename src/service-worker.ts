@@ -69,7 +69,7 @@ self.addEventListener('fetch', (e) => {
   if (url.origin !== location.origin) return;
   // Sync, photos and the index are live data: never from the cache. (The index is 3 MB; a plant's page asks for its
   // one dossier by key instead, which is cached below, so the greenhouse does not need the index at all.)
-  if (url.pathname.startsWith('/api/sync') || url.pathname.startsWith('/api/index') || url.pathname.startsWith('/api/entries')) return;
+  if (url.pathname.startsWith('/api/sync') || url.pathname.startsWith('/api/index')) return;
 
   e.respondWith(
     (async () => {
@@ -100,7 +100,8 @@ self.addEventListener('fetch', (e) => {
       }
       // Species pages, dossiers, the climate API: network first, cache fallback, so what you have read stays readable.
       // Settings too: its HTML is rendered in the reader's units, so a cached copy from before a switch would paint the old ones first.
-      if (url.pathname.startsWith('/species/') || url.pathname.startsWith('/api/dossier/') || url.pathname.startsWith('/s/') || url.pathname.startsWith('/about/') || url.pathname === '/' || url.pathname === '/settings') {
+      // The index buckets a grower's own species fall in are kept too, so the plants list has its thumbnails and the labels their care lines in the greenhouse.
+      if (url.pathname.startsWith('/species/') || url.pathname.startsWith('/api/dossier/') || url.pathname.startsWith('/api/entries') || url.pathname.startsWith('/s/') || url.pathname.startsWith('/about/') || url.pathname === '/' || url.pathname === '/settings') {
         try {
           const r = await fetch(request);
           if (request.mode === 'navigate' ? cacheableHtml(r) : r.ok && r.type === 'basic') cache.put(request, r.clone());

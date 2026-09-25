@@ -388,7 +388,7 @@
           </div>
         {/if}
       {/each}
-      {#if start + shown < data.rows.length}<div class="more" bind:this={sentinel}><a class="btn small" href="?by={data.by}&from={data.rows[start + shown].letter ?? ''}" onclick={(e) => { e.preventDefault(); shown = Math.min(data.rows.length - start, shown + CHUNK); }}>More of the {fmtN(data.rows.length)} {data.by === 'genus' ? 'genera' : data.by === 'family' ? 'families' : 'regions'}</a></div>{/if}
+      {#if start + shown < data.rows.length}<div class="more" bind:this={sentinel}><a class="btn small" href="?by={data.by}&at={start + shown}" onclick={(e) => { e.preventDefault(); shown = Math.min(data.rows.length - start, shown + CHUNK); }}>More of the {fmtN(data.rows.length)} {data.by === 'genus' ? 'genera' : data.by === 'family' ? 'families' : 'regions'}</a></div>{/if}
     </div>
     <p class="seccount" style="margin-top: 14px">{fmtN(data.rows.length)} {data.by === 'genus' ? 'genera' : data.by === 'family' ? 'families' : 'regions'} · {fmtN(data.total)} species</p>
   {/if}

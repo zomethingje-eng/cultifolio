@@ -63,6 +63,7 @@ class Collection {
         const scheme = await getMeta<NumberingScheme>('scheme');
         if (isScheme(scheme)) this.metaScheme = scheme;
         await this.readLedger();
+        this.importedOn = (await getMeta<Record<string, string>>('importedOn')) ?? {};
         this.ready = true;
         onOtherTabWrite(() => void this.catchUp().catch(() => {}));
         this.persisted = await requestPersistence();
@@ -250,11 +251,16 @@ class Collection {
   /** Remember every parentId a place has been given, so a cut loop can fall back to the previous one. Same on every device: it is read from the log, not from arrival order. */
   /** The earliest stamp seen for each record: the day it was made on this device or imported, whatever its id looks like (a v2 import keeps its v2 ids). */
   private born = new Map<string, string>();
-  /** The local day a record was made or imported: from its id when the id carries the time, else from its first change. */
+  /** The day each imported record arrived on this device (a v2 import stamps its changes with the v2 edit times, years back): kept in `meta`, read at load. */
+  private importedOn: Record<string, string> = {};
+  /** The local day a record was made or imported: the import day when it came in a file, else the day in its id, else its first change. */
   madeOn(kind: Kind, id: string): string | null {
+    const k = recKey(kind, id);
+    const imp = this.importedOn[k];
+    if (imp) return imp;
     const fromId = madeOn(id);
     if (fromId) return fromId;
-    const t = this.born.get(recKey(kind, id));
+    const t = this.born.get(k);
     return t ? localDate(new Date(hlcWall(t))) : null;
   }
   private noteParents(changes: Iterable<Change>): void {
@@ -642,7 +648,10 @@ class Collection {
   /** A local change to a field whose current stamp is ahead of this clock (made while a clock was fast) is stamped just past that stamp, so the edit wins the field without following the bad clock (round eight, 4). */
   private stampPast(changes: Change[]): Change[] {
     for (const c of changes) {
-      const prev = this.seen.get(recKey(c.kind, c.id) + '\0' + c.field); // the fold's own key: record, NUL, field
+      const k = recKey(c.kind, c.id);
+      let prev = this.seen.get(k + '\0' + c.field); // the fold's own key: record, NUL, field
+      // Whether a record is deleted is decided against its latest edit to any field, so a removal must clear that too.
+      if (c.field === '_deleted') { const e = this.seen.get(k + '\0*'); if (e !== undefined && (prev === undefined || hlcCompare(e, prev) > 0)) prev = e; }
       if (prev !== undefined && hlcCompare(c.t, prev) <= 0) c.t = hlcAfter(prev, this.writer);
     }
     return changes;
@@ -752,6 +761,13 @@ class Collection {
     validateChanges(changes);
     for (const c of changes) this.clock?.observe(c.t);
     await this.commit(changes, source);
+    if (source === 'import') {
+      // Records new to this device today count from today, whatever their changes are stamped: a collection kept in v2 since 2019 is not "not seen for 2,400 days" on the day it arrives.
+      const today = localDate();
+      let added = false;
+      for (const c of changes) { const k = recKey(c.kind, c.id); if (!this.importedOn[k] && !madeOn(c.id)) { this.importedOn[k] = today; added = true; } }
+      if (added) await setMeta('importedOn', this.importedOn).catch(() => {});
+    }
     try {
       await this.resolveDuplicateNumbers();
     } catch {

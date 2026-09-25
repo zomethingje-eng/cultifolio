@@ -15,7 +15,7 @@
   import { collection } from '$lib/db/collection.svelte';
   import { kindOf, type Accession } from '$lib/db/types';
   import { setCrumb } from '$lib/ui/crumb.svelte';
-  import { bySlug } from '$lib/ui/index.svelte';
+  import { dossierForName } from '$lib/ui/index.svelte';
   import { slugify, speciesSlug, speciesOf } from '$core/names';
   import { careLine } from '$core/note';
   import type { Dossier } from '$dossier/schema';
@@ -86,12 +86,12 @@
   };
   const pickAll = (on: boolean) => (chosen = on ? new Set([...chosen, ...filtered.map((a) => a.id)]) : new Set([...chosen].filter((id) => !filtered.some((a) => a.id === id))));
 
-  const fetchDossier = (key: number) => fetch(`/api/dossier/${key}`).then((r) => (r.ok ? (r.json() as Promise<Dossier>) : null)).catch(() => null);
+  // One request per species, not per plant: five Astrophytum labels share one dossier.
+  const dossiers = new Map<number, Promise<Dossier | 'none' | null>>();
+  const fetchDossier = (key: number) => { let p = dossiers.get(key); if (!p) { p = fetch(`/api/dossier/${key}`).then((r): Promise<Dossier | 'none' | null> => (r.ok ? (r.json() as Promise<Dossier>) : Promise.resolve(r.status === 404 ? 'none' : null))).catch(() => null); dossiers.set(key, p); } return p; };
   async function dossierFor(a: Accession): Promise<Dossier | null> {
-    const own = a.taxonKey && speciesOf(a.taxonName) === a.taxonName ? await fetchDossier(a.taxonKey) : null;
-    if (own) return own;
-    const e = await bySlug(speciesSlug(a.taxonName));
-    return e ? fetchDossier(e.key) : null;
+    const d = await dossierForName<Dossier>(a.taxonName, a.taxonKey, fetchDossier, (k) => { if (a.taxonKey !== k) collection.put('accession', a.id, { taxonKey: k }); });
+    return d && d !== 'none' ? d : null;
   }
   // QR codes and care lines are made once per plant, lazily.
   $effect(() => {

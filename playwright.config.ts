@@ -1,4 +1,7 @@
 import { defineConfig } from '@playwright/test';
+// Offline means offline for the service worker too: without this, a worker's own fetches ignore `context.setOffline` and
+// a page that should say "reference not reached" quietly gets its data through the worker.
+process.env.PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS = '1';
 export default defineConfig({
   testDir: 'tests/e2e',
   // wrangler dev's workerd occasionally drops a connection mid-run (a "Broken pipe" in its log; the page sees net::ERR_ABORTED on a

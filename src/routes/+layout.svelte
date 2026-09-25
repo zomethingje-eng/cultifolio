@@ -104,6 +104,7 @@
       // the previous build's cache for one generation, so a tab still on the old build finds its chunks.
       navigator.serviceWorker.register('/service-worker.js', { type: 'module' }).then((reg) => {
         if (reg.waiting) skipTo(reg.waiting);
+        reg.update().catch(() => {}); // one conditional GET of the script: the browser's own check after a navigation is not guaranteed on every load
         reg.addEventListener('updatefound', () => { const w = reg.installing; w?.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) skipTo(w); }); });
       }).catch((e) => console.warn('service worker not registered; offline use is off', e));
       // The reload under the new worker happens at once only in the first seconds of a page (nothing is half-done yet);

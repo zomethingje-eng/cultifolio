@@ -7,6 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Change } from '$core/log';
 import { hlcEncode, hlcDecode } from '$core/hlc';
+import { localDate } from '$core/dates';
 import { accNo, NUMBERING_SETTING } from '$lib/db/types';
 import { importV2 } from '$lib/import/v2';
 
@@ -312,5 +313,34 @@ describe('a clock that was fast (round eight, 4)', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('round nine', () => {
+  it('a removal after a fast-clock edit takes: the removal is stamped past the record\'s latest edit, not only its own field (round nine, 2)', async () => {
+    const real = Date.parse('2026-09-25T12:00:00Z');
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(real + 365 * 86_400_000);
+      const { collection } = await fresh('fastdevice00');
+      const e = await collection.addEvent({ acc: 'x', d: '2026-09-25', t: 'water', note: 'logged while fast' });
+      vi.setSystemTime(real);
+      const c2 = (await reload()) as typeof collection;
+      expect(c2.events('x')).toHaveLength(1);
+      await c2.remove('event', e.id);
+      expect(c2.events('x')).toHaveLength(0);
+      await c2.restore('event', e.id);
+      expect(c2.events('x')).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it('a record that arrived in a file counts from the day it arrived, whatever its changes are stamped (round nine, 3)', async () => {
+    const { collection } = await fresh('testdevice');
+    const old = Date.now() - 500 * 86_400_000;
+    await collection.ingest([remote(old, 0, 'v2import', 'accession', 'A-1', 'acc', 'A-1'), remote(old, 1, 'v2import', 'accession', 'A-1', 'taxonName', 'Lithops')]);
+    expect(collection.madeOn('accession', 'A-1')).toBe(localDate());
+    const again = (await reload()) as typeof collection;
+    expect(again.madeOn('accession', 'A-1')).toBe(localDate()); // kept across a reload
   });
 });

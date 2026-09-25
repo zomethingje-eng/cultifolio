@@ -13,7 +13,7 @@
   import { slugify, speciesSlug } from '$core/names';
   import { EVENT_LABEL, PROP_METHODS, kindOf, type PropMethod, type Provenance } from '$lib/db/types';
   import { setCrumb } from '$lib/ui/crumb.svelte';
-  import { bySlug } from '$lib/ui/index.svelte';
+  import { entriesFor } from '$lib/ui/index.svelte';
   import type { IndexEntry } from '$lib/server/dossiers';
   import PhotoImg from '$lib/ui/PhotoImg.svelte';
   import PhotoAdd from '$lib/ui/PhotoAdd.svelte';
@@ -35,7 +35,7 @@
   $effect(() => {
     if (s) {
       setCrumb([{ label: 'Sowings', href: '/sowings' }, { label: `${sowNo(s)} · ${s.taxonName}` }]);
-      bySlug(speciesSlug(s.taxonName)).then((e) => (idx = e ?? undefined));
+      entriesFor([speciesSlug(s.taxonName)]).then((m) => (idx = m?.get(speciesSlug(s.taxonName))));
     }
     return () => setCrumb([]);
   });

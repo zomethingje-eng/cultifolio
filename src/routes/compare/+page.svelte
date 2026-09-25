@@ -96,7 +96,7 @@
     </div>
     <div class="rowlab">Rain</div>
     <div class="row">
-      {#each cols as c (c.d.key)}<div class="cell fig">{#if c.rain != null && c.wet}<b>{rain(c.rain, u)}/yr</b><span>{c.wet.n === 0 ? `no month over ${u === 'us' ? '1 in' : '25 mm'}` : `${c.wet.n} month${c.wet.n === 1 ? '' : 's'} over ${u === 'us' ? '1 in' : '25 mm'}`} · peak {c.wet.mo} (CHELSA)</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
+      {#each cols as c (c.d.key)}<div class="cell fig">{#if c.rain != null && c.wet}<b>{rain(c.rain, u)}/yr</b><span>{c.wet.n === 0 ? `no month over 25 mm (1 in)` : `${c.wet.n} month${c.wet.n === 1 ? '' : 's'} over 25 mm (1 in)`} · peak {c.wet.mo} (CHELSA)</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
     </div>
     <div class="rowlab">Light</div>
     <div class="row">

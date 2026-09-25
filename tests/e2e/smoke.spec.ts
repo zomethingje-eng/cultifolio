@@ -646,6 +646,7 @@ test('sync: an offline edit uploaded late is still discovered, and a backup merg
   await b.evaluate(() => navigator.serviceWorker.ready);
   await expect.poll(async () => b.evaluate(async () => { for (const n of await caches.keys()) if (await (await caches.open(n)).match('/plants')) return true; return false; }), { timeout: 30000 }).toBe(true);
   await B.setOffline(true);
+  await expect(b.getByRole('button', { name: 'Water', exact: true })).toBeVisible({ timeout: 20000 }); // the offline page renders from the vault; under load that takes longer than the default wait
   await b.getByRole('button', { name: 'Water', exact: true }).click();
   await b.fill('#ev-note', 'B, offline, first');
   await b.getByRole('button', { name: 'Record' }).click();
@@ -661,9 +662,9 @@ test('sync: an offline edit uploaded late is still discovered, and a backup merg
   await syncNow(b);
   await syncNow(a);
   await a.goto(`/plants/${acc}`);
-  await expect(a.locator('.tlrow', { hasText: 'B, offline, first' })).toBeVisible();
+  await expect(a.locator('.tlrow', { hasText: 'B, offline, first' })).toBeVisible({ timeout: 20000 });
   await b.goto(`/plants/${acc}`);
-  await expect(b.locator('.tlrow', { hasText: 'A, online, second' })).toBeVisible();
+  await expect(b.locator('.tlrow', { hasText: 'A, online, second' })).toBeVisible({ timeout: 20000 }); // a pull can take a few seconds under load; the wait is generous, the assertion is exact
 
   // A third, unsynced device makes its own plant and exports a backup; A merges that file. B must get the plant.
   const C = await browser.newContext();
@@ -1424,13 +1425,14 @@ test('the front page offline asks for the catalogue once and offers a retry, nev
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
+  // The reference unreachable: the route is on the context, so the worker's own fetch of the bucket fails too (worker network events are on in the config).
   let calls = 0;
-  await page.route(/\/api\/(index|entries)/, (r) => { calls++; r.abort(); });
+  await ctx.route(/\/api\/(index|entries)/, (r) => { calls++; r.abort(); });
   await page.goto('/');
   await expect(page.locator('.tile .im.ph', { hasText: 'reference not reached' })).toBeVisible();
   await page.waitForTimeout(1500);
-  expect(calls).toBeLessThanOrEqual(2);
-  await page.unroute(/\/api\/index/);
+  expect(calls).toBeLessThanOrEqual(4); // the page's fetch and the worker's, once each: no loop
+  await ctx.unroute(/\/api\/(index|entries)/);
   await page.getByRole('button', { name: 'Try again' }).click();
   await expect(page.locator('.tile .nm', { hasText: 'Copiapoa cinerea' })).toBeVisible();
   await ctx.close();
