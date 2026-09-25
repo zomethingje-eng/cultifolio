@@ -120,7 +120,7 @@ h1.sci i { font-style: italic; }
 h1.sci .auth { font-family: var(--ui); font-style: normal; font-size: 13px; color: var(--ink3); font-weight: 400; letter-spacing: 0; white-space: nowrap; }
 h1.q, h3.q { font-family: var(--serif); font-size: 30px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.15; margin: 0 0 14px; }
 .vern { font-size: 13.5px; color: var(--ink2); margin: 5px 0 0; }
-h2.sec { font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--ink3); font-weight: 700; margin: var(--section-gap) 0 8px; font-family: var(--ui); }
+h2.sec { font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--ink3); font-weight: 700; margin: var(--section-gap) 0 8px; font-family: var(--ui); scroll-margin-top: 108px; /* under the top bar and the sticky section row */ }
 h2.sec:first-child { margin-top: 14px; }
 .secsub { margin: 8px 0 2px; font-size: 13.5px; color: var(--ink2); max-width: 64ch; }
 .seccount { margin: 0 0 6px; font-family: var(--mono); font-size: 11.5px; color: var(--ink3); letter-spacing: 0.02em; }
@@ -266,7 +266,8 @@ nav.tabs a.on { background: var(--ink); color: var(--bg); }
 table.wx { width: 100%; font-size: 12.5px; margin: 14px 0; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); overflow: hidden; border-collapse: separate; border-spacing: 0; }
 table.wx th { text-align: right; font-size: 10px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink3); border-bottom: 1px solid var(--rule); padding: 9px 10px; font-weight: 700; }
 table.wx th:first-child { text-align: left; }
-table.wx td { border-bottom: 1px solid var(--rule); padding: 8px 10px; font-family: var(--mono); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+table.wx td { border-bottom: 1px solid var(--rule); padding: 8px 10px; font-family: var(--mono); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.wx td:first-child, table.wx th:first-child { position: sticky; left: 0; background: var(--card); }
 table.wx td:first-child { font-family: var(--ui); font-weight: 600; text-align: left; white-space: nowrap; }
 table.wx tr:last-child td { border-bottom: 0; }
 
@@ -307,6 +308,7 @@ details.why > .whybody { font-family: var(--ui); font-size: 12.5px; line-height:
   /* On a phone the section row is one line that scrolls sideways and sticks under the top bar: the page's own navigation. */
   nav.tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding: 8px 0 6px; margin-inline: -16px; padding-inline: 16px; }
   nav.tabs::-webkit-scrollbar { display: none; }
+  nav.tabs { mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); }
   nav.tabs a { font-size: 12px; padding: 0 11px; }
   table.wx td, table.wx th { padding: 6px 8px; }
   /* Fingers: 40 px minimum on anything tappable. */

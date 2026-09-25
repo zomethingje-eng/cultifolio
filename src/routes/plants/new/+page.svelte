@@ -44,6 +44,7 @@
   let provenance = $state<Provenance>('unknown');
   let acquired = $state(localDate());
   let sourceFrom = $state('');
+  let price = $state('');
   let sourceForm = $state('plant');
   let locationId = $state<string | null>(null);
   let notes = $state('');
@@ -79,6 +80,7 @@
         provenance,
         acquired: acquired || null,
         sourceFrom: sourceFrom.trim() || null,
+        price: price.trim() || null,
         sourceForm,
         locationId,
         notes: notes.trim() || null
@@ -95,7 +97,7 @@
 
 <form class="form" onsubmit={save}>
   <PageHead title="Add a plant" kick="My plants" places={false}>
-    {#snippet subline()}It will be numbered <span class="accno">{useOwnNumber && ownNumber ? ownNumber : nextNo}</span>. A number is never reused.{/snippet}
+    {#snippet subline()}{#if count > 1}They will be numbered from <span class="accno">{nextNo}</span>, one each.{:else}It will be numbered <span class="accno">{useOwnNumber && ownNumber ? ownNumber : nextNo}</span>.{/if} A number is never reused.{/snippet}
   </PageHead>
   <div class="cult sheet">
 
@@ -115,7 +117,7 @@
       <select id="f-prov" bind:value={provenance}>
         <option value="unknown">Not stated</option>
         <option value="wild">Wild-collected</option>
-        <option value="f1">Ex-habitat seed (F1)</option>
+        <option value="f1">F1: raised from wild-collected seed</option>
         <option value="fn">Cultivated seed (Fn)</option>
         <option value="veg">Vegetative</option>
       </select>
@@ -131,6 +133,7 @@
   <div class="two">
     <label class="field"><span>Acquired</span><input id="f-date" type="date" bind:value={acquired} /></label>
     <label class="field"><span>From</span><input id="f-from" type="text" bind:value={sourceFrom} placeholder="Nursery, seller, friend" /></label>
+    <label class="field"><span>Price <span class="faint">(optional)</span></span><input id="f-price" type="text" bind:value={price} placeholder="what it cost, as you like to write it" /></label>
   </div>
 
   <div class="two">

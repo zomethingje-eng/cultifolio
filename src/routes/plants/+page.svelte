@@ -64,7 +64,7 @@
 
 <svelte:head><title>My plants — Cultifolio</title></svelte:head>
 
-<PageHead title="My plants" sub="Your plants, each under its own number, kept on this device." count="{collection.accessions.filter((a) => a.status === 'growing').length} growing · {collection.accessions.length} numbered">
+<PageHead title="My plants" sub="Your plants, each under its own number, kept on this device." count="{collection.accessions.filter((a) => a.status === 'growing').length} growing · {collection.numbersIssued} number{collection.numbersIssued === 1 ? '' : 's'} given">
   <a class="btn pri" href="/plants/new">Add a plant</a>
 </PageHead>
 
@@ -105,7 +105,7 @@
       <a class="azrow accrow" href="/plants/{accNo(a)}">
         <span class="im" class:own={!!own}>{#if own}<PhotoImg id={own.id} alt="" loading="lazy" />{:else if th}<img src={th} alt="" loading="lazy" onerror={(e) => ((e.currentTarget as HTMLImageElement).style.display = 'none')} />{:else}<span>–</span>{/if}</span>
         <span>
-          <span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} />{#if a.cultivar} ‘{a.cultivar}’{/if}</span>
+          <span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}‘{a.cultivar}’{/if}</span>
           <span class="fam">{#if kindOf(a) !== 'species'}<span class="pill c">{kindOf(a)}</span>{/if}{#if a.fieldNumber}<span class="fnchip">{a.fieldNumber}</span>{/if}{#if a.locationId}<span>{collection.locationName(a.locationId)}</span>{:else if a.location}<span>{a.location}</span>{/if}{#if a.status !== 'growing'}<span class="pill">{a.status}</span>{/if}</span>
         </span>
         <span class="fig" class:due={w != null && w > 21 && a.status === 'growing'}>{w == null ? 'not watered yet' : w === 0 ? 'watered today' : `watered ${w} d ago`}</span>

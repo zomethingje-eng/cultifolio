@@ -34,11 +34,11 @@
 {#if hero}
   {#if rest.length}
     <div class="grid">
-      {#each shown as p (p.src + p.id)}
-        <a class="ph" href={p.page ?? p.url} rel="noopener" title="{credit(p)}{p.captive ? ' · in cultivation' : ''}"><img src={p.thumb} alt="{name}{p.captive ? ', in cultivation' : ''}" loading="lazy" />{#if p.captive}<span class="tag">cultivated</span>{/if}</a>
+      {#each shown as p, i (p.src + p.id)}
+        <a class="ph" href={p.page ?? p.url} rel="noopener" title="{credit(p)}{p.captive ? ' · in cultivation' : ''}" aria-label="{name}{p.captive ? ', in cultivation' : ''}: photograph {i + 1} of {shown.length}, {credit(p)}"><img src={p.thumb} alt="" loading="lazy" />{#if p.captive}<span class="tag">cultivated</span>{/if}</a>
       {/each}
     </div>
-    <p class="credits faint">Photographs: {credits}.{#if rest.length > LIMIT} <button class="linkish" type="button" onclick={() => (showAll = !showAll)}>{showAll ? 'Show fewer' : `Show all ${photos.length}`}</button>{/if}</p>
+    <p class="credits faint">Photographs: {credits}.{#if rest.length > LIMIT}{' '}<button class="linkish" type="button" onclick={() => (showAll = !showAll)}>{showAll ? 'Show fewer' : `Show all ${photos.length}`}</button>{/if}</p>
   {/if}
 {:else}
   <div class="empty card">

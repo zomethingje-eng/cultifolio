@@ -46,7 +46,7 @@
   });
   function startEdit() {
     if (!loc) return;
-    f = { name: loc.name, kind: loc.type ?? '', parent: path.length > 1 ? path[path.length - 2].id : null, indoor: loc.indoor == null ? '' : loc.indoor ? 'yes' : 'no', floorC: loc.floorC == null ? '' : (units.current === 'us' ? +cToF(loc.floorC).toFixed(1) : loc.floorC).toString(), ppfd: loc.ppfd?.toString() ?? '', lightHours: loc.lightHours?.toString() ?? '', lat: loc.lat?.toString() ?? '', lon: loc.lon?.toString() ?? '', altM: loc.altM?.toString() ?? '', notes: loc.notes ?? '' };
+    f = { name: loc.name, kind: loc.type ?? '', parent: path.length > 1 ? path[path.length - 2].id : null, indoor: loc.indoor == null ? '' : loc.indoor ? 'yes' : 'no', floorC: loc.floorC == null ? '' : (units.current === 'us' ? +cToF(loc.floorC).toFixed(1) : +loc.floorC.toFixed(1)).toString(), ppfd: loc.ppfd?.toString() ?? '', lightHours: loc.lightHours?.toString() ?? '', lat: loc.lat?.toString() ?? '', lon: loc.lon?.toString() ?? '', altM: loc.altM?.toString() ?? '', notes: loc.notes ?? '' };
     editing = true;
   }
   const num = (s: string) => (s.trim() === '' || Number.isNaN(Number(s)) ? null : Number(s));
@@ -218,13 +218,14 @@
       {#each deep as a (a.id)}
         {@const seen = collection.lastSeen(a.id)}
         {@const ds = daysSince(seen)}
+        {@const missed = lastAudit != null && (seen == null || seen < lastAudit)}
         {#if auditing}
           <label class="azrow accrow row"><input type="checkbox" bind:checked={present[a.id]} /><span><span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} /></span></span><span class="fig">{a.locationId !== id ? collection.location(a.locationId!)?.name ?? '' : ''}</span></label>
         {:else}
           <a class="azrow accrow row" href="/plants/{accNo(a)}">
             <span class="dot statedot {ds == null ? '' : ds > 90 ? 'wake' : 'grow'}" role="img" aria-label={ds == null ? 'never audited' : ds > 90 ? `not seen for ${ds} days` : `seen ${ds} days ago`} title={ds == null ? 'never audited' : ds > 90 ? `not seen for ${ds} days` : `seen ${ds} days ago`}></span>
             <span><span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} /></span><span class="fam">{a.locationId !== id ? collection.location(a.locationId!)?.name ?? '' : ''}</span></span>
-            <span class="fig" class:due={ds != null && ds > 90}>{ds == null ? 'never audited' : ds > 90 ? `not seen for ${ds} days` : ds === 0 ? 'seen today' : ds === 1 ? 'seen yesterday' : `seen ${ds} d ago`}</span>
+            <span class="fig" class:due={missed || (ds != null && ds > 90)}>{missed ? `not seen at the audit of ${lastAudit}` : ds == null ? 'never audited' : ds > 90 ? `not seen for ${ds} days` : ds === 0 ? 'seen today' : ds === 1 ? 'seen yesterday' : `seen ${ds} d ago`}</span>
           </a>
         {/if}
       {/each}

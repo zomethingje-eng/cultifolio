@@ -36,7 +36,7 @@ export function rain(mm: number, u: Units): string {
     const i = mmToIn(mm);
     return `${i < 1 ? i.toFixed(2) : i.toFixed(1)} in`;
   }
-  return `${mm < 10 && mm !== Math.round(mm) ? mm.toFixed(1) : Math.round(mm)} mm`;
+  return `${mm < 10 && mm !== Math.round(mm) ? mm.toFixed(1) : Math.round(mm).toLocaleString('en-US')} mm`;
 }
 /** The number alone: "2.8". */
 export function rainN(mm: number, u: Units): string {

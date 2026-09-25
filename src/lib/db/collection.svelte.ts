@@ -579,8 +579,12 @@ class Collection {
     await this.commit([{ t: this.tick(), kind, id, field: '_deleted', value: false }]);
   }
 
-  nextAccessionNumber(): string {
-    return nextAccession(this.takenNumbers('accession'), this.scheme);
+  nextAccessionNumber(scheme: NumberingScheme = this.scheme): string {
+    return nextAccession(this.takenNumbers('accession'), scheme);
+  }
+  /** How many plant numbers this device has ever given, removed plants included: a number is never reused. */
+  get numbersIssued(): number {
+    return this.takenNumbers('accession').size;
   }
 
   /** A new plant. Its number is minted, or taken from `acc` when the grower brings one; a number already in use is refused, never overwritten. */

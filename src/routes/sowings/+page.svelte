@@ -8,6 +8,8 @@
   import { PROP_METHODS } from '$lib/db/types';
   onMount(() => collection.load());
   let show = $state<'active' | 'all'>('active');
+  // Nothing in progress but batches on file: open on All rather than on an empty list.
+  $effect(() => { if (collection.ready && collection.sowings.length && !collection.sowings.some((s) => s.status === 'active')) show = 'all'; });
   const rows = $derived(collection.sowings.filter((s) => show === 'all' || s.status === 'active').map((s) => ({ s, st: collection.sowingStats(s.id), m: PROP_METHODS.find((m) => m.k === s.method) ?? PROP_METHODS[0] })));
   const pct = (r: number | null) => (r == null ? '–' : `${Math.round(r * 100)}%`);
 </script>
@@ -36,7 +38,7 @@
             <tr>
               <td><a class="mono" href="/sowings/{sowNo(s)}">{sowNo(s)}</a></td>
               <td class="left"><SpeciesName name={s.taxonName} />{#if s.cultivar} ‘{s.cultivar}’{/if}</td>
-              <td class="left">{m.label}{#if s.parentAcc} <span class="faint">from <a class="mono" href="/plants/{s.parentAcc}">{collection.accession(s.parentAcc) ? accNo(collection.accession(s.parentAcc)!) : s.parentAcc}</a></span>{/if}</td>
+              <td class="left">{m.label}{#if s.parentAcc} <span class="faint"> from <a class="mono" href="/plants/{s.parentAcc}">{collection.accession(s.parentAcc) ? accNo(collection.accession(s.parentAcc)!) : s.parentAcc}</a></span>{/if}</td>
               <td class="left">{s.sown}</td>
               <td>{st.days}</td>
               <td>{s.count}</td>

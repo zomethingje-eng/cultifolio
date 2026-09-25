@@ -164,9 +164,9 @@ test('sowings: sow seed, count germination, pot up into numbered plants, propaga
   // the plant knows its batch and its provenance
   await page.locator('.rows a.accrow').first().click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
-  await expect(page.locator('.vern')).toContainText('ex-habitat seed');
+  await expect(page.locator('.vern')).toContainText('F1, raised from wild-collected seed');
   await expect(page.locator('.fnchip', { hasText: 'MG 123' })).toBeVisible();
-  await expect(page.getByText(/raised from/)).toBeVisible();
+  await expect(page.locator('a.mono[href^="/sowings/"]').first()).toBeVisible(); // the plant links its batch
   // take offsets from it
   await page.getByRole('link', { name: 'Propagate' }).click();
   await expect(page).toHaveURL(/\/sowings\/new\?parent=/);
@@ -221,7 +221,7 @@ test('the path species → my plants → bench is prefilled at every step and lo
   await page.goto(`/plants/${acc}`);
   await expect(page.locator('.hvh')).toContainText('this place is set to bottom out at 2 °C');
   // the habitat figure is the median with its 10th–90th span across the envelope cells, and the quantity is named
-  await expect(page.locator('.hvh')).toContainText(/coldest month's mean night at the habitat \d+ °C in \w+ \(median year; across the 40 envelope cells \d+ to \d+; CHELSA\); 1st-percentile night over 40 years at the typical cell 6\.5 °C \(NASA POWER\)/);
+  await expect(page.locator('.hvh')).toContainText(/coldest month's mean night at the habitat \d+(\.\d)? °C in \w+ \(median year; across the 40 envelope cells \d+ to \d+; CHELSA\); 1st-percentile night over 40 years at the typical cell 6\.5 °C \(NASA POWER\)/);
   await expect(page.locator('.hvh')).toContainText(/open sky over the habitat \d+–\d+ mol\/m²\/day across the year \(median year; across the 40 envelope cells \d+ to \d+; CHELSA\)/);
   await expect(page.locator('.hvh .pill')).toHaveCount(0);
   await page.locator('.hvh + details.why summary').click(); // the caveat sits one tap away, not beside the figures
@@ -478,7 +478,7 @@ test('the species page condenses its cultivation sheet into a note by rule', asy
   await expect(page.locator('#gen-note .body')).toContainText("Rain rule: no rainy season to read (72 mm a year); the temperature rule's cooler six months are November to April in the northern hemisphere.");
   await expect(page.locator('#gen-note .body')).not.toContainText(/fog/);
   await expect(page.locator('#gen-note .body')).toContainText('Cold floor 6.5 °C (1st-percentile habitat night, NASA POWER).');
-  await expect(page.locator('#gen-note .foot')).toContainText('Its year, Rain, Light, Temperature');
+  await expect(page.locator('#gen-note .foot')).toContainText('Its year, Rain, Light, Warmth and air');
   // the note's floor is the card's floor, the same figure with the same quantity named
   await expect(page.locator('.cult', { hasText: /^Warmth and air/ }).first().locator('.body')).toContainText('Cold floor: 6.5 °C, which is the 1st-percentile night over 40 years at the typical cell (NASA POWER).');
   // nothing on the sheet says what the plant does, wants or tolerates, or what to do to it
@@ -843,7 +843,7 @@ test('the species page carries the envelope: median with its span, the cells it 
   await page.getByRole('button', { name: /^Add/ }).click();
   const t = page.locator('.card', { hasText: 'Habitat rain season' });
   await expect(t).toContainText('No rainy season to read');
-  await expect(t).toContainText("72 mm a year; the temperature rule's cooler six months May–Oct (S), shifted to the north (no coordinates set): Nov–Apr (CHELSA).");
+  await expect(t).toContainText("72 mm a year; the temperature rule's cooler six months May–Oct (S), shifted to the north (no site set): Nov–Apr (CHELSA).");
   await expect(t.getByRole('link', { name: 'The sheet' })).toBeVisible();
   await expect(t).not.toContainText(/Rest expected|Growth expected|Water when/);
 });
@@ -888,6 +888,8 @@ test('every control has a name, headings do not jump, images have alt text, mute
   await page.fill('#s-count', '10'); // a count is never assumed
   await page.getByRole('button', { name: 'Start batch' }).click();
   await expect(page).toHaveURL(/\/sowings\/S\d{4}-\d{3}$/);
+  await page.fill('#g-n', '3'); // nothing is potted from an uncounted pot
+  await page.getByRole('button', { name: 'Record count' }).click();
   await page.getByRole('button', { name: 'Pot up…' }).click();
   await page.getByRole('button', { name: 'Edit' }).click();
   expect((await a11yScan(page)).unlabeled).toEqual([]);
@@ -1029,7 +1031,10 @@ test('the species field is a combobox: arrows and Enter pick a suggestion; Enter
   await expect(input).toHaveValue('Copiapoa cinerea');
   await expect(page.locator('.picker .pill.ok')).toContainText('GBIF');
   await expect(page).toHaveURL(/\/plants\/new$/);
+  // Enter never files a plant from this field, resolved or not: Add is the deliberate act
   await input.press('Enter');
+  await expect(page).toHaveURL(/\/plants\/new$/);
+  await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   await expect(page.locator('h1')).toContainText('Copiapoa cinerea');
 
@@ -1038,7 +1043,7 @@ test('the species field is a combobox: arrows and Enter pick a suggestion; Enter
   await input.fill('Welwit');
   await page.waitForTimeout(400); // the suggestion debounce; a genus fragment resolves to nothing local
   await input.press('Enter');
-  await expect(page.locator('.picker .hint')).toContainText('Pick a name from the list, or press Enter again');
+  await expect(page.locator('.picker .hint')).toContainText(/Pick a name from the list|Did you mean/);
   await expect(page).toHaveURL(/\/plants\/new$/);
   await page.goto('/plants');
   await expect(page.locator('.accrow')).toHaveCount(1);
@@ -1218,7 +1223,7 @@ test('the share card is a PNG with the figures and the link drawn in, and is off
   const path = await dl.path();
   const { statSync } = await import('node:fs');
   expect(statSync(path!).size).toBeGreaterThan(20_000);
-  await expect(page.getByRole('status')).toContainText('Saved as a picture');
+  await expect(page.getByRole('status')).toContainText('Saved to your downloads');
 });
 
 test('a grower\'s home says what needs them: sowings in the tray and plants without a photograph, each a link', async ({ page }) => {
@@ -1360,4 +1365,111 @@ test('the collection\'s pages need nothing from the server to open: a plant page
   await page.goto('/settings');
   await expect(page.getByRole('button', { name: '°F and inches' })).toHaveAttribute('aria-pressed', 'true');
   await ctx.close();
+});
+
+test('the batch page checks what it is told: no count above the seeds sown or below the last count, no loss or potting beyond the pot, no future dates; a wrong entry can be removed', async ({ page }) => {
+  await page.goto('/sowings/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.fill('#s-count', '10');
+  await page.fill('#s-date', '2099-01-01');
+  await page.getByRole('button', { name: 'Start batch' }).click();
+  await expect(page.locator('#s-date-bad')).toContainText('in the future');
+  await expect(page).toHaveURL(/\/sowings\/new/);
+  await page.fill('#s-date', '2026-09-01');
+  await page.getByRole('button', { name: 'Start batch' }).click();
+  await expect(page).toHaveURL(/\/sowings\/S2026-\d{3}$/);
+  // a count above what went in
+  await page.fill('#g-n', '15');
+  await page.getByRole('button', { name: 'Record count' }).click();
+  await expect(page.locator('.refuse').first()).toContainText('more than the 10 that went in');
+  await page.fill('#g-n', '6');
+  await page.getByRole('button', { name: 'Record count' }).click();
+  await expect(page.locator('.card', { hasText: 'Germinated' })).toContainText('6');
+  // a count below the last count is not a count: losses are recorded as losses
+  await page.fill('#g-n', '2');
+  await page.getByRole('button', { name: 'Record count' }).click();
+  await expect(page.locator('.refuse').first()).toContainText('fewer than the 6 already counted');
+  // a loss beyond the pot, then a real one
+  await page.fill('#l-n', '30');
+  await page.getByRole('button', { name: 'Record loss' }).click();
+  await expect(page.locator('.refuse', { hasText: 'Only 6 in the pot to lose' })).toBeVisible();
+  await page.fill('#l-n', '1');
+  await page.getByRole('button', { name: 'Record loss' }).click();
+  await expect(page.locator('.card', { hasText: 'Still in the pot' })).toContainText('5');
+  // potting more than the pot holds is refused before any number is minted
+  await page.getByRole('button', { name: 'Pot up…' }).click();
+  await page.fill('#p-n', '50');
+  await page.getByRole('button', { name: /^Pot up 50/ }).click();
+  await expect(page.locator('.refuse', { hasText: 'Only 5 in the pot; each potted plant gets a number' })).toBeVisible();
+  await page.goto('/plants');
+  await expect(page.locator('.accrow')).toHaveCount(0);
+  await page.goBack();
+  // a slip in the log can be taken out again
+  const rows = page.locator('.tlrow');
+  await expect(rows.first()).toBeVisible();
+  const before = await rows.count();
+  expect(before).toBeGreaterThan(1);
+  await rows.first().locator('.rm').click();
+  await rows.first().locator('.rm.confirm').click();
+  await expect(rows).toHaveCount(before - 1);
+});
+
+test('the front page offline asks for the catalogue once and offers a retry, never a loop', async ({ browser }) => {
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+  await page.goto('/');
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.getByRole('button', { name: /^Add/ }).click();
+  await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
+  let calls = 0;
+  await page.route(/\/api\/index/, (r) => { calls++; r.abort(); });
+  await page.goto('/');
+  await expect(page.locator('.tile .im.ph', { hasText: 'reference not reached' })).toBeVisible();
+  await page.waitForTimeout(1500);
+  expect(calls).toBeLessThanOrEqual(2);
+  await page.unroute(/\/api\/index/);
+  await page.getByRole('button', { name: 'Try again' }).click();
+  await expect(page.locator('.tile .nm', { hasText: 'Copiapoa cinerea' })).toBeVisible();
+  await ctx.close();
+});
+
+test('settings previews the next number from the numbers given, and an edited acquisition date follows into the log', async ({ page }) => {
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.getByRole('button', { name: /^Add/ }).click();
+  await page.goto('/plants/new?species=Copiapoa%20humilis&key=5384999');
+  await page.getByRole('button', { name: /^Add/ }).click();
+  await page.goto('/settings');
+  await expect(page.locator('.accno')).toHaveText(/-0003$/);
+  await page.goto('/plants/2026-0001');
+  await page.getByRole('button', { name: 'Edit' }).click();
+  await page.fill('#ed-date', '2024-03-07');
+  await page.fill('#ed-from', 'A nursery');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.locator('.tlrow', { hasText: 'Acquired' })).toContainText('2024-03-07');
+  await expect(page.locator('.tlrow', { hasText: 'Acquired' })).toContainText('from A nursery');
+});
+
+test('keyboard: the menu keeps Tab inside and Escape returns focus; Enter in the species field never files a plant; the search opens its first match on Enter', async ({ page }) => {
+  await page.goto('/');
+  const menu = page.getByRole('button', { name: 'Menu' });
+  await expect.poll(async () => { await menu.focus(); await page.keyboard.press('Enter'); return menu.getAttribute('aria-expanded'); }).toBe('true'); // before hydration the key does nothing
+  await expect.poll(() => page.evaluate(() => document.activeElement?.textContent?.trim())).toBe('Species');
+  await page.keyboard.press('Shift+Tab');
+  await expect.poll(() => page.evaluate(() => document.activeElement?.textContent?.trim())).toBe('Source');
+  await page.keyboard.press('Tab');
+  await expect.poll(() => page.evaluate(() => document.activeElement?.textContent?.trim())).toBe('Species');
+  await page.keyboard.press('Escape');
+  await expect.poll(() => page.evaluate(() => document.activeElement?.getAttribute('aria-label'))).toBe('Menu');
+  // the search: Enter opens the first match
+  await page.fill('.searchbar', 'copiapoa hum');
+  await expect(page.locator('a.tile').first()).toBeVisible();
+  await page.locator('.searchbar').press('Enter');
+  await expect(page).toHaveURL(/\/species\/copiapoa-humilis$/);
+  // back keeps the search
+  await page.goBack();
+  await expect(page.locator('.searchbar')).toHaveValue('copiapoa hum');
+  // Enter in a filled species field does nothing; Add files it
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.locator('#species-name').press('Enter');
+  await expect(page).toHaveURL(/\/plants\/new/);
 });

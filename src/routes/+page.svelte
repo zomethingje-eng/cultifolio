@@ -1,5 +1,8 @@
 <script lang="ts">
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
+  import { goto, replaceState } from '$app/navigation';
+  import { browser } from '$app/environment';
+  import { page } from '$app/state';
   import { accNo } from '$lib/db/types';
   import PageHead from '$lib/ui/PageHead.svelte';
   import { collection } from '$lib/db/collection.svelte';
@@ -10,7 +13,21 @@
   import { prepare, search } from '$core/search';
   import Today from '$lib/ui/Today.svelte';
   let { data } = $props();
-  let q = $state('');
+  // The search lives in the URL (?q=) so the back button and a shared link bring it back; the server ignores it.
+  let q = $state(browser ? (new URLSearchParams(location.search).get('q') ?? '') : '');
+  // The search lives in the URL (?q=) so the back button and a shared link bring it back; the server ignores it.
+  $effect(() => {
+    if (!browser) return;
+    const u = new URL(location.href);
+    if (q.trim()) u.searchParams.set('q', q.trim()); else u.searchParams.delete('q');
+    if (u.href !== location.href) replaceState(u, page.state);
+  });
+  /** Enter in the search opens the first match: the way a search box is expected to behave. */
+  function openTop(e: KeyboardEvent) {
+    if (e.key !== 'Enter') return;
+    const top = (yourView ? hits : found)[0];
+    if (top) { e.preventDefault(); goto(`/species/${top.slug}`); }
+  }
   let chip = $state<'all' | 'owned' | 'climate' | 'noclimate'>('all');
   let welcomeHidden = $state(true);
   // A returning grower's device remembers that the page will be their species, not the catalogue: until the collection is
@@ -74,19 +91,24 @@
   // The full catalogue, fetched once and only when a search or a chip needs to cut across the grouping.
   let full = $state<Item[] | null>(null);
   let loadingFull = $state(false);
+  let fullFailed = $state(false);
   async function loadFull() {
-    if (full || loadingFull) return;
+    if (full || loadingFull || fullFailed) return; // a failed load (offline) is retried by the button, never by the effect
     loadingFull = true;
     try {
       const r = await fetch('/api/index');
+      if (!r.ok) fullFailed = true;
       if (r.ok) {
         const idx = (await r.json()) as Array<{ key: number; slug: string; name: string; family?: string; common?: string; origin?: string[]; thumb?: string; photos: number; open: number; climate: string }>;
         full = idx.map((e) => ({ key: e.key, slug: e.slug, name: e.name, family: e.family, common: e.common, origin: e.origin ?? [], thumb: e.thumb, alt: e.thumb ? e.name : undefined, photos: e.photos, open: e.open, climate: e.climate }));
       }
+    } catch {
+      fullFailed = true;
     } finally {
       loadingFull = false;
     }
   }
+  const retryFull = () => { fullFailed = false; loadFull(); };
   const flat = $derived(!!q.trim() || chip !== 'all');
   $effect(() => {
     if (flat || hasMine) loadFull();
@@ -160,7 +182,7 @@
 {#snippet tile(c: Tile)}
   <a class="tile" href="/species/{c.slug}">
     {#if owned.get(c.slug)?.length}<span class="ownchip" title="You grow {owned.get(c.slug)!.length === 1 ? owned.get(c.slug)![0] : owned.get(c.slug)!.length + ' of these'}" aria-label="You grow {owned.get(c.slug)!.length === 1 ? owned.get(c.slug)![0] : owned.get(c.slug)!.length + ' of these'}">{owned.get(c.slug)!.length === 1 ? owned.get(c.slug)![0] : `× ${owned.get(c.slug)!.length}`}</span>{:else if mine.get(c.slug)?.followed}<span class="ownchip following" title="On your list without a plant of it" aria-label="Following: on your list without a plant of it">following</span>{/if}
-    {#if c.thumb}<div class="im"><img src={c.thumb} alt={c.alt} loading="lazy" onerror={(e) => { const im = e.currentTarget as HTMLImageElement; im.style.display = 'none'; im.parentElement?.classList.add('ph'); im.parentElement && (im.parentElement.textContent = 'photograph did not load'); }} /></div>{:else if c.climate}<div class="im ph">no open photograph on file</div>{:else if c.missing}<div class="im ph">not in the reference yet</div>{:else}<div class="im ph">{loadingFull ? 'loading…' : ''}</div>{/if}
+    {#if c.thumb}<div class="im"><img src={c.thumb} alt={c.alt} loading="lazy" onerror={(e) => { const im = e.currentTarget as HTMLImageElement; im.style.display = 'none'; im.parentElement?.classList.add('ph'); im.parentElement && (im.parentElement.textContent = 'photograph did not load'); }} /></div>{:else if c.climate}<div class="im ph">no open photograph on file</div>{:else if c.missing}<div class="im ph">not in the reference yet</div>{:else}<div class="im ph">{loadingFull ? 'loading…' : fullFailed ? 'reference not reached' : ''}</div>{/if}
     <div class="tx">
       <div class="nm"><SpeciesName name={c.name} /></div>
       <div class="fam">{c.common ?? c.family ?? ''}</div>
@@ -185,7 +207,7 @@
   <Today />
 
   <div class="toolrow">
-    <input class="searchbar" type="search" placeholder="Search all {fmtN(data.total)} species by name, genus, family or origin…" bind:value={q} aria-label="Search the whole species catalogue" />
+    <input class="searchbar" type="search" placeholder="Search all {fmtN(data.total)} species by name, genus, family or origin…" bind:value={q} onkeydown={openTop} aria-label="Search the whole species catalogue" />
     <nav class="seg viewseg" aria-label="Which species">
       <button type="button" class="on" aria-current="true">Your species</button>
       <button type="button" onclick={startBrowsing}>All {fmtN(data.total)}</button>
@@ -194,16 +216,19 @@
 
   {#if q.trim()}
     {#if !full}
-      <p class="seccount" style="margin-top: 14px">Loading the whole catalogue…</p>
+      <p class="seccount" style="margin-top: 14px">{fullFailed ? 'The catalogue could not be reached.' : 'Loading the whole catalogue…'}{#if fullFailed} <button class="linkish" type="button" onclick={retryFull}>Try again</button>{/if}</p>
     {:else if !hits.length}
       <div class="emptybox"><p class="muted">Nothing in the catalogue matches.</p></div>
     {:else}
       <div class="hgrid">
         {#each hits as c (c.slug)}{@render tile(c)}{/each}
       </div>
-      <p class="seccount" style="margin-top: 14px">{fmtN(hits.length)} of {fmtN(data.total)} match.</p>
+      <p class="seccount" style="margin-top: 14px" role="status">{fmtN(hits.length)} of {fmtN(data.total)} match; Enter opens the first.</p>
     {/if}
   {:else}
+    {#if fullFailed}
+      <p class="seccount" style="margin-top: 14px">The reference could not be reached, so your tiles are without their photographs and climate. <button class="linkish" type="button" onclick={retryFull}>Try again</button></p>
+    {/if}
     {#if mineTiles.grow.length}
       <h2 class="q grouptitle">You grow</h2>
       <div class="hgrid">
@@ -242,27 +267,27 @@
         <button type="button" class="on" aria-current="true">All {fmtN(data.total)}</button>
       </nav>
     {/if}
-    <input class="searchbar" type="search" placeholder="Search by name, genus, family or origin…" bind:value={q} aria-label="Search species" />
+    <input class="searchbar" type="search" placeholder="Search by name, genus, family or origin…" bind:value={q} onkeydown={openTop} aria-label="Search species" />
     <nav class="seg" aria-label="Group by">
       {#each ['genus', 'origin', 'family'] as const as b (b)}<a href="?by={b}" class:on={data.by === b} aria-current={data.by === b ? 'true' : undefined}>{byLabel[b]}</a>{/each}
     </nav>
   </div>
   <div class="chiprow">
-    <button class="chipbtn" class:on={chip === 'all'} onclick={() => (chip = 'all')}>All<span class="n">{fmtN(data.total)}</span></button>
-    <button class="chipbtn" class:on={chip === 'climate'} onclick={() => (chip = 'climate')}>Climate known<span class="n">{fmtN(data.withClimate)}</span></button>
-    <button class="chipbtn" class:on={chip === 'noclimate'} onclick={() => (chip = 'noclimate')}>Without climate<span class="n">{fmtN(data.total - data.withClimate)}</span></button>
+    <button class="chipbtn" class:on={chip === 'all'} aria-pressed={chip === 'all'} onclick={() => (chip = 'all')}>All<span class="n">{fmtN(data.total)}</span></button>
+    <button class="chipbtn" class:on={chip === 'climate'} aria-pressed={chip === 'climate'} onclick={() => (chip = 'climate')}>Climate known<span class="n">{fmtN(data.withClimate)}</span></button>
+    <button class="chipbtn" class:on={chip === 'noclimate'} aria-pressed={chip === 'noclimate'} onclick={() => (chip = 'noclimate')}>Without climate<span class="n">{fmtN(data.total - data.withClimate)}</span></button>
   </div>
 
   {#if flat}
     {#if !full}
-      <p class="seccount" style="margin-top: 14px">{loadingFull ? 'Loading the whole catalogue…' : 'The catalogue could not be loaded; try again.'}</p>
+      <p class="seccount" style="margin-top: 14px">{loadingFull ? 'Loading the whole catalogue…' : 'The catalogue could not be reached.'}{#if fullFailed} <button class="linkish" type="button" onclick={retryFull}>Try again</button>{/if}</p>
     {:else if !found.length}
       <div class="emptybox"><p class="muted">Nothing matches.</p></div>
     {:else}
       <div class="hgrid">
         {#each found as c (c.slug)}{@render tile(c)}{/each}
       </div>
-      <p class="seccount" style="margin-top: 14px">{fmtN(found.length)} of {fmtN(data.total)} shown.</p>
+      <p class="seccount" style="margin-top: 14px" role="status">{fmtN(found.length)} of {fmtN(data.total)} shown{q.trim() ? '; Enter opens the first' : ''}.</p>
     {/if}
   {:else}
     {#if data.letters.length > 1}

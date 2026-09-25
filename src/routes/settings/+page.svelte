@@ -97,8 +97,8 @@
   const parseWidth = (v: string): number | null => (/^\s*[2-6]\s*$/.test(v) ? Number(v) : null);
   const preview = $derived.by(() => {
     const w = parseWidth(width) ?? 4;
-    const s: NumberingScheme = mode === 'year' ? { mode, width: w } : { mode, prefix: cleanPrefix(prefix) || 'ACC', width: w };
-    return collection.ready ? nextAccession(collection.accessions.map((a) => a.id), s) : '';
+    const s: NumberingScheme = mode === 'year' ? { mode, width: w } : { mode, prefix: cleanPrefix(prefix) || 'ABC', width: w };
+    return collection.ready ? collection.nextAccessionNumber(s) : '';
   });
   async function saveScheme() {
     const w = parseWidth(width);
@@ -112,7 +112,7 @@
       return;
     }
     await collection.setScheme(s);
-    numMsg = `Saved${sync.configured ? ' and synced' : ''}. Numbers already given are kept; the next plant is ${nextAccession(collection.accessions.map((a) => a.id), s)}.`;
+    numMsg = `Saved${sync.configured ? ' and synced' : ''}. Numbers already given are kept; the next plant is ${collection.nextAccessionNumber(s)}.`;
   }
 </script>
 

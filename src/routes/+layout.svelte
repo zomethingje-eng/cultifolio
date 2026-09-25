@@ -45,7 +45,17 @@
     { href: '/about/formats', label: 'Formats' },
     { href: 'https://github.com/zomethingje-eng/cultifolio', label: 'Source' }
   ];
-  afterNavigate(() => (menuOpen = false));
+  let mainEl = $state<HTMLElement | null>(null);
+  // How many pages this session has moved through inside the app: the back control goes to the previous one when there is one.
+  let hops = 0;
+  afterNavigate((nav) => {
+    menuOpen = false;
+    if (nav.from && nav.type !== 'popstate') hops++;
+    else if (nav.type === 'popstate' && hops > 0) hops--;
+    // A new page: focus its content, not the top bar again (a same-page hash jump keeps the browser's own focus handling).
+    if (nav.to?.url.hash) return;
+    mainEl?.focus({ preventScroll: true });
+  });
   const closeMenu = () => {
     menuOpen = false;
     menuBtn?.focus();
@@ -53,11 +63,13 @@
   // Open: focus goes to the first item and Tab stays inside until Escape or a choice; closed: it returns to the mark.
   let menuEl = $state<HTMLElement | null>(null);
   $effect(() => {
-    if (menuOpen && menuEl) menuEl.querySelector<HTMLElement>('a, button')?.focus();
+    if (menuOpen && menuEl) visible(menuEl)[0]?.focus();
   });
+  /** The menu's focusable items that are actually shown: the close button is hidden on a desktop and must not swallow the focus. */
+  const visible = (el: HTMLElement) => [...el.querySelectorAll<HTMLElement>('a, button')].filter((x) => x.offsetParent !== null);
   function trapTab(e: KeyboardEvent) {
     if (e.key !== 'Tab' || !menuEl) return;
-    const items = [...menuEl.querySelectorAll<HTMLElement>('a, button')];
+    const items = visible(menuEl);
     const first = items[0], last = items[items.length - 1];
     if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
@@ -94,7 +106,7 @@
 
 <div id="topbar">
   <button class="iconbtn brand" type="button" bind:this={menuBtn} aria-label="Menu" aria-haspopup="true" aria-expanded={menuOpen} aria-controls="menu" onclick={() => (menuOpen = !menuOpen)}>✳</button>
-  {#if back}<a class="iconbtn" href={back} aria-label="Back">‹</a>{/if}
+  {#if back}<a class="iconbtn" href={back} aria-label="Back" onclick={(e) => { if (hops > 0) { e.preventDefault(); history.back(); } }}>‹</a>{/if}
   <div class="crumb">
     {#each parts as c, i}
       {#if i}<span class="sep">›</span>{/if}
@@ -120,7 +132,8 @@
 {/if}
 {#if vaultNote}<p class="vaultnote">{vaultNote}</p>{/if}
 
-<main class="wrap">
+<a class="skip" href="#main">Skip to content</a>
+<main class="wrap" id="main" tabindex="-1" bind:this={mainEl}>
   <ToastBar />
   <InstallBar />
   {@render children()}
@@ -179,6 +192,10 @@
   @media (max-width: 700px) { #menu { top: 0; left: 0; bottom: 0; width: min(78vw, 300px); border-radius: 0 14px 14px 0; padding-top: max(8px, env(safe-area-inset-top)); overflow-y: auto; } #menu .menuhead { display: flex; } }
   main { padding-block: 0 3rem; max-width: 980px; }
   footer.credits { border-top: 1px solid var(--rule); margin: 44px auto 0; padding: 18px 0 40px; max-width: 980px; font-size: 11.5px; line-height: 1.75; color: var(--ink3); }
+  @media (max-width: 700px) { footer.credits { padding-bottom: calc(56px + 2rem + env(safe-area-inset-bottom)); } }
+  main:focus { outline: none; }
+  .skip { position: absolute; left: 16px; top: -40px; z-index: 90; background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-weight: 600; font-size: 13px; }
+  .skip:focus { top: 8px; outline: 2px solid var(--accent); }
   footer.credits p { margin: 0; }
   footer.credits a { display: inline-block; padding: 11px 2px; margin: -11px 0; }
   #tabbar { display: none; }

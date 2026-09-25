@@ -1,5 +1,7 @@
 <script lang="ts">
   import { units } from '$lib/ui/units.svelte';
+  import { toast } from '$lib/ui/toast.svelte';
+  import { site } from '$lib/ui/site.svelte';
   import { localDate } from '$core/dates';
   import { temp, tempN, rain, deltaT } from '$core/units';
   import { plural } from '$core/words';
@@ -22,7 +24,7 @@
   import PhotoImg from '$lib/ui/PhotoImg.svelte';
   import PhotoAdd from '$lib/ui/PhotoAdd.svelte';
   import Lightbox from '$lib/ui/Lightbox.svelte';
-  onMount(() => collection.load());
+  onMount(() => { site.load(); collection.load(); });
   /** The URL carries the number people know (or an identity, from a printed code); everything below works on the record's identity. */
   const u = $derived(units.current);
   const param = $derived(page.params.acc!);
@@ -100,7 +102,7 @@
   const coldCompare = $derived.by(() => {
     if (!habitat) return null;
     const n = habitat.night;
-    const night = `coldest month's mean night at the habitat ${temp(n.v, u)} in ${MONTHS[n.mo - 1]} (median year; across the ${habitat.cells} envelope cells ${tempN(n.lo, u)} to ${tempN(n.hi, u)}; CHELSA)`;
+    const night = `coldest month's mean night at the habitat ${temp(n.v, u, 1)} in ${MONTHS[n.mo - 1]} (median year; across the ${habitat.cells} envelope cells ${tempN(n.lo, u)} to ${tempN(n.hi, u)}; CHELSA)`;
     const p01 = habitat.ex ? `; 1st-percentile night over ${habitat.ex.years} years at the typical cell ${temp(habitat.ex.minP01, u, 1)} (NASA POWER)` : '';
     if (cond?.floorC == null) return { here: null, text: `${night}${p01}; no floor set for this place` };
     return { here: cond.floorC, text: `this place is set to bottom out at ${temp(cond.floorC, u)}; ${night}${p01}` };
@@ -110,10 +112,12 @@
   const season = $derived.by(() => {
     if (!habitat?.year) return null;
     const y = habitat.year;
-    const southHere = (cond?.lat ?? 40) < 0;
-    const here = runs(forReader(y, cond?.lat ?? 40), 'short');
+    // This place's coordinates, else the site set in Settings, else the north with a note: the same order as the species page.
+    const hereLat = cond?.lat ?? site.current?.lat ?? null;
+    const southHere = (hereLat ?? 40) < 0;
+    const here = runs(forReader(y, hereLat ?? 40), 'short');
     const home = `${runs(y.growMonths, 'short')} (${y.south ? 'S' : 'N'})`;
-    const shift = `shifted to ${cond?.lat != null ? 'this place' : 'the north'}${cond?.lat == null ? ' (no coordinates set)' : ''}: ${here}`;
+    const shift = `shifted to ${cond?.lat != null ? 'this place' : hereLat != null ? 'your site' : 'the north'}${hereLat == null ? ' (no site set)' : ''}: ${here}`;
     if (y.none) return { label: 'No season to read', note: `${rain(y.annualMm, u)} a year and a flat temperature curve (${deltaT(y.rangeT, u)} of range): no rainy season and no cooler half (CHELSA).` };
     const same = !y.shiftable ? 'not shifted: no thermal season to reverse' : southHere === y.south ? 'the same here' : shift;
     if (y.fog) return { label: 'No rainy season to read', note: `${rain(y.annualMm, u)} a year; the temperature rule's cooler six months ${home}, ${same} (CHELSA).` };
@@ -151,12 +155,19 @@
     if (!lastMeasure) rows.push({ k: 'measure', n: '3', t: 'Measure it', w: 'growth is read from the first measurement on', go: () => { moreActs = true; quick('measure'); } });
     return rows.length >= 2 ? rows : [];
   });
-  const provLabel = (p: string | null | undefined) => (p === 'wild' ? 'wild-collected' : p === 'f1' ? 'ex-habitat seed (F1)' : p === 'fn' ? 'cultivated seed' : p === 'veg' ? 'vegetative' : 'provenance not stated');
+  const provLabel = (p: string | null | undefined) => (p === 'wild' ? 'wild-collected' : p === 'f1' ? 'F1, raised from wild-collected seed' : p === 'fn' ? 'cultivated seed (Fn)' : p === 'veg' ? 'vegetative' : 'provenance not stated');
   let logOpen = $state(false);
   function quick(t: EventType) {
     et = t;
     logOpen = true;
-    setTimeout(() => document.getElementById('ev-note')?.focus(), 0);
+    // The first thing to fill: a measurement's first figure, a treatment's product, else the note.
+    setTimeout(() => (document.querySelector<HTMLElement>(t === 'measure' ? '.measures input' : t === 'treat' || t === 'feed' ? '#ev-used' : '#ev-note') ?? document.getElementById('ev-note'))?.focus(), 0);
+  }
+  /** After a record or a cancel, focus returns to the verb bar and the log line is announced, so a keyboard user is not dropped on the page body. */
+  function closeLog(recorded?: string) {
+    logOpen = false;
+    if (recorded) toast.show(recorded);
+    setTimeout(() => document.querySelector<HTMLElement>('.quickbar button')?.focus(), 0);
   }
   const propagations = $derived(collection.propagationsOf(id));
 
@@ -184,6 +195,10 @@
     const moved = (f.locationId ?? null) !== (a.locationId ?? null);
     await collection.put('accession', id, { taxonName: f.taxonName.trim() || a.taxonName, cultivar: f.cultivar.trim() || null, nameKind: f.nameKind, parentage: f.nameKind === 'hybrid' ? f.parentage.trim() || null : null, nameAsReceived: f.nameAsReceived.trim() || null, fieldNumber: f.fieldNumber.trim() || null, provenance: f.provenance, acquired: f.acquired || null, sourceFrom: f.sourceFrom.trim() || null, sourceForm: f.sourceForm.trim() || null, price: f.price.trim() || null, locationId: f.locationId ?? null, location: f.locationId ? null : a.location ?? null });
     if (moved && f.locationId) await collection.addEvent({ acc: id, d: localDate(), t: 'move', note: `to ${collection.locationName(f.locationId)}` });
+    // The log's "Acquired" line is the same fact as the card's date and source: it follows an edit rather than keeping the old one.
+    const acq = events.find((e) => e.t === 'acquire');
+    const newDate = f.acquired || null, newNote = f.sourceFrom.trim() ? `from ${f.sourceFrom.trim()}` : null;
+    if (acq && newDate && (acq.d !== newDate || (acq.note ?? null) !== newNote)) await collection.put('event', acq.id, { d: newDate, note: newNote });
     editing = false;
   }
 
@@ -225,7 +240,7 @@
   <p class="muted">Opening your collection…</p>
 {:else if !a}
   <h1 class="q" style="margin-top: 24px">{param}</h1>
-  <p class="muted">No plant with this number on this device.</p>
+  <p class="muted">{collection.isNumberTaken(param) ? `${param} was given to a plant since removed; the number stays reserved and its record stays in the change log and in any backup taken before.` : 'No plant with this number on this device.'}</p>
 {:else}
   <div class="hero" class:own={!!cover}>
     {#if cover}
@@ -245,8 +260,8 @@
       <p class="vern">
         {#if a.nameAsReceived}received as <i>{a.nameAsReceived}</i> · {/if}
         {#if a.fieldNumber}<span class="fnchip">{a.fieldNumber}</span> · {/if}
-        {#if a.provenance === 'unknown' && !a.sourceFrom && !a.fieldNumber}Added {fmtDate(a.acquired)}{:else}{provLabel(a.provenance)}{#if a.acquired} · {a.sourceForm ?? 'acquired'} {a.sourceFrom ? `from ${a.sourceFrom}` : ''} {fmtDate(a.acquired)}{/if}{/if}
-        {#if a.sowingId} · raised from <a class="mono" href="/sowings/{a.sowingId}">{sowing ? sowNo(sowing) : a.sowingId}</a>{#if sowing && sowing.parentAcc} (from <a class="mono" href="/plants/{sowing.parentAcc}">{collection.accession(sowing.parentAcc) ? accNo(collection.accession(sowing.parentAcc)!) : sowing.parentAcc}</a>){/if}{/if}
+        {#if a.provenance === 'unknown' && !a.sourceFrom && !a.fieldNumber}Added {fmtDate(a.acquired)}{:else}{provLabel(a.provenance)}{#if a.acquired}{' · '}{a.sourceForm ?? 'acquired'}{a.sourceFrom ? ` from ${a.sourceFrom}` : ''}{' '}{fmtDate(a.acquired)}{/if}{/if}
+        {#if a.sowingId}{' · '}raised from <a class="mono" href="/sowings/{a.sowingId}">{sowing ? sowNo(sowing) : a.sowingId}</a>{#if sowing && sowing.parentAcc} (from <a class="mono" href="/plants/{sowing.parentAcc}">{collection.accession(sowing.parentAcc) ? accNo(collection.accession(sowing.parentAcc)!) : sowing.parentAcc}</a>){/if}{/if}
       </p>
       {#if kind === 'hybrid'}
         <p class="vern parentage">{#if parentLinks.length}{#each parentLinks as pl, i}{#if i}{' × '}{/if}{#if pl.slug}<a href="/species/{pl.slug}"><SpeciesName name={pl.name} /></a>{:else}<SpeciesName name={pl.name} />{/if}{/each}{:else}A hybrid; parentage not stated. <button class="linkish" type="button" onclick={startEdit}>Add it</button> if you know it.{/if}</p>
@@ -274,7 +289,7 @@
       {#if f.nameKind === 'hybrid'}<label><span>Parentage</span><input id="ed-parentage" type="text" bind:value={f.parentage} placeholder="Seed parent × pollen parent" /></label>{/if}
       <label><span>Name as received</span><input id="ed-recv" type="text" bind:value={f.nameAsReceived} /></label>
       <label><span>Field number</span><input id="ed-fn" type="text" bind:value={f.fieldNumber} /></label>
-      <label><span>Provenance</span><select id="ed-prov" bind:value={f.provenance}><option value="unknown">Not stated</option><option value="wild">Wild-collected</option><option value="f1">Ex-habitat seed (F1)</option><option value="fn">Cultivated seed (Fn)</option><option value="veg">Vegetative</option></select></label>
+      <label><span>Provenance</span><select id="ed-prov" bind:value={f.provenance}><option value="unknown">Not stated</option><option value="wild">Wild-collected</option><option value="f1">F1: raised from wild-collected seed</option><option value="fn">Cultivated seed (Fn)</option><option value="veg">Vegetative</option></select></label>
       <label><span>Acquired</span><input id="ed-date" type="date" bind:value={f.acquired} /></label>
       <label><span>From</span><input id="ed-from" type="text" bind:value={f.sourceFrom} /></label>
       <label><span>Form</span><input id="ed-form" type="text" bind:value={f.sourceForm} placeholder="plant, seedling, seed, cutting" /></label>
@@ -298,7 +313,7 @@
       <button class="btn" onclick={() => quick('flower')}>Flower</button>
       {#if a.status === 'growing'}<button class="btn" onclick={() => setStatus('archived')}>Archive</button>{:else}<button class="btn" onclick={() => setStatus('growing')}>Mark growing</button>{/if}
     {:else}
-      <button class="btn more" type="button" aria-expanded="false" onclick={() => (moreActs = true)}>More ▾</button>
+      <button class="btn more" type="button" aria-expanded="false" onclick={() => { moreActs = true; setTimeout(() => document.querySelector<HTMLElement>('.quickbar button:nth-of-type(5)')?.focus(), 0); }}>More ▾</button>
     {/if}
   </div>
 
@@ -310,7 +325,8 @@
   {/if}
 
   {#if logOpen}
-    <form class="cult evform" onsubmit={(e) => { addEvent(e); logOpen = false; }}>
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <form class="cult evform" onsubmit={(e) => { addEvent(e); closeLog(`${EVENT_LABEL[et]} recorded`); }} onkeydown={(e) => { if (e.key === 'Escape') { e.preventDefault(); closeLog(); } }}>
       <div class="sum">Record: {EVENT_LABEL[et]} <span class="hint">goes on the timeline below</span></div>
       <div class="fields">
         <div class="row">
@@ -329,7 +345,7 @@
           </div>
         {/if}
         <input id="ev-note" type="text" aria-label="Note" bind:value={enote} placeholder="Note (optional)" />
-        <div class="actions"><button class="btn" type="button" onclick={() => (logOpen = false)}>Cancel</button><button class="btn pri" type="submit">Record</button></div>
+        <div class="actions"><button class="btn" type="button" onclick={() => closeLog()}>Cancel</button><button class="btn pri" type="submit">Record</button></div>
       </div>
     </form>
   {/if}
@@ -439,7 +455,7 @@
     <p class="empty">Nothing stated yet. <button class="linkish" type="button" onclick={startEdit}>Add where it came from</button></p>
   {:else}
   <div class="factgrid">
-    <div><b>Source</b>{[a.sourceFrom, a.sourceForm, a.acquired].filter(Boolean).join(' · ') || 'not stated'}{#if a.price} · {a.price}{/if}</div>
+    <div><b>Source</b>{[a.sourceFrom, a.sourceForm, a.acquired].filter(Boolean).join(' · ') || 'not stated'}{#if a.price}{' · '}{a.price}{/if}</div>
     <div><b>Field number</b>{a.fieldNumber ?? 'none'}</div>
     <div><b>Provenance</b>{provLabel(a.provenance)}</div>
     {#if a.sowingId}<div><b>Raised from</b><a href="/sowings/{a.sowingId}">{sowing ? sowNo(sowing) : a.sowingId}</a>{#if sowing} · {sowing.count} started, {collection.sowingStats(sowing.id).germinated} up, {collection.sowingStats(sowing.id).potted} potted{/if}</div>{/if}

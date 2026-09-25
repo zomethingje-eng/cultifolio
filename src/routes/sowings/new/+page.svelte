@@ -25,6 +25,7 @@
   // Never guessed: a count the grower did not give would become the denominator of every germination figure.
   let count = $state<number | null>(null);
   let countMissing = $state(false);
+  let dateMsg = $state('');
   let sourceFrom = $state('');
   let sourceRef = $state('');
   let provenance = $state<Provenance>('unknown');
@@ -82,6 +83,13 @@
     if (n == null || !Number.isFinite(n) || n < 1) {
       countMissing = true;
       document.getElementById('s-count')?.focus();
+      return;
+    }
+    // A batch is numbered by its year and counts its days from its date, so a date in the future would number it into
+    // next year and count backwards; a cutting cannot be taken before its parent arrived.
+    dateMsg = !sown ? 'Give the batch a date.' : sown > localDate() ? `${sown} is in the future.` : m.veg && parent?.acquired && sown < parent.acquired ? `${sown} is before ${accNo(parent)} arrived on ${parent.acquired}.` : '';
+    if (dateMsg) {
+      document.getElementById('s-date')?.focus();
       return;
     }
     busy = true;
@@ -145,7 +153,7 @@
   {/if}
 
   <div class="two">
-    <label class="field"><span>Date</span><input id="s-date" type="date" bind:value={sown} /></label>
+    <label class="field"><span>Date</span><input id="s-date" type="date" max={localDate()} bind:value={sown} oninput={() => (dateMsg = '')} aria-invalid={!!dateMsg} aria-describedby={dateMsg ? 's-date-bad' : undefined} />{#if dateMsg}<span class="bad small" id="s-date-bad">{dateMsg}</span>{/if}</label>
     <label class="field"><span>How many {m.unit}</span><input id="s-count" type="number" min="1" max="5000" required bind:value={count} oninput={() => (countMissing = false)} aria-invalid={countMissing} aria-describedby={countMissing ? 's-count-missing' : undefined} />{#if countMissing}<span class="bad small" id="s-count-missing">Say how many {m.unit} went in; the germination figures divide by it.</span>{/if}</label>
   </div>
 
@@ -158,8 +166,8 @@
       <select id="s-prov" bind:value={provenance}>
         <option value="unknown">Not stated</option>
         <option value="wild">Wild-collected seed (plants raised will be F1)</option>
-        <option value="f1">Seed from ex-habitat plants (plants raised will be Fn)</option>
-        <option value="fn">Seed from cultivated plants</option>
+        <option value="f1">Seed from F1 plants in cultivation (plants raised will be Fn)</option>
+        <option value="fn">Seed from cultivated plants (Fn)</option>
       </select>
     </label>
   {/if}

@@ -194,18 +194,20 @@
   .sheets { margin: 12px 0 40px; display: grid; gap: 16px; overflow-x: auto; }
   .page { position: relative; width: var(--pw); height: var(--ph); background: #fff; box-shadow: var(--sh2); color: #000; }
   .label { position: absolute; width: var(--lw); height: var(--lh); display: flex; gap: 1.5mm; padding: 1.6mm 2mm; box-sizing: border-box; overflow: hidden; outline: 0.2mm dashed #bbb; outline-offset: -0.2mm; }
-  .qr { flex: none; height: 100%; aspect-ratio: 1; }
+  /* The code never takes more than 22 mm: on a tall label (4 × 2 in) the name, not the code, gets the room. */
+  .qr { flex: none; height: 100%; max-height: 22mm; aspect-ratio: 1; align-self: center; }
   .qr :global(svg) { width: 100%; height: 100%; display: block; }
   .txt { min-width: 0; flex: 1; display: flex; flex-direction: column; justify-content: center; line-height: 1.15; }
   .no { font-family: var(--mono); font-size: 7.5pt; font-weight: 700; letter-spacing: 0.02em; }
   .no .fn { font-weight: 400; color: #333; margin-left: 1mm; }
-  .sci { font-family: var(--serif); font-size: 9.5pt; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* A name is never cut to "…": it wraps to a second line before anything else gives way. */
+  .sci { font-family: var(--serif); font-size: 9.5pt; font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .sci .cv { font-style: normal; font-weight: 500; }
   .care { font-family: var(--ui); font-size: 6.2pt; color: #222; margin-top: 0.6mm; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.2; }
   .src { font-family: var(--ui); font-size: 6pt; color: #444; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .page.tiny .label { padding: 0.8mm 1.5mm; }
   .page.tiny .no { font-size: 6pt; }
-  .page.tiny .sci { font-size: 7pt; }
+  .page.tiny .sci { font-size: 7pt; -webkit-line-clamp: 1; line-clamp: 1; }
   .page.tiny .care, .page.tiny .src { display: none; }
 
   @media print {

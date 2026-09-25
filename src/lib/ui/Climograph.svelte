@@ -37,7 +37,7 @@
       <text class="extlab" x={g.left + g.plotW - 14} y={g.temp.minAbs.y + 3.5} text-anchor="end">{g.temp.minAbs.label}</text>
     {/if}
     <text class="panel" x={g.left + 2} y={g.temp.top - 2}>{tempUnit(g.units)} · day and night</text>
-    <text class="quarterlab" x={g.temp.coldQuarter.x + 4} y={g.temp.top + 11}>cold quarter</text>
+    <text class="quarterlab" x={g.temp.coldQuarter.x + 4} y={g.temp.top + g.temp.height - 5}>cold quarter</text>
 
     <!-- rain panel -->
     {#each g.rain.ticks as t}

@@ -40,24 +40,41 @@
     return () => setCrumb([]);
   });
 
+  // The batch believes what it is told, so what it is told is checked: a date on or after the sowing and not in the
+  // future, a count that cannot exceed what went in or fall below what was already counted, a loss or a potting that
+  // cannot exceed what is in the pot. Each refusal is a sentence under the form, never a silent no.
+  const dateProblem = (d: string, what: string): string | null => {
+    if (!d) return `Give the ${what} a date.`;
+    if (d > today()) return `${what[0].toUpperCase()}${what.slice(1)} dated ${d} is in the future.`;
+    if (s && d < s.sown) return `${what[0].toUpperCase()}${what.slice(1)} dated ${d} is before the sowing on ${s.sown}.`;
+    return null;
+  };
   /* germination count */
   let gd = $state(today());
   let gn = $state<number | ''>('');
   let gnote = $state('');
+  let gmsg = $state('');
   async function count(e: SubmitEvent) {
     e.preventDefault();
-    if (gn === '' || gn < 0) return;
-    await collection.addEvent({ acc: id, d: gd, t: 'germinate', n: Number(gn), note: gnote.trim() || null });
+    if (!s || gn === '' || gn < 0) return;
+    const n = Number(gn);
+    gmsg = dateProblem(gd, 'count') ?? (n > s.count ? `${n} is more than the ${s.count} that went in; edit the batch if the count was wrong.` : n < st.germinated ? `${n} is fewer than the ${st.germinated} already counted; the count is the total up so far, so record losses instead.` : '');
+    if (gmsg) return;
+    await collection.addEvent({ acc: id, d: gd, t: 'germinate', n, note: gnote.trim() || null });
     gn = ''; gnote = '';
   }
   /* loss */
   let ld = $state(today());
   let ln = $state<number | ''>('');
   let lcause = $state('');
+  let lmsg = $state('');
   async function loss(e: SubmitEvent) {
     e.preventDefault();
     if (ln === '' || ln < 1) return;
-    await collection.addEvent({ acc: id, d: ld, t: 'loss', n: Number(ln), cause: lcause.trim() || null });
+    const n = Number(ln);
+    lmsg = dateProblem(ld, 'loss') ?? (n > st.remaining ? (st.remaining ? `Only ${st.remaining} in the pot to lose.` : 'Nothing in the pot to lose: count the seedlings first.') : '');
+    if (lmsg) return;
+    await collection.addEvent({ acc: id, d: ld, t: 'loss', n, cause: lcause.trim() || null });
     ln = ''; lcause = '';
   }
   /* pot up */
@@ -67,9 +84,13 @@
   let ploc = $state<string | null>(null);
   let pnote = $state('');
   let potted = $state<string[]>([]);
+  let pmsg = $state('');
   async function potUp(e: SubmitEvent) {
     e.preventDefault();
     if (pn < 1) return;
+    // A number is never reused, so a slip here would burn numbers for good: the pot decides how many can be potted.
+    pmsg = dateProblem(pd, 'potting') ?? (st.remaining < 1 ? 'Nothing in the pot to pot up: count the seedlings first.' : pn > st.remaining ? `Only ${st.remaining} in the pot; each potted plant gets a number that is never reused.` : '');
+    if (pmsg) return;
     const made = await collection.potUp(id, pn, { date: pd, locationId: ploc, note: pnote.trim() || null });
     potted = made.map((a) => accNo(a));
     potting = false;
@@ -78,12 +99,16 @@
   /* note */
   let nd = $state(today());
   let ntext = $state('');
+  let nmsg = $state('');
   async function note(e: SubmitEvent) {
     e.preventDefault();
     if (!ntext.trim()) return;
+    nmsg = dateProblem(nd, 'note') ?? '';
+    if (nmsg) return;
     await collection.addEvent({ acc: id, d: nd, t: 'note', note: ntext.trim() });
     ntext = '';
   }
+  let confirmEvent = $state<string | null>(null);
   async function setStatus(status: 'active' | 'done' | 'failed') {
     await collection.put('sowing', id, { status });
   }
@@ -146,7 +171,7 @@
       <button class="btn" onclick={startEdit}>Edit</button>
       {#if s.status === 'active'}
         <button class="btn" onclick={() => setStatus('done')}>Mark done</button>
-        <button class="btn" onclick={() => setStatus('failed')}>Mark failed</button>
+        {#if !raised.length}<button class="btn" onclick={() => setStatus('failed')}>Mark failed</button>{/if}
       {:else}
         <button class="btn" onclick={() => setStatus('active')}>Reopen</button>
       {/if}
@@ -185,12 +210,16 @@
     <div class="notice ok">Potted up {potted.length}: {#each potted as p, i}{#if i}, {/if}<a class="mono" href="/plants/{p}">{p}</a>{/each}.</div>
   {/if}
 
+  {#if s.status !== 'active'}
+    <p class="empty" style="margin: 14px 0">This batch is {s.status === 'done' ? 'done' : 'marked failed'}; Reopen it to record more.</p>
+  {:else}
   <div class="acts3">
     <form class="cult act" onsubmit={count}>
       <div class="sum">{m.veg ? 'Count what has struck' : 'Count seedlings'} <span class="hint">the total up so far</span></div>
       <div class="fields">
-        <div class="row"><input id="g-date" type="date" aria-label="Date counted" bind:value={gd} /><input id="g-n" type="number" min="0" max={s.count * 2} placeholder="up so far" aria-label="Up so far" bind:value={gn} /></div>
+        <div class="row"><input id="g-date" type="date" aria-label="Date counted" bind:value={gd} /><input id="g-n" type="number" min="0" placeholder="up so far" aria-label="Up so far" bind:value={gn} /></div>
         <input id="g-note" type="text" placeholder="note (optional)" aria-label="Note" bind:value={gnote} />
+        {#if gmsg}<p class="refuse" role="alert">{gmsg}</p>{/if}
         <div class="end"><button class="btn pri" type="submit" disabled={gn === ''}>Record count</button></div>
       </div>
     </form>
@@ -199,6 +228,7 @@
       <div class="fields">
         <div class="row"><input id="l-date" type="date" aria-label="Date of loss" bind:value={ld} /><input id="l-n" type="number" min="1" placeholder="how many" aria-label="How many lost" bind:value={ln} /></div>
         <input id="l-cause" type="text" placeholder="cause" aria-label="Cause" bind:value={lcause} />
+        {#if lmsg}<p class="refuse" role="alert">{lmsg}</p>{/if}
         <div class="end"><button class="btn" type="submit" disabled={ln === ''}>Record loss</button></div>
       </div>
     </form>
@@ -206,16 +236,18 @@
       <div class="sum">Pot up <span class="hint">each plant gets its own number</span></div>
       {#if potting}
         <form onsubmit={potUp} class="fields">
-          <div class="row"><input id="p-date" type="date" aria-label="Date potted up" bind:value={pd} /><input id="p-n" type="number" min="1" max="500" aria-label="How many to pot up" bind:value={pn} /></div>
+          <div class="row"><input id="p-date" type="date" aria-label="Date potted up" bind:value={pd} /><input id="p-n" type="number" min="1" aria-label="How many to pot up" bind:value={pn} /></div>
           <LocationPicker bind:value={ploc} id="p-loc" label="Where they go" />
           <input id="p-note" type="text" placeholder="note (optional)" aria-label="Note" bind:value={pnote} />
+          {#if pmsg}<p class="refuse" role="alert">{pmsg}</p>{/if}
           <div class="end"><button class="btn" type="button" onclick={() => (potting = false)}>Cancel</button><button class="btn pri" type="submit">Pot up {pn}</button></div>
         </form>
       {:else}
-        <div class="fields"><p class="small muted" style="margin: 0">The batch becomes their provenance: seed source, lot and the right provenance class carry to every plant.</p><div class="end"><button class="btn pri" onclick={() => { potting = true; pn = Math.max(1, st.remaining || 1); ploc = s.locationId ?? null; }}>Pot up…</button></div></div>
+        <div class="fields"><p class="small muted" style="margin: 0">{st.remaining ? `${st.remaining} in the pot. ` : ''}The batch becomes their provenance: {m.veg ? 'the parent plant and the method' : 'seed source, lot and the right provenance class'} carry to every plant.</p><div class="end"><button class="btn pri" disabled={st.remaining < 1} title={st.remaining < 1 ? 'Count the seedlings first' : undefined} onclick={() => { potting = true; pmsg = ''; pn = Math.max(1, st.remaining || 1); ploc = s.locationId ?? null; }}>Pot up…</button></div></div>
       {/if}
     </div>
   </div>
+  {/if}
 
   {#if raised.length}
     <div class="secrule"><h2>Plants raised from this batch</h2><div class="line"></div><span class="n">{raised.length}</span></div>
@@ -242,6 +274,7 @@
   <form class="noteform" onsubmit={note}>
     <input id="n-date" type="date" aria-label="Date of the note" bind:value={nd} /><input id="n-text" type="text" placeholder="Add a note to the log" aria-label="Note" bind:value={ntext} /><button class="btn" type="submit" disabled={!ntext.trim()}>Add</button>
   </form>
+  {#if nmsg}<p class="refuse" role="alert">{nmsg}</p>{/if}
   {#if !events.length}
     <div class="cult"><div class="none">Nothing recorded yet.</div></div>
   {:else}
@@ -250,13 +283,13 @@
         <div class="tlrow">
           <span class="d">{e.d}</span>
           <span class="t">{EVENT_LABEL[e.t] ?? e.t}{#if e.n != null}&nbsp;<b>{e.n}</b>{/if}{#if e.cause}<span class="x2">{' · '}{e.cause}</span>{/if}{#if e.note}<span class="x2">{' · '}{e.note}</span>{/if}</span>
-          <span></span>
+          {#if e.t === 'potup'}<span class="x small muted">kept: the plants exist</span>{:else if confirmEvent === e.id}<button class="rm confirm" type="button" onclick={() => { collection.remove('event', e.id); confirmEvent = null; }}>Remove?</button>{:else}<button class="rm" type="button" title="Remove this entry" aria-label="Remove this entry" onclick={() => (confirmEvent = e.id)}>×</button>{/if}
         </div>
       {/each}
     </div>
   {/if}
 
-  <div class="secrule"><h2>How it was sown</h2><div class="line"></div></div>
+  <div class="secrule"><h2>{m.veg ? 'How it was started' : 'How it was sown'}</h2><div class="line"></div></div>
   <div class="factgrid">
     <div><b>Medium</b>{s.medium ?? 'not stated'}</div>
     <div><b>Container</b>{s.container ?? 'not stated'}</div>
@@ -299,6 +332,10 @@
   .tlrow .x2 { font-weight: 400; color: var(--ink2); font-size: 12.5px; }
   .factgrid .wide { grid-column: 1 / -1; }
   .accrow .nm .accno { font-style: normal; vertical-align: 2px; }
+  .refuse { margin: 6px 0 0; font-size: 12.5px; color: var(--bad); }
+  .rm { border: 0; background: none; color: var(--ink3); font: inherit; cursor: pointer; min-width: 32px; min-height: 32px; border-radius: 6px; }
+  .rm:hover { color: var(--bad); background: var(--sunk); }
+  .rm.confirm { color: var(--bad); font-size: 12.5px; font-weight: 600; }
   .dangerrow { margin: 46px 0 10px; padding: 0; display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; font-size: 12.5px; color: var(--ink3); }
   a.pill { color: inherit; }
   @media (max-width: 720px) { .acts3 { grid-template-columns: 1fr; } .editform { grid-template-columns: 1fr 1fr; } .noteform { grid-template-columns: 1fr; } .hero { margin-top: 0; } }

@@ -66,6 +66,9 @@ export function broadRegion(unitName: string): string {
   return unitName;
 }
 
+/** A TDWG unit's name as a person would say it: WCVP writes "Gambia,  The" and "Bahamas, The". */
+export const unitName = (u: string) => u.replace(/^(.+?),\s+The$/, 'The $1');
+
 /** The broad region most of a species' native units fall in; ties go to the first listed. The homepage groups by this, on the server and again on the client for the full list. */
 export function groupFor(origin: string[]): string {
   const tally = new Map<string, number>();

@@ -1,5 +1,5 @@
 import { getIndex } from '$lib/server/dossiers';
-import { groupFor } from '$core/regions';
+import { groupFor, unitName } from '$core/regions';
 import { slugify, genusOf } from '$core/names';
 import { worldSvg } from '$lib/map/still';
 import tdwg from '$dossier/tdwg3.json';
@@ -61,7 +61,14 @@ export const load: PageServerLoad = async ({ platform, fetch, setHeaders, url, c
         ? (commonest(sorted.map((c) => c.family).filter((f): f is string => !!f)) ?? '')
         : by === 'family'
           ? `${genera} ${genera === 1 ? 'genus' : 'genera'}`
-          : [...new Set(sorted.flatMap((c) => c.origin))].slice(0, 6).join(', ') + (new Set(sorted.flatMap((c) => c.origin)).size > 6 ? ' …' : '');
+          : (() => {
+              // The region's own commonest units, not every unit its species also reach: a maple native from Florida to the Yukon
+              // belongs under Eastern North America without putting the Yukon in that row's subtitle.
+              const t = new Map<string, number>();
+              for (const c of sorted) for (const u of c.origin) if (groupFor([u]) === label) t.set(u, (t.get(u) ?? 0) + 1);
+              const top = [...t.entries()].sort((a, b) => b[1] - a[1]).map(([u]) => unitName(u));
+              return top.slice(0, 6).join(', ') + (top.length > 6 ? ' …' : '');
+            })();
     return {
       id,
       label,

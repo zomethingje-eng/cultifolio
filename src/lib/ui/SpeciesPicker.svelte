@@ -7,23 +7,25 @@
    * and flagged, never silently guessed.
    *
    * The list is a combobox: ArrowUp/ArrowDown move a highlight, Enter picks
-   * it, Escape closes. Enter on a name nothing resolved does not file the
-   * plant under a half-typed name: the first press asks, the second is the
-   * grower's deliberate act and lets the form submit exactly what was typed.
+   * it, Escape closes. Enter never submits the form from this field: a
+   * keyboard user pressing Enter to "choose" must not file a plant by
+   * accident; the Add button is the deliberate act. A suggestion from another
+   * genus (a spelling one edit away) is labelled as such, and a name nothing
+   * resolved is flagged, with the nearest reference name offered by name.
    */
   import { parseName } from '$core/names';
   import { prepare, search as searchIndex, type Prepared } from '$core/search';
   import SpeciesName from './SpeciesName.svelte';
   import type { NameKind } from '$core/names';
   let { value = $bindable(''), taxonKey = $bindable<number | null>(null), cultivar = $bindable<string | null>(null), kind = $bindable<NameKind>('species'), parentage = $bindable<string | null>(null) } = $props();
-  type Sugg = { key: number; name: string; family?: string; rank?: string; status?: string; local?: boolean };
+  type Sugg = { key: number; name: string; family?: string; rank?: string; status?: string; local?: boolean; far?: boolean };
   let suggestions = $state<Sugg[]>([]);
   let open = $state(false);
   type Entry = { key: number; slug: string; name: string; family?: string; common?: string };
   let index: Entry[] | null = null;
   let prepared: Prepared<Entry>[] | null = null;
   let timer: ReturnType<typeof setTimeout> | undefined;
-  let resolved = $state<'yes' | 'no' | 'unknown'>('unknown');
+  let resolved = $state<'yes' | 'no' | 'unknown' | 'unreached'>('unknown');
   /** The highlighted row, or -1 for none. */
   let hi = $state(-1);
   /** Enter was pressed once on a name nothing resolved; the next press submits it as typed. */
@@ -54,7 +56,9 @@
     const idx = await loadIndex();
     // The corpus index is species-level; for a genus-only name (a hybrid) its rows would be wrong suggestions.
     if (!prepared) prepared = prepare(idx);
-    const local: Sugg[] = genusOnly ? [] : searchIndex(prepared!, needle, 6).map((e) => ({ key: e.key, name: e.name, family: e.family, local: true }));
+    // A local hit whose genus is not the one typed came from the one-edit fallback ("polyphylla" → Lupinus polyphyllus): say so.
+    const typedGenus = needle.split(/\s+/)[0] ?? '';
+    const local: Sugg[] = genusOnly ? [] : searchIndex(prepared!, needle, 6).map((e) => ({ key: e.key, name: e.name, family: e.family, local: true, far: !e.name.toLowerCase().startsWith(typedGenus.slice(0, Math.min(4, typedGenus.length))) }));
     suggestions = local;
     hi = -1;
     open = true;
@@ -107,9 +111,11 @@
         resolved = 'yes';
       } else resolved = 'no';
     } catch {
-      resolved = 'unknown';
+      resolved = 'unreached';
     }
   }
+  /** The nearest reference name when the typed one resolved to nothing: offered by name, never taken on its own. */
+  const nearest = $derived(resolved === 'no' || resolved === 'unreached' ? (suggestions.find((x) => x.local && !x.far) ?? suggestions.find((x) => x.local)) : undefined);
   function onBlur(e: FocusEvent) {
     // Focus moving inside the picker (a click on a row) is not a leave.
     if (e.relatedTarget instanceof Node && root?.contains(e.relatedTarget)) return;
@@ -143,20 +149,19 @@
       pick(suggestions[hi]);
       return;
     }
-    // A resolved name, an empty field, or the second press: the form decides.
-    if (taxonKey || armed || !value.trim()) return;
-    // The exact spelling of a suggestion is a pick, not a partial name.
+    // Enter never submits from this field. The exact spelling of a suggestion is a pick; anything else is asked about.
+    e.preventDefault();
+    if (taxonKey || !value.trim()) return;
     const want = parseName(value).scientific.toLowerCase();
     const exact = suggestions.find((s) => s.name.toLowerCase() === want);
     if (exact) {
-      e.preventDefault();
       pick(exact);
       return;
     }
-    e.preventDefault();
     open = false;
     hi = -1;
     armed = true;
+    checkExact();
   }
 </script>
 
@@ -179,12 +184,13 @@
     onfocus={() => value && (open = true)}
     onblur={onBlur}
   />
-  {#if taxonKey}<span class="pill ok">GBIF {taxonKey}</span>{:else if resolved === 'no'}<span class="pill warn">not in the backbone — kept as typed</span>{/if}
+  {#if taxonKey}<span class="pill ok">GBIF {taxonKey}</span>{:else if resolved === 'no'}<span class="pill warn">not in the backbone — kept as typed</span>{:else if resolved === 'unreached'}<span class="pill warn">name service not reached — kept as typed</span>{/if}
   {#if kind === 'hybrid'}<span class="pill">hybrid{parentage ? '' : ', parentage not stated'}</span>{:else if kind === 'cultivar'}<span class="pill">cultivar</span>{/if}
-  {#if armed}<p class="hint" id="{listId}-hint" role="status">Pick a name from the list, or press Enter again to use exactly what you typed.</p>{/if}
+  {#if nearest}<p class="hint" role="status">Not a reference name. Did you mean <button type="button" class="linkish" onclick={() => pick(nearest)}><SpeciesName name={nearest.name} /></button>? Otherwise Add keeps exactly what you typed.</p>
+  {:else if armed}<p class="hint" id="{listId}-hint" role="status">Pick a name from the list, or press Add to keep exactly what you typed.</p>{/if}
   <ul class="menu card" role="listbox" id={listId} aria-label="Suggested names" hidden={!menuOpen}>
     {#each suggestions as s, i (s.key)}
-      <li role="option" id={optionId(i)} aria-selected={i === hi} class:hi={i === hi} tabindex="-1" onmousedown={(e) => e.preventDefault()} onclick={() => pick(s)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(s); } }} onmousemove={() => (hi = i)}><SpeciesName name={s.name} /> <span class="faint">{s.family ?? ''}{s.rank === 'GENUS' ? ' · genus' : ''}{s.local ? ' · has a dossier' : ''}</span></li>
+      <li role="option" id={optionId(i)} aria-selected={i === hi} class:hi={i === hi} tabindex="-1" onmousedown={(e) => e.preventDefault()} onclick={() => pick(s)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(s); } }} onmousemove={() => (hi = i)}><SpeciesName name={s.name} /> <span class="faint">{s.family ?? ''}{s.rank === 'GENUS' ? ' · genus' : ''}{s.far ? ' · similar spelling, another genus' : s.local ? ' · has a dossier' : ''}</span></li>
     {/each}
   </ul>
 </div>
@@ -193,6 +199,7 @@
   .picker { position: relative; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
   input { flex: 1; min-width: 14rem; padding: 0.5em 0.8em; border: 1px solid var(--rule2); border-radius: 8px; background: var(--card); }
   .hint { flex-basis: 100%; margin: 0; font-size: 12.5px; color: var(--ink2); }
+  .linkish { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-decoration: underline; }
   .menu { position: absolute; top: 100%; left: 0; right: 0; z-index: 5; list-style: none; margin: 0.3rem 0 0; padding: 0.3rem; box-shadow: var(--sh2); max-height: 18rem; overflow: auto; }
   .menu[hidden] { display: none; }
   .menu li { display: block; width: 100%; text-align: left; padding: 0.45em 0.6em; border-radius: 6px; cursor: pointer; }

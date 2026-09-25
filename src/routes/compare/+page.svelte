@@ -6,6 +6,8 @@
    * other, each with its source, and a missing figure stays missing.
    */
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
+  import { site } from '$lib/ui/site.svelte';
+  import { collection } from '$lib/db/collection.svelte';
   import PageHead from '$lib/ui/PageHead.svelte';
   import Climograph from '$lib/ui/Climograph.svelte';
   import { cultivationSheet, CARD_ORDER } from '$core/sheet';
@@ -17,6 +19,8 @@
   import { temp, rain } from '$core/units';
   let { data } = $props();
   const u = $derived(units.current);
+  // The grower's hemisphere, from the site or the first bench with coordinates: the months follow it, as on the species page.
+  const readerLat = $derived(site.current?.lat ?? (collection.ready ? (collection.locations.map((l) => l.lat).find((x): x is number => x != null) ?? null) : null));
   const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   type D = (typeof data.items)[number];
   type Month = { tmax: number; tmin: number; precipMm: number; dli?: number };
@@ -27,7 +31,7 @@
     const idx = (f: (x: Month) => number, hi: boolean) => (m ? m.reduce((b: number, x: Month, i: number) => ((hi ? f(x) > f(m[b]) : f(x) < f(m[b])) ? i : b), 0) : 0);
     const hot = idx((x) => x.tmax, true), cold = idx((x) => x.tmin, false), wet = idx((x) => x.precipMm, true);
     const dlis = m ? m.map((x) => x.dli).filter((x): x is number => x != null) : [];
-    const sheet = cultivationSheet({ scientific: d.name.scientific, climateStatus: cl.status, family: d.name.family, months: cl.status === 'ok' ? cl.months : null, p10: cl.status === 'ok' ? cl.p10 : null, p90: cl.status === 'ok' ? cl.p90 : null, annualP10: cl.status === 'ok' ? (cl.annualRain?.p10 ?? null) : null, annualP90: cl.status === 'ok' ? (cl.annualRain?.p90 ?? null) : null, extremes: cl.status === 'ok' ? (cl.extremes ?? null) : null, lat: d.centroid?.lat ?? (cl.status === 'ok' ? cl.at.lat : null), units: u });
+    const sheet = cultivationSheet({ scientific: d.name.scientific, climateStatus: cl.status, family: d.name.family, months: cl.status === 'ok' ? cl.months : null, p10: cl.status === 'ok' ? cl.p10 : null, p90: cl.status === 'ok' ? cl.p90 : null, annualP10: cl.status === 'ok' ? (cl.annualRain?.p10 ?? null) : null, annualP90: cl.status === 'ok' ? (cl.annualRain?.p90 ?? null) : null, extremes: cl.status === 'ok' ? (cl.extremes ?? null) : null, lat: d.centroid?.lat ?? (cl.status === 'ok' ? cl.at.lat : null), units: u, readerLat });
     const hero = d.photos.find((p) => !p.captive) ?? d.photos[0];
     return {
       d,
@@ -50,7 +54,7 @@
     setCrumb([{ label: 'Species', href: '/' }, { label: 'Compare' }]);
     return () => setCrumb([]);
   });
-  onMount(() => compare.load());
+  onMount(() => { compare.load(); site.load(); collection.load(); });
 </script>
 
 <svelte:head>
@@ -68,6 +72,7 @@
 {/if}
 
 {#if cols.length}
+  {#if cols.length > 1}<p class="small muted swipehint">{cols.length} species side by side; on a narrow screen the table swipes sideways.</p>{/if}
   <div class="cmp" style="--n: {cols.length}">
     <div class="row head">
       {#each cols as c (c.d.key)}
@@ -98,7 +103,7 @@
     </div>
 
     <div class="rowlab">The year</div>
-    <div class="row">
+    <div class="row yearrow">
       {#each cols as c (c.d.key)}
         <div class="cell">
           {#if c.ok && c.d.climate.status === 'ok'}
@@ -126,6 +131,7 @@
 
 <style>
   .cmp { display: grid; gap: 0; margin-top: 14px; }
+  .swipehint { margin: 10px 0 0; display: none; }
   .row { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 12px; }
   .rowlab { font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink3); font-weight: 700; margin: 18px 0 6px; font-family: var(--ui); }
   .cell { background: var(--card); border-radius: var(--r); box-shadow: var(--sh); padding: 12px 14px; min-width: 0; }
@@ -145,7 +151,11 @@
     .cmp { overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 4px; margin-right: -16px; padding-right: 16px; }
     .row { grid-template-columns: repeat(var(--n), minmax(220px, 1fr)); }
     .row .cell { scroll-snap-align: start; }
-    .rowlab { position: sticky; left: 0; width: max-content; }
+    .rowlab { position: sticky; left: 0; width: max-content; background: var(--bg); padding: 0 8px 0 2px; }
+    .swipehint { display: block; }
+    /* a climograph at 220 px is unreadable; on a phone the year's row points at each page's chart instead */
+    .yearrow :global(.climo) { display: none; }
+    .yearrow .cell:has(:global(.climo))::after { content: 'The chart is on the species page.'; font-size: 12.5px; color: var(--ink3); }
     .head .nm { font-size: 16px; }
   }
 </style>

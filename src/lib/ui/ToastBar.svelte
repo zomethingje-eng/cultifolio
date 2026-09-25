@@ -1,5 +1,7 @@
 <script lang="ts">
   import { toast } from '$lib/ui/toast.svelte';
+  import { afterNavigate } from '$app/navigation';
+  afterNavigate(() => toast.onNavigate());
 </script>
 
 {#if toast.text}

@@ -19,7 +19,7 @@ declare const self: ServiceWorkerGlobalScope;
 const CACHE = `cultifolio-${version}`;
 /** Collection pages render on the device from the vault; their HTML is a shell that is the same for everyone. */
 const SHELLS = ['/plants', '/plants/new', '/benches', '/sowings', '/sowings/new', '/labels', '/backup', '/sync', '/frost', '/settings', '/offline'];
-const PRECACHE = [...build, ...files.filter((f) => !f.startsWith('/s/')), ...SHELLS];
+const PRECACHE = [...build, ...files.filter((f) => !f.startsWith('/s/')), ...SHELLS, '/']; // the front page too: it is the start URL
 
 self.addEventListener('install', (e) => {
   // Each file on its own: one shell that answers with a redirect or a 500 must not fail the whole install and leave the

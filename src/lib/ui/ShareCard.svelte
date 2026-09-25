@@ -4,6 +4,7 @@
   let { input }: { input: CardInput } = $props();
   let busy = $state(false);
   let said = $state<string | null>(null);
+  let saved = $state<string | null>(null); // the picture's own URL, so "saved" can be seen and not only believed
   const file = () => `${input.slug}-climate.png`;
   async function go() {
     if (busy) return;
@@ -26,8 +27,8 @@
       a.href = URL.createObjectURL(png);
       a.download = file();
       a.click();
-      setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
-      said = 'Saved as a picture.';
+      saved = a.href;
+      said = `Saved to your downloads as ${file()}.`;
     } catch (e) {
       said = (e as Error).message;
     } finally {
@@ -37,7 +38,7 @@
 </script>
 
 <button class="btn" type="button" onclick={go} disabled={busy} title="One picture: the four figures, the year, the sources and the link">{busy ? 'Drawing…' : 'Share card'}</button>
-{#if said}<span class="small muted" role="status">{said}</span>{/if}
+{#if said}<span class="small muted" role="status">{said}{#if saved} <a href={saved} target="_blank" rel="noopener">Open it</a>.{/if}</span>{/if}
 
 <style>
   .muted { color: var(--ink3); }
