@@ -17,7 +17,7 @@
   import { generatedNote } from '$core/note';
   import { cultivationSheet, CARD_ORDER } from '$core/sheet';
   import { collection } from '$lib/db/collection.svelte';
-  import { slugify, genusOf } from '$core/names';
+  import { slugify, genusOf, speciesSlug } from '$core/names';
   import { unitName } from '$core/regions';
   import { onMount } from 'svelte';
   import { units } from '$lib/ui/units.svelte';
@@ -96,7 +96,7 @@
     addEventListener('scroll', onScroll, { passive: true });
     return () => removeEventListener('scroll', onScroll);
   });
-  const mine = $derived(collection.ready ? collection.accessions.filter((a) => slugify(a.taxonName) === d.slug) : []);
+  const mine = $derived(collection.ready ? collection.accessions.filter((a) => speciesSlug(a.taxonName) === d.slug) : []);
   const growing = $derived(mine.filter((a) => a.status === 'growing'));
   /** Your own photographs of this species, across every plant of it you own. */
   const myPhotos = $derived(mine.flatMap((a) => collection.photos(a.id).map((p) => ({ ...p, plant: a }))).sort((x, y) => y.d.localeCompare(x.d)));
@@ -109,7 +109,8 @@
     await collection.put('taxon', d.slug, { name: d.name.scientific, gbifKey: d.key, myNotes: myDraft.trim() || null });
     editingMy = false;
   }
-  const readerLat = $derived(site.current?.lat ?? (collection.ready ? (collection.locations.map((l) => l.lat).find((x): x is number => x != null) ?? null) : null));
+  // The site once loaded; before that (and on the server) the hemisphere cookie, so a southern grower never sees northern months first.
+  const readerLat = $derived(site.current?.lat ?? (site.loaded ? (collection.ready ? (collection.locations.map((l) => l.lat).find((x): x is number => x != null) ?? null) : null) : data.hemiLat));
   const sheetIn = $derived({ readerLat, scientific: d.name.scientific, climateStatus: d.climate.status, family: d.name.family, months: d.climate.status === 'ok' ? d.climate.months : null, p10: d.climate.status === 'ok' ? d.climate.p10 : null, p90: d.climate.status === 'ok' ? d.climate.p90 : null, annualP10: d.climate.status === 'ok' ? (d.climate.annualRain?.p10 ?? null) : null, annualP90: d.climate.status === 'ok' ? (d.climate.annualRain?.p90 ?? null) : null, extremes: d.climate.status === 'ok' ? (d.climate.extremes ?? null) : null, lat: d.centroid?.lat ?? (d.climate.status === 'ok' ? d.climate.at.lat : null), units: u });
   const sheet = $derived(cultivationSheet(sheetIn));
   /** An upstream that refused or failed. Only 'none' is ever rendered as an absence; these get their own line. */
@@ -245,14 +246,15 @@
         <div class="cards">
           <button class="card unitbtn" type="button" title="Switch to {u === 'us' ? 'Celsius and millimetres' : 'Fahrenheit and inches'}" onclick={() => units.toggle()}><div class="lab">Cold floor</div>{#if sheet.floor?.raised}<div class="val">{tempN(sheet.floor.floor, u)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">the archetype table's minimum for a {sheet.floor.group}, above the habitat's {glance.ex ? `1st-percentile night ${temp(glance.ex.minP01, u, 1)} (NASA POWER)` : `coldest mean night ${temp(glance.cold.v, u)} (CHELSA)`}</div>{:else if glance.ex}<div class="val">{tempN(glance.ex.minP01, u, 1)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">1st-percentile night over {glance.ex.years} years; lowest {temp(glance.ex.minAbs, u, 1)}, {frostWording(glance.ex)} (NASA POWER)</div>{:else}<div class="val">{tempN(glance.cold.v, u)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">{glance.cold.mo}, mean night (CHELSA); no extremes series for this cell</div>{/if}<span class="swap">tap for {u === 'us' ? '°C' : '°F'}</span></button>
           <div class="card"><div class="lab">Warmest month</div><div class="val">{tempN(glance.hot.v, u)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">{glance.hot.mo}, mean day; nights {temp(glance.hot.night, u)} (CHELSA)</div></div>
-          <div class="card"><div class="lab">Rain</div><div class="val">{rainN(glance.rain, u)}<span class="u"> {rainUnit(u)}/yr</span></div><div class="gauge"><i class="c" style="width:{Math.min(100, glance.rain / 12)}%"></i></div><div class="sub">{glance.wetMonths === 0 ? `no month over ${rain(25, u)}` : `${glance.wetMonths} month${glance.wetMonths === 1 ? '' : 's'} over ${rain(25, u)}`} · peak {glance.wet.mo} {rain(glance.wet.v, u)} (CHELSA)</div></div>
+          <div class="card"><div class="lab">Rain</div><div class="val">{rainN(glance.rain, u)}<span class="u"> {rainUnit(u)}/yr</span></div><div class="gauge"><i class="c" style="width:{Math.min(100, glance.rain / 12)}%"></i></div><div class="sub">{glance.wetMonths === 0 ? `no month over ${u === 'us' ? '1 in' : '25 mm'}` : `${glance.wetMonths} month${glance.wetMonths === 1 ? '' : 's'} over ${u === 'us' ? '1 in' : '25 mm'}`} · peak {glance.wet.mo} {rain(glance.wet.v, u)} (CHELSA)</div></div>
           {#if glance.dli}<div class="card"><div class="lab">Light</div><div class="val">{glance.dli.lo.toFixed(0)}–{glance.dli.hi.toFixed(0)}<span class="u"> DLI</span></div><div class="gauge"><i class="w" style="width:{Math.min(100, glance.dli.hi / 0.7)}%"></i></div><div class="sub">mol/m²/day, winter to summer, open sky (CHELSA shortwave)</div></div>{/if}
         </div>
+        {#if d.climate.status === 'ok' && d.climate.records < 12}<p class="small muted thinline">Under a dozen records behind these figures ({d.climate.records}): treat them as indicative. <a href="#s-habitat">The records.</a></p>{/if}
       {/if}
       {#if note}
         <details class="cult acc notecard" id="gen-note">
           <summary><span class="t">In short</span><span class="one">the figures as one paragraph, condensed by rule from the cultivation cards · not written by a person</span><span class="pm" aria-hidden="true"><span class="pmw">open</span></span></summary>
-          <div class="body">{note.text}</div><div class="foot">Each sentence is one card's own one-line form, written by the same rule as the card ({note.from.map((c) => (c === 'Temperature' || c === 'Humidity' ? 'Warmth and air' : c)).filter((c, i, a) => a.indexOf(c) === i).join(', ')}); the note cannot say what a card does not. {#if note.hab}Months are given for {readerLat != null && readerLat < 0 ? 'the southern' : 'the northern'} hemisphere{readerLat == null ? ' (set your site in ' : site.current ? ', from your site' : ', from your benches'}{#if readerLat == null}<a href="/settings#site">Settings</a> to change this){/if}, and the habitat's own alongside.{/if} <a href="#s-cultivation">The cards</a> · <a href="#s-climate">the figures</a>.</div>
+          <div class="body">{note.text}</div><div class="foot">Each sentence is one card's own one-line form, written by the same rule as the card ({note.from.map((c) => (c === 'Temperature' || c === 'Humidity' ? 'Warmth and air' : c)).filter((c, i, a) => a.indexOf(c) === i).join(', ')}); the note cannot say what a card does not. {#if note.hab}Months are given for {readerLat != null && readerLat < 0 ? 'the southern' : 'the northern'} hemisphere{readerLat == null ? ' (set your site in ' : site.current || !site.loaded ? ', from your site' : ', from your benches'}{#if readerLat == null}<a href="/settings#site">Settings</a> to change this){/if}, and the habitat's own alongside.{/if} <a href="#s-cultivation">The cards</a> · <a href="#s-climate">the figures</a>.</div>
         </details>
       {/if}
     </section>
@@ -443,6 +445,7 @@
 </article>
 
 <style>
+  .thinline { margin: 6px 0 0; }
   .myph { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-top: 10px; }
   .myph .ph { position: relative; display: block; padding: 0; border: 0; background: var(--sunk); border-radius: 9px; overflow: hidden; aspect-ratio: 1; cursor: zoom-in; box-shadow: var(--sh); }
   .myph .ph :global(img) { width: 100%; height: 100%; object-fit: cover; display: block; }

@@ -41,7 +41,7 @@ export function climateCardSvg(c: CardInput): string {
   const figs: Array<[string, string, string]> = [
     fl?.raised ? ['Cold floor', temp(fl.floor, u), `${fl.group} group minimum · hab. night ${temp(fl.habitat!, u, 1)}`] : ex ? ['Cold floor', temp(ex.minP01, u, 1), `1st-percentile night, ${ex.years} yrs · ${frostWording(ex)}`] : ['Coldest month', temp(m[cold].tmin, u), `${MON[cold]}, mean night`],
     ['Warmest month', temp(m[hot].tmax, u), `${MON[hot]}, mean day`],
-    ['Rain', `${rain(rainYear, u)}/yr`, wetMonths === 0 ? `no month over ${rain(25, u)}` : `${wetMonths} month${wetMonths === 1 ? '' : 's'} over ${rain(25, u)}`],
+    ['Rain', `${rain(rainYear, u)}/yr`, wetMonths === 0 ? `no month over ${u === 'us' ? '1 in' : '25 mm'}` : `${wetMonths} month${wetMonths === 1 ? '' : 's'} over ${u === 'us' ? '1 in' : '25 mm'}`],
     dlis.length ? ['Light', `${Math.min(...dlis).toFixed(0)}–${Math.max(...dlis).toFixed(0)} DLI`, 'mol/m²/day, winter to summer'] : ['Cells', String(c.cells), 'habitat grid cells read']
   ];
   const g = climograph({ ...c.climate, extremes: ex ? { minAbs: ex.minAbs, maxP99: ex.maxP99, years: ex.years } : null }, 640, u);

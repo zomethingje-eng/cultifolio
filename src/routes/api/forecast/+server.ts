@@ -18,9 +18,6 @@ import type { RequestHandler } from './$types';
 const notAnswered = () => json({ error: 'forecast source did not answer' }, { status: 502, headers: { 'cache-control': 'no-store' } });
 
 export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddress }) => {
-  // One address asks for a forecast a few times an hour; a stream of distinct coordinates would be a stream of MET calls under this site's User-Agent.
-  const stop = await limited(platform, getClientAddress, 'forecast');
-  if (stop) return stop;
   // Absent or blank is not zero: Number('') is 0, and 0,0 is a real place in the Gulf of Guinea that MET would answer for.
   const coord = (k: string) => {
     const v = url.searchParams.get(k)?.trim();
@@ -53,6 +50,10 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
     }
   }
 
+  // Only a cache miss costs MET a call, so only a miss counts against the address: a garden club on one Wi-Fi watching one
+  // site shares a cache line, not an allowance. A stream of distinct coordinates is what the limit is for.
+  const stop = await limited(platform, getClientAddress, 'forecast');
+  if (stop) return stop;
   const headers = { 'user-agent': USER_AGENT, accept: 'application/json' };
   // Anything short of a well-formed answer from MET (unreachable, a non-2xx, a body that is not JSON or not a forecast) is one
   // plain 502 with no-store: the page says "not checked", and a bad hour is never cached.

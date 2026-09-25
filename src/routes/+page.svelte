@@ -5,10 +5,11 @@
   import { page } from '$app/state';
   import { accNo } from '$lib/db/types';
   import { photoAt } from '$dossier/photo-size';
+  import { entriesFor } from '$lib/ui/index.svelte';
   import PageHead from '$lib/ui/PageHead.svelte';
   import { collection } from '$lib/db/collection.svelte';
   import { onMount, tick } from 'svelte';
-  import { slugify } from '$core/names';
+  import { slugify, speciesSlug } from '$core/names';
   import { groupFor } from '$core/regions';
   import type { MySpecies } from '$lib/db/species-list';
   import { prepare, search } from '$core/search';
@@ -51,30 +52,34 @@
    * index, not these rows, and are unaffected.
    */
   const WINDOW = 120, CHUNK = 160;
-  const firstNeeded = () => { const i = data.open ? data.rows.findIndex((r) => r.id === data.open) : -1; return Math.max(WINDOW, i + 30); };
+  /** Where the window starts: the letter asked for with `?from=` (a reader without JavaScript), else the top. */
+  // svelte-ignore state_referenced_locally
+  let start = $state(data.start);
+  const firstNeeded = () => { const i = data.open ? data.rows.findIndex((r) => r.id === data.open) : -1; return Math.max(WINDOW, i - data.start + 30); };
   let shown = $state(firstNeeded());
-  $effect(() => { data.rows; data.open; shown = firstNeeded(); }); // a new grouping or a newly opened row: start again from what it needs
-  const visibleRows = $derived(data.rows.slice(0, shown));
+  $effect(() => { data.rows; data.open; data.start; start = data.start; shown = firstNeeded(); }); // a new grouping, letter or opened row: start again from what it needs
+  const visibleRows = $derived(data.rows.slice(start, start + shown));
   let sentinel = $state<HTMLElement | null>(null);
   /** Append a chunk, and keep appending while the end of the list is still within reach of the viewport (a tall screen, a fling that landed on it). */
   async function growWhileNear() {
-    while (sentinel && shown < data.rows.length && sentinel.getBoundingClientRect().top < window.innerHeight + 1600) {
-      shown = Math.min(data.rows.length, shown + CHUNK);
+    while (sentinel && start + shown < data.rows.length && sentinel.getBoundingClientRect().top < window.innerHeight + 1600) {
+      shown = Math.min(data.rows.length - start, shown + CHUNK);
       await tick();
     }
   }
   $effect(() => {
-    if (!sentinel || shown >= data.rows.length) return;
+    if (!sentinel || start + shown >= data.rows.length) return;
     const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) growWhileNear(); }, { rootMargin: '1600px 0px' });
     io.observe(sentinel);
     return () => io.disconnect();
   });
   /** Render every row up to the end of a letter, then scroll to its heading; the hash is kept so the back button and a copied link behave. */
   async function jumpToLetter(l: string) {
-    let last = -1;
-    data.rows.forEach((r, i) => { if (r.letter === l) last = i; });
+    let first = -1, last = -1;
+    data.rows.forEach((r, i) => { if (r.letter === l) { if (first < 0) first = i; last = i; } });
     if (last < 0) return;
-    shown = Math.max(shown, last + 1);
+    if (first < start) { shown += start; start = 0; } // a letter above the window: the window opens from the top
+    shown = Math.max(shown, last + 1 - start);
     await tick();
     document.getElementById(`l-${l}`)?.scrollIntoView();
     history.replaceState(history.state, '', `#l-${l}`);
@@ -124,7 +129,7 @@
   const owned = $derived.by(() => {
     const m = new Map<string, string[]>();
     if (!collection.ready) return m;
-    for (const a of collection.accessions) if (a.status === 'growing') m.set(slugify(a.taxonName), [...(m.get(slugify(a.taxonName)) ?? []), accNo(a)]);
+    for (const a of collection.accessions) if (a.status === 'growing') m.set(speciesSlug(a.taxonName), [...(m.get(speciesSlug(a.taxonName)) ?? []), accNo(a)]);
     return m;
   });
   // Your species: what you grow or follow. Empty until the collection is open, so the server-rendered catalogue stands until then.
@@ -159,10 +164,22 @@
   const retryFull = () => { fullFailed = false; loadFull(); };
   const flat = $derived(!!q.trim() || chip !== 'all');
   $effect(() => {
-    if (flat || hasMine) loadFull();
+    if (flat) loadFull();
   });
+  // A grower's own tiles come from a small request for their own species; the whole catalogue is fetched only for a search or a chip.
+  let ownEntries = $state<Map<string, Item> | null>(null);
+  let ownFailed = $state(false);
+  async function loadOwn() {
+    if (ownFailed) return;
+    const m = await entriesFor([...mine.keys()]);
+    if (!m) { ownFailed = true; return; }
+    ownEntries = new Map([...m.values()].map((e) => [e.slug, { key: e.key, slug: e.slug, name: e.name, family: e.family, common: e.common, origin: e.origin ?? [], thumb: e.thumb, alt: e.thumb ? e.name : undefined, photos: e.photos, open: e.open, climate: e.climate } as Item]));
+  }
+  $effect(() => { if (hasMine && !full) { mine.size; loadOwn(); } });
+  const retryOwn = () => { ownFailed = false; loadOwn(); };
   const ownedN = $derived.by(() => {
     if (full) return [...owned.keys()].filter((k) => full!.some((c) => c.slug === k)).length;
+    if (ownEntries) return [...owned.keys()].filter((k) => ownEntries!.has(k)).length;
     return [...owned.keys()].length; // until the full index is here, count what you grow, not what the corpus has of it
   });
   const prepared = $derived(full ? prepare(full) : null);
@@ -186,7 +203,7 @@
   type Tile = { slug: string; name: string; family?: string; common?: string; thumb?: string; alt?: string; open?: number; climate?: string; missing?: boolean };
   const mineTiles = $derived.by(() => {
     const list = [...mine.values()].sort((a, b) => a.name.localeCompare(b.name));
-    const bySlug = full ? new Map(full.map((c) => [c.slug, c])) : null;
+    const bySlug = full ? new Map(full.map((c) => [c.slug, c])) : ownEntries;
     const toTile = (s: { slug: string; name: string }): Tile => bySlug?.get(s.slug) ?? { slug: s.slug, name: s.name, missing: !!bySlug };
     return { grow: list.filter((s) => s.grown > 0).map(toTile), follow: list.filter((s) => !s.grown && s.followed).map(toTile) };
   });
@@ -238,7 +255,7 @@
 {#snippet tile(c: Tile)}
   <a class="tile" href="/species/{c.slug}">
     {#if owned.get(c.slug)?.length}<span class="ownchip" title="You grow {owned.get(c.slug)!.length === 1 ? owned.get(c.slug)![0] : owned.get(c.slug)!.length + ' of these'}" aria-label="You grow {owned.get(c.slug)!.length === 1 ? owned.get(c.slug)![0] : owned.get(c.slug)!.length + ' of these'}">{owned.get(c.slug)!.length === 1 ? owned.get(c.slug)![0] : `× ${owned.get(c.slug)!.length}`}</span>{:else if mine.get(c.slug)?.followed}<span class="ownchip following" title="On your list without a plant of it" aria-label="Following: on your list without a plant of it">following</span>{/if}
-    {#if c.thumb}<div class="im"><img src={c.thumb} alt={c.alt} loading="lazy" onerror={(e) => { const im = e.currentTarget as HTMLImageElement; im.style.display = 'none'; im.parentElement?.classList.add('ph'); im.parentElement && (im.parentElement.textContent = 'photograph did not load'); }} /></div>{:else if c.climate}<div class="im ph">no open photograph on file</div>{:else if c.missing}<div class="im ph">not in the reference yet</div>{:else}<div class="im ph">{loadingFull ? 'loading…' : fullFailed ? 'reference not reached' : ''}</div>{/if}
+    {#if c.thumb}<div class="im"><img src={c.thumb} alt={c.alt} loading="lazy" onerror={(e) => { const im = e.currentTarget as HTMLImageElement; im.style.display = 'none'; im.parentElement?.classList.add('ph'); im.parentElement && (im.parentElement.textContent = 'photograph did not load'); }} /></div>{:else if c.climate}<div class="im ph">no open photograph on file</div>{:else if c.missing}<div class="im ph">not in the reference yet</div>{:else}<div class="im ph">{loadingFull ? 'loading…' : fullFailed || ownFailed ? 'reference not reached' : ''}</div>{/if}
     <div class="tx">
       <div class="nm"><SpeciesName name={c.name} /></div>
       <div class="fam">{c.common ?? c.family ?? ''}</div>
@@ -283,8 +300,8 @@
       <p class="seccount" style="margin-top: 14px" role="status">{fmtN(hits.length)} of {fmtN(data.total)} match; Enter opens the first.</p>
     {/if}
   {:else}
-    {#if fullFailed}
-      <p class="seccount" style="margin-top: 14px">The reference could not be reached, so your tiles are without their photographs and climate. <button class="linkish" type="button" onclick={retryFull}>Try again</button></p>
+    {#if fullFailed || ownFailed}
+      <p class="seccount" style="margin-top: 14px">The reference could not be reached, so your tiles are without their photographs and climate. <button class="linkish" type="button" onclick={() => { retryFull(); retryOwn(); }}>Try again</button></p>
     {/if}
     {#if mineTiles.grow.length}
       <h2 class="q grouptitle">You grow</h2>
@@ -350,12 +367,12 @@
   {:else}
     {#if data.letters.length > 1}
       <nav class="letters" aria-label="Jump to a letter">
-        {#each data.letters as l (l)}<a href="#l-{l}" onclick={(e) => { e.preventDefault(); jumpToLetter(l); }}>{l}</a>{/each}
+        {#each data.letters as l (l)}<a href="?by={data.by}&from={l}#l-{l}" onclick={(e) => { e.preventDefault(); jumpToLetter(l); }}>{l}</a>{/each}
       </nav>
     {/if}
     <div class="rows" class:withletters={data.letters.length > 1}>
       {#each visibleRows as r, i (r.id)}
-        {#if r.letter && (i === 0 || data.rows[i - 1].letter !== r.letter)}<h2 class="letter" id="l-{r.letter}">{r.letter}</h2>{/if}
+        {#if r.letter && (i === 0 || data.rows[start + i - 1].letter !== r.letter)}<h2 class="letter" id="l-{r.letter}">{r.letter}</h2>{/if}
         <a class="grow" class:open={r.id === data.open} id="g-{r.id}" href={rowHref(r.id)} data-sveltekit-noscroll aria-expanded={r.id === data.open}>
           {#if r.map}<div class="gmap">{@html r.map}</div>{:else if r.thumb}<div class="gthumb"><img src={photoAt(r.thumb, 'small')} alt="" loading="lazy" onerror={(e) => { const im = e.currentTarget as HTMLImageElement; im.remove(); }} /></div>{:else}<div class="gthumb mono" aria-hidden="true">{r.label[0] ?? ''}</div>{/if}
           <div class="gtx">
@@ -371,7 +388,7 @@
           </div>
         {/if}
       {/each}
-      {#if shown < data.rows.length}<div class="more" bind:this={sentinel}><button class="btn small" type="button" onclick={() => (shown = Math.min(data.rows.length, shown + CHUNK))}>More of the {fmtN(data.rows.length)} {data.by === 'genus' ? 'genera' : data.by === 'family' ? 'families' : 'regions'}</button></div>{/if}
+      {#if start + shown < data.rows.length}<div class="more" bind:this={sentinel}><a class="btn small" href="?by={data.by}&from={data.rows[start + shown].letter ?? ''}" onclick={(e) => { e.preventDefault(); shown = Math.min(data.rows.length - start, shown + CHUNK); }}>More of the {fmtN(data.rows.length)} {data.by === 'genus' ? 'genera' : data.by === 'family' ? 'families' : 'regions'}</a></div>{/if}
     </div>
     <p class="seccount" style="margin-top: 14px">{fmtN(data.rows.length)} {data.by === 'genus' ? 'genera' : data.by === 'family' ? 'families' : 'regions'} · {fmtN(data.total)} species</p>
   {/if}

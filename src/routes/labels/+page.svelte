@@ -16,7 +16,7 @@
   import { kindOf, type Accession } from '$lib/db/types';
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import { bySlug } from '$lib/ui/index.svelte';
-  import { slugify } from '$core/names';
+  import { slugify, speciesSlug, speciesOf } from '$core/names';
   import { careLine } from '$core/note';
   import type { Dossier } from '$dossier/schema';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
@@ -86,14 +86,21 @@
   };
   const pickAll = (on: boolean) => (chosen = on ? new Set([...chosen, ...filtered.map((a) => a.id)]) : new Set([...chosen].filter((id) => !filtered.some((a) => a.id === id))));
 
+  const fetchDossier = (key: number) => fetch(`/api/dossier/${key}`).then((r) => (r.ok ? (r.json() as Promise<Dossier>) : null)).catch(() => null);
+  async function dossierFor(a: Accession): Promise<Dossier | null> {
+    const own = a.taxonKey && speciesOf(a.taxonName) === a.taxonName ? await fetchDossier(a.taxonKey) : null;
+    if (own) return own;
+    const e = await bySlug(speciesSlug(a.taxonName));
+    return e ? fetchDossier(e.key) : null;
+  }
   // QR codes and care lines are made once per plant, lazily.
   $effect(() => {
     for (const a of picked) {
       if (withQr && !qrs[a.id]) QRCode.toString(`${location.origin}/plants/${a.id}`, { type: 'svg', errorCorrectionLevel: 'M', margin: 0 }).then((svg) => (qrs = { ...qrs, [a.id]: svg }));
       if (withCare && care[a.id] === undefined && kindOf(a) !== 'hybrid') {
         care = { ...care, [a.id]: '' };
-        bySlug(slugify(a.taxonName)).then(async (e) => {
-          const d = e ? await fetch(`/api/dossier/${e.key}`).then((r) => (r.ok ? (r.json() as Promise<Dossier>) : null)).catch(() => null) : null;
+        // The plant's own key first (one small file, the one the offline worker keeps); the index only for a plant without one.
+        dossierFor(a).then(async (d) => {
           const readerLat = site.current?.lat ?? collection.locations.map((l) => l.lat).find((x): x is number => x != null) ?? null;
           const line = careLine({ scientific: a.taxonName, family: d?.name.family, months: d?.climate.status === 'ok' ? d.climate.months : null, extremes: d?.climate.status === 'ok' ? (d.climate.extremes ?? null) : null, lat: d?.centroid?.lat ?? null, units: units.current }, { readerLat });
           care = { ...care, [a.id]: line };

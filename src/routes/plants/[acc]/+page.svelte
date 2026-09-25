@@ -13,7 +13,7 @@
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
   import LocationPicker from '$lib/ui/LocationPicker.svelte';
   import type { Provenance } from '$lib/db/types';
-  import { slugify, speciesOf } from '$core/names';
+  import { slugify, speciesOf, speciesSlug } from '$core/names';
   import SpeciesPicker from '$lib/ui/SpeciesPicker.svelte';
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import { bySlug } from '$lib/ui/index.svelte';
@@ -46,7 +46,7 @@
   const timeline = $derived(
     [...events.map((e) => ({ k: 'e' as const, d: e.d, id: e.id, e })), ...photos.map((ph) => ({ k: 'p' as const, d: ph.d, id: ph.id, ph }))].sort((a, b) => b.d.localeCompare(a.d) || b.id.localeCompare(a.id))
   );
-  const taxon = $derived(a ? collection.taxon(slugify(a.taxonName)) : undefined);
+  const taxon = $derived(a ? collection.taxon(speciesSlug(a.taxonName)) : undefined);
   const sowing = $derived(a?.sowingId ? collection.sowing(a.sowingId) : undefined);
   let idx = $state<IndexEntry | undefined>(undefined);
   let dossier = $state<Dossier | null>(null);
@@ -242,7 +242,7 @@
   }
   async function saveMyNotes() {
     if (!a) return;
-    await collection.put('taxon', slugify(a.taxonName), { name: a.taxonName, gbifKey: a.taxonKey ?? null, myNotes: myNotesDraft.trim() || null });
+    await collection.put('taxon', speciesSlug(a.taxonName), { name: speciesOf(a.taxonName), gbifKey: a.taxonKey ?? null, myNotes: myNotesDraft.trim() || null });
     editingMy = false;
   }
   async function remove() {
@@ -258,7 +258,12 @@
 {/if}
 {#if !collection.ready}
   <!-- The page's shape before the vault opens: the same head, hero and card heights, so nothing jumps when the record arrives. -->
-  <div class="skel" aria-busy="true"><h1 class="q" style="margin-top: 24px">{param}</h1><p class="muted">Opening your collection…</p><div class="hero skelbox"></div><div class="idcard skelcard"></div></div>
+  <!-- In the loaded page's own order: hero, then the id card (with the number as its title and the actions row), then the verb bar. -->
+  <div class="skel" aria-busy="true">
+    <div class="hero skelbox"></div>
+    <div class="idcard"><div class="who"><h1 class="sci"><span class="accno big lead">{param}</span></h1><p class="vern muted">Opening your collection…</p><div class="pills"><span class="pill">&nbsp;</span></div></div><div class="acts"><span class="btn skelbtn">&nbsp;</span><span class="btn skelbtn">&nbsp;</span></div></div>
+    <div class="skelverbs"></div>
+  </div>
 {:else if !a}
   <h1 class="q" style="margin-top: 24px">{param}</h1>
   <p class="muted">{collection.isNumberTaken(param) ? `${param} was given to a plant since removed; the number stays reserved and its record stays in the change log and in any backup taken before.` : 'No plant with this number on this device.'}</p>
@@ -384,7 +389,7 @@
     {#if lastOf('water')}<div class="card"><div class="lab">Since watered</div><div class="val">{sinceWater == null ? '–' : sinceWater}<span class="u">{sinceWater == null ? '' : ' d'}</span></div><div class="sub">last {lastOf('water')}</div></div>{/if}
     {#if events.some((e) => e.t === 'audit')}<div class="card"><div class="lab">Last seen</div><div class="val">{seen == null ? '–' : seen}<span class="u">{seen == null ? '' : ' d'}</span></div><div class="sub">audit, {collection.lastSeen(id)}</div></div>{/if}
     {#if lastMeasure}<div class="card"><div class="lab">{sizeKey ? (MEASURES.find((m) => m.k === sizeKey)?.label ?? 'Size') : 'Size'}</div><div class="val">{sizeKey && lastMeasure ? lastMeasure.measures![sizeKey] : '–'}<span class="u">{sizeKey ? ' ' + (MEASURES.find((m) => m.k === sizeKey)?.unit ?? '') : ''}</span></div>{#if growth != null}<div class="gauge"><i style="width: {Math.min(100, Math.max(8, (growth / Math.max(1, lastMeasure!.measures![sizeKey!])) * 100))}%"></i></div>{/if}<div class="sub">{growth != null ? `${growth >= 0 ? '+' : ''}${growth} since ${firstMeasure!.d}` : `measured ${lastMeasure.d}`}</div></div>{/if}
-    <div class="card"><div class="lab">Habitat rain season</div><div class="val" style="font-family: var(--ui); font-size: 17px; font-weight: 700">{season ? season.label : dossier?.climate.status === 'refused' ? 'Climate not checked' : dossier?.climate.status === 'pending' ? 'Climate pending' : dossier ? 'No habitat climate' : ref === 'unreachable' ? 'Reference not reached' : ref === 'none' ? (kind === 'hybrid' ? 'A hybrid' : 'No species page') : '…'}</div><div class="sub">{#if season}{season.note} <a href="/species/{slugify(a.taxonName)}#s-cultivation">The sheet</a>.{:else if dossier?.climate.status === 'refused'}A source did not answer when the species page was built{dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}. Not a statement that no climate exists.{:else if dossier?.climate.status === 'pending'}The habitat climate for this species has not been derived yet.{:else if dossier}Nothing to read a season from{dossier.climate.status === 'none' && dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}.{:else if ref === 'unreachable'}The species reference could not be reached from here; nothing is known either way.{:else if ref === 'none'}{kind === 'hybrid' ? (parentLinks.some((p) => p.slug) ? 'No habitat of its own; its parents have species pages.' : 'No habitat of its own.') : 'Not in the reference.'}{:else}reading the species dossier{/if}</div></div>
+    <div class="card"><div class="lab">Habitat rain season</div><div class="val" style="font-family: var(--ui); font-size: 17px; font-weight: 700">{season ? season.label : dossier?.climate.status === 'refused' ? 'Climate not checked' : dossier?.climate.status === 'pending' ? 'Climate pending' : dossier ? 'No habitat climate' : ref === 'unreachable' ? 'Reference not reached' : ref === 'none' ? (kind === 'hybrid' ? 'A hybrid' : 'No species page') : '…'}</div><div class="sub">{#if season}{season.note} <a href="/species/{speciesSlug(a.taxonName)}#s-cultivation">The sheet</a>.{:else if dossier?.climate.status === 'refused'}A source did not answer when the species page was built{dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}. Not a statement that no climate exists.{:else if dossier?.climate.status === 'pending'}The habitat climate for this species has not been derived yet.{:else if dossier}Nothing to read a season from{dossier.climate.status === 'none' && dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}.{:else if ref === 'unreachable'}The species reference could not be reached from here; nothing is known either way.{:else if ref === 'none'}{kind === 'hybrid' ? (parentLinks.some((p) => p.slug) ? 'No habitat of its own; its parents have species pages.' : 'No habitat of its own.') : 'Not in the reference.'}{:else}reading the species dossier{/if}</div></div>
   </div>
 
   {#if habitat && a.locationId}
@@ -395,7 +400,7 @@
     </div>
     <details class="why">
       <summary>What this compares</summary>
-      <div class="whybody">A comparison, not a verdict: the habitat figures are what the sky and the weather do where the species is recorded (CHELSA across every envelope cell, NASA POWER at the typical cell), not measured tolerances of this plant. This place's figures are its bench settings, inherited from parents where set. <a href="/species/{slugify(a.taxonName)}#s-cultivation">The full cultivation sheet</a>.</div>
+      <div class="whybody">A comparison, not a verdict: the habitat figures are what the sky and the weather do where the species is recorded (CHELSA across every envelope cell, NASA POWER at the typical cell), not measured tolerances of this plant. This place's figures are its bench settings, inherited from parents where set. <a href="/species/{speciesSlug(a.taxonName)}#s-cultivation">The full cultivation sheet</a>.</div>
     </details>
   {/if}
 
@@ -500,7 +505,8 @@
   .hero:not(.own) { min-height: 260px; }
   .hero .spthumb { width: 100%; height: 260px; object-fit: cover; display: block; }
   .skelbox { background: var(--sunk); border-radius: var(--r); min-height: 260px; }
-  .skelcard { min-height: 120px; margin-top: 14px; }
+  .skelbtn { min-width: 64px; visibility: hidden; }
+  .skelverbs { min-height: 52px; margin-top: 14px; }
   .parentage { margin-top: 2px; }
   .parentage a { color: inherit; }
   .hero.own { background: #0d1211; }

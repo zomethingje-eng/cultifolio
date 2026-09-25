@@ -35,6 +35,13 @@ class SiteStore {
     } catch {
       /* a private window keeps it for the page */
     }
+    // The hemisphere alone goes in a cookie, so the server renders a southern grower's months southern from the first
+    // paint (and for a reader without JavaScript), the way the units cookie seeds the units. The site itself stays here.
+    try {
+      document.cookie = s ? `cultifolio.hemi=${s.lat < 0 ? 's' : 'n'}; path=/; max-age=31536000; samesite=lax` : 'cultifolio.hemi=; path=/; max-age=0; samesite=lax';
+    } catch {
+      /* no document: nothing to seed */
+    }
   }
 }
 export const site = new SiteStore();

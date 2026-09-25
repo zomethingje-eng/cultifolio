@@ -6,7 +6,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Change } from '$core/log';
-import { hlcEncode } from '$core/hlc';
+import { hlcEncode, hlcDecode } from '$core/hlc';
 import { accNo, NUMBERING_SETTING } from '$lib/db/types';
 import { importV2 } from '$lib/import/v2';
 
@@ -287,5 +287,30 @@ describe('importing the same v2 file twice (finding 5)', () => {
     await collection.ingest(again.changes);
     expect(collection.accession('A-1')?.notes).toBe('repotted, new mix');
     expect(collection.accession('A-1')?.status).toBe('dead');
+  });
+});
+
+describe('a clock that was fast (round eight, 4)', () => {
+  it('an edit after the correction wins its field by a stamp just past the old one, while other fields and other records are stamped at real time', async () => {
+    const real = Date.parse('2026-09-25T12:00:00Z');
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(real + 365 * 86_400_000); // a year fast
+      const { collection } = await fresh('fastdevice00');
+      const a = await collection.addAccession({ taxonName: 'Lithops', acc: 'L-1', notes: 'first' });
+      vi.setSystemTime(real); // put right, and the app reloads
+      const c2 = (await reload()) as typeof collection;
+      expect(c2.accession(a.id)?.notes).toBe('first'); // its own stamps are never held on itself
+      await c2.put('accession', a.id, { notes: 'second', location: 'sill' });
+      expect(c2.accession(a.id)?.notes).toBe('second'); // the edit wins the field
+      const changes = [...mem.changes.values()].sort((x, y) => x.t.localeCompare(y.t));
+      const notes = changes.filter((c) => c.field === 'notes').map((c) => hlcDecode(c.t));
+      expect(notes[1].wall).toBe(notes[0].wall); // stamped just past the fast stamp, not a year ahead again
+      expect(notes[1].count).toBe(notes[0].count + 1);
+      const loc = hlcDecode(changes.find((c) => c.field === 'location')!.t);
+      expect(loc.wall).toBeLessThan(real + 60_000); // an untouched field is stamped now: nothing else from this device is held elsewhere
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

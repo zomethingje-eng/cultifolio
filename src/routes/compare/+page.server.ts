@@ -13,5 +13,5 @@ export const load: PageServerLoad = async ({ url, platform, fetch, setHeaders, c
     })
   );
   setHeaders({ 'cache-control': 'private, max-age=60', vary: 'accept-language, cookie' }); // private: the page is rendered in the reader's units, so no shared cache may hand one reader's page to another
-  return { units: unitsFor(cookies, request), items: found.filter((x) => x.d).map((x) => x.d!), missing: found.filter((x) => !x.d).map((x) => x.slug) };
+  return { units: unitsFor(cookies, request), hemiLat: cookies.get('cultifolio.hemi') === 's' ? -1 : cookies.get('cultifolio.hemi') === 'n' ? 1 : null, items: found.filter((x) => x.d).map((x) => x.d!), missing: found.filter((x) => !x.d).map((x) => x.slug) };
 };

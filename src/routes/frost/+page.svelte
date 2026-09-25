@@ -1,6 +1,6 @@
 <script lang="ts">
   import { units } from '$lib/ui/units.svelte';
-  import { getForecast } from '$lib/weather/client';
+  import { getForecast, forecastRefusal } from '$lib/weather/client';
   import { site } from '$lib/ui/site.svelte';
   import { tempUnit, rainUnit, tempN, rainN } from '$core/units';
   import { onMount } from 'svelte';
@@ -21,11 +21,11 @@
         err = 'Latitude is −90 to 90 and longitude −180 to 180; check the figures.';
         return;
       }
-      if (!r.ok) throw new Error('not answered');
+      if (!r.ok) { err = forecastRefusal(r.status); return; }
       data = r.body;
     } catch {
-      // Whatever went wrong upstream, the page says the check did not happen: never a status code, never that the nights are clear.
-      err = 'Forecast not checked: the forecast source did not answer.';
+      // Whatever went wrong, the page says the check did not happen: never a status code, never that the nights are clear.
+      err = forecastRefusal(null);
     }
     finally { busy = false; }
   }

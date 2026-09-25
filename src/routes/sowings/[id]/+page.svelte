@@ -10,7 +10,7 @@
   import { collection } from '$lib/db/collection.svelte';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
   import LocationPicker from '$lib/ui/LocationPicker.svelte';
-  import { slugify } from '$core/names';
+  import { slugify, speciesSlug } from '$core/names';
   import { EVENT_LABEL, PROP_METHODS, kindOf, type PropMethod, type Provenance } from '$lib/db/types';
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import { bySlug } from '$lib/ui/index.svelte';
@@ -35,7 +35,7 @@
   $effect(() => {
     if (s) {
       setCrumb([{ label: 'Sowings', href: '/sowings' }, { label: `${sowNo(s)} · ${s.taxonName}` }]);
-      bySlug(slugify(s.taxonName)).then((e) => (idx = e ?? undefined));
+      bySlug(speciesSlug(s.taxonName)).then((e) => (idx = e ?? undefined));
     }
     return () => setCrumb([]);
   });
@@ -172,7 +172,7 @@
       </div>
     </div>
     <div class="acts">
-      <a class="btn" href="/species/{slugify(s.taxonName)}">Species page</a>
+      <a class="btn" href="/species/{speciesSlug(s.taxonName)}">Species page</a>
       <button class="btn" onclick={startEdit}>Edit</button>
       {#if s.status === 'active'}
         <button class="btn" onclick={() => setStatus('done')}>Mark done</button>

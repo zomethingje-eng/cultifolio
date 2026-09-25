@@ -10,7 +10,7 @@
   import { collection } from '$lib/db/collection.svelte';
   import SpeciesPicker from '$lib/ui/SpeciesPicker.svelte';
   import LocationPicker from '$lib/ui/LocationPicker.svelte';
-  import { parseName, slugify, type NameKind } from '$core/names';
+  import { parseName, slugify, type NameKind, speciesSlug, speciesOf } from '$core/names';
   import type { Provenance } from '$lib/db/types';
   onMount(async () => {
     await collection.load();
@@ -63,8 +63,8 @@
     const p = parseName(name);
     const taxonName = p.scientific;
     // Keep a taxon record so the species has a home for your notes even before a dossier exists.
-    const slug = slugify(taxonName);
-    if (!collection.taxon(slug)) await collection.put('taxon', slug, { name: taxonName, gbifKey: taxonKey });
+    const slug = speciesSlug(taxonName);
+    if (!collection.taxon(slug)) await collection.put('taxon', slug, { name: speciesOf(taxonName), gbifKey: taxonKey });
     let firstId = '';
     for (let i = 0; i < Math.max(1, count); i++) {
       const rec = await collection.addAccession({

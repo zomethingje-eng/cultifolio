@@ -6,8 +6,8 @@
  */
 import { SvelteMap } from 'svelte/reactivity';
 import { localDate, madeOn } from '$core/dates';
-import { Clock, hlcDecode, hlcEncode, hlcCompare } from '$core/hlc';
-import { apply, diff, validateChanges, key as recKey, type Change, type Kind, type Record_, type State } from '$core/log';
+import { Clock, hlcDecode, hlcEncode, hlcCompare, hlcAfter } from '$core/hlc';
+import { apply, diff, validateChanges, key as recKey, type Change, type Kind, type Record_, type State, hlcWall } from '$core/log';
 import { nextAccession, DEFAULT_SCHEME, type NumberingScheme } from '$core/accession';
 import { allChanges, appendChanges, appendChangesClaiming, onOtherTabWrite, deviceId, requestPersistence, getMeta, setMeta, putPhotoBlobs, getPhotoBlobs, deletePhotoBlobs, holdVault, type NumberKind } from './vault';
 import type { Accession, PlantEvent, Taxon, Location, Sowing, Provenance, Photo } from './types';
@@ -49,9 +49,15 @@ class Collection {
     if (!this.loading)
       this.loading = (async () => {
         const dev = await deviceId();
-        this.clock = new Clock(dev);
+        this.deviceId = dev;
+        // Each tab is its own writer: two tabs of one browser share the device but not a clock, and two clocks stamping the
+        // same millisecond under one name would give two records one identity (round eight, 1). The tag is four base-36
+        // characters on top of the twelve-character device, within the HLC's sixteen; the device alone still names this
+        // machine to sync and to the hold rule (which matches the writer by that prefix).
+        this.clock = new Clock(dev + Array.from(crypto.getRandomValues(new Uint8Array(4)), (b) => (b % 36).toString(36)).join(''));
         const changes = await allChanges();
         apply(this.state, changes, this.seen, { now: Date.now(), except: dev }); // a change stamped far ahead of this clock is held, not applied (round five, 4)
+        for (const c of changes) this.applied.add(c.t);
         this.noteParents(changes);
         for (const c of changes) this.clock.observe(c.t);
         const scheme = await getMeta<NumberingScheme>('scheme');
@@ -93,8 +99,8 @@ class Collection {
   /** The vault's ledger of every number ever written on this device, read at load and after another tab writes: a replace from an older backup does not bring those numbers back into play. */
   private ledger: Record<NumberKind, Set<string>> = { accession: new Set(), sowing: new Set() };
   /** Every number ever given to a plant on this device, live, dead or replaced away: a number is never reused. */
-  private takenNumbers(kind: NumberKind): Set<string> {
-    const out = new Set(this.ledger[kind]);
+  private takenNumbers(kind: NumberKind, withLedger = true): Set<string> {
+    const out = new Set(withLedger ? this.ledger[kind] : []);
     for (const r of this.state.values()) if (r.kind === kind) out.add(kind === 'accession' ? accNo(r as unknown as Accession) : sowNo(r as unknown as Sowing));
     return out;
   }
@@ -107,10 +113,10 @@ class Collection {
   /** Another tab of this browser wrote: fold in what this tab has not seen, so its list and its next number are current. */
   private async catchUp(): Promise<void> {
     if (!this.ready) return;
-    const changes = (await allChanges()).filter((c) => !this.seen.has(c.t));
+    const changes = (await allChanges()).filter((c) => !this.applied.has(c.t));
     await this.readLedger();
     if (!changes.length) return;
-    for (const c of changes) this.clock?.observe(c.t);
+    for (const c of changes) { this.clock?.observe(c.t); this.applied.add(c.t); }
     apply(this.state, changes, this.seen, { now: Date.now(), except: this.device });
     this.noteParents(changes);
     for (const k of new Set(changes.map((c) => recKey(c.kind, c.id)))) {
@@ -242,8 +248,20 @@ class Collection {
     return { parent: null, loop: false };
   }
   /** Remember every parentId a place has been given, so a cut loop can fall back to the previous one. Same on every device: it is read from the log, not from arrival order. */
+  /** The earliest stamp seen for each record: the day it was made on this device or imported, whatever its id looks like (a v2 import keeps its v2 ids). */
+  private born = new Map<string, string>();
+  /** The local day a record was made or imported: from its id when the id carries the time, else from its first change. */
+  madeOn(kind: Kind, id: string): string | null {
+    const fromId = madeOn(id);
+    if (fromId) return fromId;
+    const t = this.born.get(recKey(kind, id));
+    return t ? localDate(new Date(hlcWall(t))) : null;
+  }
   private noteParents(changes: Iterable<Change>): void {
     for (const c of changes) {
+      const k = recKey(c.kind, c.id);
+      const b = this.born.get(k);
+      if (!b || hlcCompare(c.t, b) < 0) this.born.set(k, c.t);
       if (c.kind !== 'location' || c.field !== 'parentId') continue;
       let m = this.parentHist.get(c.id);
       if (!m) this.parentHist.set(c.id, (m = new Map()));
@@ -557,7 +575,7 @@ class Collection {
   lastSeen(acc: string): string | null {
     const ev = this.events(acc).find((e) => e.t === 'audit' || e.t === 'acquire');
     if (!ev) return null;
-    return ev.t === 'audit' ? ev.d : (madeOn(ev.id) ?? ev.d);
+    return ev.t === 'audit' ? ev.d : (this.madeOn('event', ev.id) ?? ev.d);
   }
 
   private live<T>(kind: Kind): T[] {
@@ -584,6 +602,7 @@ class Collection {
    */
   private async commit(changes: Change[], source: 'local' | 'import' | 'server' = 'local'): Promise<void> {
     if (!changes.length) return;
+    if (source === 'local') this.stampPast(changes);
     // The vault first. If it refuses (a full phone), nothing is applied, the page keeps showing what is stored, and the error is kept for the page to show.
     try {
       await appendChanges(changes, source === 'server');
@@ -592,6 +611,7 @@ class Collection {
       throw e;
     }
     this.lastWriteError = null;
+    for (const c of changes) this.applied.add(c.t);
     apply(this.state, changes, this.seen, { now: Date.now(), except: this.device });
     this.noteParents(changes);
     // apply() mutates records in place; re-set a copy so the reactive map notices.
@@ -608,8 +628,24 @@ class Collection {
     this.listeners.add(fn);
     return () => this.listeners.delete(fn);
   }
+  /** This machine: what sync names batches by and the hold rule matches; the same in every tab. */
+  private deviceId = '';
   get device(): string {
+    return this.deviceId;
+  }
+  /** This tab's writer id: the device plus a tag, what stamps carry. */
+  get writer(): string {
     return this.clock?.device ?? '';
+  }
+  /** Every HLC folded into this tab's state, so a write announced by another tab is read once, not the whole log. */
+  private applied = new Set<string>();
+  /** A local change to a field whose current stamp is ahead of this clock (made while a clock was fast) is stamped just past that stamp, so the edit wins the field without following the bad clock (round eight, 4). */
+  private stampPast(changes: Change[]): Change[] {
+    for (const c of changes) {
+      const prev = this.seen.get(recKey(c.kind, c.id) + '\0' + c.field); // the fold's own key: record, NUL, field
+      if (prev !== undefined && hlcCompare(c.t, prev) <= 0) c.t = hlcAfter(prev, this.writer);
+    }
+    return changes;
   }
 
   /** Upsert any record kind from a plain object. Only changed fields are written. */
@@ -657,7 +693,7 @@ class Collection {
     try {
       out = await appendChangesClaiming(kind, this.takenNumbers(kind), (issued) => {
         const b = build(issued);
-        made = b.changes;
+        made = this.stampPast(b.changes);
         return b;
       });
     } catch (e) {
@@ -665,7 +701,7 @@ class Collection {
       throw e;
     }
     this.lastWriteError = null;
-    for (const c of made) { const k = numberField(c); if (k && typeof c.value === 'string') this.ledger[k].add(c.value); }
+    for (const c of made) { const k = numberField(c); if (k && typeof c.value === 'string') this.ledger[k].add(c.value); this.applied.add(c.t); }
     apply(this.state, made, this.seen, { now: Date.now(), except: this.device });
     this.noteParents(made);
     for (const k of new Set(made.map((c) => recKey(c.kind, c.id)))) {
@@ -743,7 +779,8 @@ class Collection {
         const no = kind === 'accession' ? accNo(r as Accession) : sowNo(r as Sowing);
         byNo.set(no, [...(byNo.get(no) ?? []), r]);
       }
-      const taken = this.takenNumbers(kind);
+      // From the log alone, never this device's ledger: every device must derive the same repair from the same merged log (round eight, 5).
+      const taken = this.takenNumbers(kind, false);
       for (const no of [...byNo.keys()].sort()) {
         const recs = byNo.get(no)!;
         if (recs.length < 2) continue;

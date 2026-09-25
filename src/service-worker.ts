@@ -69,7 +69,7 @@ self.addEventListener('fetch', (e) => {
   if (url.origin !== location.origin) return;
   // Sync, photos and the index are live data: never from the cache. (The index is 3 MB; a plant's page asks for its
   // one dossier by key instead, which is cached below, so the greenhouse does not need the index at all.)
-  if (url.pathname.startsWith('/api/sync') || url.pathname.startsWith('/api/index')) return;
+  if (url.pathname.startsWith('/api/sync') || url.pathname.startsWith('/api/index') || url.pathname.startsWith('/api/entries')) return;
 
   e.respondWith(
     (async () => {

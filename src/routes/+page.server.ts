@@ -101,6 +101,8 @@ export const load: PageServerLoad = async ({ platform, fetch, setHeaders, url, c
     open: rows.some((r) => r.id === open) ? open : '',
     rows,
     letters,
+    // `?from=L`: the server-rendered window starts at that letter, so a reader without JavaScript (and a crawler) can follow the letter index; with JavaScript the index jumps in place.
+    start: Math.max(0, rows.findIndex((r) => r.letter === (url.searchParams.get('from') ?? '').toUpperCase())),
     total: index.length,
     withClimate: list.filter((c) => c.climate === 'ok').length
   };

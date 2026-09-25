@@ -127,3 +127,6 @@ export function speciesOf(name: string): string {
   const p = parseName(name);
   return p.epithet ? `${p.genus} ${p.epithet}` : p.genus;
 }
+
+/** The slug of the species a plant's name belongs to: what its species page, its taxon record, its thumbnail and its care line are joined on. A subspecies or a variety is one of its species' plants. */
+export const speciesSlug = (name: string): string => slugify(speciesOf(name));

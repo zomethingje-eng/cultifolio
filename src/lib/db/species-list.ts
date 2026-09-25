@@ -2,7 +2,7 @@
  * The grower's own species list: every kind with a growing plant, plus every
  * kind followed without one. Pure, so it can be tested without the store.
  */
-import { slugify } from '$core/names';
+import { slugify, speciesSlug, speciesOf } from '$core/names';
 import type { Accession, Taxon } from './types';
 
 export interface MySpecies {
@@ -19,11 +19,11 @@ export function mySpeciesOf(accessions: readonly Accession[], taxa: readonly Tax
   const out = new Map<string, MySpecies>();
   for (const a of accessions) {
     if (a.status !== 'growing') continue;
-    const slug = slugify(a.taxonName);
+    const slug = speciesSlug(a.taxonName);
     if (!slug) continue;
     const cur = out.get(slug);
     if (cur) cur.grown++;
-    else out.set(slug, { slug, name: a.taxonName, gbifKey: a.taxonKey ?? null, grown: 1, followed: false });
+    else out.set(slug, { slug, name: speciesOf(a.taxonName), gbifKey: a.taxonKey ?? null, grown: 1, followed: false });
   }
   for (const t of taxa) {
     if (t.removed) continue;

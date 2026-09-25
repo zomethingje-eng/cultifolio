@@ -20,7 +20,7 @@
   let { data } = $props();
   const u = $derived(units.current);
   // The grower's hemisphere, from the site or the first bench with coordinates: the months follow it, as on the species page.
-  const readerLat = $derived(site.current?.lat ?? (collection.ready ? (collection.locations.map((l) => l.lat).find((x): x is number => x != null) ?? null) : null));
+  const readerLat = $derived(site.current?.lat ?? (site.loaded ? (collection.ready ? (collection.locations.map((l) => l.lat).find((x): x is number => x != null) ?? null) : null) : data.hemiLat));
   const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   type D = (typeof data.items)[number];
   type Month = { tmax: number; tmin: number; precipMm: number; dli?: number };
@@ -96,7 +96,7 @@
     </div>
     <div class="rowlab">Rain</div>
     <div class="row">
-      {#each cols as c (c.d.key)}<div class="cell fig">{#if c.rain != null && c.wet}<b>{rain(c.rain, u)}/yr</b><span>{c.wet.n === 0 ? `no month over ${rain(25, u)}` : `${c.wet.n} month${c.wet.n === 1 ? '' : 's'} over ${rain(25, u)}`} · peak {c.wet.mo} (CHELSA)</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
+      {#each cols as c (c.d.key)}<div class="cell fig">{#if c.rain != null && c.wet}<b>{rain(c.rain, u)}/yr</b><span>{c.wet.n === 0 ? `no month over ${u === 'us' ? '1 in' : '25 mm'}` : `${c.wet.n} month${c.wet.n === 1 ? '' : 's'} over ${u === 'us' ? '1 in' : '25 mm'}`} · peak {c.wet.mo} (CHELSA)</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
     </div>
     <div class="rowlab">Light</div>
     <div class="row">

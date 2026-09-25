@@ -1,13 +1,13 @@
 <script lang="ts">
   import { collection } from '$lib/db/collection.svelte';
-  import { localDate, localDateYearAgo, daysBetween, madeOn } from '$core/dates';
+  import { localDate, localDateYearAgo, daysBetween } from '$core/dates';
   import { accNo, sowNo } from '$lib/db/types';
   import { kindOf } from '$lib/db/types';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
-  import { slugify } from '$core/names';
+  import { slugify, speciesSlug } from '$core/names';
   import { onMount } from 'svelte';
   import PageHead from '$lib/ui/PageHead.svelte';
-  import { speciesIndex } from '$lib/ui/index.svelte';
+  import { entriesFor } from '$lib/ui/index.svelte';
   import type { IndexEntry } from '$lib/server/dossiers';
   import PhotoImg from '$lib/ui/PhotoImg.svelte';
   onMount(() => collection.load());
@@ -48,13 +48,15 @@
   const noPhoto = (id: string) => !collection.photos(id).some((p) => p.d >= yearAgo);
   const noPhotoN = $derived(collection.accessions.filter((a) => a.status === 'growing' && noPhoto(a.id)).length);
   let thumbs = $state<Map<string, string>>(new Map());
-  onMount(async () => {
-    const idx = (await speciesIndex()) ?? [];
-    thumbs = new Map(idx.filter((e: IndexEntry) => e.thumb).map((e: IndexEntry) => [e.slug, e.thumb!]));
+  // Thumbnails for the species grown here, a small request, not the whole catalogue (round eight, 9).
+  $effect(() => {
+    if (!collection.ready) return;
+    const slugs = collection.accessions.map((a) => speciesSlug(a.taxonName));
+    entriesFor(slugs).then((m) => { if (m) thumbs = new Map([...m.values()].filter((e) => e.thumb).map((e) => [e.slug, e.thumb!])); });
   });
   const sinceWater = (id: string) => { const d = collection.events(id).find((e) => e.t === 'water')?.d; return d ? daysBetween(d) : null; };
   // Never watered counts from the day its record was made (not the acquisition date, which for a collection entered late is years back), so a plant entered this week is not "overdue".
-  const sinceCare = (a: (typeof collection.accessions)[number]) => sinceWater(a.id) ?? daysBetween(madeOn(a.id) ?? a.acquired ?? localDate());
+  const sinceCare = (a: (typeof collection.accessions)[number]) => sinceWater(a.id) ?? daysBetween(collection.madeOn('accession', a.id) ?? a.acquired ?? localDate());
   const dueN = $derived(collection.accessions.filter((a) => a.status === 'growing' && sinceCare(a) > 21).length);
   const list = $derived(
     collection.accessions.filter((a) => (show === 'all' || a.status === 'growing') && (show !== 'due' || sinceCare(a) > 21) && (show !== 'nophoto' || noPhoto(a.id)) && (!q || `${a.taxonName} ${a.cultivar ?? ''} ${a.parentage ?? ''} ${a.nameAsReceived ?? ''} ${accNo(a)} ${a.fieldNumber ?? ''} ${a.locationId ? collection.locationName(a.locationId) : (a.location ?? '')}`.toLowerCase().includes(q.toLowerCase())))
@@ -71,7 +73,7 @@
   <input id="plants-q" class="searchbar" type="search" placeholder="Search name, number, field number, place…" aria-label="Search your plants" bind:value={q} />
   <div class="chiprow" style="margin: 0">
     <button class="chipbtn" class:on={show === 'growing'} onclick={() => (show = 'growing')}>Growing<span class="n">{collection.accessions.filter((a) => a.status === 'growing').length}</span></button>
-    <button class="chipbtn" class:on={show === 'due'} onclick={() => (show = 'due')}>Water overdue<span class="n">{dueN}</span></button>
+    <button class="chipbtn" class:on={show === 'due'} onclick={() => (show = 'due')} title="Not watered, or not recorded as watered, for three weeks: a fact about the record, not a verdict on the plant">Not watered 21+ days<span class="n">{dueN}</span></button>
     <button class="chipbtn" class:on={show === 'nophoto'} onclick={() => (show = 'nophoto')} title="Growing plants with no photograph in the last year">No photo this year<span class="n">{noPhotoN}</span></button>
     <button class="chipbtn" class:on={show === 'all'} onclick={() => (show = 'all')}>All<span class="n">{collection.accessions.length}</span></button>
   </div>
@@ -99,7 +101,7 @@
   <div class="rows">
     {#each list as a (a.id)}
       {@const w = sinceWater(a.id)}
-      {@const th = thumbs.get(slugify(a.taxonName))}
+      {@const th = thumbs.get(speciesSlug(a.taxonName))}
       {@const own = collection.cover(a.id)}
       <a class="azrow accrow" href="/plants/{accNo(a)}">
         <span class="im" class:own={!!own}>{#if own}<PhotoImg id={own.id} alt="" loading="lazy" />{:else if th}<img src={th} alt="" loading="lazy" onerror={(e) => ((e.currentTarget as HTMLImageElement).style.display = 'none')} />{:else}<span>–</span>{/if}</span>
@@ -121,5 +123,6 @@
   .accrow .nm .accno { font-style: normal; vertical-align: 2px; }
   .im.own { box-shadow: inset 0 0 0 2px var(--accent); }
   .im :global(img) { width: 100%; height: 100%; object-fit: cover; }
-  @media (max-width: 640px) { .azrow .fig { display: none; } }
+  /* On a phone the figure goes under the name instead of away: "which of these did I water last" is the question the list is for. */
+  @media (max-width: 640px) { .azrow { grid-template-columns: 40px minmax(0, 1fr); } .azrow .fig { grid-column: 2; justify-content: flex-start; text-align: left; font-size: 11.5px; margin-top: -4px; } }
 </style>

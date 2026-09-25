@@ -60,11 +60,11 @@ export class Clock {
     else this.last = this.bump(this.last.wall, this.last.count);
     return hlcEncode(this.last);
   }
-  /** Fold in a timestamp seen from another device so our next tick sorts after it. A peer far ahead of real time is not followed: we keep our own wall and count past it. This device's own stamps are always followed, however far ahead: they were made here while the clock was wrong, and an edit made after the clock is put right must still sort after them, or it loses to the older value. */
+  /** Fold in a timestamp seen from another device so our next tick sorts after it. A stamp far ahead of real time is not followed, this device's own included: following one would keep every later stamp from here a year ahead, and every other device would hold them all until then. An edit to a field whose current stamp is ahead of the clock is stamped just past that one stamp instead (`hlcAfter`, used by the store), so it wins the field without moving the clock. */
   observe(remote: string): void {
     const r = hlcDecode(remote);
     const phys = this.now();
-    if (r.device !== this.device && r.wall > phys + MAX_AHEAD_MS) return;
+    if (r.wall > phys + MAX_AHEAD_MS) return;
     const wall = Math.max(phys, this.last.wall, r.wall);
     if (wall === this.last.wall && wall === r.wall) this.last = this.bump(wall, Math.max(this.last.count, r.count));
     else if (wall === r.wall) this.last = this.bump(wall, r.count);
@@ -74,4 +74,10 @@ export class Clock {
   private bump(wall: number, count: number): Hlc {
     return count >= MAX_COUNT ? { wall: wall + 1, count: 0, device: this.device } : { wall, count: count + 1, device: this.device };
   }
+}
+
+/** The stamp just past `prev`, as `device`: for one field whose current stamp is ahead of the clock. Unique, since no writer but `device` stamps with that tag and `device`'s own clock never reached that wall. */
+export function hlcAfter(prev: string, device: string): string {
+  const p = hlcDecode(prev);
+  return hlcEncode(p.count >= MAX_COUNT ? { wall: p.wall + 1, count: 0, device } : { wall: p.wall, count: p.count + 1, device });
 }

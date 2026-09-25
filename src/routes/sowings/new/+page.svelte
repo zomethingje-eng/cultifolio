@@ -10,7 +10,7 @@
   import { collection } from '$lib/db/collection.svelte';
   import SpeciesPicker from '$lib/ui/SpeciesPicker.svelte';
   import LocationPicker from '$lib/ui/LocationPicker.svelte';
-  import { parseName, slugify, type NameKind } from '$core/names';
+  import { parseName, slugify, type NameKind, speciesSlug, speciesOf } from '$core/names';
   import { PROP_METHODS, kindOf, type PropMethod, type Provenance } from '$lib/db/types';
   import { setCrumb } from '$lib/ui/crumb.svelte';
 
@@ -95,7 +95,7 @@
     }
     // Bottom heat outside anything a propagator does is a figure in the wrong units, not a setting: seed is not sown at 77 °C.
     const heatC = bottomHeat !== '' && !Number.isNaN(Number(bottomHeat)) ? (units.current === 'us' ? fToC(Number(bottomHeat)) : Number(bottomHeat)) : null;
-    heatMsg = heatC != null && (heatC < 5 || heatC > 45) ? `${bottomHeat} ${tempUnit(units.current)} would cook seed${units.current === 'metric' && heatC > 45 && heatC <= 113 ? `; did you mean ${bottomHeat} °F (${Math.round(fToC(Number(bottomHeat)))} °C)?` : '.'}` : '';
+    heatMsg = heatC == null ? '' : heatC > 45 ? `${bottomHeat} ${tempUnit(units.current)} would cook seed${units.current === 'metric' && heatC <= 113 ? `; did you mean ${bottomHeat} °F (${Math.round(fToC(Number(bottomHeat)))} °C)?` : '.'}` : heatC < 5 ? `${bottomHeat} ${tempUnit(units.current)} is colder than no heat at all; bottom heat is 5 to 45 °C.` : '';
     if (heatMsg) {
       document.getElementById('s-heat')?.focus();
       return;
@@ -103,8 +103,8 @@
     busy = true;
     const p = parseName(name);
     const taxonName = p.scientific;
-    const slug = slugify(taxonName);
-    if (!collection.taxon(slug)) await collection.put('taxon', slug, { name: taxonName, gbifKey: taxonKey });
+    const slug = speciesSlug(taxonName);
+    if (!collection.taxon(slug)) await collection.put('taxon', slug, { name: speciesOf(taxonName), gbifKey: taxonKey });
     const rec = await collection.addSowing({
       taxonName,
       taxonKey,

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { licenceTag, isOpen } from '$core/licence';
 import { slugify, parseName, tidyName, nameParts, parents } from '$core/names';
-import { Clock, hlcCompare, hlcDecode, hlcEncode, MAX_AHEAD_MS } from '$core/hlc';
+import { Clock, hlcCompare, hlcDecode, hlcEncode, MAX_AHEAD_MS, hlcAfter } from '$core/hlc';
 import { materialise, apply, live, diff, validateChanges, type Change } from '$core/log';
 import { nextAccession } from '$core/accession';
 import { densestCluster, habitatCluster, habitatCentre, haversineKm, inBox } from '$core/geo';
@@ -80,14 +80,15 @@ describe('hlc', () => {
     now += 3600_000;
     expect(hlcDecode(c.tick()).wall).toBe(now);
   });
-  it('follows its own stamps however far ahead: an edit after the clock is put right still sorts after one made while it was fast (round seven, 3)', () => {
-    let now = 1_700_000_000_000 + 86_400_000; // a day fast
+  it('does not follow its own stamps far ahead either: one fast edit must not keep every later stamp ahead (round eight, 4; the field itself is won by hlcAfter, tested on the store)', () => {
+    let now = 1_700_000_000_000 + 86_400_000;
     const fast = new Clock('dev1', () => now);
     const stampedFast = fast.tick();
-    now -= 86_400_000; // the clock is corrected and the app reloads
+    now -= 86_400_000;
     const c = new Clock('dev1', () => now);
-    c.observe(stampedFast); // read back from the vault at load
-    expect(hlcCompare(c.tick(), stampedFast)).toBe(1);
+    c.observe(stampedFast);
+    expect(hlcDecode(c.tick()).wall).toBe(now);
+    expect(hlcCompare(hlcAfter(stampedFast, 'dev1'), stampedFast)).toBe(1);
   });
   it('the counter widens past ffff and still parses and orders; past six digits the wall takes a millisecond', () => {
     const c = new Clock('dev1', () => 1_700_000_000_000);

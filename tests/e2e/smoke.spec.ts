@@ -217,6 +217,7 @@ test('the path species → my plants → bench is prefilled at every step and lo
   await expect(page.locator('#e-name')).toHaveValue('East sill');
   await page.fill('#e-floor', '2');
   await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.locator('#e-floor')).toHaveCount(0); // the save has landed once the form has closed; a hard navigation before that reads the old floor
   // back on the plant, the comparison shows both figures and no verdict: the judgement is the grower's
   await page.goto(`/plants/${acc}`);
   await expect(page.locator('.hvh')).toContainText('this place is set to bottom out at 2 °C');
@@ -1424,7 +1425,7 @@ test('the front page offline asks for the catalogue once and offers a retry, nev
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   let calls = 0;
-  await page.route(/\/api\/index/, (r) => { calls++; r.abort(); });
+  await page.route(/\/api\/(index|entries)/, (r) => { calls++; r.abort(); });
   await page.goto('/');
   await expect(page.locator('.tile .im.ph', { hasText: 'reference not reached' })).toBeVisible();
   await page.waitForTimeout(1500);
@@ -1540,6 +1541,7 @@ test('the one search box finds a plant by its number, and the cold floor is one 
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
   await page.getByRole('button', { name: /^Add/ }).click();
   await page.goto('/');
+  await page.waitForLoadState('networkidle'); // a value typed before hydration is dropped when the bound input hydrates
   await page.fill('.searchbar', '2026-0001');
   await expect(page.locator('.plantsfound .accrow')).toHaveCount(1);
   await page.locator('.searchbar').press('Enter');
@@ -1567,4 +1569,24 @@ test('the catalogue renders a window of rows and the letter index lands on its h
   await expect(page.locator('a.grow').first()).toBeVisible();
   // the "more" control only exists past the first window; the fixtures fit in one
   await expect(page.locator('.more')).toHaveCount(0);
+});
+
+test('two tabs whose clocks read the same millisecond still make two plants: each tab is its own writer (round eight, 1)', async ({ page, context }) => {
+  // Both tabs' clocks stopped at one instant: every stamp either tab makes has the same wall time, so only the writer tag can tell them apart.
+  const frozen = Date.parse('2026-09-25T16:30:00.000Z');
+  await page.clock.setFixedTime(frozen); // Date.now() stands still; timers still run
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  const other = await context.newPage();
+  await other.clock.setFixedTime(frozen);
+  await other.goto('/plants/new?species=Welwitschia%20mirabilis&key=5411106');
+  await expect(page.locator('.accno').first()).toHaveText('2026-0001');
+  await expect(other.locator('.accno').first()).toHaveText('2026-0001');
+  await Promise.all([page.getByRole('button', { name: /^Add/ }).click(), other.getByRole('button', { name: /^Add/ }).click()]);
+  await expect(page).toHaveURL(/\/plants\/2026-000[12]$/);
+  await expect(other).toHaveURL(/\/plants\/2026-000[12]$/);
+  await page.goto('/plants');
+  await expect(page.locator('.accrow')).toHaveCount(2); // both records exist: their stamps differ by writer, not by time
+  await expect(page.locator('.accrow', { hasText: 'Copiapoa' })).toHaveCount(1);
+  await expect(page.locator('.accrow', { hasText: 'Welwitschia' })).toHaveCount(1);
+  await other.close();
 });

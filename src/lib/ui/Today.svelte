@@ -11,9 +11,9 @@
   import { collection } from '$lib/db/collection.svelte';
   import { accNo, sowNo } from '$lib/db/types';
   import { onMount } from 'svelte';
-  import { getForecast } from '$lib/weather/client';
+  import { getForecast, forecastRefusal } from '$lib/weather/client';
   type Risk = { level: string; text: string };
-  let frost = $state<{ risk: Risk } | 'unchecked' | null>(null);
+  let frost = $state<{ risk: Risk } | { unchecked: string } | null>(null);
   let hasSite = $state(false);
   onMount(async () => {
     site.load();
@@ -22,9 +22,9 @@
     hasSite = true;
     try {
       const r = await getForecast<{ risk: Risk }>(s.lat, s.lon, units.current);
-      frost = r.ok ? { risk: r.body.risk } : 'unchecked';
+      frost = r.ok ? { risk: r.body.risk } : { unchecked: forecastRefusal(r.status, 'Frost') };
     } catch {
-      frost = 'unchecked';
+      frost = { unchecked: forecastRefusal(null, 'Frost') };
     }
   });
   const today = new Date();
@@ -32,7 +32,7 @@
   const sowings = $derived(collection.ready ? collection.sowings.filter((s) => s.status === 'active').sort((a, b) => a.sown.localeCompare(b.sown)) : []);
   const growing = $derived(collection.ready ? collection.accessions.filter((a) => a.status === 'growing') : []);
   const unphotographed = $derived(growing.filter((a) => !collection.photos(a.id).some((p) => p.d >= yearAgo)));
-  const frostLine = $derived(frost === 'unchecked' ? { tone: 'warn', text: 'Frost not checked: the forecast source did not answer.' } : frost && frost.risk.level !== 'none' ? { tone: 'bad', text: `${frost.risk.level}: ${frost.risk.text}` } : null);
+  const frostLine = $derived(frost && 'unchecked' in frost ? { tone: 'warn', text: frost.unchecked } : frost && frost.risk.level !== 'none' ? { tone: 'bad', text: `${frost.risk.level}: ${frost.risk.text}` } : null);
   const lines = $derived(
     [
       frostLine ? { href: '/frost', tone: frostLine.tone, text: frostLine.text } : null,

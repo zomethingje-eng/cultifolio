@@ -1,6 +1,6 @@
 <script lang="ts">
   import { units } from '$lib/ui/units.svelte';
-  import { getForecast } from '$lib/weather/client';
+  import { getForecast, forecastRefusal } from '$lib/weather/client';
   import { localDate, daysBetween } from '$core/dates';
   import { temp, tempN, tempUnit, cToF, fToC } from '$core/units';
   import { plural } from '$core/words';
@@ -50,7 +50,12 @@
     editing = true;
   }
   const num = (s: string) => (s.trim() === '' || Number.isNaN(Number(s)) ? null : Number(s));
+  let altMsg = $state('');
   async function save() {
+    // An altitude the forecast source cannot take is refused here, with the likely reason, rather than on every frost check afterwards.
+    const alt = num(f.altM);
+    altMsg = alt != null && (alt < -500 || alt > 9000) ? `${f.altM} is outside −500 to 9000 m${alt > 9000 && alt < 30000 ? `; in feet that would be ${Math.round(alt * 0.3048)} m` : ''}.` : '';
+    if (altMsg) { document.getElementById('e-alt')?.focus(); return; }
     await collection.put('location', id, { name: f.name.trim() || loc?.name, type: f.kind || null, indoor: f.indoor === '' ? null : f.indoor === 'yes', floorC: (() => { const v = num(f.floorC); return v == null ? null : units.current === 'us' ? +fToC(v).toFixed(2) : v; })(), ppfd: num(f.ppfd), lightHours: num(f.lightHours), lat: num(f.lat), lon: num(f.lon), altM: num(f.altM), notes: f.notes.trim() || null });
     if ((f.parent ?? null) !== (loc?.parentId ?? null) || collection.needsHome(id)) await collection.moveLocation(id, f.parent ?? null);
     editing = false;
@@ -95,9 +100,9 @@
   $effect(() => {
     if (!watchable || forecast) return;
     getForecast<NonNullable<typeof forecast>>(cond.lat!, cond.lon!, units.current, cond.altM)
-      .then((r) => { if (!r.ok) throw new Error('not answered'); forecast = r.body; })
-      // Whatever went wrong upstream, the page says the check did not happen, never a status code, and never that the nights are clear.
-      .catch(() => (forecastErr = 'Forecast not checked: the forecast source did not answer.'));
+      .then((r) => { if (!r.ok) { forecastErr = forecastRefusal(r.status); return; } forecast = r.body; })
+      // Whatever went wrong, the page says the check did not happen, never a status code, and never that the nights are clear; our own refusals are said as ours.
+      .catch(() => (forecastErr = forecastRefusal(null)));
   });
   /** A heater set-point protects the plants even outdoors; the risk is only real below the floor. */
   const effectiveRisk = $derived.by(() => {
@@ -153,7 +158,7 @@
       <label><span>Light hours/day</span><input id="e-hours" type="text" inputmode="decimal" bind:value={f.lightHours} /></label>
       <label><span>Latitude</span><input id="e-lat" type="text" inputmode="decimal" bind:value={f.lat} /></label>
       <label><span>Longitude</span><input id="e-lon" type="text" inputmode="decimal" bind:value={f.lon} /></label>
-      <label><span>Altitude m</span><input id="e-alt" type="text" inputmode="decimal" bind:value={f.altM} /></label>
+      <label><span>Altitude m</span><input id="e-alt" type="text" inputmode="decimal" bind:value={f.altM} oninput={() => (altMsg = '')} aria-invalid={!!altMsg} aria-describedby={altMsg ? 'e-alt-bad' : undefined} />{#if altMsg}<span class="bad small" id="e-alt-bad">{altMsg}</span>{/if}</label>
       <label class="wide"><span>Notes</span><textarea id="e-notes" rows="2" bind:value={f.notes}></textarea></label>
       <div class="actions wide"><button class="btn" type="button" onclick={useMyLocation}>Use my location</button><span class="grow"></span><button class="btn" type="button" onclick={() => (editing = false)}>Cancel</button><button class="btn pri" type="submit">Save</button></div>
     </form>

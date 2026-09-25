@@ -3,6 +3,9 @@
   import '@fontsource-variable/newsreader';
   // Italic (botanical names) from the weight-only Latin file, 64 KB, not the optical-size one at 147 KB: the difference is invisible at text sizes and the file is on every first visit.
   import newsreaderItalic from '@fontsource-variable/newsreader/files/newsreader-latin-wght-italic.woff2?url';
+  // The two faces every page paints with, preloaded so the title and the body do not reflow when they arrive.
+  import publicSansLatin from '@fontsource-variable/public-sans/files/public-sans-latin-wght-normal.woff2?url';
+  import newsreaderLatin from '@fontsource-variable/newsreader/files/newsreader-latin-wght-normal.woff2?url';
   import '@fontsource/dm-mono';
   import '$lib/ui/theme.css';
   import { page, updated } from '$app/state';
@@ -11,7 +14,7 @@
   import { sync } from '$lib/sync/engine.svelte';
   import { collection } from '$lib/db/collection.svelte';
   import { onVaultNotice } from '$lib/db/vault';
-  import { afterNavigate } from '$app/navigation';
+  import { afterNavigate, beforeNavigate } from '$app/navigation';
   import { browser } from '$app/environment';
   import CompareBar from '$lib/ui/CompareBar.svelte';
   import InstallBar from '$lib/ui/InstallBar.svelte';
@@ -76,26 +79,40 @@
   }
   let vaultNote = $state<string | null>(null);
   let takingOver = false;
+  let reloadOnNext = false;
+  const skipTo = (w: ServiceWorker | null) => { if (w) { takingOver = true; w.postMessage('skip'); } };
   $effect(() => {
     if (!updated.current || !browser || !('serviceWorker' in navigator)) return;
     navigator.serviceWorker.getRegistration().then(async (reg) => {
       if (!reg) return;
-      const skip = (w: ServiceWorker | null) => { if (w) { takingOver = true; w.postMessage('skip'); } };
-      if (reg.waiting) return skip(reg.waiting);
+      if (reg.waiting) return skipTo(reg.waiting);
       await reg.update().catch(() => {});
-      if (reg.waiting) return skip(reg.waiting);
-      reg.addEventListener('updatefound', () => { const w = reg.installing; w?.addEventListener('statechange', () => { if (w.state === 'installed') skip(w); }); });
+      if (reg.waiting) skipTo(reg.waiting);
     });
+  });
+  beforeNavigate((nav) => {
+    // The new build takes over at a page boundary: a full load of the destination, never a reload of a page being worked on.
+    if (reloadOnNext && nav.to && nav.type !== 'leave') { nav.cancel(); location.href = nav.to.url.href; }
   });
   // Sync wakes with the app when a vault key is on this device; it does nothing otherwise.
   onMount(async () => {
     // The app shell offline: registered after load so it never competes with the page's own requests.
     if ('serviceWorker' in navigator && !import.meta.env.DEV) {
-      navigator.serviceWorker.register('/service-worker.js', { type: 'module' }).catch((e) => console.warn('service worker not registered; offline use is off', e));
-      // A new build's worker waits until every tab of the old one has closed, which an installed app never does; so when
-      // the version poll sees a deploy the waiting worker is told to take over and the page reloads under it. The worker
-      // keeps the previous build's cache for one generation, so a tab still on the old build finds its chunks.
-      navigator.serviceWorker.addEventListener('controllerchange', () => { if (takingOver) location.reload(); });
+      // A new build's worker waits until every tab of the old one has closed, which an installed app never does. So a
+      // waiting worker is told to take over on every load (a returning visitor's first page after a deploy is the common
+      // case, and the version poll never fires for it), and again when the poll sees a deploy mid-session. The worker keeps
+      // the previous build's cache for one generation, so a tab still on the old build finds its chunks.
+      navigator.serviceWorker.register('/service-worker.js', { type: 'module' }).then((reg) => {
+        if (reg.waiting) skipTo(reg.waiting);
+        reg.addEventListener('updatefound', () => { const w = reg.installing; w?.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) skipTo(w); }); });
+      }).catch((e) => console.warn('service worker not registered; offline use is off', e));
+      // The reload under the new worker happens at once only in the first seconds of a page (nothing is half-done yet);
+      // later it waits for the next navigation, so a half-filled form or an audit in progress is never thrown away.
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!takingOver) return;
+        if (performance.now() < 4000) location.reload();
+        else reloadOnNext = true;
+      });
     }
     onVaultNotice((t) => (vaultNote = t));
     await collection.load();
@@ -116,6 +133,8 @@
 </script>
 
 <svelte:head>
+  <link rel="preload" as="font" type="font/woff2" href={publicSansLatin} crossorigin="anonymous" />
+  <link rel="preload" as="font" type="font/woff2" href={newsreaderLatin} crossorigin="anonymous" />
   {@html `<style>@font-face{font-family:'Newsreader Variable';font-style:italic;font-display:swap;font-weight:200 800;src:url(${newsreaderItalic}) format('woff2-variations');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}</style>`}
   <title>Cultifolio</title>
 </svelte:head>

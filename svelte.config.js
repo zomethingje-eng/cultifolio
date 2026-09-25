@@ -13,7 +13,10 @@ const config = {
     // previous build had and the new one does not. HTML is served with a short cache and no stale-while-revalidate for the same reason.
     version: { pollInterval: 5 * 60_000 },
     // The corpus under static/s/ is served by the platform, never listed in the worker: 19,000 paths in the script would be 400 KB of nothing it uses.
-    serviceWorker: { files: (f) => !f.startsWith('s/') },
+    // The layout registers the worker itself (after load, and it watches the registration for a waiting build); Kit's
+    // own inline registration on top of that made two registrations per load, and the second always installed a
+    // spurious waiting worker, which the take-over then reloaded the page for, without end.
+    serviceWorker: { register: false, files: (f) => !f.startsWith('s/') },
     // "No third-party scripts" as a header the browser enforces, not a sentence on the about page. Scripts only from
     // this origin (SvelteKit hashes its own inline one; app.html's theme line is hashed below); inline style attributes are used
     // throughout, so styles allow them; photographs come from iNaturalist, GBIF's cache and Wikimedia over https.

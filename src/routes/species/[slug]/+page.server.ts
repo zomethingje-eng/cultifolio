@@ -28,6 +28,8 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   const genusRecord = await getGenus(platform, fetch, slugify(genus));
   return {
     units: unitsFor(cookies, request),
+    // The grower's hemisphere, when their site has been saved on this device: seeds the months before the site store loads.
+    hemiLat: cookies.get('cultifolio.hemi') === 's' ? -1 : cookies.get('cultifolio.hemi') === 'n' ? 1 : null,
     d,
     genusRecord,
     siblings,

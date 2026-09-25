@@ -184,8 +184,10 @@ describe('places', () => {
     expect(collection.plantsAt(room.id, false).map((p) => p.id)).toContain(a.id);
     expect(collection.locationName(shelf.id)).toBe('Room');
   });
-  it('record ids carry the whole device id', async () => {
+  it('record ids carry the whole device id and this tab\'s writer tag, so two tabs of one device never mint one id (round eight, 1)', async () => {
     const a = await collection.addAccession({ taxonName: 'X', acc: 'ID-1' });
-    expect(a.id).toMatch(/^r[0-9a-z]+testdevice$/);
+    expect(a.id).toMatch(/^r[0-9a-z]+testdevice[0-9a-z]{4}$/);
+    expect(collection.writer).toMatch(/^testdevice[0-9a-z]{4}$/);
+    expect(collection.device).toBe('testdevice');
   });
 });

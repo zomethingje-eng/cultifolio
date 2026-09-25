@@ -51,3 +51,13 @@ export async function getForecast<T = unknown>(lat: number, lon: number, units: 
   writeCache(k, body);
   return { ok: true, body };
 }
+
+/**
+ * The sentence for a forecast that was not had. A refusal of ours (a bad altitude, a rate limit) is said as ours; only
+ * a failure of the source is blamed on the source. Never a status code, never "no frost".
+ */
+export function forecastRefusal(status: number | null, what: 'Forecast' | 'Frost' = 'Forecast'): string {
+  if (status === 429) return `${what} not checked: this site asked this device to wait a few minutes before asking again.`;
+  if (status === 400) return `${what} not checked: this place's altitude is outside −500 to 9000 m, or its coordinates are not a place; check them.`;
+  return `${what} not checked: the forecast source did not answer.`;
+}

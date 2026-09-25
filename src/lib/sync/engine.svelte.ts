@@ -68,6 +68,9 @@ const IDLE_PULL_MS = 5 * 60_000;
 
 const utf8 = new TextEncoder();
 
+/** A stamp made on this device (any tab: the writer is the device plus a tab tag). */
+const ownStamp = (t: string, device: string) => t.slice(t.lastIndexOf('-') + 1).startsWith(device);
+
 class Sync {
   configured = $state(false);
   busy = $state<string | null>(null);
@@ -236,7 +239,7 @@ class Sync {
     let ownLast = '';
     for (const c of all) {
       if (isHeld(c.t, hold)) held.add(c.t);
-      else if (hold.except && c.t.endsWith('-' + hold.except) && hlcCompare(c.t, ownLast) > 0) ownLast = c.t;
+      else if (hold.except && ownStamp(c.t, hold.except) && hlcCompare(c.t, ownLast) > 0) ownLast = c.t;
     }
     this.meta.held = [...held];
     this.setHeld();
@@ -253,7 +256,7 @@ class Sync {
       if (isHeld(c.t, hold)) {
         if (!this.meta.held?.includes(c.t)) (this.meta.held ??= []).push(c.t);
         added = true;
-      } else if (hold.except && c.t.endsWith('-' + hold.except) && hlcCompare(c.t, ownLast) > 0) ownLast = c.t;
+      } else if (hold.except && ownStamp(c.t, hold.except) && hlcCompare(c.t, ownLast) > 0) ownLast = c.t;
     }
     if (added) this.setHeld();
     this.warnClock(ownLast);
@@ -262,7 +265,7 @@ class Sync {
   private warnClock(ownLast: string): void {
     if (ownLast && hlcWall(ownLast) > Date.now() + MAX_AHEAD_MS) {
       const until = new Date(hlcWall(ownLast));
-      this.clockWarning = `This device's clock appears to have jumped back; edits made before ${until.toLocaleString()} will win over later ones until then.`;
+      this.clockWarning = `This device's clock appears to have jumped back; edits it made before ${until.toLocaleString()} keep their stamps, and a later edit to the same field is stamped just past them.`;
     }
   }
 

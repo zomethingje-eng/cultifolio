@@ -44,6 +44,14 @@ The Worker caches the index for a minute per isolate, so a new index is live wit
 
 Never upload `static\s\v1` (the old schema; the Worker reads only `s/v2/`), and never upload `bulk\`, `climate\` or `static\s\v2\report.txt`.
 
+Turn off Cloudflare's own page-view beacon for the zone: the dashboard's Web Analytics "automatic setup" injects `static.cloudflareinsights.com/beacon.min.js` into every HTML response at the edge, which is analytics under a site that says it has none (round eight, 1). Dashboard → Analytics & Logs → Web Analytics → the site → Manage site → disable automatic setup (or remove the site). The Content Security Policy blocks the script from running either way, but it must not be served at all. Check from outside, with an HTML Accept header (a bare `curl` does not get the injection):
+
+```
+curl -sH 'accept: text/html' https://cultifolio.com/ | grep -c cloudflareinsights
+```
+
+must print `0`.
+
 ## 3. Every deploy
 
 ```
@@ -58,7 +66,7 @@ That runs `svelte-check`, the unit tests, the build and `wrangler deploy`, in th
 
 Open the site in a private window and walk it: a species you know (the climate, the marker caption, the photographs and their credits), search for a species, add a plant, follow another, `/` shows your list, export a backup, `/about/how`. Then on a phone: the same species page, the climograph legible, no horizontal scroll. Then sync: create a vault on one device, join from the other with the key, edit on both, watch them agree. Then check `npx wrangler tail` for a minute while doing it; the only errors should be the ones you caused.
 
-Then the two things the code cannot do for you: confirm in the dashboard that the R2 bucket is private (no public bucket URL, no r2.dev subdomain), and that the KV namespace holds `bytes:` and `rl:` keys after the sync test, which proves the binding is the real one.
+Then the three things the code cannot do for you: confirm in the dashboard that the R2 bucket is private (no public bucket URL, no r2.dev subdomain), that the KV namespace holds `bytes:` and `rl:` keys after the sync test, which proves the binding is the real one, and that the `cloudflareinsights` check in section 1 prints `0`.
 
 ## 5. Refreshing the corpus later
 
