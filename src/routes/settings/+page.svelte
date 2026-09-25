@@ -7,6 +7,7 @@
    * Nothing here is sent anywhere.
    */
   import { onMount } from 'svelte';
+  import PageHead from '$lib/ui/PageHead.svelte';
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import { units } from '$lib/ui/units.svelte';
   import { site } from '$lib/ui/site.svelte';
@@ -117,9 +118,7 @@
 
 <svelte:head><title>Settings — Cultifolio</title></svelte:head>
 
-<div class="kick" style="margin-top: 22px">Cultifolio</div>
-<h1 class="q">Settings</h1>
-<p class="secsub">What is about you rather than about a plant. Units, appearance and your site stay on this device; numbering is a setting of your vault and syncs.</p>
+<PageHead title="Settings" places={false} sub="Units, appearance and your site stay on this device; numbering is a setting of your vault and syncs." />
 
 <h2 class="sec" id="units">Units</h2>
 <div class="cult">
@@ -128,14 +127,14 @@
       <button type="button" class:on={units.current === 'metric'} aria-pressed={units.current === 'metric'} onclick={() => units.set('metric')}>°C and mm</button>
       <button type="button" class:on={units.current === 'us'} aria-pressed={units.current === 'us'} onclick={() => units.set('us')}>°F and inches</button>
     </div>
-    <p class="small muted" style="margin: 10px 0 0">Every figure and every sentence follows this: a cold floor reads {temp(6.5, units.current, 1)}, a year's rain {rain(72, units.current)}. The data underneath stays in the units the sources measured in, and the page says so where it matters. Any temperature figure on a species page switches this too.</p>
+    <p class="small muted" style="margin: 10px 0 0">A cold floor reads {temp(6.5, units.current, 1)}, a year's rain {rain(72, units.current)}; the sources stay in what they measured. Tapping a temperature on a species page switches this too.</p>
   </div>
 </div>
 
 <h2 class="sec" id="site">Your site</h2>
 <div class="cult">
   <div class="body">
-    <p class="small" style="margin: 0 0 10px">Where you grow. The frost watch reads the forecast here and shows it on the front page when it turns; the months in the cultivation notes are given for this hemisphere.{#if !site.current && benches.length} Until it is set, the first bench with coordinates stands in.{/if}</p>
+    <p class="small" style="margin: 0 0 10px">Where you grow: the frost watch reads its forecast here, and the months in the notes follow its hemisphere.{#if !site.current && benches.length} Until it is set, the first bench with coordinates stands in.{/if}</p>
     <div class="fields">
       <label><span>Name</span><input type="text" bind:value={siteName} placeholder="home, the greenhouse" /></label>
       <label><span>Latitude</span><input type="text" inputmode="decimal" bind:value={lat} placeholder="40.43" /></label>
@@ -168,7 +167,7 @@
 <h2 class="sec" id="numbering">Numbering</h2>
 <div class="cult">
   <div class="body">
-    <p class="small" style="margin: 0 0 10px">How new plants are numbered. A number is never reused and numbers already given are kept; this is a setting of the vault, so every device mints the same way.</p>
+    <p class="small" style="margin: 0 0 10px">How new plants are numbered; a number is never reused, and numbers already given are kept.</p>
     <div class="seg" role="group" aria-label="Numbering scheme">
       <button type="button" class:on={mode === 'year'} aria-pressed={mode === 'year'} onclick={() => (mode = 'year')}>Year: 2026-0001</button>
       <button type="button" class:on={mode === 'prefix'} aria-pressed={mode === 'prefix'} onclick={() => (mode = 'prefix')}>Prefix: ABC-0001</button>

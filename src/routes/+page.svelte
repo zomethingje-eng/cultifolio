@@ -19,6 +19,11 @@
   const HINT = 'cultifolio.hasMine';
   let expectMine = $state(false);
   onMount(() => {
+    // A page opened at ?open=<row> (a link, a bookmark, the back button) starts at the row, not at the top of a thousand rows.
+    if (data.open && window.scrollY < 10) {
+      const el = document.getElementById(`g-${data.open}`);
+      if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 120 });
+    }
     try {
       expectMine = localStorage.getItem(HINT) === '1';
     } catch {
@@ -101,6 +106,9 @@
     return base.filter(chipOk);
   });
   const byLabel = { genus: 'Genus', origin: 'Origin', family: 'Family' } as const;
+  const fmtN = (n: number) => n.toLocaleString('en-US');
+  // A visitor: no plants on this device (until the collection has opened, the server's catalogue stands as the visitor's page).
+  const visitor = $derived(!collection.ready || (!hasMine && !collection.accessions.length));
   const openRow = $derived(data.rows.find((r) => r.id === data.open));
   const rowHref = (id: string) => `?by=${data.by}${id === data.open ? '' : `&open=${id}`}`;
   /* ---- your species ---- */
@@ -137,12 +145,11 @@
 {#snippet tile(c: Tile)}
   <a class="tile" href="/species/{c.slug}">
     {#if owned.get(c.slug)?.length}<span class="ownchip" title="You grow {owned.get(c.slug)!.length === 1 ? owned.get(c.slug)![0] : owned.get(c.slug)!.length + ' of these'}" aria-label="You grow {owned.get(c.slug)!.length === 1 ? owned.get(c.slug)![0] : owned.get(c.slug)!.length + ' of these'}">{owned.get(c.slug)!.length === 1 ? owned.get(c.slug)![0] : `× ${owned.get(c.slug)!.length}`}</span>{:else if mine.get(c.slug)?.followed}<span class="ownchip following" title="On your list without a plant of it" aria-label="Following: on your list without a plant of it">following</span>{/if}
-    {#if c.climate}<span class="statedot dot {c.climate === 'ok' ? 'grow' : c.climate === 'refused' ? 'wake' : ''}" role="img" aria-label={climateWord(c.climate)} title={climateWord(c.climate)}></span>{/if}
     {#if c.thumb}<div class="im"><img src={c.thumb} alt={c.alt} loading="lazy" onerror={(e) => { const im = e.currentTarget as HTMLImageElement; im.style.display = 'none'; im.parentElement?.classList.add('ph'); im.parentElement && (im.parentElement.textContent = 'photograph did not load'); }} /></div>{:else if c.climate}<div class="im ph">no open photograph on file</div>{:else if c.missing}<div class="im ph">not in the reference yet</div>{:else}<div class="im ph">{loadingFull ? 'loading…' : ''}</div>{/if}
     <div class="tx">
       <div class="nm"><SpeciesName name={c.name} /></div>
       <div class="fam">{c.common ?? c.family ?? ''}</div>
-      <div class="fig">{c.climate ? `${c.climate === 'ok' ? 'climate' : c.climate === 'pending' ? 'climate pending' : c.climate === 'refused' ? 'climate not checked' : 'no climate'}${c.open ? ` · ${c.open} open record${c.open === 1 ? '' : 's'}` : ''}` : c.missing ? 'no dossier yet' : ''}</div>
+      <div class="fig" title={c.climate ? climateWord(c.climate) : undefined}>{c.climate === 'ok' ? `${c.open ? `${c.open} wild record${c.open === 1 ? '' : 's'}` : 'habitat climate'}` : c.climate === 'pending' ? 'climate pending' : c.climate === 'refused' ? 'climate not checked' : c.climate ? 'no habitat climate' : c.missing ? 'not in the reference' : ''}</div>
     </div>
   </a>
 {/snippet}
@@ -176,7 +183,7 @@
       <div class="hgrid">
         {#each hits as c (c.slug)}{@render tile(c)}{/each}
       </div>
-      <p class="seccount" style="margin-top: 14px">{hits.length} of {data.total} match.</p>
+      <p class="seccount" style="margin-top: 14px">{fmtN(hits.length)} of {fmtN(data.total)} match.</p>
     {/if}
   {:else}
     {#if mineTiles.grow.length}
@@ -194,21 +201,27 @@
     <p class="seccount" style="margin-top: 14px"><button class="linkish" type="button" onclick={startBrowsing}>Browse all {data.total} species</button></p>
   {/if}
 {:else}
-  <PageHead title="Species" count="{data.total} kinds · {data.withClimate} with habitat climate{ownedN ? ` · ${ownedN} you grow` : ''}">
-    <a class="btn pri" href="/plants/new">Add a plant</a>
+  <PageHead title="Species" sub={visitor ? 'A reference to the plants people grow, every figure with its source; your own plants stay on this device.' : undefined} count="{fmtN(data.total)} species · {fmtN(data.withClimate)} with habitat climate{ownedN ? ` · ${ownedN} you grow` : ''}">
+    {#if !visitor}<a class="btn pri" href="/plants/new">Add a plant</a>{/if}
   </PageHead>
 
-  {#if collection.ready && !hasMine && !collection.accessions.length && !welcomeHidden}
-    <div class="cult welcome" id="welcome">
-      <div class="body">
-        <p><b>New here.</b> A reference with every figure sourced, and a place for your own plants that stays on this device.</p>
-        <div class="row">
-          <a class="btn pri" href="/plants/new">Add your first plant</a>
-          <a class="btn" href="/backup">Restore a backup or import from v2</a>
-          <button class="linkish" type="button" onclick={dismissWelcome}>Not now</button>
-        </div>
+  {#if visitor && data.featured.length}
+    <!-- A stranger sees plants before a list of them: one photographed species from each of the largest genera, by rule, rotated daily. -->
+    <section class="featured" aria-label="From the reference">
+      <div class="strip">
+        {#each data.featured as c (c.slug)}
+          <a class="ftile" href="/species/{c.slug}">
+            <img src={c.thumb} alt="" loading="lazy" onerror={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = 'hidden')} />
+            <span class="fnm"><SpeciesName name={c.name} /></span>
+            {#if c.common}<span class="fcom">{c.common}</span>{/if}
+          </a>
+        {/each}
       </div>
-    </div>
+    </section>
+  {/if}
+
+  {#if collection.ready && !hasMine && !collection.accessions.length && !welcomeHidden}
+    <p class="welcome" id="welcome"><b>New here.</b> <a href="/plants/new">Add your first plant</a> · <a href="/backup">Restore a backup or import from v2</a> <button class="linkish" type="button" onclick={dismissWelcome}>Not now</button></p>
   {/if}
 
   <div class="toolrow">
@@ -234,7 +247,7 @@
       <div class="hgrid">
         {#each found as c (c.slug)}{@render tile(c)}{/each}
       </div>
-      <p class="seccount" style="margin-top: 14px">{found.length} of {data.total} shown.</p>
+      <p class="seccount" style="margin-top: 14px">{fmtN(found.length)} of {fmtN(data.total)} shown.</p>
     {/if}
   {:else}
     {#if data.letters.length > 1}
@@ -246,7 +259,7 @@
       {#each data.rows as r, i (r.id)}
         {#if r.letter && (i === 0 || data.rows[i - 1].letter !== r.letter)}<h2 class="letter" id="l-{r.letter}">{r.letter}</h2>{/if}
         <a class="grow" class:open={r.id === data.open} id="g-{r.id}" href={rowHref(r.id)} data-sveltekit-noscroll aria-expanded={r.id === data.open}>
-          {#if r.map}<div class="gmap">{@html r.map}</div>{:else if r.thumb}<div class="gthumb"><img src={r.thumb} alt="" loading="lazy" onerror={(e) => ((e.currentTarget as HTMLImageElement).style.display = 'none')} /></div>{:else}<div class="gthumb ph"></div>{/if}
+          {#if r.map}<div class="gmap">{@html r.map}</div>{:else if r.thumb}<div class="gthumb"><img src={r.thumb} alt="" loading="lazy" onerror={(e) => { const im = e.currentTarget as HTMLImageElement; im.remove(); }} /></div>{:else}<div class="gthumb mono" aria-hidden="true">{r.label[0] ?? ''}</div>{/if}
           <div class="gtx">
             <span class="gname" class:sci={data.by === 'genus'}>{r.label}</span>
             {#if r.sub}<span class="d">{r.sub}</span>{/if}
@@ -261,17 +274,26 @@
         {/if}
       {/each}
     </div>
-    <p class="seccount" style="margin-top: 14px">{data.rows.length} {data.by === 'genus' ? 'genera' : data.by === 'family' ? 'families' : 'regions'}, {data.total} species{openRow ? `; ${openRow.label} open` : ''}.{#if hasMine} <button class="linkish" type="button" onclick={stopBrowsing}>Back to your species</button>{/if}</p>
+    <p class="seccount" style="margin-top: 14px">{fmtN(data.rows.length)} {data.by === 'genus' ? 'genera' : data.by === 'family' ? 'families' : 'regions'} · {fmtN(data.total)} species{#if hasMine} · <button class="linkish" type="button" onclick={stopBrowsing}>Back to your species</button>{/if}</p>
   {/if}
 {/if}
 
 <style>
-  .welcome { margin: 14px 0 4px; border-left: 3px solid var(--accent); }
-  .welcome .body { padding: 14px 17px; font-family: var(--ui); }
-  .welcome p { margin: 0 0 12px; font-size: 14px; line-height: 1.5; color: var(--ink2); }
-  .welcome .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .welcome { margin: 12px 0 0; font-size: 13.5px; color: var(--ink2); line-height: 1.6; }
+  .welcome a { font-weight: 600; }
   .linkish { background: none; border: 0; padding: 0 4px; font: inherit; font-size: 13px; color: var(--accent); cursor: pointer; text-decoration: underline; }
-  .welcome .linkish { color: var(--ink3); }
+  .welcome .linkish { color: var(--ink3); margin-left: 4px; }
+  /* the featured strip: one row, scrolls sideways on a phone, six-up on a desktop */
+  .featured { margin: 14px 0 6px; }
+  .strip { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(150px, 1fr); gap: 12px; overflow-x: auto; scroll-snap-type: x proximity; padding: 2px 2px 8px; margin: 0 -2px; scrollbar-width: thin; }
+  .ftile { scroll-snap-align: start; display: block; border-radius: var(--r); overflow: hidden; background: var(--card); box-shadow: var(--sh); color: inherit; text-decoration: none; transition: transform 0.18s, box-shadow 0.18s; }
+  .ftile:hover { transform: translateY(-2px); box-shadow: var(--sh2); text-decoration: none; color: inherit; }
+  .ftile img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; background: var(--sunk); }
+  .ftile .fnm { display: block; padding: 8px 11px 0; font-family: var(--serif); font-style: italic; font-size: 14px; font-weight: 600; line-height: 1.25; }
+  .ftile .fcom { display: block; padding: 2px 11px 10px; font-size: 11.5px; color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ftile .fnm:last-child { padding-bottom: 10px; }
+  @media (min-width: 701px) { .strip { grid-auto-columns: minmax(0, 1fr); grid-template-columns: repeat(6, minmax(0, 1fr)); grid-auto-flow: row; overflow: visible; } .ftile:nth-child(n + 7) { display: none; } }
+  @media (min-width: 1000px) { .strip { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
   .muted { color: var(--ink3); }
   .grouptitle { font-size: 20px; margin: 22px 0 8px; }
   .skeleton { margin-top: 22px; }
@@ -286,7 +308,8 @@
   .rows { display: flex; flex-direction: column; gap: 6px; }
   .grow { display: grid; grid-template-columns: 56px minmax(0, 1fr) 28px; gap: 14px; align-items: center; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); padding: 8px 12px 8px 8px; color: inherit; text-decoration: none; min-height: 56px; scroll-margin-top: 120px; }
   .grow:hover { text-decoration: none; color: inherit; box-shadow: var(--sh2); }
-  .grow.open { outline: 2px solid var(--accent); }
+  .grow.open { outline: 2px solid var(--accent); background: color-mix(in srgb, var(--accent-soft) 45%, var(--card)); }
+  .grow .gthumb.mono, .grow .gthumb:empty { display: flex; align-items: center; justify-content: center; font-family: var(--serif); font-style: italic; font-size: 22px; color: var(--ink3); }
   .grow .gthumb { width: 56px; height: 56px; border-radius: 8px; overflow: hidden; background: var(--sunk); }
   .grow .gthumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .grow .gmap { width: 56px; aspect-ratio: 2 / 1; border-radius: 6px; overflow: hidden; background: var(--map-sea); }
@@ -297,7 +320,8 @@
   .grow .d { font-size: 12.5px; color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
   .grow .st { font-family: var(--mono); font-size: 11.5px; color: var(--ink3); flex-basis: 100%; }
   .grow .chev { font-family: var(--mono); font-size: 18px; color: var(--ink3); text-align: center; }
-  .hgrid.opened { margin: 8px 0 18px; }
+  .hgrid.opened { margin: 8px 0 18px; animation: fold 0.2s ease-out; transform-origin: top; }
+  @keyframes fold { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
   @media (max-width: 700px) { .grow { grid-template-columns: 48px minmax(0, 1fr) 24px; gap: 10px; } .grow .gthumb { width: 48px; height: 48px; } .grow .gmap { width: 48px; } }
   .ownchip.following { background: var(--card); color: var(--ink2); border: 1px solid var(--rule); box-shadow: var(--sh); }
 </style>

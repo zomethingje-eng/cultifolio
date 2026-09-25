@@ -6,7 +6,7 @@
  * Celsius is a choice, not a conflict.
  */
 import { browser } from '$app/environment';
-import { METRIC, parseUnits, type Units } from '$core/units';
+import { METRIC, parseUnits, unitsForLocale, type Units } from '$core/units';
 
 /** The cookie as this browser holds it now: the service worker serves some shells from its cache, so the HTML's own idea of the units can be stale. */
 function fromCookie(): Units | null {
@@ -20,8 +20,9 @@ function fromCookie(): Units | null {
 
 class UnitsStore {
   current = $state<Units>(METRIC);
-  seed(u: Units) {
-    this.current = fromCookie() ?? u;
+  /** The cookie first; then what the server saw; then, on a page the server did not render (the collection's), the browser's own language, so a plant page and a species page agree. */
+  seed(u?: Units) {
+    this.current = fromCookie() ?? u ?? (browser ? unitsForLocale(navigator.language) : METRIC);
   }
   set(u: Units) {
     this.current = u;

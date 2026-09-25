@@ -7,7 +7,7 @@
   const hero = $derived(wild[0] ?? cult[0]);
   const rest = $derived(photos.filter((p) => p !== hero));
   let showAll = $state(false);
-  const LIMIT = 8;
+  const LIMIT = 6;
   const shown = $derived(showAll ? rest : rest.slice(0, LIMIT));
   // A credit names its licence only when the attribution does not already: "J. Doe (CC BY)" is not followed by "· CC BY".
   const credit = (p: Photo) => {

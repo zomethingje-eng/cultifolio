@@ -1,5 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import { toast } from '$lib/ui/toast.svelte';
+  import PageHead from '$lib/ui/PageHead.svelte';
   import { localDate } from '$core/dates';
   import { accNo } from '$lib/db/types';
   import { onMount } from 'svelte';
@@ -84,6 +86,7 @@
       if (!firstId) firstId = accNo(rec);
     }
     try { if (locationId) localStorage.setItem('cultifolio.lastLocation', locationId); } catch { /* fine */ }
+    toast.show(count > 1 ? `${count} plants added` : `${firstId} added`);
     goto(count > 1 ? '/plants' : `/plants/${firstId}`);
   }
 </script>
@@ -91,9 +94,9 @@
 <svelte:head><title>Add plant — Cultifolio</title></svelte:head>
 
 <form class="form" onsubmit={save}>
-  <div class="kick" style="margin-top: 22px">My plants</div>
-  <h1 class="q">Add a plant</h1>
-  <p class="secsub">It will be numbered <span class="accno">{useOwnNumber && ownNumber ? ownNumber : nextNo}</span>. A number is never reused.</p>
+  <PageHead title="Add a plant" kick="My plants" places={false}>
+    {#snippet subline()}It will be numbered <span class="accno">{useOwnNumber && ownNumber ? ownNumber : nextNo}</span>. A number is never reused.{/snippet}
+  </PageHead>
   <div class="cult sheet">
 
   <label class="field"><span>Species</span><SpeciesPicker bind:value={name} bind:taxonKey bind:cultivar bind:kind bind:parentage />

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { setCrumb } from '$lib/ui/crumb.svelte';
+  import PageHead from '$lib/ui/PageHead.svelte';
   $effect(() => {
     setCrumb([{ label: 'About', href: '/about/how' }, { label: 'Formats' }]);
     return () => setCrumb([]);
@@ -11,9 +12,7 @@
   <meta name="description" content="The backup file, the change log, and the sync wire format, documented so you can read your own data without the app." />
 </svelte:head>
 
-<div class="kick" style="margin-top: 22px">About</div>
-<h1 class="q">Formats</h1>
-<p class="secsub">Your data is yours, and that means being able to read it without this app. Three formats, all plain: the change log, the backup file, and what sync puts on the server.</p>
+<PageHead title="Formats" kick="About" places={false} sub="Your data is readable without this app: the change log, the backup file, and what sync puts on the server, all plain." />
 
 <nav class="seg topseg" aria-label="About"><a href="/about/how">How it is made</a><a class="on" href="/about/formats">Formats</a></nav>
 

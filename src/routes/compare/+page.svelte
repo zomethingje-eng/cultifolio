@@ -6,6 +6,7 @@
    * other, each with its source, and a missing figure stays missing.
    */
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
+  import PageHead from '$lib/ui/PageHead.svelte';
   import Climograph from '$lib/ui/Climograph.svelte';
   import { cultivationSheet, CARD_ORDER } from '$core/sheet';
   import { frostWording } from '$core/extremes';
@@ -57,9 +58,7 @@
   <meta name="robots" content="noindex" />
 </svelte:head>
 
-<div class="kick" style="margin-top: 22px">Cultifolio</div>
-<h1 class="q">Side by side</h1>
-<p class="secsub">The pages' own figures next to each other, each with its source. No verdict is drawn: which is easier, or alike, is yours to read.</p>
+<PageHead title="Side by side" places={false} sub="The pages' own figures next to each other, each with its source; no verdict is drawn." />
 {#if data.missing.length}<p class="notice">Not in the reference: {data.missing.join(', ')}.</p>{/if}
 {#if !cols.length}
   <div class="emptybox">

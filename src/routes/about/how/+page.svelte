@@ -1,5 +1,6 @@
 <script lang="ts">
   import { setCrumb } from '$lib/ui/crumb.svelte';
+  import PageHead from '$lib/ui/PageHead.svelte';
   $effect(() => {
     setCrumb([{ label: 'About', href: '/about/how' }, { label: 'How it is made' }]);
     return () => setCrumb([]);
@@ -11,9 +12,7 @@
   <meta name="description" content="Where every number on a species page comes from, how the habitat climate envelope and the map marker are worked out, what two fixed rules read from the curves, and what the app refuses to guess." />
 </svelte:head>
 
-<div class="kick" style="margin-top: 22px">About</div>
-<h1 class="q">How it is made</h1>
-<p class="secsub">Every figure on a species page has a source and a method. This page is the method. The rule underneath all of it: a number the app cannot derive is left out and said to be missing, never filled in.</p>
+<PageHead title="How it is made" kick="About" places={false} sub="Every figure on a species page has a source and a method; this page is the method. A number that cannot be derived is left out and said to be missing, never filled in." />
 
 <nav class="seg topseg" aria-label="About"><a class="on" href="/about/how">How it is made</a><a href="/about/formats">Formats</a></nav>
 

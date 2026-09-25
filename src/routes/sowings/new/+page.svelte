@@ -1,5 +1,6 @@
 <script lang="ts">
   import { units } from '$lib/ui/units.svelte';
+  import PageHead from '$lib/ui/PageHead.svelte';
   import { localDate } from '$core/dates';
   import { temp, tempUnit, cToF, fToC } from '$core/units';
   import { goto } from '$app/navigation';
@@ -118,9 +119,9 @@
 <svelte:head><title>New sowing — Cultifolio</title></svelte:head>
 
 <form class="form" novalidate onsubmit={save}>
-  <div class="kick" style="margin-top: 22px">Sowings</div>
-  <h1 class="q">{m.veg ? 'Start a propagation' : 'Sow seed'}</h1>
-  <p class="secsub">Batch <span class="accno">{nextNo}</span>. Plants potted up from it are numbered then, not now.</p>
+  <PageHead title={m.veg ? 'Start a propagation' : 'Sow seed'} kick="Sowings" places={false}>
+    {#snippet subline()}Batch <span class="accno">{nextNo}</span>. Plants potted up from it are numbered then, not now.{/snippet}
+  </PageHead>
   <div class="cult sheet">
 
   <label class="field"><span>Method</span>

@@ -140,6 +140,17 @@
   const firstMeasure = $derived([...events].reverse().find((e) => e.t === 'measure' && e.measures));
   const sizeKey = $derived(lastMeasure ? (['diam', 'h', 'caudex', 'spread', 'heads', 'leaves'].find((k) => lastMeasure.measures?.[k] != null) ?? null) : null);
   const growth = $derived(sizeKey && lastMeasure && firstMeasure && firstMeasure !== lastMeasure && firstMeasure.measures?.[sizeKey] != null ? lastMeasure.measures![sizeKey] - firstMeasure.measures![sizeKey] : null);
+  let moreActs = $state(false);
+  const fmtDate = (d: string | null | undefined) => (d ? new Date(d + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '');
+  // What a new plant's page is missing: a place, a photograph, a first measurement. Each line goes when it is done; the card goes when two of three are.
+  const setup = $derived.by(() => {
+    if (!a || a.status !== 'growing') return [];
+    const rows: { k: string; n: string; t: string; w: string; go: () => void }[] = [];
+    if (!a.locationId) rows.push({ k: 'place', n: '1', t: 'Give it a place', w: 'the bench or room it lives on; conditions and the frost watch follow', go: () => { moveTo = null; moving = true; } });
+    if (!photos.length) rows.push({ k: 'photo', n: '2', t: 'Add a photograph', w: 'the page and the labels use it', go: () => { adding = true; setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0); } });
+    if (!lastMeasure) rows.push({ k: 'measure', n: '3', t: 'Measure it', w: 'growth is read from the first measurement on', go: () => { moreActs = true; quick('measure'); } });
+    return rows.length >= 2 ? rows : [];
+  });
   const provLabel = (p: string | null | undefined) => (p === 'wild' ? 'wild-collected' : p === 'f1' ? 'ex-habitat seed (F1)' : p === 'fn' ? 'cultivated seed' : p === 'veg' ? 'vegetative' : 'provenance not stated');
   let logOpen = $state(false);
   function quick(t: EventType) {
@@ -223,7 +234,7 @@
     {:else if idx?.thumb && !thumbFailed}
       <img src={idx.thumb} alt={a.taxonName} style="max-height: 260px" onerror={() => (thumbFailed = true)} /><button class="cred" type="button" onclick={() => { adding = true; setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0); }}>species photograph · add your own</button>
     {:else if idx?.thumb}
-      <div class="ph"><span class="phcap">species photograph did not load</span><PhotoAdd acc={id} id="hero-photo" compact /></div>
+      <div class="ph"><span class="phcap empty">No photograph yet.</span><PhotoAdd acc={id} id="hero-photo" compact /></div>
     {:else}
       <div class="ph"><PhotoAdd acc={id} id="hero-photo" compact /></div>
     {/if}
@@ -234,8 +245,7 @@
       <p class="vern">
         {#if a.nameAsReceived}received as <i>{a.nameAsReceived}</i> · {/if}
         {#if a.fieldNumber}<span class="fnchip">{a.fieldNumber}</span> · {/if}
-        {provLabel(a.provenance)}
-        {#if a.acquired} · {a.sourceForm ?? 'acquired'} {a.sourceFrom ? `from ${a.sourceFrom}` : ''} {a.acquired}{/if}
+        {#if a.provenance === 'unknown' && !a.sourceFrom && !a.fieldNumber}Added {fmtDate(a.acquired)}{:else}{provLabel(a.provenance)}{#if a.acquired} · {a.sourceForm ?? 'acquired'} {a.sourceFrom ? `from ${a.sourceFrom}` : ''} {fmtDate(a.acquired)}{/if}{/if}
         {#if a.sowingId} · raised from <a class="mono" href="/sowings/{a.sowingId}">{sowing ? sowNo(sowing) : a.sowingId}</a>{#if sowing && sowing.parentAcc} (from <a class="mono" href="/plants/{sowing.parentAcc}">{collection.accession(sowing.parentAcc) ? accNo(collection.accession(sowing.parentAcc)!) : sowing.parentAcc}</a>){/if}{/if}
       </p>
       {#if kind === 'hybrid'}
@@ -274,17 +284,22 @@
     </form>
   {/if}
 
+  <!-- The four verbs a grower uses most, then the rest on request: a new plant's page is not the tracker's whole vocabulary. -->
   <div class="quickbar">
     <button class="btn pri" onclick={() => quick('water')}>Water</button>
-    <button class="btn" onclick={() => quick('feed')}>Feed</button>
-    <button class="btn" onclick={() => quick('repot')}>Repot</button>
-    <button class="btn" onclick={() => quick('measure')}>Measure</button>
-    <button class="btn" onclick={() => quick('treat')}>Treat</button>
-    <button class="btn" onclick={() => quick('flower')}>Flower</button>
-    <button class="btn" onclick={() => quick('note')}>Note</button>
     <button class="btn" onclick={() => { adding = !adding; if (adding) setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0); }}>Photo</button>
+    <button class="btn" onclick={() => quick('note')}>Note</button>
     <button class="btn" onclick={() => { moveTo = a.locationId ?? null; moving = !moving; }}>Move</button>
-    {#if a.status === 'growing'}<button class="btn" onclick={() => setStatus('archived')}>Archive</button>{:else}<button class="btn" onclick={() => setStatus('growing')}>Mark growing</button>{/if}
+    {#if moreActs}
+      <button class="btn" onclick={() => quick('feed')}>Feed</button>
+      <button class="btn" onclick={() => quick('repot')}>Repot</button>
+      <button class="btn" onclick={() => quick('measure')}>Measure</button>
+      <button class="btn" onclick={() => quick('treat')}>Treat</button>
+      <button class="btn" onclick={() => quick('flower')}>Flower</button>
+      {#if a.status === 'growing'}<button class="btn" onclick={() => setStatus('archived')}>Archive</button>{:else}<button class="btn" onclick={() => setStatus('growing')}>Mark growing</button>{/if}
+    {:else}
+      <button class="btn more" type="button" aria-expanded="false" onclick={() => (moreActs = true)}>More ▾</button>
+    {/if}
   </div>
 
   {#if moving}
@@ -319,20 +334,32 @@
     </form>
   {/if}
 
+  {#if setup.length}
+    <div class="cult setup">
+      <div class="sum">Set it up <span class="hint">what makes this page useful</span></div>
+      <div class="setupbody">
+        {#each setup as st (st.k)}<button class="setuprow" type="button" onclick={st.go}><span class="n">{st.n}</span><span class="t">{st.t}</span><span class="w">{st.w}</span></button>{/each}
+      </div>
+    </div>
+  {/if}
+
   <div class="cards">
-    <div class="card"><div class="lab">Since watered</div><div class="val">{sinceWater == null ? '–' : sinceWater}<span class="u">{sinceWater == null ? '' : ' d'}</span></div><div class="sub">{lastOf('water') ? `last ${lastOf('water')}` : 'no watering recorded'}</div></div>
-    <div class="card"><div class="lab">Last seen</div><div class="val">{seen == null ? '–' : seen}<span class="u">{seen == null ? '' : ' d'}</span></div><div class="sub">{collection.lastSeen(id) ? `audit or arrival, ${collection.lastSeen(id)}` : 'never audited'}</div></div>
-    <div class="card"><div class="lab">{sizeKey ? (MEASURES.find((m) => m.k === sizeKey)?.label ?? 'Size') : 'Size'}</div><div class="val">{sizeKey && lastMeasure ? lastMeasure.measures![sizeKey] : '–'}<span class="u">{sizeKey ? ' ' + (MEASURES.find((m) => m.k === sizeKey)?.unit ?? '') : ''}</span></div>{#if growth != null}<div class="gauge"><i style="width: {Math.min(100, Math.max(8, (growth / Math.max(1, lastMeasure!.measures![sizeKey!])) * 100))}%"></i></div>{/if}<div class="sub">{growth != null ? `${growth >= 0 ? '+' : ''}${growth} since ${firstMeasure!.d}` : lastMeasure ? `measured ${lastMeasure.d}` : 'not measured yet'}</div></div>
+    {#if lastOf('water')}<div class="card"><div class="lab">Since watered</div><div class="val">{sinceWater == null ? '–' : sinceWater}<span class="u">{sinceWater == null ? '' : ' d'}</span></div><div class="sub">last {lastOf('water')}</div></div>{/if}
+    {#if events.some((e) => e.t === 'audit')}<div class="card"><div class="lab">Last seen</div><div class="val">{seen == null ? '–' : seen}<span class="u">{seen == null ? '' : ' d'}</span></div><div class="sub">audit, {collection.lastSeen(id)}</div></div>{/if}
+    {#if lastMeasure}<div class="card"><div class="lab">{sizeKey ? (MEASURES.find((m) => m.k === sizeKey)?.label ?? 'Size') : 'Size'}</div><div class="val">{sizeKey && lastMeasure ? lastMeasure.measures![sizeKey] : '–'}<span class="u">{sizeKey ? ' ' + (MEASURES.find((m) => m.k === sizeKey)?.unit ?? '') : ''}</span></div>{#if growth != null}<div class="gauge"><i style="width: {Math.min(100, Math.max(8, (growth / Math.max(1, lastMeasure!.measures![sizeKey!])) * 100))}%"></i></div>{/if}<div class="sub">{growth != null ? `${growth >= 0 ? '+' : ''}${growth} since ${firstMeasure!.d}` : `measured ${lastMeasure.d}`}</div></div>{/if}
     <div class="card"><div class="lab">Habitat rain season</div><div class="val" style="font-family: var(--ui); font-size: 17px; font-weight: 700">{season ? season.label : dossier?.climate.status === 'refused' ? 'Climate not checked' : dossier?.climate.status === 'pending' ? 'Climate pending' : dossier ? 'No habitat climate' : ref === 'unreachable' ? 'Reference not reached' : ref === 'none' ? (kind === 'hybrid' ? 'A hybrid' : 'No species page') : '…'}</div><div class="sub">{#if season}{season.note} <a href="/species/{slugify(a.taxonName)}#s-cultivation">The sheet</a>.{:else if dossier?.climate.status === 'refused'}A source did not answer when the species page was built{dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}. Not a statement that no climate exists.{:else if dossier?.climate.status === 'pending'}The habitat climate for this species has not been derived yet.{:else if dossier}Nothing to read a season from{dossier.climate.status === 'none' && dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}.{:else if ref === 'unreachable'}The species reference could not be reached from here; nothing is known either way.{:else if ref === 'none'}{kind === 'hybrid' ? (parentLinks.some((p) => p.slug) ? 'No habitat of its own; its parents have species pages.' : 'No habitat of its own.') : 'Not in the reference.'}{:else}reading the species dossier{/if}</div></div>
   </div>
 
-  {#if habitat}
-    <div class="secrule"><h2>Habitat versus here</h2><div class="line"></div><span class="n">{a.locationId ? collection.locationName(a.locationId) : 'no place set'}</span></div>
+  {#if habitat && a.locationId}
+    <div class="secrule"><h2>Habitat versus here</h2><div class="line"></div><span class="n">{collection.locationName(a.locationId)}</span></div>
     <div class="factgrid hvh">
       {#if lightCompare}<div><b>Light</b>{lightCompare.text}.{#if lightCompare.here == null}{#if a.locationId}{' '}<a href="/benches/{a.locationId}?edit=1">Set its light</a>.{:else}{' '}<button type="button" class="linkish" onclick={() => (moving = true)}>Give it a place</button> first.{/if}{/if}</div>{/if}
       {#if coldCompare}<div><b>Cold</b>{coldCompare.text}.{#if coldCompare.here == null}{#if a.locationId}{' '}<a href="/benches/{a.locationId}?edit=1">Set its floor</a>.{:else}{' '}<button type="button" class="linkish" onclick={() => (moving = true)}>Give it a place</button> first.{/if}{/if}</div>{/if}
-      <div class="wide small muted">A comparison, not a verdict: the habitat figures are what the sky and the weather do where the species is recorded (CHELSA across every envelope cell, NASA POWER at the typical cell), not measured tolerances of this plant. This place's figures are its bench settings, inherited from parents where set. <a href="/species/{slugify(a.taxonName)}#s-cultivation">The full cultivation sheet</a>.</div>
     </div>
+    <details class="why">
+      <summary>What this compares</summary>
+      <div class="whybody">A comparison, not a verdict: the habitat figures are what the sky and the weather do where the species is recorded (CHELSA across every envelope cell, NASA POWER at the typical cell), not measured tolerances of this plant. This place's figures are its bench settings, inherited from parents where set. <a href="/species/{slugify(a.taxonName)}#s-cultivation">The full cultivation sheet</a>.</div>
+    </details>
   {/if}
 
   <div class="secrule" id="photos"><h2>Photographs</h2><div class="line"></div><span class="n">{photos.length ? `${photos.length}` : ''}</span></div>
@@ -353,7 +380,7 @@
 
   <div class="secrule"><h2>Log</h2><div class="line"></div><span class="n">{plural(timeline.length, 'entry', 'entries')}</span></div>
   {#if !events.length}
-    <div class="cult"><div class="none">Nothing recorded yet. The verbs above each add a line here.</div></div>
+    <p class="empty">Nothing recorded yet; each verb above adds a line here.</p>
   {:else}
     <div class="tl">
       {#each timeline as row (row.k + row.id)}
@@ -475,7 +502,17 @@
   a.tlrow:hover { text-decoration: none; }
   a.tlrow:hover .t { color: var(--accent); }
   .linkish { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font: inherit; font-size: 13px; }
-  .dangerrow { margin: 46px 0 10px; padding: 15px 17px; border: 1px dashed var(--rule2); border-radius: var(--r); display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  .dangerrow { margin: 46px 0 10px; padding: 0; display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; font-size: 12.5px; color: var(--ink3); }
+  .setup { margin-top: 14px; }
+  .setup .setupbody { display: grid; }
+  .setuprow { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; gap: 12px; align-items: center; text-align: left; padding: 12px 17px; border: 0; border-top: 1px solid var(--rule); background: none; font: inherit; color: inherit; cursor: pointer; min-height: 48px; width: 100%; }
+  .setuprow:first-child { border-top: 0; }
+  .setuprow:hover { background: var(--sunk); }
+  .setuprow .n { font-family: var(--mono); font-size: 12px; color: var(--ink3); }
+  .setuprow .t { font-weight: 600; font-size: 14px; color: var(--accent); }
+  .setuprow .w { font-size: 12px; color: var(--ink3); }
+  .quickbar .more { color: var(--ink2); }
+  @media (max-width: 640px) { .setuprow .w { display: none; } }
   a.pill { color: inherit; }
   @media (max-width: 640px) { .editform { grid-template-columns: 1fr 1fr; } .hero { margin-top: 0; } .heroimg :global(img) { max-height: 260px; } }
 </style>

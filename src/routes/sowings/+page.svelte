@@ -14,7 +14,7 @@
 
 <svelte:head><title>Sowings — Cultifolio</title></svelte:head>
 
-<PageHead title="Sowings" sub="Every propagation batch: seed, cuttings, offsets, divisions. Count what comes up, pot up what survives, and each potted plant gets its own number with the batch as its provenance." count="{collection.sowings.filter((s) => s.status === 'active').length} in progress · {plural(collection.sowings.length, 'batch', 'batches')}">
+<PageHead title="Sowings" sub="Seed, cuttings, offsets and divisions, counted up; each potted survivor gets its own number." count="{collection.sowings.filter((s) => s.status === 'active').length} in progress · {plural(collection.sowings.length, 'batch', 'batches')}">
   <a class="btn pri" href="/sowings/new">New sowing</a>
 </PageHead>
 

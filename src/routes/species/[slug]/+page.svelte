@@ -21,6 +21,7 @@
   import { site } from '$lib/ui/site.svelte';
   import { temp, tempN, rain, rainN, tempUnit, rainUnit, cToF, mmToIn } from '$core/units';
   let { data } = $props();
+  let allPapers = $state(false);
   const u = $derived(units.current);
   const d = $derived(data.d);
   const common = $derived(d.name.vernacular.filter((v) => !v.lang || v.lang === 'eng').map((v) => v.name).slice(0, 4));
@@ -67,6 +68,21 @@
   onMount(() => {
     site.load();
     collection.load();
+  });
+  // The section row names where the reader is: the last section heading that has passed under the sticky row.
+  let active = $state('');
+  onMount(() => {
+    const heads = [...document.querySelectorAll<HTMLElement>('h2.sec[id]')].filter((h) => ['s-cultivation', 's-climate', 's-habitat', 's-photos', 's-photos-open', 's-research', 's-related', 's-registers'].includes(h.id));
+    if (!heads.length) return;
+    const onScroll = () => {
+      const line = 110;
+      let cur = '';
+      for (const h of heads) if (h.getBoundingClientRect().top <= line) cur = h.id;
+      active = cur;
+    };
+    onScroll();
+    addEventListener('scroll', onScroll, { passive: true });
+    return () => removeEventListener('scroll', onScroll);
   });
   const mine = $derived(collection.ready ? collection.accessions.filter((a) => slugify(a.taxonName) === d.slug) : []);
   const growing = $derived(mine.filter((a) => a.status === 'growing'));
@@ -212,33 +228,33 @@
     <section class="glance" aria-label="At a glance">
       {#if glance}
         <div class="cards">
-          <button class="card unitbtn" type="button" title="Switch to {u === 'us' ? 'Celsius and millimetres' : 'Fahrenheit and inches'}" onclick={() => units.toggle()}><div class="lab">Cold floor</div>{#if glance.ex}<div class="val">{tempN(glance.ex.minP01, u, 1)}<span class="u">{tempUnit(u)}</span></div><div class="sub">1st-percentile night over {glance.ex.years} years at the typical cell, the sheet's floor; lowest {temp(glance.ex.minAbs, u, 1)}, {frostWording(glance.ex)} (NASA POWER)</div>{:else}<div class="val">{tempN(glance.cold.v, u)}<span class="u">{tempUnit(u)}</span></div><div class="sub">{glance.cold.mo}, mean night (CHELSA); no extremes series for this cell</div>{/if}<span class="swap">tap for {u === 'us' ? '°C' : '°F'}</span></button>
+          <button class="card unitbtn" type="button" title="Switch to {u === 'us' ? 'Celsius and millimetres' : 'Fahrenheit and inches'}" onclick={() => units.toggle()}><div class="lab">Cold floor</div>{#if glance.ex}<div class="val">{tempN(glance.ex.minP01, u, 1)}<span class="u">{tempUnit(u)}</span></div><div class="sub">1st-percentile night over {glance.ex.years} years; lowest {temp(glance.ex.minAbs, u, 1)}, {frostWording(glance.ex)} (NASA POWER)</div>{:else}<div class="val">{tempN(glance.cold.v, u)}<span class="u">{tempUnit(u)}</span></div><div class="sub">{glance.cold.mo}, mean night (CHELSA); no extremes series for this cell</div>{/if}<span class="swap">tap for {u === 'us' ? '°C' : '°F'}</span></button>
           <div class="card"><div class="lab">Warmest month</div><div class="val">{tempN(glance.hot.v, u)}<span class="u">{tempUnit(u)}</span></div><div class="sub">{glance.hot.mo}, mean day; nights {temp(glance.hot.night, u)} (CHELSA)</div></div>
           <div class="card"><div class="lab">Rain</div><div class="val">{rainN(glance.rain, u)}<span class="u">{rainUnit(u)}/yr</span></div><div class="gauge"><i class="c" style="width:{Math.min(100, glance.rain / 12)}%"></i></div><div class="sub">{glance.wetMonths === 0 ? 'no wet month' : glance.wetMonths + (glance.wetMonths === 1 ? ' wet month' : ' wet months')} · peak {glance.wet.mo} {rain(glance.wet.v, u)} (CHELSA)</div></div>
           {#if glance.dli}<div class="card"><div class="lab">Light</div><div class="val">{glance.dli.lo.toFixed(0)}–{glance.dli.hi.toFixed(0)}<span class="u">DLI</span></div><div class="gauge"><i class="w" style="width:{Math.min(100, glance.dli.hi / 0.7)}%"></i></div><div class="sub">mol/m²/day, winter to summer, open sky (CHELSA shortwave)</div></div>{/if}
         </div>
       {/if}
       {#if note}
-        <div class="cult" id="gen-note"><div class="sum">In short <span class="hint">condensed by rule from the cultivation cards · not written by a person</span></div><div class="body">{note.text}</div><div class="foot">Each sentence is one card's own one-line form, written by the same rule as the card ({note.from.join(', ')}); the note cannot say what a card does not. {#if note.hab}Months are given for {readerLat != null && readerLat < 0 ? 'the southern' : 'the northern'} hemisphere{readerLat == null ? ' (set your site in Settings to change this)' : site.current ? ', from your site' : ', from your benches'}, and the habitat's own alongside.{/if} <a href="#s-cultivation">The cards</a> · <a href="#s-climate">the figures</a>.</div></div>
+        <details class="cult acc notecard" id="gen-note">
+          <summary><span class="t">In short</span><span class="one">the figures as one paragraph, condensed by rule from the cultivation cards · not written by a person</span><span class="pm" aria-hidden="true"><span class="pmw">open</span></span></summary>
+          <div class="body">{note.text}</div><div class="foot">Each sentence is one card's own one-line form, written by the same rule as the card ({note.from.join(', ')}); the note cannot say what a card does not. {#if note.hab}Months are given for {readerLat != null && readerLat < 0 ? 'the southern' : 'the northern'} hemisphere{readerLat == null ? ' (set your site in Settings to change this)' : site.current ? ', from your site' : ', from your benches'}, and the habitat's own alongside.{/if} <a href="#s-cultivation">The cards</a> · <a href="#s-climate">the figures</a>.</div>
+        </details>
       {/if}
     </section>
   {/if}
 
   <nav class="tabs" aria-label="Sections">
-    <a href="#s-cultivation">Cultivation</a>
-    <a href="#s-climate">Climate</a>
-    <a href="#s-habitat">Habitat</a>
-    {#if d.photos.length > 1}<a href="#s-photos">Photographs</a>{/if}
-    {#if d.literature.length || refused('openalex')}<a href="#s-research">Papers</a>{/if}
-    {#if data.siblings.length || data.near.length}<a href="#s-related">Related</a>{/if}
-    <a href="#s-registers">Registers</a>
+    <a href="#s-cultivation" class:on={active === 's-cultivation'}>Cultivation</a>
+    <a href="#s-climate" class:on={active === 's-climate'}>Climate</a>
+    <a href="#s-habitat" class:on={active === 's-habitat'}>Habitat</a>
+    {#if d.photos.length > 1}<a href="#s-photos" class:on={active === 's-photos' || active === 's-photos-open'}>Photographs</a>{/if}
+    {#if d.literature.length || refused('openalex')}<a href="#s-research" class:on={active === 's-research'}>Papers</a>{/if}
+    {#if data.siblings.length || data.near.length}<a href="#s-related" class:on={active === 's-related'}>Related</a>{/if}
+    <a href="#s-registers" class:on={active === 's-registers'}>Registers</a>
   </nav>
 
   {#if d.upstream['gbif.accepted']?.detail}
     <p class="small muted">This page was reached by a name the GBIF Backbone holds as a synonym: {d.upstream['gbif.accepted'].detail}.</p>
-  {/if}
-  {#if d.name.synonyms.length}
-    <p class="small muted">Also known as {d.name.synonyms.slice(0, 5).join('; ')}{d.name.synonyms.length > 5 ? ` and ${d.name.synonyms.length - 5} more` : ''}{d.name.synonyms.slice(0, 5).join('; ').endsWith('.') && d.name.synonyms.length <= 5 ? '' : '.'}</p>
   {/if}
 
   <h2 class="sec" id="s-cultivation">Cultivation</h2>
@@ -257,7 +273,10 @@
       <p class="small muted notesline">Your notes: none yet. <button class="linkish" onclick={() => { myDraft = ''; editingMy = true; }}>Write what you know</button> · yours alone, on this device.</p>
     {/if}
     {#if sheet.arch}
-      <p class="small muted" style="margin: 4px 0 12px">Grouped as a {sheet.arch.arch.lab.toLowerCase()} by {sheet.arch.why} (archetype table). {sheet.arch.arch.minC != null ? 'The table supplies one figure for this group, a conventional minimum for the cold floor, and no prose.' : (d.climate.status === 'ok' ? 'The table holds no figure for this group, which spans too much for one minimum; the cold floor is the habitat\'s alone, and no prose comes from the table.' : 'The table holds no figure for this group, which spans too much for one minimum, and no habitat climate is derived yet; no cold floor is given, and no prose comes from the table.')}</p>
+      <details class="why archwhy">
+        <summary>Grouped as a {sheet.arch.arch.lab.toLowerCase()} by {sheet.arch.why}</summary>
+        <div class="whybody">From the archetype table. {sheet.arch.arch.minC != null ? 'The table supplies one figure for this group, a conventional minimum for the cold floor, and no prose.' : (d.climate.status === 'ok' ? 'The table holds no figure for this group, which spans too much for one minimum; the cold floor is the habitat\'s alone, and no prose comes from the table.' : 'The table holds no figure for this group, which spans too much for one minimum, and no habitat climate is derived yet; no cold floor is given, and no prose comes from the table.')}</div>
+      </details>
     {/if}
     {#each sheetCards as c, i (c.title)}
       <details class="cult acc" open={i === 0}>
@@ -267,12 +286,17 @@
           <span class="pm" aria-hidden="true"><span class="pmw">open</span></span>
         </summary>
         <div class="body sheet">
-          <p class="small muted hintline">{c.rows.some((r) => r.hab) ? (c.title === 'Its year' ? 'This species’ habitat figures, and what two fixed rules read from them.' : 'This species’ habitat figures, with their source.') : 'The archetype table’s figure; no habitat figure for this species.'}</p>
           {#each c.rows as r}
             {#if c.rows.length > 1}<div class="rowk" role="heading" aria-level="3">{r.k}</div>{/if}
             <p>{r.s}</p>
-            <p class="why">{r.why}</p>
           {/each}
+          <details class="why">
+            <summary>How this is read</summary>
+            <div class="whybody">
+              <p class="hintline">{c.rows.some((r) => r.hab) ? (c.title === 'Its year' ? 'This species’ habitat figures, and what two fixed rules read from them.' : 'This species’ habitat figures, with their source.') : 'The archetype table’s figure; no habitat figure for this species.'}</p>
+              {#each c.rows as r}<p class="whyline">{#if c.rows.length > 1}<b>{r.k}.</b> {/if}{r.why}</p>{/each}
+            </div>
+          </details>
         </div>
       </details>
     {/each}
@@ -300,11 +324,14 @@
       </table>
     </div>
     </details>
-    <p class="small muted">
+    <details class="why">
+      <summary>Where these figures come from</summary>
+      <div class="whybody">
       Each figure is the median across the {d.climate.cells} grid cells holding the {d.climate.records} in-range records, with the 10th–90th percentile span across those cells after the slash where it differs. Extremes and elevation were read at the typical cell {d.climate.cell} ({d.climate.at.lat}, {d.climate.at.lon}).
       {#if d.climate.extremes}Over {d.climate.extremes.years} years there: absolute minimum {temp(d.climate.extremes.minAbs, u, 1)}, 1st-percentile night {temp(d.climate.extremes.minP01, u, 1)}, 99th-percentile day {temp(d.climate.extremes.maxP99, u, 1)}.{/if}{#if u === 'us'}{' '}Shown in Fahrenheit and inches; the sources measure in °C and mm.{/if}
       Normals: {d.climate.src.normals}. Envelope: {d.climate.src.envelope}.{#if d.climate.src.extremes}{' '}Extremes: {d.climate.src.extremes}.{/if}{#if d.climate.src.elevation}{' '}Elevation: {d.climate.src.elevation}.{/if}
-    </p>
+      </div>
+    </details>
   {:else if d.climate.status === 'pending'}
     <div class="cult"><div class="none">Pending: the habitat climate for this species has not been derived yet{d.climate.detail ? ` (${d.climate.detail})` : ''}. Not a statement that none exists.</div></div>
   {:else if d.climate.status === 'refused'}
@@ -325,9 +352,14 @@
     {#if d.distribution.ambiguous}<div class="wide"><b>Name not resolved</b>{d.distribution.ambiguous}<span class="small muted"> · WCVP lists this name more than once and authorship did not decide, so no range is attached and nothing is derived from records</span></div>{/if}
     {#if d.centroid}<div><b>Map marker</b>{d.centroid.lat}, {d.centroid.lon}<span class="small muted">{' · '}in the densest population, {d.centroid.n} records ({Math.round(d.centroid.share * 100)}% of those in range)</span></div>{/if}
     <div class="wide"><b>Evidence used</b>{evidence.text}{#if d.occurrences.nVague}{' '}{d.occurrences.nVague} in-range record{d.occurrences.nVague === 1 ? ' is' : 's are'} placed to worse than 10 km and stay{d.occurrences.nVague === 1 ? 's' : ''} on the map but off the climate.{/if}</div>
-    {#if d.centroid}<div class="wide"><b>The map marker</b>{d.centroid.how}.</div>{/if}
     {#if d.distribution.native.length && !d.distribution.boxes.length}<div><b>Range source</b>{d.distribution.source}: country level only, so records are not tested against it.</div>{/if}
   </div>
+  {#if d.centroid}
+    <details class="why">
+      <summary>How the map marker was placed</summary>
+      <div class="whybody">{d.centroid.how}.</div>
+    </details>
+  {/if}
 
   {#if myPhotos.length}
     <h2 class="sec" id="s-photos">Your photographs</h2>
@@ -359,9 +391,10 @@
   {#if d.literature.length}
     <h2 class="sec" id="s-research">Papers naming this species</h2>
     <p class="small muted" style="margin: 0 0 8px">Works whose title or abstract names <i>{d.name.scientific}</i>, most cited first, from OpenAlex (CC0). A mention, not a cultivation source: nothing on this page is drawn from them.</p>
-    {#each d.literature as p}
+    {#each allPapers ? d.literature : d.literature.slice(0, 3) as p}
       <div class="paper"><a href={p.url} rel="noopener">{p.title}</a><div class="meta">{p.authors?.join(', ')}{p.year ? ` (${p.year})` : ''}{p.venue ? ` · ${p.venue}` : ''}</div></div>
     {/each}
+    {#if d.literature.length > 3 && !allPapers}<button class="btn small" type="button" onclick={() => (allPapers = true)}>All {d.literature.length} papers</button>{/if}
   {/if}
 
   {#if data.siblings.length || data.near.length}
@@ -381,7 +414,10 @@
     {/if}
   {/if}
 
-  <h2 class="sec" id="s-registers">History &amp; registers</h2>
+  <h2 class="sec" id="s-registers">Names &amp; registers</h2>
+  {#if d.name.synonyms.length}
+    <p class="small muted names"><b>Also known as</b> {d.name.synonyms.slice(0, 5).join('; ')}{d.name.synonyms.length > 5 ? ` and ${d.name.synonyms.length - 5} more` : ''}{d.name.synonyms.slice(0, 5).join('; ').endsWith('.') && d.name.synonyms.length <= 5 ? '' : '.'}</p>
+  {/if}
   <div class="links">
     {#each Object.entries(d.links) as [k, url]}
       <a href={url} rel="noopener">{k === 'gbif' ? 'GBIF' : k === 'powo' ? 'POWO' : k === 'ipni' ? 'IPNI' : k === 'wfo' ? 'WFO' : k === 'wikidata' ? 'Wikidata' : k === 'wikipedia' ? 'Wikipedia' : k === 'inat' ? 'iNaturalist' : k.toUpperCase()}</a>
@@ -461,7 +497,12 @@
   .sheet .rowk { font-size: 11px; letter-spacing: 0.11em; text-transform: uppercase; color: var(--accent); font-weight: 700; margin: 14px 0 4px; font-family: var(--ui); }
   .sheet .rowk:first-child { margin-top: 0; }
   .sheet p { margin: 0 0 6px; }
-  .sheet .why { font-family: var(--ui); font-size: 12px; color: var(--ink3); line-height: 1.5; margin-bottom: 10px; }
-  .sheet .why:last-child { margin-bottom: 0; }
+  .sheet details.why { margin-top: 10px; }
+  .sheet .whyline, .sheet .hintline { margin: 0 0 6px; font-family: var(--ui); }
+  .sheet .whyline b { color: var(--ink2); }
+  .notecard .body { white-space: normal; }
+  .archwhy { margin: 0 0 10px; }
+  .names { margin: 0 0 8px; }
+
   @media (max-width: 640px) { .hero { margin-top: 0; } }
 </style>

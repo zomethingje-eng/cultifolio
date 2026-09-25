@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import PageHead from '$lib/ui/PageHead.svelte';
   import { collection } from '$lib/db/collection.svelte';
   import { getMeta, setMeta, photoBlobIds } from '$lib/db/vault';
   import { prepareBackup, downloadBackup, openBackup, restoreBackup, type Opened, type PreparedBackup } from '$lib/backup/io';
@@ -131,9 +132,7 @@
 
 <svelte:head><title>Backup — Cultifolio</title></svelte:head>
 
-<div class="kick" style="margin-top: 22px">My plants</div>
-<h1 class="q">Backup</h1>
-<p class="secsub">Your collection lives on this device and nowhere else. A backup is one file: every record, every change, every photograph.{#if collection.ready}{' '}<span class="mono faint">{collection.accessions.length} plants · {photoCount ?? '…'} photos</span>{/if}</p>
+<PageHead title="Backup" kick="My plants" places={false} sub="One file holds every record, every change and every photograph." count={collection.ready ? `${collection.accessions.length} plants · ${photoCount ?? '…'} photos` : undefined} />
 
 {#if collection.persisted === false}
   <div class="cult warn"><div class="body"><b>This browser has not promised to keep your data.</b> Storage for sites you rarely open can be cleared to make room. Take a backup now, and install the app to your home screen, which tells the browser to keep it.</div></div>

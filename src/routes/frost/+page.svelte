@@ -40,7 +40,7 @@
 <svelte:head><title>Frost watch — Cultifolio</title></svelte:head>
 
 <div class="page">
-  <PageHead title="Frost watch" sub="The next nine nights at a site. Outdoor or unheated places with coordinates get their own watch on their bench page." />
+  <PageHead title="Frost watch" sub="The next nine nights at your site; outdoor places with coordinates get their own watch." />
   {#if watched.length}
     <p class="small">Watched places: {#each watched as w, i}{i ? ', ' : ''}<a href="/benches/{w.id}">{w.name}</a>{/each}</p>
   {/if}
@@ -75,7 +75,7 @@
 </div>
 
 <style>
-  .page { max-width: 640px; display: grid; gap: 1rem; }
+  .page { display: grid; gap: 1rem; }
   .row { display: flex; gap: 0.5rem; flex-wrap: wrap; }
   .risk { padding: 0.9rem 1.1rem; }
   .risk .k { margin-right: 0.6em; }

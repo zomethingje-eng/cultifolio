@@ -53,10 +53,7 @@
 
 <svelte:head><title>My plants — Cultifolio</title></svelte:head>
 
-<PageHead title="My plants" sub="Every plant you own, under its own number. Recorded on this device and nowhere else until you choose to sync." count="{collection.accessions.filter((a) => a.status === 'growing').length} growing · {collection.accessions.length} numbered">
-  <a class="btn" href="/labels">Labels</a>
-  <a class="btn" href="/backup">Backup</a>
-  <a class="btn" href="/sync">Sync</a>
+<PageHead title="My plants" sub="Your plants, each under its own number, kept on this device." count="{collection.accessions.filter((a) => a.status === 'growing').length} growing · {collection.accessions.length} numbered">
   <a class="btn pri" href="/plants/new">Add a plant</a>
 </PageHead>
 
@@ -102,7 +99,7 @@
       </a>
     {/each}
   </div>
-  <p class="seccount">{list.length} of {collection.accessions.length}. <a href="/backup">Backup</a>.</p>
+  <p class="seccount">{list.length} of {collection.accessions.length} shown</p>
 {/if}
 
 <style>

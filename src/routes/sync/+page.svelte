@@ -6,6 +6,7 @@
    * recover any of it.
    */
   import { onMount } from 'svelte';
+  import PageHead from '$lib/ui/PageHead.svelte';
   import QRCode from 'qrcode';
   import { collection } from '$lib/db/collection.svelte';
   import { sync } from '$lib/sync/engine.svelte';
@@ -136,9 +137,7 @@
 
 <svelte:head><title>Sync — Cultifolio</title></svelte:head>
 
-<div class="kick" style="margin-top: 22px">My plants</div>
-<h1 class="q">Sync</h1>
-<p class="secsub">Keep the same collection on your phone and your computer. Everything is encrypted on the device with a key only you hold; the server stores what it cannot read.</p>
+<PageHead title="Sync" kick="My plants" places={false} sub="The same collection on your phone and your computer, encrypted with a key only you hold." />
 
 {#if sync.configured}
   <div class="secrule"><h2>This device</h2><div class="line"></div><span class="n">vault {sync.vaultId.slice(0, 6)}…</span></div>

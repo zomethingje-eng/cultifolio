@@ -1,11 +1,16 @@
 <script lang="ts">
-  /** The head of a list page: kicker, the segmented control between the app's places, a sentence on what the page is for, the count, the title. */
+  /**
+   * The one head every list page wears, so the pages read as one site: the kicker and the places control on top, the
+   * title with at most one action beside it, one line under the title saying what the page is for, and the count in
+   * the mono style only where a count matters. A detail page has its own head (the id card); settings and the like
+   * pass `places={false}` since they are not places.
+   */
   import { page } from '$app/state';
   import { collection } from '$lib/db/collection.svelte';
-  let { title, sub, count, children }: { title: string; sub?: string; count?: string; children?: import('svelte').Snippet } = $props();
+  let { title, sub, subline, count, places = true, kick = 'Cultifolio', children }: { title: string; sub?: string; subline?: import('svelte').Snippet; count?: string; places?: boolean; kick?: string; children?: import('svelte').Snippet } = $props();
   const hasPlants = $derived(collection.ready && collection.accessions.length > 0);
   const shown = (pl: { href: string; on: (p: string) => boolean }) => hasPlants || pl.href === '/' || pl.href === '/plants' || pl.on(page.url.pathname);
-  const places = [
+  const PLACES = [
     { href: '/', label: 'Species', on: (p: string) => p === '/' || p.startsWith('/species') },
     { href: '/plants', label: 'My plants', on: (p: string) => p.startsWith('/plants') },
     { href: '/benches', label: 'Benches', on: (p: string) => p.startsWith('/benches') },
@@ -14,21 +19,28 @@
   ];
 </script>
 
-<div class="kick" style="margin-top: 22px">Cultifolio</div>
-<!-- A visitor with no plants sees two places; benches, sowings and frost mean nothing until there is a plant, and stay in the menu. -->
-<nav class="seg topseg" aria-label="Places">
-  {#each places.filter((pl) => shown(pl)) as pl}<a href={pl.href} class:on={pl.on(page.url.pathname)}>{pl.label}</a>{/each}
-</nav>
-{#if sub}<p class="secsub">{sub}</p>{/if}
-{#if count}<p class="seccount">{count}</p>{/if}
-<div class="titlerow">
-  <h1 class="q">{title}</h1>
-  {#if children}<div class="acts">{@render children()}</div>{/if}
-</div>
+<header class="phead">
+  <div class="kick">{kick}</div>
+  {#if places}
+    <!-- A visitor with no plants sees two places; benches, sowings and frost mean nothing until there is a plant, and stay in the menu. -->
+    <nav class="seg topseg" aria-label="Places">
+      {#each PLACES.filter((pl) => shown(pl)) as pl}<a href={pl.href} class:on={pl.on(page.url.pathname)}>{pl.label}</a>{/each}
+    </nav>
+  {/if}
+  <div class="titlerow">
+    <h1 class="q">{title}</h1>
+    {#if children}<div class="acts">{@render children()}</div>{/if}
+  </div>
+  {#if subline}<p class="secsub">{@render subline()}</p>{:else if sub}<p class="secsub">{sub}</p>{/if}
+  {#if count}<p class="seccount">{count}</p>{/if}
+</header>
 
 <style>
-  .titlerow { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-  .titlerow h1 { margin-bottom: 4px; }
+  .phead { margin: 22px 0 18px; }
+  .titlerow { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
+  .titlerow h1 { margin: 0; }
   .acts { display: flex; gap: 8px; flex-wrap: wrap; }
-  @media (max-width: 700px) { .topseg { display: none; } }
+  .phead :global(.secsub) { margin: 6px 0 0; }
+  .phead :global(.seccount) { margin: 6px 0 0; }
+  @media (max-width: 700px) { .topseg { display: none; } .phead { margin-top: 16px; } .titlerow { margin-top: 2px; } }
 </style>

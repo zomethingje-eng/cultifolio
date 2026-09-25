@@ -1,5 +1,6 @@
 <script lang="ts">
   import { units } from '$lib/ui/units.svelte';
+  import PageHead from '$lib/ui/PageHead.svelte';
   import { site } from '$lib/ui/site.svelte';
   /**
    * Printable labels. Pick plants, pick a sheet, print. The page shows the
@@ -115,9 +116,7 @@
 </svelte:head>
 
 <div class="ui">
-  <div class="kick" style="margin-top: 22px">My plants</div>
-  <h1 class="q">Labels</h1>
-  <p class="secsub">Pick plants and a sheet; the preview is at true size. Print at 100% (no “fit to page”). Each label carries the number, the name, and a code that opens the plant’s page.</p>
+  <PageHead title="Labels" kick="My plants" places={false} sub="Pick plants and a sheet, then print at 100%; each label carries the number, the name and a code that opens the plant." />
 
   <div class="cult opts">
     <div class="body">

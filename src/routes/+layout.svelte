@@ -15,13 +15,14 @@
   import { browser } from '$app/environment';
   import CompareBar from '$lib/ui/CompareBar.svelte';
   import InstallBar from '$lib/ui/InstallBar.svelte';
+  import Toast from '$lib/ui/Toast.svelte';
   import { units } from '$lib/ui/units.svelte';
   import { METRIC } from '$core/units';
   let { children } = $props();
   // Seed before anything renders. A server-rendered page carries the reader's units in its data (from the cookie or the
   // language); a client-rendered page has no server data and the store reads the cookie itself. So the first paint is in
   // the reader's units, and no page needs the server for it, which the collection's pages, offline, must not.
-  $effect.pre(() => units.seed((page.data.units as typeof METRIC | 'us' | undefined) ?? METRIC));
+  $effect.pre(() => units.seed(page.data.units as typeof METRIC | 'us' | undefined));
   // svelte-ignore state_referenced_locally
   if (!browser) units.seed((page.data.units as typeof METRIC | 'us' | undefined) ?? METRIC);
   // The menu: everything the app has, from anywhere, behind the mark in the corner. Closes on navigation, Escape, or a tap outside.
@@ -117,6 +118,7 @@
 {#if vaultNote}<p class="vaultnote">{vaultNote}</p>{/if}
 
 <main class="wrap">
+  <Toast />
   <InstallBar />
   {@render children()}
 </main>
@@ -176,9 +178,8 @@
   #tabbar { display: none; }
   @media (max-width: 700px) {
     main { padding-bottom: calc(56px + 2rem + env(safe-area-inset-bottom)); }
-    #tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 70; display: grid; grid-template-columns: repeat(5, 1fr);
-    }
-    #tabbar.two { grid-template-columns: repeat(2, 1fr); background: color-mix(in srgb, var(--card) 94%, transparent); backdrop-filter: blur(10px); border-top: 1px solid var(--rule); padding-bottom: env(safe-area-inset-bottom); }
+    #tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 70; display: grid; grid-template-columns: repeat(5, 1fr); background: color-mix(in srgb, var(--card) 94%, transparent); backdrop-filter: blur(10px); border-top: 1px solid var(--rule); padding-bottom: env(safe-area-inset-bottom); }
+    #tabbar.two { grid-template-columns: repeat(2, 1fr); }
     #tabbar a { color: var(--ink3); font-size: 10.5px; font-weight: 600; letter-spacing: 0.02em; min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
     #tabbar a:hover { text-decoration: none; }
     #tabbar a.on { color: var(--accent); }

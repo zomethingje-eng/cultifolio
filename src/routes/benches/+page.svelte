@@ -34,7 +34,7 @@
 
 <svelte:head><title>Benches — Cultifolio</title></svelte:head>
 
-<PageHead title="Benches" sub="Where your plants live: rooms, shelves, benches, trays, a greenhouse, the garden. Conditions set on a place apply to everything inside it. Watering, audits and frost watch work per place." count="{rows.length} place{rows.length === 1 ? '' : 's'}{unplaced ? ` · ${unplaced} plant${unplaced === 1 ? '' : 's'} with no place` : ''}">
+<PageHead title="Benches" sub="Where your plants live; conditions set on a place apply to everything inside it." count="{rows.length} place{rows.length === 1 ? '' : 's'}{unplaced ? ` · ${unplaced} unplaced` : ''}">
   <button class="btn pri" onclick={() => (adding = !adding)}>New location</button>
 </PageHead>
 

@@ -63,7 +63,6 @@ export const load: PageServerLoad = async ({ platform, fetch, setHeaders, url, c
           ? `${genera} ${genera === 1 ? 'genus' : 'genera'}`
           : [...new Set(sorted.flatMap((c) => c.origin))].slice(0, 6).join(', ') + (new Set(sorted.flatMap((c) => c.origin)).size > 6 ? ' …' : '');
     return {
-    units: unitsFor(cookies, request),
       id,
       label,
       sub,
@@ -79,7 +78,17 @@ export const load: PageServerLoad = async ({ platform, fetch, setHeaders, url, c
   const unplaced = (r: (typeof rows)[number]) => (r.label === 'Origin not stated' || r.label === 'Family not stated' ? 1 : 0);
   rows.sort((a, b) => unplaced(a) - unplaced(b) || (by === 'origin' ? b.count - a.count : a.label.localeCompare(b.label)));
   const letters = [...new Set(rows.map((r) => r.letter).filter(Boolean))];
+  // What a stranger sees first: twelve photographed species with a derived climate, one from each of the largest
+  // genera, chosen by rule (the most-recorded species of the genus) and rotated by the day so the strip is not editorial.
+  const byGenus = new Map<string, Item[]>();
+  for (const c of list) if (c.thumb && c.climate === 'ok') byGenus.set(genusOf(c.name), [...(byGenus.get(genusOf(c.name)) ?? []), c]);
+  const genera = [...byGenus.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+  const day = Math.floor(Date.now() / 86_400_000);
+  const pool = genera.slice(0, 48).map(([, xs]) => xs.sort((a, b) => b.open - a.open)[0]);
+  const featured = pool.length ? Array.from({ length: Math.min(12, pool.length) }, (_, i) => pool[(day * 12 + i) % pool.length]).map((c) => ({ slug: c.slug, name: c.name, thumb: c.thumb!, common: c.common, family: c.family })) : [];
   return {
+    units: unitsFor(cookies, request),
+    featured,
     by,
     open: rows.some((r) => r.id === open) ? open : '',
     rows,
