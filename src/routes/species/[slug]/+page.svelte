@@ -274,8 +274,8 @@
     {/if}
     {#if sheet.arch}
       <details class="why archwhy">
-        <summary>Grouped as a {sheet.arch.arch.lab.toLowerCase()} by {sheet.arch.why}</summary>
-        <div class="whybody">From the archetype table. {sheet.arch.arch.minC != null ? 'The table supplies one figure for this group, a conventional minimum for the cold floor, and no prose.' : (d.climate.status === 'ok' ? 'The table holds no figure for this group, which spans too much for one minimum; the cold floor is the habitat\'s alone, and no prose comes from the table.' : 'The table holds no figure for this group, which spans too much for one minimum, and no habitat climate is derived yet; no cold floor is given, and no prose comes from the table.')}</div>
+        <summary>Grouped as a {sheet.arch.arch.lab.toLowerCase()}</summary>
+        <div class="whybody">By {sheet.arch.why}, from the archetype table. {sheet.arch.arch.minC != null ? 'The table supplies one figure for this group, a conventional minimum for the cold floor, and no prose.' : (d.climate.status === 'ok' ? 'The table holds no figure for this group, which spans too much for one minimum; the cold floor is the habitat\'s alone, and no prose comes from the table.' : 'The table holds no figure for this group, which spans too much for one minimum, and no habitat climate is derived yet; no cold floor is given, and no prose comes from the table.')}</div>
       </details>
     {/if}
     {#each sheetCards as c, i (c.title)}

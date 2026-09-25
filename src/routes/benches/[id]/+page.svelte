@@ -136,11 +136,6 @@
     </div>
     <div class="acts">
       <button class="btn" onclick={startEdit}>Edit</button>
-      {#if confirmRemove}
-        <span class="small">Remove this place? Its plants keep their records and lose only the place.</span><button class="btn danger" onclick={remove}>Yes, remove</button><button class="btn" onclick={() => (confirmRemove = false)}>Keep</button>
-      {:else}
-        <button class="btn danger" onclick={() => (confirmRemove = true)}>Remove place</button>
-      {/if}
     </div>
   </div>
 
@@ -165,21 +160,27 @@
   {/if}
 
   <div class="quickbar">
-    <button class="btn pri" onclick={() => waterAll('water')} disabled={!deep.length || !!busy}>Water all {deep.length}</button>
-    <button class="btn" onclick={() => waterAll('feed')} disabled={!deep.length || !!busy}>Feed all</button>
-    <button class="btn" onclick={startAudit} disabled={!deep.length || auditing}>Audit</button>
-    <a class="btn" href="/plants/new?loc={id}">Add a plant here</a>
+    {#if deep.length}
+      <button class="btn pri" onclick={() => waterAll('water')} disabled={!!busy}>Water all {deep.length}</button>
+      <button class="btn" onclick={() => waterAll('feed')} disabled={!!busy}>Feed all</button>
+      <button class="btn" onclick={startAudit} disabled={auditing}>Audit</button>
+    {/if}
+    <a class="btn" class:pri={!deep.length} href="/plants/new?loc={id}">Add a plant here</a>
     <a class="btn" href="/sowings/new?loc={id}">Sow here</a>
     <a class="btn" href="/labels?loc={id}">Labels</a>
     {#if flash}<span class="flash">{flash}</span>{/if}
   </div>
 
+  {#if cond.floorC == null && dli == null && !lastWater && !lastAudit}
+    <p class="empty" style="margin: 14px 0 0">No floor, light, watering or audit recorded here yet. <button class="linkish" type="button" onclick={startEdit}>Set the floor and the light</button></p>
+  {:else}
   <div class="cards">
-    <div class="card"><div class="lab">Floor</div><div class="val">{cond.floorC == null ? '–' : tempN(cond.floorC, units.current)}<span class="u">{cond.floorC == null ? '' : ' ' + tempUnit(units.current)}</span></div><div class="sub">{cond.floorC == null ? 'not stated' : cond.from.floorC && cond.from.floorC !== loc.name ? `from ${cond.from.floorC}` : 'set here'}</div></div>
-    <div class="card"><div class="lab">Light</div><div class="val">{dli == null ? '–' : dli.toFixed(0)}<span class="u">{dli == null ? '' : ' DLI'}</span></div><div class="sub">{cond.ppfd == null ? 'not measured' : `${cond.ppfd} µmol × ${cond.lightHours ?? 12} h${cond.from.ppfd && cond.from.ppfd !== loc.name ? ` · from ${cond.from.ppfd}` : ''}`}</div></div>
-    <div class="card"><div class="lab">Last watered</div><div class="val">{lastWater ? daysSince(lastWater) : '–'}<span class="u">{lastWater ? ' d ago' : ''}</span></div><div class="sub">{lastWater ? `most recent plant here, ${lastWater}` : 'nothing recorded'}</div></div>
-    <div class="card"><div class="lab">Last audit</div><div class="val">{lastAudit ? daysSince(lastAudit) : '–'}<span class="u">{lastAudit ? ' d ago' : ''}</span></div><div class="sub">{lastAudit ? lastAudit : 'never audited'}{unseen && deep.length ? ` · ${unseen} not seen in 90 d` : ''}</div></div>
+    {#if cond.floorC != null}<div class="card"><div class="lab">Floor</div><div class="val">{cond.floorC == null ? '–' : tempN(cond.floorC, units.current)}<span class="u">{cond.floorC == null ? '' : ' ' + tempUnit(units.current)}</span></div><div class="sub">{cond.floorC == null ? 'not stated' : cond.from.floorC && cond.from.floorC !== loc.name ? `from ${cond.from.floorC}` : 'set here'}</div></div>{/if}
+    {#if dli != null}<div class="card"><div class="lab">Light</div><div class="val">{dli == null ? '–' : dli.toFixed(0)}<span class="u">{dli == null ? '' : ' DLI'}</span></div><div class="sub">{cond.ppfd == null ? 'not measured' : `${cond.ppfd} µmol × ${cond.lightHours ?? 12} h${cond.from.ppfd && cond.from.ppfd !== loc.name ? ` · from ${cond.from.ppfd}` : ''}`}</div></div>{/if}
+    {#if lastWater}<div class="card"><div class="lab">Last watered</div><div class="val">{lastWater ? daysSince(lastWater) : '–'}<span class="u">{lastWater ? ' d ago' : ''}</span></div><div class="sub">{lastWater ? `most recent plant here, ${lastWater}` : 'nothing recorded'}</div></div>{/if}
+    {#if lastAudit}<div class="card"><div class="lab">Last audit</div><div class="val">{lastAudit ? daysSince(lastAudit) : '–'}<span class="u">{lastAudit ? ' d ago' : ''}</span></div><div class="sub">{lastAudit ? lastAudit : 'never audited'}{unseen && deep.length ? ` · ${unseen} not seen in 90 d` : ''}</div></div>{/if}
   </div>
+  {/if}
 
   {#if watchable}
     <div class="secrule"><h2>Frost watch</h2><div class="line"></div></div>
@@ -223,7 +224,7 @@
           <a class="azrow accrow row" href="/plants/{accNo(a)}">
             <span class="dot statedot {ds == null ? '' : ds > 90 ? 'wake' : 'grow'}" role="img" aria-label={ds == null ? 'never audited' : ds > 90 ? `not seen for ${ds} days` : `seen ${ds} days ago`} title={ds == null ? 'never audited' : ds > 90 ? `not seen for ${ds} days` : `seen ${ds} days ago`}></span>
             <span><span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} /></span><span class="fam">{a.locationId !== id ? collection.location(a.locationId!)?.name ?? '' : ''}</span></span>
-            <span class="fig" class:due={ds != null && ds > 90}>{ds == null ? 'never audited' : ds > 90 ? `not seen for ${ds} days` : `seen ${ds} d ago`}</span>
+            <span class="fig" class:due={ds != null && ds > 90}>{ds == null ? 'never audited' : ds > 90 ? `not seen for ${ds} days` : ds === 0 ? 'seen today' : ds === 1 ? 'seen yesterday' : `seen ${ds} d ago`}</span>
           </a>
         {/if}
       {/each}
@@ -232,12 +233,22 @@
       <p class="actions" style="margin-top: 10px"><button class="btn" onclick={() => (auditing = false)}>Cancel</button><button class="btn pri" onclick={finishAudit}>Finish audit</button></p>
     {/if}
   {/if}
+
+  <div class="dangerrow">
+    <span>Removing a place keeps every plant's records; they lose only the place.</span>
+    {#if confirmRemove}
+      <span><button class="btn danger small" onclick={remove}>Yes, remove</button> <button class="btn small" onclick={() => (confirmRemove = false)}>Keep</button></span>
+    {:else}
+      <button class="btn danger small" onclick={() => (confirmRemove = true)}>Remove place</button>
+    {/if}
+  </div>
 {/if}
 
 <style>
+  .dangerrow { margin: 46px 0 10px; display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; font-size: 12.5px; color: var(--ink3); }
   .linkish { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-decoration: underline; }
   .hero.band { margin-top: 14px; min-height: 0; }
-  .hero.band .ph { height: 120px; background: linear-gradient(135deg, var(--sunk), color-mix(in srgb, var(--sunk) 70%, var(--accent-soft))); }
+  .hero.band .ph { height: 72px; background: linear-gradient(135deg, var(--sunk), color-mix(in srgb, var(--sunk) 70%, var(--accent-soft))); }
   .muted { color: var(--ink3); }
   .flash { color: var(--accent); font-weight: 600; align-self: center; }
   .form { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 12px; padding: 14px 17px; margin-top: 16px; }

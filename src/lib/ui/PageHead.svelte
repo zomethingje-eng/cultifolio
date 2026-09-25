@@ -2,14 +2,11 @@
   /**
    * The one head every list page wears, so the pages read as one site: the kicker and the places control on top, the
    * title with at most one action beside it, one line under the title saying what the page is for, and the count in
-   * the mono style only where a count matters. A detail page has its own head (the id card); settings and the like
-   * pass `places={false}` since they are not places.
+   * the mono style only where a count matters. The five places are always shown, so a visitor sees the whole shape of
+   * the app at once. A detail page has its own head (the id card); settings and the like pass `places={false}`.
    */
   import { page } from '$app/state';
-  import { collection } from '$lib/db/collection.svelte';
   let { title, sub, subline, count, places = true, kick = 'Cultifolio', children }: { title: string; sub?: string; subline?: import('svelte').Snippet; count?: string; places?: boolean; kick?: string; children?: import('svelte').Snippet } = $props();
-  const hasPlants = $derived(collection.ready && collection.accessions.length > 0);
-  const shown = (pl: { href: string; on: (p: string) => boolean }) => hasPlants || pl.href === '/' || pl.href === '/plants' || pl.on(page.url.pathname);
   const PLACES = [
     { href: '/', label: 'Species', on: (p: string) => p === '/' || p.startsWith('/species') },
     { href: '/plants', label: 'My plants', on: (p: string) => p.startsWith('/plants') },
@@ -22,9 +19,8 @@
 <header class="phead">
   <div class="kick">{kick}</div>
   {#if places}
-    <!-- A visitor with no plants sees two places; benches, sowings and frost mean nothing until there is a plant, and stay in the menu. -->
     <nav class="seg topseg" aria-label="Places">
-      {#each PLACES.filter((pl) => shown(pl)) as pl}<a href={pl.href} class:on={pl.on(page.url.pathname)}>{pl.label}</a>{/each}
+      {#each PLACES as pl}<a href={pl.href} class:on={pl.on(page.url.pathname)}>{pl.label}</a>{/each}
     </nav>
   {/if}
   <div class="titlerow">

@@ -122,7 +122,7 @@
   <p class="muted">No sowing with this number on this device.</p>
 {:else}
   <div class="hero">
-    {#if idx?.thumb && !thumbFailed}<img src={idx.thumb} alt={s.taxonName} style="max-height: 220px" onerror={() => (thumbFailed = true)} /><span class="cred">species photograph</span>{:else if idx?.thumb}<div class="ph" style="height: 120px">species photograph did not load</div>{:else}<div class="ph" style="height: 120px">{m.label}</div>{/if}
+    {#if idx?.thumb && !thumbFailed}<img src={idx.thumb} alt={s.taxonName} style="max-height: 220px" onerror={() => (thumbFailed = true)} /><span class="cred">species photograph</span>{:else if idx?.thumb}<div class="ph empty" style="height: 120px">No photograph yet.</div>{:else}<div class="ph" style="height: 120px">{m.label}</div>{/if}
   </div>
   <div class="idcard">
     <div class="who">
@@ -299,7 +299,7 @@
   .tlrow .x2 { font-weight: 400; color: var(--ink2); font-size: 12.5px; }
   .factgrid .wide { grid-column: 1 / -1; }
   .accrow .nm .accno { font-style: normal; vertical-align: 2px; }
-  .dangerrow { margin: 46px 0 10px; padding: 15px 17px; border: 1px dashed var(--rule2); border-radius: var(--r); display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  .dangerrow { margin: 46px 0 10px; padding: 0; display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; font-size: 12.5px; color: var(--ink3); }
   a.pill { color: inherit; }
   @media (max-width: 720px) { .acts3 { grid-template-columns: 1fr; } .editform { grid-template-columns: 1fr 1fr; } .noteform { grid-template-columns: 1fr; } .hero { margin-top: 0; } }
 </style>

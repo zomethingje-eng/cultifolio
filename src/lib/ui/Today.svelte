@@ -52,9 +52,11 @@
 {/if}
 
 <style>
-  .today { display: flex; flex-direction: column; gap: 6px; margin: 12px 0 4px; }
-  .line { display: block; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); padding: 10px 14px; font-size: 13.5px; color: var(--ink); border-left: 3px solid var(--rule); }
-  .line:hover { text-decoration: none; box-shadow: var(--sh2); }
+  .today { display: flex; flex-direction: column; margin: 12px 0 4px; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); overflow: hidden; }
+  .line { display: block; padding: 10px 14px; font-size: 13.5px; color: var(--ink); border-left: 3px solid var(--rule); border-top: 1px solid var(--rule); }
+  .line:first-child { border-top: 0; }
+  .line:hover { text-decoration: none; background: var(--sunk); }
+  .today > .small { padding: 8px 14px; border-top: 1px solid var(--rule); }
   .line.bad { border-left-color: var(--bad); }
   .line.warn { border-left-color: var(--warn, #b8692a); }
   .line.ok { border-left-color: var(--accent); }

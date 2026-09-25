@@ -43,7 +43,7 @@
               <td>{st.germinated}</td>
               <td>{pct(st.rate)}</td>
               <td>{st.potted}</td>
-              <td class="left"><span class="pill {s.status === 'active' ? 'ok' : s.status === 'failed' ? 'bad' : ''}">{s.status}</span></td>
+              <td class="left"><span class="pill {s.status === 'active' ? 'ok' : s.status === 'failed' ? 'bad' : ''}">{s.status === 'active' ? 'in progress' : s.status}</span></td>
             </tr>
           {/each}
         </tbody>

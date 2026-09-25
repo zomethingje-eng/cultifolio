@@ -11,13 +11,22 @@
   import type { IndexEntry } from '$lib/server/dossiers';
   import PhotoImg from '$lib/ui/PhotoImg.svelte';
   onMount(() => collection.load());
-  /** The "not persisted" notice can be put away for this tab's life only; the browser's promise has not changed, so it comes back on the next visit. */
+  /** The storage warning can be put away for this tab's life only; the browser's promise has not changed, so it comes back on the next visit. */
   let storageNoticeHidden = $state(false);
-  onMount(() => {
+  // The amber notice is for storage that is actually running out: under 50 MB left, or nine tenths used. A browser that
+  // merely has not promised to keep the data gets one quiet line under the count instead.
+  let storageLow = $state(false);
+  onMount(async () => {
     try {
       storageNoticeHidden = sessionStorage.getItem('storage-notice-hidden') === '1';
     } catch {
       /* private window or storage blocked: show it */
+    }
+    try {
+      const est = await navigator.storage?.estimate?.();
+      if (est?.quota && est.usage != null) storageLow = est.quota - est.usage < 50 * 1024 * 1024 || est.usage / est.quota > 0.9;
+    } catch {
+      /* no estimate: no warning */
     }
   });
   function hideStorageNotice() {
@@ -45,9 +54,11 @@
   });
   const dayMs = 86_400_000;
   const sinceWater = (id: string) => { const d = collection.events(id).find((e) => e.t === 'water')?.d; return d ? Math.floor((Date.now() - Date.parse(d)) / dayMs) : null; };
-  const dueN = $derived(collection.accessions.filter((a) => a.status === 'growing' && (sinceWater(a.id) ?? 999) > 21).length);
+  // Never watered counts from the day it arrived, so a plant added this week is not "overdue".
+  const sinceCare = (a: (typeof collection.accessions)[number]) => sinceWater(a.id) ?? (a.acquired ? Math.floor((Date.now() - Date.parse(a.acquired)) / dayMs) : 999);
+  const dueN = $derived(collection.accessions.filter((a) => a.status === 'growing' && sinceCare(a) > 21).length);
   const list = $derived(
-    collection.accessions.filter((a) => (show === 'all' || a.status === 'growing') && (show !== 'due' || (sinceWater(a.id) ?? 999) > 21) && (show !== 'nophoto' || noPhoto(a.id)) && (!q || `${a.taxonName} ${a.cultivar ?? ''} ${a.parentage ?? ''} ${a.nameAsReceived ?? ''} ${accNo(a)} ${a.fieldNumber ?? ''} ${a.locationId ? collection.locationName(a.locationId) : (a.location ?? '')}`.toLowerCase().includes(q.toLowerCase())))
+    collection.accessions.filter((a) => (show === 'all' || a.status === 'growing') && (show !== 'due' || sinceCare(a) > 21) && (show !== 'nophoto' || noPhoto(a.id)) && (!q || `${a.taxonName} ${a.cultivar ?? ''} ${a.parentage ?? ''} ${a.nameAsReceived ?? ''} ${accNo(a)} ${a.fieldNumber ?? ''} ${a.locationId ? collection.locationName(a.locationId) : (a.location ?? '')}`.toLowerCase().includes(q.toLowerCase())))
   );
 </script>
 
@@ -70,8 +81,10 @@
 {#if collection.lastWriteError}
   <div class="notice err" role="alert" id="write-error">This change was not saved: {collection.lastWriteError}. Free space or <a href="/backup">back up now</a>.</div>
 {/if}
-{#if collection.ready && collection.persisted === false && !storageNoticeHidden}
-  <div class="notice" id="storage-notice">This browser has not promised to keep your data: it may clear this site's storage, photographs included, to make room. <a href="/backup">Back up now</a>. Installing the app to your home screen tells the browser to keep it. <button class="linkish" type="button" onclick={hideStorageNotice}>Hide for now</button></div>
+{#if collection.ready && storageLow && !storageNoticeHidden}
+  <div class="notice" id="storage-notice">This browser's storage is nearly full{collection.persisted === false ? ', and it has not promised to keep this site\'s data' : ''}: it may clear photographs to make room. <a href="/backup">Back up now</a>. <button class="linkish" type="button" onclick={hideStorageNotice}>Hide for now</button></div>
+{:else if collection.ready && collection.persisted === false}
+  <p class="small muted keepline" id="storage-notice">Kept in this browser only; <a href="/backup">back up</a> or install the app to keep it safe.</p>
 {/if}
 
 {#if !collection.ready}
@@ -90,7 +103,7 @@
       {@const th = thumbs.get(slugify(a.taxonName))}
       {@const own = collection.cover(a.id)}
       <a class="azrow accrow" href="/plants/{accNo(a)}">
-        <span class="im" class:own={!!own}>{#if own}<PhotoImg id={own.id} alt="" loading="lazy" />{:else if th}<img src={th} alt="" loading="lazy" />{:else}<span>–</span>{/if}</span>
+        <span class="im" class:own={!!own}>{#if own}<PhotoImg id={own.id} alt="" loading="lazy" />{:else if th}<img src={th} alt="" loading="lazy" onerror={(e) => ((e.currentTarget as HTMLImageElement).style.display = 'none')} />{:else}<span>–</span>{/if}</span>
         <span>
           <span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} />{#if a.cultivar} ‘{a.cultivar}’{/if}</span>
           <span class="fam">{#if kindOf(a) !== 'species'}<span class="pill c">{kindOf(a)}</span>{/if}{#if a.fieldNumber}<span class="fnchip">{a.fieldNumber}</span>{/if}{#if a.locationId}<span>{collection.locationName(a.locationId)}</span>{:else if a.location}<span>{a.location}</span>{/if}{#if a.status !== 'growing'}<span class="pill">{a.status}</span>{/if}</span>
@@ -103,6 +116,7 @@
 {/if}
 
 <style>
+  .keepline { margin: -6px 0 10px; }
   .muted { color: var(--ink3); }
   .notice .linkish { background: none; border: 0; padding: 0; color: var(--ink3); font: inherit; text-decoration: underline; cursor: pointer; }
   .accrow .nm .accno { font-style: normal; vertical-align: 2px; }

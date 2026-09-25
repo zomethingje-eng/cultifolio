@@ -126,7 +126,7 @@ test('benches: make a place, put a plant there, water the bench, audit it', asyn
   await page.locator('label.row input[type=checkbox]').check();
   await page.getByRole('button', { name: 'Finish audit' }).click();
   await expect(page.getByText('1 present.')).toBeVisible();
-  await expect(page.getByText(/seen 0 d ago/)).toBeVisible();
+  await expect(page.getByText(/seen today/)).toBeVisible();
   // the plant's timeline has both entries
   await page.locator('.rows a.row', { hasText: 'Tylecodon' }).first().click();
   await expect(page.locator('.tlrow .t', { hasText: 'Seen at audit' })).toBeVisible();
@@ -1323,9 +1323,9 @@ test('the species page reads in reference order: summary, the genus, the facts, 
   await expect(page.locator('#s-genus + .notice')).toContainText('Not checked');
 });
 
-test('a visitor with no plants sees two places; the other three appear with the first plant and stay in the menu meanwhile', async ({ page }) => {
+test('a visitor sees all five places from the start, and the menu has them too', async ({ page }) => {
   await page.goto('/');
-  await expect(page.locator('.topseg a')).toHaveText(['Species', 'My plants']);
+  await expect(page.locator('.topseg a')).toHaveText(['Species', 'My plants', 'Benches', 'Sowings', 'Frost']);
   // a click that lands before hydration opens nothing: poll the button's own state rather than the first click
   await expect.poll(async () => { await page.getByRole('button', { name: 'Menu' }).click(); return page.getByRole('button', { name: 'Menu' }).getAttribute('aria-expanded'); }).toBe('true');
   await expect(page.locator('#menu').getByRole('link', { name: 'Benches', exact: true })).toBeVisible();

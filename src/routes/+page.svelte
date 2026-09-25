@@ -142,6 +142,21 @@
   <meta name="description" content="A species reference that shows its sources, and a collection record that stays on your device." />
 </svelte:head>
 
+{#snippet featured(titled = false)}
+  <section class="featured" aria-label="From the reference">
+    {#if titled}<h2 class="q grouptitle">From the reference</h2>{/if}
+    <div class="strip">
+      {#each data.featured as c (c.slug)}
+        <a class="ftile" href="/species/{c.slug}">
+          <img src={c.thumb} alt="" loading="lazy" onerror={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = 'hidden')} />
+          <span class="fnm"><SpeciesName name={c.name} /></span>
+          {#if c.common}<span class="fcom">{c.common}</span>{/if}
+        </a>
+      {/each}
+    </div>
+  </section>
+{/snippet}
+
 {#snippet tile(c: Tile)}
   <a class="tile" href="/species/{c.slug}">
     {#if owned.get(c.slug)?.length}<span class="ownchip" title="You grow {owned.get(c.slug)!.length === 1 ? owned.get(c.slug)![0] : owned.get(c.slug)!.length + ' of these'}" aria-label="You grow {owned.get(c.slug)!.length === 1 ? owned.get(c.slug)![0] : owned.get(c.slug)!.length + ' of these'}">{owned.get(c.slug)!.length === 1 ? owned.get(c.slug)![0] : `× ${owned.get(c.slug)!.length}`}</span>{:else if mine.get(c.slug)?.followed}<span class="ownchip following" title="On your list without a plant of it" aria-label="Following: on your list without a plant of it">following</span>{/if}
@@ -163,15 +178,18 @@
     </div>
   </div>
 {:else if yourView}
-  <PageHead title="Species" sub="The kinds you grow, want, or are reading up on. The whole catalogue is a search away." count="{mine.size} {mine.size === 1 ? 'kind' : 'kinds'} · {grownN} you grow · {followingN} following">
-    <a class="btn pri" href="/plants/new">Add a plant</a>
+  <PageHead title="Species" sub="The species you grow, want, or are reading up on; the whole reference is one switch away." count="{grownN} you grow{followingN ? ` · ${followingN} following` : ''}">
+    <a class="btn pri headadd" href="/plants/new">Add a plant</a>
   </PageHead>
 
   <Today />
 
   <div class="toolrow">
-    <input class="searchbar" type="search" placeholder="Search all {data.total} species by name, genus, family or origin…" bind:value={q} aria-label="Search the whole species catalogue" />
-    <span class="toollab">{q.trim() ? 'Catalogue' : 'Your species'}</span>
+    <input class="searchbar" type="search" placeholder="Search all {fmtN(data.total)} species by name, genus, family or origin…" bind:value={q} aria-label="Search the whole species catalogue" />
+    <nav class="seg viewseg" aria-label="Which species">
+      <button type="button" class="on" aria-current="true">Your species</button>
+      <button type="button" onclick={startBrowsing}>All {fmtN(data.total)}</button>
+    </nav>
   </div>
 
   {#if q.trim()}
@@ -198,26 +216,19 @@
         {#each mineTiles.follow as c (c.slug)}{@render tile(c)}{/each}
       </div>
     {/if}
-    <p class="seccount" style="margin-top: 14px"><button class="linkish" type="button" onclick={startBrowsing}>Browse all {data.total} species</button></p>
+    {#if mineTiles.grow.length + mineTiles.follow.length < 6 && data.featured.length}
+      {@render featured(true)}
+    {/if}
+
   {/if}
 {:else}
   <PageHead title="Species" sub={visitor ? 'A reference to the plants people grow, every figure with its source; your own plants stay on this device.' : undefined} count="{fmtN(data.total)} species · {fmtN(data.withClimate)} with habitat climate{ownedN ? ` · ${ownedN} you grow` : ''}">
-    {#if !visitor}<a class="btn pri" href="/plants/new">Add a plant</a>{/if}
+    {#if !visitor}<a class="btn pri headadd" href="/plants/new">Add a plant</a>{/if}
   </PageHead>
 
   {#if visitor && data.featured.length}
     <!-- A stranger sees plants before a list of them: one photographed species from each of the largest genera, by rule, rotated daily. -->
-    <section class="featured" aria-label="From the reference">
-      <div class="strip">
-        {#each data.featured as c (c.slug)}
-          <a class="ftile" href="/species/{c.slug}">
-            <img src={c.thumb} alt="" loading="lazy" onerror={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = 'hidden')} />
-            <span class="fnm"><SpeciesName name={c.name} /></span>
-            {#if c.common}<span class="fcom">{c.common}</span>{/if}
-          </a>
-        {/each}
-      </div>
-    </section>
+    {@render featured()}
   {/if}
 
   {#if collection.ready && !hasMine && !collection.accessions.length && !welcomeHidden}
@@ -225,17 +236,21 @@
   {/if}
 
   <div class="toolrow">
+    {#if hasMine}
+      <nav class="seg viewseg" aria-label="Which species">
+        <button type="button" onclick={stopBrowsing}>Your species</button>
+        <button type="button" class="on" aria-current="true">All {fmtN(data.total)}</button>
+      </nav>
+    {/if}
     <input class="searchbar" type="search" placeholder="Search by name, genus, family or origin…" bind:value={q} aria-label="Search species" />
     <nav class="seg" aria-label="Group by">
       {#each ['genus', 'origin', 'family'] as const as b (b)}<a href="?by={b}" class:on={data.by === b} aria-current={data.by === b ? 'true' : undefined}>{byLabel[b]}</a>{/each}
     </nav>
-    {#if hasMine}<button class="linkish" type="button" onclick={stopBrowsing}>Back to your species</button>{/if}
   </div>
   <div class="chiprow">
-    <button class="chipbtn" class:on={chip === 'all'} onclick={() => (chip = 'all')}>All<span class="n">{data.total}</span></button>
-    {#if ownedN}<button class="chipbtn" class:on={chip === 'owned'} onclick={() => (chip = 'owned')}>You grow<span class="n">{ownedN}</span></button>{/if}
-    <button class="chipbtn" class:on={chip === 'climate'} onclick={() => (chip = 'climate')}>Climate known<span class="n">{data.withClimate}</span></button>
-    <button class="chipbtn" class:on={chip === 'noclimate'} onclick={() => (chip = 'noclimate')}>Without climate<span class="n">{data.total - data.withClimate}</span></button>
+    <button class="chipbtn" class:on={chip === 'all'} onclick={() => (chip = 'all')}>All<span class="n">{fmtN(data.total)}</span></button>
+    <button class="chipbtn" class:on={chip === 'climate'} onclick={() => (chip = 'climate')}>Climate known<span class="n">{fmtN(data.withClimate)}</span></button>
+    <button class="chipbtn" class:on={chip === 'noclimate'} onclick={() => (chip = 'noclimate')}>Without climate<span class="n">{fmtN(data.total - data.withClimate)}</span></button>
   </div>
 
   {#if flat}
@@ -274,12 +289,17 @@
         {/if}
       {/each}
     </div>
-    <p class="seccount" style="margin-top: 14px">{fmtN(data.rows.length)} {data.by === 'genus' ? 'genera' : data.by === 'family' ? 'families' : 'regions'} · {fmtN(data.total)} species{#if hasMine} · <button class="linkish" type="button" onclick={stopBrowsing}>Back to your species</button>{/if}</p>
+    <p class="seccount" style="margin-top: 14px">{fmtN(data.rows.length)} {data.by === 'genus' ? 'genera' : data.by === 'family' ? 'families' : 'regions'} · {fmtN(data.total)} species</p>
   {/if}
 {/if}
 
 <style>
   .welcome { margin: 12px 0 0; font-size: 13.5px; color: var(--ink2); line-height: 1.6; }
+  /* the grower's main switch: yours or everything; it leads the tool row on both views */
+  .viewseg { order: -1; }
+  @media (max-width: 700px) { .headadd { display: none; } } /* the + in the top bar is the phone's add button */
+  .viewseg > button { font-weight: 700; }
+  @media (max-width: 700px) { .viewseg { flex-basis: 100%; } .viewseg > button { flex: 1; text-align: center; } }
   .welcome a { font-weight: 600; }
   .linkish { background: none; border: 0; padding: 0 4px; font: inherit; font-size: 13px; color: var(--accent); cursor: pointer; text-decoration: underline; }
   .welcome .linkish { color: var(--ink3); margin-left: 4px; }

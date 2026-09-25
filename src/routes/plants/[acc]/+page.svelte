@@ -338,7 +338,7 @@
     <div class="cult setup">
       <div class="sum">Set it up <span class="hint">what makes this page useful</span></div>
       <div class="setupbody">
-        {#each setup as st (st.k)}<button class="setuprow" type="button" onclick={st.go}><span class="n">{st.n}</span><span class="t">{st.t}</span><span class="w">{st.w}</span></button>{/each}
+        {#each setup as st, i (st.k)}<button class="setuprow" type="button" onclick={st.go}><span class="n">{i + 1}</span><span class="t">{st.t}</span><span class="w">{st.w}</span></button>{/each}
       </div>
     </div>
   {/if}
@@ -435,6 +435,9 @@
   {/if}
 
   <div class="secrule"><h2>Provenance</h2><div class="line"></div></div>
+  {#if !a.sourceFrom && !a.sourceForm && !a.fieldNumber && a.provenance === 'unknown' && !a.sowingId && !a.nameAsReceived && kind !== 'hybrid'}
+    <p class="empty">Nothing stated yet. <button class="linkish" type="button" onclick={startEdit}>Add where it came from</button></p>
+  {:else}
   <div class="factgrid">
     <div><b>Source</b>{[a.sourceFrom, a.sourceForm, a.acquired].filter(Boolean).join(' · ') || 'not stated'}{#if a.price} · {a.price}{/if}</div>
     <div><b>Field number</b>{a.fieldNumber ?? 'none'}</div>
@@ -443,6 +446,7 @@
     {#if a.nameAsReceived}<div><b>Name as received</b>{a.nameAsReceived}</div>{/if}
     {#if kind === 'hybrid'}<div><b>Parentage</b>{a.parentage ?? 'not stated'}</div>{/if}
   </div>
+  {/if}
 
   <div class="dangerrow">
     <span class="small muted">Removing keeps the number reserved; the record stays in the change log and in any backup taken before.</span>

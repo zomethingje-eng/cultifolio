@@ -81,7 +81,8 @@ export const load: PageServerLoad = async ({ platform, fetch, setHeaders, url, c
   // What a stranger sees first: twelve photographed species with a derived climate, one from each of the largest
   // genera, chosen by rule (the most-recorded species of the genus) and rotated by the day so the strip is not editorial.
   const byGenus = new Map<string, Item[]>();
-  for (const c of list) if (c.thumb && c.climate === 'ok') byGenus.set(genusOf(c.name), [...(byGenus.get(genusOf(c.name)) ?? []), c]);
+  // Eight or more photographs: a species photographed that often is photographed alive, not as a pressed sheet.
+  for (const c of list) if (c.thumb && c.climate === 'ok' && c.photos >= 8) byGenus.set(genusOf(c.name), [...(byGenus.get(genusOf(c.name)) ?? []), c]);
   const genera = [...byGenus.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
   const day = Math.floor(Date.now() / 86_400_000);
   const pool = genera.slice(0, 48).map(([, xs]) => xs.sort((a, b) => b.open - a.open)[0]);
