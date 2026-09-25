@@ -1168,6 +1168,7 @@ test('at 390 px every tap target is a finger wide: top-bar icons, breadcrumb, se
 
 test('search forgives a typing error, ranks the genus first, and the picker does the same', async ({ page }) => {
   await page.goto('/');
+  await page.waitForLoadState('networkidle'); // a value typed before hydration is dropped when the bound input hydrates
   await page.fill('.searchbar', 'copiapao');
   await expect(page.locator('a.tile .nm', { hasText: 'Copiapoa cinerea' })).toBeVisible();
   await page.fill('.searchbar', 'welwit mirab');
@@ -1547,4 +1548,23 @@ test('the one search box finds a plant by its number, and the cold floor is one 
   const glance = page.locator('.card.unitbtn', { hasText: 'Cold floor' });
   await expect(glance).toContainText('6.5');
   await expect(page.locator('.cult', { hasText: /^Warmth and air/ }).first().locator('.body')).toContainText('Cold floor: 6.5 °C');
+});
+
+test('the catalogue renders a window of rows and the letter index lands on its heading, by tap and by link (round seven, 23)', async ({ page }) => {
+  await page.goto('/');
+  const letters = await page.locator('nav.letters a').allInnerTexts();
+  expect(letters.length).toBeGreaterThan(1);
+  const last = letters[letters.length - 1];
+  await page.locator('nav.letters a', { hasText: new RegExp(`^${last}$`) }).click();
+  await expect(page).toHaveURL(new RegExp(`#l-${last}$`));
+  // in view and not behind the sticky bars (the fixtures' page is too short to scroll a heading to the top; the corpus build was checked by hand at 120 px)
+  const pos = await page.evaluate((l) => { const r = document.getElementById(`l-${l}`)!.getBoundingClientRect(); return { top: r.top, h: window.innerHeight, bar: document.querySelector('#topbar')!.getBoundingClientRect().bottom }; }, last);
+  expect(pos.top).toBeGreaterThanOrEqual(pos.bar);
+  expect(pos.top).toBeLessThan(pos.h);
+  await page.goto('/about/how');
+  await page.goto(`/#l-${letters[0]}`);
+  await expect(page.locator(`#l-${letters[0]}`)).toBeVisible();
+  await expect(page.locator('a.grow').first()).toBeVisible();
+  // the "more" control only exists past the first window; the fixtures fit in one
+  await expect(page.locator('.more')).toHaveCount(0);
 });

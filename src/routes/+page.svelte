@@ -7,7 +7,7 @@
   import { photoAt } from '$dossier/photo-size';
   import PageHead from '$lib/ui/PageHead.svelte';
   import { collection } from '$lib/db/collection.svelte';
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { slugify } from '$core/names';
   import { groupFor } from '$core/regions';
   import type { MySpecies } from '$lib/db/species-list';
@@ -43,12 +43,51 @@
   // The server never sees the hint, so crawlers and first visits get the catalogue at once.
   const HINT = 'cultifolio.hasMine';
   let expectMine = $state(false);
+  /*
+   * The catalogue is 1,321 genera; as HTML that is ten thousand nodes, which a phone lays out before it can scroll. So
+   * the page renders a first window of rows (enough to fill several screens) and appends the rest as the reader nears
+   * the end, in chunks large enough that a fling does not outrun it. A letter tap, a `#l-X` link and a `?open=` row all
+   * render up to what they need before they scroll to it, so they land where they say. Search and the chips read the
+   * index, not these rows, and are unaffected.
+   */
+  const WINDOW = 120, CHUNK = 160;
+  const firstNeeded = () => { const i = data.open ? data.rows.findIndex((r) => r.id === data.open) : -1; return Math.max(WINDOW, i + 30); };
+  let shown = $state(firstNeeded());
+  $effect(() => { data.rows; data.open; shown = firstNeeded(); }); // a new grouping or a newly opened row: start again from what it needs
+  const visibleRows = $derived(data.rows.slice(0, shown));
+  let sentinel = $state<HTMLElement | null>(null);
+  /** Append a chunk, and keep appending while the end of the list is still within reach of the viewport (a tall screen, a fling that landed on it). */
+  async function growWhileNear() {
+    while (sentinel && shown < data.rows.length && sentinel.getBoundingClientRect().top < window.innerHeight + 1600) {
+      shown = Math.min(data.rows.length, shown + CHUNK);
+      await tick();
+    }
+  }
+  $effect(() => {
+    if (!sentinel || shown >= data.rows.length) return;
+    const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) growWhileNear(); }, { rootMargin: '1600px 0px' });
+    io.observe(sentinel);
+    return () => io.disconnect();
+  });
+  /** Render every row up to the end of a letter, then scroll to its heading; the hash is kept so the back button and a copied link behave. */
+  async function jumpToLetter(l: string) {
+    let last = -1;
+    data.rows.forEach((r, i) => { if (r.letter === l) last = i; });
+    if (last < 0) return;
+    shown = Math.max(shown, last + 1);
+    await tick();
+    document.getElementById(`l-${l}`)?.scrollIntoView();
+    history.replaceState(history.state, '', `#l-${l}`);
+  }
   onMount(() => {
     // A page opened at ?open=<row> (a link, a bookmark, the back button) starts at the row, not at the top of a thousand rows.
     if (data.open && window.scrollY < 10) {
       const el = document.getElementById(`g-${data.open}`);
       if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 120 });
     }
+    const fromHash = () => { const m = /^#l-(.+)$/.exec(location.hash); if (m) jumpToLetter(decodeURIComponent(m[1])); };
+    fromHash();
+    window.addEventListener('hashchange', fromHash);
     try {
       expectMine = localStorage.getItem(HINT) === '1';
     } catch {
@@ -62,6 +101,7 @@
         welcomeHidden = false;
       }
     })();
+    return () => window.removeEventListener('hashchange', fromHash);
   });
   $effect(() => {
     if (!collection.ready) return;
@@ -310,11 +350,11 @@
   {:else}
     {#if data.letters.length > 1}
       <nav class="letters" aria-label="Jump to a letter">
-        {#each data.letters as l (l)}<a href="#l-{l}">{l}</a>{/each}
+        {#each data.letters as l (l)}<a href="#l-{l}" onclick={(e) => { e.preventDefault(); jumpToLetter(l); }}>{l}</a>{/each}
       </nav>
     {/if}
     <div class="rows" class:withletters={data.letters.length > 1}>
-      {#each data.rows as r, i (r.id)}
+      {#each visibleRows as r, i (r.id)}
         {#if r.letter && (i === 0 || data.rows[i - 1].letter !== r.letter)}<h2 class="letter" id="l-{r.letter}">{r.letter}</h2>{/if}
         <a class="grow" class:open={r.id === data.open} id="g-{r.id}" href={rowHref(r.id)} data-sveltekit-noscroll aria-expanded={r.id === data.open}>
           {#if r.map}<div class="gmap">{@html r.map}</div>{:else if r.thumb}<div class="gthumb"><img src={photoAt(r.thumb, 'small')} alt="" loading="lazy" onerror={(e) => { const im = e.currentTarget as HTMLImageElement; im.remove(); }} /></div>{:else}<div class="gthumb mono" aria-hidden="true">{r.label[0] ?? ''}</div>{/if}
@@ -331,6 +371,7 @@
           </div>
         {/if}
       {/each}
+      {#if shown < data.rows.length}<div class="more" bind:this={sentinel}><button class="btn small" type="button" onclick={() => (shown = Math.min(data.rows.length, shown + CHUNK))}>More of the {fmtN(data.rows.length)} {data.by === 'genus' ? 'genera' : data.by === 'family' ? 'families' : 'regions'}</button></div>{/if}
     </div>
     <p class="seccount" style="margin-top: 14px">{fmtN(data.rows.length)} {data.by === 'genus' ? 'genera' : data.by === 'family' ? 'families' : 'regions'} · {fmtN(data.total)} species</p>
   {/if}
@@ -371,6 +412,7 @@
   .letters a:hover { background: var(--sunk); text-decoration: none; color: var(--ink); }
   .letter { font-family: var(--mono); font-size: 12px; letter-spacing: 0.12em; color: var(--ink3); margin: 22px 0 6px; scroll-margin-top: 120px; }
   .rows { display: flex; flex-direction: column; gap: 6px; }
+  .more { display: flex; justify-content: center; padding: 18px 0 6px; } /* a button for a reader without the observer (or without JavaScript, where it does nothing) */
   .grow { display: grid; grid-template-columns: 56px minmax(0, 1fr) 28px; gap: 14px; align-items: center; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); padding: 8px 12px 8px 8px; color: inherit; text-decoration: none; min-height: 56px; scroll-margin-top: 120px; }
   .grow:hover { text-decoration: none; color: inherit; box-shadow: var(--sh2); }
   .grow.open { outline: 2px solid var(--accent); background: color-mix(in srgb, var(--accent-soft) 45%, var(--card)); }
