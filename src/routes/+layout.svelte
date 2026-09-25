@@ -15,7 +15,7 @@
   import { browser } from '$app/environment';
   import CompareBar from '$lib/ui/CompareBar.svelte';
   import InstallBar from '$lib/ui/InstallBar.svelte';
-  import Toast from '$lib/ui/Toast.svelte';
+  import ToastBar from '$lib/ui/ToastBar.svelte';
   import { units } from '$lib/ui/units.svelte';
   import { METRIC } from '$core/units';
   let { children } = $props();
@@ -118,7 +118,7 @@
 {#if vaultNote}<p class="vaultnote">{vaultNote}</p>{/if}
 
 <main class="wrap">
-  <Toast />
+  <ToastBar />
   <InstallBar />
   {@render children()}
 </main>
