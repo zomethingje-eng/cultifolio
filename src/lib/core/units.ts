@@ -18,13 +18,18 @@ export const inToMm = (i: number) => i * 25.4;
 export const tempUnit = (u: Units) => (u === 'us' ? '°F' : '°C');
 export const rainUnit = (u: Units) => (u === 'us' ? 'in' : 'mm');
 
+/** `toFixed` that never prints "-0": a night of -0.3 °C shown to no decimals is 0 °C, not a minus with nothing behind it. */
+export function fixed(x: number, digits: number): string {
+  const s = x.toFixed(digits);
+  return /^-0(\.0*)?$/.test(s) ? s.slice(1) : s;
+}
 /** A temperature, from °C, with `digits` decimals: "6.5 °C" or "43.7 °F". */
 export function temp(c: number, u: Units, digits = 0): string {
-  return `${(u === 'us' ? cToF(c) : c).toFixed(digits)} ${tempUnit(u)}`;
+  return `${fixed(u === 'us' ? cToF(c) : c, digits)} ${tempUnit(u)}`;
 }
 /** The number alone, for an axis or a card value: "43.7". */
 export function tempN(c: number, u: Units, digits = 0): string {
-  return (u === 'us' ? cToF(c) : c).toFixed(digits);
+  return fixed(u === 'us' ? cToF(c) : c, digits);
 }
 /** A difference of temperatures, from °C: "4.0 °C" or "7.2 °F". No offset. */
 export function deltaT(dc: number, u: Units, digits = 1): string {

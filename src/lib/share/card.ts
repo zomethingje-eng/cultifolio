@@ -9,6 +9,8 @@
  */
 import { climograph, type ClimoInput } from '$climate/climograph';
 import { frostWording } from '$core/extremes';
+import { coldFloor } from '$core/sheet';
+import { archFor } from '$core/arch';
 import { temp, rain, tempUnit, rainUnit, METRIC, type Units, dryLabel } from '$core/units';
 
 export interface CardInput {
@@ -34,10 +36,12 @@ export function climateCardSvg(c: CardInput): string {
   const dlis = m.map((x) => x.dli).filter((x): x is number => x != null);
   const ex = c.climate.extremes ?? null;
   const u = c.units ?? METRIC;
+  // The same floor rule as the sheet, so the card never names a figure the page does not.
+  const fl = coldFloor(m.map((x) => ({ ...x, tmean: (x.tmax + x.tmin) / 2 })), ex, archFor(c.name, c.family), u); // coldFloor reads only tmin; the mean is the type's, not the rule's
   const figs: Array<[string, string, string]> = [
-    ex ? ['Cold floor', temp(ex.minP01, u, 1), `1st-percentile night, ${ex.years} yrs · ${frostWording(ex)}`] : ['Coldest month', temp(m[cold].tmin, u), `${MON[cold]}, mean night`],
+    fl?.raised ? ['Cold floor', temp(fl.floor, u), `${fl.group} group minimum · hab. night ${temp(fl.habitat!, u, 1)}`] : ex ? ['Cold floor', temp(ex.minP01, u, 1), `1st-percentile night, ${ex.years} yrs · ${frostWording(ex)}`] : ['Coldest month', temp(m[cold].tmin, u), `${MON[cold]}, mean night`],
     ['Warmest month', temp(m[hot].tmax, u), `${MON[hot]}, mean day`],
-    ['Rain', `${rain(rainYear, u)}/yr`, wetMonths === 0 ? 'no wet month' : `${wetMonths} wet month${wetMonths === 1 ? '' : 's'}`],
+    ['Rain', `${rain(rainYear, u)}/yr`, wetMonths === 0 ? `no month over ${rain(25, u)}` : `${wetMonths} month${wetMonths === 1 ? '' : 's'} over ${rain(25, u)}`],
     dlis.length ? ['Light', `${Math.min(...dlis).toFixed(0)}–${Math.max(...dlis).toFixed(0)} DLI`, 'mol/m²/day, winter to summer'] : ['Cells', String(c.cells), 'habitat grid cells read']
   ];
   const g = climograph({ ...c.climate, extremes: ex ? { minAbs: ex.minAbs, maxP99: ex.maxP99, years: ex.years } : null }, 640, u);

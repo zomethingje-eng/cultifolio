@@ -476,7 +476,9 @@ export const RATE = {
   /** One batch or one photo fetched, checked or stored: a first join of a large vault makes a thousand. */
   syncobj: { limit: 3000, windowMs: 600_000 },
   /** Name suggestions: a person typing makes a few a second for a few seconds. */
-  names: { limit: 300, windowMs: 600_000 }
+  names: { limit: 300, windowMs: 600_000 },
+  /** A forecast: the frost page and the front strip ask once an hour per site; each distinct coordinate is a call to MET Norway under this site's name. */
+  forecast: { limit: 60, windowMs: 600_000 }
 } as const;
 export type RateBucket = keyof typeof RATE;
 

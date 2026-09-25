@@ -1,6 +1,6 @@
 <script lang="ts">
   import { collection } from '$lib/db/collection.svelte';
-  import { localDate, localDateYearAgo } from '$core/dates';
+  import { localDate, localDateYearAgo, daysBetween, madeOn } from '$core/dates';
   import { accNo, sowNo } from '$lib/db/types';
   import { kindOf } from '$lib/db/types';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
@@ -52,10 +52,9 @@
     const idx = (await speciesIndex()) ?? [];
     thumbs = new Map(idx.filter((e: IndexEntry) => e.thumb).map((e: IndexEntry) => [e.slug, e.thumb!]));
   });
-  const dayMs = 86_400_000;
-  const sinceWater = (id: string) => { const d = collection.events(id).find((e) => e.t === 'water')?.d; return d ? Math.floor((Date.now() - Date.parse(d)) / dayMs) : null; };
-  // Never watered counts from the day it arrived, so a plant added this week is not "overdue".
-  const sinceCare = (a: (typeof collection.accessions)[number]) => sinceWater(a.id) ?? (a.acquired ? Math.floor((Date.now() - Date.parse(a.acquired)) / dayMs) : 999);
+  const sinceWater = (id: string) => { const d = collection.events(id).find((e) => e.t === 'water')?.d; return d ? daysBetween(d) : null; };
+  // Never watered counts from the day its record was made (not the acquisition date, which for a collection entered late is years back), so a plant entered this week is not "overdue".
+  const sinceCare = (a: (typeof collection.accessions)[number]) => sinceWater(a.id) ?? daysBetween(madeOn(a.id) ?? a.acquired ?? localDate());
   const dueN = $derived(collection.accessions.filter((a) => a.status === 'growing' && sinceCare(a) > 21).length);
   const list = $derived(
     collection.accessions.filter((a) => (show === 'all' || a.status === 'growing') && (show !== 'due' || sinceCare(a) > 21) && (show !== 'nophoto' || noPhoto(a.id)) && (!q || `${a.taxonName} ${a.cultivar ?? ''} ${a.parentage ?? ''} ${a.nameAsReceived ?? ''} ${accNo(a)} ${a.fieldNumber ?? ''} ${a.locationId ? collection.locationName(a.locationId) : (a.location ?? '')}`.toLowerCase().includes(q.toLowerCase())))
@@ -108,7 +107,7 @@
           <span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}‘{a.cultivar}’{/if}</span>
           <span class="fam">{#if kindOf(a) !== 'species'}<span class="pill c">{kindOf(a)}</span>{/if}{#if a.fieldNumber}<span class="fnchip">{a.fieldNumber}</span>{/if}{#if a.locationId}<span>{collection.locationName(a.locationId)}</span>{:else if a.location}<span>{a.location}</span>{/if}{#if a.status !== 'growing'}<span class="pill">{a.status}</span>{/if}</span>
         </span>
-        <span class="fig" class:due={w != null && w > 21 && a.status === 'growing'}>{w == null ? 'not watered yet' : w === 0 ? 'watered today' : `watered ${w} d ago`}</span>
+        <span class="fig" class:due={w != null && w > 21 && a.status === 'growing'}>{w == null ? 'no watering recorded' : w === 0 ? 'watered today' : `watered ${w} d ago`}</span>
       </a>
     {/each}
   </div>

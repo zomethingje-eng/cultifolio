@@ -35,14 +35,14 @@
 <svelte:head><title>Benches — Cultifolio</title></svelte:head>
 
 <PageHead title="Benches" sub="Where your plants live; conditions set on a place apply to everything inside it." count="{rows.length} place{rows.length === 1 ? '' : 's'}{unplaced ? ` · ${unplaced} unplaced` : ''}">
-  <button class="btn pri" onclick={() => (adding = !adding)}>New location</button>
+  <button class="btn pri" onclick={() => (adding = !adding)}>New place</button>
 </PageHead>
 
 {#if adding}
   <form class="cult form" onsubmit={(e) => { e.preventDefault(); add(); }}>
-    <input id="loc-name" type="text" placeholder="Name" aria-label="Name of the new location" bind:value={name} />
-    <select id="loc-kind" bind:value={kind} aria-label="Kind of location">{#each LOCATION_KINDS as k}<option value={k.k}>{k.label}</option>{/each}</select>
-    <select id="loc-parent" bind:value={parent} aria-label="Inside which location">
+    <input id="loc-name" type="text" placeholder="Name" aria-label="Name of the new place" bind:value={name} />
+    <select id="loc-kind" bind:value={kind} aria-label="Kind of place">{#each LOCATION_KINDS as k}<option value={k.k}>{k.label}</option>{/each}</select>
+    <select id="loc-parent" bind:value={parent} aria-label="Inside which place">
       <option value={null}>Top level</option>
       {#each rows as r}<option value={r.loc.id}>{'  '.repeat(r.depth)}{r.loc.name}</option>{/each}
     </select>
@@ -56,7 +56,7 @@
   {#if collection.legacyLocations.length}
     <div class="cult legacy">
       <div class="sum">Places written as text on your plants</div>
-      <p class="faint small">Turn each into a real location; its plants move there.</p>
+      <p class="faint small">Turn each into a real place; its plants move there.</p>
       <ul>
         {#each collection.legacyLocations as l}
           <li><span>{l.text}</span> <span class="faint">{l.n} plant{l.n === 1 ? '' : 's'}</span> <button class="btn small" onclick={() => collection.convertLegacyLocation(l.text)}>Make it a location</button></li>
@@ -65,7 +65,7 @@
     </div>
   {/if}
   {#if !rows.length}
-    <div class="emptybox"><h2 class="q" style="font-size: 22px">No locations yet</h2><p class="muted">Start with the room or greenhouse, then the shelves or benches inside it.</p></div>
+    <div class="emptybox"><h2 class="q" style="font-size: 22px">No places yet</h2><p class="muted">Start with the room or greenhouse, then the shelves or benches inside it.</p></div>
   {:else}
     <div class="tree">
       {#each rows as r (r.loc.id)}
@@ -77,7 +77,7 @@
       {/each}
     </div>
   {/if}
-  {#if unplaced}<p class="faint small">{plural(unplaced, 'growing plant')} {unplaced === 1 ? 'has' : 'have'} no location.</p>{/if}
+  {#if unplaced}<p class="faint small">{plural(unplaced, 'growing plant')} {unplaced === 1 ? 'has' : 'have'} no place.</p>{/if}
 {/if}
 
 <style>

@@ -117,7 +117,13 @@ export function nameParts(scientific: string): Array<{ text: string; italic: boo
   return out;
 }
 
-/** The genus of a scientific name: its first word, past a hybrid sign. */
+/** The genus of a scientific name: its first word, past a hybrid sign. A leading ASCII "x" counts as the sign only when it stands alone: Xanthosoma keeps its X. */
 export function genusOf(name: string): string {
-  return name.trim().replace(/^[×x]\s*/i, '').split(/\s+/)[0] ?? name;
+  return name.trim().replace(/^(?:×\s*|x\s+)/i, '').split(/\s+/)[0] ?? name;
+}
+
+/** The species a name belongs to: genus and epithet, with anything below species (subsp., var., a third word) and any cultivar left off. "Ariocarpus retusus subsp. furfuraceus" → "Ariocarpus retusus". */
+export function speciesOf(name: string): string {
+  const p = parseName(name);
+  return p.epithet ? `${p.genus} ${p.epithet}` : p.genus;
 }

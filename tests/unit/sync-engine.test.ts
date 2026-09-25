@@ -4,10 +4,11 @@
  * together through a fake fetch and a fake R2, so the outbox → server → pull
  * path under test is the real one.
  */
+import { hlcWall } from '$core/log';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { Change } from '$core/log';
 import { hlcEncode, MAX_AHEAD_MS } from '$core/hlc';
-import { deriveKeys, newVaultKey, sealJson, sha256hex } from '$lib/sync/crypto';
+import { batchFingerprint, deriveKeys, newVaultKey, sealJson, sha256hex } from '$lib/sync/crypto';
 import { MAX_BYTES } from '$lib/server/sync';
 
 /* ------------------------------------------------------------------ fakes */
@@ -22,7 +23,9 @@ type Mem = { device: string; changes: Map<string, Change>; outbox: Set<string>; 
 const newMem = (device: string): Mem => ({ device, changes: new Map(), outbox: new Set(), meta: new Map(), photos: new Map() });
 let mem: Mem = newMem('dev0');
 
-vi.mock('$lib/db/vault', () => ({
+vi.mock('$lib/db/vault', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const m: any = {
   allChanges: async () => [...mem.changes.values()],
   appendChanges: async (cs: Change[], fromServer = false) => {
     if (mem.failAppend?.(cs, fromServer)) throw quota();
@@ -55,7 +58,12 @@ vi.mock('$lib/db/vault', () => ({
     mem.outbox.clear();
     mem.photos.clear();
   }
-}));
+};
+  // The claiming write of the real vault, over the same in-memory log: `build` sees the numbers the caller knows.
+  m.appendChangesClaiming = async (_k: string, known: Set<string>, build: (s: Set<string>) => { changes: Change[]; result: unknown }) => { const b = build(new Set(known)); await m.appendChanges(b.changes); return b.result; };
+  m.onOtherTabWrite = () => () => {};
+  return m;
+});
 
 /** Just enough of R2 for the routes: keys, bytes, upload times. */
 function fakeR2() {
@@ -197,10 +205,13 @@ describe('batches are named by content and acked only when the server holds thos
     const keys = await deriveKeys(KEY);
     const name = logKeys(r2)[0].split('/log/')[1].slice(0, -4);
     const bytes = r2.objs.get(logKeys(r2)[0])!.body;
-    // The name is the last HLC and the first twelve hex digits of the SHA-256 of the changes as JSON.
+    // The name is the hour of the last edit, a fixed counter, the device, and twelve digits of a keyed fingerprint of the
+    // changes as JSON: the server learns the hour and the device, never the millisecond, and holds no plain hash (round seven, 15).
     const changes = [...memB.changes.keys()].sort().map((t) => memB.changes.get(t));
-    const plain = await sha256hex(new TextEncoder().encode(JSON.stringify(changes)));
-    expect(name).toBe(`${changes[changes.length - 1]!.t}-${plain.slice(0, 12)}`);
+    const plain = await batchFingerprint(keys, new TextEncoder().encode(JSON.stringify(changes)));
+    expect(plain).not.toBe(await sha256hex(new TextEncoder().encode(JSON.stringify(changes))));
+    const hour = Math.floor(hlcWall(changes[changes.length - 1]!.t) / 3600_000) * 3600_000;
+    expect(name).toBe(`${hour}-0000-bbbbbbbbbbbb-${plain.slice(0, 12)}`);
     expect(r2.objs.get(logKeys(r2)[0])!.md).toMatchObject({ plain, device: 'bbbbbbbbbbbb' });
     let r = await post(keys, name, bytes);
     expect(await r.json()).toEqual({ stored: false, reason: 'already there' });
@@ -348,6 +359,29 @@ describe('a full vault is said, not split', () => {
     expect(B2.sync.vaultFull).toBeNull();
     expect(memB.outbox.size).toBe(0);
     expect((memB.meta.get('sync') as { vaultFull?: unknown }).vaultFull).toBeUndefined();
+  });
+  it('a photo whose first send landed but whose reply was lost is recognised on the retry, not refused (round seven, 7)', async () => {
+    const r2 = fakeR2();
+    const memB = newMem('bbbbbbbbbbbb');
+    const B = await boot(memB, r2);
+    const a = await B.collection.addAccession({ taxonName: 'Aloe', acc: 'B-1' });
+    await B.sync.setup(KEY, 'create');
+    const pid = 'pone000000001';
+    memB.photos.set(pid, { id: pid, blob: new Blob([new Uint8Array([1, 2, 3, 4])]), thumb: new Blob([new Uint8Array([9])]) });
+    await B.collection.put('photo', pid, { acc: a.id, d: '2026-01-01', w: 1, h: 1, bytes: 4 });
+    const real = globalThis.fetch;
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const res = await real(input, init);
+      if (init?.method === 'PUT' && String(input).includes('/api/sync/photo/')) throw new TypeError('Failed to fetch');
+      return res;
+    }) as typeof fetch;
+    await expect(B.sync.run()).rejects.toThrow(/Failed to fetch/);
+    const key = `vault/${(await deriveKeys(KEY)).id}/photo/${pid}.bin`;
+    expect(r2.objs.has(key)).toBe(true); // the server did the work
+    globalThis.fetch = real;
+    await B.sync.run(); // the retry seals with a fresh nonce: different bytes, same pixels
+    expect(B.sync.refused).toEqual([]);
+    expect((memB.meta.get('sync') as { photosPushed: string[] }).photosPushed).toContain(pid);
   });
   it('a full vault refuses a photo with 507 too; a photo that is merely too big is still 413 and noted', async () => {
     const r2 = fakeR2();

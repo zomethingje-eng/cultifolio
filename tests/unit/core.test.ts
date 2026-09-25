@@ -80,6 +80,15 @@ describe('hlc', () => {
     now += 3600_000;
     expect(hlcDecode(c.tick()).wall).toBe(now);
   });
+  it('follows its own stamps however far ahead: an edit after the clock is put right still sorts after one made while it was fast (round seven, 3)', () => {
+    let now = 1_700_000_000_000 + 86_400_000; // a day fast
+    const fast = new Clock('dev1', () => now);
+    const stampedFast = fast.tick();
+    now -= 86_400_000; // the clock is corrected and the app reloads
+    const c = new Clock('dev1', () => now);
+    c.observe(stampedFast); // read back from the vault at load
+    expect(hlcCompare(c.tick(), stampedFast)).toBe(1);
+  });
   it('the counter widens past ffff and still parses and orders; past six digits the wall takes a millisecond', () => {
     const c = new Clock('dev1', () => 1_700_000_000_000);
     let last = '';

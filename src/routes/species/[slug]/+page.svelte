@@ -9,6 +9,8 @@
   import FollowButton from '$lib/ui/FollowButton.svelte';
   import CompareButton from '$lib/ui/CompareButton.svelte';
   import ShareCard from '$lib/ui/ShareCard.svelte';
+  import { isDatasetDoi } from '$dossier/sources/openalex';
+  import { photoAt } from '$dossier/photo-size';
   import { firstSentences } from '$core/text';
   import { frostWording } from '$core/extremes';
   import { setCrumb } from '$lib/ui/crumb.svelte';
@@ -20,7 +22,7 @@
   import { onMount } from 'svelte';
   import { units } from '$lib/ui/units.svelte';
   import { site } from '$lib/ui/site.svelte';
-  import { temp, tempN, rain, rainN, tempUnit, rainUnit, cToF, mmToIn } from '$core/units';
+  import { temp, tempN, rain, rainN, tempUnit, rainUnit, cToF, mmToIn, fixed } from '$core/units';
   let { data } = $props();
   let allPapers = $state(false);
   const u = $derived(units.current);
@@ -52,12 +54,17 @@
     if (!o.nOpenInRange && !o.nRestrictedInRange) return { tone: 'muted', text: 'No georeferenced records inside the stated native range.' };
     const all = o.nOpenInRange + o.nRestrictedInRange;
     const climateOk = d.climate.status === 'ok';
-    let t = `The map marker${climateOk ? ' and the climate envelope' : ''} rest${climateOk ? '' : 's'} on all ${all} georeferenced record${all === 1 ? '' : 's'} inside the native range`;
+    // The marker rests on every in-range record; the envelope only on those placed well enough (within 10 km) to read a grid cell at, which is what `climate.records` counts.
+    const climRecs = d.climate.status === 'ok' ? d.climate.records : all;
+    let t = climateOk && climRecs < all
+      ? `The map marker rests on all ${all} georeferenced records inside the native range; the climate envelope on the ${climRecs} of them placed to within 10 km`
+      : `The map marker${climateOk ? ' and the climate envelope' : ''} rest${climateOk ? '' : 's'} on all ${all} georeferenced record${all === 1 ? '' : 's'} inside the native range`;
     if (!o.nOpenInRange) t += `; none carries a licence permitting republication, so the map shows no points.`;
     else if (o.nRestrictedInRange) t += `; the map shows only the ${o.nOpenInRange} openly licensed one${o.nOpenInRange === 1 ? '' : 's'}` + (o.restrictedShiftKm != null && o.restrictedShiftKm >= 1 ? `, which alone would put the marker ${o.restrictedShiftKm} km away` : o.restrictedShiftKm != null ? ', which alone would put the marker in the same place' : '') + '.';
     else t += ', all openly licensed and shown on the map.';
     if (o.nOutsideRange) t += ` ${o.nOutsideRange} record${o.nOutsideRange === 1 ? '' : 's'} outside the range (gardens, roadsides, misidentifications) ignored.`;
     if (o.thin) t += ` Under a dozen records: treat the map${climateOk ? ' and the climate' : ''} as indicative.`;
+    else if (climateOk && climRecs < 12) t += ` Under a dozen records behind the climate: treat it as indicative.`;
     if (!climateOk) t += d.climate.status === 'pending' ? ' No climate envelope yet: the habitat climate is pending.' : d.climate.status === 'refused' ? ' No climate envelope: the climate source did not answer.' : ' No climate envelope is derived for this species.';
     return { tone: 'ok', text: t };
   });
@@ -71,6 +78,8 @@
     collection.load();
   });
   // The section row names where the reader is: the last section heading that has passed under the sticky row.
+  /** The dossier's works without GBIF occurrence downloads: datasets that name the species, not papers about it (the builder drops them at source now; the corpus on disk is filtered here until it is refilled). */
+  const papers = $derived(d.literature.filter((p) => !isDatasetDoi(p.doi) && !/^Occurrence Download$/i.test(p.title)));
   let active = $state('');
   onMount(() => {
     const heads = [...document.querySelectorAll<HTMLElement>('h2.sec[id]')].filter((h) => ['s-cultivation', 's-climate', 's-habitat', 's-photos', 's-photos-open', 's-research', 's-related', 's-registers'].includes(h.id));
@@ -112,7 +121,7 @@
   const photoSourceName: Record<string, string> = { 'inat.taxon': 'iNaturalist', 'inat.photos.wild': 'iNaturalist', 'inat.photos.cultivated': 'iNaturalist', commons: 'Wikimedia Commons', 'gbif.media': 'GBIF media' };
   const refusedPhotoNames = $derived([...new Set(refusedPhotoSources.map((k) => photoSourceName[k]))]);
   /** "12 / 8–15": the median with the 10th–90th span across the envelope cells. */
-  const cell = (med: number | undefined, lo: number | undefined, hi: number | undefined, digits = 0, conv: (x: number) => number = (x) => x) => (med == null ? '–' : lo == null || hi == null || (lo === med && hi === med) ? conv(med).toFixed(digits) : `${conv(med).toFixed(digits)} / ${conv(lo).toFixed(digits)}–${conv(hi).toFixed(digits)}`);
+  const cell = (med: number | undefined, lo: number | undefined, hi: number | undefined, digits = 0, conv: (x: number) => number = (x) => x) => (med == null ? '–' : lo == null || hi == null || (lo === med && hi === med) ? fixed(conv(med), digits) : `${fixed(conv(med), digits)} / ${fixed(conv(lo), digits)}–${fixed(conv(hi), digits)}`);
   const tC = $derived((x: number) => (u === 'us' ? cToF(x) : x));
   const rMm = $derived((x: number) => (u === 'us' ? mmToIn(x) : x));
   /** A source's detail string as a sentence of its own: capitalised, with a full stop. */
@@ -160,7 +169,8 @@
   <meta property="og:description" content={desc} />
   {#if hero}<meta property="og:image" content={hero.url} />{/if}
   <link rel="canonical" href="https://cultifolio.com/species/{d.slug}" />
-  {@html `<script type="application/ld+json">${jsonld}</script>`}
+  <!-- A vernacular name is user-contributed upstream; a "<" in it must not end this script early. -->
+  {@html `<script type="application/ld+json">${jsonld.replace(/</g, '\\u003c')}</script>`}
 </svelte:head>
 
 <article class="species">
@@ -169,7 +179,7 @@
     <div class="hero"><div class="ph">The photograph did not load ({hero.attribution}); <a href={hero.page ?? hero.url} rel="noopener">its page is here</a>.</div></div>
   {:else if hero}
     <div class="hero">
-      <a href={hero.page ?? hero.url} rel="noopener"><img src={hero.url} alt="{d.name.scientific}{hero.place ? ', ' + hero.place : ''}" loading="eager" fetchpriority="high" onerror={() => (heroFailed = true)} /></a>
+      <a href={hero.page ?? hero.url} rel="noopener"><img src={photoAt(hero.url, 'large')} alt="{d.name.scientific}{hero.place ? ', ' + hero.place : ''}" loading="eager" fetchpriority="high" onerror={() => (heroFailed = true)} /></a>
       <a class="cred" href={hero.page ?? hero.url} rel="noopener">{hero.attribution}{hero.captive ? ' · in cultivation' : ' · observed growing wild'}{hero.observedOn ? ' · ' + hero.observedOn : ''}</a>
     </div>
   {:else}
@@ -201,7 +211,7 @@
     </div>
   </div>
   </div>
-  <p class="small muted derived">Every figure on this page is derived from public data by a stated rule and says its source; nothing here is written by a person or a model, except the Wikipedia passage, which is quoted and marked as such. <a href="/about/how">How it is made.</a></p>
+  <p class="small muted derived">Every figure on this page is derived from public data by a stated rule and says its source; nothing here is written by a person or a model, except the quoted passages, which are marked and credited: Wikipedia, and where a register such as Kew's gives one, its own description. <a href="/about/how">How it is made.</a></p>
 
   {#if d.summary}
     <h2 class="sec" id="s-summary">Summary</h2>
@@ -233,9 +243,9 @@
     <section class="glance" aria-label="At a glance">
       {#if glance}
         <div class="cards">
-          <button class="card unitbtn" type="button" title="Switch to {u === 'us' ? 'Celsius and millimetres' : 'Fahrenheit and inches'}" onclick={() => units.toggle()}><div class="lab">Cold floor</div>{#if glance.ex}<div class="val">{tempN(glance.ex.minP01, u, 1)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">1st-percentile night over {glance.ex.years} years; lowest {temp(glance.ex.minAbs, u, 1)}, {frostWording(glance.ex)} (NASA POWER)</div>{:else}<div class="val">{tempN(glance.cold.v, u)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">{glance.cold.mo}, mean night (CHELSA); no extremes series for this cell</div>{/if}<span class="swap">tap for {u === 'us' ? '°C' : '°F'}</span></button>
+          <button class="card unitbtn" type="button" title="Switch to {u === 'us' ? 'Celsius and millimetres' : 'Fahrenheit and inches'}" onclick={() => units.toggle()}><div class="lab">Cold floor</div>{#if sheet.floor?.raised}<div class="val">{tempN(sheet.floor.floor, u)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">the archetype table's minimum for a {sheet.floor.group}, above the habitat's {glance.ex ? `1st-percentile night ${temp(glance.ex.minP01, u, 1)} (NASA POWER)` : `coldest mean night ${temp(glance.cold.v, u)} (CHELSA)`}</div>{:else if glance.ex}<div class="val">{tempN(glance.ex.minP01, u, 1)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">1st-percentile night over {glance.ex.years} years; lowest {temp(glance.ex.minAbs, u, 1)}, {frostWording(glance.ex)} (NASA POWER)</div>{:else}<div class="val">{tempN(glance.cold.v, u)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">{glance.cold.mo}, mean night (CHELSA); no extremes series for this cell</div>{/if}<span class="swap">tap for {u === 'us' ? '°C' : '°F'}</span></button>
           <div class="card"><div class="lab">Warmest month</div><div class="val">{tempN(glance.hot.v, u)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">{glance.hot.mo}, mean day; nights {temp(glance.hot.night, u)} (CHELSA)</div></div>
-          <div class="card"><div class="lab">Rain</div><div class="val">{rainN(glance.rain, u)}<span class="u"> {rainUnit(u)}/yr</span></div><div class="gauge"><i class="c" style="width:{Math.min(100, glance.rain / 12)}%"></i></div><div class="sub">{glance.wetMonths === 0 ? 'no wet month' : glance.wetMonths + (glance.wetMonths === 1 ? ' wet month' : ' wet months')} · peak {glance.wet.mo} {rain(glance.wet.v, u)} (CHELSA)</div></div>
+          <div class="card"><div class="lab">Rain</div><div class="val">{rainN(glance.rain, u)}<span class="u"> {rainUnit(u)}/yr</span></div><div class="gauge"><i class="c" style="width:{Math.min(100, glance.rain / 12)}%"></i></div><div class="sub">{glance.wetMonths === 0 ? `no month over ${rain(25, u)}` : `${glance.wetMonths} month${glance.wetMonths === 1 ? '' : 's'} over ${rain(25, u)}`} · peak {glance.wet.mo} {rain(glance.wet.v, u)} (CHELSA)</div></div>
           {#if glance.dli}<div class="card"><div class="lab">Light</div><div class="val">{glance.dli.lo.toFixed(0)}–{glance.dli.hi.toFixed(0)}<span class="u"> DLI</span></div><div class="gauge"><i class="w" style="width:{Math.min(100, glance.dli.hi / 0.7)}%"></i></div><div class="sub">mol/m²/day, winter to summer, open sky (CHELSA shortwave)</div></div>{/if}
         </div>
       {/if}
@@ -253,7 +263,7 @@
     <a href="#s-climate" class:on={active === 's-climate'}>Climate</a>
     <a href="#s-habitat" class:on={active === 's-habitat'}>Habitat</a>
     {#if d.photos.length > 1}<a href="#s-photos" class:on={active === 's-photos' || active === 's-photos-open'}>Photographs</a>{/if}
-    {#if d.literature.length || refused('openalex')}<a href="#s-research" class:on={active === 's-research'}>Papers</a>{/if}
+    {#if papers.length || refused('openalex')}<a href="#s-research" class:on={active === 's-research'}>Papers</a>{/if}
     {#if data.siblings.length || data.near.length}<a href="#s-related" class:on={active === 's-related'}>Related</a>{/if}
     <a href="#s-registers" class:on={active === 's-registers'}>Registers</a>
   </nav>
@@ -389,17 +399,17 @@
     <Lightbox photos={myPhotos} bind:index={lightbox} acc={myPhotos[lightbox]?.plant.id ?? null} onclose={() => (lightbox = null)} />
   {/if}
 
-  {#if refused('openalex') && !d.literature.length}
+  {#if refused('openalex') && !papers.length}
     <h2 class="sec" id="s-research">Papers naming this species</h2>
     <div class="notice"><b>Not checked.</b> OpenAlex did not answer when this page was built. Not a statement that no paper names this species.</div>
   {/if}
-  {#if d.literature.length}
+  {#if papers.length}
     <h2 class="sec" id="s-research">Papers naming this species</h2>
     <p class="small muted" style="margin: 0 0 8px">Works whose title or abstract names <i>{d.name.scientific}</i>, most cited first, from OpenAlex (CC0). A mention, not a cultivation source: nothing on this page is drawn from them.</p>
-    {#each allPapers ? d.literature : d.literature.slice(0, 3) as p}
+    {#each allPapers ? papers : papers.slice(0, 3) as p}
       <div class="paper"><a href={p.url} rel="noopener">{p.title}</a><div class="meta">{p.authors?.join(', ')}{p.year ? ` (${p.year})` : ''}{p.venue ? ` · ${p.venue}` : ''}</div></div>
     {/each}
-    {#if d.literature.length > 3 && !allPapers}<button class="btn small" type="button" onclick={() => (allPapers = true)}>All {d.literature.length} papers</button>{/if}
+    {#if papers.length > 3 && !allPapers}<button class="btn small" type="button" onclick={() => (allPapers = true)}>All {papers.length} papers</button>{/if}
   {/if}
 
   {#if data.siblings.length || data.near.length}

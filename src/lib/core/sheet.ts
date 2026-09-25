@@ -196,7 +196,9 @@ const DT = (dc: number) => deltaT(dc, U, 1);
 const RAIN = (mm: number) => rain(mm, U);
 
 /** What the cold floor is: the quantity, the figure, and any raising by the archetype table, all in one sentence. */
-export function coldFloor(m: Month[] | null, ex: Extremes | null, guess: ArchGuess | null, units: Units = U): { floor: number; s: string; short: string; hab: boolean } | null {
+/** The floor a page shows, with its provenance: `habitat` is the measured night (null when none is on file), `floor` the figure the rule settles on, `raised` true when the archetype table's minimum was higher and took over. `hab` remains true whenever a habitat figure exists. */
+export interface ColdFloor { floor: number; habitat: number | null; raised: boolean; group: string | null; s: string; short: string; hab: boolean }
+export function coldFloor(m: Month[] | null, ex: Extremes | null, guess: ArchGuess | null, units: Units = U): ColdFloor | null {
   U = units;
   const minC = guess?.arch.minC ?? null;
   let floor: number | null = null;
@@ -214,19 +216,20 @@ export function coldFloor(m: Month[] | null, ex: Extremes | null, guess: ArchGue
   }
   if (floor == null && minC == null) return null;
   if (floor == null) {
-    return { floor: minC!, s: `Cold floor: ${T(minC!)}, the archetype table's conventional minimum for a ${guess!.arch.lab.toLowerCase()} (grouped by ${guess!.why}); no habitat figure is on file for this species.`, short: `Cold floor ${T(minC!)} (conventional for a ${guess!.arch.lab.toLowerCase()}, archetype table).`, hab: false };
+    return { floor: minC!, habitat: null, raised: false, group: guess!.arch.lab.toLowerCase(), s: `Cold floor: ${T(minC!)}, the archetype table's conventional minimum for a ${guess!.arch.lab.toLowerCase()} (grouped by ${guess!.why}); no habitat figure is on file for this species.`, short: `Cold floor ${T(minC!)} (conventional for a ${guess!.arch.lab.toLowerCase()}, archetype table).`, hab: false };
   }
   if (minC != null && minC > floor) {
-    return { floor: minC, s: `Cold floor: ${T(minC)}. The habitat figure, ${quantity}, is ${T1(floor)}; the archetype table's conventional minimum for a ${guess!.arch.lab.toLowerCase()} (grouped by ${guess!.why}) is ${T(minC)}, which is higher, and the floor rule takes the higher.`, short: `Cold floor ${T(minC)} (archetype minimum for a ${guess!.arch.lab.toLowerCase()}, above the ${T1(floor)} habitat night).`, hab: true };
+    return { floor: minC, habitat: floor, raised: true, group: guess!.arch.lab.toLowerCase(), s: `Cold floor: ${T(minC)}. The habitat figure, ${quantity}, is ${T1(floor)}; the archetype table's conventional minimum for a ${guess!.arch.lab.toLowerCase()} (grouped by ${guess!.why}) is ${T(minC)}, which is higher, and the floor rule takes the higher.`, short: `Cold floor ${T(minC)} (archetype minimum for a ${guess!.arch.lab.toLowerCase()}, above the ${T1(floor)} habitat night).`, hab: true };
   }
-  return { floor, s: `Cold floor: ${T1(floor)}, which is ${quantity}${minC != null ? `; the archetype table's minimum for a ${guess!.arch.lab.toLowerCase()}, ${T(minC)}, is lower and does not raise it` : ''}.`, short: `Cold floor ${T1(floor)} (${quantityShort}).`, hab: true };
+  return { floor, habitat: floor, raised: false, group: minC != null ? guess!.arch.lab.toLowerCase() : null, s: `Cold floor: ${T1(floor)}, which is ${quantity}${minC != null ? `; the archetype table's minimum for a ${guess!.arch.lab.toLowerCase()}, ${T(minC)}, is lower and does not raise it` : ''}.`, short: `Cold floor ${T1(floor)} (${quantityShort}).`, hab: true };
 }
 
-export function cultivationSheet(input: SheetInput): { rows: Row[]; arch: ArchGuess | null; year: Year | null } {
+export function cultivationSheet(input: SheetInput): { rows: Row[]; arch: ArchGuess | null; year: Year | null; floor: ColdFloor | null } {
   U = input.units ?? METRIC;
   const rows: Row[] = [];
   const add = (card: string, k: string, s: string, why: string, hab = false, short?: string) => rows.push({ card, k, s, why, hab, short });
   const guess = archFor(input.scientific, input.family);
+  let floorOut: ColdFloor | null = null;
   const m = input.months && input.months.length === 12 ? input.months : null;
   const p10 = input.p10 && input.p10.length === 12 ? input.p10 : null;
   const p90 = input.p90 && input.p90.length === 12 ? input.p90 : null;
@@ -300,17 +303,19 @@ export function cultivationSheet(input: SheetInput): { rows: Row[]; arch: ArchGu
     }
     const spread10 = p10 && p90 ? ` (across the envelope cells ${T1(p10[coldI].tmin)} to ${T1(p90[coldI].tmin)})` : '';
     bits.push(`Monthly means: coldest night ${T1(m[coldI].tmin)} in ${mon(coldI + 1)}${spread10}, warmest day ${T1(m[hotI].tmax)} in ${mon(hotI + 1)} (${ENV}).`);
-    const floor = coldFloor(m, ex, guess);
+    floorOut = coldFloor(m, ex, guess);
+    const floor = floorOut;
     if (floor) bits.push(floor.s);
     add('Warmth and air', 'Temperature', bits.join(' '), `${ex ? `NASA POWER daily minima and maxima 1981–2024 at the typical cell${ex.lapseAppliedM ? ', lapse-corrected to its elevation' : ', without lapse correction'}; ` : ''}CHELSA monthly means, ${ENV}. The cold floor is the figure named in its sentence${guess?.arch.minC != null ? `, and the archetype table's group minimum where that is higher` : ''}. Not a measured survival limit for any plant in a pot.`, true, floor?.short);
     const rhs = m.map((x) => x.rh).filter((x): x is number => x != null);
     if (rhs.length) add('Warmth and air', 'Humidity', `Relative humidity at the habitat: ${Math.round(Math.min(...rhs)) === Math.round(Math.max(...rhs)) ? `${Math.round(Math.min(...rhs))}% all year` : `${Math.round(Math.min(...rhs))} to ${Math.round(Math.max(...rhs))}% across the year`} (monthly means, ${ENV}). A figure about the air, saying nothing about how the plant takes water.`, `CHELSA relative humidity, ${ENV.replace(', CHELSA', '')}.`, true);
   } else {
-    const floor = coldFloor(null, ex, guess);
+    floorOut = coldFloor(null, ex, guess);
+    const floor = floorOut;
     if (floor) add('Warmth and air', 'Temperature', floor.s, `The archetype table's conventional minimum for the group; no habitat figure is on file for this species.`, false, floor.short);
   }
 
-  return { rows, arch: guess, year };
+  return { rows, arch: guess, year, floor: floorOut };
 }
 
 export const CARD_ORDER = ['Its year', 'Rain', 'Light', 'Warmth and air'];

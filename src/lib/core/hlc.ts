@@ -60,11 +60,11 @@ export class Clock {
     else this.last = this.bump(this.last.wall, this.last.count);
     return hlcEncode(this.last);
   }
-  /** Fold in a timestamp seen from another device so our next tick sorts after it. A peer far ahead of real time is not followed: we keep our own wall and count past it. */
+  /** Fold in a timestamp seen from another device so our next tick sorts after it. A peer far ahead of real time is not followed: we keep our own wall and count past it. This device's own stamps are always followed, however far ahead: they were made here while the clock was wrong, and an edit made after the clock is put right must still sort after them, or it loses to the older value. */
   observe(remote: string): void {
     const r = hlcDecode(remote);
     const phys = this.now();
-    if (r.wall > phys + MAX_AHEAD_MS) return;
+    if (r.device !== this.device && r.wall > phys + MAX_AHEAD_MS) return;
     const wall = Math.max(phys, this.last.wall, r.wall);
     if (wall === this.last.wall && wall === r.wall) this.last = this.bump(wall, Math.max(this.last.count, r.count));
     else if (wall === r.wall) this.last = this.bump(wall, r.count);

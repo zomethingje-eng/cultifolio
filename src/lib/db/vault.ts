@@ -3,7 +3,7 @@
  * here knows about the network; sync (a later milestone) appends remote
  * changes through the same door local edits use.
  */
-import { openDB, deleteDB, type IDBPDatabase, type DBSchema } from 'idb';
+import { openDB, deleteDB, type IDBPDatabase, type DBSchema, type IDBPTransaction } from 'idb';
 import type { Change } from '$core/log';
 
 /** The pixels for one photo record; metadata is in the change log. */
@@ -118,7 +118,7 @@ export function openVault(): Promise<IDBPDatabase<VaultDB>> {
       }
     }).then(async (db) => {
       // A replace that was cut off between the wipe and the copy: finish it before anything reads the vault.
-      if (await db.get('meta', STAGING_PENDING)) await writing(() => copyStagingIn(db));
+      if (await db.get('meta', STAGING_PENDING)) await writing(() => replaceFromStaging(db));
       return db;
     });
   return dbp;
@@ -188,11 +188,23 @@ export async function openStaging(): Promise<StagedReplacement> {
       await writing(async () => {
         const live = await openVault();
         await live.put('meta', true, STAGING_PENDING);
-        await Promise.all([live.clear('changes'), live.clear('photos'), live.clear('outbox')]);
-        await copyStagingIn(live);
+        await replaceFromStaging(live);
       });
     }
   };
+}
+
+/**
+ * The flag means "the staged file is the collection now, whatever the live
+ * stores hold": every run of this, the first or a recovery after the browser
+ * stopped part-way, clears the live log before copying, so a stop between the
+ * flag and the clear cannot leave the old collection merged under the new.
+ * The ledger of issued numbers in `meta` is kept on purpose: a number given
+ * after the backup was taken stays given.
+ */
+async function replaceFromStaging(live: IDBPDatabase<VaultDB>): Promise<void> {
+  await Promise.all([live.clear('changes'), live.clear('photos'), live.clear('outbox')]);
+  await copyStagingIn(live);
 }
 
 /** Copy every change (into the log and the outbox: the server has not seen a restored log) and every photograph from the staging database into the live one, clear the flag, delete the staging database. Re-runnable. */
@@ -222,15 +234,96 @@ export async function allChanges(): Promise<Change[]> {
   return db.getAll('changes');
 }
 
+/* ---- numbers, issued once ----
+ * A plant's number is never reused, and two tabs of the same browser are two
+ * writers over one vault: each holds its own picture of the collection, so
+ * each would mint the same "next" number for a different plant. The ledger
+ * of every number ever written on this device lives in `meta` and is read and
+ * extended inside the same read-write transaction that stores the change, and
+ * IndexedDB runs such transactions one after another; so the second tab reads
+ * the first tab's number before choosing its own. Numbers arriving any other
+ * way (an import, a sync pull, a repair) go on the ledger by the same route.
+ */
+const ISSUED = (kind: NumberKind) => `issued:${kind}`;
+export type NumberKind = 'accession' | 'sowing';
+const numberField = (c: Change): NumberKind | null => (c.kind === 'accession' && c.field === 'acc' ? 'accession' : c.kind === 'sowing' && c.field === 'no' ? 'sowing' : null);
+type Tx = IDBPTransaction<VaultDB, ('changes' | 'outbox' | 'meta')[], 'readwrite'>;
+
+async function issuedIn(tx: Tx, kind: NumberKind): Promise<Set<string>> {
+  const v = (await tx.objectStore('meta').get(ISSUED(kind))) as unknown;
+  return new Set(Array.isArray(v) ? (v as string[]) : []);
+}
+/** Store changes and outbox entries, and note every number they carry, inside `tx`. */
+async function storeIn(tx: Tx, changes: Change[], fromServer: boolean, extra: Partial<Record<NumberKind, Set<string>>> = {}): Promise<void> {
+  const ch = tx.objectStore('changes'), ob = tx.objectStore('outbox'), meta = tx.objectStore('meta');
+  const carried: Partial<Record<NumberKind, Set<string>>> = { ...extra };
+  for (const c of changes) {
+    const k = numberField(c);
+    if (k && typeof c.value === 'string') (carried[k] ??= new Set()).add(c.value);
+  }
+  const puts: Promise<unknown>[] = [...changes.map((c) => ch.put(c)), ...(fromServer ? [] : changes.map((c) => ob.put({ t: c.t })))];
+  for (const k of Object.keys(carried) as NumberKind[]) {
+    const set = await issuedIn(tx, k);
+    for (const n of carried[k]!) set.add(n);
+    puts.push(meta.put([...set], ISSUED(k)));
+  }
+  await Promise.all([...puts, tx.done]);
+}
+
 /** Append changes; unless they came from the server (`fromServer`), they also go in the outbox to be pushed. One transaction, so the two stores cannot disagree. */
 export async function appendChanges(changes: Change[], fromServer = false): Promise<void> {
   if (!changes.length) return;
   await writing(async () => {
     const db = await openVault();
-    const tx = db.transaction(['changes', 'outbox'], 'readwrite');
-    const ch = tx.objectStore('changes'), ob = tx.objectStore('outbox');
-    await Promise.all([...changes.map((c) => ch.put(c)), ...(fromServer ? [] : changes.map((c) => ob.put({ t: c.t }))), tx.done]);
+    await storeIn(db.transaction(['changes', 'outbox', 'meta'], 'readwrite'), changes, fromServer);
   });
+  announce();
+}
+
+/**
+ * Append changes that mint numbers. `build` is called inside the transaction
+ * with every number this device has ever written (the ledger, plus whatever
+ * the caller knows from memory), chooses numbers outside it, and returns the
+ * changes; the numbers it chose are on the ledger before the transaction ends.
+ * A `build` that throws (a number the grower typed is already taken) stores
+ * nothing.
+ */
+export async function appendChangesClaiming<T>(kind: NumberKind, known: Set<string>, build: (issued: Set<string>) => { changes: Change[]; result: T }): Promise<T> {
+  const out = await writing(async () => {
+    const db = await openVault();
+    const tx = db.transaction(['changes', 'outbox', 'meta'], 'readwrite');
+    let built: { changes: Change[]; result: T };
+    try {
+      const issued = await issuedIn(tx, kind);
+      for (const n of known) issued.add(n);
+      built = build(issued);
+    } catch (e) {
+      tx.abort();
+      throw e;
+    }
+    await storeIn(tx, built.changes, false);
+    return built.result;
+  });
+  announce();
+  return out;
+}
+
+/* ---- other tabs ----
+ * A write here is told to the other tabs of this browser, which fold in what
+ * they have not seen; so a plant added in one tab is on the list in the next,
+ * and its number is never offered there.
+ */
+const CHANNEL = 'cultifolio-vault';
+const chan = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(CHANNEL) : null;
+function announce(): void {
+  try { chan?.postMessage('written'); } catch { /* a closed channel is nothing to report */ }
+}
+/** Called with nothing when another tab wrote to the vault. */
+export function onOtherTabWrite(fn: () => void): () => void {
+  if (!chan) return () => {};
+  const h = () => fn();
+  chan.addEventListener('message', h);
+  return () => chan.removeEventListener('message', h);
 }
 
 /** HLCs waiting to be pushed, in order. */

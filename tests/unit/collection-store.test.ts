@@ -24,7 +24,9 @@ const newMem = (device: string): Mem => ({
 });
 /** Which device's vault the mock is talking to; switched before each call when two collections are in play. */
 let mem: Mem = newMem('testdevice');
-vi.mock('$lib/db/vault', () => ({
+vi.mock('$lib/db/vault', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const m: any = {
   allChanges: async () => [...mem.changes.values()],
   appendChanges: async (cs: Change[]) => {
     if (mem.fail) throw new Error(mem.fail);
@@ -34,7 +36,12 @@ vi.mock('$lib/db/vault', () => ({
   setMeta: async (k: string, v: unknown) => void mem.meta.set(k, v),
   deviceId: async () => mem.device,
   requestPersistence: async () => true
-}));
+};
+  // The claiming write of the real vault, over the same in-memory log: `build` sees the numbers the caller knows.
+  m.appendChangesClaiming = async (_k: string, known: Set<string>, build: (s: Set<string>) => { changes: Change[]; result: unknown }) => { const b = build(new Set(known)); await m.appendChanges(b.changes); return b.result; };
+  m.onOtherTabWrite = () => () => {};
+  return m;
+});
 
 const remote = (wall: number, count: number, device: string, kind: Change['kind'], id: string, field: string, value: unknown): Change => ({
   t: hlcEncode({ wall, count, device }),

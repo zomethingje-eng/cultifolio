@@ -19,7 +19,9 @@ declare const self: ServiceWorkerGlobalScope;
 const CACHE = `cultifolio-${version}`;
 /** Collection pages render on the device from the vault; their HTML is a shell that is the same for everyone. */
 const SHELLS = ['/plants', '/plants/new', '/benches', '/sowings', '/sowings/new', '/labels', '/backup', '/sync', '/frost', '/settings', '/offline'];
-const PRECACHE = [...build, ...files.filter((f) => !f.startsWith('/s/')), ...SHELLS, '/']; // the front page too: it is the start URL
+const BUILD = new Set(build);
+const FILES = new Set(files);
+const PRECACHE = [...build, ...files, ...SHELLS, '/']; // the front page too: it is the start URL; the corpus is kept out of `files` by svelte.config.js
 
 self.addEventListener('install', (e) => {
   // Each file on its own: one shell that answers with a redirect or a 500 must not fail the whole install and leave the
@@ -31,10 +33,13 @@ self.addEventListener('install', (e) => {
       if (failed.length) console.warn(`service worker: ${failed.length} of ${PRECACHE.length} files not cached at install`, failed.slice(0, 5));
     })
   );
-  // No skipWaiting: the new worker waits until every page of the old build is gone. Activating under an open page
-  // would delete the old build's cache while that page still lazily imports the old build's chunks, and a chunk the
-  // network no longer has kills client-side navigation until a reload. SvelteKit's version poll reloads open pages
-  // on their next navigation after a deploy, and this worker takes over then.
+  // No skipWaiting by itself: the new worker waits until every page of the old build is gone. An open page that learns
+  // of the deploy from the version poll sends 'skip' (below) and reloads under this worker; the old build's cache is
+  // kept for one generation so a tab that has not reloaded yet still finds the chunks it lazily imports.
+});
+
+self.addEventListener('message', (e) => {
+  if (e.data === 'skip') self.skipWaiting();
 });
 
 self.addEventListener('activate', (e) => {
@@ -43,7 +48,12 @@ self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then((keys) => {
+        // This build's cache and the newest one before it stay; everything older goes.
+        const ours = keys.filter((k) => k.startsWith('cultifolio-') && k !== CACHE).sort();
+        const keep = new Set([CACHE, ...ours.slice(-1)]);
+        return Promise.all(keys.filter((k) => !keep.has(k)).map((k) => caches.delete(k)));
+      })
       .then(() => self.clients.claim())
   );
 });
@@ -57,27 +67,34 @@ self.addEventListener('fetch', (e) => {
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
   if (url.origin !== location.origin) return;
-  // Sync, photos and the index are live data: never from the cache.
+  // Sync, photos and the index are live data: never from the cache. (The index is 3 MB; a plant's page asks for its
+  // one dossier by key instead, which is cached below, so the greenhouse does not need the index at all.)
   if (url.pathname.startsWith('/api/sync') || url.pathname.startsWith('/api/index')) return;
 
   e.respondWith(
     (async () => {
       const cache = await caches.open(CACHE);
       // Build assets and the app shell: cache first, they are immutable per build.
-      if (build.includes(url.pathname) || files.includes(url.pathname)) {
+      if (BUILD.has(url.pathname) || FILES.has(url.pathname)) {
         return (await cache.match(request)) ?? fetch(request);
       }
       if (request.mode === 'navigate' && isShell(url.pathname) && url.pathname !== '/settings') {
-        // A plant's own page is the /plants shell plus the vault: serve the shell of the section when the exact page is not cached.
+        // A plant's own page is the /plants shell plus the vault, and the shell is the same HTML for every plant: it is
+        // served from the cache without asking the network, so a label's link opens in a greenhouse with one bar of signal
+        // instead of waiting on a fetch that neither succeeds nor fails.
         const exact = await cache.match(request);
         if (exact) return exact;
+        const section = '/' + url.pathname.split('/')[1];
+        if (section !== url.pathname) {
+          const shell = await cache.match(section);
+          if (shell) return shell;
+        }
         try {
           const r = await fetch(request);
           if (cacheableHtml(r)) cache.put(request, r.clone());
           return r;
         } catch {
           // The section's shell renders the same page from the vault; asset URLs are absolute (paths.relative is off), so it works from a nested path.
-          const section = '/' + url.pathname.split('/')[1];
           return (await cache.match(section)) ?? (await cache.match('/offline')) ?? Response.error();
         }
       }
@@ -89,7 +106,8 @@ self.addEventListener('fetch', (e) => {
           if (request.mode === 'navigate' ? cacheableHtml(r) : r.ok && r.type === 'basic') cache.put(request, r.clone());
           return r;
         } catch {
-          return (await cache.match(request)) ?? (request.mode === 'navigate' ? ((await cache.match('/offline')) ?? Response.error()) : Response.error());
+          // These pages vary on the units cookie; offline, the copy cached under the other units is the page (it re-reads the units on hydration), so Vary is ignored.
+          return (await cache.match(request, { ignoreVary: true })) ?? (request.mode === 'navigate' ? ((await cache.match('/offline')) ?? Response.error()) : Response.error());
         }
       }
       return fetch(request);

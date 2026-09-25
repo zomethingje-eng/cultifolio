@@ -137,7 +137,7 @@
   </div>
 
   <div class="two">
-    <div class="field"><span>Location</span><LocationPicker bind:value={locationId} id="f-loc" label="Location" /></div>
+    <div class="field"><span>Place</span><LocationPicker bind:value={locationId} id="f-loc" label="Place" /></div>
     <label class="field"><span>How many</span><input id="f-count" type="number" min="1" max="200" bind:value={count} /><span class="faint small">Each gets its own number.</span></label>
   </div>
 

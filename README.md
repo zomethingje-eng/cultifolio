@@ -43,7 +43,7 @@ src/lib/dossier/    building a species dossier from its sources; the bulk path; 
 src/lib/climate/    the packed climate grid and NASA POWER
 src/lib/db/         the local vault (IndexedDB) and the reactive collection
 src/lib/sync/       vault keys, sealing, the sync engine
-src/lib/server/     what runs in the Worker: dossier lookup, zero-knowledge sync storage
+src/lib/server/     what runs in the Worker: dossier lookup, end-to-end encrypted sync storage (the server sees sizes and activity, never content)
 src/routes/         the pages
 scripts/            corpus tooling (MIT)
 tests/              unit (vitest) and e2e (Playwright)

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { units } from '$lib/ui/units.svelte';
   import { getForecast } from '$lib/weather/client';
-  import { localDate } from '$core/dates';
+  import { localDate, daysBetween } from '$core/dates';
   import { temp, tempN, tempUnit, cToF, fToC } from '$core/units';
   import { plural } from '$core/words';
   import { page } from '$app/state';
@@ -86,7 +86,7 @@
     auditing = false;
     setTimeout(() => (flash = ''), 4000);
   }
-  const daysSince = (d: string | null) => (d ? Math.floor((Date.now() - new Date(d).getTime()) / 86400000) : null);
+  const daysSince = (d: string | null) => (d ? daysBetween(d) : null);
 
   /* ---- frost watch for outdoor / unheated places with coordinates ---- */
   let forecast = $state<{ forecast: Forecast; alerts: Alert[]; risk: { level: string; text: string }; attribution: string[] } | null>(null);

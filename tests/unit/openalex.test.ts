@@ -10,7 +10,8 @@ describe('literature screening', () => {
           { title: 'Crashworthiness of an electric motorcycle chassis', publication_year: 2022, abstract_inverted_index: { A: [0], biomimetic: [1], study: [2] } },
           { title: 'Leaf structure of Albuca spiralis', publication_year: 2015 },
           { title: 'Bulb dormancy in a Namaqualand geophyte', publication_year: 2018, abstract_inverted_index: { We: [0], studied: [1], 'A.': [2], spiralis: [3], in: [4], the: [5], field: [6] } },
-          { title: 'Solar pump development', publication_year: 2020, abstract_inverted_index: { Albuca: [0] } } // genus alone is not the species
+          { title: 'Solar pump development', publication_year: 2020, abstract_inverted_index: { Albuca: [0] } }, // genus alone is not the species
+          { title: 'Occurrence Download', doi: 'https://doi.org/10.15468/dl.5xu4bv', publication_year: 2026, abstract_inverted_index: { Albuca: [0], spiralis: [1] } } // a GBIF download names it; it is a dataset, not a paper (round seven, 5)
         ]
       }
     });

@@ -5,14 +5,21 @@ import type { Accession, Taxon } from '$lib/db/types';
 
 // The collection store against an in-memory vault: what a page sees, without IndexedDB.
 const mem: { changes: Change[]; meta: Map<string, unknown> } = { changes: [], meta: new Map() };
-vi.mock('$lib/db/vault', () => ({
+vi.mock('$lib/db/vault', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const m: any = {
   allChanges: async () => [...mem.changes],
   appendChanges: async (c: Change[]) => void mem.changes.push(...c),
   getMeta: async (k: string) => mem.meta.get(k),
   setMeta: async (k: string, v: unknown) => void mem.meta.set(k, v),
   deviceId: async () => 'testdevice',
   requestPersistence: async () => true
-}));
+};
+  // The claiming write of the real vault, over the same in-memory log: `build` sees the numbers the caller knows.
+  m.appendChangesClaiming = async (_k: string, known: Set<string>, build: (s: Set<string>) => { changes: Change[]; result: unknown }) => { const b = build(new Set(known)); await m.appendChanges(b.changes); return b.result; };
+  m.onOtherTabWrite = () => () => {};
+  return m;
+});
 
 const { collection } = await import('$lib/db/collection.svelte');
 

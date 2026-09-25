@@ -2,7 +2,7 @@
   import { units } from '$lib/ui/units.svelte';
   import { toast } from '$lib/ui/toast.svelte';
   import { site } from '$lib/ui/site.svelte';
-  import { localDate } from '$core/dates';
+  import { localDate, daysBetween } from '$core/dates';
   import { temp, tempN, rain, deltaT } from '$core/units';
   import { plural } from '$core/words';
   import { page } from '$app/state';
@@ -13,7 +13,8 @@
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
   import LocationPicker from '$lib/ui/LocationPicker.svelte';
   import type { Provenance } from '$lib/db/types';
-  import { slugify } from '$core/names';
+  import { slugify, speciesOf } from '$core/names';
+  import SpeciesPicker from '$lib/ui/SpeciesPicker.svelte';
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import { bySlug } from '$lib/ui/index.svelte';
   import type { IndexEntry } from '$lib/server/dossiers';
@@ -55,20 +56,37 @@
   /** A hybrid's parents, each with a species page when the corpus has one. */
   let parentLinks = $state<Array<{ name: string; slug: string | null }>>([]);
   $effect(() => {
-    if (a) {
-      setCrumb([{ label: 'My plants', href: '/plants' }, { label: `${accNo(a)} · ${a.taxonName}${a.cultivar ? ` ‘${a.cultivar}’` : ''}` }]);
-      bySlug(slugify(a.taxonName)).then(async (e) => {
-        if (e === null) { ref = 'unreachable'; return; }
-        idx = e;
-        if (!e) { ref = 'none'; return; }
-        if (!dossier) dossier = await fetch(`/api/dossier/${e.key}`).then((r) => (r.ok ? (r.json() as Promise<Dossier>) : null)).catch(() => null);
-        ref = dossier ? 'ok' : 'unreachable';
-      });
-      const ps = parents(a.parentage);
-      Promise.all(ps.map(async (name) => ({ name, slug: (await bySlug(slugify(name))) ? slugify(name) : null }))).then((r) => (parentLinks = r));
-    }
+    if (a) setCrumb([{ label: 'My plants', href: '/plants' }, { label: `${accNo(a)} · ${a.taxonName}${a.cultivar ? ` ‘${a.cultivar}’` : ''}` }]);
     return () => setCrumb([]);
   });
+  /** The species behind the plant, fetched again whenever the name or key changes (an edit), and a late answer for a name no longer on the record is dropped. */
+  let asked = 0;
+  const fetchDossier = (key: number | string): Promise<Dossier | 'none' | null> => fetch(`/api/dossier/${key}`).then((r): Promise<Dossier | 'none' | null> => (r.ok ? (r.json() as Promise<Dossier>) : Promise.resolve(r.status === 404 ? 'none' : null))).catch(() => null);
+  $effect(() => {
+    if (!a) return;
+    // A name below species (a subspecies, a variety) belongs to its species' page; the record keeps the full name.
+    const slug = slugify(speciesOf(a.taxonName)), key = a.taxonKey, parentage = a.parentage;
+    const seq = ++asked;
+    idx = undefined; dossier = null; ref = 'loading';
+    (async () => {
+      // The record carries its species' key, so one small file is asked for, not the whole index: the file the offline worker keeps.
+      let d: Dossier | null | 'none' = key && speciesOf(a.taxonName) === a.taxonName ? await fetchDossier(key) : 'none';
+      if (seq !== asked) return;
+      if (d === 'none' || d === null) {
+        const e = await bySlug(slug);
+        if (seq !== asked) return;
+        idx = e ?? undefined;
+        if (e) d = await fetchDossier(e.key);
+        else if (e === null && d === 'none') d = null; // the key led nowhere and the index could not be reached: unknown, not absent
+        if (seq !== asked) return;
+      }
+      dossier = d === 'none' ? null : d;
+      ref = d === 'none' ? 'none' : d ? 'ok' : 'unreachable';
+    })();
+    Promise.all(parents(parentage).map(async (name) => ({ name, slug: (await bySlug(slugify(name))) ? slugify(name) : null }))).then((r) => { if (seq === asked) parentLinks = r; });
+  });
+  /** A photograph of the species for the plant without one of its own: the index's thumb when the index was read, else the dossier's own first wild photograph. */
+  const speciesThumb = $derived(idx?.thumb ?? (dossier?.photos.find((p) => !p.captive) ?? dossier?.photos[0])?.thumb);
   // Habitat versus here: the species' habitat figures, median with the 10th–90th span across the envelope cells, beside the bench's.
   const habitat = $derived.by(() => {
     if (!dossier || dossier.climate.status !== 'ok') return null;
@@ -135,8 +153,7 @@
     if (moveTo) await collection.addEvent({ acc: id, d: localDate(), t: 'move', note: `to ${collection.locationName(moveTo)}` });
     moving = false;
   }
-  const dayMs = 86_400_000;
-  const daysAgo = (d: string | null | undefined) => (d ? Math.floor((Date.now() - Date.parse(d)) / dayMs) : null);
+  const daysAgo = (d: string | null | undefined) => (d ? daysBetween(d) : null);
   const lastOf = (t: string) => events.find((e) => e.t === t)?.d ?? null;
   const sinceWater = $derived(daysAgo(lastOf('water')));
   const seen = $derived(daysAgo(collection.lastSeen(id)));
@@ -184,16 +201,19 @@
 
   /* ---- edit the record ---- */
   let editing = $state(false);
+  /** The species' key while editing: kept when the name is untouched, cleared by typing, set again by picking a suggestion. */
+  let edKey = $state<number | null>(null);
   let f = $state({ taxonName: '', cultivar: '', nameKind: 'species' as 'species' | 'cultivar' | 'hybrid', parentage: '', nameAsReceived: '', fieldNumber: '', provenance: 'unknown' as Provenance, acquired: '', sourceFrom: '', sourceForm: '', price: '', locationId: null as string | null });
   function startEdit() {
     if (!a) return;
+    edKey = a.taxonKey ?? null;
     f = { taxonName: a.taxonName, cultivar: a.cultivar ?? '', nameKind: kindOf(a), parentage: a.parentage ?? '', nameAsReceived: a.nameAsReceived ?? '', fieldNumber: a.fieldNumber ?? '', provenance: a.provenance ?? 'unknown', acquired: a.acquired ?? '', sourceFrom: a.sourceFrom ?? '', sourceForm: a.sourceForm ?? '', price: a.price ?? '', locationId: a.locationId ?? null };
     editing = true;
   }
   async function saveEdit() {
     if (!a) return;
     const moved = (f.locationId ?? null) !== (a.locationId ?? null);
-    await collection.put('accession', id, { taxonName: f.taxonName.trim() || a.taxonName, cultivar: f.cultivar.trim() || null, nameKind: f.nameKind, parentage: f.nameKind === 'hybrid' ? f.parentage.trim() || null : null, nameAsReceived: f.nameAsReceived.trim() || null, fieldNumber: f.fieldNumber.trim() || null, provenance: f.provenance, acquired: f.acquired || null, sourceFrom: f.sourceFrom.trim() || null, sourceForm: f.sourceForm.trim() || null, price: f.price.trim() || null, locationId: f.locationId ?? null, location: f.locationId ? null : a.location ?? null });
+    await collection.put('accession', id, { taxonName: f.taxonName.trim() || a.taxonName, taxonKey: f.taxonName.trim() ? edKey : (a.taxonKey ?? null), cultivar: f.cultivar.trim() || null, nameKind: f.nameKind, parentage: f.nameKind === 'hybrid' ? f.parentage.trim() || null : null, nameAsReceived: f.nameAsReceived.trim() || null, fieldNumber: f.fieldNumber.trim() || null, provenance: f.provenance, acquired: f.acquired || null, sourceFrom: f.sourceFrom.trim() || null, sourceForm: f.sourceForm.trim() || null, price: f.price.trim() || null, locationId: f.locationId ?? null, location: f.locationId ? null : a.location ?? null });
     if (moved && f.locationId) await collection.addEvent({ acc: id, d: localDate(), t: 'move', note: `to ${collection.locationName(f.locationId)}` });
     // The log's "Acquired" line is the same fact as the card's date and source: it follows an edit rather than keeping the old one.
     const acq = events.find((e) => e.t === 'acquire');
@@ -237,7 +257,8 @@
   <div class="notice err" role="alert" id="write-error">This change was not saved: {collection.lastWriteError}. Free space or <a href="/backup">back up now</a>.</div>
 {/if}
 {#if !collection.ready}
-  <p class="muted">Opening your collection…</p>
+  <!-- The page's shape before the vault opens: the same head, hero and card heights, so nothing jumps when the record arrives. -->
+  <div class="skel" aria-busy="true"><h1 class="q" style="margin-top: 24px">{param}</h1><p class="muted">Opening your collection…</p><div class="hero skelbox"></div><div class="idcard skelcard"></div></div>
 {:else if !a}
   <h1 class="q" style="margin-top: 24px">{param}</h1>
   <p class="muted">{collection.isNumberTaken(param) ? `${param} was given to a plant since removed; the number stays reserved and its record stays in the change log and in any backup taken before.` : 'No plant with this number on this device.'}</p>
@@ -246,9 +267,9 @@
     {#if cover}
       <button class="heroimg" type="button" onclick={() => openPhoto(cover)} aria-label="Open photograph">{#key cover.id}<PhotoImg id={cover.id} size="full" alt="{a.taxonName}, {cover.d}" />{/key}</button>
       <span class="cred">{cover.caption ? cover.caption + ' · ' : ''}{cover.d}{photos.length > 1 ? ` · ${plural(photos.length, 'photo')}` : ''}</span>
-    {:else if idx?.thumb && !thumbFailed}
-      <img src={idx.thumb} alt={a.taxonName} style="max-height: 260px" onerror={() => (thumbFailed = true)} /><button class="cred" type="button" onclick={() => { adding = true; setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0); }}>species photograph · add your own</button>
-    {:else if idx?.thumb}
+    {:else if speciesThumb && !thumbFailed}
+      <img src={speciesThumb} alt={a.taxonName} class="spthumb" onerror={() => (thumbFailed = true)} /><button class="cred" type="button" onclick={() => { adding = true; setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0); }}>species photograph · add your own</button>
+    {:else if speciesThumb}
       <div class="ph"><span class="phcap empty">No photograph yet.</span><PhotoAdd acc={id} id="hero-photo" compact /></div>
     {:else}
       <div class="ph"><PhotoAdd acc={id} id="hero-photo" compact /></div>
@@ -274,7 +295,7 @@
       </div>
     </div>
     <div class="acts">
-      {#if kind !== 'hybrid'}<a class="btn" href="/species/{slugify(a.taxonName)}">Species page</a>{/if}
+      {#if kind !== 'hybrid' && ref === 'ok'}<a class="btn" href="/species/{slugify(speciesOf(a.taxonName))}">Species page</a>{/if}
       <button class="btn" onclick={startEdit}>Edit</button>
       <a class="btn" href="/labels?acc={a.id}">Label</a>
       {#if a.status === 'growing'}<a class="btn" href="/sowings/new?parent={a.id}">Propagate</a>{/if}
@@ -283,7 +304,7 @@
 
   {#if editing}
     <form class="cult editform" onsubmit={(e) => { e.preventDefault(); saveEdit(); }}>
-      <label><span>Species</span><input id="ed-name" type="text" bind:value={f.taxonName} /></label>
+      <label><span>Species</span><SpeciesPicker bind:value={f.taxonName} bind:taxonKey={edKey} id="ed-name" /></label>
       <label><span>Cultivar</span><input id="ed-cv" type="text" bind:value={f.cultivar} /></label>
       <label><span>What it is</span><select id="ed-kind" bind:value={f.nameKind}><option value="species">A species</option><option value="cultivar">A cultivar of that species</option><option value="hybrid">A hybrid (filed under the genus)</option></select></label>
       {#if f.nameKind === 'hybrid'}<label><span>Parentage</span><input id="ed-parentage" type="text" bind:value={f.parentage} placeholder="Seed parent × pollen parent" /></label>{/if}
@@ -294,7 +315,7 @@
       <label><span>From</span><input id="ed-from" type="text" bind:value={f.sourceFrom} /></label>
       <label><span>Form</span><input id="ed-form" type="text" bind:value={f.sourceForm} placeholder="plant, seedling, seed, cutting" /></label>
       <label><span>Price</span><input id="ed-price" type="text" bind:value={f.price} /></label>
-      <div class="wide"><span class="lbl">Location</span><LocationPicker bind:value={f.locationId} id="ed-loc" label="Location" /></div>
+      <div class="wide"><span class="lbl">Place</span><LocationPicker bind:value={f.locationId} id="ed-loc" label="Place" /></div>
       <div class="actions wide"><button class="btn" type="button" onclick={() => (editing = false)}>Cancel</button><button class="btn pri" type="submit">Save</button></div>
     </form>
   {/if}
@@ -326,7 +347,7 @@
 
   {#if logOpen}
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-    <form class="cult evform" onsubmit={(e) => { addEvent(e); closeLog(`${EVENT_LABEL[et]} recorded`); }} onkeydown={(e) => { if (e.key === 'Escape') { e.preventDefault(); closeLog(); } }}>
+    <form class="cult evform" onsubmit={async (e) => { e.preventDefault(); const label = EVENT_LABEL[et]; try { await addEvent(e); } catch { return; } closeLog(`${label} recorded`); }} onkeydown={(e) => { if (e.key === 'Escape') { e.preventDefault(); closeLog(); } }}>
       <div class="sum">Record: {EVENT_LABEL[et]} <span class="hint">goes on the timeline below</span></div>
       <div class="fields">
         <div class="row">
@@ -475,6 +496,11 @@
 
 <style>
   .hero { margin-top: 14px; }
+  /* A fixed height for the species photograph and its stand-ins: the box is the same size before the image, with it, and without it, so the page below does not move. */
+  .hero:not(.own) { min-height: 260px; }
+  .hero .spthumb { width: 100%; height: 260px; object-fit: cover; display: block; }
+  .skelbox { background: var(--sunk); border-radius: var(--r); min-height: 260px; }
+  .skelcard { min-height: 120px; margin-top: 14px; }
   .parentage { margin-top: 2px; }
   .parentage a { color: inherit; }
   .hero.own { background: #0d1211; }
@@ -482,7 +508,7 @@
   .heroimg { display: block; width: 100%; padding: 0; border: 0; background: transparent; cursor: zoom-in; }
   .heroimg :global(img) { width: 100%; max-height: 430px; object-fit: cover; display: block; }
   /* No photograph: the box keeps a hero's height but grows with its contents, the caption on its own line above the buttons. */
-  .hero .ph { height: auto; min-height: 150px; padding: 16px; flex-direction: column; gap: 12px; }
+  .hero .ph { height: auto; min-height: 260px; box-sizing: border-box; padding: 16px; flex-direction: column; gap: 12px; }
   .hero .ph .phcap { display: block; }
   button.cred { border: 0; cursor: pointer; font: inherit; font-size: 10.5px; }
   .addrow { padding: 14px 17px; margin-top: 12px; }

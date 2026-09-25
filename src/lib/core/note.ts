@@ -68,7 +68,11 @@ export function careLine(input: SheetInput, o: NoteOpts = {}): string {
   const m = input.months && input.months.length === 12 ? input.months : null;
   const fl = coldFloor(m, input.extremes ?? null, archFor(input.scientific, input.family), input.units ?? METRIC);
   // The habitat night at one decimal, as the page prints it, named as what it is; "floor" alone reads as a thermostat setting.
-  if (fl) bits.push(fl.hab ? `hab. night ${temp(fl.floor, input.units ?? METRIC, 1)}` : `group min ${temp(fl.floor, input.units ?? METRIC, 0)}`);
+  // The habitat night is printed as what it is, and a floor the archetype table raised is printed as the table's, never as a night the habitat had.
+  if (fl) {
+    if (fl.habitat != null) bits.push(`hab. night ${temp(fl.habitat, input.units ?? METRIC, 1)}`);
+    if (fl.habitat == null || fl.raised) bits.push(`group min ${temp(fl.floor, input.units ?? METRIC, 0)}`);
+  }
   const dlis = m ? m.map((x) => x.dli).filter((x): x is number => x != null) : [];
   if (dlis.length) bits.push(`sky ${Math.round(Math.min(...dlis))}–${Math.round(Math.max(...dlis))} DLI`);
   return bits.join(' · ');

@@ -4,6 +4,7 @@
   import { browser } from '$app/environment';
   import { page } from '$app/state';
   import { accNo } from '$lib/db/types';
+  import { photoAt } from '$dossier/photo-size';
   import PageHead from '$lib/ui/PageHead.svelte';
   import { collection } from '$lib/db/collection.svelte';
   import { onMount } from 'svelte';
@@ -25,9 +26,16 @@
   /** Enter in the search opens the first match: the way a search box is expected to behave. */
   function openTop(e: KeyboardEvent) {
     if (e.key !== 'Enter') return;
+    if (plantHits.length) { e.preventDefault(); goto(`/plants/${accNo(plantHits[0])}`); return; }
     const top = (yourView ? hits : found)[0];
     if (top) { e.preventDefault(); goto(`/species/${top.slug}`); }
   }
+  /** The one search box also finds the grower's own plants by number, field number or name: a returning grower types "2026-0007" here first. */
+  const plantHits = $derived.by(() => {
+    const needle = q.trim().toLowerCase();
+    if (!needle || !collection.ready || needle.length < 2) return [];
+    return collection.accessions.filter((a) => accNo(a).toLowerCase().includes(needle) || (a.fieldNumber ?? '').toLowerCase().includes(needle) || (a.nameAsReceived ?? '').toLowerCase().includes(needle) || (a.cultivar ?? '').toLowerCase().includes(needle)).slice(0, 5);
+  });
   let chip = $state<'all' | 'owned' | 'climate' | 'noclimate'>('all');
   let welcomeHidden = $state(true);
   // A returning grower's device remembers that the page will be their species, not the catalogue: until the collection is
@@ -164,6 +172,14 @@
   <meta name="description" content="A species reference that shows its sources, and a collection record that stays on your device." />
 </svelte:head>
 
+{#snippet plantsFound()}
+  {#if plantHits.length}
+    <div class="plantsfound" role="status">
+      {#each plantHits as a (a.id)}<a class="azrow accrow" href="/plants/{accNo(a)}"><span class="im"></span><span><span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}‘{a.cultivar}’{/if}</span><span class="fam">your plant{a.locationId ? ` · ${collection.locationName(a.locationId)}` : ''}</span></span><span class="fig">open →</span></a>{/each}
+    </div>
+  {/if}
+{/snippet}
+
 {#snippet featured(titled = false)}
   <section class="featured" aria-label="From the reference">
     {#if titled}<h2 class="q grouptitle">From the reference</h2>{/if}
@@ -215,6 +231,7 @@
   </div>
 
   {#if q.trim()}
+    {@render plantsFound()}
     {#if !full}
       <p class="seccount" style="margin-top: 14px">{fullFailed ? 'The catalogue could not be reached.' : 'Loading the whole catalogue…'}{#if fullFailed} <button class="linkish" type="button" onclick={retryFull}>Try again</button>{/if}</p>
     {:else if !hits.length}
@@ -279,6 +296,7 @@
   </div>
 
   {#if flat}
+    {#if q.trim()}{@render plantsFound()}{/if}
     {#if !full}
       <p class="seccount" style="margin-top: 14px">{loadingFull ? 'Loading the whole catalogue…' : 'The catalogue could not be reached.'}{#if fullFailed} <button class="linkish" type="button" onclick={retryFull}>Try again</button>{/if}</p>
     {:else if !found.length}
@@ -299,7 +317,7 @@
       {#each data.rows as r, i (r.id)}
         {#if r.letter && (i === 0 || data.rows[i - 1].letter !== r.letter)}<h2 class="letter" id="l-{r.letter}">{r.letter}</h2>{/if}
         <a class="grow" class:open={r.id === data.open} id="g-{r.id}" href={rowHref(r.id)} data-sveltekit-noscroll aria-expanded={r.id === data.open}>
-          {#if r.map}<div class="gmap">{@html r.map}</div>{:else if r.thumb}<div class="gthumb"><img src={r.thumb} alt="" loading="lazy" onerror={(e) => { const im = e.currentTarget as HTMLImageElement; im.remove(); }} /></div>{:else}<div class="gthumb mono" aria-hidden="true">{r.label[0] ?? ''}</div>{/if}
+          {#if r.map}<div class="gmap">{@html r.map}</div>{:else if r.thumb}<div class="gthumb"><img src={photoAt(r.thumb, 'small')} alt="" loading="lazy" onerror={(e) => { const im = e.currentTarget as HTMLImageElement; im.remove(); }} /></div>{:else}<div class="gthumb mono" aria-hidden="true">{r.label[0] ?? ''}</div>{/if}
           <div class="gtx">
             <span class="gname" class:sci={data.by === 'genus'}>{r.label}</span>
             {#if r.sub}<span class="d">{r.sub}</span>{/if}
@@ -319,6 +337,8 @@
 {/if}
 
 <style>
+  .plantsfound { margin: 12px 0 4px; }
+  .plantsfound .accrow .nm .accno { font-style: normal; vertical-align: 2px; }
   .welcome { margin: 12px 0 0; font-size: 13.5px; color: var(--ink2); line-height: 1.6; }
   /* the grower's main switch: yours or everything; it leads the tool row on both views */
   .viewseg { order: -1; }

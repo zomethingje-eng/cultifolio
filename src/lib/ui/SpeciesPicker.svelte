@@ -17,7 +17,7 @@
   import { prepare, search as searchIndex, type Prepared } from '$core/search';
   import SpeciesName from './SpeciesName.svelte';
   import type { NameKind } from '$core/names';
-  let { value = $bindable(''), taxonKey = $bindable<number | null>(null), cultivar = $bindable<string | null>(null), kind = $bindable<NameKind>('species'), parentage = $bindable<string | null>(null) } = $props();
+  let { value = $bindable(''), taxonKey = $bindable<number | null>(null), cultivar = $bindable<string | null>(null), kind = $bindable<NameKind>('species'), parentage = $bindable<string | null>(null), id = 'species-name' }: { value?: string; taxonKey?: number | null; cultivar?: string | null; kind?: NameKind; parentage?: string | null; id?: string } = $props();
   type Sugg = { key: number; name: string; family?: string; rank?: string; status?: string; local?: boolean; far?: boolean };
   let suggestions = $state<Sugg[]>([]);
   let open = $state(false);
@@ -71,7 +71,9 @@
       const remote: Sugg[] = rows
         .filter((x) => (genusOnly ? x.rank === 'GENUS' : /SPECIES|SUBSPECIES|VARIETY|FORM/.test(x.rank ?? '')))
         .map((x) => ({ key: x.key, name: x.canonicalName ?? x.scientificName, family: x.family, rank: x.rank, status: x.status }))
-        .filter((x) => !local.some((l) => l.key === x.key));
+        .filter((x) => !local.some((l) => l.key === x.key))
+        // The backbone lists a subspecies under several keys (accepted, synonyms of one another); one line per name and rank is enough.
+        .filter((x, i, arr) => arr.findIndex((y) => y.name === x.name && y.rank === x.rank) === i);
       suggestions = [...local, ...remote];
       if (hi >= suggestions.length) hi = -1;
     } catch {
@@ -167,7 +169,7 @@
 
 <div class="picker" bind:this={root}>
   <input
-    id="species-name"
+    {id}
     type="text"
     autocomplete="off"
     spellcheck="false"
@@ -190,7 +192,7 @@
   {:else if armed}<p class="hint" id="{listId}-hint" role="status">Pick a name from the list, or press Add to keep exactly what you typed.</p>{/if}
   <ul class="menu card" role="listbox" id={listId} aria-label="Suggested names" hidden={!menuOpen}>
     {#each suggestions as s, i (s.key)}
-      <li role="option" id={optionId(i)} aria-selected={i === hi} class:hi={i === hi} tabindex="-1" onmousedown={(e) => e.preventDefault()} onclick={() => pick(s)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(s); } }} onmousemove={() => (hi = i)}><SpeciesName name={s.name} /> <span class="faint">{s.family ?? ''}{s.rank === 'GENUS' ? ' · genus' : ''}{s.far ? ' · similar spelling, another genus' : s.local ? ' · has a dossier' : ''}</span></li>
+      <li role="option" id={optionId(i)} aria-selected={i === hi} class:hi={i === hi} tabindex="-1" onmousedown={(e) => e.preventDefault()} onclick={() => pick(s)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(s); } }} onmousemove={() => (hi = i)}><SpeciesName name={s.name} /> <span class="faint">{s.family ?? ''}{s.rank === 'GENUS' ? ' · genus' : s.rank === 'SUBSPECIES' ? ' · subspecies' : s.rank === 'VARIETY' ? ' · variety' : s.rank === 'FORM' ? ' · form' : ''}{s.far ? ' · similar spelling, another genus' : s.local ? ' · has a dossier' : ''}</span></li>
     {/each}
   </ul>
 </div>

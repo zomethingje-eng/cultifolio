@@ -50,6 +50,7 @@ export interface VaultKeys {
   id: string; // vault id on the server (26 chars)
   token: string; // bearer for the server (hex)
   enc: CryptoKey; // AES-GCM, non-extractable
+  name: CryptoKey; // HMAC-SHA-256 for naming and fingerprinting batches: the server holds no hash of any plaintext it could test a guess against
 }
 
 async function hkdf(root: CryptoKey, info: string, bits: number): Promise<ArrayBuffer> {
@@ -65,8 +66,12 @@ export async function deriveKeys(vaultKey: string): Promise<VaultKeys> {
   const auth = new Uint8Array(await hkdf(root, 'auth', 256));
   const token = hex(auth);
   const id = base32(new Uint8Array(await crypto.subtle.digest('SHA-256', enc.encode('id:' + token)))).slice(0, 26);
-  return { key, id, token, enc: encKey };
+  const nameKey = await crypto.subtle.deriveKey({ name: 'HKDF', hash: 'SHA-256', salt: enc.encode('cultifolio-vault-v1'), info: enc.encode('name') }, root, { name: 'HMAC', hash: 'SHA-256', length: 256 }, false, ['sign']);
+  return { key, id, token, enc: encKey, name: nameKey };
 }
+
+/** A keyed fingerprint of a batch's plaintext: equal for equal content on the same vault (so a re-send after a lost reply is recognised), meaningless to anyone without the key. */
+export const batchFingerprint = async (k: VaultKeys, b: Uint8Array) => hex(new Uint8Array(await crypto.subtle.sign('HMAC', k.name, b as BufferSource)));
 
 /** What the server keeps: it can check a presented token against this without being able to produce one. */
 export async function tokenHash(token: string): Promise<string> {

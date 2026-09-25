@@ -2,6 +2,7 @@ import { parseUnits } from '$core/units';
 import { json, error } from '@sveltejs/kit';
 import { metUrl, reduceMet, nwsAlertsUrl, reduceNws, isUS, frostRisk, type MetResponse } from '$lib/weather/forecast';
 import { USER_AGENT } from '$dossier/fetch';
+import { limited } from '$lib/server/sync';
 import type { RequestHandler } from './$types';
 
 /**
@@ -16,7 +17,10 @@ import type { RequestHandler } from './$types';
  */
 const notAnswered = () => json({ error: 'forecast source did not answer' }, { status: 502, headers: { 'cache-control': 'no-store' } });
 
-export const GET: RequestHandler = async ({ url, platform, fetch }) => {
+export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddress }) => {
+  // One address asks for a forecast a few times an hour; a stream of distinct coordinates would be a stream of MET calls under this site's User-Agent.
+  const stop = await limited(platform, getClientAddress, 'forecast');
+  if (stop) return stop;
   // Absent or blank is not zero: Number('') is 0, and 0,0 is a real place in the Gulf of Guinea that MET would answer for.
   const coord = (k: string) => {
     const v = url.searchParams.get(k)?.trim();
@@ -24,9 +28,13 @@ export const GET: RequestHandler = async ({ url, platform, fetch }) => {
   };
   const lat = coord('lat'),
     lon = coord('lon');
-  const alt = url.searchParams.get('alt');
+  const altRaw = url.searchParams.get('alt')?.trim();
   const units = parseUnits(url.searchParams.get('units')) ?? 'metric';
   if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) error(400, 'lat and lon required');
+  // An altitude is a number between the Dead Sea and the high Himalaya, rounded to 10 m so that 300 and 300.0001 are one cache line and one MET call; anything else is our caller's mistake (400), not the source failing to answer.
+  const altN = altRaw ? Number(altRaw) : null;
+  if (altN != null && (!Number.isFinite(altN) || altN < -500 || altN > 9000)) error(400, 'alt must be a height in metres between -500 and 9000');
+  const alt = altN == null ? null : String(Math.round(altN / 10) * 10);
   const la = Math.round(lat * 100) / 100,
     lo = Math.round(lon * 100) / 100;
   const cacheKey = new Request(`https://cultifolio.com/api/forecast?lat=${la}&lon=${lo}&alt=${alt ?? ''}`);
@@ -56,6 +64,8 @@ export const GET: RequestHandler = async ({ url, platform, fetch }) => {
   } catch {
     return notAnswered();
   }
+  // A 200 with no days in it (an empty body, a series without a temperature) is not a forecast that says "no frost"; it is the source not answering.
+  if (!forecast.days.length || !forecast.days.some((d) => Number.isFinite(d.tmin))) return notAnswered();
 
   let alerts: ReturnType<typeof reduceNws> = [];
   let alertsStatus: 'ok' | 'none' | 'refused' | 'n/a' = 'n/a';

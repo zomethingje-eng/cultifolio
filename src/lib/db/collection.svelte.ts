@@ -5,11 +5,11 @@
  * so the page never shows an edit the vault does not hold.
  */
 import { SvelteMap } from 'svelte/reactivity';
-import { localDate } from '$core/dates';
+import { localDate, madeOn } from '$core/dates';
 import { Clock, hlcDecode, hlcEncode, hlcCompare } from '$core/hlc';
 import { apply, diff, validateChanges, key as recKey, type Change, type Kind, type Record_, type State } from '$core/log';
 import { nextAccession, DEFAULT_SCHEME, type NumberingScheme } from '$core/accession';
-import { allChanges, appendChanges, deviceId, requestPersistence, getMeta, setMeta, putPhotoBlobs, getPhotoBlobs, deletePhotoBlobs, holdVault } from './vault';
+import { allChanges, appendChanges, appendChangesClaiming, onOtherTabWrite, deviceId, requestPersistence, getMeta, setMeta, putPhotoBlobs, getPhotoBlobs, deletePhotoBlobs, holdVault, type NumberKind } from './vault';
 import type { Accession, PlantEvent, Taxon, Location, Sowing, Provenance, Photo } from './types';
 import { PROP_METHODS, accNo, sowNo, NUMBERING_SETTING } from './types';
 import { slugify } from '$core/names';
@@ -28,6 +28,8 @@ function tag36(s: string): string {
   };
   return fnv(0x811c9dc5) + fnv(0x050c5d1f);
 }
+
+const numberField = (c: Change): NumberKind | null => (c.kind === 'accession' && c.field === 'acc' ? 'accession' : c.kind === 'sowing' && c.field === 'no' ? 'sowing' : null);
 
 class Collection {
   ready = $state(false);
@@ -54,7 +56,9 @@ class Collection {
         for (const c of changes) this.clock.observe(c.t);
         const scheme = await getMeta<NumberingScheme>('scheme');
         if (isScheme(scheme)) this.metaScheme = scheme;
+        await this.readLedger();
         this.ready = true;
+        onOtherTabWrite(() => void this.catchUp().catch(() => {}));
         this.persisted = await requestPersistence();
       })();
     return this.loading;
@@ -86,11 +90,33 @@ class Collection {
     if (r && !r._deleted) return r as unknown as Accession;
     return this.live<Accession>('accession').find((a) => a.acc === idOrNo);
   }
-  /** Every number ever given to a plant on this device, live or dead: a number is never reused. */
-  private takenNumbers(kind: 'accession' | 'sowing'): Set<string> {
-    const out = new Set<string>();
+  /** The vault's ledger of every number ever written on this device, read at load and after another tab writes: a replace from an older backup does not bring those numbers back into play. */
+  private ledger: Record<NumberKind, Set<string>> = { accession: new Set(), sowing: new Set() };
+  /** Every number ever given to a plant on this device, live, dead or replaced away: a number is never reused. */
+  private takenNumbers(kind: NumberKind): Set<string> {
+    const out = new Set(this.ledger[kind]);
     for (const r of this.state.values()) if (r.kind === kind) out.add(kind === 'accession' ? accNo(r as unknown as Accession) : sowNo(r as unknown as Sowing));
     return out;
+  }
+  private async readLedger(): Promise<void> {
+    for (const k of ['accession', 'sowing'] as NumberKind[]) {
+      const v = await getMeta<string[]>(`issued:${k}`);
+      this.ledger[k] = new Set(Array.isArray(v) ? v : []);
+    }
+  }
+  /** Another tab of this browser wrote: fold in what this tab has not seen, so its list and its next number are current. */
+  private async catchUp(): Promise<void> {
+    if (!this.ready) return;
+    const changes = (await allChanges()).filter((c) => !this.seen.has(c.t));
+    await this.readLedger();
+    if (!changes.length) return;
+    for (const c of changes) this.clock?.observe(c.t);
+    apply(this.state, changes, this.seen, { now: Date.now(), except: this.device });
+    this.noteParents(changes);
+    for (const k of new Set(changes.map((c) => recKey(c.kind, c.id)))) {
+      const r = this.state.get(k);
+      if (r) this.state.set(k, { ...r });
+    }
   }
   isNumberTaken(no: string): boolean {
     return this.takenNumbers('accession').has(no.trim());
@@ -99,10 +125,27 @@ class Collection {
   private newId(prefix: 'r' | 's'): string {
     return prefix + this.eventId().slice(1);
   }
+  /**
+   * Events and photographs grouped by plant, built once per change to the
+   * state rather than once per plant per render: a list of a thousand plants
+   * asks for each plant's last watering several times a keystroke, and a
+   * scan of every record each time is seconds on a phone.
+   */
+  private eventsByAcc = $derived.by(() => {
+    const out = new Map<string, PlantEvent[]>();
+    for (const e of this.live<PlantEvent>('event')) (out.get(e.acc) ?? out.set(e.acc, []).get(e.acc)!).push(e);
+    for (const list of out.values()) list.sort((a, b) => b.d.localeCompare(a.d) || b.id.localeCompare(a.id));
+    return out;
+  });
+  private photosByAcc = $derived.by(() => {
+    const out = new Map<string, Photo[]>();
+    for (const p of this.live<Photo>('photo')) { const k = p.acc ?? ''; (out.get(k) ?? out.set(k, []).get(k)!).push(p); }
+    for (const list of out.values()) list.sort((a, b) => b.d.localeCompare(a.d) || b.id.localeCompare(a.id));
+    return out;
+  });
+  /** A plant's (or batch's) events, newest first. */
   events(acc: string): PlantEvent[] {
-    return this.live<PlantEvent>('event')
-      .filter((e) => e.acc === acc)
-      .sort((a, b) => b.d.localeCompare(a.d) || b.id.localeCompare(a.id));
+    return this.eventsByAcc.get(acc) ?? [];
   }
   get taxa(): Taxon[] {
     return this.live<Taxon>('taxon').filter((t) => !t.removed);
@@ -378,15 +421,19 @@ class Collection {
     return nextAccession(this.takenNumbers('sowing'), { mode: 'prefix', prefix: `S${year}`, width: 3 });
   }
   async addSowing(sw: Omit<Sowing, 'id' | 'status'> & { id?: string; status?: Sowing['status'] }): Promise<Sowing> {
-    const no = sw.no?.trim() || this.nextSowingNumber(Number(sw.sown.slice(0, 4)) || undefined);
-    if (sw.no && this.takenNumbers('sowing').has(no)) throw new Error(`Batch number ${no} is already used.`);
+    const wanted = sw.no?.trim() || null;
     const id = sw.id ?? this.newId('s');
-    const rec: Sowing = { status: 'active', ...sw, id, no };
-    await this.put('sowing', id, rec as unknown as Record<string, unknown>);
+    const rec = await this.claim('sowing', (issued) => {
+      const year = Number(sw.sown.slice(0, 4)) || new Date().getFullYear();
+      const no = wanted ?? nextAccession(issued, { mode: 'prefix', prefix: `S${year}`, width: 3 });
+      if (wanted && issued.has(no)) throw new Error(`Batch number ${no} is already used.`);
+      const r: Sowing = { status: 'active', ...sw, id, no };
+      return { changes: diff('sowing', id, r as unknown as Record<string, unknown>, undefined, this.tick), result: r };
+    });
     // The parent plant's timeline records that material was taken.
     if (rec.parentAcc && this.accession(rec.parentAcc)) {
       const m = PROP_METHODS.find((x) => x.k === rec.method);
-      await this.addEvent({ acc: rec.parentAcc, d: rec.sown, t: 'propagate', n: rec.count, note: `${rec.count} ${m?.unit ?? 'pieces'} → ${no}` });
+      await this.addEvent({ acc: rec.parentAcc, d: rec.sown, t: 'propagate', n: rec.count, note: `${rec.count} ${m?.unit ?? 'pieces'} → ${rec.no}` });
     }
     return rec;
   }
@@ -403,7 +450,7 @@ class Collection {
     const parent = s.parentAcc ? this.accession(s.parentAcc) : undefined;
     // Seed keeps the provenance the seed carried; a wild-collected seed lot raises F1 plants. Vegetative material is 'veg'.
     const provenance: Provenance = veg ? 'veg' : s.provenance === 'wild' ? 'f1' : s.provenance === 'f1' ? 'fn' : (s.provenance ?? 'unknown');
-    const taken = this.takenNumbers('accession');
+    return this.claim('accession', (taken) => {
     const changes: Change[] = [];
     const made: Accession[] = [];
     for (let i = 0; i < n; i++) {
@@ -436,16 +483,14 @@ class Collection {
     }
     const pid = this.eventId();
     changes.push(...diff('event', pid, { acc: s.id, d: date, t: 'potup', n, note: [made.map((a) => accNo(a)).join(', '), opts.note?.trim() || null].filter(Boolean).join(' · ') }, undefined, this.tick));
-    await this.commit(changes);
-    return made;
+    return { changes, result: made };
+    });
   }
 
   /* ---- photos ---- */
   /** Photos of a plant, newest first. */
   photos(acc: string): Photo[] {
-    return this.live<Photo>('photo')
-      .filter((p) => p.acc === acc)
-      .sort((a, b) => b.d.localeCompare(a.d) || b.id.localeCompare(a.id));
+    return this.photosByAcc.get(acc) ?? [];
   }
   photosOfSowing(id: string): Photo[] {
     return this.live<Photo>('photo')
@@ -508,9 +553,11 @@ class Collection {
   }
 
   /** Last time each plant was marked present at an audit (or acquired), for "not seen since". */
+  /** The last day the plant was in front of the grower: its last audit, else the day its record was made (not the acquisition date it was given, which may be years back for a collection entered late). */
   lastSeen(acc: string): string | null {
     const ev = this.events(acc).find((e) => e.t === 'audit' || e.t === 'acquire');
-    return ev?.d ?? null;
+    if (!ev) return null;
+    return ev.t === 'audit' ? ev.d : (madeOn(ev.id) ?? ev.d);
   }
 
   private live<T>(kind: Kind): T[] {
@@ -589,13 +636,44 @@ class Collection {
 
   /** A new plant. Its number is minted, or taken from `acc` when the grower brings one; a number already in use is refused, never overwritten. */
   async addAccession(a: Omit<Accession, 'id' | 'status'> & { id?: string; status?: Accession['status'] }): Promise<Accession> {
-    const no = a.acc?.trim() || this.nextAccessionNumber();
-    if (a.acc && this.takenNumbers('accession').has(no)) throw new Error(`Accession number ${no} is already used. A number is never reused; pick another.`);
+    const wanted = a.acc?.trim() || null;
     const id = a.id ?? this.newId('r');
-    const rec: Accession = { status: 'growing', ...a, id, acc: no };
-    await this.put('accession', id, rec as unknown as Record<string, unknown>);
-    if (rec.acquired) await this.addEvent({ acc: id, d: rec.acquired, t: 'acquire', note: rec.sourceFrom ? `from ${rec.sourceFrom}` : null });
+    // The number is chosen inside the vault's own transaction (see `appendChangesClaiming`): two tabs adding at once get two numbers.
+    const rec = await this.claim('accession', (issued) => {
+      const no = wanted ?? nextAccession(issued, this.scheme);
+      if (wanted && issued.has(no)) throw new Error(`Accession number ${no} is already used. A number is never reused; pick another.`);
+      const r: Accession = { status: 'growing', ...a, id, acc: no };
+      const changes = diff('accession', id, r as unknown as Record<string, unknown>, undefined, this.tick);
+      if (r.acquired) changes.push(...diff('event', this.eventId(), { acc: id, d: r.acquired, t: 'acquire', note: r.sourceFrom ? `from ${r.sourceFrom}` : null }, undefined, this.tick));
+      return { changes, result: r };
+    });
     return rec;
+  }
+
+  /** A write that mints numbers: the vault hands `build` every number ever issued here, `build` chooses outside it, and the changes are stored and applied as one commit. */
+  private async claim<T>(kind: NumberKind, build: (issued: Set<string>) => { changes: Change[]; result: T }): Promise<T> {
+    let made: Change[] = [];
+    let out: T;
+    try {
+      out = await appendChangesClaiming(kind, this.takenNumbers(kind), (issued) => {
+        const b = build(issued);
+        made = b.changes;
+        return b;
+      });
+    } catch (e) {
+      this.lastWriteError = e instanceof Error ? e.message : String(e);
+      throw e;
+    }
+    this.lastWriteError = null;
+    for (const c of made) { const k = numberField(c); if (k && typeof c.value === 'string') this.ledger[k].add(c.value); }
+    apply(this.state, made, this.seen, { now: Date.now(), except: this.device });
+    this.noteParents(made);
+    for (const k of new Set(made.map((c) => recKey(c.kind, c.id)))) {
+      const r = this.state.get(k);
+      if (r) this.state.set(k, { ...r });
+    }
+    for (const fn of this.listeners) fn(made);
+    return out;
   }
 
   async addEvent(e: Omit<PlantEvent, 'id'> & { id?: string }): Promise<PlantEvent> {

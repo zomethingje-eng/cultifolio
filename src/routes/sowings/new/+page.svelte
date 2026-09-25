@@ -26,6 +26,7 @@
   let count = $state<number | null>(null);
   let countMissing = $state(false);
   let dateMsg = $state('');
+  let heatMsg = $state('');
   let sourceFrom = $state('');
   let sourceRef = $state('');
   let provenance = $state<Provenance>('unknown');
@@ -90,6 +91,13 @@
     dateMsg = !sown ? 'Give the batch a date.' : sown > localDate() ? `${sown} is in the future.` : m.veg && parent?.acquired && sown < parent.acquired ? `${sown} is before ${accNo(parent)} arrived on ${parent.acquired}.` : '';
     if (dateMsg) {
       document.getElementById('s-date')?.focus();
+      return;
+    }
+    // Bottom heat outside anything a propagator does is a figure in the wrong units, not a setting: seed is not sown at 77 °C.
+    const heatC = bottomHeat !== '' && !Number.isNaN(Number(bottomHeat)) ? (units.current === 'us' ? fToC(Number(bottomHeat)) : Number(bottomHeat)) : null;
+    heatMsg = heatC != null && (heatC < 5 || heatC > 45) ? `${bottomHeat} ${tempUnit(units.current)} would cook seed${units.current === 'metric' && heatC > 45 && heatC <= 113 ? `; did you mean ${bottomHeat} °F (${Math.round(fToC(Number(bottomHeat)))} °C)?` : '.'}` : '';
+    if (heatMsg) {
+      document.getElementById('s-heat')?.focus();
       return;
     }
     busy = true;
@@ -178,7 +186,7 @@
   </div>
   <div class="two">
     <label class="field"><span>Pre-treatment</span><input id="s-treat" type="text" bind:value={treatment} placeholder="soak, GA3, smoke, scarified, callused 5 days…" /></label>
-    <label class="field"><span>Bottom heat {tempUnit(units.current)}</span><input id="s-heat" type="number" step="0.5" bind:value={bottomHeat} placeholder="blank if none" /></label>
+    <label class="field"><span>Bottom heat {tempUnit(units.current)}</span><input id="s-heat" type="number" step="0.5" bind:value={bottomHeat} placeholder="blank if none" oninput={() => (heatMsg = '')} aria-invalid={!!heatMsg} aria-describedby={heatMsg ? 's-heat-bad' : undefined} />{#if heatMsg}<span class="bad small" id="s-heat-bad">{heatMsg}</span>{/if}</label>
   </div>
   <label class="check"><input id="s-covered" type="checkbox" bind:checked={covered} /> Covered (bag, lid, propagator)</label>
 

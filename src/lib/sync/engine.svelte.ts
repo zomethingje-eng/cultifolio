@@ -3,8 +3,8 @@
  * vault key. The server is a dumb store of ciphertext (see server/sync.ts).
  *
  * Push: whatever is in the outbox, in HLC order, sealed as batches named by
- * the HLC of their last change plus a hash of the changes as JSON (the
- * plaintext), so two batches with different contents never share a name and
+ * the hour of their last change, the device, and a keyed fingerprint of the
+ * changes as JSON, so two batches with different contents never share a name and
  * the same batch sealed twice (a re-push after a lost reply; each seal has a
  * fresh IV) lands on the same name. A batch is acked only when the server
  * says it holds that batch. The outbox is every change the server has not
@@ -37,7 +37,7 @@
  */
 import { collection } from '$lib/db/collection.svelte';
 import { getMeta, setMeta, getPhotoBlobs, putPhotoBlobs, photoBlobIds, outboxKeys, outboxAck, outboxFill, outboxClear, changesByKeys, allChanges, appendChanges } from '$lib/db/vault';
-import { deriveKeys, sealJson, openJson, seal, open, packPhoto, unpackPhoto, parseVaultKey, sha256hex, type VaultKeys } from './crypto';
+import { deriveKeys, sealJson, openJson, seal, open, packPhoto, unpackPhoto, parseVaultKey, batchFingerprint, sha256hex, type VaultKeys } from './crypto';
 import { MAX_BATCH_BYTES, MAX_PHOTO_BYTES, SEAL_OVERHEAD } from './limits';
 import { validateChanges, isHeld, dueAt, hlcWall, type Change } from '$core/log';
 import { hlcCompare, MAX_AHEAD_MS } from '$core/hlc';
@@ -373,6 +373,7 @@ class Sync {
       }
       if (r.ok) m.photosPushed.push(id);
       else if (r.status === 429) this.limited(r);
+      else if (r.status === 409 && (await this.serverHolds(id, packed))) m.photosPushed.push(id); // our own earlier send whose answer was lost: sealed again with a fresh nonce, so the bytes differ, the pixels do not
       else if (r.status >= 400 && r.status < 500 && r.status !== 401 && r.status !== 403) this.note('refused', id, `photo refused: ${r.status}`);
       else throw new Error(`photo push failed: ${r.status}`);
       await setMeta(META, m);
@@ -389,9 +390,12 @@ class Sync {
    */
   private async pushBatch(batch: Change[], mayResplit = true): Promise<number> {
     const m = this.meta!;
-    const last = batch[batch.length - 1].t;
-    const plain = await sha256hex(utf8.encode(JSON.stringify(batch)));
-    const key = `${last}-${plain.slice(0, 12)}`;
+    // The name the server files this under: the hour of the last edit (never the millisecond), a fixed counter, this
+    // device, and twelve digits of a keyed fingerprint of the content. The fingerprint is sent in full so a re-send after
+    // a lost reply is recognised as the same batch; being keyed, it is not a hash anyone could test a guessed edit against.
+    const lastWall = hlcWall(batch[batch.length - 1].t);
+    const plain = await batchFingerprint(this.keys!, utf8.encode(JSON.stringify(batch)));
+    const key = `${String(Math.floor(lastWall / 3600_000) * 3600_000).padStart(13, '0')}-0000-${collection.device || 'dev'}-${plain.slice(0, 12)}`;
     const body = await sealJson(this.keys!, 'log', { v: 1, device: collection.device, changes: batch });
     if (body.length > MAX_BATCH_BYTES && mayResplit && batch.length > 1) {
       // Too big before it ever leaves: halve it. Each half is named by its own content.
@@ -420,10 +424,24 @@ class Sync {
     }
     if (r.status === 400 || r.status === 409 || r.status === 413) {
       // Noted under the last HLC, which is stable across runs.
-      this.note('refused', last, `the server refused ${batch.length} change${batch.length === 1 ? '' : 's'} (${r.status})`);
+      this.note('refused', batch[batch.length - 1].t, `the server refused ${batch.length} change${batch.length === 1 ? '' : 's'} (${r.status})`);
       return 0;
     }
     throw new Error(`push failed: ${r.status}`);
+  }
+
+  /** A 409 for a photo id: fetch what the server holds under it and compare the pixels. True when it is this very photo (a send whose answer was lost); false when something else sits there, which is the refusal it looks like. */
+  private async serverHolds(id: string, packed: Uint8Array): Promise<boolean> {
+    try {
+      const r = await fetch(`${this.base}/api/sync/photo/${id}?vault=${this.keys!.id}`, { headers: this.h() });
+      if (!r.ok) return false;
+      const theirs = await open(this.keys!, 'photo', new Uint8Array(await r.arrayBuffer()), id);
+      if (theirs.length !== packed.length) return false;
+      for (let i = 0; i < packed.length; i++) if (theirs[i] !== packed[i]) return false;
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private async pull(): Promise<void> {

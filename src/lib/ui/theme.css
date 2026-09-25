@@ -56,6 +56,10 @@ body {
 }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; text-underline-offset: 3px; }
+/* A link inside running text is told apart by more than its hue: the accent and the muted ink around it are near one luminance, so prose links carry an underline (a light one, so a paragraph of citations does not turn to rules). */
+p a, li a, .sub a, .small a, .muted a, .foot a, .secsub a, .mapcap a, .credits a, .whybody a, dd a, td a { text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent) 50%, transparent); text-underline-offset: 3px; text-decoration-thickness: 1px; }
+p a:hover, li a:hover, .sub a:hover, .small a:hover, .muted a:hover, .foot a:hover, .secsub a:hover, .mapcap a:hover, .credits a:hover, .whybody a:hover, dd a:hover, td a:hover { text-decoration-color: currentColor; }
+p a.btn, li a.btn, .sub a.btn, .small a.btn, .muted a.btn, p a.mono, .sub a.mono, .small a.mono { text-decoration: none; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 /* A label the screen reader gets and the eye does not, for a field whose placeholder is its visible name. */
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -203,7 +207,7 @@ nav.tabs a.on { background: var(--ink); color: var(--bg); }
 .chipbtn { border: 1px solid var(--rule); background: var(--card); border-radius: 999px; padding: 7px 13px; font: inherit; font-size: 12px; font-weight: 600; color: var(--ink2); cursor: pointer; box-shadow: var(--sh); white-space: nowrap; }
 .chipbtn:hover { color: var(--ink); text-decoration: none; }
 .chipbtn.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-.chipbtn .n { font-family: var(--mono); opacity: 0.7; margin-left: 5px; font-weight: 400; }
+.chipbtn .n { font-family: var(--mono); margin-left: 5px; font-weight: 400; } /* no opacity: at 12 px a count at 70% fell to 3:1 against the chip */
 .secrule { display: flex; align-items: baseline; gap: 12px; margin: var(--section-gap) 0 10px; }
 .secrule h2, .secrule h4 { font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--ink3); font-weight: 700; margin: 0; font-family: var(--ui); }
 .secrule .line { flex: 1; height: 1px; background: var(--rule); }
@@ -322,4 +326,9 @@ details.why > .whybody { font-family: var(--ui); font-size: 12.5px; line-height:
   .cult .sum .hint { margin-left: 0; text-align: left; flex-basis: 100%; }
   .searchbar { font-size: 16px; }
   .ownchip { font-size: 9px; padding: 2px 5px; }
+}
+
+/* A short viewport (a phone on its side, a desktop at 200% zoom): the section row and the tool row stop sticking, so the page keeps most of the screen for reading. */
+@media (max-height: 480px) {
+  nav.tabs, .toolrow { position: static; }
 }

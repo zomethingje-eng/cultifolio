@@ -5,7 +5,7 @@
   import newsreaderItalic from '@fontsource-variable/newsreader/files/newsreader-latin-wght-italic.woff2?url';
   import '@fontsource/dm-mono';
   import '$lib/ui/theme.css';
-  import { page } from '$app/state';
+  import { page, updated } from '$app/state';
   import { crumb } from '$lib/ui/crumb.svelte';
   import { onMount } from 'svelte';
   import { sync } from '$lib/sync/engine.svelte';
@@ -75,10 +75,28 @@
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   }
   let vaultNote = $state<string | null>(null);
+  let takingOver = false;
+  $effect(() => {
+    if (!updated.current || !browser || !('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.getRegistration().then(async (reg) => {
+      if (!reg) return;
+      const skip = (w: ServiceWorker | null) => { if (w) { takingOver = true; w.postMessage('skip'); } };
+      if (reg.waiting) return skip(reg.waiting);
+      await reg.update().catch(() => {});
+      if (reg.waiting) return skip(reg.waiting);
+      reg.addEventListener('updatefound', () => { const w = reg.installing; w?.addEventListener('statechange', () => { if (w.state === 'installed') skip(w); }); });
+    });
+  });
   // Sync wakes with the app when a vault key is on this device; it does nothing otherwise.
   onMount(async () => {
     // The app shell offline: registered after load so it never competes with the page's own requests.
-    if ('serviceWorker' in navigator && !import.meta.env.DEV) navigator.serviceWorker.register('/service-worker.js', { type: 'module' }).catch((e) => console.warn('service worker not registered; offline use is off', e));
+    if ('serviceWorker' in navigator && !import.meta.env.DEV) {
+      navigator.serviceWorker.register('/service-worker.js', { type: 'module' }).catch((e) => console.warn('service worker not registered; offline use is off', e));
+      // A new build's worker waits until every tab of the old one has closed, which an installed app never does; so when
+      // the version poll sees a deploy the waiting worker is told to take over and the page reloads under it. The worker
+      // keeps the previous build's cache for one generation, so a tab still on the old build finds its chunks.
+      navigator.serviceWorker.addEventListener('controllerchange', () => { if (takingOver) location.reload(); });
+    }
     onVaultNotice((t) => (vaultNote = t));
     await collection.load();
     await sync.init();
@@ -206,4 +224,6 @@
     #tabbar a:hover { text-decoration: none; }
     #tabbar a.on { color: var(--accent); }
   }
+  /* Under 480 px tall the bottom bar would take a sixth of the screen: the places stay one tap away in the menu. */
+  @media (max-height: 480px) { #tabbar { display: none !important; } footer.credits { padding-bottom: 0 !important; } }
 </style>

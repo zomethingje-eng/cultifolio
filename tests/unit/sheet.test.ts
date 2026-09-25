@@ -127,6 +127,7 @@ describe('the sheet', () => {
     // A tropical aroid whose habitat night is below the group minimum: the floor is the table's, and the sentence says so.
     const fl = coldFloor(namaqua, ex, archFor('Monstera deliciosa', 'Araceae'))!;
     expect(fl.floor).toBe(12);
+    expect(fl).toMatchObject({ habitat: 4.1, raised: true, group: 'tropical foliage plant' });
     expect(fl.s).toBe("Cold floor: 12 °C. The habitat figure, the 1st-percentile night over 44 years at the typical cell (NASA POWER), is 4.1 °C; the archetype table's conventional minimum for a tropical foliage plant (grouped by the genus Monstera, which is reliably one kind of plant) is 12 °C, which is higher, and the floor rule takes the higher.");
     // Without extremes the quantity is the coldest month's mean night, named as such.
     const fl2 = coldFloor(namaqua, null, archFor('Tylecodon pearsonii', 'Crassulaceae'))!;

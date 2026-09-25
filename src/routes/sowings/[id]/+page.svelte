@@ -49,6 +49,11 @@
     if (s && d < s.sown) return `${what[0].toUpperCase()}${what.slice(1)} dated ${d} is before the sowing on ${s.sown}.`;
     return null;
   };
+  /** A count can go only if what is left still covers what was potted and lost: the batch never says 0 up and 2 potted. */
+  const canDropCount = (eventId: string): boolean => {
+    const rest = collection.events(id).filter((e) => e.t === 'germinate' && e.id !== eventId).map((e) => e.n ?? 0);
+    return (rest.length ? Math.max(...rest) : 0) >= st.potted + st.lost;
+  };
   /* germination count */
   let gd = $state(today());
   let gn = $state<number | ''>('');
@@ -283,7 +288,7 @@
         <div class="tlrow">
           <span class="d">{e.d}</span>
           <span class="t">{EVENT_LABEL[e.t] ?? e.t}{#if e.n != null}&nbsp;<b>{e.n}</b>{/if}{#if e.cause}<span class="x2">{' · '}{e.cause}</span>{/if}{#if e.note}<span class="x2">{' · '}{e.note}</span>{/if}</span>
-          {#if e.t === 'potup'}<span class="x small muted">kept: the plants exist</span>{:else if confirmEvent === e.id}<button class="rm confirm" type="button" onclick={() => { collection.remove('event', e.id); confirmEvent = null; }}>Remove?</button>{:else}<button class="rm" type="button" title="Remove this entry" aria-label="Remove this entry" onclick={() => (confirmEvent = e.id)}>×</button>{/if}
+          {#if e.t === 'potup'}<span class="x small muted">kept: the plants exist</span>{:else if e.t === 'germinate' && !canDropCount(e.id)}<span class="x small muted" title="Without this count the batch would show fewer up than were potted and lost">kept: the potted plants rest on it</span>{:else if confirmEvent === e.id}<button class="rm confirm" type="button" onclick={() => { collection.remove('event', e.id); confirmEvent = null; }}>Remove?</button>{:else}<button class="rm" type="button" title="Remove this entry" aria-label="Remove this entry" onclick={() => (confirmEvent = e.id)}>×</button>{/if}
         </div>
       {/each}
     </div>
