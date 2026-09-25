@@ -101,6 +101,10 @@
       {#if c.href && i < parts.length - 1}<a href={c.href}>{c.label}</a>{:else}<span class:last={i === parts.length - 1 && parts.length > 1}>{c.label}</span>{/if}
     {/each}
   </div>
+  <!-- The five places, from every page, in the bar that is always there; the phone has them in the tab bar instead. -->
+  <nav class="seg topseg" aria-label="Places">
+    {#each places as pl}<a href={pl.href} class:on={pl.on(page.url.pathname)}>{pl.label === 'Plants' ? 'My plants' : pl.label}</a>{/each}
+  </nav>
   <a class="iconbtn sync" href="/sync" title={sync.configured ? (sync.busy ?? (sync.lastError ? 'Sync: ' + sync.lastError : 'Synced')) : 'Sync'} aria-label="Sync" class:on={sync.configured} class:busy={!!sync.busy} class:err={!!sync.lastError}>⟳</a>
   <a class="iconbtn" href="/plants/new" title="Add a plant" aria-label="Add a plant">+</a>
 </div>
@@ -158,6 +162,9 @@
   .crumb a:hover { color: var(--ink); text-decoration: none; }
   .crumb .sep { opacity: 0.45; margin: 0 5px; }
   .crumb .last { color: var(--ink); }
+  #topbar .topseg { margin: 0 6px; flex: none; }
+  #topbar .topseg > a { padding: 5px 12px; font-size: 12.5px; }
+  @media (max-width: 700px) { #topbar .topseg { display: none; } }
   .iconbtn { border: 1px solid transparent; background: none; color: var(--ink2); font: inherit; font-size: 15px; font-weight: 600; padding: 4px 8px; border-radius: 8px; line-height: 1.2; min-width: 40px; min-height: 40px; display: inline-flex; align-items: center; justify-content: center; text-align: center; }
   .iconbtn:hover { background: var(--sunk); color: var(--ink); text-decoration: none; }
   .iconbtn.brand { color: var(--accent); cursor: pointer; }

@@ -48,7 +48,7 @@
 /* Fonts are self-hosted via @fontsource packages (OFL), imported in the root layout. */
 
 *, *::before, *::after { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
+html { -webkit-text-size-adjust: 100%; scrollbar-gutter: stable; } /* a long page and a short one share one column: the scrollbar's width is always reserved */
 body {
   margin: 0; background: var(--bg); color: var(--ink);
   font-family: var(--ui); font-size: 14.5px; line-height: 1.55; -webkit-font-smoothing: antialiased;
