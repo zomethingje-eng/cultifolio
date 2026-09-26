@@ -229,7 +229,7 @@ test('the path species → my plants → bench is prefilled at every step and lo
   await expect(page.locator('#e-floor')).toHaveCount(0); // the save has landed once the form has closed; a hard navigation before that reads the old floor
   // back on the plant, the comparison shows both figures and no verdict: the judgement is the grower's
   await page.goto(`/plants/${acc}`);
-  await expect(page.locator('.hvh')).toContainText('this place is set to bottom out at 2 °C');
+  await expect(page.locator('.hvh')).toContainText('this place is set to bottom out at 2.0 °C');
   // the habitat figure is the median with its 10th–90th span across the envelope cells, and the quantity is named
   await expect(page.locator('.hvh')).toContainText(/coldest month's mean night at the habitat \d+(\.\d)? °C in \w+ \(median year; across the 40 envelope cells \d+ to \d+; CHELSA\); 1st-percentile night over 40 years at the typical cell 6\.5 °C \(NASA POWER\)/);
   await expect(page.locator('.hvh')).toContainText(/open sky over the habitat \d+–\d+ mol\/m²\/day across the year \(median year; across the 40 envelope cells \d+ to \d+; CHELSA\)/);
@@ -1136,9 +1136,11 @@ test('a forecast source that does not answer is "not checked" in a plain notice 
 });
 });
 
-test('a night under the place\'s floor is "below the floor", not frost; a warning is said whatever the floor; alerts that were not checked are said not to have been (round twelve, 9)', async ({ page }) => {
-  const days = [{ date: '2026-11-02', tmin: 8, tmax: 15, precipMm: 0, steps: 24 }, { date: '2026-11-03', tmin: 9, tmax: 14, precipMm: 0, steps: 24 }];
-  const body = (alerts: object[], alertsStatus: string) => JSON.stringify({ forecast: { source: 'met.no', fetched: '2026-11-01T00:00:00Z', days, hoursCovered: 48, offsetH: -5 }, alerts, alertsStatus, risk: alerts.length ? { level: 'warning', text: 'Freeze Warning in force (NOAA/NWS).' } : { level: 'none', text: 'No frost in the next 48 hours of forecast; coldest 8 °C (MET Norway).' }, attribution: ['Forecast data from MET Norway (CC BY 4.0)', 'Alerts: NOAA National Weather Service'] });
+test('a night under the place\'s floor "reaches the floor", not frost, and a floor not reached keeps a frost night\'s own level; a warning is said whatever the floor; alerts that were not checked are said not to have been (round twelve, 9)', async ({ page }) => {
+  const mild = [{ date: '2026-11-02', tmin: 8, tmax: 15, precipMm: 0, steps: 24 }, { date: '2026-11-03', tmin: 9, tmax: 14, precipMm: 0, steps: 24 }];
+  const frosty = [{ date: '2026-11-02', tmin: -2, tmax: 9, precipMm: 0, steps: 24 }, { date: '2026-11-03', tmin: 4, tmax: 12, precipMm: 0, steps: 24 }];
+  let days = mild;
+  const body = (alerts: object[], alertsStatus: string) => JSON.stringify({ forecast: { source: 'met.no', fetched: '2026-11-01T00:00:00Z', days, hoursCovered: 48, offsetH: -5, firstFrost: days === frosty ? '2026-11-02' : undefined }, alerts, alertsStatus, risk: alerts.length ? { level: 'warning', text: 'Freeze Warning in force (NOAA/NWS).' } : days === frosty ? { level: 'frost', text: 'Frost forecast: -2.0 °C around 05:00 Monday solar time (2026-11-02, MET Norway).' } : { level: 'none', text: 'No frost in the next 48 hours of forecast; coldest 8 °C (MET Norway).' }, attribution: ['Forecast data from MET Norway (CC BY 4.0)', 'Alerts: NOAA National Weather Service'] });
   let alerts: object[] = [], status = 'refused';
   // At the context, not the page: after the first load the service worker makes these requests, and a page route does not see them.
   await page.context().route(/\/api\/forecast/, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: body(alerts, status) }));
@@ -1158,7 +1160,8 @@ test('a night under the place\'s floor is "below the floor", not frost; a warnin
   await expect(page.locator('.notice')).toContainText("reaches this place's 10.0 °C floor on 2026-11-02 (8.0 °C outside)");
   await expect(page.locator('.notice')).not.toContainText('Frost forecast');
   await expect(page.locator('.notice')).toContainText('Alerts not checked');
-  await expect(page.locator('.pill', { hasText: 'below the floor' })).toBeVisible();
+  await expect(page.locator('.pill', { hasText: 'reaches the floor' })).toBeVisible();
+  await expect(page.locator('.pill', { hasText: 'floor 10.0 °C' })).toBeVisible();
   // a floor the coldest night reaches exactly counts (round thirteen, 11); a floor of 2.5 prints as 2.5, not 3
   await page.getByRole('button', { name: 'Edit' }).click();
   await page.fill('#e-floor', '8');
@@ -1169,6 +1172,19 @@ test('a night under the place\'s floor is "below the floor", not frost; a warnin
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.locator('.notice')).toContainText('above the 2.5 °C floor');
   await expect(page.locator('.notice')).toContainText('Forecast clear.');
+  await expect(page.locator('.pill', { hasText: 'floor 2.5 °C' })).toBeVisible();
+  // a floor the forecast does not reach is not a clear forecast: a frost night keeps its own level, with the floor said (round fifteen, 11)
+  days = frosty;
+  await page.evaluate(() => sessionStorage.clear());
+  await page.reload();
+  await page.getByRole('button', { name: 'Edit' }).click();
+  await page.fill('#e-floor', '-5');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.locator('.notice')).toContainText('Frost forecast.');
+  await expect(page.locator('.notice')).toContainText('Frost forecast: -2.0 °C');
+  await expect(page.locator('.notice')).toContainText('above the -5.0 °C floor');
+  await expect(page.locator('.pill', { hasText: 'frost forecast' })).toBeVisible();
+  await expect(page.locator('.pill', { hasText: 'frost: clear' })).toHaveCount(0);
   // a warning in force is said with the floor set; and an answer for the OLD coordinates that lands after the edit is
   // dropped, never shown as this place's (round thirteen, B1): the old point's forecast is delayed past the save
   alerts = [{ event: 'Freeze Warning', headline: 'Freeze Warning tonight' }]; status = 'ok';

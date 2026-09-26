@@ -72,41 +72,50 @@
     if (!name.trim() || busy) return;
     if (ownTaken) return;
     busy = true;
-    const p = parseName(name);
-    const taxonName = p.scientific;
-    // Keep a taxon record so the species has a home for your notes even before a dossier exists.
-    const slug = speciesSlug(taxonName);
-    if (!collection.taxon(slug)) await collection.put('taxon', slug, { name: speciesOf(taxonName), gbifKey: taxonKey });
-    let firstId = '';
-    for (let i = 0; i < countN; i++) {
-      const rec = await collection.addAccession({
-        acc: useOwnNumber && ownNumber.trim() && i === 0 ? ownNumber.trim() : undefined,
-        taxonName,
-        taxonKey,
-        cultivar: cultivar ?? p.cultivar ?? null,
-        // The picker parses the name on a debounce; the form parses it again here so a quick Add cannot file a hybrid as a species.
-        nameKind: p.kind !== 'species' ? p.kind : kind,
-        parentage: p.kind === 'hybrid' || kind === 'hybrid' ? (parentage?.trim() || p.parentage || null) : null,
-        nameAsReceived: nameAsReceived.trim() || (nameAsReceived !== name ? null : null),
-        fieldNumber: fieldNumber.trim() || null,
-        provenance,
-        acquired: acquired || null,
-        sourceFrom: sourceFrom.trim() || null,
-        price: price.trim() || null,
-        sourceForm,
-        locationId,
-        notes: notes.trim() || null
-      });
-      if (!firstId) firstId = accNo(rec);
+    try {
+      const p = parseName(name);
+      const taxonName = p.scientific;
+      // Keep a taxon record so the species has a home for your notes even before a dossier exists.
+      const slug = speciesSlug(taxonName);
+      if (!collection.taxon(slug)) await collection.put('taxon', slug, { name: speciesOf(taxonName), gbifKey: taxonKey });
+      let firstId = '';
+      for (let i = 0; i < countN; i++) {
+        const rec = await collection.addAccession({
+          acc: useOwnNumber && ownNumber.trim() && i === 0 ? ownNumber.trim() : undefined,
+          taxonName,
+          taxonKey,
+          cultivar: cultivar ?? p.cultivar ?? null,
+          // The picker parses the name on a debounce; the form parses it again here so a quick Add cannot file a hybrid as a species.
+          nameKind: p.kind !== 'species' ? p.kind : kind,
+          parentage: p.kind === 'hybrid' || kind === 'hybrid' ? (parentage?.trim() || p.parentage || null) : null,
+          nameAsReceived: nameAsReceived.trim() || (nameAsReceived !== name ? null : null),
+          fieldNumber: fieldNumber.trim() || null,
+          provenance,
+          acquired: acquired || null,
+          sourceFrom: sourceFrom.trim() || null,
+          price: price.trim() || null,
+          sourceForm,
+          locationId,
+          notes: notes.trim() || null
+        });
+        if (!firstId) firstId = accNo(rec);
+      }
+      try { if (locationId) localStorage.setItem('cultifolio.lastLocation', locationId); } catch { /* fine */ }
+      toast.show(countN > 1 ? `${countN} plants added` : `${firstId} added`);
+      goto(countN > 1 ? '/plants' : `/plants/${firstId}`);
+    } catch {
+      /* the store has recorded why in lastWriteError, which the notice above the form shows; the form stays open with what was typed (round fifteen, 9) */
+    } finally {
+      busy = false;
     }
-    try { if (locationId) localStorage.setItem('cultifolio.lastLocation', locationId); } catch { /* fine */ }
-    toast.show(countN > 1 ? `${countN} plants added` : `${firstId} added`);
-    goto(countN > 1 ? '/plants' : `/plants/${firstId}`);
   }
 </script>
 
 <svelte:head><title>Add plant — Cultifolio</title></svelte:head>
 
+{#if collection.lastWriteError}
+  <div class="notice err" role="alert" id="write-error">This change was not saved: {collection.lastWriteError}. Free space or <a href="/backup">back up now</a>.</div>
+{/if}
 <form class="form" onsubmit={save}>
   <PageHead title="Add a plant" kick="My plants" places={false}>
     {#snippet subline()}{#if countN > 1}They will be numbered from <span class="accno">{nextNo}</span>, one each.{:else}It will be numbered <span class="accno">{useOwnNumber && ownNumber ? ownNumber : nextNo}</span>.{/if} A number is never reused.{/snippet}

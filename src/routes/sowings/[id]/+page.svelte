@@ -1,7 +1,7 @@
 <script lang="ts">
   import { units } from '$lib/ui/units.svelte';
   import { localDate } from '$core/dates';
-  import { temp, tempUnit, cToF, bottomHeat as heatCheck } from '$core/units';
+  import { temp, tempUnit, cToF, bottomHeat as heatCheck, numberOrNull } from '$core/units';
   import { plural } from '$core/words';
   import { page } from '$app/state';
   import { accNo, sowNo } from '$lib/db/types';
@@ -86,21 +86,29 @@
   /* pot up */
   let potting = $state(false);
   let pd = $state(today());
-  let pn = $state(1);
+  let pn = $state<number | null>(1);
   let ploc = $state<string | null>(null);
   let pnote = $state('');
   let potted = $state<string[]>([]);
   let pmsg = $state('');
+  let pottingBusy = $state(false);
   async function potUp(e: SubmitEvent) {
     e.preventDefault();
-    if (pn < 1) return;
+    const n = Math.floor(numberOrNull(pn) ?? 0); // whole plants: a cleared box or 0.5 is refused with a sentence, never a silent return (round fifteen, 10)
     // A number is never reused, so a slip here would burn numbers for good: the pot decides how many can be potted.
-    pmsg = dateProblem(pd, 'potting') ?? (st.remaining < 1 ? 'Nothing in the pot to pot up: count the seedlings first.' : pn > st.remaining ? `Only ${st.remaining} in the pot; each potted plant gets a number that is never reused.` : '');
+    pmsg = n < 1 ? 'Say how many to pot up: each gets a number that is never reused.' : (dateProblem(pd, 'potting') ?? (st.remaining < 1 ? 'Nothing in the pot to pot up: count the seedlings first.' : n > st.remaining ? `Only ${st.remaining} in the pot; each potted plant gets a number that is never reused.` : ''));
     if (pmsg) return;
-    const made = await collection.potUp(id, pn, { date: pd, locationId: ploc, note: pnote.trim() || null });
-    potted = made.map((a) => accNo(a));
-    potting = false;
-    pnote = '';
+    pottingBusy = true;
+    try {
+      const made = await collection.potUp(id, n, { date: pd, locationId: ploc, note: pnote.trim() || null });
+      potted = made.map((a) => accNo(a));
+      potting = false;
+      pnote = '';
+    } catch {
+      /* lastWriteError is shown on the page; the form stays open (round fifteen, 9) */
+    } finally {
+      pottingBusy = false;
+    }
   }
   /* note */
   let nd = $state(today());
@@ -153,6 +161,9 @@
 
 <svelte:head><title>{s ? `${sowNo(s)} ${s.taxonName}` : param} — Cultifolio</title></svelte:head>
 
+{#if collection.lastWriteError}
+  <div class="notice err" role="alert" id="write-error">This change was not saved: {collection.lastWriteError}. Free space or <a href="/backup">back up now</a>.</div>
+{/if}
 {#if !collection.ready}
   <p class="muted">Opening your collection…</p>
 {:else if !s}
@@ -175,7 +186,7 @@
         <span class="pill {s.status === 'active' ? 'a' : s.status === 'failed' ? 'b' : ''}">{s.status === 'active' ? 'in progress' : s.status}</span>
         <span class="pill">{m.label}</span>
         {#if s.locationId}<a class="pill" href="/benches/{s.locationId}">{collection.locationName(s.locationId)}</a>{/if}
-        {#if s.bottomHeatC != null}<span class="pill w">bottom heat {temp(s.bottomHeatC, units.current)}</span>{/if}
+        {#if s.bottomHeatC != null}<span class="pill w">bottom heat {temp(s.bottomHeatC, units.current, 1)}</span>{/if}
         {#if s.covered}<span class="pill c">covered</span>{/if}
       </div>
     </div>
@@ -253,7 +264,7 @@
           <LocationPicker bind:value={ploc} id="p-loc" label="Where they go" />
           <input id="p-note" type="text" placeholder="note (optional)" aria-label="Note" bind:value={pnote} />
           {#if pmsg}<p class="refuse" role="alert">{pmsg}</p>{/if}
-          <div class="end"><button class="btn" type="button" onclick={() => (potting = false)}>Cancel</button><button class="btn pri" type="submit">Pot up {pn}</button></div>
+          <div class="end"><button class="btn" type="button" onclick={() => (potting = false)}>Cancel</button><button class="btn pri" type="submit" disabled={pottingBusy}>Pot up {Math.floor(numberOrNull(pn) ?? 0) || ''}</button></div>
         </form>
       {:else}
         <div class="fields"><p class="small muted" style="margin: 0">{st.remaining ? `${st.remaining} in the pot. ` : ''}The batch becomes their provenance: {m.veg ? 'the parent plant and the method' : 'seed source, lot and the right provenance class'} carry to every plant.</p><div class="end"><button class="btn pri" disabled={st.remaining < 1} title={st.remaining < 1 ? 'Count the seedlings first' : undefined} onclick={() => { potting = true; pmsg = ''; pn = Math.max(1, st.remaining || 1); ploc = s.locationId ?? null; }}>Pot up…</button></div></div>
@@ -307,7 +318,7 @@
     <div><b>Medium</b>{s.medium ?? 'not stated'}</div>
     <div><b>Container</b>{s.container ?? 'not stated'}</div>
     <div><b>Pre-treatment</b>{s.treatment ?? 'none'}</div>
-    <div><b>Warmth and cover</b>{s.bottomHeatC != null ? `bottom heat ${temp(s.bottomHeatC, units.current)}` : 'no bottom heat'}{s.covered ? ' · covered' : ''}</div>
+    <div><b>Warmth and cover</b>{s.bottomHeatC != null ? `bottom heat ${temp(s.bottomHeatC, units.current, 1)}` : 'no bottom heat'}{s.covered ? ' · covered' : ''}</div>
     {#if s.notes}<div class="wide"><b>Notes</b><span style="white-space: pre-wrap">{s.notes}</span></div>{/if}
   </div>
 

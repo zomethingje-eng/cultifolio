@@ -88,7 +88,7 @@
 
     <div class="rowlab">Cold floor</div>
     <div class="row">
-      {#each cols as c (c.d.key)}<div class="cell fig">{#if c.floor?.raised}<b>{temp(c.floor.floor, u)}</b><span>archetype minimum for a {c.floor.group}, above the habitat's {c.ex ? `1st-percentile night ${temp(c.ex.minP01, u, 1)} (NASA POWER)` : `coldest mean night ${temp(c.cold!.v, u)} (CHELSA)`}</span>{:else if c.ex}<b>{temp(c.ex.minP01, u, 1)}</b><span>1st-percentile night over {c.ex.years} yrs; lowest {temp(c.ex.minAbs, u, 1)}, {frostWording(c.ex)} (NASA POWER)</span>{:else if c.cold}<b>{temp(c.cold.v, u)}</b><span>{c.cold.mo}, mean night (CHELSA); no extremes series</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
+      {#each cols as c (c.d.key)}<div class="cell fig">{#if c.floor?.raised}<b>{temp(c.floor.floor, u)}</b><span>archetype minimum for a {c.floor.group}, above the habitat's {c.ex ? `1st-percentile night ${temp(c.ex.minP01, u, 1)} (NASA POWER)` : `coldest mean night ${temp(c.cold!.v, u, 1)} (CHELSA)`}</span>{:else if c.ex}<b>{temp(c.ex.minP01, u, 1)}</b><span>1st-percentile night over {c.ex.years} yrs; lowest {temp(c.ex.minAbs, u, 1)}, {frostWording(c.ex)} (NASA POWER)</span>{:else if c.cold}<b>{temp(c.cold.v, u, 1)}</b><span>{c.cold.mo}, mean night (CHELSA); no extremes series</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
     </div>
     <div class="rowlab">Warmest month</div>
     <div class="row">

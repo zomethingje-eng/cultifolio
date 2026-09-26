@@ -190,6 +190,7 @@ export async function openStaging(): Promise<StagedReplacement> {
         await live.put('meta', true, STAGING_PENDING);
         await replaceFromStaging(live);
       });
+      announce('replaced'); // every other tab folds the old log; they reload onto this one (round fifteen, 2)
     }
   };
 }
@@ -264,7 +265,19 @@ async function storeIn(tx: Tx, changes: Change[], fromServer: boolean, extra: Pa
     const k = numberField(c);
     if (k && typeof c.value === 'string') (carried[k] ??= new Set()).add(c.value);
   }
-  const puts: Promise<unknown>[] = [...changes.map((c) => (strict ? ch.add(c) : ch.put(c))), ...(fromServer ? [] : changes.map((c) => ob.put({ t: c.t })))];
+  // A change already stored under a stamp is never replaced by a different one under the same stamp: two devices that
+  // minted one stamp for two changes (an importer's shared counter, before round fifteen) must not overwrite each other's
+  // on disk. The same stamp with the same content is a re-send and lands as before (round fifteen, 3).
+  const kept: Change[] = [];
+  for (const c of changes) {
+    const had = strict ? undefined : await ch.get(c.t);
+    if (had && (had.kind !== c.kind || had.id !== c.id || had.field !== c.field || JSON.stringify(had.value ?? null) !== JSON.stringify(c.value ?? null))) {
+      console.warn(`change ${c.t} is already stored with other content; the stored one stands`);
+      continue;
+    }
+    kept.push(c);
+  }
+  const puts: Promise<unknown>[] = [...kept.map((c) => (strict ? ch.add(c) : ch.put(c))), ...(fromServer ? [] : kept.map((c) => ob.put({ t: c.t })))];
   for (const k of Object.keys(carried) as NumberKind[]) {
     const set = await issuedIn(tx, k);
     for (const n of carried[k]!) set.add(n);
@@ -318,13 +331,16 @@ export async function appendChangesClaiming<T>(kind: NumberKind, known: Set<stri
  */
 const CHANNEL = 'cultifolio-vault';
 const chan = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(CHANNEL) : null;
-function announce(): void {
-  try { chan?.postMessage('written'); } catch { /* a closed channel is nothing to report */ }
+export type VaultNotice = 'written' | 'replaced' | 'sync-forgotten';
+function announce(what: VaultNotice = 'written'): void {
+  try { chan?.postMessage(what); } catch { /* a closed channel is nothing to report */ }
 }
-/** Called with nothing when another tab wrote to the vault. */
-export function onOtherTabWrite(fn: () => void): () => void {
+/** Tell the other tabs something they must not sync through: the sync key was forgotten here (round fifteen, 2). */
+export const announceSyncForgotten = () => announce('sync-forgotten');
+/** Called when another tab wrote to the vault ('written'), replaced the whole collection ('replaced'), or stopped syncing ('sync-forgotten'). */
+export function onOtherTabWrite(fn: (what: VaultNotice) => void): () => void {
   if (!chan) return () => {};
-  const h = () => fn();
+  const h = (e: MessageEvent) => fn(typeof e.data === 'string' ? (e.data as VaultNotice) : 'written');
   chan.addEventListener('message', h);
   return () => chan.removeEventListener('message', h);
 }

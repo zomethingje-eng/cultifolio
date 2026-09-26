@@ -117,7 +117,7 @@
     const night = `coldest month's mean night at the habitat ${temp(n.v, u, 1)} in ${MONTHS[n.mo - 1]} (median year; across the ${habitat.cells} envelope cells ${tempN(n.lo, u)} to ${tempN(n.hi, u)}; CHELSA)`;
     const p01 = habitat.ex ? `; 1st-percentile night over ${habitat.ex.years} years at the typical cell ${temp(habitat.ex.minP01, u, 1)} (NASA POWER)` : '';
     if (cond?.floorC == null) return { here: null, text: `${night}${p01}; no floor set for this place` };
-    return { here: cond.floorC, text: `this place is set to bottom out at ${temp(cond.floorC, u)}; ${night}${p01}` };
+    return { here: cond.floorC, text: `this place is set to bottom out at ${temp(cond.floorC, u, 1)}; ${night}${p01}` };
   });
   const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   // The habitat rain season as a figure: the rain rule's reading in habitat months and shifted to this place's hemisphere. No verdict.
@@ -125,7 +125,7 @@
     if (!habitat?.year) return null;
     const y = habitat.year;
     // This place's coordinates, else the site set in Settings, else the north with a note: the same order as the species page.
-    const hereLat = cond?.lat ?? site.current?.lat ?? null;
+    const hereLat = cond?.lat ?? site.current?.lat ?? collection.locations.map((l) => l.lat).find((x): x is number => x != null) ?? null; // the place, the site, else the first place with coordinates, as the species page and the labels do (round fifteen, 4)
     const southHere = (hereLat ?? 40) < 0;
     const here = runs(forReader(y, hereLat ?? 40), 'short');
     const home = `${runs(y.growMonths, 'short')} (${y.south ? 'S' : 'N'})`;

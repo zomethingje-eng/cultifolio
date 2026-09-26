@@ -110,18 +110,23 @@
       .catch(() => { if (key === condKey) forecastErr = forecastRefusal(null); });
   });
   /**
-   * A heater set-point protects the plants even outdoors, so with a floor set the question is whether the outside drops
-   * below it: its own level and wording, never "frost" for an 8 °C night under a 10 °C floor. An NWS warning in force
-   * is said whatever the floor, and alerts that were not checked are said not to have been (round twelve, 9).
+   * A heater set-point protects the plants even outdoors, so with a floor set the first question is whether the outside
+   * reaches it: its own level and wording, and a night that reaches it exactly counts (round thirteen, 11). A floor that
+   * is not reached does not make the forecast clear: a frost or cold night the forecast itself found keeps its own level,
+   * with the floor sentence added, so a bench with a -5 °C floor never says "frost: clear" over a -2 °C night (round
+   * fifteen, 11). An NWS warning in force is said whatever the floor, and alerts that were not checked are said not to
+   * have been (round twelve, 9).
    */
   const effectiveRisk = $derived.by(() => {
     if (!forecast) return null;
     const floor = cond.floorC;
     if (floor == null) return forecast.risk;
     if (forecast.risk.level === 'warning') return forecast.risk;
-    // A floor is the lowest the plants should see, so a night that reaches it exactly counts (round thirteen, 11).
+    const F = temp(floor, units.current, 1);
     const nights = forecast.forecast.days.filter((d) => d.tmin <= floor);
-    return nights.length ? { level: 'floor', text: `Forecast reaches this place's ${temp(floor, units.current, 1)} floor on ${nights[0].date} (${temp(nights[0].tmin, units.current, 1)} outside).` } : { level: 'none', text: `Outside stays above the ${temp(floor, units.current, 1)} floor for the ${forecast.forecast.hoursCovered} hours of forecast.` };
+    if (nights.length) return { level: 'floor', text: `Forecast reaches this place's ${F} floor on ${nights[0].date} (${temp(nights[0].tmin, units.current, 1)} outside).` };
+    const above = `Outside stays above the ${F} floor for the ${forecast.forecast.hoursCovered} hours of forecast.`;
+    return forecast.risk.level === 'none' ? { level: 'none', text: above } : { level: forecast.risk.level, text: `${forecast.risk.text} ${above}` };
   });
   const alertsUnchecked = $derived(forecast?.alertsStatus === 'refused');
 
@@ -145,9 +150,9 @@
       <h1 class="q" style="margin: 0">{loc.name}</h1>
       <p class="vern">{LOCATION_KINDS.find((k) => k.k === loc.type)?.label ?? 'Place'} · {plural(deep.length, 'growing plant')}{kids.length ? ` in ${plural(kids.length + 1, 'place')}` : ''}{#if cond.indoor != null} · {cond.indoor ? 'indoors' : 'outdoors'}{/if}</p>
       <div class="pills">
-        {#if cond.floorC != null}<span class="pill c">floor {temp(cond.floorC, units.current)}</span>{/if}
+        {#if cond.floorC != null}<span class="pill c">floor {temp(cond.floorC, units.current, 1)}</span>{/if}
         {#if dli != null}<span class="pill w">DLI {dli.toFixed(0)}</span>{/if}
-        {#if watchable && effectiveRisk}<span class="pill {effectiveRisk.level === 'none' ? 'a' : effectiveRisk.level === 'cold' ? 'w' : 'b'}">{effectiveRisk.level === 'none' ? (alertsUnchecked ? 'forecast clear; alerts not checked' : 'frost: clear') : effectiveRisk.level === 'cold' ? 'cold night coming' : effectiveRisk.level === 'floor' ? 'below the floor' : effectiveRisk.level === 'warning' ? 'weather warning' : 'frost forecast'}</span>{/if}
+        {#if watchable && effectiveRisk}<span class="pill {effectiveRisk.level === 'none' ? 'a' : effectiveRisk.level === 'cold' ? 'w' : 'b'}">{effectiveRisk.level === 'none' ? (alertsUnchecked ? 'forecast clear; alerts not checked' : 'frost: clear') : effectiveRisk.level === 'cold' ? 'cold night coming' : effectiveRisk.level === 'floor' ? 'reaches the floor' : effectiveRisk.level === 'warning' ? 'weather warning' : 'frost forecast'}</span>{/if}
         {#if unseen && deep.length}<span class="pill w">{unseen} not seen in 90 d</span>{/if}
       </div>
     </div>
@@ -192,7 +197,7 @@
     <p class="empty" style="margin: 14px 0 0">No floor, light, watering or audit recorded here yet. <button class="linkish" type="button" onclick={startEdit}>Set the floor and the light</button></p>
   {:else}
   <div class="cards">
-    {#if cond.floorC != null}<div class="card"><div class="lab">Floor</div><div class="val">{cond.floorC == null ? '–' : tempN(cond.floorC, units.current)}<span class="u">{cond.floorC == null ? '' : ' ' + tempUnit(units.current)}</span></div><div class="sub">{cond.floorC == null ? 'not stated' : cond.from.floorC && cond.from.floorC !== loc.name ? `from ${cond.from.floorC}` : 'set here'}</div></div>{/if}
+    {#if cond.floorC != null}<div class="card"><div class="lab">Floor</div><div class="val">{cond.floorC == null ? '–' : tempN(cond.floorC, units.current, 1)}<span class="u">{cond.floorC == null ? '' : ' ' + tempUnit(units.current)}</span></div><div class="sub">{cond.floorC == null ? 'not stated' : cond.from.floorC && cond.from.floorC !== loc.name ? `from ${cond.from.floorC}` : 'set here'}</div></div>{/if}
     {#if dli != null}<div class="card"><div class="lab">Light</div><div class="val">{dli == null ? '–' : dli.toFixed(0)}<span class="u">{dli == null ? '' : ' DLI'}</span></div><div class="sub">{cond.ppfd == null ? 'not measured' : `${cond.ppfd} µmol × ${cond.lightHours ?? 12} h${cond.from.ppfd && cond.from.ppfd !== loc.name ? ` · from ${cond.from.ppfd}` : ''}`}</div></div>{/if}
     {#if lastWater}<div class="card"><div class="lab">Last watered</div><div class="val">{lastWater ? daysSince(lastWater) : '–'}<span class="u">{lastWater ? ' d ago' : ''}</span></div><div class="sub">{lastWater ? `most recent plant here, ${lastWater}` : 'nothing recorded'}</div></div>{/if}
     {#if lastAudit}<div class="card"><div class="lab">Last audit</div><div class="val">{lastAudit ? daysSince(lastAudit) : '–'}<span class="u">{lastAudit ? ' d ago' : ''}</span></div><div class="sub">{lastAudit ? lastAudit : 'never audited'}{unseen && deep.length ? ` · ${unseen} not seen in 90 d` : ''}</div></div>{/if}

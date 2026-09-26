@@ -2,7 +2,7 @@
   import { units } from '$lib/ui/units.svelte';
   import PageHead from '$lib/ui/PageHead.svelte';
   import { localDate } from '$core/dates';
-  import { temp, tempUnit, cToF, bottomHeat as heatCheck } from '$core/units';
+  import { temp, tempUnit, cToF, bottomHeat as heatCheck, numberOrNull } from '$core/units';
   import { goto } from '$app/navigation';
   import { accNo, sowNo } from '$lib/db/types';
   import { page } from '$app/state';
@@ -89,7 +89,7 @@
   async function save(e: SubmitEvent) {
     e.preventDefault();
     if (!name.trim() || busy) return;
-    const n = count;
+    const n = numberOrNull(count) == null ? null : Math.floor(numberOrNull(count)!); // whole seeds or cuttings: 2.5 is 2, a cleared box is missing (round fifteen, 10)
     if (n == null || !Number.isFinite(n) || n < 1) {
       countMissing = true;
       document.getElementById('s-count')?.focus();
@@ -110,39 +110,48 @@
       return;
     }
     busy = true;
-    const p = parseName(name);
-    const taxonName = p.scientific;
-    const slug = speciesSlug(taxonName);
-    if (!collection.taxon(slug)) await collection.put('taxon', slug, { name: speciesOf(taxonName), gbifKey: taxonKey });
-    const rec = await collection.addSowing({
-      taxonName,
-      taxonKey,
-      cultivar: cultivar ?? p.cultivar ?? null,
-      // The picker parses the name on a debounce; the form parses it again here so a quick Add cannot file a hybrid as a species.
-        nameKind: p.kind !== 'species' ? p.kind : kind,
-      parentage: p.kind === 'hybrid' || kind === 'hybrid' ? (parentage?.trim() || p.parentage || null) : null,
-      method,
-      parentAcc: m.veg ? parentAcc : null,
-      sown,
-      count: n,
-      sourceFrom: m.veg ? null : sourceFrom.trim() || null,
-      sourceRef: m.veg ? null : sourceRef.trim() || null,
-      provenance: m.veg ? 'veg' : provenance,
-      medium: medium.trim() || null,
-      container: container.trim() || null,
-      treatment: treatment.trim() || null,
-      bottomHeatC: heat.c,
-      covered,
-      locationId,
-      notes: notes.trim() || null
-    });
-    try { if (locationId) localStorage.setItem('cultifolio.lastSowLocation', locationId); } catch { /* fine */ }
-    goto(`/sowings/${sowNo(rec)}`);
+    try {
+      const p = parseName(name);
+      const taxonName = p.scientific;
+      const slug = speciesSlug(taxonName);
+      if (!collection.taxon(slug)) await collection.put('taxon', slug, { name: speciesOf(taxonName), gbifKey: taxonKey });
+      const rec = await collection.addSowing({
+        taxonName,
+        taxonKey,
+        cultivar: cultivar ?? p.cultivar ?? null,
+        // The picker parses the name on a debounce; the form parses it again here so a quick Add cannot file a hybrid as a species.
+          nameKind: p.kind !== 'species' ? p.kind : kind,
+        parentage: p.kind === 'hybrid' || kind === 'hybrid' ? (parentage?.trim() || p.parentage || null) : null,
+        method,
+        parentAcc: m.veg ? parentAcc : null,
+        sown,
+        count: n,
+        sourceFrom: m.veg ? null : sourceFrom.trim() || null,
+        sourceRef: m.veg ? null : sourceRef.trim() || null,
+        provenance: m.veg ? 'veg' : provenance,
+        medium: medium.trim() || null,
+        container: container.trim() || null,
+        treatment: treatment.trim() || null,
+        bottomHeatC: heat.c,
+        covered,
+        locationId,
+        notes: notes.trim() || null
+      });
+      try { if (locationId) localStorage.setItem('cultifolio.lastSowLocation', locationId); } catch { /* fine */ }
+      goto(`/sowings/${sowNo(rec)}`);
+    } catch {
+      /* lastWriteError is shown above the form; the form stays open (round fifteen, 9) */
+    } finally {
+      busy = false;
+    }
   }
 </script>
 
 <svelte:head><title>New sowing — Cultifolio</title></svelte:head>
 
+{#if collection.lastWriteError}
+  <div class="notice err" role="alert" id="write-error">This change was not saved: {collection.lastWriteError}. Free space or <a href="/backup">back up now</a>.</div>
+{/if}
 <form class="form" novalidate onsubmit={save}>
   <PageHead title={m.veg ? 'Start a propagation' : 'Sow seed'} kick="Sowings" places={false}>
     {#snippet subline()}Batch <span class="accno">{nextNo}</span>. Plants potted up from it are numbered then, not now.{/snippet}

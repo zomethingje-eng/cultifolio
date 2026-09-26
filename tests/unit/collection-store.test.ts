@@ -41,6 +41,7 @@ vi.mock('$lib/db/vault', () => {
   // The claiming write of the real vault, over the same in-memory log: `build` sees the numbers the caller knows.
   m.appendChangesClaiming = async (_k: string, known: Set<string>, build: (s: Set<string>) => { changes: Change[]; result: unknown }) => { const b = build(new Set(known)); await m.appendChanges(b.changes); return b.result; };
   m.onOtherTabWrite = () => () => {};
+  m.announceSyncForgotten = () => {};
   return m;
 });
 
@@ -470,3 +471,30 @@ describe('round thirteen', () => {
     expect(again.accession('X-1')?.price).toBe('p2');
   });
 });
+
+describe('round fifteen', () => {
+  it('a plant removed in v2 stays removed after the import, and after a reload (round fifteen, 1)', async () => {
+    const { collection } = await fresh('testdevice');
+    const v2 = { collection: { accessions: { 'A-1': { acc: 'A-1', nameAsReceived: 'Aloe x', status: 'growing' } }, tombs: { 'a:A-2': 1_700_000_000_000 } } };
+    const { changes } = importV2(v2, { now: Date.now() });
+    await collection.ingest(changes);
+    expect(collection.accession('A-1')).toBeDefined();
+    expect(collection.accession('A-2')).toBeUndefined(); // not brought back to life by the import day
+    expect(collection.accessions.map((a) => a.id)).toEqual(['A-1']);
+    const again = (await reload()) as typeof collection;
+    expect(again.accession('A-2')).toBeUndefined();
+    expect(again.accession('A-1')?.importedOn).toBe(localDate());
+  });
+  it('a duplicate is renumbered into the year of the number it held, not its acquisition year (round fifteen, 14)', async () => {
+    const x = await fresh('devicex00000');
+    const mine = await x.collection.addAccession({ taxonName: 'Copiapoa', acc: '2026-0007', acquired: '2019-05-01' });
+    const y = await fresh('devicey00000');
+    await new Promise((r) => setTimeout(r, 2));
+    const theirs = await y.collection.addAccession({ taxonName: 'Copiapoa', acc: '2026-0007', acquired: '2019-05-01' });
+    mem = x.mem;
+    await x.collection.ingest([...y.mem.changes.values()], 'server');
+    expect(accNo(x.collection.accession(mine.id)!)).toBe('2026-0007');
+    expect(accNo(x.collection.accession(theirs.id)!)).toBe('2026-0008');
+  });
+});
+

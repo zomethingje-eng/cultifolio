@@ -36,7 +36,7 @@
  * what records mention that we lack.
  */
 import { collection } from '$lib/db/collection.svelte';
-import { getMeta, setMeta, getPhotoBlobs, putPhotoBlobs, photoBlobIds, outboxKeys, outboxAck, outboxFill, outboxClear, changesByKeys, allChanges, appendChanges } from '$lib/db/vault';
+import { getMeta, setMeta, getPhotoBlobs, putPhotoBlobs, photoBlobIds, outboxKeys, outboxAck, outboxFill, outboxClear, changesByKeys, allChanges, appendChanges, onOtherTabWrite, announceSyncForgotten } from '$lib/db/vault';
 import { deriveKeys, sealJson, openJson, seal, open, packPhoto, unpackPhoto, parseVaultKey, batchFingerprint, sha256hex, type VaultKeys } from './crypto';
 import { MAX_BATCH_BYTES, MAX_PHOTO_BYTES, SEAL_OVERHEAD, OVERLAP_MS } from './limits';
 import { validateChanges, isHeld, dueAt, hlcWall, type Change } from '$core/log';
@@ -56,7 +56,7 @@ interface SyncMeta {
    * Batches that could not be opened or validated, by name, with why, and the build that failed to read them. Also in
    * `have`, so they never block the cursor; a new build drops them from both and reads them again (round twelve, 2).
    */
-  quarantined?: Array<{ key: string; error: string; at: string; build?: string }>;
+  quarantined?: Array<{ key: string; error: string; at: string; build?: string; /** what the key names; an entry without it from before round fifteen is told by its error text */ kind?: 'batch' | 'photo' }>;
   /** Things the server refused to take from this device, by name, with why. They stay in the outbox; the rest of a sync goes on. */
   refused?: Array<{ key: string; error: string; at: string }>;
   /** HLCs of stored changes the fold is holding back because they are stamped too far ahead of this device's clock. */
@@ -137,6 +137,7 @@ class Sync {
     });
     if (this.listening || typeof window === 'undefined') return;
     this.listening = true;
+    onOtherTabWrite((what) => { if (what === 'sync-forgotten' && this.configured) this.dropped(); });
     window.addEventListener('online', () => this.schedule(1000));
     // An open, idle device pulls too: when it comes back into view, when it gets focus, and every few minutes while visible. Never while hidden.
     const visible = () => typeof document === 'undefined' || document.visibilityState === 'visible';
@@ -191,6 +192,35 @@ class Sync {
 
   /** Stop syncing on this device. Nothing local is deleted; nothing on the server is deleted. */
   async forget(): Promise<void> {
+    this.dropped(); // this.meta is null from here: a run in flight cannot write the old record back (round fifteen, 2)
+    await setMeta(META, null);
+    await outboxClear();
+    announceSyncForgotten(); // and the other tabs drop theirs
+  }
+
+  private async countPending(): Promise<void> {
+    if (!this.meta) return;
+    this.pending = (await outboxKeys()).length;
+  }
+
+  /** The outbox, as changes, in HLC order. */
+  private async toPush(): Promise<Change[]> {
+    const ts = (await outboxKeys()).sort(hlcCompare);
+    return changesByKeys(ts);
+  }
+
+  /**
+   * Write the meta a run is working on, but only while it is still this device's meta: after "Stop syncing" (here or in
+   * another tab) a run already in flight holds the old record, and writing it back would put the key and the cursor back
+   * as if nothing had happened. The run ends instead (round fifteen, 2).
+   */
+  private async save(m: SyncMeta): Promise<void> {
+    if (this.meta !== m) throw new Error('syncing was stopped on this device while this run was under way');
+    await setMeta(META, m);
+  }
+
+  /** Forget the key in memory only: another tab did the forgetting and wrote the vault; this tab must not sync through it. */
+  private dropped(): void {
     this.unhook?.();
     this.unhook = null;
     this.meta = null;
@@ -205,25 +235,12 @@ class Sync {
     this.heldUntil = null;
     this.clockWarning = null;
     this.vaultFull = null;
-    await setMeta(META, null);
-    await outboxClear();
-  }
-
-  private async countPending(): Promise<void> {
-    if (!this.meta) return;
-    this.pending = (await outboxKeys()).length;
-  }
-
-  /** The outbox, as changes, in HLC order. */
-  private async toPush(): Promise<Change[]> {
-    const ts = (await outboxKeys()).sort(hlcCompare);
-    return changesByKeys(ts);
   }
 
   private note(list: 'quarantined' | 'refused', key: string, error: string): void {
     const m = this.meta!;
     const l = (m[list] ??= []);
-    if (!l.some((q) => q.key === key)) l.push({ key, error, at: new Date().toISOString(), ...(list === 'quarantined' ? { build: BUILD } : {}) });
+    if (!l.some((q) => q.key === key)) l.push({ key, error, at: new Date().toISOString(), ...(list === 'quarantined' ? { build: BUILD, kind: error.startsWith('photo:') ? 'photo' : 'batch' } : {}) });
     this[list] = [...l];
   }
 
@@ -300,7 +317,7 @@ class Sync {
     if (changes.length) await collection.ingest(changes, 'server');
     m.held = m.held.filter((t) => !due.includes(t));
     this.setHeld();
-    await setMeta(META, m);
+    await this.save(m);
   }
 
   async run(): Promise<void> {
@@ -310,11 +327,20 @@ class Sync {
     try {
       await collection.load();
       await this.refold();
-      await this.push();
+      // A push the server asks to wait on (429: the address's allowance is spent, say after a large photo upload) does not
+      // stop the pull: other devices' changes still arrive, and the wait is reported afterwards (round fifteen, 7).
+      let wait: Error | null = null;
+      try {
+        await this.push();
+      } catch (e) {
+        if ((e as { retryAfterMs?: number })?.retryAfterMs) wait = e as Error;
+        else throw e;
+      }
       await this.pull();
       this.meta.lastSync = new Date().toISOString();
       this.lastSync = this.meta.lastSync;
-      await setMeta(META, this.meta);
+      await this.save(this.meta);
+      if (wait) { wait.message = `received; ${wait.message}`; throw wait; }
     } catch (e) {
       this.lastError = e instanceof Error ? e.message : String(e);
       const wait = (e as { retryAfterMs?: number })?.retryAfterMs;
@@ -363,10 +389,12 @@ class Sync {
       this.busy = `Sending ${Math.min(i + batch.length, todo.length)} of ${todo.length} changes…`;
       sent += await this.pushBatch(batch);
       this.pending = todo.length - sent;
-      await setMeta(META, m);
+      await this.save(m);
       if (this.vaultFull) return;
     }
-    if (this.vaultFull) return;
+    // A vault that was full is probed by the next photo too: with nothing in the outbox no batch is ever sent to clear the
+    // flag, and once room is made the photo would otherwise wait until the grower edits something (round fifteen, 8).
+    const probing = !!this.vaultFull;
     // Photos we have that the server may not.
     const have = new Set(await photoBlobIds());
     const pushed = new Set(m.photosPushed);
@@ -386,15 +414,15 @@ class Sync {
       const full = await this.fullFrom(r);
       if (full) {
         this.setFull(full);
-        await setMeta(META, m);
+        await this.save(m);
         return;
       }
-      if (r.ok) m.photosPushed.push(id);
+      if (r.ok) { m.photosPushed.push(id); if (probing) this.setFull(null); }
       else if (r.status === 429) this.limited(r);
       else if (r.status === 409 && (await this.serverHolds(id, packed))) m.photosPushed.push(id); // our own earlier send whose answer was lost: sealed again with a fresh nonce, so the bytes differ, the pixels do not
       else if (r.status >= 400 && r.status < 500 && r.status !== 401 && r.status !== 403) this.note('refused', id, `photo refused: ${r.status}`);
       else throw new Error(`photo push failed: ${r.status}`);
-      await setMeta(META, m);
+      await this.save(m);
     }
   }
 
@@ -543,7 +571,7 @@ class Sync {
         // One write per page, not per batch (round twelve, 10). A run that stops mid-page keeps what it applied: a
         // batch applied and not recorded is fetched again and folded again, which the log makes harmless.
         this.pruneHave(m);
-        await setMeta(META, m);
+        await this.save(m);
       }
       if (!more || !batches.length) break;
       const last = next ?? { at: batches[batches.length - 1].at, key: batches[batches.length - 1].key };
@@ -556,14 +584,20 @@ class Sync {
     // has folded. A transient failure (a 429, a 5xx, a dropped connection) leaves the entry exactly as it was, to be tried
     // next run; only bytes read whole that this build cannot open are re-noted under this build (round fourteen, 1; the
     // round-thirteen version removed the entry first, and a throw then lost it).
-    for (const q of (m.quarantined ?? []).filter((q) => q.build !== BUILD)) {
+    // Batches only: a photograph set aside is retried by the photo pull below, not fetched as if it were a batch (round
+    // fifteen, 6: every deploy is a new build, and one photo entry ended every run on the device with a failed fetch).
+    // A failure to re-read one key does not end the run: the entry stands, the failure is noted, and the number repair
+    // and the photo pull still happen; only a 429 stops the run, since that is the server asking for time.
+    const isPhoto = (q: { kind?: string; error: string }) => q.kind === 'photo' || (!q.kind && q.error.startsWith('photo:'));
+    for (const q of (m.quarantined ?? []).filter((q) => q.build !== BUILD && !isPhoto(q))) {
       this.busy = 'Reading a batch set aside by an earlier build…';
       let ok: boolean;
       try {
         ok = await this.takeBatch(m, q.key);
       } catch (e) {
-        this.busy = null;
-        throw e; // the entry stands; this run ends as any pull that could not fetch a batch ends
+        if ((e as { retryAfterMs?: number })?.retryAfterMs) throw e;
+        console.warn(`set-aside batch ${q.key} could not be read again this run: ${e instanceof Error ? e.message : String(e)}`);
+        continue; // the entry stands, whatever the failure: a 5xx, a dropped connection, or a 4xx for a batch the server no longer holds
       }
       if (ok) {
         m.quarantined = m.quarantined!.filter((x) => x.key !== q.key);
@@ -573,7 +607,7 @@ class Sync {
         if (entry) entry.build = BUILD; // read again by this build and still unreadable: noted as this build's
       }
       this.quarantined = [...(m.quarantined ?? [])];
-      await setMeta(META, m);
+      await this.save(m);
     }
     // Duplicate numbers are repaired once, over the whole pull, so every device repairs from the same complete log (round twelve, 3).
     await collection.repairNumbers();
@@ -583,7 +617,9 @@ class Sync {
     for (let i = 0; i < missing.length; i++) {
       this.busy = `Receiving photo ${i + 1} of ${missing.length}…`;
       const p = missing[i];
-      if (m.quarantined?.some((q) => q.key === p.id)) continue;
+      const setAside = m.quarantined?.find((q) => q.key === p.id);
+      if (setAside && setAside.build === BUILD) continue; // set aside by this build: not asked for again
+      if (setAside) { m.quarantined = m.quarantined!.filter((q) => q.key !== p.id); this.quarantined = [...m.quarantined]; } // another build's: read again; set aside afresh below if still unreadable
       const r = await fetch(`${this.base}/api/sync/photo/${p.id}?vault=${this.keys!.id}`, { headers: this.h() });
       if (r.status === 404) continue; // not uploaded from its device yet
       if (r.status === 429) this.limited(r);
@@ -602,7 +638,7 @@ class Sync {
         await putPhotoBlobs({ id: p.id, blob: new Blob([pixels.full as BlobPart], { type: 'image/jpeg' }), thumb: new Blob([pixels.thumb as BlobPart], { type: 'image/jpeg' }) });
         m.photosPushed.push(p.id); // it is on the server already; never push it back
       }
-      await setMeta(META, m);
+      await this.save(m);
     }
   }
 }

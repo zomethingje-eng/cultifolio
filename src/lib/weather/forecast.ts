@@ -50,7 +50,12 @@ export function metUrl(lat: number, lon: number, altitudeM?: number): string {
   return `https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${la}&lon=${lo}${altitudeM != null ? `&altitude=${Math.round(altitudeM)}` : ''}`;
 }
 
-/** Reduce MET's hourly-then-6-hourly series to daily min/max. Days are cut at local midnight using a longitude-based offset (good to within an hour, which is enough for a night minimum). */
+/**
+ * Reduce MET's hourly-then-6-hourly series to daily min/max. Days are cut at solar midnight: the offset is the site's
+ * longitude in whole hours, which is mean solar time to the hour, not the clock. MET's compact answer carries no zone,
+ * and a zone table is more than this needs, so the clock can be two or three hours away (Mendoza, western China, Spain
+ * in summer); the times are labelled solar for that reason (round fifteen, 13).
+ */
 export function reduceMet(res: MetResponse, lon: number, fetched = new Date().toISOString(), expires?: string): Forecast {
   const offsetH = Math.round(lon / 15);
   const byDay = new Map<string, DayForecast>();
@@ -148,15 +153,15 @@ const WEEKDAY = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday
 const localHM = (ms: number, offsetH: number) => new Date(ms + offsetH * 3600_000).toISOString().slice(11, 16);
 const localDay = (ms: number, offsetH: number) => WEEKDAY[new Date(ms + offsetH * 3600_000).getUTCDay()];
 
-/** "at 05:00 Thursday", or for a six-hour minimum "between 21:00 Wednesday and 03:00 Thursday". Local time by the site's longitude. */
+/** "around 05:00 Thursday solar time", or for a six-hour minimum "between 21:00 Wednesday and 03:00 Thursday solar time". Solar time by the site's longitude, never the clock. */
 export function whenText(tminAt: string | undefined, offsetH: number): string {
   if (!tminAt) return '';
   const [a, b] = tminAt.split('/');
   const ta = new Date(a).getTime();
-  if (!b) return `at ${localHM(ta, offsetH)} ${localDay(ta, offsetH)}`;
+  if (!b) return `around ${localHM(ta, offsetH)} ${localDay(ta, offsetH)} solar time`;
   const tb = new Date(b).getTime();
   const da = localDay(ta, offsetH), db = localDay(tb, offsetH);
-  return `between ${localHM(ta, offsetH)} ${da} and ${localHM(tb, offsetH)}${db === da ? '' : ' ' + db}`;
+  return `between ${localHM(ta, offsetH)} ${da} and ${localHM(tb, offsetH)}${db === da ? '' : ' ' + db} solar time`;
 }
 
 /** What the frost panel says. Thresholds are in °C at 2 m; a bench under glass or indoors adjusts them itself. Every sentence names the hours it covers or the night it is about. */

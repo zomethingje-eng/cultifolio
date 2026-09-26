@@ -62,6 +62,7 @@ vi.mock('$lib/db/vault', () => {
   // The claiming write of the real vault, over the same in-memory log: `build` sees the numbers the caller knows.
   m.appendChangesClaiming = async (_k: string, known: Set<string>, build: (s: Set<string>) => { changes: Change[]; result: unknown }) => { const b = build(new Set(known)); await m.appendChanges(b.changes); return b.result; };
   m.onOtherTabWrite = () => () => {};
+  m.announceSyncForgotten = () => {};
   return m;
 });
 
@@ -593,7 +594,7 @@ describe('a batch that cannot be read is set aside, not a wall', () => {
     expect(D2.sync.quarantined).toHaveLength(0);
     expect(D2.sync.lastError).toBeNull();
   });
-  it('a transient failure while re-reading a set-aside batch leaves it set aside, to be tried next run; it is not lost (round fourteen, 1)', async () => {
+  it('a transient failure while re-reading a set-aside batch leaves it set aside, to be tried next run, and does not end the run; it is not lost (round fourteen, 1; round fifteen)', async () => {
     const r2 = fakeR2();
     const A = await boot(newMem('aaaaaaaaaaaa'), r2);
     const p = await A.collection.addAccession({ taxonName: 'Lithops', acc: 'A-1' });
@@ -614,7 +615,8 @@ describe('a batch that cannot be read is set aside, not a wall', () => {
       if (String(input).includes(`/api/sync/log/${key}`) && !failed++) return new Response('{"error":"try later"}', { status: 503 });
       return real(input, init);
     }) as typeof fetch;
-    await expect(D2.sync.run()).rejects.toThrow(/503/);
+    await D2.sync.run(); // the failed re-read does not end the run (round fifteen, design note): the number repair and the photo pull still happen
+    expect(D2.sync.lastError).toBeNull();
     expect(D2.sync.quarantined).toHaveLength(1); // still set aside, still on the page
     expect((m.meta.get('sync') as typeof meta).quarantined).toHaveLength(1); // and still on disk, whatever writes meta next
     await D2.collection.addAccession({ taxonName: 'Conophytum', acc: 'D-1' }); // a push writes meta too
@@ -622,6 +624,79 @@ describe('a batch that cannot be read is set aside, not a wall', () => {
     expect(D2.collection.accession(p.id)).toBeDefined(); // fetched again, folded
     expect(D2.sync.quarantined).toHaveLength(0);
     expect(D2.sync.lastError).toBeNull();
+  });
+  it('a photograph set aside by an older build is not fetched as a batch, and does not end every run after a deploy (round fifteen, 6)', async () => {
+    const r2 = fakeR2();
+    const A = await boot(newMem('aaaaaaaaaaaa'), r2);
+    const p = await A.collection.addAccession({ taxonName: 'Lithops', acc: 'A-1' });
+    await A.sync.setup(KEY, 'create');
+    const D = await boot(newMem('dddddddddddd'), r2);
+    await D.sync.setup(KEY, 'join');
+    const m = mem;
+    const meta = m.meta.get('sync') as { quarantined?: Array<{ key: string; error: string; at: string; build?: string }> };
+    meta.quarantined = [{ key: 'p1790000000000-0000-aaaaaaaaaaaa', error: 'photo: pixels do not match the record', at: new Date().toISOString(), build: 'older-build' }];
+    m.meta.set('sync', meta);
+    const D2 = await reboot(m, r2);
+    await D2.sync.run(); // a new build: the entry is from another build, and is a photograph, not a batch
+    expect(D2.sync.lastError).toBeNull();
+    expect(D2.sync.lastSync).not.toBeNull();
+    expect(D2.calls.some((c) => c.includes('/api/sync/log/p1790000000000'))).toBe(false); // never fetched as a batch
+    expect(D2.collection.accession(p.id)).toBeDefined();
+  });
+  it('a push the server asks to wait on does not stop the pull: the other device\'s changes arrive and the wait is reported after (round fifteen, 7)', async () => {
+    const r2 = fakeR2();
+    const memA = newMem('aaaaaaaaaaaa'), memD = newMem('dddddddddddd');
+    const A = await boot(memA, r2);
+    await A.sync.setup(KEY, 'create');
+    const D = await boot(memD, r2);
+    await D.sync.setup(KEY, 'join');
+    const A2 = await boot(memA, r2);
+    await A2.sync.init();
+    const p = await A2.collection.addAccession({ taxonName: 'Lithops', acc: 'A-1' });
+    await A2.sync.run(); // on the server now
+    const D2 = await reboot(memD, r2);
+    await D2.collection.addAccession({ taxonName: 'Conophytum', acc: 'D-1' }); // something pending here
+    const real = globalThis.fetch;
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      if (init?.method === 'POST' && String(input).includes('/api/sync/log')) return new Response('{"error":"day allowance spent"}', { status: 429, headers: { 'retry-after': '600' } });
+      return real(input, init);
+    }) as typeof fetch;
+    const err = await D2.sync.run().catch((e: Error) => e);
+    expect((err as Error).message).toMatch(/^received; /);
+    expect(D2.collection.accession(p.id)).toBeDefined(); // the pull ran
+    expect(D2.sync.lastSync).not.toBeNull();
+    expect(memD.outbox.size).toBeGreaterThan(0); // the change here still waits
+  });
+  it('"Stop syncing" during a run: the run cannot write the old key back (round fifteen, 2)', async () => {
+    const r2 = fakeR2();
+    const memA = newMem('aaaaaaaaaaaa'), memD = newMem('dddddddddddd');
+    const A = await boot(memA, r2);
+    await A.sync.setup(KEY, 'create');
+    await A.collection.addAccession({ taxonName: 'Lithops', acc: 'A-1' });
+    await A.sync.run();
+    const D = await boot(memD, r2);
+    await D.sync.setup(KEY, 'join');
+    const D2 = await reboot(memD, r2);
+    memD.meta.set('sync', { ...(memD.meta.get('sync') as object), since: 0, have: [] }); // make the run fetch a batch
+    const D3 = await reboot(memD, r2);
+    // The listing answers, then the batch body takes a while; "Stop syncing" is pressed in the meantime.
+    const real = globalThis.fetch;
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      if (/\/api\/sync\/log\/[^?]+/.test(String(input))) await gate;
+      return real(input, init);
+    }) as typeof fetch;
+    const run = D3.sync.run().catch((e: Error) => e);
+    await new Promise((r) => setTimeout(r, 50));
+    await D3.sync.forget();
+    release();
+    const err = await run;
+    expect(err).toBeInstanceOf(Error);
+    expect(memD.meta.get('sync')).toBeNull(); // the run did not write the old meta back
+    const D4 = await reboot(memD, r2);
+    expect(D4.sync.configured).toBe(false);
+    void D2;
   });
   it('a batch with a reserved field is refused whole: nothing of it is applied', async () => {
     const r2 = fakeR2();

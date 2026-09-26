@@ -94,6 +94,8 @@
   }
   /** Care lines that could not be made because the reference was not reached: said on the sheet and on the page, never printed as if the species had no data (round thirteen, 6). */
   const unchecked = $derived(picked.filter((a) => care[a.id] === null));
+  /** Plants whose species' climate was refused when the reference was built: printed as "climate not checked", counted on the page (round fifteen, 5). */
+  const refused = $derived(picked.filter((a) => care[a.id] === 'climate not checked'));
   /** Plants whose sheet has been asked for and not yet answered: its own set, since an answer can be an empty line (a species with no climate) and must count as answered (round fourteen, 3). */
   let asking = $state<Set<string>>(new Set());
   const pending = $derived(withCare && picked.some((a) => asking.has(a.id)));
@@ -115,7 +117,7 @@
           done();
           if (d === 'unreachable') { care = { ...care, [a.id]: null }; return; } // not "no data": not reached
           const readerLat = site.current?.lat ?? collection.locations.map((l) => l.lat).find((x): x is number => x != null) ?? null;
-          const line = careLine({ scientific: a.taxonName, family: d?.name.family, months: d?.climate.status === 'ok' ? d.climate.months : null, extremes: d?.climate.status === 'ok' ? (d.climate.extremes ?? null) : null, lat: d?.habitatLat ?? null, units: units.current }, { readerLat });
+          const line = careLine({ scientific: a.taxonName, climateStatus: d?.climate.status, family: d?.name.family, months: d?.climate.status === 'ok' ? d.climate.months : null, extremes: d?.climate.status === 'ok' ? (d.climate.extremes ?? null) : null, lat: d?.habitatLat ?? null, units: units.current }, { readerLat });
           care = { ...care, [a.id]: line };
         }).catch(() => { done(); care = { ...care, [a.id]: null }; });
       }
@@ -150,8 +152,11 @@
         <span class="grow"></span>
         <button id="lb-print" class="btn pri" onclick={() => window.print()} disabled={!picked.length || pending}>{pending ? 'Reading the reference…' : `Print ${picked.length} ${picked.length === 1 ? 'label' : 'labels'}`}</button>
       </div>
+      {#if withCare && refused.length}
+        <p class="small muted" role="status">{refused.length === 1 ? 'One label prints' : `${refused.length} labels print`} "climate not checked": the climate source did not answer when the species page was built, which is not a statement that the species has no climate.</p>
+      {/if}
       {#if withCare && unchecked.length}
-        <div class="notice" id="lb-unchecked" role="status">{unchecked.length === 1 ? 'One care line' : `${unchecked.length} care lines`} not checked: the species reference could not be reached from here, which is not a statement that the species has no figures. Those labels say so. <button type="button" class="linkish" onclick={retryCare}>Try again</button> before printing.</div>
+        <div class="notice" id="lb-unchecked" role="status">{unchecked.length === 1 ? 'One care line' : `${unchecked.length} care lines`} not checked: the species reference could not be reached from here, which is not a statement that the species has no figures. The preview marks those care lines; on the printed labels they are left blank. <button type="button" class="linkish" onclick={retryCare}>Try again</button> before printing.</div>
       {/if}
     </div>
   </div>

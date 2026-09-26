@@ -18,6 +18,7 @@ vi.mock('$lib/db/vault', () => {
   // The claiming write of the real vault, over the same in-memory log: `build` sees the numbers the caller knows.
   m.appendChangesClaiming = async (_k: string, known: Set<string>, build: (s: Set<string>) => { changes: Change[]; result: unknown }) => { const b = build(new Set(known)); await m.appendChanges(b.changes); return b.result; };
   m.onOtherTabWrite = () => () => {};
+  m.announceSyncForgotten = () => {};
   return m;
 });
 

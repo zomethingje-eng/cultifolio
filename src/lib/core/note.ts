@@ -53,11 +53,17 @@ export function generatedNote(input: SheetInput, o: NoteOpts = {}): Condensed | 
 
 /** One line for a label: the rain rule's season in the reader's hemisphere, the cold floor, the open-sky light. Empty when nothing is known. */
 export function careLine(input: SheetInput, o: NoteOpts = {}): string {
+  // A climate that was not checked (the source refused when the page was built) is said so, never printed as the blank a
+  // species with no climate gets: the label follows the same refusal rule as the pages (round fifteen, 5).
+  if (input.climateStatus === 'refused' || input.climateStatus === 'pending') return 'climate not checked';
   const { rows, year } = cultivationSheet(input);
   if (!rows.length) return '';
   const bits: string[] = [];
   if (year) {
-    const months = span3(forReader(year, o.readerLat));
+    // Months the shift rule cannot move (a flat curve, or within 10° of the equator) are the habitat's own whichever side of
+    // the equator the reader is on, and the label marks them, as the pages say "not shifted" (round fifteen, 15).
+    const otherSide = ((o.readerLat ?? 40) < 0) !== year.south;
+    const months = span3(forReader(year, o.readerLat)) + (!year.shiftable && otherSide ? ' (hab.)' : '');
     if (year.none) bits.push('no season to read');
     else if (year.fog) bits.push(`cooler six months ${months}`);
     else if (year.spread) bits.push('rain spread, no season');

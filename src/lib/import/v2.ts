@@ -15,6 +15,7 @@
 import type { Change } from '$core/log';
 import { hlcEncode, MAX_COUNT } from '$core/hlc';
 import { slugify } from '$core/names';
+import { tag36 } from '$core/tag';
 
 interface V2Event {
   id?: string;
@@ -93,21 +94,31 @@ export function importV2(json: unknown, opts: ImportOpts = {}): { changes: Chang
   const report: ImportReport = { accessions: 0, events: 0, taxa: 0, locations: 0, sowings: 0, skipped: [], alreadyHere: 0 };
   const changes: Change[] = [];
   const device = opts.device ?? 'v2imp';
+  /**
+   * Each record is stamped under its own writer tag (the importer's tag plus a hash of the record's id) with its own
+   * counter, so the stamps a record gets depend on nothing but the record: not on the records before it in the file, and
+   * not on which of them another device already had and skipped. Two devices importing one file therefore give the same
+   * change the same stamp and different changes different stamps, and the change store's put-by-stamp can never replace
+   * one record's field with another's (round fifteen, 3).
+   */
+  const writerOf = (kind: string, id: string) => device + tag36(kind + ':' + id).slice(0, 16 - device.length);
   const now = opts.now ?? Date.now();
   // A record without its own modification time is stamped an hour before the file was written (the file's export time when it says, else now), so any edit made after the import wins on every device.
   const exported = modTime(root.exported ?? root.at ?? root.when, now) ?? (typeof root.exported === 'string' && !Number.isNaN(Date.parse(root.exported)) ? Math.min(Date.parse(root.exported), now) : null);
   const base = (exported ?? now) - 3600_000;
   // One counter per millisecond, so two records modified in the same millisecond never share a stamp; a very large record spills into the next millisecond rather than past the counter's width.
-  const counters = new Map<number, number>();
+  const counters = new Map<string, number>();
   let wall = base;
-  const at = (ms: number) => {
+  let writer = device;
+  const at = (ms: number, kind?: string, id?: string) => {
     wall = ms;
+    writer = kind && id ? writerOf(kind, id) : device;
   };
   const t = () => {
-    let n = counters.get(wall) ?? 0;
-    while (n > MAX_COUNT) n = counters.get(++wall) ?? 0;
-    counters.set(wall, n + 1);
-    return hlcEncode({ wall, count: n, device });
+    let n = counters.get(writer + ':' + wall) ?? 0;
+    while (n > MAX_COUNT) n = counters.get(writer + ':' + ++wall) ?? 0;
+    counters.set(writer + ':' + wall, n + 1);
+    return hlcEncode({ wall, count: n, device: writer });
   };
   const push = (kind: Change['kind'], id: string, fields: Record<string, unknown>) => {
     for (const [field, value] of Object.entries(fields)) if (value !== undefined) changes.push({ t: t(), kind, id, field, value });
@@ -126,7 +137,7 @@ export function importV2(json: unknown, opts: ImportOpts = {}): { changes: Chang
       taxonNames.set(id, name);
       const slug = slugify(name);
       if (here('taxon', slug)) continue;
-      at(modTime((o as { m?: unknown }).m, now) ?? base);
+      at(modTime((o as { m?: unknown }).m, now) ?? base, 'taxon', slug);
       const gk = o.gk ?? opts.summaries?.[id]?.gk ?? null;
       push('taxon', slug, { name, gbifKey: gk, myNotes: o.myNotes ?? null, removed: o.removed ?? null });
       report.taxa++;
@@ -141,7 +152,7 @@ export function importV2(json: unknown, opts: ImportOpts = {}): { changes: Chang
       const name = b.name ?? b.id;
       const lid = 'l-v2-' + slugify(name).slice(0, 24) + '-' + slugify(b.id).slice(0, 8);
       if (here('location', lid)) continue;
-      at(modTime((b as { m?: unknown }).m, now) ?? base);
+      at(modTime((b as { m?: unknown }).m, now) ?? base, 'location', lid);
       const outdoor = /out|garden|balcon|patio|yard/i.test(`${b.where ?? ''}`);
       push('location', lid, { name, parentId: null, type: outdoor ? 'outdoor' : 'bench', indoor: outdoor ? false : b.where ? true : null, floorC: typeof b.floor === 'number' ? b.floor : null, ppfd: typeof b.ppfd === 'number' ? b.ppfd : null, lightHours: typeof b.hours === 'number' ? b.hours : null, lat: typeof b.lat === 'number' ? b.lat : null, lon: typeof b.lon === 'number' ? b.lon : null, notes: b.notes ?? null });
       benchByRef.set(b.id, lid);
@@ -164,7 +175,7 @@ export function importV2(json: unknown, opts: ImportOpts = {}): { changes: Chang
         continue;
       }
       if (here('sowing', id)) continue;
-      at(modTime(w?.m, now) ?? base);
+      at(modTime(w?.m, now) ?? base, 'sowing', id);
       const taxonId = str(w?.taxonId);
       const taxonName = (taxonId && taxonNames.get(taxonId)) || str(w?.name) || str(w?.taxon) || taxonId || 'Unknown';
       const count = num(w?.count) ?? num(w?.n) ?? num(w?.seeds) ?? num(w?.sownN) ?? 0;
@@ -213,7 +224,7 @@ export function importV2(json: unknown, opts: ImportOpts = {}): { changes: Chang
         continue;
       }
       if (here('accession', a.acc)) continue;
-      at(modTime(a.m, now) ?? base); // the plant and its embedded events share the plant's modification time
+      at(modTime(a.m, now) ?? base, 'accession', a.acc); // the plant and its embedded events share the plant's modification time and writer
       const taxonName = (a.taxonId && taxonNames.get(a.taxonId)) || a.nameAsReceived || a.taxonId || 'Unknown';
       const status = a.status === 'dead' ? 'dead' : a.status === 'archived' ? 'archived' : 'growing';
       push('accession', a.acc, {
@@ -259,11 +270,11 @@ export function importV2(json: unknown, opts: ImportOpts = {}): { changes: Chang
       const m = /^a:(.+)$/.exec(k);
       if (!m || typeof ts !== 'number') continue;
       if (here('accession', m[1])) continue;
-      at(modTime(ts, now) ?? base);
+      at(modTime(ts, now) ?? base, 'accession', m[1]);
       // A removed plant's number stays issued (on the ledger, never given again), so the number is a field here too. It is
       // stamped one millisecond BEFORE the removal, under its own writer tag, so the removal keeps the stamp an earlier
       // build gave it (round thirteen, 5) and stays a removal: an edit stamped after a removal would undo it.
-      changes.push({ t: hlcEncode({ wall: wall - 1, count: 0, device: device + 'n' }), kind: 'accession', id: m[1], field: 'acc', value: m[1] });
+      changes.push({ t: hlcEncode({ wall: wall - 1, count: 0, device: writer }), kind: 'accession', id: m[1], field: 'acc', value: m[1] });
       changes.push({ t: t(), kind: 'accession', id: m[1], field: '_deleted', value: true });
     }
   }

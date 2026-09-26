@@ -7,6 +7,7 @@
 import { SvelteMap } from 'svelte/reactivity';
 import { localDate, madeOn } from '$core/dates';
 import { Clock, hlcDecode, hlcEncode, hlcCompare, hlcAfter } from '$core/hlc';
+import { tag36 } from '$core/tag';
 import { apply, diff, validateChanges, key as recKey, type Change, type Kind, type Record_, type State, hlcWall } from '$core/log';
 import { nextAccession, DEFAULT_SCHEME, type NumberingScheme } from '$core/accession';
 import { allChanges, appendChanges, appendChangesClaiming, onOtherTabWrite, deviceId, requestPersistence, getMeta, setMeta, putPhotoBlobs, getPhotoBlobs, deletePhotoBlobs, holdVault, type NumberKind } from './vault';
@@ -20,14 +21,6 @@ export { NUMBERING_SETTING };
 const isScheme = (s: unknown): s is NumberingScheme => !!s && typeof s === 'object' && ((s as NumberingScheme).mode === 'year' || (s as NumberingScheme).mode === 'prefix') && typeof (s as NumberingScheme).width === 'number';
 
 /** A short, deterministic tag for a string: two 32-bit FNV-1a hashes in base 36 (up to 14 characters, [a-z0-9]). */
-function tag36(s: string): string {
-  const fnv = (seed: number) => {
-    let h = seed >>> 0;
-    for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193) >>> 0;
-    return h.toString(36);
-  };
-  return fnv(0x811c9dc5) + fnv(0x050c5d1f);
-}
 
 const numberField = (c: Change): NumberKind | null => (c.kind === 'accession' && c.field === 'acc' ? 'accession' : c.kind === 'sowing' && c.field === 'no' ? 'sowing' : null);
 
@@ -64,7 +57,12 @@ class Collection {
         if (isScheme(scheme)) this.metaScheme = scheme;
         await this.readLedger();
         this.ready = true;
-        onOtherTabWrite(() => void this.catchUp().catch(() => {}));
+        onOtherTabWrite((what) => {
+          // Another tab replaced the whole collection from a file: this tab's fold is of a log that no longer exists, and a
+          // note saved here would be diffed against records the new log does not have. The page reloads onto the new one.
+          if (what === 'replaced') { if (typeof location !== 'undefined') location.reload(); return; }
+          if (what === 'written') void this.catchUp().catch(() => {});
+        });
         this.persisted = await requestPersistence();
       })();
     return this.loading;
@@ -776,7 +774,7 @@ class Collection {
         if (seenRec.has(k) || madeOn(c.id)) continue;
         seenRec.add(k);
         const r = this.state.get(k);
-        if (r && !r.importedOn) stamp.push({ t: this.tick(), kind: c.kind, id: c.id, field: 'importedOn', value: today });
+        if (r && !r._deleted && !r.importedOn) stamp.push({ t: this.tick(), kind: c.kind, id: c.id, field: 'importedOn', value: today }); // never a removed record: an edit after a removal undoes it (round fifteen, 1)
       }
       if (stamp.length) await this.commit(stamp, 'local');
     }
@@ -823,7 +821,9 @@ class Collection {
           const base = hlcDecode(rec._t);
           const wall = base.wall + 1;
           const when = new Date(wall);
-          const fresh = kind === 'accession' ? nextAccession(taken, this.scheme, Number((r as Accession).acquired?.slice(0, 4)) || when.getUTCFullYear()) : nextAccession(taken, { mode: 'prefix', prefix: `S${(r as Sowing).sown.slice(0, 4)}`, width: 3 });
+          // The year of the number being replaced, so a plant minted 2026-0007 is repaired to 2026-0008, not into its acquisition year (round fifteen, 14); the stamp's year when the number carries none.
+          const yearOf = /^(\d{4})-/.exec(no)?.[1];
+          const fresh = kind === 'accession' ? nextAccession(taken, this.scheme, yearOf ? Number(yearOf) : when.getUTCFullYear()) : nextAccession(taken, { mode: 'prefix', prefix: `S${(r as Sowing).sown.slice(0, 4)}`, width: 3 });
           taken.add(fresh);
           // The tag is a function of the record AND the number chosen, and no real device id starts with 'zz': two devices that
           // derive the same repair write identical changes (one in the log), and two that chose differently (one of them

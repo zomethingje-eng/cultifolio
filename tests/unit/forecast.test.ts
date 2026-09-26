@@ -89,7 +89,7 @@ describe('what "no frost" is a statement about', () => {
     expect(f.hoursCovered).toBe(36);
     const r = frostRisk(f, []);
     expect(r.level).toBe('none');
-    expect(r.text).toBe('No frost in the next 36 hours of forecast; coldest 4.0 °C at 05:00 Thursday (MET Norway).');
+    expect(r.text).toBe('No frost in the next 36 hours of forecast; coldest 4.0 °C around 05:00 Thursday solar time (MET Norway).');
   });
   it('a six-hour minimum across local midnight belongs to the later night and is reported with its interval', () => {
     // At longitude 0: an interval 21:00 Wed – 03:00 Thu whose minimum is -1 °C; the instant readings are mild.
@@ -97,7 +97,7 @@ describe('what "no frost" is a statement about', () => {
     const f = reduceMet({ properties: { timeseries: ts } } as never, 0);
     expect(f.firstFrost).toBe('2026-10-15');
     expect(f.days.find((d) => d.date === '2026-10-14')!.tmin).toBe(5);
-    expect(frostRisk(f, []).text).toBe('Frost forecast: -1.0 °C between 21:00 Wednesday and 03:00 Thursday (2026-10-15, MET Norway).');
+    expect(frostRisk(f, []).text).toBe('Frost forecast: -1.0 °C between 21:00 Wednesday and 03:00 Thursday solar time (2026-10-15, MET Norway).');
     expect(f.hoursCovered).toBe(24);
   });
 });
