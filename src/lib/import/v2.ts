@@ -249,11 +249,14 @@ export function importV2(json: unknown, opts: ImportOpts = {}): { changes: Chang
         acc: a.acc
       });
       report.accessions++;
+      // An event without an id is named by its place within its own plant, never by a count across the file: a device that
+      // skipped an earlier plant would otherwise give the same event a different id under the same stamp (round sixteen, 4).
+      let ei = 0;
       for (const e of a.events ?? []) {
         if (!e?.d || !e?.t) continue;
         const measures: Record<string, number> = {};
         for (const k of MEASURE_KEYS) if (typeof e[k] === 'number') measures[k] = e[k] as number;
-        push('event', e.id ? `v2-${a.acc}-${e.id}` : `v2-${a.acc}-${report.events}`, {
+        push('event', e.id ? `v2-${a.acc}-${e.id}` : `v2-${a.acc}-e${ei++}`, {
           acc: a.acc,
           d: e.d,
           t: e.t,

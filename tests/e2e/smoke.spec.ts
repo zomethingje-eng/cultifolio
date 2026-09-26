@@ -983,7 +983,7 @@ test('removing asks twice; a species photograph that fails to load leaves the na
   // the species image host is unreachable: the hero says so and keeps its height, so the ID card sits below the topbar
   await page.route(/inaturalist|wikimedia/, (r) => r.abort());
   await page.goto(`/plants/${acc}`);
-  await expect(page.locator('.hero .ph')).toContainText('No photograph yet.');
+  await expect(page.locator('.hero .ph')).toContainText("The reference's photograph did not load.");
   const pos = await page.evaluate(() => ({ card: document.querySelector('.idcard')!.getBoundingClientRect().top, bar: document.querySelector('#topbar')!.getBoundingClientRect().bottom }));
   expect(pos.card).toBeGreaterThanOrEqual(pos.bar);
   await page.goto('/species/copiapoa-cinerea');
@@ -1222,7 +1222,7 @@ test('pages about your own plants ask no outside host for anything unless the re
   await expect(page.locator('.accrow')).toHaveCount(1);
   await page.goto('/');
   await page.waitForLoadState('networkidle');
-  await expect(page.locator('a.tile', { hasText: 'Welwitschia' }).first()).toContainText('photograph on the species page'); // the own tile, without its photograph
+  await expect(page.locator('a.tile', { hasText: 'Welwitschia' }).first()).toContainText('reference photograph off'); // the own tile, without its photograph
   await page.waitForTimeout(500);
   expect(outside.filter((u) => !u.startsWith('/ ->'))).toEqual([]); // the plant page and the list asked no outside host for anything
   expect(outside.filter((u) => u.includes('700/medium'))).toEqual([]); // and the front page fetched nothing about the plant grown (its rows and strip are the public catalogue)
@@ -1230,15 +1230,21 @@ test('pages about your own plants ask no outside host for anything unless the re
   await page.fill('.searchbar', 'welwit');
   await expect(page.locator('a.tile')).toHaveCount(1);
   await page.fill('.searchbar', '');
-  await expect(page.locator('a.tile', { hasText: 'Welwitschia' }).first()).toContainText('photograph on the species page');
+  await expect(page.locator('a.tile', { hasText: 'Welwitschia' }).first()).toContainText('reference photograph off');
   expect(api.filter((u) => /^\/api\/(sheets|entries)/.test(u)).every((u) => /[?&]c=fixture(&|$)/.test(u))).toBe(true); // every reference request names the corpus
   expect(api.some((u) => u === '/api/corpus')).toBe(true);
-  // switched on in Settings, the plant page fetches the species' photograph from the image host, and from nowhere else
+  // switched on where it is withheld (the offer beside the own tiles, one tap, the disclosure in the same line), the tiles show
+  // the photographs at once and Settings reads the same preference; the plant page then fetches the species' photograph from
+  // the image host, and from nowhere else
+  await expect(page.locator('.hero img')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Show the reference’s photographs on your tiles' }).click();
+  await expect.poll(() => outside.some((u) => u === '/ -> https://inaturalist-open-data.s3.amazonaws.com/photos/700/medium.jpg'), { timeout: 10000 }).toBe(true); // the tile asked the image host at once (the stub refuses it, so the tile says it did not load)
+  await expect(page.locator('a.tile', { hasText: 'Welwitschia' }).first()).toContainText('photograph did not load');
   await page.goto('/settings');
-  await page.check('#pref-refphotos');
+  await expect(page.locator('#pref-refphotos')).toBeChecked();
   await page.goto(`/plants/${acc}`);
   await expect.poll(() => outside.some((u) => u === `/plants/${acc} -> https://inaturalist-open-data.s3.amazonaws.com/photos/700/medium.jpg`), { timeout: 10000 }).toBe(true);
-  expect(outside.every((u) => u.includes('inaturalist-open-data.s3.amazonaws.com'))).toBe(true);
+  expect(outside.every((u) => u.includes('inaturalist-open-data.s3.amazonaws.com'))).toBe(true); // the front page's and the plant page's requests, and nothing to any other host
   expect(api.some((u) => u.startsWith('/api/dossier') || /welwitschia|5411106/.test(u))).toBe(false); // still no key and no name to this server
 });
 
@@ -1801,4 +1807,35 @@ test('two tabs whose clocks read the same millisecond still make two plants: eac
   await expect(page.locator('.accrow', { hasText: 'Copiapoa' })).toHaveCount(1);
   await expect(page.locator('.accrow', { hasText: 'Welwitschia' })).toHaveCount(1);
   await other.close();
+});
+
+test('no page address goes out as a referrer: the policy is on every document and every response (round sixteen, 9 and 15)', async ({ page }) => {
+  // Playwright reports a request's headers as the page framed them, before the browser applies the referrer policy, so the
+  // wire itself is not observable here; it was checked once with a logging proxy in front of the server (no Referer on any
+  // font, API or data request). What is checked on every run: the policy is declared on the document and on every response.
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  expect(await page.evaluate(() => document.querySelector('meta[name="referrer"]')?.getAttribute('content'))).toBe('no-referrer');
+  for (const path of ['/plants', '/about/how', '/offline', '/api/corpus']) {
+    const r = await page.request.get(path);
+    expect(r.headers()['referrer-policy'], path).toBe('no-referrer');
+    expect(r.headers()['x-frame-options'], path).toBe('DENY');
+  }
+});
+
+test('the hemisphere cookie rides only on species and compare pages, never on sync or the API (round sixteen, 11)', async ({ page }) => {
+  await page.goto('/settings');
+  await page.getByLabel('Latitude').fill('-33.9');
+  await page.getByLabel('Longitude').fill('18.4');
+  await page.locator('#site').locator('..').getByRole('button', { name: 'Save', exact: true }).first().click();
+  await expect(page.getByText('Saved on this device.')).toBeVisible();
+  const on = async (path: string) => { await page.goto(path); return page.evaluate(() => document.cookie); };
+  expect(await on('/species/copiapoa-cinerea')).toContain('cultifolio.hemi=s');
+  expect(await on('/compare')).toContain('cultifolio.hemi=s');
+  expect(await on('/plants')).not.toContain('cultifolio.hemi');
+  expect(await on('/sync')).not.toContain('cultifolio.hemi');
+  // the cookies the browser would attach to an API or sync request: the units, never the hemisphere
+  const jar = await page.context().cookies(['http://127.0.0.1:4173/api/sync/log', 'http://127.0.0.1:4173/api/sheets']);
+  expect(jar.map((c) => c.name)).not.toContain('cultifolio.hemi');
+  const species = await page.context().cookies(['http://127.0.0.1:4173/species/copiapoa-cinerea']);
+  expect(species.map((c) => c.name)).toContain('cultifolio.hemi');
 });

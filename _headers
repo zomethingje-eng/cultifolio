@@ -1,0 +1,5 @@
+# Project root, as adapter-cloudflare wants it. Served by the Worker's static assets for the prerendered pages (/about/how, /about/formats, /offline) and the build's
+# files, which never pass through hooks.server.ts (round sixteen, 9 and 15). The dynamic pages get the same from there.
+/*
+  Referrer-Policy: no-referrer
+  X-Frame-Options: DENY

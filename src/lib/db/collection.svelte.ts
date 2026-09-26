@@ -8,7 +8,7 @@ import { SvelteMap } from 'svelte/reactivity';
 import { localDate, madeOn } from '$core/dates';
 import { Clock, hlcDecode, hlcEncode, hlcCompare, hlcAfter } from '$core/hlc';
 import { tag36 } from '$core/tag';
-import { apply, diff, validateChanges, key as recKey, type Change, type Kind, type Record_, type State, hlcWall } from '$core/log';
+import { apply, diff, validateChanges, key as recKey, type Change, type Kind, type Record_, type State, hlcWall, revivedByImport } from '$core/log';
 import { nextAccession, DEFAULT_SCHEME, type NumberingScheme } from '$core/accession';
 import { allChanges, appendChanges, appendChangesClaiming, onOtherTabWrite, deviceId, requestPersistence, getMeta, setMeta, putPhotoBlobs, getPhotoBlobs, deletePhotoBlobs, holdVault, type NumberKind } from './vault';
 import type { Accession, PlantEvent, Taxon, Location, Sowing, Provenance, Photo } from './types';
@@ -57,6 +57,10 @@ class Collection {
         if (isScheme(scheme)) this.metaScheme = scheme;
         await this.readLedger();
         this.ready = true;
+        // Plants an earlier build's import brought back nameless (a tombstone, then its `importedOn`) are removed again,
+        // once: the removal is a change like any other, so it syncs, and after it nothing matches again (round sixteen, 5).
+        const revived = revivedByImport(changes);
+        if (revived.length) await this.commit(revived.map((r) => ({ t: this.tick(), kind: r.kind, id: r.id, field: '_deleted', value: true })), 'local').catch(() => {});
         onOtherTabWrite((what) => {
           // Another tab replaced the whole collection from a file: this tab's fold is of a log that no longer exists, and a
           // note saved here would be diffed against records the new log does not have. The page reloads onto the new one.
@@ -606,12 +610,15 @@ class Collection {
     if (source === 'local') this.stampPast(changes);
     // The vault first. If it refuses (a full phone), nothing is applied, the page keeps showing what is stored, and the error is kept for the page to show.
     try {
-      await appendChanges(changes, source === 'server', source === 'local');
+      // Only what the vault kept is applied: a change it declined (another under the same stamp already stored and ranking
+      // higher) is not shown here either, so the screen and the disk agree without a reload (round sixteen, 4).
+      changes = await appendChanges(changes, source === 'server', source === 'local');
     } catch (e) {
       this.lastWriteError = e instanceof Error ? e.message : String(e);
       throw e;
     }
     this.lastWriteError = null;
+    if (!changes.length) return;
     for (const c of changes) this.applied.add(c.t);
     apply(this.state, changes, this.seen, { now: Date.now(), except: this.device });
     this.noteParents(changes);

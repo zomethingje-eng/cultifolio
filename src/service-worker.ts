@@ -82,7 +82,10 @@ self.addEventListener('fetch', (e) => {
         // A plant's own page is the /plants shell plus the vault, and the shell is the same HTML for every plant: it is
         // served from the cache without asking the network, so a label's link opens in a greenhouse with one bar of signal
         // instead of waiting on a fetch that neither succeeds nor fails.
-        const exact = await cache.match(request);
+        // The shell is the same HTML whatever the query (`/labels?acc=…`, `/plants?show=…`), so the match ignores it: a
+        // query-string navigation on a private page after a deploy must not go to the server, which would see the record
+        // id in the URL, nor be cached once per URL (round sixteen, 10).
+        const exact = await cache.match(request, { ignoreSearch: true });
         if (exact) return exact;
         const section = '/' + url.pathname.split('/')[1];
         if (section !== url.pathname) {
@@ -91,7 +94,7 @@ self.addEventListener('fetch', (e) => {
         }
         try {
           const r = await fetch(request);
-          if (cacheableHtml(r)) cache.put(request, r.clone());
+          if (cacheableHtml(r)) cache.put(url.origin + url.pathname, r.clone()); // under the path alone, never a query
           return r;
         } catch {
           // The section's shell renders the same page from the vault; asset URLs are absolute (paths.relative is off), so it works from a nested path.
@@ -108,7 +111,9 @@ self.addEventListener('fetch', (e) => {
         if (hit) return hit;
         try {
           const r = await fetch(request);
-          if (r.ok && r.type === 'basic') cache.put(request, r.clone());
+          // A `no-store` answer is the server declining to vouch for it (a sheet or entries bucket asked for under a corpus id
+          // that is not the current one): kept out of here too, or a device would hold it until the next deploy (round sixteen, 12).
+          if (r.ok && r.type === 'basic' && !/no-store/.test(r.headers.get('cache-control') ?? '')) cache.put(request, r.clone());
           return r;
         } catch {
           return Response.error();

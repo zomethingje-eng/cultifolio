@@ -72,7 +72,7 @@ export function careLine(input: SheetInput, o: NoteOpts = {}): string {
     else bits.push(`${year.grow} rain ${months}`);
   }
   const m = input.months && input.months.length === 12 ? input.months : null;
-  const fl = coldFloor(m, input.extremes ?? null, archFor(input.scientific, input.family), input.units ?? METRIC);
+  const fl = coldFloor(m, input.extremes ?? null, archFor(input.scientific, input.family), input.units ?? METRIC, input.extremesStatus);
   // The habitat night at one decimal, as the page prints it, named as what it is; "floor" alone reads as a thermostat setting.
   // The habitat night is printed as what it is, and a floor the archetype table raised is printed as the table's, never as a night the habitat had.
   if (fl) {

@@ -38,6 +38,8 @@
  *   npx tsx scripts/build-dossiers.ts not-accepted.txt --grid climate --bulk bulk --force --skip inat,openalex
  *                                                                # rebuilds those by key: each is followed to its accepted species (a new file)
  *   npx tsx scripts/build-dossiers.ts --prune-followed          # then deletes the old synonym-name files that an accepted page says it was followed from
+ *   npx tsx scripts/build-dossiers.ts --prune-uncredited        # drops every published photograph under CC BY or CC BY-SA that names no author
+ *                                                                # ("unknown", "Wikimedia Commons", "iNaturalist user"); no API calls; then --index
  *   npx tsx scripts/build-dossiers.ts --fill gbif --bulk bulk    # photographs from the download's multimedia.txt into every dossier on disk; no API calls
  *   npx tsx scripts/build-dossiers.ts --fill genus               # "About the genus": one Wikipedia lead per genus in the index, to s/v<N>/g/<slug>.json
  *   npx tsx scripts/build-dossiers.ts --fixtures                # synthetic dossiers for dev
@@ -110,18 +112,18 @@ function diskPowerCache(dir: string): PowerCache {
 
 type IndexEntry = { key: number; slug: string; name: string; family?: string; common?: string; origin: string[]; thumb?: string; photos: number; open: number; climate: string; near?: number[] };
 type Dossierish = { key: number; slug: string; name: { scientific: string; family?: string; status?: string; vernacular: Array<{ name: string; lang?: string }> }; distribution: { native: Array<{ name: string }> }; photos: Array<{ thumb: string; captive?: boolean }>; occurrences: { nOpenInRange: number; nRestrictedInRange?: number; nOutsideRange?: number }; climate: { status: string; months?: Array<{ tmax: number; tmin: number; precipMm: number }> } };
-function indexEntry(d: Dossierish): IndexEntry {
+function indexEntry(d: Dossierish): IndexEntry & { status?: string } {
   const hero = d.photos.find((p) => !p.captive) ?? d.photos[0];
-  return { key: d.key, slug: d.slug, name: d.name.scientific, family: d.name.family, common: d.name.vernacular.find((v) => v.lang === 'eng')?.name, origin: d.distribution.native.map((n) => n.name), thumb: hero?.thumb, photos: d.photos.length, open: d.occurrences.nOpenInRange, climate: d.climate.status };
+  return { status: d.name.status, key: d.key, slug: d.slug, name: d.name.scientific, family: d.name.family, common: d.name.vernacular.find((v) => v.lang === 'eng')?.name, origin: d.distribution.native.map((n) => n.name), thumb: hero?.thumb, photos: d.photos.length, open: d.occurrences.nOpenInRange, climate: d.climate.status };
 }
 
 /** Every dossier on disk, as index entries. The corpus is the files; the index is derived from them. */
 /** Dossiers under a name the backbone does not accept: seen on the last scan, so --index can list them. */
 let notAccepted: Array<{ key: number; name: string; status: string; records: number }> = [];
-function scanDossiers(): IndexEntry[] {
+function scanDossiers(): Array<IndexEntry & { status?: string }> {
   const dir = `${outDir}/s/v${DOSSIER_V}`;
   if (!existsSync(dir)) return [];
-  const out: IndexEntry[] = [];
+  const out: Array<IndexEntry & { status?: string }> = [];
   const withClimate: Array<{ key: number; months: Array<{ tmax: number; tmin: number; precipMm: number }> }> = [];
   notAccepted = [];
   for (const f of readdirSync(dir)) {
@@ -347,14 +349,22 @@ function pruneFollowed(): void {
   writeIndexFromDisk();
 }
 
-/** Two dossiers with one slug (an accepted name and a doubtful homonym) would leave one unreachable: the later key gets its key appended. */
-function uniqueSlugs(index: IndexEntry[]): IndexEntry[] {
-  const seen = new Map<string, number>();
-  for (const e of index) {
-    const prev = seen.get(e.slug);
-    if (prev !== undefined && prev !== e.key) e.slug = `${e.slug}-${e.key}`;
-    else seen.set(e.slug, e.key);
+/**
+ * Two dossiers with one slug (an accepted name and a doubtful homonym) would leave one unreachable. The plain slug goes to
+ * the accepted name, whichever file sorted first, and the other gets its key appended; between two of one status the
+ * lower key keeps it, so the outcome does not depend on file order (round sixteen, 8). `status` rides on the entry for
+ * the choice and is stripped before the index is written.
+ */
+function uniqueSlugs(index: Array<IndexEntry & { status?: string }>): IndexEntry[] {
+  const bySlug = new Map<string, Array<IndexEntry & { status?: string }>>();
+  for (const e of index) bySlug.set(e.slug, [...(bySlug.get(e.slug) ?? []), e]);
+  for (const [slug, es] of bySlug) {
+    if (es.length < 2) continue;
+    const rank = (e: { status?: string; key: number }) => (e.status === 'accepted' ? 0 : 1);
+    const keeper = [...es].sort((a, b) => rank(a) - rank(b) || a.key - b.key)[0];
+    for (const e of es) if (e !== keeper) e.slug = `${slug}-${e.key}`;
   }
+  for (const e of index) delete e.status;
   return index;
 }
 
@@ -363,6 +373,34 @@ function uniqueSlugs(index: IndexEntry[]): IndexEntry[] {
  * calls: the media index answers the same request the build makes, so the photographs come out identical to a build's.
  * A species the download does not carry (over the record cap, or not in the names file) is left as it is.
  */
+/**
+ * Photographs published without an author under a licence that requires one (round sixteen, 3: 1.7% of the corpus,
+ * credited "unknown, CC BY, via GBIF" by the build's fallback). They are removed from every dossier on disk, with no
+ * upstream call; the build no longer produces them.
+ */
+function pruneUncredited(): void {
+  const dir = `${outDir}/s/v${DOSSIER_V}`;
+  const files = existsSync(dir) ? readdirSync(dir).filter((f) => /^\d+\.json$/.test(f)) : [];
+  const uncredited = (p: { licence: string; attribution: string }) => p.licence !== 'cc0' && /^(unknown|Wikimedia Commons|iNaturalist user|no author stated),/.test(p.attribution);
+  let touched = 0, dropped = 0;
+  for (const f of files) {
+    const path = `${dir}/${f}`;
+    let d: Pick<Dossier, 'photos'>;
+    try {
+      d = JSON.parse(readFileSync(path, 'utf8')) as Pick<Dossier, 'photos'>;
+    } catch {
+      continue;
+    }
+    const keep = (d.photos ?? []).filter((p) => !uncredited(p));
+    if (keep.length === (d.photos ?? []).length) continue;
+    dropped += d.photos.length - keep.length;
+    d.photos = keep;
+    writeFileSync(path, JSON.stringify(d));
+    touched++;
+  }
+  console.log(`${dropped} uncredited photograph${dropped === 1 ? '' : 's'} removed from ${touched} dossier${touched === 1 ? '' : 's'} of ${files.length}; now run --index and upload`);
+}
+
 async function fillGbifPhotos(): Promise<void> {
   if (!bulkDir) {
     console.error('--fill gbif needs --bulk <dir> with occurrence.zip from a DWCA download');
@@ -416,7 +454,7 @@ function writeSheetBuckets(index: IndexEntry[], idxDir: string): void {
     try {
       const d = parseDossier(JSON.parse(readFileSync(`${idxDir}/${e.key}.json`, 'utf8')));
       const b = bucketOf(e.slug);
-      buckets.set(b, [...(buckets.get(b) ?? []), sheetOf(d, e.thumb)]);
+      buckets.set(b, [...(buckets.get(b) ?? []), { ...sheetOf(d, e.thumb), slug: e.slug }]); // filed under the index slug, and carrying it: a suffixed homonym's sheet must not answer to the plain name (round sixteen, 8)
       n++;
     } catch {
       /* a dossier that does not parse is not served as a sheet either; the Worker derives what it can */
@@ -453,6 +491,7 @@ function writeIndexFromDisk(): void {
 async function main() {
   mkdirSync(outDir, { recursive: true });
   if (args.includes('--prune-followed')) return pruneFollowed();
+  if (args.includes('--prune-uncredited')) return pruneUncredited();
   if (args.includes('--index')) return writeIndexFromDisk();
   if (fill === 'openalex') return fillLiterature();
   if (fill === 'inat') return fillPhotos();

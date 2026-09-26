@@ -33,6 +33,7 @@ vi.mock('$lib/db/vault', () => {
       mem.changes.set(c.t, c);
       if (!fromServer) mem.outbox.add(c.t);
     }
+    return cs;
   },
   outboxKeys: async () => [...mem.outbox],
   outboxAck: async (ts: string[]) => void ts.forEach((t) => mem.outbox.delete(t)),
@@ -44,6 +45,12 @@ vi.mock('$lib/db/vault', () => {
   changesByKeys: async (ts: string[]) => ts.map((t) => mem.changes.get(t)).filter(Boolean),
   getMeta: async (k: string) => mem.meta.get(k),
   setMeta: async (k: string, v: unknown) => void mem.meta.set(k, v),
+  setMetaIfKey: async (k: string, v: unknown, key: string) => {
+    const had = mem.meta.get(k) as { key?: string } | null | undefined;
+    if (!had || had.key !== key) return false;
+    mem.meta.set(k, v);
+    return true;
+  },
   deviceId: async () => mem.device,
   requestPersistence: async () => true,
   putPhotoBlobs: async (p: { id: string; blob: Blob; thumb: Blob }) => {
@@ -662,7 +669,7 @@ describe('a batch that cannot be read is set aside, not a wall', () => {
       return real(input, init);
     }) as typeof fetch;
     const err = await D2.sync.run().catch((e: Error) => e);
-    expect((err as Error).message).toMatch(/^received; /);
+    expect((err as Error).message).toMatch(/^received 1 batch; /); // and said only because something arrived (round sixteen, design note)
     expect(D2.collection.accession(p.id)).toBeDefined(); // the pull ran
     expect(D2.sync.lastSync).not.toBeNull();
     expect(memD.outbox.size).toBeGreaterThan(0); // the change here still waits
@@ -697,6 +704,70 @@ describe('a batch that cannot be read is set aside, not a wall', () => {
     const D4 = await reboot(memD, r2);
     expect(D4.sync.configured).toBe(false);
     void D2;
+  });
+  it('"Stop syncing" in ANOTHER tab during a run: the run sees the stored key gone and writes nothing back, and no batch is folded (round sixteen, 1)', async () => {
+    const r2 = fakeR2();
+    const memA = newMem('aaaaaaaaaaaa'), memD = newMem('dddddddddddd');
+    const A = await boot(memA, r2);
+    await A.sync.setup(KEY, 'create');
+    await A.collection.addAccession({ taxonName: 'Lithops', acc: 'A-1' });
+    await A.sync.run();
+    const D = await boot(memD, r2);
+    await D.sync.setup(KEY, 'join');
+    memD.meta.set('sync', { ...(memD.meta.get('sync') as object), since: 0, have: [] }); // make the run fetch a batch
+    const D3 = await reboot(memD, r2);
+    const real = globalThis.fetch;
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      if (/\/api\/sync\/log\/[^?]+/.test(String(input))) await gate;
+      return real(input, init);
+    }) as typeof fetch;
+    const run = D3.sync.run().catch((e: Error) => e);
+    await new Promise((r) => setTimeout(r, 50));
+    memD.meta.set('sync', null); // the other tab's forget(): on disk only; this tab has not heard the broadcast
+    memD.outbox.clear();
+    const before = memD.changes.size;
+    release();
+    const err = await run;
+    expect(err).toBeInstanceOf(Error);
+    expect(String((err as Error).message)).toMatch(/stopped/);
+    expect(memD.meta.get('sync')).toBeNull(); // not written back
+    expect(memD.changes.size).toBe(before); // the batch in flight was not folded into a log that is no longer this vault's
+    expect(D3.sync.configured).toBe(false); // and this tab dropped the vault on seeing it gone
+  });
+  it('a new vault set up while an old run is pushing: the old run acks nothing from the new outbox and leaves its status alone (round sixteen, 2)', async () => {
+    const r2 = fakeR2();
+    const memA = newMem('aaaaaaaaaaaa');
+    const A = await boot(memA, r2);
+    await A.sync.setup(KEY, 'create');
+    await A.collection.addAccession({ taxonName: 'Lithops', acc: 'A-1' });
+    // The old vault's push is held at the POST; meanwhile the grower stops syncing and joins another vault.
+    const real = globalThis.fetch;
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    let held = 0;
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      if (init?.method === 'POST' && /\/api\/sync\/log\?/.test(String(input)) && held++ === 0) await gate;
+      return real(input, init);
+    }) as typeof fetch;
+    const old = A.sync.run().catch((e: Error) => e);
+    await new Promise((r) => setTimeout(r, 50));
+    await A.sync.forget();
+    const KEY2 = newVaultKey();
+    const setup = A.sync.setup(KEY2, 'create'); // refills the outbox with everything for the new vault
+    await new Promise((r) => setTimeout(r, 20));
+    release();
+    const err = await old;
+    await setup;
+    expect(err).toBeInstanceOf(Error);
+    expect(A.sync.lastError).toBeNull(); // the stale run's error did not land on the new vault's status
+    expect(A.sync.busy).toBeNull();
+    expect(A.sync.key).toBe(KEY2);
+    // the new vault holds the plant: the stale run did not ack the new outbox, so the new vault's own push sent it
+    const B = await boot(newMem('bbbbbbbbbbbb'), r2);
+    await B.sync.setup(KEY2, 'join');
+    expect(B.collection.accessions.map((a) => a.taxonName)).toEqual(['Lithops']);
   });
   it('a batch with a reserved field is refused whole: nothing of it is applied', async () => {
     const r2 = fakeR2();
@@ -780,5 +851,16 @@ describe('photos', () => {
     D.sync['meta']!.quarantined = [];
     await D.sync.run();
     expect(memD.photos.size).toBe(2);
+  });
+});
+
+describe('the vault route on a body that is not an object (round sixteen, 16)', () => {
+  it('answers 400, never 500, to a JSON null', async () => {
+    const r2 = fakeR2();
+    await boot(newMem('aaaaaaaaaaaa'), r2);
+    for (const body of ['null', '7', '"x"', '']) {
+      const r = await fetch('/api/sync/vault', { method: 'POST', headers: { 'content-type': 'application/json' }, body });
+      expect(r.status).toBe(400);
+    }
   });
 });

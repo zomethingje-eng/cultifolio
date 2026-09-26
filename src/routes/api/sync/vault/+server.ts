@@ -11,7 +11,9 @@ export const POST: RequestHandler = async ({ request, platform, getClientAddress
   const r2 = store(platform);
   const stop = await limited(platform, getClientAddress, 'sync');
   if (stop) return stop;
-  const body = (await request.json().catch(() => ({}))) as { id?: string; token?: string; create?: boolean };
+  // A body that is valid JSON but not an object (`null`, a number) is treated like no body: a 400 below, never a 500 (round sixteen, 16).
+  const raw: unknown = await request.json().catch(() => ({}));
+  const body = (raw && typeof raw === 'object' ? raw : {}) as { id?: string; token?: string; create?: boolean };
   const id = vaultId(body.id ?? null);
   if (!body.token || !/^[0-9a-f]{64}$/.test(body.token)) return json({ error: 'token required' }, { status: 400 });
   // Joining a second device must not quietly make a fresh empty vault out of a mistyped key.

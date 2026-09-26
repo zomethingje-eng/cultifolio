@@ -30,6 +30,20 @@ describe('dossier builder', () => {
     expect(d.upstream['gbif.occurrences'].status).toBe('ok');
   });
 
+  it('a refused range does not make every record "in range": the dossier says the range was not tested (round sixteen, 6)', async () => {
+    const table = copiapoa() as Record<string, unknown>;
+    for (const k of Object.keys(table)) if (/\/species\/\d+\/distributions$/.test(k)) table[k] = { __status: 'refused', status: 'refused', detail: '429' };
+    const r = await buildDossier('Copiapoa cinerea', opts(table));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const d = r.dossier;
+    expect(d.upstream['wcvp.distribution'].status).toBe('refused');
+    expect(d.occurrences.rangeTested).toBe(false);
+    expect(d.occurrences.nOutsideRange).toBe(0); // nothing was tested, so nothing was ruled out
+    const tested = await buildDossier('Copiapoa cinerea', opts(copiapoa()));
+    expect(tested.ok && tested.dossier.occurrences.rangeTested).toBe(true);
+  });
+
   it('Copiapoa: every in-range coordinate informs the centre; the open-only shift is measured', async () => {
     const r = await buildDossier('Copiapoa cinerea', opts(copiapoa()));
     expect(r.ok).toBe(true);

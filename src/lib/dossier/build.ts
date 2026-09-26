@@ -66,10 +66,12 @@ const countryName = (iso?: string): string | undefined => {
 
 /** GBIF media rows as dossier photographs, at most 24. iNaturalist's open-data bucket serves sizes by name; anything else goes through GBIF's image cache. */
 export function photosFromMedia(rows: OccMedia[]): Photo[] {
-  return rows.slice(0, 24).map((im) => {
+  // A photograph under CC BY or CC BY-SA without an author cannot be credited as its licence requires, so it is not
+  // published; CC0 asks for no name (round sixteen, 3).
+  return rows.filter((im) => im.creator || im.rightsHolder || im.licence === 'cc0').slice(0, 24).map((im) => {
     const inat = /^https:\/\/inaturalist-open-data\.s3\.amazonaws\.com\/photos\/\d+\/original\.(\w+)$/.exec(im.url);
     const thumb = inat ? im.url.replace(/original\.(\w+)$/, 'medium.$1') : `https://api.gbif.org/v1/image/cache/fit-in/400x/${encodeURIComponent(im.url)}`;
-    return { src: 'gbif', id: im.id, url: im.url, thumb, licence: im.licence as Photo['licence'], attribution: `${im.creator ?? im.rightsHolder ?? 'unknown'}, ${licenceLabel(im.licence as Photo['licence'])}, ${inat ? 'iNaturalist via GBIF' : 'via GBIF'}`, page: im.page };
+    return { src: 'gbif', id: im.id, url: im.url, thumb, licence: im.licence as Photo['licence'], attribution: `${im.creator ?? im.rightsHolder ?? 'no author stated'}, ${licenceLabel(im.licence as Photo['licence'])}, ${inat ? 'iNaturalist via GBIF' : 'via GBIF'}`, page: im.page };
   });
 }
 
@@ -233,6 +235,8 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
       const ds = datasets.get(dsKey) ?? { title: r.datasetName ?? undefined, licence: tag ?? 'unstated', n: 0 };
       ds.n++;
       datasets.set(dsKey, ds);
+      // No boxes (the range source refused, or a country-level range): nothing is tested and every record is kept; the
+      // dossier says so (`rangeTested: false`) rather than publishing the count as records inside the range (round sixteen, 6).
       const inRange = boxes.length ? boxes.some((b) => inBox(lat, lon, b)) : true;
       if (!inRange) {
         nOutside++;
@@ -278,6 +282,8 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   else if (allPts.length) climate = { status: 'none', detail: `${allPts.length} in-range record${allPts.length === 1 ? '' : 's'}, none placed to within 10 km` };
   if (climate.status === 'pending') upstream.climate = { status: 'skipped', at: now(), detail: climate.detail };
   else mark('climate', climate.status === 'ok' ? { status: 'ok' } : { status: climate.status, detail: climate.detail });
+  // The daily extremes are their own upstream: a refusal here is a reason to build again, which `climate: ok` alone would hide (round sixteen, 7).
+  if (climate.status === 'ok' && climate.extremesStatus) upstream['climate.extremes'] = { status: climate.extremesStatus === 'refused' ? 'refused' : climate.extremesStatus === 'skipped' ? 'skipped' : climate.extremesStatus === 'none' ? 'none' : 'ok', at: now(), ...(climate.src.extremes ? { detail: climate.src.extremes } : {}) };
 
   /* ---- 5. Identifiers, summary ---- */
   const ids: Dossier['ids'] = { gbif: key };
@@ -382,6 +388,7 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
       nRestrictedInRange: restrictedInRange.length,
       nOutsideRange: nOutside,
       nVague,
+      rangeTested: boxes.length > 0,
       restrictedShiftKm,
       thin: allPts.length < 12,
       datasets: [...datasets.entries()].map(([k, d]) => ({ key: k, title: u(d.title), licence: d.licence, n: d.n }))

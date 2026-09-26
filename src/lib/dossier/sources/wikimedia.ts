@@ -124,6 +124,7 @@ export async function commonsPhotos(f: JsonFetcher, category: string, max = 12):
     const tag = licenceTag(lic.replace(/^Public domain$/i, 'cc0').replace(/^PD.*$/i, 'cc0'));
     if (!isOpen(tag) || (tag !== 'cc0' && tag !== 'by' && tag !== 'by-sa')) continue;
     const artist = (meta.Artist?.value ?? meta.Credit?.value ?? '').replace(/<[^>]+>/g, '').trim();
+    if (!artist && tag !== 'cc0') continue; // CC BY and CC BY-SA require the author's name; a file without one is not published (round sixteen, 3)
     out.push({
       src: 'commons',
       id: p.title,
@@ -132,7 +133,7 @@ export async function commonsPhotos(f: JsonFetcher, category: string, max = 12):
       width: ii.width ?? undefined,
       height: ii.height ?? undefined,
       licence: tag,
-      attribution: `${artist || 'Wikimedia Commons'}, ${lic}, via Wikimedia Commons`,
+      attribution: `${artist || 'no author stated'}, ${lic}, via Wikimedia Commons`,
       page: ii.descriptionurl ?? undefined
     });
     if (out.length >= max) break;

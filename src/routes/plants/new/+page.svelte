@@ -59,6 +59,7 @@
   let locationId = $state<string | null>(null);
   let notes = $state('');
   let count = $state<number | null>(1); // null once cleared
+  let added = $state(0); // plants written by the last Add before it stopped
   /** Whole plants only, one to two hundred: 2.5 is two, a cleared box is one, and a number is never minted for a fraction (round thirteen, 10). */
   const countN = $derived(Math.min(200, Math.max(1, Math.floor(numberOrNull(count) ?? 1))));
   let useOwnNumber = $state(false);
@@ -72,6 +73,7 @@
     if (!name.trim() || busy) return;
     if (ownTaken) return;
     busy = true;
+    const wanted = countN;
     try {
       const p = parseName(name);
       const taxonName = p.scientific;
@@ -79,7 +81,8 @@
       const slug = speciesSlug(taxonName);
       if (!collection.taxon(slug)) await collection.put('taxon', slug, { name: speciesOf(taxonName), gbifKey: taxonKey });
       let firstId = '';
-      for (let i = 0; i < countN; i++) {
+      for (let i = 0; i < wanted; i++) {
+        added = i; // how many are in before this one: a refusal partway says so and leaves the count at what remains (round sixteen, 14)
         const rec = await collection.addAccession({
           acc: useOwnNumber && ownNumber.trim() && i === 0 ? ownNumber.trim() : undefined,
           taxonName,
@@ -100,11 +103,15 @@
         });
         if (!firstId) firstId = accNo(rec);
       }
+      added = wanted;
       try { if (locationId) localStorage.setItem('cultifolio.lastLocation', locationId); } catch { /* fine */ }
-      toast.show(countN > 1 ? `${countN} plants added` : `${firstId} added`);
-      goto(countN > 1 ? '/plants' : `/plants/${firstId}`);
+      toast.show(wanted > 1 ? `${wanted} plants added` : `${firstId} added`);
+      goto(wanted > 1 ? '/plants' : `/plants/${firstId}`);
     } catch {
-      /* the store has recorded why in lastWriteError, which the notice above the form shows; the form stays open with what was typed (round fifteen, 9) */
+      // The store has recorded why in lastWriteError, which the notice above the form shows; the form stays open with what
+      // was typed. Plants added before the refusal exist and are numbered: the count drops to what remains, so pressing Add
+      // again does not add them twice, and the notice says how many are in (round fifteen, 9; round sixteen, 14).
+      if (added > 0) { count = wanted - added; useOwnNumber = false; }
     } finally {
       busy = false;
     }
@@ -114,7 +121,9 @@
 <svelte:head><title>Add plant — Cultifolio</title></svelte:head>
 
 {#if collection.lastWriteError}
-  <div class="notice err" role="alert" id="write-error">This change was not saved: {collection.lastWriteError}. Free space or <a href="/backup">back up now</a>.</div>
+  {@const numberClash = /already used/.test(collection.lastWriteError)}
+  <!-- Worded by cause: a number already used is not a full phone (round sixteen, 14) -->
+  <div class="notice err" role="alert" id="write-error">{#if added > 0}{added} of the {added + countN} plants {added === 1 ? 'was' : 'were'} added and numbered before this; Add now adds the remaining {countN}. {/if}This change was not saved: {collection.lastWriteError}{#if !numberClash} Free space or <a href="/backup">back up now</a>.{/if}</div>
 {/if}
 <form class="form" onsubmit={save}>
   <PageHead title="Add a plant" kick="My plants" places={false}>

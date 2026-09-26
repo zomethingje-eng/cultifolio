@@ -47,6 +47,8 @@ export interface SheetInput {
   p10?: Pick<Month, 'tmin' | 'dli'>[] | null;
   p90?: Pick<Month, 'tmin' | 'dli'>[] | null;
   extremes?: Extremes | null;
+  /** Why there are no extremes, when there are none: 'refused' (the source did not answer when the dossier was built) is said as not checked, never as none on file (round sixteen, 7). */
+  extremesStatus?: 'ok' | 'none' | 'refused' | 'skipped' | null;
   /** Habitat latitude (the map marker's), for the hemisphere. */
   lat?: number | null;
   /** The grower's latitude, if known: the one-sentence shorts print months for that hemisphere. */
@@ -198,7 +200,7 @@ const RAIN = (mm: number) => rain(mm, U);
 /** What the cold floor is: the quantity, the figure, and any raising by the archetype table, all in one sentence. */
 /** The floor a page shows, with its provenance: `habitat` is the measured night (null when none is on file), `floor` the figure the rule settles on, `raised` true when the archetype table's minimum was higher and took over. `hab` remains true whenever a habitat figure exists. */
 export interface ColdFloor { floor: number; habitat: number | null; raised: boolean; group: string | null; s: string; short: string; hab: boolean }
-export function coldFloor(m: Month[] | null, ex: Extremes | null, guess: ArchGuess | null, units: Units = U): ColdFloor | null {
+export function coldFloor(m: Month[] | null, ex: Extremes | null, guess: ArchGuess | null, units: Units = U, exStatus?: SheetInput['extremesStatus']): ColdFloor | null {
   U = units;
   const minC = guess?.arch.minC ?? null;
   let floor: number | null = null;
@@ -211,7 +213,7 @@ export function coldFloor(m: Month[] | null, ex: Extremes | null, guess: ArchGue
   } else if (m) {
     const i = m.reduce((b, x, j) => (x.tmin < m[b].tmin ? j : b), 0);
     floor = m[i].tmin;
-    quantity = `the coldest month's mean night, ${mon(i + 1)}, in the median year (CHELSA); no daily extremes are on file`;
+    quantity = `the coldest month's mean night, ${mon(i + 1)}, in the median year (CHELSA); ${exStatus === 'refused' ? 'the daily extremes were not checked (NASA POWER did not answer when this page was built)' : 'no daily extremes are on file'}`;
     quantityShort = `coldest month's mean night, CHELSA`;
   }
   if (floor == null && minC == null) return null;
@@ -303,7 +305,7 @@ export function cultivationSheet(input: SheetInput): { rows: Row[]; arch: ArchGu
     }
     const spread10 = p10 && p90 ? ` (across the envelope cells ${T1(p10[coldI].tmin)} to ${T1(p90[coldI].tmin)})` : '';
     bits.push(`Monthly means: coldest night ${T1(m[coldI].tmin)} in ${mon(coldI + 1)}${spread10}, warmest day ${T1(m[hotI].tmax)} in ${mon(hotI + 1)} (${ENV}).`);
-    floorOut = coldFloor(m, ex, guess);
+    floorOut = coldFloor(m, ex, guess, U, input.extremesStatus);
     const floor = floorOut;
     if (floor) bits.push(floor.s);
     add('Warmth and air', 'Temperature', bits.join(' '), `${ex ? `NASA POWER daily minima and maxima 1981–2024 at the typical cell${ex.lapseAppliedM ? ', lapse-corrected to its elevation' : ', without lapse correction'}; ` : ''}CHELSA monthly means, ${ENV}. The cold floor is the figure named in its sentence${guess?.arch.minC != null ? `, and the archetype table's group minimum where that is higher` : ''}. Not a measured survival limit for any plant in a pot.`, true, floor?.short);

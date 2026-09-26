@@ -37,8 +37,12 @@ class SiteStore {
     }
     // The hemisphere alone goes in a cookie, so the server renders a southern grower's months southern from the first
     // paint (and for a reader without JavaScript), the way the units cookie seeds the units. The site itself stays here.
+    // The cookie is scoped to the two paths that read it, so it rides on no other request, sync and the API included
+    // (round sixteen, 11); an older path=/ copy is expired.
     try {
-      document.cookie = s ? `cultifolio.hemi=${s.lat < 0 ? 's' : 'n'}; path=/; max-age=31536000; samesite=lax` : 'cultifolio.hemi=; path=/; max-age=0; samesite=lax';
+      const v = s ? s.lat < 0 ? 's' : 'n' : null;
+      for (const path of ['/species', '/compare']) document.cookie = v ? `cultifolio.hemi=${v}; path=${path}; max-age=31536000; samesite=lax` : `cultifolio.hemi=; path=${path}; max-age=0; samesite=lax`;
+      document.cookie = 'cultifolio.hemi=; path=/; max-age=0; samesite=lax';
     } catch {
       /* no document: nothing to seed */
     }

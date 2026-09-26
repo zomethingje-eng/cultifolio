@@ -72,6 +72,17 @@ Then the three things the code cannot do for you: confirm in the dashboard that 
 
 The order of operations for a corpus refresh is always: build or fill on the PC, `npm run dossier -- --index`, `rclone copy` as above. Since round twelve `--index` also writes `static/s/v2/sheets/00.json` … `1f.json`, the 32 sheet buckets the plant pages and labels read (`/api/sheets?b=`), and the copy carries them up; without them the Worker derives a bucket from a few hundred dossier reads on first ask, which is slow, so do not skip the index step. The upload needs no deploy: `/api/corpus` reports the index object's etag and every reference request from a device carries it, so the edge cache, each device's worker cache and the browser cache turn over on their own once the new `index.json` is in the bucket (the index is re-read by the Worker within a minute). Upload the dossiers and the sheet files before `index.json`, so no device sees a new id before the files behind it are there (a bucket fetched under the new id is kept at the edge for a day, and it must be the new bucket): run the copy once with `--exclude index.json` added, then once more without it, which uploads only the index. A schema bump (`DOSSIER_V` in `src/lib/dossier/schema.ts`) changes the prefix to `s/v3/`, needs a rederive (`--offline` is the fast one), an upload to the new prefix, and a deploy; the old prefix can be deleted from the bucket afterwards (`rclone purge r2:cultifolio/s/v2`), never before.
 
+**Round sixteen's corpus step, once.** 2,935 photographs in 702 dossiers were published credited "unknown" under CC BY or CC BY-SA, which those licences do not allow (round sixteen, 3). The build no longer produces them; the ones on disk are removed with
+
+```
+npm run dossier -- --prune-uncredited
+npm run dossier -- --index
+rclone copy static\s\v2 r2:cultifolio/s/v2 --transfers 32 --checkers 32 --exclude report.txt --exclude index.json --s3-no-check-bucket -P
+rclone copy static\s\v2\index.json r2:cultifolio/s/v2 --s3-no-check-bucket -P
+```
+
+No API calls; a minute on the PC. 53 species are left without a photograph by it; the next `--fill inat` or `--fill gbif` gives them a credited one where one exists. Round sixteen also adds a dev dependency (`fake-indexeddb`, for tests that run the real vault on an in-memory IndexedDB), so `npm install` once before `npm run deploy`.
+
 ## 6. If something is wrong after a deploy
 
 `wrangler deploy` is atomic and the previous version is kept: Workers → cultifolio → Deployments → roll back. HTML is cached for at most a minute and open pages reload on their next navigation after a deploy, so a rollback is live within a minute too. The corpus is not versioned by the deploy; a bad corpus upload is fixed by uploading the previous `static\s\v2` again (keep the last good one zipped somewhere before a rederive).

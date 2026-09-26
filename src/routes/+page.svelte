@@ -15,6 +15,7 @@
   import type { MySpecies } from '$lib/db/species-list';
   import { prepare, search } from '$core/search';
   import Today from '$lib/ui/Today.svelte';
+  import RefPhotoOffer from '$lib/ui/RefPhotoOffer.svelte';
   let { data } = $props();
   // The search lives in the URL (?q=) so the back button and a shared link bring it back; the server ignores it.
   let q = $state(browser ? (new URLSearchParams(location.search).get('q') ?? '') : '');
@@ -261,7 +262,7 @@
 {#snippet tile(c: Tile)}
   <a class="tile" href="/species/{c.slug}">
     {#if owned.get(c.slug)?.length}<span class="ownchip" title="You grow {owned.get(c.slug)!.length === 1 ? owned.get(c.slug)![0] : owned.get(c.slug)!.length + ' of these'}" aria-label="You grow {owned.get(c.slug)!.length === 1 ? owned.get(c.slug)![0] : owned.get(c.slug)!.length + ' of these'}">{owned.get(c.slug)!.length === 1 ? owned.get(c.slug)![0] : `× ${owned.get(c.slug)!.length}`}</span>{:else if mine.get(c.slug)?.followed}<span class="ownchip following" title="On your list without a plant of it" aria-label="Following: on your list without a plant of it">following</span>{/if}
-    {#if c.thumb}<div class="im"><img src={c.thumb} alt={c.alt} loading="lazy" onerror={(e) => { const im = e.currentTarget as HTMLImageElement; im.style.display = 'none'; im.parentElement?.classList.add('ph'); im.parentElement && (im.parentElement.textContent = 'photograph did not load'); }} /></div>{:else if c.thumbOff}<div class="im ph" title="The reference has a photograph; showing it here is switched off in Settings">photograph on the species page</div>{:else if c.climate}<div class="im ph">no open photograph on file</div>{:else if c.missing}<div class="im ph">not in the reference yet</div>{:else}<div class="im ph">{loadingFull ? 'loading…' : fullFailed || ownFailed ? 'reference not reached' : ''}</div>{/if}
+    {#if c.thumb}<div class="im"><img src={c.thumb} alt={c.alt} loading="lazy" onerror={(e) => { const im = e.currentTarget as HTMLImageElement; im.style.display = 'none'; im.parentElement?.classList.add('ph'); im.parentElement && (im.parentElement.textContent = 'photograph did not load'); }} /></div>{:else if c.thumbOff}<div class="im ph" title="The reference has a photograph; showing it on your own tiles is off">reference photograph off</div>{:else if c.climate}<div class="im ph">no open photograph on file</div>{:else if c.missing}<div class="im ph">not in the reference yet</div>{:else}<div class="im ph">{loadingFull ? 'loading…' : fullFailed || ownFailed ? 'reference not reached' : ''}</div>{/if}
     <div class="tx">
       <div class="nm"><SpeciesName name={c.name} /></div>
       <div class="fam">{c.common ?? c.family ?? ''}</div>
@@ -311,6 +312,9 @@
     {/if}
     {#if mineTiles.grow.length}
       <h2 class="q grouptitle">You grow</h2>
+      {#if [...mineTiles.grow, ...mineTiles.follow].some((c) => c.thumbOff)}
+        <div class="offer"><RefPhotoOffer what="the reference’s photographs on your tiles" /></div>
+      {/if}
       <div class="hgrid" data-sveltekit-preload-data="off">
         {#each mineTiles.grow as c (c.slug)}{@render tile(c)}{/each}
       </div>
@@ -340,6 +344,7 @@
     <p class="welcome" id="welcome"><b>New here.</b> <a href="/plants/new">Add your first plant</a> · <a href="/backup">Restore a backup or import from v2</a> <button class="linkish" type="button" onclick={dismissWelcome}>Not now</button></p>
   {/if}
 
+  <div class="stickyhead">
   <div class="toolrow">
     {#if hasMine}
       <nav class="seg viewseg" aria-label="Which species">
@@ -357,6 +362,12 @@
     <button class="chipbtn" class:on={chip === 'climate'} aria-pressed={chip === 'climate'} onclick={() => (chip = 'climate')}>Climate known<span class="n">{fmtN(data.withClimate)}</span></button>
     <button class="chipbtn" class:on={chip === 'noclimate'} aria-pressed={chip === 'noclimate'} onclick={() => (chip = 'noclimate')}>Without climate<span class="n">{fmtN(data.total - data.withClimate)}</span></button>
   </div>
+  {#if !flat && data.letters.length > 1}
+    <nav class="letters" aria-label="Jump to a letter">
+      {#each data.letters as l (l)}<a href="?by={data.by}&from={l}#l-{l}" onclick={(e) => { e.preventDefault(); jumpToLetter(l); }}>{l}</a>{/each}
+    </nav>
+  {/if}
+  </div>
 
   {#if flat}
     {#if q.trim()}{@render plantsFound()}{/if}
@@ -371,11 +382,6 @@
       <p class="seccount" style="margin-top: 14px" role="status">{fmtN(found.length)} of {fmtN(data.total)} shown{q.trim() ? '; Enter opens the first' : ''}.</p>
     {/if}
   {:else}
-    {#if data.letters.length > 1}
-      <nav class="letters" aria-label="Jump to a letter">
-        {#each data.letters as l (l)}<a href="?by={data.by}&from={l}#l-{l}" onclick={(e) => { e.preventDefault(); jumpToLetter(l); }}>{l}</a>{/each}
-      </nav>
-    {/if}
     <div class="rows" class:withletters={data.letters.length > 1}>
       {#each visibleRows as r, i (r.id)}
         {#if r.letter && (i === 0 || data.rows[start + i - 1].letter !== r.letter)}<h2 class="letter" id="l-{r.letter}">{r.letter}</h2>{/if}
@@ -430,13 +436,18 @@
   .sk.head { height: 34px; width: 40%; max-width: 220px; margin-bottom: 12px; }
   .sk.line { height: 14px; width: 70%; margin-bottom: 26px; }
   .sk.tile { aspect-ratio: 1 / 1.15; }
-  .letters { display: flex; flex-wrap: wrap; gap: 2px; margin: 6px 0 10px; }
+  /* The search, the grouping, the filter chips and the letters stick together under the top bar while the list scrolls; the tool row's own stickiness is off inside it. */
+  .stickyhead { position: sticky; top: 44px; z-index: 40; background: var(--bg); margin: 16px 0 6px; padding-bottom: 4px; border-bottom: 1px solid var(--rule); }
+  .stickyhead .toolrow { position: static; margin-top: 0; }
+  @media (max-height: 480px) { .stickyhead { position: static; } }
+  .offer { margin: -4px 0 10px; }
+  .letters { display: flex; flex-wrap: wrap; gap: 2px; margin: 0 0 2px; }
   .letters a { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--ink2); min-width: 30px; min-height: 30px; display: inline-flex; align-items: center; justify-content: center; border-radius: 7px; }
   .letters a:hover { background: var(--sunk); text-decoration: none; color: var(--ink); }
-  .letter { font-family: var(--mono); font-size: 12px; letter-spacing: 0.12em; color: var(--ink3); margin: 22px 0 6px; scroll-margin-top: 120px; }
+  .letter { font-family: var(--mono); font-size: 12px; letter-spacing: 0.12em; color: var(--ink3); margin: 22px 0 6px; scroll-margin-top: 210px; }
   .rows { display: flex; flex-direction: column; gap: 6px; }
   .more { display: flex; justify-content: center; padding: 18px 0 6px; } /* a button for a reader without the observer (or without JavaScript, where it does nothing) */
-  .grow { display: grid; grid-template-columns: 56px minmax(0, 1fr) 28px; gap: 14px; align-items: center; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); padding: 8px 12px 8px 8px; color: inherit; text-decoration: none; min-height: 56px; scroll-margin-top: 120px; }
+  .grow { display: grid; grid-template-columns: 56px minmax(0, 1fr) 28px; gap: 14px; align-items: center; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); padding: 8px 12px 8px 8px; color: inherit; text-decoration: none; min-height: 56px; scroll-margin-top: 210px; }
   .grow:hover { text-decoration: none; color: inherit; box-shadow: var(--sh2); }
   .grow.open { outline: 2px solid var(--accent); background: color-mix(in srgb, var(--accent-soft) 45%, var(--card)); }
   .grow .gthumb.mono, .grow .gthumb:empty { display: flex; align-items: center; justify-content: center; font-family: var(--serif); font-style: italic; font-size: 22px; color: var(--ink3); }

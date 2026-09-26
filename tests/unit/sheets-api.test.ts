@@ -95,3 +95,19 @@ describe('/api/corpus', () => {
     expect(await r.json()).toEqual({ id: 'fixture' });
   });
 });
+
+import { GET as entriesGET } from '../../src/routes/api/entries/+server';
+describe('/api/entries', () => {
+  const ask = (q: string) => entriesGET({ url: new URL(`http://x/api/entries?${q}`), platform: { env: { QUEUE: kv() } } as unknown as App.Platform, fetch: noStatic } as never);
+  it('is cacheable under the corpus now served, and no-store under any other id, so no cache keeps old entries under a new id (round sixteen, 12)', async () => {
+    const b = bucketOf('copiapoa-cinerea');
+    const current = await ask(`b=${b}&c=fixture`);
+    expect(current.headers.get('cache-control')).toBe('public, max-age=86400');
+    expect(((await current.json()) as Array<{ slug: string }>).some((e) => e.slug === 'copiapoa-cinerea')).toBe(true);
+    const stale = await ask(`b=${b}&c=old-etag`);
+    expect(stale.headers.get('cache-control')).toBe('no-store');
+    expect(((await stale.json()) as Array<{ slug: string }>).some((e) => e.slug === 'copiapoa-cinerea')).toBe(true); // still answered
+    const none = await ask(`b=${b}`);
+    expect(none.headers.get('cache-control')).toBe('no-store');
+  });
+});

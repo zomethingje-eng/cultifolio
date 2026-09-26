@@ -77,10 +77,10 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
   }
 
   /** Daily extremes at one point, lapse-corrected to its cell's elevation unless that elevation is below sea level (a coastal cell averaged with sea floor). */
-  async function extremesAt(lat: number, lon: number, elevationM: number | undefined, src: { extremes?: string; elevation?: string }): Promise<ClimateOk['extremes']> {
+  async function extremesAt(lat: number, lon: number, elevationM: number | undefined, src: { extremes?: string; elevation?: string }): Promise<{ extremes: ClimateOk['extremes']; status: NonNullable<ClimateOk['extremesStatus']> }> {
     if (o.noExtremes) {
       src.extremes = 'extremes skipped in this build';
-      return undefined;
+      return { extremes: undefined, status: 'skipped' };
     }
     const pc = powerCell(lat, lon);
     let ps = await cache.get(pc.id);
@@ -90,8 +90,10 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
         ps = r.data;
         await cache.set(pc.id, ps);
       } else {
+        // A refusal is kept apart from an absence: it is marked on the dossier, so the next build asks again, and the page says
+        // "not checked" rather than "none on file" (round sixteen, 7).
         src.extremes = `NASA POWER ${r.status === 'none' ? 'has no series here' : 'did not answer (' + r.detail + ')'}; extremes not derived`;
-        return undefined;
+        return { extremes: undefined, status: r.status === 'none' ? 'none' : 'refused' };
       }
     }
     // ETOPO's cell mean over a coastline includes sea floor; a negative "elevation" would warm every extreme. No lapse then, and say so.
@@ -99,7 +101,7 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
     const e = extremesFor(ps, target);
     if (!e.usable) {
       src.extremes = `NASA POWER series too short (${e.extremes.years} years); extremes not derived`;
-      return undefined;
+      return { extremes: undefined, status: 'none' };
     }
     // Every case says what was done about elevation: corrected, or not, and why not.
     const lapse = e.deltaM
@@ -111,7 +113,8 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
           : ', no lapse correction (POWER gave no cell elevation)';
     src.extremes = `NASA POWER (MERRA-2) daily 1981–2024, cell ${ps.cell}${lapse}`;
     // The frost figure is kept as the count and the exact rate: rounding the rate to a decimal turned one night in forty years into none.
-    return { years: e.extremes.years, minAbs: r1(e.extremes.minAbs), minP01: r1(e.extremes.minP01), maxP99: r1(e.extremes.maxP99), frostDaysPerYear: +e.extremes.frostDaysPerYear.toFixed(3), frostNights: e.extremes.frostNights, lapseAppliedM: e.deltaM };
+    return { extremes: { years: e.extremes.years, minAbs: r1(e.extremes.minAbs), minP01: r1(e.extremes.minP01), maxP99: r1(e.extremes.maxP99), frostDaysPerYear: +e.extremes.frostDaysPerYear.toFixed(3), frostNights: e.extremes.frostNights, lapseAppliedM: e.deltaM }, status: 'ok' };
+
   }
 
   return {
@@ -153,8 +156,8 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
         envelope: `median and 10th–90th percentile of each month across the ${read.length} distinct grid cells holding the ${points.length} in-range records; extremes and elevation at the typical cell ${typical.id} (its coldest month's mean night nearest the median across cells); its position is the cell centre`,
         elevation: typical.elevationM != null ? `ETOPO 2022, ${Math.round(typical.elevationM)} m (cell mean)` : undefined
       };
-      const extremes = await extremesAt(typical.lat, typical.lon, typical.elevationM, src);
-      return { status: 'ok', cells: read.length, records: points.length, cell: typical.id, at: { lat: +typical.lat.toFixed(3), lon: +typical.lon.toFixed(3) }, months, p10, p90, annualRain, extremes, src };
+      const { extremes, status: extremesStatus } = await extremesAt(typical.lat, typical.lon, typical.elevationM, src);
+      return { status: 'ok', cells: read.length, records: points.length, cell: typical.id, at: { lat: +typical.lat.toFixed(3), lon: +typical.lon.toFixed(3) }, months, p10, p90, annualRain, extremes, extremesStatus, src };
     },
     async at(lat, lon): Promise<Climate> {
       // One point: an envelope of one cell, for the plant page's bench comparison and for tests.
@@ -171,8 +174,8 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
         envelope: 'one cell: median and percentiles coincide',
         elevation: c.elevationM != null ? `ETOPO 2022, ${Math.round(c.elevationM)} m (cell mean)` : undefined
       };
-      const extremes = await extremesAt(lat, lon, c.elevationM, src);
-      return { status: 'ok', cells: 1, records: 1, cell: c.id, at: { lat: +lat.toFixed(3), lon: +lon.toFixed(3) }, months: c.months, p10: c.months, p90: c.months, extremes, src };
+      const { extremes, status: extremesStatus } = await extremesAt(lat, lon, c.elevationM, src);
+      return { status: 'ok', cells: 1, records: 1, cell: c.id, at: { lat: +lat.toFixed(3), lon: +lon.toFixed(3) }, months: c.months, p10: c.months, p90: c.months, extremes, extremesStatus, src };
     }
   };
 }

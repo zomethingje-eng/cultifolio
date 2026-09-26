@@ -11,6 +11,7 @@
   import { entriesFor } from '$lib/ui/index.svelte';
   import type { IndexEntry } from '$lib/server/dossiers';
   import PhotoImg from '$lib/ui/PhotoImg.svelte';
+  import RefPhotoOffer from '$lib/ui/RefPhotoOffer.svelte';
   onMount(() => collection.load());
   /** The storage warning can be put away for this tab's life only; the browser's promise has not changed, so it comes back on the next visit. */
   let storageNoticeHidden = $state(false);
@@ -101,6 +102,9 @@
 {:else if !list.length}
   <div class="emptybox"><p class="muted">No plants match.</p></div>
 {:else}
+  {#if !prefs.referencePhotos && list.some((a) => !collection.cover(a.id))}
+    <div style="margin: 0 0 8px"><RefPhotoOffer compact what="the reference’s photographs for plants without their own" /></div>
+  {/if}
   <div class="rows">
     {#each list as a (a.id)}
       {@const w = sinceWater(a.id)}

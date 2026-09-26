@@ -19,6 +19,7 @@
   import PhotoImg from '$lib/ui/PhotoImg.svelte';
   import PhotoAdd from '$lib/ui/PhotoAdd.svelte';
   import Lightbox from '$lib/ui/Lightbox.svelte';
+  import RefPhotoOffer from '$lib/ui/RefPhotoOffer.svelte';
   onMount(() => collection.load());
   const param = $derived(page.params.id!);
   const s = $derived(collection.sowing(param));
@@ -171,7 +172,7 @@
   <p class="muted">No sowing with this number on this device.</p>
 {:else}
   <div class="hero">
-    {#if idx?.thumb && prefs.referencePhotos && !thumbFailed}<img src={idx.thumb} alt={s.taxonName} style="max-height: 220px" onerror={() => (thumbFailed = true)} /><span class="cred">species photograph</span>{:else if idx?.thumb && prefs.referencePhotos}<div class="ph empty" style="height: 120px">No photograph yet.</div>{:else}<div class="ph" style="height: 120px">{m.label}</div>{/if}
+    {#if idx?.thumb && prefs.referencePhotos && !thumbFailed}<img src={idx.thumb} alt={s.taxonName} style="max-height: 220px" onerror={() => (thumbFailed = true)} /><span class="cred">species photograph</span>{:else if idx?.thumb && prefs.referencePhotos}<div class="ph empty" style="height: 120px">No photograph yet.</div>{:else}<div class="ph" style="height: auto; min-height: 120px; flex-direction: column; gap: 10px; padding: 16px">{m.label}{#if idx?.thumb && !prefs.referencePhotos}<RefPhotoOffer center what="the reference’s photograph of this species" />{/if}</div>{/if}
   </div>
   <div class="idcard">
     <div class="who">

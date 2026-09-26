@@ -258,24 +258,31 @@ async function issuedIn(tx: Tx, kind: NumberKind): Promise<Set<string>> {
  * `strict` (a change made on this device): a stamp already in the store is a bug, not a re-send, and `add` refuses it
  * so the transaction fails loudly instead of one change silently replacing another under the same key (round twelve, 4).
  */
-async function storeIn(tx: Tx, changes: Change[], fromServer: boolean, extra: Partial<Record<NumberKind, Set<string>>> = {}, strict = false): Promise<void> {
+async function storeIn(tx: Tx, changes: Change[], fromServer: boolean, extra: Partial<Record<NumberKind, Set<string>>> = {}, strict = false): Promise<Change[]> {
   const ch = tx.objectStore('changes'), ob = tx.objectStore('outbox'), meta = tx.objectStore('meta');
-  const carried: Partial<Record<NumberKind, Set<string>>> = { ...extra };
-  for (const c of changes) {
-    const k = numberField(c);
-    if (k && typeof c.value === 'string') (carried[k] ??= new Set()).add(c.value);
-  }
-  // A change already stored under a stamp is never replaced by a different one under the same stamp: two devices that
-  // minted one stamp for two changes (an importer's shared counter, before round fifteen) must not overwrite each other's
-  // on disk. The same stamp with the same content is a re-send and lands as before (round fifteen, 3).
+  // Two changes under one stamp should not exist; when they do (an importer's shared counter before round fifteen, or two
+  // devices naming the same v2 event differently before round sixteen), the store keeps one of them, and the same one on
+  // every device: not whichever arrived first but the one that ranks higher by content, so devices that met the two in
+  // either order converge (round fifteen, 3; round sixteen, 4). Only what is kept goes into the outbox, onto the ledger and
+  // back to the caller, which applies only that.
   const kept: Change[] = [];
+  const replacing: Change[] = [];
   for (const c of changes) {
     const had = strict ? undefined : await ch.get(c.t);
-    if (had && (had.kind !== c.kind || had.id !== c.id || had.field !== c.field || JSON.stringify(had.value ?? null) !== JSON.stringify(c.value ?? null))) {
-      console.warn(`change ${c.t} is already stored with other content; the stored one stands`);
+    if (had && !sameChange(had, c)) {
+      if (rank(c) > rank(had)) {
+        console.warn(`change ${c.t} is already stored with other content; this one ranks higher and replaces it`);
+        replacing.push(c);
+        kept.push(c);
+      } else console.warn(`change ${c.t} is already stored with other content; the stored one stands`);
       continue;
     }
     kept.push(c);
+  }
+  const carried: Partial<Record<NumberKind, Set<string>>> = { ...extra };
+  for (const c of kept) {
+    const k = numberField(c);
+    if (k && typeof c.value === 'string') (carried[k] ??= new Set()).add(c.value);
   }
   const puts: Promise<unknown>[] = [...kept.map((c) => (strict ? ch.add(c) : ch.put(c))), ...(fromServer ? [] : kept.map((c) => ob.put({ t: c.t })))];
   for (const k of Object.keys(carried) as NumberKind[]) {
@@ -284,16 +291,21 @@ async function storeIn(tx: Tx, changes: Change[], fromServer: boolean, extra: Pa
     puts.push(meta.put([...set], ISSUED(k)));
   }
   await Promise.all([...puts, tx.done]);
+  return kept;
 }
+const sameChange = (a: Change, b: Change) => a.kind === b.kind && a.id === b.id && a.field === b.field && JSON.stringify(a.value ?? null) === JSON.stringify(b.value ?? null);
+/** A total order on a change's content, for two under one stamp: the same on every device, whatever order they met them in. */
+const rank = (c: Change) => `${c.kind}\0${c.id}\0${c.field}\0${JSON.stringify(c.value ?? null)}`;
 
 /** Append changes; unless they came from the server (`fromServer`), they also go in the outbox to be pushed. One transaction, so the two stores cannot disagree. */
-export async function appendChanges(changes: Change[], fromServer = false, strict = false): Promise<void> {
-  if (!changes.length) return;
-  await writing(async () => {
+export async function appendChanges(changes: Change[], fromServer = false, strict = false): Promise<Change[]> {
+  if (!changes.length) return [];
+  const kept = await writing(async () => {
     const db = await openVault();
-    await storeIn(db.transaction(['changes', 'outbox', 'meta'], 'readwrite'), changes, fromServer, {}, strict);
+    return storeIn(db.transaction(['changes', 'outbox', 'meta'], 'readwrite'), changes, fromServer, {}, strict);
   });
   announce();
+  return kept;
 }
 
 /**
@@ -385,6 +397,24 @@ export async function getMeta<T>(k: string): Promise<T | undefined> {
 
 export async function setMeta(k: string, v: unknown): Promise<void> {
   await writing(async () => (await openVault()).put('meta', v, k));
+}
+
+/**
+ * Write a meta record only while the stored one still carries `key`: read and write in one transaction, so a tab whose
+ * sync was stopped or replaced by another tab cannot put the old record back between the two (round sixteen, 1). False
+ * when the stored record is gone or belongs to another vault; nothing is written then.
+ */
+export async function setMetaIfKey(k: string, v: unknown, key: string): Promise<boolean> {
+  return writing(async () => {
+    const tx = (await openVault()).transaction('meta', 'readwrite');
+    const had = (await tx.store.get(k)) as { key?: string } | undefined;
+    if (!had || had.key !== key) {
+      await tx.done;
+      return false;
+    }
+    await Promise.all([tx.store.put(v, k), tx.done]);
+    return true;
+  });
 }
 
 /** A stable per-device id, minted once. */

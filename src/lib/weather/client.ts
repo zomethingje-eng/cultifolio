@@ -42,10 +42,14 @@ function writeCache(k: string, body: unknown) {
 
 /** The forecast for a point in the reader's units: from the session's cache when fresh, else from /api/forecast. */
 export async function getForecast<T = unknown>(lat: number, lon: number, units: Units, altM?: number | null): Promise<ForecastAnswer<T>> {
-  const k = `${lat},${lon},${altM ?? ''},${units}`;
+  // Rounded here, before anything leaves the device: a hundredth of a degree (about a kilometre) and ten metres, which is
+  // all a forecast can use. The server rounds again for the weather services; this is so the server itself never sees
+  // more (round sixteen, 11).
+  const la = lat.toFixed(2), lo = lon.toFixed(2), alt = altM != null ? String(Math.round(altM / 10) * 10) : null;
+  const k = `${la},${lo},${alt ?? ''},${units}`;
   const hit = readCache(k);
   if (hit !== undefined) return { ok: true, body: hit as T };
-  const r = await fetch(`/api/forecast?lat=${lat}&lon=${lon}${altM != null ? `&alt=${altM}` : ''}&units=${units}`);
+  const r = await fetch(`/api/forecast?lat=${la}&lon=${lo}${alt != null ? `&alt=${alt}` : ''}&units=${units}`);
   if (!r.ok) return { ok: false, status: r.status };
   const body = (await r.json()) as T;
   writeCache(k, body);

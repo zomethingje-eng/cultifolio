@@ -31,7 +31,7 @@
     const idx = (f: (x: Month) => number, hi: boolean) => (m ? m.reduce((b: number, x: Month, i: number) => ((hi ? f(x) > f(m[b]) : f(x) < f(m[b])) ? i : b), 0) : 0);
     const hot = idx((x) => x.tmax, true), cold = idx((x) => x.tmin, false), wet = idx((x) => x.precipMm, true);
     const dlis = m ? m.map((x) => x.dli).filter((x): x is number => x != null) : [];
-    const sheet = cultivationSheet({ scientific: d.name.scientific, climateStatus: cl.status, family: d.name.family, months: cl.status === 'ok' ? cl.months : null, p10: cl.status === 'ok' ? cl.p10 : null, p90: cl.status === 'ok' ? cl.p90 : null, annualP10: cl.status === 'ok' ? (cl.annualRain?.p10 ?? null) : null, annualP90: cl.status === 'ok' ? (cl.annualRain?.p90 ?? null) : null, extremes: cl.status === 'ok' ? (cl.extremes ?? null) : null, lat: d.centroid?.lat ?? (cl.status === 'ok' ? cl.at.lat : null), units: u, readerLat });
+    const sheet = cultivationSheet({ scientific: d.name.scientific, climateStatus: cl.status, family: d.name.family, months: cl.status === 'ok' ? cl.months : null, p10: cl.status === 'ok' ? cl.p10 : null, p90: cl.status === 'ok' ? cl.p90 : null, annualP10: cl.status === 'ok' ? (cl.annualRain?.p10 ?? null) : null, annualP90: cl.status === 'ok' ? (cl.annualRain?.p90 ?? null) : null, extremes: cl.status === 'ok' ? (cl.extremes ?? null) : null, extremesStatus: cl.status === 'ok' ? cl.extremesStatus : null, lat: d.centroid?.lat ?? (cl.status === 'ok' ? cl.at.lat : null), units: u, readerLat });
     const hero = d.photos.find((p) => !p.captive) ?? d.photos[0];
     return {
       d,
@@ -88,7 +88,7 @@
 
     <div class="rowlab">Cold floor</div>
     <div class="row">
-      {#each cols as c (c.d.key)}<div class="cell fig">{#if c.floor?.raised}<b>{temp(c.floor.floor, u)}</b><span>archetype minimum for a {c.floor.group}, above the habitat's {c.ex ? `1st-percentile night ${temp(c.ex.minP01, u, 1)} (NASA POWER)` : `coldest mean night ${temp(c.cold!.v, u, 1)} (CHELSA)`}</span>{:else if c.ex}<b>{temp(c.ex.minP01, u, 1)}</b><span>1st-percentile night over {c.ex.years} yrs; lowest {temp(c.ex.minAbs, u, 1)}, {frostWording(c.ex)} (NASA POWER)</span>{:else if c.cold}<b>{temp(c.cold.v, u, 1)}</b><span>{c.cold.mo}, mean night (CHELSA); no extremes series</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
+      {#each cols as c (c.d.key)}<div class="cell fig">{#if c.floor?.raised}<b>{temp(c.floor.floor, u)}</b><span>archetype minimum for a {c.floor.group}, above the habitat's {c.ex ? `1st-percentile night ${temp(c.ex.minP01, u, 1)} (NASA POWER)` : `coldest mean night ${temp(c.cold!.v, u, 1)} (CHELSA)`}</span>{:else if c.ex}<b>{temp(c.ex.minP01, u, 1)}</b><span>1st-percentile night over {c.ex.years} yrs; lowest {temp(c.ex.minAbs, u, 1)}, {frostWording(c.ex)} (NASA POWER)</span>{:else if c.cold}<b>{temp(c.cold.v, u, 1)}</b><span>{c.cold.mo}, mean night (CHELSA); {c.d.climate.status === 'ok' && c.d.climate.extremesStatus === 'refused' ? 'extremes not checked' : 'no extremes series'}</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
     </div>
     <div class="rowlab">Warmest month</div>
     <div class="row">

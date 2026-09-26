@@ -9,7 +9,7 @@ vi.mock('$lib/db/vault', () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const m: any = {
   allChanges: async () => [...mem.changes],
-  appendChanges: async (c: Change[]) => void mem.changes.push(...c),
+  appendChanges: async (c: Change[]) => { mem.changes.push(...c); return c; },
   getMeta: async (k: string) => mem.meta.get(k),
   setMeta: async (k: string, v: unknown) => void mem.meta.set(k, v),
   deviceId: async () => 'testdevice',

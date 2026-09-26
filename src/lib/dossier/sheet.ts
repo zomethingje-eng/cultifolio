@@ -9,7 +9,7 @@ import type { Dossier } from '$dossier/schema';
 type Ok = Extract<Dossier['climate'], { status: 'ok' }>;
 export type SheetMonth = { tmax: number; tmin: number; tmean: number; precipMm: number; dli?: number; rh?: number };
 export type SheetClimate =
-  | { status: 'ok'; cells: number; records: number; at: { lat: number }; months: SheetMonth[]; p10: Pick<SheetMonth, 'tmin' | 'dli'>[]; p90: Pick<SheetMonth, 'tmin' | 'dli'>[]; extremes?: Ok['extremes'] }
+  | { status: 'ok'; cells: number; records: number; at: { lat: number }; months: SheetMonth[]; p10: Pick<SheetMonth, 'tmin' | 'dli'>[]; p90: Pick<SheetMonth, 'tmin' | 'dli'>[]; extremes?: Ok['extremes']; extremesStatus?: Ok['extremesStatus'] }
   | { status: 'pending' | 'none' | 'refused'; detail?: string };
 export type Sheet = {
   key: number;
@@ -36,7 +36,7 @@ export function sheetOf(d: Dossier, thumb?: string): Sheet {
     centroid: d.centroid ? { lat: d.centroid.lat } : null,
     habitatLat: d.centroid?.lat ?? (c.status === 'ok' ? c.at.lat : null),
     climate: c.status === 'ok'
-      ? { status: 'ok', cells: c.cells, records: c.records, at: { lat: c.at.lat }, months: slimYear(c.months), p10: slimSpan(c.p10), p90: slimSpan(c.p90), ...(c.extremes ? { extremes: c.extremes } : {}) }
+      ? { status: 'ok', cells: c.cells, records: c.records, at: { lat: c.at.lat }, months: slimYear(c.months), p10: slimSpan(c.p10), p90: slimSpan(c.p90), ...(c.extremes ? { extremes: c.extremes } : {}), ...(c.extremesStatus && c.extremesStatus !== 'ok' ? { extremesStatus: c.extremesStatus } : {}) }
       : { status: c.status, ...(c.detail ? { detail: c.detail } : {}) }
   };
 }

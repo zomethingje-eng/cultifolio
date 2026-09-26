@@ -32,6 +32,7 @@ vi.mock('$lib/db/vault', () => {
   appendChanges: async (cs: Change[]) => {
     if (mem.fail) throw new Error(mem.fail);
     for (const c of cs) mem.changes.set(c.t, c);
+    return cs;
   },
   getMeta: async (k: string) => mem.meta.get(k),
   setMeta: async (k: string, v: unknown) => void mem.meta.set(k, v),
@@ -498,3 +499,27 @@ describe('round fifteen', () => {
   });
 });
 
+describe('round sixteen', () => {
+  it('a plant an earlier build\'s import brought back (a tombstone, then only its importedOn) is removed again on load, once, and stays removed (round sixteen, 5)', async () => {
+    const { collection } = await fresh('testdevice');
+    const wall = 1_700_000_000_000;
+    const put = (c: Change) => mem.changes.set(c.t, c);
+    // what a round-fourteen import left in the log: the plant, its removal, then the import day stamped after it
+    put(remote(wall, 0, 'aaaaaaaaaaaa', 'accession', 'A-2', 'taxonName', 'Aloe x'));
+    put(remote(wall, 1, 'aaaaaaaaaaaa', 'accession', 'A-2', '_deleted', true));
+    put(remote(wall + 5000, 0, 'testdevice00', 'accession', 'A-2', 'importedOn', '2026-09-20'));
+    // and a plant removed and then edited on purpose, which is a real revival and stays
+    put(remote(wall, 0, 'bbbbbbbbbbbb', 'accession', 'B-1', 'taxonName', 'Lithops'));
+    put(remote(wall, 1, 'bbbbbbbbbbbb', 'accession', 'B-1', '_deleted', true));
+    put(remote(wall + 5000, 0, 'bbbbbbbbbbbb', 'accession', 'B-1', 'notes', 'back'));
+    const before = mem.changes.size;
+    const again = (await reload()) as typeof collection;
+    expect(again.accession('A-2')).toBeUndefined();
+    expect(again.accession('B-1')?.notes).toBe('back');
+    expect(mem.changes.size).toBe(before + 1); // one removal written, and it syncs like any change
+    const third = (await reload()) as typeof collection;
+    expect(third.accession('A-2')).toBeUndefined();
+    expect(mem.changes.size).toBe(before + 1); // once
+    void collection;
+  });
+});

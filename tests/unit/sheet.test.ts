@@ -133,6 +133,11 @@ describe('the sheet', () => {
     const fl2 = coldFloor(namaqua, null, archFor('Tylecodon pearsonii', 'Crassulaceae'))!;
     expect(fl2.floor).toBe(6);
     expect(fl2.s).toContain("the coldest month's mean night, July, in the median year (CHELSA); no daily extremes are on file");
+    // A refused extremes source is not an absence: the sentence says the extremes were not checked (round sixteen, 7).
+    const fl2r = coldFloor(namaqua, null, archFor('Tylecodon pearsonii', 'Crassulaceae'), undefined, 'refused')!;
+    expect(fl2r.floor).toBe(6);
+    expect(fl2r.s).toContain('the daily extremes were not checked (NASA POWER did not answer when this page was built)');
+    expect(fl2r.s).not.toContain('no daily extremes are on file');
     // No climate at all: the table's figure alone, credited.
     const fl3 = coldFloor(null, null, archFor('Monstera deliciosa', 'Araceae'))!;
     expect(fl3.hab).toBe(false);

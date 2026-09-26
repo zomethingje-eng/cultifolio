@@ -102,6 +102,8 @@ export const Occurrences = v.object({
   nOutsideRange: v.number(),
   /** In-range records too vaguely placed (over 10 km) to read climate at; they stay on the map. */
   nVague: v.optional(v.number()),
+  /** False when there was no range to test against (the range source refused, or a country-level range): every record then counted as "in range" untested (round sixteen, 6). */
+  rangeTested: v.optional(v.boolean()),
   /** How far the centre would have moved had restricted records been used. */
   restrictedShiftKm: v.nullable(v.number()),
   thin: v.boolean(),
@@ -165,6 +167,8 @@ export const Climate = v.variant('status', [
         lapseAppliedM: v.number()
       })
     ),
+    /** Whether the daily extremes were read: 'refused' is NASA POWER not answering, which is not the same as no series (round sixteen, 7). */
+    extremesStatus: v.optional(v.picklist(['ok', 'none', 'refused', 'skipped'])),
     src: v.object({ normals: v.string(), envelope: v.string(), extremes: v.optional(v.string()), elevation: v.optional(v.string()) })
   }),
   v.object({ status: v.picklist(['pending', 'none', 'refused']), detail: v.optional(v.string()) })

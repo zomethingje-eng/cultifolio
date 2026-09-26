@@ -1,5 +1,5 @@
 import { json, error } from '@sveltejs/kit';
-import { getIndex } from '$lib/server/dossiers';
+import { getIndex, getCorpusId } from '$lib/server/dossiers';
 import { bucketOf, BUCKET } from '$core/bucket';
 import type { RequestHandler } from './$types';
 
@@ -16,5 +16,10 @@ export const GET: RequestHandler = async ({ url, platform, fetch }) => {
   if (buckets.length > 4 || buckets.some((b) => !BUCKET.test(b))) error(400, 'buckets are two hex digits, 00 to 1f, at most 4 per request');
   const want = new Set(buckets);
   const idx = await getIndex(platform, fetch);
-  return json(idx.filter((e) => want.has(bucketOf(e.slug))), { headers: { 'cache-control': 'public, max-age=86400' } });
+  // As the sheets route does (round thirteen, 4): an answer is cacheable only when asked for under the corpus now served.
+  // An isolate still holding the old index answers a request under the new id with `no-store`, so no cache, the service
+  // worker included, keeps the old entries under the new id until the next deploy (round sixteen, 12).
+  const asked = (url.searchParams.get('c') ?? '').replace(/[^A-Za-z0-9._-]/g, '').slice(0, 40);
+  const current = asked === (await getCorpusId(platform, fetch));
+  return json(idx.filter((e) => want.has(bucketOf(e.slug))), { headers: { 'cache-control': current ? 'public, max-age=86400' : 'no-store' } });
 };

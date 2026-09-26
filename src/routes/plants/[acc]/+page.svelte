@@ -25,6 +25,7 @@
   import PhotoImg from '$lib/ui/PhotoImg.svelte';
   import PhotoAdd from '$lib/ui/PhotoAdd.svelte';
   import Lightbox from '$lib/ui/Lightbox.svelte';
+  import RefPhotoOffer from '$lib/ui/RefPhotoOffer.svelte';
   onMount(() => { site.load(); collection.load(); });
   /** The URL carries the number people know (or an identity, from a printed code); everything below works on the record's identity. */
   const u = $derived(units.current);
@@ -89,8 +90,9 @@
     const dli = (y: { dli?: number }[]) => y.map((x) => x.dli).filter((x): x is number => x != null);
     const dlis = dli(m), dli10 = dli(c.p10), dli90 = dli(c.p90);
     const ex = c.extremes ?? null;
+    const exStatus = c.extremesStatus ?? null;
     const coldI = m.reduce((b, x, j) => (x.tmin < m[b].tmin ? j : b), 0);
-    const sheet = cultivationSheet({ scientific: dossier.name.scientific, family: dossier.name.family, months: m, p10: c.p10, p90: c.p90, extremes: ex, lat: dossier.habitatLat ?? c.at.lat, units: u });
+    const sheet = cultivationSheet({ scientific: dossier.name.scientific, family: dossier.name.family, months: m, p10: c.p10, p90: c.p90, extremes: ex, extremesStatus: exStatus, lat: dossier.habitatLat ?? c.at.lat, units: u });
     return {
       dli: dlis.length ? { lo: Math.min(...dlis), hi: Math.max(...dlis), lo10: dli10.length ? Math.min(...dli10) : null, hi90: dli90.length ? Math.max(...dli90) : null } : null,
       night: { v: m[coldI].tmin, mo: coldI + 1, lo: c.p10[coldI].tmin, hi: c.p90[coldI].tmin },
@@ -268,10 +270,9 @@
       <span class="cred">{cover.caption ? cover.caption + ' · ' : ''}{cover.d}{photos.length > 1 ? ` · ${plural(photos.length, 'photo')}` : ''}</span>
     {:else if speciesThumb && !thumbFailed}
       <img src={speciesThumb} alt={a.taxonName} class="spthumb" onerror={() => (thumbFailed = true)} /><button class="cred" type="button" onclick={() => { adding = true; setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0); }}>species photograph · add your own</button>
-    {:else if speciesThumb}
-      <div class="ph"><span class="phcap empty">No photograph yet.</span><PhotoAdd acc={id} id="hero-photo" compact /></div>
     {:else}
-      <div class="ph"><PhotoAdd acc={id} id="hero-photo" compact /></div>
+      <!-- The grower's own photograph is what this space is for; the reference's is offered beneath, with what showing it discloses, when it is being withheld -->
+      <div class="ph">{#if speciesThumb && thumbFailed}<span class="phcap empty">The reference's photograph did not load.</span>{/if}<PhotoAdd acc={id} id="hero-photo" compact />{#if dossier?.thumb && !prefs.referencePhotos}<RefPhotoOffer center what="the reference’s photograph of this species" />{/if}</div>
     {/if}
   </div>
   <div class="idcard">

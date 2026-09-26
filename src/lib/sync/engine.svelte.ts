@@ -36,7 +36,7 @@
  * what records mention that we lack.
  */
 import { collection } from '$lib/db/collection.svelte';
-import { getMeta, setMeta, getPhotoBlobs, putPhotoBlobs, photoBlobIds, outboxKeys, outboxAck, outboxFill, outboxClear, changesByKeys, allChanges, appendChanges, onOtherTabWrite, announceSyncForgotten } from '$lib/db/vault';
+import { getMeta, setMeta, setMetaIfKey, getPhotoBlobs, putPhotoBlobs, photoBlobIds, outboxKeys, outboxAck, outboxFill, outboxClear, changesByKeys, allChanges, appendChanges, onOtherTabWrite, announceSyncForgotten } from '$lib/db/vault';
 import { deriveKeys, sealJson, openJson, seal, open, packPhoto, unpackPhoto, parseVaultKey, batchFingerprint, sha256hex, type VaultKeys } from './crypto';
 import { MAX_BATCH_BYTES, MAX_PHOTO_BYTES, SEAL_OVERHEAD, OVERLAP_MS } from './limits';
 import { validateChanges, isHeld, dueAt, hlcWall, type Change } from '$core/log';
@@ -79,6 +79,7 @@ const ownStamp = (t: string, device: string) => t.slice(t.lastIndexOf('-') + 1).
 
 class Sync {
   configured = $state(false);
+  private gen = 0;
   busy = $state<string | null>(null);
   lastSync = $state<string | null>(null);
   lastError = $state<string | null>(null);
@@ -173,6 +174,7 @@ class Sync {
     const keys = await deriveKeys(key);
     const r = await fetch(`${this.base}/api/sync/vault`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: keys.id, token: keys.token, create: mode === 'create' }) });
     if (!r.ok) throw new Error(r.status === 404 ? 'No vault answers to that key. Check it against the other device; one wrong letter is a different vault.' : r.status === 403 ? 'That key does not open its vault.' : r.status === 503 ? 'Sync is not available on this server.' : `The server said ${r.status}.`);
+    this.gen++; // a run still in flight for an earlier vault is stale from here: it touches nothing of this one (round sixteen, 2)
     this.keys = keys;
     this.vaultId = keys.id;
     this.meta = { key, since: 0, have: [], photosPushed: [], lastSync: null };
@@ -215,12 +217,28 @@ class Sync {
    * as if nothing had happened. The run ends instead (round fifteen, 2).
    */
   private async save(m: SyncMeta): Promise<void> {
-    if (this.meta !== m) throw new Error('syncing was stopped on this device while this run was under way');
-    await setMeta(META, m);
+    if (this.meta !== m) throw stopped();
+    // And on disk, in one transaction: another tab's "Stop syncing" or "Replace from backup" is seen there before this tab
+    // hears of it, and a run in that window must not write the old key and cursor back (round sixteen, 1).
+    if (!(await setMetaIfKey(META, m, m.key))) {
+      this.dropped();
+      throw stopped();
+    }
+  }
+
+  /** The same check without a write, before a step that must not happen for a vault this device has left: an outbox ack, a fold. */
+  private async live(m: SyncMeta): Promise<void> {
+    if (this.meta !== m) throw stopped();
+    const stored = await getMeta<SyncMeta>(META);
+    if (!stored || stored.key !== m.key) {
+      this.dropped();
+      throw stopped();
+    }
   }
 
   /** Forget the key in memory only: another tab did the forgetting and wrote the vault; this tab must not sync through it. */
   private dropped(): void {
+    this.gen++;
     this.unhook?.();
     this.unhook = null;
     this.meta = null;
@@ -322,6 +340,9 @@ class Sync {
 
   async run(): Promise<void> {
     if (!this.configured || !this.keys || !this.meta || this.busy) return;
+    // The generation this run belongs to: "Stop syncing" or a new vault during the run makes it stale, and a stale run
+    // leaves the status, the busy flag and the run count to the vault that replaced it (round sixteen, 2).
+    const g = this.gen;
     this.lastError = null;
     this.busy = 'Starting…';
     try {
@@ -336,19 +357,24 @@ class Sync {
         if ((e as { retryAfterMs?: number })?.retryAfterMs) wait = e as Error;
         else throw e;
       }
-      await this.pull();
+      const got = await this.pull();
       this.meta.lastSync = new Date().toISOString();
       this.lastSync = this.meta.lastSync;
       await this.save(this.meta);
-      if (wait) { wait.message = `received; ${wait.message}`; throw wait; }
+      // Said only when something did arrive (round sixteen, design note).
+      if (wait) { if (got) wait.message = `received ${got} batch${got === 1 ? '' : 'es'}; ${wait.message}`; throw wait; }
     } catch (e) {
-      this.lastError = e instanceof Error ? e.message : String(e);
-      const wait = (e as { retryAfterMs?: number })?.retryAfterMs;
-      if (wait) this.schedule(wait);
+      if (g === this.gen) {
+        this.lastError = e instanceof Error ? e.message : String(e);
+        const wait = (e as { retryAfterMs?: number })?.retryAfterMs;
+        if (wait) this.schedule(wait);
+      }
       throw e;
     } finally {
-      this.busy = null;
-      this.runs++;
+      if (g === this.gen) {
+        this.busy = null;
+        this.runs++;
+      }
     }
   }
 
@@ -395,6 +421,10 @@ class Sync {
     // A vault that was full is probed by the next photo too: with nothing in the outbox no batch is ever sent to clear the
     // flag, and once room is made the photo would otherwise wait until the grower edits something (round fifteen, 8).
     const probing = !!this.vaultFull;
+    // But at most once an hour: the probe is a whole photograph, and a run happens on every focus and every five minutes
+    // while the page is open, which on mobile data would be tens of megabytes an hour to be told the vault is still full
+    // (round sixteen, 13). The batch push above still probes with a small request whenever the outbox has something.
+    if (probing && m.vaultFull && Date.now() - Date.parse(m.vaultFull.at) < PROBE_MS) return;
     // Photos we have that the server may not.
     const have = new Set(await photoBlobIds());
     const pushed = new Set(m.photosPushed);
@@ -452,6 +482,7 @@ class Sync {
     if (collection.device) headers['x-device'] = collection.device;
     const r = await fetch(`${this.base}/api/sync/log?vault=${this.keys!.id}`, { method: 'POST', headers, body: body as BodyInit });
     if (r.ok) {
+      await this.live(m); // never ack into a vault this device has since left or replaced: the new vault's outbox holds these same changes (round sixteen, 2)
       this.setFull(null);
       if (!m.have.includes(key)) m.have.push(key);
       (m.haveAt ??= {})[key] = Date.now(); // its arrival, near enough: the server's clock and this one agree to the minute the overlap allows
@@ -529,6 +560,7 @@ class Sync {
     }
     // Storing can fail (a full phone). That is not the batch's fault: nothing is noted, the cursor stays before it,
     // and the error stops this run, so the next run fetches it again.
+    await this.live(m); // and never fold a batch of a vault this device has left into a log that has since been replaced (round sixteen, 1)
     const hold = this.hold();
     const ahead = changes.filter((c) => isHeld(c.t, hold));
     if (ahead.length) {
@@ -541,8 +573,10 @@ class Sync {
     return true;
   }
 
-  private async pull(): Promise<void> {
+  /** Returns how many batches were folded this run. */
+  private async pull(): Promise<number> {
     const m = this.meta!;
+    let got = 0;
     // The first page of a run starts a minute before the cursor; later pages continue strictly after the last batch listed.
     let after: { at: number; key: string } | null = null;
     for (;;) {
@@ -560,7 +594,7 @@ class Sync {
         for (const b of batches) {
           if (!have.has(b.key)) {
             this.busy = `Receiving ${++n} of ${fresh.length}…`;
-            await this.takeBatch(m, b.key);
+            if (await this.takeBatch(m, b.key)) got++;
             m.have.push(b.key);
             have.add(b.key);
           }
@@ -600,6 +634,7 @@ class Sync {
         continue; // the entry stands, whatever the failure: a 5xx, a dropped connection, or a 4xx for a batch the server no longer holds
       }
       if (ok) {
+        got++;
         m.quarantined = m.quarantined!.filter((x) => x.key !== q.key);
         if (!m.have.includes(q.key)) m.have.push(q.key);
       } else {
@@ -640,8 +675,13 @@ class Sync {
       }
       await this.save(m);
     }
+    return got;
   }
 }
+
+const stopped = () => new Error('syncing was stopped on this device while this run was under way');
+/** A full vault is probed with a photograph at most this often. */
+const PROBE_MS = 3600_000;
 
 function collectionPhotos(): Photo[] {
   const out: Photo[] = [];

@@ -58,6 +58,7 @@ export async function photos(f: JsonFetcher, taxonId: number, wild: boolean, per
       if (!isOpen(tag) || (tag !== 'cc0' && tag !== 'by' && tag !== 'by-sa')) continue;
       const base = p.url.replace(/\/square\.(\w+)$/, '');
       const ext = /\.(\w+)$/.exec(p.url)?.[1] ?? 'jpg';
+      if (!p.attribution && tag !== 'cc0') continue; // no attribution line means no author to credit, which CC BY requires (round sixteen, 3)
       out.push({
         src: 'inat',
         id: String(p.id),
@@ -66,7 +67,7 @@ export async function photos(f: JsonFetcher, taxonId: number, wild: boolean, per
         width: p.original_dimensions?.width ?? undefined,
         height: p.original_dimensions?.height ?? undefined,
         licence: tag,
-        attribution: p.attribution ?? 'iNaturalist user, licence as stated',
+        attribution: p.attribution ?? 'no author stated, CC0',
         page: `https://www.inaturalist.org/observations/${o.id}`,
         captive: !wild,
         observedOn: o.observed_on ?? undefined,

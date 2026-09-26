@@ -159,3 +159,14 @@ describe('each imported record is stamped on its own (round fifteen, 3)', () => 
     expect(new Set(all.changes.map((c) => c.t)).size).toBe(all.changes.length);
   });
 });
+
+describe('events without an id (round sixteen, 4)', () => {
+  it('are named by their place in their own plant, so the same event gets the same id and stamp whether or not an earlier plant was skipped', () => {
+    const file = { collection: { accessions: { A: { acc: '2024-0001', taxonId: 'x', events: [{ d: '2024-05-01', t: 'water' }] }, B: { acc: '2024-0002', taxonId: 'x', events: [{ d: '2024-06-01', t: 'repot' }, { d: '2024-07-01', t: 'water' }] } } } };
+    const all = importV2(file, { now: 1_800_000_000_000 });
+    const skippingA = importV2(file, { now: 1_800_000_000_000, exists: (kind, id) => kind === 'accession' && id === '2024-0001' });
+    const ev = (r: { changes: Change[] }) => r.changes.filter((c) => c.kind === 'event' && c.field === 'd').map((c) => c.id + '@' + c.t);
+    expect(ev(all).filter((x) => x.startsWith('v2-2024-0002-'))).toEqual(ev(skippingA));
+    expect(ev(all).map((x) => x.split('@')[0])).toEqual(['v2-2024-0001-e0', 'v2-2024-0002-e0', 'v2-2024-0002-e1']);
+  });
+});
