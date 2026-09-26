@@ -15,10 +15,9 @@
   import { collection } from '$lib/db/collection.svelte';
   import { kindOf, type Accession } from '$lib/db/types';
   import { setCrumb } from '$lib/ui/crumb.svelte';
-  import { dossierForName } from '$lib/ui/index.svelte';
+  import { sheetForName, sheetsFor, type Sheet as SpeciesSheet } from '$lib/ui/index.svelte';
   import { slugify, speciesSlug, speciesOf } from '$core/names';
   import { careLine } from '$core/note';
-  import type { Dossier } from '$dossier/schema';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
 
   /** Sheet geometry in mm. Avery numbers are the common US and A4 stocks; the strip is for cutting by hand. */
@@ -86,20 +85,19 @@
   };
   const pickAll = (on: boolean) => (chosen = on ? new Set([...chosen, ...filtered.map((a) => a.id)]) : new Set([...chosen].filter((id) => !filtered.some((a) => a.id === id))));
 
-  // One request per species, not per plant: five Astrophytum labels share one dossier.
-  const dossiers = new Map<number, Promise<Dossier | 'none' | null>>();
-  const fetchDossier = (key: number) => { let p = dossiers.get(key); if (!p) { p = fetch(`/api/dossier/${key}`).then((r): Promise<Dossier | 'none' | null> => (r.ok ? (r.json() as Promise<Dossier>) : Promise.resolve(r.status === 404 ? 'none' : null))).catch(() => null); dossiers.set(key, p); } return p; };
-  async function dossierFor(a: Accession): Promise<Dossier | null> {
-    const d = await dossierForName<Dossier>(a.taxonName, a.taxonKey, fetchDossier, (k) => { if (a.taxonKey !== k) collection.put('accession', a.id, { taxonKey: k }); });
+  /** A plant's species sheet, by hash bucket: the labels page never names or keys the species it prints. Five Astrophytum labels are one lookup in one cached bucket. */
+  async function dossierFor(a: Accession): Promise<SpeciesSheet | null> {
+    const d = await sheetForName(a.taxonName, a.taxonKey, (k) => { if (a.taxonKey !== k) collection.put('accession', a.id, { taxonKey: k }); });
     return d && d !== 'none' ? d : null;
   }
   // QR codes and care lines are made once per plant, lazily.
   $effect(() => {
+    // Every bucket the picked plants need, asked for in one request; the per-plant lookups below then find their bucket cached.
+    if (withCare) void sheetsFor(picked.filter((a) => care[a.id] === undefined && kindOf(a) !== 'hybrid').map((a) => speciesSlug(a.taxonName)));
     for (const a of picked) {
       if (withQr && !qrs[a.id]) QRCode.toString(`${location.origin}/plants/${a.id}`, { type: 'svg', errorCorrectionLevel: 'M', margin: 0 }).then((svg) => (qrs = { ...qrs, [a.id]: svg }));
       if (withCare && care[a.id] === undefined && kindOf(a) !== 'hybrid') {
         care = { ...care, [a.id]: '' };
-        // The plant's own key first (one small file, the one the offline worker keeps); the index only for a plant without one.
         dossierFor(a).then(async (d) => {
           const readerLat = site.current?.lat ?? collection.locations.map((l) => l.lat).find((x): x is number => x != null) ?? null;
           const line = careLine({ scientific: a.taxonName, family: d?.name.family, months: d?.climate.status === 'ok' ? d.climate.months : null, extremes: d?.climate.status === 'ok' ? (d.climate.extremes ?? null) : null, lat: d?.centroid?.lat ?? null, units: units.current }, { readerLat });

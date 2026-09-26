@@ -344,3 +344,22 @@ describe('round nine', () => {
     expect(again.madeOn('accession', 'A-1')).toBe(localDate()); // kept across a reload
   });
 });
+
+describe('round ten', () => {
+  it('the import day is a field on the record, so a second device that receives the log counts from the same day (round ten, 3)', async () => {
+    const { collection, mem: first } = await fresh('testdevice');
+    const old = Date.now() - 500 * 86_400_000;
+    await collection.ingest([remote(old, 0, 'v2import', 'accession', 'A-1', 'acc', 'A-1'), remote(old, 1, 'v2import', 'accession', 'A-1', 'taxonName', 'Lithops')]);
+    const imported = [...first.changes.values()].filter((c) => c.field === 'importedOn');
+    expect(imported).toHaveLength(1);
+    expect(imported[0].value).toBe(localDate());
+    expect(collection.accession('A-1')?.importedOn).toBe(localDate());
+    // Another device receives the whole log from the server, a month later by its own clock: same day.
+    const { collection: other } = await fresh('otherdevice0');
+    await other.ingest([...first.changes.values()], 'server');
+    expect(other.madeOn('accession', 'A-1')).toBe(localDate());
+    // A record that already carries the day is not stamped again by a later file.
+    await collection.ingest([remote(old, 2, 'v2import', 'accession', 'A-1', 'notes', 'again')]);
+    expect([...first.changes.values()].filter((c) => c.field === 'importedOn')).toHaveLength(1);
+  });
+});

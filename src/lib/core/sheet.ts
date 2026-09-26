@@ -44,8 +44,8 @@ export interface SheetInput {
   /** The median year across the envelope cells. */
   months?: Month[] | null;
   /** The 10th and 90th percentile years, when the dossier carries them: the range the species is recorded in. */
-  p10?: Month[] | null;
-  p90?: Month[] | null;
+  p10?: Pick<Month, 'tmin' | 'dli'>[] | null;
+  p90?: Pick<Month, 'tmin' | 'dli'>[] | null;
   extremes?: Extremes | null;
   /** Habitat latitude (the map marker's), for the hemisphere. */
   lat?: number | null;

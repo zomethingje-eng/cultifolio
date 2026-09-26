@@ -63,7 +63,6 @@ class Collection {
         const scheme = await getMeta<NumberingScheme>('scheme');
         if (isScheme(scheme)) this.metaScheme = scheme;
         await this.readLedger();
-        this.importedOn = (await getMeta<Record<string, string>>('importedOn')) ?? {};
         this.ready = true;
         onOtherTabWrite(() => void this.catchUp().catch(() => {}));
         this.persisted = await requestPersistence();
@@ -251,13 +250,11 @@ class Collection {
   /** Remember every parentId a place has been given, so a cut loop can fall back to the previous one. Same on every device: it is read from the log, not from arrival order. */
   /** The earliest stamp seen for each record: the day it was made on this device or imported, whatever its id looks like (a v2 import keeps its v2 ids). */
   private born = new Map<string, string>();
-  /** The day each imported record arrived on this device (a v2 import stamps its changes with the v2 edit times, years back): kept in `meta`, read at load. */
-  private importedOn: Record<string, string> = {};
-  /** The local day a record was made or imported: the import day when it came in a file, else the day in its id, else its first change. */
+  /** The local day a record was made or imported: the import day written on the record when it came in a file (a v2 import stamps its changes with the v2 edit times, years back), else the day in its id, else its first change. */
   madeOn(kind: Kind, id: string): string | null {
     const k = recKey(kind, id);
-    const imp = this.importedOn[k];
-    if (imp) return imp;
+    const imp = this.state.get(k)?.importedOn;
+    if (typeof imp === 'string') return imp;
     const fromId = madeOn(id);
     if (fromId) return fromId;
     const t = this.born.get(k);
@@ -762,11 +759,21 @@ class Collection {
     for (const c of changes) this.clock?.observe(c.t);
     await this.commit(changes, source);
     if (source === 'import') {
-      // Records new to this device today count from today, whatever their changes are stamped: a collection kept in v2 since 2019 is not "not seen for 2,400 days" on the day it arrives.
+      // Records new to this device today count from today, whatever their changes are stamped: a collection kept in v2 since
+      // 2019 is not "not seen for 2,400 days" on the day it arrives. The day goes on the record as a field, so it syncs and
+      // every device counts the same way (round ten, 3).
       const today = localDate();
-      let added = false;
-      for (const c of changes) { const k = recKey(c.kind, c.id); if (!this.importedOn[k] && !madeOn(c.id)) { this.importedOn[k] = today; added = true; } }
-      if (added) await setMeta('importedOn', this.importedOn).catch(() => {});
+      const stamp: Change[] = [];
+      const seenRec = new Set<string>();
+      for (const c of changes) {
+        if (c.kind !== 'accession' && c.kind !== 'sowing') continue;
+        const k = recKey(c.kind, c.id);
+        if (seenRec.has(k) || madeOn(c.id)) continue;
+        seenRec.add(k);
+        const r = this.state.get(k);
+        if (r && !r.importedOn) stamp.push({ t: this.tick(), kind: c.kind, id: c.id, field: 'importedOn', value: today });
+      }
+      if (stamp.length) await this.commit(stamp, 'local');
     }
     try {
       await this.resolveDuplicateNumbers();

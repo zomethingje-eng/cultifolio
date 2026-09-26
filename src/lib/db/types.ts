@@ -42,6 +42,8 @@ export interface Accession {
   sowingId?: string | null;
   /** The photo shown as this plant's face; the newest photo when unset. */
   cover?: string | null;
+  /** The local day this record arrived in a file on some device (YYYY-MM-DD). Set once by the importer; day counters start here for a record whose id carries no time. */
+  importedOn?: string | null;
 }
 
 /**
@@ -157,6 +159,8 @@ export interface Sowing {
   locationId?: string | null;
   status: SowingStatus;
   notes?: string | null;
+  /** The local day this record arrived in a file on some device (YYYY-MM-DD). Set once by the importer; day counters start here for a record whose id carries no time. */
+  importedOn?: string | null;
 }
 
 export const PROP_METHODS: Array<{ k: PropMethod; label: string; unit: string; veg: boolean }> = [

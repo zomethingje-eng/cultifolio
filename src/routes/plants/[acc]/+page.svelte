@@ -16,9 +16,8 @@
   import { slugify, speciesOf, speciesSlug } from '$core/names';
   import SpeciesPicker from '$lib/ui/SpeciesPicker.svelte';
   import { setCrumb } from '$lib/ui/crumb.svelte';
-  import { entriesFor, dossierForName } from '$lib/ui/index.svelte';
-  import type { IndexEntry } from '$lib/server/dossiers';
-  import type { Dossier } from '$dossier/schema';
+  import { entriesFor, sheetForName } from '$lib/ui/index.svelte';
+  import type { Sheet } from '$lib/ui/index.svelte';
   import { cultivationSheet, runs, forReader } from '$core/sheet';
   import { EVENT_LABEL, MEASURES, PROP_METHODS, kindOf, type EventType, type Photo } from '$lib/db/types';
   import { parents } from '$core/names';
@@ -48,8 +47,7 @@
   );
   const taxon = $derived(a ? collection.taxon(speciesSlug(a.taxonName)) : undefined);
   const sowing = $derived(a?.sowingId ? collection.sowing(a.sowingId) : undefined);
-  let idx = $state<IndexEntry | undefined>(undefined);
-  let dossier = $state<Dossier | null>(null);
+  let dossier = $state<Sheet | null>(null);
   /** What the reference said about this plant's species: still being asked, could not be reached (a different fact from absent), not there, or read. */
   let ref = $state<'loading' | 'unreachable' | 'none' | 'ok'>('loading');
   const kind = $derived(a ? kindOf(a) : 'species');
@@ -59,35 +57,35 @@
     if (a) setCrumb([{ label: 'My plants', href: '/plants' }, { label: `${accNo(a)} · ${a.taxonName}${a.cultivar ? ` ‘${a.cultivar}’` : ''}` }]);
     return () => setCrumb([]);
   });
-  /** The species behind the plant, fetched again whenever the name or key changes (an edit), and a late answer for a name no longer on the record is dropped. */
+  /** The species behind the plant: its sheet, found by hash bucket (the server never learns the species), fetched again only when the name, the key or the parentage changes, never because the record was re-set; a late answer for a name no longer on the record is dropped. */
   let asked = 0;
-  const fetchDossier = (key: number | string): Promise<Dossier | 'none' | null> => fetch(`/api/dossier/${key}`).then((r): Promise<Dossier | 'none' | null> => (r.ok ? (r.json() as Promise<Dossier>) : Promise.resolve(r.status === 404 ? 'none' : null))).catch(() => null);
+  let askedFor = '';
   $effect(() => {
     if (!a) return;
-    // A name below species (a subspecies, a variety) belongs to its species' page; the record keeps the full name.
-    const slug = slugify(speciesOf(a.taxonName)), key = a.taxonKey, parentage = a.parentage;
+    const name = a.taxonName, key = a.taxonKey ?? null, parentage = a.parentage ?? null;
+    const want = `${name}\0${key}\0${parentage}`;
+    if (want === askedFor) return; // the record was re-set (a watering, the key repaired) but the species is the same: nothing to ask again
+    askedFor = want;
     const seq = ++asked;
-    idx = undefined; dossier = null; ref = 'loading';
+    dossier = null; ref = 'loading';
     (async () => {
-      // The record's own key first, checked against its name (a key can be stale after a rename, and a wrong key would
-      // put another species' habitat under this plant); else the species by hash bucket; a wrong or missing key is repaired.
-      const name = a.taxonName;
-      const d = await dossierForName<Dossier>(name, key, fetchDossier, (k) => { if (a && a.taxonName === name && a.taxonKey !== k) collection.put('accession', a.id, { taxonKey: k }); });
+      // A wrong key would have put another species' habitat under this plant, so the sheet is found by the name, and the key is set right only for a name at species rank.
+      const d = await sheetForName(name, key, (k) => { if (a && a.taxonName === name && a.taxonKey !== k) collection.put('accession', a.id, { taxonKey: k }); });
       if (seq !== asked) return;
       dossier = d === 'none' ? null : d;
       ref = d === 'none' ? 'none' : d ? 'ok' : 'unreachable';
     })();
     const ps = parents(parentage);
-    entriesFor(ps.map((n) => slugify(n))).then((m) => { if (seq === asked) parentLinks = ps.map((name) => ({ name, slug: m?.has(slugify(name)) ? slugify(name) : null })); });
+    entriesFor(ps.map((n) => slugify(n))).then((m) => { if (seq === asked) parentLinks = ps.map((pn) => ({ name: pn, slug: m?.has(slugify(pn)) ? slugify(pn) : null })); });
   });
   /** A photograph of the species for the plant without one of its own: the index's thumb when the index was read, else the dossier's own first wild photograph. */
-  const speciesThumb = $derived(idx?.thumb ?? (dossier?.photos.find((p) => !p.captive) ?? dossier?.photos[0])?.thumb);
+  const speciesThumb = $derived(dossier?.thumb);
   // Habitat versus here: the species' habitat figures, median with the 10th–90th span across the envelope cells, beside the bench's.
   const habitat = $derived.by(() => {
     if (!dossier || dossier.climate.status !== 'ok') return null;
     const c = dossier.climate;
     const m = c.months;
-    const dli = (y: typeof m) => y.map((x) => x.dli).filter((x): x is number => x != null);
+    const dli = (y: { dli?: number }[]) => y.map((x) => x.dli).filter((x): x is number => x != null);
     const dlis = dli(m), dli10 = dli(c.p10), dli90 = dli(c.p90);
     const ex = c.extremes ?? null;
     const coldI = m.reduce((b, x, j) => (x.tmin < m[b].tmin ? j : b), 0);

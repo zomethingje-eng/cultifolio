@@ -100,8 +100,21 @@ self.addEventListener('fetch', (e) => {
       }
       // Species pages, dossiers, the climate API: network first, cache fallback, so what you have read stays readable.
       // Settings too: its HTML is rendered in the reader's units, so a cached copy from before a switch would paint the old ones first.
-      // The index buckets a grower's own species fall in are kept too, so the plants list has its thumbnails and the labels their care lines in the greenhouse.
-      if (url.pathname.startsWith('/species/') || url.pathname.startsWith('/api/dossier/') || url.pathname.startsWith('/api/entries') || url.pathname.startsWith('/s/') || url.pathname.startsWith('/about/') || url.pathname === '/' || url.pathname === '/settings') {
+      // The reference's files change only when the corpus is refilled, which is a new build and a new cache: within a build a
+      // dossier, an index bucket or a sheet bucket is asked for once and then served from here, so a device that has its species
+      // asks the server nothing more about them, online or off.
+      if (url.pathname.startsWith('/api/dossier/') || url.pathname.startsWith('/api/entries') || url.pathname.startsWith('/api/sheets')) {
+        const hit = await cache.match(request);
+        if (hit) return hit;
+        try {
+          const r = await fetch(request);
+          if (r.ok && r.type === 'basic') cache.put(request, r.clone());
+          return r;
+        } catch {
+          return Response.error();
+        }
+      }
+      if (url.pathname.startsWith('/species/') || url.pathname.startsWith('/s/') || url.pathname.startsWith('/about/') || url.pathname === '/' || url.pathname === '/settings') {
         try {
           const r = await fetch(request);
           if (request.mode === 'navigate' ? cacheableHtml(r) : r.ok && r.type === 'basic') cache.put(request, r.clone());

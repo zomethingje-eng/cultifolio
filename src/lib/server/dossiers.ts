@@ -22,7 +22,7 @@ export interface IndexEntry {
   near?: number[];
 }
 
-type Fetch = typeof fetch;
+export type Fetch = typeof fetch;
 
 const fixtureFiles = import.meta.glob('/fixtures/dossiers/s/v2/*.json', { eager: true, import: 'default' }) as Record<string, unknown>;
 const fixtureIndex = (import.meta.glob('/fixtures/dossiers/index.json', { eager: true, import: 'default' }) as Record<string, IndexEntry[]>)['/fixtures/dossiers/index.json'] ?? [];
@@ -37,7 +37,7 @@ for (const [path, json] of Object.entries(fixtureFiles)) {
   }
 }
 
-type Platform = App.Platform | undefined;
+export type Platform = App.Platform | undefined;
 
 /** Union by key; the first list wins a collision. Linear, not quadratic: a corpus is thousands of species. */
 const merge = (a: IndexEntry[], b: IndexEntry[]) => {

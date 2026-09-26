@@ -167,11 +167,17 @@ class Sync {
     this.keys = keys;
     this.vaultId = keys.id;
     this.meta = { key, since: 0, have: [], photosPushed: [], lastSync: null };
-    await setMeta(META, this.meta);
-    await outboxFill(); // everything on this device goes up first
-    this.configured = true;
-    this.hook();
-    await this.scanClock();
+    // Busy from here until the first run ends: a device that has just joined is not "Synced" until it has pulled (round ten).
+    this.busy = mode === 'join' ? 'Joining…' : 'Starting…';
+    try {
+      await setMeta(META, this.meta);
+      await outboxFill(); // everything on this device goes up first
+      this.configured = true;
+      this.hook();
+      await this.scanClock();
+    } finally {
+      this.busy = null; // run() sets its own, in the same tick
+    }
     await this.run();
   }
 

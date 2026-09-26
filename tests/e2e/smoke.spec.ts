@@ -449,6 +449,8 @@ test('labels: pick plants, choose a sheet, print at true size with a code that o
   await expect(page.locator('h1.sci .accno')).toHaveText(acc);
   await expect(page.locator('h1.sci')).toContainText('Welwitschia');
   // all growing plants, on a 30-up sheet, skipping three used cells; the fourth cell is the first printed
+  const asked: string[] = [];
+  page.on('request', (r) => { if (r.url().includes('/api/')) asked.push(new URL(r.url()).pathname + new URL(r.url()).search); });
   await page.goto('/labels');
   await expect(page.locator('.pick input:checked')).toHaveCount(2);
   await page.selectOption('#lb-sheet', '5160');
@@ -465,6 +467,9 @@ test('labels: pick plants, choose a sheet, print at true size with a code that o
   expect(box!.height).toBeLessThan(102);
   // the care line arrives from the dossier for the species with climate
   await expect(page.locator('.page .label .care', { hasText: 'cooler six months Nov–Apr · hab. night 6.5 °C · sky 30–65 DLI' })).toHaveCount(1); // the same rules and the same month formatter as the sheet
+  // and it was asked for by hash bucket only: no key, no slug, no species name left the browser (round ten, 1)
+  expect(asked.filter((u) => u.startsWith('/api/sheets'))).toHaveLength(1);
+  for (const u of asked) { expect(u).not.toMatch(/dossier|index|copiapoa|welwitschia|5384013/); expect(u).toMatch(/^\/api\/(sheets|entries)\?b=([01][0-9a-f],?)+$/); }
   // the page size follows the sheet
   await page.selectOption('#lb-sheet', 'L7160');
   await expect(page.locator('.page').first()).toHaveCSS('width', /793|794/); // 210 mm
@@ -816,12 +821,14 @@ test('a refused source is a distinct state on every surface: species page, front
 });
 
 test('an unreachable reference is "not reached", never "not in the reference"', async ({ page }) => {
+  // Cut the reference before the plant page is ever opened: the worker keeps a reached sheet file for the build (round ten).
+  await page.route('**/api/index', (r) => r.abort());
+  await page.route('**/api/sheets**', (r) => r.abort()); // the plant asks for its species' sheet by hash bucket
+  await page.route('**/api/dossier/**', (r) => r.abort());
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   const acc = page.url().split('/').pop()!;
-  await page.route('**/api/index', (r) => r.abort());
-  await page.route('**/api/dossier/**', (r) => r.abort()); // the plant asks for its own dossier by key first
   await page.goto(`/plants/${acc}`);
   const t = page.locator('.card', { hasText: 'Habitat rain season' });
   await expect(t).toContainText('Reference not reached');

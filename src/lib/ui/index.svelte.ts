@@ -47,25 +47,45 @@ export async function entriesFor(slugs: Iterable<string>): Promise<Map<string, I
   return out;
 }
 
-export type DossierLike = { slug: string; name: { scientific: string } };
+export type { Sheet } from '$lib/server/sheets';
+import type { Sheet } from '$lib/server/sheets';
 /**
- * The dossier behind a plant's name, from the device's knowledge outward: the record's own key first (one small file,
- * the one the offline worker keeps), checked against the name on the record, since a key can be stale after a rename;
- * then the species' index entry, found by hash bucket, never by sending the name. Returns the dossier, 'none' when the
- * reference has no such species, or null when it could not be reached. `repair` is called with the right key when the
- * stored one was wrong or missing, so the record heals itself.
+ * The sheets (a species' figures for a plant page, a label, a batch) for a few species, by hash bucket: the server never
+ * learns which species, and the worker keeps each bucket for the build, so a device asks once. Null when the reference
+ * could not be reached; a species the reference lacks is absent from the map.
  */
-export async function dossierForName<D extends DossierLike>(name: string, key: number | null | undefined, fetchDossier: (key: number) => Promise<D | 'none' | null>, repair?: (key: number) => void): Promise<D | 'none' | null> {
-  const slug = speciesSlug(name);
-  if (key && speciesOf(name) === name) {
-    const d = await fetchDossier(key);
-    if (d && d !== 'none' && (d.slug === slug || speciesSlug(d.name.scientific) === slug)) return d;
-    if (d === null) return null; // not reached: say so, do not guess by name
+const sheetBucketCache = new Map<string, Promise<Sheet[] | null>>();
+export async function sheetsFor(slugs: Iterable<string>): Promise<Map<string, Sheet> | null> {
+  const list = [...new Set(slugs)].filter(Boolean);
+  const out = new Map<string, Sheet>();
+  if (!list.length) return out;
+  const want = new Set(list);
+  const buckets = [...new Set(list.map(bucketOf))].sort();
+  const missing = buckets.filter((b) => !sheetBucketCache.has(b));
+  if (missing.length) {
+    const p = fetch(`/api/sheets?b=${missing.join(',')}`).then((r) => (r.ok ? (r.json() as Promise<Sheet[]>) : null)).catch(() => null);
+    for (const b of missing) sheetBucketCache.set(b, p.then((all) => (all ? all.filter((s) => bucketOf(s.slug) === b) : null)));
   }
-  const m = await entriesFor([slug]);
+  for (const b of buckets) {
+    const sheets = await sheetBucketCache.get(b)!;
+    if (!sheets) { sheetBucketCache.delete(b); return null; }
+    for (const s of sheets) if (want.has(s.slug)) out.set(s.slug, s);
+  }
+  return out;
+}
+
+/**
+ * The sheet behind a plant's name, found by the species' slug through the bucket lookup, never by sending a key.
+ * Returns the sheet, 'none' when the reference has no such species, or null when it could not be reached. `repair` is
+ * called with the species' key only for a name at species rank whose stored key is missing or belongs to something
+ * else; a subspecies keeps the key the picker gave it, since its species' key would disagree with its name.
+ */
+export async function sheetForName(name: string, key: number | null | undefined, repair?: (key: number) => void): Promise<Sheet | 'none' | null> {
+  const slug = speciesSlug(name);
+  const m = await sheetsFor([slug]);
   if (m === null) return null;
-  const e = m.get(slug);
-  if (!e) return 'none';
-  repair?.(e.key);
-  return fetchDossier(e.key);
+  const s = m.get(slug);
+  if (!s) return 'none';
+  if (speciesOf(name) === name && key !== s.key) repair?.(s.key);
+  return s;
 }
