@@ -94,7 +94,9 @@
   }
   /** Care lines that could not be made because the reference was not reached: said on the sheet and on the page, never printed as if the species had no data (round thirteen, 6). */
   const unchecked = $derived(picked.filter((a) => care[a.id] === null));
-  const pending = $derived(withCare && picked.some((a) => care[a.id] === '' && kindOf(a) !== 'hybrid'));
+  /** Plants whose sheet has been asked for and not yet answered: its own set, since an answer can be an empty line (a species with no climate) and must count as answered (round fourteen, 3). */
+  let asking = $state<Set<string>>(new Set());
+  const pending = $derived(withCare && picked.some((a) => asking.has(a.id)));
   function retryCare() {
     const again: Record<string, string | null> = { ...care };
     for (const a of unchecked) delete again[a.id];
@@ -106,14 +108,16 @@
     if (withCare) void sheetsFor(picked.filter((a) => care[a.id] === undefined && kindOf(a) !== 'hybrid').map((a) => speciesSlug(a.taxonName)));
     for (const a of picked) {
       if (withQr && !qrs[a.id]) QRCode.toString(`${location.origin}/plants/${a.id}`, { type: 'svg', errorCorrectionLevel: 'M', margin: 0 }).then((svg) => (qrs = { ...qrs, [a.id]: svg }));
-      if (withCare && care[a.id] === undefined && kindOf(a) !== 'hybrid') {
-        care = { ...care, [a.id]: '' };
+      if (withCare && care[a.id] === undefined && !asking.has(a.id) && kindOf(a) !== 'hybrid') {
+        asking = new Set([...asking, a.id]);
+        const done = () => { const n = new Set(asking); n.delete(a.id); asking = n; };
         dossierFor(a).then(async (d) => {
+          done();
           if (d === 'unreachable') { care = { ...care, [a.id]: null }; return; } // not "no data": not reached
           const readerLat = site.current?.lat ?? collection.locations.map((l) => l.lat).find((x): x is number => x != null) ?? null;
           const line = careLine({ scientific: a.taxonName, family: d?.name.family, months: d?.climate.status === 'ok' ? d.climate.months : null, extremes: d?.climate.status === 'ok' ? (d.climate.extremes ?? null) : null, lat: d?.habitatLat ?? null, units: units.current }, { readerLat });
           care = { ...care, [a.id]: line };
-        });
+        }).catch(() => { done(); care = { ...care, [a.id]: null }; });
       }
     }
   });
@@ -224,6 +228,7 @@
   .sci { font-family: var(--serif); font-size: 9.5pt; font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .sci .cv { font-style: normal; font-weight: 500; }
   .care.unchecked { font-style: italic; color: #666; }
+  @media print { .care.unchecked { display: none; } } /* on paper the line is simply blank: a label lives in a pot for years, and the notice belongs on the screen, not in the pot */
   .care { font-family: var(--ui); font-size: 6.2pt; color: #222; margin-top: 0.6mm; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.2; }
   .src { font-family: var(--ui); font-size: 6pt; color: #444; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .page.tiny .label { padding: 0.8mm 1.5mm; }

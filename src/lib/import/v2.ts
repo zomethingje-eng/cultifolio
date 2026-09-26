@@ -185,7 +185,8 @@ export function importV2(json: unknown, opts: ImportOpts = {}): { changes: Chang
         treatment: str(w?.treatment) ?? str(w?.pretreat) ?? null,
         locationId: (str(w?.bench) && (benchByRef.get(str(w.bench)!) ?? benchByRef.get(str(w.bench)!.toLowerCase()))) ?? null,
         status: /done|closed|finished/i.test(String(w?.status ?? '')) ? 'done' : /fail/i.test(String(w?.status ?? '')) ? 'failed' : 'active',
-        notes: str(w?.notes) ?? null
+        notes: str(w?.notes) ?? null,
+        no: id // the batch number as a field, last, so the vault's ledger sees it (round twelve, 6; dropped by mistake in round thirteen, back in round fourteen, 2)
       });
       sowIds.add(id);
       report.sowings++;

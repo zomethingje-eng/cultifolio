@@ -550,6 +550,7 @@ test('sync: two devices share one encrypted vault; changes and photos cross both
   await a.getByRole('button', { name: 'Water', exact: true }).click();
   await a.fill('#ev-note', 'from device A');
   await a.getByRole('button', { name: 'Record' }).click();
+  await expect(a.locator('.tlrow', { hasText: 'from device A' })).toBeVisible(); // Record awaits the write; the test waits for the row before moving on (round fourteen, B1)
   const jpeg = await a.screenshot({ type: 'jpeg', quality: 60 });
   await a.locator('#acc-photo-file').setInputFiles({ name: 'a.jpg', mimeType: 'image/jpeg', buffer: jpeg });
   await expect(a.locator('.phgrid .ph')).toHaveCount(1);
@@ -587,6 +588,7 @@ test('sync: two devices share one encrypted vault; changes and photos cross both
   await b.getByRole('button', { name: 'Feed', exact: true }).click();
   await b.fill('#ev-note', 'from device B');
   await b.getByRole('button', { name: 'Record' }).click();
+  await expect(b.locator('.tlrow', { hasText: 'from device B' })).toBeVisible();
   await b.goto('/sync');
   await syncRun(b);
   await expect(b.locator('.card', { hasText: 'Waiting to send' })).toContainText('0');
@@ -670,6 +672,7 @@ test('sync: an offline edit uploaded late is still discovered, and a backup merg
   await a.getByRole('button', { name: 'Feed', exact: true }).click();
   await a.fill('#ev-note', 'A, online, second');
   await a.getByRole('button', { name: 'Record' }).click();
+  await expect(a.locator('.tlrow', { hasText: 'A, online, second' })).toBeVisible();
   await syncNow(a);
   // B comes back and uploads its older change late. A must still receive it.
   await B.setOffline(false);
@@ -1225,7 +1228,7 @@ test('pages about your own plants ask no outside host for anything unless the re
 
 test('hovering a species link on a page about your own plants sends nothing; the same link on a species page preloads (round thirteen, 2)', async ({ page }) => {
   const data: string[] = [];
-  page.on('request', (r) => { if (r.url().includes('__data.json')) data.push(new URL(r.url()).pathname); });
+  page.context().on('request', (r) => { if (r.url().includes('__data.json')) data.push(new URL(r.url()).pathname); }); // the context sees a preload the worker answered; the page may not
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
@@ -1251,6 +1254,7 @@ test('a label whose species could not be reached says so, and the sheet is not p
   await page.context().route('**/api/sheets**', (r) => r.fulfill({ status: 429, contentType: 'application/json', body: '{"error":"wait"}' }));
   await page.goto('/labels');
   await expect(page.locator('#lb-unchecked')).toContainText('One care line not checked');
+  await expect(page.locator('#lb-print')).toHaveText('Print 1 label');
   await expect(page.locator('.page .label .care.unchecked')).toHaveText('care line not checked: the reference was not reached');
   await expect(page.locator('#lb-print')).toBeEnabled();
   await page.context().unroute('**/api/sheets**');
@@ -1266,6 +1270,15 @@ test('a label whose species could not be reached says so, and the sheet is not p
   await expect(page.locator('.page').first().locator('.label').nth(29).locator('.no')).toBeVisible();
   await page.fill('#lb-skip', '');
   await expect(page.locator('.page').first().locator('.label').nth(0).locator('.no')).toBeVisible();
+  // a species the reference has but with no climate: its care line is empty, and that is an answer, not a wait (round fourteen, 3)
+  await page.goto('/plants/new?species=Welwitschia%20mirabilis&key=5411106');
+  await page.getByRole('button', { name: /^Add/ }).click();
+  await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
+  await page.goto('/labels');
+  await expect(page.locator('#lb-print')).toHaveText('Print 2 labels', { timeout: 10000 });
+  await expect(page.locator('#lb-print')).toBeEnabled();
+  await expect(page.locator('.page .label .care', { hasText: 'hab. night' })).toHaveCount(1);
+  await expect(page.locator('#lb-unchecked')).toHaveCount(0);
 });
 
 test('a returning grower never sees the catalogue or "You grow 0" while the collection opens; a first visit sees the catalogue at once', async ({ page }) => {

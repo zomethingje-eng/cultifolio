@@ -593,6 +593,36 @@ describe('a batch that cannot be read is set aside, not a wall', () => {
     expect(D2.sync.quarantined).toHaveLength(0);
     expect(D2.sync.lastError).toBeNull();
   });
+  it('a transient failure while re-reading a set-aside batch leaves it set aside, to be tried next run; it is not lost (round fourteen, 1)', async () => {
+    const r2 = fakeR2();
+    const A = await boot(newMem('aaaaaaaaaaaa'), r2);
+    const p = await A.collection.addAccession({ taxonName: 'Lithops', acc: 'A-1' });
+    await A.sync.setup(KEY, 'create');
+    const key = logKeys(r2)[0].split('/log/')[1].replace(/\.bin$/, '');
+    const D = await boot(newMem('dddddddddddd'), r2);
+    await D.sync.setup(KEY, 'join');
+    const m = mem;
+    const meta = m.meta.get('sync') as { have: string[]; since: number; quarantined?: Array<{ key: string; error: string; at: string; build?: string }> };
+    for (const t of [...m.changes.keys()]) m.changes.delete(t);
+    meta.quarantined = [{ key, error: 'not a batch this version understands', at: new Date().toISOString(), build: 'older-build' }];
+    meta.since += 86_400_000;
+    m.meta.set('sync', meta);
+    const D2 = await reboot(m, r2);
+    const real = globalThis.fetch;
+    let failed = 0;
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      if (String(input).includes(`/api/sync/log/${key}`) && !failed++) return new Response('{"error":"try later"}', { status: 503 });
+      return real(input, init);
+    }) as typeof fetch;
+    await expect(D2.sync.run()).rejects.toThrow(/503/);
+    expect(D2.sync.quarantined).toHaveLength(1); // still set aside, still on the page
+    expect((m.meta.get('sync') as typeof meta).quarantined).toHaveLength(1); // and still on disk, whatever writes meta next
+    await D2.collection.addAccession({ taxonName: 'Conophytum', acc: 'D-1' }); // a push writes meta too
+    await D2.sync.run();
+    expect(D2.collection.accession(p.id)).toBeDefined(); // fetched again, folded
+    expect(D2.sync.quarantined).toHaveLength(0);
+    expect(D2.sync.lastError).toBeNull();
+  });
   it('a batch with a reserved field is refused whole: nothing of it is applied', async () => {
     const r2 = fakeR2();
     const B = await boot(newMem('bbbbbbbbbbbb'), r2);

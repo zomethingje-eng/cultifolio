@@ -515,19 +515,6 @@ class Sync {
 
   private async pull(): Promise<void> {
     const m = this.meta!;
-    // A batch set aside by an earlier build may be one this build can read (a newer batch format, a kind it did not
-    // know). It arrived long before the cursor, so a listing would never show it again: it is fetched by key, here,
-    // and leaves the quarantine only once it has folded (round thirteen, 1; the round-twelve version dropped the entry
-    // and relied on a listing that could not reach it).
-    const again = (m.quarantined ?? []).filter((q) => q.build !== BUILD);
-    for (const q of again) {
-      this.busy = 'Reading a batch set aside by an earlier build…';
-      m.quarantined = m.quarantined!.filter((x) => x.key !== q.key); // out, so a failure this time is noted afresh by this build
-      const ok = await this.takeBatch(m, q.key);
-      if (ok && !m.have.includes(q.key)) m.have.push(q.key);
-      this.quarantined = [...(m.quarantined ?? [])];
-      await setMeta(META, m);
-    }
     // The first page of a run starts a minute before the cursor; later pages continue strictly after the last batch listed.
     let after: { at: number; key: string } | null = null;
     for (;;) {
@@ -562,6 +549,31 @@ class Sync {
       const last = next ?? { at: batches[batches.length - 1].at, key: batches[batches.length - 1].key };
       if (after && last.at === after.at && last.key === after.key) break; // no progress (a server without the cursor): stop rather than spin
       after = last;
+    }
+    // A batch set aside by an earlier build may be one this build can read (a newer batch format, a kind it did not
+    // know). It arrived long before the cursor, so a listing would never show it again: it is fetched by key, after the
+    // listing so that new changes arrive even while an old batch keeps failing, and it leaves the quarantine only once it
+    // has folded. A transient failure (a 429, a 5xx, a dropped connection) leaves the entry exactly as it was, to be tried
+    // next run; only bytes read whole that this build cannot open are re-noted under this build (round fourteen, 1; the
+    // round-thirteen version removed the entry first, and a throw then lost it).
+    for (const q of (m.quarantined ?? []).filter((q) => q.build !== BUILD)) {
+      this.busy = 'Reading a batch set aside by an earlier build…';
+      let ok: boolean;
+      try {
+        ok = await this.takeBatch(m, q.key);
+      } catch (e) {
+        this.busy = null;
+        throw e; // the entry stands; this run ends as any pull that could not fetch a batch ends
+      }
+      if (ok) {
+        m.quarantined = m.quarantined!.filter((x) => x.key !== q.key);
+        if (!m.have.includes(q.key)) m.have.push(q.key);
+      } else {
+        const entry = m.quarantined!.find((x) => x.key === q.key);
+        if (entry) entry.build = BUILD; // read again by this build and still unreadable: noted as this build's
+      }
+      this.quarantined = [...(m.quarantined ?? [])];
+      await setMeta(META, m);
     }
     // Duplicate numbers are repaired once, over the whole pull, so every device repairs from the same complete log (round twelve, 3).
     await collection.repairNumbers();

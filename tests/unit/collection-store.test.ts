@@ -462,7 +462,6 @@ describe('round thirteen', () => {
     await collection.ingest([remote(wall, 3, 'testdevicea1b2', 'accession', 'X-1', 'notes', 'n1'), remote(wall, 3, 'testdevicec3d4', 'accession', 'X-1', 'price', 'p1'), remote(wall, 4, 'testdevicea1b2', 'accession', 'X-1', 'taxonName', 'Lithops')], 'server');
     await collection.put('accession', 'X-1', { notes: 'n2' }); // stepped past notes' stamp: wall, count 4, this writer
     await collection.put('accession', 'X-1', { price: 'p2' }); // stepped past price's stamp: the same wall and count, the same writer, unless the store is checked
-    console.log('STAMPS', [...mem.changes.values()].map((c) => c.t + ' ' + c.field + '=' + c.value));
     expect(collection.lastWriteError).toBeNull();
     expect(collection.accession('X-1')?.notes).toBe('n2');
     expect(collection.accession('X-1')?.price).toBe('p2');

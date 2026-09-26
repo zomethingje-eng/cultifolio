@@ -47,7 +47,7 @@ describe('v2 importer', () => {
     expect(c.acquired).toBe('2025-03-02');
     // The number is a field as well as the id, so the vault's ledger of issued numbers sees every imported one (round twelve, 6).
     expect(changes.filter((ch) => ch.kind === 'accession' && ch.field === 'acc').map((ch) => ch.value).sort()).toEqual(['2024-0001', '2024-0002', '2025-0003']);
-    // and the fields before it keep the stamps an earlier build gave them: taxonName is the record's first change, count 0
+    // and it is the record's last field, so the fields before it keep their counters: taxonName is the record's first change, count 0
     expect(changes.find((ch) => ch.id === '2025-0003' && ch.field === 'taxonName')!.t).toMatch(/-0000-v2imp$/);
     const evs = live(state, 'event') as unknown as Array<{ acc: string; t: string; measures?: Record<string, number> }>;
     expect(evs.filter((e) => e.acc === '2025-0003')).toHaveLength(3);
@@ -132,5 +132,16 @@ describe('v2 benches', () => {
     // an unknown bench name stays as free text for one-click conversion later
     expect(accs.find((a) => a.id === '2026-0003')?.locationId).toBeNull();
     expect(accs.find((a) => a.id === '2026-0003')?.location).toBe('Windowsill');
+  });
+});
+
+describe('imported numbers reach the ledger (round twelve, 6; round fourteen, 2)', () => {
+  it('a sowing carries its number as a `no` field, last, like a plant carries `acc`', () => {
+    const file = { collection: { sowings: { 'S2025-001': { id: 'S2025-001', sown: '2025-03-01', taxonId: 'lithops', count: 12, m: 1_700_000_000_000 } } } };
+    const { changes, report } = importV2(file, { now: 1_800_000_000_000 });
+    expect(report.sowings).toBe(1);
+    const fields = changes.filter((c) => c.kind === 'sowing' && c.id === 'S2025-001').map((c) => c.field);
+    expect(fields[fields.length - 1]).toBe('no');
+    expect(changes.find((c) => c.kind === 'sowing' && c.field === 'no')?.value).toBe('S2025-001');
   });
 });
