@@ -118,6 +118,7 @@ class Sync {
         await setMeta(META, this.meta);
       } else this.meta = m;
       this.keys = await deriveKeys(m.key);
+      this.keysOf.set(m, this.keys);
       this.vaultId = this.keys.id;
       this.lastSync = m.lastSync;
       this.quarantined = this.meta.quarantined ?? [];
@@ -178,6 +179,7 @@ class Sync {
     this.keys = keys;
     this.vaultId = keys.id;
     this.meta = { key, since: 0, have: [], photosPushed: [], lastSync: null };
+    this.keysOf.set(this.meta, keys);
     // Busy from here until the first run ends: a device that has just joined is not "Synced" until it has pulled (round ten).
     this.busy = mode === 'join' ? 'Joining…' : 'Starting…';
     try {
@@ -226,16 +228,6 @@ class Sync {
     }
   }
 
-  /** The same check without a write, before a step that must not happen for a vault this device has left: an outbox ack, a fold. */
-  private async live(m: SyncMeta): Promise<void> {
-    if (this.meta !== m) throw stopped();
-    const stored = await getMeta<SyncMeta>(META);
-    if (!stored || stored.key !== m.key) {
-      this.dropped();
-      throw stopped();
-    }
-  }
-
   /** Forget the key in memory only: another tab did the forgetting and wrote the vault; this tab must not sync through it. */
   private dropped(): void {
     this.gen++;
@@ -262,8 +254,25 @@ class Sync {
     this[list] = [...l];
   }
 
-  private h(): Record<string, string> {
-    return { authorization: `Bearer ${this.keys!.token}` };
+  private h(m: SyncMeta): Record<string, string> {
+    return { authorization: `Bearer ${this.k(m).token}` };
+  }
+
+  /**
+   * The keys of the vault a run belongs to, by its meta record: a run that outlives "Stop syncing" and a new vault must
+   * never reach the new vault with the old meta (round seventeen, 4). Kept beside the meta, not on the engine.
+   */
+  private keysOf = new WeakMap<SyncMeta, VaultKeys>();
+  private k(m: SyncMeta): VaultKeys {
+    const k = this.keysOf.get(m);
+    if (!k || this.meta !== m) throw stopped();
+    return k;
+  }
+
+  /** A step of a run: its progress text, set only while the run is still this device's; a stale run stops here, before it fetches anything (round seventeen, 4). */
+  private step(m: SyncMeta, text: string): void {
+    if (this.meta !== m) throw stopped();
+    this.busy = text;
   }
 
   /* ---- held changes and the clock ---- */
@@ -412,7 +421,7 @@ class Sync {
     // A vault that was full last time is tried once more each run (one request); if it is still full the push stops there.
     for (let i = 0; i < todo.length; i += BATCH_MAX) {
       const batch = todo.slice(i, i + BATCH_MAX);
-      this.busy = `Sending ${Math.min(i + batch.length, todo.length)} of ${todo.length} changes…`;
+      this.step(m, `Sending ${Math.min(i + batch.length, todo.length)} of ${todo.length} changes…`);
       sent += await this.pushBatch(batch);
       this.pending = todo.length - sent;
       await this.save(m);
@@ -432,7 +441,7 @@ class Sync {
     let n = 0;
     for (const id of have) {
       if (pushed.has(id) || !live.has(id)) continue;
-      this.busy = `Sending photo ${++n}…`;
+      this.step(m, `Sending photo ${++n}…`);
       const b = await getPhotoBlobs(id);
       if (!b) continue;
       if (b.blob.size + b.thumb.size + SEAL_OVERHEAD > MAX_PHOTO_BYTES) {
@@ -440,7 +449,7 @@ class Sync {
         continue;
       }
       const packed = packPhoto(new Uint8Array(await b.blob.arrayBuffer()), new Uint8Array(await b.thumb.arrayBuffer()));
-      const r = await fetch(`${this.base}/api/sync/photo/${id}?vault=${this.keys!.id}`, { method: 'PUT', headers: this.h(), body: (await seal(this.keys!, 'photo', packed, id)) as BodyInit });
+      const r = await fetch(`${this.base}/api/sync/photo/${id}?vault=${this.k(m).id}`, { method: 'PUT', headers: this.h(m), body: (await seal(this.k(m), 'photo', packed, id)) as BodyInit });
       const full = await this.fullFrom(r);
       if (full) {
         this.setFull(full);
@@ -449,7 +458,7 @@ class Sync {
       }
       if (r.ok) { m.photosPushed.push(id); if (probing) this.setFull(null); }
       else if (r.status === 429) this.limited(r);
-      else if (r.status === 409 && (await this.serverHolds(id, packed))) m.photosPushed.push(id); // our own earlier send whose answer was lost: sealed again with a fresh nonce, so the bytes differ, the pixels do not
+      else if (r.status === 409 && (await this.serverHolds(m, id, packed))) m.photosPushed.push(id); // our own earlier send whose answer was lost: sealed again with a fresh nonce, so the bytes differ, the pixels do not
       else if (r.status >= 400 && r.status < 500 && r.status !== 401 && r.status !== 403) this.note('refused', id, `photo refused: ${r.status}`);
       else throw new Error(`photo push failed: ${r.status}`);
       await this.save(m);
@@ -470,23 +479,25 @@ class Sync {
     // device, and twelve digits of a keyed fingerprint of the content. The fingerprint is sent in full so a re-send after
     // a lost reply is recognised as the same batch; being keyed, it is not a hash anyone could test a guessed edit against.
     const lastWall = hlcWall(batch[batch.length - 1].t);
-    const plain = await batchFingerprint(this.keys!, utf8.encode(JSON.stringify(batch)));
+    const plain = await batchFingerprint(this.k(m), utf8.encode(JSON.stringify(batch)));
     const key = `${String(Math.floor(lastWall / 3600_000) * 3600_000).padStart(13, '0')}-0000-${collection.device || 'dev'}-${plain.slice(0, 12)}`;
-    const body = await sealJson(this.keys!, 'log', { v: 1, device: collection.device, changes: batch });
+    const body = await sealJson(this.k(m), 'log', { v: 1, device: collection.device, changes: batch });
     if (body.length > MAX_BATCH_BYTES && mayResplit && batch.length > 1) {
       // Too big before it ever leaves: halve it. Each half is named by its own content.
       const mid = Math.ceil(batch.length / 2);
       return (await this.pushBatch(batch.slice(0, mid))) + (await this.pushBatch(batch.slice(mid)));
     }
-    const headers: Record<string, string> = { ...this.h(), 'x-batch': key, 'x-batch-plain': plain };
+    const headers: Record<string, string> = { ...this.h(m), 'x-batch': key, 'x-batch-plain': plain };
     if (collection.device) headers['x-device'] = collection.device;
-    const r = await fetch(`${this.base}/api/sync/log?vault=${this.keys!.id}`, { method: 'POST', headers, body: body as BodyInit });
+    const r = await fetch(`${this.base}/api/sync/log?vault=${this.k(m).id}`, { method: 'POST', headers, body: body as BodyInit });
     if (r.ok) {
-      await this.live(m); // never ack into a vault this device has since left or replaced: the new vault's outbox holds these same changes (round sixteen, 2)
+      // Acknowledged out of the outbox only while the stored sync record still carries this run's key, checked in the ack's
+      // own transaction: a run of a vault this device has since left or replaced must not empty the new vault's outbox of
+      // these same changes (round sixteen, 2; round seventeen, A1).
+      await outboxAck(batch.map((c) => c.t), m.key);
       this.setFull(null);
       if (!m.have.includes(key)) m.have.push(key);
       (m.haveAt ??= {})[key] = Date.now(); // its arrival, near enough: the server's clock and this one agree to the minute the overlap allows
-      await outboxAck(batch.map((c) => c.t)); // acknowledged: out of the outbox, whatever device stamped them
       return batch.length;
     }
     const full = await this.fullFrom(r);
@@ -509,11 +520,11 @@ class Sync {
   }
 
   /** A 409 for a photo id: fetch what the server holds under it and compare the pixels. True when it is this very photo (a send whose answer was lost); false when something else sits there, which is the refusal it looks like. */
-  private async serverHolds(id: string, packed: Uint8Array): Promise<boolean> {
+  private async serverHolds(m: SyncMeta, id: string, packed: Uint8Array): Promise<boolean> {
     try {
-      const r = await fetch(`${this.base}/api/sync/photo/${id}?vault=${this.keys!.id}`, { headers: this.h() });
+      const r = await fetch(`${this.base}/api/sync/photo/${id}?vault=${this.k(m).id}`, { headers: this.h(m) });
       if (!r.ok) return false;
-      const theirs = await open(this.keys!, 'photo', new Uint8Array(await r.arrayBuffer()), id);
+      const theirs = await open(this.k(m), 'photo', new Uint8Array(await r.arrayBuffer()), id);
       if (theirs.length !== packed.length) return false;
       for (let i = 0; i < packed.length; i++) if (theirs[i] !== packed[i]) return false;
       return true;
@@ -545,13 +556,13 @@ class Sync {
    * opened are set aside (by name, so they never block what came after them). True when the batch folded.
    */
   private async takeBatch(m: SyncMeta, key: string): Promise<boolean> {
-    const res = await fetch(`${this.base}/api/sync/log/${key}?vault=${this.keys!.id}`, { headers: this.h() });
+    const res = await fetch(`${this.base}/api/sync/log/${key}?vault=${this.k(m).id}`, { headers: this.h(m) });
     if (res.status === 429) this.limited(res);
     if (!res.ok) throw new Error(`batch ${key}: ${res.status}`);
     const bytes = new Uint8Array(await res.arrayBuffer());
     let changes: Change[] | null = null;
     try {
-      const batch = await openJson<{ v: number; device: string; changes: unknown }>(this.keys!, 'log', bytes);
+      const batch = await openJson<{ v: number; device: string; changes: unknown }>(this.k(m), 'log', bytes);
       if (!batch || typeof batch !== 'object' || batch.v !== 1) throw new Error('not a batch this version understands');
       changes = validateChanges(batch.changes);
     } catch (e) {
@@ -560,16 +571,17 @@ class Sync {
     }
     // Storing can fail (a full phone). That is not the batch's fault: nothing is noted, the cursor stays before it,
     // and the error stops this run, so the next run fetches it again.
-    await this.live(m); // and never fold a batch of a vault this device has left into a log that has since been replaced (round sixteen, 1)
+    // Never fold a batch of a vault this device has left into a log that has since been replaced: the key is checked
+    // inside the write's own transaction (round sixteen, 1; round seventeen, A1).
     const hold = this.hold();
     const ahead = changes.filter((c) => isHeld(c.t, hold));
     if (ahead.length) {
       // Stamped too far ahead of this clock: into the log, not into the fold, until the clock reaches them.
-      await appendChanges(ahead, true);
+      await appendChanges(ahead, true, false, m.key);
       for (const c of ahead) if (!m.held?.includes(c.t)) (m.held ??= []).push(c.t);
       this.setHeld();
     }
-    if (ahead.length < changes.length) await collection.ingest(ahead.length ? changes.filter((c) => !isHeld(c.t, hold)) : changes, 'server', { repair: false });
+    if (ahead.length < changes.length) await collection.ingest(ahead.length ? changes.filter((c) => !isHeld(c.t, hold)) : changes, 'server', { repair: false, requireKey: m.key });
     return true;
   }
 
@@ -580,10 +592,10 @@ class Sync {
     // The first page of a run starts a minute before the cursor; later pages continue strictly after the last batch listed.
     let after: { at: number; key: string } | null = null;
     for (;;) {
-      this.busy = 'Checking for changes…';
+      this.step(m, 'Checking for changes…');
       // `since` goes with every page so a server that does not know `after` still answers the old way.
       const q = `since=${m.since || ''}` + (after ? `&after=${after.at}:${encodeURIComponent(after.key)}` : '');
-      const r = await fetch(`${this.base}/api/sync/log?vault=${this.keys!.id}&${q}`, { headers: this.h() });
+      const r = await fetch(`${this.base}/api/sync/log?vault=${this.k(m).id}&${q}`, { headers: this.h(m) });
       if (r.status === 429) this.limited(r);
       if (!r.ok) throw new Error(`pull failed: ${r.status}`);
       const { batches, more, next } = (await r.json()) as { batches: Array<{ key: string; at: number }>; more: boolean; next?: { at: number; key: string } };
@@ -593,7 +605,7 @@ class Sync {
       try {
         for (const b of batches) {
           if (!have.has(b.key)) {
-            this.busy = `Receiving ${++n} of ${fresh.length}…`;
+            this.step(m, `Receiving ${++n} of ${fresh.length}…`);
             if (await this.takeBatch(m, b.key)) got++;
             m.have.push(b.key);
             have.add(b.key);
@@ -624,7 +636,7 @@ class Sync {
     // and the photo pull still happen; only a 429 stops the run, since that is the server asking for time.
     const isPhoto = (q: { kind?: string; error: string }) => q.kind === 'photo' || (!q.kind && q.error.startsWith('photo:'));
     for (const q of (m.quarantined ?? []).filter((q) => q.build !== BUILD && !isPhoto(q))) {
-      this.busy = 'Reading a batch set aside by an earlier build…';
+      this.step(m, 'Reading a batch set aside by an earlier build…');
       let ok: boolean;
       try {
         ok = await this.takeBatch(m, q.key);
@@ -650,19 +662,19 @@ class Sync {
     const have = new Set(await photoBlobIds());
     const missing = collectionPhotos().filter((p) => !have.has(p.id));
     for (let i = 0; i < missing.length; i++) {
-      this.busy = `Receiving photo ${i + 1} of ${missing.length}…`;
+      this.step(m, `Receiving photo ${i + 1} of ${missing.length}…`);
       const p = missing[i];
       const setAside = m.quarantined?.find((q) => q.key === p.id);
       if (setAside && setAside.build === BUILD) continue; // set aside by this build: not asked for again
       if (setAside) { m.quarantined = m.quarantined!.filter((q) => q.key !== p.id); this.quarantined = [...m.quarantined]; } // another build's: read again; set aside afresh below if still unreadable
-      const r = await fetch(`${this.base}/api/sync/photo/${p.id}?vault=${this.keys!.id}`, { headers: this.h() });
+      const r = await fetch(`${this.base}/api/sync/photo/${p.id}?vault=${this.k(m).id}`, { headers: this.h(m) });
       if (r.status === 404) continue; // not uploaded from its device yet
       if (r.status === 429) this.limited(r);
       if (!r.ok) throw new Error(`photo ${p.id}: ${r.status}`);
       const bytes = new Uint8Array(await r.arrayBuffer()); // read whole before it is judged: a dropped connection stops the run and it is fetched again
       let pixels: { full: Uint8Array; thumb: Uint8Array } | null = null;
       try {
-        pixels = unpackPhoto(await open(this.keys!, 'photo', bytes, p.id));
+        pixels = unpackPhoto(await open(this.k(m), 'photo', bytes, p.id));
         // The record says what the pixels hash to; a server cannot swap one photo for another.
         if (p.sha && (await sha256hex(pixels.full)) !== p.sha) throw new Error('pixels do not match the record');
       } catch (e) {

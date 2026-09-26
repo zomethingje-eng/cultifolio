@@ -65,6 +65,7 @@ class Collection {
           // Another tab replaced the whole collection from a file: this tab's fold is of a log that no longer exists, and a
           // note saved here would be diffed against records the new log does not have. The page reloads onto the new one.
           if (what === 'replaced') { if (typeof location !== 'undefined') location.reload(); return; }
+          if (what === 'refold') { void this.rebuild().catch(() => {}); return; }
           if (what === 'written') void this.catchUp().catch(() => {});
         });
         this.persisted = await requestPersistence();
@@ -113,6 +114,19 @@ class Collection {
     }
   }
   /** Another tab of this browser wrote: fold in what this tab has not seen, so its list and its next number are current. */
+  /** The fold, again, from the whole log: for the rare change the vault displaced under its stamp, which the incremental fold cannot undo. */
+  async rebuild(): Promise<void> {
+    const changes = await allChanges();
+    this.state.clear();
+    this.seen = new Map();
+    this.applied = new Set();
+    this.parentHist = new Map();
+    apply(this.state, changes, this.seen, { now: Date.now(), except: this.device });
+    for (const c of changes) { this.applied.add(c.t); this.clock?.observe(c.t); }
+    this.noteParents(changes);
+    await this.readLedger();
+  }
+
   private async catchUp(): Promise<void> {
     if (!this.ready) return;
     const changes = (await allChanges()).filter((c) => !this.applied.has(c.t));
@@ -605,14 +619,24 @@ class Collection {
    * 'import' (a backup or v2 file: not an edit, but the server has never seen
    * it, so it is pushed too), 'server' (came down through sync: already there).
    */
-  private async commit(changes: Change[], source: 'local' | 'import' | 'server' = 'local'): Promise<void> {
+  private async commit(changes: Change[], source: 'local' | 'import' | 'server' = 'local', requireKey?: string): Promise<void> {
     if (!changes.length) return;
     if (source === 'local') this.stampPast(changes);
     // The vault first. If it refuses (a full phone), nothing is applied, the page keeps showing what is stored, and the error is kept for the page to show.
     try {
       // Only what the vault kept is applied: a change it declined (another under the same stamp already stored and ranking
       // higher) is not shown here either, so the screen and the disk agree without a reload (round sixteen, 4).
-      changes = await appendChanges(changes, source === 'server', source === 'local');
+      const stored = await appendChanges(changes, source === 'server', source === 'local', requireKey);
+      changes = stored.kept;
+      // A stored change displaced under its stamp (a higher-ranking one arrived) has no inverse in the incremental fold:
+      // the fold is rebuilt from the log, so the displaced record leaves the screen and cannot be edited into a fragment
+      // the disk does not have (round seventeen, 3). Other tabs rebuild on the 'refold' notice.
+      if (stored.replaced.length) {
+        this.lastWriteError = null;
+        await this.rebuild();
+        if (source !== 'server') for (const fn of this.listeners) fn(changes);
+        return;
+      }
     } catch (e) {
       this.lastWriteError = e instanceof Error ? e.message : String(e);
       throw e;
@@ -695,7 +719,8 @@ class Collection {
    * Several plants of one kind in one commit: all land, with consecutive numbers, or none does, so a full phone partway
    * through cannot leave two of five saved under a notice that says nothing was (round sixteen, 14; the eighth
    * reviewer's atomic fix). The number is chosen inside the vault's own transaction (see `appendChangesClaiming`): two
-   * tabs adding at once get two runs of numbers. A number the grower brings goes on the first plant only.
+   * tabs adding at once get two runs of numbers. A number the grower brings goes on the first plant only; the rest are minted
+   * as usual, and the form says so (round seventeen, 12).
    */
   async addAccessions(n: number, a: Omit<Accession, 'id' | 'status'> & { id?: string; status?: Accession['status'] }): Promise<Accession[]> {
     const wanted = a.acc?.trim() || null;
@@ -779,10 +804,10 @@ class Collection {
    * applied, `lastWriteError` says so, and the repair runs again on the next
    * ingest.
    */
-  async ingest(changes: Change[], source: 'import' | 'server' = 'import', opts: { repair?: boolean } = {}): Promise<void> {
+  async ingest(changes: Change[], source: 'import' | 'server' = 'import', opts: { repair?: boolean; requireKey?: string } = {}): Promise<void> {
     validateChanges(changes);
     for (const c of changes) this.clock?.observe(c.t);
-    await this.commit(changes, source);
+    await this.commit(changes, source, opts.requireKey);
     if (source === 'import') {
       // Records new to this device today count from today, whatever their changes are stamped: a collection kept in v2 since
       // 2019 is not "not seen for 2,400 days" on the day it arrives. The day goes on the record as a field, so it syncs and

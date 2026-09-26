@@ -27,16 +27,21 @@ vi.mock('$lib/db/vault', () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const m: any = {
   allChanges: async () => [...mem.changes.values()],
-  appendChanges: async (cs: Change[], fromServer = false) => {
+  appendChanges: async (cs: Change[], fromServer = false, _strict = false, requireKey?: string) => {
     if (mem.failAppend?.(cs, fromServer)) throw quota();
+    // the real vault checks the stored sync key inside the write's transaction (round seventeen, A1)
+    if (requireKey !== undefined && (mem.meta.get('sync') as { key?: string } | null | undefined)?.key !== requireKey) throw new Error('syncing was stopped on this device while this run was under way');
     for (const c of cs) {
       mem.changes.set(c.t, c);
       if (!fromServer) mem.outbox.add(c.t);
     }
-    return cs;
+    return { kept: cs, replaced: [] };
   },
   outboxKeys: async () => [...mem.outbox],
-  outboxAck: async (ts: string[]) => void ts.forEach((t) => mem.outbox.delete(t)),
+  outboxAck: async (ts: string[], key?: string) => {
+    if (key !== undefined && (mem.meta.get('sync') as { key?: string } | null | undefined)?.key !== key) throw new Error('syncing was stopped on this device while this run was under way');
+    ts.forEach((t) => mem.outbox.delete(t));
+  },
   outboxFill: async () => {
     for (const t of mem.changes.keys()) mem.outbox.add(t);
     return mem.changes.size;
@@ -862,5 +867,96 @@ describe('the vault route on a body that is not an object (round sixteen, 16)', 
       const r = await fetch('/api/sync/vault', { method: 'POST', headers: { 'content-type': 'application/json' }, body });
       expect(r.status).toBe(400);
     }
+  });
+});
+
+describe('a run that outlives the vault it belongs to (round seventeen, A1 and 4)', () => {
+  it('cannot ack the new vault\'s outbox: the key is checked inside the ack, after the old run has already passed every earlier check', async () => {
+    const r2 = fakeR2();
+    const memA = newMem('aaaaaaaaaaaa');
+    const A = await boot(memA, r2);
+    await A.sync.setup(KEY, 'create');
+    await A.collection.addAccession({ taxonName: 'Lithops', acc: 'A-1' });
+    const real = globalThis.fetch;
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    let held = 0;
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const r = await real(input, init);
+      if (init?.method === 'POST' && /\/api\/sync\/log\?/.test(String(input)) && held++ === 0) await gate; // the server has stored the batch; the answer is on its way
+      return r;
+    }) as typeof fetch;
+    const old = A.sync.run().catch((e: Error) => e);
+    await new Promise((r) => setTimeout(r, 50));
+    // another tab: stop syncing, join vault B, refill the outbox for it; this tab's engine has heard nothing yet
+    const KEY2 = newVaultKey();
+    memA.meta.set('sync', { key: KEY2, since: 0, have: [], photosPushed: [], lastSync: null });
+    memA.outbox.clear();
+    for (const t of memA.changes.keys()) memA.outbox.add(t);
+    const before = memA.outbox.size;
+    release();
+    const err = await old;
+    expect(err).toBeInstanceOf(Error);
+    expect(String((err as Error).message)).toMatch(/stopped/);
+    expect(memA.outbox.size).toBe(before); // vault B's outbox is whole: the old run's ack was refused
+  });
+  it('cannot fold an old-vault batch into the new log: the key is checked inside the write', async () => {
+    const r2 = fakeR2();
+    const memA = newMem('aaaaaaaaaaaa'), memD = newMem('dddddddddddd');
+    const A = await boot(memA, r2);
+    await A.sync.setup(KEY, 'create');
+    await A.collection.addAccession({ taxonName: 'Lithops', acc: 'A-1' });
+    await A.sync.run();
+    const D = await boot(memD, r2);
+    await D.sync.setup(KEY, 'join');
+    memD.meta.set('sync', { ...(memD.meta.get('sync') as object), since: 0, have: [] });
+    const D3 = await reboot(memD, r2);
+    const real = globalThis.fetch;
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const r = await real(input, init);
+      if (/\/api\/sync\/log\/[^?]+/.test(String(input))) await gate; // the batch body has arrived; the fold is next
+      return r;
+    }) as typeof fetch;
+    const run = D3.sync.run().catch((e: Error) => e);
+    await new Promise((r) => setTimeout(r, 50));
+    memD.meta.set('sync', { key: newVaultKey(), since: 0, have: [], photosPushed: [], lastSync: null }); // another tab moved this device to vault B
+    const before = memD.changes.size;
+    release();
+    const err = await run;
+    expect(err).toBeInstanceOf(Error);
+    expect(memD.changes.size).toBe(before); // nothing of vault A was written into B's log
+  });
+  it('a stale run that wakes after the new vault\'s first run leaves busy clear, so sync keeps running', async () => {
+    const r2 = fakeR2();
+    const memA = newMem('aaaaaaaaaaaa'), memD = newMem('dddddddddddd');
+    const D = await boot(memD, r2);
+    await D.sync.setup(KEY, 'create');
+    await D.collection.addAccession({ taxonName: 'Lithops', acc: 'D-1' });
+    await D.sync.run(); // a batch on vault A for the old run to receive
+    const A = await boot(memA, r2);
+    await A.sync.setup(KEY, 'join');
+    memA.meta.set('sync', { ...(memA.meta.get('sync') as object), since: 0, have: [] });
+    const A2 = await reboot(memA, r2);
+    const real = globalThis.fetch;
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    let held = 0;
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      if (!init?.method && /\/api\/sync\/log\?vault=/.test(String(input)) && held++ === 0) { const r = await real(input, init); await gate; return r; } // the old vault's listing takes a long time
+      return real(input, init);
+    }) as typeof fetch;
+    const old = A2.sync.run().catch((e: Error) => e);
+    await new Promise((r) => setTimeout(r, 50));
+    await A2.sync.forget();
+    await A2.sync.setup(newVaultKey(), 'create'); // its first run completes while the old listing is still pending
+    const runsAfterSetup = A2.sync.runs;
+    release();
+    await old;
+    expect(A2.sync.busy).toBeNull(); // the stale run did not leave "Receiving 1 of 1…" behind
+    expect(A2.sync.lastError).toBeNull();
+    await A2.sync.run(); // and a run still runs
+    expect(A2.sync.runs).toBe(runsAfterSetup + 1);
   });
 });

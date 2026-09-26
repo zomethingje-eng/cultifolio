@@ -110,7 +110,7 @@ export function buildBundle(c: Corpus, opts: { version: string; homepage: string
       months && months.length === 12 ? Math.min(...months.map((m) => m.tmin)) : '',
       ex?.minP01,
       ex?.frostDaysPerYear,
-      (get<number>(d, 'occurrences.nOpenInRange') ?? 0) + (get<number>(d, 'occurrences.nRestrictedInRange') ?? 0),
+      get<boolean>(d, 'occurrences.rangeTested') === false ? '' : (get<number>(d, 'occurrences.nOpenInRange') ?? 0) + (get<number>(d, 'occurrences.nRestrictedInRange') ?? 0), // blank when no range was tested: the count would not be in-range records (round seventeen, 5)
       (get<unknown[]>(d, 'photos') ?? []).length,
       (get<unknown[]>(d, 'literature') ?? []).length,
       built

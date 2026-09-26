@@ -25,7 +25,13 @@ class PrefStore {
       this.current = { ...DEFAULTS };
     }
     this.loaded = true;
+    // Two tabs, one switch: turned off in Settings in one tab, the other stops fetching too, without a reload (round seventeen, 9).
+    if (!this.listening) {
+      this.listening = true;
+      window.addEventListener('storage', (e) => { if (e.key === KEY || e.key === null) { this.loaded = false; this.load(); } });
+    }
   }
+  private listening = false;
   set(p: Partial<Prefs>) {
     this.current = { ...this.current, ...p };
     try {

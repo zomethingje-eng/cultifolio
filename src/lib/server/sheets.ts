@@ -26,7 +26,7 @@ export async function sheetsIn(platform: Platform, fetch: Fetch, bucket: string,
     out = [];
     const width = 16;
     for (let i = 0; i < entries.length; i += width) {
-      const got = await Promise.all(entries.slice(i, i + width).map(async (e) => { const d = await getDossier(platform, fetch, e.key); return d ? sheetOf(d, e.thumb) : null; }));
+      const got = await Promise.all(entries.slice(i, i + width).map(async (e) => { const d = await getDossier(platform, fetch, e.key); return d ? { ...sheetOf(d, e.thumb), slug: e.slug } : null; })); // under the index slug, as the build's bucket files are (round seventeen, 6)
       for (const s of got) if (s) out.push(s);
     }
   }

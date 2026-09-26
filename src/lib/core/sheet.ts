@@ -213,7 +213,7 @@ export function coldFloor(m: Month[] | null, ex: Extremes | null, guess: ArchGue
   } else if (m) {
     const i = m.reduce((b, x, j) => (x.tmin < m[b].tmin ? j : b), 0);
     floor = m[i].tmin;
-    quantity = `the coldest month's mean night, ${mon(i + 1)}, in the median year (CHELSA); ${exStatus === 'refused' ? 'the daily extremes were not checked (NASA POWER did not answer when this page was built)' : 'no daily extremes are on file'}`;
+    quantity = `the coldest month's mean night, ${mon(i + 1)}, in the median year (CHELSA); ${exStatus === 'refused' ? 'the daily extremes were not checked (NASA POWER did not answer when this page was built)' : exStatus === 'skipped' ? 'the daily extremes were not asked for when this page was built' : 'no daily extremes are on file'}`;
     quantityShort = `coldest month's mean night, CHELSA`;
   }
   if (floor == null && minC == null) return null;

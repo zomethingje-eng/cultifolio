@@ -8,8 +8,11 @@ import type { PageServerLoad } from './$types';
 export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders, cookies, request }) => {
   const key = await resolveSlug(platform, fetch, params.slug);
   if (!key) error(404, { message: `No dossier for “${params.slug}” yet` });
-  const d = await getDossier(platform, fetch, key);
-  if (!d) error(404, { message: `No dossier for “${params.slug}” yet` });
+  const loaded = await getDossier(platform, fetch, key);
+  if (!loaded) error(404, { message: `No dossier for “${params.slug}” yet` });
+  // The page's own slug is the index's: a homonym whose plain slug the index gave to the other species carries that
+  // plain slug in its file, and every link, Compare, Follow and note keyed on it would point at the other (round seventeen, 6).
+  const d = params.slug !== loaded.slug ? { ...loaded, slug: params.slug } : loaded;
   const pts = d.occurrences.open.map((p) => [p[0], p[1]] as [number, number]);
   // Short for HTML: a deploy changes the hashed asset names the page references, so a page cached for an hour
   // would point at assets that no longer exist. The assets themselves are immutable and cached for a year.

@@ -81,7 +81,7 @@ rclone copy static\s\v2 r2:cultifolio/s/v2 --transfers 32 --checkers 32 --exclud
 rclone copy static\s\v2\index.json r2:cultifolio/s/v2 --s3-no-check-bucket -P
 ```
 
-No API calls; a minute on the PC. 53 species are left without a photograph by it; the next `--fill inat` or `--fill gbif` gives them a credited one where one exists. Round sixteen also adds a dev dependency (`fake-indexeddb`, for tests that run the real vault on an in-memory IndexedDB), so `npm install` once before `npm run deploy`.
+No API calls; a minute on the PC. 53 species are left without a photograph by it; all 53 have iNaturalist and Commons recorded as having nothing for them, so no fill can give them one until a source does (round seventeen, 13: the pass reopens a dossier's photo sources for the next fill only where a source had answered). Round seventeen's version of the pass also rewords the CC0 credits that read "unknown" to "author not stated" (1,018 photographs), so it is run once more, with `--index` and the two uploads after it. Round sixteen also adds a dev dependency (`fake-indexeddb`, for tests that run the real vault on an in-memory IndexedDB), so `npm install` once before `npm run deploy`.
 
 ## 6. If something is wrong after a deploy
 

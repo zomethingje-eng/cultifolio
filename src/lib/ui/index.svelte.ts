@@ -108,6 +108,15 @@ export async function sheetForName(name: string, key: number | null | undefined,
   const m = await sheetsFor([slug]);
   if (m === null) return null;
   const s = m.get(slug);
+  // A homonym's sheet is filed under `<slug>-<key>`. When the plain slug answers with another key than the plant's, that
+  // is looked for before the plant's key is "repaired" to the other species' (round seventeen, 6): one more bucket
+  // request only in that case, so the ordinary plant still asks for one bucket.
+  if (s && key && s.key !== key) {
+    const suffixed = `${slug}-${key}`;
+    const m2 = await sheetsFor([suffixed]);
+    const s2 = m2?.get(suffixed);
+    if (s2) return s2;
+  }
   if (!s) return 'none';
   if (speciesOf(name) === name && key !== s.key) repair?.(s.key);
   return s;

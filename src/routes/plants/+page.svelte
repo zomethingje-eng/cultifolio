@@ -103,7 +103,7 @@
   <div class="emptybox"><p class="muted">No plants match.</p></div>
 {:else}
   {#if !prefs.referencePhotos && list.some((a) => !collection.cover(a.id))}
-    <div style="margin: 0 0 8px"><RefPhotoOffer compact what="the reference’s photographs for plants without their own" /></div>
+    <div style="margin: 0 0 8px"><RefPhotoOffer compact buckets what="the reference’s photographs for plants without their own" /></div>
   {/if}
   <div class="rows">
     {#each list as a (a.id)}

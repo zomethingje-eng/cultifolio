@@ -32,7 +32,7 @@ vi.mock('$lib/db/vault', () => {
   appendChanges: async (cs: Change[]) => {
     if (mem.fail) throw new Error(mem.fail);
     for (const c of cs) mem.changes.set(c.t, c);
-    return cs;
+    return { kept: cs, replaced: [] };
   },
   getMeta: async (k: string) => mem.meta.get(k),
   setMeta: async (k: string, v: unknown) => void mem.meta.set(k, v),

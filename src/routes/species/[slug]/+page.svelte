@@ -49,18 +49,20 @@
     const o = d.occurrences;
     const up = d.upstream['gbif.occurrences']?.status;
     if (up === 'refused' || up === 'error') return { tone: 'warn', text: 'The occurrence source did not answer when this dossier was built. Nothing here is derived from records, and this is not a statement that none exist.' };
-    if (d.distribution.verified === false || (!d.distribution.native.length && d.distribution.reported?.length)) {
-      const all = o.nOpenInRange + o.nRestrictedInRange;
-      return { tone: 'warn', text: `No verified native range for this name: WCVP has no entry with native status, and a checklist that only reports presence cannot tell a wild record from a garden one. The map shows ${o.nOpenInRange} openly licensed record${o.nOpenInRange === 1 ? '' : 's'}${all > o.nOpenInRange ? ` of ${all}` : ''} untested against any range; no map marker or climate is derived from them, and no sheet is built from them.` };
-    }
+    // A refused range is said before anything is read as an absence of one (round seventeen, 5).
     const rangeUp = d.upstream['wcvp.distribution']?.status;
     if (o.rangeTested === false && (rangeUp === 'refused' || rangeUp === 'error')) {
       const all = o.nOpenInRange + o.nRestrictedInRange;
       return { tone: 'warn', text: `The range source did not answer when this dossier was built, so none of the ${all} georeferenced record${all === 1 ? '' : 's'} was tested against a native range: the map marker${d.climate.status === 'ok' ? ' and the climate envelope' : ''} rest on all of them, garden and roadside records included. This is not a statement that they are in range.` };
     }
+    if (d.distribution.verified === false || (!d.distribution.native.length && d.distribution.reported?.length)) {
+      const all = o.nOpenInRange + o.nRestrictedInRange;
+      return { tone: 'warn', text: `No verified native range for this name: WCVP has no entry with native status, and a checklist that only reports presence cannot tell a wild record from a garden one. The map shows ${o.nOpenInRange} openly licensed record${o.nOpenInRange === 1 ? '' : 's'}${all > o.nOpenInRange ? ` of ${all}` : ''} untested against any range; no map marker or climate is derived from them, and no sheet is built from them.` };
+    }
     if (!o.nOpenInRange && !o.nRestrictedInRange) return { tone: 'muted', text: 'No georeferenced records inside the stated native range.' };
     const all = o.nOpenInRange + o.nRestrictedInRange;
     const where = o.rangeTested === false ? 'not tested against the range (stated at country level only)' : 'inside the native range';
+    if (o.rangeTested === false) return { tone: 'muted', text: `${all} georeferenced record${all === 1 ? '' : 's'}, ${where}; no map marker or climate envelope is derived without a range to test them against. ${o.nOpenInRange ? `The map shows the ${o.nOpenInRange} openly licensed one${o.nOpenInRange === 1 ? '' : 's'}.` : 'None carries a licence permitting republication, so the map shows no points.'}` };
     const climateOk = d.climate.status === 'ok';
     // The marker rests on every in-range record; the envelope only on those placed well enough (within 10 km) to read a grid cell at, which is what `climate.records` counts.
     const climRecs = d.climate.status === 'ok' ? d.climate.records : all;
@@ -256,7 +258,7 @@
     <div class="fact"><div class="lab">Family</div><div class="v">{d.name.family ?? '–'}</div></div>
     <div class="fact"><div class="lab">Described by</div><div class="v">{d.name.authorship ?? '–'}</div></div>
     <div class="fact"><div class="lab">Native to</div><div class="v">{#if d.distribution.native.length}{d.distribution.native.slice(0, 3).map((r) => unitName(r.name)).join(', ')}{d.distribution.native.length > 3 ? ` +${d.distribution.native.length - 3}` : ''}{:else}<span class="muted">not verified</span>{/if}</div></div>
-    <div class="fact"><div class="lab">Wild records</div><div class="v">{#if d.occurrences.nOpenInRange || d.occurrences.nRestrictedInRange}{d.occurrences.nOpenInRange + d.occurrences.nRestrictedInRange} in range<span class="small muted">{' · '}{d.occurrences.nOpenInRange} open</span>{:else if ['refused', 'error'].includes(d.upstream['gbif.occurrences']?.status ?? '')}<span class="muted">not checked</span>{:else}<span class="muted">none in range</span>{/if}</div></div>
+    <div class="fact"><div class="lab">Wild records</div><div class="v">{#if d.occurrences.nOpenInRange || d.occurrences.nRestrictedInRange}{d.occurrences.nOpenInRange + d.occurrences.nRestrictedInRange} {d.occurrences.rangeTested === false ? 'georeferenced' : 'in range'}<span class="small muted">{' · '}{d.occurrences.nOpenInRange} open{d.occurrences.rangeTested === false ? ' · range not tested' : ''}</span>{:else if ['refused', 'error'].includes(d.upstream['gbif.occurrences']?.status ?? '')}<span class="muted">not checked</span>{:else}<span class="muted">none in range</span>{/if}</div></div>
   </div>
 
   {#if glance || note}
@@ -264,7 +266,7 @@
     <section class="glance" aria-label="At a glance">
       {#if glance}
         <div class="cards">
-          <button class="card unitbtn" type="button" title="Switch to {u === 'us' ? 'Celsius and millimetres' : 'Fahrenheit and inches'}" onclick={() => units.toggle()}><div class="lab">Cold floor</div>{#if sheet.floor?.raised}<div class="val">{tempN(sheet.floor.floor, u)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">the archetype table's minimum for a {sheet.floor.group}, above the habitat's {glance.ex ? `1st-percentile night ${temp(glance.ex.minP01, u, 1)} (NASA POWER)` : `coldest mean night ${temp(glance.cold.v, u, 1)} (CHELSA)`}</div>{:else if glance.ex}<div class="val">{tempN(glance.ex.minP01, u, 1)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">1st-percentile night over {glance.ex.years} years; lowest {temp(glance.ex.minAbs, u, 1)}, {frostWording(glance.ex)} (NASA POWER)</div>{:else}<div class="val">{tempN(glance.cold.v, u, 1)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">{glance.cold.mo}, mean night (CHELSA); {d.climate.status === 'ok' && d.climate.extremesStatus === 'refused' ? 'extremes not checked: NASA POWER did not answer when this page was built' : 'no extremes series for this cell'}</div>{/if}<span class="swap">tap for {u === 'us' ? '°C' : '°F'}</span></button>
+          <button class="card unitbtn" type="button" title="Switch to {u === 'us' ? 'Celsius and millimetres' : 'Fahrenheit and inches'}" onclick={() => units.toggle()}><div class="lab">Cold floor</div>{#if sheet.floor?.raised}<div class="val">{tempN(sheet.floor.floor, u)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">the archetype table's minimum for a {sheet.floor.group}, above the habitat's {glance.ex ? `1st-percentile night ${temp(glance.ex.minP01, u, 1)} (NASA POWER)` : `coldest mean night ${temp(glance.cold.v, u, 1)} (CHELSA)`}</div>{:else if glance.ex}<div class="val">{tempN(glance.ex.minP01, u, 1)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">1st-percentile night over {glance.ex.years} years; lowest {temp(glance.ex.minAbs, u, 1)}, {frostWording(glance.ex)} (NASA POWER)</div>{:else}<div class="val">{tempN(glance.cold.v, u, 1)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">{glance.cold.mo}, mean night (CHELSA); {d.climate.status === 'ok' && d.climate.extremesStatus === 'refused' ? 'extremes not checked: NASA POWER did not answer when this page was built' : d.climate.status === 'ok' && d.climate.extremesStatus === 'skipped' ? 'extremes not asked for when this page was built' : 'no extremes series for this cell'}</div>{/if}<span class="swap">tap for {u === 'us' ? '°C' : '°F'}</span></button>
           <div class="card"><div class="lab">Warmest month</div><div class="val">{tempN(glance.hot.v, u)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">{glance.hot.mo}, mean day; nights {temp(glance.hot.night, u)} (CHELSA)</div></div>
           <div class="card"><div class="lab">Rain</div><div class="val">{rainN(glance.rain, u)}<span class="u"> {rainUnit(u)}/yr</span></div><div class="gauge"><i class="c" style="width:{Math.min(100, glance.rain / 12)}%"></i></div><div class="sub">{glance.wetMonths === 0 ? `no month over 25 mm (1 in)` : `${glance.wetMonths} month${glance.wetMonths === 1 ? '' : 's'} over 25 mm (1 in)`} · peak {glance.wet.mo} {rain(glance.wet.v, u)} (CHELSA)</div></div>
           {#if glance.dli}<div class="card"><div class="lab">Light</div><div class="val">{glance.dli.lo.toFixed(0)}–{glance.dli.hi.toFixed(0)}<span class="u"> DLI</span></div><div class="gauge"><i class="w" style="width:{Math.min(100, glance.dli.hi / 0.7)}%"></i></div><div class="sub">mol/m²/day, winter to summer, open sky (CHELSA shortwave)</div></div>{/if}
@@ -380,7 +382,7 @@
   <h2 class="sec" id="s-habitat">Natural habitat</h2>
   <div class="maprow">
     <div class="mapbox">{@html data.worldSvg}<div class="mapcap">Native range as published by WCVP{#if d.centroid}; the marker is where the records are densest and decides nothing{#if d.climate.status === 'ok'}: the climate was read across every in-range record's cell, not at the marker{/if}{/if}.</div></div>
-    <div class="mapbox">{@html data.regionSvg}<div class="mapcap">{d.occurrences.nOpenInRange ? 'Openly licensed records inside the range, framed on where they fall.' : ['refused', 'error'].includes(d.upstream['gbif.occurrences']?.status ?? '') ? 'Records not checked: the occurrence source did not answer when this page was built.' : 'No openly licensed record to show inside the range.'}</div></div>
+    <div class="mapbox">{@html data.regionSvg}<div class="mapcap">{d.occurrences.nOpenInRange ? (d.occurrences.rangeTested === false ? 'Openly licensed records, not tested against the stated range, framed on where they fall.' : 'Openly licensed records inside the range, framed on where they fall.') : ['refused', 'error'].includes(d.upstream['gbif.occurrences']?.status ?? '') ? 'Records not checked: the occurrence source did not answer when this page was built.' : 'No openly licensed record to show inside the range.'}</div></div>
   </div>
   <div class="factgrid">
     <div class:wide={longRange}><b>Native</b>{#if d.distribution.native.length}{d.distribution.native.map((r) => unitName(r.name)).join(', ')}{#if d.distribution.verified === false}<span class="small muted"> · stated native by a national checklist, not by WCVP: unverified</span>{/if}{:else if d.distribution.reported?.length}<span class="muted">Not verified.</span><span class="small muted"> Reported present (native status not stated): {d.distribution.reported.map((r) => r.name).join(', ')}</span>{:else}{d.upstream['wcvp.distribution']?.status === 'none' ? 'No published distribution for this name.' : 'Distribution source did not answer.'}{/if}{#if d.distribution.introduced.length}<span class="small muted"> · introduced: {d.distribution.introduced.map((r) => r.name).join(', ')}</span>{/if}</div>
@@ -503,7 +505,7 @@
   .muted { color: var(--ink3); }
   .factgrid .wide { grid-column: 1 / -1; }
   .sheet { white-space: normal; }
-  .mine { margin-top: 8px; }
+  .mine { margin-top: 8px; white-space: normal; overflow-wrap: anywhere; line-height: 1.9; } /* six numbers on a phone wrap rather than widen the page (round seventeen, 11) */
   .sumbody .more { font-family: var(--ui); font-size: 13px; white-space: nowrap; }
   .notesline { margin: 2px 0 12px; }
   .figures { margin: 10px 0 0; }

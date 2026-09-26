@@ -382,23 +382,39 @@ function pruneUncredited(): void {
   const dir = `${outDir}/s/v${DOSSIER_V}`;
   const files = existsSync(dir) ? readdirSync(dir).filter((f) => /^\d+\.json$/.test(f)) : [];
   const uncredited = (p: { licence: string; attribution: string }) => p.licence !== 'cc0' && /^(unknown|Wikimedia Commons|iNaturalist user|no author stated),/.test(p.attribution);
-  let touched = 0, dropped = 0;
+  type Up = Record<string, { status: string; at?: string; detail?: string }>;
+  let touched = 0, dropped = 0, reworded = 0, reopened = 0;
   for (const f of files) {
     const path = `${dir}/${f}`;
-    let d: Pick<Dossier, 'photos'>;
+    let d: { photos: Array<{ licence: string; attribution: string }>; upstream?: Up };
     try {
-      d = JSON.parse(readFileSync(path, 'utf8')) as Pick<Dossier, 'photos'>;
+      d = JSON.parse(readFileSync(path, 'utf8')) as typeof d;
     } catch {
       continue;
     }
-    const keep = (d.photos ?? []).filter((p) => !uncredited(p));
-    if (keep.length === (d.photos ?? []).length) continue;
-    dropped += d.photos.length - keep.length;
-    d.photos = keep;
+    const photos = d.photos ?? [];
+    let changed = false;
+    // A CC0 photograph needs no credit, but "unknown" reads as a missing one: it says what it is (round seventeen, 13).
+    for (const p of photos) if (p.licence === 'cc0' && /^unknown, /.test(p.attribution)) { p.attribution = p.attribution.replace(/^unknown, /, 'author not stated, '); reworded++; changed = true; }
+    const keep = photos.filter((p) => !uncredited(p));
+    if (keep.length < photos.length) {
+      dropped += photos.length - keep.length;
+      d.photos = keep;
+      changed = true;
+    }
+    // A dossier the prune emptied, this run or an earlier one, has its photo sources reopened so the next fill asks again
+    // (round seventeen, 13: DEPLOY.md's promise that a fill gives an emptied species a credited photograph holds only if
+    // the fill looks at it; a source marked ok with no photograph left is not settled).
+    if (keep.length === 0) {
+      for (const k of ['inat.photos.wild', 'inat.photos.cultivated', 'commons']) {
+        if (d.upstream?.[k]?.status === 'ok') { d.upstream[k] = { status: 'skipped', at: new Date().toISOString(), detail: 'no credited photograph is left; ask again' }; reopened++; changed = true; }
+      }
+    }
+    if (!changed) continue;
     writeFileSync(path, JSON.stringify(d));
     touched++;
   }
-  console.log(`${dropped} uncredited photograph${dropped === 1 ? '' : 's'} removed from ${touched} dossier${touched === 1 ? '' : 's'} of ${files.length}; now run --index and upload`);
+  console.log(`${dropped} uncredited photograph${dropped === 1 ? '' : 's'} removed, ${reworded} CC0 credit${reworded === 1 ? '' : 's'} reworded, ${reopened} photo source${reopened === 1 ? '' : 's'} reopened for the next fill, across ${touched} dossier${touched === 1 ? '' : 's'} of ${files.length}; now run --index and upload`);
 }
 
 async function fillGbifPhotos(): Promise<void> {

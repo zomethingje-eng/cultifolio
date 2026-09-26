@@ -26,6 +26,18 @@ class SiteStore {
       this.current = null;
     }
     this.loaded = true;
+    // A site-wide copy of the hemisphere cookie from before round sixteen rode on every request until Settings was next
+    // saved; it is expired on every load, and the path-scoped copies written here if the site is set (round seventeen, 8).
+    this.writeCookie(this.current);
+  }
+  private writeCookie(s: Site | null) {
+    try {
+      const v = s ? s.lat < 0 ? 's' : 'n' : null;
+      for (const path of ['/species', '/compare']) document.cookie = v ? `cultifolio.hemi=${v}; path=${path}; max-age=31536000; samesite=lax` : `cultifolio.hemi=; path=${path}; max-age=0; samesite=lax`;
+      document.cookie = 'cultifolio.hemi=; path=/; max-age=0; samesite=lax';
+    } catch {
+      /* no document: nothing to seed */
+    }
   }
   set(s: Site | null) {
     this.current = s;
@@ -39,13 +51,7 @@ class SiteStore {
     // paint (and for a reader without JavaScript), the way the units cookie seeds the units. The site itself stays here.
     // The cookie is scoped to the two paths that read it, so it rides on no other request, sync and the API included
     // (round sixteen, 11); an older path=/ copy is expired.
-    try {
-      const v = s ? s.lat < 0 ? 's' : 'n' : null;
-      for (const path of ['/species', '/compare']) document.cookie = v ? `cultifolio.hemi=${v}; path=${path}; max-age=31536000; samesite=lax` : `cultifolio.hemi=; path=${path}; max-age=0; samesite=lax`;
-      document.cookie = 'cultifolio.hemi=; path=/; max-age=0; samesite=lax';
-    } catch {
-      /* no document: nothing to seed */
-    }
+    this.writeCookie(s);
   }
 }
 export const site = new SiteStore();

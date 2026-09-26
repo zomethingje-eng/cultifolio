@@ -167,6 +167,11 @@ describe('events without an id (round sixteen, 4)', () => {
     const skippingA = importV2(file, { now: 1_800_000_000_000, exists: (kind, id) => kind === 'accession' && id === '2024-0001' });
     const ev = (r: { changes: Change[] }) => r.changes.filter((c) => c.kind === 'event' && c.field === 'd').map((c) => c.id + '@' + c.t);
     expect(ev(all).filter((x) => x.startsWith('v2-2024-0002-'))).toEqual(ev(skippingA));
-    expect(ev(all).map((x) => x.split('@')[0])).toEqual(['v2-2024-0001-e0', 'v2-2024-0002-e0', 'v2-2024-0002-e1']);
+    expect(ev(all).map((x) => x.split('@')[0])).toEqual(['v2-2024-0001-#0', 'v2-2024-0002-#0', 'v2-2024-0002-#1']);
+    // and never in the namespace of v2's own ids (`e1`…): a plant with one id-less event beside `e1` and `e2` keeps all three (round seventeen, 2)
+    const mixed = { collection: { accessions: { A: { acc: '2024-0001', taxonId: 'x', events: [{ id: 'e1', d: '2024-05-01', t: 'acquire', note: 'bought at show' }, { d: '2024-06-01', t: 'repot' }, { d: '2024-07-01', t: 'note', note: 'first flower' }] } } } };
+    const m = importV2(mixed, { now: 1_800_000_000_000 });
+    expect(new Set(m.changes.filter((c) => c.kind === 'event').map((c) => c.id)).size).toBe(3);
+    expect(m.changes.find((c) => c.kind === 'event' && c.field === 'note' && c.value === 'bought at show')?.id).toBe('v2-2024-0001-e1');
   });
 });

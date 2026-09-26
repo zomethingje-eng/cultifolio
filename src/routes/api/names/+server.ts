@@ -35,7 +35,7 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   const cacheKey = new Request(`https://cache.cultifolio/names?q=${encodeURIComponent(q.toLowerCase())}`);
   const cache = platform?.caches?.default;
   const hit = await cache?.match(cacheKey);
-  if (hit) return hit;
+  if (hit) return new Response(hit.body, hit); // a copy: the cached response's own headers are immutable, and the hook adds two (round seventeen, 1)
   const stop = await limited(platform, getClientAddress, 'names');
   if (stop) return stop;
   let res: Response;

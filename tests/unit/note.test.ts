@@ -45,6 +45,10 @@ describe('the generated note', () => {
 describe('the label line', () => {
   it('season in the reader\'s hemisphere, floor and open-sky light in a few words, from the same rules as the sheet', () => {
     expect(careLine({ scientific: 'Tylecodon pearsonii', family: 'Crassulaceae', months: namaqua, lat: -30, extremes: ex })).toBe('winter rain Nov–Feb · hab. night 4.1 °C · sky 20–58 DLI');
+    // no extremes on file: the CHELSA mean night is printed, named as the habitat night; with the extremes source refused it is not,
+    // since it is a warmer and different quantity and the label cannot say so (round seventeen, 7)
+    expect(careLine({ scientific: 'Tylecodon pearsonii', family: 'Crassulaceae', months: namaqua, lat: -30, extremes: null, extremesStatus: 'none' })).toContain('hab. night 6.0 °C');
+    expect(careLine({ scientific: 'Tylecodon pearsonii', family: 'Crassulaceae', months: namaqua, lat: -30, extremes: null, extremesStatus: 'refused' })).toBe('winter rain Nov–Feb · sky 20–58 DLI');
     expect(careLine({ scientific: 'Tylecodon pearsonii', family: 'Crassulaceae', months: namaqua, lat: -30, extremes: ex }, { readerLat: -34 })).toBe('winter rain May–Aug · hab. night 4.1 °C · sky 20–58 DLI');
     expect(careLine({ scientific: 'Aglaonema commutatum', family: 'Araceae', months: equatorial, lat: 1 })).toBe('rain Mar–May, Oct–Nov, flat T · hab. night 16.0 °C');
     expect(careLine({ scientific: 'Monstera deliciosa', family: 'Araceae' })).toBe('group min 12 °C');

@@ -1067,7 +1067,7 @@ test('the species field is a combobox: arrows and Enter pick a suggestion; Enter
   await input.fill('Welwit');
   await page.waitForTimeout(400); // the suggestion debounce; a genus fragment resolves to nothing local
   await input.press('Enter');
-  await expect(page.locator('.picker .hint')).toContainText(/Pick a name from the list|Did you mean/);
+  await expect(page.locator('.picker .hint:not(.svc)')).toContainText(/Pick a name from the list|Did you mean/);
   await expect(page).toHaveURL(/\/plants\/new$/);
   await page.goto('/plants');
   await expect(page.locator('.accrow')).toHaveCount(1);
@@ -1838,4 +1838,43 @@ test('the hemisphere cookie rides only on species and compare pages, never on sy
   expect(jar.map((c) => c.name)).not.toContain('cultifolio.hemi');
   const species = await page.context().cookies(['http://127.0.0.1:4173/species/copiapoa-cinerea']);
   expect(species.map((c) => c.name)).toContain('cultifolio.hemi');
+});
+
+test('a place chosen on the add form while the reference is still answering is kept, not overwritten by the last-used default (round seventeen, A3)', async ({ page }) => {
+  await page.goto('/benches');
+  for (const n of ['Greenhouse', 'Cold frame']) {
+    await page.getByRole('button', { name: 'New place' }).click();
+    await page.fill('#loc-name', n);
+    await page.getByRole('button', { name: 'Add', exact: true }).click();
+  }
+  // make Greenhouse the last-used place
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  const ghValue = await page.locator('#f-loc option', { hasText: 'Greenhouse' }).getAttribute('value');
+  await page.selectOption('#f-loc', ghValue!);
+  await page.getByRole('button', { name: /^Add/ }).click();
+  await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
+  // the reference's answer is slow this time; the grower picks Cold frame before it lands
+  await page.context().route(/\/api\/sheets/, async (r) => { await new Promise((res) => setTimeout(res, 1500)); await r.continue(); });
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await expect(page.locator('#f-loc')).toHaveValue(ghValue!); // the default, at once
+  const cfValue = await page.locator('#f-loc option', { hasText: 'Cold frame' }).getAttribute('value');
+  await page.selectOption('#f-loc', cfValue!);
+  await page.waitForTimeout(2200);
+  await expect(page.locator('#f-loc')).toHaveValue(cfValue!); // still the grower's choice after the reference answered
+  await page.getByRole('button', { name: /^Add/ }).click();
+  await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
+  await expect(page.locator('main')).toContainText('Cold frame');
+});
+
+test('a species page you grow six of does not scroll sideways on a phone (round seventeen, 11)', async ({ page }) => {
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.fill('#f-count', '6');
+  await page.getByRole('button', { name: /^Add/ }).click();
+  await expect(page).toHaveURL(/\/plants$/);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/species/copiapoa-cinerea');
+  await expect(page.locator('.mine .accno')).toHaveCount(6);
+  const w = await page.evaluate(() => ({ doc: document.documentElement.scrollWidth, mine: document.querySelector('.mine')!.scrollWidth }));
+  expect(w.doc).toBeLessThanOrEqual(390);
+  expect(w.mine).toBeLessThanOrEqual(390);
 });

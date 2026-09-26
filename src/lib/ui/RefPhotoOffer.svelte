@@ -7,7 +7,7 @@
    */
   import { prefs } from '$lib/ui/prefs.svelte';
   import { toast } from '$lib/ui/toast.svelte';
-  let { compact = false, center = false, what = 'the reference’s photographs of your species' }: { compact?: boolean; center?: boolean; what?: string } = $props();
+  let { compact = false, center = false, what = 'the reference’s photographs of your species', buckets = false }: { compact?: boolean; center?: boolean; what?: string; buckets?: boolean } = $props();
   function on() {
     prefs.set({ referencePhotos: true });
     toast.show('Reference photographs on. Off again in Settings.');
@@ -16,7 +16,7 @@
 
 <div class="rpo" class:compact class:center>
   <button class="go" type="button" onclick={on}>{center ? 'or show' : 'Show'} {what}</button>
-  <span class="why">They come straight from the image host (iNaturalist or the GBIF image cache), which then sees which species you grow. Nothing is sent to Cultifolio.</span>
+  <span class="why">They come straight from the image host (iNaturalist or the GBIF image cache), which then sees which species you grow. {buckets ? 'This site is asked for the hash buckets of your species, as the plant pages ask; nothing more.' : 'Nothing is sent to Cultifolio.'}</span>
 </div>
 
 <style>

@@ -8,7 +8,8 @@ export const load: PageServerLoad = async ({ url, platform, fetch, setHeaders, c
   const found = await Promise.all(
     slugs.map(async (slug) => {
       const key = await resolveSlug(platform, fetch, slug);
-      const d = key ? await getDossier(platform, fetch, key) : null;
+      const loaded = key ? await getDossier(platform, fetch, key) : null;
+      const d = loaded && loaded.slug !== slug ? { ...loaded, slug } : loaded; // under the slug asked for, which is the index's (round seventeen, 6)
       return { slug, d };
     })
   );

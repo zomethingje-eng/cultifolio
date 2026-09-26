@@ -26,10 +26,9 @@
     const sp = page.url.searchParams.get('species');
     const k = Number(page.url.searchParams.get('key'));
     if (sp) name = sp;
-    // The key in the link is not trusted on its own: a copied, edited or stale link can pair a name with another species'
-    // key. For a name at species rank the reference's own key for that name is the one kept (round eleven, 2).
-    if (k) taxonKey = await checkedKey(sp, k);
-    // Arriving from a bench page: /plants/new?loc=<id>. Otherwise the place you used last time.
+    // Arriving from a bench page: /plants/new?loc=<id>. Otherwise the place you used last time. Set now, before the
+    // reference is asked anything: the form is live during that wait, and a default applied after it would overwrite a
+    // place the grower had already chosen (round seventeen, A3). Only a place not yet touched by hand takes it.
     const loc = page.url.searchParams.get('loc');
     let want: string | null = loc;
     try {
@@ -37,7 +36,10 @@
     } catch {
       /* fine */
     }
-    if (want && collection.location(want)) locationId = want;
+    if (want && collection.location(want) && locationId == null) locationId = want;
+    // The key in the link is not trusted on its own: a copied, edited or stale link can pair a name with another species'
+    // key. For a name at species rank the reference's own key for that name is the one kept (round eleven, 2).
+    if (k) taxonKey = await checkedKey(sp, k);
   });
   $effect(() => {
     setCrumb([{ label: 'My plants', href: '/plants' }, { label: 'Add a plant' }]);
@@ -116,11 +118,11 @@
 {#if collection.lastWriteError}
   {@const numberClash = /already used/.test(collection.lastWriteError)}
   <!-- Worded by cause: a number already used is not a full phone (round sixteen, 14) -->
-  <div class="notice err" role="alert" id="write-error">{countN > 1 ? 'None of the plants was saved' : 'This change was not saved'}: {collection.lastWriteError}{#if !numberClash} Free space or <a href="/backup">back up now</a>.{/if}</div>
+  <div class="notice err" role="alert" id="write-error">{countN > 1 ? 'None of the plants was saved' : 'This change was not saved'}: {collection.lastWriteError}{#if !numberClash}{' '}Free space or <a href="/backup">back up now</a>.{/if}</div>
 {/if}
 <form class="form" onsubmit={save}>
   <PageHead title="Add a plant" kick="My plants" places={false}>
-    {#snippet subline()}{#if countN > 1}They will be numbered from <span class="accno">{nextNo}</span>, one each.{:else}It will be numbered <span class="accno">{useOwnNumber && ownNumber ? ownNumber : nextNo}</span>.{/if} A number is never reused.{/snippet}
+    {#snippet subline()}{#if countN > 1}{#if useOwnNumber && ownNumber.trim()}The first will be numbered <span class="accno">{ownNumber.trim()}</span>, the rest from <span class="accno">{nextNo}</span>.{:else}They will be numbered from <span class="accno">{nextNo}</span>, one each.{/if}{:else}It will be numbered <span class="accno">{useOwnNumber && ownNumber ? ownNumber : nextNo}</span>.{/if} A number is never reused.{/snippet}
   </PageHead>
   <div class="cult sheet">
 

@@ -258,21 +258,48 @@ async function issuedIn(tx: Tx, kind: NumberKind): Promise<Set<string>> {
  * `strict` (a change made on this device): a stamp already in the store is a bug, not a re-send, and `add` refuses it
  * so the transaction fails loudly instead of one change silently replacing another under the same key (round twelve, 4).
  */
-async function storeIn(tx: Tx, changes: Change[], fromServer: boolean, extra: Partial<Record<NumberKind, Set<string>>> = {}, strict = false): Promise<Change[]> {
+/** What a store did: the changes it kept (all a caller applies), and the stored changes it displaced under the same stamp, which a caller must un-fold (round seventeen, 3). */
+export interface Stored {
+  kept: Change[];
+  replaced: Change[];
+}
+export class StoppedError extends Error {
+  constructor() {
+    super('syncing was stopped on this device while this run was under way');
+  }
+}
+async function storeIn(tx: Tx, changes: Change[], fromServer: boolean, extra: Partial<Record<NumberKind, Set<string>>> = {}, strict = false, requireKey?: string): Promise<Stored> {
   const ch = tx.objectStore('changes'), ob = tx.objectStore('outbox'), meta = tx.objectStore('meta');
+  // A write for a sync run happens only while the stored sync record still carries that run's key, checked inside this
+  // very transaction: another tab's "Stop syncing" or new vault between a check and a write can no longer let a batch of
+  // the old vault into the new log (round seventeen, A1).
+  if (requireKey !== undefined) {
+    const s = (await meta.get('sync')) as { key?: string } | null | undefined;
+    if (!s || s.key !== requireKey) {
+      tx.abort();
+      await tx.done.catch(() => {}); // the abort is the point; its rejection is not an error to surface
+      throw new StoppedError();
+    }
+  }
   // Two changes under one stamp should not exist; when they do (an importer's shared counter before round fifteen, or two
   // devices naming the same v2 event differently before round sixteen), the store keeps one of them, and the same one on
   // every device: not whichever arrived first but the one that ranks higher by content, so devices that met the two in
-  // either order converge (round fifteen, 3; round sixteen, 4). Only what is kept goes into the outbox, onto the ledger and
-  // back to the caller, which applies only that.
-  const kept: Change[] = [];
-  const replacing: Change[] = [];
+  // either order converge (round fifteen, 3; round sixteen, 4). Within one batch the same rule applies first, so the last
+  // put never silently wins (round seventeen, 3). Only what is kept goes into the outbox, onto the ledger and back to the
+  // caller, which applies only that and un-folds what was replaced.
+  const byStamp = new Map<string, Change>();
   for (const c of changes) {
+    const had = byStamp.get(c.t);
+    if (!had || rank(c) > rank(had)) byStamp.set(c.t, c);
+  }
+  const kept: Change[] = [];
+  const replaced: Change[] = [];
+  for (const c of byStamp.values()) {
     const had = strict ? undefined : await ch.get(c.t);
     if (had && !sameChange(had, c)) {
       if (rank(c) > rank(had)) {
         console.warn(`change ${c.t} is already stored with other content; this one ranks higher and replaces it`);
-        replacing.push(c);
+        replaced.push(had);
         kept.push(c);
       } else console.warn(`change ${c.t} is already stored with other content; the stored one stands`);
       continue;
@@ -291,21 +318,21 @@ async function storeIn(tx: Tx, changes: Change[], fromServer: boolean, extra: Pa
     puts.push(meta.put([...set], ISSUED(k)));
   }
   await Promise.all([...puts, tx.done]);
-  return kept;
+  return { kept, replaced };
 }
 const sameChange = (a: Change, b: Change) => a.kind === b.kind && a.id === b.id && a.field === b.field && JSON.stringify(a.value ?? null) === JSON.stringify(b.value ?? null);
 /** A total order on a change's content, for two under one stamp: the same on every device, whatever order they met them in. */
 const rank = (c: Change) => `${c.kind}\0${c.id}\0${c.field}\0${JSON.stringify(c.value ?? null)}`;
 
 /** Append changes; unless they came from the server (`fromServer`), they also go in the outbox to be pushed. One transaction, so the two stores cannot disagree. */
-export async function appendChanges(changes: Change[], fromServer = false, strict = false): Promise<Change[]> {
-  if (!changes.length) return [];
-  const kept = await writing(async () => {
+export async function appendChanges(changes: Change[], fromServer = false, strict = false, requireKey?: string): Promise<Stored> {
+  if (!changes.length) return { kept: [], replaced: [] };
+  const out = await writing(async () => {
     const db = await openVault();
-    return storeIn(db.transaction(['changes', 'outbox', 'meta'], 'readwrite'), changes, fromServer, {}, strict);
+    return storeIn(db.transaction(['changes', 'outbox', 'meta'], 'readwrite'), changes, fromServer, {}, strict, requireKey);
   });
-  announce();
-  return kept;
+  announce(out.replaced.length ? 'refold' : 'written');
+  return out;
 }
 
 /**
@@ -343,7 +370,7 @@ export async function appendChangesClaiming<T>(kind: NumberKind, known: Set<stri
  */
 const CHANNEL = 'cultifolio-vault';
 const chan = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(CHANNEL) : null;
-export type VaultNotice = 'written' | 'replaced' | 'sync-forgotten';
+export type VaultNotice = 'written' | 'replaced' | 'refold' | 'sync-forgotten';
 function announce(what: VaultNotice = 'written'): void {
   try { chan?.postMessage(what); } catch { /* a closed channel is nothing to report */ }
 }
@@ -362,12 +389,26 @@ export async function outboxKeys(): Promise<string[]> {
   const db = await openVault();
   return db.getAllKeys('outbox');
 }
-export async function outboxAck(ts: string[]): Promise<void> {
+/**
+ * Acknowledge pushed changes out of the outbox, but only while the stored sync record still carries `key`, read in the
+ * same transaction: a run of a vault this device has since left, or replaced, must not empty the new vault's outbox of the
+ * very changes it has yet to send (round seventeen, A1). Without a key the ack is unconditional.
+ */
+export async function outboxAck(ts: string[], key?: string): Promise<void> {
   if (!ts.length) return;
   await writing(async () => {
     const db = await openVault();
-    const tx = db.transaction('outbox', 'readwrite');
-    await Promise.all([...ts.map((t) => tx.store.delete(t)), tx.done]);
+    const tx = db.transaction(['outbox', 'meta'], 'readwrite');
+    if (key !== undefined) {
+      const s = (await tx.objectStore('meta').get('sync')) as { key?: string } | null | undefined;
+      if (!s || s.key !== key) {
+        tx.abort();
+        await tx.done.catch(() => {});
+        throw new StoppedError();
+      }
+    }
+    const ob = tx.objectStore('outbox');
+    await Promise.all([...ts.map((t) => ob.delete(t)), tx.done]);
   });
 }
 /** Put every change on this device in the outbox: the first push after sync is set up sends the whole collection. */

@@ -440,6 +440,11 @@
   .stickyhead { position: sticky; top: 44px; z-index: 40; background: var(--bg); margin: 16px 0 6px; padding-bottom: 4px; border-bottom: 1px solid var(--rule); }
   .stickyhead .toolrow { position: static; margin-top: 0; }
   @media (max-height: 480px) { .stickyhead { position: static; } }
+  /* On a phone the whole block would take a quarter of the screen while scrolling: only the search row stays pinned there (round seventeen, design note) */
+  @media (max-width: 640px) {
+    .stickyhead { position: static; border-bottom: 0; padding-bottom: 0; }
+    .stickyhead .toolrow { position: sticky; top: 44px; z-index: 40; background: var(--bg); }
+  }
   .offer { margin: -4px 0 10px; }
   .letters { display: flex; flex-wrap: wrap; gap: 2px; margin: 0 0 2px; }
   .letters a { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--ink2); min-width: 30px; min-height: 30px; display: inline-flex; align-items: center; justify-content: center; border-radius: 7px; }

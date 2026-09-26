@@ -9,7 +9,10 @@ import type { Handle } from '@sveltejs/kit';
  * prerendered pages are served as static files and get theirs from static/_headers.
  */
 export const handle: Handle = async ({ event, resolve }) => {
-  const r = await resolve(event);
+  const res = await resolve(event);
+  // A response taken from the edge cache (the names route returns its hit as it is) has immutable headers in Workers, and
+  // setting one throws, which SvelteKit turned into a 500 on every repeated lookup (round seventeen, 1). A copy is mutable.
+  const r = new Response(res.body, res);
   r.headers.set('referrer-policy', 'no-referrer');
   if (!r.headers.has('x-frame-options')) r.headers.set('x-frame-options', 'DENY');
   return r;
