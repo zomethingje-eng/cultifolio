@@ -1,5 +1,14 @@
 import { test, expect } from '@playwright/test';
 
+/** Click "Sync now" and wait for THAT run to finish: the status card counts finished runs, so the "Synced" that was already on screen is not mistaken for the new one (round thirteen, B2). */
+async function syncRun(p: import('@playwright/test').Page) {
+  const status = p.locator('.card', { hasText: 'Status' });
+  const before = Number(await status.getAttribute('data-runs'));
+  await p.click('#sync-now');
+  await expect.poll(async () => Number(await status.getAttribute('data-runs')), { timeout: 30000 }).toBeGreaterThan(before);
+  await expect(status).toContainText('Synced');
+}
+
 test('front page renders server-side with the fixture corpus: closed genus rows, one open by URL, no JavaScript needed', async ({ browser }) => {
   const ctx = await browser.newContext({ javaScriptEnabled: false });
   const page = await ctx.newPage();
@@ -451,6 +460,7 @@ test('labels: pick plants, choose a sheet, print at true size with a code that o
   await expect(page.locator('h1.sci .accno')).toHaveText(acc);
   await expect(page.locator('h1.sci')).toContainText('Welwitschia');
   // all growing plants, on a 30-up sheet, skipping three used cells; the fourth cell is the first printed
+  await page.waitForLoadState('networkidle'); // the plant page's own sheet request must not be counted as the labels page's
   const asked: string[] = [];
   page.on('request', (r) => { if (r.url().includes('/api/')) asked.push(new URL(r.url()).pathname + new URL(r.url()).search); });
   await page.goto('/labels');
@@ -578,11 +588,10 @@ test('sync: two devices share one encrypted vault; changes and photos cross both
   await b.fill('#ev-note', 'from device B');
   await b.getByRole('button', { name: 'Record' }).click();
   await b.goto('/sync');
-  await b.click('#sync-now');
+  await syncRun(b);
   await expect(b.locator('.card', { hasText: 'Waiting to send' })).toContainText('0');
   await a.goto('/sync');
-  await a.click('#sync-now');
-  await expect(a.locator('.card', { hasText: 'Status' })).toContainText('Synced');
+  await syncRun(a);
   await a.goto(`/plants/${acc}`);
   await expect(a.locator('.tlrow', { hasText: 'from device B' })).toBeVisible();
   await expect(a.locator('.tl .tlrow')).toHaveCount(4); // acquired, watered, photographed, fed
@@ -597,8 +606,7 @@ test('sync: two devices share one encrypted vault; changes and photos cross both
   await b.locator('#acc-notes').locator('..').getByRole('button', { name: 'Save' }).click();
   for (const p of [a, b, a]) {
     await p.goto('/sync');
-    await p.click('#sync-now');
-    await expect(p.locator('.card', { hasText: 'Status' })).toContainText('Synced');
+    await syncRun(p);
   }
   await a.goto(`/plants/${acc}`);
   await b.goto(`/plants/${acc}`);
@@ -622,8 +630,7 @@ test('sync: an offline edit uploaded late is still discovered, and a backup merg
   test.setTimeout(150_000);
   const syncNow = async (p: import('@playwright/test').Page) => {
     await p.goto('/sync');
-    await p.click('#sync-now');
-    await expect(p.locator('.card', { hasText: 'Status' })).toContainText('Synced');
+    await syncRun(p);
     await expect(p.locator('.card', { hasText: 'Waiting to send' })).toContainText('0');
   };
   // A makes a plant and a vault; B joins.
@@ -1130,7 +1137,8 @@ test('a night under the place\'s floor is "below the floor", not frost; a warnin
   const days = [{ date: '2026-11-02', tmin: 8, tmax: 15, precipMm: 0, steps: 24 }, { date: '2026-11-03', tmin: 9, tmax: 14, precipMm: 0, steps: 24 }];
   const body = (alerts: object[], alertsStatus: string) => JSON.stringify({ forecast: { source: 'met.no', fetched: '2026-11-01T00:00:00Z', days, hoursCovered: 48, offsetH: -5 }, alerts, alertsStatus, risk: alerts.length ? { level: 'warning', text: 'Freeze Warning in force (NOAA/NWS).' } : { level: 'none', text: 'No frost in the next 48 hours of forecast; coldest 8 °C (MET Norway).' }, attribution: ['Forecast data from MET Norway (CC BY 4.0)', 'Alerts: NOAA National Weather Service'] });
   let alerts: object[] = [], status = 'refused';
-  await page.route(/\/api\/forecast/, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: body(alerts, status) }));
+  // At the context, not the page: after the first load the service worker makes these requests, and a page route does not see them.
+  await page.context().route(/\/api\/forecast/, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: body(alerts, status) }));
   await page.goto('/benches');
   await page.getByRole('button', { name: 'New place' }).click();
   await page.fill('#loc-name', 'Cold frame');
@@ -1144,21 +1152,36 @@ test('a night under the place\'s floor is "below the floor", not frost; a warnin
   await page.fill('#e-floor', '10');
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.locator('.notice')).toContainText('Below the floor.');
-  await expect(page.locator('.notice')).toContainText("drops below this place's 10.0 °C floor on 2026-11-02 (8.0 °C outside)");
+  await expect(page.locator('.notice')).toContainText("reaches this place's 10.0 °C floor on 2026-11-02 (8.0 °C outside)");
   await expect(page.locator('.notice')).not.toContainText('Frost forecast');
   await expect(page.locator('.notice')).toContainText('Alerts not checked');
   await expect(page.locator('.pill', { hasText: 'below the floor' })).toBeVisible();
-  // a floor of 2.5 prints as 2.5, not 3
+  // a floor the coldest night reaches exactly counts (round thirteen, 11); a floor of 2.5 prints as 2.5, not 3
+  await page.getByRole('button', { name: 'Edit' }).click();
+  await page.fill('#e-floor', '8');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.locator('.notice')).toContainText("reaches this place's 8.0 °C floor");
   await page.getByRole('button', { name: 'Edit' }).click();
   await page.fill('#e-floor', '2.5');
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.locator('.notice')).toContainText('above the 2.5 °C floor');
   await expect(page.locator('.notice')).toContainText('Forecast clear.');
-  // a warning in force is said with the floor set
+  // a warning in force is said with the floor set; and an answer for the OLD coordinates that lands after the edit is
+  // dropped, never shown as this place's (round thirteen, B1): the old point's forecast is delayed past the save
   alerts = [{ event: 'Freeze Warning', headline: 'Freeze Warning tonight' }]; status = 'ok';
+  await page.context().unroute(/\/api\/forecast/);
+  await page.context().route(/\/api\/forecast/, async (r) => {
+    const u = new URL(r.request().url());
+    if (u.searchParams.get('lat') === '40.38') { await new Promise((res) => setTimeout(res, 1500)); return r.fulfill({ status: 200, contentType: 'application/json', body: body([], 'refused') }); }
+    return r.fulfill({ status: 200, contentType: 'application/json', body: body(alerts, status) });
+  });
+  await page.evaluate(() => sessionStorage.clear()); // the forecast kept in this browser for an hour, so the old point is asked again
+  await page.reload();
   await page.getByRole('button', { name: 'Edit' }).click();
-  await page.fill('#e-lat', '40.39'); // another place, so the forecast kept in this browser for an hour is not the one read
+  await page.fill('#e-lat', '40.39'); // the new place answers at once; the old one's slow answer must not overwrite it
   await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.locator('.notice')).toContainText('Warning in force.');
+  await page.waitForTimeout(2000);
   await expect(page.locator('.notice')).toContainText('Warning in force.');
   await expect(page.locator('.pill', { hasText: 'weather warning' })).toBeVisible();
 });
@@ -1198,6 +1221,51 @@ test('pages about your own plants ask no outside host for anything unless the re
   await expect.poll(() => outside.some((u) => u === `/plants/${acc} -> https://inaturalist-open-data.s3.amazonaws.com/photos/700/medium.jpg`), { timeout: 10000 }).toBe(true);
   expect(outside.every((u) => u.includes('inaturalist-open-data.s3.amazonaws.com'))).toBe(true);
   expect(api.some((u) => u.startsWith('/api/dossier') || /welwitschia|5411106/.test(u))).toBe(false); // still no key and no name to this server
+});
+
+test('hovering a species link on a page about your own plants sends nothing; the same link on a species page preloads (round thirteen, 2)', async ({ page }) => {
+  const data: string[] = [];
+  page.on('request', (r) => { if (r.url().includes('__data.json')) data.push(new URL(r.url()).pathname); });
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.getByRole('button', { name: /^Add/ }).click();
+  await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
+  await page.getByRole('link', { name: 'Species page' }).hover();
+  await page.waitForTimeout(700);
+  expect(data.filter((u) => u.includes('/species/'))).toEqual([]);
+  await page.goto('/');
+  await expect(page.locator('a.tile', { hasText: 'Copiapoa' }).first()).toBeVisible();
+  await page.locator('a.tile', { hasText: 'Copiapoa' }).first().hover(); // an own tile
+  await page.waitForTimeout(700);
+  expect(data.filter((u) => u.includes('/species/'))).toEqual([]);
+  // the public catalogue still preloads on hover: a visitor's browsing is not the collection
+  await page.getByRole('button', { name: /^All / }).click(); // the catalogue
+  await page.locator('.grow', { hasText: 'Welwitschia' }).click();
+  await page.locator('a.tile', { hasText: 'Welwitschia' }).first().hover();
+  await expect.poll(() => data.some((u) => u.includes('/species/welwitschia-mirabilis')), { timeout: 5000 }).toBe(true);
+});
+
+test('a label whose species could not be reached says so, and the sheet is not printed as if the species had no figures (round thirteen, 6)', async ({ page }) => {
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.getByRole('button', { name: /^Add/ }).click();
+  await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
+  await page.context().route('**/api/sheets**', (r) => r.fulfill({ status: 429, contentType: 'application/json', body: '{"error":"wait"}' }));
+  await page.goto('/labels');
+  await expect(page.locator('#lb-unchecked')).toContainText('One care line not checked');
+  await expect(page.locator('.page .label .care.unchecked')).toHaveText('care line not checked: the reference was not reached');
+  await expect(page.locator('#lb-print')).toBeEnabled();
+  await page.context().unroute('**/api/sheets**');
+  await page.locator('#lb-unchecked').getByRole('button', { name: 'Try again' }).click();
+  await expect(page.locator('.page .label .care', { hasText: 'hab. night' })).toHaveCount(1);
+  await expect(page.locator('#lb-unchecked')).toHaveCount(0);
+  // the skip box: cleared, 2.5 and 99 on a 30-cell sheet are 0, 2 and 29 blanks, never an error
+  await page.selectOption('#lb-sheet', '5160');
+  await page.fill('#lb-skip', '2.5');
+  await expect(page.locator('.page').first().locator('.label').nth(2).locator('.no')).toBeVisible();
+  await page.fill('#lb-skip', '99');
+  await expect(page.locator('.page')).toHaveCount(1);
+  await expect(page.locator('.page').first().locator('.label').nth(29).locator('.no')).toBeVisible();
+  await page.fill('#lb-skip', '');
+  await expect(page.locator('.page').first().locator('.label').nth(0).locator('.no')).toBeVisible();
 });
 
 test('a returning grower never sees the catalogue or "You grow 0" while the collection opens; a first visit sees the catalogue at once', async ({ page }) => {

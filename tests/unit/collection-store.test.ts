@@ -453,3 +453,21 @@ describe('round twelve', () => {
   });
 });
 
+describe('round thirteen', () => {
+  it('two commits, each bumping a different field past stamps that differ only by writer, do not collide in the store (round thirteen, 7)', async () => {
+    const { collection } = await fresh('testdevice');
+    // Two tabs of this device (the device id with two tab tags) stamped two fields of one record at the same wall and count
+    // while the clock was three months fast: applied, since they are this device's own, and never followed by the clock.
+    const wall = Date.now() + 90 * 86_400_000;
+    await collection.ingest([remote(wall, 3, 'testdevicea1b2', 'accession', 'X-1', 'notes', 'n1'), remote(wall, 3, 'testdevicec3d4', 'accession', 'X-1', 'price', 'p1'), remote(wall, 4, 'testdevicea1b2', 'accession', 'X-1', 'taxonName', 'Lithops')], 'server');
+    await collection.put('accession', 'X-1', { notes: 'n2' }); // stepped past notes' stamp: wall, count 4, this writer
+    await collection.put('accession', 'X-1', { price: 'p2' }); // stepped past price's stamp: the same wall and count, the same writer, unless the store is checked
+    console.log('STAMPS', [...mem.changes.values()].map((c) => c.t + ' ' + c.field + '=' + c.value));
+    expect(collection.lastWriteError).toBeNull();
+    expect(collection.accession('X-1')?.notes).toBe('n2');
+    expect(collection.accession('X-1')?.price).toBe('p2');
+    const again = (await reload()) as typeof collection;
+    expect(again.accession('X-1')?.notes).toBe('n2');
+    expect(again.accession('X-1')?.price).toBe('p2');
+  });
+});

@@ -314,3 +314,18 @@ describe('delete merging is order-independent', () => {
     expect(state.get('accession:x')?.pot).toBe('9');
   });
 });
+
+describe('a removal under a repeated stamp (round thirteen, 8)', () => {
+  it('folds to "removed" whichever copy arrives first', () => {
+    const t0 = hlcEncode({ wall: 1_700_000_000_000, count: 0, device: 'dev1' });
+    const t1 = hlcEncode({ wall: 1_700_000_000_000, count: 1, device: 'dev1' });
+    const base: Change = { t: t0, kind: 'accession', id: 'r1', field: 'taxonName', value: 'Aloe' };
+    const gone: Change = { t: t1, kind: 'accession', id: 'r1', field: '_deleted', value: true };
+    const kept: Change = { t: t1, kind: 'accession', id: 'r1', field: '_deleted', value: false };
+    for (const order of [[base, gone, kept], [base, kept, gone]]) {
+      const state = new Map();
+      apply(state, order, new Map());
+      expect(state.get('accession:r1')?._deleted).toBe(true);
+    }
+  });
+});

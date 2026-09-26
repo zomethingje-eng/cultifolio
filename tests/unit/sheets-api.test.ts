@@ -38,17 +38,28 @@ describe('/api/sheets', () => {
   it('derives a bucket from the fixture dossiers when no file exists, and puts each bucket in the edge cache under its own canonical URL with the corpus id', async () => {
     const cache = memCache();
     const b = bucketOf('copiapoa-cinerea');
-    const r = await call(`c=abc&b=${b}`, { cache });
+    const r = await call(`c=fixture&b=${b}`, { cache });
     expect(r.status).toBe(200);
     const sheets = (await r.json()) as Array<{ slug: string }>;
     expect(sheets.map((s) => s.slug)).toContain('copiapoa-cinerea');
-    expect(cache.puts).toEqual([`http://x/api/sheets?b=${b}&c=abc`]);
+    expect(cache.puts).toEqual([`http://x/api/sheets?b=${b}&c=fixture`]);
     // the same bucket asked for again, in another grouping or order, is answered from the entry and nothing is derived
     const other = [...Array(32).keys()].map((i) => i.toString(16).padStart(2, '0')).find((x) => x !== b)!;
-    cache.store.set(`http://x/api/sheets?b=${other}&c=abc`, new Response('[]', { headers: { 'content-type': 'application/json' } }));
-    const again = await call(`b=${other},${b}&c=abc`, { cache });
+    cache.store.set(`http://x/api/sheets?b=${other}&c=fixture`, new Response('[]', { headers: { 'content-type': 'application/json' } }));
+    const again = await call(`b=${other},${b}&c=fixture`, { cache });
     expect(((await again.json()) as unknown[]).length).toBe(sheets.length);
     expect(cache.puts).toHaveLength(1);
+  });
+  it('a request under another corpus id is answered but never cached, at the edge or by the browser (round thirteen, 4)', async () => {
+    const cache = memCache();
+    const b = bucketOf('copiapoa-cinerea');
+    const r = await call(`c=stale&b=${b}`, { cache });
+    expect(r.status).toBe(200);
+    expect(r.headers.get('cache-control')).toBe('no-store');
+    expect(cache.puts).toEqual([]);
+    const none = await call(`b=${b}`, { cache }); // no id at all: the same
+    expect(none.headers.get('cache-control')).toBe('no-store');
+    expect(cache.puts).toEqual([]);
   });
   it('serves the bucket file the corpus build wrote when the store has one: one read, nothing derived', async () => {
     const b = '07';
@@ -57,12 +68,21 @@ describe('/api/sheets', () => {
     const r = await call(`b=${b}`, { store });
     expect(await r.json()).toEqual(file);
   });
-  it('a derived bucket counts against the sheets rate bucket; a cached one does not', async () => {
+  it('each derived bucket counts against the sheets rate bucket; a cached one does not (round thirteen, 12)', async () => {
     const cache = memCache();
-    for (let i = 0; i < RATE.sheets.limit; i++) expect((await call(`b=${bucketOf('copiapoa-cinerea')}&c=${i}`, { cache, ip: '9.9.9.9' })).status).toBe(200);
-    const stop = await call(`b=${bucketOf('copiapoa-cinerea')}&c=over`, { cache, ip: '9.9.9.9' });
+    const all = [...Array(32).keys()].map((i) => i.toString(16).padStart(2, '0'));
+    // eight requests of four buckets each is thirty-two derivations, then every derivation is refused, and a cached bucket is not charged
+    let n = 0;
+    while (n + 4 <= RATE.sheets.limit) {
+      const four = [0, 1, 2, 3].map((k) => all[(n + k) % 32]);
+      const res = await call(`b=${four.join(',')}&c=${n}`, { cache, ip: '9.9.9.9' }); // a stale id: nothing is cached, so every bucket derives
+      expect(res.status).toBe(200);
+      n += 4;
+    }
+    const stop = await call(`b=${all[0]}&c=over`, { cache, ip: '9.9.9.9' });
     expect(stop.status).toBe(429);
-    const hit = await call(`b=${bucketOf('copiapoa-cinerea')}&c=0`, { cache, ip: '9.9.9.9' });
+    cache.store.set(`http://x/api/sheets?b=${all[0]}&c=fixture`, new Response('[]', { headers: { 'content-type': 'application/json' } }));
+    const hit = await call(`b=${all[0]}&c=fixture`, { cache, ip: '9.9.9.9' });
     expect(hit.status).toBe(200);
   });
 });

@@ -82,6 +82,8 @@ class Sync {
   busy = $state<string | null>(null);
   lastSync = $state<string | null>(null);
   lastError = $state<string | null>(null);
+  /** Runs that finished on this page, well or badly: the sync page shows it, so a test (or a person) can tell a new "Synced" from the one that was already there (round thirteen, B2). */
+  runs = $state(0);
   pending = $state(0);
   /** Batches on the server this device could not read; the sync page says so. */
   quarantined = $state<Array<{ key: string; error: string; at: string }>>([]);
@@ -320,6 +322,7 @@ class Sync {
       throw e;
     } finally {
       this.busy = null;
+      this.runs++;
     }
   }
 
@@ -462,13 +465,14 @@ class Sync {
 
   /**
    * `have` only has to cover what a listing can show again: the overlap window before the cursor. Keys whose arrival
-   * is well behind it are dropped (a batch listed again after that is folded again, which the log makes harmless);
-   * keys with no recorded arrival are kept until they are listed once.
+   * is well behind it are dropped, and so are keys with no recorded arrival (written before arrivals were kept: a
+   * listing can only show them again inside the overlap, and a batch folded twice is harmless; round thirteen, 9).
+   * Quarantined keys stay, whatever their age.
    */
   private pruneHave(m: SyncMeta): void {
     const at = m.haveAt ?? {};
     const floor = m.since - 10 * OVERLAP_MS;
-    const keep = m.have.filter((k) => !(k in at) || at[k] >= floor || m.quarantined?.some((q) => q.key === k));
+    const keep = m.have.filter((k) => (k in at && at[k] >= floor) || m.quarantined?.some((q) => q.key === k));
     if (keep.length !== m.have.length) {
       m.have = keep;
       const set = new Set(keep);
@@ -476,15 +480,52 @@ class Sync {
     }
   }
 
+  /**
+   * Fetch one batch by key and fold it. The bytes are read before anything is judged: a connection that drops mid-body
+   * throws here, the run stops, and the batch is fetched again next run. Only bytes that arrived whole and cannot be
+   * opened are set aside (by name, so they never block what came after them). True when the batch folded.
+   */
+  private async takeBatch(m: SyncMeta, key: string): Promise<boolean> {
+    const res = await fetch(`${this.base}/api/sync/log/${key}?vault=${this.keys!.id}`, { headers: this.h() });
+    if (res.status === 429) this.limited(res);
+    if (!res.ok) throw new Error(`batch ${key}: ${res.status}`);
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    let changes: Change[] | null = null;
+    try {
+      const batch = await openJson<{ v: number; device: string; changes: unknown }>(this.keys!, 'log', bytes);
+      if (!batch || typeof batch !== 'object' || batch.v !== 1) throw new Error('not a batch this version understands');
+      changes = validateChanges(batch.changes);
+    } catch (e) {
+      this.note('quarantined', key, e instanceof Error ? e.message : String(e));
+      return false;
+    }
+    // Storing can fail (a full phone). That is not the batch's fault: nothing is noted, the cursor stays before it,
+    // and the error stops this run, so the next run fetches it again.
+    const hold = this.hold();
+    const ahead = changes.filter((c) => isHeld(c.t, hold));
+    if (ahead.length) {
+      // Stamped too far ahead of this clock: into the log, not into the fold, until the clock reaches them.
+      await appendChanges(ahead, true);
+      for (const c of ahead) if (!m.held?.includes(c.t)) (m.held ??= []).push(c.t);
+      this.setHeld();
+    }
+    if (ahead.length < changes.length) await collection.ingest(ahead.length ? changes.filter((c) => !isHeld(c.t, hold)) : changes, 'server', { repair: false });
+    return true;
+  }
+
   private async pull(): Promise<void> {
     const m = this.meta!;
     // A batch set aside by an earlier build may be one this build can read (a newer batch format, a kind it did not
-    // know): drop it from the quarantine and from `have`, so this run fetches it again (round twelve, 2).
-    if (m.quarantined?.some((q) => q.build !== BUILD)) {
-      const again = new Set(m.quarantined.filter((q) => q.build !== BUILD).map((q) => q.key));
-      m.quarantined = m.quarantined.filter((q) => !again.has(q.key));
-      m.have = m.have.filter((k) => !again.has(k));
-      this.quarantined = [...m.quarantined];
+    // know). It arrived long before the cursor, so a listing would never show it again: it is fetched by key, here,
+    // and leaves the quarantine only once it has folded (round thirteen, 1; the round-twelve version dropped the entry
+    // and relied on a listing that could not reach it).
+    const again = (m.quarantined ?? []).filter((q) => q.build !== BUILD);
+    for (const q of again) {
+      this.busy = 'Reading a batch set aside by an earlier build…';
+      m.quarantined = m.quarantined!.filter((x) => x.key !== q.key); // out, so a failure this time is noted afresh by this build
+      const ok = await this.takeBatch(m, q.key);
+      if (ok && !m.have.includes(q.key)) m.have.push(q.key);
+      this.quarantined = [...(m.quarantined ?? [])];
       await setMeta(META, m);
     }
     // The first page of a run starts a minute before the cursor; later pages continue strictly after the last batch listed.
@@ -504,34 +545,7 @@ class Sync {
         for (const b of batches) {
           if (!have.has(b.key)) {
             this.busy = `Receiving ${++n} of ${fresh.length}…`;
-            const res = await fetch(`${this.base}/api/sync/log/${b.key}?vault=${this.keys!.id}`, { headers: this.h() });
-            if (res.status === 429) this.limited(res);
-            if (!res.ok) throw new Error(`batch ${b.key}: ${res.status}`);
-            // The bytes are read before anything is judged: a connection that drops mid-body throws here, the run stops,
-            // and the batch is fetched again next run. Only bytes that arrived whole and cannot be opened are set aside.
-            const bytes = new Uint8Array(await res.arrayBuffer());
-            let changes: Change[] | null = null;
-            try {
-              const batch = await openJson<{ v: number; device: string; changes: unknown }>(this.keys!, 'log', bytes);
-              if (!batch || typeof batch !== 'object' || batch.v !== 1) throw new Error('not a batch this version understands');
-              changes = validateChanges(batch.changes);
-            } catch (e) {
-              // Bad bytes, a wrong key, a malformed change: set it aside by name so it never blocks what came after it.
-              this.note('quarantined', b.key, e instanceof Error ? e.message : String(e));
-            }
-            if (changes) {
-              // Storing can fail (a full phone). That is not the batch's fault: nothing is noted, the cursor stays
-              // before it, and the error stops this run, so the next run fetches it again.
-              const hold = this.hold();
-              const ahead = changes.filter((c) => isHeld(c.t, hold));
-              if (ahead.length) {
-                // Stamped too far ahead of this clock: into the log, not into the fold, until the clock reaches them.
-                await appendChanges(ahead, true);
-                for (const c of ahead) if (!m.held?.includes(c.t)) (m.held ??= []).push(c.t);
-                this.setHeld();
-              }
-              if (ahead.length < changes.length) await collection.ingest(ahead.length ? changes.filter((c) => !isHeld(c.t, hold)) : changes, 'server', { repair: false });
-            }
+            await this.takeBatch(m, b.key);
             m.have.push(b.key);
             have.add(b.key);
           }

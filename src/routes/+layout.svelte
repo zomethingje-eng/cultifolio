@@ -50,6 +50,8 @@
     { href: 'https://github.com/zomethingje-eng/cultifolio', label: 'Source' }
   ];
   let mainEl = $state<HTMLElement | null>(null);
+  /** The routes about the grower's own collection: what they link to says what is grown. */
+  const privateRoute = $derived(/^\/(plants|sowings|benches|labels|backup|sync|settings|frost)(\/|$)/.test(page.url.pathname));
   // How many pages this session has moved through inside the app: the back control goes to the previous one when there is one.
   let hops = 0;
   afterNavigate((nav) => {
@@ -173,7 +175,9 @@
 {#if vaultNote}<p class="vaultnote">{vaultNote}</p>{/if}
 
 <a class="skip" href="#main">Skip to content</a>
-<main class="wrap" id="main" tabindex="-1" bind:this={mainEl}>
+<!-- On the pages about your own plants, links are not preloaded on hover: a preload of a species page sends that species' name to the
+     server before any click, which the bucket lookups exist to avoid; a tap or click is a visit the grower chose (round thirteen, 2). -->
+<main class="wrap" id="main" tabindex="-1" bind:this={mainEl} data-sveltekit-preload-data={privateRoute ? 'off' : 'hover'}>
   <ToastBar />
   <InstallBar />
   {@render children()}

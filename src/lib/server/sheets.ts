@@ -16,8 +16,9 @@ export const sheetsPath = (bucket: string) => `s/v${DOSSIER_V}/sheets/${bucket}.
  * else derived here from the dossiers (a few hundred reads, sixteen at a time; the fixture corpus and a corpus uploaded
  * before the files existed). Kept ten minutes in this isolate; the route puts it in the edge cache (round twelve, 8).
  */
-export async function sheetsIn(platform: Platform, fetch: Fetch, bucket: string): Promise<Sheet[]> {
-  const hit = cache.get(bucket);
+export async function sheetsIn(platform: Platform, fetch: Fetch, bucket: string, corpus = ''): Promise<Sheet[]> {
+  const ck = `${corpus}:${bucket}`; // keyed by corpus as well as bucket, so an isolate that outlives a refresh does not serve the old one (round thirteen, 4)
+  const hit = cache.get(ck);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.sheets;
   let out: Sheet[] | null = await sheetsFile(platform, fetch, bucket);
   if (!out) {
@@ -29,7 +30,7 @@ export async function sheetsIn(platform: Platform, fetch: Fetch, bucket: string)
       for (const s of got) if (s) out.push(s);
     }
   }
-  cache.set(bucket, { at: Date.now(), sheets: out });
+  cache.set(ck, { at: Date.now(), sheets: out });
   return out;
 }
 

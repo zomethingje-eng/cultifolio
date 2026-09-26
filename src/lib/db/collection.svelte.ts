@@ -651,7 +651,9 @@ class Collection {
       // Whether a record is deleted is decided against its latest edit to any field, so a removal must clear that too.
       if (c.field === '_deleted') { const e = this.seen.get(k + '\0*'); if (e !== undefined && (prev === undefined || hlcCompare(e, prev) > 0)) prev = e; }
       if (prev !== undefined && hlcCompare(c.t, prev) <= 0) c.t = hlcAfter(prev, this.writer);
-      while (given.has(c.t)) c.t = hlcAfter(c.t, this.writer); // a field left at real time keeps its stamp; only an actual collision moves
+      // A field left at real time keeps its stamp; only an actual collision moves: with a stamp given out in this commit, or with
+      // one already in the fold (two commits bumped past the same held stamp, round thirteen, 7), since the store refuses a repeat.
+      while (given.has(c.t) || this.applied.has(c.t)) c.t = hlcAfter(c.t, this.writer);
       given.add(c.t);
     }
     return changes;
@@ -829,6 +831,9 @@ class Collection {
           // everywhere, instead of two values under one stamp (round twelve, 3).
           const device = ('zz' + tag36(kind + ':' + r.id + ':' + fresh)).slice(0, 16);
           const stamp = (count: number) => hlcEncode({ wall, count, device });
+          // A repair already in the log (folded, or stored and held because its stamp is ahead of this clock) is not
+          // minted again: the store would refuse the repeat stamp on every pull (round thirteen, 7).
+          if (this.applied.has(stamp(0))) continue;
           changes.push({ t: stamp(0), kind, id: r.id, field: kind === 'accession' ? 'acc' : 'no', value: fresh });
           const eid = 'e' + wall.toString(36) + '00' + device;
           // The day is taken in UTC, not the reader's zone: two devices in different zones must write the identical note, or the one that arrives second wins by chance.

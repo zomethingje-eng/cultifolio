@@ -47,6 +47,8 @@ describe('v2 importer', () => {
     expect(c.acquired).toBe('2025-03-02');
     // The number is a field as well as the id, so the vault's ledger of issued numbers sees every imported one (round twelve, 6).
     expect(changes.filter((ch) => ch.kind === 'accession' && ch.field === 'acc').map((ch) => ch.value).sort()).toEqual(['2024-0001', '2024-0002', '2025-0003']);
+    // and the fields before it keep the stamps an earlier build gave them: taxonName is the record's first change, count 0
+    expect(changes.find((ch) => ch.id === '2025-0003' && ch.field === 'taxonName')!.t).toMatch(/-0000-v2imp$/);
     const evs = live(state, 'event') as unknown as Array<{ acc: string; t: string; measures?: Record<string, number> }>;
     expect(evs.filter((e) => e.acc === '2025-0003')).toHaveLength(3);
     expect(evs.find((e) => e.t === 'measure')?.measures).toEqual({ diam: 22, h: 15 });
@@ -67,8 +69,11 @@ describe('v2 importer', () => {
     expect(withM.every((c) => wallOf(c) === 1_700_000_000_000)).toBe(true); // the plant and its embedded events
     const without = changes.filter((c) => c.id === '2024-0001');
     expect(without.every((c) => wallOf(c) === 1_800_000_000_000 - 3_600_000)).toBe(true);
-    const tomb = changes.find((c) => c.id === '2024-0002');
+    const tomb = changes.find((c) => c.id === '2024-0002' && c.field === '_deleted');
     expect(wallOf(tomb!)).toBe(1_710_000_000_000); // the v2 deletion time
+    expect(tomb!.t).toBe('1710000000000-0000-v2imp'); // the stamp earlier builds gave the removal (round thirteen, 5)
+    const tombNo = changes.find((c) => c.id === '2024-0002' && c.field === 'acc')!;
+    expect(tombNo.t < tomb!.t).toBe(true); // the number is stamped before the removal, so the removal stands
     // An edit here after the v2 modification time wins on every device; a second import cannot beat it.
     const again = importV2(backup, { now: 1_800_000_000_000 + 86_400_000 });
     expect(again.changes.filter((c) => c.id === '2025-0003').map((c) => c.t)).toEqual(withM.filter((c) => c.id === '2025-0003').map((c) => c.t));

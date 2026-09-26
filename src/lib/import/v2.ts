@@ -171,7 +171,6 @@ export function importV2(json: unknown, opts: ImportOpts = {}): { changes: Chang
       const method = /cutting|offset|leaf|division|graft/i.test(String(w?.method ?? w?.type ?? '')) ? String(w?.method ?? w?.type).toLowerCase().replace(/s$/, '') : 'seed';
       const src = (w?.source ?? {}) as Record<string, unknown>;
       push('sowing', id, {
-        no: id, // as above: on the ledger, never reissued
         taxonName,
         taxonKey: (taxonId && opts.summaries?.[taxonId]?.gk) ?? null,
         method,
@@ -217,7 +216,6 @@ export function importV2(json: unknown, opts: ImportOpts = {}): { changes: Chang
       const taxonName = (a.taxonId && taxonNames.get(a.taxonId)) || a.nameAsReceived || a.taxonId || 'Unknown';
       const status = a.status === 'dead' ? 'dead' : a.status === 'archived' ? 'archived' : 'growing';
       push('accession', a.acc, {
-        acc: a.acc, // the number as a field too, so the vault's ledger of issued numbers sees it (round twelve, 6)
         taxonName,
         taxonKey: (a.taxonId && opts.summaries?.[a.taxonId]?.gk) ?? null,
         nameAsReceived: a.nameAsReceived ?? null,
@@ -232,7 +230,11 @@ export function importV2(json: unknown, opts: ImportOpts = {}): { changes: Chang
         sourceForm: a.source?.form ?? null,
         price: a.source?.price ?? null,
         notes: a.notes ?? null,
-        sowingId: a.sowId ?? null
+        sowingId: a.sowId ?? null,
+        // The number as a field too, so the vault's ledger of issued numbers sees it (round twelve, 6). Last, so the
+        // fields before it keep the stamps an earlier build gave them: the same file imported on two builds must give
+        // the same stamp to the same change (round thirteen, 5).
+        acc: a.acc
       });
       report.accessions++;
       for (const e of a.events ?? []) {
@@ -257,7 +259,10 @@ export function importV2(json: unknown, opts: ImportOpts = {}): { changes: Chang
       if (!m || typeof ts !== 'number') continue;
       if (here('accession', m[1])) continue;
       at(modTime(ts, now) ?? base);
-      changes.push({ t: t(), kind: 'accession', id: m[1], field: 'acc', value: m[1] }); // a removed plant's number stays issued: on the ledger, never given again
+      // A removed plant's number stays issued (on the ledger, never given again), so the number is a field here too. It is
+      // stamped one millisecond BEFORE the removal, under its own writer tag, so the removal keeps the stamp an earlier
+      // build gave it (round thirteen, 5) and stays a removal: an edit stamped after a removal would undo it.
+      changes.push({ t: hlcEncode({ wall: wall - 1, count: 0, device: device + 'n' }), kind: 'accession', id: m[1], field: 'acc', value: m[1] });
       changes.push({ t: t(), kind: 'accession', id: m[1], field: '_deleted', value: true });
     }
   }

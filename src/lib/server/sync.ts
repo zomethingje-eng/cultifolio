@@ -483,8 +483,8 @@ export const RATE = {
   names: { limit: 300, windowMs: 600_000 },
   /** A forecast: the frost page and the front strip ask once an hour per site; each distinct coordinate is a call to MET Norway under this site's name. */
   forecast: { limit: 60, windowMs: 600_000 },
-  /** A sheet bucket the edge did not hold: a device asks for at most 32 in a life, and a bucket not yet written by the corpus build is a few hundred R2 reads. */
-  sheets: { limit: 40, windowMs: 600_000 }
+  /** A sheet bucket the edge did not hold, charged per bucket derived: a device asks for at most 32 in a life, and a bucket is one R2 read when the corpus build wrote it, a few hundred when not. */
+  sheets: { limit: 200, windowMs: 600_000 }
 } as const;
 export type RateBucket = keyof typeof RATE;
 

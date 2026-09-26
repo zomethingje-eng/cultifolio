@@ -59,7 +59,6 @@
     await collection.put('location', id, { name: f.name.trim() || loc?.name, type: f.kind || null, indoor: f.indoor === '' ? null : f.indoor === 'yes', floorC: (() => { const v = num(f.floorC); return v == null ? null : units.current === 'us' ? +fToC(v).toFixed(2) : v; })(), ppfd: num(f.ppfd), lightHours: num(f.lightHours), lat: num(f.lat), lon: num(f.lon), altM: num(f.altM), notes: f.notes.trim() || null });
     if ((f.parent ?? null) !== (loc?.parentId ?? null) || collection.needsHome(id)) await collection.moveLocation(id, f.parent ?? null);
     editing = false;
-    forecast = null;
   }
   function useMyLocation() {
     navigator.geolocation?.getCurrentPosition((p) => { f.lat = p.coords.latitude.toFixed(4); f.lon = p.coords.longitude.toFixed(4); if (p.coords.altitude != null) f.altM = Math.round(p.coords.altitude).toString(); });
@@ -94,15 +93,21 @@
   const daysSince = (d: string | null) => (d ? daysBetween(d) : null);
 
   /* ---- frost watch for outdoor / unheated places with coordinates ---- */
-  let forecast = $state<{ forecast: Forecast; alerts: Alert[]; alertsStatus?: 'ok' | 'none' | 'refused' | 'n/a'; risk: { level: string; text: string }; attribution: string[] } | null>(null);
+  type ForecastAnswer = { forecast: Forecast; alerts: Alert[]; alertsStatus?: 'ok' | 'none' | 'refused' | 'n/a'; risk: { level: string; text: string }; attribution: string[] };
+  /** The forecast, with the conditions it was asked for: an answer is shown only while those are still the place's (round thirteen, B1). */
+  let got = $state<{ key: string; answer: ForecastAnswer } | null>(null);
   let forecastErr = $state('');
   const watchable = $derived(cond.lat != null && cond.lon != null && cond.indoor !== true);
+  const condKey = $derived(watchable ? `${cond.lat},${cond.lon},${cond.altM ?? ''},${units.current}` : '');
+  const forecast = $derived(got && got.key === condKey ? got.answer : null);
   $effect(() => {
-    if (!watchable || forecast) return;
-    getForecast<NonNullable<typeof forecast>>(cond.lat!, cond.lon!, units.current, cond.altM)
-      .then((r) => { if (!r.ok) { forecastErr = forecastRefusal(r.status); return; } forecast = r.body; })
+    if (!condKey || (got && got.key === condKey)) return;
+    const key = condKey; // what this request is for; a place edited before it answers makes the answer stale, and a stale answer is dropped
+    forecastErr = '';
+    getForecast<ForecastAnswer>(cond.lat!, cond.lon!, units.current, cond.altM)
+      .then((r) => { if (key !== condKey) return; if (!r.ok) { forecastErr = forecastRefusal(r.status); return; } got = { key, answer: r.body }; })
       // Whatever went wrong, the page says the check did not happen, never a status code, and never that the nights are clear; our own refusals are said as ours.
-      .catch(() => (forecastErr = forecastRefusal(null)));
+      .catch(() => { if (key === condKey) forecastErr = forecastRefusal(null); });
   });
   /**
    * A heater set-point protects the plants even outdoors, so with a floor set the question is whether the outside drops
@@ -114,8 +119,9 @@
     const floor = cond.floorC;
     if (floor == null) return forecast.risk;
     if (forecast.risk.level === 'warning') return forecast.risk;
-    const nights = forecast.forecast.days.filter((d) => d.tmin < floor);
-    return nights.length ? { level: 'floor', text: `Forecast drops below this place's ${temp(floor, units.current, 1)} floor on ${nights[0].date} (${temp(nights[0].tmin, units.current, 1)} outside).` } : { level: 'none', text: `Outside stays above the ${temp(floor, units.current, 1)} floor for the ${forecast.forecast.hoursCovered} hours of forecast.` };
+    // A floor is the lowest the plants should see, so a night that reaches it exactly counts (round thirteen, 11).
+    const nights = forecast.forecast.days.filter((d) => d.tmin <= floor);
+    return nights.length ? { level: 'floor', text: `Forecast reaches this place's ${temp(floor, units.current, 1)} floor on ${nights[0].date} (${temp(nights[0].tmin, units.current, 1)} outside).` } : { level: 'none', text: `Outside stays above the ${temp(floor, units.current, 1)} floor for the ${forecast.forecast.hoursCovered} hours of forecast.` };
   });
   const alertsUnchecked = $derived(forecast?.alertsStatus === 'refused');
 

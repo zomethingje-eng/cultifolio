@@ -237,7 +237,7 @@
 
 {#snippet plantsFound()}
   {#if plantHits.length}
-    <div class="plantsfound" role="status">
+    <div class="plantsfound" role="status" data-sveltekit-preload-data="off">
       {#each plantHits as a (a.id)}<a class="azrow accrow" href="/plants/{accNo(a)}"><span class="im"></span><span><span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}‘{a.cultivar}’{/if}</span><span class="fam">your plant{a.locationId ? ` · ${collection.locationName(a.locationId)}` : ''}</span></span><span class="fig">open →</span></a>{/each}
     </div>
   {/if}
@@ -311,13 +311,13 @@
     {/if}
     {#if mineTiles.grow.length}
       <h2 class="q grouptitle">You grow</h2>
-      <div class="hgrid">
+      <div class="hgrid" data-sveltekit-preload-data="off">
         {#each mineTiles.grow as c (c.slug)}{@render tile(c)}{/each}
       </div>
     {/if}
     {#if mineTiles.follow.length}
       <h2 class="q grouptitle">Following</h2>
-      <div class="hgrid">
+      <div class="hgrid" data-sveltekit-preload-data="off">
         {#each mineTiles.follow as c (c.slug)}{@render tile(c)}{/each}
       </div>
     {/if}

@@ -11,6 +11,7 @@
   import SpeciesPicker from '$lib/ui/SpeciesPicker.svelte';
   import LocationPicker from '$lib/ui/LocationPicker.svelte';
   import { parseName, slugify, type NameKind, speciesSlug, speciesOf } from '$core/names';
+  import { numberOrNull } from '$core/units';
   import { sheetForName } from '$lib/ui/index.svelte';
   import type { Provenance } from '$lib/db/types';
   /** The reference's key for a species-rank name when the reference answers; otherwise the key as given (the plant page repairs it later). */
@@ -57,7 +58,9 @@
   let sourceForm = $state('plant');
   let locationId = $state<string | null>(null);
   let notes = $state('');
-  let count = $state(1);
+  let count = $state<number | null>(1); // null once cleared
+  /** Whole plants only, one to two hundred: 2.5 is two, a cleared box is one, and a number is never minted for a fraction (round thirteen, 10). */
+  const countN = $derived(Math.min(200, Math.max(1, Math.floor(numberOrNull(count) ?? 1))));
   let useOwnNumber = $state(false);
   let ownNumber = $state('');
   const ownTaken = $derived(useOwnNumber && !!ownNumber.trim() && collection.isNumberTaken(ownNumber));
@@ -75,7 +78,7 @@
     const slug = speciesSlug(taxonName);
     if (!collection.taxon(slug)) await collection.put('taxon', slug, { name: speciesOf(taxonName), gbifKey: taxonKey });
     let firstId = '';
-    for (let i = 0; i < Math.max(1, count); i++) {
+    for (let i = 0; i < countN; i++) {
       const rec = await collection.addAccession({
         acc: useOwnNumber && ownNumber.trim() && i === 0 ? ownNumber.trim() : undefined,
         taxonName,
@@ -97,8 +100,8 @@
       if (!firstId) firstId = accNo(rec);
     }
     try { if (locationId) localStorage.setItem('cultifolio.lastLocation', locationId); } catch { /* fine */ }
-    toast.show(count > 1 ? `${count} plants added` : `${firstId} added`);
-    goto(count > 1 ? '/plants' : `/plants/${firstId}`);
+    toast.show(countN > 1 ? `${countN} plants added` : `${firstId} added`);
+    goto(countN > 1 ? '/plants' : `/plants/${firstId}`);
   }
 </script>
 
@@ -106,7 +109,7 @@
 
 <form class="form" onsubmit={save}>
   <PageHead title="Add a plant" kick="My plants" places={false}>
-    {#snippet subline()}{#if count > 1}They will be numbered from <span class="accno">{nextNo}</span>, one each.{:else}It will be numbered <span class="accno">{useOwnNumber && ownNumber ? ownNumber : nextNo}</span>.{/if} A number is never reused.{/snippet}
+    {#snippet subline()}{#if countN > 1}They will be numbered from <span class="accno">{nextNo}</span>, one each.{:else}It will be numbered <span class="accno">{useOwnNumber && ownNumber ? ownNumber : nextNo}</span>.{/if} A number is never reused.{/snippet}
   </PageHead>
   <div class="cult sheet">
 
@@ -147,7 +150,7 @@
 
   <div class="two">
     <div class="field"><span>Place</span><LocationPicker bind:value={locationId} id="f-loc" label="Place" /></div>
-    <label class="field"><span>How many</span><input id="f-count" type="number" min="1" max="200" bind:value={count} /><span class="faint small">Each gets its own number.</span></label>
+    <label class="field"><span>How many</span><input id="f-count" type="number" min="1" max="200" step="1" bind:value={count} /><span class="faint small">Each gets its own number.{#if numberOrNull(count) != null && numberOrNull(count) !== countN} {countN === 1 ? 'One plant' : `${countN} plants`} will be added.{/if}</span></label>
   </div>
 
   <label class="field"><span>Notes</span><textarea id="f-notes" rows="3" bind:value={notes}></textarea></label>
@@ -161,7 +164,7 @@
 
   <div class="actions">
     <a class="btn" href="/plants">Cancel</a>
-    <button class="btn pri" type="submit" disabled={!name.trim() || busy || ownTaken}>Add{count > 1 ? ` ${count} plants` : ''}</button>
+    <button class="btn pri" type="submit" disabled={!name.trim() || busy || ownTaken}>Add{countN > 1 ? ` ${countN} plants` : ''}</button>
   </div>
 </form>
 

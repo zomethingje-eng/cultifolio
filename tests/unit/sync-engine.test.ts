@@ -569,6 +569,30 @@ describe('a batch that cannot be read is set aside, not a wall', () => {
     expect(B2.sync.quarantined).toHaveLength(1);
     expect((m.meta.get('sync') as { quarantined: Array<{ build?: string }> }).quarantined[0].build).not.toBe('older-build');
   });
+  it('a readable batch that an earlier build set aside is fetched by key, folded, and leaves the quarantine, although no listing would show it again (round thirteen, 1)', async () => {
+    const r2 = fakeR2();
+    const A = await boot(newMem('aaaaaaaaaaaa'), r2);
+    const p = await A.collection.addAccession({ taxonName: 'Lithops', acc: 'A-1' });
+    await A.sync.setup(KEY, 'create');
+    const key = logKeys(r2)[0].split('/log/')[1].replace(/\.bin$/, '');
+    // Device D: the batch is on file as set aside by an older build, not folded, and the cursor is a day past its arrival.
+    const D = await boot(newMem('dddddddddddd'), r2);
+    await D.sync.setup(KEY, 'join');
+    expect(D.collection.accession(p.id)).toBeDefined();
+    const m = mem;
+    const meta = m.meta.get('sync') as { have: string[]; since: number; quarantined?: Array<{ key: string; error: string; at: string; build?: string }> };
+    for (const t of [...m.changes.keys()]) m.changes.delete(t); // as if it had never folded
+    meta.quarantined = [{ key, error: 'not a batch this version understands', at: new Date().toISOString(), build: 'older-build' }];
+    meta.since += 86_400_000;
+    m.meta.set('sync', meta);
+    const D2 = await reboot(m, r2);
+    expect(D2.collection.accession(p.id)).toBeUndefined();
+    await D2.sync.run();
+    expect(D2.calls.filter((c) => c.includes(`/api/sync/log/${key}`))).toHaveLength(1);
+    expect(D2.collection.accession(p.id)).toBeDefined();
+    expect(D2.sync.quarantined).toHaveLength(0);
+    expect(D2.sync.lastError).toBeNull();
+  });
   it('a batch with a reserved field is refused whole: nothing of it is applied', async () => {
     const r2 = fakeR2();
     const B = await boot(newMem('bbbbbbbbbbbb'), r2);

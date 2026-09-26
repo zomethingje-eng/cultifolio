@@ -17,6 +17,7 @@
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import { sheetForName, sheetsFor, type Sheet as SpeciesSheet } from '$lib/ui/index.svelte';
   import { slugify, speciesSlug, speciesOf } from '$core/names';
+  import { numberOrNull } from '$core/units';
   import { careLine } from '$core/note';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
 
@@ -32,14 +33,15 @@
 
   let sheetK = $state<Sheet['k']>('5160');
   const sheet = $derived(SHEETS.find((s) => s.k === sheetK)!);
-  let skip = $state(0); // cells already used on a part-used sheet
+  let skip = $state<number | null>(0); // cells already used on a part-used sheet; null once cleared (Svelte binds an emptied number input to null)
+  /** The skip as a whole number inside the sheet: a cleared box is 0, 2.5 is 2, 99 on a 30-cell sheet is 29 (round thirteen, 10). */
   let withQr = $state(true);
   let withCare = $state(true);
   let withSource = $state(false);
   let q = $state('');
   let chosen = $state<Set<string>>(new Set());
   let qrs = $state<Record<string, string>>({});
-  let care = $state<Record<string, string>>({});
+  let care = $state<Record<string, string | null>>({}); // '' while asked, null when the reference was not reached
 
   onMount(async () => {
     site.load();
@@ -86,9 +88,17 @@
   const pickAll = (on: boolean) => (chosen = on ? new Set([...chosen, ...filtered.map((a) => a.id)]) : new Set([...chosen].filter((id) => !filtered.some((a) => a.id === id))));
 
   /** A plant's species sheet, by hash bucket: the labels page never names or keys the species it prints. Five Astrophytum labels are one lookup in one cached bucket. */
-  async function dossierFor(a: Accession): Promise<SpeciesSheet | null> {
+  async function dossierFor(a: Accession): Promise<SpeciesSheet | null | 'unreachable'> {
     const d = await sheetForName(a.taxonName, a.taxonKey, (k) => { if (a.taxonKey !== k) collection.put('accession', a.id, { taxonKey: k }); });
-    return d && d !== 'none' ? d : null;
+    return d === null ? 'unreachable' : d === 'none' ? null : d;
+  }
+  /** Care lines that could not be made because the reference was not reached: said on the sheet and on the page, never printed as if the species had no data (round thirteen, 6). */
+  const unchecked = $derived(picked.filter((a) => care[a.id] === null));
+  const pending = $derived(withCare && picked.some((a) => care[a.id] === '' && kindOf(a) !== 'hybrid'));
+  function retryCare() {
+    const again: Record<string, string | null> = { ...care };
+    for (const a of unchecked) delete again[a.id];
+    care = again;
   }
   // QR codes and care lines are made once per plant, lazily.
   $effect(() => {
@@ -99,6 +109,7 @@
       if (withCare && care[a.id] === undefined && kindOf(a) !== 'hybrid') {
         care = { ...care, [a.id]: '' };
         dossierFor(a).then(async (d) => {
+          if (d === 'unreachable') { care = { ...care, [a.id]: null }; return; } // not "no data": not reached
           const readerLat = site.current?.lat ?? collection.locations.map((l) => l.lat).find((x): x is number => x != null) ?? null;
           const line = careLine({ scientific: a.taxonName, family: d?.name.family, months: d?.climate.status === 'ok' ? d.climate.months : null, extremes: d?.climate.status === 'ok' ? (d.climate.extremes ?? null) : null, lat: d?.habitatLat ?? null, units: units.current }, { readerLat });
           care = { ...care, [a.id]: line };
@@ -109,7 +120,8 @@
 
   /** Cells per page, with `skip` blanks first; then pages. */
   const perPage = $derived(sheet.cols * sheet.rows);
-  const cells = $derived<Array<Accession | null>>([...Array(skip).fill(null), ...picked]);
+  const skipN = $derived(Math.min(Math.max(0, Math.floor(numberOrNull(skip) ?? 0)), Math.max(0, perPage - 1)));
+  const cells = $derived<Array<Accession | null>>([...Array(skipN).fill(null), ...picked]);
   const pages = $derived(Array.from({ length: Math.max(1, Math.ceil(cells.length / perPage)) }, (_, p) => cells.slice(p * perPage, (p + 1) * perPage)));
   const sourceLine = (a: Accession) => [a.sourceFrom, a.acquired].filter(Boolean).join(' · ');
   const tiny = $derived(sheet.h < 16);
@@ -132,8 +144,11 @@
         <label class="check"><input type="checkbox" bind:checked={withCare} /> Care line</label>
         <label class="check"><input type="checkbox" bind:checked={withSource} /> Source and date</label>
         <span class="grow"></span>
-        <button id="lb-print" class="btn pri" onclick={() => window.print()} disabled={!picked.length}>Print {picked.length} {picked.length === 1 ? 'label' : 'labels'}</button>
+        <button id="lb-print" class="btn pri" onclick={() => window.print()} disabled={!picked.length || pending}>{pending ? 'Reading the reference…' : `Print ${picked.length} ${picked.length === 1 ? 'label' : 'labels'}`}</button>
       </div>
+      {#if withCare && unchecked.length}
+        <div class="notice" id="lb-unchecked" role="status">{unchecked.length === 1 ? 'One care line' : `${unchecked.length} care lines`} not checked: the species reference could not be reached from here, which is not a statement that the species has no figures. Those labels say so. <button type="button" class="linkish" onclick={retryCare}>Try again</button> before printing.</div>
+      {/if}
     </div>
   </div>
 
@@ -167,7 +182,7 @@
             <div class="txt">
               <div class="no">{accNo(a)}{#if a.fieldNumber} <span class="fn">{a.fieldNumber}</span>{/if}</div>
               <div class="sci"><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}<span class="cv">‘{a.cultivar}’</span>{/if}{#if kindOf(a) === 'hybrid' && a.parentage}{' '}<span class="cv">({a.parentage})</span>{/if}</div>
-              {#if withCare && care[a.id]}<div class="care">{care[a.id]}</div>{/if}
+              {#if withCare && care[a.id]}<div class="care">{care[a.id]}</div>{:else if withCare && care[a.id] === null}<div class="care unchecked">care line not checked: the reference was not reached</div>{/if}
               {#if withSource && sourceLine(a)}<div class="src">{sourceLine(a)}</div>{/if}
             </div>
           {/if}
@@ -208,6 +223,7 @@
   /* A name is never cut to "…": it wraps to a second line before anything else gives way. */
   .sci { font-family: var(--serif); font-size: 9.5pt; font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .sci .cv { font-style: normal; font-weight: 500; }
+  .care.unchecked { font-style: italic; color: #666; }
   .care { font-family: var(--ui); font-size: 6.2pt; color: #222; margin-top: 0.6mm; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.2; }
   .src { font-family: var(--ui); font-size: 6pt; color: #444; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .page.tiny .label { padding: 0.8mm 1.5mm; }

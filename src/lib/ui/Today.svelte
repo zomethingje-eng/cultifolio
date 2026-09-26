@@ -43,7 +43,7 @@
 </script>
 
 {#if lines.length}
-  <div class="today" aria-label="Today">
+  <div class="today" aria-label="Today" data-sveltekit-preload-data="off">
     {#each lines as l (l.href)}<a class="line {l.tone}" href={l.href}>{l.text}</a>{/each}
     {#if !hasSite}<span class="small muted">Frost watch needs a site: <a href="/settings#site">set one in Settings</a>.</span>{/if}
   </div>
