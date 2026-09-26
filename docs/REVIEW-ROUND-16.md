@@ -26,7 +26,7 @@ The reviewer went past the diff this time, with three readers: one trying to bre
 
 ## Confusing
 
-14. **A multi-plant add that failed partway left the form ready to add them all again** (14). Plants 1 and 2 of 5 existed, the form said "Add 5 plants", and pressing it added five more; the notice said "Free space" when the refusal was a number already used. The count drops to what remains and the notice says how many were added and numbered; a number clash is worded as one, without the free-space line.
+14. **A multi-plant add that failed partway left the form ready to add them all again** (14; also the eighth reviewer's one finding on this build, reproduced live with an injected quota error: one of three plants stored under a notice saying nothing was, then four after the retry). First fixed by counting, then done the way that reviewer asked: the batch is one commit. `addAccessions(n, …)` builds every plant and its acquire event inside one claiming transaction, minting each number against the batch so far, so all land with consecutive numbers or none does, and a refusal leaves no first plant and issues no number. The notice for a batch says "None of the plants was saved"; a number clash is worded as one, without the free-space line. Store test: a refused three-plant add stores nothing and issues nothing; a good one stores three with their acquire events; a brought number goes on the first and the rest follow.
 15. **The about pages could be framed by any site** (15). The prerendered `/about/how`, `/about/formats` and `/offline` carried no `frame-ancestors`, the CSP being a meta tag there, which cannot carry it. `_headers` gives them `X-Frame-Options: DENY`, and the hook gives the dynamic pages the same beside the CSP. Covered by item 9's e2e.
 16. **`POST /api/sync/vault` with a JSON `null` was a 500** (16). A body that is valid JSON but not an object is treated as no body: 400. Engine test over `null`, a number, a string and an empty body.
 
@@ -36,4 +36,4 @@ Both taken. A refused climate is now blank on the printed label like an unreache
 
 ## After the fixes
 
-`npx svelte-check --threshold warning` clean; `npx vitest run` 33 files, 314 tests; `npx playwright test tests/e2e/smoke.spec.ts --workers=1` 64 tests, no retries. For the deployer, in `docs/DEPLOY.md`: `npm install` once (the new dev dependency), and the corpus step for item 3 (`--prune-uncredited`, `--index`, the two uploads), which needs no deploy.
+`npx svelte-check --threshold warning` clean; `npx vitest run` 33 files, 315 tests; `npx playwright test tests/e2e/smoke.spec.ts --workers=1` 64 tests, no retries. For the deployer, in `docs/DEPLOY.md`: `npm install` once (the new dev dependency), and the corpus step for item 3 (`--prune-uncredited`, `--index`, the two uploads), which needs no deploy.

@@ -688,18 +688,33 @@ class Collection {
 
   /** A new plant. Its number is minted, or taken from `acc` when the grower brings one; a number already in use is refused, never overwritten. */
   async addAccession(a: Omit<Accession, 'id' | 'status'> & { id?: string; status?: Accession['status'] }): Promise<Accession> {
+    return (await this.addAccessions(1, a))[0];
+  }
+
+  /**
+   * Several plants of one kind in one commit: all land, with consecutive numbers, or none does, so a full phone partway
+   * through cannot leave two of five saved under a notice that says nothing was (round sixteen, 14; the eighth
+   * reviewer's atomic fix). The number is chosen inside the vault's own transaction (see `appendChangesClaiming`): two
+   * tabs adding at once get two runs of numbers. A number the grower brings goes on the first plant only.
+   */
+  async addAccessions(n: number, a: Omit<Accession, 'id' | 'status'> & { id?: string; status?: Accession['status'] }): Promise<Accession[]> {
     const wanted = a.acc?.trim() || null;
-    const id = a.id ?? this.newId('r');
-    // The number is chosen inside the vault's own transaction (see `appendChangesClaiming`): two tabs adding at once get two numbers.
-    const rec = await this.claim('accession', (issued) => {
-      const no = wanted ?? nextAccession(issued, this.scheme);
-      if (wanted && issued.has(no)) throw new Error(`Accession number ${no} is already used. A number is never reused; pick another.`);
-      const r: Accession = { status: 'growing', ...a, id, acc: no };
-      const changes = diff('accession', id, r as unknown as Record<string, unknown>, undefined, this.tick);
-      if (r.acquired) changes.push(...diff('event', this.eventId(), { acc: id, d: r.acquired, t: 'acquire', note: r.sourceFrom ? `from ${r.sourceFrom}` : null }, undefined, this.tick));
-      return { changes, result: r };
+    const ids = Array.from({ length: Math.max(1, n) }, (_, i) => (i === 0 && a.id ? a.id : this.newId('r')));
+    return this.claim('accession', (issued) => {
+      const taken = new Set(issued); // grows as each number is minted, so the next is chosen against the batch so far
+      const changes: Change[] = [];
+      const result: Accession[] = [];
+      for (const [i, id] of ids.entries()) {
+        const no = i === 0 && wanted ? wanted : nextAccession(taken, this.scheme);
+        if (i === 0 && wanted && issued.has(no)) throw new Error(`Accession number ${no} is already used. A number is never reused; pick another.`);
+        taken.add(no);
+        const r: Accession = { status: 'growing', ...a, id, acc: no };
+        changes.push(...diff('accession', id, r as unknown as Record<string, unknown>, undefined, this.tick));
+        if (r.acquired) changes.push(...diff('event', this.eventId(), { acc: id, d: r.acquired, t: 'acquire', note: r.sourceFrom ? `from ${r.sourceFrom}` : null }, undefined, this.tick));
+        result.push(r);
+      }
+      return { changes, result };
     });
-    return rec;
   }
 
   /** A write that mints numbers: the vault hands `build` every number ever issued here, `build` chooses outside it, and the changes are stored and applied as one commit. */

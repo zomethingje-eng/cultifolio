@@ -522,4 +522,23 @@ describe('round sixteen', () => {
     expect(mem.changes.size).toBe(before + 1); // once
     void collection;
   });
+  it('several plants at once are one commit: a refused write stores none of them and issues no number; a good one stores all, consecutively (round sixteen, 14)', async () => {
+    const { collection } = await fresh('testdevice');
+    mem.fail = 'QuotaExceededError: the disk is full';
+    await expect(collection.addAccessions(3, { taxonName: 'Lithops' })).rejects.toThrow(/QuotaExceeded/);
+    expect(collection.accessions).toEqual([]);
+    expect(collection.lastWriteError).toMatch(/QuotaExceeded/);
+    expect(mem.changes.size).toBe(0); // nothing durable either: no first plant of three
+    expect(collection.numbersIssued).toBe(0);
+    mem.fail = null;
+    const recs = await collection.addAccessions(3, { taxonName: 'Lithops', acquired: '2026-09-01', sourceFrom: 'Mesa' });
+    expect(recs.map((r) => accNo(r))).toEqual([`${new Date().getFullYear()}-0001`, `${new Date().getFullYear()}-0002`, `${new Date().getFullYear()}-0003`]);
+    expect(collection.accessions.length).toBe(3);
+    expect(recs.every((r) => collection.events(r.id).some((e) => e.t === 'acquire'))).toBe(true); // each with its acquire event
+    const again = (await reload()) as typeof collection;
+    expect(again.accessions.length).toBe(3);
+    // a brought number goes on the first, the rest follow it
+    const more = await again.addAccessions(2, { taxonName: 'Conophytum', acc: '2030-0007' });
+    expect(more.map((r) => accNo(r))).toEqual(['2030-0007', `${new Date().getFullYear()}-0004`]);
+  });
 });

@@ -59,7 +59,6 @@
   let locationId = $state<string | null>(null);
   let notes = $state('');
   let count = $state<number | null>(1); // null once cleared
-  let added = $state(0); // plants written by the last Add before it stopped
   /** Whole plants only, one to two hundred: 2.5 is two, a cleared box is one, and a number is never minted for a fraction (round thirteen, 10). */
   const countN = $derived(Math.min(200, Math.max(1, Math.floor(numberOrNull(count) ?? 1))));
   let useOwnNumber = $state(false);
@@ -80,38 +79,32 @@
       // Keep a taxon record so the species has a home for your notes even before a dossier exists.
       const slug = speciesSlug(taxonName);
       if (!collection.taxon(slug)) await collection.put('taxon', slug, { name: speciesOf(taxonName), gbifKey: taxonKey });
-      let firstId = '';
-      for (let i = 0; i < wanted; i++) {
-        added = i; // how many are in before this one: a refusal partway says so and leaves the count at what remains (round sixteen, 14)
-        const rec = await collection.addAccession({
-          acc: useOwnNumber && ownNumber.trim() && i === 0 ? ownNumber.trim() : undefined,
-          taxonName,
-          taxonKey,
-          cultivar: cultivar ?? p.cultivar ?? null,
-          // The picker parses the name on a debounce; the form parses it again here so a quick Add cannot file a hybrid as a species.
-          nameKind: p.kind !== 'species' ? p.kind : kind,
-          parentage: p.kind === 'hybrid' || kind === 'hybrid' ? (parentage?.trim() || p.parentage || null) : null,
-          nameAsReceived: nameAsReceived.trim() || (nameAsReceived !== name ? null : null),
-          fieldNumber: fieldNumber.trim() || null,
-          provenance,
-          acquired: acquired || null,
-          sourceFrom: sourceFrom.trim() || null,
-          price: price.trim() || null,
-          sourceForm,
-          locationId,
-          notes: notes.trim() || null
-        });
-        if (!firstId) firstId = accNo(rec);
-      }
-      added = wanted;
+      // One commit for the whole batch: all the plants land with consecutive numbers, or none does (round sixteen, 14).
+      const recs = await collection.addAccessions(wanted, {
+        acc: useOwnNumber && ownNumber.trim() ? ownNumber.trim() : undefined,
+        taxonName,
+        taxonKey,
+        cultivar: cultivar ?? p.cultivar ?? null,
+        // The picker parses the name on a debounce; the form parses it again here so a quick Add cannot file a hybrid as a species.
+        nameKind: p.kind !== 'species' ? p.kind : kind,
+        parentage: p.kind === 'hybrid' || kind === 'hybrid' ? (parentage?.trim() || p.parentage || null) : null,
+        nameAsReceived: nameAsReceived.trim() || (nameAsReceived !== name ? null : null),
+        fieldNumber: fieldNumber.trim() || null,
+        provenance,
+        acquired: acquired || null,
+        sourceFrom: sourceFrom.trim() || null,
+        price: price.trim() || null,
+        sourceForm,
+        locationId,
+        notes: notes.trim() || null
+      });
+      const firstId = accNo(recs[0]);
       try { if (locationId) localStorage.setItem('cultifolio.lastLocation', locationId); } catch { /* fine */ }
       toast.show(wanted > 1 ? `${wanted} plants added` : `${firstId} added`);
       goto(wanted > 1 ? '/plants' : `/plants/${firstId}`);
     } catch {
-      // The store has recorded why in lastWriteError, which the notice above the form shows; the form stays open with what
-      // was typed. Plants added before the refusal exist and are numbered: the count drops to what remains, so pressing Add
-      // again does not add them twice, and the notice says how many are in (round fifteen, 9; round sixteen, 14).
-      if (added > 0) { count = wanted - added; useOwnNumber = false; }
+      /* the store has recorded why in lastWriteError, which the notice above the form shows; the form stays open with what
+         was typed, and nothing was written: the batch is one commit (round fifteen, 9; round sixteen, 14) */
     } finally {
       busy = false;
     }
@@ -123,7 +116,7 @@
 {#if collection.lastWriteError}
   {@const numberClash = /already used/.test(collection.lastWriteError)}
   <!-- Worded by cause: a number already used is not a full phone (round sixteen, 14) -->
-  <div class="notice err" role="alert" id="write-error">{#if added > 0}{added} of the {added + countN} plants {added === 1 ? 'was' : 'were'} added and numbered before this; Add now adds the remaining {countN}. {/if}This change was not saved: {collection.lastWriteError}{#if !numberClash} Free space or <a href="/backup">back up now</a>.{/if}</div>
+  <div class="notice err" role="alert" id="write-error">{countN > 1 ? 'None of the plants was saved' : 'This change was not saved'}: {collection.lastWriteError}{#if !numberClash} Free space or <a href="/backup">back up now</a>.{/if}</div>
 {/if}
 <form class="form" onsubmit={save}>
   <PageHead title="Add a plant" kick="My plants" places={false}>
