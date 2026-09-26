@@ -208,7 +208,7 @@
           </div>
         </div>
       </div>
-      {#if err}<p class="bad">{err}</p>{/if}
+      {#if err}<p class="bad" id="sync-err" role="alert">{err}</p>{/if}
       <div class="actions">
         <button class="btn" onclick={() => (mode = 'idle')} disabled={busy}>Cancel</button>
         <button id="sync-create" class="btn pri" onclick={create} disabled={!saved || busy}>{busy ? 'Setting up…' : 'Start syncing'}</button>
@@ -224,8 +224,8 @@
         <video bind:this={video} class="scan" playsinline muted></video>
         <div class="actions"><button class="btn" onclick={stopScan}>Stop scanning</button></div>
       {:else}
-        <input id="sync-key" class="keyin mono" type="text" bind:value={typed} placeholder="XXXXX-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX" aria-label="Vault key" autocomplete="off" spellcheck="false" />
-        {#if err}<p class="bad">{err}</p>{/if}
+        <input id="sync-key" class="keyin mono" type="text" bind:value={typed} placeholder="XXXXX-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX" aria-label="Vault key" aria-invalid={!!err} aria-describedby={err ? 'sync-err' : undefined} autocomplete="off" spellcheck="false" />
+        {#if err}<p class="bad" id="sync-err" role="alert">{err}</p>{/if}
         {#if scanErr}<p class="bad">{scanErr}</p>{/if}
         <div class="actions">
           <button class="btn" onclick={() => (mode = 'idle')} disabled={busy}>Cancel</button>

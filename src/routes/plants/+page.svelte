@@ -76,10 +76,10 @@
 <div class="toolrow">
   <input id="plants-q" class="searchbar" type="search" placeholder="Search name, number, field number, place…" aria-label="Search your plants" bind:value={q} />
   <div class="chiprow" style="margin: 0">
-    <button class="chipbtn" class:on={show === 'growing'} onclick={() => (show = 'growing')}>Growing<span class="n">{collection.accessions.filter((a) => a.status === 'growing').length}</span></button>
-    <button class="chipbtn" class:on={show === 'due'} onclick={() => (show = 'due')} title="Not watered, or not recorded as watered, for three weeks: a fact about the record, not a verdict on the plant">Not watered 21+ days<span class="n">{dueN}</span></button>
-    <button class="chipbtn" class:on={show === 'nophoto'} onclick={() => (show = 'nophoto')} title="Growing plants with no photograph in the last year">No photo this year<span class="n">{noPhotoN}</span></button>
-    <button class="chipbtn" class:on={show === 'all'} onclick={() => (show = 'all')}>All<span class="n">{collection.accessions.length}</span></button>
+    <button class="chipbtn" class:on={show === 'growing'} aria-pressed={show === 'growing'} onclick={() => (show = 'growing')}>Growing<span class="n">{collection.accessions.filter((a) => a.status === 'growing').length}</span></button>
+    <button class="chipbtn" class:on={show === 'due'} aria-pressed={show === 'due'} onclick={() => (show = 'due')} title="Not watered, or not recorded as watered, for three weeks: a fact about the record, not a verdict on the plant">Not watered 21+ days<span class="n">{dueN}</span></button>
+    <button class="chipbtn" class:on={show === 'nophoto'} aria-pressed={show === 'nophoto'} onclick={() => (show = 'nophoto')} title="Growing plants with no photograph in the last year">No photo this year<span class="n">{noPhotoN}</span></button>
+    <button class="chipbtn" class:on={show === 'all'} aria-pressed={show === 'all'} onclick={() => (show = 'all')}>All<span class="n">{collection.accessions.length}</span></button>
   </div>
 </div>
 

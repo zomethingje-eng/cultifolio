@@ -52,8 +52,9 @@
     // A refused range is said before anything is read as an absence of one (round seventeen, 5).
     const rangeUp = d.upstream['wcvp.distribution']?.status;
     if (o.rangeTested === false && (rangeUp === 'refused' || rangeUp === 'error')) {
+      // The range source did not answer: no marker and no envelope are made, and the records were tested against nothing (round eighteen, 9).
       const all = o.nOpenInRange + o.nRestrictedInRange;
-      return { tone: 'warn', text: `The range source did not answer when this dossier was built, so none of the ${all} georeferenced record${all === 1 ? '' : 's'} was tested against a native range: the map marker${d.climate.status === 'ok' ? ' and the climate envelope' : ''} rest on all of them, garden and roadside records included. This is not a statement that they are in range.` };
+      return { tone: 'warn', text: `The range source did not answer when this dossier was built, so none of the ${all} georeferenced record${all === 1 ? '' : 's'} was tested against a native range, and no map marker or climate envelope is derived without one. ${o.nOpenInRange ? `The map shows the ${o.nOpenInRange} openly licensed one${o.nOpenInRange === 1 ? '' : 's'}, garden and roadside records included.` : 'None carries a licence permitting republication, so the map shows no points.'} This is not a statement that they are in range.` };
     }
     if (d.distribution.verified === false || (!d.distribution.native.length && d.distribution.reported?.length)) {
       const all = o.nOpenInRange + o.nRestrictedInRange;
@@ -118,7 +119,8 @@
     addEventListener('scroll', onScroll, { passive: true });
     return () => removeEventListener('scroll', onScroll);
   });
-  const mine = $derived(collection.ready ? collection.accessions.filter((a) => speciesSlug(a.taxonName) === d.slug) : []);
+  // Yours: by the name's slug, or by the reference key, so a suffixed homonym's page lists its own plants (round eighteen, 6).
+  const mine = $derived(collection.ready ? collection.accessions.filter((a) => speciesSlug(a.taxonName) === d.slug || (a.taxonKey != null && a.taxonKey === d.key)) : []);
   const growing = $derived(mine.filter((a) => a.status === 'growing'));
   /** Your own photographs of this species, across every plant of it you own. */
   const myPhotos = $derived(mine.flatMap((a) => collection.photos(a.id).map((p) => ({ ...p, plant: a }))).sort((x, y) => y.d.localeCompare(x.d)));
@@ -206,7 +208,7 @@
       <a class="cred" href={hero.page ?? hero.url} rel="noopener">{hero.attribution}{hero.captive ? ' · in cultivation' : ' · observed growing wild'}{hero.observedOn ? ' · ' + hero.observedOn : ''}</a>
     </div>
   {:else}
-    <div class="hero"><div class="ph">{#if refusedPhotoNames.length}Photographs: {refusedPhotoNames.join(' and ')} {refusedPhotoSources.every((k) => d.upstream[k]?.status === 'skipped') ? 'were not asked when this page was built' : 'did not answer when this page was built'}. Not a statement that none exist.{:else}No openly licensed photograph on file. If you grow this plant, add your own photo to your record.{/if}</div></div>
+    <div class="hero"><div class="ph">{#if refusedPhotoNames.length}Photographs: {refusedPhotoNames.join(' and ')} {refusedPhotoSources.every((k) => (d.upstream[k]?.detail ?? '').startsWith('no credited photograph')) ? 'answered, but every photograph they gave lacked an author to credit under its licence, so none is shown' : refusedPhotoSources.every((k) => d.upstream[k]?.status === 'skipped') ? 'were not asked when this page was built' : 'did not answer when this page was built'}. Not a statement that none exist.{:else}No openly licensed photograph on file. If you grow this plant, add your own photo to your record.{/if}</div></div>
   {/if}
   <div class="idcard">
     <div class="who">
@@ -258,7 +260,7 @@
     <div class="fact"><div class="lab">Family</div><div class="v">{d.name.family ?? '–'}</div></div>
     <div class="fact"><div class="lab">Described by</div><div class="v">{d.name.authorship ?? '–'}</div></div>
     <div class="fact"><div class="lab">Native to</div><div class="v">{#if d.distribution.native.length}{d.distribution.native.slice(0, 3).map((r) => unitName(r.name)).join(', ')}{d.distribution.native.length > 3 ? ` +${d.distribution.native.length - 3}` : ''}{:else}<span class="muted">not verified</span>{/if}</div></div>
-    <div class="fact"><div class="lab">Wild records</div><div class="v">{#if d.occurrences.nOpenInRange || d.occurrences.nRestrictedInRange}{d.occurrences.nOpenInRange + d.occurrences.nRestrictedInRange} {d.occurrences.rangeTested === false ? 'georeferenced' : 'in range'}<span class="small muted">{' · '}{d.occurrences.nOpenInRange} open{d.occurrences.rangeTested === false ? ' · range not tested' : ''}</span>{:else if ['refused', 'error'].includes(d.upstream['gbif.occurrences']?.status ?? '')}<span class="muted">not checked</span>{:else}<span class="muted">none in range</span>{/if}</div></div>
+    <div class="fact"><div class="lab">Wild records</div><div class="v">{#if d.occurrences.nOpenInRange || d.occurrences.nRestrictedInRange}{d.occurrences.nOpenInRange + d.occurrences.nRestrictedInRange} {d.occurrences.rangeTested === false ? 'georeferenced' : 'in range'}<span class="small muted">{' · '}{d.occurrences.nOpenInRange} open{d.occurrences.rangeTested === false ? ' · range not tested' : ''}</span>{:else if ['refused', 'error'].includes(d.upstream['gbif.occurrences']?.status ?? '')}<span class="muted">not checked</span>{:else if d.occurrences.rangeTested === false}<span class="muted">no georeferenced records · range not tested</span>{:else}<span class="muted">none in range</span>{/if}</div></div>
   </div>
 
   {#if glance || note}
@@ -382,7 +384,7 @@
   <h2 class="sec" id="s-habitat">Natural habitat</h2>
   <div class="maprow">
     <div class="mapbox">{@html data.worldSvg}<div class="mapcap">Native range as published by WCVP{#if d.centroid}; the marker is where the records are densest and decides nothing{#if d.climate.status === 'ok'}: the climate was read across every in-range record's cell, not at the marker{/if}{/if}.</div></div>
-    <div class="mapbox">{@html data.regionSvg}<div class="mapcap">{d.occurrences.nOpenInRange ? (d.occurrences.rangeTested === false ? 'Openly licensed records, not tested against the stated range, framed on where they fall.' : 'Openly licensed records inside the range, framed on where they fall.') : ['refused', 'error'].includes(d.upstream['gbif.occurrences']?.status ?? '') ? 'Records not checked: the occurrence source did not answer when this page was built.' : 'No openly licensed record to show inside the range.'}</div></div>
+    <div class="mapbox">{@html data.regionSvg}<div class="mapcap">{d.occurrences.nOpenInRange ? (d.occurrences.rangeTested === false ? 'Openly licensed records, not tested against the stated range, framed on where they fall.' : 'Openly licensed records inside the range, framed on where they fall.') : ['refused', 'error'].includes(d.upstream['gbif.occurrences']?.status ?? '') ? 'Records not checked: the occurrence source did not answer when this page was built.' : d.occurrences.rangeTested === false ? 'No openly licensed georeferenced record to show; records were not tested against the stated range.' : 'No openly licensed record to show inside the range.'}</div></div>
   </div>
   <div class="factgrid">
     <div class:wide={longRange}><b>Native</b>{#if d.distribution.native.length}{d.distribution.native.map((r) => unitName(r.name)).join(', ')}{#if d.distribution.verified === false}<span class="small muted"> · stated native by a national checklist, not by WCVP: unverified</span>{/if}{:else if d.distribution.reported?.length}<span class="muted">Not verified.</span><span class="small muted"> Reported present (native status not stated): {d.distribution.reported.map((r) => r.name).join(', ')}</span>{:else}{d.upstream['wcvp.distribution']?.status === 'none' ? 'No published distribution for this name.' : 'Distribution source did not answer.'}{/if}{#if d.distribution.introduced.length}<span class="small muted"> · introduced: {d.distribution.introduced.map((r) => r.name).join(', ')}</span>{/if}</div>

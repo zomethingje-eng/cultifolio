@@ -960,3 +960,97 @@ describe('a run that outlives the vault it belongs to (round seventeen, A1 and 4
     expect(A2.sync.runs).toBe(runsAfterSetup + 1);
   });
 });
+
+describe('a stale run\'s verdicts never land on the new vault (round eighteen, 4, 11, 12)', () => {
+  it('a late 507 for the old vault does not mark the new vault full', async () => {
+    const r2 = fakeR2();
+    const memA = newMem('aaaaaaaaaaaa');
+    const A = await boot(memA, r2);
+    await A.sync.setup(KEY, 'create');
+    await A.collection.addAccession({ taxonName: 'Lithops', acc: 'A-1' });
+    const real = globalThis.fetch;
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    let held = 0;
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      if (init?.method === 'POST' && /\/api\/sync\/log\?/.test(String(input)) && held++ === 0) { await gate; return new Response('{"bytes":123,"limit":456}', { status: 507 }); }
+      return real(input, init);
+    }) as typeof fetch;
+    const old = A.sync.run().catch((e: Error) => e);
+    await new Promise((r) => setTimeout(r, 50));
+    await A.sync.forget();
+    await A.sync.setup(newVaultKey(), 'create'); // the new vault's first run completes
+    release();
+    await old;
+    expect(A.sync.vaultFull).toBeNull(); // the old vault's 507 is not the new vault's
+    expect((memA.meta.get('sync') as { vaultFull?: unknown }).vaultFull).toBeUndefined();
+  });
+  it('a late batch body for the old vault is not set aside in the new vault\'s quarantine', async () => {
+    const r2 = fakeR2();
+    const memA = newMem('aaaaaaaaaaaa'), memD = newMem('dddddddddddd');
+    const D = await boot(memD, r2);
+    await D.sync.setup(KEY, 'create');
+    await D.collection.addAccession({ taxonName: 'Lithops', acc: 'D-1' });
+    await D.sync.run();
+    const A = await boot(memA, r2);
+    await A.sync.setup(KEY, 'join');
+    memA.meta.set('sync', { ...(memA.meta.get('sync') as object), since: 0, have: [] });
+    const A2 = await reboot(memA, r2);
+    const real = globalThis.fetch;
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const r = await real(input, init);
+      if (/\/api\/sync\/log\/[^?]+/.test(String(input))) await gate; // the batch body is in; the open comes next
+      return r;
+    }) as typeof fetch;
+    const old = A2.sync.run().catch((e: Error) => e);
+    await new Promise((r) => setTimeout(r, 50));
+    await A2.sync.forget();
+    await A2.sync.setup(newVaultKey(), 'create');
+    release();
+    const err = await old;
+    expect(String((err as Error).message)).toMatch(/stopped/);
+    expect(A2.sync.quarantined).toEqual([]);
+    expect((memA.meta.get('sync') as { quarantined?: unknown[] }).quarantined ?? []).toEqual([]);
+    expect(A2.sync.busy).toBeNull();
+  });
+  it('"Stop syncing" during a run clears the busy flag at once, so the icon stops', async () => {
+    const r2 = fakeR2();
+    const memA = newMem('aaaaaaaaaaaa');
+    const A = await boot(memA, r2);
+    await A.sync.setup(KEY, 'create');
+    await A.collection.addAccession({ taxonName: 'Lithops', acc: 'A-1' });
+    const real = globalThis.fetch;
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    let held = 0;
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      if (init?.method === 'POST' && /\/api\/sync\/log\?/.test(String(input)) && held++ === 0) await gate;
+      return real(input, init);
+    }) as typeof fetch;
+    const old = A.sync.run().catch((e: Error) => e);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(A.sync.busy).not.toBeNull();
+    await A.sync.forget();
+    expect(A.sync.busy).toBeNull();
+    release();
+    await old;
+    expect(A.sync.busy).toBeNull();
+  });
+  it('a device whose stored meta predates the arrival cursor runs on its first page load', async () => {
+    const r2 = fakeR2();
+    const memA = newMem('aaaaaaaaaaaa');
+    const A = await boot(memA, r2);
+    await A.sync.setup(KEY, 'create');
+    await A.collection.addAccession({ taxonName: 'Lithops', acc: 'A-1' });
+    await A.sync.run();
+    const stored = memA.meta.get('sync') as { key: string; photosPushed: string[]; lastSync: string | null };
+    memA.meta.set('sync', { key: stored.key, own: [], cursor: '', firstPushDone: true, photosPushed: stored.photosPushed, lastSync: stored.lastSync }); // the HLC-cursor engine's shape
+    const A2 = await reboot(memA, r2);
+    expect(A2.sync.configured).toBe(true);
+    await A2.sync.run(); // did not throw "stopped"
+    expect(A2.sync.lastError).toBeNull();
+    expect(A2.sync.runs).toBe(1);
+  });
+});

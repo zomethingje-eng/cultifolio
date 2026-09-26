@@ -71,7 +71,7 @@ export function photosFromMedia(rows: OccMedia[]): Photo[] {
   return rows.filter((im) => im.creator || im.rightsHolder || im.licence === 'cc0').slice(0, 24).map((im) => {
     const inat = /^https:\/\/inaturalist-open-data\.s3\.amazonaws\.com\/photos\/\d+\/original\.(\w+)$/.exec(im.url);
     const thumb = inat ? im.url.replace(/original\.(\w+)$/, 'medium.$1') : `https://api.gbif.org/v1/image/cache/fit-in/400x/${encodeURIComponent(im.url)}`;
-    return { src: 'gbif', id: im.id, url: im.url, thumb, licence: im.licence as Photo['licence'], attribution: `${im.creator || im.rightsHolder || 'no author stated'}, ${licenceLabel(im.licence as Photo['licence'])}, ${inat ? 'iNaturalist via GBIF' : 'via GBIF'}`, page: im.page };
+    return { src: 'gbif', id: im.id, url: im.url, thumb, licence: im.licence as Photo['licence'], attribution: `${im.creator || im.rightsHolder || 'author not stated'}, ${licenceLabel(im.licence as Photo['licence'])}, ${inat ? 'iNaturalist via GBIF' : 'via GBIF'}`, page: im.page };
   });
 }
 

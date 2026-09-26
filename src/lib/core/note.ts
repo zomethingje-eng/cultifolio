@@ -78,7 +78,7 @@ export function careLine(input: SheetInput, o: NoteOpts = {}): string {
   if (fl) {
     // With the extremes source refused, the habitat figure is the CHELSA mean night, a warmer and different quantity: it is
     // not printed as the night on a label that cannot say so; the labels page counts these (round seventeen, 7).
-    const nightUnchecked = !input.extremes && input.extremesStatus === 'refused';
+    const nightUnchecked = !input.extremes && (input.extremesStatus === 'refused' || input.extremesStatus === 'skipped'); // skipped too: not asked is not none (round eighteen, 8)
     if (fl.habitat != null && !nightUnchecked) bits.push(`hab. night ${temp(fl.habitat, input.units ?? METRIC, 1)}`);
     if (fl.habitat == null || fl.raised) bits.push(`group min ${temp(fl.floor, input.units ?? METRIC, 0)}`);
   }

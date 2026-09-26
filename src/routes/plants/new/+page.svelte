@@ -30,16 +30,23 @@
     // reference is asked anything: the form is live during that wait, and a default applied after it would overwrite a
     // place the grower had already chosen (round seventeen, A3). Only a place not yet touched by hand takes it.
     const loc = page.url.searchParams.get('loc');
-    let want: string | null = loc;
+    let last: string | null = null;
     try {
-      want = loc ?? localStorage.getItem('cultifolio.lastLocation');
+      last = localStorage.getItem('cultifolio.lastLocation');
     } catch {
       /* fine */
     }
+    // A ?loc= naming a bench since removed falls back to the last-used one rather than dropping both (round eighteen, 18).
+    const want = loc && collection.location(loc) ? loc : last;
     if (want && collection.location(want) && locationId == null) locationId = want;
     // The key in the link is not trusted on its own: a copied, edited or stale link can pair a name with another species'
-    // key. For a name at species rank the reference's own key for that name is the one kept (round eleven, 2).
-    if (k) taxonKey = await checkedKey(sp, k);
+    // key. For a name at species rank the reference's own key for that name is the one kept (round eleven, 2). The answer
+    // is taken only if the name is still the one asked about: the form is live during the wait, and a grower who has
+    // typed another name must not get the first name's key back (round eighteen, 5).
+    if (k) {
+      const checked = await checkedKey(sp, k);
+      if (name === sp) taxonKey = checked;
+    }
   });
   $effect(() => {
     setCrumb([{ label: 'My plants', href: '/plants' }, { label: 'Add a plant' }]);
@@ -170,8 +177,8 @@
 
   <details class="own">
     <summary class="faint">Use my own number</summary>
-    <label class="ownrow"><input id="f-own" type="checkbox" bind:checked={useOwnNumber} /> <input id="f-own-no" type="text" bind:value={ownNumber} placeholder="e.g. 2019-0147" disabled={!useOwnNumber} aria-invalid={ownTaken} /></label>
-    {#if ownTaken}<p class="bad small" id="f-own-taken">{ownNumber.trim()} is already used by <a href="/plants/{collection.accession(ownNumber.trim())?.id}">{collection.accession(ownNumber.trim())?.taxonName ?? 'a plant no longer growing'}</a>. A number is never reused; pick another.</p>{/if}
+    <div class="ownrow"><input id="f-own" type="checkbox" bind:checked={useOwnNumber} aria-label="Use my own number" /> <input id="f-own-no" type="text" bind:value={ownNumber} placeholder="e.g. 2019-0147" aria-label="Your accession number" disabled={!useOwnNumber} aria-invalid={ownTaken} aria-describedby={ownTaken ? 'f-own-taken' : undefined} /></div>
+    {#if ownTaken}<p class="bad small" id="f-own-taken" role="alert">{ownNumber.trim()} is already used by <a href="/plants/{collection.accession(ownNumber.trim())?.id}">{collection.accession(ownNumber.trim())?.taxonName ?? 'a plant no longer growing'}</a>. A number is never reused; pick another.</p>{/if}
   </details>
   </div>
 

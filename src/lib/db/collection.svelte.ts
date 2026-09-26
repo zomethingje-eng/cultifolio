@@ -115,7 +115,10 @@ class Collection {
   }
   /** Another tab of this browser wrote: fold in what this tab has not seen, so its list and its next number are current. */
   /** The fold, again, from the whole log: for the rare change the vault displaced under its stamp, which the incremental fold cannot undo. */
+  /** Bumped by every rebuild: a catch-up that began before one must not apply what it read over the rebuilt fold (round eighteen, 3). */
+  private foldGen = 0;
   async rebuild(): Promise<void> {
+    this.foldGen++;
     const changes = await allChanges();
     this.state.clear();
     this.seen = new Map();
@@ -129,8 +132,10 @@ class Collection {
 
   private async catchUp(): Promise<void> {
     if (!this.ready) return;
+    const gen = this.foldGen;
     const changes = (await allChanges()).filter((c) => !this.applied.has(c.t));
     await this.readLedger();
+    if (gen !== this.foldGen) return; // a rebuild landed meanwhile: it read the same log and more; what was read here would put a displaced change back
     if (!changes.length) return;
     for (const c of changes) { this.clock?.observe(c.t); this.applied.add(c.t); }
     apply(this.state, changes, this.seen, { now: Date.now(), except: this.device });

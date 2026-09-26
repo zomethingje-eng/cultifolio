@@ -24,8 +24,8 @@
   <p class="muted">Opening your collection…</p>
 {:else}
   <div class="chiprow">
-    <button class="chipbtn" class:on={show === 'active'} onclick={() => (show = 'active')}>In progress<span class="n">{collection.sowings.filter((s) => s.status === 'active').length}</span></button>
-    <button class="chipbtn" class:on={show === 'all'} onclick={() => (show = 'all')}>All<span class="n">{collection.sowings.length}</span></button>
+    <button class="chipbtn" class:on={show === 'active'} aria-pressed={show === 'active'} onclick={() => (show = 'active')}>In progress<span class="n">{collection.sowings.filter((s) => s.status === 'active').length}</span></button>
+    <button class="chipbtn" class:on={show === 'all'} aria-pressed={show === 'all'} onclick={() => (show = 'all')}>All<span class="n">{collection.sowings.length}</span></button>
   </div>
   {#if !rows.length}
     <div class="emptybox"><p class="muted">{show === 'active' ? 'Nothing in progress.' : 'No sowings yet.'} <a href="/sowings/new">Start one.</a></p></div>

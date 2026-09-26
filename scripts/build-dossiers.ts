@@ -381,7 +381,7 @@ function uniqueSlugs(index: Array<IndexEntry & { status?: string }>): IndexEntry
 function pruneUncredited(): void {
   const dir = `${outDir}/s/v${DOSSIER_V}`;
   const files = existsSync(dir) ? readdirSync(dir).filter((f) => /^\d+\.json$/.test(f)) : [];
-  const uncredited = (p: { licence: string; attribution: string }) => p.licence !== 'cc0' && /^(unknown|Wikimedia Commons|iNaturalist user|no author stated),/.test(p.attribution);
+  const uncredited = (p: { licence: string; attribution: string }) => p.licence !== 'cc0' && /^(unknown|Wikimedia Commons|iNaturalist user|no author stated|author not stated),/.test(p.attribution);
   type Up = Record<string, { status: string; at?: string; detail?: string }>;
   let touched = 0, dropped = 0, reworded = 0, reopened = 0;
   for (const f of files) {
@@ -406,8 +406,10 @@ function pruneUncredited(): void {
     // (round seventeen, 13: DEPLOY.md's promise that a fill gives an emptied species a credited photograph holds only if
     // the fill looks at it; a source marked ok with no photograph left is not settled).
     if (keep.length === 0) {
-      for (const k of ['inat.photos.wild', 'inat.photos.cultivated', 'commons']) {
-        if (d.upstream?.[k]?.status === 'ok') { d.upstream[k] = { status: 'skipped', at: new Date().toISOString(), detail: 'no credited photograph is left; ask again' }; reopened++; changed = true; }
+      // iNaturalist only: `--fill inat` is what asks again; nothing re-asks Commons, and a source marked skipped that nothing
+      // will ask would read as "not asked" for good (round eighteen, 10). The detail names what happened; the page words it.
+      for (const k of ['inat.photos.wild', 'inat.photos.cultivated']) {
+        if (d.upstream?.[k]?.status === 'ok') { d.upstream[k] = { status: 'skipped', at: new Date().toISOString(), detail: 'no credited photograph is left of what it gave; ask again' }; reopened++; changed = true; }
       }
     }
     if (!changed) continue;

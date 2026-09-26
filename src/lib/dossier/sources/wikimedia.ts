@@ -133,7 +133,7 @@ export async function commonsPhotos(f: JsonFetcher, category: string, max = 12):
       width: ii.width ?? undefined,
       height: ii.height ?? undefined,
       licence: tag,
-      attribution: `${artist || 'no author stated'}, ${lic}, via Wikimedia Commons`,
+      attribution: `${artist || 'author not stated'}, ${lic}, via Wikimedia Commons`,
       page: ii.descriptionurl ?? undefined
     });
     if (out.length >= max) break;

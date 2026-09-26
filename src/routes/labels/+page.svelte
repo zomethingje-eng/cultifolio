@@ -122,7 +122,7 @@
           const readerLat = site.current?.lat ?? collection.locations.map((l) => l.lat).find((x): x is number => x != null) ?? null;
           const line = careLine({ scientific: a.taxonName, climateStatus: d?.climate.status, family: d?.name.family, months: d?.climate.status === 'ok' ? d.climate.months : null, extremes: d?.climate.status === 'ok' ? (d.climate.extremes ?? null) : null, extremesStatus: d?.climate.status === 'ok' ? d.climate.extremesStatus : null, lat: d?.habitatLat ?? null, units: units.current }, { readerLat });
           care = { ...care, [a.id]: line };
-          if (d && d.climate.status === 'ok' && !d.climate.extremes && d.climate.extremesStatus === 'refused') nightOff = new Set([...nightOff, a.id]); // the night is left off this label; counted below (round seventeen, 7)
+          if (d && d.climate.status === 'ok' && !d.climate.extremes && (d.climate.extremesStatus === 'refused' || d.climate.extremesStatus === 'skipped')) nightOff = new Set([...nightOff, a.id]); // the night is left off this label; counted below (round seventeen, 7)
         }).catch(() => { done(); care = { ...care, [a.id]: null }; });
       }
     }
@@ -160,7 +160,7 @@
         <p class="small muted" role="status">{refused.length === 1 ? 'One care line' : `${refused.length} care lines`} not checked: the climate source did not answer when the species page was built, which is not a statement that the species has no climate. The preview marks those lines; on the printed labels they are left blank.</p>
       {/if}
       {#if withCare && nightOffCount}
-        <p class="small muted" role="status">{nightOffCount === 1 ? 'One label prints' : `${nightOffCount} labels print`} no habitat night: the daily extremes source did not answer when the species page was built, and the mean night is a different figure, so it is left off rather than printed in its place.</p>
+        <p class="small muted" role="status">{nightOffCount === 1 ? 'One label prints' : `${nightOffCount} labels print`} no habitat night: the daily extremes were not checked when the species page was built (the source did not answer, or was not asked), and the mean night is a different figure, so it is left off rather than printed in its place.</p>
       {/if}
       {#if withCare && unchecked.length}
         <div class="notice" id="lb-unchecked" role="status">{unchecked.length === 1 ? 'One care line' : `${unchecked.length} care lines`} not checked: the species reference could not be reached from here, which is not a statement that the species has no figures. The preview marks those care lines; on the printed labels they are left blank. <button type="button" class="linkish" onclick={retryCare}>Try again</button> before printing.</div>

@@ -114,7 +114,8 @@ export async function sheetForName(name: string, key: number | null | undefined,
   if (s && key && s.key !== key) {
     const suffixed = `${slug}-${key}`;
     const m2 = await sheetsFor([suffixed]);
-    const s2 = m2?.get(suffixed);
+    if (m2 === null) return null; // not reached: not "the other species", and no repair of the key on a failed request (round eighteen, 6)
+    const s2 = m2.get(suffixed);
     if (s2) return s2;
   }
   if (!s) return 'none';

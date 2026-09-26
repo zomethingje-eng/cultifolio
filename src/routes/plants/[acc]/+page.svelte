@@ -25,6 +25,7 @@
   import PhotoImg from '$lib/ui/PhotoImg.svelte';
   import PhotoAdd from '$lib/ui/PhotoAdd.svelte';
   import Lightbox from '$lib/ui/Lightbox.svelte';
+  import { focusNext } from '$lib/ui/focus';
   import RefPhotoOffer from '$lib/ui/RefPhotoOffer.svelte';
   onMount(() => { site.load(); collection.load(); });
   /** The URL carries the number people know (or an identity, from a printed code); everything below works on the record's identity. */
@@ -50,6 +51,8 @@
   const taxon = $derived(a ? collection.taxon(speciesSlug(a.taxonName)) : undefined);
   const sowing = $derived(a?.sowingId ? collection.sowing(a.sowingId) : undefined);
   let dossier = $state<Sheet | null>(null);
+  /** The species page's slug: the sheet's own (a homonym's is suffixed) when the sheet is here, else the name's (round eighteen, 6). */
+  const speciesHref = $derived(dossier?.slug ?? (a ? speciesSlug(a.taxonName) : ''));
   /** What the reference said about this plant's species: still being asked, could not be reached (a different fact from absent), not there, or read. */
   let ref = $state<'loading' | 'unreachable' | 'none' | 'ok'>('loading');
   const kind = $derived(a ? kindOf(a) : 'species');
@@ -97,6 +100,7 @@
       dli: dlis.length ? { lo: Math.min(...dlis), hi: Math.max(...dlis), lo10: dli10.length ? Math.min(...dli10) : null, hi90: dli90.length ? Math.max(...dli90) : null } : null,
       night: { v: m[coldI].tmin, mo: coldI + 1, lo: c.p10[coldI].tmin, hi: c.p90[coldI].tmin },
       ex,
+      exStatus,
       year: sheet.year,
       cells: c.cells
     };
@@ -117,7 +121,8 @@
     if (!habitat) return null;
     const n = habitat.night;
     const night = `coldest month's mean night at the habitat ${temp(n.v, u, 1)} in ${MONTHS[n.mo - 1]} (median year; across the ${habitat.cells} envelope cells ${tempN(n.lo, u)} to ${tempN(n.hi, u)}; CHELSA)`;
-    const p01 = habitat.ex ? `; 1st-percentile night over ${habitat.ex.years} years at the typical cell ${temp(habitat.ex.minP01, u, 1)} (NASA POWER)` : '';
+    // With no extremes, say why, as the species page and compare do: a refusal or a skip is not an absence (round eighteen, 8).
+    const p01 = habitat.ex ? `; 1st-percentile night over ${habitat.ex.years} years at the typical cell ${temp(habitat.ex.minP01, u, 1)} (NASA POWER)` : habitat.exStatus === 'refused' ? '; the daily extremes were not checked (NASA POWER did not answer when the species page was built)' : habitat.exStatus === 'skipped' ? '; the daily extremes were not asked for when the species page was built' : '';
     if (cond?.floorC == null) return { here: null, text: `${night}${p01}; no floor set for this place` };
     return { here: cond.floorC, text: `this place is set to bottom out at ${temp(cond.floorC, u, 1)}; ${night}${p01}` };
   });
@@ -231,6 +236,7 @@
   }
   async function setStatus(s: 'growing' | 'archived' | 'dead') {
     await collection.put('accession', id, { status: s });
+    void focusNext('#status-toggle'); // the button that replaced the one just pressed
   }
   async function saveNotes() {
     await collection.put('accession', id, { notes: notesDraft.trim() || null });
@@ -295,7 +301,7 @@
       </div>
     </div>
     <div class="acts">
-      {#if kind !== 'hybrid' && ref === 'ok'}<a class="btn" href="/species/{slugify(speciesOf(a.taxonName))}">Species page</a>{:else if kind !== 'hybrid' && ref === 'loading'}<span class="btn skelbtn" aria-hidden="true">Species page</span>{/if}
+      {#if kind !== 'hybrid' && ref === 'ok'}<a class="btn" href="/species/{speciesHref}">Species page</a>{:else if kind !== 'hybrid' && ref === 'loading'}<span class="btn skelbtn" aria-hidden="true">Species page</span>{/if}
       <button class="btn" onclick={startEdit}>Edit</button>
       <a class="btn" href="/labels?acc={a.id}">Label</a>
       {#if a.status === 'growing'}<a class="btn" href="/sowings/new?parent={a.id}">Propagate</a>{/if}
@@ -332,7 +338,7 @@
       <button class="btn" onclick={() => quick('measure')}>Measure</button>
       <button class="btn" onclick={() => quick('treat')}>Treat</button>
       <button class="btn" onclick={() => quick('flower')}>Flower</button>
-      {#if a.status === 'growing'}<button class="btn" onclick={() => setStatus('archived')}>Archive</button>{:else}<button class="btn" onclick={() => setStatus('growing')}>Mark growing</button>{/if}
+      {#if a.status === 'growing'}<button class="btn" id="status-toggle" onclick={() => setStatus('archived')}>Archive</button>{:else}<button class="btn" id="status-toggle" onclick={() => setStatus('growing')}>Mark growing</button>{/if}
     {:else}
       <button class="btn more" type="button" aria-expanded="false" onclick={() => { moreActs = true; setTimeout(() => document.querySelector<HTMLElement>('.quickbar button:nth-of-type(5)')?.focus(), 0); }}>More ▾</button>
     {/if}
@@ -384,7 +390,7 @@
     {#if lastOf('water')}<div class="card"><div class="lab">Since watered</div><div class="val">{sinceWater == null ? '–' : sinceWater}<span class="u">{sinceWater == null ? '' : ' d'}</span></div><div class="sub">last {lastOf('water')}</div></div>{/if}
     {#if events.some((e) => e.t === 'audit')}<div class="card"><div class="lab">Last seen</div><div class="val">{seen == null ? '–' : seen}<span class="u">{seen == null ? '' : ' d'}</span></div><div class="sub">audit, {collection.lastSeen(id)}</div></div>{/if}
     {#if lastMeasure}<div class="card"><div class="lab">{sizeKey ? (MEASURES.find((m) => m.k === sizeKey)?.label ?? 'Size') : 'Size'}</div><div class="val">{sizeKey && lastMeasure ? lastMeasure.measures![sizeKey] : '–'}<span class="u">{sizeKey ? ' ' + (MEASURES.find((m) => m.k === sizeKey)?.unit ?? '') : ''}</span></div>{#if growth != null}<div class="gauge"><i style="width: {Math.min(100, Math.max(8, (growth / Math.max(1, lastMeasure!.measures![sizeKey!])) * 100))}%"></i></div>{/if}<div class="sub">{growth != null ? `${growth >= 0 ? '+' : ''}${growth} since ${firstMeasure!.d}` : `measured ${lastMeasure.d}`}</div></div>{/if}
-    <div class="card"><div class="lab">Habitat rain season</div><div class="val" style="font-family: var(--ui); font-size: 17px; font-weight: 700">{season ? season.label : dossier?.climate.status === 'refused' ? 'Climate not checked' : dossier?.climate.status === 'pending' ? 'Climate pending' : dossier ? 'No habitat climate' : ref === 'unreachable' ? 'Reference not reached' : ref === 'none' ? (kind === 'hybrid' ? 'A hybrid' : 'No species page') : '…'}</div><div class="sub">{#if season}{season.note} <a href="/species/{speciesSlug(a.taxonName)}#s-cultivation">The sheet</a>.{:else if dossier?.climate.status === 'refused'}A source did not answer when the species page was built{dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}. Not a statement that no climate exists.{:else if dossier?.climate.status === 'pending'}The habitat climate for this species has not been derived yet.{:else if dossier}Nothing to read a season from{dossier.climate.status === 'none' && dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}.{:else if ref === 'unreachable'}The species reference could not be reached from here; nothing is known either way.{:else if ref === 'none'}{kind === 'hybrid' ? (parentLinks.some((p) => p.slug) ? 'No habitat of its own; its parents have species pages.' : 'No habitat of its own.') : 'Not in the reference.'}{:else}reading the species dossier{/if}</div></div>
+    <div class="card"><div class="lab">Habitat rain season</div><div class="val" style="font-family: var(--ui); font-size: 17px; font-weight: 700">{season ? season.label : dossier?.climate.status === 'refused' ? 'Climate not checked' : dossier?.climate.status === 'pending' ? 'Climate pending' : dossier ? 'No habitat climate' : ref === 'unreachable' ? 'Reference not reached' : ref === 'none' ? (kind === 'hybrid' ? 'A hybrid' : 'No species page') : '…'}</div><div class="sub">{#if season}{season.note} <a href="/species/{speciesHref}#s-cultivation">The sheet</a>.{:else if dossier?.climate.status === 'refused'}A source did not answer when the species page was built{dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}. Not a statement that no climate exists.{:else if dossier?.climate.status === 'pending'}The habitat climate for this species has not been derived yet.{:else if dossier}Nothing to read a season from{dossier.climate.status === 'none' && dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}.{:else if ref === 'unreachable'}The species reference could not be reached from here; nothing is known either way.{:else if ref === 'none'}{kind === 'hybrid' ? (parentLinks.some((p) => p.slug) ? 'No habitat of its own; its parents have species pages.' : 'No habitat of its own.') : 'Not in the reference.'}{:else}reading the species dossier{/if}</div></div>
   </div>
 
   {#if habitat && a.locationId}
@@ -395,7 +401,7 @@
     </div>
     <details class="why">
       <summary>What this compares</summary>
-      <div class="whybody">A comparison, not a verdict: the habitat figures are what the sky and the weather do where the species is recorded (CHELSA across every envelope cell, NASA POWER at the typical cell), not measured tolerances of this plant. This place's figures are its bench settings, inherited from parents where set. <a href="/species/{speciesSlug(a.taxonName)}#s-cultivation">The full cultivation sheet</a>.</div>
+      <div class="whybody">A comparison, not a verdict: the habitat figures are what the sky and the weather do where the species is recorded (CHELSA across every envelope cell, NASA POWER at the typical cell), not measured tolerances of this plant. This place's figures are its bench settings, inherited from parents where set. <a href="/species/{speciesHref}#s-cultivation">The full cultivation sheet</a>.</div>
     </details>
   {/if}
 
@@ -426,7 +432,7 @@
           <div class="tlrow">
             <span class="d">{e.d}</span>
             <span class="t">{EVENT_LABEL[e.t] ?? e.t}{#if e.used}<span class="x2">{' · '}{e.used}</span>{/if}{#if e.cause}<span class="x2">{' · '}{e.cause}</span>{/if}{#if e.measures}<span class="x2">{' · '}{Object.entries(e.measures).map(([k, v]) => `${MEASURES.find((m) => m.k === k)?.label ?? k} ${v}`).join(', ')}</span>{/if}{#if e.note}<span class="x2">{' · '}{e.note}</span>{/if}</span>
-            {#if confirmEvent === e.id}<button class="rm confirm" type="button" onclick={() => { collection.remove('event', e.id); confirmEvent = null; }}>Remove?</button>{:else}<button class="rm" type="button" title="Remove this entry" aria-label="Remove this entry" onclick={() => (confirmEvent = e.id)}>×</button>{/if}
+            {#if confirmEvent === e.id}<button class="rm confirm" type="button" onclick={() => { collection.remove('event', e.id); confirmEvent = null; }}>Remove?</button>{:else}<button class="rm" type="button" title="Remove this entry" aria-label="Remove this entry" onclick={() => { confirmEvent = e.id; void focusNext('.rm.confirm'); }}>×</button>{/if}
           </div>
         {:else}
           {@const ph = row.ph}
@@ -487,7 +493,7 @@
 
   <div class="dangerrow">
     <span class="small muted">Removing keeps the number reserved; the record stays in the change log and in any backup taken before.</span>
-    {#if confirmRemove}<span><button class="btn danger" onclick={remove}>Yes, remove {accNo(a)}</button> <button class="btn" onclick={() => (confirmRemove = false)}>Keep</button></span>{:else}<button class="btn danger" onclick={() => (confirmRemove = true)}>Remove this plant</button>{/if}
+    {#if confirmRemove}<span><button class="btn danger" onclick={remove}>Yes, remove {accNo(a)}</button> <button class="btn" onclick={() => (confirmRemove = false)}>Keep</button></span>{:else}<button class="btn danger" onclick={() => { confirmRemove = true; void focusNext('.dangerrow .btn.danger'); }}>Remove this plant</button>{/if}
   </div>
   {#if lightbox != null && photos.length}
     <Lightbox {photos} bind:index={lightbox} acc={id} onclose={() => (lightbox = null)} />

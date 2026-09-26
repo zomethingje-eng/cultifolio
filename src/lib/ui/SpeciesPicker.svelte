@@ -25,6 +25,8 @@
   let index: Entry[] | null = null;
   let prepared: Prepared<Entry>[] | null = null;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  /** Bumped on every keystroke: a search or exact check answers only if it is still the latest, so a slow answer for text since changed never replaces the menu (round eighteen, B2). */
+  let reqGen = 0;
   let resolved = $state<'yes' | 'no' | 'unknown' | 'unreached'>('unknown');
   /** The highlighted row, or -1 for none. */
   let hi = $state(-1);
@@ -48,6 +50,8 @@
   }
 
   async function search(q: string) {
+    const gen = ++reqGen;
+    const live = () => gen === reqGen;
     const p = parseName(q);
     cultivar = p.cultivar ?? null;
     kind = p.kind;
@@ -55,6 +59,7 @@
     const genusOnly = !p.epithet;
     const needle = p.scientific.toLowerCase();
     const idx = await loadIndex();
+    if (!live()) return;
     // The corpus index is species-level; for a genus-only name (a hybrid) its rows would be wrong suggestions.
     if (!prepared) prepared = prepare(idx);
     // A local hit whose genus is not the one typed came from the one-edit fallback ("polyphylla" → Lupinus polyphyllus): say so.
@@ -67,10 +72,12 @@
     try {
       // /api/names proxies GBIF's species/suggest (same JSON shape) from the Worker, so no name you type leaves this site from the browser.
       const r = await fetch(`/api/names?q=${encodeURIComponent(p.scientific)}`);
+      if (!live()) return;
       // A refusal is said, not shown as an empty list: the grower can still type the name and let the plant page repair the key later (round seventeen, 1).
       if (!r.ok) { nameServiceDown = true; return; }
       nameServiceDown = false;
       const rows = (await r.json()) as Array<{ key: number; canonicalName?: string; scientificName: string; family?: string; rank?: string; status?: string }>;
+      if (!live()) return;
       const remote: Sugg[] = rows
         .filter((x) => (genusOnly ? x.rank === 'GENUS' : /SPECIES|SUBSPECIES|VARIETY|FORM/.test(x.rank ?? '')))
         .map((x) => ({ key: x.key, name: x.canonicalName ?? x.scientificName, family: x.family, rank: x.rank, status: x.status }))
@@ -80,11 +87,12 @@
       suggestions = [...local, ...remote];
       if (hi >= suggestions.length) hi = -1;
     } catch {
-      nameServiceDown = true; // offline: local suggestions only, and said
+      if (live()) nameServiceDown = true; // offline: local suggestions only, and said
     }
   }
 
   function onInput() {
+    reqGen++;
     taxonKey = null;
     resolved = 'unknown';
     armed = false;
@@ -103,12 +111,14 @@
   }
   async function checkExact() {
     if (taxonKey || value.trim().length < 4) return;
+    const gen = reqGen;
     const p = parseName(value);
     try {
       // An exact spelling among the suggestions resolves the name; a genus-only name (a hybrid, a cultivar of unstated parentage) resolves at genus rank.
       const r = await fetch(`/api/names?q=${encodeURIComponent(p.scientific)}`);
       if (!r.ok) throw new Error(String(r.status));
       const rows = (await r.json()) as Array<{ key: number; canonicalName?: string; scientificName?: string; rank?: string }>;
+      if (gen !== reqGen) return; // the field changed while this was asked
       const want = p.scientific.toLowerCase();
       const m = rows.find((x) => (x.canonicalName ?? x.scientificName ?? '').toLowerCase() === want && (p.epithet ? /SPECIES|SUBSPECIES|VARIETY|FORM/.test(x.rank ?? '') : x.rank === 'GENUS'));
       if (m) {
@@ -116,7 +126,7 @@
         resolved = 'yes';
       } else resolved = 'no';
     } catch {
-      resolved = 'unreached';
+      if (gen === reqGen) resolved = 'unreached';
     }
   }
   /** The nearest reference name when the typed one resolved to nothing: offered by name, never taken on its own. */

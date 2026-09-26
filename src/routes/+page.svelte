@@ -132,6 +132,8 @@
     const m = new Map<string, string[]>();
     if (!collection.ready) return m;
     for (const a of collection.accessions) if (a.status === 'growing') m.set(speciesSlug(a.taxonName), [...(m.get(speciesSlug(a.taxonName)) ?? []), accNo(a)]);
+    // and by key, so a tile under a suffixed homonym slug still shows the plants grown of it (round eighteen, 6)
+    for (const a of collection.accessions) if (a.status === 'growing' && a.taxonKey != null) { const k = `key:${a.taxonKey}`; m.set(k, [...(m.get(k) ?? []), accNo(a)]); }
     return m;
   });
   // Your species: what you grow or follow. Empty until the collection is open, so the server-rendered catalogue stands until then.
@@ -202,7 +204,7 @@
   const rowHref = (id: string) => `?by=${data.by}${id === data.open ? '' : `&open=${id}`}`;
   /* ---- your species ---- */
   // A tile's data: a catalogue entry, or, until the index is here, the name alone. `missing`: the index is here and has no such species.
-  type Tile = { slug: string; name: string; family?: string; common?: string; thumb?: string; alt?: string; open?: number; climate?: string; missing?: boolean; /** the reference has a photograph, and the grower has it switched off for their own tiles */ thumbOff?: boolean };
+  type Tile = { slug: string; key?: number; name: string; family?: string; common?: string; thumb?: string; alt?: string; open?: number; climate?: string; missing?: boolean; /** the reference has a photograph, and the grower has it switched off for their own tiles */ thumbOff?: boolean };
   const mineTiles = $derived.by(() => {
     const list = [...mine.values()].sort((a, b) => a.name.localeCompare(b.name));
     const bySlug = full ? new Map(full.map((c) => [c.slug, c])) : ownEntries;
@@ -260,13 +262,15 @@
 {/snippet}
 
 {#snippet tile(c: Tile)}
+  {@const own = owned.get(c.slug) ?? (c.key != null ? owned.get(`key:${c.key}`) : undefined)}
   <a class="tile" href="/species/{c.slug}">
-    {#if owned.get(c.slug)?.length}<span class="ownchip" title="You grow {owned.get(c.slug)!.length === 1 ? owned.get(c.slug)![0] : owned.get(c.slug)!.length + ' of these'}" aria-label="You grow {owned.get(c.slug)!.length === 1 ? owned.get(c.slug)![0] : owned.get(c.slug)!.length + ' of these'}">{owned.get(c.slug)!.length === 1 ? owned.get(c.slug)![0] : `× ${owned.get(c.slug)!.length}`}</span>{:else if mine.get(c.slug)?.followed}<span class="ownchip following" title="On your list without a plant of it" aria-label="Following: on your list without a plant of it">following</span>{/if}
+    {#if own?.length}<span class="ownchip" title="You grow {own.length === 1 ? own[0] : own.length + ' of these'}" aria-label="You grow {own.length === 1 ? own[0] : own.length + ' of these'}">{own.length === 1 ? own[0] : `× ${own.length}`}</span>{:else if mine.get(c.slug)?.followed}<span class="ownchip following" title="On your list without a plant of it" aria-label="Following: on your list without a plant of it">following</span>{/if}
     {#if c.thumb}<div class="im"><img src={c.thumb} alt={c.alt} loading="lazy" onerror={(e) => { const im = e.currentTarget as HTMLImageElement; im.style.display = 'none'; im.parentElement?.classList.add('ph'); im.parentElement && (im.parentElement.textContent = 'photograph did not load'); }} /></div>{:else if c.thumbOff}<div class="im ph" title="The reference has a photograph; showing it on your own tiles is off">reference photograph off</div>{:else if c.climate}<div class="im ph">no open photograph on file</div>{:else if c.missing}<div class="im ph">not in the reference yet</div>{:else}<div class="im ph">{loadingFull ? 'loading…' : fullFailed || ownFailed ? 'reference not reached' : ''}</div>{/if}
     <div class="tx">
       <div class="nm"><SpeciesName name={c.name} /></div>
       <div class="fam">{c.common ?? c.family ?? ''}</div>
-      <div class="fig" title={c.climate ? climateWord(c.climate) : undefined}>{c.climate === 'ok' ? `${c.open ? `${c.open} wild record${c.open === 1 ? '' : 's'}` : 'habitat climate'}` : c.climate === 'pending' ? 'climate pending' : c.climate === 'refused' ? 'climate not checked' : c.climate ? 'no habitat climate' : c.missing ? 'not in the reference' : ''}</div>
+      <!-- the index carries the openly licensed count only; the species page's "in range" total is another figure, so this one is named for what it is (round eighteen, 7) -->
+      <div class="fig" title={c.climate ? climateWord(c.climate) : undefined}>{c.climate === 'ok' ? `${c.open ? `${c.open} open record${c.open === 1 ? '' : 's'}` : 'habitat climate'}` : c.climate === 'pending' ? 'climate pending' : c.climate === 'refused' ? 'climate not checked' : c.climate ? 'no habitat climate' : c.missing ? 'not in the reference' : ''}</div>
     </div>
   </a>
 {/snippet}

@@ -19,6 +19,7 @@
   import PhotoImg from '$lib/ui/PhotoImg.svelte';
   import PhotoAdd from '$lib/ui/PhotoAdd.svelte';
   import Lightbox from '$lib/ui/Lightbox.svelte';
+  import { focusNext } from '$lib/ui/focus';
   import RefPhotoOffer from '$lib/ui/RefPhotoOffer.svelte';
   onMount(() => collection.load());
   const param = $derived(page.params.id!);
@@ -308,7 +309,7 @@
         <div class="tlrow">
           <span class="d">{e.d}</span>
           <span class="t">{EVENT_LABEL[e.t] ?? e.t}{#if e.n != null}&nbsp;<b>{e.n}</b>{/if}{#if e.cause}<span class="x2">{' · '}{e.cause}</span>{/if}{#if e.note}<span class="x2">{' · '}{e.note}</span>{/if}</span>
-          {#if e.t === 'potup'}<span class="x small muted">kept: the plants exist</span>{:else if e.t === 'germinate' && !canDropCount(e.id)}<span class="x small muted" title="Without this count the batch would show fewer up than were potted and lost">kept: the potted plants rest on it</span>{:else if confirmEvent === e.id}<button class="rm confirm" type="button" onclick={() => { collection.remove('event', e.id); confirmEvent = null; }}>Remove?</button>{:else}<button class="rm" type="button" title="Remove this entry" aria-label="Remove this entry" onclick={() => (confirmEvent = e.id)}>×</button>{/if}
+          {#if e.t === 'potup'}<span class="x small muted">kept: the plants exist</span>{:else if e.t === 'germinate' && !canDropCount(e.id)}<span class="x small muted" title="Without this count the batch would show fewer up than were potted and lost">kept: the potted plants rest on it</span>{:else if confirmEvent === e.id}<button class="rm confirm" type="button" onclick={() => { collection.remove('event', e.id); confirmEvent = null; }}>Remove?</button>{:else}<button class="rm" type="button" title="Remove this entry" aria-label="Remove this entry" onclick={() => { confirmEvent = e.id; void focusNext('.rm.confirm'); }}>×</button>{/if}
         </div>
       {/each}
     </div>

@@ -13,6 +13,7 @@
   import { LOCATION_KINDS, type LocationKind } from '$lib/db/types';
   import type { Forecast, Alert } from '$lib/weather/forecast';
   import { setCrumb } from '$lib/ui/crumb.svelte';
+  import { focusNext } from '$lib/ui/focus';
   onMount(async () => {
     await collection.load();
     // /benches/<id>?edit=1 from a plant page that found a figure missing here.
@@ -262,7 +263,7 @@
     {#if confirmRemove}
       <span><button class="btn danger small" onclick={remove}>Yes, remove</button> <button class="btn small" onclick={() => (confirmRemove = false)}>Keep</button></span>
     {:else}
-      <button class="btn danger small" onclick={() => (confirmRemove = true)}>Remove place</button>
+      <button class="btn danger small" onclick={() => { confirmRemove = true; void focusNext('.dangerrow .btn.danger'); }}>Remove place</button>
     {/if}
   </div>
 {/if}

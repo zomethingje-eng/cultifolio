@@ -24,11 +24,23 @@
     confirming = false;
   });
   $effect(() => {
+    // A modal: the rest of the page is inert while it is open (Tab cannot leave it, a screen reader cannot read behind it),
+    // and focus goes back to what opened it on close, the thumbnail as a rule (round eighteen, 13).
+    const opener = document.activeElement as HTMLElement | null;
     dialog?.focus();
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
+    // Every sibling of the dialog and of each of its ancestors, up to <body>: the dialog sits deep inside the page, so
+    // marking only <body>'s children would leave its own branch live.
+    const others: HTMLElement[] = [];
+    for (let node: HTMLElement | null = dialog; node && node.parentElement && node !== document.body; node = node.parentElement) {
+      for (const sib of node.parentElement.children) if (sib !== node && !(sib as HTMLElement).inert) others.push(sib as HTMLElement);
+    }
+    for (const el of others) el.inert = true;
     return () => {
       document.body.style.overflow = prev;
+      for (const el of others) el.inert = false;
+      if (opener && document.contains(opener)) opener.focus();
     };
   });
 

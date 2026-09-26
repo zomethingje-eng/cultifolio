@@ -118,7 +118,7 @@ class Sync {
         await setMeta(META, this.meta);
       } else this.meta = m;
       this.keys = await deriveKeys(m.key);
-      this.keysOf.set(m, this.keys);
+      this.keysOf.set(this.meta!, this.keys); // the meta this engine holds, which the conversion branch just replaced (round eighteen, 12)
       this.vaultId = this.keys.id;
       this.lastSync = m.lastSync;
       this.quarantined = this.meta.quarantined ?? [];
@@ -231,6 +231,7 @@ class Sync {
   /** Forget the key in memory only: another tab did the forgetting and wrote the vault; this tab must not sync through it. */
   private dropped(): void {
     this.gen++;
+    this.busy = null; // a run this drop strands never clears it (its finally leaves the new generation alone), and the icon would spin until a reload (round eighteen, 11)
     this.unhook?.();
     this.unhook = null;
     this.meta = null;
@@ -247,8 +248,8 @@ class Sync {
     this.vaultFull = null;
   }
 
-  private note(list: 'quarantined' | 'refused', key: string, error: string): void {
-    const m = this.meta!;
+  private note(m: SyncMeta, list: 'quarantined' | 'refused', key: string, error: string): void {
+    if (this.meta !== m) throw stopped(); // a stale run's verdict on its old vault's batch or photo must not land on the new vault (round eighteen, 4)
     const l = (m[list] ??= []);
     if (!l.some((q) => q.key === key)) l.push({ key, error, at: new Date().toISOString(), ...(list === 'quarantined' ? { build: BUILD, kind: error.startsWith('photo:') ? 'photo' : 'batch' } : {}) });
     this[list] = [...l];
@@ -395,8 +396,8 @@ class Sync {
     throw e;
   }
 
-  private setFull(full: { bytes: number; limit: number } | null): void {
-    const m = this.meta!;
+  private setFull(m: SyncMeta, full: { bytes: number; limit: number } | null): void {
+    if (this.meta !== m) throw stopped(); // a stale 507 or 200 is the old vault's, never the new one's (round eighteen, 4)
     if (full) {
       m.vaultFull = { ...full, at: new Date().toISOString() };
       this.vaultFull = full;
@@ -422,7 +423,7 @@ class Sync {
     for (let i = 0; i < todo.length; i += BATCH_MAX) {
       const batch = todo.slice(i, i + BATCH_MAX);
       this.step(m, `Sending ${Math.min(i + batch.length, todo.length)} of ${todo.length} changes…`);
-      sent += await this.pushBatch(batch);
+      sent += await this.pushBatch(m, batch);
       this.pending = todo.length - sent;
       await this.save(m);
       if (this.vaultFull) return;
@@ -445,21 +446,21 @@ class Sync {
       const b = await getPhotoBlobs(id);
       if (!b) continue;
       if (b.blob.size + b.thumb.size + SEAL_OVERHEAD > MAX_PHOTO_BYTES) {
-        this.note('refused', id, `photo is ${Math.round((b.blob.size + b.thumb.size) / 1048576)} MB; the limit is ${MAX_PHOTO_BYTES / 1048576} MB`);
+        this.note(m, 'refused', id, `photo is ${Math.round((b.blob.size + b.thumb.size) / 1048576)} MB; the limit is ${MAX_PHOTO_BYTES / 1048576} MB`);
         continue;
       }
       const packed = packPhoto(new Uint8Array(await b.blob.arrayBuffer()), new Uint8Array(await b.thumb.arrayBuffer()));
       const r = await fetch(`${this.base}/api/sync/photo/${id}?vault=${this.k(m).id}`, { method: 'PUT', headers: this.h(m), body: (await seal(this.k(m), 'photo', packed, id)) as BodyInit });
       const full = await this.fullFrom(r);
       if (full) {
-        this.setFull(full);
+        this.setFull(m, full);
         await this.save(m);
         return;
       }
-      if (r.ok) { m.photosPushed.push(id); if (probing) this.setFull(null); }
+      if (r.ok) { m.photosPushed.push(id); if (probing) this.setFull(m, null); }
       else if (r.status === 429) this.limited(r);
       else if (r.status === 409 && (await this.serverHolds(m, id, packed))) m.photosPushed.push(id); // our own earlier send whose answer was lost: sealed again with a fresh nonce, so the bytes differ, the pixels do not
-      else if (r.status >= 400 && r.status < 500 && r.status !== 401 && r.status !== 403) this.note('refused', id, `photo refused: ${r.status}`);
+      else if (r.status >= 400 && r.status < 500 && r.status !== 401 && r.status !== 403) this.note(m, 'refused', id, `photo refused: ${r.status}`);
       else throw new Error(`photo push failed: ${r.status}`);
       await this.save(m);
     }
@@ -473,8 +474,7 @@ class Sync {
    * in the outbox while the rest of the sync goes on. A 507 is the vault being
    * full: nothing is halved; the push stops and the page says so.
    */
-  private async pushBatch(batch: Change[], mayResplit = true): Promise<number> {
-    const m = this.meta!;
+  private async pushBatch(m: SyncMeta, batch: Change[], mayResplit = true): Promise<number> {
     // The name the server files this under: the hour of the last edit (never the millisecond), a fixed counter, this
     // device, and twelve digits of a keyed fingerprint of the content. The fingerprint is sent in full so a re-send after
     // a lost reply is recognised as the same batch; being keyed, it is not a hash anyone could test a guessed edit against.
@@ -485,7 +485,7 @@ class Sync {
     if (body.length > MAX_BATCH_BYTES && mayResplit && batch.length > 1) {
       // Too big before it ever leaves: halve it. Each half is named by its own content.
       const mid = Math.ceil(batch.length / 2);
-      return (await this.pushBatch(batch.slice(0, mid))) + (await this.pushBatch(batch.slice(mid)));
+      return (await this.pushBatch(m, batch.slice(0, mid))) + (await this.pushBatch(m, batch.slice(mid)));
     }
     const headers: Record<string, string> = { ...this.h(m), 'x-batch': key, 'x-batch-plain': plain };
     if (collection.device) headers['x-device'] = collection.device;
@@ -495,25 +495,25 @@ class Sync {
       // own transaction: a run of a vault this device has since left or replaced must not empty the new vault's outbox of
       // these same changes (round sixteen, 2; round seventeen, A1).
       await outboxAck(batch.map((c) => c.t), m.key);
-      this.setFull(null);
+      this.setFull(m, null);
       if (!m.have.includes(key)) m.have.push(key);
       (m.haveAt ??= {})[key] = Date.now(); // its arrival, near enough: the server's clock and this one agree to the minute the overlap allows
       return batch.length;
     }
     const full = await this.fullFrom(r);
     if (full) {
-      this.setFull(full);
+      this.setFull(m, full);
       return 0;
     }
     if (r.status === 429) this.limited(r);
     if ((r.status === 400 || r.status === 409 || r.status === 413) && mayResplit && batch.length > 1) {
       const mid = Math.ceil(batch.length / 2);
-      const a = await this.pushBatch(batch.slice(0, mid));
-      return this.vaultFull ? a : a + (await this.pushBatch(batch.slice(mid)));
+      const a = await this.pushBatch(m, batch.slice(0, mid));
+      return this.vaultFull ? a : a + (await this.pushBatch(m, batch.slice(mid)));
     }
     if (r.status === 400 || r.status === 409 || r.status === 413) {
       // Noted under the last HLC, which is stable across runs.
-      this.note('refused', batch[batch.length - 1].t, `the server refused ${batch.length} change${batch.length === 1 ? '' : 's'} (${r.status})`);
+      this.note(m, 'refused', batch[batch.length - 1].t, `the server refused ${batch.length} change${batch.length === 1 ? '' : 's'} (${r.status})`);
       return 0;
     }
     throw new Error(`push failed: ${r.status}`);
@@ -561,12 +561,13 @@ class Sync {
     if (!res.ok) throw new Error(`batch ${key}: ${res.status}`);
     const bytes = new Uint8Array(await res.arrayBuffer());
     let changes: Change[] | null = null;
+    const keys = this.k(m); // outside the try: a stale run stops here, and is never read as bad ciphertext (round eighteen, 4)
     try {
-      const batch = await openJson<{ v: number; device: string; changes: unknown }>(this.k(m), 'log', bytes);
+      const batch = await openJson<{ v: number; device: string; changes: unknown }>(keys, 'log', bytes);
       if (!batch || typeof batch !== 'object' || batch.v !== 1) throw new Error('not a batch this version understands');
       changes = validateChanges(batch.changes);
     } catch (e) {
-      this.note('quarantined', key, e instanceof Error ? e.message : String(e));
+      this.note(m, 'quarantined', key, e instanceof Error ? e.message : String(e));
       return false;
     }
     // Storing can fail (a full phone). That is not the batch's fault: nothing is noted, the cursor stays before it,
@@ -673,12 +674,13 @@ class Sync {
       if (!r.ok) throw new Error(`photo ${p.id}: ${r.status}`);
       const bytes = new Uint8Array(await r.arrayBuffer()); // read whole before it is judged: a dropped connection stops the run and it is fetched again
       let pixels: { full: Uint8Array; thumb: Uint8Array } | null = null;
+      const keys = this.k(m);
       try {
-        pixels = unpackPhoto(await open(this.k(m), 'photo', bytes, p.id));
+        pixels = unpackPhoto(await open(keys, 'photo', bytes, p.id));
         // The record says what the pixels hash to; a server cannot swap one photo for another.
         if (p.sha && (await sha256hex(pixels.full)) !== p.sha) throw new Error('pixels do not match the record');
       } catch (e) {
-        this.note('quarantined', p.id, `photo: ${e instanceof Error ? e.message : String(e)}`);
+        this.note(m, 'quarantined', p.id, `photo: ${e instanceof Error ? e.message : String(e)}`);
       }
       if (pixels) {
         // A failed write is storage, not the photo: not quarantined, and the run stops so it is fetched again.

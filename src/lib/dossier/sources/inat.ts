@@ -67,7 +67,7 @@ export async function photos(f: JsonFetcher, taxonId: number, wild: boolean, per
         width: p.original_dimensions?.width ?? undefined,
         height: p.original_dimensions?.height ?? undefined,
         licence: tag,
-        attribution: p.attribution ?? 'no author stated, CC0',
+        attribution: p.attribution ?? 'author not stated, CC0',
         page: `https://www.inaturalist.org/observations/${o.id}`,
         captive: !wild,
         observedOn: o.observed_on ?? undefined,
