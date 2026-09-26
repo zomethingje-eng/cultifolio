@@ -45,7 +45,7 @@
   const nextNo = $derived(collection.ready ? collection.nextSowingNumber(Number(sown.slice(0, 4)) || undefined) : '…');
 
   $effect(() => {
-    setCrumb([{ label: 'Sowings', href: '/sowings' }, { label: 'New sowing' }]);
+    setCrumb([{ label: 'Propagation', href: '/propagation' }, { label: 'New batch' }]);
     return () => setCrumb([]);
   });
   /** The reference's key for a species-rank name when the reference answers; otherwise the key as given (the plant page repairs it later). */
@@ -56,7 +56,7 @@
   }
   onMount(async () => {
     await collection.load();
-    // /sowings/new?species=…&key=… from a species page
+    // /propagation/new?species=…&key=… from a species page
     const sp = page.url.searchParams.get('species');
     const k = Number(page.url.searchParams.get('key'));
     if (sp) name = sp;
@@ -71,7 +71,7 @@
       /* fine */
     }
     if (want && collection.location(want)) locationId = want;
-    // /sowings/new?parent=2026-0004 → a vegetative batch from that plant, species prefilled.
+    // /propagation/new?parent=2026-0004 → a vegetative batch from that plant, species prefilled.
     const p = page.url.searchParams.get('parent');
     if (p && collection.accession(p)) {
       const a = collection.accession(p)!;
@@ -138,7 +138,7 @@
         notes: notes.trim() || null
       });
       try { if (locationId) localStorage.setItem('cultifolio.lastSowLocation', locationId); } catch { /* fine */ }
-      goto(`/sowings/${sowNo(rec)}`);
+      goto(`/propagation/${sowNo(rec)}`);
     } catch {
       /* lastWriteError is shown above the form; the form stays open (round fifteen, 9) */
     } finally {
@@ -147,13 +147,13 @@
   }
 </script>
 
-<svelte:head><title>New sowing — Cultifolio</title></svelte:head>
+<svelte:head><title>New batch — Cultifolio</title></svelte:head>
 
 {#if collection.lastWriteError}
   <div class="notice err" role="alert" id="write-error">This change was not saved: {collection.lastWriteError}. Free space or <a href="/backup">back up now</a>.</div>
 {/if}
 <form class="form" novalidate onsubmit={save}>
-  <PageHead title={m.veg ? 'Start a propagation' : 'Sow seed'} kick="Sowings" places={false}>
+  <PageHead title={m.veg ? 'Start a propagation' : 'Sow seed'} kick="Propagation" places={false}>
     {#snippet subline()}Batch <span class="accno">{nextNo}</span>. Plants potted up from it are numbered then, not now.{/snippet}
   </PageHead>
   <div class="cult sheet">
@@ -213,7 +213,7 @@
   </div>
 
   <div class="actions">
-    <a class="btn" href="/sowings">Cancel</a>
+    <a class="btn" href="/propagation">Cancel</a>
     <button class="btn pri" type="submit" disabled={!name.trim() || busy}>Start batch</button>
   </div>
 </form>

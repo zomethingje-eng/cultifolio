@@ -35,8 +35,8 @@
   const menu = [
     { href: '/', label: 'Species' },
     { href: '/plants', label: 'My plants' },
-    { href: '/benches', label: 'Benches' },
-    { href: '/sowings', label: 'Sowings' },
+    { href: '/places', label: 'Places' },
+    { href: '/propagation', label: 'Propagation' },
     { href: '/frost', label: 'Frost' },
     null,
     { href: '/compare', label: 'Compare species' },
@@ -51,7 +51,7 @@
   ];
   let mainEl = $state<HTMLElement | null>(null);
   /** The routes about the grower's own collection: what they link to says what is grown. */
-  const privateRoute = $derived(/^\/(plants|sowings|benches|labels|backup|sync|settings|frost)(\/|$)/.test(page.url.pathname));
+  const privateRoute = $derived(/^\/(plants|propagation|places|labels|backup|sync|settings|frost)(\/|$)/.test(page.url.pathname));
   // How many pages this session has moved through inside the app: the back control goes to the previous one when there is one.
   let hops = 0;
   afterNavigate((nav) => {
@@ -127,8 +127,8 @@
   const places = [
     { href: '/', label: 'Species', on: (p: string) => p === '/' || p.startsWith('/species') },
     { href: '/plants', label: 'Plants', on: (p: string) => p.startsWith('/plants') },
-    { href: '/benches', label: 'Benches', on: (p: string) => p.startsWith('/benches') },
-    { href: '/sowings', label: 'Sowings', on: (p: string) => p.startsWith('/sowings') },
+    { href: '/places', label: 'Places', on: (p: string) => p.startsWith('/places') },
+    { href: '/propagation', label: 'Propagation', on: (p: string) => p.startsWith('/propagation') },
     { href: '/frost', label: 'Frost', on: (p: string) => p.startsWith('/frost') }
   ];
   // The crumb: what a detail page set, else the section this path belongs to.
@@ -195,8 +195,8 @@
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         {#if pl.label === 'Species'}<path d="M12 3v18M5 8c4 0 7 2 7 6M19 8c-4 0-7 2-7 6M7 15c3 0 5 1.5 5 4M17 15c-3 0-5 1.5-5 4" />
         {:else if pl.label === 'Plants'}<path d="M6 21h12M9 21V10a3 3 0 0 1 6 0v11M12 10V4M9 6c0 0 3-2 3-2s3 2 3 2" />
-        {:else if pl.label === 'Benches'}<path d="M3 10h18M3 15h18M6 10v11M18 10v11M6 15v-5M18 15v-5" />
-        {:else if pl.label === 'Sowings'}<path d="M4 19h16M6 19c0-6 3-9 6-9s6 3 6 9M12 10V4M9 7l3-3 3 3" />
+        {:else if pl.label === 'Places'}<path d="M3 10h18M3 15h18M6 10v11M18 10v11M6 15v-5M18 15v-5" />
+        {:else if pl.label === 'Propagation'}<path d="M4 19h16M6 19c0-6 3-9 6-9s6 3 6 9M12 10V4M9 7l3-3 3 3" />
         {:else}<path d="M12 2v20M4 6l16 12M20 6L4 18M2 12h20" />{/if}
       </svg>
       <span>{pl.label}</span>

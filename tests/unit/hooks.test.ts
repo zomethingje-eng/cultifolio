@@ -19,7 +19,7 @@ class CacheHit extends Response {
 
 describe('hooks.server handle', () => {
   it('adds the policy headers to a response whose own headers are immutable, keeping its body and headers', async () => {
-    const r = await handle({ event: {} as never, resolve: async () => new CacheHit('[{"key":1}]') } as never);
+    const r = await handle({ event: { url: new URL('http://x/api/names?q=a') } as never, resolve: async () => new CacheHit('[{"key":1}]') } as never);
     expect(r.status).toBe(200);
     expect(r.headers.get('referrer-policy')).toBe('no-referrer');
     expect(r.headers.get('x-frame-options')).toBe('DENY');
@@ -27,7 +27,21 @@ describe('hooks.server handle', () => {
     expect(await r.text()).toBe('[{"key":1}]');
   });
   it('leaves an x-frame-options a route set', async () => {
-    const r = await handle({ event: {} as never, resolve: async () => new Response('x', { headers: { 'x-frame-options': 'SAMEORIGIN' } }) } as never);
+    const r = await handle({ event: { url: new URL('http://x/api/names?q=a') } as never, resolve: async () => new Response('x', { headers: { 'x-frame-options': 'SAMEORIGIN' } }) } as never);
     expect(r.headers.get('x-frame-options')).toBe('SAMEORIGIN');
+  });
+  it('sends the renamed sections\' old paths to the new ones, query kept, and nothing else (improvements, 3)', async () => {
+    const at = async (path: string) => {
+      try {
+        await handle({ event: { url: new URL('http://x' + path) } as never, resolve: async () => new Response('page') } as never);
+        return null;
+      } catch (e) {
+        return e as { status: number; location: string };
+      }
+    };
+    expect(await at('/benches')).toMatchObject({ status: 301, location: '/places' });
+    expect(await at('/sowings/new?loc=k1')).toMatchObject({ status: 301, location: '/propagation/new?loc=k1' });
+    expect(await at('/benchesx')).toBeNull();
+    expect(await at('/plants/2026-0001')).toBeNull();
   });
 });

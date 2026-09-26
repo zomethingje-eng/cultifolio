@@ -16,7 +16,7 @@
   import { focusNext } from '$lib/ui/focus';
   onMount(async () => {
     await collection.load();
-    // /benches/<id>?edit=1 from a plant page that found a figure missing here.
+    // /places/<id>?edit=1 from a plant page that found a figure missing here.
     if (page.url.searchParams.get('edit') === '1') startEdit();
   });
 
@@ -29,7 +29,7 @@
   const cond = $derived(collection.conditions(id));
   const today = localDate();
   $effect(() => {
-    if (loc) setCrumb([{ label: 'Benches', href: '/benches' }, ...path.slice(0, -1).map((p) => ({ label: p.name, href: `/benches/${p.id}` })), { label: loc.name }]);
+    if (loc) setCrumb([{ label: 'Places', href: '/places' }, ...path.slice(0, -1).map((p) => ({ label: p.name, href: `/places/${p.id}` })), { label: loc.name }]);
     return () => setCrumb([]);
   });
   const dli = $derived(cond.ppfd != null ? (cond.ppfd * (cond.lightHours ?? 12) * 3600) / 1e6 : null);
@@ -65,7 +65,7 @@
     navigator.geolocation?.getCurrentPosition((p) => { f.lat = p.coords.latitude.toFixed(4); f.lon = p.coords.longitude.toFixed(4); if (p.coords.altitude != null) f.altM = Math.round(p.coords.altitude).toString(); });
   }
 
-  /* ---- water / feed the whole bench ---- */
+  /* ---- water / feed the whole place ---- */
   let busy = $state('');
   async function waterAll(t: 'water' | 'feed') {
     busy = t;
@@ -114,7 +114,7 @@
    * A heater set-point protects the plants even outdoors, so with a floor set the first question is whether the outside
    * reaches it: its own level and wording, and a night that reaches it exactly counts (round thirteen, 11). A floor that
    * is not reached does not make the forecast clear: a frost or cold night the forecast itself found keeps its own level,
-   * with the floor sentence added, so a bench with a -5 °C floor never says "frost: clear" over a -2 °C night (round
+   * with the floor sentence added, so a place with a -5 °C floor never says "frost: clear" over a -2 °C night (round
    * fifteen, 11). An NWS warning in force is said whatever the floor, and alerts that were not checked are said not to
    * have been (round twelve, 9).
    */
@@ -134,7 +134,7 @@
   let confirmRemove = $state(false);
   async function remove() {
     await collection.removeLocation(id);
-    goto('/benches');
+    goto('/places');
   }
 </script>
 
@@ -143,7 +143,7 @@
 {#if !collection.ready}
   <p class="muted">Opening your collection…</p>
 {:else if !loc}
-  <h1 class="q" style="margin-top: 24px">Not here</h1><p class="muted">No location with that id on this device. <a href="/benches">All locations</a>.</p>
+  <h1 class="q" style="margin-top: 24px">Not here</h1><p class="muted">No location with that id on this device. <a href="/places">All locations</a>.</p>
 {:else}
   <div class="hero band"><div class="ph">{LOCATION_KINDS.find((k) => k.k === loc.type)?.label ?? 'Place'}{path.length > 1 ? ' inside ' + path.slice(0, -1).map((p) => p.name).join(' › ') : ''}</div></div>
   <div class="idcard">
@@ -189,7 +189,7 @@
       <button class="btn" onclick={startAudit} disabled={auditing}>Audit</button>
     {/if}
     <a class="btn" class:pri={!deep.length} href="/plants/new?loc={id}">Add a plant here</a>
-    <a class="btn" href="/sowings/new?loc={id}">Sow here</a>
+    <a class="btn" href="/propagation/new?loc={id}">Sow here</a>
     <a class="btn" href="/labels?loc={id}">Labels</a>
     {#if flash}<span class="flash">{flash}</span>{/if}
   </div>
@@ -228,14 +228,14 @@
     <div class="secrule"><h2>Inside</h2><div class="line"></div><span class="n">{kids.length}</span></div>
     <div class="rows">
       {#each kids as k}
-        <a class="azrow" href="/benches/{k.id}"><span class="im">{(LOCATION_KINDS.find((x) => x.k === k.type)?.label ?? 'Place').slice(0, 5)}</span><span><span class="nm" style="font-style: normal">{k.name}</span><span class="fam">{LOCATION_KINDS.find((x) => x.k === k.type)?.label ?? 'Place'}</span></span><span class="fig">{plural(collection.plantsAt(k.id).length, 'plant')}</span></a>
+        <a class="azrow" href="/places/{k.id}"><span class="im">{(LOCATION_KINDS.find((x) => x.k === k.type)?.label ?? 'Place').slice(0, 5)}</span><span><span class="nm" style="font-style: normal">{k.name}</span><span class="fam">{LOCATION_KINDS.find((x) => x.k === k.type)?.label ?? 'Place'}</span></span><span class="fig">{plural(collection.plantsAt(k.id).length, 'plant')}</span></a>
       {/each}
     </div>
   {/if}
 
   <div class="secrule"><h2>{auditing ? 'Audit: tick what you can see' : `Plants${kids.length ? ' (including places inside)' : ''}`}</h2><div class="line"></div><span class="n">{deep.length}</span></div>
   {#if !deep.length}
-    <div class="cult"><div class="none">Nothing here yet. <a href="/plants/new?loc={id}">Add a plant here</a>, <a href="/sowings/new?loc={id}">sow here</a>, or move one in from its own page.</div></div>
+    <div class="cult"><div class="none">Nothing here yet. <a href="/plants/new?loc={id}">Add a plant here</a>, <a href="/propagation/new?loc={id}">sow here</a>, or move one in from its own page.</div></div>
   {:else}
     <div class="rows">
       {#each deep as a (a.id)}

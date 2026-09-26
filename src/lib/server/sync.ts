@@ -440,29 +440,51 @@ const noKv = () => {
 export const resetKvWarning = () => (warnedNoKv = false);
 
 /**
- * New vaults per address per day. A random key stops anyone reading a
- * stranger's vault; this stops a stranger making ten thousand of them. FAILS
- * CLOSED: no KV bound, or a KV that cannot be read or written, refuses every
- * creation and says so once in the log. The placeholder id in wrangler.jsonc
- * cannot be seen from inside the Worker (only the binding is), but a deploy
- * with it is refused by wrangler, so an absent binding is the case that
- * reaches code.
+ * New vaults: per address per day, for everyone per day, and in all. A random
+ * key stops anyone reading a stranger's vault; these stop a stranger making
+ * ten thousand of them, from one address or from many, and put a ceiling on
+ * what a launch day can cost before anyone looks. The ceilings can be raised
+ * without a deploy: `SYNC_VAULTS_PER_DAY` and `SYNC_VAULTS_MAX` in the Worker's
+ * variables. The counters are KV reads and writes, not atomic, so a burst can
+ * pass a ceiling by a few; that is bounding, not accounting. FAILS CLOSED: no
+ * KV bound, or a KV that cannot be read or written, refuses every creation and
+ * says so once in the log. The placeholder id in wrangler.jsonc cannot be seen
+ * from inside the Worker (only the binding is), but a deploy with it is
+ * refused by wrangler, so an absent binding is the case that reaches code.
  */
-export const MAX_NEW_VAULTS_PER_DAY = 20;
-export async function allowCreation(kv: KVNamespace | undefined, ip: string, now = Date.now()): Promise<boolean> {
+export const MAX_NEW_VAULTS_PER_DAY = 5;
+export const MAX_NEW_VAULTS_ALL_PER_DAY = 200;
+export const MAX_VAULTS = 2000;
+export type Creation = 'ok' | 'address' | 'full';
+export interface CreationCeilings {
+  perDay?: number;
+  max?: number;
+}
+export function creationCeilings(env: Record<string, unknown> | undefined): CreationCeilings {
+  const n = (v: unknown) => (typeof v === 'string' && /^\d+$/.test(v) ? Number(v) : undefined);
+  return { perDay: n(env?.SYNC_VAULTS_PER_DAY), max: n(env?.SYNC_VAULTS_MAX) };
+}
+export async function allowCreation(kv: KVNamespace | undefined, ip: string, now = Date.now(), ceilings: CreationCeilings = {}): Promise<Creation> {
   if (!kv) {
     noKv();
-    return false;
+    return 'full';
   }
-  const k = `vaults:${ip}:${day(now)}`;
+  const perDay = ceilings.perDay ?? MAX_NEW_VAULTS_ALL_PER_DAY;
+  const max = ceilings.max ?? MAX_VAULTS;
+  const kIp = `vaults:${ip}:${day(now)}`;
+  const kDay = `vaults:all:${day(now)}`;
+  const kAll = 'vaults:all';
   try {
-    const n = Number((await kv.get(k)) ?? 0);
-    if (n >= MAX_NEW_VAULTS_PER_DAY) return false;
-    await kv.put(k, String(n + 1), { expirationTtl: 2 * 86400 });
-    return true;
+    const [ip$, day$, all$] = await Promise.all([kv.get(kIp), kv.get(kDay), kv.get(kAll)]);
+    const [nIp, nDay, nAll] = [ip$, day$, all$].map((v) => Number(v ?? 0));
+    // The address's own limit is checked first: one address at its limit is told so, not that sync is full.
+    if (nIp >= MAX_NEW_VAULTS_PER_DAY) return 'address';
+    if (nDay >= perDay || nAll >= max) return 'full';
+    await Promise.all([kv.put(kIp, String(nIp + 1), { expirationTtl: 2 * 86400 }), kv.put(kDay, String(nDay + 1), { expirationTtl: 2 * 86400 }), kv.put(kAll, String(nAll + 1))]);
+    return 'ok';
   } catch (e) {
-    console.error('sync: the vault-creation counter could not be read or written; creation refused', e);
-    return false;
+    console.error('sync: the vault-creation counters could not be read or written; creation refused', e);
+    return 'full';
   }
 }
 

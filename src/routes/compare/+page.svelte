@@ -1,4 +1,5 @@
 <script lang="ts">
+  import NotChecked from '$lib/ui/NotChecked.svelte';
   /**
    * Species side by side: the same figures in the same order for each, with a
    * climograph per column, and the sheet's one-line rows beneath. Nothing is
@@ -19,7 +20,7 @@
   import { temp, rain } from '$core/units';
   let { data } = $props();
   const u = $derived(units.current);
-  // The grower's hemisphere, from the site or the first bench with coordinates: the months follow it, as on the species page.
+  // The grower's hemisphere, from the site or the first place with coordinates: the months follow it, as on the species page.
   const readerLat = $derived(site.current?.lat ?? (site.loaded ? (collection.ready ? (collection.locations.map((l) => l.lat).find((x): x is number => x != null) ?? null) : null) : data.hemiLat));
   const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   type D = (typeof data.items)[number];
@@ -81,7 +82,7 @@
           {#if c.hero}<img src={c.hero.thumb ?? c.hero.url} alt="" loading="lazy" />{/if}
           <a class="nm" href="/species/{c.d.slug}"><SpeciesName name={c.d.name.scientific} /></a>
           <div class="fam">{c.d.name.family ?? ''}{c.d.distribution.native.length ? ' · ' + c.d.distribution.native.slice(0, 2).map((r) => r.name).join(', ') : ''}</div>
-          {#if !c.ok}<div class="small muted">{climateWord(c.d)}</div>{/if}
+          {#if c.d.climate.status === 'refused'}<div class="small muted"><NotChecked what="Climate" why="A source did not answer when the species page was built." /></div>{:else if !c.ok}<div class="small muted">{climateWord(c.d)}</div>{/if}
         </div>
       {/each}
     </div>

@@ -36,7 +36,7 @@
   const lines = $derived(
     [
       frostLine ? { href: '/frost', tone: frostLine.tone, text: frostLine.text } : null,
-      sowings.length ? { href: '/sowings', tone: 'ok', text: `${sowings.length} sowing${sowings.length === 1 ? '' : 's'} in the tray, the oldest ${sowNo(sowings[0])} (${sowings[0].taxonName}) sown ${sowings[0].sown}.` } : null,
+      sowings.length ? { href: '/propagation', tone: 'ok', text: `${sowings.length} propagation batch${sowings.length === 1 ? '' : 'es'} in the tray, the oldest ${sowNo(sowings[0])} (${sowings[0].taxonName}) sown ${sowings[0].sown}.` } : null,
       unphotographed.length && growing.length ? { href: '/plants?show=nophoto', tone: 'muted', text: `${unphotographed.length} of ${growing.length} plants without a photograph this year${unphotographed.length <= 3 ? ': ' + unphotographed.map(accNo).join(', ') : ''}.` } : null
     ].filter((x): x is { href: string; tone: string; text: string } => !!x)
   );

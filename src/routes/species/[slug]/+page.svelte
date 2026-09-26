@@ -1,4 +1,5 @@
 <script lang="ts">
+  import NotChecked from '$lib/ui/NotChecked.svelte';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
   import { accNo, sowNo } from '$lib/db/types';
   import Photos from '$lib/ui/Photos.svelte';
@@ -152,7 +153,7 @@
   /** A source's detail string as a sentence of its own: capitalised, with a full stop. */
   const sentence = (t: string | undefined, fallback: string) => { const x = (t ?? fallback).trim(); const y = x.charAt(0).toUpperCase() + x.slice(1); return y.endsWith('.') ? y : y + '.'; };
   /** The grower's hemisphere, from the first place with coordinates, else north. Only the months in the note depend on it. */
-  // Your site's latitude decides the hemisphere of the months; a bench with coordinates stands in when no site is set.
+  // Your site's latitude decides the hemisphere of the months; a place with coordinates stands in when no site is set.
   const note = $derived(generatedNote(sheetIn, { readerLat }));
   /** Four sentences of the quoted lead; the rest is a link, never a mid-sentence cut. */
   const excerpt = $derived(d.summary ? firstSentences(d.summary.text, 4) : null);
@@ -217,26 +218,28 @@
         {#if common.length}{common.join(', ')}{:else}{d.name.family ?? ''}{/if}
         {#if d.name.status === 'synonym' && d.name.acceptedName}· <span class="pill w">synonym of {d.name.acceptedName}</span>{:else if d.name.status !== 'accepted'}· <span class="pill">{d.name.status}</span>{/if}
       </p>
-      <div class="pills">
-        {#if d.climate.status === 'ok'}<span class="pill a">Climate known</span>{:else if d.climate.status === 'pending'}<span class="pill">Climate pending</span>{:else if d.climate.status === 'refused'}<span class="pill w">Climate not checked</span>{:else}<span class="pill">No habitat climate</span>{/if}
-        {#if d.photos.length}<span class="pill">{d.photos.length} photograph{d.photos.length === 1 ? '' : 's'}</span>{:else if refusedPhotoNames.length}<span class="pill w">Photographs not checked</span>{/if}
-        {#if sheet.arch}<span class="pill" title="Grouped by {sheet.arch.why} (archetype table)">{sheet.arch.arch.lab}</span>{/if}
-        {#if growing.length}<span class="pill a">you grow {growing.length}</span>{/if}
-      </div>
+      <!-- Pills say a state that is not the usual one; what is known is shown, not announced. Counts and groupings are plain text (improvements, 7). -->
+      {#if d.climate.status !== 'ok' || (!d.photos.length && refusedPhotoNames.length)}
+        <div class="pills">
+          {#if d.climate.status === 'pending'}<span class="pill">Climate pending</span>{:else if d.climate.status === 'refused'}<NotChecked what="Climate" why={sentence(d.climate.detail, 'A source did not answer when this page was built')} />{:else if d.climate.status !== 'ok'}<span class="pill">No habitat climate</span>{/if}
+          {#if !d.photos.length && refusedPhotoNames.length}<NotChecked what="Photographs" why="{refusedPhotoNames.join(' and ')} did not answer when this page was built." />{/if}
+        </div>
+      {/if}
+      {#if sheet.arch}<p class="vern small muted">Grouped with the {sheet.arch.arch.lab} in the archetype table, by {sheet.arch.why}.</p>{/if}
       {#if mine.length}
         <p class="vern mine">Yours: {#each mine as a, i}{#if i}, {/if}<a class="accno" href="/plants/{accNo(a)}">{accNo(a)}</a>{#if a.status !== 'growing'} <span class="small muted">({a.status})</span>{/if}{/each}</p>
       {/if}
     </div>
     <div class="acts">
       <a class="btn pri" href="/plants/new?species={encodeURIComponent(d.name.scientific)}&key={d.key}">Add one to my plants</a>
-      <a class="btn" href="/sowings/new?species={encodeURIComponent(d.name.scientific)}&key={d.key}">Sow seed</a>
+      <a class="btn" href="/propagation/new?species={encodeURIComponent(d.name.scientific)}&key={d.key}">Sow seed</a>
       <FollowButton slug={d.slug} name={d.name.scientific} gbifKey={d.key} />
       <CompareButton slug={d.slug} name={d.name.scientific} />
       {#if d.climate.status === 'ok'}<ShareCard input={{ units: u, name: d.name.scientific, family: d.name.family, origin: d.distribution.native.map((r) => r.name), slug: d.slug, cells: d.climate.cells, climate: { months: d.climate.months, p10: d.climate.p10, p90: d.climate.p90, cells: d.climate.cells, extremes: d.climate.extremes ?? null } }} />{/if}
     </div>
   </div>
   </div>
-  <p class="small muted derived">Every figure on this page is derived from public data by a stated rule and says its source; nothing here is written by a person or a model, except the quoted passages, which are marked and credited: Wikipedia, and where a register such as Kew's gives one, its own description. <a href="/about/how">How it is made.</a></p>
+  <p class="small muted derived">Every figure here is derived from public data by a stated rule and names its source; nothing is written by a person or a model except the marked, credited quotations. <a href="/about/how">How&nbsp;→</a></p>
 
   {#if d.summary}
     <h2 class="sec" id="s-summary">Summary</h2>
@@ -278,7 +281,7 @@
       {#if note}
         <details class="cult acc notecard" id="gen-note">
           <summary><span class="t">In short</span><span class="one">the figures as one paragraph, condensed by rule from the cultivation cards · not written by a person</span><span class="pm" aria-hidden="true"><span class="pmw">open</span></span></summary>
-          <div class="body">{note.text}</div><div class="foot">Each sentence is one card's own one-line form, written by the same rule as the card ({note.from.map((c) => (c === 'Temperature' || c === 'Humidity' ? 'Warmth and air' : c)).filter((c, i, a) => a.indexOf(c) === i).join(', ')}); the note cannot say what a card does not. {#if note.hab}Months are given for {readerLat != null && readerLat < 0 ? 'the southern' : 'the northern'} hemisphere{readerLat == null ? ' (set your site in ' : site.current || !site.loaded ? ', from your site' : ', from your benches'}{#if readerLat == null}<a href="/settings#site">Settings</a> to change this){/if}, and the habitat's own alongside.{/if} <a href="#s-cultivation">The cards</a> · <a href="#s-climate">the figures</a>.</div>
+          <div class="body">{note.text}</div><div class="foot">Each sentence is one card's own one-line form, written by the same rule as the card ({note.from.map((c) => (c === 'Temperature' || c === 'Humidity' ? 'Warmth and air' : c)).filter((c, i, a) => a.indexOf(c) === i).join(', ')}); the note cannot say what a card does not. {#if note.hab}Months are given for {readerLat != null && readerLat < 0 ? 'the southern' : 'the northern'} hemisphere{readerLat == null ? ' (set your site in ' : site.current || !site.loaded ? ', from your site' : ', from your places'}{#if readerLat == null}<a href="/settings#site">Settings</a> to change this){/if}, and the habitat's own alongside.{/if} <a href="#s-cultivation">The cards</a> · <a href="#s-climate">the figures</a>.</div>
         </details>
       {/if}
     </section>

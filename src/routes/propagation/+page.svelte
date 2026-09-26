@@ -14,10 +14,10 @@
   const pct = (r: number | null) => (r == null ? '–' : `${Math.round(r * 100)}%`);
 </script>
 
-<svelte:head><title>Sowings — Cultifolio</title></svelte:head>
+<svelte:head><title>Propagation — Cultifolio</title></svelte:head>
 
-<PageHead title="Sowings" sub="Seed, cuttings, offsets and divisions, counted up; each potted survivor gets its own number." count="{collection.sowings.filter((s) => s.status === 'active').length} in progress · {plural(collection.sowings.length, 'batch', 'batches')}">
-  <a class="btn pri" href="/sowings/new">New sowing</a>
+<PageHead title="Propagation" sub="Seed, cuttings, offsets and divisions, a batch each, counted up; each potted survivor gets its own number." count="{collection.sowings.filter((s) => s.status === 'active').length} in progress · {plural(collection.sowings.length, 'batch', 'batches')}">
+  <a class="btn pri" href="/propagation/new">New batch</a>
 </PageHead>
 
 {#if !collection.ready}
@@ -28,7 +28,7 @@
     <button class="chipbtn" class:on={show === 'all'} aria-pressed={show === 'all'} onclick={() => (show = 'all')}>All<span class="n">{collection.sowings.length}</span></button>
   </div>
   {#if !rows.length}
-    <div class="emptybox"><p class="muted">{show === 'active' ? 'Nothing in progress.' : 'No sowings yet.'} <a href="/sowings/new">Start one.</a></p></div>
+    <div class="emptybox"><p class="muted">{show === 'active' ? 'Nothing in progress.' : 'No batches yet.'} <a href="/propagation/new">Start one.</a></p></div>
   {:else}
     <div class="scroll-x">
       <table class="wx">
@@ -36,7 +36,7 @@
         <tbody>
           {#each rows as { s, st, m }}
             <tr>
-              <td><a class="mono" href="/sowings/{sowNo(s)}">{sowNo(s)}</a></td>
+              <td><a class="mono" href="/propagation/{sowNo(s)}">{sowNo(s)}</a></td>
               <td class="left"><SpeciesName name={s.taxonName} />{#if s.cultivar} ‘{s.cultivar}’{/if}</td>
               <td class="left">{m.label}{#if s.parentAcc} <span class="faint"> from <a class="mono" href="/plants/{s.parentAcc}">{collection.accession(s.parentAcc) ? accNo(collection.accession(s.parentAcc)!) : s.parentAcc}</a></span>{/if}</td>
               <td class="left">{s.sown}</td>

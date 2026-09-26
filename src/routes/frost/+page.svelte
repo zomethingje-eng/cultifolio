@@ -1,4 +1,5 @@
 <script lang="ts">
+  import NotChecked from '$lib/ui/NotChecked.svelte';
   import { units } from '$lib/ui/units.svelte';
   import { getForecast, forecastRefusal } from '$lib/weather/client';
   import { site } from '$lib/ui/site.svelte';
@@ -42,7 +43,7 @@
 <div class="page">
   <PageHead title="Frost watch" sub="The next nine nights at your site; outdoor places with coordinates get their own watch." />
   {#if watched.length}
-    <p class="small">Watched places: {#each watched as w, i}{i ? ', ' : ''}<a href="/benches/{w.id}">{w.name}</a>{/each}</p>
+    <p class="small">Watched places: {#each watched as w, i}{i ? ', ' : ''}<a href="/places/{w.id}">{w.name}</a>{/each}</p>
   {/if}
   {#if site.current}
     <p class="small">Your site: {site.current.name ? site.current.name + ', ' : ''}{site.current.lat}, {site.current.lon} · <a href="/settings#site">change in Settings</a>.</p>
@@ -65,7 +66,7 @@
     {#if data.alerts.length}
       <ul class="alerts">{#each data.alerts as a}<li><strong>{a.event}</strong>{a.headline ? ` — ${a.headline}` : ''}</li>{/each}</ul>
     {:else if data.alertsStatus === 'refused'}
-      <p class="small"><b>Alerts not checked.</b> The National Weather Service did not answer; the forecast above stands on its own, and this is not a statement that no alert is in force.</p>
+      <p class="small"><NotChecked what="Alerts" why="The National Weather Service did not answer; the forecast above stands on its own." /></p>
     {:else if data.alertsStatus === 'none'}
       <p class="small muted">No frost or freeze alert in force (NOAA/NWS).</p>
     {/if}

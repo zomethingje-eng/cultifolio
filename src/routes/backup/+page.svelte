@@ -115,7 +115,7 @@
     try {
       await collection.ingest(v2.changes);
       const r = v2.report;
-      done = `Imported ${r.accessions} plants, ${r.events} timeline entries, ${r.taxa} species notes${r.locations ? `, ${r.locations} places` : ''}${r.sowings ? `, ${r.sowings} sowings` : ''}.${r.alreadyHere ? ` ${r.alreadyHere} ${r.alreadyHere === 1 ? 'record was' : 'records were'} already on this device and left as ${r.alreadyHere === 1 ? 'it is' : 'they are'}.` : ''}${r.skipped.length ? ` Skipped: ${r.skipped.join('; ')}.` : ''}`;
+      done = `Imported ${r.accessions} plants, ${r.events} timeline entries, ${r.taxa} species notes${r.locations ? `, ${r.locations} places` : ''}${r.sowings ? `, ${r.sowings} propagation batch${r.sowings === 1 ? '' : 'es'}` : ''}.${r.alreadyHere ? ` ${r.alreadyHere} ${r.alreadyHere === 1 ? 'record was' : 'records were'} already on this device and left as ${r.alreadyHere === 1 ? 'it is' : 'they are'}.` : ''}${r.skipped.length ? ` Skipped: ${r.skipped.join('; ')}.` : ''}`;
       v2 = null;
     } catch (err) {
       openErr = err instanceof Error ? err.message : String(err);
@@ -171,7 +171,7 @@
     {@const c = opened.counts}
     <div class="preview">
       <div class="factgrid">
-        <div><b>In the file</b>{c.accessions} plant{c.accessions === 1 ? '' : 's'} · {c.events} timeline entr{c.events === 1 ? 'y' : 'ies'} · {c.locations} place{c.locations === 1 ? '' : 's'} · {c.sowings} sowing{c.sowings === 1 ? '' : 's'} · {c.photos} photo{c.photos === 1 ? "" : "s"}{#if m}<span class="faint">{" · "}taken {m.exported.slice(0, 10)}{m.device ? ` on device ${m.device.slice(0, 6)}` : ''}</span>{/if}</div>
+        <div><b>In the file</b>{c.accessions} plant{c.accessions === 1 ? '' : 's'} · {c.events} timeline entr{c.events === 1 ? 'y' : 'ies'} · {c.locations} place{c.locations === 1 ? '' : 's'} · {c.sowings} propagation batch{c.sowings === 1 ? '' : 'es'} · {c.photos} photo{c.photos === 1 ? "" : "s"}{#if m}<span class="faint">{" · "}taken {m.exported.slice(0, 10)}{m.device ? ` on device ${m.device.slice(0, 6)}` : ''}</span>{/if}</div>
         <div><b>Merging would</b>{#if opened.merge.fresh.length === 0}change nothing: everything in the file is already here.{:else}add {opened.merge.added} {opened.merge.added === 1 ? 'record' : 'records'}, update {opened.merge.changed}, and bring in {opened.newPhotos} {opened.newPhotos === 1 ? 'photo' : 'photos'}. Nothing on this device is removed.{/if}{#if opened.missingPixels.length} {opened.missingPixels.length} photo {opened.missingPixels.length === 1 ? 'record in the file has' : 'records in the file have'} no photograph in it or on this device.{/if}</div>
       </div>
       <div class="row acts">
@@ -191,7 +191,7 @@
   {#if v2}
     <div class="preview">
       <div class="factgrid">
-        <div><b>A v2 Herbarium backup</b>{v2.report.accessions} plants, {v2.report.events} timeline entries, {v2.report.taxa} species notes{#if v2.report.locations}, {v2.report.locations} places{/if}{#if v2.report.sowings}, {v2.report.sowings} sowings{/if}.{#if v2.report.alreadyHere} {v2.report.alreadyHere} {v2.report.alreadyHere === 1 ? 'record is' : 'records are'} already on this device and will be left as {v2.report.alreadyHere === 1 ? 'it is' : 'they are'}.{/if} Your numbers are kept. Nothing in the old app is changed.</div>
+        <div><b>A v2 Herbarium backup</b>{v2.report.accessions} plants, {v2.report.events} timeline entries, {v2.report.taxa} species notes{#if v2.report.locations}, {v2.report.locations} places{/if}{#if v2.report.sowings}, {v2.report.sowings} propagation batches{/if}.{#if v2.report.alreadyHere} {v2.report.alreadyHere} {v2.report.alreadyHere === 1 ? 'record is' : 'records are'} already on this device and will be left as {v2.report.alreadyHere === 1 ? 'it is' : 'they are'}.{/if} Your numbers are kept. Nothing in the old app is changed.</div>
       </div>
       <div class="row acts">
         <button id="bk-v2" class="btn pri" onclick={doV2} disabled={!!busy}>Import</button>

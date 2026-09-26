@@ -27,6 +27,7 @@
   import Lightbox from '$lib/ui/Lightbox.svelte';
   import { focusNext } from '$lib/ui/focus';
   import RefPhotoOffer from '$lib/ui/RefPhotoOffer.svelte';
+  import NotChecked from '$lib/ui/NotChecked.svelte';
   onMount(() => { site.load(); collection.load(); });
   /** The URL carries the number people know (or an identity, from a printed code); everything below works on the record's identity. */
   const u = $derived(units.current);
@@ -163,12 +164,25 @@
   const sizeKey = $derived(lastMeasure ? (['diam', 'h', 'caudex', 'spread', 'heads', 'leaves'].find((k) => lastMeasure.measures?.[k] != null) ?? null) : null);
   const growth = $derived(sizeKey && lastMeasure && firstMeasure && firstMeasure !== lastMeasure && firstMeasure.measures?.[sizeKey] != null ? lastMeasure.measures![sizeKey] - firstMeasure.measures![sizeKey] : null);
   let moreActs = $state(false);
+  // The id card's one primary action is the species page; editing, the label and propagation are behind "More", which
+  // closes on a choice, Escape, or a tap outside (improvements, 7).
+  let cardMenu = $state(false);
+  let cardMenuBtn = $state<HTMLButtonElement | null>(null);
+  const autofocusFirst = (el: HTMLElement) => {
+    el.querySelector<HTMLElement>('[role=menuitem]')?.focus();
+  };
+  function closeCardMenu(refocus = false) {
+    cardMenu = false;
+    if (refocus) cardMenuBtn?.focus();
+  }
+  /** Whether the first screen has a picture: the grower's own, or the reference's where it is shown. Without one there is no hero; a tile beside the name stands in (improvements, 4). */
+  const hasHero = $derived(!!cover || (!!speciesThumb && !thumbFailed));
   const fmtDate = (d: string | null | undefined) => (d ? new Date(d + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '');
   // What a new plant's page is missing: a place, a photograph, a first measurement. Each line goes when it is done; the card goes when two of three are.
   const setup = $derived.by(() => {
     if (!a || a.status !== 'growing') return [];
     const rows: { k: string; n: string; t: string; w: string; go: () => void }[] = [];
-    if (!a.locationId) rows.push({ k: 'place', n: '1', t: 'Give it a place', w: 'the bench or room it lives on; conditions and the frost watch follow', go: () => { moveTo = null; moving = true; } });
+    if (!a.locationId) rows.push({ k: 'place', n: '1', t: 'Give it a place', w: 'the greenhouse, bench, shelf or windowsill it lives on; conditions and the frost watch follow', go: () => { moveTo = null; moving = true; } });
     if (!photos.length) rows.push({ k: 'photo', n: '2', t: 'Add a photograph', w: 'the page and the labels use it', go: () => { adding = true; setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0); } });
     if (!lastMeasure) rows.push({ k: 'measure', n: '3', t: 'Measure it', w: 'growth is read from the first measurement on', go: () => { moreActs = true; quick('measure'); } });
     return rows.length >= 2 ? rows : [];
@@ -254,57 +268,71 @@
 </script>
 
 <svelte:head><title>{a ? `${accNo(a)} ${a.taxonName}` : param} — Cultifolio</title></svelte:head>
+<svelte:window onkeydown={(e) => { if (e.key === 'Escape' && cardMenu) closeCardMenu(true); }} onclick={(e) => { if (cardMenu && !(e.target as Element).closest('.cardmenu')) closeCardMenu(); }} />
 
 {#if collection.lastWriteError}
   <div class="notice err" role="alert" id="write-error">This change was not saved: {collection.lastWriteError}. Free space or <a href="/backup">back up now</a>.</div>
 {/if}
 {#if !collection.ready}
-  <!-- The page's shape before the vault opens: the same head, hero and card heights, so nothing jumps when the record arrives. -->
-  <!-- In the loaded page's own order: hero, then the id card (with the number as its title and the actions row), then the verb bar. -->
+  <!-- The page's shape before the vault opens: the card without a picture, which is what most plants' pages are; one with a photograph grows a hero above it when the record arrives. -->
+  <!-- In the loaded page's own order: the id card (the tile, the number as its title and the actions row), then the verb bar. -->
   <div class="skel" aria-busy="true">
-    <div class="hero skelbox"></div>
-    <div class="idcard"><div class="who"><h1 class="sci"><span class="accno big lead">{param}</span></h1><p class="vern muted">Opening your collection…</p><div class="pills"><span class="pill">&nbsp;</span></div></div><div class="acts"><span class="btn skelbtn">&nbsp;</span><span class="btn skelbtn">&nbsp;</span></div></div>
+    <div class="idcard flat"><div class="skeltile skelbox"></div><div class="who"><h1 class="sci"><span class="accno big lead">{param}</span></h1><p class="vern muted">Opening your collection…</p><div class="pills"><span class="pill">&nbsp;</span></div></div><div class="acts"><span class="btn skelbtn">&nbsp;</span><span class="btn skelbtn">&nbsp;</span></div></div>
     <div class="skelverbs"></div>
   </div>
 {:else if !a}
   <h1 class="q" style="margin-top: 24px">{param}</h1>
   <p class="muted">{collection.isNumberTaken(param) ? `${param} was given to a plant since removed; the number stays reserved and its record stays in the change log and in any backup taken before.` : 'No plant with this number on this device.'}</p>
 {:else}
-  <div class="hero" class:own={!!cover}>
-    {#if cover}
+  {#if cover}
+    <div class="hero own">
       <button class="heroimg" type="button" onclick={() => openPhoto(cover)} aria-label="Open photograph">{#key cover.id}<PhotoImg id={cover.id} size="full" alt="{a.taxonName}, {cover.d}" />{/key}</button>
       <span class="cred">{cover.caption ? cover.caption + ' · ' : ''}{cover.d}{photos.length > 1 ? ` · ${plural(photos.length, 'photo')}` : ''}</span>
-    {:else if speciesThumb && !thumbFailed}
+    </div>
+  {:else if speciesThumb && !thumbFailed}
+    <div class="hero">
       <img src={speciesThumb} alt={a.taxonName} class="spthumb" onerror={() => (thumbFailed = true)} /><button class="cred" type="button" onclick={() => { adding = true; setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0); }}>species photograph · add your own</button>
-    {:else}
-      <!-- The grower's own photograph is what this space is for; the reference's is offered beneath, with what showing it discloses, when it is being withheld -->
-      <div class="ph">{#if speciesThumb && thumbFailed}<span class="phcap empty">The reference's photograph did not load.</span>{/if}<PhotoAdd acc={id} id="hero-photo" compact />{#if dossier?.thumb && !prefs.referencePhotos}<RefPhotoOffer center what="the reference’s photograph of this species" />{/if}</div>
+    </div>
+  {/if}
+  <div class="idcard" class:flat={!hasHero}>
+    {#if !hasHero}
+      <!-- No photograph: a small tile where one would go, beside the name, not a screen-high empty box. The reference's is one line beneath, with what showing it discloses on tap. -->
+      <PhotoAdd acc={id} id="hero-photo" tile />
     {/if}
-  </div>
-  <div class="idcard">
     <div class="who">
       <h1 class="sci"><span class="accno big lead">{accNo(a)}</span><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}<span style="font-style: normal">‘{a.cultivar}’</span>{/if}</h1>
       <p class="vern">
+        {#if kind === 'hybrid'}<span class="kind">hybrid</span> · {:else if kind === 'cultivar'}<span class="kind">cultivar</span> · {/if}
         {#if a.nameAsReceived}received as <i>{a.nameAsReceived}</i> · {/if}
         {#if a.fieldNumber}<span class="fnchip">{a.fieldNumber}</span> · {/if}
         {#if a.provenance === 'unknown' && !a.sourceFrom && !a.fieldNumber}Added {fmtDate(a.acquired)}{:else}{provLabel(a.provenance)}{#if a.acquired}{' · '}{a.sourceForm ?? 'acquired'}{a.sourceFrom ? ` from ${a.sourceFrom}` : ''}{' '}{fmtDate(a.acquired)}{/if}{/if}
-        {#if a.sowingId}{' · '}raised from <a class="mono" href="/sowings/{a.sowingId}">{sowing ? sowNo(sowing) : a.sowingId}</a>{#if sowing && sowing.parentAcc} (from <a class="mono" href="/plants/{sowing.parentAcc}">{collection.accession(sowing.parentAcc) ? accNo(collection.accession(sowing.parentAcc)!) : sowing.parentAcc}</a>){/if}{/if}
+        {#if a.sowingId}{' · '}raised from <a class="mono" href="/propagation/{a.sowingId}">{sowing ? sowNo(sowing) : a.sowingId}</a>{#if sowing && sowing.parentAcc} (from <a class="mono" href="/plants/{sowing.parentAcc}">{collection.accession(sowing.parentAcc) ? accNo(collection.accession(sowing.parentAcc)!) : sowing.parentAcc}</a>){/if}{/if}
+        {#if a.locationId}{' · '}at <a class="place" href="/places/{a.locationId}">{collection.locationName(a.locationId)}</a>{:else if a.location}{' · '}at <span class="place">{a.location}</span>{/if}
       </p>
       {#if kind === 'hybrid'}
         <p class="vern parentage">{#if parentLinks.length}{#each parentLinks as pl, i}{#if i}{' × '}{/if}{#if pl.slug}<a href="/species/{pl.slug}"><SpeciesName name={pl.name} /></a>{:else}<SpeciesName name={pl.name} />{/if}{/each}{:else}A hybrid; parentage not stated. <button class="linkish" type="button" onclick={startEdit}>Add it</button> if you know it.{/if}</p>
       {/if}
-      <div class="pills">
-        <span class="pill {a.status === 'growing' ? 'a' : a.status === 'dead' ? 'b' : ''}">{a.status}</span>
-        {#if kind === 'hybrid'}<span class="pill c">hybrid</span>{:else if kind === 'cultivar'}<span class="pill c">cultivar</span>{/if}
-        {#if a.locationId}<a class="pill" href="/benches/{a.locationId}">{collection.locationName(a.locationId)}</a>{:else if a.location}<span class="pill">{a.location}</span>{/if}
-        {#if sinceWater != null && sinceWater > 21 && a.status === 'growing'}<span class="pill w">not watered for {sinceWater} d</span>{/if}
-      </div>
+      {#if !hasHero && speciesThumb && thumbFailed}<p class="vern muted">The reference's photograph did not load.</p>{/if}
+      {#if !hasHero && dossier?.thumb && !prefs.referencePhotos}<RefPhotoOffer link what="the reference’s photograph of this species" />{/if}
+      {#if a.status !== 'growing' || (sinceWater != null && sinceWater > 21)}
+        <div class="pills">
+          {#if a.status !== 'growing'}<span class="pill {a.status === 'dead' ? 'b' : ''}">{a.status}</span>{/if}
+          {#if sinceWater != null && sinceWater > 21 && a.status === 'growing'}<span class="pill w">not watered for {sinceWater} d</span>{/if}
+        </div>
+      {/if}
     </div>
     <div class="acts">
       {#if kind !== 'hybrid' && ref === 'ok'}<a class="btn" href="/species/{speciesHref}">Species page</a>{:else if kind !== 'hybrid' && ref === 'loading'}<span class="btn skelbtn" aria-hidden="true">Species page</span>{/if}
-      <button class="btn" onclick={startEdit}>Edit</button>
-      <a class="btn" href="/labels?acc={a.id}">Label</a>
-      {#if a.status === 'growing'}<a class="btn" href="/sowings/new?parent={a.id}">Propagate</a>{/if}
+      <div class="cardmenu">
+        <button class="btn dots" type="button" bind:this={cardMenuBtn} aria-haspopup="menu" aria-expanded={cardMenu} aria-controls="card-menu" aria-label="More for this plant: edit, label, propagate" title="Edit, label, propagate" onclick={() => (cardMenu = !cardMenu)}>···</button>
+        {#if cardMenu}
+          <div class="menu" id="card-menu" role="menu" aria-label="More for this plant" use:autofocusFirst>
+            <button role="menuitem" type="button" onclick={() => { closeCardMenu(); startEdit(); }}>Edit</button>
+            <a role="menuitem" href="/labels?acc={a.id}" onclick={() => closeCardMenu()}>Label</a>
+            {#if a.status === 'growing'}<a role="menuitem" href="/propagation/new?parent={a.id}" onclick={() => closeCardMenu()}>Propagate</a>{/if}
+          </div>
+        {/if}
+      </div>
     </div>
   </div>
 
@@ -390,18 +418,18 @@
     {#if lastOf('water')}<div class="card"><div class="lab">Since watered</div><div class="val">{sinceWater == null ? '–' : sinceWater}<span class="u">{sinceWater == null ? '' : ' d'}</span></div><div class="sub">last {lastOf('water')}</div></div>{/if}
     {#if events.some((e) => e.t === 'audit')}<div class="card"><div class="lab">Last seen</div><div class="val">{seen == null ? '–' : seen}<span class="u">{seen == null ? '' : ' d'}</span></div><div class="sub">audit, {collection.lastSeen(id)}</div></div>{/if}
     {#if lastMeasure}<div class="card"><div class="lab">{sizeKey ? (MEASURES.find((m) => m.k === sizeKey)?.label ?? 'Size') : 'Size'}</div><div class="val">{sizeKey && lastMeasure ? lastMeasure.measures![sizeKey] : '–'}<span class="u">{sizeKey ? ' ' + (MEASURES.find((m) => m.k === sizeKey)?.unit ?? '') : ''}</span></div>{#if growth != null}<div class="gauge"><i style="width: {Math.min(100, Math.max(8, (growth / Math.max(1, lastMeasure!.measures![sizeKey!])) * 100))}%"></i></div>{/if}<div class="sub">{growth != null ? `${growth >= 0 ? '+' : ''}${growth} since ${firstMeasure!.d}` : `measured ${lastMeasure.d}`}</div></div>{/if}
-    <div class="card"><div class="lab">Habitat rain season</div><div class="val" style="font-family: var(--ui); font-size: 17px; font-weight: 700">{season ? season.label : dossier?.climate.status === 'refused' ? 'Climate not checked' : dossier?.climate.status === 'pending' ? 'Climate pending' : dossier ? 'No habitat climate' : ref === 'unreachable' ? 'Reference not reached' : ref === 'none' ? (kind === 'hybrid' ? 'A hybrid' : 'No species page') : '…'}</div><div class="sub">{#if season}{season.note} <a href="/species/{speciesHref}#s-cultivation">The sheet</a>.{:else if dossier?.climate.status === 'refused'}A source did not answer when the species page was built{dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}. Not a statement that no climate exists.{:else if dossier?.climate.status === 'pending'}The habitat climate for this species has not been derived yet.{:else if dossier}Nothing to read a season from{dossier.climate.status === 'none' && dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}.{:else if ref === 'unreachable'}The species reference could not be reached from here; nothing is known either way.{:else if ref === 'none'}{kind === 'hybrid' ? (parentLinks.some((p) => p.slug) ? 'No habitat of its own; its parents have species pages.' : 'No habitat of its own.') : 'Not in the reference.'}{:else}reading the species dossier{/if}</div></div>
+    <div class="card"><div class="lab">Habitat rain season</div><div class="val" style="font-family: var(--ui); font-size: 17px; font-weight: 700">{#if !season && dossier?.climate.status === 'refused'}<NotChecked what="Climate" why="A source did not answer when the species page was built{dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}." />{:else}{season ? season.label : dossier?.climate.status === 'pending' ? 'Climate pending' : dossier ? 'No habitat climate' : ref === 'unreachable' ? 'Reference not reached' : ref === 'none' ? (kind === 'hybrid' ? 'A hybrid' : 'No species page') : '…'}{/if}</div><div class="sub">{#if season}{season.note} <a href="/species/{speciesHref}#s-cultivation">The sheet</a>.{:else if dossier?.climate.status === 'refused'}No season is read from an answer that was not given.{:else if dossier?.climate.status === 'pending'}The habitat climate for this species has not been derived yet.{:else if dossier}Nothing to read a season from{dossier.climate.status === 'none' && dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}.{:else if ref === 'unreachable'}The species reference could not be reached from here; nothing is known either way.{:else if ref === 'none'}{kind === 'hybrid' ? (parentLinks.some((p) => p.slug) ? 'No habitat of its own; its parents have species pages.' : 'No habitat of its own.') : 'Not in the reference.'}{:else}reading the species dossier{/if}</div></div>
   </div>
 
   {#if habitat && a.locationId}
     <div class="secrule"><h2>Habitat versus here</h2><div class="line"></div><span class="n">{collection.locationName(a.locationId)}</span></div>
     <div class="factgrid hvh">
-      {#if lightCompare}<div><b>Light</b>{lightCompare.text}.{#if lightCompare.here == null}{#if a.locationId}{' '}<a href="/benches/{a.locationId}?edit=1">Set its light</a>.{:else}{' '}<button type="button" class="linkish" onclick={() => (moving = true)}>Give it a place</button> first.{/if}{/if}</div>{/if}
-      {#if coldCompare}<div><b>Cold</b>{coldCompare.text}.{#if coldCompare.here == null}{#if a.locationId}{' '}<a href="/benches/{a.locationId}?edit=1">Set its floor</a>.{:else}{' '}<button type="button" class="linkish" onclick={() => (moving = true)}>Give it a place</button> first.{/if}{/if}</div>{/if}
+      {#if lightCompare}<div><b>Light</b>{lightCompare.text}.{#if lightCompare.here == null}{#if a.locationId}{' '}<a href="/places/{a.locationId}?edit=1">Set its light</a>.{:else}{' '}<button type="button" class="linkish" onclick={() => (moving = true)}>Give it a place</button> first.{/if}{/if}</div>{/if}
+      {#if coldCompare}<div><b>Cold</b>{coldCompare.text}.{#if coldCompare.here == null}{#if a.locationId}{' '}<a href="/places/{a.locationId}?edit=1">Set its floor</a>.{:else}{' '}<button type="button" class="linkish" onclick={() => (moving = true)}>Give it a place</button> first.{/if}{/if}</div>{/if}
     </div>
     <details class="why">
       <summary>What this compares</summary>
-      <div class="whybody">A comparison, not a verdict: the habitat figures are what the sky and the weather do where the species is recorded (CHELSA across every envelope cell, NASA POWER at the typical cell), not measured tolerances of this plant. This place's figures are its bench settings, inherited from parents where set. <a href="/species/{speciesHref}#s-cultivation">The full cultivation sheet</a>.</div>
+      <div class="whybody">A comparison, not a verdict: the habitat figures are what the sky and the weather do where the species is recorded (CHELSA across every envelope cell, NASA POWER at the typical cell), not measured tolerances of this plant. This place's figures are its own settings, inherited from the places above it where set. <a href="/species/{speciesHref}#s-cultivation">The full cultivation sheet</a>.</div>
     </details>
   {/if}
 
@@ -472,7 +500,7 @@
     <div class="tl">
       {#each propagations as p}
         {@const st = collection.sowingStats(p.id)}
-        <a class="tlrow" href="/sowings/{sowNo(p)}"><span class="d">{p.sown}</span><span class="t"><span class="mono">{sowNo(p)}</span> · {p.count} {(PROP_METHODS.find((m) => m.k === p.method) ?? PROP_METHODS[0]).unit}</span><span class="x">{st.germinated} struck · {st.potted} potted · {p.status}</span></a>
+        <a class="tlrow" href="/propagation/{sowNo(p)}"><span class="d">{p.sown}</span><span class="t"><span class="mono">{sowNo(p)}</span> · {p.count} {(PROP_METHODS.find((m) => m.k === p.method) ?? PROP_METHODS[0]).unit}</span><span class="x">{st.germinated} struck · {st.potted} potted · {p.status}</span></a>
       {/each}
     </div>
   {/if}
@@ -485,7 +513,7 @@
     <div><b>Source</b>{[a.sourceFrom, a.sourceForm, a.acquired].filter(Boolean).join(' · ') || 'not stated'}{#if a.price}{' · '}{a.price}{/if}</div>
     <div><b>Field number</b>{a.fieldNumber ?? 'none'}</div>
     <div><b>Provenance</b>{provLabel(a.provenance)}</div>
-    {#if a.sowingId}<div><b>Raised from</b><a href="/sowings/{a.sowingId}">{sowing ? sowNo(sowing) : a.sowingId}</a>{#if sowing} · {sowing.count} started, {collection.sowingStats(sowing.id).germinated} up, {collection.sowingStats(sowing.id).potted} potted{/if}</div>{/if}
+    {#if a.sowingId}<div><b>Raised from</b><a href="/propagation/{a.sowingId}">{sowing ? sowNo(sowing) : a.sowingId}</a>{#if sowing} · {sowing.count} started, {collection.sowingStats(sowing.id).germinated} up, {collection.sowingStats(sowing.id).potted} potted{/if}</div>{/if}
     {#if a.nameAsReceived}<div><b>Name as received</b>{a.nameAsReceived}</div>{/if}
     {#if kind === 'hybrid'}<div><b>Parentage</b>{a.parentage ?? 'not stated'}</div>{/if}
   </div>
@@ -502,12 +530,24 @@
 
 <style>
   .hero { margin-top: 14px; }
+  /* Without a picture the card does not overlap a hero that is not there. */
+  .idcard.flat { margin-top: 14px; }
+  .idcard.flat .who { flex-basis: 260px; }
+  .vern .kind { font-family: var(--ui); font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--cool); }
+  .vern .place { font-weight: 600; color: var(--ink); }
+  .idcard .pills:empty { display: none; }
+  .cardmenu { position: relative; }
+  .cardmenu .dots { font-weight: 700; letter-spacing: 0.1em; padding-left: 12px; padding-right: 12px; }
+  .cardmenu .menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; min-width: 160px; background: var(--card); border-radius: 10px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18); padding: 6px; display: flex; flex-direction: column; }
+  .cardmenu .menu > * { display: block; text-align: left; font: inherit; font-family: var(--ui); font-size: 14px; padding: 9px 12px; border: 0; background: none; color: var(--ink); border-radius: 7px; cursor: pointer; text-decoration: none; }
+  .cardmenu .menu > *:hover, .cardmenu .menu > *:focus-visible { background: var(--sunk); outline: none; }
   /* A fixed height for the species photograph and its stand-ins: the box is the same size before the image, with it, and without it, so the page below does not move. */
   .hero:not(.own) { min-height: 260px; }
   .hero .spthumb { width: 100%; height: 260px; object-fit: cover; display: block; }
   /* The skeleton fills the first screen, so the footer starts below the fold and does not move when the record's sections arrive (round eleven, 4). */
   .skel { min-height: calc(100vh - 150px); }
   .skelbox { background: var(--sunk); border-radius: var(--r); min-height: 260px; }
+  .skeltile { width: var(--tile, 96px); height: var(--tile, 96px); min-height: 0; flex: 0 0 var(--tile, 96px); border-radius: 12px; }
   .skelbtn { min-width: 64px; visibility: hidden; }
   .skelverbs { min-height: 52px; margin-top: 14px; }
   .parentage { margin-top: 2px; }
@@ -516,9 +556,6 @@
   .hero.own .cred { top: 10px; bottom: auto; }
   .heroimg { display: block; width: 100%; padding: 0; border: 0; background: transparent; cursor: zoom-in; }
   .heroimg :global(img) { width: 100%; height: 430px; object-fit: cover; display: block; } /* a fixed height: the box is the same before the pixels arrive from the vault */
-  /* No photograph: the box keeps a hero's height but grows with its contents, the caption on its own line above the buttons. */
-  .hero .ph { height: auto; min-height: 260px; box-sizing: border-box; padding: 16px; flex-direction: column; gap: 12px; }
-  .hero .ph .phcap { display: block; }
   button.cred { border: 0; cursor: pointer; font: inherit; font-size: 10.5px; }
   .addrow { padding: 14px 17px; margin-top: 12px; }
   .phgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-top: 12px; }
@@ -568,6 +605,5 @@
   .setuprow .w { font-size: 12px; color: var(--ink3); }
   .quickbar .more { color: var(--ink2); }
   @media (max-width: 640px) { .setuprow .w { display: none; } }
-  a.pill { color: inherit; }
-  @media (max-width: 640px) { .editform { grid-template-columns: 1fr 1fr; } .hero { margin-top: 0; } .hero.own { min-height: 260px; } .heroimg :global(img) { height: 260px; } }
+  @media (max-width: 640px) { .editform { grid-template-columns: 1fr 1fr; } .hero { margin-top: 0; } .hero.own { min-height: 260px; } .heroimg :global(img) { height: 260px; } .idcard.flat { margin-top: 10px; display: grid; grid-template-columns: 80px minmax(0, 1fr); --tile: 80px; } .idcard.flat .acts { grid-column: 1 / -1; } .idcard.flat .who { flex-basis: auto; } .idcard.flat h1.sci { font-size: 23px; } .idcard.flat .accno.lead { display: table; margin: 0 0 4px; vertical-align: baseline; } }
 </style>

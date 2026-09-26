@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { listBatches, parseAfter, storeCounted, storeOnce, batchMeta, readBody, batchKey, recount, vaultBytes, vaultIdFor, ensureVault, MAX_BYTES, MAX_IP_BYTES_PER_DAY, MAX_LIST_PAGES, META_FLUSH_BYTES, META_FLUSH_MS, OVERLAP_MS, allowCreation, rateLimit, resetRateLimits, resetMetaFlush, resetKvWarning, tooMany, VaultFull, DayQuota, type VaultMeta } from '$lib/server/sync';
+import { listBatches, parseAfter, storeCounted, storeOnce, batchMeta, readBody, batchKey, recount, vaultBytes, vaultIdFor, ensureVault, MAX_BYTES, MAX_IP_BYTES_PER_DAY, MAX_LIST_PAGES, META_FLUSH_BYTES, META_FLUSH_MS, OVERLAP_MS, MAX_NEW_VAULTS_PER_DAY, allowCreation, creationCeilings, rateLimit, resetRateLimits, resetMetaFlush, resetKvWarning, tooMany, VaultFull, DayQuota, type VaultMeta } from '$lib/server/sync';
 import { deriveKeys, newVaultKey } from '$lib/sync/crypto';
 
 /** Just enough of R2 for the sync store: keys, bytes, upload times we control. */
@@ -153,23 +153,39 @@ describe('storage accounting', () => {
   });
 });
 
-describe('vault creation is bounded per address', () => {
+describe('vault creation is bounded per address, per day for everyone, and in all', () => {
   beforeEach(() => resetKvWarning());
-  it('allows the cap and refuses the next', async () => {
+  it('allows the address its cap and refuses the next as the address\'s own limit', async () => {
     const kv = fakeKV();
     let ok = 0;
-    for (let i = 0; i < 25; i++) if (await allowCreation(kv as never, '1.2.3.4')) ok++;
-    expect(ok).toBe(20);
-    expect(await allowCreation(kv as never, '5.6.7.8')).toBe(true);
+    for (let i = 0; i < 8; i++) if ((await allowCreation(kv as never, '1.2.3.4')) === 'ok') ok++;
+    expect(ok).toBe(MAX_NEW_VAULTS_PER_DAY);
+    expect(await allowCreation(kv as never, '1.2.3.4')).toBe('address');
+    expect(await allowCreation(kv as never, '5.6.7.8')).toBe('ok');
+    expect(kv.m.get('vaults:all')).toBe(String(MAX_NEW_VAULTS_PER_DAY + 1));
+  });
+  it('many addresses together meet the day ceiling, then the ceiling in all; both come from the Worker variables', async () => {
+    const kv = fakeKV();
+    const ips = Array.from({ length: 10 }, (_, i) => `10.0.0.${i}`);
+    let ok = 0;
+    for (const ip of ips) for (let i = 0; i < 3; i++) if ((await allowCreation(kv as never, ip, T0, { perDay: 12, max: 100 })) === 'ok') ok++;
+    expect(ok).toBe(12);
+    expect(await allowCreation(kv as never, '10.0.0.9', T0, { perDay: 12, max: 100 })).toBe('full');
+    // the next day the day counter is fresh, and the ceiling in all is what stops it
+    expect(await allowCreation(kv as never, '10.0.0.9', T0 + 86_400_000, { perDay: 12, max: 100 })).toBe('ok');
+    expect(await allowCreation(kv as never, '10.0.1.1', T0 + 86_400_000, { perDay: 12, max: 13 })).toBe('full');
+    expect(kv.m.get('vaults:all')).toBe('13');
+    expect(creationCeilings({ SYNC_VAULTS_PER_DAY: '300', SYNC_VAULTS_MAX: 'lots' })).toEqual({ perDay: 300, max: undefined });
+    expect(creationCeilings(undefined)).toEqual({ perDay: undefined, max: undefined });
   });
   it('FAILS CLOSED: no KV bound refuses every creation and logs once; a KV that throws refuses too', async () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {});
-    expect(await allowCreation(undefined, '1.2.3.4')).toBe(false);
-    expect(await allowCreation(undefined, '1.2.3.4')).toBe(false);
+    expect(await allowCreation(undefined, '1.2.3.4')).toBe('full');
+    expect(await allowCreation(undefined, '1.2.3.4')).toBe('full');
     expect(err).toHaveBeenCalledTimes(1);
     const kv = fakeKV();
     kv.fail = true;
-    expect(await allowCreation(kv as never, '9.9.9.9')).toBe(false);
+    expect(await allowCreation(kv as never, '9.9.9.9')).toBe('full');
     err.mockRestore();
   });
   it('the id must be the one the token derives, exactly as the client derives it', async () => {

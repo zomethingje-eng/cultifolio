@@ -136,7 +136,7 @@
 <h2 class="sec" id="site">Your site</h2>
 <div class="cult">
   <div class="body">
-    <p class="small" style="margin: 0 0 10px">Where you grow: the frost watch reads its forecast here, and the months in the notes follow its hemisphere.{#if !site.current && benches.length} Until it is set, the first bench with coordinates stands in.{/if}</p>
+    <p class="small" style="margin: 0 0 10px">Where you grow: the frost watch reads its forecast here, and the months in the notes follow its hemisphere.{#if !site.current && benches.length} Until it is set, the first place with coordinates stands in.{/if}</p>
     <div class="fields">
       <label><span>Name</span><input type="text" bind:value={siteName} placeholder="home, the greenhouse" /></label>
       <label><span>Latitude</span><input type="text" inputmode="decimal" bind:value={lat} placeholder="40.43" /></label>
@@ -146,7 +146,7 @@
       <button class="btn pri" type="button" onclick={saveSite}>Save</button>
       <button class="btn" type="button" onclick={locate} disabled={locating}>{locating ? 'Locating…' : 'Use my location'}</button>
       {#if benches.length}
-        <label class="inline"><span>or a bench:</span><select onchange={(e) => useBench((e.currentTarget as HTMLSelectElement).value)}><option value="">choose</option>{#each benches as b (b.id)}<option value={b.id}>{b.name}</option>{/each}</select></label>
+        <label class="inline"><span>or a place:</span><select onchange={(e) => useBench((e.currentTarget as HTMLSelectElement).value)}><option value="">choose</option>{#each benches as b (b.id)}<option value={b.id}>{b.name}</option>{/each}</select></label>
       {/if}
       {#if site.current}<button class="linkish" type="button" onclick={clearSite}>Clear</button>{/if}
     </div>

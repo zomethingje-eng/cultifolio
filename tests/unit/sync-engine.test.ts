@@ -870,6 +870,30 @@ describe('the vault route on a body that is not an object (round sixteen, 16)', 
   });
 });
 
+describe('new vaults have a ceiling (improvements, 1)', () => {
+  it('the server answers 503 with a plain sentence once the ceiling in all is met, and the sync page gets that sentence, not a number', async () => {
+    const r2 = fakeR2();
+    const A = await boot(newMem('aaaaaaaaaaaa'), r2);
+    kv.set('vaults:all', '2000');
+    const k = await deriveKeys(KEY);
+    const r = await fetch('/api/sync/vault', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: k.id, token: k.token, create: true }) });
+    expect(r.status).toBe(503);
+    expect(r.headers.get('cache-control')).toBe('no-store');
+    await expect(A.sync.setup(KEY, 'create')).rejects.toThrow(/^Sync is full for now/);
+    expect(A.sync.configured).toBe(false);
+    // the address's own limit is a different sentence
+    kv.set('vaults:all', '0');
+    kv.set(`vaults:1.1.1.1:${new Date().toISOString().slice(0, 10)}`, '5');
+    await expect(A.sync.setup(KEY, 'create')).rejects.toThrow(/^Too many new vaults from this address today\.$/);
+    // joining an existing vault is never refused by the ceiling
+    kv.clear();
+    await A.sync.setup(KEY, 'create');
+    kv.set('vaults:all', '2000');
+    const B = await boot(newMem('bbbbbbbbbbbb'), r2);
+    await expect(B.sync.setup(KEY, 'join')).resolves.toBeUndefined();
+  });
+});
+
 describe('a run that outlives the vault it belongs to (round seventeen, A1 and 4)', () => {
   it('cannot ack the new vault\'s outbox: the key is checked inside the ack, after the old run has already passed every earlier check', async () => {
     const r2 = fakeR2();

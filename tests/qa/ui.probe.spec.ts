@@ -23,7 +23,7 @@ const shot = (page: Page, name: string) => page.screenshot({ path: path.join(SHO
 
 const SPECIES = ['copiapoa-cinerea', 'welwitschia-mirabilis', 'refusia-testii'];
 const NAMES: Record<string, string> = { 'copiapoa-cinerea': 'Copiapoa cinerea', 'welwitschia-mirabilis': 'Welwitschia mirabilis', 'refusia-testii': 'Refusia testii' };
-const STATIC_ROUTES = ['/', '/plants', '/plants/new', '/benches', '/sowings', '/sowings/new', '/labels', '/backup', '/sync', '/frost', '/offline', '/about/how', '/about/formats', ...SPECIES.map((s) => `/species/${s}`)];
+const STATIC_ROUTES = ['/', '/plants', '/plants/new', '/places', '/propagation', '/propagation/new', '/labels', '/backup', '/sync', '/frost', '/offline', '/about/how', '/about/formats', ...SPECIES.map((s) => `/species/${s}`)];
 
 /** Everything the browser says or fails to fetch, per page, plus any request that leaves this origin. */
 function watch(page: Page) {
@@ -101,7 +101,7 @@ for (const width of [360, 1280]) {
     const accs: Record<string, string> = {};
     for (const s of SPECIES) accs[s] = await addPlant(page, NAMES[s], { field: s === 'copiapoa-cinerea' ? 'KK 1462' : undefined });
     // A place, so the plant page has a bench to compare with and the labels page has a location.
-    await page.goto('/benches');
+    await page.goto('/places');
     await page.getByRole('button', { name: 'New location' }).click();
     await page.fill('#loc-name', 'East sill');
     await page.getByRole('button', { name: 'Add', exact: true }).click();
@@ -117,7 +117,7 @@ for (const width of [360, 1280]) {
       if (o.scrollW > o.innerW + 1) bad.push(`${r}: scrollWidth ${o.scrollW} > ${o.innerW}; ${o.wide.join(', ')}`);
     }
     // A bench page with the frost section and edit form open.
-    await page.goto('/benches');
+    await page.goto('/places');
     await page.locator('a.row').first().click();
     await page.getByRole('button', { name: 'Edit' }).click();
     await shot(page, `${width}_benches_id_edit`);

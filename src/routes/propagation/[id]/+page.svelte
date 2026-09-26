@@ -37,7 +37,7 @@
   let thumbFailed = $state(false);
   $effect(() => {
     if (s) {
-      setCrumb([{ label: 'Sowings', href: '/sowings' }, { label: `${sowNo(s)} · ${s.taxonName}` }]);
+      setCrumb([{ label: 'Propagation', href: '/propagation' }, { label: `${sowNo(s)} · ${s.taxonName}` }]);
       entriesFor([speciesSlug(s.taxonName)]).then((m) => (idx = m?.get(speciesSlug(s.taxonName))));
     }
     return () => setCrumb([]);
@@ -131,7 +131,7 @@
   async function remove() {
     if (raised.length) return;
     await collection.remove('sowing', id);
-    goto('/sowings');
+    goto('/propagation');
   }
 
   /* edit */
@@ -170,7 +170,7 @@
   <p class="muted">Opening your collection…</p>
 {:else if !s}
   <h1 class="q" style="margin-top: 24px">{param}</h1>
-  <p class="muted">No sowing with this number on this device.</p>
+  <p class="muted">No batch with this number on this device.</p>
 {:else}
   <div class="hero">
     {#if idx?.thumb && prefs.referencePhotos && !thumbFailed}<img src={idx.thumb} alt={s.taxonName} style="max-height: 220px" onerror={() => (thumbFailed = true)} /><span class="cred">species photograph</span>{:else if idx?.thumb && prefs.referencePhotos}<div class="ph empty" style="height: 120px">No photograph yet.</div>{:else}<div class="ph" style="height: auto; min-height: 120px; flex-direction: column; gap: 10px; padding: 16px">{m.label}{#if idx?.thumb && !prefs.referencePhotos}<RefPhotoOffer center what="the reference’s photograph of this species" />{/if}</div>{/if}
@@ -187,7 +187,7 @@
       <div class="pills">
         <span class="pill {s.status === 'active' ? 'a' : s.status === 'failed' ? 'b' : ''}">{s.status === 'active' ? 'in progress' : s.status}</span>
         <span class="pill">{m.label}</span>
-        {#if s.locationId}<a class="pill" href="/benches/{s.locationId}">{collection.locationName(s.locationId)}</a>{/if}
+        {#if s.locationId}<a class="pill" href="/places/{s.locationId}">{collection.locationName(s.locationId)}</a>{/if}
         {#if s.bottomHeatC != null}<span class="pill w">bottom heat {temp(s.bottomHeatC, units.current, 1)}</span>{/if}
         {#if s.covered}<span class="pill c">covered</span>{/if}
       </div>

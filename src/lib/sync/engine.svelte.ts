@@ -174,7 +174,11 @@ class Sync {
     if (!key) throw new Error('That is not a vault key.');
     const keys = await deriveKeys(key);
     const r = await fetch(`${this.base}/api/sync/vault`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: keys.id, token: keys.token, create: mode === 'create' }) });
-    if (!r.ok) throw new Error(r.status === 404 ? 'No vault answers to that key. Check it against the other device; one wrong letter is a different vault.' : r.status === 403 ? 'That key does not open its vault.' : r.status === 503 ? 'Sync is not available on this server.' : `The server said ${r.status}.`);
+    if (!r.ok) {
+      // The server's own sentence where it gives one ("Sync is full for now…", "too many new vaults from this address today"); the fixed wording for the statuses whose meaning the client knows better.
+      const said = await r.json().then((b: unknown) => (b && typeof b === 'object' && typeof (b as { error?: unknown }).error === 'string' ? (b as { error: string }).error : null)).catch(() => null);
+      throw new Error(r.status === 404 ? 'No vault answers to that key. Check it against the other device; one wrong letter is a different vault.' : r.status === 403 ? 'That key does not open its vault.' : said ? said[0].toUpperCase() + said.slice(1) + (/[.!?]$/.test(said) ? '' : '.') : r.status === 503 ? 'Sync is not available on this server.' : `The server said ${r.status}.`);
+    }
     this.gen++; // a run still in flight for an earlier vault is stale from here: it touches nothing of this one (round sixteen, 2)
     this.keys = keys;
     this.vaultId = keys.id;

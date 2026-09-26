@@ -58,9 +58,9 @@ must print `0`.
 npm run deploy
 ```
 
-That runs `svelte-check`, the unit tests, the build and `wrangler deploy`, in that order, and stops at the first failure. The first deploy creates the Worker at `cultifolio.<account>.workers.dev`; the custom domain is added once in the dashboard (Workers → cultifolio → Settings → Domains & Routes → add `cultifolio.com`), after which every deploy serves both.
+That runs `svelte-check`, the unit tests, the build, `wrangler deploy` and then `scripts/live-check.mjs` against `https://cultifolio.com`, in that order, and stops at the first failure. The live check is the set of requests made by hand after every deploy since round fifteen: the name service three times (200 each, and it says whether the edge answered), the two headers on a prerendered page, a species page, the offline page and an API route, the beacon check, the reference under a stale corpus id (must be `no-store`), a forecast, and the vault route's 400 on a JSON null. It can be run alone with `npm run live-check`, or against a preview with `node scripts/live-check.mjs https://<worker>.workers.dev`. A failure after `wrangler deploy` means the new version is live and wrong: roll back (section 6) before reading further. The first deploy creates the Worker at `cultifolio.<account>.workers.dev`; the custom domain is added once in the dashboard (Workers → cultifolio → Settings → Domains & Routes → add `cultifolio.com`), after which every deploy serves both.
 
-`SYNC_OPEN` is `"1"` in `wrangler.jsonc`: any vault can sync, no licence. Leave it until licensing is wired in; removing the variable closes new-vault creation and says so to the client.
+`SYNC_OPEN` is `"1"` in `wrangler.jsonc`: any vault can sync, no licence. Leave it until licensing is wired in; removing the variable closes new-vault creation and says so to the client. New vaults are also bounded: 5 per address a day (a 429), 200 a day for everyone and 2,000 in all (a 503 the sync page shows as "Sync is full for now"); the last two can be raised without a deploy by setting `SYNC_VAULTS_PER_DAY` and `SYNC_VAULTS_MAX` on the Worker, and the running totals are the KV keys `vaults:all:<day>` and `vaults:all`.
 
 ## 4. After the first deploy, once, by hand
 

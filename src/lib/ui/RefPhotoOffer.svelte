@@ -7,17 +7,26 @@
    */
   import { prefs } from '$lib/ui/prefs.svelte';
   import { toast } from '$lib/ui/toast.svelte';
-  let { compact = false, center = false, what = 'the reference’s photographs of your species', buckets = false }: { compact?: boolean; center?: boolean; what?: string; buckets?: boolean } = $props();
+  let { compact = false, center = false, link = false, what = 'the reference’s photographs of your species', buckets = false }: { compact?: boolean; center?: boolean; link?: boolean; what?: string; buckets?: boolean } = $props();
+  const why = $derived(`They come straight from the image host (iNaturalist or the GBIF image cache), which then sees which species you grow. ${buckets ? 'This site is asked for the hash buckets of your species, as the plant pages ask; nothing more.' : 'Nothing is sent to Cultifolio.'}`);
   function on() {
     prefs.set({ referencePhotos: true });
     toast.show('Reference photographs on. Off again in Settings.');
   }
 </script>
 
+{#if link}
+  <!-- One line, and what showing it discloses on tap, before the switch is thrown: the first screen of a plant is not the place for a paragraph. -->
+  <details class="rpo link">
+    <summary>Show {what}</summary>
+    <span class="why">{why}</span> <button class="go" type="button" onclick={on}>Show it</button>
+  </details>
+{:else}
 <div class="rpo" class:compact class:center>
   <button class="go" type="button" onclick={on}>{center ? 'or show' : 'Show'} {what}</button>
-  <span class="why">They come straight from the image host (iNaturalist or the GBIF image cache), which then sees which species you grow. {buckets ? 'This site is asked for the hash buckets of your species, as the plant pages ask; nothing more.' : 'Nothing is sent to Cultifolio.'}</span>
+  <span class="why">{why}</span>
 </div>
+{/if}
 
 <style>
   .rpo { font-family: var(--ui); font-size: 12.5px; color: var(--ink3); display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
@@ -28,4 +37,10 @@
   .rpo.compact .why { max-width: none; }
   .rpo.center { flex-direction: column; align-items: center; gap: 4px; text-align: center; font-family: var(--ui); }
   .rpo.center .why { max-width: 48ch; }
+  .rpo.link { display: block; margin-top: 6px; }
+  .rpo.link summary { cursor: pointer; color: var(--accent); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; list-style: none; width: fit-content; }
+  .rpo.link summary::-webkit-details-marker { display: none; }
+  .rpo.link summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+  .rpo.link[open] summary { margin-bottom: 4px; }
+  .rpo.link .why { display: inline; }
 </style>

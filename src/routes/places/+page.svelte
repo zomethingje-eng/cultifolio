@@ -32,9 +32,9 @@
   }
 </script>
 
-<svelte:head><title>Benches — Cultifolio</title></svelte:head>
+<svelte:head><title>Places — Cultifolio</title></svelte:head>
 
-<PageHead title="Benches" sub="Where your plants live; conditions set on a place apply to everything inside it." count="{rows.length} place{rows.length === 1 ? '' : 's'}{unplaced ? ` · ${unplaced} unplaced` : ''}">
+<PageHead title="Places" sub="Where your plants live: a greenhouse, a bench, a shelf or a windowsill; conditions set on a place apply to everything inside it." count="{rows.length} place{rows.length === 1 ? '' : 's'}{unplaced ? ` · ${unplaced} unplaced` : ''}">
   <button class="btn pri" onclick={() => (adding = !adding)}>New place</button>
 </PageHead>
 
@@ -69,7 +69,7 @@
   {:else}
     <div class="tree">
       {#each rows as r (r.loc.id)}
-        <a class="row card" href="/benches/{r.loc.id}" style="--d:{r.depth}">
+        <a class="row card" href="/places/{r.loc.id}" style="--d:{r.depth}">
           <span class="name">{r.loc.name}{#if collection.needsHome(r.loc.id)} <span class="faint">· needs a home: two devices moved places into each other; move this one where it belongs</span>{/if}</span>
           <span class="faint kind">{kindLabel(r.loc.type)}</span>
           <span class="n mono">{r.deepN}{r.deepN !== r.n ? ` (${r.n} here)` : ''}</span>

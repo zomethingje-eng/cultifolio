@@ -76,7 +76,7 @@ test('bench with coordinates, move, event, photo, labels, frost', async ({ brows
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   const acc = page.url().split('/').pop()!;
   // a bench with coordinates
-  await page.goto('/benches');
+  await page.goto('/places');
   await page.getByRole('button', { name: 'New location' }).click();
   await shot(page, 'bench-new-form');
   note(`BENCH new form fields: ${(await page.locator('form label, form .lbl').allInnerTexts()).join(' | ')}`);
@@ -157,7 +157,7 @@ test('bench with coordinates, move, event, photo, labels, frost', async ({ brows
   note(`FROST text:\n${await page.locator('main, body').first().innerText()}\nFROST requests: ${reqs.join(', ')}`);
   const fr = await page.request.get('/api/forecast?lat=51.5&lon=-0.12');
   note(`FROST api status ${fr.status()} body ${(await fr.text()).slice(0, 400)}`);
-  await page.goto('/benches');
+  await page.goto('/places');
   await page.locator('.tree .row', { hasText: 'Greenhouse' }).click();
   await page.waitForTimeout(1500);
   await shot(page, 'bench-frost');
@@ -176,7 +176,7 @@ test('sowing: sow from species page, germination, pot up', async ({ browser }) =
   await shot(page, 'sow-new-390');
   note(`SOW form labels: ${(await page.locator('form label, form .lbl').allInnerTexts()).join(' | ')}`);
   await page.getByRole('button', { name: 'Start batch' }).click();
-  await expect(page).toHaveURL(/\/sowings\/S\d{4}-\d{3}$/);
+  await expect(page).toHaveURL(/\/propagation\/S\d{4}-\d{3}$/);
   await shot(page, 'sow-page-390');
   note(`SOW page (no count):\n${await page.locator('main, body').first().innerText()}`);
   await page.fill('#g-n', '3');
@@ -190,7 +190,7 @@ test('sowing: sow from species page, germination, pot up', async ({ browser }) =
   await page.waitForTimeout(400);
   await shot(page, 'sow-done-390');
   note(`SOW after pot up:\n${await page.locator('main, body').first().innerText()}`);
-  await page.goto('/sowings');
+  await page.goto('/propagation');
   await shot(page, 'sowings-list-390');
   note(`SOWINGS list:\n${await page.locator('main, body').first().innerText()}`);
   await page.goto('/');

@@ -2,7 +2,7 @@
  * Your site: one place with coordinates that the frost watch, the hemisphere
  * of the months in the notes, and the forecast on the front page read. Kept
  * on this device (the same key the frost page always used, so nothing set
- * before is lost); a bench with coordinates stands in for it when it is not set.
+ * before is lost); a place with coordinates stands in for it when it is not set.
  */
 import { browser } from '$app/environment';
 

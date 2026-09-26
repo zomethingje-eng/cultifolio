@@ -1,4 +1,5 @@
 <script lang="ts">
+  import NotChecked from '$lib/ui/NotChecked.svelte';
   import { units } from '$lib/ui/units.svelte';
   import PageHead from '$lib/ui/PageHead.svelte';
   import { site } from '$lib/ui/site.svelte';
@@ -157,13 +158,13 @@
         <button id="lb-print" class="btn pri" onclick={() => window.print()} disabled={!picked.length || pending}>{pending ? 'Reading the reference…' : `Print ${picked.length} ${picked.length === 1 ? 'label' : 'labels'}`}</button>
       </div>
       {#if withCare && refused.length}
-        <p class="small muted" role="status">{refused.length === 1 ? 'One care line' : `${refused.length} care lines`} not checked: the climate source did not answer when the species page was built, which is not a statement that the species has no climate. The preview marks those lines; on the printed labels they are left blank.</p>
+        <p class="small muted" role="status">{refused.length === 1 ? 'One care line' : `${refused.length} care lines`} <NotChecked inline why="The climate source did not answer when the species page was built." />: the preview marks {refused.length === 1 ? 'it' : 'them'}; the printed labels leave {refused.length === 1 ? 'it' : 'them'} blank.</p>
       {/if}
       {#if withCare && nightOffCount}
         <p class="small muted" role="status">{nightOffCount === 1 ? 'One label prints' : `${nightOffCount} labels print`} no habitat night: the daily extremes were not checked when the species page was built (the source did not answer, or was not asked), and the mean night is a different figure, so it is left off rather than printed in its place.</p>
       {/if}
       {#if withCare && unchecked.length}
-        <div class="notice" id="lb-unchecked" role="status">{unchecked.length === 1 ? 'One care line' : `${unchecked.length} care lines`} not checked: the species reference could not be reached from here, which is not a statement that the species has no figures. The preview marks those care lines; on the printed labels they are left blank. <button type="button" class="linkish" onclick={retryCare}>Try again</button> before printing.</div>
+        <div class="notice" id="lb-unchecked" role="status">{unchecked.length === 1 ? 'One care line' : `${unchecked.length} care lines`} <NotChecked inline why="The species reference could not be reached from here." />: the preview marks {unchecked.length === 1 ? 'it' : 'them'}; the printed labels leave {unchecked.length === 1 ? 'it' : 'them'} blank. <button type="button" class="linkish" onclick={retryCare}>Try again</button> before printing.</div>
       {/if}
     </div>
   </div>

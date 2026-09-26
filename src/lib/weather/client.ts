@@ -48,12 +48,59 @@ export async function getForecast<T = unknown>(lat: number, lon: number, units: 
   const la = lat.toFixed(2), lo = lon.toFixed(2), alt = altM != null ? String(Math.round(altM / 10) * 10) : null;
   const k = `${la},${lo},${alt ?? ''},${units}`;
   const hit = readCache(k);
-  if (hit !== undefined) return { ok: true, body: hit as T };
+  if (hit !== undefined) return { ok: true, body: clockTime(hit) as T };
   const r = await fetch(`/api/forecast?lat=${la}&lon=${lo}${alt != null ? `&alt=${alt}` : ''}&units=${units}`);
   if (!r.ok) return { ok: false, status: r.status };
   const body = (await r.json()) as T;
   writeCache(k, body);
-  return { ok: true, body };
+  return { ok: true, body: clockTime(body) as T };
+}
+
+/* ---------- Clock time for the frost line ---------- */
+
+type RiskBody = { forecast?: { days?: Array<{ date: string; tmin: number; tminAt?: string }>; offsetH?: number }; risk?: { level: string; text: string } };
+const SOLAR = /\b(around|between) \d\d:\d\d [A-Z][a-z]+(?: and \d\d:\d\d(?: [A-Z][a-z]+)?)? solar time\b/;
+
+/** The zone's offset from UTC in hours at an instant, by what Intl prints for it. */
+function zoneOffsetH(zone: string | undefined, at: number): number {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: zone, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric' }).formatToParts(new Date(at));
+  const n = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? 0);
+  const asUtc = Date.UTC(n('year'), n('month') - 1, n('day'), n('hour'), n('minute'));
+  return Math.round(((asUtc - Math.floor(at / 60_000) * 60_000) / 3600_000) * 4) / 4;
+}
+
+/**
+ * The server says when the coldest hour falls in solar time by the site's longitude, because MET's answer carries no
+ * zone and a zone table is more than a frost line needs (round fifteen, 9). On the device the clock is known: when the
+ * browser's zone is within two hours of the site's solar offset, the reader is at the site or in its zone, and the line
+ * is said in their clock time instead, weekday from the same zone. A browser five zones away (a grower checking a
+ * greenhouse from abroad) keeps the solar wording, which is at least true. The server's text is never changed in the
+ * cache; the rewrite is on the way out, so a wrong guess costs one line, not the stored answer (improvements, 6).
+ */
+export function clockTime<T>(body: T, zone?: string): T {
+  const b = body as RiskBody;
+  const f = b?.forecast, risk = b?.risk;
+  if (!f?.days || typeof f.offsetH !== 'number' || !risk?.text || !SOLAR.test(risk.text)) return body;
+  try {
+    const day = risk.level === 'none' ? f.days.reduce((a, c) => (c.tmin < a.tmin ? c : a)) : f.days.find((d) => risk.text.includes(`(${d.date},`));
+    if (!day?.tminAt) return body;
+    const [a, bb] = day.tminAt.split('/');
+    const ta = new Date(a).getTime();
+    if (!Number.isFinite(ta) || Math.abs(zoneOffsetH(zone, ta) - f.offsetH) > 2) return body;
+    const hm = new Intl.DateTimeFormat('en-GB', { timeZone: zone, hourCycle: 'h23', hour: '2-digit', minute: '2-digit' });
+    const wd = new Intl.DateTimeFormat('en-GB', { timeZone: zone, weekday: 'long' });
+    let when: string;
+    if (!bb) when = `around ${hm.format(ta)} ${wd.format(ta)}`;
+    else {
+      const tb = new Date(bb).getTime();
+      if (!Number.isFinite(tb)) return body;
+      const da = wd.format(ta), db = wd.format(tb);
+      when = `between ${hm.format(ta)} ${da} and ${hm.format(tb)}${db === da ? '' : ' ' + db}`;
+    }
+    return { ...b, risk: { ...risk, text: risk.text.replace(SOLAR, when) } } as T;
+  } catch {
+    return body;
+  }
 }
 
 /**

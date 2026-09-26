@@ -1,4 +1,10 @@
-import type { Handle } from '@sveltejs/kit';
+import { redirect, type Handle } from '@sveltejs/kit';
+
+/** The two sections renamed before the launch: a bookmark or an installed app's cached shell still says the old path. */
+const MOVED: Array<[RegExp, string]> = [
+  [/^\/benches(?=\/|$)/, '/places'],
+  [/^\/sowings(?=\/|$)/, '/propagation']
+];
 
 /**
  * Two headers on every response the Worker renders. No referrer: a browser would otherwise send the page's own URL
@@ -9,6 +15,7 @@ import type { Handle } from '@sveltejs/kit';
  * prerendered pages are served as static files and get theirs from static/_headers.
  */
 export const handle: Handle = async ({ event, resolve }) => {
+  for (const [from, to] of MOVED) if (from.test(event.url.pathname)) redirect(301, event.url.pathname.replace(from, to) + event.url.search);
   const res = await resolve(event);
   // A response taken from the edge cache (the names route returns its hit as it is) has immutable headers in Workers, and
   // setting one throws, which SvelteKit turned into a 500 on every repeated lookup (round seventeen, 1). A copy is mutable.

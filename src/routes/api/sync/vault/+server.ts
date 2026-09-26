@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { store, vaultId, vaultIdFor, ensureVault, authed, readMeta, recount, vaultBytes, allowCreation, limited } from '$lib/server/sync';
+import { store, vaultId, vaultIdFor, ensureVault, authed, readMeta, recount, vaultBytes, allowCreation, creationCeilings, limited } from '$lib/server/sync';
 
 /**
  * Create or open a vault. Body: { id, token, create }. The token is hashed
@@ -23,7 +23,13 @@ export const POST: RequestHandler = async ({ request, platform, getClientAddress
   if (!existing && (await vaultIdFor(body.token)) !== id) return json({ error: 'that vault id does not belong to that token' }, { status: 400 });
   // SYNC_OPEN=1 (dev, and the launch before licences) lets any vault sync; anything else, including an unset variable, means a licence must be attached later.
   const open = platform?.env?.SYNC_OPEN === '1';
-  if (!existing && !(await allowCreation(platform?.env?.QUEUE, getClientAddress()))) return json({ error: 'too many new vaults from this address today' }, { status: 429, headers: { 'retry-after': '3600', 'cache-control': 'no-store' } });
+  if (!existing) {
+    // Three ceilings on new vaults (per address, for everyone today, in all), and a refusal is a plain answer the sync
+    // page shows as it is, never a 500: 429 for the address's own limit, 503 "sync is full for now" for the shared ones.
+    const may = await allowCreation(platform?.env?.QUEUE, getClientAddress(), Date.now(), creationCeilings(platform?.env as Record<string, unknown> | undefined));
+    if (may === 'address') return json({ error: 'too many new vaults from this address today' }, { status: 429, headers: { 'retry-after': '3600', 'cache-control': 'no-store' } });
+    if (may === 'full') return json({ error: 'Sync is full for now. Your collection stays on this device; try again another day.' }, { status: 503, headers: { 'retry-after': '3600', 'cache-control': 'no-store' } });
+  }
   const { created, meta } = await ensureVault(r2, id, body.token, open);
   // A (re)join is the moment the slow, authoritative listing puts the live counter right.
   const kv = platform?.env?.QUEUE;

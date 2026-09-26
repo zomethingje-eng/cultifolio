@@ -9,7 +9,7 @@ import fs from 'node:fs';
 const OUT = '/tmp/r5';
 fs.mkdirSync(OUT, { recursive: true });
 const BASE = 'http://localhost:5199';
-const ROUTES = ['/', '/species/copiapoa-cinerea', '/species/welwitschia-mirabilis', '/species/refusia-testii', '/plants', '/plants/new', '/benches', '/sowings', '/sowings/new', '/labels', '/frost', '/backup', '/sync', '/about/how', '/about/formats', '/offline', '/species/nonsensia-fakeii'];
+const ROUTES = ['/', '/species/copiapoa-cinerea', '/species/welwitschia-mirabilis', '/species/refusia-testii', '/plants', '/plants/new', '/places', '/propagation', '/propagation/new', '/labels', '/frost', '/backup', '/sync', '/about/how', '/about/formats', '/offline', '/species/nonsensia-fakeii'];
 
 function watch(page: Page) {
   const out = { console: [] as string[], failed: [] as string[] };

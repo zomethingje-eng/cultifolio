@@ -18,10 +18,17 @@ declare const self: ServiceWorkerGlobalScope;
 
 const CACHE = `cultifolio-${version}`;
 /** Collection pages render on the device from the vault; their HTML is a shell that is the same for everyone. */
-const SHELLS = ['/plants', '/plants/new', '/benches', '/sowings', '/sowings/new', '/labels', '/backup', '/sync', '/frost', '/settings', '/offline'];
+const SHELLS = ['/plants', '/plants/new', '/places', '/propagation', '/propagation/new', '/labels', '/backup', '/sync', '/frost', '/settings', '/offline'];
 const BUILD = new Set(build);
 const FILES = new Set(files);
-const PRECACHE = [...build, ...files, ...SHELLS, '/']; // the front page too: it is the start URL; the corpus is kept out of `files` by svelte.config.js
+/**
+ * Cached at install: the scripts and styles, the shells, the front page (the start URL), and only the Latin subsets of
+ * the three fonts, which is every glyph the pages set in them. The Latin-extended and Vietnamese subsets (84 kB) are
+ * fetched by the browser only when a name needs them, and the fetch handler caches them then (improvements, 9). The
+ * corpus is kept out of `files` by svelte.config.js.
+ */
+const isLazyFont = (p: string) => /\.woff2$/.test(p) && !/-latin-(?!ext)/.test(p);
+const PRECACHE = [...build.filter((p) => !isLazyFont(p)), ...files, ...SHELLS, '/'];
 
 self.addEventListener('install', (e) => {
   // Each file on its own: one shell that answers with a redirect or a 500 must not fail the whole install and leave the
@@ -58,7 +65,7 @@ self.addEventListener('activate', (e) => {
   );
 });
 
-const isShell = (path: string) => SHELLS.includes(path) || /^\/(plants|benches|sowings)\/[^/]+$/.test(path);
+const isShell = (path: string) => SHELLS.includes(path) || /^\/(plants|places|propagation)\/[^/]+$/.test(path);
 /** Only our own server's HTML goes in the cache: a captive portal's 200 must not become the app shell until the next build. */
 const cacheableHtml = (r: Response) => r.ok && r.type === 'basic' && (r.headers.get('content-type') ?? '').startsWith('text/html');
 
@@ -76,7 +83,12 @@ self.addEventListener('fetch', (e) => {
       const cache = await caches.open(CACHE);
       // Build assets and the app shell: cache first, they are immutable per build.
       if (BUILD.has(url.pathname) || FILES.has(url.pathname)) {
-        return (await cache.match(request)) ?? fetch(request);
+        const hit = await cache.match(request);
+        if (hit) return hit;
+        // A build file not cached at install (a font subset fetched for one name): kept once it has been asked for.
+        const r = await fetch(request);
+        if (r.ok && r.type === 'basic') void cache.put(request, r.clone()).catch(() => {});
+        return r;
       }
       if (request.mode === 'navigate' && isShell(url.pathname) && url.pathname !== '/settings') {
         // A plant's own page is the /plants shell plus the vault, and the shell is the same HTML for every plant: it is

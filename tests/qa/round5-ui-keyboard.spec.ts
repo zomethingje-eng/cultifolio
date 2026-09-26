@@ -43,7 +43,7 @@ test('species tab after first plant, with a wait', async ({ page }) => {
   for (let i = 0; i < 12; i++) { seen.push(`${Date.now() - t0}ms: ${await page.locator('.seccount').first().innerText().catch(() => '?')} | ${(await page.locator('h2').allInnerTexts()).join('/')}`); await page.waitForTimeout(250); }
   note(`SWITCH timing:\n${seen.join('\n')}`);
   await page.screenshot({ path: `${OUT}/flow-home-mine-1000.png`, fullPage: true });
-  await page.goto('/sowings');
+  await page.goto('/propagation');
   await page.waitForTimeout(800);
   note(`SOWINGS list text: ${await page.locator('main').innerText().catch(() => '(no main)')}`);
 });
