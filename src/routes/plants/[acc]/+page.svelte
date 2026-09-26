@@ -3,12 +3,13 @@
   import { toast } from '$lib/ui/toast.svelte';
   import { site } from '$lib/ui/site.svelte';
   import { localDate, daysBetween } from '$core/dates';
-  import { temp, tempN, rain, deltaT } from '$core/units';
+  import { temp, tempN, rain, deltaT, numberOrNull } from '$core/units';
   import { plural } from '$core/words';
   import { page } from '$app/state';
   import { accNo, sowNo } from '$lib/db/types';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
+  import { prefs } from '$lib/ui/prefs.svelte';
   import { collection } from '$lib/db/collection.svelte';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
   import LocationPicker from '$lib/ui/LocationPicker.svelte';
@@ -79,7 +80,7 @@
     entriesFor(ps.map((n) => slugify(n))).then((m) => { if (seq === asked) parentLinks = ps.map((pn) => ({ name: pn, slug: m?.has(slugify(pn)) ? slugify(pn) : null })); });
   });
   /** A photograph of the species for the plant without one of its own: the index's thumb when the index was read, else the dossier's own first wild photograph. */
-  const speciesThumb = $derived(dossier?.thumb);
+  const speciesThumb = $derived(prefs.referencePhotos ? dossier?.thumb : undefined); // a third-party request only when the grower switched it on (round twelve, A1)
   // Habitat versus here: the species' habitat figures, median with the 10th–90th span across the envelope cells, beside the bench's.
   const habitat = $derived.by(() => {
     if (!dossier || dossier.climate.status !== 'ok') return null;
@@ -89,7 +90,7 @@
     const dlis = dli(m), dli10 = dli(c.p10), dli90 = dli(c.p90);
     const ex = c.extremes ?? null;
     const coldI = m.reduce((b, x, j) => (x.tmin < m[b].tmin ? j : b), 0);
-    const sheet = cultivationSheet({ scientific: dossier.name.scientific, family: dossier.name.family, months: m, p10: c.p10, p90: c.p90, extremes: ex, lat: dossier.centroid?.lat ?? c.at.lat, units: u });
+    const sheet = cultivationSheet({ scientific: dossier.name.scientific, family: dossier.name.family, months: m, p10: c.p10, p90: c.p90, extremes: ex, lat: dossier.habitatLat ?? c.at.lat, units: u });
     return {
       dli: dlis.length ? { lo: Math.min(...dlis), hi: Math.max(...dlis), lo10: dli10.length ? Math.min(...dli10) : null, hi90: dli90.length ? Math.max(...dli90) : null } : null,
       night: { v: m[coldI].tmin, mo: coldI + 1, lo: c.p10[coldI].tmin, hi: c.p90[coldI].tmin },
@@ -186,7 +187,7 @@
   let enote = $state('');
   let eused = $state('');
   let ecause = $state('');
-  let measures = $state<Record<string, string>>({});
+  let measures = $state<Record<string, string | number | null>>({});
   let editingNotes = $state(false);
   let notesDraft = $state('');
   let myNotesDraft = $state('');
@@ -218,7 +219,7 @@
   async function addEvent(e: SubmitEvent) {
     e.preventDefault();
     const m: Record<string, number> = {};
-    for (const [k, v] of Object.entries(measures)) if (v !== '' && !Number.isNaN(Number(v))) m[k] = Number(v);
+    for (const [k, v] of Object.entries(measures)) { const n = numberOrNull(v); if (n != null) m[k] = n; } // a cleared box is no measurement, not 0
     await collection.addEvent({ acc: id, d: ed, t: et, note: enote.trim() || null, used: et === 'treat' || et === 'feed' ? eused.trim() || null : null, cause: et === 'death' ? ecause.trim() || null : null, measures: Object.keys(m).length ? m : null, followUp: et === 'treat' ? 10 : null });
     if (et === 'death') await collection.put('accession', id, { status: 'dead' });
     enote = '';

@@ -7,6 +7,7 @@
    * Nothing here is sent anywhere.
    */
   import { onMount } from 'svelte';
+  import { prefs } from '$lib/ui/prefs.svelte';
   import PageHead from '$lib/ui/PageHead.svelte';
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import { units } from '$lib/ui/units.svelte';
@@ -24,6 +25,7 @@
   onMount(async () => {
     site.load();
     theme.load();
+    prefs.load();
     await collection.load();
     const s = collection.scheme;
     mode = s.mode;
@@ -161,6 +163,14 @@
         <button type="button" class:on={theme.current === t} aria-pressed={theme.current === t} onclick={() => theme.set(t)}>{label}</button>
       {/each}
     </div>
+  </div>
+</div>
+
+<h2 class="sec" id="privacy">Reference photographs on your own pages</h2>
+<div class="cult">
+  <div class="body">
+    <label class="check"><input id="pref-refphotos" type="checkbox" checked={prefs.current.referencePhotos} onchange={(e) => prefs.set({ referencePhotos: e.currentTarget.checked })} /> Show the reference's photograph of the species on my plants, my batches and my tiles when a plant has no photograph of its own.</label>
+    <p class="small muted" style="margin: 6px 0 0">Off, your own pages ask no outside host for anything. On, the photograph comes straight from iNaturalist or the GBIF image cache, so that host sees this address ask for that species' picture; Cultifolio's server is not involved and learns nothing. Species pages you open are unaffected either way.</p>
   </div>
 </div>
 

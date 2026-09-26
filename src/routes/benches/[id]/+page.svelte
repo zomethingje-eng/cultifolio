@@ -94,7 +94,7 @@
   const daysSince = (d: string | null) => (d ? daysBetween(d) : null);
 
   /* ---- frost watch for outdoor / unheated places with coordinates ---- */
-  let forecast = $state<{ forecast: Forecast; alerts: Alert[]; risk: { level: string; text: string }; attribution: string[] } | null>(null);
+  let forecast = $state<{ forecast: Forecast; alerts: Alert[]; alertsStatus?: 'ok' | 'none' | 'refused' | 'n/a'; risk: { level: string; text: string }; attribution: string[] } | null>(null);
   let forecastErr = $state('');
   const watchable = $derived(cond.lat != null && cond.lon != null && cond.indoor !== true);
   $effect(() => {
@@ -104,14 +104,20 @@
       // Whatever went wrong, the page says the check did not happen, never a status code, and never that the nights are clear; our own refusals are said as ours.
       .catch(() => (forecastErr = forecastRefusal(null)));
   });
-  /** A heater set-point protects the plants even outdoors; the risk is only real below the floor. */
+  /**
+   * A heater set-point protects the plants even outdoors, so with a floor set the question is whether the outside drops
+   * below it: its own level and wording, never "frost" for an 8 °C night under a 10 °C floor. An NWS warning in force
+   * is said whatever the floor, and alerts that were not checked are said not to have been (round twelve, 9).
+   */
   const effectiveRisk = $derived.by(() => {
     if (!forecast) return null;
     const floor = cond.floorC;
     if (floor == null) return forecast.risk;
+    if (forecast.risk.level === 'warning') return forecast.risk;
     const nights = forecast.forecast.days.filter((d) => d.tmin < floor);
-    return nights.length ? { level: 'frost', text: `Forecast drops below this place's ${temp(floor, units.current)} floor on ${nights[0].date} (${temp(nights[0].tmin, units.current, 1)} outside).` } : { level: 'none', text: `Outside stays above the ${temp(floor, units.current)} floor for the ${forecast.forecast.hoursCovered} hours of forecast.` };
+    return nights.length ? { level: 'floor', text: `Forecast drops below this place's ${temp(floor, units.current, 1)} floor on ${nights[0].date} (${temp(nights[0].tmin, units.current, 1)} outside).` } : { level: 'none', text: `Outside stays above the ${temp(floor, units.current, 1)} floor for the ${forecast.forecast.hoursCovered} hours of forecast.` };
   });
+  const alertsUnchecked = $derived(forecast?.alertsStatus === 'refused');
 
   let confirmRemove = $state(false);
   async function remove() {
@@ -135,7 +141,7 @@
       <div class="pills">
         {#if cond.floorC != null}<span class="pill c">floor {temp(cond.floorC, units.current)}</span>{/if}
         {#if dli != null}<span class="pill w">DLI {dli.toFixed(0)}</span>{/if}
-        {#if watchable && effectiveRisk}<span class="pill {effectiveRisk.level === 'none' ? 'a' : effectiveRisk.level === 'cold' ? 'w' : 'b'}">{effectiveRisk.level === 'none' ? 'frost: clear' : effectiveRisk.level === 'cold' ? 'cold night coming' : 'frost forecast'}</span>{/if}
+        {#if watchable && effectiveRisk}<span class="pill {effectiveRisk.level === 'none' ? 'a' : effectiveRisk.level === 'cold' ? 'w' : 'b'}">{effectiveRisk.level === 'none' ? (alertsUnchecked ? 'forecast clear; alerts not checked' : 'frost: clear') : effectiveRisk.level === 'cold' ? 'cold night coming' : effectiveRisk.level === 'floor' ? 'below the floor' : effectiveRisk.level === 'warning' ? 'weather warning' : 'frost forecast'}</span>{/if}
         {#if unseen && deep.length}<span class="pill w">{unseen} not seen in 90 d</span>{/if}
       </div>
     </div>
@@ -192,7 +198,7 @@
     {#if forecastErr}<div class="notice">{forecastErr}</div>
     {:else if !forecast}<p class="muted">Fetching the forecast…</p>
     {:else}
-      <div class="notice {effectiveRisk?.level === 'none' ? 'ok' : effectiveRisk?.level === 'cold' ? '' : 'err'}"><b>{effectiveRisk?.level === 'none' ? 'All clear.' : effectiveRisk?.level === 'cold' ? 'Cold night coming.' : 'Frost forecast.'}</b> {effectiveRisk?.text}</div>
+      <div class="notice {effectiveRisk?.level === 'none' ? 'ok' : effectiveRisk?.level === 'cold' ? '' : 'err'}"><b>{effectiveRisk?.level === 'none' ? (alertsUnchecked ? 'Forecast clear.' : 'All clear.') : effectiveRisk?.level === 'cold' ? 'Cold night coming.' : effectiveRisk?.level === 'floor' ? 'Below the floor.' : effectiveRisk?.level === 'warning' ? 'Warning in force.' : 'Frost forecast.'}</b> {effectiveRisk?.text}{#if alertsUnchecked} Alerts not checked: the National Weather Service did not answer, and this is not a statement that no alert is in force.{/if}</div>
       <p class="small muted">{forecast.attribution.join(' · ')}. <a href="/frost">Full forecast</a>.</p>
     {/if}
   {:else if cond.indoor !== true}

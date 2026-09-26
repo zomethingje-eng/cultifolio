@@ -186,3 +186,19 @@ describe('round five: seasons the rules do not earn', () => {
     expect(s.short).toContain('March to May at the habitat (not shifted)');
   });
 });
+
+describe('the sheet carries the habitat latitude (round twelve, 1)', () => {
+  it('a species with a climate and no map marker still tells the label which hemisphere it grows in', async () => {
+    const { sheetOf } = await import('$lib/server/sheets');
+    const d = JSON.parse(JSON.stringify((await import('../../fixtures/dossiers/s/v2/5384013.json')).default));
+    d.centroid = null; // a species with too few in-range records for a marker
+    const s = sheetOf(d);
+    expect(s.centroid).toBeNull();
+    expect(s.habitatLat).toBe(d.climate.at.lat); // the typical cell, as the species page falls back to
+    expect(s.habitatLat).toBeLessThan(0);
+    // and the label's season line, read from the sheet the way the labels page reads it, is the southern one
+    const line = careLine({ scientific: s.name.scientific, family: s.name.family, months: s.climate.status === 'ok' ? s.climate.months : null, extremes: null, lat: s.habitatLat, units: 'metric' }, { readerLat: 40.4 });
+    const without = careLine({ scientific: s.name.scientific, family: s.name.family, months: s.climate.status === 'ok' ? s.climate.months : null, extremes: null, lat: null, units: 'metric' }, { readerLat: 40.4 });
+    expect(line).not.toBe(without); // the latitude changes the printed months; without it the habitat was read as northern
+  });
+});

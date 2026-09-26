@@ -100,7 +100,7 @@
         care = { ...care, [a.id]: '' };
         dossierFor(a).then(async (d) => {
           const readerLat = site.current?.lat ?? collection.locations.map((l) => l.lat).find((x): x is number => x != null) ?? null;
-          const line = careLine({ scientific: a.taxonName, family: d?.name.family, months: d?.climate.status === 'ok' ? d.climate.months : null, extremes: d?.climate.status === 'ok' ? (d.climate.extremes ?? null) : null, lat: d?.centroid?.lat ?? null, units: units.current }, { readerLat });
+          const line = careLine({ scientific: a.taxonName, family: d?.name.family, months: d?.climate.status === 'ok' ? d.climate.months : null, extremes: d?.climate.status === 'ok' ? (d.climate.extremes ?? null) : null, lat: d?.habitatLat ?? null, units: units.current }, { readerLat });
           care = { ...care, [a.id]: line };
         });
       }

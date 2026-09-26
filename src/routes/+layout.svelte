@@ -20,6 +20,7 @@
   import InstallBar from '$lib/ui/InstallBar.svelte';
   import ToastBar from '$lib/ui/ToastBar.svelte';
   import { units } from '$lib/ui/units.svelte';
+  import { prefs } from '$lib/ui/prefs.svelte';
   import { METRIC } from '$core/units';
   let { children } = $props();
   // Seed before anything renders. A server-rendered page carries the reader's units in its data (from the cookie or the
@@ -96,6 +97,7 @@
   });
   // Sync wakes with the app when a vault key is on this device; it does nothing otherwise.
   onMount(async () => {
+    prefs.load(); // whether private pages may fetch the reference's photographs: off until switched on
     // The app shell offline: registered after load so it never competes with the page's own requests.
     if ('serviceWorker' in navigator && !import.meta.env.DEV) {
       // A new build's worker waits until every tab of the old one has closed, which an installed app never does. So a

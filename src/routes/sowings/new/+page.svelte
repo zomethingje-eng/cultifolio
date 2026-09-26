@@ -2,7 +2,7 @@
   import { units } from '$lib/ui/units.svelte';
   import PageHead from '$lib/ui/PageHead.svelte';
   import { localDate } from '$core/dates';
-  import { temp, tempUnit, cToF, fToC } from '$core/units';
+  import { temp, tempUnit, cToF, bottomHeat as heatCheck } from '$core/units';
   import { goto } from '$app/navigation';
   import { accNo, sowNo } from '$lib/db/types';
   import { page } from '$app/state';
@@ -34,7 +34,7 @@
   let medium = $state('');
   let container = $state('');
   let treatment = $state('');
-  let bottomHeat = $state('');
+  let bottomHeat = $state<string | number | null>(''); // Svelte binds a cleared number input to null
   let covered = $state(false);
   let locationId = $state<string | null>(null);
   let notes = $state('');
@@ -103,8 +103,8 @@
       return;
     }
     // Bottom heat outside anything a propagator does is a figure in the wrong units, not a setting: seed is not sown at 77 °C.
-    const heatC = bottomHeat !== '' && !Number.isNaN(Number(bottomHeat)) ? (units.current === 'us' ? fToC(Number(bottomHeat)) : Number(bottomHeat)) : null;
-    heatMsg = heatC == null ? '' : heatC > 45 ? `${bottomHeat} ${tempUnit(units.current)} would cook seed${units.current === 'metric' && heatC <= 113 ? `; did you mean ${bottomHeat} °F (${Math.round(fToC(Number(bottomHeat)))} °C)?` : '.'}` : heatC < 5 ? `${bottomHeat} ${tempUnit(units.current)} is colder than no heat at all; bottom heat is 5 to 45 °C.` : '';
+    const heat = heatCheck(bottomHeat, units.current);
+    heatMsg = heat.msg;
     if (heatMsg) {
       document.getElementById('s-heat')?.focus();
       return;
@@ -131,7 +131,7 @@
       medium: medium.trim() || null,
       container: container.trim() || null,
       treatment: treatment.trim() || null,
-      bottomHeatC: bottomHeat !== '' && !Number.isNaN(Number(bottomHeat)) ? (units.current === 'us' ? +fToC(Number(bottomHeat)).toFixed(2) : Number(bottomHeat)) : null,
+      bottomHeatC: heat.c,
       covered,
       locationId,
       notes: notes.trim() || null

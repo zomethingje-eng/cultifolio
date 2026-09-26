@@ -3,3 +3,6 @@ export const MAX_BATCH_BYTES = 16 * 1024 * 1024;
 export const MAX_PHOTO_BYTES = 12 * 1024 * 1024;
 /** Sealed-blob overhead: version, IV, GCM tag, and the photo pack's length word. */
 export const SEAL_OVERHEAD = 1 + 12 + 16 + 4;
+
+/** How far behind its cursor a client re-reads (the server subtracts this from `since`), so a put that committed a little late is still seen. */
+export const OVERLAP_MS = 60_000;

@@ -45,6 +45,8 @@ describe('v2 importer', () => {
     expect(c.taxonKey).toBe(5384013);
     expect(c.location).toBe('Basement shelf 2');
     expect(c.acquired).toBe('2025-03-02');
+    // The number is a field as well as the id, so the vault's ledger of issued numbers sees every imported one (round twelve, 6).
+    expect(changes.filter((ch) => ch.kind === 'accession' && ch.field === 'acc').map((ch) => ch.value).sort()).toEqual(['2024-0001', '2024-0002', '2025-0003']);
     const evs = live(state, 'event') as unknown as Array<{ acc: string; t: string; measures?: Record<string, number> }>;
     expect(evs.filter((e) => e.acc === '2025-0003')).toHaveLength(3);
     expect(evs.find((e) => e.t === 'measure')?.measures).toEqual({ diam: 22, h: 15 });

@@ -246,6 +246,8 @@ test('the path species → my plants → bench is prefilled at every step and lo
 });
 
 test('photos: taken on the device, resized, stored, captioned, made the cover, shown everywhere, survive a reload, removed', async ({ page }) => {
+  await page.goto('/settings');
+  await page.check('#pref-refphotos'); // the species' photograph on a private page is opt-in (round twelve, A1)
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
@@ -468,8 +470,8 @@ test('labels: pick plants, choose a sheet, print at true size with a code that o
   // the care line arrives from the dossier for the species with climate
   await expect(page.locator('.page .label .care', { hasText: 'cooler six months Nov–Apr · hab. night 6.5 °C · sky 30–65 DLI' })).toHaveCount(1); // the same rules and the same month formatter as the sheet
   // and it was asked for by hash bucket only: no key, no slug, no species name left the browser (round ten, 1)
-  expect(asked.filter((u) => u.startsWith('/api/sheets'))).toHaveLength(1);
-  for (const u of asked) { expect(u).not.toMatch(/dossier|index|copiapoa|welwitschia|5384013/); expect(u).toMatch(/^\/api\/(sheets|entries)\?b=([01][0-9a-f],?)+$/); }
+  expect(asked.filter((u) => u.startsWith('/api/sheets')).sort()).toEqual(['/api/sheets?b=03&c=fixture', '/api/sheets?b=1c&c=fixture']); // one request a bucket (its edge-cache key), with the corpus id
+  for (const u of asked) { expect(u).not.toMatch(/dossier|index|copiapoa|welwitschia|5384013/); expect(u).toMatch(/^\/api\/(corpus|(sheets|entries)\?b=([01][0-9a-f],?)+&c=fixture)$/); }
   // the page size follows the sheet
   await page.selectOption('#lb-sheet', 'L7160');
   await expect(page.locator('.page').first()).toHaveCSS('width', /793|794/); // 210 mm
@@ -961,6 +963,8 @@ test('long and unicode names: nothing overflows at 360 px, the number chip never
 });
 
 test('removing asks twice; a species photograph that fails to load leaves the name where it can be read', async ({ page }) => {
+  await page.goto('/settings');
+  await page.check('#pref-refphotos');
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
@@ -1120,6 +1124,80 @@ test('a forecast source that does not answer is "not checked" in a plain notice 
   await expect(page.locator('.notice')).not.toHaveClass(/err/);
   await expect(page.getByText(/forecast 50\d/)).toHaveCount(0);
 });
+});
+
+test('a night under the place\'s floor is "below the floor", not frost; a warning is said whatever the floor; alerts that were not checked are said not to have been (round twelve, 9)', async ({ page }) => {
+  const days = [{ date: '2026-11-02', tmin: 8, tmax: 15, precipMm: 0, steps: 24 }, { date: '2026-11-03', tmin: 9, tmax: 14, precipMm: 0, steps: 24 }];
+  const body = (alerts: object[], alertsStatus: string) => JSON.stringify({ forecast: { source: 'met.no', fetched: '2026-11-01T00:00:00Z', days, hoursCovered: 48, offsetH: -5 }, alerts, alertsStatus, risk: alerts.length ? { level: 'warning', text: 'Freeze Warning in force (NOAA/NWS).' } : { level: 'none', text: 'No frost in the next 48 hours of forecast; coldest 8 °C (MET Norway).' }, attribution: ['Forecast data from MET Norway (CC BY 4.0)', 'Alerts: NOAA National Weather Service'] });
+  let alerts: object[] = [], status = 'refused';
+  await page.route(/\/api\/forecast/, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: body(alerts, status) }));
+  await page.goto('/benches');
+  await page.getByRole('button', { name: 'New place' }).click();
+  await page.fill('#loc-name', 'Cold frame');
+  await page.selectOption('#loc-kind', 'outdoor');
+  await page.getByRole('button', { name: 'Add', exact: true }).click();
+  await page.locator('.tree .row', { hasText: 'Cold frame' }).click();
+  await page.getByRole('button', { name: 'Edit' }).click();
+  await page.selectOption('#e-indoor', 'no');
+  await page.fill('#e-lat', '40.38');
+  await page.fill('#e-lon', '-80.05');
+  await page.fill('#e-floor', '10');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.locator('.notice')).toContainText('Below the floor.');
+  await expect(page.locator('.notice')).toContainText("drops below this place's 10.0 °C floor on 2026-11-02 (8.0 °C outside)");
+  await expect(page.locator('.notice')).not.toContainText('Frost forecast');
+  await expect(page.locator('.notice')).toContainText('Alerts not checked');
+  await expect(page.locator('.pill', { hasText: 'below the floor' })).toBeVisible();
+  // a floor of 2.5 prints as 2.5, not 3
+  await page.getByRole('button', { name: 'Edit' }).click();
+  await page.fill('#e-floor', '2.5');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.locator('.notice')).toContainText('above the 2.5 °C floor');
+  await expect(page.locator('.notice')).toContainText('Forecast clear.');
+  // a warning in force is said with the floor set
+  alerts = [{ event: 'Freeze Warning', headline: 'Freeze Warning tonight' }]; status = 'ok';
+  await page.getByRole('button', { name: 'Edit' }).click();
+  await page.fill('#e-lat', '40.39'); // another place, so the forecast kept in this browser for an hour is not the one read
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.locator('.notice')).toContainText('Warning in force.');
+  await expect(page.locator('.pill', { hasText: 'weather warning' })).toBeVisible();
+});
+
+test('pages about your own plants ask no outside host for anything unless the reference photographs are switched on; reference requests carry the corpus id (round twelve, A1 and 7)', async ({ page }) => {
+  const outside: string[] = [];
+  const api: string[] = [];
+  await page.route(/^https?:\/\/(?!localhost|127\.0\.0\.1)/, (r) => { outside.push(new URL(page.url()).pathname + ' -> ' + r.request().url()); r.abort(); });
+  page.on('request', (r) => { const u = new URL(r.url()); if (u.pathname.startsWith('/api/')) api.push(u.pathname + u.search); });
+  // Welwitschia: its photograph (…/700/medium.jpg) is what an own page would fetch; the public front page shows it only as a small row thumbnail.
+  await page.goto('/plants/new?species=Welwitschia%20mirabilis&key=5411106');
+  await page.getByRole('button', { name: /^Add/ }).click();
+  await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
+  const acc = page.url().split('/').pop()!;
+  await expect(page.locator('.card', { hasText: 'Habitat rain season' })).toContainText('Climate pending');
+  await expect(page.locator('.hero .ph')).toBeVisible(); // the add row, not the species' photograph: nothing is fetched for a private page by default
+  await expect(page.locator('.hero img')).toHaveCount(0);
+  await page.goto('/plants');
+  await expect(page.locator('.accrow')).toHaveCount(1);
+  await page.goto('/');
+  await page.waitForLoadState('networkidle');
+  await expect(page.locator('a.tile', { hasText: 'Welwitschia' }).first()).toContainText('photograph on the species page'); // the own tile, without its photograph
+  await page.waitForTimeout(500);
+  expect(outside.filter((u) => !u.startsWith('/ ->'))).toEqual([]); // the plant page and the list asked no outside host for anything
+  expect(outside.filter((u) => u.includes('700/medium'))).toEqual([]); // and the front page fetched nothing about the plant grown (its rows and strip are the public catalogue)
+  // after a search the whole index is here, with every photograph; the own tile still shows none
+  await page.fill('.searchbar', 'welwit');
+  await expect(page.locator('a.tile')).toHaveCount(1);
+  await page.fill('.searchbar', '');
+  await expect(page.locator('a.tile', { hasText: 'Welwitschia' }).first()).toContainText('photograph on the species page');
+  expect(api.filter((u) => /^\/api\/(sheets|entries)/.test(u)).every((u) => /[?&]c=fixture(&|$)/.test(u))).toBe(true); // every reference request names the corpus
+  expect(api.some((u) => u === '/api/corpus')).toBe(true);
+  // switched on in Settings, the plant page fetches the species' photograph from the image host, and from nowhere else
+  await page.goto('/settings');
+  await page.check('#pref-refphotos');
+  await page.goto(`/plants/${acc}`);
+  await expect.poll(() => outside.some((u) => u === `/plants/${acc} -> https://inaturalist-open-data.s3.amazonaws.com/photos/700/medium.jpg`), { timeout: 10000 }).toBe(true);
+  expect(outside.every((u) => u.includes('inaturalist-open-data.s3.amazonaws.com'))).toBe(true);
+  expect(api.some((u) => u.startsWith('/api/dossier') || /welwitschia|5411106/.test(u))).toBe(false); // still no key and no name to this server
 });
 
 test('a returning grower never sees the catalogue or "You grow 0" while the collection opens; a first visit sees the catalogue at once', async ({ page }) => {

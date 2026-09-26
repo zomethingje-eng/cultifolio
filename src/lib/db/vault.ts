@@ -213,9 +213,8 @@ async function copyStagingIn(live: IDBPDatabase<VaultDB>): Promise<void> {
   try {
     const changes = await stage.getAll('changes');
     if (changes.length) {
-      const tx = live.transaction(['changes', 'outbox'], 'readwrite');
-      const ch = tx.objectStore('changes'), ob = tx.objectStore('outbox');
-      await Promise.all([...changes.map((c) => ch.put(c)), ...changes.map((c) => ob.put({ t: c.t })), tx.done]);
+      // Through storeIn, so the numbers a restored collection carries go on the ledger like any other write (round twelve, 6).
+      await storeIn(live.transaction(['changes', 'outbox', 'meta'], 'readwrite'), changes, false);
     }
     // Photographs one at a time: a transaction holding every blob of a large collection would be one large allocation.
     for (const id of await stage.getAllKeys('photos')) {
@@ -254,14 +253,18 @@ async function issuedIn(tx: Tx, kind: NumberKind): Promise<Set<string>> {
   return new Set(Array.isArray(v) ? (v as string[]) : []);
 }
 /** Store changes and outbox entries, and note every number they carry, inside `tx`. */
-async function storeIn(tx: Tx, changes: Change[], fromServer: boolean, extra: Partial<Record<NumberKind, Set<string>>> = {}): Promise<void> {
+/**
+ * `strict` (a change made on this device): a stamp already in the store is a bug, not a re-send, and `add` refuses it
+ * so the transaction fails loudly instead of one change silently replacing another under the same key (round twelve, 4).
+ */
+async function storeIn(tx: Tx, changes: Change[], fromServer: boolean, extra: Partial<Record<NumberKind, Set<string>>> = {}, strict = false): Promise<void> {
   const ch = tx.objectStore('changes'), ob = tx.objectStore('outbox'), meta = tx.objectStore('meta');
   const carried: Partial<Record<NumberKind, Set<string>>> = { ...extra };
   for (const c of changes) {
     const k = numberField(c);
     if (k && typeof c.value === 'string') (carried[k] ??= new Set()).add(c.value);
   }
-  const puts: Promise<unknown>[] = [...changes.map((c) => ch.put(c)), ...(fromServer ? [] : changes.map((c) => ob.put({ t: c.t })))];
+  const puts: Promise<unknown>[] = [...changes.map((c) => (strict ? ch.add(c) : ch.put(c))), ...(fromServer ? [] : changes.map((c) => ob.put({ t: c.t })))];
   for (const k of Object.keys(carried) as NumberKind[]) {
     const set = await issuedIn(tx, k);
     for (const n of carried[k]!) set.add(n);
@@ -271,11 +274,11 @@ async function storeIn(tx: Tx, changes: Change[], fromServer: boolean, extra: Pa
 }
 
 /** Append changes; unless they came from the server (`fromServer`), they also go in the outbox to be pushed. One transaction, so the two stores cannot disagree. */
-export async function appendChanges(changes: Change[], fromServer = false): Promise<void> {
+export async function appendChanges(changes: Change[], fromServer = false, strict = false): Promise<void> {
   if (!changes.length) return;
   await writing(async () => {
     const db = await openVault();
-    await storeIn(db.transaction(['changes', 'outbox', 'meta'], 'readwrite'), changes, fromServer);
+    await storeIn(db.transaction(['changes', 'outbox', 'meta'], 'readwrite'), changes, fromServer, {}, strict);
   });
   announce();
 }

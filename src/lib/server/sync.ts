@@ -147,20 +147,24 @@ export function parseAfter(raw: string | null): After | null {
 
 const refCompare = (a: BatchRef, b: BatchRef) => a.at - b.at || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
 
-/** How far behind its cursor a client re-reads, so a put that committed a little late is still seen. */
-export const OVERLAP_MS = 60_000;
+import { OVERLAP_MS } from '$lib/sync/limits';
+export { OVERLAP_MS };
 
 /**
  * R2 list pages (of 1,000 keys) one request may walk over a prefix. A vault
- * holds hundreds to a few thousand batches over its life; twenty pages is
- * twenty thousand, well past that. The prefix must be walked whole because R2
+ * holds hundreds to a few thousand batches over its life; fifty pages is
+ * fifty thousand, past a grower who syncs with changes five times a day for
+ * twenty-five years. The prefix must be walked whole because R2
  * lists in key order and the client needs arrival order, and a batch that
  * arrived late can sit anywhere in key order; so the walk is bounded here and
  * a vault past the bound is refused (503, plain JSON) rather than listed
  * short and silently missed. The rate limit bounds how often one address can
- * make the Worker do the walk.
+ * make the Worker do the walk. The structural fix, for a round that can change
+ * the wire: name the stored object by its arrival time (the client's key kept
+ * as a marker object beside it), so the list starts at the cursor and costs
+ * one page per pull whatever the vault's size (round twelve, 10).
  */
-export const MAX_LIST_PAGES = 20;
+export const MAX_LIST_PAGES = 50;
 
 /** Walk one prefix, at most `MAX_LIST_PAGES` pages; false when the prefix goes on past the bound. */
 async function walk(r2: R2Bucket, prefix: string, each: (o: R2Object) => void): Promise<boolean> {
@@ -478,7 +482,9 @@ export const RATE = {
   /** Name suggestions: a person typing makes a few a second for a few seconds. */
   names: { limit: 300, windowMs: 600_000 },
   /** A forecast: the frost page and the front strip ask once an hour per site; each distinct coordinate is a call to MET Norway under this site's name. */
-  forecast: { limit: 60, windowMs: 600_000 }
+  forecast: { limit: 60, windowMs: 600_000 },
+  /** A sheet bucket the edge did not hold: a device asks for at most 32 in a life, and a bucket not yet written by the corpus build is a few hundred R2 reads. */
+  sheets: { limit: 40, windowMs: 600_000 }
 } as const;
 export type RateBucket = keyof typeof RATE;
 

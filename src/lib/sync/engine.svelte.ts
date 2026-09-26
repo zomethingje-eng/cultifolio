@@ -38,19 +38,25 @@
 import { collection } from '$lib/db/collection.svelte';
 import { getMeta, setMeta, getPhotoBlobs, putPhotoBlobs, photoBlobIds, outboxKeys, outboxAck, outboxFill, outboxClear, changesByKeys, allChanges, appendChanges } from '$lib/db/vault';
 import { deriveKeys, sealJson, openJson, seal, open, packPhoto, unpackPhoto, parseVaultKey, batchFingerprint, sha256hex, type VaultKeys } from './crypto';
-import { MAX_BATCH_BYTES, MAX_PHOTO_BYTES, SEAL_OVERHEAD } from './limits';
+import { MAX_BATCH_BYTES, MAX_PHOTO_BYTES, SEAL_OVERHEAD, OVERLAP_MS } from './limits';
 import { validateChanges, isHeld, dueAt, hlcWall, type Change } from '$core/log';
 import { hlcCompare, MAX_AHEAD_MS } from '$core/hlc';
 import type { Photo } from '$lib/db/types';
+import { version as BUILD } from '$app/environment';
 
 interface SyncMeta {
   key: string; // the vault key, kept on this device so it can sync without asking
   /** Arrival time (ms) of the newest batch we have taken from the server. */
   since: number;
-  /** Batch keys this device holds: pushed by it or applied from a pull. Skipped when listed again. */
+  /** Batch keys this device holds: pushed by it or applied from a pull. Skipped when listed again. Pruned to the overlap window (round twelve). */
   have: string[];
-  /** Batches that could not be opened or validated, by name, with why. Also in `have`, so they never block the cursor. */
-  quarantined?: Array<{ key: string; error: string; at: string }>;
+  /** Arrival time of each key in `have`, so the list can be pruned once the cursor has moved well past it. */
+  haveAt?: Record<string, number>;
+  /**
+   * Batches that could not be opened or validated, by name, with why, and the build that failed to read them. Also in
+   * `have`, so they never block the cursor; a new build drops them from both and reads them again (round twelve, 2).
+   */
+  quarantined?: Array<{ key: string; error: string; at: string; build?: string }>;
   /** Things the server refused to take from this device, by name, with why. They stay in the outbox; the rest of a sync goes on. */
   refused?: Array<{ key: string; error: string; at: string }>;
   /** HLCs of stored changes the fold is holding back because they are stamped too far ahead of this device's clock. */
@@ -215,7 +221,7 @@ class Sync {
   private note(list: 'quarantined' | 'refused', key: string, error: string): void {
     const m = this.meta!;
     const l = (m[list] ??= []);
-    if (!l.some((q) => q.key === key)) l.push({ key, error, at: new Date().toISOString() });
+    if (!l.some((q) => q.key === key)) l.push({ key, error, at: new Date().toISOString(), ...(list === 'quarantined' ? { build: BUILD } : {}) });
     this[list] = [...l];
   }
 
@@ -417,6 +423,7 @@ class Sync {
     if (r.ok) {
       this.setFull(null);
       if (!m.have.includes(key)) m.have.push(key);
+      (m.haveAt ??= {})[key] = Date.now(); // its arrival, near enough: the server's clock and this one agree to the minute the overlap allows
       await outboxAck(batch.map((c) => c.t)); // acknowledged: out of the outbox, whatever device stamped them
       return batch.length;
     }
@@ -453,8 +460,33 @@ class Sync {
     }
   }
 
+  /**
+   * `have` only has to cover what a listing can show again: the overlap window before the cursor. Keys whose arrival
+   * is well behind it are dropped (a batch listed again after that is folded again, which the log makes harmless);
+   * keys with no recorded arrival are kept until they are listed once.
+   */
+  private pruneHave(m: SyncMeta): void {
+    const at = m.haveAt ?? {};
+    const floor = m.since - 10 * OVERLAP_MS;
+    const keep = m.have.filter((k) => !(k in at) || at[k] >= floor || m.quarantined?.some((q) => q.key === k));
+    if (keep.length !== m.have.length) {
+      m.have = keep;
+      const set = new Set(keep);
+      for (const k of Object.keys(at)) if (!set.has(k)) delete at[k];
+    }
+  }
+
   private async pull(): Promise<void> {
     const m = this.meta!;
+    // A batch set aside by an earlier build may be one this build can read (a newer batch format, a kind it did not
+    // know): drop it from the quarantine and from `have`, so this run fetches it again (round twelve, 2).
+    if (m.quarantined?.some((q) => q.build !== BUILD)) {
+      const again = new Set(m.quarantined.filter((q) => q.build !== BUILD).map((q) => q.key));
+      m.quarantined = m.quarantined.filter((q) => !again.has(q.key));
+      m.have = m.have.filter((k) => !again.has(k));
+      this.quarantined = [...m.quarantined];
+      await setMeta(META, m);
+    }
     // The first page of a run starts a minute before the cursor; later pages continue strictly after the last batch listed.
     let after: { at: number; key: string } | null = null;
     for (;;) {
@@ -468,37 +500,48 @@ class Sync {
       const have = new Set(m.have);
       const fresh = batches.filter((b) => !have.has(b.key));
       let n = 0;
-      for (const b of batches) {
-        if (!have.has(b.key)) {
-          this.busy = `Receiving ${++n} of ${fresh.length}…`;
-          const res = await fetch(`${this.base}/api/sync/log/${b.key}?vault=${this.keys!.id}`, { headers: this.h() });
-          if (!res.ok) throw new Error(`batch ${b.key}: ${res.status}`);
-          let changes: Change[] | null = null;
-          try {
-            const batch = await openJson<{ v: number; device: string; changes: unknown }>(this.keys!, 'log', new Uint8Array(await res.arrayBuffer()));
-            if (!batch || typeof batch !== 'object' || batch.v !== 1) throw new Error('not a batch this version understands');
-            changes = validateChanges(batch.changes);
-          } catch (e) {
-            // Bad bytes, a wrong key, a malformed change: set it aside by name so it never blocks what came after it.
-            this.note('quarantined', b.key, e instanceof Error ? e.message : String(e));
-          }
-          if (changes) {
-            // Storing can fail (a full phone). That is not the batch's fault: nothing is noted, the cursor stays
-            // before it, and the error stops this run, so the next run fetches it again.
-            const hold = this.hold();
-            const ahead = changes.filter((c) => isHeld(c.t, hold));
-            if (ahead.length) {
-              // Stamped too far ahead of this clock: into the log, not into the fold, until the clock reaches them.
-              await appendChanges(ahead, true);
-              for (const c of ahead) if (!m.held?.includes(c.t)) (m.held ??= []).push(c.t);
-              this.setHeld();
+      try {
+        for (const b of batches) {
+          if (!have.has(b.key)) {
+            this.busy = `Receiving ${++n} of ${fresh.length}…`;
+            const res = await fetch(`${this.base}/api/sync/log/${b.key}?vault=${this.keys!.id}`, { headers: this.h() });
+            if (res.status === 429) this.limited(res);
+            if (!res.ok) throw new Error(`batch ${b.key}: ${res.status}`);
+            // The bytes are read before anything is judged: a connection that drops mid-body throws here, the run stops,
+            // and the batch is fetched again next run. Only bytes that arrived whole and cannot be opened are set aside.
+            const bytes = new Uint8Array(await res.arrayBuffer());
+            let changes: Change[] | null = null;
+            try {
+              const batch = await openJson<{ v: number; device: string; changes: unknown }>(this.keys!, 'log', bytes);
+              if (!batch || typeof batch !== 'object' || batch.v !== 1) throw new Error('not a batch this version understands');
+              changes = validateChanges(batch.changes);
+            } catch (e) {
+              // Bad bytes, a wrong key, a malformed change: set it aside by name so it never blocks what came after it.
+              this.note('quarantined', b.key, e instanceof Error ? e.message : String(e));
             }
-            if (ahead.length < changes.length) await collection.ingest(ahead.length ? changes.filter((c) => !isHeld(c.t, hold)) : changes, 'server');
+            if (changes) {
+              // Storing can fail (a full phone). That is not the batch's fault: nothing is noted, the cursor stays
+              // before it, and the error stops this run, so the next run fetches it again.
+              const hold = this.hold();
+              const ahead = changes.filter((c) => isHeld(c.t, hold));
+              if (ahead.length) {
+                // Stamped too far ahead of this clock: into the log, not into the fold, until the clock reaches them.
+                await appendChanges(ahead, true);
+                for (const c of ahead) if (!m.held?.includes(c.t)) (m.held ??= []).push(c.t);
+                this.setHeld();
+              }
+              if (ahead.length < changes.length) await collection.ingest(ahead.length ? changes.filter((c) => !isHeld(c.t, hold)) : changes, 'server', { repair: false });
+            }
+            m.have.push(b.key);
+            have.add(b.key);
           }
-          m.have.push(b.key);
-          have.add(b.key);
+          (m.haveAt ??= {})[b.key] = b.at;
+          if (b.at > m.since) m.since = b.at;
         }
-        if (b.at > m.since) m.since = b.at;
+      } finally {
+        // One write per page, not per batch (round twelve, 10). A run that stops mid-page keeps what it applied: a
+        // batch applied and not recorded is fetched again and folded again, which the log makes harmless.
+        this.pruneHave(m);
         await setMeta(META, m);
       }
       if (!more || !batches.length) break;
@@ -506,6 +549,8 @@ class Sync {
       if (after && last.at === after.at && last.key === after.key) break; // no progress (a server without the cursor): stop rather than spin
       after = last;
     }
+    // Duplicate numbers are repaired once, over the whole pull, so every device repairs from the same complete log (round twelve, 3).
+    await collection.repairNumbers();
     // Photos that records mention and we lack.
     const have = new Set(await photoBlobIds());
     const missing = collectionPhotos().filter((p) => !have.has(p.id));
@@ -515,10 +560,12 @@ class Sync {
       if (m.quarantined?.some((q) => q.key === p.id)) continue;
       const r = await fetch(`${this.base}/api/sync/photo/${p.id}?vault=${this.keys!.id}`, { headers: this.h() });
       if (r.status === 404) continue; // not uploaded from its device yet
+      if (r.status === 429) this.limited(r);
       if (!r.ok) throw new Error(`photo ${p.id}: ${r.status}`);
+      const bytes = new Uint8Array(await r.arrayBuffer()); // read whole before it is judged: a dropped connection stops the run and it is fetched again
       let pixels: { full: Uint8Array; thumb: Uint8Array } | null = null;
       try {
-        pixels = unpackPhoto(await open(this.keys!, 'photo', new Uint8Array(await r.arrayBuffer()), p.id));
+        pixels = unpackPhoto(await open(this.keys!, 'photo', bytes, p.id));
         // The record says what the pixels hash to; a server cannot swap one photo for another.
         if (p.sha && (await sha256hex(pixels.full)) !== p.sha) throw new Error('pixels do not match the record');
       } catch (e) {

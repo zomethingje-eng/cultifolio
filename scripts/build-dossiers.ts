@@ -54,7 +54,9 @@ import * as inat from '../src/lib/dossier/sources/inat';
 import * as wm from '../src/lib/dossier/sources/wikimedia';
 import { genusOf, slugify } from '../src/lib/core/names';
 import { makeFetcher, fixtureFetcher } from '../src/lib/dossier/fetch';
-import { dossierPath, DOSSIER_V } from '../src/lib/dossier/schema';
+import { dossierPath, DOSSIER_V, parseDossier } from '../src/lib/dossier/schema';
+import { sheetOf, type Sheet } from '../src/lib/dossier/sheet';
+import { bucketOf, BUCKETS } from '../src/lib/core/bucket';
 import { welwitschia, copiapoa, refused } from '../fixtures/upstream';
 import { makeClimateProvider, type PowerCache } from '../src/lib/climate/provider';
 import { fileGridSource } from './file-grid';
@@ -402,6 +404,32 @@ async function fillGbifPhotos(): Promise<void> {
   writeIndexFromDisk();
 }
 
+/**
+ * The 32 sheet-bucket files the Worker serves for plant pages and labels (`/api/sheets?b=`), one object read a bucket
+ * instead of a few hundred: every species in the index, its sheet (src/lib/dossier/sheet.ts) filed under the hash bucket
+ * of its slug. Uploaded with the corpus (`rclone copy` takes the whole s/v2 tree). Round twelve, 8.
+ */
+function writeSheetBuckets(index: IndexEntry[], idxDir: string): void {
+  const buckets = new Map<string, Sheet[]>();
+  let n = 0;
+  for (const e of index) {
+    try {
+      const d = parseDossier(JSON.parse(readFileSync(`${idxDir}/${e.key}.json`, 'utf8')));
+      const b = bucketOf(e.slug);
+      buckets.set(b, [...(buckets.get(b) ?? []), sheetOf(d, e.thumb)]);
+      n++;
+    } catch {
+      /* a dossier that does not parse is not served as a sheet either; the Worker derives what it can */
+    }
+  }
+  mkdirSync(`${idxDir}/sheets`, { recursive: true });
+  for (let i = 0; i < BUCKETS; i++) {
+    const b = i.toString(16).padStart(2, '0');
+    writeFileSync(`${idxDir}/sheets/${b}.json`, JSON.stringify(buckets.get(b) ?? []));
+  }
+  console.log(`  sheets: ${n} species into ${BUCKETS} bucket files → ${idxDir}/sheets/`);
+}
+
 /** The index is derived from the files; after a fill the thumbnails have changed, so it is written again. */
 function writeIndexFromDisk(): void {
   const index = uniqueSlugs(scanDossiers().sort((a, b) => a.name.localeCompare(b.name)));
@@ -409,6 +437,7 @@ function writeIndexFromDisk(): void {
   mkdirSync(idxDir, { recursive: true });
   writeFileSync(`${idxDir}/index.json`, JSON.stringify(index, null, 1));
   console.log(`  index: ${index.length} species`);
+  writeSheetBuckets(index, idxDir);
   // A dossier under a synonym is a page the backbone would not put its records under: a rebuild follows it to
   // the accepted species. A doubtful name has nothing to follow to (the backbone holds it as doubtful, with no
   // accepted name in its place), so the page stays under it and says so; listed for information, not for rebuilding.

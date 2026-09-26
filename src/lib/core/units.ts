@@ -65,3 +65,23 @@ export function unitsForLocale(lang: string | null | undefined): Units {
 export function parseUnits(v: string | null | undefined): Units | null {
   return v === 'us' || v === 'metric' ? v : null;
 }
+
+/**
+ * A typed number field as Svelte binds it: '' before anything is typed, null once a figure is cleared, else a number
+ * or a string. Blank either way is "not given", never zero (round twelve, 5).
+ */
+export const blank = (v: unknown): boolean => v == null || v === '' || (typeof v === 'number' && Number.isNaN(v));
+export const numberOrNull = (v: unknown): number | null => (blank(v) || Number.isNaN(Number(v)) ? null : Number(v));
+
+/**
+ * Bottom heat as typed, in the reader's units, checked once for both sowing forms: blank is no heat; outside 5–45 °C is
+ * refused with the likely reason (a figure in the wrong units), because seed is not sown at 77 °C.
+ */
+export function bottomHeat(raw: unknown, u: Units): { c: number | null; msg: string } {
+  const n = numberOrNull(raw);
+  if (n == null) return { c: null, msg: '' };
+  const c = u === 'us' ? fToC(n) : n;
+  if (c > 45) return { c: null, msg: `${n} ${tempUnit(u)} would cook seed${u === 'metric' && c <= 113 ? `; did you mean ${n} °F (${Math.round(fToC(n))} °C)?` : '.'}` };
+  if (c < 5) return { c: null, msg: `${n} ${tempUnit(u)} is colder than no heat at all; bottom heat is 5 to 45 °C.` };
+  return { c: +c.toFixed(2), msg: '' };
+}

@@ -25,6 +25,28 @@ export const bySlug = async (slug: string): Promise<IndexEntry | undefined | nul
  * page's life, and the service worker keeps the answers for the greenhouse.
  */
 const bucketCache = new Map<string, Promise<IndexEntry[] | null>>();
+
+/**
+ * The corpus id for reference requests (`?c=`): asked of /api/corpus once per page life (never cached anywhere), and
+ * remembered in this browser so that offline the requests carry the id they carried last, which is what the worker
+ * holds. A corpus refresh is an upload, not a deploy; the id is what turns the caches over (round twelve, 7).
+ */
+const CORPUS_KEY = 'cultifolio.corpus';
+let corpusP: Promise<string> | null = null;
+export function corpusId(): Promise<string> {
+  if (!corpusP)
+    corpusP = fetch('/api/corpus', { cache: 'no-store' })
+      .then((r) => (r.ok ? (r.json() as Promise<{ id: string }>) : null))
+      .then((j) => {
+        const id = j?.id ?? '';
+        if (id) { try { localStorage.setItem(CORPUS_KEY, id); } catch { /* private mode */ } }
+        return id || remembered();
+      })
+      .catch(() => remembered());
+  return corpusP;
+}
+const remembered = () => { try { return localStorage.getItem(CORPUS_KEY) ?? ''; } catch { return ''; } };
+const withCorpus = async (url: string) => { const c = await corpusId(); return c ? `${url}&c=${encodeURIComponent(c)}` : url; };
 export async function entriesFor(slugs: Iterable<string>): Promise<Map<string, IndexEntry> | null> {
   const list = [...new Set(slugs)].filter(Boolean);
   const out = new Map<string, IndexEntry>();
@@ -34,9 +56,9 @@ export async function entriesFor(slugs: Iterable<string>): Promise<Map<string, I
   const want = new Set(list);
   const buckets = [...new Set(list.map(bucketOf))].sort();
   const missing = buckets.filter((b) => !bucketCache.has(b));
-  for (let i = 0; i < missing.length; i += 64) {
-    const chunk = missing.slice(i, i + 64);
-    const p = fetch(`/api/entries?b=${chunk.join(',')}`).then((r) => (r.ok ? (r.json() as Promise<IndexEntry[]>) : null)).catch(() => null);
+  for (let i = 0; i < missing.length; i += 4) {
+    const chunk = missing.slice(i, i + 4); // four a request: each bucket is its own edge-cache entry, and a request names few enough that the URLs repeat
+    const p = withCorpus(`/api/entries?b=${chunk.join(',')}`).then(fetch).then((r) => (r.ok ? (r.json() as Promise<IndexEntry[]>) : null)).catch(() => null);
     for (const b of chunk) bucketCache.set(b, p.then((all) => (all ? all.filter((e) => bucketOf(e.slug) === b) : null)));
   }
   for (const b of buckets) {
@@ -62,10 +84,9 @@ export async function sheetsFor(slugs: Iterable<string>): Promise<Map<string, Sh
   const want = new Set(list);
   const buckets = [...new Set(list.map(bucketOf))].sort();
   const missing = buckets.filter((b) => !sheetBucketCache.has(b));
-  if (missing.length) {
-    const p = fetch(`/api/sheets?b=${missing.join(',')}`).then((r) => (r.ok ? (r.json() as Promise<Sheet[]>) : null)).catch(() => null);
-    for (const b of missing) sheetBucketCache.set(b, p.then((all) => (all ? all.filter((s) => bucketOf(s.slug) === b) : null)));
-  }
+  // One bucket a request: the URL is then the edge cache's own key for that bucket, and the worker's, so it repeats
+  // across devices and visits; the requests run in parallel.
+  for (const b of missing) sheetBucketCache.set(b, withCorpus(`/api/sheets?b=${b}`).then(fetch).then((r) => (r.ok ? (r.json() as Promise<Sheet[]>) : null)).catch(() => null));
   for (const b of buckets) {
     const sheets = await sheetBucketCache.get(b)!;
     if (!sheets) { sheetBucketCache.delete(b); return null; }

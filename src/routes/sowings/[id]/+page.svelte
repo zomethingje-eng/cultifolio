@@ -1,12 +1,13 @@
 <script lang="ts">
   import { units } from '$lib/ui/units.svelte';
   import { localDate } from '$core/dates';
-  import { temp, tempUnit, cToF, fToC } from '$core/units';
+  import { temp, tempUnit, cToF, bottomHeat as heatCheck } from '$core/units';
   import { plural } from '$core/words';
   import { page } from '$app/state';
   import { accNo, sowNo } from '$lib/db/types';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
+  import { prefs } from '$lib/ui/prefs.svelte';
   import { collection } from '$lib/db/collection.svelte';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
   import LocationPicker from '$lib/ui/LocationPicker.svelte';
@@ -56,12 +57,12 @@
   };
   /* germination count */
   let gd = $state(today());
-  let gn = $state<number | ''>('');
+  let gn = $state<number | '' | null>(''); // null once a typed figure is cleared
   let gnote = $state('');
   let gmsg = $state('');
   async function count(e: SubmitEvent) {
     e.preventDefault();
-    if (!s || gn === '' || gn < 0) return;
+    if (!s || gn == null || gn === '' || gn < 0) return;
     const n = Number(gn);
     gmsg = dateProblem(gd, 'count') ?? (n > s.count ? `${n} is more than the ${s.count} that went in; edit the batch if the count was wrong.` : n < st.germinated ? `${n} is fewer than the ${st.germinated} already counted; the count is the total up so far, so record losses instead.` : '');
     if (gmsg) return;
@@ -70,12 +71,12 @@
   }
   /* loss */
   let ld = $state(today());
-  let ln = $state<number | ''>('');
+  let ln = $state<number | '' | null>('');
   let lcause = $state('');
   let lmsg = $state('');
   async function loss(e: SubmitEvent) {
     e.preventDefault();
-    if (ln === '' || ln < 1) return;
+    if (ln == null || ln === '' || ln < 1) return;
     const n = Number(ln);
     lmsg = dateProblem(ld, 'loss') ?? (n > st.remaining ? (st.remaining ? `Only ${st.remaining} in the pot to lose.` : 'Nothing in the pot to lose: count the seedlings first.') : '');
     if (lmsg) return;
@@ -125,18 +126,25 @@
 
   /* edit */
   let editing = $state(false);
-  let f = $state({ taxonName: '', cultivar: '', method: 'seed' as PropMethod, sown: '', count: 0, sourceFrom: '', sourceRef: '', provenance: 'unknown' as Provenance, medium: '', container: '', treatment: '', bottomHeatC: '', covered: false, locationId: null as string | null, notes: '' });
+  let f = $state({ taxonName: '', cultivar: '', method: 'seed' as PropMethod, sown: '', count: 0, sourceFrom: '', sourceRef: '', provenance: 'unknown' as Provenance, medium: '', container: '', treatment: '', bottomHeatC: '' as string | number | null, covered: false, locationId: null as string | null, notes: '' });
   function startEdit() {
     if (!s) return;
     f = { taxonName: s.taxonName, cultivar: s.cultivar ?? '', method: s.method, sown: s.sown, count: s.count, sourceFrom: s.sourceFrom ?? '', sourceRef: s.sourceRef ?? '', provenance: s.provenance ?? 'unknown', medium: s.medium ?? '', container: s.container ?? '', treatment: s.treatment ?? '', bottomHeatC: s.bottomHeatC == null ? '' : String(units.current === 'us' ? +cToF(s.bottomHeatC).toFixed(1) : s.bottomHeatC), covered: s.covered ?? false, locationId: s.locationId ?? null, notes: s.notes ?? '' };
     editing = true;
   }
+  let heatMsg = $state('');
   async function saveEdit() {
     if (!s) return;
+    const heat = heatCheck(f.bottomHeatC, units.current); // the same check as the new-batch form: 77 does not save as 77 °C here either
+    heatMsg = heat.msg;
+    if (heatMsg) {
+      document.getElementById('se-heat')?.focus();
+      return;
+    }
     await collection.put('sowing', id, {
       taxonName: f.taxonName.trim() || s.taxonName, cultivar: f.cultivar.trim() || null, method: f.method, sown: f.sown || s.sown, count: Math.max(1, Number(f.count) || s.count),
       sourceFrom: f.sourceFrom.trim() || null, sourceRef: f.sourceRef.trim() || null, provenance: f.provenance, medium: f.medium.trim() || null, container: f.container.trim() || null,
-      treatment: f.treatment.trim() || null, bottomHeatC: f.bottomHeatC !== '' && !Number.isNaN(Number(f.bottomHeatC)) ? (units.current === 'us' ? +fToC(Number(f.bottomHeatC)).toFixed(2) : Number(f.bottomHeatC)) : null, covered: f.covered, locationId: f.locationId ?? null, notes: f.notes.trim() || null
+      treatment: f.treatment.trim() || null, bottomHeatC: heat.c, covered: f.covered, locationId: f.locationId ?? null, notes: f.notes.trim() || null
     });
     editing = false;
   }
@@ -152,7 +160,7 @@
   <p class="muted">No sowing with this number on this device.</p>
 {:else}
   <div class="hero">
-    {#if idx?.thumb && !thumbFailed}<img src={idx.thumb} alt={s.taxonName} style="max-height: 220px" onerror={() => (thumbFailed = true)} /><span class="cred">species photograph</span>{:else if idx?.thumb}<div class="ph empty" style="height: 120px">No photograph yet.</div>{:else}<div class="ph" style="height: 120px">{m.label}</div>{/if}
+    {#if idx?.thumb && prefs.referencePhotos && !thumbFailed}<img src={idx.thumb} alt={s.taxonName} style="max-height: 220px" onerror={() => (thumbFailed = true)} /><span class="cred">species photograph</span>{:else if idx?.thumb && prefs.referencePhotos}<div class="ph empty" style="height: 120px">No photograph yet.</div>{:else}<div class="ph" style="height: 120px">{m.label}</div>{/if}
   </div>
   <div class="idcard">
     <div class="who">
@@ -196,7 +204,7 @@
       <label><span>Medium</span><input id="se-medium" type="text" bind:value={f.medium} /></label>
       <label><span>Container</span><input id="se-container" type="text" bind:value={f.container} /></label>
       <label><span>Pre-treatment</span><input id="se-treat" type="text" bind:value={f.treatment} /></label>
-      <label><span>Bottom heat {tempUnit(units.current)}</span><input id="se-heat" type="number" step="0.5" bind:value={f.bottomHeatC} /></label>
+      <label><span>Bottom heat {tempUnit(units.current)}</span><input id="se-heat" type="number" step="0.5" bind:value={f.bottomHeatC} placeholder="blank if none" oninput={() => (heatMsg = '')} aria-invalid={!!heatMsg} aria-describedby={heatMsg ? 'se-heat-bad' : undefined} />{#if heatMsg}<span class="bad small" id="se-heat-bad">{heatMsg}</span>{/if}</label>
       <label class="row"><input id="se-covered" type="checkbox" bind:checked={f.covered} /> Covered</label>
       <div class="wide"><span class="lbl">Where</span><LocationPicker bind:value={f.locationId} id="se-loc" label="Where" /></div>
       <label class="wide"><span>Notes</span><textarea id="se-notes" rows="3" bind:value={f.notes}></textarea></label>
@@ -225,7 +233,7 @@
         <div class="row"><input id="g-date" type="date" aria-label="Date counted" bind:value={gd} /><input id="g-n" type="number" min="0" placeholder="up so far" aria-label="Up so far" bind:value={gn} /></div>
         <input id="g-note" type="text" placeholder="note (optional)" aria-label="Note" bind:value={gnote} />
         {#if gmsg}<p class="refuse" role="alert">{gmsg}</p>{/if}
-        <div class="end"><button class="btn pri" type="submit" disabled={gn === ''}>Record count</button></div>
+        <div class="end"><button class="btn pri" type="submit" disabled={gn == null || gn === ''}>Record count</button></div>
       </div>
     </form>
     <form class="cult act" onsubmit={loss}>
@@ -234,7 +242,7 @@
         <div class="row"><input id="l-date" type="date" aria-label="Date of loss" bind:value={ld} /><input id="l-n" type="number" min="1" placeholder="how many" aria-label="How many lost" bind:value={ln} /></div>
         <input id="l-cause" type="text" placeholder="cause" aria-label="Cause" bind:value={lcause} />
         {#if lmsg}<p class="refuse" role="alert">{lmsg}</p>{/if}
-        <div class="end"><button class="btn" type="submit" disabled={ln === ''}>Record loss</button></div>
+        <div class="end"><button class="btn" type="submit" disabled={ln == null || ln === ''}>Record loss</button></div>
       </div>
     </form>
     <div class="cult act">

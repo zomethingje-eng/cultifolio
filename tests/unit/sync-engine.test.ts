@@ -513,6 +513,62 @@ describe('a batch that cannot be read is set aside, not a wall', () => {
     await D.sync.run(); // listed again inside the overlap window: still skipped, still one entry
     expect(D.sync.quarantined).toHaveLength(1);
   });
+  it('a batch whose body breaks off mid-download is not set aside: the run stops, and the next run brings it whole (round twelve, 2)', async () => {
+    const r2 = fakeR2();
+    const A = await boot(newMem('aaaaaaaaaaaa'), r2);
+    const p = await A.collection.addAccession({ taxonName: 'Lithops', acc: 'A-1' });
+    await A.sync.setup(KEY, 'create');
+    const D = await boot(newMem('dddddddddddd'), r2);
+    // The first GET of a batch body answers 200 and then the connection drops while the bytes are being read.
+    const real = globalThis.fetch;
+    let broke = 0;
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const r = await real(input, init);
+      if (/\/api\/sync\/log\/[^?]+/.test(String(input)) && !broke++) return new Response(new ReadableStream({ start(c) { c.enqueue(new Uint8Array([1, 2, 3])); c.error(new TypeError('network error')); } }), { status: 200, headers: r.headers });
+      return r;
+    }) as typeof fetch;
+    await expect(D.sync.setup(KEY, 'join')).rejects.toThrow();
+    expect(D.sync.quarantined).toHaveLength(0); // bytes that never arrived are not a batch that could not be read
+    expect(D.collection.accession(p.id)).toBeUndefined();
+    await D.sync.run();
+    expect(D.sync.lastError).toBeNull();
+    expect(D.collection.accession(p.id)).toBeDefined(); // fetched again, whole
+    expect(D.sync.quarantined).toHaveLength(0);
+  });
+  it('a 429 on one batch body is a wait, not a failure: the run stops with the server\'s Retry-After (round twelve, 2)', async () => {
+    const r2 = fakeR2();
+    const A = await boot(newMem('aaaaaaaaaaaa'), r2);
+    await A.collection.addAccession({ taxonName: 'Lithops', acc: 'A-1' });
+    await A.sync.setup(KEY, 'create');
+    const D = await boot(newMem('dddddddddddd'), r2);
+    const real = globalThis.fetch;
+    let once = 0;
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      if (/\/api\/sync\/log\/[^?]+/.test(String(input)) && !once++) return new Response('{"error":"slow down"}', { status: 429, headers: { 'retry-after': '7' } });
+      return real(input, init);
+    }) as typeof fetch;
+    const err = await D.sync.setup(KEY, 'join').catch((e: Error & { retryAfterMs?: number }) => e);
+    expect((err as Error & { retryAfterMs?: number }).retryAfterMs).toBe(7000);
+    expect(D.sync.quarantined).toHaveLength(0);
+  });
+  it('a batch set aside by one build is read again by the next (round twelve, 2)', async () => {
+    const r2 = fakeR2();
+    const B = await boot(newMem('bbbbbbbbbbbb'), r2);
+    await B.sync.setup(KEY, 'create');
+    const keys = await deriveKeys(KEY);
+    expect((await post(keys, '1700000000000-0000-evil', crypto.getRandomValues(new Uint8Array(64)))).ok).toBe(true);
+    await B.sync.run();
+    expect(B.sync.quarantined).toHaveLength(1);
+    // Another build opens the same vault: the entry is dropped from the quarantine and the batch fetched again (still garbage here, so it is set aside again, by this build).
+    const m = mem;
+    const q = (m.meta.get('sync') as { quarantined: Array<{ build?: string }> }).quarantined;
+    q[0].build = 'older-build';
+    const B2 = await reboot(m, r2);
+    await B2.sync.run();
+    expect(B2.calls.filter((c) => c.includes('/api/sync/log/1700000000000-0000-evil'))).toHaveLength(1);
+    expect(B2.sync.quarantined).toHaveLength(1);
+    expect((m.meta.get('sync') as { quarantined: Array<{ build?: string }> }).quarantined[0].build).not.toBe('older-build');
+  });
   it('a batch with a reserved field is refused whole: nothing of it is applied', async () => {
     const r2 = fakeR2();
     const B = await boot(newMem('bbbbbbbbbbbb'), r2);

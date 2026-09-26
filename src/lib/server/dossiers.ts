@@ -46,7 +46,7 @@ const merge = (a: IndexEntry[], b: IndexEntry[]) => {
 };
 
 /** The parsed index, kept for a minute per isolate: the homepage, slug resolution and the API all read it, and parsing thousands of rows per request is waste. */
-let cached: { at: number; idx: IndexEntry[]; bySlug: Map<string, number> } | null = null;
+let cached: { at: number; idx: IndexEntry[]; bySlug: Map<string, number>; corpus: string } | null = null;
 const CACHE_MS = 60_000;
 
 async function staticJson<T>(fetch: Fetch, path: string): Promise<T | null> {
@@ -60,19 +60,42 @@ async function staticJson<T>(fetch: Fetch, path: string): Promise<T | null> {
 }
 
 export async function getIndex(platform: Platform, fetch: Fetch): Promise<IndexEntry[]> {
-  if (cached && Date.now() - cached.at < CACHE_MS) return cached.idx;
+  return (await loadIndex(platform, fetch)).idx;
+}
+
+/**
+ * The corpus id: what the client puts on its reference requests (`?c=`) so a corpus refresh, which is an upload and
+ * not a deploy, turns the edge, worker and browser caches over (round twelve, 7). The R2 object's etag when the index
+ * comes from the bucket; a hash of the file otherwise; 'fixture' for the fixture corpus.
+ */
+export async function getCorpusId(platform: Platform, fetch: Fetch): Promise<string> {
+  return (await loadIndex(platform, fetch)).corpus;
+}
+
+const fnv = (s: string) => { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(16).padStart(8, '0'); };
+
+async function loadIndex(platform: Platform, fetch: Fetch): Promise<NonNullable<typeof cached>> {
+  if (cached && Date.now() - cached.at < CACHE_MS) return cached;
   let idx: IndexEntry[] = [];
+  let corpus = '';
   const store = platform?.env?.STORE;
   if (store) {
     const obj = await store.get(`s/v${DOSSIER_V}/index.json`);
-    if (obj) idx = (await obj.json()) as IndexEntry[];
+    if (obj) {
+      const text = await obj.text();
+      idx = JSON.parse(text) as IndexEntry[];
+      corpus = (obj.etag || fnv(text)).replace(/[^A-Za-z0-9._-]/g, '').slice(0, 16);
+    }
   }
   const stat = await staticJson<IndexEntry[]>(fetch, `s/v${DOSSIER_V}/index.json`);
-  if (stat) idx = merge(idx, stat);
+  if (stat) {
+    idx = merge(idx, stat);
+    corpus = corpus || fnv(JSON.stringify(stat));
+  }
   // Fixtures only fill in when nothing real exists, so a real corpus never shows synthetic species.
   const out = idx.length ? idx : fixtureIndex;
-  cached = { at: Date.now(), idx: out, bySlug: new Map(out.map((e) => [e.slug, e.key])) };
-  return out;
+  cached = { at: Date.now(), idx: out, bySlug: new Map(out.map((e) => [e.slug, e.key])), corpus: idx.length ? corpus : 'fixture' };
+  return cached;
 }
 
 export async function getDossier(platform: Platform, fetch: Fetch, key: number): Promise<Dossier | null> {

@@ -608,7 +608,7 @@ class Collection {
     if (source === 'local') this.stampPast(changes);
     // The vault first. If it refuses (a full phone), nothing is applied, the page keeps showing what is stored, and the error is kept for the page to show.
     try {
-      await appendChanges(changes, source === 'server');
+      await appendChanges(changes, source === 'server', source === 'local');
     } catch (e) {
       this.lastWriteError = e instanceof Error ? e.message : String(e);
       throw e;
@@ -644,12 +644,15 @@ class Collection {
   private applied = new Set<string>();
   /** A local change to a field whose current stamp is ahead of this clock (made while a clock was fast) is stamped just past that stamp, so the edit wins the field without following the bad clock (round eight, 4). */
   private stampPast(changes: Change[]): Change[] {
+    const given = new Set<string>(); // the stamps given out in this commit: two fields bumped past stamps that differ only by writer must not land on one stamp (round twelve, 4)
     for (const c of changes) {
       const k = recKey(c.kind, c.id);
       let prev = this.seen.get(k + '\0' + c.field); // the fold's own key: record, NUL, field
       // Whether a record is deleted is decided against its latest edit to any field, so a removal must clear that too.
       if (c.field === '_deleted') { const e = this.seen.get(k + '\0*'); if (e !== undefined && (prev === undefined || hlcCompare(e, prev) > 0)) prev = e; }
       if (prev !== undefined && hlcCompare(c.t, prev) <= 0) c.t = hlcAfter(prev, this.writer);
+      while (given.has(c.t)) c.t = hlcAfter(c.t, this.writer); // a field left at real time keeps its stamp; only an actual collision moves
+      given.add(c.t);
     }
     return changes;
   }
@@ -754,7 +757,7 @@ class Collection {
    * applied, `lastWriteError` says so, and the repair runs again on the next
    * ingest.
    */
-  async ingest(changes: Change[], source: 'import' | 'server' = 'import'): Promise<void> {
+  async ingest(changes: Change[], source: 'import' | 'server' = 'import', opts: { repair?: boolean } = {}): Promise<void> {
     validateChanges(changes);
     for (const c of changes) this.clock?.observe(c.t);
     await this.commit(changes, source);
@@ -775,6 +778,11 @@ class Collection {
       }
       if (stamp.length) await this.commit(stamp, 'local');
     }
+    if (opts.repair !== false) await this.repairNumbers();
+  }
+
+  /** The duplicate-number repair, once over the whole log: a pull calls it after its last batch, not after each (round twelve, 3). */
+  async repairNumbers(): Promise<void> {
     try {
       await this.resolveDuplicateNumbers();
     } catch {
@@ -815,8 +823,11 @@ class Collection {
           const when = new Date(wall);
           const fresh = kind === 'accession' ? nextAccession(taken, this.scheme, Number((r as Accession).acquired?.slice(0, 4)) || when.getUTCFullYear()) : nextAccession(taken, { mode: 'prefix', prefix: `S${(r as Sowing).sown.slice(0, 4)}`, width: 3 });
           taken.add(fresh);
-          // The tag is a function of the record and no real device id starts with 'zz', so the stamps collide with nothing and are identical on every device.
-          const device = ('zz' + tag36(kind + ':' + r.id)).slice(0, 16);
+          // The tag is a function of the record AND the number chosen, and no real device id starts with 'zz': two devices that
+          // derive the same repair write identical changes (one in the log), and two that chose differently (one of them
+          // repaired from a log still missing a batch) write distinct stamps, which the ordinary merge settles the same way
+          // everywhere, instead of two values under one stamp (round twelve, 3).
+          const device = ('zz' + tag36(kind + ':' + r.id + ':' + fresh)).slice(0, 16);
           const stamp = (count: number) => hlcEncode({ wall, count, device });
           changes.push({ t: stamp(0), kind, id: r.id, field: kind === 'accession' ? 'acc' : 'no', value: fresh });
           const eid = 'e' + wall.toString(36) + '00' + device;

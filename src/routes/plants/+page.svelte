@@ -6,6 +6,7 @@
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
   import { slugify, speciesSlug } from '$core/names';
   import { onMount } from 'svelte';
+  import { prefs } from '$lib/ui/prefs.svelte';
   import PageHead from '$lib/ui/PageHead.svelte';
   import { entriesFor } from '$lib/ui/index.svelte';
   import type { IndexEntry } from '$lib/server/dossiers';
@@ -49,8 +50,10 @@
   const noPhotoN = $derived(collection.accessions.filter((a) => a.status === 'growing' && noPhoto(a.id)).length);
   let thumbs = $state<Map<string, string>>(new Map());
   // Thumbnails for the species grown here, a small request, not the whole catalogue (round eight, 9).
+  // Only when the grower has switched the reference's photographs on for their own pages: the thumbnails are the one thing
+  // this page would ask for, and they come from iNaturalist or GBIF, which then see which species (round twelve, A1).
   $effect(() => {
-    if (!collection.ready) return;
+    if (!collection.ready || !prefs.referencePhotos) return;
     const slugs = collection.accessions.map((a) => speciesSlug(a.taxonName));
     entriesFor(slugs).then((m) => { if (m) thumbs = new Map([...m.values()].filter((e) => e.thumb).map((e) => [e.slug, e.thumb!])); });
   });

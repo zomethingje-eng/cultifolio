@@ -394,3 +394,62 @@ describe('round eleven', () => {
     }
   });
 });
+
+describe('round twelve', () => {
+  it('one commit after a fast-clock episode gives every field its own stamp, so nothing is overwritten on disk (round twelve, 4)', async () => {
+    const real = Date.parse('2026-09-25T12:00:00Z');
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(real + 90 * 86_400_000); // three months fast
+      const { collection } = await fresh('fastdevice00');
+      const a = await collection.addAccession({ taxonName: 'Lithops', acc: 'L-1', notes: 'n1', price: 'p1' });
+      vi.setSystemTime(real);
+      const c2 = (await reload()) as typeof collection;
+      await c2.put('accession', a.id, { notes: 'n2' });
+      await c2.put('accession', a.id, { notes: 'n3', price: 'p2' });
+      expect(c2.accession(a.id)?.notes).toBe('n3');
+      expect(c2.accession(a.id)?.price).toBe('p2');
+      const stamps = [...mem.changes.values()].map((c) => c.t);
+      expect(new Set(stamps).size).toBe(stamps.length); // every change under its own key
+      const c3 = (await reload()) as typeof collection;
+      expect(c3.accession(a.id)?.notes).toBe('n3'); // what the screen showed is what the vault holds
+      expect(c3.accession(a.id)?.price).toBe('p2');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it('two devices that repaired one duplicate to different numbers (one log still short a batch) settle on one number after the merge, with no stamp shared by two values (round twelve, 3)', async () => {
+    const x = await fresh('devicex00000');
+    const mine = await x.collection.addAccession({ taxonName: 'Copiapoa', acc: '2026-0007' });
+    const other = await x.collection.addAccession({ taxonName: 'Lithops', acc: '2026-0008' }); // X knows 0008 is taken; Y will not
+    const y = await fresh('devicey00000');
+    await new Promise((r) => setTimeout(r, 2));
+    const theirs = await y.collection.addAccession({ taxonName: 'Copiapoa', acc: '2026-0007' });
+    const xLog = [...x.mem.changes.values()], yLog = [...y.mem.changes.values()];
+    // X has everything and repairs: theirs -> 0009. Y receives only X's 0007 (a batch short) and repairs: theirs -> 0008.
+    mem = x.mem;
+    await x.collection.ingest(yLog, 'server');
+    expect(accNo(x.collection.accession(theirs.id)!)).toBe('2026-0009');
+    mem = y.mem;
+    await y.collection.ingest(xLog.filter((c) => c.id !== other.id), 'server');
+    expect(accNo(y.collection.accession(theirs.id)!)).toBe('2026-0008');
+    // The two repairs carry different stamps (the number is in the tag), never two values under one stamp.
+    const xRepair = [...x.mem.changes.values()].filter((c) => c.field === 'acc' && c.id === theirs.id && c.value !== '2026-0007');
+    const yRepair = [...y.mem.changes.values()].filter((c) => c.field === 'acc' && c.id === theirs.id && c.value !== '2026-0007');
+    expect(xRepair).toHaveLength(1);
+    expect(yRepair).toHaveLength(1);
+    expect(xRepair[0].t).not.toBe(yRepair[0].t);
+    // Then the logs meet, in either order, and both devices end with the same numbers, all distinct.
+    const xAll = [...x.mem.changes.values()], yAll = [...y.mem.changes.values()];
+    mem = x.mem;
+    await x.collection.ingest(yAll, 'server');
+    mem = y.mem;
+    await y.collection.ingest(xAll, 'server');
+    const nos = (c: typeof x.collection) => [mine.id, other.id, theirs.id].map((id) => accNo(c.accession(id)!));
+    expect(nos(x.collection)).toEqual(nos(y.collection));
+    expect(new Set(nos(x.collection)).size).toBe(3);
+    const sortLog = (m: Mem) => [...m.changes.values()].sort((a, b) => a.t.localeCompare(b.t));
+    expect(sortLog(x.mem)).toEqual(sortLog(y.mem));
+  });
+});
+

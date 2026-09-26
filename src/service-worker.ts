@@ -69,7 +69,7 @@ self.addEventListener('fetch', (e) => {
   if (url.origin !== location.origin) return;
   // Sync, photos and the index are live data: never from the cache. (The index is 3 MB; a plant's page asks for its
   // one dossier by key instead, which is cached below, so the greenhouse does not need the index at all.)
-  if (url.pathname.startsWith('/api/sync') || url.pathname.startsWith('/api/index')) return;
+  if (url.pathname.startsWith('/api/sync') || url.pathname.startsWith('/api/index') || url.pathname === '/api/corpus') return;
 
   e.respondWith(
     (async () => {
@@ -100,9 +100,9 @@ self.addEventListener('fetch', (e) => {
       }
       // Species pages, dossiers, the climate API: network first, cache fallback, so what you have read stays readable.
       // Settings too: its HTML is rendered in the reader's units, so a cached copy from before a switch would paint the old ones first.
-      // The reference's files change only when the corpus is refilled, which is a new build and a new cache: within a build a
-      // dossier, an index bucket or a sheet bucket is asked for once and then served from here, so a device that has its species
-      // asks the server nothing more about them, online or off.
+      // The reference's files are asked for under the corpus id (`?c=`, from /api/corpus, which is never cached): a dossier, an
+      // index bucket or a sheet bucket is asked for once per corpus and then served from here, so a device that has its species
+      // asks the server nothing more about them, online or off, and a corpus refresh (an upload, no deploy) is a new URL (round twelve, 7).
       if (url.pathname.startsWith('/api/dossier/') || url.pathname.startsWith('/api/entries') || url.pathname.startsWith('/api/sheets')) {
         const hit = await cache.match(request);
         if (hit) return hit;
