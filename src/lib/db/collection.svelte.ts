@@ -820,7 +820,8 @@ class Collection {
           const stamp = (count: number) => hlcEncode({ wall, count, device });
           changes.push({ t: stamp(0), kind, id: r.id, field: kind === 'accession' ? 'acc' : 'no', value: fresh });
           const eid = 'e' + wall.toString(36) + '00' + device;
-          const note = { acc: r.id, d: localDate(when), t: 'note', note: `Renumbered from ${no} to ${fresh}: another plant had been given ${no} on a device that was offline at the time.` };
+          // The day is taken in UTC, not the reader's zone: two devices in different zones must write the identical note, or the one that arrives second wins by chance.
+          const note = { acc: r.id, d: when.toISOString().slice(0, 10), t: 'note', note: `Renumbered from ${no} to ${fresh}: another ${kind === 'accession' ? 'plant' : 'batch'} had been given ${no} on a device that was offline at the time.` };
           let count = 1;
           for (const [field, value] of Object.entries(note)) changes.push({ t: stamp(count++), kind: 'event', id: eid, field, value });
           renumbered++;

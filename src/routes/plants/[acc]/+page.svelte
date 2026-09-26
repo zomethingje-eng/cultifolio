@@ -293,7 +293,7 @@
       </div>
     </div>
     <div class="acts">
-      {#if kind !== 'hybrid' && ref === 'ok'}<a class="btn" href="/species/{slugify(speciesOf(a.taxonName))}">Species page</a>{/if}
+      {#if kind !== 'hybrid' && ref === 'ok'}<a class="btn" href="/species/{slugify(speciesOf(a.taxonName))}">Species page</a>{:else if kind !== 'hybrid' && ref === 'loading'}<span class="btn skelbtn" aria-hidden="true">Species page</span>{/if}
       <button class="btn" onclick={startEdit}>Edit</button>
       <a class="btn" href="/labels?acc={a.id}">Label</a>
       {#if a.status === 'growing'}<a class="btn" href="/sowings/new?parent={a.id}">Propagate</a>{/if}
@@ -497,15 +497,17 @@
   /* A fixed height for the species photograph and its stand-ins: the box is the same size before the image, with it, and without it, so the page below does not move. */
   .hero:not(.own) { min-height: 260px; }
   .hero .spthumb { width: 100%; height: 260px; object-fit: cover; display: block; }
+  /* The skeleton fills the first screen, so the footer starts below the fold and does not move when the record's sections arrive (round eleven, 4). */
+  .skel { min-height: calc(100vh - 150px); }
   .skelbox { background: var(--sunk); border-radius: var(--r); min-height: 260px; }
   .skelbtn { min-width: 64px; visibility: hidden; }
   .skelverbs { min-height: 52px; margin-top: 14px; }
   .parentage { margin-top: 2px; }
   .parentage a { color: inherit; }
-  .hero.own { background: #0d1211; }
+  .hero.own { background: #0d1211; min-height: 430px; }
   .hero.own .cred { top: 10px; bottom: auto; }
   .heroimg { display: block; width: 100%; padding: 0; border: 0; background: transparent; cursor: zoom-in; }
-  .heroimg :global(img) { width: 100%; max-height: 430px; object-fit: cover; display: block; }
+  .heroimg :global(img) { width: 100%; height: 430px; object-fit: cover; display: block; } /* a fixed height: the box is the same before the pixels arrive from the vault */
   /* No photograph: the box keeps a hero's height but grows with its contents, the caption on its own line above the buttons. */
   .hero .ph { height: auto; min-height: 260px; box-sizing: border-box; padding: 16px; flex-direction: column; gap: 12px; }
   .hero .ph .phcap { display: block; }
@@ -559,5 +561,5 @@
   .quickbar .more { color: var(--ink2); }
   @media (max-width: 640px) { .setuprow .w { display: none; } }
   a.pill { color: inherit; }
-  @media (max-width: 640px) { .editform { grid-template-columns: 1fr 1fr; } .hero { margin-top: 0; } .heroimg :global(img) { max-height: 260px; } }
+  @media (max-width: 640px) { .editform { grid-template-columns: 1fr 1fr; } .hero { margin-top: 0; } .hero.own { min-height: 260px; } .heroimg :global(img) { height: 260px; } }
 </style>

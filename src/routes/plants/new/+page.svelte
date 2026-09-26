@@ -11,14 +11,23 @@
   import SpeciesPicker from '$lib/ui/SpeciesPicker.svelte';
   import LocationPicker from '$lib/ui/LocationPicker.svelte';
   import { parseName, slugify, type NameKind, speciesSlug, speciesOf } from '$core/names';
+  import { sheetForName } from '$lib/ui/index.svelte';
   import type { Provenance } from '$lib/db/types';
+  /** The reference's key for a species-rank name when the reference answers; otherwise the key as given (the plant page repairs it later). */
+  async function checkedKey(sp: string | null, k: number): Promise<number> {
+    if (!sp || speciesOf(sp) !== sp) return k;
+    const s = await sheetForName(sp, k);
+    return s && s !== 'none' ? s.key : k;
+  }
   onMount(async () => {
     await collection.load();
     // Arriving from a species page: /plants/new?species=Copiapoa%20cinerea&key=7284333
     const sp = page.url.searchParams.get('species');
     const k = Number(page.url.searchParams.get('key'));
     if (sp) name = sp;
-    if (k) taxonKey = k;
+    // The key in the link is not trusted on its own: a copied, edited or stale link can pair a name with another species'
+    // key. For a name at species rank the reference's own key for that name is the one kept (round eleven, 2).
+    if (k) taxonKey = await checkedKey(sp, k);
     // Arriving from a bench page: /plants/new?loc=<id>. Otherwise the place you used last time.
     const loc = page.url.searchParams.get('loc');
     let want: string | null = loc;

@@ -363,3 +363,34 @@ describe('round ten', () => {
     expect([...first.changes.values()].filter((c) => c.field === 'importedOn')).toHaveLength(1);
   });
 });
+
+describe('round eleven', () => {
+  it('the renumbering note carries the same day on two devices in different time zones (round eleven, 3)', async () => {
+    const tz = process.env.TZ;
+    vi.useFakeTimers();
+    try {
+      // Y's plant is made at 00:30 UTC on New Year's Day: the previous evening in Honolulu, the next afternoon in Kiritimati.
+      vi.setSystemTime(Date.parse('2026-01-01T00:29:00Z'));
+      const x = await fresh('devicex00000');
+      const mine = await x.collection.addAccession({ taxonName: 'Copiapoa', acc: '2026-0007' });
+      vi.setSystemTime(Date.parse('2026-01-01T00:30:00Z'));
+      const y = await fresh('devicey00000');
+      const theirs = await y.collection.addAccession({ taxonName: 'Copiapoa', acc: '2026-0007' });
+      expect(theirs.id > mine.id).toBe(true);
+      const xLog = [...x.mem.changes.values()], yLog = [...y.mem.changes.values()];
+      process.env.TZ = 'Pacific/Honolulu';
+      mem = x.mem;
+      await x.collection.ingest(yLog, 'server');
+      process.env.TZ = 'Pacific/Kiritimati';
+      mem = y.mem;
+      await y.collection.ingest(xLog, 'server');
+      const sortLog = (m: Mem) => [...m.changes.values()].sort((a, b) => a.t.localeCompare(b.t));
+      expect(sortLog(x.mem)).toEqual(sortLog(y.mem)); // byte for byte, the note's day included
+      const note = x.collection.events(theirs.id).find((e) => /Renumbered/.test(e.note ?? ''))!;
+      expect(note.d).toBe('2026-01-01');
+    } finally {
+      if (tz === undefined) delete process.env.TZ; else process.env.TZ = tz;
+      vi.useRealTimers();
+    }
+  });
+});

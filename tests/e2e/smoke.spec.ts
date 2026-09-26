@@ -1561,6 +1561,34 @@ test('the one search box finds a plant by its number, and the cold floor is one 
   await expect(page.locator('.cult', { hasText: /^Warmth and air/ }).first().locator('.body')).toContainText('Cold floor: 6.5 °C');
 });
 
+test('a link that pairs a species with another species\' key is corrected at the form, and the plant page shows the species named (round eleven, 2)', async ({ page }) => {
+  // Copiapoa cinerea with Copiapoa humilis's key: the reference's own key for the name is kept, not the one in the link.
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384999');
+  await expect(page.locator('.pill', { hasText: 'GBIF 5384013' })).toBeVisible();
+  await page.getByRole('button', { name: /^Add/ }).click();
+  await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
+  await expect(page.locator('h1.sci')).toContainText('Copiapoa cinerea');
+  await expect(page.locator('.card', { hasText: 'Habitat rain season' })).toContainText('The sheet'); // the habitat is read, by name
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  await expect(page.locator('.pill', { hasText: 'GBIF 5384013' })).toBeVisible(); // the record carries cinerea's key
+  // The same at the sowing form; and a name below species rank keeps the key it was given (the reference has none for it).
+  await page.goto('/sowings/new?species=Copiapoa%20cinerea&key=5384999');
+  await expect(page.locator('.pill', { hasText: 'GBIF 5384013' })).toBeVisible();
+  await page.goto('/plants/new?species=Copiapoa%20cinerea%20subsp.%20test&key=777');
+  await expect(page.locator('.pill', { hasText: 'GBIF 777' })).toBeVisible();
+});
+
+test('a species page opened from the catalogue starts at its top, on a short screen too (round eleven)', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 560 }); // the section tabs sit below the fold, where a scrollIntoView on them pulled the page down on arrival
+  await page.goto('/');
+  await page.waitForLoadState('networkidle');
+  await page.locator('.grow', { hasText: 'Copiapoa' }).click();
+  await page.locator('a.tile').first().click();
+  await expect(page).toHaveURL(/\/species\//);
+  await page.waitForTimeout(600);
+  expect(await page.evaluate(() => scrollY)).toBe(0);
+});
+
 test('the catalogue renders a window of rows and the letter index lands on its heading, by tap and by link (round seven, 23)', async ({ page }) => {
   await page.goto('/');
   const letters = await page.locator('nav.letters a').allInnerTexts();

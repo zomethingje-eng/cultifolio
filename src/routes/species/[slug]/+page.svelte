@@ -88,9 +88,21 @@
       const line = 110;
       const prev = active;
       let cur = '';
-      for (const h of heads) if (h.getBoundingClientRect().top <= line) cur = h.id;
+      for (const h of heads) {
+        const r = h.getBoundingClientRect();
+        if (r.height > 0 && r.top <= line) cur = h.id; // a heading that is not rendered measures 0,0 and must not count as passed
+      }
       active = cur;
-      if (cur !== prev) document.querySelector<HTMLElement>('nav.tabs a.on')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      if (cur === prev) return;
+      // Keep the marked tab within the strip by scrolling the strip itself, never the page: scrollIntoView on a tab whose
+      // strip is below the fold scrolled the page down to it on arrival, so a species page opened part-way down.
+      const nav = document.querySelector<HTMLElement>('nav.tabs');
+      const on = nav?.querySelector<HTMLElement>('a.on');
+      if (nav && on) {
+        const a = on.getBoundingClientRect(), n = nav.getBoundingClientRect();
+        if (a.left < n.left) nav.scrollLeft += a.left - n.left;
+        else if (a.right > n.right) nav.scrollLeft += a.right - n.right;
+      }
     };
     onScroll();
     addEventListener('scroll', onScroll, { passive: true });
