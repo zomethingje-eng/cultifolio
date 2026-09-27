@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { listBatches, parseAfter, storeCounted, storeOnce, batchMeta, readBody, batchKey, recount, vaultBytes, vaultIdFor, ensureVault, MAX_BYTES, MAX_IP_BYTES_PER_DAY, MAX_LIST_PAGES, META_FLUSH_BYTES, META_FLUSH_MS, OVERLAP_MS, MAX_NEW_VAULTS_PER_DAY, allowCreation, creationCeilings, addressKey, clientIp, rateLimit, resetRateLimits, resetMetaFlush, resetKvWarning, tooMany, VaultFull, DayQuota, type VaultMeta } from '$lib/server/sync';
+import { listBatches, parseAfter, storeCounted, storeOnce, batchMeta, readBody, batchKey, recount, vaultBytes, vaultIdFor, ensureVault, MAX_BYTES, MAX_IP_BYTES_PER_DAY, MAX_LIST_PAGES, META_FLUSH_BYTES, META_FLUSH_MS, OVERLAP_MS, MAX_NEW_VAULTS_PER_DAY, allowCreation, refundCreation, creationCeilings, addressKey, clientIp, rateLimit, resetRateLimits, resetMetaFlush, resetKvWarning, tooMany, VaultFull, DayQuota, type VaultMeta } from '$lib/server/sync';
 import { deriveKeys, newVaultKey } from '$lib/sync/crypto';
 
 /** Just enough of R2 for the sync store: keys, bytes, upload times we control. */
@@ -186,11 +186,11 @@ describe('vault creation is bounded per address, per day for everyone, and in al
     expect(err).toHaveBeenCalledTimes(1);
     err.mockRestore();
   });
-  it("the address's count that cannot be written refuses the creation (that write is what stops a burst from one address); a shared count that cannot be written is a warning", async () => {
+  it("the address's count that cannot be written refuses the creation for a minute, not as the address's limit (round twenty-two, 9); a shared count that cannot be written is a warning", async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const kv = fakeKV();
     kv.fail = true;
-    expect(await allowCreation(kv as never, '9.9.9.9')).toBe('address');
+    expect(await allowCreation(kv as never, '9.9.9.9')).toBe('unavailable');
     kv.fail = false;
     const realPut = kv.put.bind(kv);
     kv.put = async (k: string, v: string) => { if (k === 'vaults:all') throw new Error('kv: too many writes'); return realPut(k, v); };
@@ -210,12 +210,15 @@ describe('vault creation is bounded per address, per day for everyone, and in al
     const store = new Map<string, number>();
     let busy = false;
     const obj = {
-      async create(address: string, dayKey: string, perAddress: number, perDay: number, max: number) {
+      async refund(address: string, dayKey: string) {
+        for (const k of [`ip:${address}:${dayKey}`, `day:${dayKey}`, 'all']) store.set(k, Math.max(0, (store.get(k) ?? 0) - 1));
+      },
+      async create(address: string, dayKey: string, perAddress: number, perDay: number, max: number, seed = 0) {
         if (busy) throw new Error('two requests inside the object at once');
         busy = true;
         try {
           await new Promise((r) => setTimeout(r, 1));
-          const nIp = store.get(`ip:${address}:${dayKey}`) ?? 0, nDay = store.get(`day:${dayKey}`) ?? 0, nAll = store.get('all') ?? 0;
+          const nIp = store.get(`ip:${address}:${dayKey}`) ?? 0, nDay = store.get(`day:${dayKey}`) ?? 0, nAll = store.get('all') ?? seed;
           if (nIp >= perAddress) return 'address' as const;
           if (nAll >= max) return 'total' as const;
           if (nDay >= perDay) return 'day' as const;
@@ -228,13 +231,18 @@ describe('vault creation is bounded per address, per day for everyone, and in al
     };
     // The namespace serialises calls to one object, as Durable Objects do.
     let chain = Promise.resolve<unknown>(undefined);
-    const ns = { idFromName: (n: string) => n as never, get: () => ({ create: (...a: Parameters<typeof obj.create>) => { const p = chain.then(() => obj.create(...a)); chain = p.catch(() => {}); return p; } }) };
+    const ns = { idFromName: (n: string) => n as never, get: () => ({ create: (...a: Parameters<typeof obj.create>) => { const p = chain.then(() => obj.create(...a)); chain = p.catch(() => {}); return p; }, refund: (...a: Parameters<typeof obj.refund>) => { const p = chain.then(() => obj.refund(...a)); chain = p.catch(() => {}); return p; } }) };
     const kv = fakeKV();
+    kv.m.set('vaults:all', '7'); // the vaults made before the object existed
     const burst = await Promise.all(Array.from({ length: 100 }, (_, i) => allowCreation(kv as never, `2001:db8:1:1::${i}`, T0, {}, ns)));
     expect(burst.filter((r) => r === 'ok').length).toBe(MAX_NEW_VAULTS_PER_DAY); // one /64, whatever it rotates to
     expect(burst.filter((r) => r === 'address').length).toBe(100 - MAX_NEW_VAULTS_PER_DAY);
-    expect(store.get('all')).toBe(MAX_NEW_VAULTS_PER_DAY); // and the shared counters saw every one
-    expect(kv.puts).toBe(0); // KV is not touched on this path
+    expect(store.get('all')).toBe(7 + MAX_NEW_VAULTS_PER_DAY); // and the shared counters saw every one, on top of the KV count the object was seeded with (round twenty-two, 6)
+    expect(kv.puts).toBe(0); // KV is not written on this path
+    // a creation counted and then not made goes back (round twenty-two, 1): the sixth from the /64 is allowed after one refund
+    await refundCreation(ns, '2001:db8:1:1::9', T0);
+    expect(await allowCreation(kv as never, '2001:db8:1:1::9', T0, {}, ns)).toBe('ok');
+    expect(store.get('all')).toBe(7 + MAX_NEW_VAULTS_PER_DAY);
     const many = await Promise.all(Array.from({ length: 300 }, (_, i) => allowCreation(kv as never, `10.${i >> 8}.${(i >> 4) & 15}.${i & 15}`, T0, { perDay: 50, max: 1000 }, ns)));
     expect(many.filter((r) => r === 'ok').length).toBe(50 - MAX_NEW_VAULTS_PER_DAY); // the day's 50 includes the burst above
     expect(many.filter((r) => r === 'day').length).toBe(250 + MAX_NEW_VAULTS_PER_DAY);

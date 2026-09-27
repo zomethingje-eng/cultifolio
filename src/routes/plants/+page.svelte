@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { sync } from '$lib/sync/engine.svelte';
   import { collection } from '$lib/db/collection.svelte';
   import { localDate, localDateYearAgo, daysBetween } from '$core/dates';
   import { accNo, sowNo } from '$lib/db/types';
@@ -88,7 +89,7 @@
 {/if}
 {#if collection.ready && storageLow && !storageNoticeHidden}
   <div class="notice" id="storage-notice">This browser's storage is nearly full{collection.persisted === false ? ', and it has not promised to keep this site\'s data' : ''}: it may clear photographs to make room. <a href="/backup">Back up now</a>. <button class="linkish" type="button" onclick={hideStorageNotice}>Hide for now</button></div>
-{:else if collection.ready && collection.persisted === false}
+{:else if collection.ready && collection.persisted === false && !sync.configured}
   <p class="small muted keepline" id="storage-notice">Kept in this browser only; <a href="/backup">back up</a> or install the app to keep it safe.</p>
 {/if}
 

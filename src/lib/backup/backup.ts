@@ -33,11 +33,14 @@ export interface PhotoBytes {
   thumb: Uint8Array;
 }
 
+/** This device's own settings, which are not records: the site, the units, the label sheet choices, the preferences. Carried as `device.json` so a restore on a cleared or new device gets them back (round twenty-two, 5). */
+export type DeviceSettings = Record<string, unknown>;
 export interface BuildOpts {
   changes: Change[];
   scheme?: unknown;
   device?: string;
   app?: string;
+  settings?: DeviceSettings;
   /** Called once per live photo record; return null when the pixels are missing (the record still travels, and the manifest names it under `photosMissing`). */
   readPhoto: (id: string) => Promise<PhotoBytes | null>;
   onProgress?: (done: number, total: number) => void;
@@ -85,6 +88,7 @@ export async function buildBackup(o: BuildOpts): Promise<BuiltBackup> {
   };
   files['manifest.json'] = strToU8(JSON.stringify(manifest, null, 1));
   files['changes.json'] = strToU8(JSON.stringify(o.changes));
+  if (o.settings && Object.keys(o.settings).length) files['device.json'] = strToU8(JSON.stringify(o.settings, null, 1));
   files['plants.csv'] = strToU8(plantsCsv(live<Accession & Record_>(s.state, 'accession'), s.state));
   const bytes = await new Promise<Uint8Array>((resolve, reject) => zip(files, { level: 6 }, (err, out) => (err ? reject(err) : resolve(out))));
   return { bytes, photosMissing };
@@ -93,6 +97,8 @@ export async function buildBackup(o: BuildOpts): Promise<BuiltBackup> {
 export interface ReadBackup {
   manifest: Manifest | null; // null for the legacy changes-only JSON
   changes: Change[];
+  /** The exporting device's settings (`device.json`), when the file has them. */
+  settings: DeviceSettings | null;
   /** Photo ids whose pixels are in the file. */
   photoIds: string[];
   readPhoto: (id: string) => PhotoBytes | null;
@@ -114,7 +120,7 @@ export async function readBackup(bytes: Uint8Array): Promise<ReadBackup> {
     const json = JSON.parse(strFromU8(bytes));
     const r = v.safeParse(LegacyChanges, json);
     if (!r.success) throw new Error('That JSON is not a Cultifolio backup.');
-    return { manifest: null, changes: checkRows(r.output.changes), photoIds: [], readPhoto: () => null };
+    return { manifest: null, changes: checkRows(r.output.changes), settings: null, photoIds: [], readPhoto: () => null };
   }
   if (!(bytes[0] === 0x50 && bytes[1] === 0x4b)) throw new Error('That file is neither a Cultifolio backup zip nor a JSON export.');
   const files = await new Promise<Record<string, Uint8Array>>((resolve, reject) => unzip(bytes, (err, out) => (err ? reject(err) : resolve(out))));
@@ -133,9 +139,19 @@ export async function readBackup(bytes: Uint8Array): Promise<ReadBackup> {
     const e = photoBytesError(files[photoPath(id)], files[thumbPath(id)]);
     if (e) throw new Error(`Photo ${id} in that backup cannot be restored: ${e}.`);
   }
+  let settings: DeviceSettings | null = null;
+  if (files['device.json']) {
+    try {
+      const d: unknown = JSON.parse(strFromU8(files['device.json']));
+      if (d && typeof d === 'object' && !Array.isArray(d)) settings = d as DeviceSettings;
+    } catch {
+      /* a device.json that does not parse is left out; the records still restore */
+    }
+  }
   return {
     manifest: m.output,
     changes: checkRows(rows.output),
+    settings,
     photoIds,
     readPhoto: (id) => (files[photoPath(id)] && files[thumbPath(id)] ? { id, full: files[photoPath(id)], thumb: files[thumbPath(id)] } : null)
   };

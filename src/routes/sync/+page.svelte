@@ -239,6 +239,7 @@
 {:else}
   <div class="cult"><div class="body prose">
     <p>Not syncing. Your collection is on this device only. Set up a vault here if this is your first device, or join with the key from a device that already has one.</p>
+    <p class="small muted">What sync does: it moves an encrypted copy of your collection between your devices through this site, which cannot read it. The key is the only way in: there is no account and no recovery, so a lost key means a lost copy (your devices keep theirs, and a backup file needs no key).</p>
     <div class="row">
       <button id="sync-start" class="btn pri" onclick={startCreate}>Set up sync on this device</button>
       <button id="sync-have-key" class="btn" onclick={() => { mode = 'join'; err = ''; }}>I have a key</button>

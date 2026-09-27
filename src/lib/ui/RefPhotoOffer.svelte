@@ -30,7 +30,7 @@
 
 <style>
   .rpo { font-family: var(--ui); font-size: 12.5px; color: var(--ink3); display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
-  .go { border: 0; background: none; padding: 0; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--accent); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; white-space: nowrap; min-height: 0; }
+  .go { border: 0; background: none; padding: 4px 0; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--accent); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; white-space: nowrap; min-height: 24px; }
   .go:hover { color: var(--ink); }
   .rpo .why { max-width: 56ch; line-height: 1.4; }
   .rpo.compact { font-size: 12px; }

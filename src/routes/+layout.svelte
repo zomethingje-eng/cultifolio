@@ -197,7 +197,7 @@
         {:else if pl.label === 'Plants'}<path d="M6 21h12M9 21V10a3 3 0 0 1 6 0v11M12 10V4M9 6c0 0 3-2 3-2s3 2 3 2" />
         {:else if pl.label === 'Places'}<path d="M3 10h18M3 15h18M6 10v11M18 10v11M6 15v-5M18 15v-5" />
         {:else if pl.label === 'Propagation'}<path d="M4 19h16M6 19c0-6 3-9 6-9s6 3 6 9M12 10V4M9 7l3-3 3 3" />
-        {:else}<path d="M12 2v20M4 6l16 12M20 6L4 18M2 12h20" />{/if}
+        {:else}<path d="M12 3v18M4 7.5l16 9M20 7.5l-16 9M12 3l-2.5 2.5M12 3l2.5 2.5M12 21l-2.5-2.5M12 21l2.5-2.5M4 7.5l.9 3.4M4 7.5l3.4-.9M20 16.5l-.9-3.4M20 16.5l-3.4.9M20 7.5l-.9 3.4M20 7.5l-3.4-.9M4 16.5l.9-3.4M4 16.5l3.4.9" />{/if}
       </svg>
       <span>{pl.label}</span>
     </a>

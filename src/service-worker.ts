@@ -104,9 +104,11 @@ self.addEventListener('fetch', (e) => {
         return r;
       }
       if (request.mode === 'navigate') {
-        // A trailing slash is stripped first: `/benches/k1/` must become `/places/k1`, a shell, not `/places/k1/`, which
-        // no shell matches and which would then go to the server with the id in it (round twenty-one, 13).
-        const to = moved(url.pathname.replace(/\/+$/, '') || '/');
+        // The path is normalised once, doubled slashes collapsed and a trailing one stripped, before anything is matched:
+        // `/plants/r1/` and `/benches//x` are shells only in that form, and un-normalised they would go to the server
+        // with the record id in them (round twenty-one, 13; round twenty-two, 7). A path that changed is a redirect.
+        const clean = url.pathname.replace(/\/{2,}/g, '/').replace(/\/+$/, '') || '/';
+        const to = moved(clean) ?? (clean !== url.pathname ? clean : null);
         if (to) return Response.redirect(url.origin + to + url.search, 301);
       }
       if (request.mode === 'navigate' && isShell(url.pathname) && url.pathname !== '/settings') {

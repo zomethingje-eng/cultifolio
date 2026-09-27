@@ -467,7 +467,7 @@ export function creationCeilings(env: Record<string, unknown> | undefined): Crea
   return { perDay: n(env?.SYNC_VAULTS_PER_DAY), max: n(env?.SYNC_VAULTS_MAX) };
 }
 /** The counters' Durable Object namespace, typed loosely so this module needs nothing from `cloudflare:workers`. */
-export type CountersNs = { idFromName(name: string): DurableObjectId; get(id: DurableObjectId): { create(address: string, day: string, perAddress: number, perDay: number, max: number): Promise<Creation> } };
+export type CountersNs = { idFromName(name: string): DurableObjectId; get(id: DurableObjectId): { create(address: string, day: string, perAddress: number, perDay: number, max: number, seed?: number): Promise<Creation>; refund(address: string, day: string): Promise<void> } };
 /**
  * With the Durable Object bound (production), the decision and the count are one atomic step and a burst is counted
  * exactly (round twenty-one, 1). Without it (tests, a `wrangler dev` before the migration), the KV counters below bound
@@ -481,7 +481,9 @@ export async function allowCreation(kv: KVNamespace | undefined, ip: string, now
   const address = addressKey(ip);
   if (counters) {
     try {
-      return await counters.get(counters.idFromName('vaults')).create(address, day(now), MAX_NEW_VAULTS_PER_DAY, perDay, max);
+      // The vaults made before the object existed are the KV total; the object takes it as its starting count, once (round twenty-two, 6).
+      const seed = kv ? Number((await kv.get('vaults:all').catch(() => null)) ?? 0) : 0;
+      return await counters.get(counters.idFromName('vaults')).create(address, day(now), MAX_NEW_VAULTS_PER_DAY, perDay, max, seed);
     } catch (e) {
       console.error('sync: the vault-creation counter object did not answer; creation refused for now', e);
       return 'unavailable';
@@ -508,14 +510,23 @@ export async function allowCreation(kv: KVNamespace | undefined, ip: string, now
   try {
     await kv.put(kIp, String(nIp + 1), { expirationTtl: 2 * 86400 });
   } catch (e) {
-    console.warn("sync: the address's vault-creation count could not be written (KV takes one write a second per key); creation refused as the address's limit", e);
-    return 'address';
+    // KV takes one write a second per key: two creations from one household within a second are not "too many today", they are a moment's wait (round twenty-two, 9).
+    console.warn("sync: the address's vault-creation count could not be written; creation refused for a minute", e);
+    return 'unavailable';
   }
   await Promise.allSettled([kv.put(kDay, String(nDay + 1), { expirationTtl: 2 * 86400 }), kv.put(kAll, String(nAll + 1))]).then((rs) => {
     if (rs.some((r) => r.status === 'rejected')) console.warn('sync: a shared vault-creation counter was not written; the count is short by one');
   });
   return 'ok';
 }
+
+/** A creation counted by the object and then not made (the vault write threw): the count goes back, so a grower retrying through an R2 blip is not told they made too many (round twenty-two, 1). Best-effort. */
+export async function refundCreation(counters: CountersNs | undefined, ip: string, now = Date.now()): Promise<void> {
+  if (!counters) return;
+  await counters.get(counters.idFromName('vaults')).refund(addressKey(ip), day(now)).catch((e) => console.warn('sync: a vault-creation refund did not land', e));
+}
+/** The day key of the address-keyed counters, for callers that need to pair a count with its refund. */
+export const creationDay = (now = Date.now()) => day(now);
 
 /* ---------- Rate limit ---------- */
 

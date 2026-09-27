@@ -7,7 +7,8 @@ const config = {
   kit: {
     adapter: adapter({
       config: 'wrangler.jsonc',
-      platformProxy: { configPath: 'wrangler.jsonc', persist: true }
+      // The proxy reads a config without the Durable Object: a dev proxy cannot run one and warned on every build that the class was missing (round twenty-two, 2)
+      platformProxy: { configPath: 'wrangler.dev.jsonc', persist: true }
     }),
     // An open page learns of a new deploy and does a full reload on its next navigation, so it never asks for a chunk the
     // previous build had and the new one does not. HTML is served with a short cache and no stale-while-revalidate for the same reason.

@@ -86,7 +86,9 @@ export function clockTime<T>(body: T, zone?: string): T {
     if (!day?.tminAt) return body;
     const [a, bb] = day.tminAt.split('/');
     const ta = new Date(a).getTime();
-    if (!Number.isFinite(ta) || Math.abs(zoneOffsetH(zone, ta) - f.offsetH) > 2) return body;
+    // Compared around the clock: Apia's solar offset is -11 and its zone +13, one hour apart, not twenty-four (round twenty-two, 13).
+    const x = (((zoneOffsetH(zone, ta) - f.offsetH) % 24) + 24) % 24;
+    if (!Number.isFinite(ta) || Math.min(x, 24 - x) > 2) return body;
     const hm = new Intl.DateTimeFormat('en-GB', { timeZone: zone, hourCycle: 'h23', hour: '2-digit', minute: '2-digit' });
     const wd = new Intl.DateTimeFormat('en-GB', { timeZone: zone, weekday: 'long' });
     // "your time": the reader's clock, which is the site's clock when they are there, and near it when they are not; the
@@ -100,9 +102,9 @@ export function clockTime<T>(body: T, zone?: string): T {
       when = `between ${hm.format(ta)} ${da} and ${hm.format(tb)}${db === da ? '' : ' ' + db}, your time`;
     }
     // The bracketed date stays the server's: it is the row of the frost table, which lists the site's solar days, and a
-    // line in the reader's clock must still point at that row. "night of" says which it is, so "01:00 Thursday, your
-    // time (night of 2026-10-14…)" reads as one statement rather than two (round twenty-one, 11).
-    const text = risk.text.replace(SOLAR, when).replace(`(${day.date},`, `(night of ${day.date},`);
+    // line in the reader's clock must still point at that row; "in the table" says that is what it is, since "night of
+    // the 15th" in plain English is the evening of the 15th, which a pre-dawn frost is not (round twenty-two, 12).
+    const text = risk.text.replace(SOLAR, when).replace(`(${day.date},`, `(${day.date} in the table,`);
     return { ...b, risk: { ...risk, text } } as T;
   } catch {
     return body;

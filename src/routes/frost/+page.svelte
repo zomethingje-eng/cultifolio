@@ -43,12 +43,12 @@
 <div class="page">
   <PageHead title="Frost watch" sub="The next nine nights at your site; outdoor places with coordinates get their own watch." />
   {#if watched.length}
-    <p class="small">Watched places: {#each watched as w, i}{i ? ', ' : ''}<a href="/places/{w.id}">{w.name}</a>{/each}</p>
+    <p class="small">Watched places, each with its own forecast on its page: {#each watched as w, i}{i ? ', ' : ''}<a href="/places/{w.id}">{w.name}</a>{/each}</p>
   {/if}
   {#if site.current}
     <p class="small">Your site: {site.current.name ? site.current.name + ', ' : ''}{site.current.lat}, {site.current.lon} · <a href="/settings#site">change in Settings</a>.</p>
   {:else if site.loaded}
-    <div class="emptybox"><p class="muted" style="margin: 0">No site set. <a href="/settings#site">Set your site in Settings</a> and the forecast for it appears here, and on the front page when it turns.</p></div>
+    <div class="emptybox"><p class="muted" style="margin: 0">No site set. <a href="/settings#site">Set your site in Settings</a> and its forecast appears here and on the front page when it turns{#if watched.length}; the places above are watched on their own pages either way{/if}.</p></div>
   {/if}
   {#if err}<div class="notice" role="status">{err}</div>{/if}
   {#if data}

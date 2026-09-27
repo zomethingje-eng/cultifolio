@@ -65,7 +65,7 @@ That runs `svelte-check`, the unit tests, the build, `wrangler deploy` and then 
 ```
 "durable_objects": { "bindings": [{ "name": "COUNTERS", "class_name": "Counters" }] },
 "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Counters"] }]
-``` New vaults are also bounded: 5 per address a day (a 429), 200 a day for everyone and 2,000 in all (a 503 the sync page shows as "Sync is full for now"); the last two can be raised without a deploy by setting `SYNC_VAULTS_PER_DAY` and `SYNC_VAULTS_MAX` on the Worker (dashboard → Settings → Variables; `wrangler.jsonc` has `keep_vars: true` so the next deploy does not wipe them), and the running totals are the KV keys `vaults:all:<day>` and `vaults:all`. Addresses are counted as an IPv4 address or an IPv6 /64.
+``` New vaults are also bounded: 5 per address a day (a 429), 200 a day for everyone and 2,000 in all (a 503 the sync page shows as "Sync is full for now"); the last two can be raised without a deploy by setting `SYNC_VAULTS_PER_DAY` and `SYNC_VAULTS_MAX` on the Worker (dashboard → Settings → Variables; `wrangler.jsonc` has `keep_vars: true` so the next deploy does not wipe them), and the running totals live in the counter object (`Counters.totals(day)`; the KV keys `vaults:all:<day>` and `vaults:all` are the counts from before round twenty-one, and `vaults:all` seeds the object's total once). The object drops address keys older than two days by a daily alarm. Addresses are counted as an IPv4 address or an IPv6 /64.
 
 ## 4. After the first deploy, once, by hand
 

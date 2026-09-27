@@ -36,7 +36,7 @@
  * what records mention that we lack.
  */
 import { collection } from '$lib/db/collection.svelte';
-import { getMeta, setMeta, setMetaIfKey, getPhotoBlobs, putPhotoBlobs, photoBlobIds, outboxKeys, outboxAck, outboxFill, outboxClear, changesByKeys, allChanges, appendChanges, onOtherTabWrite, announceSyncForgotten } from '$lib/db/vault';
+import { StoppedError, getMeta, setMeta, setMetaIfKey, getPhotoBlobs, putPhotoBlobs, photoBlobIds, outboxKeys, outboxAck, outboxFill, outboxClear, changesByKeys, allChanges, appendChanges, onOtherTabWrite, announceSyncForgotten } from '$lib/db/vault';
 import { deriveKeys, sealJson, openJson, seal, open, packPhoto, unpackPhoto, parseVaultKey, batchFingerprint, sha256hex, type VaultKeys } from './crypto';
 import { MAX_BATCH_BYTES, MAX_PHOTO_BYTES, SEAL_OVERHEAD, OVERLAP_MS } from './limits';
 import { validateChanges, isHeld, dueAt, hlcWall, type Change } from '$core/log';
@@ -648,7 +648,7 @@ class Sync {
         ok = await this.takeBatch(m, q.key);
       } catch (e) {
         if ((e as { retryAfterMs?: number })?.retryAfterMs) throw e;
-        if (this.meta !== m) throw e; // the key check inside takeBatch said this run is stale: it must not go on into the number repair (round twenty-one, 4)
+        if (e instanceof StoppedError || this.meta !== m) throw e; // a stop, from this tab (the meta gone) or another (the stored key gone, seen inside the vault write): the run must not go on into the number repair (round twenty-one, 4; round twenty-two, 8)
         console.warn(`set-aside batch ${q.key} could not be read again this run: ${e instanceof Error ? e.message : String(e)}`);
         continue; // the entry stands, whatever the failure: a 5xx, a dropped connection, or a 4xx for a batch the server no longer holds
       }
@@ -699,7 +699,7 @@ class Sync {
   }
 }
 
-const stopped = () => new Error('syncing was stopped on this device while this run was under way');
+const stopped = () => new StoppedError();
 /** A full vault is probed with a photograph at most this often. */
 const PROBE_MS = 3600_000;
 

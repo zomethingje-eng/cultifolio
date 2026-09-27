@@ -155,6 +155,9 @@ test('benches: make a place, put a plant there, water the bench, audit it', asyn
   await page.selectOption('#loc-parent', { label: 'Laundry room' });
   await page.getByRole('button', { name: 'Add', exact: true }).click();
   await expect(page.locator('.tree .row', { hasText: 'Shelf 2' })).toBeVisible();
+  // the next place is not filed inside Laundry room just because the last one was (round twenty-two, 3)
+  await page.getByRole('button', { name: 'New place' }).click();
+  await expect(page.locator('#loc-parent option:checked')).toHaveText('Top level');
   // add a plant on the shelf
   await page.goto('/plants/new');
   await page.fill('#species-name', 'Tylecodon pearsonii');
@@ -394,6 +397,8 @@ test('backup: export a zip, wipe the device, restore it, and the collection is i
   const before = await dump();
   expect(before.changes.length).toBeGreaterThan(10);
   expect(before.photos).toHaveLength(1);
+  // the device's settings travel too (round twenty-two, 5): a site set here comes back on a device that has none
+  await page.evaluate(() => localStorage.setItem('cultifolio.frost.site', JSON.stringify({ lat: 40.38, lon: -80.05, name: 'Mt Lebanon' })));
   // export
   await page.goto('/backup');
   await expect(page.locator('.secrule .n', { hasText: 'never' })).toBeVisible();
@@ -411,6 +416,7 @@ test('backup: export a zip, wipe the device, restore it, and the collection is i
   await page.evaluate(async () => {
     const db = await new Promise<IDBDatabase>((res) => { const r = indexedDB.open('cultifolio'); r.onsuccess = () => res(r.result); });
     await Promise.all(['changes', 'photos'].map((s) => new Promise<void>((res) => { const r = db.transaction(s, 'readwrite').objectStore(s).clear(); r.onsuccess = () => res(); })));
+    localStorage.removeItem('cultifolio.frost.site');
   });
   await page.goto('/plants');
   await expect(page.locator('a.accrow')).toHaveCount(0);
@@ -421,6 +427,8 @@ test('backup: export a zip, wipe the device, restore it, and the collection is i
   await expect(page.locator('.preview')).toContainText('bring in 1 photo');
   await page.click('#bk-merge');
   await expect(page.locator('#bk-done')).toContainText('1 photo');
+  await expect(page.locator('#bk-done')).toContainText(/This device had no site( or preferences)? of its own, so the file's (was|were) applied/);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('cultifolio.frost.site') ?? 'null'))).toMatchObject({ lat: 40.38, lon: -80.05 });
   const after = await dump();
   expect(after).toEqual(before);
   // and the plant is back with its photo and its place
@@ -806,7 +814,7 @@ test('the app shell is installed for offline use: collection pages, a species pa
   // in the URL and offline it still lands on the section (round twenty, 1). The route below stands in for the server: had
   // the worker let the request through, the page would be this 500, not the places shell.
   let reachedServer = 0;
-  await ctx.route(/\/(benches|sowings)(\/|\?|$)|\/places\/[^/?]+\/(\?|$)/, (r) => { reachedServer++; return r.fulfill({ status: 500, body: 'server saw it' }); });
+  await ctx.route(/\/(benches|sowings)(\/|\?|$)|\/(places|plants)\/[^/?]+\/(\?|$)/, (r) => { reachedServer++; return r.fulfill({ status: 500, body: 'server saw it' }); });
   await page.goto('/benches/k1?edit=1');
   await expect(page).toHaveURL(/\/places\/k1\?edit=1$/);
   await expect(page.locator('h1')).toContainText('Not here'); // the places shell rendered from the vault: no place k1 on this device
@@ -815,6 +823,10 @@ test('the app shell is installed for offline use: collection pages, a species pa
   await page.goto('/benches/k1/'); // a trailing slash: still the shell, still nothing to the server (round twenty-one, 13)
   await expect(page).toHaveURL(/\/places\/k1$/);
   await expect(page.locator('h1')).toContainText('Not here');
+  await page.goto('/benches//x'); // a doubled slash, and a current path with a trailing one: normalised before the match (round twenty-two, 7)
+  await expect(page).toHaveURL(/\/places\/x$/);
+  await page.goto('/plants/r1/');
+  await expect(page).toHaveURL(/\/plants\/r1$/);
   expect(reachedServer).toBe(0);
   await ctx.close();
 });

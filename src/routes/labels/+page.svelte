@@ -199,7 +199,7 @@
             <div class="txt">
               <div class="no">{accNo(a)}{#if a.fieldNumber} <span class="fn">{a.fieldNumber}</span>{/if}</div>
               <div class="sci"><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}<span class="cv">‘{a.cultivar}’</span>{/if}{#if kindOf(a) === 'hybrid' && a.parentage}{' '}<span class="cv">({a.parentage})</span>{/if}</div>
-              {#if withCare && care[a.id]}<div class="care">{care[a.id]}</div>{:else if withCare && care[a.id] === null}<div class="care unchecked">care line not checked: the reference was not reached</div>{/if}
+              {#if withCare && care[a.id]}<div class="care" class:unchecked={care[a.id] === 'climate not checked'}>{care[a.id]}</div>{:else if withCare && care[a.id] === null}<div class="care unchecked">care line not checked: the reference was not reached</div>{/if}
               {#if withSource && sourceLine(a)}<div class="src">{sourceLine(a)}</div>{/if}
             </div>
           {/if}

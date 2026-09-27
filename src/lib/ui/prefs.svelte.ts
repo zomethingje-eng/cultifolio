@@ -14,6 +14,8 @@ const DEFAULTS: Prefs = { referencePhotos: false };
 
 class PrefStore {
   current = $state<Prefs>({ ...DEFAULTS });
+  /** Whether this device has ever saved preferences: a restore applies a backup's only where it has not. */
+  stored = $state(false);
   loaded = $state(false);
   load() {
     if (this.loaded || !browser) return;
@@ -21,6 +23,7 @@ class PrefStore {
       const s = localStorage.getItem(KEY);
       const v = s ? (JSON.parse(s) as Partial<Prefs>) : null;
       this.current = { ...DEFAULTS, referencePhotos: v?.referencePhotos === true };
+      this.stored = !!s;
     } catch {
       this.current = { ...DEFAULTS };
     }
@@ -36,6 +39,7 @@ class PrefStore {
     this.current = { ...this.current, ...p };
     try {
       localStorage.setItem(KEY, JSON.stringify(this.current));
+      this.stored = true;
     } catch {
       /* a private window keeps it for the page */
     }

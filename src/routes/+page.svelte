@@ -346,7 +346,7 @@
   {/if}
 
   {#if collection.ready && !hasMine && !collection.accessions.length && !welcomeHidden}
-    <p class="welcome" id="welcome"><b>New here.</b> <a href="/plants/new">Add your first plant</a> · <a href="/backup">Restore a backup or import from v2</a> <button class="linkish" type="button" onclick={dismissWelcome}>Not now</button></p>
+    <p class="welcome" id="welcome"><b>New here.</b> <a href="/plants/new">Add your first plant</a> · <a href="/backup">Bring in a collection</a> (a backup file, or an export from the old Herbarium app) <button class="linkish" type="button" onclick={dismissWelcome}>Not now</button></p>
   {/if}
 
   <div class="stickyhead">

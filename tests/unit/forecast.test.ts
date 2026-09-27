@@ -121,13 +121,18 @@ describe('the frost line in clock time on the device (improvements, 6)', () => {
     const f2 = reduceMet({ properties: { timeseries: ts2 } } as never, -68.8);
     const b2 = { forecast: f2, risk: frostRisk(f2, []) };
     expect(b2.risk.text).toContain('between 19:00 Wednesday and 01:00 Thursday solar time');
-    expect(clockTime(b2, 'America/Argentina/Mendoza').risk.text).toContain('between 21:00 Wednesday and 03:00 Thursday, your time (night of 2026-10-14,');
+    expect(clockTime(b2, 'America/Argentina/Mendoza').risk.text).toContain('between 21:00 Wednesday and 03:00 Thursday, your time (2026-10-14 in the table,');
     // the bracketed date stays the frost table's solar day, marked as the night it is: solar 23:00 Wednesday the 14th at Mendoza is 01:00 Thursday on the clock, and the line points at the table's row for the 14th (round twenty, 7; round twenty-one, 11)
     const ts3 = [...Array(36).keys()].map((h) => step(new Date(Date.UTC(2026, 9, 14, h)).toISOString(), h === 28 ? -1 : 10)); // 04:00 UTC on the 15th = 23:00 solar on the 14th
     const f3 = reduceMet({ properties: { timeseries: ts3 } } as never, -68.8);
     const b3 = { forecast: f3, risk: frostRisk(f3, []) };
     expect(b3.risk.text).toContain('around 23:00 Wednesday solar time (2026-10-14,');
-    expect(clockTime(b3, 'America/Argentina/Mendoza').risk.text).toContain('around 01:00 Thursday, your time (night of 2026-10-14,');
+    expect(clockTime(b3, 'America/Argentina/Mendoza').risk.text).toContain('around 01:00 Thursday, your time (2026-10-14 in the table,');
+    // Apia: solar -11 by longitude, the clock +13; the two are an hour apart around the clock, so the line is said in clock time (round twenty-two, 13)
+    const ts4 = [...Array(36).keys()].map((h) => step(new Date(Date.UTC(2026, 9, 14, h)).toISOString(), h === 16 ? 4 : 10)); // 16:00 UTC = 05:00 solar the 15th = 05:00 clock the 15th
+    const f4 = reduceMet({ properties: { timeseries: ts4 } } as never, -171.8);
+    expect(f4.offsetH).toBe(-11);
+    expect(clockTime({ forecast: f4, risk: frostRisk(f4, []) }, 'Pacific/Apia').risk.text).toContain('around 05:00 Thursday, your time');
     // a body without a solar phrase (a warning in force, a refusal) passes through
     const w = { forecast: f, risk: { level: 'warning', text: 'Freeze Warning in force (NOAA/NWS).' } };
     expect(clockTime(w, 'America/Argentina/Mendoza')).toBe(w);

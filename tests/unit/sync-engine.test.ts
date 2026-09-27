@@ -24,13 +24,19 @@ const newMem = (device: string): Mem => ({ device, changes: new Map(), outbox: n
 let mem: Mem = newMem('dev0');
 
 vi.mock('$lib/db/vault', () => {
+  class StoppedError extends Error {
+    constructor() {
+      super('syncing was stopped on this device while this run was under way');
+    }
+  }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const m: any = {
+  StoppedError,
   allChanges: async () => [...mem.changes.values()],
   appendChanges: async (cs: Change[], fromServer = false, _strict = false, requireKey?: string) => {
     if (mem.failAppend?.(cs, fromServer)) throw quota();
     // the real vault checks the stored sync key inside the write's transaction (round seventeen, A1)
-    if (requireKey !== undefined && (mem.meta.get('sync') as { key?: string } | null | undefined)?.key !== requireKey) throw new Error('syncing was stopped on this device while this run was under way');
+    if (requireKey !== undefined && (mem.meta.get('sync') as { key?: string } | null | undefined)?.key !== requireKey) throw new StoppedError();
     for (const c of cs) {
       mem.changes.set(c.t, c);
       if (!fromServer) mem.outbox.add(c.t);
@@ -39,7 +45,7 @@ vi.mock('$lib/db/vault', () => {
   },
   outboxKeys: async () => [...mem.outbox],
   outboxAck: async (ts: string[], key?: string) => {
-    if (key !== undefined && (mem.meta.get('sync') as { key?: string } | null | undefined)?.key !== key) throw new Error('syncing was stopped on this device while this run was under way');
+    if (key !== undefined && (mem.meta.get('sync') as { key?: string } | null | undefined)?.key !== key) throw new StoppedError();
     ts.forEach((t) => mem.outbox.delete(t));
   },
   outboxFill: async () => {
@@ -1030,6 +1036,31 @@ describe('the vault route under a runtime that gives no client address (round tw
     expect(await r.json()).toMatchObject({ created: true });
     expect([...kv.keys()].some((x) => x.startsWith('vaults:unknown:'))).toBe(true);
     globalThis.fetch = real;
+  });
+});
+
+describe('a creation counted and then not made (round twenty-two, 1)', () => {
+  it('refunds the slot on the counter object when the vault write throws, and does not on a join', async () => {
+    const r2 = fakeR2();
+    await boot(newMem('aaaaaaaaaaaa'), r2);
+    const routes = await import('../../src/routes/api/sync/vault/+server');
+    const calls: string[] = [];
+    const COUNTERS = { idFromName: (n: string) => n, get: () => ({ create: async () => { calls.push('create'); return 'ok' as const; }, refund: async () => { calls.push('refund'); } }) };
+    const QUEUE = { get: async () => null, put: async () => {} };
+    const k = await deriveKeys(KEY);
+    const req = () => new Request('http://x/api/sync/vault', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: k.id, token: k.token, create: true }) });
+    const ev = (request: Request) => ({ request, url: new URL(request.url), platform: { env: { STORE: r2, QUEUE, COUNTERS, SYNC_OPEN: '1' } }, getClientAddress: () => '1.1.1.1', params: {} }) as never;
+    const realPut = r2.put.bind(r2);
+    r2.put = async () => { throw new Error('r2: blip'); };
+    await expect(routes.POST(ev(req()))).rejects.toThrow(/blip/);
+    expect(calls).toEqual(['create', 'refund']);
+    r2.put = realPut;
+    calls.length = 0;
+    expect((await routes.POST(ev(req()))).status).toBe(200);
+    expect(calls).toEqual(['create']);
+    calls.length = 0;
+    expect((await routes.POST(ev(req()))).status).toBe(200); // a rejoin of the vault just made: neither counted nor refunded
+    expect(calls).toEqual([]);
   });
 });
 

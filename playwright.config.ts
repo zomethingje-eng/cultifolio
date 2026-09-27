@@ -7,7 +7,7 @@ export default defineConfig({
   // wrangler dev's workerd occasionally drops a connection mid-run (a "Broken pipe" in its log; the page sees net::ERR_ABORTED on a
   // navigation). One retry tells that apart from a real failure without hiding one: a test that fails twice is reported.
   retries: 1,
-  webServer: { command: 'npm run build && node scripts/dev/fresh-state.mjs && npx wrangler dev --port 4173', port: 4173, reuseExistingServer: true, timeout: 180000 },
+  webServer: { command: 'npm run build && node scripts/dev/fresh-state.mjs && npx wrangler dev --port 4173', port: 4173, reuseExistingServer: !!process.env.PW_REUSE, timeout: 180000 }, // a server already up is reused only when asked (PW_REUSE=1): otherwise its state would not be reset (round twenty-two, 10)
   // en-GB: the tests read metric figures; an en-US browser would be served Fahrenheit and inches on its first visit (by design).
   use: { baseURL: 'http://127.0.0.1:4173', locale: 'en-GB', launchOptions: process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {} }
 });

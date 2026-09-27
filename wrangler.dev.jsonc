@@ -1,0 +1,14 @@
+{
+  // The bindings the dev proxy gives `platform` under `vite dev` and during the build's prerender: the same as
+  // wrangler.jsonc without the Durable Object, which a dev proxy cannot run (and would warn about on every build). Without
+  // the COUNTERS binding the KV counters bound vault creation approximately, which is right for a dev server; the real
+  // object runs under `wrangler dev` (npm run preview) and in production. Keep the rest in step with wrangler.jsonc.
+  "name": "cultifolio",
+  "main": ".svelte-kit/cloudflare/_worker.js",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": { "directory": ".svelte-kit/cloudflare", "binding": "ASSETS" },
+  "vars": { "SYNC_OPEN": "1" },
+  "r2_buckets": [{ "binding": "STORE", "bucket_name": "cultifolio" }],
+  "kv_namespaces": [{ "binding": "QUEUE", "id": "local-dev-only" }]
+}

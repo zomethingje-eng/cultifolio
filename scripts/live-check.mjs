@@ -95,9 +95,10 @@ for (const path of ['/about/how', `/species/${process.env.LIVE_CHECK_SPECIES ?? 
 // MET not answering twice, a few seconds apart, is a failure: a deploy that broke every forecast must not pass (round twenty, 13).
 if (!skip.has('forecast')) {
   // A cell the Worker has not cached this hour, so MET is really asked: the longitude steps through thirty cells west of
-  // London by the minute (the Worker caches a cell for an hour; a deploy that cannot reach MET must not pass on last
+  // London by the minute, sixty of them, more than the hour the Worker caches a cell for (a deploy that cannot reach MET
+// must not pass on last hour's answer; round twenty-two, 11); a rerun in the same minute is the one case that repeats a cell
   // hour's answer). `units` as the app sends it; `lc` keeps the outer edge from answering for the previous build.
-  const path = `/api/forecast?lat=51.5&lon=${(-0.13 - 0.01 * (Math.floor(Date.now() / 60_000) % 30)).toFixed(2)}&alt=20&units=metric&lc=${Date.now()}`;
+  const path = `/api/forecast?lat=51.5&lon=${(-0.13 - 0.01 * (Math.floor(Date.now() / 60_000) % 60)).toFixed(2)}&alt=20&units=metric&lc=${Date.now()}`;
   let r = await get(path);
   if (r.status === 502) {
     await new Promise((res) => setTimeout(res, 5000));

@@ -136,7 +136,7 @@
 <h2 class="sec" id="site">Your site</h2>
 <div class="cult">
   <div class="body">
-    <p class="small" style="margin: 0 0 10px">Where you grow: the frost watch reads its forecast here, and the months in the notes follow its hemisphere.{#if !site.current && benches.length} Until it is set, the first place with coordinates stands in.{/if}</p>
+    <p class="small" style="margin: 0 0 10px">Where you grow: the frost watch reads its forecast here, and the months in the notes follow its hemisphere.{#if !site.current && benches.length} Until it is set, the first place with coordinates decides the hemisphere for the months; the frost watch here and on the front page needs the site itself, and a place with coordinates is watched on its own page regardless.{/if}</p>
     <div class="fields">
       <label><span>Name</span><input type="text" bind:value={siteName} placeholder="home, the greenhouse" /></label>
       <label><span>Latitude</span><input type="text" inputmode="decimal" bind:value={lat} placeholder="40.43" /></label>

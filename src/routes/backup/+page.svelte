@@ -98,8 +98,9 @@
         location.href = '/plants';
         return;
       }
-      done = `Merged ${r.changes} ${r.changes === 1 ? 'change' : 'changes'} and ${r.photos} ${r.photos === 1 ? 'photo' : 'photos'}.`;
+      done = `Merged: ${opened ? `${opened.merge.added} ${opened.merge.added === 1 ? 'record' : 'records'} added, ${opened.merge.changed} updated, ` : ''}${r.changes} ${r.changes === 1 ? 'change' : 'changes'} and ${r.photos} ${r.photos === 1 ? 'photo' : 'photos'} taken in.`;
       if (r.photosMissing) done += ` ${r.photosMissing} ${r.photosMissing === 1 ? 'photo record has' : 'photo records have'} no photograph: the file did not hold the pixels and neither does this device. The ${r.photosMissing === 1 ? 'record is' : 'records are'} kept.`;
+      if (r.settingsRestored.length) done += ` This device had no ${r.settingsRestored.length > 1 ? r.settingsRestored.slice(0, -1).join(', ') + ' or ' + r.settingsRestored.at(-1) : r.settingsRestored[0]} of its own, so the file's ${r.settingsRestored.length === 1 ? 'was' : 'were'} applied.`;
       if (r.schemeRestored) done += ` Numbering now follows the file: ${r.schemeRestored.mode === 'prefix' ? `${r.schemeRestored.prefix}-${'0'.repeat(r.schemeRestored.width)}` : `year-${'0'.repeat(r.schemeRestored.width)}`}.`;
       opened = null;
       photoCount = (await photoBlobIds()).length;
@@ -132,7 +133,7 @@
 
 <svelte:head><title>Backup — Cultifolio</title></svelte:head>
 
-<PageHead title="Backup" kick="My plants" places={false} sub="One file holds every record, every change and every photograph." count={collection.ready ? `${collection.accessions.length} plants · ${photoCount ?? '…'} photos` : undefined} />
+<PageHead title="Backup" kick="My plants" places={false} sub="One file holds every record, every change and every photograph, and this device's settings (site, units, label choices), which a restore applies on a device that has none." count={collection.ready ? `${collection.accessions.length} plants · ${photoCount ?? '…'} photos` : undefined} />
 
 {#if collection.persisted === false}
   <div class="cult warn"><div class="body"><b>This browser has not promised to keep your data.</b> Storage for sites you rarely open can be cleared to make room. Take a backup now, and install the app to your home screen, which tells the browser to keep it.</div></div>

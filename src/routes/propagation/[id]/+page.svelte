@@ -269,7 +269,7 @@
           <div class="end"><button class="btn" type="button" onclick={() => (potting = false)}>Cancel</button><button class="btn pri" type="submit" disabled={pottingBusy}>Pot up {Math.floor(numberOrNull(pn) ?? 0) || ''}</button></div>
         </form>
       {:else}
-        <div class="fields"><p class="small muted" style="margin: 0">{st.remaining ? `${st.remaining} in the pot. ` : ''}The batch becomes their provenance: {m.veg ? 'the parent plant and the method' : 'seed source, lot and the right provenance class'} carry to every plant.</p><div class="end"><button class="btn pri" disabled={st.remaining < 1} title={st.remaining < 1 ? 'Count the seedlings first' : undefined} onclick={() => { potting = true; pmsg = ''; pn = Math.max(1, st.remaining || 1); ploc = s.locationId ?? null; }}>Pot up…</button></div></div>
+        <div class="fields"><p class="small muted" style="margin: 0">{st.remaining ? `${st.remaining} in the pot. ` : ''}The batch becomes their provenance: {m.veg ? 'the parent plant and the method' : 'seed source, lot and the right provenance class'} carry to every plant.</p><div class="end"><button class="btn pri" disabled={st.remaining < 1} title={st.remaining < 1 ? 'Count the seedlings first' : undefined} onclick={() => { potting = true; pmsg = ''; pn = 1; ploc = s.locationId ?? null; }}>Pot up…</button></div></div>
       {/if}
     </div>
   </div>

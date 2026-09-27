@@ -153,6 +153,7 @@
     if (!a || (moveTo ?? null) === (a.locationId ?? null)) { moving = false; return; }
     await collection.put('accession', id, { locationId: moveTo ?? null, location: moveTo ? null : a.location ?? null });
     if (moveTo) await collection.addEvent({ acc: id, d: localDate(), t: 'move', note: `to ${collection.locationName(moveTo)}` });
+    toast.show(moveTo ? `Moved to ${collection.locationName(moveTo)}` : 'Place cleared');
     moving = false;
   }
   const daysAgo = (d: string | null | undefined) => (d ? daysBetween(d) : null);
@@ -200,6 +201,8 @@
   });
   const provLabel = (p: string | null | undefined) => (p === 'wild' ? 'wild-collected' : p === 'f1' ? 'F1, raised from wild-collected seed' : p === 'fn' ? 'cultivated seed (Fn)' : p === 'veg' ? 'vegetative' : 'provenance not stated');
   let logOpen = $state(false);
+  /** The toast after a log line: "Watering recorded", not "Watered recorded" (round twenty-two, 21). */
+  const recordedText = (label: string) => ({ Watered: 'Watering recorded', Fed: 'Feeding recorded', Treated: 'Treatment recorded', Repotted: 'Repotting recorded', Measured: 'Measurement recorded', Flowered: 'Flowering recorded', Note: 'Note recorded', Died: 'Death recorded', Pruned: 'Pruning recorded', Moved: 'Move recorded' } as Record<string, string>)[label] ?? `${label} recorded`;
   function quick(t: EventType) {
     et = t;
     logOpen = true;
@@ -262,6 +265,9 @@
   }
   async function setStatus(s: 'growing' | 'archived' | 'dead') {
     await collection.put('accession', id, { status: s });
+    // A status change is a line in the log too, so the timeline says when the plant was archived or grown again; a death is recorded through "Died…", with its date and cause (round twenty-two, 16).
+    await collection.addEvent({ acc: id, d: localDate(), t: 'note', note: s === 'archived' ? 'Archived' : s === 'growing' ? 'Marked growing again' : 'Marked dead' });
+    toast.show(s === 'archived' ? 'Archived, and logged' : s === 'growing' ? 'Marked growing, and logged' : 'Marked dead, and logged');
     void focusNext('#status-toggle'); // the button that replaced the one just pressed
   }
   async function saveNotes() {
@@ -341,6 +347,7 @@
           <div class="menu" id="card-menu" role="menu" tabindex="-1" aria-label="More for this plant" use:autofocusFirst onkeydown={menuKeys} onfocusout={(e) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node | null) && e.relatedTarget !== cardMenuBtn) closeCardMenu(); }}>
             <button role="menuitem" type="button" onclick={() => { closeCardMenu(); startEdit(); }}>Edit</button>
             <a role="menuitem" href="/labels?acc={a.id}" onclick={() => closeCardMenu()}>Label</a>
+            {#if a.status === 'growing'}<button role="menuitem" type="button" onclick={() => { closeCardMenu(); quick('death'); }}>Died…</button>{/if}
             {#if a.status === 'growing'}<a role="menuitem" href="/propagation/new?parent={a.id}" onclick={() => closeCardMenu()}>Propagate</a>{/if}
           </div>
         {/if}
@@ -370,7 +377,7 @@
   <div class="quickbar">
     <button class="btn pri" onclick={() => quick('water')}>Water</button>
     {#if hasHero}<button class="btn" onclick={() => { adding = !adding; if (adding) setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0); }}>Photo</button>{/if}
-    <button class="btn" onclick={() => quick('note')}>Note</button>
+    <button class="btn" onclick={() => quick('note')}>Log</button>
     <button class="btn" onclick={() => { moveTo = a.locationId ?? null; moving = !moving; }}>Move</button>
     {#if moreActs}
       <button class="btn" id="verb-feed" onclick={() => quick('feed')}>Feed</button>
@@ -393,7 +400,7 @@
 
   {#if logOpen}
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-    <form class="cult evform" onsubmit={async (e) => { e.preventDefault(); const label = EVENT_LABEL[et]; try { await addEvent(e); } catch { return; } closeLog(`${label} recorded`); }} onkeydown={(e) => { if (e.key === 'Escape') { e.preventDefault(); closeLog(); } }}>
+    <form class="cult evform" onsubmit={async (e) => { e.preventDefault(); const label = EVENT_LABEL[et]; try { await addEvent(e); } catch { return; } closeLog(recordedText(label)); }} onkeydown={(e) => { if (e.key === 'Escape') { e.preventDefault(); closeLog(); } }}>
       <div class="sum">Record: {EVENT_LABEL[et]} <span class="hint">goes on the timeline below</span></div>
       <div class="fields">
         <div class="row">
@@ -472,7 +479,7 @@
           {@const e = row.e}
           <div class="tlrow">
             <span class="d">{e.d}</span>
-            <span class="t">{EVENT_LABEL[e.t] ?? e.t}{#if e.used}<span class="x2">{' · '}{e.used}</span>{/if}{#if e.cause}<span class="x2">{' · '}{e.cause}</span>{/if}{#if e.measures}<span class="x2">{' · '}{Object.entries(e.measures).map(([k, v]) => `${MEASURES.find((m) => m.k === k)?.label ?? k} ${v}`).join(', ')}</span>{/if}{#if e.note}<span class="x2">{' · '}{e.note}</span>{/if}</span>
+            <span class="t">{EVENT_LABEL[e.t] ?? e.t}{#if e.used}<span class="x2">{' · '}{e.used}</span>{/if}{#if e.cause}<span class="x2">{' · '}{e.cause}</span>{/if}{#if e.measures}<span class="x2">{' · '}{Object.entries(e.measures).map(([k, v]) => { const m = MEASURES.find((x) => x.k === k); return `${m?.label ?? k} ${v}${m?.unit ? ' ' + m.unit : ''}`; }).join(', ')}</span>{/if}{#if e.note}<span class="x2">{' · '}{e.note}</span>{/if}</span>
             {#if confirmEvent === e.id}<button class="rm confirm" type="button" onclick={() => { collection.remove('event', e.id); confirmEvent = null; }}>Remove?</button>{:else}<button class="rm" type="button" title="Remove this entry" aria-label="Remove this entry" onclick={() => { confirmEvent = e.id; void focusNext('.rm.confirm'); }}>×</button>{/if}
           </div>
         {:else}

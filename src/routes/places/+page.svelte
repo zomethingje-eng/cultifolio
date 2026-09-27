@@ -28,7 +28,7 @@
   async function add() {
     if (!name.trim()) return;
     await collection.addLocation({ name: name.trim(), type: kind, parentId: parent });
-    name = ''; adding = false;
+    name = ''; parent = null; adding = false; // the parent is chosen per place: the last one's must not file the next one inside it (round twenty-two, 3)
   }
 </script>
 

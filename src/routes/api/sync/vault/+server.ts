@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { store, vaultId, vaultIdFor, ensureVault, authed, readMeta, recount, vaultBytes, allowCreation, creationCeilings, clientIp, limited } from '$lib/server/sync';
+import { store, vaultId, vaultIdFor, ensureVault, authed, readMeta, recount, vaultBytes, allowCreation, refundCreation, creationCeilings, clientIp, limited } from '$lib/server/sync';
 
 /**
  * Create or open a vault. Body: { id, token, create }. The token is hashed
@@ -33,7 +33,14 @@ export const POST: RequestHandler = async ({ request, platform, getClientAddress
     if (may === 'unavailable') return json({ error: 'Sync could not count new vaults just now. Your collection stays on this device; try again in a minute.' }, { status: 503, headers: { 'retry-after': '60', 'cache-control': 'no-store' } });
     if (may === 'total') return json({ error: 'Sync is not taking new vaults for now. Your collection stays on this device; joining an existing vault still works.' }, { status: 503, headers: { 'retry-after': '86400', 'cache-control': 'no-store' } });
   }
-  const { created, meta } = await ensureVault(r2, id, body.token, open);
+  let made: Awaited<ReturnType<typeof ensureVault>>;
+  try {
+    made = await ensureVault(r2, id, body.token, open);
+  } catch (e) {
+    if (!existing) await refundCreation(platform?.env?.COUNTERS, clientIp(getClientAddress)); // counted above, not made: the slot goes back (round twenty-two, 1)
+    throw e;
+  }
+  const { created, meta } = made;
   // A (re)join is the moment the slow, authoritative listing puts the live counter right.
   const kv = platform?.env?.QUEUE;
   const bytes = created ? 0 : kv ? await vaultBytes(r2, kv, id, meta, Date.now(), true) : await recount(r2, id, meta);

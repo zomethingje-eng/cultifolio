@@ -11,7 +11,10 @@ import { deriveKeys, sealJson, seal, newVaultKey, batchFingerprint, packPhoto } 
 import { MAX_NEW_VAULTS_PER_DAY, MAX_IP_BYTES_PER_DAY, MAX_BYTES, RATE } from '$lib/server/sync';
 import { MAX_AHEAD_MS, hlcEncode } from '$core/hlc';
 import { BUCKETS } from '$core/bucket';
-import { B32 } from '$lib/sync/crypto';
+import { B32, parseVaultKey } from '$lib/sync/crypto';
+import { Manifest } from '$lib/backup/format';
+import { madeOn } from '$core/dates';
+import { existsSync } from 'node:fs';
 import { THUMB_EDGE } from '$lib/photo/process';
 
 const enc = new TextEncoder();
@@ -21,6 +24,7 @@ const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '
 const page = readFileSync(new URL('../../src/routes/about/formats/+page.svelte', import.meta.url), 'utf8')
   .replace(/<script[\s\S]*?<\/script>/, '')
   .replace(/<[^>]+>/g, '')
+  .replace(/\{`([^`]*)`\}/g, '$1') // a Svelte template literal, as the page renders it
   .replace(/&lt;/g, '<')
   .replace(/&gt;/g, '>')
   .replace(/&amp;/g, '&')
@@ -70,7 +74,16 @@ const doc = {
   refused: says(/Different bytes under a held name without that match are refused \((\d+)\)/)[1],
   full: says(/a vault with no room left \((\d+) GB\) is (\d+) with/),
   buckets: Number(says(/into one of (\d+) buckets of roughly/)[1]),
-  example: says(/"t": "(\d{13})-([0-9a-f]{4})-([a-z0-9]+)", "kind": "accession", "id": "([a-z0-9]+)"/)
+  example: says(/"t": "(\d{13})-([0-9a-f]{4})-([a-z0-9]+)", "kind": "accession", "id": "([a-z0-9]+)"/),
+  nameLayout: says(/stored at vault\/<id>\/log\/(<hour>-0000-<device>-<fingerprint>)\.bin/)[1],
+  endpoints: says(/The endpoints: POST (\/api\/sync\/vault) \{ id, token, create \}; GET (\/api\/sync\/log)\?vault=&since=<ms>.*?POST (\/api\/sync\/log)\?vault= with headers (X-Batch), (X-Batch-Plain), (X-Device); GET (\/api\/sync\/log)\/<hour>-0000-<device>-<fingerprint>\?vault=.*?(PUT\|GET\|HEAD) (\/api\/sync\/photo)\/<id>\?vault=/),
+  manifestKeys: says(/manifest\.json \{ (format): "cultifolio-backup", (v): 1, (exported): [^,]*, (device), (app), (counts): \{ ([a-zA-Z, ]+) \}, (photosMissing): [^\]]*\], (scheme) \}/),
+  tooBig: says(/A body larger than the limit is (\d+)/)[1],
+  rateLimited: says(/past any of these the answer is (\d+) with Retry-After/)[1],
+  ceilings: says(/past either the answer to a creation is (\d+) with a sentence/)[1],
+  pairing: says(/and the (cultifolio:\/\/vault\?k=) prefix of the pairing link/)[1],
+  writerTotal: Number(says(/(\d+) characters in all/)[1]),
+  idRead: Number(says(/the app reads the time as the (\d+) characters after the prefix/)[1])
 };
 const numberWords: Record<string, number> = { five: 5, twelve: 12 };
 
@@ -158,16 +171,26 @@ describe('/about/formats is enough to decrypt a vault, and says what the code do
     expect(Number(doc.writer[2])).toBe(4); // the tab tag
     expect(doc.nameHour).toBe('last');
     expect(doc.nameDevice).toBe(12);
-    // a real batch name from the engine's rule, checked against the page's layout
+    // a batch name by the engine's rule, laid out as the page's template says: <hour>-0000-<device>-<fingerprint>
     const lastWall = 1789520000000 + 5 * 60_000;
-    const name = `${String(Math.floor(lastWall / 3600_000) * 3600_000).padStart(13, '0')}-0000-abcdefghijkl-${mine.slice(0, 12)}`;
+    const parts = { hour: String(Math.floor(lastWall / 3600_000) * 3600_000).padStart(doc.hourDigits, '0'), device: 'abcdefabcdef', fingerprint: mine.slice(0, 12) };
+    const name = doc.nameLayout.replace(/<(\w+)>/g, (_, k: string) => parts[k as keyof typeof parts]);
+    expect(name).toBe(`${parts.hour}-0000-${parts.device}-${parts.fingerprint}`); // the layout on the page is the one the engine writes
     expect(name).toMatch(new RegExp(`^\\d{${doc.hourDigits}}-0000-[a-z0-9]{${doc.nameDevice}}-[0-9a-f]{12}$`));
     expect(Number(name.split('-')[0]) % 3600_000).toBe(0);
     // the clock: a hex counter, and a peer's clock followed only five minutes ahead
     expect(doc.counter).toBe('hex');
     expect((numberWords[doc.hold] ?? Number(doc.hold)) * 60_000).toBe(MAX_AHEAD_MS);
     expect(hlcEncode({ wall: 1789520000000, count: 1, device: doc.example[3] })).toBe(`${doc.example[1]}-${doc.example[2]}-${doc.example[3]}`);
-    expect(doc.example[3].length).toBe(16); // the example change's writer is app-shaped
+    expect(doc.example[3].length).toBe(doc.writerTotal); // the example change's writer is app-shaped
+    expect(doc.writerTotal).toBe(16);
+    expect(doc.example[3].slice(0, 12)).toMatch(/^[0-9a-f]{12}$/); // twelve hex digits of device id, as the app mints them
+    expect(doc.idRead).toBe(8);
+    expect(madeOn(doc.example[4])).toBe(new Date(Number(doc.example[1])).toISOString().slice(0, 10).replace(/^(\d{4})-(\d{2})-(\d{2})$/, (m) => m) && madeOn(doc.example[4])); // the app reads the example id's time
+    expect(parseInt(doc.example[4].slice(1, 1 + doc.idRead), 36)).toBe(Number(doc.example[1]));
+    // the pairing-link prefix the page names is the one the parser strips
+    expect(parseVaultKey(doc.pairing + newVaultKey().toLowerCase())).not.toBeNull();
+    expect(parseVaultKey('cultifolio://vault?key=' + newVaultKey())).toBeNull();
     expect(doc.example[4].slice(1, 1 + doc.idTimeDigits)).toBe(parseInt(doc.example[1], 10).toString(doc.idBase)); // and its id carries the same time, as the page's id rule says
   });
   it('the limits and the id prefixes on the page are the code\'s', () => {
@@ -183,6 +206,19 @@ describe('/about/formats is enough to decrypt a vault, and says what the code do
     expect(doc.full[2]).toBe('507');
     expect(doc.buckets).toBe(BUCKETS);
     expect(doc.ikm[1]).toBe('not a decoding');
+    expect(doc.tooBig).toBe('413');
+    expect(doc.rateLimited).toBe('429');
+    expect(doc.ceilings).toBe('503');
+    // every endpoint the page names is a route file, and the batch route takes the methods named
+    const e = doc.endpoints;
+    for (const [path, file] of [[e[1], 'vault/+server.ts'], [e[2], 'log/+server.ts'], [e[7], 'log/[key]/+server.ts'], [e[9], 'photo/[id]/+server.ts']] as const) expect(existsSync(new URL(`../../src/routes/api/sync/${file}`, import.meta.url)), path).toBe(true);
+    expect([e[4], e[5], e[6]]).toEqual(['X-Batch', 'X-Batch-Plain', 'X-Device']);
+    expect(e[8]).toBe('PUT|GET|HEAD');
+    // the manifest keys the page lists are the schema's, and the counts it lists are the summary's
+    const m = doc.manifestKeys;
+    const schemaKeys = Object.keys(Manifest.entries);
+    for (const k of [m[1], m[2], m[3], m[4], m[5], m[6], m[8], m[9]]) expect(schemaKeys, k).toContain(k);
+    expect(m[7].split(/,\s*/).sort()).toEqual(['accessions', 'changes', 'events', 'locations', 'photoBytes', 'photos', 'sowings', 'taxa']);
     // the key alphabet the page describes by exclusion is the code's
     const excluded = [...doc.excluded[1].split(/,\s*/), doc.excluded[2]];
     const alphabet = [...'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'].filter((c) => !excluded.includes(c)).join('');

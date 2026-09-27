@@ -7,6 +7,7 @@ import { DEFAULT_SCHEME, type NumberingScheme } from '$core/accession';
 import { buildBackup, readBackup, previewMerge, summarise, photosWithoutPixels, type ReadBackup } from './backup';
 import { replaceThroughStaging } from './replace';
 import { backupName } from './format';
+import { readDeviceSettings, applyDeviceSettings } from './device';
 
 export interface PreparedBackup {
   name: string;
@@ -24,6 +25,7 @@ export async function prepareBackup(onProgress?: (done: number, total: number) =
     scheme: collection.scheme,
     device: await getMeta<string>('device'),
     app: 'cultifolio 3',
+    settings: readDeviceSettings(),
     onProgress,
     readPhoto: async (id) => {
       const b = await getPhotoBlobs(id);
@@ -70,6 +72,8 @@ export interface RestoreReport {
   photosMissing: number;
   /** The numbering scheme was taken from the file because this device was on the default. */
   schemeRestored: NumberingScheme | null;
+  /** Device settings taken from the file because this device had none: 'site', 'units', 'label settings', 'preferences'. */
+  settingsRestored: string[];
 }
 
 const sameScheme = (a: NumberingScheme, b: NumberingScheme) => a.mode === b.mode && a.width === b.width && (a.prefix ?? null) === (b.prefix ?? null);
@@ -112,11 +116,11 @@ export async function restoreBackup(o: Opened, mode: 'merge' | 'replace', onProg
     await collection.setScheme(fileScheme);
     schemeRestored = fileScheme;
   }
-  return { changes: changes.length, photos, photosMissing: o.missingPixels.length, schemeRestored };
+  return { changes: changes.length, photos, photosMissing: o.missingPixels.length, schemeRestored, settingsRestored: applyDeviceSettings(o.file.settings) };
 }
 
 /** The replace path: stage, verify, turn sync off, switch (see replace.ts and vault.ts). */
 async function replaceFromBackup(o: Opened, onProgress?: (done: number, total: number) => void): Promise<RestoreReport> {
   const r = await replaceThroughStaging(o.file, openStaging, { onProgress, beforeSwitch: async () => { if (sync.configured) await sync.forget(); } });
-  return { ...r, schemeRestored: null };
+  return { ...r, schemeRestored: null, settingsRestored: applyDeviceSettings(o.file.settings) };
 }
