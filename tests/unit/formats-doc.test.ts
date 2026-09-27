@@ -12,7 +12,7 @@ import { MAX_NEW_VAULTS_PER_DAY, MAX_IP_BYTES_PER_DAY, MAX_BYTES, RATE } from '$
 import { MAX_AHEAD_MS, hlcEncode } from '$core/hlc';
 import { B32, parseVaultKey } from '$lib/sync/crypto';
 import { Manifest, LegacyChanges, photoPath, thumbPath, backupName, EXT } from '$lib/backup/format';
-import { PUSH_HEADERS, batchName, listAfter } from '$lib/sync/limits';
+import { PUSH_HEADERS, batchName, listAfter, BATCH_NAME, logBatch } from '$lib/sync/limits';
 import { KINDS, RESERVED_FIELDS } from '$core/log';
 import { EVENT_LABEL } from '$lib/db/types';
 import { BUCKETS, bucketOf } from '$core/bucket';
@@ -24,8 +24,27 @@ import { THUMB_EDGE, FULL_EDGE } from '$lib/photo/process';
 const enc = new TextEncoder();
 const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
 
+const markup = readFileSync(new URL('../../src/routes/about/formats/+page.svelte', import.meta.url), 'utf8');
+/** The field names the page lists for one record kind: every <code> after "<b>kind</b>:" up to the next bold kind. */
+const pageFields = (kind: string): string[] => {
+  const m = new RegExp(`<b>${kind}</b>[^:]*:([\\s\\S]*?)(?=<b>|</p>)`).exec(markup);
+  if (!m) throw new Error(`/about/formats lists no fields for ${kind}`);
+  return [...m[1].matchAll(/<code>([A-Za-z_]+)<\/code>/g)].map((x) => x[1]);
+};
+/** The record interfaces as `src/lib/db/types.ts` declares them: the field names, `id` aside, which the page describes once for every kind. */
+const types = readFileSync(new URL('../../src/lib/db/types.ts', import.meta.url), 'utf8');
+const codeFields = (name: string): string[] => {
+  const m = new RegExp(`export interface ${name} \\{([\\s\\S]*?)\\n\\}`).exec(types);
+  if (!m) throw new Error(`no interface ${name}`);
+  return [...m[1].matchAll(/^\s{2}([A-Za-z_]+)\??:/gm)].map((x) => x[1]).filter((f) => f !== 'id');
+};
+const codeUnion = (name: string): string[] => {
+  const m = new RegExp(`export type ${name} = ([^;]+);`).exec(types);
+  if (!m) throw new Error(`no type ${name}`);
+  return [...m[1].matchAll(/'([a-z0-9]+)'/g)].map((x) => x[1]);
+};
 /** The page as a reader sees it: the Svelte markup with tags removed and entities decoded. */
-const page = readFileSync(new URL('../../src/routes/about/formats/+page.svelte', import.meta.url), 'utf8')
+const page = markup
   .replace(/<script[\s\S]*?<\/script>/, '')
   .replace(/\{`([^`]*)`\}/g, (_, t: string) => t.replace(/</g, '&lt;').replace(/>/g, '&gt;')) // a Svelte template literal, as the page renders it: its angle brackets are text, not tags
   .replace(/<[^>]+>/g, '')
@@ -101,7 +120,10 @@ const doc = {
   hash: says(/the species slug is hashed \((FNV-1a)\) into one of (\d+) buckets/),
   bucketRoutes: says(/the device asks (\/api\/sheets)\?b= or (\/api\/entries)\?b= for the buckets/),
   corpusRoute: says(/carries the corpus id from (\/api\/corpus)\)/)[1],
-  dossierRoute: says(/served at (\/api\/dossier)\/<gbifKey>/)[1]
+  dossierRoute: says(/served at (\/api\/dossier)\/<gbifKey>/)[1],
+  provenance: says(/provenance \(([a-z0-9, ]+)\), status \(([a-z, ]+)\)/),
+  nameKinds: says(/nameKind \(([a-z, ]+) or ([a-z]+)\)/),
+  batchShape: says(/A log batch decrypts to \{ "v": (\d), "device": "\.\.\.", "changes": \[\.\.\.\] \}/)
 };
 const numberWords: Record<string, number> = { five: 5, twelve: 12 };
 
@@ -213,7 +235,7 @@ describe('/about/formats is enough to decrypt a vault, and says what the code do
     expect(parseVaultKey('cultifolio://vault?key=' + newVaultKey())).toBeNull();
     expect(doc.example[4].slice(1, 1 + doc.idTimeDigits)).toBe(parseInt(doc.example[1], 10).toString(doc.idBase)); // and its id carries the same time, as the page's id rule says
   });
-  it('the limits and the id prefixes on the page are the code\'s', () => {
+  it('the limits and the id prefixes on the page are the code\'s', async () => {
     expect(Number(doc.limits[1])).toBe(MAX_NEW_VAULTS_PER_DAY);
     expect(Number(doc.limits[2]) * 1024 * 1024 * 1024).toBe(MAX_IP_BYTES_PER_DAY);
     expect(Number(doc.limits[3])).toBe(RATE.sync.limit);
@@ -240,8 +262,19 @@ describe('/about/formats is enough to decrypt a vault, and says what the code do
     expect(parseAfter(listAfter(1789520000000, 'k'))).toEqual({ at: 1789520000000, key: 'k' });
     expect(doc.bearer.slice(1, 3)).toEqual(['Authorization', 'Bearer']);
     // the 507 body the page prints is the one the class sends
-    expect(JSON.parse(JSON.stringify({ error: doc.fullBody[1], bytes: 1, limit: 2 }))).toEqual({ error: 'vault full', bytes: 1, limit: 2 });
-    expect(new VaultFull(1, 2).response().status).toBe(507);
+    const full = new VaultFull(1, 2).response();
+    expect(full.status).toBe(507);
+    expect(await full.json()).toEqual({ [doc.fullBody[1] === 'vault full' ? 'error' : 'no']: 'vault full', [doc.fullBody[2]]: 1, [doc.fullBody[3]]: 2 }); // the body the class sends carries the page's three keys (round twenty-four, 7)
+    // the batch's plaintext shape is the engine's, and its name passes the Worker's own pattern
+    expect(Object.keys(logBatch('abc', []))).toEqual(['v', 'device', 'changes']);
+    expect(logBatch('abc', []).v).toBe(Number(doc.batchShape[1]));
+    expect(BATCH_NAME.test(batchName(1789520000000, 'abcdefabcdef', 'f'.repeat(64)))).toBe(true);
+    expect(BATCH_NAME.test('1789520000000-0000-abcdefabcdef-' + 'f'.repeat(11))).toBe(false);
+    // the record fields, by kind, are the interfaces' (round twenty-four, 7): nothing on the page the code lacks, nothing in the code the page leaves out
+    for (const [kind, name] of [['accession', 'Accession'], ['event', 'PlantEvent'], ['photo', 'Photo'], ['location', 'Location'], ['sowing', 'Sowing'], ['taxon', 'Taxon']] as const) expect([...new Set(pageFields(kind))].sort(), kind).toEqual(codeFields(name).sort());
+    expect(doc.provenance[1].split(/,\s*/)).toEqual(codeUnion('Provenance'));
+    expect(doc.provenance[2].split(/,\s*/)).toEqual(codeUnion('AccStatus'));
+    expect([...doc.nameKinds[1].split(/,\s*/), doc.nameKinds[2]]).toEqual(['species', 'cultivar', 'hybrid']);
     expect(doc.refusalFields.slice(1, 4)).toEqual(['error', 'message', '404']); // json() routes say `error`, SvelteKit's error() says `message`
     // the hash the page names is the one the bucket function computes
     expect(doc.hash[1]).toBe('FNV-1a');

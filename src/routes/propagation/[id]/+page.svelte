@@ -21,6 +21,7 @@
   import Lightbox from '$lib/ui/Lightbox.svelte';
   import { focusNext } from '$lib/ui/focus';
   import { toast } from '$lib/ui/toast.svelte';
+  import { today as day } from '$lib/ui/today.svelte';
   import RefPhotoOffer from '$lib/ui/RefPhotoOffer.svelte';
   onMount(() => collection.load());
   const param = $derived(page.params.id!);
@@ -55,7 +56,7 @@
   const dateProblem = (d: string, what: string): string | null => {
     if (!d) return `Give the ${what} a date.`;
     if (d > today()) return `${what[0].toUpperCase()}${what.slice(1)} dated ${d} is in the future.`;
-    if (s && d < s.sown) return `${what[0].toUpperCase()}${what.slice(1)} dated ${d} is before the sowing on ${s.sown}.`;
+    if (s && d < s.sown) return `${what[0].toUpperCase()}${what.slice(1)} dated ${d} is before the ${m.veg ? 'batch was started' : 'sowing'} on ${s.sown}.`;
     return null;
   };
   /** A count can go only if what is left still covers what was potted and lost: the batch never says 0 up and 2 potted. */
@@ -72,7 +73,7 @@
     e.preventDefault();
     if (!s || gn == null || gn === '' || gn < 0) return;
     const n = Number(gn);
-    gmsg = dateProblem(gd, 'count') ?? (n > s.count ? `${n} is more than the ${s.count} that went in; edit the batch if the count was wrong.` : n < st.germinated ? `${n} is fewer than the ${st.germinated} already counted; the count is the total up so far, so record losses instead.` : '');
+    gmsg = dateProblem(gd, 'count') ?? (n > s.count ? `${n} is more than the ${s.count} that went in; edit the batch if the count was wrong.` : n < st.germinated ? `${n} is fewer than the ${st.germinated} already counted; the count is the total ${upWord} so far, so record losses instead.` : '');
     if (gmsg) return;
     await collection.addEvent({ acc: id, d: gd, t: 'germinate', n, note: gnote.trim() || null });
     toast.show(`Recorded: ${n} ${upWord} so far.`);
@@ -123,6 +124,18 @@
   }
   /* note */
   let nd = $state(today());
+  // The forms on this page are always open, so their default dates follow the calendar while the page stays open; a
+  // date the grower typed is left alone (round twenty-four, 2).
+  let dayDefault = today();
+  $effect(() => {
+    const t = day.current;
+    if (t === dayDefault) return;
+    if (gd === dayDefault) gd = t;
+    if (ld === dayDefault) ld = t;
+    if (pd === dayDefault) pd = t;
+    if (nd === dayDefault) nd = t;
+    dayDefault = t;
+  });
   let ntext = $state('');
   let nmsg = $state('');
   async function note(e: SubmitEvent) {
@@ -159,6 +172,7 @@
   async function saveEdit() {
     if (!s) return;
     const heat = heatCheck(f.bottomHeatC, units.current); // the same check as the new-batch form: 77 does not save as 77 °C here either
+    const veg = (PROP_METHODS.find((x) => x.k === f.method) ?? m).veg; // a cuttings batch has no seed source or seed provenance, as on the add form (round twenty-four, 13)
     heatMsg = heat.msg;
     if (heatMsg) {
       document.getElementById('se-heat')?.focus();
@@ -166,7 +180,7 @@
     }
     await collection.put('sowing', id, {
       taxonName: f.taxonName.trim() || s.taxonName, cultivar: f.cultivar.trim() || null, method: f.method, sown: f.sown || s.sown, count: Math.max(1, Number(f.count) || s.count),
-      sourceFrom: f.sourceFrom.trim() || null, sourceRef: f.sourceRef.trim() || null, provenance: f.provenance, medium: f.medium.trim() || null, container: f.container.trim() || null,
+      sourceFrom: veg ? null : f.sourceFrom.trim() || null, sourceRef: veg ? null : f.sourceRef.trim() || null, provenance: veg ? 'veg' : f.provenance, medium: f.medium.trim() || null, container: f.container.trim() || null,
       treatment: f.treatment.trim() || null, bottomHeatC: heat.c, covered: f.covered, locationId: f.locationId ?? null, notes: f.notes.trim() || null
     });
     editing = false;
@@ -224,9 +238,11 @@
       <label><span>Method</span><select id="se-method" bind:value={f.method}>{#each PROP_METHODS as pm}<option value={pm.k}>{pm.label}</option>{/each}</select></label>
       <label><span>Date</span><input id="se-date" type="date" bind:value={f.sown} /></label>
       <label><span>Started</span><input id="se-count" type="number" min="1" bind:value={f.count} /></label>
-      <label><span>Seed from</span><input id="se-from" type="text" bind:value={f.sourceFrom} /></label>
-      <label><span>Lot / field no.</span><input id="se-ref" type="text" bind:value={f.sourceRef} /></label>
-      <label><span>Seed provenance</span><select id="se-prov" bind:value={f.provenance}><option value="unknown">Not stated</option><option value="wild">Wild-collected</option><option value="f1">Ex-habitat plants</option><option value="fn">Cultivated plants</option><option value="veg">Vegetative</option></select></label>
+      {#if !(PROP_METHODS.find((x) => x.k === f.method) ?? m).veg}
+        <label><span>Seed from</span><input id="se-from" type="text" bind:value={f.sourceFrom} /></label>
+        <label><span>Lot / field no.</span><input id="se-ref" type="text" bind:value={f.sourceRef} /></label>
+        <label><span>Seed provenance</span><select id="se-prov" bind:value={f.provenance}><option value="unknown">Not stated</option><option value="wild">Wild-collected</option><option value="f1">Ex-habitat plants</option><option value="fn">Cultivated plants</option></select></label>
+      {/if}
       <label><span>Medium</span><input id="se-medium" type="text" bind:value={f.medium} /></label>
       <label><span>Container</span><input id="se-container" type="text" bind:value={f.container} /></label>
       <label><span>Pre-treatment</span><input id="se-treat" type="text" bind:value={f.treatment} /></label>
@@ -242,11 +258,11 @@
     <div class="card"><div class="lab">Day</div><div class="val">{st.days}</div><div class="sub">since {s.sown}</div></div>
     <div class="card"><div class="lab">{m.veg ? 'Struck' : 'Germinated'}</div><div class="val">{st.germinated}<span class="u"> / {s.count}</span></div><div class="gauge"><i style="width: {Math.min(100, (st.rate ?? 0) * 100)}%"></i></div><div class="sub">{pct(st.rate)}{#if st.daysToFirst != null} · first at day {st.daysToFirst}{/if}</div></div>
     <div class="card"><div class="lab">Potted up</div><div class="val">{st.potted}</div><div class="sub">{raised.length ? `${raised.length} numbered plant${raised.length === 1 ? '' : 's'}` : 'none yet'}</div></div>
-    <div class="card"><div class="lab">{m.veg ? 'Struck, not yet potted' : 'Still in the pot'}</div>{#if !st.germinated && !st.potted && !st.lost}<div class="val">–</div><div class="sub">not counted yet</div>{:else}<div class="val">{st.remaining}</div><div class="sub">{st.lost ? `${st.lost} lost` : 'no losses recorded'}</div>{/if}</div>
+    <div class="card"><div class="lab">{m.veg ? 'Struck, not yet potted' : 'Still in the pot'}</div>{#if !events.some((e) => e.t === 'germinate') && !st.potted && !st.lost}<div class="val">–</div><div class="sub">not counted yet</div>{:else}<div class="val">{st.remaining}</div><div class="sub">{st.lost ? `${st.lost} lost` : 'no losses recorded'}</div>{/if}</div>
   </div>
 
   {#if potted.length}
-    <div class="notice ok">Potted up {potted.length}: {#each potted as p, i}{#if i}, {/if}<a class="mono" href="/plants/{p}">{p}</a>{/each}.</div>
+    <div class="notice ok">Potted up {potted.length}: {#each potted as p, i}{#if i}{', '}{/if}<a class="mono" href="/plants/{p}">{p}</a>{/each}.</div>
   {/if}
 
   {#if s.status !== 'active'}

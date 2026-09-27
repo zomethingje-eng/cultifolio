@@ -416,15 +416,19 @@ class Collection {
     const changes: Change[] = [];
     const out = { plants: 0, batches: 0, places: 0, to: toName };
     for (const c of this.children(id)) { changes.push({ t: this.tick(), kind: 'location', id: c.id, field: 'parentId', value: parent }); out.places++; }
-    // Each plant moved up gets a Move line, so its timeline says where it went and why (round twenty-three, 2).
+    // Each growing plant moved up gets a Move line, so its timeline says where it went and why (round twenty-three, 2);
+    // a dead or archived plant is refiled without a line. A plant is found through `placeOf`, so one filed under a place
+    // already removed elsewhere (an offline move on another device) is carried up too, not left pointing at nothing
+    // (round twenty-four, 4).
     const when = localDate();
-    for (const a of this.accessions) if (a.locationId === id) {
+    for (const a of this.accessions) if (a.locationId && this.placeOf(a.locationId) === id) {
       changes.push({ t: this.tick(), kind: 'accession', id: a.id, field: 'locationId', value: parent });
+      if (a.status !== 'growing') continue;
       const eid = this.eventId();
-      changes.push(...diff('event', eid, { id: eid, acc: a.id, d: when, t: 'move', note: parent ? `to ${toName} (${node.name} was removed)` : `${node.name} was removed; no place now` } as unknown as Record<string, unknown>, undefined, this.tick));
+      changes.push(...diff('event', eid, { id: eid, acc: a.id, d: when, t: 'move', note: parent ? `to ${toName} (${node.name} was removed)` : `${node.name} was removed; no place now`, auto: true } as unknown as Record<string, unknown>, undefined, this.tick));
       out.plants++;
     }
-    for (const s of this.sowings) if (s.locationId === id) { changes.push({ t: this.tick(), kind: 'sowing', id: s.id, field: 'locationId', value: parent }); out.batches++; }
+    for (const s of this.sowings) if (s.locationId && this.placeOf(s.locationId) === id) { changes.push({ t: this.tick(), kind: 'sowing', id: s.id, field: 'locationId', value: parent }); out.batches++; }
     changes.push({ t: this.tick(), kind: 'location', id, field: '_deleted', value: true });
     await this.commit(changes);
     return out;
@@ -607,23 +611,34 @@ class Collection {
   /** Last time each plant was marked present at an audit (or acquired), for "not seen since". */
   /** The last day the plant was in front of the grower: its last audit, else the day its record was made (not the acquisition date it was given, which may be years back for a collection entered late). */
   lastSeen(acc: string): string | null {
-    // Any logged action is the grower in front of the plant: a watering, a measurement, a photograph's note, an audit
-    // tick. Not an audit line that says "not seen", which is the opposite (round twenty-three, 5). The acquisition
-    // counts by the day its record was made, not the date it was given.
-    let best: string | null = null;
-    for (const e of this.events(acc)) {
-      if (e.t === 'audit' && e.note === 'not seen') continue;
-      const d = e.t === 'acquire' ? (this.madeOn('event', e.id) ?? e.d) : e.d;
-      if (d && (!best || d > best)) best = d;
-    }
-    return best;
+    return this.sighting(acc).seen;
   }
-  /** The last audit at which the plant was looked for and not found, if that is later than it was last seen. */
+  /** The last audit at which the plant was looked for and not found, if nothing since has put it in front of the grower. */
   missedAt(acc: string): string | null {
-    const miss = this.events(acc).find((e) => e.t === 'audit' && e.note === 'not seen');
-    if (!miss) return null;
-    const seen = this.lastSeen(acc);
-    return seen && seen >= miss.d ? null : miss.d;
+    return this.sighting(acc).missed;
+  }
+  /**
+   * What the log says last about the plant being in front of the grower, read in the log's own order (date, then id,
+   * newest first) rather than by comparing dates: a watering at 09:00 and an audit miss at 17:00 the same day are two
+   * lines, and the later one is the answer (round twenty-four, 3). A line the grower did not write about this plant
+   * (`auto`: a place removed, a rename, a place-wide watering, the number repair) is not a sighting, nor is an event
+   * dated after today; the acquisition counts by the day its record was made, not the date it was given.
+   */
+  private sighting(acc: string): { seen: string | null; missed: string | null } {
+    const today = localDate();
+    let seen: string | null = null, missed: string | null = null;
+    for (const e of this.events(acc)) {
+      if (e.auto || (e.t === 'note' && e.note?.startsWith('Renumbered from '))) continue;
+      const d = e.t === 'acquire' ? (this.madeOn('event', e.id) ?? e.d) : e.d;
+      if (!d || d > today) continue;
+      if (e.t === 'audit' && e.note === 'not seen') {
+        if (!seen && !missed) missed = d;
+        continue;
+      }
+      if (!seen) seen = d;
+      if (missed) break;
+    }
+    return { seen, missed };
   }
 
   private live<T>(kind: Kind): T[] {
@@ -836,7 +851,23 @@ class Collection {
   async ingest(changes: Change[], source: 'import' | 'server' = 'import', opts: { repair?: boolean; requireKey?: string } = {}): Promise<void> {
     validateChanges(changes);
     for (const c of changes) this.clock?.observe(c.t);
+    const overwritten = source === 'server' ? this.textAboutToBeReplaced(changes) : [];
     await this.commit(changes, source, opts.requireKey);
+    // Free text is the one field where last-writer-wins loses a grower's writing: two devices that edited a plant's
+    // notes offline keep only one text. The other is not dropped silently: the device whose text lost writes what it
+    // said on the plant's log, so both devices have it (round twenty-four, 1). Only this device's own text is logged,
+    // by the device that held it, so the line is written once.
+    if (overwritten.length) {
+      const today = localDate();
+      const lines: Change[] = [];
+      for (const o of overwritten) {
+        const now = this.state.get(recKey(o.kind, o.id))?.notes;
+        if (now === o.old) continue; // held back, or the same text after all
+        const eid = this.eventId();
+        lines.push(...diff('event', eid, { id: eid, acc: o.id, d: today, t: 'note', note: `Notes replaced by an edit made on another device; here they read: ${o.old}`, auto: true } as unknown as Record<string, unknown>, undefined, this.tick));
+      }
+      if (lines.length) await this.commit(lines, 'local').catch(() => undefined);
+    }
     if (source === 'import') {
       // Records new to this device today count from today, whatever their changes are stamped: a collection kept in v2 since
       // 2019 is not "not seen for 2,400 days" on the day it arrives. The day goes on the record as a field, so it syncs and
@@ -857,6 +888,22 @@ class Collection {
     if (opts.repair !== false) await this.repairNumbers();
   }
 
+  /** Incoming changes to a plant's or batch's `notes` that will win over a non-empty text this device holds from another writer. */
+  private textAboutToBeReplaced(changes: Change[]): Array<{ kind: 'accession' | 'sowing'; id: string; old: string }> {
+    const out = new Map<string, { kind: 'accession' | 'sowing'; id: string; old: string }>();
+    for (const c of changes) {
+      if ((c.kind !== 'accession' && c.kind !== 'sowing') || c.field !== 'notes') continue;
+      const k = recKey(c.kind, c.id);
+      const prev = this.seen.get(k + '\0notes');
+      const rec = this.state.get(k);
+      const old = rec?.notes;
+      if (!prev || !rec || rec._deleted || typeof old !== 'string' || !old.trim() || old === c.value) continue;
+      // Only this device's own text, replaced by another device's: the other device logs its own, and a tab of this device is not another device.
+      if (hlcCompare(c.t, prev) <= 0 || !hlcDecode(prev).device.startsWith(this.deviceId) || hlcDecode(c.t).device.startsWith(this.deviceId)) continue;
+      if (!out.has(k)) out.set(k, { kind: c.kind, id: c.id, old });
+    }
+    return [...out.values()];
+  }
   /** The duplicate-number repair, once over the whole log: a pull calls it after its last batch, not after each (round twelve, 3). */
   async repairNumbers(): Promise<void> {
     try {

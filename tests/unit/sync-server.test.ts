@@ -41,12 +41,14 @@ function fakeKV() {
       const v = m.get(k) ?? null;
       return type === 'json' && v != null ? JSON.parse(v) : v;
     },
-    async put(k: string, v: string) {
+    async put(k: string, v: string, opts?: { expiration?: number; expirationTtl?: number }) {
       kv.puts++;
       if (kv.fail) throw new Error('kv: too many writes');
       m.set(k, v);
+      if (opts) kv.opts.set(k, opts);
     },
-    m
+    m,
+    opts: new Map<string, { expiration?: number; expirationTtl?: number }>()
   };
   return kv;
 }
@@ -345,6 +347,8 @@ describe('the live byte counter in KV', () => {
     kv.m.set('ipbytes:1.2.3.4:2026-09-20', String(MAX_IP_BYTES_PER_DAY - 5));
     await storeCounted(r2 as never, 'v', meta(), 'vault/v/log/a.bin', new Uint8Array(5), undefined, {}, q(kv));
     expect(kv.m.get('ipbytes:1.2.3.4:2026-09-20')).toBe(String(MAX_IP_BYTES_PER_DAY));
+    // the key expires at a fixed moment, the midnight that ends the next day, not a TTL each write renews (round twenty-four, 6)
+    expect(kv.opts.get('ipbytes:1.2.3.4:2026-09-20')).toEqual({ expiration: Date.parse('2026-09-22T00:00:00Z') / 1000 });
     const p = storeCounted(r2 as never, 'w', meta(), 'vault/w/log/a.bin', new Uint8Array(1), undefined, {}, q(kv));
     await expect(p).rejects.toBeInstanceOf(DayQuota);
     const res = (await p.then(() => null, (e: DayQuota) => e))!.response();

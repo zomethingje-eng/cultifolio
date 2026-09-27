@@ -3,7 +3,7 @@
   "version": "3.0.0-m1",
   "private": true,
   "type": "module",
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
   "scripts": {
     "dev": "vite dev",
     "build": "node scripts/clean-build.mjs && vite build && node scripts/attach-do.mjs",

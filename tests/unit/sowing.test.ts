@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Change } from '$core/log';
 import { hlcEncode } from '$core/hlc';
 import { accNo, sowNo } from '$lib/db/types';
+import { localDate } from '$core/dates';
 
 // The collection store against an in-memory vault: what a page sees, without IndexedDB.
 const mem: { changes: Change[]; meta: Map<string, unknown> } = { changes: [], meta: new Map() };
@@ -189,10 +190,74 @@ describe('places', () => {
     expect(collection.plantsAt(room.id, false).map((p) => p.id)).toContain(a.id);
     expect(collection.locationName(shelf.id)).toBe('Room');
   });
+  it('a removed place refiles dead plants without a line, carries up a plant filed under a place already removed, and marks its lines auto (round twenty-four, 4)', async () => {
+    const room = await collection.addLocation({ name: 'Room', parentId: null, type: 'room' });
+    const porch = await collection.addLocation({ name: 'Porch', parentId: room.id, type: 'outdoor' });
+    const frame = await collection.addLocation({ name: 'Frame', parentId: porch.id, type: 'bench' });
+    const dead = await collection.addAccession({ taxonName: 'Copiapoa', acc: 'RM-1', locationId: porch.id });
+    await collection.put('accession', dead.id, { status: 'dead' });
+    const live = await collection.addAccession({ taxonName: 'Lithops', acc: 'RM-2', locationId: porch.id });
+    await collection.removeLocation(frame.id); // Frame is gone; another device then files a plant into it
+    const late = await collection.addAccession({ taxonName: 'Aloe', acc: 'RM-3', locationId: frame.id });
+    const r = await collection.removeLocation(porch.id);
+    expect(r).toEqual({ plants: 2, batches: 0, places: 0, to: 'Room' }); // the dead plant is not counted or logged
+    expect(collection.accession(dead.id)!.locationId).toBe(room.id);
+    expect(collection.events(dead.id).some((e) => e.t === 'move')).toBe(false);
+    expect(collection.accession(late.id)!.locationId).toBe(room.id); // found through placeOf, not by the raw id
+    const line = collection.events(live.id).find((e) => e.t === 'move')!;
+    expect(line.note).toBe('to Room (Porch was removed)');
+    expect(line.auto).toBe(true);
+  });
   it('record ids carry the whole device id and this tab\'s writer tag, so two tabs of one device never mint one id (round eight, 1)', async () => {
     const a = await collection.addAccession({ taxonName: 'X', acc: 'ID-1' });
     expect(a.id).toMatch(/^r[0-9a-z]+testdevice[0-9a-z]{4}$/);
     expect(collection.writer).toMatch(/^testdevice[0-9a-z]{4}$/);
     expect(collection.device).toBe('testdevice');
+  });
+});
+
+describe('last seen and missed (round twenty-four, 3)', () => {
+  beforeEach(async () => { await collection.load(); });
+  it('a same-day miss after a watering stands, a same-day sighting after a miss clears it, and the order is the log\'s, not the date\'s', async () => {
+    const a = await collection.addAccession({ taxonName: 'Copiapoa', acc: 'LS-1' });
+    const today = localDate();
+    await collection.addEvent({ acc: a.id, d: today, t: 'water' });
+    await collection.addEvent({ acc: a.id, d: today, t: 'audit', note: 'not seen' });
+    expect(collection.missedAt(a.id)).toBe(today);
+    expect(collection.lastSeen(a.id)).toBe(today); // the watering stands as the last sighting; the miss is later
+    await collection.addEvent({ acc: a.id, d: today, t: 'audit', note: null });
+    expect(collection.missedAt(a.id)).toBeNull();
+  });
+  it('automatic lines, place-wide actions and future dates are not sightings', async () => {
+    const a = await collection.addAccession({ taxonName: 'Copiapoa', acc: 'LS-2', acquired: '2020-01-01' });
+    const today = localDate();
+    await collection.addEvent({ acc: a.id, d: '2026-01-05', t: 'audit', note: 'not seen' });
+    await collection.addEvent({ acc: a.id, d: today, t: 'water', note: 'whole bench', auto: true });
+    await collection.addEvent({ acc: a.id, d: today, t: 'move', note: 'to Room (Shelf was removed)', auto: true });
+    await collection.addEvent({ acc: a.id, d: today, t: 'note', note: 'Renumbered from 1 to 2: another plant had been given 1' });
+    await collection.addEvent({ acc: a.id, d: '2099-01-01', t: 'water' });
+    expect(collection.missedAt(a.id)).toBe('2026-01-05');
+    expect(collection.lastSeen(a.id)).toBe(localDate()); // the acquisition, by the day its record was made
+  });
+});
+
+describe('free text replaced by another device (round twenty-four, 1)', () => {
+  beforeEach(async () => { await collection.load(); });
+  it('a pulled notes change that wins over this device\'s text writes the old text on the log, once; the same device\'s other tab, an empty text, and a losing change do not', async () => {
+    const a = await collection.addAccession({ taxonName: 'Copiapoa', acc: 'TX-1' });
+    await collection.put('accession', a.id, { notes: 'mealybug on the crown, treated with alcohol' });
+    const later = (ms: number, device: string): string => hlcEncode({ wall: Date.now() + ms, count: 0, device });
+    await collection.ingest([{ t: later(5000, 'bbbbbbbbbbbbtab1'), kind: 'accession', id: a.id, field: 'notes', value: 'moved closer to the glass, looks etiolated' }], 'server');
+    expect(collection.accession(a.id)!.notes).toBe('moved closer to the glass, looks etiolated');
+    const lines = collection.events(a.id).filter((e) => e.t === 'note');
+    expect(lines).toHaveLength(1);
+    expect(lines[0].note).toBe('Notes replaced by an edit made on another device; here they read: mealybug on the crown, treated with alcohol');
+    expect(lines[0].auto).toBe(true);
+    // a change that loses (stamped before the one held) changes nothing and logs nothing
+    await collection.ingest([{ t: hlcEncode({ wall: Date.now() - 60_000, count: 0, device: 'cccccccccccctab1' }), kind: 'accession', id: a.id, field: 'notes', value: 'older text' }], 'server');
+    expect(collection.events(a.id).filter((e) => e.t === 'note')).toHaveLength(1);
+    // this device's other tab writing over its own text is not another device
+    await collection.ingest([{ t: later(9000, 'testdevice' + 'tab2'), kind: 'accession', id: a.id, field: 'notes', value: 'same device, other tab' }], 'server');
+    expect(collection.events(a.id).filter((e) => e.t === 'note')).toHaveLength(1);
   });
 });

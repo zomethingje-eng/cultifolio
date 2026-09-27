@@ -76,6 +76,7 @@
   let ownNumber = $state('');
   const ownTaken = $derived(useOwnNumber && !!ownNumber.trim() && collection.isNumberTaken(ownNumber));
   let busy = $state(false);
+  let checking = $state(false); // the name (or the link's key) is being checked against the reference: the button says so rather than sitting there (round twenty-four, 15)
   const nextNo = $derived(collection.ready ? collection.nextAccessionNumber() : '…');
 
   let nameUnresolved = $state(false);
@@ -85,9 +86,14 @@
     e.preventDefault();
     if (!name.trim() || busy) return;
     if (ownTaken) return;
-    if (keyCheck) await keyCheck.catch(() => undefined);
-    // A name nothing resolved is filed on the second Add, not the first: the first arms and the picker says so (round twenty-three, 4).
-    if (!taxonKey && kind !== 'hybrid' && !nameArmed && !(await picker?.check())) { nameArmed = true; return; }
+    checking = true;
+    try {
+      if (keyCheck) await keyCheck.catch(() => undefined);
+      // A name nothing resolved is filed on the second Add, not the first: the first arms and the picker says so (round twenty-three, 4).
+      if (!taxonKey && kind !== 'hybrid' && !nameArmed && !(await picker?.check())) { nameArmed = true; return; }
+    } finally {
+      checking = false;
+    }
     void nameUnresolved;
     busy = true;
     const wanted = countN;
@@ -193,7 +199,7 @@
 
   <div class="actions">
     <a class="btn" href="/plants">Cancel</a>
-    <button class="btn pri" type="submit" disabled={!name.trim() || busy || ownTaken}>Add{countN > 1 ? ` ${countN} plants` : ''}</button>
+    <button class="btn pri" type="submit" disabled={!name.trim() || busy || ownTaken} aria-live="polite">{checking ? 'Checking the name…' : busy ? 'Adding…' : `Add${countN > 1 ? ` ${countN} plants` : ''}`}</button>
   </div>
 </form>
 

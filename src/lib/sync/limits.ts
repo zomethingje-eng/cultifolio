@@ -14,5 +14,9 @@ export const PUSH_HEADERS = { batch: 'x-batch', plain: 'x-batch-plain', device: 
  * the pushing device's id and twelve hex digits of the keyed fingerprint of the content.
  */
 export const batchName = (lastWall: number, device: string, fingerprint: string) => `${String(Math.floor(lastWall / 3600_000) * 3600_000).padStart(13, '0')}-0000-${device || 'dev'}-${fingerprint.slice(0, 12)}`;
+/** What a batch name must look like to be stored: the HLC-shaped hour and counter, the device, and the optional twelve-digit fingerprint (older names carry a full HLC and no fingerprint). The Worker refuses anything else. */
+export const BATCH_NAME = /^\d{13}-[0-9a-f]{4,6}-[a-z0-9]{1,16}(-[0-9a-f]{12})?$/;
+/** The plaintext a log batch seals: the format version, the pushing device and its changes. */
+export const logBatch = <C>(device: string, changes: C[]) => ({ v: 1, device, changes });
 /** The `after` parameter of a listing page: `<arrival ms>:<batch key>`. */
 export const listAfter = (at: number, key: string) => `${at}:${encodeURIComponent(key)}`;

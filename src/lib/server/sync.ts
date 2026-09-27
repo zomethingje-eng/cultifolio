@@ -4,10 +4,12 @@
  * what it stores. Layout in R2:
  *
  *   vault/<id>/meta.json          { tokenHash, created, entitlement, bytes }
- *   vault/<id>/log/<hlc>-<hash>.bin  one sealed batch of changes; <hlc> is the batch's last change, <hash> the
- *                                    first 12 hex of the SHA-256 of the changes as JSON (the plaintext, so a
- *                                    re-seal of the same batch has the same name; batches from before this
- *                                    hashed the sealed bytes, and older ones still have no hash part)
+ *   vault/<id>/log/<hour>-0000-<device>-<fp>.bin  one sealed batch of changes; <hour> the hour of the batch's last
+ *                                    change (13 digits of ms), <device> the pushing device, <fp> the first 12 hex of
+ *                                    the keyed fingerprint (HMAC-SHA-256 under the vault's naming key) of the changes
+ *                                    as JSON, so a re-seal of the same batch has the same name and the server holds
+ *                                    nothing it could test a guess against; batches from earlier builds are named by
+ *                                    the last change's full HLC and an unkeyed SHA-256, and the oldest have no hash part
  *   vault/<id>/photo/<photoId>.bin one sealed photo (full + thumb)
  *
  * And in KV (the QUEUE binding), small counters that R2 cannot keep quickly:
@@ -48,8 +50,8 @@ export interface VaultMeta {
 }
 
 const ID = /^[A-HJKMNP-TV-Z2-9]{26}$/;
-/** An HLC, optionally followed by the content hash newer clients add. Two batches that differ in content differ in name. */
-const BATCH = /^\d{13}-[0-9a-f]{4,6}-[a-z0-9]{1,16}(-[0-9a-f]{12})?$/;
+/** An HLC-shaped name, optionally followed by the keyed fingerprint newer clients add (`BATCH_NAME`, shared with the engine). Two batches that differ in content differ in name. */
+const BATCH = BATCH_NAME;
 const PHOTO = /^p[a-z0-9]{6,32}$/;
 const TOKEN = /^[0-9a-f]{64}$/;
 
@@ -120,7 +122,7 @@ export async function ensureVault(r2: R2Bucket, id: string, token: string, open:
 }
 
 export const batchKey = (id: string, name: string) => {
-  if (!BATCH.test(name)) error(400, 'batch key must be an HLC with an optional content hash');
+  if (!BATCH.test(name)) error(400, 'batch key must be an HLC with an optional fingerprint');
   return `vault/${id}/log/${name}.bin`;
 };
 export const photoKey = (id: string, photoId: string) => {
@@ -148,7 +150,7 @@ export function parseAfter(raw: string | null): After | null {
 
 const refCompare = (a: BatchRef, b: BatchRef) => a.at - b.at || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
 
-import { OVERLAP_MS, PUSH_HEADERS } from '$lib/sync/limits';
+import { OVERLAP_MS, PUSH_HEADERS, BATCH_NAME } from '$lib/sync/limits';
 export { OVERLAP_MS };
 
 /**
@@ -249,7 +251,7 @@ export class DayQuota extends Error {
 
 /** Metadata a batch is stored with; `plain` and `device` only when the pushing client sent them. */
 export interface BatchMeta {
-  /** SHA-256 hex of the changes as JSON (the plaintext). */
+  /** The keyed fingerprint (HMAC-SHA-256 under the vault's naming key) of the changes as JSON, 64 hex digits; older clients sent an unkeyed SHA-256, which the server cannot tell apart and need not. */
   plain?: string;
   /** The device that pushed it. */
   device?: string;
@@ -347,7 +349,9 @@ export async function storeCounted(r2: R2Bucket, id: string, meta: VaultMeta, ke
     await kv.put(bytesKey, JSON.stringify({ bytes: before, day: today } satisfies BytesRow)).catch(() => {});
     throw e;
   }
-  await kv.put(ipKey, String(ipBytes + body.length), { expirationTtl: 2 * 86400 }).catch(() => {});
+  // A fixed expiry at the end of the day after this one, not a TTL that every write renews: a key written at 00:01 and
+  // again at 23:59 would otherwise live nearly three days, past what /about/how says (round twenty-four, 6).
+  await kv.put(ipKey, String(ipBytes + body.length), { expiration: Math.floor(Date.parse(today + 'T00:00:00Z') / 1000) + 2 * 86400 }).catch(() => {});
   // The snapshot, lazily.
   const flushed = lastMetaFlush.get(id) ?? 0;
   if (Math.floor(before / META_FLUSH_BYTES) !== Math.floor(after / META_FLUSH_BYTES) || now - flushed >= META_FLUSH_MS) {
@@ -394,7 +398,7 @@ export async function storeOnce(r2: R2Bucket, id: string, meta: VaultMeta, key: 
 
 const PLAIN = /^[0-9a-f]{64}$/;
 const DEVICE = /^[a-z0-9]{1,16}$/;
-/** The optional push headers: X-Batch-Plain (SHA-256 hex of the changes as JSON) and X-Device. Absent is fine (older clients); malformed is 400. */
+/** The optional push headers: X-Batch-Plain (the keyed fingerprint of the changes as JSON, 64 hex digits) and X-Device. Absent is fine (older clients); malformed is 400. */
 export function batchMeta(request: Request): BatchMeta {
   const plain = request.headers.get(PUSH_HEADERS.plain);
   const device = request.headers.get(PUSH_HEADERS.device);

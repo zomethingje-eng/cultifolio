@@ -50,6 +50,9 @@ describe('Counters', () => {
     await c.refund('a', '2026-09-25');
     expect(await c.create('a', '2026-09-25', 5, 200, 2000, 0)).toBe('ok');
     expect(storage.m.get('all')).toBe(5);
+    await c.create('c', '2026-09-25', 5, 200, 2000, 0);
+    await c.refund('c', '2026-09-25'); // an address refunded to zero is not counted among the addresses (round twenty-four, 6)
+    expect((await c.totals('2026-09-25')).addresses).toBe(1);
     expect(await c.create('b', '2026-09-25', 5, 5, 2000, 0)).toBe('day');
     expect(await c.create('b', '2026-09-25', 5, 200, 5, 0)).toBe('total');
   });

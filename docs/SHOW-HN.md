@@ -46,7 +46,7 @@ Site: https://cultifolio.com · Source: https://github.com/zomethingje-eng/culti
 
 "Cold floor from a 30-year climatology and a 40-year extreme is not hardiness." Correct, and the page says what it is: the habitat's coldest night on record at the typical cell, not a hardiness rating. Cultivation advice is derived by rule from the figures and the rule is printed.
 
-"CHELSA cells are 1 km; your cell is coarser." The grid is packed to tenth-degree cells (each the mean of ~144 pixels) for the range read; the provenance line on the page says exactly that, with the cell id.
+"CHELSA cells are 1 km; your cell is coarser." The grid is packed to 0.05° cells (each the mean of 36 of CHELSA's 30-arc-second pixels) for the range read; the provenance line on the page says exactly that, with the cell id.
 
 "GBIF records are noisy." Yes: cultivated, naturalised and invasive records are dropped, records outside the WCVP range are dropped, coordinate uncertainty is kept and preferred on dedupe, and the marker moves to the fullest bin so a stray record does not place it. The record map shows every record used.
 

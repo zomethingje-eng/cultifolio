@@ -142,8 +142,8 @@
 {#if sync.configured}
   <div class="secrule"><h2>This device</h2><div class="line"></div><span class="n">vault {sync.vaultId.slice(0, 6)}…</span></div>
   <div class="cards">
-    <div class="card" data-runs={sync.runs}><div class="lab">Status</div><div class="val" style="font-family: var(--ui); font-size: 17px; font-weight: 700">{sync.busy ?? (sync.lastError ? 'Not synced' : sync.vaultFull ? 'Vault full' : 'Synced')}</div><div class="sub">{sync.busy ? '' : sync.lastError ? sync.lastError : sync.lastSync ? `everything on the server ${ago(sync.lastSync)} is here` : 'not yet'}</div></div>
-    <div class="card"><div class="lab">Waiting to send</div><div class="val">{sync.pending}</div><div class="sub">{sync.pending === 1 ? 'change' : 'changes'} made here and not yet up</div></div>
+    <div class="card" data-runs={sync.runs}><div class="lab">Status</div><div class="val" style="font-family: var(--ui); font-size: 17px; font-weight: 700">{sync.busy ?? (sync.offline ? 'Offline' : sync.lastError ? 'Not synced' : sync.vaultFull ? 'Vault full' : sync.runs ? 'Synced' : 'Not checked yet')}</div><div class="sub">{sync.busy ? '' : sync.offline ? (sync.pending ? `${sync.pending} ${sync.pending === 1 ? 'change' : 'changes'} kept here, sent when you are back online` : 'nothing waiting; it will check when you are back online') : sync.lastError ? sync.lastError : sync.runs ? (sync.lastSync ? `everything on the server ${ago(sync.lastSync)} is here` : 'not yet') : (sync.lastSync ? `last synced ${ago(sync.lastSync)}; checking now` : 'checking now')}</div></div>
+    <div class="card"><div class="lab">Waiting to send</div><div class="val">{sync.pending}</div><div class="sub">field {sync.pending === 1 ? 'change' : 'changes'} made here and not yet up (a note is one; a new plant is several)</div></div>
     {#if sync.quarantined.length || sync.refused.length}
       <div class="card"><div class="lab">Set aside</div><div class="val">{sync.quarantined.length + sync.refused.length}</div><div class="sub">{#if sync.quarantined.length}{sync.quarantined.length} {sync.quarantined.length === 1 ? 'batch' : 'batches'} on the server could not be read here{/if}{#if sync.quarantined.length && sync.refused.length}; {/if}{#if sync.refused.length}the server refused {sync.refused.length} {sync.refused.length === 1 ? 'item' : 'items'} from this device{/if}. Syncing carries on around them.</div></div>
     {/if}
@@ -238,11 +238,20 @@
   </div>
 {:else}
   <div class="cult"><div class="body prose">
-    <p>Not syncing. Your collection is on this device only. Set up a vault here if this is your first device, or join with the key from a device that already has one.</p>
+    {#if sync.wasIn}
+      <p>Not syncing. This device was in vault <code>{sync.wasIn.vaultId.slice(0, 6)}…</code> until {ago(sync.wasIn.at)}; its collection is still here. To carry on with your other devices, rejoin with the same key. Setting up a new vault here instead makes a second, separate one, which your other devices would not see.</p>
+    {:else}
+      <p>Not syncing. Your collection is on this device only. Set up a vault here if this is your first device, or join with the key from a device that already has one.</p>
+    {/if}
     <p class="small muted">What sync does: it moves an encrypted copy of your collection between your devices through this site, which cannot read it. The key is the only way in: there is no account and no recovery, so a lost key means a lost copy (your devices keep theirs, and a backup file needs no key).</p>
     <div class="row">
-      <button id="sync-start" class="btn pri" onclick={startCreate}>Set up sync on this device</button>
-      <button id="sync-have-key" class="btn" onclick={() => { mode = 'join'; err = ''; }}>I have a key</button>
+      {#if sync.wasIn}
+        <button id="sync-have-key" class="btn pri" onclick={() => { mode = 'join'; err = ''; }}>Rejoin with your key</button>
+        <button id="sync-start" class="btn" onclick={startCreate}>Set up a new, separate vault</button>
+      {:else}
+        <button id="sync-start" class="btn pri" onclick={startCreate}>Set up sync on this device</button>
+        <button id="sync-have-key" class="btn" onclick={() => { mode = 'join'; err = ''; }}>I have a key</button>
+      {/if}
     </div>
   </div></div>
   <div class="secrule"><h2>What you are trusting</h2><div class="line"></div></div>

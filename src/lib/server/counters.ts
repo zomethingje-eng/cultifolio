@@ -48,8 +48,10 @@ export class Counters extends DurableObject {
   /** The running totals, for a look from the outside. */
   async totals(day: string): Promise<{ day: number; all: number; addresses: number }> {
     const got = await this.ctx.storage.get<number>([`day:${day}`, 'all']);
-    const ips = await this.ctx.storage.list({ prefix: 'ip:' });
-    return { day: got.get(`day:${day}`) ?? 0, all: got.get('all') ?? 0, addresses: ips.size };
+    const ips = await this.ctx.storage.list<number>({ prefix: 'ip:' });
+    let addresses = 0;
+    for (const n of ips.values()) if (n > 0) addresses++; // a refunded address at zero is not an address that made a vault (round twenty-four, 6)
+    return { day: got.get(`day:${day}`) ?? 0, all: got.get('all') ?? 0, addresses };
   }
   /**
    * At every UTC midnight: every per-address and per-day key not dated today or yesterday goes. A key dated the 25th is

@@ -82,6 +82,8 @@ export interface PlantEvent {
   measures?: Record<string, number> | null;
   /** A count, for sowing events: seedlings up so far (germinate, cumulative), plants potted (potup), plants lost (loss). */
   n?: number | null;
+  /** Written by the app (a place removed, a rename) or by a place-wide action (Water all), not by the grower looking at this plant: it never counts as the plant being seen (round twenty-four, 3). */
+  auto?: boolean | null;
 }
 
 export interface Taxon {

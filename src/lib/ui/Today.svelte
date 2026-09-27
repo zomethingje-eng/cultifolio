@@ -1,6 +1,6 @@
 <script lang="ts">
   import { units } from '$lib/ui/units.svelte';
-  import { localDate, localDateYearAgo } from '$core/dates';
+  import { localDate, localDateYearAgo, daysBetween } from '$core/dates';
   import { site } from '$lib/ui/site.svelte';
   import { tempUnit, rainUnit, tempN, rainN } from '$core/units';
   /**
@@ -32,10 +32,18 @@
   const sowings = $derived(collection.ready ? collection.sowings.filter((s) => s.status === 'active').sort((a, b) => a.sown.localeCompare(b.sown)) : []);
   const growing = $derived(collection.ready ? collection.accessions.filter((a) => a.status === 'growing') : []);
   const unphotographed = $derived(growing.filter((a) => !collection.photos(a.id).some((p) => p.d >= yearAgo)));
+  // The two facts the plants list and the place pages already flag, said once here: not watered for three weeks (by the
+  // log, from the day the record was made when nothing is logged), and missed at the last audit or not seen for ninety
+  // days. Facts from the log, not a schedule (round twenty-four, 11).
+  const sinceCare = (a: (typeof growing)[number]) => { const d = collection.events(a.id).find((e) => e.t === 'water')?.d; return d ? daysBetween(d) : daysBetween(collection.madeOn('accession', a.id) ?? a.acquired ?? localDate()); };
+  const dry = $derived(growing.filter((a) => sinceCare(a) > 21));
+  const unseen = $derived(growing.filter((a) => { if (collection.missedAt(a.id)) return true; const s = collection.lastSeen(a.id); return s != null && daysBetween(s) > 90; }));
   const frostLine = $derived(frost && 'unchecked' in frost ? { tone: 'warn', text: frost.unchecked } : frost && frost.risk.level !== 'none' ? { tone: 'bad', text: `${frost.risk.level}: ${frost.risk.text}` } : null);
   const lines = $derived(
     [
       frostLine ? { href: '/frost', tone: frostLine.tone, text: frostLine.text } : null,
+      dry.length ? { href: '/plants?show=due', tone: 'warn', text: `${dry.length} of ${growing.length} plants not watered, or not recorded as watered, for three weeks or more.` } : null,
+      unseen.length ? { href: '/places', tone: 'warn', text: `${unseen.length} plant${unseen.length === 1 ? '' : 's'} missed at the last audit or not seen for ninety days${unseen.length <= 3 ? ': ' + unseen.map(accNo).join(', ') : ''}.` } : null,
       sowings.length ? { href: '/propagation', tone: 'ok', text: `${sowings.length} propagation batch${sowings.length === 1 ? '' : 'es'} in the tray, the oldest ${sowNo(sowings[0])} (${sowings[0].taxonName}) sown ${sowings[0].sown}.` } : null,
       unphotographed.length && growing.length ? { href: '/plants?show=nophoto', tone: 'muted', text: `${unphotographed.length} of ${growing.length} plants without a photograph this year${unphotographed.length <= 3 ? ': ' + unphotographed.map(accNo).join(', ') : ''}.` } : null
     ].filter((x): x is { href: string; tone: string; text: string } => !!x)

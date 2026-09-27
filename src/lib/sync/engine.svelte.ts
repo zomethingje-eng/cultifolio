@@ -38,7 +38,7 @@
 import { collection } from '$lib/db/collection.svelte';
 import { StoppedError, getMeta, setMeta, setMetaIfKey, getPhotoBlobs, putPhotoBlobs, photoBlobIds, outboxKeys, outboxAck, outboxFill, outboxClear, changesByKeys, allChanges, appendChanges, onOtherTabWrite, announceSyncForgotten } from '$lib/db/vault';
 import { deriveKeys, sealJson, openJson, seal, open, packPhoto, unpackPhoto, parseVaultKey, batchFingerprint, sha256hex, type VaultKeys } from './crypto';
-import { MAX_BATCH_BYTES, MAX_PHOTO_BYTES, SEAL_OVERHEAD, OVERLAP_MS, PUSH_HEADERS, batchName, listAfter } from './limits';
+import { MAX_BATCH_BYTES, MAX_PHOTO_BYTES, SEAL_OVERHEAD, OVERLAP_MS, PUSH_HEADERS, batchName, listAfter, logBatch } from './limits';
 import { validateChanges, isHeld, dueAt, hlcWall, type Change } from '$core/log';
 import { hlcCompare, MAX_AHEAD_MS } from '$core/hlc';
 import type { Photo } from '$lib/db/types';
@@ -68,6 +68,8 @@ interface SyncMeta {
 }
 
 const META = 'sync';
+/** Written by "Stop syncing" (and a replace from backup, which goes through it): which vault this device was in, so the sync page can lead with rejoining rather than with making a second vault (round twenty-four, 10). */
+const WAS = 'sync-was';
 const BATCH_MAX = 2000;
 /** While the page is visible, pull this often even with nothing to push: a laptop left on /plants follows the phone. */
 const IDLE_PULL_MS = 5 * 60_000;
@@ -83,6 +85,10 @@ class Sync {
   busy = $state<string | null>(null);
   lastSync = $state<string | null>(null);
   lastError = $state<string | null>(null);
+  /** The last run could not reach the server at all (no network), as opposed to the server answering with a refusal: the page says offline, and that the changes are kept (round twenty-four, 9). */
+  offline = $state(false);
+  /** The vault this device was in before it stopped syncing, if any, with when it stopped. */
+  wasIn = $state<{ vaultId: string; at: string } | null>(null);
   /** Runs that finished on this page, well or badly: the sync page shows it, so a test (or a person) can tell a new "Synced" from the one that was already there (round thirteen, B2). */
   runs = $state(0);
   pending = $state(0);
@@ -109,6 +115,7 @@ class Sync {
   async init(base = ''): Promise<void> {
     this.base = base;
     if (this.meta) return;
+    this.wasIn = (await getMeta<{ vaultId: string; at: string }>(WAS)) ?? null;
     const m = await getMeta<SyncMeta & { own?: string[]; cursor?: string; firstPushDone?: boolean }>(META);
     if (m?.key) {
       // Meta written by the HLC-cursor engine: carry the key, start the arrival cursor from zero (a re-list is idempotent).
@@ -189,6 +196,8 @@ class Sync {
     this.busy = mode === 'join' ? 'Joining…' : 'Starting…';
     try {
       await setMeta(META, this.meta);
+      await setMeta(WAS, null);
+      this.wasIn = null;
       await outboxFill(); // everything on this device goes up first
       this.configured = true;
       this.hook();
@@ -201,8 +210,10 @@ class Sync {
 
   /** Stop syncing on this device. Nothing local is deleted; nothing on the server is deleted. */
   async forget(): Promise<void> {
+    const was = this.vaultId ? { vaultId: this.vaultId, at: new Date().toISOString() } : null;
     this.dropped(); // this.meta is null from here: a run in flight cannot write the old record back (round fifteen, 2)
     await setMeta(META, null);
+    if (was) { await setMeta(WAS, was); this.wasIn = was; }
     await outboxClear();
     announceSyncForgotten(); // and the other tabs drop theirs
   }
@@ -244,6 +255,8 @@ class Sync {
     this.configured = false;
     this.vaultId = '';
     this.lastSync = null;
+    this.lastError = null;
+    this.offline = false;
     this.pending = 0;
     this.quarantined = [];
     this.refused = [];
@@ -377,12 +390,16 @@ class Sync {
       if (this.meta !== m) throw stopped(); // the 429 was caught above; a stop or a new vault during the push still ends the run here
       const got = await this.pull(m);
       m.lastSync = new Date().toISOString();
+      this.offline = false;
       await this.save(m); // refuses, and throws, if this run is stale: the sync time below is then never shown for a vault this device has left (round twenty-one, 4)
       this.lastSync = m.lastSync;
       // Said only when something did arrive (round sixteen, design note).
       if (wait) { if (got) wait.message = `received ${got} batch${got === 1 ? '' : 'es'}; ${wait.message}`; throw wait; }
     } catch (e) {
       if (g === this.gen) {
+        // A fetch that never reached the server throws a TypeError ("Failed to fetch", "Load failed"); the browser's own
+        // offline flag says so more plainly when it is set. Either way the page says offline, not failed (round twenty-four, 9).
+        this.offline = e instanceof TypeError || (typeof navigator !== 'undefined' && navigator.onLine === false);
         this.lastError = e instanceof Error ? e.message : String(e);
         const wait = (e as { retryAfterMs?: number })?.retryAfterMs;
         if (wait) this.schedule(wait);
@@ -488,7 +505,7 @@ class Sync {
     const lastWall = hlcWall(batch[batch.length - 1].t);
     const plain = await batchFingerprint(this.k(m), utf8.encode(JSON.stringify(batch)));
     const key = batchName(lastWall, collection.device, plain);
-    const body = await sealJson(this.k(m), 'log', { v: 1, device: collection.device, changes: batch });
+    const body = await sealJson(this.k(m), 'log', logBatch(collection.device, batch));
     if (body.length > MAX_BATCH_BYTES && mayResplit && batch.length > 1) {
       // Too big before it ever leaves: halve it. Each half is named by its own content.
       const mid = Math.ceil(batch.length / 2);

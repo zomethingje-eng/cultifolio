@@ -12,6 +12,7 @@
   import { crumb } from '$lib/ui/crumb.svelte';
   import { onMount } from 'svelte';
   import { sync } from '$lib/sync/engine.svelte';
+  import { today } from '$lib/ui/today.svelte';
   import { collection } from '$lib/db/collection.svelte';
   import { onVaultNotice } from '$lib/db/vault';
   import { afterNavigate, beforeNavigate } from '$app/navigation';
@@ -99,6 +100,7 @@
   });
   // Sync wakes with the app when a vault key is on this device; it does nothing otherwise.
   onMount(async () => {
+    today.start();
     prefs.load(); // whether private pages may fetch the reference's photographs: off until switched on
     // The app shell offline: registered after load so it never competes with the page's own requests.
     if ('serviceWorker' in navigator && !import.meta.env.DEV) {
@@ -159,7 +161,7 @@
   <nav class="seg topseg" aria-label="Places">
     {#each places as pl}<a href={pl.href} class:on={pl.on(page.url.pathname)}>{pl.label === 'Plants' ? 'My plants' : pl.label}</a>{/each}
   </nav>
-  <a class="iconbtn sync" href="/sync" title={sync.configured ? (sync.busy ?? (sync.lastError ? 'Sync: ' + sync.lastError : 'Synced')) : 'Sync'} aria-label="Sync" class:on={sync.configured} class:busy={!!sync.busy} class:err={!!sync.lastError}>⟳</a>
+  <a class="iconbtn sync" href="/sync" title={sync.configured ? (sync.busy ?? (sync.offline ? 'Sync: offline; changes are kept here' : sync.lastError ? 'Sync: ' + sync.lastError : sync.runs ? 'Synced' : 'Sync: not checked yet')) : 'Sync'} aria-label="Sync" class:on={sync.configured} class:busy={!!sync.busy} class:err={!!sync.lastError}>⟳</a>
   <a class="iconbtn" href="/plants/new" title="Add a plant" aria-label="Add a plant">+</a>
 </div>
 {#if menuOpen}

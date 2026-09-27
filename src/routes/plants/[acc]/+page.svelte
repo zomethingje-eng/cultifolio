@@ -194,7 +194,7 @@
   const setup = $derived.by(() => {
     if (!a || a.status !== 'growing') return [];
     const rows: { k: string; n: string; t: string; w: string; go: () => void }[] = [];
-    if (!a.locationId) rows.push({ k: 'place', n: '1', t: 'Give it a place', w: 'the greenhouse, bench, shelf or windowsill it lives on; conditions and the frost watch follow', go: () => { moveTo = null; moving = true; } });
+    if (!collection.placeOf(a.locationId)) rows.push({ k: 'place', n: '1', t: 'Give it a place', w: 'the greenhouse, bench, shelf or windowsill it lives on; conditions and the frost watch follow', go: () => { moveTo = null; moving = true; } });
     if (!photos.length) rows.push({ k: 'photo', n: '2', t: 'Add a photograph', w: 'the page and the labels use it', go: () => { adding = true; setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0); } });
     if (!lastMeasure) rows.push({ k: 'measure', n: '3', t: 'Measure it', w: 'growth is read from the first measurement on', go: () => { moreActs = true; quick('measure'); } });
     return rows.length >= 2 ? rows : [];
@@ -205,6 +205,7 @@
   const recordedText = (label: string) => ({ Watered: 'Watering recorded', Fed: 'Feeding recorded', Treated: 'Treatment recorded', Repotted: 'Repotting recorded', Measured: 'Measurement recorded', Flowered: 'Flowering recorded', Note: 'Note recorded', Died: 'Death recorded', Pruned: 'Pruning recorded', Moved: 'Move recorded' } as Record<string, string>)[label] ?? `${label} recorded`;
   function quick(t: EventType) {
     et = t;
+    ed = localDate(); // today as of opening the form, not as of loading the page (round twenty-four, 2)
     logOpen = true;
     // The first thing to fill: a measurement's first figure, a treatment's product, else the note.
     setTimeout(() => (document.querySelector<HTMLElement>(t === 'measure' ? '.measures input' : t === 'treat' || t === 'feed' ? '#ev-used' : '#ev-note') ?? document.getElementById('ev-note'))?.focus(), 0);
@@ -225,6 +226,7 @@
   let measures = $state<Record<string, string | number | null>>({});
   let editingNotes = $state(false);
   let notesDraft = $state('');
+  let notesBase = ''; // the text the editor opened on: a text that changed underneath it (another tab, a pull) is logged before it is written over (round twenty-four, 1)
   let myNotesDraft = $state('');
   let editingMy = $state(false);
 
@@ -250,7 +252,8 @@
     const p = parseName(typed);
     const hybrid = f.nameKind === 'hybrid' || p.kind === 'hybrid';
     const taxonName = hybrid ? (p.kind === 'hybrid' ? p.scientific : p.genus || typed) : typed;
-    const taxonKey = hybrid ? null : f.taxonName.trim() ? edKey : (a.taxonKey ?? null);
+    // A hybrid's key goes only when its name changes: an edit to a nothospecies' price keeps the key the list gave it (round twenty-four, 5).
+    const taxonKey = hybrid && taxonName !== a.taxonName ? null : f.taxonName.trim() ? edKey : (a.taxonKey ?? null);
     const nameKind = hybrid ? 'hybrid' : f.nameKind;
     const parentage = hybrid ? f.parentage.trim() || p.parentage || (p.kind === 'species' && p.epithet ? typed : null) : null;
     const wasKind = kindOf(a); // read before the write: `a` is the live record and says the new kind once it is saved
@@ -258,8 +261,9 @@
     // A change of identity is provenance: the old name goes in the log, and into "name as received" if that was empty (round twenty-three, 3).
     const oldFull = `${a.taxonName}${a.cultivar ? ` '${a.cultivar}'` : ''}`;
     const newFull = `${taxonName}${f.cultivar.trim() ? ` '${f.cultivar.trim()}'` : ''}`;
-    await collection.put('accession', id, { taxonName, taxonKey, cultivar: f.cultivar.trim() || null, nameKind, parentage, nameAsReceived: f.nameAsReceived.trim() || (renamed && !a.nameAsReceived ? oldFull : null), fieldNumber: f.fieldNumber.trim() || null, provenance: f.provenance, acquired: f.acquired || null, sourceFrom: f.sourceFrom.trim() || null, sourceForm: f.sourceForm.trim() || null, price: f.price.trim() || null, locationId: f.locationId ?? null, location: f.locationId ? null : a.location ?? null });
-    if (renamed && oldFull !== newFull) await collection.addEvent({ acc: id, d: localDate(), t: 'note', note: `Renamed from ${oldFull} to ${newFull}${nameKind !== wasKind ? ` (${nameKind === 'hybrid' ? 'now a hybrid' : nameKind === 'cultivar' ? 'now a cultivar' : 'now a species'})` : ''}` });
+    await collection.put('accession', id, { taxonName, taxonKey, cultivar: f.cultivar.trim() || null, nameKind, parentage, nameAsReceived: f.nameAsReceived.trim() || (oldFull !== newFull && !a.nameAsReceived ? oldFull : null), fieldNumber: f.fieldNumber.trim() || null, provenance: f.provenance, acquired: f.acquired || null, sourceFrom: f.sourceFrom.trim() || null, sourceForm: f.sourceForm.trim() || null, price: f.price.trim() || null, locationId: f.locationId ?? null, location: f.locationId ? null : a.location ?? null });
+    const kindWord = nameKind === 'hybrid' ? 'a hybrid' : nameKind === 'cultivar' ? 'a cultivar' : 'a species';
+    if (renamed) await collection.addEvent({ acc: id, d: localDate(), t: 'note', note: oldFull !== newFull ? `Renamed from ${oldFull} to ${newFull}${nameKind !== wasKind ? ` (now ${kindWord})` : ''}` : `Now recorded as ${kindWord}`, auto: true });
     if (moved && f.locationId) await collection.addEvent({ acc: id, d: localDate(), t: 'move', note: `to ${collection.locationName(f.locationId)}` });
     // The log's "Acquired" line is the same fact as the card's date and source: it follows an edit rather than keeping the old one.
     const acq = events.find((e) => e.t === 'acquire');
@@ -287,7 +291,10 @@
     void focusNext('#status-toggle'); // the button that replaced the one just pressed
   }
   async function saveNotes() {
-    await collection.put('accession', id, { notes: notesDraft.trim() || null });
+    const current = a?.notes ?? '';
+    const next = notesDraft.trim() || null;
+    await collection.put('accession', id, { notes: next });
+    if (current && current !== notesBase && current !== next) await collection.addEvent({ acc: id, d: localDate(), t: 'note', note: `Notes replaced by this edit; before it they read: ${current}`, auto: true });
     editingNotes = false;
   }
   async function saveMyNotes() {
@@ -341,7 +348,7 @@
         {#if a.fieldNumber}<span class="fnchip">{a.fieldNumber}</span> · {/if}
         {#if a.provenance === 'unknown' && !a.sourceFrom && !a.fieldNumber}Added {fmtDate(a.acquired)}{:else}{provLabel(a.provenance)}{#if a.acquired}{' · '}{a.sourceForm ?? 'acquired'}{a.sourceFrom ? ` from ${a.sourceFrom}` : ''}{' '}{fmtDate(a.acquired)}{/if}{/if}
         {#if a.sowingId}{' · '}raised from <a class="mono" href="/propagation/{a.sowingId}">{sowing ? sowNo(sowing) : a.sowingId}</a>{#if sowing && sowing.parentAcc} (from <a class="mono" href="/plants/{sowing.parentAcc}">{collection.accession(sowing.parentAcc) ? accNo(collection.accession(sowing.parentAcc)!) : sowing.parentAcc}</a>){/if}{/if}
-        {#if a.locationId}{' · '}at <a class="place" href="/places/{a.locationId}">{collection.locationName(a.locationId)}</a>{:else if a.location}{' · '}at <span class="place">{a.location}</span>{/if}
+        {#if a.locationId && collection.placeOf(a.locationId)}{' · '}at <a class="place" href="/places/{collection.placeOf(a.locationId)}">{collection.locationName(a.locationId)}</a>{:else if a.locationId}{' · '}<span class="place">its place was removed; no place now</span>{:else if a.location}{' · '}at <span class="place">{a.location}</span>{/if}
         {#if !a.taxonKey && kind !== 'hybrid' && ref !== 'ok' && ref !== 'loading'}{' · '}<NotChecked inline what="Name" why="The name was kept as typed: it matched no reference name, or the name service did not answer when the plant was added. Edit the plant and pick the name from the list to check it." />{/if}
       </p>
       {#if kind === 'hybrid'}
@@ -517,9 +524,9 @@
     {#if editingNotes}
       <div class="fields"><textarea id="acc-notes" rows="4" bind:value={notesDraft}></textarea><div class="actions"><button class="btn" onclick={() => (editingNotes = false)}>Cancel</button><button class="btn pri" onclick={saveNotes}>Save</button></div></div>
     {:else if a.notes}
-      <div class="body">{a.notes}</div><div class="foot"><button class="linkish" onclick={() => { notesDraft = a.notes ?? ''; editingNotes = true; }}>Edit</button></div>
+      <div class="body">{a.notes}</div><div class="foot"><button class="linkish" onclick={() => { notesDraft = a.notes ?? ''; notesBase = notesDraft; editingNotes = true; }}>Edit</button></div>
     {:else}
-      <div class="none">Nothing yet. <button class="linkish" onclick={() => { notesDraft = ''; editingNotes = true; }}>Add a note</button></div>
+      <div class="none">Nothing yet. <button class="linkish" onclick={() => { notesDraft = ''; notesBase = ''; editingNotes = true; }}>Add a note</button></div>
     {/if}
   </div>
   <div class="cult">

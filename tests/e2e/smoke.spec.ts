@@ -767,6 +767,23 @@ test('sync: an offline edit uploaded late is still discovered, and a backup merg
   await syncNow(b);
   await b.goto('/plants');
   await expect(b.locator('a.accrow', { hasText: 'Welwitschia' })).toBeVisible();
+  // B stops syncing: the page remembers the vault it was in and leads with rejoining, not with a second vault (round twenty-four, 10)
+  await b.goto('/sync');
+  await b.click('#sync-forget');
+  await b.getByRole('button', { name: 'Yes, stop' }).click();
+  await expect(b.locator('.prose').first()).toContainText('This device was in vault');
+  await expect(b.locator('#sync-have-key')).toHaveText('Rejoin with your key');
+  await expect(b.locator('#sync-have-key')).toHaveClass(/pri/);
+  await b.click('#sync-have-key');
+  await b.fill('#sync-key', key);
+  await b.click('#sync-join');
+  await expect(b.locator('.card', { hasText: 'Status' })).toContainText('Synced');
+  // offline, the status says so and that the changes are kept, rather than "Failed to fetch" (round twenty-four, 9)
+  await B.setOffline(true);
+  await b.locator('#sync-now').click();
+  await expect(b.locator('.card', { hasText: 'Status' })).toContainText('Offline', { timeout: 20000 });
+  await expect(b.locator('.card', { hasText: 'Status' })).toContainText('back online');
+  await B.setOffline(false);
   await A.close();
   await B.close();
   await C.close();
@@ -1557,6 +1574,17 @@ test('a grower\'s home says what needs them: sowings in the tray and plants with
   await today.locator('.line', { hasText: 'without a photograph' }).click();
   await expect(page).toHaveURL(/\/plants\?show=nophoto$/);
   await expect(page.locator('.chipbtn.on')).toContainText('No photo this year');
+  // a plant last watered a month ago, by its log: Today says so, in the words of the plants list's Due chip (round twenty-four, 11)
+  await expect(today).toHaveCount(0);
+  await page.locator('.accrow').first().click();
+  await page.locator('.quickbar .btn', { hasText: /^Water$/ }).click();
+  const monthAgo = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10);
+  await page.fill('#ev-date', monthAgo);
+  await page.locator('.evform button[type=submit]').click();
+  await page.goto('/');
+  await expect(page.locator('.today .line', { hasText: 'not watered, or not recorded as watered, for three weeks' })).toBeVisible();
+  await page.locator('.today .line', { hasText: 'not watered' }).click();
+  await expect(page).toHaveURL(/\/plants\?show=due$/);
 });
 
 test('the install bar waits for a second day, and stays away for thirty days once dismissed', async ({ page }) => {
@@ -1757,6 +1785,7 @@ test('the front page offline asks for the catalogue once and offers a retry, nev
 test('settings previews the next number from the numbers given, and an edited acquisition date follows into the log', async ({ page }) => {
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
   await page.getByRole('button', { name: /^Add/ }).click();
+  await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   await page.goto('/plants/new?species=Copiapoa%20humilis&key=5384999');
   await addPlant(page);
   await page.goto('/settings');
@@ -1858,6 +1887,7 @@ test('a germination count that potted plants rest on cannot be removed; bottom h
 test('the one search box finds a plant by its number, and the cold floor is one figure everywhere it appears (round seven, 18 and 1)', async ({ page }) => {
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
   await page.getByRole('button', { name: /^Add/ }).click();
+  await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   await page.goto('/');
   await page.waitForLoadState('networkidle'); // a value typed before hydration is dropped when the bound input hydrates
   await page.fill('.searchbar', '2026-0001');
@@ -2045,6 +2075,7 @@ test('round twenty-three: a name the reference does not hold is added on the sec
   const porch = await page.locator('#loc-parent option', { hasText: 'Porch' }).getAttribute('value');
   await page.selectOption('#loc-parent', porch!);
   await page.getByRole('button', { name: 'Add', exact: true }).click();
+  await expect(page.locator('.tree .row', { hasText: 'Cold frame' })).toBeVisible(); // the write is on screen before the page is left
   await page.goto(`/plants/${acc}`);
   await page.locator('.quickbar .btn', { hasText: /^Move$/ }).click();
   const frame = await page.locator('#mv-loc option', { hasText: 'Cold frame' }).getAttribute('value');

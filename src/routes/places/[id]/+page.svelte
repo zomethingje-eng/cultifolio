@@ -29,13 +29,15 @@
   const here = $derived(collection.plantsAt(id, false));
   const deep = $derived(collection.plantsAt(id, true));
   const cond = $derived(collection.conditions(id));
-  const today = localDate();
+  const today = () => localDate(); // read when the action runs, not when the page loaded (round twenty-four, 2)
   $effect(() => {
     if (loc) setCrumb([{ label: 'Places', href: '/places' }, ...path.slice(0, -1).map((p) => ({ label: p.name, href: `/places/${p.id}` })), { label: loc.name }]);
     return () => setCrumb([]);
   });
   const dli = $derived(cond.ppfd != null ? (cond.ppfd * (cond.lightHours ?? 12) * 3600) / 1e6 : null);
-  const lastWater = $derived.by(() => { const ds = deep.map((a) => collection.events(a.id).find((e) => e.t === 'water')?.d).filter((d): d is string => !!d).sort(); return ds.length ? ds[ds.length - 1] : null; });
+  // The most recent watering of any plant here, and the longest wait among them, so "0 d ago" cannot stand for a place where two plants are at 35 d (round twenty-four, 12).
+  const watering = $derived.by(() => { const ds = deep.map((a) => collection.events(a.id).find((e) => e.t === 'water')?.d); const dated = ds.filter((d): d is string => !!d).sort(); return { newest: dated.length ? dated[dated.length - 1] : null, oldest: dated.length ? dated[0] : null, never: ds.length - dated.length }; });
+  const lastWater = $derived(watering.newest);
   const lastAudit = $derived.by(() => { const ds = deep.map((a) => collection.events(a.id).find((e) => e.t === 'audit')?.d).filter((d): d is string => !!d).sort(); return ds.length ? ds[ds.length - 1] : null; });
   const unseen = $derived(deep.filter((a) => { const d = daysSince(collection.lastSeen(a.id)); return d == null || d > 90; }).length);
 
@@ -71,7 +73,8 @@
   let busy = $state('');
   async function waterAll(t: 'water' | 'feed') {
     busy = t;
-    const n = await collection.addEvents(deep.map((a) => ({ acc: a.id, d: today, t, note: `whole ${loc?.type ?? 'location'}: ${loc?.name ?? ''}` })));
+    // A place-wide line is not an observation of each plant, so it never counts as one being seen (round twenty-four, 3).
+    const n = await collection.addEvents(deep.map((a) => ({ acc: a.id, d: today(), t, note: `whole ${loc?.type ?? 'location'}: ${loc?.name ?? ''}`, auto: true })));
     busy = '';
     flash = `${t === 'water' ? 'Watered' : 'Fed'} ${n} plant${n === 1 ? '' : 's'}.`;
     setTimeout(() => (flash = ''), 3000);
@@ -89,7 +92,8 @@
     const seen = deep.filter((a) => present[a.id]);
     const missed = deep.filter((a) => !present[a.id]);
     // Both outcomes are logged: a plant not found at an audit carries that on its own timeline, and the row says so on every screen size (round twenty-three, 5).
-    await collection.addEvents([...seen.map((a) => ({ acc: a.id, d: today, t: 'audit' as const, note: null })), ...missed.map((a) => ({ acc: a.id, d: today, t: 'audit' as const, note: 'not seen' }))]);
+    const d = today();
+    await collection.addEvents([...seen.map((a) => ({ acc: a.id, d, t: 'audit' as const, note: null })), ...missed.map((a) => ({ acc: a.id, d, t: 'audit' as const, note: 'not seen' }))]);
     const missing = missed.length;
     flash = `${seen.length} present${missing ? `, ${missing} not seen: ${missed.map(accNo).join(', ')}` : ''}.`;
     auditing = false;
@@ -206,7 +210,7 @@
   <div class="cards">
     {#if cond.floorC != null}<div class="card"><div class="lab">Floor</div><div class="val">{cond.floorC == null ? '–' : tempN(cond.floorC, units.current, 1)}<span class="u">{cond.floorC == null ? '' : ' ' + tempUnit(units.current)}</span></div><div class="sub">{cond.floorC == null ? 'not stated' : cond.from.floorC && cond.from.floorC !== loc.name ? `from ${cond.from.floorC}` : 'set here'}</div></div>{/if}
     {#if dli != null}<div class="card"><div class="lab">Light</div><div class="val">{dli == null ? '–' : dli.toFixed(0)}<span class="u">{dli == null ? '' : ' DLI'}</span></div><div class="sub">{cond.ppfd == null ? 'not measured' : `${cond.ppfd} µmol × ${cond.lightHours ?? 12} h${cond.from.ppfd && cond.from.ppfd !== loc.name ? ` · from ${cond.from.ppfd}` : ''}`}</div></div>{/if}
-    {#if lastWater}<div class="card"><div class="lab">Last watered</div><div class="val">{lastWater ? daysSince(lastWater) : '–'}<span class="u">{lastWater ? ' d ago' : ''}</span></div><div class="sub">{lastWater ? `most recent plant here, ${lastWater}` : 'nothing recorded'}</div></div>{/if}
+    {#if lastWater}<div class="card"><div class="lab">Last watered</div><div class="val">{lastWater ? daysSince(lastWater) : '–'}<span class="u">{lastWater ? ' d ago' : ''}</span></div><div class="sub">{lastWater ? `the most recently watered plant; the longest waiting ${watering.oldest === lastWater ? 'the same' : `${daysSince(watering.oldest)} d`}${watering.never ? `; ${watering.never} never watered` : ''}` : 'nothing recorded'}</div></div>{/if}
     {#if lastAudit}<div class="card"><div class="lab">Last audit</div><div class="val">{lastAudit ? daysSince(lastAudit) : '–'}<span class="u">{lastAudit ? ' d ago' : ''}</span></div><div class="sub">{lastAudit ? lastAudit : 'never audited'}{unseen && deep.length ? ` · ${unseen} not seen in 90 d` : ''}</div></div>{/if}
   </div>
   {/if}
