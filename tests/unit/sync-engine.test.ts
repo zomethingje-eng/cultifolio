@@ -774,6 +774,67 @@ describe('a batch that cannot be read is set aside, not a wall', () => {
     await B.sync.setup(KEY2, 'join');
     expect(B.collection.accessions.map((a) => a.taxonName)).toEqual(['Lithops']);
   });
+  it('a push answered 429 after "Stop syncing" does not go on to pull: the stale run ends, sets no busy text, and a new vault set up meanwhile is not listed by it (round twenty, 2)', async () => {
+    const r2 = fakeR2();
+    const A = await boot(newMem('aaaaaaaaaaaa'), r2);
+    await A.sync.setup(KEY, 'create');
+    await A.collection.addAccession({ taxonName: 'Lithops', acc: 'A-1' });
+    // The old vault's push is held at the POST and then answered 429, which run() catches so the pull can still happen.
+    const real = globalThis.fetch;
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    let held = 0;
+    const gets: string[] = [];
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      if (init?.method === 'POST' && /\/api\/sync\/log\?/.test(String(input)) && held++ === 0) {
+        await gate;
+        return new Response('{"error":"wait"}', { status: 429, headers: { 'retry-after': '30' } });
+      }
+      if ((!init?.method || init.method === 'GET') && /\/api\/sync\/log\?/.test(String(input))) gets.push(String(input));
+      return real(input, init);
+    }) as typeof fetch;
+    const old = A.sync.run().catch((e: Error) => e);
+    await new Promise((r) => setTimeout(r, 50));
+    await A.sync.forget();
+    expect(A.sync.busy).toBeNull();
+    release();
+    const err = await old;
+    expect(err).toBeInstanceOf(Error);
+    expect(String((err as Error).message)).toMatch(/stopped/);
+    expect(A.sync.busy).toBeNull(); // the stale run did not set "Checking for changes…" on a device that has stopped
+    expect(gets).toEqual([]); // and it listed nothing
+    expect(A.sync.lastError).toBeNull();
+    // the same with a new vault set up meanwhile: the stale run does not list the new vault, and the new vault's runs are not blocked by a busy flag it left
+    const KEY2 = newVaultKey();
+    globalThis.fetch = real;
+    await A.sync.setup(KEY, 'create'); // back on the first vault; its plant is on the server already, so this run pushes nothing
+    await A.collection.addAccession({ taxonName: 'Conophytum', acc: 'A-2' }); // something to push
+    held = 0;
+    const gate2 = new Promise<void>((r) => (release = r));
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      if (init?.method === 'POST' && /\/api\/sync\/log\?/.test(String(input)) && held++ === 0) {
+        await gate2;
+        return new Response('{"error":"wait"}', { status: 429, headers: { 'retry-after': '30' } });
+      }
+      if ((!init?.method || init.method === 'GET') && /\/api\/sync\/log\?/.test(String(input))) gets.push(String(input));
+      return real(input, init);
+    }) as typeof fetch;
+    const old2 = A.sync.run().catch((e: Error) => e);
+    await new Promise((r) => setTimeout(r, 50));
+    await A.sync.forget();
+    gets.length = 0;
+    await A.sync.setup(KEY2, 'create'); // its own first run pushes and lists; the POST it makes is not the held one (held is past 0)
+    const newId = (await deriveKeys(KEY2)).id;
+    const listedByNew = gets.filter((u) => u.includes(newId)).length;
+    expect(listedByNew).toBeGreaterThan(0);
+    release();
+    await old2;
+    await new Promise((r) => setTimeout(r, 20));
+    expect(gets.filter((u) => u.includes(newId)).length).toBe(listedByNew); // the stale run added no listing of the new vault
+    expect(A.sync.busy).toBeNull();
+    expect(A.sync.key).toBe(KEY2);
+    globalThis.fetch = real;
+  });
   it('a batch with a reserved field is refused whole: nothing of it is applied', async () => {
     const r2 = fakeR2();
     const B = await boot(newMem('bbbbbbbbbbbb'), r2);
@@ -879,7 +940,11 @@ describe('new vaults have a ceiling (improvements, 1)', () => {
     const r = await fetch('/api/sync/vault', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: k.id, token: k.token, create: true }) });
     expect(r.status).toBe(503);
     expect(r.headers.get('cache-control')).toBe('no-store');
-    await expect(A.sync.setup(KEY, 'create')).rejects.toThrow(/^Sync is full for now/);
+    await expect(A.sync.setup(KEY, 'create')).rejects.toThrow(/^Sync is not taking new vaults for now/);
+    kv.set('vaults:all', '0');
+    kv.set(`vaults:all:${new Date().toISOString().slice(0, 10)}`, '200');
+    await expect(A.sync.setup(KEY, 'create')).rejects.toThrow(/^Sync has taken all the new vaults it can today/);
+    kv.delete(`vaults:all:${new Date().toISOString().slice(0, 10)}`);
     expect(A.sync.configured).toBe(false);
     // the address's own limit is a different sentence
     kv.set('vaults:all', '0');

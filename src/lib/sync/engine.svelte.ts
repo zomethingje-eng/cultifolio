@@ -175,7 +175,7 @@ class Sync {
     const keys = await deriveKeys(key);
     const r = await fetch(`${this.base}/api/sync/vault`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: keys.id, token: keys.token, create: mode === 'create' }) });
     if (!r.ok) {
-      // The server's own sentence where it gives one ("Sync is full for now…", "too many new vaults from this address today"); the fixed wording for the statuses whose meaning the client knows better.
+      // The server's own sentence where it gives one ("Sync is not taking new vaults for now…", "too many new vaults from this address today"); the fixed wording for the statuses whose meaning the client knows better.
       const said = await r.json().then((b: unknown) => (b && typeof b === 'object' && typeof (b as { error?: unknown }).error === 'string' ? (b as { error: string }).error : null)).catch(() => null);
       throw new Error(r.status === 404 ? 'No vault answers to that key. Check it against the other device; one wrong letter is a different vault.' : r.status === 403 ? 'That key does not open its vault.' : said ? said[0].toUpperCase() + said.slice(1) + (/[.!?]$/.test(said) ? '' : '.') : r.status === 503 ? 'Sync is not available on this server.' : `The server said ${r.status}.`);
     }
@@ -339,8 +339,7 @@ class Sync {
   }
 
   /** Re-fold what has come due: they are in the log already; ingesting them again applies them (an append of the same HLC is a no-op). */
-  private async refold(): Promise<void> {
-    const m = this.meta!;
+  private async refold(m: SyncMeta): Promise<void> {
     if (!m.held?.length) return;
     const hold = this.hold();
     const due = m.held.filter((t) => !isHeld(t, hold));
@@ -357,24 +356,28 @@ class Sync {
     // The generation this run belongs to: "Stop syncing" or a new vault during the run makes it stale, and a stale run
     // leaves the status, the busy flag and the run count to the vault that replaced it (round sixteen, 2).
     const g = this.gen;
+    // The meta this run belongs to, read once: every step below is given it, so a run that outlives "Stop syncing" or a
+    // new vault never reads the engine's meta afresh and finds the new vault's, or null (round twenty, 2).
+    const m = this.meta;
     this.lastError = null;
     this.busy = 'Starting…';
     try {
       await collection.load();
-      await this.refold();
+      await this.refold(m);
       // A push the server asks to wait on (429: the address's allowance is spent, say after a large photo upload) does not
       // stop the pull: other devices' changes still arrive, and the wait is reported afterwards (round fifteen, 7).
       let wait: Error | null = null;
       try {
-        await this.push();
+        await this.push(m);
       } catch (e) {
         if ((e as { retryAfterMs?: number })?.retryAfterMs) wait = e as Error;
         else throw e;
       }
-      const got = await this.pull();
-      this.meta.lastSync = new Date().toISOString();
-      this.lastSync = this.meta.lastSync;
-      await this.save(this.meta);
+      if (this.meta !== m) throw stopped(); // the 429 was caught above; a stop or a new vault during the push still ends the run here
+      const got = await this.pull(m);
+      m.lastSync = new Date().toISOString();
+      this.lastSync = m.lastSync;
+      await this.save(m);
       // Said only when something did arrive (round sixteen, design note).
       if (wait) { if (got) wait.message = `received ${got} batch${got === 1 ? '' : 'es'}; ${wait.message}`; throw wait; }
     } catch (e) {
@@ -418,8 +421,7 @@ class Sync {
     return { bytes: typeof b.bytes === 'number' ? b.bytes : 0, limit: typeof b.limit === 'number' ? b.limit : 0 };
   }
 
-  private async push(): Promise<void> {
-    const m = this.meta!;
+  private async push(m: SyncMeta): Promise<void> {
     const todo = await this.toPush();
     this.pending = todo.length;
     let sent = 0;
@@ -591,8 +593,7 @@ class Sync {
   }
 
   /** Returns how many batches were folded this run. */
-  private async pull(): Promise<number> {
-    const m = this.meta!;
+  private async pull(m: SyncMeta): Promise<number> {
     let got = 0;
     // The first page of a run starts a minute before the cursor; later pages continue strictly after the last batch listed.
     let after: { at: number; key: string } | null = null;

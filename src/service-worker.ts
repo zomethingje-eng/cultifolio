@@ -66,6 +66,19 @@ self.addEventListener('activate', (e) => {
 });
 
 const isShell = (path: string) => SHELLS.includes(path) || /^\/(plants|places|propagation)\/[^/]+$/.test(path);
+/**
+ * The two sections renamed in round nineteen. The server answers the old paths with a 301, but a private page's URL must not
+ * reach the server at all (its record id is in it), and offline there is no server: the worker answers the redirect itself,
+ * query kept, and the new path is then served as a shell like any other (round twenty, 1). The same map is in hooks.server.ts.
+ */
+const MOVED: Array<[RegExp, string]> = [
+  [/^\/benches(?=\/|$)/, '/places'],
+  [/^\/sowings(?=\/|$)/, '/propagation']
+];
+const moved = (path: string): string | null => {
+  for (const [from, to] of MOVED) if (from.test(path)) return path.replace(from, to);
+  return null;
+};
 /** Only our own server's HTML goes in the cache: a captive portal's 200 must not become the app shell until the next build. */
 const cacheableHtml = (r: Response) => r.ok && r.type === 'basic' && (r.headers.get('content-type') ?? '').startsWith('text/html');
 
@@ -89,6 +102,10 @@ self.addEventListener('fetch', (e) => {
         const r = await fetch(request);
         if (r.ok && r.type === 'basic') void cache.put(request, r.clone()).catch(() => {});
         return r;
+      }
+      if (request.mode === 'navigate') {
+        const to = moved(url.pathname);
+        if (to) return Response.redirect(url.origin + to + url.search, 301);
       }
       if (request.mode === 'navigate' && isShell(url.pathname) && url.pathname !== '/settings') {
         // A plant's own page is the /plants shell plus the vault, and the shell is the same HTML for every plant: it is

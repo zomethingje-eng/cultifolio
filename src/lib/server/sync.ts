@@ -17,6 +17,7 @@
  *   ipbytes:<ip>:<yyyy-mm-dd>  bytes stored from one address today
  *   vaults:<ip>:<yyyy-mm-dd>   vaults created from one address today
  *   rl:<bucket>:<ip>:<window>  requests from one address in one rate-limit window
+ * (<ip> is the IPv4 address, or the /64 of an IPv6 one: see `addressKey`)
  *
  * Batches are handed out in ARRIVAL order (R2's upload time), not in HLC
  * order: a device that edited offline at t1 and uploads after another device
@@ -455,37 +456,44 @@ export const resetKvWarning = () => (warnedNoKv = false);
 export const MAX_NEW_VAULTS_PER_DAY = 5;
 export const MAX_NEW_VAULTS_ALL_PER_DAY = 200;
 export const MAX_VAULTS = 2000;
-export type Creation = 'ok' | 'address' | 'full';
+export type Creation = 'ok' | 'address' | 'day' | 'total';
 export interface CreationCeilings {
   perDay?: number;
   max?: number;
 }
 export function creationCeilings(env: Record<string, unknown> | undefined): CreationCeilings {
-  const n = (v: unknown) => (typeof v === 'string' && /^\d+$/.test(v) ? Number(v) : undefined);
+  const n = (v: unknown) => (typeof v === 'number' && Number.isInteger(v) && v >= 0 ? v : typeof v === 'string' && /^\d+$/.test(v) ? Number(v) : undefined);
   return { perDay: n(env?.SYNC_VAULTS_PER_DAY), max: n(env?.SYNC_VAULTS_MAX) };
 }
 export async function allowCreation(kv: KVNamespace | undefined, ip: string, now = Date.now(), ceilings: CreationCeilings = {}): Promise<Creation> {
   if (!kv) {
     noKv();
-    return 'full';
+    return 'total';
   }
   const perDay = ceilings.perDay ?? MAX_NEW_VAULTS_ALL_PER_DAY;
   const max = ceilings.max ?? MAX_VAULTS;
-  const kIp = `vaults:${ip}:${day(now)}`;
+  const kIp = `vaults:${addressKey(ip)}:${day(now)}`;
   const kDay = `vaults:all:${day(now)}`;
   const kAll = 'vaults:all';
+  let nIp = 0, nDay = 0, nAll = 0;
   try {
     const [ip$, day$, all$] = await Promise.all([kv.get(kIp), kv.get(kDay), kv.get(kAll)]);
-    const [nIp, nDay, nAll] = [ip$, day$, all$].map((v) => Number(v ?? 0));
+    [nIp, nDay, nAll] = [ip$, day$, all$].map((v) => Number(v ?? 0));
     // The address's own limit is checked first: one address at its limit is told so, not that sync is full.
     if (nIp >= MAX_NEW_VAULTS_PER_DAY) return 'address';
-    if (nDay >= perDay || nAll >= max) return 'full';
-    await Promise.all([kv.put(kIp, String(nIp + 1), { expirationTtl: 2 * 86400 }), kv.put(kDay, String(nDay + 1), { expirationTtl: 2 * 86400 }), kv.put(kAll, String(nAll + 1))]);
-    return 'ok';
+    if (nAll >= max) return 'total';
+    if (nDay >= perDay) return 'day';
   } catch (e) {
-    console.error('sync: the vault-creation counters could not be read or written; creation refused', e);
-    return 'full';
+    console.error('sync: the vault-creation counters could not be read; creation refused', e);
+    return 'total';
   }
+  // The counts are written after the decision, and a write that fails (KV takes about one write a second per key, and two
+  // growers can start in the same second) does not turn a creation the counts allowed into a refusal: the vault is made
+  // and the count is short by one, which the ceilings can bear and a refused grower cannot (round twenty, 3).
+  await Promise.allSettled([kv.put(kIp, String(nIp + 1), { expirationTtl: 2 * 86400 }), kv.put(kDay, String(nDay + 1), { expirationTtl: 2 * 86400 }), kv.put(kAll, String(nAll + 1))]).then((rs) => {
+    if (rs.some((r) => r.status === 'rejected')) console.warn('sync: a vault-creation counter was not written; the count is short by one');
+  });
+  return 'ok';
 }
 
 /* ---------- Rate limit ---------- */
@@ -568,13 +576,28 @@ export async function rateLimit(kv: KVNamespace | undefined, bucket: RateBucket,
 /** For tests: forget every window. */
 export const resetRateLimits = () => windows.clear();
 
-/** The caller's address for the counters; 'unknown' where the platform gives none. */
+/**
+ * The caller's address as the counters key it: an IPv4 address as it is, an IPv6 address by its /64, since one host
+ * usually has a whole /64 to rotate within and would otherwise be a fresh address every request (round twenty, 3).
+ * 'unknown' where the platform gives none.
+ */
 export function clientIp(getClientAddress: () => string): string {
   try {
-    return getClientAddress() || 'unknown';
+    return addressKey(getClientAddress() || 'unknown');
   } catch {
     return 'unknown';
   }
+}
+export function addressKey(ip: string): string {
+  if (!ip.includes(':')) return ip;
+  // Expand `::` so the first four groups can be read whatever the shortening; an IPv4-mapped address keeps its IPv4 part.
+  const v4 = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip);
+  if (v4) return v4[1];
+  const [head, tail = ''] = ip.split('::');
+  const h = head ? head.split(':') : [];
+  const t = tail ? tail.split(':') : [];
+  const groups = ip.includes('::') ? [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill('0'), ...t] : h;
+  return groups.slice(0, 4).map((g) => g.toLowerCase().replace(/^0+(?=\w)/, '')).join(':') + '::/64';
 }
 
 /** Check the bucket for this request; a 429 Response to return, or null to go on. */

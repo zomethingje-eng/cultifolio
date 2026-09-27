@@ -113,7 +113,7 @@ describe('the frost line in clock time on the device (improvements, 6)', () => {
     const body = { forecast: f, risk: frostRisk(f, []) };
     expect(body.risk.text).toContain('around 03:00 Thursday solar time');
     const local = clockTime(body, 'America/Argentina/Mendoza');
-    expect(local.risk.text).toBe('No frost in the next 36 hours of forecast; coldest 4.0 °C around 05:00 Thursday (MET Norway).');
+    expect(local.risk.text).toBe('No frost in the next 36 hours of forecast; coldest 4.0 °C around 05:00 Thursday, your time (MET Norway).');
     expect(body.risk.text).toContain('solar time'); // the server's answer, as cached, is not rewritten in place
     expect(clockTime(body, 'Europe/London').risk.text).toBe(body.risk.text); // five hours off: the reader is not there
     // a six-hour minimum keeps its span, and a span across the reader's midnight names both days
@@ -121,7 +121,13 @@ describe('the frost line in clock time on the device (improvements, 6)', () => {
     const f2 = reduceMet({ properties: { timeseries: ts2 } } as never, -68.8);
     const b2 = { forecast: f2, risk: frostRisk(f2, []) };
     expect(b2.risk.text).toContain('between 19:00 Wednesday and 01:00 Thursday solar time');
-    expect(clockTime(b2, 'America/Argentina/Mendoza').risk.text).toContain('between 21:00 Wednesday and 03:00 Thursday (');
+    expect(clockTime(b2, 'America/Argentina/Mendoza').risk.text).toContain('between 21:00 Wednesday and 03:00 Thursday, your time (2026-10-15,');
+    // the bracketed date follows the clock too: solar 23:00 Wednesday the 14th at Mendoza is 01:00 Thursday the 15th on the clock, and the line must not say Thursday beside the 14th (round twenty, 7)
+    const ts3 = [...Array(36).keys()].map((h) => step(new Date(Date.UTC(2026, 9, 14, h)).toISOString(), h === 28 ? -1 : 10)); // 04:00 UTC on the 15th = 23:00 solar on the 14th
+    const f3 = reduceMet({ properties: { timeseries: ts3 } } as never, -68.8);
+    const b3 = { forecast: f3, risk: frostRisk(f3, []) };
+    expect(b3.risk.text).toContain('around 23:00 Wednesday solar time (2026-10-14,');
+    expect(clockTime(b3, 'America/Argentina/Mendoza').risk.text).toContain('around 01:00 Thursday, your time (2026-10-15,');
     // a body without a solar phrase (a warning in force, a refusal) passes through
     const w = { forecast: f, risk: { level: 'warning', text: 'Freeze Warning in force (NOAA/NWS).' } };
     expect(clockTime(w, 'America/Argentina/Mendoza')).toBe(w);

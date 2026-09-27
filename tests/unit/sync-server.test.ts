@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { listBatches, parseAfter, storeCounted, storeOnce, batchMeta, readBody, batchKey, recount, vaultBytes, vaultIdFor, ensureVault, MAX_BYTES, MAX_IP_BYTES_PER_DAY, MAX_LIST_PAGES, META_FLUSH_BYTES, META_FLUSH_MS, OVERLAP_MS, MAX_NEW_VAULTS_PER_DAY, allowCreation, creationCeilings, rateLimit, resetRateLimits, resetMetaFlush, resetKvWarning, tooMany, VaultFull, DayQuota, type VaultMeta } from '$lib/server/sync';
+import { listBatches, parseAfter, storeCounted, storeOnce, batchMeta, readBody, batchKey, recount, vaultBytes, vaultIdFor, ensureVault, MAX_BYTES, MAX_IP_BYTES_PER_DAY, MAX_LIST_PAGES, META_FLUSH_BYTES, META_FLUSH_MS, OVERLAP_MS, MAX_NEW_VAULTS_PER_DAY, allowCreation, creationCeilings, addressKey, clientIp, rateLimit, resetRateLimits, resetMetaFlush, resetKvWarning, tooMany, VaultFull, DayQuota, type VaultMeta } from '$lib/server/sync';
 import { deriveKeys, newVaultKey } from '$lib/sync/crypto';
 
 /** Just enough of R2 for the sync store: keys, bytes, upload times we control. */
@@ -170,23 +170,45 @@ describe('vault creation is bounded per address, per day for everyone, and in al
     let ok = 0;
     for (const ip of ips) for (let i = 0; i < 3; i++) if ((await allowCreation(kv as never, ip, T0, { perDay: 12, max: 100 })) === 'ok') ok++;
     expect(ok).toBe(12);
-    expect(await allowCreation(kv as never, '10.0.0.9', T0, { perDay: 12, max: 100 })).toBe('full');
+    expect(await allowCreation(kv as never, '10.0.0.9', T0, { perDay: 12, max: 100 })).toBe('day');
     // the next day the day counter is fresh, and the ceiling in all is what stops it
     expect(await allowCreation(kv as never, '10.0.0.9', T0 + 86_400_000, { perDay: 12, max: 100 })).toBe('ok');
-    expect(await allowCreation(kv as never, '10.0.1.1', T0 + 86_400_000, { perDay: 12, max: 13 })).toBe('full');
+    expect(await allowCreation(kv as never, '10.0.1.1', T0 + 86_400_000, { perDay: 12, max: 13 })).toBe('total');
     expect(kv.m.get('vaults:all')).toBe('13');
     expect(creationCeilings({ SYNC_VAULTS_PER_DAY: '300', SYNC_VAULTS_MAX: 'lots' })).toEqual({ perDay: 300, max: undefined });
+    expect(creationCeilings({ SYNC_VAULTS_PER_DAY: 300, SYNC_VAULTS_MAX: 5000 })).toEqual({ perDay: 300, max: 5000 }); // a JSON number in wrangler.jsonc counts too
     expect(creationCeilings(undefined)).toEqual({ perDay: undefined, max: undefined });
   });
   it('FAILS CLOSED: no KV bound refuses every creation and logs once; a KV that throws refuses too', async () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {});
-    expect(await allowCreation(undefined, '1.2.3.4')).toBe('full');
-    expect(await allowCreation(undefined, '1.2.3.4')).toBe('full');
+    expect(await allowCreation(undefined, '1.2.3.4')).toBe('total');
+    expect(await allowCreation(undefined, '1.2.3.4')).toBe('total');
     expect(err).toHaveBeenCalledTimes(1);
     const kv = fakeKV();
-    kv.fail = true;
-    expect(await allowCreation(kv as never, '9.9.9.9')).toBe('full');
+    kv.get = async () => { throw new Error('kv: read failed'); };
+    expect(await allowCreation(kv as never, '9.9.9.9')).toBe('total');
     err.mockRestore();
+  });
+  it('a counter write that fails does not refuse a creation the counts allowed (KV takes one write a second per key)', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const kv = fakeKV();
+    kv.fail = true;
+    expect(await allowCreation(kv as never, '9.9.9.9')).toBe('ok');
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+  it('one IPv6 host is one address whatever it rotates to within its /64; IPv4 stays as it is', async () => {
+    expect(addressKey('203.0.113.7')).toBe('203.0.113.7');
+    expect(addressKey('2001:db8:85a3:8d3:1319:8a2e:370:7348')).toBe('2001:db8:85a3:8d3::/64');
+    expect(addressKey('2001:DB8:85A3:08D3::1')).toBe('2001:db8:85a3:8d3::/64');
+    expect(addressKey('2001:db8::1')).toBe('2001:db8:0:0::/64');
+    expect(addressKey('::1')).toBe('0:0:0:0::/64');
+    expect(addressKey('::ffff:203.0.113.7')).toBe('203.0.113.7');
+    expect(clientIp(() => '2001:db8:85a3:8d3:aaaa::1')).toBe('2001:db8:85a3:8d3::/64');
+    const kv = fakeKV();
+    let ok = 0;
+    for (let i = 0; i < 8; i++) if ((await allowCreation(kv as never, `2001:db8:85a3:8d3::${i + 1}`)) === 'ok') ok++;
+    expect(ok).toBe(MAX_NEW_VAULTS_PER_DAY);
   });
   it('the id must be the one the token derives, exactly as the client derives it', async () => {
     const keys = await deriveKeys(newVaultKey());

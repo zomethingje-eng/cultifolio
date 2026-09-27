@@ -21,3 +21,9 @@ for (const path of ['/', '/species/copiapoa-cinerea']) {
   await ctx.close();
 }
 await b.close();
+// What the service worker installs on top: every script and style of the build, compressed (the fonts are the Latin subsets above).
+const { readdirSync, statSync } = await import('node:fs');
+const dir = '.svelte-kit/cloudflare/_app/immutable';
+let js = 0, css = 0;
+const walk = (d) => { for (const f of readdirSync(d)) { const p = d + '/' + f; if (statSync(p).isDirectory()) walk(p); else if (f.endsWith('.js')) js += gzipSync(readFileSync(p)).length; else if (f.endsWith('.css')) css += gzipSync(readFileSync(p)).length; } };
+if (existsSync(dir)) { walk(dir); console.log(`whole build (what the worker installs): gzip kB: js ${(js/1024).toFixed(1)}, css ${(css/1024).toFixed(1)}; total ${((js+css)/1024).toFixed(1)}`); }

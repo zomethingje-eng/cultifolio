@@ -7,8 +7,9 @@
  *   node scripts/live-check.mjs https://x.dev   checks another origin (a workers.dev preview)
  *
  * Exits 1 on the first failure, with the request and what came back. `LIVE_CHECK_SKIP=names,forecast` skips the checks
- * that need an upstream (a local `wrangler dev` with no GBIF credentials); never set for the real site. Nothing here writes anything: every request is a
- * GET, apart from one POST to the vault route with a body that must be refused (round sixteen, 16).
+ * that need an upstream (a local `wrangler dev` with no GBIF credentials); never set for the real site. Nothing here creates
+ * or changes anything on the server: every request is a GET, apart from one POST to the vault route with a body that
+ * must be refused (round sixteen, 16); the requests do count against the address's rate limits like any visit's.
  */
 const origin = (process.argv[2] ?? 'https://cultifolio.com').replace(/\/+$/, '');
 const ua = 'cultifolio-live-check (deploy)';
@@ -39,10 +40,13 @@ console.log(`live check against ${origin}`);
 // The name service: twice, and the second is served from the edge. A 500 here on the second lookup was round eighteen's
 // one live fault (the immutable cached headers), which no test before the deploy could see.
 if (!skip.has('names')) {
-  const q = '/api/names?q=lithops';
+  // A name the edge is unlikely to hold already, so the first request exercises the new build's upstream path and the
+  // second the cache (round twenty, 13): one of these genera by the minute, so two runs in a row ask different ones.
+  const GENERA = ['lithops', 'conophytum', 'copiapoa', 'haworthia', 'gasteria', 'ariocarpus', 'astrophytum', 'echeveria', 'tylecodon', 'pelargonium', 'othonna', 'crassula', 'aloe', 'agave', 'mammillaria', 'gymnocalycium', 'turbinicarpus', 'euphorbia', 'pachypodium', 'adenium', 'fockea', 'dioscorea', 'bulbine', 'massonia', 'lachenalia', 'oxalis', 'albuca', 'ornithogalum', 'ledebouria', 'eriospermum'];
+  const q = `/api/names?q=${GENERA[Math.floor(Date.now() / 60_000) % GENERA.length]}`;
   const a = await get(q);
   if (a.status !== 200) fail(`${q} first answer`, a);
-  if (!/lithops/i.test(a.text)) fail(`${q} did not name Lithops`, a);
+  if (!new RegExp(q.split('=')[1], 'i').test(a.text)) fail(`${q} did not name the genus asked for`, a);
   const b = await get(q);
   if (b.status !== 200) fail(`${q} second answer (the edge-cached one)`, b);
   headersOn(b, q);
@@ -81,14 +85,21 @@ for (const path of ['/about/how', `/species/${process.env.LIVE_CHECK_SPECIES ?? 
   ok('entries under a stale corpus id: 200, no-store');
 }
 
-// A forecast, for a fixed rounded coordinate (one MET call at most, and usually a cache hit).
+// A forecast, for a fixed rounded coordinate, asked with the units the app sends and a query the edge has not seen, so
+// the answer is this build's and not an object the previous build's schema left at the edge (round twenty, R2-1); the
+// Worker's own cache key is the rounded coordinate, so MET is asked at most once an hour whatever the extra parameter.
+// MET not answering twice, a few seconds apart, is a failure: a deploy that broke every forecast must not pass (round twenty, 13).
 if (!skip.has('forecast')) {
-  const path = '/api/forecast?lat=51.5&lon=-0.13&alt=20';
-  const r = await get(path);
-  if (r.status === 502) console.warn(`  note  ${path}: 502, MET Norway did not answer; not this deploy's fault unless it stays`);
-  else if (r.status !== 200) fail(path, r);
-  else if (!/"risk"/.test(r.text) || !/"tmin"/.test(r.text)) fail(`${path} answered 200 with no forecast in it`, r);
-  if (r.status === 200) ok('forecast: 200');
+  const path = `/api/forecast?lat=51.5&lon=-0.13&alt=20&units=metric&lc=${Date.now()}`;
+  let r = await get(path);
+  if (r.status === 502) {
+    await new Promise((res) => setTimeout(res, 5000));
+    r = await get(path);
+  }
+  if (r.status === 502) fail(`${path}: 502 twice; MET Norway is not answering through this build. If curl -sI https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=51.5&lon=-0.13 also fails, MET is down and this is not the deploy's fault; otherwise it is`, r);
+  if (r.status !== 200) fail(path, r);
+  if (!/"risk"/.test(r.text) || !/"tmin"/.test(r.text)) fail(`${path} answered 200 with no forecast in it (an old object at the edge would say cf-cache-status HIT; this says "${r.h('cf-cache-status')}")`, r);
+  ok('forecast: 200 with a risk line');
 }
 
 // The vault route refuses a body that is not an object with a 400, never a 500 (round sixteen, 16). Creates nothing.

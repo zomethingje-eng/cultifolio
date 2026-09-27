@@ -171,6 +171,17 @@
   const autofocusFirst = (el: HTMLElement) => {
     el.querySelector<HTMLElement>('[role=menuitem]')?.focus();
   };
+  /** A menu's keys: arrows move, Home and End jump, Tab leaves and closes (round twenty, 11). */
+  function menuKeys(e: KeyboardEvent) {
+    const items = Array.from((e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>('[role=menuitem]'));
+    const i = items.indexOf(document.activeElement as HTMLElement);
+    const go = (n: number) => { e.preventDefault(); items[(n + items.length) % items.length]?.focus(); };
+    if (e.key === 'ArrowDown') go(i + 1);
+    else if (e.key === 'ArrowUp') go(i - 1);
+    else if (e.key === 'Home') go(0);
+    else if (e.key === 'End') go(items.length - 1);
+    else if (e.key === 'Tab') closeCardMenu();
+  }
   function closeCardMenu(refocus = false) {
     cardMenu = false;
     if (refocus) cardMenuBtn?.focus();
@@ -224,6 +235,7 @@
     edKey = a.taxonKey ?? null;
     f = { taxonName: a.taxonName, cultivar: a.cultivar ?? '', nameKind: kindOf(a), parentage: a.parentage ?? '', nameAsReceived: a.nameAsReceived ?? '', fieldNumber: a.fieldNumber ?? '', provenance: a.provenance ?? 'unknown', acquired: a.acquired ?? '', sourceFrom: a.sourceFrom ?? '', sourceForm: a.sourceForm ?? '', price: a.price ?? '', locationId: a.locationId ?? null };
     editing = true;
+    void focusNext('#ed-name'); // the first field, so a keyboard user who chose Edit from the menu lands in the form (round twenty, 11)
   }
   async function saveEdit() {
     if (!a) return;
@@ -277,7 +289,7 @@
   <!-- The page's shape before the vault opens: the card without a picture, which is what most plants' pages are; one with a photograph grows a hero above it when the record arrives. -->
   <!-- In the loaded page's own order: the id card (the tile, the number as its title and the actions row), then the verb bar. -->
   <div class="skel" aria-busy="true">
-    <div class="idcard flat"><div class="skeltile skelbox"></div><div class="who"><h1 class="sci"><span class="accno big lead">{param}</span></h1><p class="vern muted">Opening your collection…</p><div class="pills"><span class="pill">&nbsp;</span></div></div><div class="acts"><span class="btn skelbtn">&nbsp;</span><span class="btn skelbtn">&nbsp;</span></div></div>
+    <div class="idcard flat"><div class="skeltile skelbox"></div><div class="who"><h1 class="sci"><span class="accno big lead">{param}</span></h1><p class="vern muted">Opening your collection…</p></div><div class="acts"><span class="btn skelbtn">&nbsp;</span><span class="btn skelbtn">&nbsp;</span></div></div>
     <div class="skelverbs"></div>
   </div>
 {:else if !a}
@@ -326,7 +338,7 @@
       <div class="cardmenu">
         <button class="btn dots" type="button" bind:this={cardMenuBtn} aria-haspopup="menu" aria-expanded={cardMenu} aria-controls="card-menu" aria-label="More for this plant: edit, label, propagate" title="Edit, label, propagate" onclick={() => (cardMenu = !cardMenu)}>···</button>
         {#if cardMenu}
-          <div class="menu" id="card-menu" role="menu" aria-label="More for this plant" use:autofocusFirst>
+          <div class="menu" id="card-menu" role="menu" tabindex="-1" aria-label="More for this plant" use:autofocusFirst onkeydown={menuKeys} onfocusout={(e) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node | null) && e.relatedTarget !== cardMenuBtn) closeCardMenu(); }}>
             <button role="menuitem" type="button" onclick={() => { closeCardMenu(); startEdit(); }}>Edit</button>
             <a role="menuitem" href="/labels?acc={a.id}" onclick={() => closeCardMenu()}>Label</a>
             {#if a.status === 'growing'}<a role="menuitem" href="/propagation/new?parent={a.id}" onclick={() => closeCardMenu()}>Propagate</a>{/if}
@@ -357,7 +369,7 @@
   <!-- The four verbs a grower uses most, then the rest on request: a new plant's page is not the tracker's whole vocabulary. -->
   <div class="quickbar">
     <button class="btn pri" onclick={() => quick('water')}>Water</button>
-    <button class="btn" onclick={() => { adding = !adding; if (adding) setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0); }}>Photo</button>
+    {#if hasHero}<button class="btn" onclick={() => { adding = !adding; if (adding) setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0); }}>Photo</button>{/if}
     <button class="btn" onclick={() => quick('note')}>Note</button>
     <button class="btn" onclick={() => { moveTo = a.locationId ?? null; moving = !moving; }}>Move</button>
     {#if moreActs}
@@ -409,7 +421,8 @@
     <div class="cult setup">
       <div class="sum">Set it up <span class="hint">what makes this page useful</span></div>
       <div class="setupbody">
-        {#each setup as st, i (st.k)}<button class="setuprow" type="button" onclick={st.go}><span class="n">{i + 1}</span><span class="t">{st.t}</span><span class="w">{st.w}</span></button>{/each}
+        <!-- The first unfinished step is the one to take; the rest are listed, not pressed (round twenty, design) -->
+        {#each setup as st, i (st.k)}<button class="setuprow" class:next={i === 0} class:later={i > 0} type="button" onclick={st.go}><span class="n">{i + 1}</span><span class="t">{st.t}</span><span class="w">{st.w}</span></button>{/each}
       </div>
     </div>
   {/if}
@@ -603,6 +616,10 @@
   .setuprow .n { font-family: var(--mono); font-size: 12px; color: var(--ink3); }
   .setuprow .t { font-weight: 600; font-size: 14px; color: var(--accent); }
   .setuprow .w { font-size: 12px; color: var(--ink3); }
+  .setuprow.next { padding-top: 14px; padding-bottom: 14px; }
+  .setuprow.next .t { font-size: 15.5px; }
+  .setuprow.later .t { font-weight: 500; color: var(--ink2); font-size: 13.5px; }
+  .setuprow.later { padding-top: 9px; padding-bottom: 9px; }
   .quickbar .more { color: var(--ink2); }
   @media (max-width: 640px) { .setuprow .w { display: none; } }
   @media (max-width: 640px) { .editform { grid-template-columns: 1fr 1fr; } .hero { margin-top: 0; } .hero.own { min-height: 260px; } .heroimg :global(img) { height: 260px; } .idcard.flat { margin-top: 10px; display: grid; grid-template-columns: 80px minmax(0, 1fr); --tile: 80px; } .idcard.flat .acts { grid-column: 1 / -1; } .idcard.flat .who { flex-basis: auto; } .idcard.flat h1.sci { font-size: 23px; } .idcard.flat .accno.lead { display: table; margin: 0 0 4px; vertical-align: baseline; } }

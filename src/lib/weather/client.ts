@@ -89,15 +89,22 @@ export function clockTime<T>(body: T, zone?: string): T {
     if (!Number.isFinite(ta) || Math.abs(zoneOffsetH(zone, ta) - f.offsetH) > 2) return body;
     const hm = new Intl.DateTimeFormat('en-GB', { timeZone: zone, hourCycle: 'h23', hour: '2-digit', minute: '2-digit' });
     const wd = new Intl.DateTimeFormat('en-GB', { timeZone: zone, weekday: 'long' });
+    const ymd = new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' }); // en-CA prints YYYY-MM-DD
+    // "your time": the reader's clock, which is the site's clock when they are there, and near it when they are not; the
+    // line never claims to be the site's own clock, which the server does not know (round twenty, 7).
     let when: string;
-    if (!bb) when = `around ${hm.format(ta)} ${wd.format(ta)}`;
+    let at = ta;
+    if (!bb) when = `around ${hm.format(ta)} ${wd.format(ta)}, your time`;
     else {
       const tb = new Date(bb).getTime();
       if (!Number.isFinite(tb)) return body;
       const da = wd.format(ta), db = wd.format(tb);
-      when = `between ${hm.format(ta)} ${da} and ${hm.format(tb)}${db === da ? '' : ' ' + db}`;
+      when = `between ${hm.format(ta)} ${da} and ${hm.format(tb)}${db === da ? '' : ' ' + db}, your time`;
+      at = tb; // the night's date is the end of the span, as the server's is
     }
-    return { ...b, risk: { ...risk, text: risk.text.replace(SOLAR, when) } } as T;
+    // The bracketed date is the day in the site's solar calendar; said in the reader's clock it must be the same calendar, or "01:00 Thursday (2026-10-14…)" contradicts itself.
+    const text = risk.text.replace(SOLAR, when).replace(`(${day.date},`, `(${ymd.format(at)},`);
+    return { ...b, risk: { ...risk, text } } as T;
   } catch {
     return body;
   }

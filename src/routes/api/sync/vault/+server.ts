@@ -25,10 +25,11 @@ export const POST: RequestHandler = async ({ request, platform, getClientAddress
   const open = platform?.env?.SYNC_OPEN === '1';
   if (!existing) {
     // Three ceilings on new vaults (per address, for everyone today, in all), and a refusal is a plain answer the sync
-    // page shows as it is, never a 500: 429 for the address's own limit, 503 "sync is full for now" for the shared ones.
+    // page shows as it is, never a 500: 429 for the address's own limit, 503 with a sentence that says which shared ceiling, the day's or the total, and what still works.
     const may = await allowCreation(platform?.env?.QUEUE, getClientAddress(), Date.now(), creationCeilings(platform?.env as Record<string, unknown> | undefined));
     if (may === 'address') return json({ error: 'too many new vaults from this address today' }, { status: 429, headers: { 'retry-after': '3600', 'cache-control': 'no-store' } });
-    if (may === 'full') return json({ error: 'Sync is full for now. Your collection stays on this device; try again another day.' }, { status: 503, headers: { 'retry-after': '3600', 'cache-control': 'no-store' } });
+    if (may === 'day') return json({ error: 'Sync has taken all the new vaults it can today. Your collection stays on this device; try again tomorrow.' }, { status: 503, headers: { 'retry-after': '3600', 'cache-control': 'no-store' } });
+    if (may === 'total') return json({ error: 'Sync is not taking new vaults for now. Your collection stays on this device; joining an existing vault still works.' }, { status: 503, headers: { 'retry-after': '86400', 'cache-control': 'no-store' } });
   }
   const { created, meta } = await ensureVault(r2, id, body.token, open);
   // A (re)join is the moment the slow, authoritative listing puts the live counter right.

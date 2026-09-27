@@ -225,7 +225,7 @@
           {#if !d.photos.length && refusedPhotoNames.length}<NotChecked what="Photographs" why="{refusedPhotoNames.join(' and ')} did not answer when this page was built." />{/if}
         </div>
       {/if}
-      {#if sheet.arch}<p class="vern small muted">Grouped with the {sheet.arch.arch.lab} in the archetype table, by {sheet.arch.why}.</p>{/if}
+      {#if sheet.arch}<p class="vern small muted" title="Grouped by {sheet.arch.why}; the cultivation cards say where the group's table is used">{sheet.arch.arch.lab} (by {sheet.arch.tier})</p>{/if}
       {#if mine.length}
         <p class="vern mine">Yours: {#each mine as a, i}{#if i}, {/if}<a class="accno" href="/plants/{accNo(a)}">{accNo(a)}</a>{#if a.status !== 'growing'} <span class="small muted">({a.status})</span>{/if}{/each}</p>
       {/if}

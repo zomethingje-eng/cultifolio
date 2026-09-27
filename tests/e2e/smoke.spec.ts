@@ -68,6 +68,28 @@ test('the two renamed sections answer at their old paths with a redirect that ke
   expect((await request.get('/benchesx', { maxRedirects: 0 })).status()).toBe(404);
 });
 
+test('the plant card\'s menu works from the keyboard: arrows move, Tab closes it, Edit lands in the first field; no Photo verb while the tile is showing (round twenty, 10 and 11)', async ({ page }) => {
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.getByRole('button', { name: /^Add/ }).click();
+  await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
+  await expect(page.locator('.idcard label.tile')).toBeVisible();
+  await expect(page.locator('.quickbar').getByRole('button', { name: 'Photo', exact: true })).toHaveCount(0); // the tile is the way to add one
+  await page.locator('.idcard .cardmenu > button').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#card-menu [role=menuitem]').first()).toBeFocused();
+  await page.keyboard.press('ArrowDown');
+  await expect(page.locator('#card-menu [role=menuitem]').nth(1)).toBeFocused();
+  await page.keyboard.press('End');
+  await expect(page.locator('#card-menu [role=menuitem]').last()).toBeFocused();
+  await page.keyboard.press('ArrowDown'); // wraps
+  await expect(page.locator('#card-menu [role=menuitem]').first()).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(page.locator('#card-menu')).toHaveCount(0); // Tab leaves and closes; nothing is left open over the verbs
+  await page.locator('.idcard .cardmenu > button').click();
+  await page.keyboard.press('Enter'); // Edit
+  await expect(page.locator('#ed-name')).toBeFocused();
+});
+
 test('species page is readable without JavaScript and states its evidence', async ({ browser }) => {
   const ctx = await browser.newContext({ javaScriptEnabled: false });
   const page = await ctx.newPage();
@@ -779,6 +801,17 @@ test('the app shell is installed for offline use: collection pages, a species pa
   expect(cached).not.toContain('/species/welwitschia-mirabilis'); // never read: the offline page would answer for it
   await page.goto('/offline');
   await expect(page.locator('h1')).toContainText('No connection');
+  // An old bookmark from before the rename: the worker answers the redirect itself, so the server never sees the record id
+  // in the URL and offline it still lands on the section (round twenty, 1). The route below stands in for the server: had
+  // the worker let the request through, the page would be this 500, not the places shell.
+  let reachedServer = 0;
+  await ctx.route(/\/(benches|sowings)(\/|\?|$)/, (r) => { reachedServer++; return r.fulfill({ status: 500, body: 'server saw it' }); });
+  await page.goto('/benches/k1?edit=1');
+  await expect(page).toHaveURL(/\/places\/k1\?edit=1$/);
+  await expect(page.locator('h1')).toContainText('Not here'); // the places shell rendered from the vault: no place k1 on this device
+  await page.goto('/sowings/new?loc=k1');
+  await expect(page).toHaveURL(/\/propagation\/new\?loc=k1$/);
+  expect(reachedServer).toBe(0);
   await ctx.close();
 });
 

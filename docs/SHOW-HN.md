@@ -22,7 +22,7 @@ I grow cacti and succulents and got tired of cultivation advice that was either 
 
 The other half is a collection tracker: accession numbers, timelines, propagation batches that mint numbered plants, places with conditions, labels with QR codes, frost watch. Its records live in your browser and are sent nowhere unless you turn on sync, which is end-to-end encrypted with a key only you hold; the server stores ciphertext and cannot read a plant name. What your own pages send the server is a short list, stated in full on /about/how: the hash bucket of each species you grow (one of 32, so a species is narrowed to one in about 280), your site's or a place's coordinates and altitude for the frost watch (rounded on the device), a units cookie and a one-letter hemisphere cookie on species pages, the name you type in the species picker, and the species page you click through to; no referrer, nothing preloaded on hover, and those pages ask no third-party host for anything by default. No accounts, no analytics. The backup file and the wire format are documented so you can read your data without the app.
 
-Stack: SvelteKit 5 on Cloudflare Workers, the corpus in R2 as one JSON per species, IndexedDB on the client. The corpus is built offline on my PC from a names list; a full re-derivation of the rules runs in about an hour with no upstream calls. AGPL-3.0. The engineering log is in the repo, with fifteen rounds of adversarial review: each round a language model was handed the repository and the live site and asked to break it, every finding was checked against the source before anything changed, and the file for the round says which findings were real and what was done. A first load of the front page is about [100] kB of script and style compressed, plus [160] kB of fonts; a species page is served rendered and reads without JavaScript.
+Stack: SvelteKit 5 on Cloudflare Workers, the corpus in R2 as one JSON per species, IndexedDB on the client. The corpus is built offline on my PC from a names list; a full re-derivation of the rules runs in about an hour with no upstream calls. AGPL-3.0. The engineering log is in the repo, with the adversarial reviews it has been through, one file per round: from round seven on, outside language models were given the repository and the live site and asked to break it, every finding was checked against the source before anything changed, and the file for the round says which findings were real and what was done. A first visit to the front page is about [100] kB of script and style compressed plus [160] kB of fonts for the page itself; the service worker then fetches the rest of the build for offline use, about [260] kB of script and style in all; a species page is served rendered and reads without JavaScript.
 
 What I would most like to hear about: a species page where the derived figures are wrong, and why. `/about/how` is the methodology.
 
@@ -33,7 +33,7 @@ Site: https://cultifolio.com · Source: https://github.com/zomethingje-eng/culti
 ## Before posting
 
 - Fresh `npm run dossier -- --index`; put the index's species count and the photograph coverage in the text if you quote them (`report.txt` has both).
-- The first-load figures: `npm run build && npm run preview`, then `node scripts/dev/first-load.mjs` (it prints the gzip weight of the document, script, style and fonts the front page and a species page request); do not post a figure from an older build.
+- The first-load figures: `npm run build && npm run preview`, then `node scripts/dev/first-load.mjs` (it prints the gzip weight of the document, script, style and fonts the front page and a species page request, and the whole build's script and style, which is what the worker installs on a first visit); do not post a figure from an older build.
 - Open five species pages in a private window on the deployed site, one from each of: a cactus, a bulb, an epiphyte, a one-cell species, a species with a refused climate. The last two are the ones a commenter will find.
 - `npx wrangler tail` open in a window for the first hour.
 - R2 spend alert set (DEPLOY.md §1). A front-page day is a few hundred thousand reads of small objects; R2 class B reads are cheap, but see the bill before the second day.
@@ -49,6 +49,8 @@ Site: https://cultifolio.com · Source: https://github.com/zomethingje-eng/culti
 "CHELSA cells are 1 km; your cell is coarser." The grid is packed to tenth-degree cells (each the mean of ~144 pixels) for the range read; the provenance line on the page says exactly that, with the cell id.
 
 "GBIF records are noisy." Yes: cultivated, naturalised and invasive records are dropped, records outside the WCVP range are dropped, coordinate uncertainty is kept and preferred on dedupe, and the marker moves to the fullest bin so a stray record does not place it. The record map shows every record used.
+
+"The front page is megabytes." Most of it is the catalogue's photographs, lazily loaded as you scroll, and the offline install the worker does once (about 260 kB of script and style compressed, plus the Latin fonts); the page itself paints from about 100 kB of script and style, and a species page reads without JavaScript. `scripts/dev/first-load.mjs` prints the figures for a build.
 
 "Why AGPL?" So a hosted fork has to publish its changes. Scripts are MIT so the derivation can be reused anywhere.
 
