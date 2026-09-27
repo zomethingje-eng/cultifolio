@@ -176,8 +176,12 @@ describe('places', () => {
     const shelf = await collection.addLocation({ name: 'Shelf', parentId: room.id, type: 'shelf' });
     const s = await collection.addSowing({ taxonName: 'Copiapoa', method: 'seed', sown: '2026-03-01', count: 10, locationId: shelf.id });
     const a = await collection.addAccession({ taxonName: 'Copiapoa', acc: 'LOC-1', locationId: room.id });
-    await collection.removeLocation(shelf.id);
+    const onShelf = await collection.addAccession({ taxonName: 'Lithops', acc: 'LOC-2', locationId: shelf.id });
+    const r = await collection.removeLocation(shelf.id);
+    expect(r).toEqual({ plants: 1, batches: 1, places: 0, to: 'Room' }); // said back to the page, for the toast (round twenty-three, 2)
     expect(collection.sowing(s.id)!.locationId).toBe(room.id);
+    expect(collection.accession(onShelf.id)!.locationId).toBe(room.id);
+    expect(collection.events(onShelf.id).map((e) => `${e.t}:${e.note}`)).toContain('move:to Room (Shelf was removed)'); // the plant's log says where it went and why
     // The other device's move, stamped after the removal, arrives through a pull.
     await collection.ingest([{ t: hlcEncode({ wall: Date.now() + 5000, count: 0, device: 'bbbbbbbbbbbb' }), kind: 'accession', id: a.id, field: 'locationId', value: shelf.id }], 'server');
     expect(collection.accession(a.id)!.locationId).toBe(shelf.id);

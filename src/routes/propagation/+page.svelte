@@ -8,6 +8,18 @@
   import { PROP_METHODS } from '$lib/db/types';
   onMount(() => collection.load());
   let show = $state<'active' | 'all'>('active');
+  // The table is wider than a phone: a fade on the right says there is more until the reader has scrolled to it (round twenty-three, 19).
+  let scroller = $state<HTMLDivElement | null>(null);
+  let atEnd = $state(true);
+  const measure = () => { const el = scroller; atEnd = !el || el.scrollLeft + el.clientWidth >= el.scrollWidth - 2; };
+  $effect(() => {
+    const el = scroller;
+    if (!el) return;
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  });
   // Nothing in progress but batches on file: open on All rather than on an empty list.
   $effect(() => { if (collection.ready && collection.sowings.length && !collection.sowings.some((s) => s.status === 'active')) show = 'all'; });
   const rows = $derived(collection.sowings.filter((s) => show === 'all' || s.status === 'active').map((s) => ({ s, st: collection.sowingStats(s.id), m: PROP_METHODS.find((m) => m.k === s.method) ?? PROP_METHODS[0] })));
@@ -30,9 +42,9 @@
   {#if !rows.length}
     <div class="emptybox"><p class="muted">{show === 'active' ? 'Nothing in progress.' : 'No batches yet.'} <a href="/propagation/new">Start one.</a></p></div>
   {:else}
-    <div class="scroll-x">
+    <div class="scroll-x cue" class:end={atEnd} bind:this={scroller} onscroll={measure}>
       <table class="wx">
-        <thead><tr><th>Batch</th><th>Species</th><th>Method</th><th>Sown</th><th>Days</th><th>Started</th><th>Up</th><th>Rate</th><th>Potted</th><th>Status</th></tr></thead>
+        <thead><tr><th>Batch</th><th>Species</th><th>Method</th><th>Date</th><th>Days</th><th>Started</th><th>Up</th><th>Rate</th><th>Potted</th><th>Status</th></tr></thead>
         <tbody>
           {#each rows as { s, st, m }}
             <tr>

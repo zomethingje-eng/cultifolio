@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { store, vaultId, authed, batchKey, listBatches, parseAfter, storeOnce, readBody, batchMeta, VaultFull, DayQuota, MAX_BATCH_BYTES, limited, quotaOf } from '$lib/server/sync';
+import { PUSH_HEADERS } from '$lib/sync/limits';
 
 /**
  * Batches that arrived at or after ?since=<ms> (less a minute of overlap), oldest arrival first.
@@ -32,7 +33,7 @@ export const POST: RequestHandler = async ({ request, url, platform, getClientAd
   if (stop) return stop;
   const id = vaultId(url.searchParams.get('vault'));
   const meta = await authed(r2, id, request);
-  const key = batchKey(id, request.headers.get('x-batch') ?? '');
+  const key = batchKey(id, request.headers.get(PUSH_HEADERS.batch) ?? '');
   const extra = batchMeta(request);
   const body = await readBody(request, MAX_BATCH_BYTES, 'a batch');
   let r: Awaited<ReturnType<typeof storeOnce>>;

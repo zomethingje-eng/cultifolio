@@ -133,6 +133,11 @@
   const perPage = $derived(sheet.cols * sheet.rows);
   const skipN = $derived(Math.min(Math.max(0, Math.floor(numberOrNull(skip) ?? 0)), Math.max(0, perPage - 1)));
   const cells = $derived<Array<Accession | null>>([...Array(skipN).fill(null), ...picked]);
+  // The box says what the sheet uses: 99 typed on a 30-cell sheet, or 25 left over from a 30-cell sheet after choosing a
+  // 24-cell one, becomes the clamped figure in the box itself, not only in the print (round twenty-three, 18).
+  $effect(() => {
+    if (skip != null && skip !== skipN && (skip < 0 || skip > perPage - 1 || !Number.isInteger(skip))) skip = skipN;
+  });
   const pages = $derived(Array.from({ length: Math.max(1, Math.ceil(cells.length / perPage)) }, (_, p) => cells.slice(p * perPage, (p + 1) * perPage)));
   const sourceLine = (a: Accession) => [a.sourceFrom, a.acquired].filter(Boolean).join(' · ');
   const tiny = $derived(sheet.h < 16);
@@ -150,7 +155,7 @@
     <div class="body">
       <div class="row">
         <label class="field"><span>Sheet</span><select id="lb-sheet" bind:value={sheetK}>{#each SHEETS as s}<option value={s.k}>{s.label}</option>{/each}</select></label>
-        <label class="field"><span>Skip used cells</span><input id="lb-skip" type="number" min="0" max={perPage - 1} bind:value={skip} /></label>
+        <label class="field"><span>Skip used cells</span><input id="lb-skip" type="number" min="0" max={perPage - 1} bind:value={skip} onchange={() => (skip = skipN)} /></label>
         <label class="check"><input type="checkbox" bind:checked={withQr} disabled={!sheet.qr} /> QR code{#if !sheet.qr} <span class="faint">(too small)</span>{/if}</label>
         <label class="check"><input type="checkbox" bind:checked={withCare} /> Care line</label>
         <label class="check"><input type="checkbox" bind:checked={withSource} /> Source and date</label>

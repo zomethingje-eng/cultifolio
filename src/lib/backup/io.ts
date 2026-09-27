@@ -7,7 +7,7 @@ import { DEFAULT_SCHEME, type NumberingScheme } from '$core/accession';
 import { buildBackup, readBackup, previewMerge, summarise, photosWithoutPixels, type ReadBackup } from './backup';
 import { replaceThroughStaging } from './replace';
 import { backupName } from './format';
-import { readDeviceSettings, applyDeviceSettings } from './device';
+import { readDeviceSettings, applyDeviceSettings, previewDeviceSettings } from './device';
 
 export interface PreparedBackup {
   name: string;
@@ -52,6 +52,8 @@ export interface Opened {
   newPhotos: number;
   /** Photo records in the file that have no pixels in the file and none on this device: they restore as records without a photograph. */
   missingPixels: string[];
+  /** Device settings in the file that this device lacks and a restore would apply ('site', 'units', 'label settings', 'preferences'). */
+  settings: string[];
 }
 
 /** Read and size up a backup without changing anything. */
@@ -62,7 +64,7 @@ export async function openBackup(f: File): Promise<Opened> {
   const have = new Set(await photoBlobIds());
   const newPhotos = file.photoIds.filter((id) => !have.has(id)).length;
   const missingPixels = photosWithoutPixels(file).filter((id) => !have.has(id));
-  return { file, counts, merge, newPhotos, missingPixels };
+  return { file, counts, merge, newPhotos, missingPixels, settings: previewDeviceSettings(file.settings) };
 }
 
 export interface RestoreReport {

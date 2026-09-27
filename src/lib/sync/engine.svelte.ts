@@ -38,7 +38,7 @@
 import { collection } from '$lib/db/collection.svelte';
 import { StoppedError, getMeta, setMeta, setMetaIfKey, getPhotoBlobs, putPhotoBlobs, photoBlobIds, outboxKeys, outboxAck, outboxFill, outboxClear, changesByKeys, allChanges, appendChanges, onOtherTabWrite, announceSyncForgotten } from '$lib/db/vault';
 import { deriveKeys, sealJson, openJson, seal, open, packPhoto, unpackPhoto, parseVaultKey, batchFingerprint, sha256hex, type VaultKeys } from './crypto';
-import { MAX_BATCH_BYTES, MAX_PHOTO_BYTES, SEAL_OVERHEAD, OVERLAP_MS } from './limits';
+import { MAX_BATCH_BYTES, MAX_PHOTO_BYTES, SEAL_OVERHEAD, OVERLAP_MS, PUSH_HEADERS, batchName, listAfter } from './limits';
 import { validateChanges, isHeld, dueAt, hlcWall, type Change } from '$core/log';
 import { hlcCompare, MAX_AHEAD_MS } from '$core/hlc';
 import type { Photo } from '$lib/db/types';
@@ -176,7 +176,8 @@ class Sync {
     const r = await fetch(`${this.base}/api/sync/vault`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: keys.id, token: keys.token, create: mode === 'create' }) });
     if (!r.ok) {
       // The server's own sentence where it gives one ("Sync is not taking new vaults for now…", "too many new vaults from this address today"); the fixed wording for the statuses whose meaning the client knows better.
-      const said = await r.json().then((b: unknown) => (b && typeof b === 'object' && typeof (b as { error?: unknown }).error === 'string' ? (b as { error: string }).error : null)).catch(() => null);
+      // `error` is what the routes answer with; `message` is what SvelteKit's own `error()` answers with (a 402 licence refusal, a 401): both are sentences worth showing (round twenty-three, 11).
+      const said = await r.json().then((b: unknown) => { const o = b && typeof b === 'object' ? (b as { error?: unknown; message?: unknown }) : null; return typeof o?.error === 'string' ? o.error : typeof o?.message === 'string' ? o.message : null; }).catch(() => null);
       throw new Error(r.status === 404 ? 'No vault answers to that key. Check it against the other device; one wrong letter is a different vault.' : r.status === 403 ? 'That key does not open its vault.' : said ? said[0].toUpperCase() + said.slice(1) + (/[.!?]$/.test(said) ? '' : '.') : r.status === 503 ? 'Sync is not available on this server.' : `The server said ${r.status}.`);
     }
     this.gen++; // a run still in flight for an earlier vault is stale from here: it touches nothing of this one (round sixteen, 2)
@@ -486,15 +487,15 @@ class Sync {
     // a lost reply is recognised as the same batch; being keyed, it is not a hash anyone could test a guessed edit against.
     const lastWall = hlcWall(batch[batch.length - 1].t);
     const plain = await batchFingerprint(this.k(m), utf8.encode(JSON.stringify(batch)));
-    const key = `${String(Math.floor(lastWall / 3600_000) * 3600_000).padStart(13, '0')}-0000-${collection.device || 'dev'}-${plain.slice(0, 12)}`;
+    const key = batchName(lastWall, collection.device, plain);
     const body = await sealJson(this.k(m), 'log', { v: 1, device: collection.device, changes: batch });
     if (body.length > MAX_BATCH_BYTES && mayResplit && batch.length > 1) {
       // Too big before it ever leaves: halve it. Each half is named by its own content.
       const mid = Math.ceil(batch.length / 2);
       return (await this.pushBatch(m, batch.slice(0, mid))) + (await this.pushBatch(m, batch.slice(mid)));
     }
-    const headers: Record<string, string> = { ...this.h(m), 'x-batch': key, 'x-batch-plain': plain };
-    if (collection.device) headers['x-device'] = collection.device;
+    const headers: Record<string, string> = { ...this.h(m), [PUSH_HEADERS.batch]: key, [PUSH_HEADERS.plain]: plain };
+    if (collection.device) headers[PUSH_HEADERS.device] = collection.device;
     const r = await fetch(`${this.base}/api/sync/log?vault=${this.k(m).id}`, { method: 'POST', headers, body: body as BodyInit });
     if (r.ok) {
       // Acknowledged out of the outbox only while the stored sync record still carries this run's key, checked in the ack's
@@ -600,7 +601,7 @@ class Sync {
     for (;;) {
       this.step(m, 'Checking for changes…');
       // `since` goes with every page so a server that does not know `after` still answers the old way.
-      const q = `since=${m.since || ''}` + (after ? `&after=${after.at}:${encodeURIComponent(after.key)}` : '');
+      const q = `since=${m.since || ''}` + (after ? `&after=${listAfter(after.at, after.key)}` : '');
       const r = await fetch(`${this.base}/api/sync/log?vault=${this.k(m).id}&${q}`, { headers: this.h(m) });
       if (r.status === 429) this.limited(r);
       if (!r.ok) throw new Error(`pull failed: ${r.status}`);

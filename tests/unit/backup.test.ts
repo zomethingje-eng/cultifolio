@@ -98,6 +98,15 @@ describe('merging a backup into a live collection', () => {
     expect(m.fresh).toHaveLength(2);
     expect(m.added).toBe(1);
     expect(m.changed).toBe(0);
+    expect(m.addedByKind).toEqual({ accession: 1 });
+    expect(m.addedDeleted).toBe(0);
+  });
+  it('the preview counts what is added by kind, live records apart from deleted ones, so the page can say it in the words of the "In the file" line (round twenty-three, 18)', () => {
+    const more = [...log, c(30, 'accession', 'r9', 'taxonName', 'Ariocarpus fissuratus'), c(31, 'taxon', 'ariocarpus-fissuratus', 'followed', true), c(32, 'event', 'e9', 'acc', 'r9'), c(33, 'accession', 'r8', '_deleted', true)];
+    const m = previewMerge(log, more);
+    expect(m.added).toBe(4);
+    expect(m.addedByKind).toEqual({ accession: 1, taxon: 1, event: 1 });
+    expect(m.addedDeleted).toBe(1);
   });
 });
 

@@ -128,11 +128,14 @@ describe('the frost line in clock time on the device (improvements, 6)', () => {
     const b3 = { forecast: f3, risk: frostRisk(f3, []) };
     expect(b3.risk.text).toContain('around 23:00 Wednesday solar time (2026-10-14,');
     expect(clockTime(b3, 'America/Argentina/Mendoza').risk.text).toContain('around 01:00 Thursday, your time (2026-10-14 in the table,');
-    // Apia: solar -11 by longitude, the clock +13; the two are an hour apart around the clock, so the line is said in clock time (round twenty-two, 13)
-    const ts4 = [...Array(36).keys()].map((h) => step(new Date(Date.UTC(2026, 9, 14, h)).toISOString(), h === 16 ? 4 : 10)); // 16:00 UTC = 05:00 solar the 15th = 05:00 clock the 15th
+    // Apia: solar -11 by longitude, the clock +13; the same hour on the clock a day apart, so the line is said in clock time,
+    // with the reader's weekday and the table's solar date, which differ there (round twenty-two, 13; round twenty-three, 13)
+    const ts4 = [...Array(36).keys()].map((h) => step(new Date(Date.UTC(2026, 9, 14, h)).toISOString(), h === 16 ? -1 : 10)); // 16:00 UTC = 05:00 solar Wednesday the 14th = 05:00 Thursday the 15th on an Apia clock
     const f4 = reduceMet({ properties: { timeseries: ts4 } } as never, -171.8);
     expect(f4.offsetH).toBe(-11);
-    expect(clockTime({ forecast: f4, risk: frostRisk(f4, []) }, 'Pacific/Apia').risk.text).toContain('around 05:00 Thursday, your time');
+    const apia = clockTime({ forecast: f4, risk: frostRisk(f4, []) }, 'Pacific/Apia').risk.text;
+    expect(apia).toContain('around 05:00 Thursday, your time (2026-10-14 in the table,');
+    expect(frostRisk(f4, []).text).toContain('around 05:00 Wednesday solar time (2026-10-14,');
     // a body without a solar phrase (a warning in force, a refusal) passes through
     const w = { forecast: f, risk: { level: 'warning', text: 'Freeze Warning in force (NOAA/NWS).' } };
     expect(clockTime(w, 'America/Argentina/Mendoza')).toBe(w);

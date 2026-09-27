@@ -1,6 +1,14 @@
 import { test, expect } from '@playwright/test';
 
 /** The plant page's id card keeps one primary action; Edit, Label and Propagate are behind "More" (improvements, 7). */
+/** Click Add on the add-plant form. A name the reference does not hold (the name service is not reachable here) is asked about once, and the second Add keeps it as typed (round twenty-three, 4). */
+async function addPlant(p: import('@playwright/test').Page) {
+  await p.getByRole('button', { name: /^Add/ }).click();
+  const asked = p.locator('.picker .hint', { hasText: 'press Add to keep exactly what you typed' });
+  await Promise.race([p.waitForURL(/\/plants\/\d{4}-\d{4}$/), asked.waitFor()]);
+  if (await asked.isVisible()) await p.getByRole('button', { name: /^Add/ }).click();
+  await expect(p).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
+}
 async function more(p: import('@playwright/test').Page, name: string) {
   await p.locator('.idcard .cardmenu > button').click();
   await p.locator('#card-menu [role=menuitem]', { hasText: name }).click();
@@ -164,8 +172,7 @@ test('benches: make a place, put a plant there, water the bench, audit it', asyn
   await page.locator('#species-name').blur();
   const shelfValue = await page.locator('#f-loc option', { hasText: 'Shelf 2' }).getAttribute('value');
   await page.selectOption('#f-loc', shelfValue!);
-  await page.getByRole('button', { name: /^Add/ }).click();
-  await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
+  await addPlant(page);
   await expect(page.locator('.idcard a.place', { hasText: 'Laundry room › Shelf 2' })).toBeVisible();
   // the room sees the plant through the shelf; water the whole room
   await page.goto('/places');
@@ -211,7 +218,7 @@ test('sowings: sow seed, count germination, pot up into numbered plants, propaga
   await page.getByRole('button', { name: 'Pot up…' }).click();
   await page.fill('#p-n', '2');
   await page.getByRole('button', { name: 'Pot up 2' }).click();
-  await expect(page.getByText(/Potted up 2:/)).toBeVisible();
+  await expect(page.locator('.notice', { hasText: /Potted up 2:/ })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Plants raised from this batch' })).toBeVisible();
   // the plant knows its batch and its provenance
   await page.locator('.rows a.accrow').first().click();
@@ -412,6 +419,16 @@ test('backup: export a zip, wipe the device, restore it, and the collection is i
   await page.locator('#bk-file').setInputFiles(path!);
   await expect(page.locator('.preview')).toContainText('change nothing');
   await expect(page.locator('#bk-merge')).toBeDisabled();
+  // the same file on a device that has every record but no site: merging applies the settings alone, and Merge is offered (round twenty-three, 9)
+  await page.evaluate(() => localStorage.removeItem('cultifolio.frost.site'));
+  await page.reload();
+  await page.locator('#bk-file').setInputFiles(path!);
+  await expect(page.locator('.preview')).toContainText('change no records');
+  await expect(page.locator('.preview')).toContainText("apply the file's site");
+  await expect(page.locator('#bk-merge')).toBeEnabled();
+  await page.click('#bk-merge');
+  await expect(page.locator('#bk-done')).toContainText(/site/);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('cultifolio.frost.site') ?? 'null'))).toMatchObject({ lat: 40.38, lon: -80.05 });
   // wipe: replace with the file is the wipe-and-restore path, but first prove a real wipe loses everything
   await page.evaluate(async () => {
     const db = await new Promise<IDBDatabase>((res) => { const r = indexedDB.open('cultifolio'); r.onsuccess = () => res(r.result); });
@@ -1044,8 +1061,7 @@ test('long and unicode names: nothing overflows at 360 px, the number chip never
     await page.fill('#species-name', name);
     await page.locator('#species-name').blur();
     if (field) await page.fill('#f-field', field);
-    await page.getByRole('button', { name: /^Add/ }).click();
-    await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
+    await addPlant(page);
     return page.url().split('/').pop()!;
   };
   const a1 = await add('Pseudolithocarpodendron magnificentissimum-extraordinarissimum subsp. longissimumverbosum', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ-0123456789');
@@ -1398,6 +1414,10 @@ test('a label whose species could not be reached says so, and the sheet is not p
   await page.fill('#lb-skip', '99');
   await expect(page.locator('.page')).toHaveCount(1);
   await expect(page.locator('.page').first().locator('.label').nth(29).locator('.no')).toBeVisible();
+  await expect(page.locator('#lb-skip')).toHaveValue('29'); // the box says the figure the sheet uses (round twenty-three, 18)
+  await page.selectOption('#lb-sheet', '5163'); // ten cells: the skip follows the sheet down
+  await expect(page.locator('#lb-skip')).toHaveValue('9');
+  await page.selectOption('#lb-sheet', '5160');
   await page.fill('#lb-skip', '');
   await expect(page.locator('.page').first().locator('.label').nth(0).locator('.no')).toBeVisible();
   // a species the reference has but with no climate: its care line is empty, and that is an answer, not a wait (round fourteen, 3)
@@ -1738,7 +1758,7 @@ test('settings previews the next number from the numbers given, and an edited ac
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
   await page.getByRole('button', { name: /^Add/ }).click();
   await page.goto('/plants/new?species=Copiapoa%20humilis&key=5384999');
-  await page.getByRole('button', { name: /^Add/ }).click();
+  await addPlant(page);
   await page.goto('/settings');
   await expect(page.locator('.accno')).toHaveText(/-0003$/);
   await page.goto('/plants/2026-0001');
@@ -1825,7 +1845,7 @@ test('a germination count that potted plants rest on cannot be removed; bottom h
   await page.getByRole('button', { name: 'Pot up…' }).click();
   await page.fill('#p-n', '2');
   await page.getByRole('button', { name: 'Pot up 2' }).click();
-  await expect(page.getByText(/Potted up 2:/)).toBeVisible();
+  await expect(page.locator('.notice', { hasText: /Potted up 2:/ })).toBeVisible();
   const countRow = page.locator('.tlrow', { hasText: 'Germination count' });
   await expect(countRow.locator('.x', { hasText: 'kept' })).toBeVisible();
   await expect(countRow.locator('.rm')).toHaveCount(0);
@@ -1985,4 +2005,67 @@ test('a species page you grow six of does not scroll sideways on a phone (round 
   const w = await page.evaluate(() => ({ doc: document.documentElement.scrollWidth, mine: document.querySelector('.mine')!.scrollWidth }));
   expect(w.doc).toBeLessThanOrEqual(390);
   expect(w.mine).toBeLessThanOrEqual(390);
+});
+
+test('round twenty-three: a name the reference does not hold is added on the second Add and marked; an edit to a hybrid renames and logs it; a removed place says where its plants went and their logs say so; a batch status change is logged', async ({ page }) => {
+  // The name service is not reachable here (no upstream), so a name outside the fixture corpus resolves to nothing: the
+  // first Add arms the field and asks, the second keeps exactly what was typed (round twenty-three, 4).
+  await page.goto('/plants/new');
+  await page.fill('#species-name', 'Notaplantia fakeus');
+  await page.locator('#species-name').blur();
+  await page.getByRole('button', { name: /^Add/ }).click();
+  await expect(page).toHaveURL(/\/plants\/new$/);
+  await expect(page.locator('.picker .hint', { hasText: 'press Add to keep exactly what you typed' })).toBeVisible();
+  await page.getByRole('button', { name: /^Add/ }).click();
+  await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
+  const acc = page.url().split('/').pop()!;
+  await expect(page.locator('h1.sci')).toContainText('Notaplantia fakeus');
+  await expect(page.locator('.idcard .nc .tok')).toContainText('Name not checked');
+
+  // Edited into a cross: filed under the genus, the parents kept, and the log says what it was called before (round twenty-three, 3)
+  await more(page, 'Edit');
+  await page.fill('#ed-name', 'Notaplantia fakeus x N. altera');
+  await page.locator('#ed-name').blur();
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.locator('h1.sci')).toContainText('Notaplantia');
+  await expect(page.locator('h1.sci')).not.toContainText('fakeus');
+  await expect(page.locator('.idcard .kind', { hasText: 'hybrid' })).toBeVisible();
+  await expect(page.locator('.factgrid', { hasText: 'Parentage' })).toContainText('Notaplantia fakeus × Notaplantia altera');
+  await expect(page.locator('.tlrow', { hasText: 'Renamed from Notaplantia fakeus to Notaplantia' })).toContainText('now a hybrid');
+
+  // A place inside a place: removing the inner one moves its plant up, says so, and writes the move on the plant's log (round twenty-three, 2)
+  await page.goto('/places');
+  await page.getByRole('button', { name: 'New place' }).click();
+  await page.fill('#loc-name', 'Porch');
+  await page.selectOption('#loc-kind', 'outdoor');
+  await page.getByRole('button', { name: 'Add', exact: true }).click();
+  await page.getByRole('button', { name: 'New place' }).click();
+  await expect(page.locator('#loc-kind')).toHaveValue('room'); // the kind is chosen per place, not carried from the last one (round twenty-three, 19)
+  await page.fill('#loc-name', 'Cold frame');
+  const porch = await page.locator('#loc-parent option', { hasText: 'Porch' }).getAttribute('value');
+  await page.selectOption('#loc-parent', porch!);
+  await page.getByRole('button', { name: 'Add', exact: true }).click();
+  await page.goto(`/plants/${acc}`);
+  await page.locator('.quickbar .btn', { hasText: /^Move$/ }).click();
+  const frame = await page.locator('#mv-loc option', { hasText: 'Cold frame' }).getAttribute('value');
+  await page.selectOption('#mv-loc', frame!);
+  await page.locator('.evform .btn.pri', { hasText: 'Move' }).click();
+  await expect(page.locator('.idcard')).toContainText('Cold frame');
+  await page.goto(`/places/${frame}`);
+  await page.getByRole('button', { name: 'Remove place' }).click();
+  await page.getByRole('button', { name: 'Yes, remove' }).click();
+  await expect(page.locator('.toast')).toContainText('1 plant moved up to Porch');
+  await page.goto(`/plants/${acc}`);
+  await expect(page.locator('.idcard')).toContainText('Porch');
+  await expect(page.locator('.tlrow', { hasText: 'Cold frame was removed' })).toBeVisible();
+
+  // A batch marked failed: the log says so and the page says it happened (round twenty-three, 16)
+  await page.goto('/propagation/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.fill('#s-count', '6');
+  await page.getByRole('button', { name: 'Start batch' }).click();
+  await expect(page).toHaveURL(/\/propagation\/S\d{4}-001$/);
+  await page.getByRole('button', { name: 'Mark failed' }).click();
+  await expect(page.locator('.toast')).toContainText('Marked failed');
+  await expect(page.locator('.tlrow', { hasText: 'Marked failed' })).toBeVisible();
+  await expect(page.locator('.pill', { hasText: 'failed' }).first()).toBeVisible();
 });

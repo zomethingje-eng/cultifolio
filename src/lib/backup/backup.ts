@@ -163,13 +163,20 @@ export function previewMerge(current: Change[], incoming: Change[]) {
   const fresh = incoming.filter((c) => !have.has(c.t));
   const before = materialise(current).state;
   const after = materialise([...current, ...fresh]).state;
-  let added = 0, changed = 0;
+  let added = 0, changed = 0, addedDeleted = 0;
+  // Added, by kind, live records only, so the preview can say "5 plants, 20 timeline entries" in the words the "In the
+  // file" line uses, rather than a total that also counts species notes, the numbering record and deleted records
+  // (round twenty-three, 18).
+  const addedByKind: Record<string, number> = {};
   for (const [k, r] of after) {
     const b = before.get(k);
-    if (!b) added++;
-    else if (b._t !== r._t) changed++;
+    if (!b) {
+      added++;
+      if (r._deleted) addedDeleted++;
+      else addedByKind[r.kind] = (addedByKind[r.kind] ?? 0) + 1;
+    } else if (b._t !== r._t) changed++;
   }
-  return { fresh, added, changed, unchanged: after.size - added - changed };
+  return { fresh, added, changed, unchanged: after.size - added - changed, addedByKind, addedDeleted };
 }
 
 const csvCell = (x: unknown) => {

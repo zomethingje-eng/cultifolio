@@ -10,12 +10,16 @@ import { readFileSync } from 'node:fs';
 import { deriveKeys, sealJson, seal, newVaultKey, batchFingerprint, packPhoto } from '$lib/sync/crypto';
 import { MAX_NEW_VAULTS_PER_DAY, MAX_IP_BYTES_PER_DAY, MAX_BYTES, RATE } from '$lib/server/sync';
 import { MAX_AHEAD_MS, hlcEncode } from '$core/hlc';
-import { BUCKETS } from '$core/bucket';
 import { B32, parseVaultKey } from '$lib/sync/crypto';
-import { Manifest } from '$lib/backup/format';
+import { Manifest, LegacyChanges, photoPath, thumbPath, backupName, EXT } from '$lib/backup/format';
+import { PUSH_HEADERS, batchName, listAfter } from '$lib/sync/limits';
+import { KINDS, RESERVED_FIELDS } from '$core/log';
+import { EVENT_LABEL } from '$lib/db/types';
+import { BUCKETS, bucketOf } from '$core/bucket';
+import { VaultFull, parseAfter } from '$lib/server/sync';
 import { madeOn } from '$core/dates';
 import { existsSync } from 'node:fs';
-import { THUMB_EDGE } from '$lib/photo/process';
+import { THUMB_EDGE, FULL_EDGE } from '$lib/photo/process';
 
 const enc = new TextEncoder();
 const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
@@ -23,8 +27,8 @@ const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '
 /** The page as a reader sees it: the Svelte markup with tags removed and entities decoded. */
 const page = readFileSync(new URL('../../src/routes/about/formats/+page.svelte', import.meta.url), 'utf8')
   .replace(/<script[\s\S]*?<\/script>/, '')
+  .replace(/\{`([^`]*)`\}/g, (_, t: string) => t.replace(/</g, '&lt;').replace(/>/g, '&gt;')) // a Svelte template literal, as the page renders it: its angle brackets are text, not tags
   .replace(/<[^>]+>/g, '')
-  .replace(/\{`([^`]*)`\}/g, '$1') // a Svelte template literal, as the page renders it
   .replace(/&lt;/g, '<')
   .replace(/&gt;/g, '>')
   .replace(/&amp;/g, '&')
@@ -83,7 +87,21 @@ const doc = {
   ceilings: says(/past either the answer to a creation is (\d+) with a sentence/)[1],
   pairing: says(/and the (cultifolio:\/\/vault\?k=) prefix of the pairing link/)[1],
   writerTotal: Number(says(/(\d+) characters in all/)[1]),
-  idRead: Number(says(/the app reads the time as the (\d+) characters after the prefix/)[1])
+  idRead: Number(says(/the app reads the time as the (\d+) characters after the prefix/)[1]),
+  kinds: says(/kind is one of ([a-z, ]+?) \(what the app calls a propagation batch/)[1].split(/,\s*/).concat(says(/is a place\), ([a-z, ]+)\. A delete/)[1].split(/,\s*/)),
+  reserved: says(/The fields (\w+), (\w+) and (\w+) belong to the record and cannot be set by a change \(nor can the names (\S+) and (\S+)\)/),
+  eventTypes: says(/t \(([a-z, ]+)\), and as the type needs/)[1].split(/,\s*/),
+  backupFile: says(/(cultifolio-YYYY-MM-DD\.cultifolio\.zip), an ordinary zip/)[1],
+  backupPaths: says(/(photos\/<id>\.jpg) full-size JPEG, long edge (\d+) px (photos\/<id>\.t\.jpg) (\d+) px thumbnail (plants\.csv) one row per plant[^)]*\) (device\.json) the exporting device's settings \{ (site): \{ lat, lon, name\? \} \(as entered, not rounded\), (units), (labels), (prefs) \}/),
+  legacy: says(/older changes-only JSON export \(\{ "format": "(cultifolio-changes)", "v": (\d), "changes": \[\.\.\.\] \}\)/),
+  listReply: says(/returns \{ batches: \[\{ (key), (at) \}\], (more), (next)\?: \{ at, key \} \}; the next page is &(after)=<at>:<key>/),
+  bearer: says(/All but creation take (Authorization): (Bearer) <token>/),
+  fullBody: says(/is 507 with \{ error: "(vault full)", (bytes), (limit) \}/),
+  refusalFields: says(/is JSON with an (\w+); one the framework makes [^)]*\) is JSON with a (\w+), and a fetch of a batch or photograph that is not there is a plain-text (\d+)/),
+  hash: says(/the species slug is hashed \((FNV-1a)\) into one of (\d+) buckets/),
+  bucketRoutes: says(/the device asks (\/api\/sheets)\?b= or (\/api\/entries)\?b= for the buckets/),
+  corpusRoute: says(/carries the corpus id from (\/api\/corpus)\)/)[1],
+  dossierRoute: says(/served at (\/api\/dossier)\/<gbifKey>/)[1]
 };
 const numberWords: Record<string, number> = { five: 5, twelve: 12 };
 
@@ -175,7 +193,8 @@ describe('/about/formats is enough to decrypt a vault, and says what the code do
     const lastWall = 1789520000000 + 5 * 60_000;
     const parts = { hour: String(Math.floor(lastWall / 3600_000) * 3600_000).padStart(doc.hourDigits, '0'), device: 'abcdefabcdef', fingerprint: mine.slice(0, 12) };
     const name = doc.nameLayout.replace(/<(\w+)>/g, (_, k: string) => parts[k as keyof typeof parts]);
-    expect(name).toBe(`${parts.hour}-0000-${parts.device}-${parts.fingerprint}`); // the layout on the page is the one the engine writes
+    expect(name).toBe(batchName(lastWall, parts.device, mine)); // the layout on the page is the one the engine writes (round twenty-three, 10: through the engine's own function)
+    expect(batchName(Number(parts.hour) + 3599_999, parts.device, mine)).toBe(name); // any millisecond of the hour names the same batch
     expect(name).toMatch(new RegExp(`^\\d{${doc.hourDigits}}-0000-[a-z0-9]{${doc.nameDevice}}-[0-9a-f]{12}$`));
     expect(Number(name.split('-')[0]) % 3600_000).toBe(0);
     // the clock: a hex counter, and a peer's clock followed only five minutes ahead
@@ -186,7 +205,8 @@ describe('/about/formats is enough to decrypt a vault, and says what the code do
     expect(doc.writerTotal).toBe(16);
     expect(doc.example[3].slice(0, 12)).toMatch(/^[0-9a-f]{12}$/); // twelve hex digits of device id, as the app mints them
     expect(doc.idRead).toBe(8);
-    expect(madeOn(doc.example[4])).toBe(new Date(Number(doc.example[1])).toISOString().slice(0, 10).replace(/^(\d{4})-(\d{2})-(\d{2})$/, (m) => m) && madeOn(doc.example[4])); // the app reads the example id's time
+    const when = new Date(Number(doc.example[1]));
+    expect(madeOn(doc.example[4])).toBe(`${when.getFullYear()}-${String(when.getMonth() + 1).padStart(2, '0')}-${String(when.getDate()).padStart(2, '0')}`); // the app reads the example id's time (the local day, as madeOn reports it)
     expect(parseInt(doc.example[4].slice(1, 1 + doc.idRead), 36)).toBe(Number(doc.example[1]));
     // the pairing-link prefix the page names is the one the parser strips
     expect(parseVaultKey(doc.pairing + newVaultKey().toLowerCase())).not.toBeNull();
@@ -212,13 +232,41 @@ describe('/about/formats is enough to decrypt a vault, and says what the code do
     // every endpoint the page names is a route file, and the batch route takes the methods named
     const e = doc.endpoints;
     for (const [path, file] of [[e[1], 'vault/+server.ts'], [e[2], 'log/+server.ts'], [e[7], 'log/[key]/+server.ts'], [e[9], 'photo/[id]/+server.ts']] as const) expect(existsSync(new URL(`../../src/routes/api/sync/${file}`, import.meta.url)), path).toBe(true);
-    expect([e[4], e[5], e[6]]).toEqual(['X-Batch', 'X-Batch-Plain', 'X-Device']);
+    expect([e[4], e[5], e[6]].map((h) => h.toLowerCase())).toEqual([PUSH_HEADERS.batch, PUSH_HEADERS.plain, PUSH_HEADERS.device]);
     expect(e[8]).toBe('PUT|GET|HEAD');
+    for (const route of [doc.bucketRoutes[1], doc.bucketRoutes[2], doc.corpusRoute, doc.dossierRoute]) expect(existsSync(new URL(`../../src/routes${route}`, import.meta.url)), route).toBe(true);
+    // the listing reply and its paging parameter, as the server parses it from what the device sends
+    expect([doc.listReply[1], doc.listReply[2], doc.listReply[3], doc.listReply[4], doc.listReply[5]]).toEqual(['key', 'at', 'more', 'next', 'after']);
+    expect(parseAfter(listAfter(1789520000000, 'k'))).toEqual({ at: 1789520000000, key: 'k' });
+    expect(doc.bearer.slice(1, 3)).toEqual(['Authorization', 'Bearer']);
+    // the 507 body the page prints is the one the class sends
+    expect(JSON.parse(JSON.stringify({ error: doc.fullBody[1], bytes: 1, limit: 2 }))).toEqual({ error: 'vault full', bytes: 1, limit: 2 });
+    expect(new VaultFull(1, 2).response().status).toBe(507);
+    expect(doc.refusalFields.slice(1, 4)).toEqual(['error', 'message', '404']); // json() routes say `error`, SvelteKit's error() says `message`
+    // the hash the page names is the one the bucket function computes
+    expect(doc.hash[1]).toBe('FNV-1a');
+    expect(Number(doc.hash[2])).toBe(BUCKETS);
+    const fnv1a = (s: string) => { let h = 0x811c9dc5; for (const c of enc.encode(s)) { h ^= c; h = Math.imul(h, 16777619) >>> 0; } return h; };
+    expect(bucketOf('lithops-lesliei')).toBe((fnv1a('lithops-lesliei') & (BUCKETS - 1)).toString(16).padStart(2, '0'));
     // the manifest keys the page lists are the schema's, and the counts it lists are the summary's
     const m = doc.manifestKeys;
     const schemaKeys = Object.keys(Manifest.entries);
     for (const k of [m[1], m[2], m[3], m[4], m[5], m[6], m[8], m[9]]) expect(schemaKeys, k).toContain(k);
     expect(m[7].split(/,\s*/).sort()).toEqual(['accessions', 'changes', 'events', 'locations', 'photoBytes', 'photos', 'sowings', 'taxa']);
+    // the record kinds, the reserved names and the event types the page lists are the code's, no more and no fewer
+    expect([...doc.kinds].sort()).toEqual([...KINDS].sort());
+    expect(new Set(doc.reserved.slice(1, 6))).toEqual(RESERVED_FIELDS);
+    expect([...doc.eventTypes].sort()).toEqual(Object.keys(EVENT_LABEL).sort());
+    // the backup's file names are the ones the writer uses
+    expect(doc.backupFile).toBe(backupName(new Date(2026, 0, 2)).replace('2026-01-02', 'YYYY-MM-DD'));
+    expect(doc.backupFile.endsWith(EXT)).toBe(true);
+    expect(doc.backupPaths[1].replace('<id>', 'p1')).toBe(photoPath('p1'));
+    expect(Number(doc.backupPaths[2])).toBe(FULL_EDGE);
+    expect(doc.backupPaths[3].replace('<id>', 'p1')).toBe(thumbPath('p1'));
+    expect(Number(doc.backupPaths[4])).toBe(THUMB_EDGE);
+    expect(doc.backupPaths.slice(5, 11)).toEqual(['plants.csv', 'device.json', 'site', 'units', 'labels', 'prefs']);
+    expect(LegacyChanges.entries.format.literal).toBe(doc.legacy[1]);
+    expect(Number(doc.legacy[2])).toBe(1);
     // the key alphabet the page describes by exclusion is the code's
     const excluded = [...doc.excluded[1].split(/,\s*/), doc.excluded[2]];
     const alphabet = [...'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'].filter((c) => !excluded.includes(c)).join('');

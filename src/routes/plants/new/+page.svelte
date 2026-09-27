@@ -44,10 +44,12 @@
     // is taken only if the name is still the one asked about: the form is live during the wait, and a grower who has
     // typed another name must not get the first name's key back (round eighteen, 5).
     if (k) {
-      const checked = await checkedKey(sp, k);
-      if (name === sp) taxonKey = checked;
+      keyCheck = checkedKey(sp, k).then((checked) => { if (name === sp) taxonKey = checked; });
+      await keyCheck;
     }
   });
+  /** The key in the link being checked against the reference; an Add clicked before the answer waits for it rather than filing the plant without its key or asking about a name that came with one (round twenty-three, 4). */
+  let keyCheck: Promise<void> | null = null;
   $effect(() => {
     setCrumb([{ label: 'My plants', href: '/plants' }, { label: 'Add a plant' }]);
     return () => setCrumb([]);
@@ -76,10 +78,17 @@
   let busy = $state(false);
   const nextNo = $derived(collection.ready ? collection.nextAccessionNumber() : '…');
 
+  let nameUnresolved = $state(false);
+  let nameArmed = $state(false);
+  let picker = $state<{ check: () => Promise<boolean> } | null>(null);
   async function save(e: SubmitEvent) {
     e.preventDefault();
     if (!name.trim() || busy) return;
     if (ownTaken) return;
+    if (keyCheck) await keyCheck.catch(() => undefined);
+    // A name nothing resolved is filed on the second Add, not the first: the first arms and the picker says so (round twenty-three, 4).
+    if (!taxonKey && kind !== 'hybrid' && !nameArmed && !(await picker?.check())) { nameArmed = true; return; }
+    void nameUnresolved;
     busy = true;
     const wanted = countN;
     try {
@@ -133,7 +142,7 @@
   </PageHead>
   <div class="cult sheet">
 
-  <label class="field"><span>Species</span><SpeciesPicker bind:value={name} bind:taxonKey bind:cultivar bind:kind bind:parentage />
+  <label class="field"><span>Species</span><SpeciesPicker bind:value={name} bind:taxonKey bind:cultivar bind:kind bind:parentage bind:unresolved={nameUnresolved} bind:armed={nameArmed} bind:this={picker} />
     <span class="faint small">A species, a cultivar (<i>Haworthia truncata</i> 'Lime Green'), or a hybrid: write the cross (<i>Ariocarpus retusus</i> × <i>trigonus</i>), or the genus and the name (<i>Echeveria</i> 'Blue Curls') when the parents are not known.</span></label>
   {#if kind === 'hybrid'}
     <label class="field"><span>Parentage <span class="faint">(if known)</span></span><input id="f-parentage" type="text" bind:value={parentage} placeholder="Seed parent × pollen parent" /><span class="faint small">The plant is filed under the genus; its parents' species pages carry the biology. A hybrid has no habitat of its own, so the climate-derived cultivation rows do not apply to it.</span></label>

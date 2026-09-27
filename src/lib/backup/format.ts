@@ -6,6 +6,7 @@
  *   photos/<id>.jpg      full-size pixels for each photo record
  *   photos/<id>.t.jpg    its thumbnail
  *   plants.csv           the plants as a spreadsheet, for people, not for import
+ *   device.json          the exporting device's settings { site, units, labels, prefs }, applied on restore only where the device has none
  *
  * The change log is the truth; a backup restored on any device merges by the
  * same rule sync uses (per field, latest HLC wins), so restoring an old backup

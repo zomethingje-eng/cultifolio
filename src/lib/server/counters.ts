@@ -18,21 +18,24 @@
  */
 import { DurableObject } from 'cloudflare:workers';
 
-export type Creation = 'ok' | 'address' | 'day' | 'total';
+export type Creation = 'ok' | 'address' | 'day' | 'total' | 'unavailable';
 const DAY_MS = 86_400_000;
+/** The next UTC midnight after `now`: the alarm runs there, so "older than two days" is counted in whole UTC days from a fixed point (round twenty-three, 8). */
+export const nextMidnight = (now: number) => Math.floor(now / DAY_MS) * DAY_MS + DAY_MS;
 
 export class Counters extends DurableObject {
   /** Decide and count one creation. `address` is already keyed (an IPv4 address or an IPv6 /64); `day` is YYYY-MM-DD; `seed` is the count of vaults made before this object existed. */
-  async create(address: string, day: string, perAddress: number, perDay: number, max: number, seed = 0): Promise<Creation> {
+  async create(address: string, day: string, perAddress: number, perDay: number, max: number, seed: number | null = 0, now = Date.now()): Promise<Creation> {
     const kIp = `ip:${address}:${day}`, kDay = `day:${day}`;
     const got = await this.ctx.storage.get<number>([kIp, kDay, 'all']);
     const nIp = got.get(kIp) ?? 0, nDay = got.get(kDay) ?? 0;
-    const nAll = got.get('all') ?? seed;
+    if (got.get('all') == null && seed == null) return 'unavailable'; // not yet seeded and the count before this object could not be read: wait, do not start from zero
+    const nAll = got.get('all') ?? seed ?? 0;
     if (nIp >= perAddress) return 'address';
     if (nAll >= max) return 'total';
     if (nDay >= perDay) return 'day';
     await this.ctx.storage.put({ [kIp]: nIp + 1, [kDay]: nDay + 1, all: nAll + 1 });
-    if ((await this.ctx.storage.getAlarm()) == null) await this.ctx.storage.setAlarm(Date.now() + DAY_MS);
+    if ((await this.ctx.storage.getAlarm()) == null) await this.ctx.storage.setAlarm(nextMidnight(now));
     return 'ok';
   }
   /** A creation that was counted and then not made: the counts go back by one, never below zero. */
@@ -48,13 +51,24 @@ export class Counters extends DurableObject {
     const ips = await this.ctx.storage.list({ prefix: 'ip:' });
     return { day: got.get(`day:${day}`) ?? 0, all: got.get('all') ?? 0, addresses: ips.size };
   }
-  /** Once a day: every per-address and per-day key older than two days goes, so nothing about an address outlives the site's "within two days". */
+  /**
+   * At every UTC midnight: every per-address and per-day key not dated today or yesterday goes. A key dated the 25th is
+   * written between 00:00 and 23:59 on the 25th and deleted at the midnight that starts the 27th, so no address key is
+   * kept longer than 48 hours, which is what /about/how says (round twenty-three, 8).
+   */
   async alarm(): Promise<void> {
-    const cutoff = new Date(Date.now() - 2 * DAY_MS).toISOString().slice(0, 10);
+    await this.tick(Date.now());
+  }
+  async tick(now: number): Promise<void> {
+    await this.sweep(now);
+    await this.ctx.storage.setAlarm(nextMidnight(now));
+  }
+  async sweep(now = Date.now()): Promise<string[]> {
+    const keep = new Set([new Date(now).toISOString().slice(0, 10), new Date(now - DAY_MS).toISOString().slice(0, 10)]);
     const stale: string[] = [];
-    for (const k of (await this.ctx.storage.list({ prefix: 'ip:' })).keys()) if (k.slice(k.lastIndexOf(':') + 1) < cutoff) stale.push(k);
-    for (const k of (await this.ctx.storage.list({ prefix: 'day:' })).keys()) if (k.slice(4) < cutoff) stale.push(k);
+    for (const k of (await this.ctx.storage.list({ prefix: 'ip:' })).keys()) if (!keep.has(k.slice(k.lastIndexOf(':') + 1))) stale.push(k);
+    for (const k of (await this.ctx.storage.list({ prefix: 'day:' })).keys()) if (!keep.has(k.slice(4))) stale.push(k);
     for (let i = 0; i < stale.length; i += 128) await this.ctx.storage.delete(stale.slice(i, i + 128));
-    await this.ctx.storage.setAlarm(Date.now() + DAY_MS);
+    return stale;
   }
 }

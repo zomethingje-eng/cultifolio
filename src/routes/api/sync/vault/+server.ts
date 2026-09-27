@@ -23,11 +23,12 @@ export const POST: RequestHandler = async ({ request, platform, getClientAddress
   if (!existing && (await vaultIdFor(body.token)) !== id) return json({ error: 'that vault id does not belong to that token' }, { status: 400 });
   // SYNC_OPEN=1 (dev, and the launch before licences) lets any vault sync; anything else, including an unset variable, means a licence must be attached later.
   const open = platform?.env?.SYNC_OPEN === '1';
+  const now = Date.now(); // one instant for the count and any refund, so a creation counted at 23:59:59 is refunded on the same day's keys (round twenty-three, 8)
   if (!existing) {
     // Three ceilings on new vaults (per address, for everyone today, in all), and a refusal is a plain answer the sync
     // page shows as it is, never a 500: 429 for the address's own limit, 503 with a sentence that says which shared ceiling, the day's or the total, and what still works.
     // `clientIp`, not the raw callback: a local runtime can give no address at all, and `addressKey(null)` was a 500 on every creation under `wrangler dev` (round twenty-one, R1-1).
-    const may = await allowCreation(platform?.env?.QUEUE, clientIp(getClientAddress), Date.now(), creationCeilings(platform?.env as Record<string, unknown> | undefined), platform?.env?.COUNTERS);
+    const may = await allowCreation(platform?.env?.QUEUE, clientIp(getClientAddress), now, creationCeilings(platform?.env as Record<string, unknown> | undefined), platform?.env?.COUNTERS);
     if (may === 'address') return json({ error: 'too many new vaults from this address today' }, { status: 429, headers: { 'retry-after': '3600', 'cache-control': 'no-store' } });
     if (may === 'day') return json({ error: 'Sync has taken all the new vaults it can today. Your collection stays on this device; try again tomorrow.' }, { status: 503, headers: { 'retry-after': '3600', 'cache-control': 'no-store' } });
     if (may === 'unavailable') return json({ error: 'Sync could not count new vaults just now. Your collection stays on this device; try again in a minute.' }, { status: 503, headers: { 'retry-after': '60', 'cache-control': 'no-store' } });
@@ -37,10 +38,12 @@ export const POST: RequestHandler = async ({ request, platform, getClientAddress
   try {
     made = await ensureVault(r2, id, body.token, open);
   } catch (e) {
-    if (!existing) await refundCreation(platform?.env?.COUNTERS, clientIp(getClientAddress)); // counted above, not made: the slot goes back (round twenty-two, 1)
+    if (!existing) await refundCreation(platform?.env?.COUNTERS, clientIp(getClientAddress), now); // counted above, not made: the slot goes back (round twenty-two, 1)
     throw e;
   }
   const { created, meta } = made;
+  // Two devices creating the same vault at once: both were counted, one made it; the other's count goes back (round twenty-three, 7).
+  if (!existing && !created) await refundCreation(platform?.env?.COUNTERS, clientIp(getClientAddress), now);
   // A (re)join is the moment the slow, authoritative listing puts the live counter right.
   const kv = platform?.env?.QUEUE;
   const bytes = created ? 0 : kv ? await vaultBytes(r2, kv, id, meta, Date.now(), true) : await recount(r2, id, meta);

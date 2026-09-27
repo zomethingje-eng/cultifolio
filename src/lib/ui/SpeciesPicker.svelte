@@ -17,7 +17,7 @@
   import { prepare, search as searchIndex, type Prepared } from '$core/search';
   import SpeciesName from './SpeciesName.svelte';
   import type { NameKind } from '$core/names';
-  let { value = $bindable(''), taxonKey = $bindable<number | null>(null), cultivar = $bindable<string | null>(null), kind = $bindable<NameKind>('species'), parentage = $bindable<string | null>(null), id = 'species-name' }: { value?: string; taxonKey?: number | null; cultivar?: string | null; kind?: NameKind; parentage?: string | null; id?: string } = $props();
+  let { value = $bindable(''), taxonKey = $bindable<number | null>(null), cultivar = $bindable<string | null>(null), kind = $bindable<NameKind>('species'), parentage = $bindable<string | null>(null), id = 'species-name', unresolved = $bindable(false), armed = $bindable(false) }: { value?: string; taxonKey?: number | null; cultivar?: string | null; kind?: NameKind; parentage?: string | null; id?: string; unresolved?: boolean; armed?: boolean } = $props();
   type Sugg = { key: number; name: string; family?: string; rank?: string; status?: string; local?: boolean; far?: boolean };
   let suggestions = $state<Sugg[]>([]);
   let open = $state(false);
@@ -28,10 +28,12 @@
   /** Bumped on every keystroke: a search or exact check answers only if it is still the latest, so a slow answer for text since changed never replaces the menu (round eighteen, B2). */
   let reqGen = 0;
   let resolved = $state<'yes' | 'no' | 'unknown' | 'unreached'>('unknown');
+  // Said to the form: a name that nothing resolved (not a reference name, or the service did not answer) is not filed on
+  // one click; the form arms first, as Enter does here, so a half-typed name in a greenhouse without signal is not a plant (round twenty-three, 4).
+  $effect(() => { unresolved = !taxonKey && (resolved === 'no' || resolved === 'unreached'); });
   /** The highlighted row, or -1 for none. */
   let hi = $state(-1);
   /** Enter was pressed once on a name nothing resolved; the next press submits it as typed. */
-  let armed = $state(false);
   let nameServiceDown = $state(false); // /api/names refused or unreachable: said under the field (round seventeen, 1)
   let root = $state<HTMLDivElement | null>(null);
   const uid = $props.id();
@@ -113,6 +115,15 @@
     if (taxonKey || value.trim().length < 4) return;
     const gen = reqGen;
     const p = parseName(value);
+    // A reference name typed in full resolves from the reference's own index, with or without the name service: the
+    // greenhouse case (round twenty-three, 4).
+    const want0 = p.scientific.toLowerCase();
+    const local = suggestions.find((s) => s.local && s.name.toLowerCase() === want0);
+    if (local) {
+      taxonKey = local.key;
+      resolved = 'yes';
+      return;
+    }
     try {
       // An exact spelling among the suggestions resolves the name; a genus-only name (a hybrid, a cultivar of unstated parentage) resolves at genus rank.
       const r = await fetch(`/api/names?q=${encodeURIComponent(p.scientific)}`);
@@ -128,6 +139,14 @@
     } catch {
       if (gen === reqGen) resolved = 'unreached';
     }
+  }
+  /** For the form: resolve now, and say whether the name stands. Awaited before a plant is filed, so a click that outran the blur's check still checks (round twenty-three, 4). */
+  export async function check(): Promise<boolean> {
+    if (kind === 'hybrid') return true;
+    clearTimeout(timer);
+    if (value.trim() && !suggestions.length) await search(value);
+    await checkExact();
+    return !!taxonKey || resolved === 'yes';
   }
   /** The nearest reference name when the typed one resolved to nothing: offered by name, never taken on its own. */
   const nearest = $derived(resolved === 'no' || resolved === 'unreached' ? (suggestions.find((x) => x.local && !x.far) ?? suggestions.find((x) => x.local)) : undefined);

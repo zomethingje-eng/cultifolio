@@ -148,7 +148,7 @@ export function parseAfter(raw: string | null): After | null {
 
 const refCompare = (a: BatchRef, b: BatchRef) => a.at - b.at || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
 
-import { OVERLAP_MS } from '$lib/sync/limits';
+import { OVERLAP_MS, PUSH_HEADERS } from '$lib/sync/limits';
 export { OVERLAP_MS };
 
 /**
@@ -396,8 +396,8 @@ const PLAIN = /^[0-9a-f]{64}$/;
 const DEVICE = /^[a-z0-9]{1,16}$/;
 /** The optional push headers: X-Batch-Plain (SHA-256 hex of the changes as JSON) and X-Device. Absent is fine (older clients); malformed is 400. */
 export function batchMeta(request: Request): BatchMeta {
-  const plain = request.headers.get('x-batch-plain');
-  const device = request.headers.get('x-device');
+  const plain = request.headers.get(PUSH_HEADERS.plain);
+  const device = request.headers.get(PUSH_HEADERS.device);
   if (plain != null && !PLAIN.test(plain)) error(400, 'x-batch-plain must be 64 hex digits');
   if (device != null && !DEVICE.test(device)) error(400, 'x-device must be a device id');
   return { plain: plain ?? undefined, device: device ?? undefined };
@@ -467,7 +467,7 @@ export function creationCeilings(env: Record<string, unknown> | undefined): Crea
   return { perDay: n(env?.SYNC_VAULTS_PER_DAY), max: n(env?.SYNC_VAULTS_MAX) };
 }
 /** The counters' Durable Object namespace, typed loosely so this module needs nothing from `cloudflare:workers`. */
-export type CountersNs = { idFromName(name: string): DurableObjectId; get(id: DurableObjectId): { create(address: string, day: string, perAddress: number, perDay: number, max: number, seed?: number): Promise<Creation>; refund(address: string, day: string): Promise<void> } };
+export type CountersNs = { idFromName(name: string): DurableObjectId; get(id: DurableObjectId): { create(address: string, day: string, perAddress: number, perDay: number, max: number, seed?: number | null): Promise<Creation>; refund(address: string, day: string): Promise<void> } };
 /**
  * With the Durable Object bound (production), the decision and the count are one atomic step and a burst is counted
  * exactly (round twenty-one, 1). Without it (tests, a `wrangler dev` before the migration), the KV counters below bound
@@ -481,8 +481,17 @@ export async function allowCreation(kv: KVNamespace | undefined, ip: string, now
   const address = addressKey(ip);
   if (counters) {
     try {
-      // The vaults made before the object existed are the KV total; the object takes it as its starting count, once (round twenty-two, 6).
-      const seed = kv ? Number((await kv.get('vaults:all').catch(() => null)) ?? 0) : 0;
+      // The vaults made before the object existed are the KV total; the object takes it as its starting count, once
+      // (round twenty-two, 6). A KV that cannot be read is not a count of zero: the seed is null, and an object not yet
+      // seeded answers 'unavailable' rather than start its total from nothing (round twenty-three, 6).
+      let seed: number | null = 0;
+      if (kv) {
+        try {
+          seed = Number((await kv.get('vaults:all')) ?? 0);
+        } catch {
+          seed = null;
+        }
+      }
       return await counters.get(counters.idFromName('vaults')).create(address, day(now), MAX_NEW_VAULTS_PER_DAY, perDay, max, seed);
     } catch (e) {
       console.error('sync: the vault-creation counter object did not answer; creation refused for now', e);

@@ -20,6 +20,7 @@
   import PhotoAdd from '$lib/ui/PhotoAdd.svelte';
   import Lightbox from '$lib/ui/Lightbox.svelte';
   import { focusNext } from '$lib/ui/focus';
+  import { toast } from '$lib/ui/toast.svelte';
   import RefPhotoOffer from '$lib/ui/RefPhotoOffer.svelte';
   onMount(() => collection.load());
   const param = $derived(page.params.id!);
@@ -33,6 +34,11 @@
   let lightbox = $state<number | null>(null);
   const parent = $derived(s?.parentAcc ? collection.accession(s.parentAcc) : undefined);
   const today = () => localDate();
+  // A batch of cuttings is not sown and does not germinate: the verbs and the count's name follow the method
+  // (round twenty-three, 15). The record kinds and event types underneath are unchanged.
+  const upWord = $derived(m.veg ? 'struck' : 'up');
+  const countFirst = $derived(m.veg ? 'Count what has struck first' : 'Count the seedlings first');
+  const eventLabel = (t: string) => (t === 'germinate' ? (m.veg ? 'Struck count' : 'Germination count') : (EVENT_LABEL[t as keyof typeof EVENT_LABEL] ?? t));
   let idx = $state<IndexEntry | undefined>(undefined);
   let thumbFailed = $state(false);
   $effect(() => {
@@ -69,6 +75,7 @@
     gmsg = dateProblem(gd, 'count') ?? (n > s.count ? `${n} is more than the ${s.count} that went in; edit the batch if the count was wrong.` : n < st.germinated ? `${n} is fewer than the ${st.germinated} already counted; the count is the total up so far, so record losses instead.` : '');
     if (gmsg) return;
     await collection.addEvent({ acc: id, d: gd, t: 'germinate', n, note: gnote.trim() || null });
+    toast.show(`Recorded: ${n} ${upWord} so far.`);
     gn = ''; gnote = '';
   }
   /* loss */
@@ -80,9 +87,10 @@
     e.preventDefault();
     if (ln == null || ln === '' || ln < 1) return;
     const n = Number(ln);
-    lmsg = dateProblem(ld, 'loss') ?? (n > st.remaining ? (st.remaining ? `Only ${st.remaining} in the pot to lose.` : 'Nothing in the pot to lose: count the seedlings first.') : '');
+    lmsg = dateProblem(ld, 'loss') ?? (n > st.remaining ? (st.remaining ? `Only ${st.remaining} in the pot to lose.` : `Nothing in the pot to lose: ${countFirst.toLowerCase()}.`) : '');
     if (lmsg) return;
     await collection.addEvent({ acc: id, d: ld, t: 'loss', n, cause: lcause.trim() || null });
+    toast.show(`Recorded: ${n} lost.`);
     ln = ''; lcause = '';
   }
   /* pot up */
@@ -98,12 +106,13 @@
     e.preventDefault();
     const n = Math.floor(numberOrNull(pn) ?? 0); // whole plants: a cleared box or 0.5 is refused with a sentence, never a silent return (round fifteen, 10)
     // A number is never reused, so a slip here would burn numbers for good: the pot decides how many can be potted.
-    pmsg = n < 1 ? 'Say how many to pot up: each gets a number that is never reused.' : (dateProblem(pd, 'potting') ?? (st.remaining < 1 ? 'Nothing in the pot to pot up: count the seedlings first.' : n > st.remaining ? `Only ${st.remaining} in the pot; each potted plant gets a number that is never reused.` : ''));
+    pmsg = n < 1 ? 'Say how many to pot up: each gets a number that is never reused.' : (dateProblem(pd, 'potting') ?? (st.remaining < 1 ? `Nothing in the pot to pot up: ${countFirst.toLowerCase()}.` : n > st.remaining ? `Only ${st.remaining} in the pot; each potted plant gets a number that is never reused.` : ''));
     if (pmsg) return;
     pottingBusy = true;
     try {
       const made = await collection.potUp(id, n, { date: pd, locationId: ploc, note: pnote.trim() || null });
       potted = made.map((a) => accNo(a));
+      toast.show(`Potted up ${made.length}: ${potted.join(', ')}.`);
       potting = false;
       pnote = '';
     } catch {
@@ -127,6 +136,10 @@
   let confirmEvent = $state<string | null>(null);
   async function setStatus(status: 'active' | 'done' | 'failed') {
     await collection.put('sowing', id, { status });
+    // The change goes in the log, dated today, so the batch's own timeline says when and the page says it happened (round twenty-three, 16).
+    const said = status === 'failed' ? 'Marked failed' : status === 'done' ? 'Marked done' : 'Reopened';
+    await collection.addEvent({ acc: id, d: today(), t: 'note', note: said });
+    toast.show(`${said}.`);
   }
   async function remove() {
     if (raised.length) return;
@@ -229,7 +242,7 @@
     <div class="card"><div class="lab">Day</div><div class="val">{st.days}</div><div class="sub">since {s.sown}</div></div>
     <div class="card"><div class="lab">{m.veg ? 'Struck' : 'Germinated'}</div><div class="val">{st.germinated}<span class="u"> / {s.count}</span></div><div class="gauge"><i style="width: {Math.min(100, (st.rate ?? 0) * 100)}%"></i></div><div class="sub">{pct(st.rate)}{#if st.daysToFirst != null} · first at day {st.daysToFirst}{/if}</div></div>
     <div class="card"><div class="lab">Potted up</div><div class="val">{st.potted}</div><div class="sub">{raised.length ? `${raised.length} numbered plant${raised.length === 1 ? '' : 's'}` : 'none yet'}</div></div>
-    <div class="card"><div class="lab">Still in the pot</div><div class="val">{st.remaining}</div><div class="sub">{st.lost ? `${st.lost} lost` : 'no losses recorded'}</div></div>
+    <div class="card"><div class="lab">{m.veg ? 'Struck, not yet potted' : 'Still in the pot'}</div>{#if !st.germinated && !st.potted && !st.lost}<div class="val">–</div><div class="sub">not counted yet</div>{:else}<div class="val">{st.remaining}</div><div class="sub">{st.lost ? `${st.lost} lost` : 'no losses recorded'}</div>{/if}</div>
   </div>
 
   {#if potted.length}
@@ -241,9 +254,9 @@
   {:else}
   <div class="acts3">
     <form class="cult act" onsubmit={count}>
-      <div class="sum">{m.veg ? 'Count what has struck' : 'Count seedlings'} <span class="hint">the total up so far</span></div>
+      <div class="sum">{m.veg ? 'Count what has struck' : 'Count seedlings'} <span class="hint">the total {upWord} so far</span></div>
       <div class="fields">
-        <div class="row"><input id="g-date" type="date" aria-label="Date counted" bind:value={gd} /><input id="g-n" type="number" min="0" placeholder="up so far" aria-label="Up so far" bind:value={gn} /></div>
+        <div class="row"><input id="g-date" type="date" aria-label="Date counted" bind:value={gd} /><input id="g-n" type="number" min="0" placeholder="{upWord} so far" aria-label="{m.veg ? 'Struck' : 'Up'} so far" bind:value={gn} /></div>
         <input id="g-note" type="text" placeholder="note (optional)" aria-label="Note" bind:value={gnote} />
         {#if gmsg}<p class="refuse" role="alert">{gmsg}</p>{/if}
         <div class="end"><button class="btn pri" type="submit" disabled={gn == null || gn === ''}>Record count</button></div>
@@ -269,7 +282,7 @@
           <div class="end"><button class="btn" type="button" onclick={() => (potting = false)}>Cancel</button><button class="btn pri" type="submit" disabled={pottingBusy}>Pot up {Math.floor(numberOrNull(pn) ?? 0) || ''}</button></div>
         </form>
       {:else}
-        <div class="fields"><p class="small muted" style="margin: 0">{st.remaining ? `${st.remaining} in the pot. ` : ''}The batch becomes their provenance: {m.veg ? 'the parent plant and the method' : 'seed source, lot and the right provenance class'} carry to every plant.</p><div class="end"><button class="btn pri" disabled={st.remaining < 1} title={st.remaining < 1 ? 'Count the seedlings first' : undefined} onclick={() => { potting = true; pmsg = ''; pn = 1; ploc = s.locationId ?? null; }}>Pot up…</button></div></div>
+        <div class="fields"><p class="small muted" style="margin: 0">{st.remaining ? `${st.remaining} in the pot. ` : ''}The batch becomes their provenance: {m.veg ? 'the parent plant and the method' : 'seed source, lot and the right provenance class'} carry to every plant.</p><div class="end"><button class="btn pri" disabled={st.remaining < 1} title={st.remaining < 1 ? countFirst : undefined} onclick={() => { potting = true; pmsg = ''; pn = 1; ploc = s.locationId ?? null; }}>Pot up…</button></div></div>
       {/if}
     </div>
   </div>
@@ -308,7 +321,7 @@
       {#each events as e}
         <div class="tlrow">
           <span class="d">{e.d}</span>
-          <span class="t">{EVENT_LABEL[e.t] ?? e.t}{#if e.n != null}&nbsp;<b>{e.n}</b>{/if}{#if e.cause}<span class="x2">{' · '}{e.cause}</span>{/if}{#if e.note}<span class="x2">{' · '}{e.note}</span>{/if}</span>
+          <span class="t">{eventLabel(e.t)}{#if e.n != null}&nbsp;<b>{e.n}</b>{/if}{#if e.cause}<span class="x2">{' · '}{e.cause}</span>{/if}{#if e.note}<span class="x2">{' · '}{e.note}</span>{/if}</span>
           {#if e.t === 'potup'}<span class="x small muted">kept: the plants exist</span>{:else if e.t === 'germinate' && !canDropCount(e.id)}<span class="x small muted" title="Without this count the batch would show fewer up than were potted and lost">kept: the potted plants rest on it</span>{:else if confirmEvent === e.id}<button class="rm confirm" type="button" onclick={() => { collection.remove('event', e.id); confirmEvent = null; }}>Remove?</button>{:else}<button class="rm" type="button" title="Remove this entry" aria-label="Remove this entry" onclick={() => { confirmEvent = e.id; void focusNext('.rm.confirm'); }}>×</button>{/if}
         </div>
       {/each}

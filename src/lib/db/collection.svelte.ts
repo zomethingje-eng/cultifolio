@@ -408,16 +408,26 @@ class Collection {
     return loc;
   }
   /** Removing a node moves its plants, sowings and children up to its parent as shown (never the raw `parentId`, which in a cut loop points back into it); nothing is orphaned. */
-  async removeLocation(id: string): Promise<void> {
+  async removeLocation(id: string): Promise<{ plants: number; batches: number; places: number; to: string | null }> {
     const node = this.location(id);
-    if (!node) return;
+    if (!node) return { plants: 0, batches: 0, places: 0, to: null };
     const parent = this.tree().parent.get(id) ?? null;
+    const toName = parent ? this.locationName(parent) : null;
     const changes: Change[] = [];
-    for (const c of this.children(id)) changes.push({ t: this.tick(), kind: 'location', id: c.id, field: 'parentId', value: parent });
-    for (const a of this.accessions) if (a.locationId === id) changes.push({ t: this.tick(), kind: 'accession', id: a.id, field: 'locationId', value: parent });
-    for (const s of this.sowings) if (s.locationId === id) changes.push({ t: this.tick(), kind: 'sowing', id: s.id, field: 'locationId', value: parent });
+    const out = { plants: 0, batches: 0, places: 0, to: toName };
+    for (const c of this.children(id)) { changes.push({ t: this.tick(), kind: 'location', id: c.id, field: 'parentId', value: parent }); out.places++; }
+    // Each plant moved up gets a Move line, so its timeline says where it went and why (round twenty-three, 2).
+    const when = localDate();
+    for (const a of this.accessions) if (a.locationId === id) {
+      changes.push({ t: this.tick(), kind: 'accession', id: a.id, field: 'locationId', value: parent });
+      const eid = this.eventId();
+      changes.push(...diff('event', eid, { id: eid, acc: a.id, d: when, t: 'move', note: parent ? `to ${toName} (${node.name} was removed)` : `${node.name} was removed; no place now` } as unknown as Record<string, unknown>, undefined, this.tick));
+      out.plants++;
+    }
+    for (const s of this.sowings) if (s.locationId === id) { changes.push({ t: this.tick(), kind: 'sowing', id: s.id, field: 'locationId', value: parent }); out.batches++; }
     changes.push({ t: this.tick(), kind: 'location', id, field: '_deleted', value: true });
     await this.commit(changes);
+    return out;
   }
 
   /* ---- sowings ---- */
@@ -597,9 +607,23 @@ class Collection {
   /** Last time each plant was marked present at an audit (or acquired), for "not seen since". */
   /** The last day the plant was in front of the grower: its last audit, else the day its record was made (not the acquisition date it was given, which may be years back for a collection entered late). */
   lastSeen(acc: string): string | null {
-    const ev = this.events(acc).find((e) => e.t === 'audit' || e.t === 'acquire');
-    if (!ev) return null;
-    return ev.t === 'audit' ? ev.d : (this.madeOn('event', ev.id) ?? ev.d);
+    // Any logged action is the grower in front of the plant: a watering, a measurement, a photograph's note, an audit
+    // tick. Not an audit line that says "not seen", which is the opposite (round twenty-three, 5). The acquisition
+    // counts by the day its record was made, not the date it was given.
+    let best: string | null = null;
+    for (const e of this.events(acc)) {
+      if (e.t === 'audit' && e.note === 'not seen') continue;
+      const d = e.t === 'acquire' ? (this.madeOn('event', e.id) ?? e.d) : e.d;
+      if (d && (!best || d > best)) best = d;
+    }
+    return best;
+  }
+  /** The last audit at which the plant was looked for and not found, if that is later than it was last seen. */
+  missedAt(acc: string): string | null {
+    const miss = this.events(acc).find((e) => e.t === 'audit' && e.note === 'not seen');
+    if (!miss) return null;
+    const seen = this.lastSeen(acc);
+    return seen && seen >= miss.d ? null : miss.d;
   }
 
   private live<T>(kind: Kind): T[] {

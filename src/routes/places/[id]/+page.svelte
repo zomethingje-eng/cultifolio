@@ -2,6 +2,7 @@
   import { units } from '$lib/ui/units.svelte';
   import { getForecast, forecastRefusal } from '$lib/weather/client';
   import { localDate, daysBetween } from '$core/dates';
+  import { toast } from '$lib/ui/toast.svelte';
   import { temp, tempN, tempUnit, cToF, fToC } from '$core/units';
   import { plural } from '$core/words';
   import { page } from '$app/state';
@@ -23,6 +24,7 @@
   const id = $derived(page.params.id!);
   const loc = $derived(collection.location(id));
   const path = $derived(collection.locationPath(id));
+  const parentName = $derived(path.length > 1 ? path.slice(0, -1).map((p) => p.name).join(' › ') : null);
   const kids = $derived(collection.children(id));
   const here = $derived(collection.plantsAt(id, false));
   const deep = $derived(collection.plantsAt(id, true));
@@ -85,9 +87,11 @@
   }
   async function finishAudit() {
     const seen = deep.filter((a) => present[a.id]);
-    await collection.addEvents(seen.map((a) => ({ acc: a.id, d: today, t: 'audit' as const, note: null })));
-    const missing = deep.length - seen.length;
-    flash = `${seen.length} present${missing ? `, ${missing} not seen` : ''}.`;
+    const missed = deep.filter((a) => !present[a.id]);
+    // Both outcomes are logged: a plant not found at an audit carries that on its own timeline, and the row says so on every screen size (round twenty-three, 5).
+    await collection.addEvents([...seen.map((a) => ({ acc: a.id, d: today, t: 'audit' as const, note: null })), ...missed.map((a) => ({ acc: a.id, d: today, t: 'audit' as const, note: 'not seen' }))]);
+    const missing = missed.length;
+    flash = `${seen.length} present${missing ? `, ${missing} not seen: ${missed.map(accNo).join(', ')}` : ''}.`;
     auditing = false;
     setTimeout(() => (flash = ''), 4000);
   }
@@ -133,7 +137,9 @@
 
   let confirmRemove = $state(false);
   async function remove() {
-    await collection.removeLocation(id);
+    const r = await collection.removeLocation(id);
+    const parts = [r.plants ? `${r.plants} plant${r.plants === 1 ? '' : 's'}` : '', r.batches ? `${r.batches} batch${r.batches === 1 ? '' : 'es'}` : '', r.places ? `${r.places} place${r.places === 1 ? '' : 's'}` : ''].filter(Boolean);
+    toast.show(parts.length ? `Removed. ${parts.join(', ')} moved ${r.to ? `up to ${r.to}` : 'to the top level'}${r.plants ? ', and each plant\'s log says so' : ''}.` : 'Removed.');
     goto('/places');
   }
 </script>
@@ -149,7 +155,7 @@
   <div class="idcard">
     <div class="who">
       <h1 class="q" style="margin: 0">{loc.name}</h1>
-      <p class="vern">{LOCATION_KINDS.find((k) => k.k === loc.type)?.label ?? 'Place'} · {plural(deep.length, 'growing plant')}{kids.length ? ` in ${plural(kids.length + 1, 'place')}` : ''}{#if cond.indoor != null} · {cond.indoor ? 'indoors' : 'outdoors'}{/if}</p>
+      <p class="vern">{LOCATION_KINDS.find((k) => k.k === loc.type)?.label ?? 'Place'} · {plural(deep.length, 'growing plant')}{kids.length ? ` in ${plural(collection.subtree(id).length, 'place')}` : ''}{#if cond.indoor != null} · {cond.indoor ? 'indoors' : 'outdoors'}{/if}</p>
       <div class="pills">
         {#if cond.floorC != null}<span class="pill c">floor {temp(cond.floorC, units.current, 1)}</span>{/if}
         {#if dli != null}<span class="pill w">DLI {dli.toFixed(0)}</span>{/if}
@@ -241,14 +247,16 @@
       {#each deep as a (a.id)}
         {@const seen = collection.lastSeen(a.id)}
         {@const ds = daysSince(seen)}
-        {@const missed = lastAudit != null && (seen == null || seen < lastAudit)}
+        {@const missedAt = collection.missedAt(a.id)}
+        {@const missed = missedAt != null}
         {#if auditing}
           <label class="azrow accrow row"><input type="checkbox" bind:checked={present[a.id]} /><span><span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} /></span></span><span class="fig">{a.locationId !== id ? collection.location(a.locationId!)?.name ?? '' : ''}</span></label>
         {:else}
           <a class="azrow accrow row" href="/plants/{accNo(a)}">
-            <span class="dot statedot {ds == null ? '' : ds > 90 ? 'wake' : 'grow'}" role="img" aria-label={ds == null ? 'never audited' : ds > 90 ? `not seen for ${ds} days` : `seen ${ds} days ago`} title={ds == null ? 'never audited' : ds > 90 ? `not seen for ${ds} days` : `seen ${ds} days ago`}></span>
+            <span class="dot statedot {missed ? 'wake' : ds == null ? '' : ds > 90 ? 'wake' : 'grow'}" role="img" aria-label={ds == null ? 'never audited' : ds > 90 ? `not seen for ${ds} days` : `seen ${ds} days ago`} title={ds == null ? 'never audited' : ds > 90 ? `not seen for ${ds} days` : `seen ${ds} days ago`}></span>
             <span><span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} /></span><span class="fam">{a.locationId !== id ? collection.location(a.locationId!)?.name ?? '' : ''}</span></span>
-            <span class="fig" class:due={missed || (ds != null && ds > 90)}>{missed ? `not seen at the audit of ${lastAudit}` : ds == null ? 'never audited' : ds > 90 ? `not seen for ${ds} days` : ds === 0 ? 'seen today' : ds === 1 ? 'seen yesterday' : `seen ${ds} d ago`}</span>
+            <span class="fig" class:due={missed || (ds != null && ds > 90)}>{missed ? `not seen at the audit of ${missedAt}` : ds == null ? 'never audited' : ds > 90 ? `not seen for ${ds} days` : ds === 0 ? 'seen today' : ds === 1 ? 'seen yesterday' : `seen ${ds} d ago`}</span>
+            {#if missed || (ds != null && ds > 90) || ds == null}<span class="fam due phoneonly">{missed ? `not seen at the audit of ${missedAt}` : ds == null ? 'never audited' : `not seen for ${ds} days`}</span>{/if}
           </a>
         {/if}
       {/each}
@@ -259,7 +267,7 @@
   {/if}
 
   <div class="dangerrow">
-    <span>Removing a place keeps every plant's records; they lose only the place.</span>
+    <span>Removing a place keeps every plant's records: its plants, batches and places move up to {parentName ?? 'the top level'}, and each plant's log gets a line saying so.</span>
     {#if confirmRemove}
       <span><button class="btn danger small" onclick={remove}>Yes, remove</button> <button class="btn small" onclick={() => (confirmRemove = false)}>Keep</button></span>
     {:else}
@@ -287,5 +295,7 @@
   .row .dot { margin: 0 auto; }
   .row input[type='checkbox'] { width: 18px; height: 18px; margin: 0 auto; }
   .accrow .nm .accno { font-style: normal; vertical-align: 2px; }
-  @media (max-width: 640px) { .form { grid-template-columns: 1fr 1fr; } .hero.band { margin-top: 0; } .azrow .fig { display: none; } }
+  .phoneonly { display: none; }
+  .fam.due { color: var(--warm); }
+  @media (max-width: 640px) { .form { grid-template-columns: 1fr 1fr; } .hero.band { margin-top: 0; } .azrow .fig { display: none; } .phoneonly { display: block; } }
 </style>

@@ -86,7 +86,10 @@ export function clockTime<T>(body: T, zone?: string): T {
     if (!day?.tminAt) return body;
     const [a, bb] = day.tminAt.split('/');
     const ta = new Date(a).getTime();
-    // Compared around the clock: Apia's solar offset is -11 and its zone +13, one hour apart, not twenty-four (round twenty-two, 13).
+    // Compared around the clock: Apia's solar offset is -11 and its zone +13, twenty-four hours apart on the number line and
+    // the same hour on the clock, so the line is said in clock time there. The reader's weekday then differs from the
+    // table's solar date (05:00 Thursday on an Apia clock is 05:00 Wednesday by the sun), which "in the table" is for; saying
+    // solar time instead would give the reader at the site a weekday their clock disagrees with (round twenty-two, 13; round twenty-three, 13).
     const x = (((zoneOffsetH(zone, ta) - f.offsetH) % 24) + 24) % 24;
     if (!Number.isFinite(ta) || Math.min(x, 24 - x) > 2) return body;
     const hm = new Intl.DateTimeFormat('en-GB', { timeZone: zone, hourCycle: 'h23', hour: '2-digit', minute: '2-digit' });

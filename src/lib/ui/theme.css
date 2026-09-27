@@ -110,6 +110,12 @@ table.data th, table.data td { padding: 0.4em 0.6em; border-bottom: 1px solid va
 table.data th { font-family: var(--mono); font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink3); font-weight: 500; }
 table.data th:first-child, table.data td:first-child { text-align: left; }
 .scroll-x { overflow-x: auto; }
+/* A table wider than a phone: the right edge fades so the eye knows there is more, and the hint says to scroll (round twenty-three, 19). */
+.scroll-x.cue { position: relative; }
+.scroll-x.cue::after { content: ''; position: absolute; top: 0; right: 0; bottom: 0; width: 28px; pointer-events: none; background: linear-gradient(to right, transparent, var(--bg)); }
+.scroll-x.cue.end::after { display: none; }
+/* An inline link on a phone is a few millimetres of text: the same link, with a hit area the height of a finger, without moving the line (round twenty-three, 19). */
+a.tap, button.tap { display: inline-block; padding: 8px 2px; margin: -8px -2px; }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 

@@ -14,7 +14,7 @@
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
   import LocationPicker from '$lib/ui/LocationPicker.svelte';
   import type { Provenance } from '$lib/db/types';
-  import { slugify, speciesOf, speciesSlug } from '$core/names';
+  import { slugify, speciesOf, speciesSlug, parseName } from '$core/names';
   import SpeciesPicker from '$lib/ui/SpeciesPicker.svelte';
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import { entriesFor, sheetForName } from '$lib/ui/index.svelte';
@@ -243,7 +243,23 @@
   async function saveEdit() {
     if (!a) return;
     const moved = (f.locationId ?? null) !== (a.locationId ?? null);
-    await collection.put('accession', id, { taxonName: f.taxonName.trim() || a.taxonName, taxonKey: f.taxonName.trim() ? edKey : (a.taxonKey ?? null), cultivar: f.cultivar.trim() || null, nameKind: f.nameKind, parentage: f.nameKind === 'hybrid' ? f.parentage.trim() || null : null, nameAsReceived: f.nameAsReceived.trim() || null, fieldNumber: f.fieldNumber.trim() || null, provenance: f.provenance, acquired: f.acquired || null, sourceFrom: f.sourceFrom.trim() || null, sourceForm: f.sourceForm.trim() || null, price: f.price.trim() || null, locationId: f.locationId ?? null, location: f.locationId ? null : a.location ?? null });
+    // The name as the add form files it: a hybrid is filed under its genus (or nothogenus) with the cross as parentage and
+    // no species key, since it has no habitat of its own; an edit into a hybrid must not keep the species' name, key and
+    // climate (round twenty-three, 1).
+    const typed = f.taxonName.trim() || a.taxonName;
+    const p = parseName(typed);
+    const hybrid = f.nameKind === 'hybrid' || p.kind === 'hybrid';
+    const taxonName = hybrid ? (p.kind === 'hybrid' ? p.scientific : p.genus || typed) : typed;
+    const taxonKey = hybrid ? null : f.taxonName.trim() ? edKey : (a.taxonKey ?? null);
+    const nameKind = hybrid ? 'hybrid' : f.nameKind;
+    const parentage = hybrid ? f.parentage.trim() || p.parentage || (p.kind === 'species' && p.epithet ? typed : null) : null;
+    const wasKind = kindOf(a); // read before the write: `a` is the live record and says the new kind once it is saved
+    const renamed = taxonName !== a.taxonName || (f.cultivar.trim() || null) !== (a.cultivar ?? null) || nameKind !== wasKind;
+    // A change of identity is provenance: the old name goes in the log, and into "name as received" if that was empty (round twenty-three, 3).
+    const oldFull = `${a.taxonName}${a.cultivar ? ` '${a.cultivar}'` : ''}`;
+    const newFull = `${taxonName}${f.cultivar.trim() ? ` '${f.cultivar.trim()}'` : ''}`;
+    await collection.put('accession', id, { taxonName, taxonKey, cultivar: f.cultivar.trim() || null, nameKind, parentage, nameAsReceived: f.nameAsReceived.trim() || (renamed && !a.nameAsReceived ? oldFull : null), fieldNumber: f.fieldNumber.trim() || null, provenance: f.provenance, acquired: f.acquired || null, sourceFrom: f.sourceFrom.trim() || null, sourceForm: f.sourceForm.trim() || null, price: f.price.trim() || null, locationId: f.locationId ?? null, location: f.locationId ? null : a.location ?? null });
+    if (renamed && oldFull !== newFull) await collection.addEvent({ acc: id, d: localDate(), t: 'note', note: `Renamed from ${oldFull} to ${newFull}${nameKind !== wasKind ? ` (${nameKind === 'hybrid' ? 'now a hybrid' : nameKind === 'cultivar' ? 'now a cultivar' : 'now a species'})` : ''}` });
     if (moved && f.locationId) await collection.addEvent({ acc: id, d: localDate(), t: 'move', note: `to ${collection.locationName(f.locationId)}` });
     // The log's "Acquired" line is the same fact as the card's date and source: it follows an edit rather than keeping the old one.
     const acq = events.find((e) => e.t === 'acquire');
@@ -326,6 +342,7 @@
         {#if a.provenance === 'unknown' && !a.sourceFrom && !a.fieldNumber}Added {fmtDate(a.acquired)}{:else}{provLabel(a.provenance)}{#if a.acquired}{' · '}{a.sourceForm ?? 'acquired'}{a.sourceFrom ? ` from ${a.sourceFrom}` : ''}{' '}{fmtDate(a.acquired)}{/if}{/if}
         {#if a.sowingId}{' · '}raised from <a class="mono" href="/propagation/{a.sowingId}">{sowing ? sowNo(sowing) : a.sowingId}</a>{#if sowing && sowing.parentAcc} (from <a class="mono" href="/plants/{sowing.parentAcc}">{collection.accession(sowing.parentAcc) ? accNo(collection.accession(sowing.parentAcc)!) : sowing.parentAcc}</a>){/if}{/if}
         {#if a.locationId}{' · '}at <a class="place" href="/places/{a.locationId}">{collection.locationName(a.locationId)}</a>{:else if a.location}{' · '}at <span class="place">{a.location}</span>{/if}
+        {#if !a.taxonKey && kind !== 'hybrid' && ref !== 'ok' && ref !== 'loading'}{' · '}<NotChecked inline what="Name" why="The name was kept as typed: it matched no reference name, or the name service did not answer when the plant was added. Edit the plant and pick the name from the list to check it." />{/if}
       </p>
       {#if kind === 'hybrid'}
         <p class="vern parentage">{#if parentLinks.length}{#each parentLinks as pl, i}{#if i}{' × '}{/if}{#if pl.slug}<a href="/species/{pl.slug}"><SpeciesName name={pl.name} /></a>{:else}<SpeciesName name={pl.name} />{/if}{/each}{:else}A hybrid; parentage not stated. <button class="linkish" type="button" onclick={startEdit}>Add it</button> if you know it.{/if}</p>
@@ -373,13 +390,14 @@
     </form>
   {/if}
 
-  <!-- The four verbs a grower uses most, then the rest on request: a new plant's page is not the tracker's whole vocabulary. -->
+  <!-- The four verbs a grower uses most, then the rest on request: a new plant's page is not the tracker's whole vocabulary. A plant that is dead or archived is not watered first: Log leads and Water waits behind More (round twenty-three, 19). -->
   <div class="quickbar">
-    <button class="btn pri" onclick={() => quick('water')}>Water</button>
+    {#if a.status === 'growing'}<button class="btn pri" onclick={() => quick('water')}>Water</button>{/if}
     {#if hasHero}<button class="btn" onclick={() => { adding = !adding; if (adding) setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0); }}>Photo</button>{/if}
-    <button class="btn" onclick={() => quick('note')}>Log</button>
+    <button class="btn" class:pri={a.status !== 'growing'} onclick={() => quick('note')}>Log</button>
     <button class="btn" onclick={() => { moveTo = a.locationId ?? null; moving = !moving; }}>Move</button>
     {#if moreActs}
+      {#if a.status !== 'growing'}<button class="btn" onclick={() => quick('water')}>Water</button>{/if}
       <button class="btn" id="verb-feed" onclick={() => quick('feed')}>Feed</button>
       <button class="btn" onclick={() => quick('repot')}>Repot</button>
       <button class="btn" onclick={() => quick('measure')}>Measure</button>
@@ -436,7 +454,7 @@
 
   <div class="cards">
     {#if lastOf('water')}<div class="card"><div class="lab">Since watered</div><div class="val">{sinceWater == null ? '–' : sinceWater}<span class="u">{sinceWater == null ? '' : ' d'}</span></div><div class="sub">last {lastOf('water')}</div></div>{/if}
-    {#if events.some((e) => e.t === 'audit')}<div class="card"><div class="lab">Last seen</div><div class="val">{seen == null ? '–' : seen}<span class="u">{seen == null ? '' : ' d'}</span></div><div class="sub">audit, {collection.lastSeen(id)}</div></div>{/if}
+    {#if events.some((e) => e.t === 'audit')}<div class="card"><div class="lab">Last seen</div><div class="val">{seen == null ? '–' : seen}<span class="u">{seen == null ? '' : ' d'}</span></div><div class="sub">{collection.missedAt(id) ? `not seen at the audit of ${collection.missedAt(id)}; last logged ${collection.lastSeen(id)}` : `last logged ${collection.lastSeen(id)}`}</div></div>{/if}
     {#if lastMeasure}<div class="card"><div class="lab">{sizeKey ? (MEASURES.find((m) => m.k === sizeKey)?.label ?? 'Size') : 'Size'}</div><div class="val">{sizeKey && lastMeasure ? lastMeasure.measures![sizeKey] : '–'}<span class="u">{sizeKey ? ' ' + (MEASURES.find((m) => m.k === sizeKey)?.unit ?? '') : ''}</span></div>{#if growth != null}<div class="gauge"><i style="width: {Math.min(100, Math.max(8, (growth / Math.max(1, lastMeasure!.measures![sizeKey!])) * 100))}%"></i></div>{/if}<div class="sub">{growth != null ? `${growth >= 0 ? '+' : ''}${growth} since ${firstMeasure!.d}` : `measured ${lastMeasure.d}`}</div></div>{/if}
     <div class="card"><div class="lab">Habitat rain season</div><div class="val" style="font-family: var(--ui); font-size: 17px; font-weight: 700">{#if !season && dossier?.climate.status === 'refused'}<NotChecked what="Climate" why="A source did not answer when the species page was built{dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}." />{:else}{season ? season.label : dossier?.climate.status === 'pending' ? 'Climate pending' : dossier ? 'No habitat climate' : ref === 'unreachable' ? 'Reference not reached' : ref === 'none' ? (kind === 'hybrid' ? 'A hybrid' : 'No species page') : '…'}{/if}</div><div class="sub">{#if season}{season.note} <a href="/species/{speciesHref}#s-cultivation">The sheet</a>.{:else if dossier?.climate.status === 'refused'}No season is read from an answer that was not given.{:else if dossier?.climate.status === 'pending'}The habitat climate for this species has not been derived yet.{:else if dossier}Nothing to read a season from{dossier.climate.status === 'none' && dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}.{:else if ref === 'unreachable'}The species reference could not be reached from here; nothing is known either way.{:else if ref === 'none'}{kind === 'hybrid' ? (parentLinks.some((p) => p.slug) ? 'No habitat of its own; its parents have species pages.' : 'No habitat of its own.') : 'Not in the reference.'}{:else}reading the species dossier{/if}</div></div>
   </div>
@@ -444,12 +462,12 @@
   {#if habitat && a.locationId}
     <div class="secrule"><h2>Habitat versus here</h2><div class="line"></div><span class="n">{collection.locationName(a.locationId)}</span></div>
     <div class="factgrid hvh">
-      {#if lightCompare}<div><b>Light</b>{lightCompare.text}.{#if lightCompare.here == null}{#if a.locationId}{' '}<a href="/places/{a.locationId}?edit=1">Set its light</a>.{:else}{' '}<button type="button" class="linkish" onclick={() => (moving = true)}>Give it a place</button> first.{/if}{/if}</div>{/if}
-      {#if coldCompare}<div><b>Cold</b>{coldCompare.text}.{#if coldCompare.here == null}{#if a.locationId}{' '}<a href="/places/{a.locationId}?edit=1">Set its floor</a>.{:else}{' '}<button type="button" class="linkish" onclick={() => (moving = true)}>Give it a place</button> first.{/if}{/if}</div>{/if}
+      {#if lightCompare}<div><b>Light</b>{lightCompare.text}.{#if lightCompare.here == null}{#if a.locationId}{' '}<a class="tap" href="/places/{a.locationId}?edit=1">Set its light</a>.{:else}{' '}<button type="button" class="linkish tap" onclick={() => (moving = true)}>Give it a place</button> first.{/if}{/if}</div>{/if}
+      {#if coldCompare}<div><b>Cold</b>{coldCompare.text}.{#if coldCompare.here == null}{#if a.locationId}{' '}<a class="tap" href="/places/{a.locationId}?edit=1">Set its floor</a>.{:else}{' '}<button type="button" class="linkish tap" onclick={() => (moving = true)}>Give it a place</button> first.{/if}{/if}</div>{/if}
     </div>
     <details class="why">
       <summary>What this compares</summary>
-      <div class="whybody">A comparison, not a verdict: the habitat figures are what the sky and the weather do where the species is recorded (CHELSA across every envelope cell, NASA POWER at the typical cell), not measured tolerances of this plant. This place's figures are its own settings, inherited from the places above it where set. <a href="/species/{speciesHref}#s-cultivation">The full cultivation sheet</a>.</div>
+      <div class="whybody">A comparison, not a verdict: the habitat figures are what the sky and the weather do where the species is recorded (CHELSA across every envelope cell, NASA POWER at the typical cell), not measured tolerances of this plant. This place's figures are its own settings, inherited from the places above it where set. <a class="tap" href="/species/{speciesHref}#s-cultivation">The full cultivation sheet</a>.</div>
     </details>
   {/if}
 
@@ -479,7 +497,7 @@
           {@const e = row.e}
           <div class="tlrow">
             <span class="d">{e.d}</span>
-            <span class="t">{EVENT_LABEL[e.t] ?? e.t}{#if e.used}<span class="x2">{' · '}{e.used}</span>{/if}{#if e.cause}<span class="x2">{' · '}{e.cause}</span>{/if}{#if e.measures}<span class="x2">{' · '}{Object.entries(e.measures).map(([k, v]) => { const m = MEASURES.find((x) => x.k === k); return `${m?.label ?? k} ${v}${m?.unit ? ' ' + m.unit : ''}`; }).join(', ')}</span>{/if}{#if e.note}<span class="x2">{' · '}{e.note}</span>{/if}</span>
+            <span class="t">{e.t === 'audit' && e.note === 'not seen' ? 'Not seen at audit' : (EVENT_LABEL[e.t] ?? e.t)}{#if e.used}<span class="x2">{' · '}{e.used}</span>{/if}{#if e.cause}<span class="x2">{' · '}{e.cause}</span>{/if}{#if e.measures}<span class="x2">{' · '}{Object.entries(e.measures).map(([k, v]) => { const m = MEASURES.find((x) => x.k === k); return `${m?.label ?? k} ${v}${m?.unit ? ' ' + m.unit : ''}`; }).join(', ')}</span>{/if}{#if e.note && !(e.t === 'audit' && e.note === 'not seen')}<span class="x2">{' · '}{e.note}</span>{/if}</span>
             {#if confirmEvent === e.id}<button class="rm confirm" type="button" onclick={() => { collection.remove('event', e.id); confirmEvent = null; }}>Remove?</button>{:else}<button class="rm" type="button" title="Remove this entry" aria-label="Remove this entry" onclick={() => { confirmEvent = e.id; void focusNext('.rm.confirm'); }}>×</button>{/if}
           </div>
         {:else}

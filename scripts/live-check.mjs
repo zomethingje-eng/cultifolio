@@ -4,14 +4,15 @@
  * `npm run deploy`, so a deploy that broke one of them says so before anyone else notices. Plain Node, no dependencies.
  *
  *   node scripts/live-check.mjs                 checks https://cultifolio.com
- *   node scripts/live-check.mjs https://x.dev   checks another origin (a workers.dev preview)
+ *   node scripts/live-check.mjs https://x.dev   checks another origin (a workers.dev preview); LIVE_CHECK_ORIGIN in the
+ *                                               environment does the same for `npm run deploy` on another deployment
  *
  * Exits 1 on the first failure, with the request and what came back. `LIVE_CHECK_SKIP=names,forecast` skips the checks
  * that need an upstream (a local `wrangler dev` with no GBIF credentials); never set for the real site. Nothing here creates
  * or changes anything on the server: every request is a GET, apart from one POST to the vault route with a body that
  * must be refused (round sixteen, 16); the requests do count against the address's rate limits like any visit's.
  */
-const origin = (process.argv[2] ?? 'https://cultifolio.com').replace(/\/+$/, '');
+const origin = (process.argv[2] ?? process.env.LIVE_CHECK_ORIGIN ?? 'https://cultifolio.com').replace(/\/+$/, '');
 const ua = 'cultifolio-live-check (deploy)';
 let n = 0;
 const skip = new Set((process.env.LIVE_CHECK_SKIP ?? '').split(',').map((s) => s.trim()).filter(Boolean));

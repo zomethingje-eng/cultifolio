@@ -98,7 +98,7 @@
         location.href = '/plants';
         return;
       }
-      done = `Merged: ${opened ? `${opened.merge.added} ${opened.merge.added === 1 ? 'record' : 'records'} added, ${opened.merge.changed} updated, ` : ''}${r.changes} ${r.changes === 1 ? 'change' : 'changes'} and ${r.photos} ${r.photos === 1 ? 'photo' : 'photos'} taken in.`;
+      done = `Merged: ${opened ? `${addedWords(opened.merge)} added, ${opened.merge.changed} updated, ` : ''}${r.changes} ${r.changes === 1 ? 'change' : 'changes'} and ${r.photos} ${r.photos === 1 ? 'photo' : 'photos'} taken in.`;
       if (r.photosMissing) done += ` ${r.photosMissing} ${r.photosMissing === 1 ? 'photo record has' : 'photo records have'} no photograph: the file did not hold the pixels and neither does this device. The ${r.photosMissing === 1 ? 'record is' : 'records are'} kept.`;
       if (r.settingsRestored.length) done += ` This device had no ${r.settingsRestored.length > 1 ? r.settingsRestored.slice(0, -1).join(', ') + ' or ' + r.settingsRestored.at(-1) : r.settingsRestored[0]} of its own, so the file's ${r.settingsRestored.length === 1 ? 'was' : 'were'} applied.`;
       if (r.schemeRestored) done += ` Numbering now follows the file: ${r.schemeRestored.mode === 'prefix' ? `${r.schemeRestored.prefix}-${'0'.repeat(r.schemeRestored.width)}` : `year-${'0'.repeat(r.schemeRestored.width)}`}.`;
@@ -124,6 +124,22 @@
       busy = null;
     }
   }
+  /** "5 plants, 20 timeline entries, 2 places and 1 photo record", in the words the "In the file" line uses; kinds with nothing to add are left out. */
+  const addedWords = (m: Opened['merge']): string => {
+    const k = m.addedByKind;
+    const parts = [
+      k.accession ? `${k.accession} plant${k.accession === 1 ? '' : 's'}` : '',
+      k.event ? `${k.event} timeline entr${k.event === 1 ? 'y' : 'ies'}` : '',
+      k.location ? `${k.location} place${k.location === 1 ? '' : 's'}` : '',
+      k.sowing ? `${k.sowing} propagation batch${k.sowing === 1 ? '' : 'es'}` : '',
+      k.photo ? `${k.photo} photo record${k.photo === 1 ? '' : 's'}` : '',
+      k.taxon ? `${k.taxon} species note${k.taxon === 1 ? '' : 's'}` : '',
+      k.setting ? 'the numbering scheme' : '',
+      m.addedDeleted ? `${m.addedDeleted} deleted record${m.addedDeleted === 1 ? '' : 's'}` : ''
+    ].filter(Boolean);
+    if (!parts.length) return 'no records';
+    return parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+  };
   const mb = (n: number) => (n < 1024 * 1024 ? `${Math.round(n / 1024)} kB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
   const ago = (iso: string) => {
     const d = Math.floor((Date.now() - Date.parse(iso)) / 86_400_000);
@@ -172,11 +188,11 @@
     {@const c = opened.counts}
     <div class="preview">
       <div class="factgrid">
-        <div><b>In the file</b>{c.accessions} plant{c.accessions === 1 ? '' : 's'} · {c.events} timeline entr{c.events === 1 ? 'y' : 'ies'} · {c.locations} place{c.locations === 1 ? '' : 's'} · {c.sowings} propagation batch{c.sowings === 1 ? '' : 'es'} · {c.photos} photo{c.photos === 1 ? "" : "s"}{#if m}<span class="faint">{" · "}taken {m.exported.slice(0, 10)}{m.device ? ` on device ${m.device.slice(0, 6)}` : ''}</span>{/if}</div>
-        <div><b>Merging would</b>{#if opened.merge.fresh.length === 0}change nothing: everything in the file is already here.{:else}add {opened.merge.added} {opened.merge.added === 1 ? 'record' : 'records'}, update {opened.merge.changed}, and bring in {opened.newPhotos} {opened.newPhotos === 1 ? 'photo' : 'photos'}. Nothing on this device is removed.{/if}{#if opened.missingPixels.length} {opened.missingPixels.length} photo {opened.missingPixels.length === 1 ? 'record in the file has' : 'records in the file have'} no photograph in it or on this device.{/if}</div>
+        <div><b>In the file</b>{c.accessions} plant{c.accessions === 1 ? '' : 's'} · {c.events} timeline entr{c.events === 1 ? 'y' : 'ies'} · {c.locations} place{c.locations === 1 ? '' : 's'} · {c.sowings} propagation batch{c.sowings === 1 ? '' : 'es'} · {c.photos} photo{c.photos === 1 ? "" : "s"}{#if c.taxa} · {c.taxa} species note{c.taxa === 1 ? '' : 's'}{/if}{#if m}<span class="faint">{" · "}taken {m.exported.slice(0, 10)}{m.device ? ` on device ${m.device.slice(0, 6)}` : ''}</span>{/if}</div>
+        <div><b>Merging would</b>{#if opened.merge.fresh.length === 0 && !opened.settings.length}change nothing: everything in the file is already here.{:else if opened.merge.fresh.length === 0}change no records (everything in the file is already here) and apply the file's {opened.settings.join(', ')}, which this device has none of.{:else}add {addedWords(opened.merge)}, update {opened.merge.changed} {opened.merge.changed === 1 ? 'record' : 'records'}, and bring in {opened.newPhotos} {opened.newPhotos === 1 ? 'photograph' : 'photographs'}.{#if opened.settings.length} Apply the file's {opened.settings.join(', ')}, which this device has none of.{/if} Nothing on this device is removed.{/if}{#if opened.missingPixels.length} {opened.missingPixels.length} photo {opened.missingPixels.length === 1 ? 'record in the file has' : 'records in the file have'} no photograph in it or on this device.{/if}</div>
       </div>
       <div class="row acts">
-        <button id="bk-merge" class="btn pri" onclick={() => doRestore('merge')} disabled={!!busy || opened.merge.fresh.length === 0 && opened.newPhotos === 0}>Merge into this device</button>
+        <button id="bk-merge" class="btn pri" onclick={() => doRestore('merge')} disabled={!!busy || (opened.merge.fresh.length === 0 && opened.newPhotos === 0 && opened.settings.length === 0)}>Merge into this device</button>
         {#if confirmReplace}
           <span class="bad">The file is stored in full first; then everything on this device is replaced by it{#if sync.configured}, and sync is turned off (a synced vault would merge straight back in; you can create a new vault or re-join afterwards){/if}. Sure?</span>
           <button id="bk-replace-yes" class="btn danger" onclick={() => doRestore('replace')} disabled={!!busy}>Yes, replace</button>
