@@ -12,7 +12,7 @@
   import { crumb } from '$lib/ui/crumb.svelte';
   import { onMount } from 'svelte';
   import { sync } from '$lib/sync/engine.svelte';
-  import { today } from '$lib/ui/today.svelte';
+  import { today } from '$lib/ui/day.svelte';
   import { collection } from '$lib/db/collection.svelte';
   import { onVaultNotice } from '$lib/db/vault';
   import { afterNavigate, beforeNavigate } from '$app/navigation';

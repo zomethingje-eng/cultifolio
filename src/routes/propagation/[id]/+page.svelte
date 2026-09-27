@@ -21,7 +21,7 @@
   import Lightbox from '$lib/ui/Lightbox.svelte';
   import { focusNext } from '$lib/ui/focus';
   import { toast } from '$lib/ui/toast.svelte';
-  import { today as day } from '$lib/ui/today.svelte';
+  import { today as day } from '$lib/ui/day.svelte';
   import RefPhotoOffer from '$lib/ui/RefPhotoOffer.svelte';
   onMount(() => collection.load());
   const param = $derived(page.params.id!);
