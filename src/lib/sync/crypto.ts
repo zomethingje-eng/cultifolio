@@ -18,7 +18,7 @@
  * the Worker (which needs none of the encryption, only the token hash).
  */
 
-const B32 = 'ABCDEFGHJKMNPQRSTVWXYZ23456789'; // 30 symbols: no I, L, O, U, 0, 1 (unambiguous to read out)
+export const B32 = 'ABCDEFGHJKMNPQRSTVWXYZ23456789'; // 30 symbols: no I, L, O, U, 0, 1 (unambiguous to read out)
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 

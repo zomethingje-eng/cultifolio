@@ -34,7 +34,9 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   const alt = altN == null ? null : String(Math.round(altN / 10) * 10);
   const la = Math.round(lat * 100) / 100,
     lo = Math.round(lon * 100) / 100;
-  const cacheKey = new Request(`https://cultifolio.com/api/forecast?lat=${la}&lon=${lo}&alt=${alt ?? ''}`);
+  // On a private host, as the names route: a key that is also a real URL of this site is a raw object the edge can hand
+  // back to a request for that URL, which is what happened to the live check after round nineteen (round twenty-one, 5).
+  const cacheKey = new Request(`https://cache.cultifolio/forecast?lat=${la}&lon=${lo}&alt=${alt ?? ''}`);
   const cache = platform?.caches?.default;
   type Cached = { lat: number; lon: number; forecast: ReturnType<typeof reduceMet>; alerts: ReturnType<typeof reduceNws>; alertsStatus: 'ok' | 'none' | 'refused' | 'n/a'; attribution: string[] };
   const withRisk = (c: Cached, cc: string) => json({ ...c, risk: frostRisk(c.forecast, c.alerts, units) }, { headers: { 'cache-control': cc } });

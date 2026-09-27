@@ -6,7 +6,7 @@
   "license": "MIT",
   "scripts": {
     "dev": "vite dev",
-    "build": "node scripts/clean-build.mjs && vite build",
+    "build": "node scripts/clean-build.mjs && vite build && node scripts/attach-do.mjs",
     "preview": "wrangler dev --port 4173",
     "deploy": "npm run check && npm run test && npm run build && wrangler deploy && node scripts/live-check.mjs",
     "live-check": "node scripts/live-check.mjs",

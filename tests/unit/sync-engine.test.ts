@@ -835,6 +835,62 @@ describe('a batch that cannot be read is set aside, not a wall', () => {
     expect(A.sync.key).toBe(KEY2);
     globalThis.fetch = real;
   });
+  it('a run stopped during its pull shows no sync time afterwards, and a set-aside batch whose re-read finds the run stale ends the run before the number repair (round twenty-one, 4)', async () => {
+    const r2 = fakeR2();
+    const A = await boot(newMem('aaaaaaaaaaaa'), r2);
+    await A.sync.setup(KEY, 'create');
+    await A.collection.addAccession({ taxonName: 'Lithops', acc: 'A-1' });
+    await A.sync.run();
+    const real = globalThis.fetch;
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    let held = 0;
+    const after: string[] = [];
+    let stopped = false;
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const u = String(input);
+      if ((!init?.method || init.method === 'GET') && /\/api\/sync\/log\?/.test(u) && held++ === 0) await gate;
+      if (stopped) after.push(`${init?.method ?? 'GET'} ${new URL(u, 'http://x').pathname}`);
+      return real(input, init);
+    }) as typeof fetch;
+    const run = A.sync.run().catch((e: Error) => e);
+    await new Promise((r) => setTimeout(r, 50));
+    await A.sync.forget();
+    stopped = true;
+    release();
+    const err = await run;
+    expect(err).toBeInstanceOf(Error);
+    expect(A.sync.lastSync).toBeNull(); // the stale run did not stamp a sync time on a device that has stopped
+    expect(after.filter((x) => x.includes('/api/sync/photo'))).toEqual([]); // and did not go on to the photo pull
+    // a set-aside batch from an older build: its re-read runs first in a run; a stop during it must end the run there
+    globalThis.fetch = real;
+    await A.sync.setup(KEY, 'join');
+    const key = logKeys(r2)[0].split('/log/')[1].replace(/\.bin$/, '');
+    const meta = mem.meta.get('sync') as { quarantined?: Array<{ key: string; error: string; at: string; build?: string }> };
+    meta.quarantined = [{ key, error: 'not a batch this version understands', at: new Date().toISOString(), build: 'older-build' }];
+    mem.meta.set('sync', meta);
+    const B = await reboot(mem, r2); // reloads the meta with the entry
+    const repair = vi.spyOn(B.collection, 'repairNumbers');
+    held = 0;
+    after.length = 0;
+    stopped = false;
+    const gate2 = new Promise<void>((r) => (release = r));
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const u = String(input);
+      if (stopped) after.push(`${init?.method ?? 'GET'} ${new URL(u, 'http://x').pathname}`);
+      if (u.includes(`/api/sync/log/${key}`) && held++ === 0) await gate2;
+      return real(input, init);
+    }) as typeof fetch;
+    const run2 = B.sync.run().catch((e: Error) => e);
+    await new Promise((r) => setTimeout(r, 50));
+    await B.sync.forget();
+    stopped = true;
+    release();
+    expect(await run2).toBeInstanceOf(Error);
+    expect(after).toEqual([]); // nothing more was asked for after the stop: no listing, no photo pull
+    expect(repair).not.toHaveBeenCalled(); // and the number repair, which follows the set-aside loop, did not run for a vault this device has left
+    globalThis.fetch = real;
+  });
   it('a batch with a reserved field is refused whole: nothing of it is applied', async () => {
     const r2 = fakeR2();
     const B = await boot(newMem('bbbbbbbbbbbb'), r2);
@@ -956,6 +1012,24 @@ describe('new vaults have a ceiling (improvements, 1)', () => {
     kv.set('vaults:all', '2000');
     const B = await boot(newMem('bbbbbbbbbbbb'), r2);
     await expect(B.sync.setup(KEY, 'join')).resolves.toBeUndefined();
+  });
+});
+
+describe('the vault route under a runtime that gives no client address (round twenty-one, R1-1)', () => {
+  it('creates the vault: the address counts as "unknown", never a 500', async () => {
+    const r2 = fakeR2();
+    await boot(newMem('aaaaaaaaaaaa'), r2);
+    const real = globalThis.fetch;
+    // the same routes, with getClientAddress answering null as a local runtime can
+    const routes = await import('../../src/routes/api/sync/vault/+server');
+    const QUEUE = { get: async (k: string) => kv.get(k) ?? null, put: async (k: string, v: string) => void kv.set(k, v) };
+    const k = await deriveKeys(KEY);
+    const request = new Request('http://x/api/sync/vault', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: k.id, token: k.token, create: true }) });
+    const r = await routes.POST({ request, url: new URL(request.url), platform: { env: { STORE: r2, QUEUE, SYNC_OPEN: '1' } }, getClientAddress: () => null as unknown as string, params: {} } as never);
+    expect(r.status).toBe(200);
+    expect(await r.json()).toMatchObject({ created: true });
+    expect([...kv.keys()].some((x) => x.startsWith('vaults:unknown:'))).toBe(true);
+    globalThis.fetch = real;
   });
 });
 

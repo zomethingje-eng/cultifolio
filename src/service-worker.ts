@@ -104,7 +104,9 @@ self.addEventListener('fetch', (e) => {
         return r;
       }
       if (request.mode === 'navigate') {
-        const to = moved(url.pathname);
+        // A trailing slash is stripped first: `/benches/k1/` must become `/places/k1`, a shell, not `/places/k1/`, which
+        // no shell matches and which would then go to the server with the id in it (round twenty-one, 13).
+        const to = moved(url.pathname.replace(/\/+$/, '') || '/');
         if (to) return Response.redirect(url.origin + to + url.search, 301);
       }
       if (request.mode === 'navigate' && isShell(url.pathname) && url.pathname !== '/settings') {

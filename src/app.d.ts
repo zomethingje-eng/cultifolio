@@ -5,6 +5,8 @@ declare global {
       env: {
         STORE?: R2Bucket;
         QUEUE?: KVNamespace;
+        /** The vault-creation counters, one Durable Object (src/lib/server/counters.ts); without it the KV counters bound approximately. */
+        COUNTERS?: DurableObjectNamespace<import('$lib/server/counters').Counters>;
         /** '1' lets any vault sync without a licence (dev and pre-launch). */
         SYNC_OPEN?: string;
         /** Ceilings on new vaults, for everyone per day and in all; the code's defaults when unset (see `allowCreation`). */

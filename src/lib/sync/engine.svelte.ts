@@ -376,8 +376,8 @@ class Sync {
       if (this.meta !== m) throw stopped(); // the 429 was caught above; a stop or a new vault during the push still ends the run here
       const got = await this.pull(m);
       m.lastSync = new Date().toISOString();
+      await this.save(m); // refuses, and throws, if this run is stale: the sync time below is then never shown for a vault this device has left (round twenty-one, 4)
       this.lastSync = m.lastSync;
-      await this.save(m);
       // Said only when something did arrive (round sixteen, design note).
       if (wait) { if (got) wait.message = `received ${got} batch${got === 1 ? '' : 'es'}; ${wait.message}`; throw wait; }
     } catch (e) {
@@ -648,6 +648,7 @@ class Sync {
         ok = await this.takeBatch(m, q.key);
       } catch (e) {
         if ((e as { retryAfterMs?: number })?.retryAfterMs) throw e;
+        if (this.meta !== m) throw e; // the key check inside takeBatch said this run is stale: it must not go on into the number repair (round twenty-one, 4)
         console.warn(`set-aside batch ${q.key} could not be read again this run: ${e instanceof Error ? e.message : String(e)}`);
         continue; // the entry stands, whatever the failure: a 5xx, a dropped connection, or a 4xx for a batch the server no longer holds
       }

@@ -8,7 +8,10 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { deriveKeys, sealJson, seal, newVaultKey, batchFingerprint, packPhoto } from '$lib/sync/crypto';
-import { MAX_NEW_VAULTS_PER_DAY, MAX_IP_BYTES_PER_DAY, RATE } from '$lib/server/sync';
+import { MAX_NEW_VAULTS_PER_DAY, MAX_IP_BYTES_PER_DAY, MAX_BYTES, RATE } from '$lib/server/sync';
+import { MAX_AHEAD_MS, hlcEncode } from '$core/hlc';
+import { BUCKETS } from '$core/bucket';
+import { B32 } from '$lib/sync/crypto';
 import { THUMB_EDGE } from '$lib/photo/process';
 
 const enc = new TextEncoder();
@@ -51,9 +54,25 @@ const doc = {
   limits: says(/One address \(an IPv4 address, or an IPv6 \/64\) is bounded: (\d+) new vaults and (\d+) GB stored per day, (\d+) requests per ten minutes to open, list and push and ([\d,]+) to fetch or store/),
   photoSize: says(/its full JPEG plus its (\d+)-pixel thumbnail plus (\d+) bytes \(a 4-byte length, the version byte and the IV\) and the (\d+)-byte tag/),
   ids: says(/a kind prefix, (\w) for a plant, (\w) for a batch, (\w) for a place, (\w) for a photograph, (\w) for an event/),
-  writer: says(/the (\d+)-character id of the device that made the change followed by a (\d+)-character tag/)
+  writer: says(/the (\d+)-character id of the device that made the change followed by a (\d+)-character tag/),
+  idBytes: says(/take the (first|last) (\d+) bytes of the digest and map each byte b to ALPHABET\[b mod (\d+)\]/),
+  excluded: says(/an alphabet without ([A-Z0-9, ]+?) or ([A-Z0-9]), in six groups of five/),
+  ikm: says(/the UTF-8 bytes of that 30-character string, (not a decoding) of it/),
+  photoOrder: says(/a reader should try the (named|plain) form first/),
+  endian: says(/A photo decrypts to a 4-byte (big|little)-endian length, the full JPEG, then the thumbnail/),
+  tag: Number(says(/\(a (\d+)-bit tag, appended as WebCrypto does\)/)[1]),
+  nameHour: says(/the hour \(in ms, padded to 13 digits\) of the batch's (first|last) change/)[1],
+  nameDevice: Number(says(/the pushing device's (\d+)-character id/)[1]),
+  hold: says(/only up to (\w+) minutes ahead of its own/)[1],
+  counter: says(/a (hex|decimal) counter of four digits/)[1],
+  idBase: Number(says(/wall time as exactly (\d+) base-(\d+) digits/)[2]),
+  idTimeDigits: Number(says(/wall time as exactly (\d+) base-(\d+) digits/)[1]),
+  refused: says(/Different bytes under a held name without that match are refused \((\d+)\)/)[1],
+  full: says(/a vault with no room left \((\d+) GB\) is (\d+) with/),
+  buckets: Number(says(/into one of (\d+) buckets of roughly/)[1]),
+  example: says(/"t": "(\d{13})-([0-9a-f]{4})-([a-z0-9]+)", "kind": "accession", "id": "([a-z0-9]+)"/)
 };
-const words: Record<string, number> = { twelve: 12 };
+const numberWords: Record<string, number> = { five: 5, twelve: 12 };
 
 /** The page, step by step, with the page's own constants. */
 async function fromTheDoc(typed: string) {
@@ -68,8 +87,10 @@ async function fromTheDoc(typed: string) {
   expect(token.length).toBe(64);
   const nameRaw = new Uint8Array(await bits(doc.infoName));
   const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', enc.encode(doc.idPrefix + token)));
+  const bytes = doc.idBytes[1] === 'first' ? digest.slice(0, Number(doc.idBytes[2])) : digest.slice(-Number(doc.idBytes[2]));
+  expect(Number(doc.idBytes[2])).toBe(doc.idLen);
   let id = '';
-  for (let i = 0; i < doc.idLen; i++) id += doc.alphabet[digest[i] % doc.alphabet.length];
+  for (const b of bytes) id += doc.alphabet[b % Number(doc.idBytes[3])];
   const aes = await crypto.subtle.importKey('raw', encRaw, { name: 'AES-GCM' }, false, ['decrypt']);
   const name = await crypto.subtle.importKey('raw', nameRaw, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   return { id, token, aes, name };
@@ -111,8 +132,12 @@ describe('/about/formats is enough to decrypt a vault, and says what the code do
     const packed = packPhoto(full, thumb);
     const named = await seal(app, 'photo', packed, 'p1');
     const plain = await seal(app, 'photo', packed); // an older build's photograph
-    const got = await openFromTheDoc(d, fill(doc.aadPhoto, d, 'photo', 'p1'), named);
+    const forms = doc.photoOrder[1] === 'named' ? [fill(doc.aadPhoto, d, 'photo', 'p1'), fill(doc.aadOldPhoto, d, 'photo')] : [fill(doc.aadOldPhoto, d, 'photo'), fill(doc.aadPhoto, d, 'photo', 'p1')];
+    const got = await openFromTheDoc(d, forms[0], named); // the first form the page names must open a current photograph
     expect(got.length).toBe(packed.length);
+    const len = new DataView(got.buffer, got.byteOffset).getUint32(0, doc.endian[1] === 'little');
+    expect(len).toBe(full.length); // read the way the page says, the length is the JPEG's
+    expect(doc.tag).toBe(128);
     await expect(openFromTheDoc(d, fill(doc.aadPhoto, d, 'photo', 'p1'), plain)).rejects.toThrow();
     expect((await openFromTheDoc(d, fill(doc.aadOldPhoto, d, 'photo'), plain)).length).toBe(packed.length);
     // "its full JPEG plus its thumbnail plus 17 bytes and the 16-byte tag"
@@ -127,9 +152,23 @@ describe('/about/formats is enough to decrypt a vault, and says what the code do
     const changes = [{ t: '1789520000000-0000-abcdefghijkl0az9', kind: 'accession', id: 'r1', field: 'notes', value: 'x' }];
     const mine = hex(new Uint8Array(await crypto.subtle.sign('HMAC', d.name, enc.encode(JSON.stringify(changes)))));
     expect(mine).toBe(await batchFingerprint(app, enc.encode(JSON.stringify(changes))));
-    expect(words[doc.fpDigits] ?? Number(doc.fpDigits)).toBe(12);
+    expect(numberWords[doc.fpDigits] ?? Number(doc.fpDigits)).toBe(12);
     expect(doc.hourDigits).toBe(13);
-    expect(Number(doc.writer[1]) + Number(doc.writer[2])).toBe(16); // the HLC's writer field
+    expect(Number(doc.writer[1])).toBe(12); // the device id
+    expect(Number(doc.writer[2])).toBe(4); // the tab tag
+    expect(doc.nameHour).toBe('last');
+    expect(doc.nameDevice).toBe(12);
+    // a real batch name from the engine's rule, checked against the page's layout
+    const lastWall = 1789520000000 + 5 * 60_000;
+    const name = `${String(Math.floor(lastWall / 3600_000) * 3600_000).padStart(13, '0')}-0000-abcdefghijkl-${mine.slice(0, 12)}`;
+    expect(name).toMatch(new RegExp(`^\\d{${doc.hourDigits}}-0000-[a-z0-9]{${doc.nameDevice}}-[0-9a-f]{12}$`));
+    expect(Number(name.split('-')[0]) % 3600_000).toBe(0);
+    // the clock: a hex counter, and a peer's clock followed only five minutes ahead
+    expect(doc.counter).toBe('hex');
+    expect((numberWords[doc.hold] ?? Number(doc.hold)) * 60_000).toBe(MAX_AHEAD_MS);
+    expect(hlcEncode({ wall: 1789520000000, count: 1, device: doc.example[3] })).toBe(`${doc.example[1]}-${doc.example[2]}-${doc.example[3]}`);
+    expect(doc.example[3].length).toBe(16); // the example change's writer is app-shaped
+    expect(doc.example[4].slice(1, 1 + doc.idTimeDigits)).toBe(parseInt(doc.example[1], 10).toString(doc.idBase)); // and its id carries the same time, as the page's id rule says
   });
   it('the limits and the id prefixes on the page are the code\'s', () => {
     expect(Number(doc.limits[1])).toBe(MAX_NEW_VAULTS_PER_DAY);
@@ -137,5 +176,17 @@ describe('/about/formats is enough to decrypt a vault, and says what the code do
     expect(Number(doc.limits[3])).toBe(RATE.sync.limit);
     expect(Number(doc.limits[4].replace(/,/g, ''))).toBe(RATE.syncobj.limit);
     expect(doc.ids.slice(1, 6)).toEqual(['r', 's', 'l', 'p', 'e']);
+    expect(doc.idBase).toBe(36);
+    expect(doc.idTimeDigits).toBe(8);
+    expect(doc.refused).toBe('409');
+    expect(Number(doc.full[1]) * 1024 * 1024 * 1024).toBe(MAX_BYTES);
+    expect(doc.full[2]).toBe('507');
+    expect(doc.buckets).toBe(BUCKETS);
+    expect(doc.ikm[1]).toBe('not a decoding');
+    // the key alphabet the page describes by exclusion is the code's
+    const excluded = [...doc.excluded[1].split(/,\s*/), doc.excluded[2]];
+    const alphabet = [...'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'].filter((c) => !excluded.includes(c)).join('');
+    expect(alphabet).toBe(B32);
+    expect(doc.alphabet).toBe(B32);
   });
 });

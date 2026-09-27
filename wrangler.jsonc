@@ -38,5 +38,7 @@
 			"binding": "QUEUE",
 			"id": "1eb90f57004b4613b2f5f91202435c42"
 		}
-	]
+	],
+	"durable_objects": { "bindings": [{ "name": "COUNTERS", "class_name": "Counters" }] },
+	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["Counters"] }]
 }

@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { store, vaultId, vaultIdFor, ensureVault, authed, readMeta, recount, vaultBytes, allowCreation, creationCeilings, limited } from '$lib/server/sync';
+import { store, vaultId, vaultIdFor, ensureVault, authed, readMeta, recount, vaultBytes, allowCreation, creationCeilings, clientIp, limited } from '$lib/server/sync';
 
 /**
  * Create or open a vault. Body: { id, token, create }. The token is hashed
@@ -26,9 +26,11 @@ export const POST: RequestHandler = async ({ request, platform, getClientAddress
   if (!existing) {
     // Three ceilings on new vaults (per address, for everyone today, in all), and a refusal is a plain answer the sync
     // page shows as it is, never a 500: 429 for the address's own limit, 503 with a sentence that says which shared ceiling, the day's or the total, and what still works.
-    const may = await allowCreation(platform?.env?.QUEUE, getClientAddress(), Date.now(), creationCeilings(platform?.env as Record<string, unknown> | undefined));
+    // `clientIp`, not the raw callback: a local runtime can give no address at all, and `addressKey(null)` was a 500 on every creation under `wrangler dev` (round twenty-one, R1-1).
+    const may = await allowCreation(platform?.env?.QUEUE, clientIp(getClientAddress), Date.now(), creationCeilings(platform?.env as Record<string, unknown> | undefined), platform?.env?.COUNTERS);
     if (may === 'address') return json({ error: 'too many new vaults from this address today' }, { status: 429, headers: { 'retry-after': '3600', 'cache-control': 'no-store' } });
     if (may === 'day') return json({ error: 'Sync has taken all the new vaults it can today. Your collection stays on this device; try again tomorrow.' }, { status: 503, headers: { 'retry-after': '3600', 'cache-control': 'no-store' } });
+    if (may === 'unavailable') return json({ error: 'Sync could not count new vaults just now. Your collection stays on this device; try again in a minute.' }, { status: 503, headers: { 'retry-after': '60', 'cache-control': 'no-store' } });
     if (may === 'total') return json({ error: 'Sync is not taking new vaults for now. Your collection stays on this device; joining an existing vault still works.' }, { status: 503, headers: { 'retry-after': '86400', 'cache-control': 'no-store' } });
   }
   const { created, meta } = await ensureVault(r2, id, body.token, open);

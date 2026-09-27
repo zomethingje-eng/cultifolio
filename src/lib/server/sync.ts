@@ -446,17 +446,18 @@ export const resetKvWarning = () => (warnedNoKv = false);
  * ten thousand of them, from one address or from many, and put a ceiling on
  * what a launch day can cost before anyone looks. The ceilings can be raised
  * without a deploy: `SYNC_VAULTS_PER_DAY` and `SYNC_VAULTS_MAX` in the Worker's
- * variables. The counters are KV reads and writes, not atomic, so a burst can
- * pass a ceiling by a few; that is bounding, not accounting. FAILS CLOSED: no
- * KV bound, or a KV that cannot be read or written, refuses every creation and
- * says so once in the log. The placeholder id in wrangler.jsonc cannot be seen
- * from inside the Worker (only the binding is), but a deploy with it is
- * refused by wrangler, so an absent binding is the case that reaches code.
+ * variables. The counters live in one Durable Object (src/lib/server/counters.ts),
+ * where the check and the count are one step; the KV path beneath is the
+ * fallback without that binding. FAILS CLOSED: no KV bound, or a KV that
+ * cannot be read, refuses every creation and says so once in the log. The
+ * placeholder id in wrangler.jsonc cannot be seen from inside the Worker
+ * (only the binding is), but a deploy with it is refused by wrangler, so an
+ * absent binding is the case that reaches code.
  */
 export const MAX_NEW_VAULTS_PER_DAY = 5;
 export const MAX_NEW_VAULTS_ALL_PER_DAY = 200;
 export const MAX_VAULTS = 2000;
-export type Creation = 'ok' | 'address' | 'day' | 'total';
+export type Creation = 'ok' | 'address' | 'day' | 'total' | 'unavailable';
 export interface CreationCeilings {
   perDay?: number;
   max?: number;
@@ -465,33 +466,53 @@ export function creationCeilings(env: Record<string, unknown> | undefined): Crea
   const n = (v: unknown) => (typeof v === 'number' && Number.isInteger(v) && v >= 0 ? v : typeof v === 'string' && /^\d+$/.test(v) ? Number(v) : undefined);
   return { perDay: n(env?.SYNC_VAULTS_PER_DAY), max: n(env?.SYNC_VAULTS_MAX) };
 }
-export async function allowCreation(kv: KVNamespace | undefined, ip: string, now = Date.now(), ceilings: CreationCeilings = {}): Promise<Creation> {
+/** The counters' Durable Object namespace, typed loosely so this module needs nothing from `cloudflare:workers`. */
+export type CountersNs = { idFromName(name: string): DurableObjectId; get(id: DurableObjectId): { create(address: string, day: string, perAddress: number, perDay: number, max: number): Promise<Creation> } };
+/**
+ * With the Durable Object bound (production), the decision and the count are one atomic step and a burst is counted
+ * exactly (round twenty-one, 1). Without it (tests, a `wrangler dev` before the migration), the KV counters below bound
+ * approximately: the address's own count is written first and a write that fails refuses the creation, since that
+ * write is the one thing that stops a burst from one address; the shared counters are best-effort. A KV that cannot be
+ * read is 'unavailable', a short wait, not the permanent ceiling (round twenty-one, 6).
+ */
+export async function allowCreation(kv: KVNamespace | undefined, ip: string, now = Date.now(), ceilings: CreationCeilings = {}, counters?: CountersNs): Promise<Creation> {
+  const perDay = ceilings.perDay ?? MAX_NEW_VAULTS_ALL_PER_DAY;
+  const max = ceilings.max ?? MAX_VAULTS;
+  const address = addressKey(ip);
+  if (counters) {
+    try {
+      return await counters.get(counters.idFromName('vaults')).create(address, day(now), MAX_NEW_VAULTS_PER_DAY, perDay, max);
+    } catch (e) {
+      console.error('sync: the vault-creation counter object did not answer; creation refused for now', e);
+      return 'unavailable';
+    }
+  }
   if (!kv) {
     noKv();
     return 'total';
   }
-  const perDay = ceilings.perDay ?? MAX_NEW_VAULTS_ALL_PER_DAY;
-  const max = ceilings.max ?? MAX_VAULTS;
-  const kIp = `vaults:${addressKey(ip)}:${day(now)}`;
+  const kIp = `vaults:${address}:${day(now)}`;
   const kDay = `vaults:all:${day(now)}`;
   const kAll = 'vaults:all';
   let nIp = 0, nDay = 0, nAll = 0;
   try {
     const [ip$, day$, all$] = await Promise.all([kv.get(kIp), kv.get(kDay), kv.get(kAll)]);
     [nIp, nDay, nAll] = [ip$, day$, all$].map((v) => Number(v ?? 0));
-    // The address's own limit is checked first: one address at its limit is told so, not that sync is full.
-    if (nIp >= MAX_NEW_VAULTS_PER_DAY) return 'address';
-    if (nAll >= max) return 'total';
-    if (nDay >= perDay) return 'day';
   } catch (e) {
-    console.error('sync: the vault-creation counters could not be read; creation refused', e);
-    return 'total';
+    console.error('sync: the vault-creation counters could not be read; creation refused for now', e);
+    return 'unavailable';
   }
-  // The counts are written after the decision, and a write that fails (KV takes about one write a second per key, and two
-  // growers can start in the same second) does not turn a creation the counts allowed into a refusal: the vault is made
-  // and the count is short by one, which the ceilings can bear and a refused grower cannot (round twenty, 3).
-  await Promise.allSettled([kv.put(kIp, String(nIp + 1), { expirationTtl: 2 * 86400 }), kv.put(kDay, String(nDay + 1), { expirationTtl: 2 * 86400 }), kv.put(kAll, String(nAll + 1))]).then((rs) => {
-    if (rs.some((r) => r.status === 'rejected')) console.warn('sync: a vault-creation counter was not written; the count is short by one');
+  if (nIp >= MAX_NEW_VAULTS_PER_DAY) return 'address';
+  if (nAll >= max) return 'total';
+  if (nDay >= perDay) return 'day';
+  try {
+    await kv.put(kIp, String(nIp + 1), { expirationTtl: 2 * 86400 });
+  } catch (e) {
+    console.warn("sync: the address's vault-creation count could not be written (KV takes one write a second per key); creation refused as the address's limit", e);
+    return 'address';
+  }
+  await Promise.allSettled([kv.put(kDay, String(nDay + 1), { expirationTtl: 2 * 86400 }), kv.put(kAll, String(nAll + 1))]).then((rs) => {
+    if (rs.some((r) => r.status === 'rejected')) console.warn('sync: a shared vault-creation counter was not written; the count is short by one');
   });
   return 'ok';
 }

@@ -289,7 +289,7 @@
   <!-- The page's shape before the vault opens: the card without a picture, which is what most plants' pages are; one with a photograph grows a hero above it when the record arrives. -->
   <!-- In the loaded page's own order: the id card (the tile, the number as its title and the actions row), then the verb bar. -->
   <div class="skel" aria-busy="true">
-    <div class="idcard flat"><div class="skeltile skelbox"></div><div class="who"><h1 class="sci"><span class="accno big lead">{param}</span></h1><p class="vern muted">Opening your collection…</p></div><div class="acts"><span class="btn skelbtn">&nbsp;</span><span class="btn skelbtn">&nbsp;</span></div></div>
+    <div class="idcard flat"><div class="skeltile skelbox"></div><div class="who"><h1 class="sci"><span class="accno big lead">{param}</span><span class="skelname" aria-hidden="true">Species name</span></h1><p class="vern muted">Opening your collection…</p></div><div class="acts"><span class="btn skelbtn">&nbsp;</span><span class="btn skelbtn">&nbsp;</span></div></div>
     <div class="skelverbs"></div>
   </div>
 {:else if !a}
@@ -373,14 +373,14 @@
     <button class="btn" onclick={() => quick('note')}>Note</button>
     <button class="btn" onclick={() => { moveTo = a.locationId ?? null; moving = !moving; }}>Move</button>
     {#if moreActs}
-      <button class="btn" onclick={() => quick('feed')}>Feed</button>
+      <button class="btn" id="verb-feed" onclick={() => quick('feed')}>Feed</button>
       <button class="btn" onclick={() => quick('repot')}>Repot</button>
       <button class="btn" onclick={() => quick('measure')}>Measure</button>
       <button class="btn" onclick={() => quick('treat')}>Treat</button>
       <button class="btn" onclick={() => quick('flower')}>Flower</button>
       {#if a.status === 'growing'}<button class="btn" id="status-toggle" onclick={() => setStatus('archived')}>Archive</button>{:else}<button class="btn" id="status-toggle" onclick={() => setStatus('growing')}>Mark growing</button>{/if}
     {:else}
-      <button class="btn more" type="button" aria-expanded="false" onclick={() => { moreActs = true; setTimeout(() => document.querySelector<HTMLElement>('.quickbar button:nth-of-type(5)')?.focus(), 0); }}>More ▾</button>
+      <button class="btn more" type="button" aria-expanded="false" onclick={() => { moreActs = true; void focusNext('#verb-feed'); }}>More ▾</button>
     {/if}
   </div>
 
@@ -560,6 +560,7 @@
   /* The skeleton fills the first screen, so the footer starts below the fold and does not move when the record's sections arrive (round eleven, 4). */
   .skel { min-height: calc(100vh - 150px); }
   .skelbox { background: var(--sunk); border-radius: var(--r); min-height: 260px; }
+  .skelname { visibility: hidden; } /* holds the name's line, which wraps under the number on a phone, so the card does not grow when the record arrives (round twenty-one, 14) */
   .skeltile { width: var(--tile, 96px); height: var(--tile, 96px); min-height: 0; flex: 0 0 var(--tile, 96px); border-radius: 12px; }
   .skelbtn { min-width: 64px; visibility: hidden; }
   .skelverbs { min-height: 52px; margin-top: 14px; }

@@ -127,6 +127,7 @@ test('add a plant, record an event, survive a reload', async ({ page }) => {
   await expect(page.locator('h1')).toContainText('Copiapoa cinerea');
   await expect(page.locator('.fnchip', { hasText: 'KK 1462' })).toBeVisible();
   await page.locator('.quickbar .more').click(); // four verbs at rest, the rest on request
+  await expect(page.locator('#verb-feed')).toBeFocused(); // focus lands on the first revealed verb, whatever is shown before it (round twenty-one, 14)
   await page.getByRole('button', { name: 'Treat' }).click();
   await page.fill('#ev-used', 'Safari 20SG drench');
   await page.getByRole('button', { name: 'Record', exact: true }).click();
@@ -805,12 +806,15 @@ test('the app shell is installed for offline use: collection pages, a species pa
   // in the URL and offline it still lands on the section (round twenty, 1). The route below stands in for the server: had
   // the worker let the request through, the page would be this 500, not the places shell.
   let reachedServer = 0;
-  await ctx.route(/\/(benches|sowings)(\/|\?|$)/, (r) => { reachedServer++; return r.fulfill({ status: 500, body: 'server saw it' }); });
+  await ctx.route(/\/(benches|sowings)(\/|\?|$)|\/places\/[^/?]+\/(\?|$)/, (r) => { reachedServer++; return r.fulfill({ status: 500, body: 'server saw it' }); });
   await page.goto('/benches/k1?edit=1');
   await expect(page).toHaveURL(/\/places\/k1\?edit=1$/);
   await expect(page.locator('h1')).toContainText('Not here'); // the places shell rendered from the vault: no place k1 on this device
   await page.goto('/sowings/new?loc=k1');
   await expect(page).toHaveURL(/\/propagation\/new\?loc=k1$/);
+  await page.goto('/benches/k1/'); // a trailing slash: still the shell, still nothing to the server (round twenty-one, 13)
+  await expect(page).toHaveURL(/\/places\/k1$/);
+  await expect(page.locator('h1')).toContainText('Not here');
   expect(reachedServer).toBe(0);
   await ctx.close();
 });
@@ -999,6 +1003,25 @@ test('every control has a name, headings do not jump, images have alt text, mute
   const dark = await ratio();
   expect(dark.card).toBeGreaterThanOrEqual(4.5);
   expect(dark.bg).toBeGreaterThanOrEqual(4.5);
+  // the photo-less placeholder on an owned tile, in both schemes, as the page resolves it: the caption on its tint (round twenty-one, 12)
+  const placeholder = async () => page.evaluate(() => {
+    const el = document.querySelector<HTMLElement>('a.tile .ph .cap');
+    const box = el?.closest<HTMLElement>('.ph');
+    if (!el || !box) return null;
+    const rgb = (v: string) => (v.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
+    const lum = (c: number[]) => { const [r, g, b] = c.map((x) => x / 255).map((x) => (x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4)); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+    const [x, y] = [lum(rgb(getComputedStyle(el).color)), lum(rgb(getComputedStyle(box).backgroundColor))].sort((p, q) => q - p);
+    return { ratio: (x + 0.05) / (y + 0.05), hidden: !!el.closest('[aria-hidden="true"]'), text: el.textContent };
+  });
+  for (const scheme of ['dark', 'light'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.goto('/');
+    await expect(page.locator('a.tile .ph .cap').first()).toBeVisible();
+    const ph = await placeholder();
+    expect(ph?.text).toBe('reference photograph off');
+    expect(ph?.hidden).toBe(false); // the reason is read out; only the initial is decoration
+    expect(ph!.ratio).toBeGreaterThanOrEqual(4.5);
+  }
 });
 
 test('long and unicode names: nothing overflows at 360 px, the number chip never wraps, and the search finds a cultivar and a parent', async ({ browser }) => {

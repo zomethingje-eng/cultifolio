@@ -200,7 +200,7 @@
 <h2 class="sec" id="data">Your data</h2>
 <div class="cult">
   <div class="body">
-    <p class="small" style="margin: 0 0 10px">Your collection lives in this browser and nowhere else{#if sync.configured}, and in an encrypted vault only your key opens{/if}. Nothing on this site is stored about you beyond short-lived rate counters by address; there are no accounts and no analytics.</p>
+    <p class="small" style="margin: 0 0 10px">Your collection lives in this browser and nowhere else{#if sync.configured}, and in an encrypted vault only your key opens{/if}. Nothing on this site is stored about you beyond short-lived rate counters by address and, with sync on, the size of your vault; there are no accounts and no analytics.</p>
     <div class="row">
       <a class="btn" href="/backup">Back up, restore or import from v2</a>
       <a class="btn" href="/sync">Sync between devices</a>

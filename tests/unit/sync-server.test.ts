@@ -179,23 +179,66 @@ describe('vault creation is bounded per address, per day for everyone, and in al
     expect(creationCeilings({ SYNC_VAULTS_PER_DAY: 300, SYNC_VAULTS_MAX: 5000 })).toEqual({ perDay: 300, max: 5000 }); // a JSON number in wrangler.jsonc counts too
     expect(creationCeilings(undefined)).toEqual({ perDay: undefined, max: undefined });
   });
-  it('FAILS CLOSED: no KV bound refuses every creation and logs once; a KV that throws refuses too', async () => {
+  it('FAILS CLOSED: no KV bound refuses every creation and logs once', async () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {});
     expect(await allowCreation(undefined, '1.2.3.4')).toBe('total');
     expect(await allowCreation(undefined, '1.2.3.4')).toBe('total');
     expect(err).toHaveBeenCalledTimes(1);
-    const kv = fakeKV();
-    kv.get = async () => { throw new Error('kv: read failed'); };
-    expect(await allowCreation(kv as never, '9.9.9.9')).toBe('total');
     err.mockRestore();
   });
-  it('a counter write that fails does not refuse a creation the counts allowed (KV takes one write a second per key)', async () => {
+  it("the address's count that cannot be written refuses the creation (that write is what stops a burst from one address); a shared count that cannot be written is a warning", async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const kv = fakeKV();
     kv.fail = true;
+    expect(await allowCreation(kv as never, '9.9.9.9')).toBe('address');
+    kv.fail = false;
+    const realPut = kv.put.bind(kv);
+    kv.put = async (k: string, v: string) => { if (k === 'vaults:all') throw new Error('kv: too many writes'); return realPut(k, v); };
     expect(await allowCreation(kv as never, '9.9.9.9')).toBe('ok');
-    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledTimes(2);
     warn.mockRestore();
+  });
+  it('a KV that cannot be read is "unavailable", a short wait, not the permanent ceiling (round twenty-one, 6)', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const kv = fakeKV();
+    kv.get = async () => { throw new Error('kv: read failed'); };
+    expect(await allowCreation(kv as never, '9.9.9.9')).toBe('unavailable');
+    err.mockRestore();
+  });
+  it('with the counter object bound, a burst is counted exactly: every check is one step in one object (round twenty-one, 1)', async () => {
+    // A stand-in with the object's own contract: one request at a time, read-decide-write inside it.
+    const store = new Map<string, number>();
+    let busy = false;
+    const obj = {
+      async create(address: string, dayKey: string, perAddress: number, perDay: number, max: number) {
+        if (busy) throw new Error('two requests inside the object at once');
+        busy = true;
+        try {
+          await new Promise((r) => setTimeout(r, 1));
+          const nIp = store.get(`ip:${address}:${dayKey}`) ?? 0, nDay = store.get(`day:${dayKey}`) ?? 0, nAll = store.get('all') ?? 0;
+          if (nIp >= perAddress) return 'address' as const;
+          if (nAll >= max) return 'total' as const;
+          if (nDay >= perDay) return 'day' as const;
+          store.set(`ip:${address}:${dayKey}`, nIp + 1); store.set(`day:${dayKey}`, nDay + 1); store.set('all', nAll + 1);
+          return 'ok' as const;
+        } finally {
+          busy = false;
+        }
+      }
+    };
+    // The namespace serialises calls to one object, as Durable Objects do.
+    let chain = Promise.resolve<unknown>(undefined);
+    const ns = { idFromName: (n: string) => n as never, get: () => ({ create: (...a: Parameters<typeof obj.create>) => { const p = chain.then(() => obj.create(...a)); chain = p.catch(() => {}); return p; } }) };
+    const kv = fakeKV();
+    const burst = await Promise.all(Array.from({ length: 100 }, (_, i) => allowCreation(kv as never, `2001:db8:1:1::${i}`, T0, {}, ns)));
+    expect(burst.filter((r) => r === 'ok').length).toBe(MAX_NEW_VAULTS_PER_DAY); // one /64, whatever it rotates to
+    expect(burst.filter((r) => r === 'address').length).toBe(100 - MAX_NEW_VAULTS_PER_DAY);
+    expect(store.get('all')).toBe(MAX_NEW_VAULTS_PER_DAY); // and the shared counters saw every one
+    expect(kv.puts).toBe(0); // KV is not touched on this path
+    const many = await Promise.all(Array.from({ length: 300 }, (_, i) => allowCreation(kv as never, `10.${i >> 8}.${(i >> 4) & 15}.${i & 15}`, T0, { perDay: 50, max: 1000 }, ns)));
+    expect(many.filter((r) => r === 'ok').length).toBe(50 - MAX_NEW_VAULTS_PER_DAY); // the day's 50 includes the burst above
+    expect(many.filter((r) => r === 'day').length).toBe(250 + MAX_NEW_VAULTS_PER_DAY);
+    expect(store.get(`day:${new Date(T0).toISOString().slice(0, 10)}`)).toBe(50);
   });
   it('one IPv6 host is one address whatever it rotates to within its /64; IPv4 stays as it is', async () => {
     expect(addressKey('203.0.113.7')).toBe('203.0.113.7');

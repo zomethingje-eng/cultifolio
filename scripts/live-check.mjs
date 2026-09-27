@@ -43,10 +43,14 @@ if (!skip.has('names')) {
   // A name the edge is unlikely to hold already, so the first request exercises the new build's upstream path and the
   // second the cache (round twenty, 13): one of these genera by the minute, so two runs in a row ask different ones.
   const GENERA = ['lithops', 'conophytum', 'copiapoa', 'haworthia', 'gasteria', 'ariocarpus', 'astrophytum', 'echeveria', 'tylecodon', 'pelargonium', 'othonna', 'crassula', 'aloe', 'agave', 'mammillaria', 'gymnocalycium', 'turbinicarpus', 'euphorbia', 'pachypodium', 'adenium', 'fockea', 'dioscorea', 'bulbine', 'massonia', 'lachenalia', 'oxalis', 'albuca', 'ornithogalum', 'ledebouria', 'eriospermum'];
-  const q = `/api/names?q=${GENERA[Math.floor(Date.now() / 60_000) % GENERA.length]}`;
+  // The genus is asked for by a prefix of five to seven letters, all of which the suggestion service answers with the
+  // genus, so ninety keys rotate rather than thirty and a run rarely finds its first request already at the edge.
+  const minute = Math.floor(Date.now() / 60_000);
+  const genus = GENERA[minute % GENERA.length];
+  const q = `/api/names?q=${genus.slice(0, Math.max(4, genus.length - (Math.floor(minute / GENERA.length) % 3)))}`;
   const a = await get(q);
   if (a.status !== 200) fail(`${q} first answer`, a);
-  if (!new RegExp(q.split('=')[1], 'i').test(a.text)) fail(`${q} did not name the genus asked for`, a);
+  if (!new RegExp(genus, 'i').test(a.text)) fail(`${q} did not name ${genus}`, a);
   const b = await get(q);
   if (b.status !== 200) fail(`${q} second answer (the edge-cached one)`, b);
   headersOn(b, q);
@@ -90,7 +94,10 @@ for (const path of ['/about/how', `/species/${process.env.LIVE_CHECK_SPECIES ?? 
 // Worker's own cache key is the rounded coordinate, so MET is asked at most once an hour whatever the extra parameter.
 // MET not answering twice, a few seconds apart, is a failure: a deploy that broke every forecast must not pass (round twenty, 13).
 if (!skip.has('forecast')) {
-  const path = `/api/forecast?lat=51.5&lon=-0.13&alt=20&units=metric&lc=${Date.now()}`;
+  // A cell the Worker has not cached this hour, so MET is really asked: the longitude steps through thirty cells west of
+  // London by the minute (the Worker caches a cell for an hour; a deploy that cannot reach MET must not pass on last
+  // hour's answer). `units` as the app sends it; `lc` keeps the outer edge from answering for the previous build.
+  const path = `/api/forecast?lat=51.5&lon=${(-0.13 - 0.01 * (Math.floor(Date.now() / 60_000) % 30)).toFixed(2)}&alt=20&units=metric&lc=${Date.now()}`;
   let r = await get(path);
   if (r.status === 502) {
     await new Promise((res) => setTimeout(res, 5000));
