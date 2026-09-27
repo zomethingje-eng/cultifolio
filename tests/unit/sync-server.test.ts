@@ -165,6 +165,11 @@ describe('vault creation is bounded per address, per day for everyone, and in al
     expect(await allowCreation(kv as never, '1.2.3.4')).toBe('address');
     expect(await allowCreation(kv as never, '5.6.7.8')).toBe('ok');
     expect(kv.m.get('vaults:all')).toBe(String(MAX_NEW_VAULTS_PER_DAY + 1));
+    // the KV fallback's address and day keys expire at a fixed moment, the midnight ending the next day, not by a TTL each write renews (round twenty-five, 8)
+    const today = new Date().toISOString().slice(0, 10);
+    const ends = Date.parse(today + 'T00:00:00Z') / 1000 + 2 * 86400;
+    expect(kv.opts.get(`vaults:1.2.3.4:${today}`)).toEqual({ expiration: ends });
+    expect(kv.opts.get(`vaults:all:${today}`)).toEqual({ expiration: ends });
   });
   it('many addresses together meet the day ceiling, then the ceiling in all; both come from the Worker variables', async () => {
     const kv = fakeKV();

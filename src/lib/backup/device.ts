@@ -25,7 +25,8 @@ export function readDeviceSettings(): DeviceSettings {
   try {
     const l = localStorage.getItem(LABELS);
     const v = l ? (JSON.parse(l) as Record<string, unknown>) : null;
-    if (v) out.labels = labelsShape(v);
+    const shaped = v ? labelsShape(v) : null;
+    if (shaped) out.labels = shaped;
   } catch {
     /* none */
   }

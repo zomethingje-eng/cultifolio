@@ -3,6 +3,10 @@
 /** The synced record that holds the accession numbering scheme: kind 'setting', id 'numbering', field 'scheme' (a NumberingScheme). */
 export const NUMBERING_SETTING = 'numbering';
 
+import type { NameKind } from '$core/names';
+export type { NameKind };
+/** Where a photograph's date came from: the file's EXIF, or the day it was added. */
+export type PhotoDateFrom = 'exif' | 'added';
 export type Provenance = 'wild' | 'f1' | 'fn' | 'veg' | 'unknown';
 export type AccStatus = 'growing' | 'archived' | 'dead';
 
@@ -25,7 +29,7 @@ export interface Accession {
    * hybrid: a cross; taxonName is the genus or nothogenus, parentage holds what is known of the parents.
    * Unset on records made before this field existed: read as species, or cultivar when a cultivar is set.
    */
-  nameKind?: 'species' | 'cultivar' | 'hybrid' | null;
+  nameKind?: NameKind | null;
   /** For a hybrid: "Ariocarpus retusus × Ariocarpus trigonus", or null when the parents are not stated. */
   parentage?: string | null;
   fieldNumber?: string | null;
@@ -39,6 +43,8 @@ export interface Accession {
   sourceForm?: string | null; // seed, seedling, plant, cutting
   price?: string | null;
   notes?: string | null;
+  /** The stamp (HLC) of the `notes` value this record's latest notes edit was based on: how a device tells an edit made in sight of its text from one made blind to it (round twenty-five, 2). */
+  notesBase?: string | null;
   sowingId?: string | null;
   /** The photo shown as this plant's face; the newest photo when unset. */
   cover?: string | null;
@@ -59,7 +65,7 @@ export interface Photo {
   /** The day it was taken (EXIF DateTimeOriginal), else the day it was added. */
   d: string;
   /** Whether `d` came from the camera or from the clock when it was added. */
-  dFrom?: 'exif' | 'added' | null;
+  dFrom?: PhotoDateFrom | null;
   caption?: string | null;
   w: number;
   h: number;
@@ -140,7 +146,7 @@ export interface Sowing {
   taxonName: string;
   taxonKey?: number | null;
   cultivar?: string | null;
-  nameKind?: 'species' | 'cultivar' | 'hybrid' | null;
+  nameKind?: NameKind | null;
   parentage?: string | null;
   method: PropMethod;
   /** For vegetative methods: the accession the material came from. */
@@ -161,6 +167,8 @@ export interface Sowing {
   locationId?: string | null;
   status: SowingStatus;
   notes?: string | null;
+  /** As on a plant: the stamp of the notes the latest edit was based on. */
+  notesBase?: string | null;
   /** The local day this record arrived in a file on some device (YYYY-MM-DD). Set once by the importer; day counters start here for a record whose id carries no time. */
   importedOn?: string | null;
 }

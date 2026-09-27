@@ -470,7 +470,7 @@ describe('a peer whose clock is ahead', () => {
     A = await reboot(memA, r2);
     await A.sync.run();
     expect(A.collection.accession(plant.id)?.notes).toBe('bought at the show');
-    expect(A.sync.held).toBe(1);
+    expect(A.sync.held).toBe(2); // the notes and the `notesBase` a notes edit carries since round twenty-five: two field changes, both held
     expect(A.sync.heldUntil).toBeGreaterThan(real + 86_400_000 - MAX_AHEAD_MS - 1000);
     expect(memA.changes.size).toBeGreaterThan(0);
     await A.collection.put('accession', plant.id, { notes: 'no: leave it until spring' });
@@ -478,7 +478,7 @@ describe('a peer whose clock is ahead', () => {
     await A.sync.run();
     A = await reboot(memA, r2);
     if (collectionHolds) expect(A.collection.accession(plant.id)?.notes).toBe('no: leave it until spring'); // the load() fold skips the held change
-    expect(A.sync.held).toBe(1);
+    expect(A.sync.held).toBe(2);
     // When A's clock reaches B's stamp, the held change is folded in and, being the greater HLC, wins.
     vi.setSystemTime(real + 86_400_000);
     await A.sync.run();

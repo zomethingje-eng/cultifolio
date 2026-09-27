@@ -8,6 +8,7 @@
   import { page } from '$app/state';
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import { collection } from '$lib/db/collection.svelte';
+  import { today as day } from '$lib/ui/day.svelte';
   import SpeciesPicker from '$lib/ui/SpeciesPicker.svelte';
   import LocationPicker from '$lib/ui/LocationPicker.svelte';
   import { parseName, slugify, type NameKind, speciesSlug, speciesOf } from '$core/names';
@@ -63,7 +64,9 @@
   let nameAsReceived = $state('');
   let fieldNumber = $state('');
   let provenance = $state<Provenance>('unknown');
-  let acquired = $state(localDate());
+  let acquired = $state(day.current); // follows the calendar while the form is open (round twenty-five, 4)
+  let acquiredDefault = day.current;
+  $effect(() => { const t = day.current; if (t !== acquiredDefault) { if (acquired === acquiredDefault) acquired = t; acquiredDefault = t; } });
   let sourceFrom = $state('');
   let price = $state('');
   let sourceForm = $state('plant');
@@ -77,7 +80,7 @@
   const ownTaken = $derived(useOwnNumber && !!ownNumber.trim() && collection.isNumberTaken(ownNumber));
   let busy = $state(false);
   let checking = $state(false); // the name (or the link's key) is being checked against the reference: the button says so rather than sitting there (round twenty-four, 15)
-  const nextNo = $derived(collection.ready ? collection.nextAccessionNumber() : '…');
+  const nextNo = $derived(collection.ready ? collection.nextAccessionNumber(undefined, acquired) : '…'); // the year the number will carry is the acquired date's, so the preview and the number agree across New Year (round twenty-five, 4)
 
   let nameUnresolved = $state(false);
   let nameArmed = $state(false);

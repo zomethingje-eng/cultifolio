@@ -5,7 +5,11 @@
  * so the page never shows an edit the vault does not hold.
  */
 import { SvelteMap } from 'svelte/reactivity';
-import { localDate, madeOn } from '$core/dates';
+import { localDate, madeOn, daysBetween } from '$core/dates';
+
+/** Three weeks: the Due chip's "21+ days" and Today's "three weeks or more" both mean this many days, inclusive (round twenty-five, 2). */
+export const DUE_DAYS = 21;
+const yearOf = (d?: string | null): number | undefined => (d && /^\d{4}-/.test(d) ? Number(d.slice(0, 4)) : undefined);
 import { Clock, hlcDecode, hlcEncode, hlcCompare, hlcAfter } from '$core/hlc';
 import { tag36 } from '$core/tag';
 import { apply, diff, validateChanges, key as recKey, type Change, type Kind, type Record_, type State, hlcWall, revivedByImport } from '$core/log';
@@ -459,7 +463,8 @@ class Collection {
     const germinated = germ.length ? Math.max(...germ.map((e) => e.n ?? 0)) : 0;
     const potted = ev.filter((e) => e.t === 'potup').reduce((n, e) => n + (e.n ?? 0), 0);
     const lost = ev.filter((e) => e.t === 'loss').reduce((n, e) => n + (e.n ?? 0), 0);
-    const firstUp = germ.length ? germ[germ.length - 1].d : null;
+    const up = germ.filter((e) => (e.n ?? 0) > 0); // a recorded 0 is a count, not a first strike (round twenty-five, 5)
+    const firstUp = up.length ? up[up.length - 1].d : null;
     const dayMs = 86_400_000;
     const since = (a: string, b: string) => Math.floor((Date.parse(b) - Date.parse(a)) / dayMs);
     return {
@@ -608,6 +613,25 @@ class Collection {
     return p;
   }
 
+  /**
+   * The one watering figure every surface reads (the plant page, the plants list and its Due chip, the place card,
+   * Today), so they cannot disagree (round twenty-five, R1-1): the last watering dated today or earlier (a future-dated
+   * line is a typo, not a watering; round twenty-five, 1), as days ago; when nothing is logged, the days since the
+   * record was made (not the acquisition date, which for a collection entered late is years back), so a plant entered
+   * this week is not overdue. `lastWatered` is the date itself, null when none.
+   */
+  lastWatered(acc: string): string | null {
+    const today = localDate();
+    return this.events(acc).find((e) => e.t === 'water' && e.d <= today)?.d ?? null;
+  }
+  careDays(a: Accession): number {
+    const w = this.lastWatered(a.id);
+    return daysBetween(w ?? this.madeOn('accession', a.id) ?? a.acquired ?? localDate());
+  }
+  /** Growing plants not watered, or not recorded as watered, for `DUE_DAYS` days or more. */
+  get due(): Accession[] {
+    return this.accessions.filter((a) => a.status === 'growing' && this.careDays(a) >= DUE_DAYS);
+  }
   /** Last time each plant was marked present at an audit (or acquired), for "not seen since". */
   /** The last day the plant was in front of the grower: its last audit, else the day its record was made (not the acquisition date it was given, which may be years back for a collection entered late). */
   lastSeen(acc: string): string | null {
@@ -735,7 +759,19 @@ class Collection {
   /** Upsert any record kind from a plain object. Only changed fields are written. */
   async put(kind: Kind, id: string, fields: Record<string, unknown>): Promise<void> {
     const current = this.state.get(recKey(kind, id));
+    // A notes edit says which text it was based on (the stamp of the notes it saw), so a device that receives it can tell
+    // an edit made in sight of its text from one made blind to it, and log only the second (round twenty-five, 2). The
+    // caller may say the base itself (an editor opened before a pull); otherwise it is the text on screen now.
+    if ('notes' in fields && !('notesBase' in fields) && (kind === 'accession' || kind === 'sowing')) fields = { ...fields, notesBase: this.notesStamp(kind, id) };
     await this.commit(diff(kind, id, fields, current, this.tick));
+  }
+  /** The stamp of a record's current `notes`, null when none: what an edit to them is based on. */
+  notesStamp(kind: 'accession' | 'sowing', id: string): string | null {
+    return this.seen.get(recKey(kind, id) + '\0notes') ?? null;
+  }
+  /** Whether a stamp was written by this device (any of its tabs). */
+  isOwnStamp(t: string | null | undefined): boolean {
+    return !!t && hlcDecode(t).device.startsWith(this.deviceId);
   }
 
   async remove(kind: Kind, id: string): Promise<void> {
@@ -746,8 +782,9 @@ class Collection {
     await this.commit([{ t: this.tick(), kind, id, field: '_deleted', value: false }]);
   }
 
-  nextAccessionNumber(scheme: NumberingScheme = this.scheme): string {
-    return nextAccession(this.takenNumbers('accession'), scheme);
+  /** The next number, for the year of `acquired` when given: a plant acquired on 31 December filed at 00:05 is a 2026 plant, and the form's preview and the number it gets agree (round twenty-five, 4). */
+  nextAccessionNumber(scheme: NumberingScheme = this.scheme, acquired?: string | null): string {
+    return nextAccession(this.takenNumbers('accession'), scheme, yearOf(acquired));
   }
   /** How many plant numbers this device has ever given, removed plants included: a number is never reused. */
   get numbersIssued(): number {
@@ -774,7 +811,7 @@ class Collection {
       const changes: Change[] = [];
       const result: Accession[] = [];
       for (const [i, id] of ids.entries()) {
-        const no = i === 0 && wanted ? wanted : nextAccession(taken, this.scheme);
+        const no = i === 0 && wanted ? wanted : nextAccession(taken, this.scheme, yearOf(a.acquired));
         if (i === 0 && wanted && issued.has(no)) throw new Error(`Accession number ${no} is already used. A number is never reused; pick another.`);
         taken.add(no);
         const r: Accession = { status: 'growing', ...a, id, acc: no };
@@ -851,7 +888,7 @@ class Collection {
   async ingest(changes: Change[], source: 'import' | 'server' = 'import', opts: { repair?: boolean; requireKey?: string } = {}): Promise<void> {
     validateChanges(changes);
     for (const c of changes) this.clock?.observe(c.t);
-    const overwritten = source === 'server' ? this.textAboutToBeReplaced(changes) : [];
+    const overwritten = this.textAboutToBeReplaced(changes); // a pull, a restore or an import alike: a backup file is the one channel two unsynced devices share
     await this.commit(changes, source, opts.requireKey);
     // Free text is the one field where last-writer-wins loses a grower's writing: two devices that edited a plant's
     // notes offline keep only one text. The other is not dropped silently: the device whose text lost writes what it
@@ -864,7 +901,7 @@ class Collection {
         const now = this.state.get(recKey(o.kind, o.id))?.notes;
         if (now === o.old) continue; // held back, or the same text after all
         const eid = this.eventId();
-        lines.push(...diff('event', eid, { id: eid, acc: o.id, d: today, t: 'note', note: `Notes replaced by an edit made on another device; here they read: ${o.old}`, auto: true } as unknown as Record<string, unknown>, undefined, this.tick));
+        lines.push(...diff('event', eid, { id: eid, acc: o.id, d: today, t: 'note', note: `Notes replaced by an edit made ${o.how}; here they read: ${o.old}`, auto: true } as unknown as Record<string, unknown>, undefined, this.tick));
       }
       if (lines.length) await this.commit(lines, 'local').catch(() => undefined);
     }
@@ -888,9 +925,15 @@ class Collection {
     if (opts.repair !== false) await this.repairNumbers();
   }
 
-  /** Incoming changes to a plant's or batch's `notes` that will win over a non-empty text this device holds from another writer. */
-  private textAboutToBeReplaced(changes: Change[]): Array<{ kind: 'accession' | 'sowing'; id: string; old: string }> {
-    const out = new Map<string, { kind: 'accession' | 'sowing'; id: string; old: string }>();
+  /**
+   * Incoming changes to a plant's or batch's `notes` that will win over a non-empty text this device wrote, and were made
+   * without seeing it: the change's `notesBase` (the stamp of the text it was edited from, in the same commit) is not the
+   * stamp of the text held here. An edit made in sight of this text replaced it knowingly and is not logged; a change from
+   * a build before `notesBase` is taken as blind. Only this device's own text is logged, by this device: the other side logs
+   * its own, and a tab of this device is not another device (round twenty-four, 1; round twenty-five, 2).
+   */
+  private textAboutToBeReplaced(changes: Change[]): Array<{ kind: 'accession' | 'sowing'; id: string; old: string; how: string }> {
+    const out = new Map<string, { kind: 'accession' | 'sowing'; id: string; old: string; how: string }>();
     for (const c of changes) {
       if ((c.kind !== 'accession' && c.kind !== 'sowing') || c.field !== 'notes') continue;
       const k = recKey(c.kind, c.id);
@@ -898,9 +941,11 @@ class Collection {
       const rec = this.state.get(k);
       const old = rec?.notes;
       if (!prev || !rec || rec._deleted || typeof old !== 'string' || !old.trim() || old === c.value) continue;
-      // Only this device's own text, replaced by another device's: the other device logs its own, and a tab of this device is not another device.
       if (hlcCompare(c.t, prev) <= 0 || !hlcDecode(prev).device.startsWith(this.deviceId) || hlcDecode(c.t).device.startsWith(this.deviceId)) continue;
-      if (!out.has(k)) out.set(k, { kind: c.kind, id: c.id, old });
+      const base = changes.find((b) => b.kind === c.kind && b.id === c.id && b.field === 'notesBase');
+      if (base && base.value === prev) continue; // edited from the text held here: seen, not lost
+      const dev = hlcDecode(c.t).device.slice(0, 12);
+      if (!out.has(k)) out.set(k, { kind: c.kind, id: c.id, old, how: `on another device (${dev.slice(0, 6)}…)` });
     }
     return [...out.values()];
   }
@@ -945,8 +990,8 @@ class Collection {
           const wall = base.wall + 1;
           const when = new Date(wall);
           // The year of the number being replaced, so a plant minted 2026-0007 is repaired to 2026-0008, not into its acquisition year (round fifteen, 14); the stamp's year when the number carries none.
-          const yearOf = /^(\d{4})-/.exec(no)?.[1];
-          const fresh = kind === 'accession' ? nextAccession(taken, this.scheme, yearOf ? Number(yearOf) : when.getUTCFullYear()) : nextAccession(taken, { mode: 'prefix', prefix: `S${(r as Sowing).sown.slice(0, 4)}`, width: 3 });
+          const yearIn = /^(\d{4})-/.exec(no)?.[1];
+          const fresh = kind === 'accession' ? nextAccession(taken, this.scheme, yearIn ? Number(yearIn) : when.getUTCFullYear()) : nextAccession(taken, { mode: 'prefix', prefix: `S${(r as Sowing).sown.slice(0, 4)}`, width: 3 });
           taken.add(fresh);
           // The tag is a function of the record AND the number chosen, and no real device id starts with 'zz': two devices that
           // derive the same repair write identical changes (one in the log), and two that chose differently (one of them

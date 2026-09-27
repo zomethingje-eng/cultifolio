@@ -36,10 +36,12 @@
   });
   const dli = $derived(cond.ppfd != null ? (cond.ppfd * (cond.lightHours ?? 12) * 3600) / 1e6 : null);
   // The most recent watering of any plant here, and the longest wait among them, so "0 d ago" cannot stand for a place where two plants are at 35 d (round twenty-four, 12).
-  const watering = $derived.by(() => { const ds = deep.map((a) => collection.events(a.id).find((e) => e.t === 'water')?.d); const dated = ds.filter((d): d is string => !!d).sort(); return { newest: dated.length ? dated[dated.length - 1] : null, oldest: dated.length ? dated[0] : null, never: ds.length - dated.length }; });
+  const watering = $derived.by(() => { const ds = deep.map((a) => collection.lastWatered(a.id)); const dated = ds.filter((d): d is string => !!d).sort(); return { newest: dated.length ? dated[dated.length - 1] : null, oldest: dated.length ? dated[0] : null, never: ds.length - dated.length }; });
   const lastWater = $derived(watering.newest);
   const lastAudit = $derived.by(() => { const ds = deep.map((a) => collection.events(a.id).find((e) => e.t === 'audit')?.d).filter((d): d is string => !!d).sort(); return ds.length ? ds[ds.length - 1] : null; });
-  const unseen = $derived(deep.filter((a) => { const d = daysSince(collection.lastSeen(a.id)); return d == null || d > 90; }).length);
+  // The same set Today counts: missed at the last audit, or seen and not for ninety days; a plant never audited is not "unseen" (round twenty-five, 14).
+  const unseen = $derived(deep.filter((a) => { if (collection.missedAt(a.id)) return true; const d = daysSince(collection.lastSeen(a.id)); return d != null && d > 90; }).length);
+  const missedNow = $derived(deep.filter((a) => collection.missedAt(a.id)).length);
 
   /* ---- edit conditions ---- */
   let editing = $state(false);
@@ -164,7 +166,7 @@
         {#if cond.floorC != null}<span class="pill c">floor {temp(cond.floorC, units.current, 1)}</span>{/if}
         {#if dli != null}<span class="pill w">DLI {dli.toFixed(0)}</span>{/if}
         {#if watchable && effectiveRisk}<span class="pill {effectiveRisk.level === 'none' ? 'a' : effectiveRisk.level === 'cold' ? 'w' : 'b'}">{effectiveRisk.level === 'none' ? (alertsUnchecked ? 'forecast clear; alerts not checked' : 'frost: clear') : effectiveRisk.level === 'cold' ? 'cold night coming' : effectiveRisk.level === 'floor' ? 'reaches the floor' : effectiveRisk.level === 'warning' ? 'weather warning' : 'frost forecast'}</span>{/if}
-        {#if unseen && deep.length}<span class="pill w">{unseen} not seen in 90 d</span>{/if}
+        {#if unseen && deep.length}<span class="pill w">{unseen} not seen{missedNow === unseen ? ' at the last audit' : ' in 90 d'}</span>{/if}
       </div>
     </div>
     <div class="acts">
@@ -210,8 +212,8 @@
   <div class="cards">
     {#if cond.floorC != null}<div class="card"><div class="lab">Floor</div><div class="val">{cond.floorC == null ? '–' : tempN(cond.floorC, units.current, 1)}<span class="u">{cond.floorC == null ? '' : ' ' + tempUnit(units.current)}</span></div><div class="sub">{cond.floorC == null ? 'not stated' : cond.from.floorC && cond.from.floorC !== loc.name ? `from ${cond.from.floorC}` : 'set here'}</div></div>{/if}
     {#if dli != null}<div class="card"><div class="lab">Light</div><div class="val">{dli == null ? '–' : dli.toFixed(0)}<span class="u">{dli == null ? '' : ' DLI'}</span></div><div class="sub">{cond.ppfd == null ? 'not measured' : `${cond.ppfd} µmol × ${cond.lightHours ?? 12} h${cond.from.ppfd && cond.from.ppfd !== loc.name ? ` · from ${cond.from.ppfd}` : ''}`}</div></div>{/if}
-    {#if lastWater}<div class="card"><div class="lab">Last watered</div><div class="val">{lastWater ? daysSince(lastWater) : '–'}<span class="u">{lastWater ? ' d ago' : ''}</span></div><div class="sub">{lastWater ? `the most recently watered plant; the longest waiting ${watering.oldest === lastWater ? 'the same' : `${daysSince(watering.oldest)} d`}${watering.never ? `; ${watering.never} never watered` : ''}` : 'nothing recorded'}</div></div>{/if}
-    {#if lastAudit}<div class="card"><div class="lab">Last audit</div><div class="val">{lastAudit ? daysSince(lastAudit) : '–'}<span class="u">{lastAudit ? ' d ago' : ''}</span></div><div class="sub">{lastAudit ? lastAudit : 'never audited'}{unseen && deep.length ? ` · ${unseen} not seen in 90 d` : ''}</div></div>{/if}
+    {#if lastWater}<div class="card"><div class="lab">Last watered</div><div class="val">{lastWater ? daysSince(lastWater) : '–'}<span class="u">{lastWater ? ' d ago' : ''}</span></div><div class="sub">{lastWater ? `the most recently watered plant${watering.oldest === lastWater ? (deep.length > 1 ? ', and every plant here was watered that day' : '') : `; the longest waiting ${daysSince(watering.oldest)} d`}${watering.never ? `; ${watering.never} never watered` : ''}` : 'nothing recorded'}</div></div>{/if}
+    {#if lastAudit}<div class="card"><div class="lab">Last audit</div><div class="val">{lastAudit ? daysSince(lastAudit) : '–'}<span class="u">{lastAudit ? ' d ago' : ''}</span></div><div class="sub">{lastAudit ? lastAudit : 'never audited'}{missedNow ? ` · ${missedNow} not seen at it` : ''}{unseen - missedNow > 0 ? ` · ${unseen - missedNow} not seen in 90 d` : ''}</div></div>{/if}
   </div>
   {/if}
 
@@ -299,7 +301,7 @@
   .row .dot { margin: 0 auto; }
   .row input[type='checkbox'] { width: 18px; height: 18px; margin: 0 auto; }
   .accrow .nm .accno { font-style: normal; vertical-align: 2px; }
-  .phoneonly { display: none; }
+  .azrow.accrow .fam.phoneonly { display: none; } /* outranks the theme's .azrow.accrow .fam { display: flex }, which printed the status twice at desktop width (round twenty-five, 13) */
   .fam.due { color: var(--warm); }
-  @media (max-width: 640px) { .form { grid-template-columns: 1fr 1fr; } .hero.band { margin-top: 0; } .azrow .fig { display: none; } .phoneonly { display: block; } }
+  @media (max-width: 640px) { .form { grid-template-columns: 1fr 1fr; } .hero.band { margin-top: 0; } .azrow .fig { display: none; } .azrow.accrow .fam.phoneonly { display: flex; } }
 </style>

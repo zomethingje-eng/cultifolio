@@ -34,7 +34,13 @@ export interface PhotoBytes {
 }
 
 /** This device's own settings, which are not records: the site, the units, the label sheet choices, the preferences. Carried as `device.json` so a restore on a cleared or new device gets them back (round twenty-two, 5). */
-export type DeviceSettings = Record<string, unknown>;
+/** `device.json` in a backup: this device's settings, which are not records in the log. Each is applied on restore only where the device has none of its own. */
+export interface DeviceSettings {
+  site?: { lat: number; lon: number; name?: string };
+  units?: string;
+  labels?: Record<string, unknown>;
+  prefs?: { referencePhotos?: boolean };
+}
 export interface BuildOpts {
   changes: Change[];
   scheme?: unknown;

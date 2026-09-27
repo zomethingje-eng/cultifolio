@@ -1569,22 +1569,38 @@ test('a grower\'s home says what needs them: sowings in the tray and plants with
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   await page.goto('/');
   const today = page.locator('.today');
-  await expect(today.locator('.line', { hasText: 'without a photograph this year' })).toBeVisible();
+  await expect(today.locator('.line', { hasText: 'without a photograph in the last twelve months' })).toBeVisible();
   await expect(today).toContainText('Frost watch needs a site');
   await today.locator('.line', { hasText: 'without a photograph' }).click();
   await expect(page).toHaveURL(/\/plants\?show=nophoto$/);
-  await expect(page.locator('.chipbtn.on')).toContainText('No photo this year');
+  await expect(page.locator('.chipbtn.on')).toContainText('No photo in 12 months');
   // a plant last watered a month ago, by its log: Today says so, in the words of the plants list's Due chip (round twenty-four, 11)
   await expect(today).toHaveCount(0);
   await page.locator('.accrow').first().click();
   await page.locator('.quickbar .btn', { hasText: /^Water$/ }).click();
-  const monthAgo = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10);
-  await page.fill('#ev-date', monthAgo);
+  // exactly twenty-one days: the boundary the chip's "21+" and Today's "three weeks or more" both include (round twenty-five, 2)
+  const d = new Date(); d.setDate(d.getDate() - 21);
+  const threeWeeks = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  await page.fill('#ev-date', threeWeeks);
   await page.locator('.evform button[type=submit]').click();
+  await expect(page.locator('.tlrow', { hasText: 'Watered' })).toBeVisible(); // the write is on screen before the page is left (round twenty-five, 3)
+  await expect(page.locator('.card', { hasText: 'Since watered' })).toContainText('21');
+  // a fresh load, from the vault, on both surfaces: the row, the chip and Today read the one figure
+  await page.goto('/plants');
+  await expect(page.locator('.accrow .fig', { hasText: 'watered 21 d ago' })).toBeVisible();
+  await expect(page.locator('.chipbtn', { hasText: 'Not watered 21+ days' }).locator('.n')).toHaveText('1');
   await page.goto('/');
-  await expect(page.locator('.today .line', { hasText: 'not watered, or not recorded as watered, for three weeks' })).toBeVisible();
+  await expect(page.locator('.today .line', { hasText: '1 of 1 plants not watered, or not recorded as watered, for three weeks' })).toBeVisible();
   await page.locator('.today .line', { hasText: 'not watered' }).click();
   await expect(page).toHaveURL(/\/plants\?show=due$/);
+  await expect(page.locator('.accrow')).toHaveCount(1);
+  // a future-dated line is refused with a sentence and never becomes the last watering (round twenty-five, 1)
+  await page.locator('.accrow').first().click();
+  await page.locator('.quickbar .btn', { hasText: /^Water$/ }).click();
+  await page.fill('#ev-date', '2099-01-01');
+  await page.locator('.evform button[type=submit]').click();
+  await expect(page.locator('#ev-bad')).toContainText('2099-01-01 is in the future');
+  await expect(page.locator('.tlrow', { hasText: '2099-01-01' })).toHaveCount(0);
 });
 
 test('the install bar waits for a second day, and stays away for thirty days once dismissed', async ({ page }) => {
@@ -2099,4 +2115,23 @@ test('round twenty-three: a name the reference does not hold is added on the sec
   await expect(page.locator('.toast')).toContainText('Marked failed');
   await expect(page.locator('.tlrow', { hasText: 'Marked failed' })).toBeVisible();
   await expect(page.locator('.pill', { hasText: 'failed' }).first()).toBeVisible();
+  // the plants list keeps its query, chip and sort in the URL, matches every word, and searches notes (round twenty-five, 11)
+  await page.goto(`/plants/${acc}`);
+  await page.getByRole('button', { name: 'Add a note' }).click();
+  await page.fill('#acc-notes', 'looks etiolated on the porch');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.locator('.cult .body', { hasText: 'looks etiolated' })).toBeVisible();
+  await page.goto('/plants');
+  await page.fill('#plants-q', 'etiolated porch');
+  await expect(page.locator('.accrow')).toHaveCount(1);
+  await expect(page).toHaveURL(/\/plants\?q=etiolated\+porch$/);
+  await page.selectOption('#plants-sort', 'name');
+  await expect(page).toHaveURL(/sort=name/);
+  await page.locator('.accrow').first().click();
+  await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/plants\?q=etiolated\+porch&sort=name$/);
+  await expect(page.locator('.accrow')).toHaveCount(1);
+  await expect(page.locator('#plants-q')).toHaveValue('etiolated porch');
+  await expect(page.locator('#plants-sort')).toHaveValue('name');
 });

@@ -65,7 +65,7 @@
     return (rest.length ? Math.max(...rest) : 0) >= st.potted + st.lost;
   };
   /* germination count */
-  let gd = $state(today());
+  let gd = $state(day.current);
   let gn = $state<number | '' | null>(''); // null once a typed figure is cleared
   let gnote = $state('');
   let gmsg = $state('');
@@ -80,7 +80,7 @@
     gn = ''; gnote = '';
   }
   /* loss */
-  let ld = $state(today());
+  let ld = $state(day.current);
   let ln = $state<number | '' | null>('');
   let lcause = $state('');
   let lmsg = $state('');
@@ -96,7 +96,7 @@
   }
   /* pot up */
   let potting = $state(false);
-  let pd = $state(today());
+  let pd = $state(day.current);
   let pn = $state<number | null>(1);
   let ploc = $state<string | null>(null);
   let pnote = $state('');
@@ -123,10 +123,10 @@
     }
   }
   /* note */
-  let nd = $state(today());
+  let nd = $state(day.current);
   // The forms on this page are always open, so their default dates follow the calendar while the page stays open; a
   // date the grower typed is left alone (round twenty-four, 2).
-  let dayDefault = today();
+  let dayDefault = day.current; // the forms and the store start from the same day, so a page opened just after midnight cannot be pulled back to yesterday by a store not yet ticked (round twenty-five, 7)
   $effect(() => {
     const t = day.current;
     if (t === dayDefault) return;

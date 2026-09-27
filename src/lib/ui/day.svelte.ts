@@ -16,6 +16,7 @@ class Today {
       const d = localDate();
       if (d !== this.current) this.current = d;
     };
+    check();
     document.addEventListener('visibilitychange', check);
     window.addEventListener('focus', check);
     setInterval(check, 60_000);

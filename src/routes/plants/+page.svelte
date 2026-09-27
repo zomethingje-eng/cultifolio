@@ -1,12 +1,14 @@
 <script lang="ts">
   import { sync } from '$lib/sync/engine.svelte';
-  import { collection } from '$lib/db/collection.svelte';
+  import { collection, DUE_DAYS } from '$lib/db/collection.svelte';
   import { localDate, localDateYearAgo, daysBetween } from '$core/dates';
   import { accNo, sowNo } from '$lib/db/types';
   import { kindOf } from '$lib/db/types';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
   import { slugify, speciesSlug } from '$core/names';
   import { onMount } from 'svelte';
+  import { replaceState } from '$app/navigation';
+  import { page } from '$app/state';
   import { prefs } from '$lib/ui/prefs.svelte';
   import PageHead from '$lib/ui/PageHead.svelte';
   import { entriesFor } from '$lib/ui/index.svelte';
@@ -42,11 +44,40 @@
   }
   let q = $state('');
   let show = $state<'growing' | 'all' | 'due' | 'nophoto'>('growing');
-  // /plants?show=nophoto (from the front page's "today" line) opens on that chip.
+  type Sort = 'number' | 'name' | 'watered' | 'place';
+  let sort = $state<Sort>('number');
+  // The chip, the query and the sort live in the URL (?show=, ?q=, ?sort=), so Back from a plant returns to the same list
+  // and a filtered list can be bookmarked; /plants?show=due is where Today points (round twenty-five, 11).
   onMount(() => {
-    const want = new URL(location.href).searchParams.get('show');
+    const sp = new URL(location.href).searchParams;
+    const want = sp.get('show');
     if (want === 'due' || want === 'all' || want === 'nophoto') show = want;
+    q = sp.get('q') ?? '';
+    const s = sp.get('sort');
+    if (s === 'name' || s === 'watered' || s === 'place') sort = s;
   });
+  $effect(() => {
+    if (!collection.ready) return;
+    const sp = new URLSearchParams();
+    if (show !== 'growing') sp.set('show', show);
+    if (q.trim()) sp.set('q', q.trim());
+    if (sort !== 'number') sp.set('sort', sort);
+    const want = sp.toString() ? `?${sp}` : '';
+    if (new URL(location.href).search !== want) replaceState(`/plants${want}`, page.state);
+  });
+  /** Every word typed must be found somewhere in the plant's names, number, field number, place or notes: "humilis bench" finds a humilis on a bench (round twenty-five, 11). */
+  const matches = (a: (typeof collection.accessions)[number], words: string[]) => {
+    if (!words.length) return true;
+    const hay = `${a.taxonName} ${a.cultivar ?? ''} ${a.parentage ?? ''} ${a.nameAsReceived ?? ''} ${accNo(a)} ${a.fieldNumber ?? ''} ${a.locationId ? collection.locationName(a.locationId) : (a.location ?? '')} ${a.notes ?? ''} ${a.sourceFrom ?? ''}`.toLowerCase();
+    return words.every((w) => hay.includes(w));
+  };
+  const byName = (a: (typeof collection.accessions)[number], b: (typeof collection.accessions)[number]) => a.taxonName.localeCompare(b.taxonName) || (a.cultivar ?? '').localeCompare(b.cultivar ?? '') || accNo(a).localeCompare(accNo(b));
+  const sorters: Record<Sort, (a: (typeof collection.accessions)[number], b: (typeof collection.accessions)[number]) => number> = {
+    number: () => 0, // the collection's order: newest number first
+    name: byName,
+    watered: (a, b) => collection.careDays(b) - collection.careDays(a) || byName(a, b), // longest since watered first
+    place: (a, b) => (a.locationId ? collection.locationName(a.locationId) : (a.location ?? '~')).localeCompare(b.locationId ? collection.locationName(b.locationId) : (b.location ?? '~')) || byName(a, b)
+  };
   const yearAgo = localDateYearAgo();
   const noPhoto = (id: string) => !collection.photos(id).some((p) => p.d >= yearAgo);
   const noPhotoN = $derived(collection.accessions.filter((a) => a.status === 'growing' && noPhoto(a.id)).length);
@@ -59,12 +90,12 @@
     const slugs = collection.accessions.map((a) => speciesSlug(a.taxonName));
     entriesFor(slugs).then((m) => { if (m) thumbs = new Map([...m.values()].filter((e) => e.thumb).map((e) => [e.slug, e.thumb!])); });
   });
-  const sinceWater = (id: string) => { const d = collection.events(id).find((e) => e.t === 'water')?.d; return d ? daysBetween(d) : null; };
-  // Never watered counts from the day its record was made (not the acquisition date, which for a collection entered late is years back), so a plant entered this week is not "overdue".
-  const sinceCare = (a: (typeof collection.accessions)[number]) => sinceWater(a.id) ?? daysBetween(collection.madeOn('accession', a.id) ?? a.acquired ?? localDate());
-  const dueN = $derived(collection.accessions.filter((a) => a.status === 'growing' && sinceCare(a) > 21).length);
+  // One figure for the row, the chip, the filter and Today: the collection's (round twenty-five, R1-1 and 2).
+  const sinceWater = (id: string) => { const d = collection.lastWatered(id); return d ? daysBetween(d) : null; };
+  const dueN = $derived(collection.due.length);
+  const words = $derived(q.toLowerCase().split(/\s+/).filter(Boolean));
   const list = $derived(
-    collection.accessions.filter((a) => (show === 'all' || a.status === 'growing') && (show !== 'due' || sinceCare(a) > 21) && (show !== 'nophoto' || noPhoto(a.id)) && (!q || `${a.taxonName} ${a.cultivar ?? ''} ${a.parentage ?? ''} ${a.nameAsReceived ?? ''} ${accNo(a)} ${a.fieldNumber ?? ''} ${a.locationId ? collection.locationName(a.locationId) : (a.location ?? '')}`.toLowerCase().includes(q.toLowerCase())))
+    collection.accessions.filter((a) => (show === 'all' || a.status === 'growing') && (show !== 'due' || collection.careDays(a) >= DUE_DAYS) && (show !== 'nophoto' || noPhoto(a.id)) && matches(a, words)).sort(sorters[sort])
   );
 </script>
 
@@ -75,11 +106,12 @@
 </PageHead>
 
 <div class="toolrow">
-  <input id="plants-q" class="searchbar" type="search" placeholder="Search name, number, field number, place…" aria-label="Search your plants" bind:value={q} />
+  <input id="plants-q" class="searchbar" type="search" placeholder="Search name, number, field number, place, notes…" aria-label="Search your plants" bind:value={q} />
+  <select id="plants-sort" class="sortsel" aria-label="Sort" bind:value={sort}><option value="number">Newest number first</option><option value="name">By name</option><option value="watered">Longest since watered</option><option value="place">By place</option></select>
   <div class="chiprow" style="margin: 0">
     <button class="chipbtn" class:on={show === 'growing'} aria-pressed={show === 'growing'} onclick={() => (show = 'growing')}>Growing<span class="n">{collection.accessions.filter((a) => a.status === 'growing').length}</span></button>
-    <button class="chipbtn" class:on={show === 'due'} aria-pressed={show === 'due'} onclick={() => (show = 'due')} title="Not watered, or not recorded as watered, for three weeks: a fact about the record, not a verdict on the plant">Not watered 21+ days<span class="n">{dueN}</span></button>
-    <button class="chipbtn" class:on={show === 'nophoto'} aria-pressed={show === 'nophoto'} onclick={() => (show = 'nophoto')} title="Growing plants with no photograph in the last year">No photo this year<span class="n">{noPhotoN}</span></button>
+    <button class="chipbtn" class:on={show === 'due'} aria-pressed={show === 'due'} onclick={() => (show = 'due')} title="Not watered, or not recorded as watered, for three weeks or more: a fact about the record, not a verdict on the plant">Not watered 21+ days<span class="n">{dueN}</span></button>
+    <button class="chipbtn" class:on={show === 'nophoto'} aria-pressed={show === 'nophoto'} onclick={() => (show = 'nophoto')} title="Growing plants with no photograph in the last year">No photo in 12 months<span class="n">{noPhotoN}</span></button>
     <button class="chipbtn" class:on={show === 'all'} aria-pressed={show === 'all'} onclick={() => (show = 'all')}>All<span class="n">{collection.accessions.length}</span></button>
   </div>
 </div>
@@ -117,7 +149,7 @@
           <span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}‘{a.cultivar}’{/if}</span>
           <span class="fam">{#if kindOf(a) !== 'species'}<span class="pill c">{kindOf(a)}</span>{/if}{#if a.fieldNumber}<span class="fnchip">{a.fieldNumber}</span>{/if}{#if a.locationId}<span>{collection.locationName(a.locationId)}</span>{:else if a.location}<span>{a.location}</span>{/if}{#if a.status !== 'growing'}<span class="pill">{a.status}</span>{/if}</span>
         </span>
-        <span class="fig" class:due={w != null && w > 21 && a.status === 'growing'}>{w == null ? 'no watering recorded' : w === 0 ? 'watered today' : `watered ${w} d ago`}</span>
+        <span class="fig" class:due={a.status === 'growing' && collection.careDays(a) >= DUE_DAYS}>{w == null ? 'no watering recorded' : w === 0 ? 'watered today' : `watered ${w} d ago`}</span>
       </a>
     {/each}
   </div>
@@ -126,6 +158,7 @@
 
 <style>
   .keepline { margin: -6px 0 10px; }
+  .sortsel { border: 1px solid var(--rule); background: var(--card); border-radius: 9px; padding: 8px 10px; font: inherit; font-size: 13px; color: var(--ink); }
   .muted { color: var(--ink3); }
   .notice .linkish { background: none; border: 0; padding: 0; color: var(--ink3); font: inherit; text-decoration: underline; cursor: pointer; }
   .accrow .nm .accno { font-style: normal; vertical-align: 2px; }

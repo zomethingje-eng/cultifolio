@@ -87,8 +87,10 @@ class Sync {
   lastError = $state<string | null>(null);
   /** The last run could not reach the server at all (no network), as opposed to the server answering with a refusal: the page says offline, and that the changes are kept (round twenty-four, 9). */
   offline = $state(false);
+  /** With `offline`: the browser says it has no network ('offline'), or it has one and the server did not answer at all ('server'); the page words them apart (round twenty-five, 15). */
+  unreached = $state<'offline' | 'server' | null>(null);
   /** The vault this device was in before it stopped syncing, if any, with when it stopped. */
-  wasIn = $state<{ vaultId: string; at: string } | null>(null);
+  wasIn = $state<{ vaultId: string; at: string; why: 'stopped' | 'replaced' } | null>(null);
   /** Runs that finished on this page, well or badly: the sync page shows it, so a test (or a person) can tell a new "Synced" from the one that was already there (round thirteen, B2). */
   runs = $state(0);
   pending = $state(0);
@@ -115,7 +117,7 @@ class Sync {
   async init(base = ''): Promise<void> {
     this.base = base;
     if (this.meta) return;
-    this.wasIn = (await getMeta<{ vaultId: string; at: string }>(WAS)) ?? null;
+    this.wasIn = (await getMeta<{ vaultId: string; at: string; why: 'stopped' | 'replaced' }>(WAS)) ?? null;
     const m = await getMeta<SyncMeta & { own?: string[]; cursor?: string; firstPushDone?: boolean }>(META);
     if (m?.key) {
       // Meta written by the HLC-cursor engine: carry the key, start the arrival cursor from zero (a re-list is idempotent).
@@ -146,7 +148,7 @@ class Sync {
     });
     if (this.listening || typeof window === 'undefined') return;
     this.listening = true;
-    onOtherTabWrite((what) => { if (what === 'sync-forgotten' && this.configured) this.dropped(); });
+    onOtherTabWrite((what) => { if (what === 'sync-forgotten' && this.configured) { this.dropped(); void getMeta<typeof this.wasIn>(WAS).then((w) => (this.wasIn = w ?? null)); } });
     window.addEventListener('online', () => this.schedule(1000));
     // An open, idle device pulls too: when it comes back into view, when it gets focus, and every few minutes while visible. Never while hidden.
     const visible = () => typeof document === 'undefined' || document.visibilityState === 'visible';
@@ -209,8 +211,9 @@ class Sync {
   }
 
   /** Stop syncing on this device. Nothing local is deleted; nothing on the server is deleted. */
-  async forget(): Promise<void> {
-    const was = this.vaultId ? { vaultId: this.vaultId, at: new Date().toISOString() } : null;
+  async forget(why: 'stopped' | 'replaced' = 'stopped'): Promise<void> {
+    // Why matters to the page: after a replace from backup, rejoining would merge the vault's records back into the restored collection, so Rejoin is not the lead there (round twenty-five, 6).
+    const was = this.vaultId ? { vaultId: this.vaultId, at: new Date().toISOString(), why } : null;
     this.dropped(); // this.meta is null from here: a run in flight cannot write the old record back (round fifteen, 2)
     await setMeta(META, null);
     if (was) { await setMeta(WAS, was); this.wasIn = was; }
@@ -257,6 +260,7 @@ class Sync {
     this.lastSync = null;
     this.lastError = null;
     this.offline = false;
+    this.unreached = null;
     this.pending = 0;
     this.quarantined = [];
     this.refused = [];
@@ -391,6 +395,7 @@ class Sync {
       const got = await this.pull(m);
       m.lastSync = new Date().toISOString();
       this.offline = false;
+      this.unreached = null;
       await this.save(m); // refuses, and throws, if this run is stale: the sync time below is then never shown for a vault this device has left (round twenty-one, 4)
       this.lastSync = m.lastSync;
       // Said only when something did arrive (round sixteen, design note).
@@ -400,6 +405,7 @@ class Sync {
         // A fetch that never reached the server throws a TypeError ("Failed to fetch", "Load failed"); the browser's own
         // offline flag says so more plainly when it is set. Either way the page says offline, not failed (round twenty-four, 9).
         this.offline = e instanceof TypeError || (typeof navigator !== 'undefined' && navigator.onLine === false);
+        this.unreached = !this.offline ? null : typeof navigator !== 'undefined' && navigator.onLine === false ? 'offline' : 'server';
         this.lastError = e instanceof Error ? e.message : String(e);
         const wait = (e as { retryAfterMs?: number })?.retryAfterMs;
         if (wait) this.schedule(wait);

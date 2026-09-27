@@ -8,6 +8,7 @@
   import { page } from '$app/state';
   import { onMount } from 'svelte';
   import { collection } from '$lib/db/collection.svelte';
+  import { today as day } from '$lib/ui/day.svelte';
   import SpeciesPicker from '$lib/ui/SpeciesPicker.svelte';
   import LocationPicker from '$lib/ui/LocationPicker.svelte';
   import { parseName, slugify, type NameKind, speciesSlug, speciesOf } from '$core/names';
@@ -22,7 +23,9 @@
   let parentage = $state<string | null>(null);
   let method = $state<PropMethod>('seed');
   let parentAcc = $state<string | null>(null);
-  let sown = $state(localDate());
+  let sown = $state(day.current); // follows the calendar while the form is open (round twenty-five, 4)
+  let sownDefault = day.current;
+  $effect(() => { const t = day.current; if (t !== sownDefault) { if (sown === sownDefault) sown = t; sownDefault = t; } });
   // Never guessed: a count the grower did not give would become the denominator of every germination figure.
   let count = $state<number | null>(null);
   let countMissing = $state(false);

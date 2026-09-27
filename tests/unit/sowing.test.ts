@@ -241,23 +241,43 @@ describe('last seen and missed (round twenty-four, 3)', () => {
   });
 });
 
-describe('free text replaced by another device (round twenty-four, 1)', () => {
+describe('free text replaced by another device (round twenty-four, 1; round twenty-five, 2)', () => {
   beforeEach(async () => { await collection.load(); });
-  it('a pulled notes change that wins over this device\'s text writes the old text on the log, once; the same device\'s other tab, an empty text, and a losing change do not', async () => {
+  const later = (ms: number, device: string, count = 0): string => hlcEncode({ wall: Date.now() + ms, count, device });
+  it('a pulled notes change made blind to this device\'s text logs the old text once; one made in sight of it, a losing change, and this device\'s other tab log nothing', async () => {
     const a = await collection.addAccession({ taxonName: 'Copiapoa', acc: 'TX-1' });
     await collection.put('accession', a.id, { notes: 'mealybug on the crown, treated with alcohol' });
-    const later = (ms: number, device: string): string => hlcEncode({ wall: Date.now() + ms, count: 0, device });
-    await collection.ingest([{ t: later(5000, 'bbbbbbbbbbbbtab1'), kind: 'accession', id: a.id, field: 'notes', value: 'moved closer to the glass, looks etiolated' }], 'server');
+    const mine = collection.notesStamp('accession', a.id)!;
+    // B edited from an older text (its notesBase is not this device's stamp): a true conflict
+    await collection.ingest([{ t: later(5000, 'bbbbbbbbbbbbtab1'), kind: 'accession', id: a.id, field: 'notes', value: 'moved closer to the glass, looks etiolated' }, { t: later(5000, 'bbbbbbbbbbbbtab1', 1), kind: 'accession', id: a.id, field: 'notesBase', value: '1700000000000-0000-bbbbbbbbbbbbtab1' }], 'server');
     expect(collection.accession(a.id)!.notes).toBe('moved closer to the glass, looks etiolated');
-    const lines = collection.events(a.id).filter((e) => e.t === 'note');
-    expect(lines).toHaveLength(1);
-    expect(lines[0].note).toBe('Notes replaced by an edit made on another device; here they read: mealybug on the crown, treated with alcohol');
-    expect(lines[0].auto).toBe(true);
+    const lines = () => collection.events(a.id).filter((e) => e.t === 'note');
+    expect(lines()).toHaveLength(1);
+    expect(lines()[0].note).toBe('Notes replaced by an edit made on another device (bbbbbb…); here they read: mealybug on the crown, treated with alcohol');
+    expect(lines()[0].auto).toBe(true);
     // a change that loses (stamped before the one held) changes nothing and logs nothing
     await collection.ingest([{ t: hlcEncode({ wall: Date.now() - 60_000, count: 0, device: 'cccccccccccctab1' }), kind: 'accession', id: a.id, field: 'notes', value: 'older text' }], 'server');
-    expect(collection.events(a.id).filter((e) => e.t === 'note')).toHaveLength(1);
+    expect(lines()).toHaveLength(1);
+    // this device writes again; B then edits from this text (its notesBase is this device's stamp): seen, not lost, no line
+    await collection.put('accession', a.id, { notes: 'repotted into pumice' });
+    const seen = collection.notesStamp('accession', a.id)!;
+    expect(seen).not.toBe(mine);
+    await collection.ingest([{ t: later(9000, 'bbbbbbbbbbbbtab1'), kind: 'accession', id: a.id, field: 'notes', value: 'repotted into pumice; watered in' }, { t: later(9000, 'bbbbbbbbbbbbtab1', 1), kind: 'accession', id: a.id, field: 'notesBase', value: seen }], 'server');
+    expect(collection.accession(a.id)!.notes).toBe('repotted into pumice; watered in');
+    expect(lines()).toHaveLength(1);
     // this device's other tab writing over its own text is not another device
-    await collection.ingest([{ t: later(9000, 'testdevice' + 'tab2'), kind: 'accession', id: a.id, field: 'notes', value: 'same device, other tab' }], 'server');
-    expect(collection.events(a.id).filter((e) => e.t === 'note')).toHaveLength(1);
+    await collection.put('accession', a.id, { notes: 'own again' });
+    await collection.ingest([{ t: later(12000, 'testdevice' + 'tab2'), kind: 'accession', id: a.id, field: 'notes', value: 'same device, other tab' }], 'server');
+    expect(lines()).toHaveLength(1);
+  });
+  it('a restore that replaces notes written here logs them too, and a local edit records what it was based on', async () => {
+    const a = await collection.addAccession({ taxonName: 'Copiapoa', acc: 'TX-2' });
+    await collection.put('accession', a.id, { notes: 'first text' });
+    expect(collection.accession(a.id)!.notesBase ?? null).toBeNull(); // nothing to base the first text on
+    const first = collection.notesStamp('accession', a.id);
+    await collection.put('accession', a.id, { notes: 'second text' });
+    expect(collection.accession(a.id)!.notesBase).toBe(first); // the second edit says it was made from the first text
+    await collection.ingest([{ t: later(60_000, 'ddddddddddddtab1'), kind: 'accession', id: a.id, field: 'notes', value: 'from a backup made elsewhere' }], 'import'); // stamped after this device's clock, which the earlier test moved on
+    expect(collection.events(a.id).filter((e) => e.t === 'note').map((e) => e.note)).toEqual(['Notes replaced by an edit made on another device (dddddd…); here they read: second text']);
   });
 });

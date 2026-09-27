@@ -10,7 +10,7 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { prefs } from '$lib/ui/prefs.svelte';
-  import { collection } from '$lib/db/collection.svelte';
+  import { collection, DUE_DAYS } from '$lib/db/collection.svelte';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
   import LocationPicker from '$lib/ui/LocationPicker.svelte';
   import type { Provenance } from '$lib/db/types';
@@ -49,6 +49,10 @@
   const timeline = $derived(
     [...events.map((e) => ({ k: 'e' as const, d: e.d, id: e.id, e })), ...photos.map((ph) => ({ k: 'p' as const, d: ph.d, id: ph.id, ph }))].sort((a, b) => b.d.localeCompare(a.d) || b.id.localeCompare(a.id))
   );
+  // A long log is shown fifteen lines at a time, so the notes below it stay within reach on a phone (round twenty-five, 12).
+  const LOG_FIRST = 15;
+  let allLog = $state(false);
+  const shownTimeline = $derived(allLog || timeline.length <= LOG_FIRST + 3 ? timeline : timeline.slice(0, LOG_FIRST));
   const taxon = $derived(a ? collection.taxon(speciesSlug(a.taxonName)) : undefined);
   const sowing = $derived(a?.sowingId ? collection.sowing(a.sowingId) : undefined);
   let dossier = $state<Sheet | null>(null);
@@ -158,7 +162,7 @@
   }
   const daysAgo = (d: string | null | undefined) => (d ? daysBetween(d) : null);
   const lastOf = (t: string) => events.find((e) => e.t === t)?.d ?? null;
-  const sinceWater = $derived(daysAgo(lastOf('water')));
+  const sinceWater = $derived(daysAgo(collection.lastWatered(id))); // the collection's figure: a future-dated line is not a watering (round twenty-five, 1)
   const seen = $derived(daysAgo(collection.lastSeen(id)));
   const lastMeasure = $derived(events.find((e) => e.t === 'measure' && e.measures));
   const firstMeasure = $derived([...events].reverse().find((e) => e.t === 'measure' && e.measures));
@@ -227,6 +231,7 @@
   let editingNotes = $state(false);
   let notesDraft = $state('');
   let notesBase = ''; // the text the editor opened on: a text that changed underneath it (another tab, a pull) is logged before it is written over (round twenty-four, 1)
+  let notesBaseStamp: string | null = null; // and its stamp, which the saved edit carries as `notesBase` so other devices know what it was made from (round twenty-five, 2)
   let myNotesDraft = $state('');
   let editingMy = $state(false);
 
@@ -251,7 +256,8 @@
     const typed = f.taxonName.trim() || a.taxonName;
     const p = parseName(typed);
     const hybrid = f.nameKind === 'hybrid' || p.kind === 'hybrid';
-    const taxonName = hybrid ? (p.kind === 'hybrid' ? p.scientific : p.genus || typed) : typed;
+    // A nothospecies ("× Graptoveria titubans", filed as "Graptoveria titubans" with the hybrid kind) keeps its epithet: only a cross written out, or a bare genus, files as the genus (round twenty-five, 3).
+    const taxonName = hybrid ? (p.kind === 'hybrid' ? p.scientific : p.epithet ? p.scientific : p.genus || typed) : typed;
     // A hybrid's key goes only when its name changes: an edit to a nothospecies' price keeps the key the list gave it (round twenty-four, 5).
     const taxonKey = hybrid && taxonName !== a.taxonName ? null : f.taxonName.trim() ? edKey : (a.taxonKey ?? null);
     const nameKind = hybrid ? 'hybrid' : f.nameKind;
@@ -272,8 +278,12 @@
     editing = false;
   }
 
+  let evmsg = $state('');
   async function addEvent(e: SubmitEvent) {
     e.preventDefault();
+    // A date after today is a typo (2027 for 2026), and it would stand as the last watering for a year (round twenty-five, 1); refused with a sentence, as the batch page does.
+    evmsg = !ed ? 'Give the entry a date.' : ed > localDate() ? `${ed} is in the future.` : '';
+    if (evmsg) { document.getElementById('ev-date')?.focus(); throw new Error(evmsg); }
     const m: Record<string, number> = {};
     for (const [k, v] of Object.entries(measures)) { const n = numberOrNull(v); if (n != null) m[k] = n; } // a cleared box is no measurement, not 0
     await collection.addEvent({ acc: id, d: ed, t: et, note: enote.trim() || null, used: et === 'treat' || et === 'feed' ? eused.trim() || null : null, cause: et === 'death' ? ecause.trim() || null : null, measures: Object.keys(m).length ? m : null, followUp: et === 'treat' ? 10 : null });
@@ -293,8 +303,10 @@
   async function saveNotes() {
     const current = a?.notes ?? '';
     const next = notesDraft.trim() || null;
-    await collection.put('accession', id, { notes: next });
-    if (current && current !== notesBase && current !== next) await collection.addEvent({ acc: id, d: localDate(), t: 'note', note: `Notes replaced by this edit; before it they read: ${current}`, auto: true });
+    const currentStamp = collection.notesStamp('accession', id);
+    await collection.put('accession', id, { notes: next, notesBase: notesBaseStamp });
+    // A text that arrived under the open editor from this device's other tab is logged here; one from another device is that device's to log, when it sees this edit's base (round twenty-five, 2).
+    if (current && current !== notesBase && current !== next && collection.isOwnStamp(currentStamp)) await collection.addEvent({ acc: id, d: localDate(), t: 'note', note: `Notes replaced by this edit; before it they read: ${current}`, auto: true });
     editingNotes = false;
   }
   async function saveMyNotes() {
@@ -356,10 +368,10 @@
       {/if}
       {#if !hasHero && speciesThumb && thumbFailed}<p class="vern muted">The reference's photograph did not load.</p>{/if}
       {#if !hasHero && dossier?.thumb && !prefs.referencePhotos}<RefPhotoOffer link what="the reference’s photograph of this species" />{/if}
-      {#if a.status !== 'growing' || (sinceWater != null && sinceWater > 21)}
+      {#if a.status !== 'growing' || (sinceWater != null && sinceWater >= DUE_DAYS)}
         <div class="pills">
           {#if a.status !== 'growing'}<span class="pill {a.status === 'dead' ? 'b' : ''}">{a.status}</span>{/if}
-          {#if sinceWater != null && sinceWater > 21 && a.status === 'growing'}<span class="pill w">not watered for {sinceWater} d</span>{/if}
+          {#if sinceWater != null && sinceWater >= DUE_DAYS && a.status === 'growing'}<span class="pill w">not watered for {sinceWater} d</span>{/if}
         </div>
       {/if}
     </div>
@@ -432,8 +444,9 @@
           <select id="ev-type" bind:value={et} aria-label="What to record">
             {#each Object.entries(EVENT_LABEL).filter(([k]) => !['audit', 'germinate', 'potup', 'loss', 'propagate', 'acquire'].includes(k)) as [k, label]}<option value={k}>{label}</option>{/each}
           </select>
-          <input id="ev-date" type="date" aria-label="Date" bind:value={ed} />
+          <input id="ev-date" type="date" aria-label="Date" bind:value={ed} oninput={() => (evmsg = '')} aria-invalid={!!evmsg} aria-describedby={evmsg ? 'ev-bad' : undefined} />
         </div>
+        {#if evmsg}<p class="refuse" role="alert" id="ev-bad">{evmsg}</p>{/if}
         {#if et === 'treat' || et === 'feed'}<input id="ev-used" type="text" aria-label="What was used" bind:value={eused} placeholder={et === 'treat' ? 'Product and rate, e.g. Safari 20SG drench' : 'Feed, e.g. Grow More 17-8-22 ¼ tsp/gal'} />{/if}
         {#if et === 'death'}<input id="ev-cause" type="text" aria-label="Cause" bind:value={ecause} placeholder="Cause, if known" />{/if}
         {#if et === 'measure'}
@@ -460,7 +473,7 @@
   {/if}
 
   <div class="cards">
-    {#if lastOf('water')}<div class="card"><div class="lab">Since watered</div><div class="val">{sinceWater == null ? '–' : sinceWater}<span class="u">{sinceWater == null ? '' : ' d'}</span></div><div class="sub">last {lastOf('water')}</div></div>{/if}
+    {#if collection.lastWatered(id)}<div class="card"><div class="lab">Since watered</div><div class="val">{sinceWater == null ? '–' : sinceWater}<span class="u">{sinceWater == null ? '' : ' d'}</span></div><div class="sub">last {collection.lastWatered(id)}</div></div>{/if}
     {#if events.some((e) => e.t === 'audit')}<div class="card"><div class="lab">Last seen</div><div class="val">{seen == null ? '–' : seen}<span class="u">{seen == null ? '' : ' d'}</span></div><div class="sub">{collection.missedAt(id) ? `not seen at the audit of ${collection.missedAt(id)}; last logged ${collection.lastSeen(id)}` : `last logged ${collection.lastSeen(id)}`}</div></div>{/if}
     {#if lastMeasure}<div class="card"><div class="lab">{sizeKey ? (MEASURES.find((m) => m.k === sizeKey)?.label ?? 'Size') : 'Size'}</div><div class="val">{sizeKey && lastMeasure ? lastMeasure.measures![sizeKey] : '–'}<span class="u">{sizeKey ? ' ' + (MEASURES.find((m) => m.k === sizeKey)?.unit ?? '') : ''}</span></div>{#if growth != null}<div class="gauge"><i style="width: {Math.min(100, Math.max(8, (growth / Math.max(1, lastMeasure!.measures![sizeKey!])) * 100))}%"></i></div>{/if}<div class="sub">{growth != null ? `${growth >= 0 ? '+' : ''}${growth} since ${firstMeasure!.d}` : `measured ${lastMeasure.d}`}</div></div>{/if}
     <div class="card"><div class="lab">Habitat rain season</div><div class="val" style="font-family: var(--ui); font-size: 17px; font-weight: 700">{#if !season && dossier?.climate.status === 'refused'}<NotChecked what="Climate" why="A source did not answer when the species page was built{dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}." />{:else}{season ? season.label : dossier?.climate.status === 'pending' ? 'Climate pending' : dossier ? 'No habitat climate' : ref === 'unreachable' ? 'Reference not reached' : ref === 'none' ? (kind === 'hybrid' ? 'A hybrid' : 'No species page') : '…'}{/if}</div><div class="sub">{#if season}{season.note} <a href="/species/{speciesHref}#s-cultivation">The sheet</a>.{:else if dossier?.climate.status === 'refused'}No season is read from an answer that was not given.{:else if dossier?.climate.status === 'pending'}The habitat climate for this species has not been derived yet.{:else if dossier}Nothing to read a season from{dossier.climate.status === 'none' && dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}.{:else if ref === 'unreachable'}The species reference could not be reached from here; nothing is known either way.{:else if ref === 'none'}{kind === 'hybrid' ? (parentLinks.some((p) => p.slug) ? 'No habitat of its own; its parents have species pages.' : 'No habitat of its own.') : 'Not in the reference.'}{:else}reading the species dossier{/if}</div></div>
@@ -499,10 +512,10 @@
     <p class="empty">Nothing recorded yet; each verb above adds a line here.</p>
   {:else}
     <div class="tl">
-      {#each timeline as row (row.k + row.id)}
+      {#each shownTimeline as row (row.k + row.id)}
         {#if row.k === 'e'}
           {@const e = row.e}
-          <div class="tlrow">
+          <div class="tlrow" class:auto={!!e.auto} title={e.auto ? 'Written by the app or by a place-wide action, not an observation of this plant' : undefined}>
             <span class="d">{e.d}</span>
             <span class="t">{e.t === 'audit' && e.note === 'not seen' ? 'Not seen at audit' : (EVENT_LABEL[e.t] ?? e.t)}{#if e.used}<span class="x2">{' · '}{e.used}</span>{/if}{#if e.cause}<span class="x2">{' · '}{e.cause}</span>{/if}{#if e.measures}<span class="x2">{' · '}{Object.entries(e.measures).map(([k, v]) => { const m = MEASURES.find((x) => x.k === k); return `${m?.label ?? k} ${v}${m?.unit ? ' ' + m.unit : ''}`; }).join(', ')}</span>{/if}{#if e.note && !(e.t === 'audit' && e.note === 'not seen')}<span class="x2">{' · '}{e.note}</span>{/if}</span>
             {#if confirmEvent === e.id}<button class="rm confirm" type="button" onclick={() => { collection.remove('event', e.id); confirmEvent = null; }}>Remove?</button>{:else}<button class="rm" type="button" title="Remove this entry" aria-label="Remove this entry" onclick={() => { confirmEvent = e.id; void focusNext('.rm.confirm'); }}>×</button>{/if}
@@ -516,6 +529,9 @@
           </button>
         {/if}
       {/each}
+      {#if shownTimeline.length < timeline.length}
+        <div class="tlrow tlmore"><span class="d"></span><span class="t"><button type="button" class="linkish" onclick={() => (allLog = true)}>Show all {timeline.length} entries</button> <span class="x2">· the latest {shownTimeline.length} are above</span></span></div>
+      {/if}
     </div>
   {/if}
 
@@ -524,9 +540,9 @@
     {#if editingNotes}
       <div class="fields"><textarea id="acc-notes" rows="4" bind:value={notesDraft}></textarea><div class="actions"><button class="btn" onclick={() => (editingNotes = false)}>Cancel</button><button class="btn pri" onclick={saveNotes}>Save</button></div></div>
     {:else if a.notes}
-      <div class="body">{a.notes}</div><div class="foot"><button class="linkish" onclick={() => { notesDraft = a.notes ?? ''; notesBase = notesDraft; editingNotes = true; }}>Edit</button></div>
+      <div class="body">{a.notes}</div><div class="foot"><button class="linkish" onclick={() => { notesDraft = a.notes ?? ''; notesBase = notesDraft; notesBaseStamp = collection.notesStamp('accession', id); editingNotes = true; }}>Edit</button></div>
     {:else}
-      <div class="none">Nothing yet. <button class="linkish" onclick={() => { notesDraft = ''; notesBase = ''; editingNotes = true; }}>Add a note</button></div>
+      <div class="none">Nothing yet. <button class="linkish" onclick={() => { notesDraft = ''; notesBase = ''; notesBaseStamp = collection.notesStamp('accession', id); editingNotes = true; }}>Add a note</button></div>
     {/if}
   </div>
   <div class="cult">
@@ -617,6 +633,7 @@
   .tlphoto:hover .t { color: var(--accent); }
   .hvh { grid-template-columns: 1fr 1fr; }
   .linkish { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-decoration: underline; }
+  .refuse { margin: 6px 0 0; font-size: 12.5px; color: var(--bad); }
   @media (max-width: 520px) { .hvh { grid-template-columns: 1fr; } }
   .muted { color: var(--ink3); }
   .editform, .evform { margin-top: 16px; }
@@ -637,6 +654,7 @@
   .rm:hover { color: var(--bad); }
   .rm.confirm { font-size: 12px; color: var(--bad); font-weight: 600; }
   a.tlrow { color: inherit; }
+  .tlrow.auto .t { color: var(--ink3); font-weight: 400; } /* a line the app wrote, or a place-wide action made, is set quieter than the grower's own (round twenty-five, 12) */
   a.tlrow:hover { text-decoration: none; }
   a.tlrow:hover .t { color: var(--accent); }
   .linkish { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font: inherit; font-size: 13px; }

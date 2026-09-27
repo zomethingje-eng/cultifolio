@@ -63,7 +63,16 @@ if (!skip.has('names')) {
 }
 
 // Headers on a prerendered page (from `_headers`), a dynamic page (from the hook), the offline page and an API route.
-for (const path of ['/about/how', `/species/${process.env.LIVE_CHECK_SPECIES ?? 'lithops-lesliei'}`, '/offline', '/api/corpus']) {
+// The species page is one the deployment's own corpus holds: the first in its sitemap, unless LIVE_CHECK_SPECIES names one
+// (a fixed slug would 404 on a corpus without it and send the deployer to roll back a good deploy; round twenty-five, 10).
+let species = process.env.LIVE_CHECK_SPECIES;
+if (!species) {
+  const sm = await get('/sitemap.xml');
+  if (sm.status !== 200) fail('/sitemap.xml', sm);
+  species = /<loc>[^<]*\/species\/([a-z0-9-]+)<\/loc>/.exec(sm.text)?.[1];
+  if (!species) fail('/sitemap.xml names no species page', sm);
+}
+for (const path of ['/about/how', `/species/${species}`, '/offline', '/api/corpus']) {
   const r = await get(path, { headers: { accept: 'text/html,*/*' } });
   if (r.status !== 200) fail(`${path}`, r);
   headersOn(r, path);

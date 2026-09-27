@@ -89,9 +89,11 @@ export async function readMeta(r2: R2Bucket, id: string): Promise<VaultMeta | nu
   return o ? ((await o.json()) as VaultMeta) : null;
 }
 
+/** The Authorization header every call but creation carries: the scheme and the token's 64 hex digits (exported for the formats test). */
+export const BEARER = /^Bearer ([0-9a-f]{64})$/;
 /** Every call except creation goes through here: the bearer must hash to what the vault was made with. */
 export async function authed(r2: R2Bucket, id: string, request: Request): Promise<VaultMeta> {
-  const bearer = /^Bearer ([0-9a-f]{64})$/.exec(request.headers.get('authorization') ?? '')?.[1];
+  const bearer = BEARER.exec(request.headers.get('authorization') ?? '')?.[1];
   if (!bearer) error(401, 'a vault token is required');
   const meta = await readMeta(r2, id);
   if (!meta) error(404, 'no such vault');
@@ -266,6 +268,8 @@ export interface Quota {
 }
 
 const day = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+/** When a key dated `d` (YYYY-MM-DD, UTC) expires: the midnight that ends the following day, in seconds, as KV's `expiration` takes it. A fixed moment, never a TTL a write renews (round twenty-four, 6; round twenty-five, 8). */
+const endOfNextDay = (d: string) => Math.floor(Date.parse(d + 'T00:00:00Z') / 1000) + 2 * 86400;
 const untilMidnight = (ms: number) => Math.max(1, Math.ceil((Date.UTC(new Date(ms).getUTCFullYear(), new Date(ms).getUTCMonth(), new Date(ms).getUTCDate() + 1) - ms) / 1000));
 
 interface BytesRow {
@@ -351,7 +355,7 @@ export async function storeCounted(r2: R2Bucket, id: string, meta: VaultMeta, ke
   }
   // A fixed expiry at the end of the day after this one, not a TTL that every write renews: a key written at 00:01 and
   // again at 23:59 would otherwise live nearly three days, past what /about/how says (round twenty-four, 6).
-  await kv.put(ipKey, String(ipBytes + body.length), { expiration: Math.floor(Date.parse(today + 'T00:00:00Z') / 1000) + 2 * 86400 }).catch(() => {});
+  await kv.put(ipKey, String(ipBytes + body.length), { expiration: endOfNextDay(today) }).catch(() => {});
   // The snapshot, lazily.
   const flushed = lastMetaFlush.get(id) ?? 0;
   if (Math.floor(before / META_FLUSH_BYTES) !== Math.floor(after / META_FLUSH_BYTES) || now - flushed >= META_FLUSH_MS) {
@@ -521,13 +525,13 @@ export async function allowCreation(kv: KVNamespace | undefined, ip: string, now
   if (nAll >= max) return 'total';
   if (nDay >= perDay) return 'day';
   try {
-    await kv.put(kIp, String(nIp + 1), { expirationTtl: 2 * 86400 });
+    await kv.put(kIp, String(nIp + 1), { expiration: endOfNextDay(day(now)) });
   } catch (e) {
     // KV takes one write a second per key: two creations from one household within a second are not "too many today", they are a moment's wait (round twenty-two, 9).
     console.warn("sync: the address's vault-creation count could not be written; creation refused for a minute", e);
     return 'unavailable';
   }
-  await Promise.allSettled([kv.put(kDay, String(nDay + 1), { expirationTtl: 2 * 86400 }), kv.put(kAll, String(nAll + 1))]).then((rs) => {
+  await Promise.allSettled([kv.put(kDay, String(nDay + 1), { expiration: endOfNextDay(day(now)) }), kv.put(kAll, String(nAll + 1))]).then((rs) => {
     if (rs.some((r) => r.status === 'rejected')) console.warn('sync: a shared vault-creation counter was not written; the count is short by one');
   });
   return 'ok';
@@ -593,7 +597,9 @@ export async function rateLimit(kv: KVNamespace | undefined, bucket: RateBucket,
   const key = `rl:${bucket}:${ip}:${win}`;
   let w = windows.get(key);
   if (!w) {
-    if (windows.size > 5000) windows.clear(); // an isolate is short-lived; this only stops a slow leak
+    // Windows before this one are over: they go now, not when the map is large or the isolate ends, so the isolate's memory holds only the current ten minutes of any address (round twenty-five, 8).
+    for (const k of windows.keys()) if (Number(k.slice(k.lastIndexOf(':') + 1)) < win && k.startsWith(`rl:${bucket}:`)) windows.delete(k);
+    if (windows.size > 5000) windows.clear();
     let remote = 0;
     if (kv) remote = Number((await kv.get(key).catch(() => null)) ?? 0);
     else noKv();

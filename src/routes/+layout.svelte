@@ -161,7 +161,7 @@
   <nav class="seg topseg" aria-label="Places">
     {#each places as pl}<a href={pl.href} class:on={pl.on(page.url.pathname)}>{pl.label === 'Plants' ? 'My plants' : pl.label}</a>{/each}
   </nav>
-  <a class="iconbtn sync" href="/sync" title={sync.configured ? (sync.busy ?? (sync.offline ? 'Sync: offline; changes are kept here' : sync.lastError ? 'Sync: ' + sync.lastError : sync.runs ? 'Synced' : 'Sync: not checked yet')) : 'Sync'} aria-label="Sync" class:on={sync.configured} class:busy={!!sync.busy} class:err={!!sync.lastError}>⟳</a>
+  <a class="iconbtn sync" href="/sync" title={sync.configured ? (sync.busy ?? (sync.offline ? (sync.unreached === 'server' ? 'Sync: the server did not answer; changes are kept here' : 'Sync: offline; changes are kept here') : sync.lastError ? 'Sync: ' + sync.lastError : sync.runs ? 'Synced' : 'Sync: not checked yet')) : 'Sync'} aria-label="Sync" class:on={sync.configured} class:busy={!!sync.busy} class:err={!!sync.lastError}>⟳</a>
   <a class="iconbtn" href="/plants/new" title="Add a plant" aria-label="Add a plant">+</a>
 </div>
 {#if menuOpen}

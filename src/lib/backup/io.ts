@@ -123,6 +123,6 @@ export async function restoreBackup(o: Opened, mode: 'merge' | 'replace', onProg
 
 /** The replace path: stage, verify, turn sync off, switch (see replace.ts and vault.ts). */
 async function replaceFromBackup(o: Opened, onProgress?: (done: number, total: number) => void): Promise<RestoreReport> {
-  const r = await replaceThroughStaging(o.file, openStaging, { onProgress, beforeSwitch: async () => { if (sync.configured) await sync.forget(); } });
+  const r = await replaceThroughStaging(o.file, openStaging, { onProgress, beforeSwitch: async () => { if (sync.configured) await sync.forget('replaced'); } });
   return { ...r, schemeRestored: null, settingsRestored: applyDeviceSettings(o.file.settings) };
 }

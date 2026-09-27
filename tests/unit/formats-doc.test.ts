@@ -16,7 +16,10 @@ import { PUSH_HEADERS, batchName, listAfter, BATCH_NAME, logBatch } from '$lib/s
 import { KINDS, RESERVED_FIELDS } from '$core/log';
 import { EVENT_LABEL } from '$lib/db/types';
 import { BUCKETS, bucketOf } from '$core/bucket';
-import { VaultFull, parseAfter } from '$lib/server/sync';
+import { VaultFull, parseAfter, BEARER, listBatches } from '$lib/server/sync';
+import * as photoRoute from '../../src/routes/api/sync/photo/[id]/+server';
+import * as logRoute from '../../src/routes/api/sync/log/+server';
+import { apply } from '$core/log';
 import { madeOn } from '$core/dates';
 import { existsSync } from 'node:fs';
 import { THUMB_EDGE, FULL_EDGE } from '$lib/photo/process';
@@ -36,12 +39,20 @@ const types = readFileSync(new URL('../../src/lib/db/types.ts', import.meta.url)
 const codeFields = (name: string): string[] => {
   const m = new RegExp(`export interface ${name} \\{([\\s\\S]*?)\\n\\}`).exec(types);
   if (!m) throw new Error(`no interface ${name}`);
-  return [...m[1].matchAll(/^\s{2}([A-Za-z_]+)\??:/gm)].map((x) => x[1]).filter((f) => f !== 'id');
+  return [...m[1].matchAll(/^\s{2}(?:readonly )?([A-Za-z_]+)\??:/gm)].map((x) => x[1]).filter((f) => f !== 'id');
 };
-const codeUnion = (name: string): string[] => {
-  const m = new RegExp(`export type ${name} = ([^;]+);`).exec(types);
+const namesSrc = readFileSync(new URL('../../src/lib/core/names.ts', import.meta.url), 'utf8');
+const codeUnion = (name: string, src = types): string[] => {
+  const m = new RegExp(`export type ${name} = ([^;]+);`).exec(src);
   if (!m) throw new Error(`no type ${name}`);
   return [...m[1].matchAll(/'([a-z0-9]+)'/g)].map((x) => x[1]);
+};
+/** The fields of an interface in another source file (device.json's shape, the listing's reply). */
+const fieldsIn = (file: string, name: string): string[] => {
+  const src = readFileSync(new URL(file, import.meta.url), 'utf8');
+  const m = new RegExp(`export interface ${name} \\{([\\s\\S]*?)\\n\\}`).exec(src);
+  if (!m) throw new Error(`no interface ${name} in ${file}`);
+  return [...m[1].matchAll(/^\s{2}(?:readonly )?([A-Za-z_]+)\??:/gm)].map((x) => x[1]);
 };
 /** The page as a reader sees it: the Svelte markup with tags removed and entities decoded. */
 const page = markup
@@ -123,7 +134,10 @@ const doc = {
   dossierRoute: says(/served at (\/api\/dossier)\/<gbifKey>/)[1],
   provenance: says(/provenance \(([a-z0-9, ]+)\), status \(([a-z, ]+)\)/),
   nameKinds: says(/nameKind \(([a-z, ]+) or ([a-z]+)\)/),
-  batchShape: says(/A log batch decrypts to \{ "v": (\d), "device": "\.\.\.", "changes": \[\.\.\.\] \}/)
+  batchShape: says(/A log batch decrypts to \{ "v": (\d), "device": "\.\.\.", "changes": \[\.\.\.\] \}/),
+  mergeRule: says(/keeping for each record and field the value with the (greatest|smallest) t/)[1],
+  changesFile: says(/(changes\.json)\s+a JSON array of changes/)[1],
+  dFrom: says(/dFrom \(([a-z]+) or ([a-z]+)\)/)
 };
 const numberWords: Record<string, number> = { five: 5, twelve: 12 };
 
@@ -255,12 +269,17 @@ describe('/about/formats is enough to decrypt a vault, and says what the code do
     const e = doc.endpoints;
     for (const [path, file] of [[e[1], 'vault/+server.ts'], [e[2], 'log/+server.ts'], [e[7], 'log/[key]/+server.ts'], [e[9], 'photo/[id]/+server.ts']] as const) expect(existsSync(new URL(`../../src/routes/api/sync/${file}`, import.meta.url)), path).toBe(true);
     expect([e[4], e[5], e[6]].map((h) => h.toLowerCase())).toEqual([PUSH_HEADERS.batch, PUSH_HEADERS.plain, PUSH_HEADERS.device]);
-    expect(e[8]).toBe('PUT|GET|HEAD');
+    expect(e[8].split('|').sort()).toEqual(Object.keys(photoRoute).filter((k) => /^[A-Z]+$/.test(k)).sort()); // the methods the page names are the ones the route module exports
+    expect(Object.keys(logRoute).filter((k) => /^[A-Z]+$/.test(k)).sort()).toEqual(['GET', 'POST']);
     for (const route of [doc.bucketRoutes[1], doc.bucketRoutes[2], doc.corpusRoute, doc.dossierRoute]) expect(existsSync(new URL(`../../src/routes${route}`, import.meta.url)), route).toBe(true);
     // the listing reply and its paging parameter, as the server parses it from what the device sends
-    expect([doc.listReply[1], doc.listReply[2], doc.listReply[3], doc.listReply[4], doc.listReply[5]]).toEqual(['key', 'at', 'more', 'next', 'after']);
+    expect([doc.listReply[1], doc.listReply[2]].sort()).toEqual(fieldsIn('../../src/lib/server/sync.ts', 'BatchRef').sort()); // the entries' fields are BatchRef's
+    expect([doc.listReply[3], doc.listReply[4]].sort()).toEqual([...(/Promise<\{ batches: BatchRef\[\]; (\w+): boolean; (\w+)\?: After \}>/.exec(readFileSync(new URL('../../src/lib/server/sync.ts', import.meta.url), 'utf8')) ?? []).slice(1, 3)].sort()); // and the reply's other two are listBatches's
+    expect(typeof listBatches).toBe('function');
+    expect(doc.listReply[5]).toBe('after');
     expect(parseAfter(listAfter(1789520000000, 'k'))).toEqual({ at: 1789520000000, key: 'k' });
-    expect(doc.bearer.slice(1, 3)).toEqual(['Authorization', 'Bearer']);
+    expect(BEARER.test(`${doc.bearer[2]} ${'a'.repeat(64)}`)).toBe(true); // the scheme the page names is the one the Worker parses
+    expect(doc.bearer[1].toLowerCase()).toBe('authorization');
     // the 507 body the page prints is the one the class sends
     const full = new VaultFull(1, 2).response();
     expect(full.status).toBe(507);
@@ -274,7 +293,16 @@ describe('/about/formats is enough to decrypt a vault, and says what the code do
     for (const [kind, name] of [['accession', 'Accession'], ['event', 'PlantEvent'], ['photo', 'Photo'], ['location', 'Location'], ['sowing', 'Sowing'], ['taxon', 'Taxon']] as const) expect([...new Set(pageFields(kind))].sort(), kind).toEqual(codeFields(name).sort());
     expect(doc.provenance[1].split(/,\s*/)).toEqual(codeUnion('Provenance'));
     expect(doc.provenance[2].split(/,\s*/)).toEqual(codeUnion('AccStatus'));
-    expect([...doc.nameKinds[1].split(/,\s*/), doc.nameKinds[2]]).toEqual(['species', 'cultivar', 'hybrid']);
+    expect([...doc.nameKinds[1].split(/,\s*/), doc.nameKinds[2]]).toEqual(codeUnion('NameKind', namesSrc));
+    expect([doc.dFrom[1], doc.dFrom[2]]).toEqual(codeUnion('PhotoDateFrom'));
+    // the merge rule the page states is the one the fold applies: of two values for one field, the greater stamp wins whatever order they arrive in
+    expect(doc.mergeRule).toBe('greatest');
+    const st1 = new Map(), st2 = new Map();
+    const c1 = { t: '1789520000000-0000-aaaaaaaaaaaa', kind: 'accession' as const, id: 'r1', field: 'notes', value: 'early' };
+    const c2 = { t: '1789520000001-0000-aaaaaaaaaaaa', kind: 'accession' as const, id: 'r1', field: 'notes', value: 'late' };
+    apply(st1, [c1, c2]); apply(st2, [c2, c1]);
+    expect(st1.get('accession:r1')!.notes).toBe('late');
+    expect(st2.get('accession:r1')!.notes).toBe('late');
     expect(doc.refusalFields.slice(1, 4)).toEqual(['error', 'message', '404']); // json() routes say `error`, SvelteKit's error() says `message`
     // the hash the page names is the one the bucket function computes
     expect(doc.hash[1]).toBe('FNV-1a');
@@ -284,7 +312,7 @@ describe('/about/formats is enough to decrypt a vault, and says what the code do
     // the manifest keys the page lists are the schema's, and the counts it lists are the summary's
     const m = doc.manifestKeys;
     const schemaKeys = Object.keys(Manifest.entries);
-    for (const k of [m[1], m[2], m[3], m[4], m[5], m[6], m[8], m[9]]) expect(schemaKeys, k).toContain(k);
+    expect([m[1], m[2], m[3], m[4], m[5], m[6], m[8], m[9]].sort()).toEqual(schemaKeys.sort()); // both ways: a key added to the schema must be on the page
     expect(m[7].split(/,\s*/).sort()).toEqual(['accessions', 'changes', 'events', 'locations', 'photoBytes', 'photos', 'sowings', 'taxa']);
     // the record kinds, the reserved names and the event types the page lists are the code's, no more and no fewer
     expect([...doc.kinds].sort()).toEqual([...KINDS].sort());
@@ -297,7 +325,10 @@ describe('/about/formats is enough to decrypt a vault, and says what the code do
     expect(Number(doc.backupPaths[2])).toBe(FULL_EDGE);
     expect(doc.backupPaths[3].replace('<id>', 'p1')).toBe(thumbPath('p1'));
     expect(Number(doc.backupPaths[4])).toBe(THUMB_EDGE);
-    expect(doc.backupPaths.slice(5, 11)).toEqual(['plants.csv', 'device.json', 'site', 'units', 'labels', 'prefs']);
+    expect(doc.backupPaths.slice(5, 7)).toEqual(['plants.csv', 'device.json']);
+    expect(doc.backupPaths.slice(7, 11).sort()).toEqual(fieldsIn('../../src/lib/backup/backup.ts', 'DeviceSettings').sort()); // device.json's keys are the interface's
+    expect(doc.changesFile).toBe('changes.json');
+    expect(readFileSync(new URL('../../src/lib/backup/backup.ts', import.meta.url), 'utf8')).toContain(`'${doc.changesFile}'`); // and the writer uses that name
     expect(LegacyChanges.entries.format.literal).toBe(doc.legacy[1]);
     expect(Number(doc.legacy[2])).toBe(1);
     // the key alphabet the page describes by exclusion is the code's
