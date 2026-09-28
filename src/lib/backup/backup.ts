@@ -3,9 +3,9 @@
  * reader, a photo writer) so the same code is unit-tested in Node and run in
  * the browser; the vault wiring is in ./io.ts.
  */
-import { zipSync, unzipSync, strToU8, strFromU8, type Zippable } from 'fflate';
+import { Zip, ZipPassThrough, ZipDeflate, unzipSync, strToU8, strFromU8 } from 'fflate';
 import * as v from 'valibot';
-import { materialise, live, changeError, type Change, type Record_ } from '$core/log';
+import { materialise, live, readChanges, type Change, type Record_ } from '$core/log';
 import { kindOf, accNo, sowNo, type Accession, type Photo, type Sowing } from '$lib/db/types';
 import { MAX_PHOTO_BYTES, SEAL_OVERHEAD } from '$lib/sync/limits';
 import { BACKUP_FORMAT, BACKUP_V, Manifest, ChangeRow, LegacyChanges, photoPath, thumbPath } from './format';
@@ -18,13 +18,20 @@ export function photoBytesError(full: Uint8Array, thumb: Uint8Array): string | n
   return null;
 }
 
-/** Every row must be a change the fold can take; the first that is not names itself. */
-function checkRows(rows: unknown[]): Change[] {
-  for (let i = 0; i < rows.length; i++) {
-    const e = changeError(rows[i]);
-    if (e) throw new Error(`Change ${i + 1} in that backup cannot be read (${e}); the file may be damaged or from a newer version.`);
+/**
+ * Every row the fold can take, mended where an older build wrote a number for text; a row it cannot take is left out
+ * and named in `unreadable` rather than refusing the file (round twenty-nine, 2). A file with no readable change at all
+ * is refused, since there is nothing to restore.
+ */
+function checkRows(rows: unknown[]): { changes: Change[]; unreadable: string[] } {
+  let read: ReturnType<typeof readChanges>;
+  try {
+    read = readChanges(rows);
+  } catch (e) {
+    const m = /^change (\d+): (.*)$/.exec(e instanceof Error ? e.message : String(e));
+    throw new Error(m ? `Change ${Number(m[1]) + 1} in that backup cannot be read (${m[2]}); the file may be damaged or from a newer version.` : String(e));
   }
-  return rows as Change[];
+  return { changes: read.changes, unreadable: read.dropped.map((d) => d.replace(/^change (\d+):/, (_, n) => `change ${Number(n) + 1}:`)) };
 }
 
 export interface PhotoBytes {
@@ -60,7 +67,12 @@ export function summarise(changes: Change[]) {
 }
 
 export interface BuiltBackup {
-  bytes: Uint8Array;
+  /** The zip as the pieces the writer produced, in order: a Blob of them is the file, with nothing held twice (round twenty-nine, 11). */
+  parts: Uint8Array[];
+  /** The zip's size in bytes. */
+  size: number;
+  /** The zip as one array, joined on demand: for tests and for the older JSON path; a page should use `parts`. */
+  readonly bytes: Uint8Array;
   /** Live photo records whose pixels `readPhoto` could not supply: their records are in the file, their pixels are not, and the manifest says so. */
   photosMissing: string[];
 }
@@ -68,16 +80,34 @@ export interface BuiltBackup {
 export async function buildBackup(o: BuildOpts): Promise<BuiltBackup> {
   const s = summarise(o.changes);
   const photos = live<Photo & Record_>(s.state, 'photo');
-  const files: Zippable = {};
+  // Written as a stream, one entry at a time: a photograph is read, pushed through the zip and let go before the next
+  // is read, and the zip's own output is kept as the pieces it comes in rather than joined. A backup of six hundred
+  // photographs held every photograph, the whole zip and a copy of it at once, about three times the file, which is
+  // more than a phone gives a tab (round twenty-nine, 11). fflate's streaming classes use no worker, so the CSP stands.
+  const parts: Uint8Array[] = [];
+  let size = 0;
+  let failed: Error | null = null;
+  const zip = new Zip((err, chunk) => {
+    if (err) failed = err;
+    else {
+      parts.push(chunk);
+      size += chunk.length;
+    }
+  });
+  const entry = (name: string, bytes: Uint8Array, deflate: boolean) => {
+    const f = deflate ? new ZipDeflate(name, { level: 6 }) : new ZipPassThrough(name); // JPEGs do not compress; stored as-is so the zip is fast to write and read
+    zip.add(f);
+    f.push(bytes, true);
+    if (failed) throw failed;
+  };
   let photoBytes = 0;
   let done = 0;
   const photosMissing: string[] = [];
   for (const p of photos) {
     const b = await o.readPhoto(p.id);
     if (b) {
-      // JPEGs do not compress; store them as-is so the zip is fast to write and read.
-      files[photoPath(p.id)] = [b.full, { level: 0 }];
-      files[thumbPath(p.id)] = [b.thumb, { level: 0 }];
+      entry(photoPath(p.id), b.full, false);
+      entry(thumbPath(p.id), b.thumb, false);
       photoBytes += b.full.length + b.thumb.length;
     } else photosMissing.push(p.id);
     o.onProgress?.(++done, photos.length);
@@ -92,22 +122,31 @@ export async function buildBackup(o: BuildOpts): Promise<BuiltBackup> {
     ...(photosMissing.length ? { photosMissing } : {}),
     scheme: o.scheme
   };
-  files['manifest.json'] = strToU8(JSON.stringify(manifest, null, 1));
-  files['changes.json'] = strToU8(JSON.stringify(o.changes));
-  if (o.settings && Object.keys(o.settings).length) files['device.json'] = strToU8(JSON.stringify(o.settings, null, 1));
-  files['plants.csv'] = strToU8(plantsCsv(live<Accession & Record_>(s.state, 'accession'), s.state));
-  files['batches.csv'] = strToU8(batchesCsv(live<Sowing & Record_>(s.state, 'sowing'), s.state));
-  // The synchronous writer, on purpose: fflate's asynchronous one hands any entry of 160 kB or more to a worker it makes
-  // from a blob: URL, which the site's CSP (worker-src 'self') refuses, so a backup whose changes.json had grown past
-  // that (about a thousand changes) failed on every device while a small one passed. A few megabytes deflate in well
-  // under a second on the main thread (round twenty-eight, 0).
-  const bytes = zipSync(files, { level: 6 });
-  return { bytes, photosMissing };
+  entry('manifest.json', strToU8(JSON.stringify(manifest, null, 1)), true);
+  entry('changes.json', strToU8(JSON.stringify(o.changes)), true);
+  if (o.settings && Object.keys(o.settings).length) entry('device.json', strToU8(JSON.stringify(o.settings, null, 1)), true);
+  entry('plants.csv', strToU8(plantsCsv(live<Accession & Record_>(s.state, 'accession'), s.state)), true);
+  entry('batches.csv', strToU8(batchesCsv(live<Sowing & Record_>(s.state, 'sowing'), s.state)), true);
+  zip.end();
+  if (failed) throw failed;
+  return {
+    parts,
+    size,
+    photosMissing,
+    get bytes() {
+      const out = new Uint8Array(size);
+      let at = 0;
+      for (const c of parts) { out.set(c, at); at += c.length; }
+      return out;
+    }
+  };
 }
 
 export interface ReadBackup {
   manifest: Manifest | null; // null for the legacy changes-only JSON
   changes: Change[];
+  /** Rows of `changes.json` that could not be read and were left out, each named ("change 15: price of a accession must be a string, not [1]"). */
+  unreadable: string[];
   /** The exporting device's settings (`device.json`), when the file has them. */
   settings: DeviceSettings | null;
   /** Photo ids whose pixels are in the file. */
@@ -123,6 +162,11 @@ export function photosWithoutPixels(file: Pick<ReadBackup, 'changes' | 'photoIds
     .filter((id) => !have.has(id));
 }
 
+/** The entries a backup carries and nothing else: the three JSON files, the two sheets, a photograph or its thumbnail. */
+const KNOWN_ENTRY = /^(manifest\.json|changes\.json|device\.json|plants\.csv|batches\.csv|photos\/[^\0]{1,200}\.jpg)$/; // a photo entry's name is judged below, so an impossible one is refused and said rather than skipped
+/** The most any one entry may inflate to: a photograph is bounded by the sync limit, and a log of a million changes is well under this. */
+export const MAX_ENTRY_BYTES = 256 * 1024 * 1024;
+
 /** Parse a backup from bytes: a zip, or the older JSON. Throws a readable error for anything else. */
 export async function readBackup(bytes: Uint8Array): Promise<ReadBackup> {
   // JSON starts with '{' after optional whitespace; a zip starts with PK.
@@ -131,10 +175,13 @@ export async function readBackup(bytes: Uint8Array): Promise<ReadBackup> {
     const json = JSON.parse(strFromU8(bytes));
     const r = v.safeParse(LegacyChanges, json);
     if (!r.success) throw new Error('That JSON is not a Cultifolio backup.');
-    return { manifest: null, changes: checkRows(r.output.changes), settings: null, photoIds: [], readPhoto: () => null };
+    return { manifest: null, ...checkRows(r.output.changes), settings: null, photoIds: [], readPhoto: () => null };
   }
   if (!(bytes[0] === 0x50 && bytes[1] === 0x4b)) throw new Error('That file is neither a Cultifolio backup zip nor a JSON export.');
-  const files = unzipSync(bytes); // synchronous for the same reason as the writer: the asynchronous reader inflates entries over 512 kB in a blob: worker the CSP refuses
+  // Synchronous for the same reason as the writer: the asynchronous reader inflates entries over 512 kB in a blob: worker
+  // the CSP refuses. Only the entries a backup has are inflated, each within a size a backup entry can have: a zip made
+  // to inflate to gigabytes is refused at its table of contents, not after the page has frozen on it (round twenty-nine, 10).
+  const files = unzipSync(bytes, { filter: (f) => KNOWN_ENTRY.test(f.name) && f.originalSize <= MAX_ENTRY_BYTES });
   if (!files['manifest.json'] || !files['changes.json']) throw new Error('That zip has no manifest.json and changes.json; it is not a Cultifolio backup.');
   const m = v.safeParse(Manifest, JSON.parse(strFromU8(files['manifest.json'])));
   if (!m.success) throw new Error('The backup manifest is not in a shape this version understands.');
@@ -161,7 +208,7 @@ export async function readBackup(bytes: Uint8Array): Promise<ReadBackup> {
   }
   return {
     manifest: m.output,
-    changes: checkRows(rows.output),
+    ...checkRows(rows.output),
     settings,
     photoIds,
     readPhoto: (id) => (files[photoPath(id)] && files[thumbPath(id)] ? { id, full: files[photoPath(id)], thumb: files[thumbPath(id)] } : null)
@@ -193,9 +240,10 @@ export function previewMerge(current: Change[], incoming: Change[]) {
 const csvCell = (x: unknown) => {
   if (x == null) return '';
   let s = String(x);
-  // A cell beginning =, +, -, @ or a tab is read as a formula by a spreadsheet; a note starting "-5 °C" is the real case.
-  // A leading apostrophe makes it text, which is what it is (round twenty-six, 14).
-  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+  // A text cell beginning =, +, -, @ or a tab (after any leading spaces, and the full-width forms too) is read as a
+  // formula by a spreadsheet; a note starting "-5 °C" is the real case. A leading apostrophe makes it text, which is
+  // what it is (round twenty-six, 14). A number is a number and is written as one: −5 °C of bottom heat stays -5 (round twenty-nine, 10).
+  if (typeof x === 'string' && /^\s*[=+\-@\t\r＝＋－＠]/.test(s)) s = "'" + s;
   return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 };
 

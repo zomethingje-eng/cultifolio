@@ -39,7 +39,7 @@ import { collection } from '$lib/db/collection.svelte';
 import { StoppedError, getMeta, setMeta, setMetaIfKey, getPhotoBlobs, putPhotoBlobs, photoBlobIds, outboxKeys, outboxAck, outboxFill, outboxClear, changesByKeys, allChanges, appendChanges, onOtherTabWrite, announceSyncForgotten } from '$lib/db/vault';
 import { deriveKeys, sealJson, openJson, seal, open, packPhoto, unpackPhoto, parseVaultKey, batchFingerprint, sha256hex, type VaultKeys } from './crypto';
 import { MAX_BATCH_BYTES, MAX_PHOTO_BYTES, SEAL_OVERHEAD, OVERLAP_MS, PUSH_HEADERS, batchName, listAfter, logBatch } from './limits';
-import { validateChanges, isHeld, dueAt, hlcWall, type Change } from '$core/log';
+import { readChanges, isHeld, dueAt, hlcWall, type Change } from '$core/log';
 import { hlcCompare, MAX_AHEAD_MS } from '$core/hlc';
 import type { Photo } from '$lib/db/types';
 import { version as BUILD } from '$app/environment';
@@ -74,17 +74,23 @@ const META = 'sync';
  * before, at most one step back from `at`; a cut that cannot move (a two-change batch) stays where it is.
  */
 export function cutBefore(list: Change[], at: number): number {
-  if (at <= 1 || at >= list.length) return at;
-  const next = list[at];
-  if (next.field !== 'notesBase') return at;
-  // The base's notes change is the same writer's nearest earlier notes change to the record; another tab's change
-  // stamped in the same millisecond can sit between them, so the walk back is a few steps, not one (round twenty-eight, 0).
+  if (at <= 0 || at >= list.length) return at;
   const writer = (c: Change) => c.t.slice(c.t.lastIndexOf('-') + 1);
-  for (let j = at - 1; j >= Math.max(1, at - 8); j--) {
-    const c = list[j];
-    if (c.kind !== next.kind || c.id !== next.id) continue;
-    if (c.field === 'notes' && writer(c) === writer(next)) return j;
-    if (c.field === 'notes' || c.field === 'notesBase') break; // another edit of the same notes: the pair is not this one
+  // Any base within a few steps after the cut whose own notes change sits before it: the cut moves before that notes
+  // change. The pair need not be adjacent (another tab's change stamped in the same millisecond can sit between them)
+  // and the base need not be the first change after the cut (round twenty-eight, 0; round twenty-nine, 9).
+  for (let j = at; j < Math.min(list.length, at + 8); j++) {
+    const base = list[j];
+    if (base.field !== 'notesBase') continue;
+    for (let i = j - 1; i >= Math.max(0, j - 8); i--) {
+      const c = list[i];
+      if (c.kind !== base.kind || c.id !== base.id) continue;
+      if (c.field === 'notes' && writer(c) === writer(base)) {
+        if (i < at) return i >= 1 ? i : j + 1 < list.length ? j + 1 : at; // a pair that starts the batch is kept whole by cutting after it instead
+        break;
+      }
+      if (c.field === 'notes' || c.field === 'notesBase') break; // another edit of the same notes: the pair is not this one
+    }
   }
   return at;
 }
@@ -504,9 +510,10 @@ class Sync {
     const pushed = new Set(m.photosPushed);
     const live = new Set(collectionPhotos().map((p) => p.id));
     let n = 0;
+    const toSend = [...have].filter((id) => !pushed.has(id) && live.has(id)).length; // the total, so a first sync says "592 of 598", not "592…" (round twenty-nine, 13)
     for (const id of have) {
       if (pushed.has(id) || !live.has(id)) continue;
-      this.step(m, `Sending photo ${++n}…`);
+      this.step(m, `Sending photo ${++n} of ${toSend}…`);
       const b = await getPhotoBlobs(id);
       if (!b) continue;
       if (b.blob.size + b.thumb.size + SEAL_OVERHEAD > MAX_PHOTO_BYTES) {
@@ -571,7 +578,7 @@ class Sync {
     }
     if (r.status === 429) this.limited(r);
     if ((r.status === 400 || r.status === 409 || r.status === 413) && mayResplit && batch.length > 1) {
-      const mid = Math.ceil(batch.length / 2);
+      const mid = cutBefore(batch, Math.ceil(batch.length / 2)); // never between a notes change and its base (round twenty-nine, 9)
       const a = await this.pushBatch(m, batch.slice(0, mid));
       return this.vaultFull ? a : a + (await this.pushBatch(m, batch.slice(mid)));
     }
@@ -629,7 +636,11 @@ class Sync {
     try {
       const batch = await openJson<{ v: number; device: string; changes: unknown }>(keys, 'log', bytes);
       if (!batch || typeof batch !== 'object' || batch.v !== 1) throw new Error('not a batch this version understands');
-      changes = validateChanges(batch.changes);
+      const read = readChanges(batch.changes);
+      // A change of a type its field never takes is left out and said; the rest of the batch is folded (round twenty-nine, 2).
+      if (read.dropped.length) console.warn(`batch ${key}: ${read.dropped.length} change${read.dropped.length === 1 ? '' : 's'} left out:`, read.dropped.slice(0, 5));
+      if (read.dropped.length && !read.changes.length) throw new Error(read.dropped[0]);
+      changes = read.changes;
     } catch (e) {
       this.note(m, 'quarantined', key, e instanceof Error ? e.message : String(e));
       return false;

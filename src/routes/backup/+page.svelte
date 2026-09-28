@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import PageHead from '$lib/ui/PageHead.svelte';
   import { collection } from '$lib/db/collection.svelte';
-  import { getMeta, setMeta, photoBlobIds } from '$lib/db/vault';
+  import { getMeta, setMeta, photoBlobIds, storageErrorText } from '$lib/db/vault';
   import { prepareBackup, downloadBackup, openBackup, restoreBackup, type Opened, type PreparedBackup } from '$lib/backup/io';
   import { sync } from '$lib/sync/engine.svelte';
   import { importV2, type ImportReport } from '$lib/import/v2';
@@ -105,7 +105,7 @@
       opened = null;
       photoCount = (await photoBlobIds()).length;
     } catch (err) {
-      openErr = err instanceof Error ? err.message : String(err);
+      openErr = (await storageErrorText(err)) ?? (err instanceof Error && err.message ? err.message : String(err)); // a full device is named as such (round twenty-nine, 4)
     } finally {
       busy = null;
     }
@@ -189,7 +189,7 @@
     <div class="preview">
       <div class="factgrid">
         <div><b>In the file</b>{c.accessions} plant{c.accessions === 1 ? '' : 's'} · {c.events} timeline entr{c.events === 1 ? 'y' : 'ies'} · {c.locations} place{c.locations === 1 ? '' : 's'} · {c.sowings} propagation batch{c.sowings === 1 ? '' : 'es'} · {c.photos} photo{c.photos === 1 ? "" : "s"}{#if c.taxa}{' · '}{c.taxa} species record{c.taxa === 1 ? '' : 's'}{/if}{#if m}<span class="faint">{" · "}taken {m.exported.slice(0, 10)}{m.device ? ` on device ${m.device.slice(0, 6)}` : ''}</span>{/if}</div>
-        <div><b>Merging would</b>{#if opened.merge.fresh.length === 0 && !opened.settings.length}change nothing: everything in the file is already here.{:else if opened.merge.fresh.length === 0}change no records (everything in the file is already here) and apply the file's {opened.settings.join(', ')}, which this device has none of.{:else}add {addedWords(opened.merge)}, update {opened.merge.changed} {opened.merge.changed === 1 ? 'record' : 'records'}, and bring in {opened.newPhotos} {opened.newPhotos === 1 ? 'photograph' : 'photographs'}.{#if opened.settings.length} Apply the file's {opened.settings.join(', ')}, which this device has none of.{/if} Nothing on this device is removed.{/if}{#if opened.missingPixels.length} {opened.missingPixels.length} photo {opened.missingPixels.length === 1 ? 'record in the file has' : 'records in the file have'} no photograph in it or on this device.{/if}</div>
+        <div><b>Merging would</b>{#if opened.merge.fresh.length === 0 && !opened.settings.length}change nothing: everything in the file is already here.{:else if opened.merge.fresh.length === 0}change no records (everything in the file is already here) and apply the file's {opened.settings.join(', ')}, which this device has none of.{:else}add {addedWords(opened.merge)}, update {opened.merge.changed} {opened.merge.changed === 1 ? 'record' : 'records'}, and bring in {opened.newPhotos} {opened.newPhotos === 1 ? 'photograph' : 'photographs'}.{#if opened.settings.length} Apply the file's {opened.settings.join(', ')}, which this device has none of.{/if} Nothing on this device is removed.{/if}{#if opened.missingPixels.length} {opened.missingPixels.length} photo {opened.missingPixels.length === 1 ? 'record in the file has' : 'records in the file have'} no photograph in it or on this device.{/if}{#if opened.file.unreadable.length} {opened.file.unreadable.length} {opened.file.unreadable.length === 1 ? 'change in the file cannot be read and is' : 'changes in the file cannot be read and are'} left out ({opened.file.unreadable[0]}).{/if}</div>
       </div>
       <div class="row acts">
         <button id="bk-merge" class="btn pri" onclick={() => doRestore('merge')} disabled={!!busy || (opened.merge.fresh.length === 0 && opened.newPhotos === 0 && opened.settings.length === 0)}>Merge into this device</button>

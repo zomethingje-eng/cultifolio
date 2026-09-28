@@ -560,3 +560,22 @@ describe('round twenty-eight', () => {
     expect(again.accessions.every((r) => !r.acc || collection.accessions.filter((x) => x.acc === r.acc).length === 1)).toBe(true);
   });
 });
+
+describe('round twenty-nine', () => {
+  it('a plant restored after another device minted its number is renumbered on restore, not left sharing the number (round twenty-nine, 3)', async () => {
+    const x = await fresh('devicex00000');
+    const mine = await x.collection.addAccession({ taxonName: 'Copiapoa', acc: '2026-0007', acquired: '2026-05-01' });
+    const y = await fresh('devicey00000');
+    await new Promise((r) => setTimeout(r, 2));
+    const theirs = await y.collection.addAccession({ taxonName: 'Lithops', acc: '2026-0007', acquired: '2026-05-02' });
+    mem = x.mem;
+    await x.collection.remove('accession', mine.id);
+    await x.collection.ingest([...y.mem.changes.values()], 'server'); // nothing to repair: X's plant is removed
+    expect(x.collection.accessions.map((a) => accNo(a))).toEqual(['2026-0007']);
+    await x.collection.restore('accession', mine.id); // Undo
+    const nos = x.collection.accessions.map((a) => accNo(a)).sort();
+    expect(nos).toEqual(['2026-0007', '2026-0008']);
+    expect(accNo(x.collection.accession(mine.id)!)).toBe('2026-0007'); // the earlier identity keeps the number
+    expect(accNo(x.collection.accession(theirs.id)!)).toBe('2026-0008');
+  });
+});

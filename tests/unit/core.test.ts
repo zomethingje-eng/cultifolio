@@ -338,3 +338,23 @@ describe('a removal under a repeated stamp (round thirteen, 8)', () => {
     }
   });
 });
+
+describe('round twenty-nine: old data is mended, not refused', () => {
+  const ok = { t: '1700000000000-0000-x', kind: 'accession', id: 'r1', field: 'price', value: 12 };
+  it('a finite number in a text field becomes its text; anything else of the wrong type is left out and named; the rest is kept', async () => {
+    const { readChanges, mendChange } = await import('$core/log');
+    expect(mendChange(ok as Change)).toEqual({ ...ok, value: '12' });
+    const keyed = { ...ok, field: 'taxonKey' } as Change;
+    expect(mendChange(keyed)).toBe(keyed); // a number where a number belongs: the same object back
+    const r = readChanges([ok, { ...ok, field: 'notes', value: { a: 1 } }, { ...ok, field: 'taxonKey', value: 'x' }, { ...ok, field: 'notes', value: 'fine' }]);
+    expect(r.changes.map((c) => c.value)).toEqual(['12', 'fine']);
+    expect(r.dropped).toEqual(['change 1: notes of a accession must be a string, not {"a":1}', 'change 2: taxonKey of a accession must be a number, not "x"']);
+    expect(() => readChanges(null)).toThrow(/not a list/);
+    expect(() => readChanges([ok, { ...ok, t: '~' }])).toThrow(/change 1: bad timestamp/); // structure still refuses the list whole
+    expect(() => readChanges([{ ...ok, field: '*' }])).toThrow(/reserved/);
+  });
+  it('a field named after Object.prototype is refused, whatever its value (round twenty-nine, 10)', async () => {
+    const { validateChanges } = await import('$core/log');
+    for (const field of ['__proto__', 'constructor', 'toString', 'hasOwnProperty']) expect(() => validateChanges([{ ...ok, field, value: null }])).toThrow(/not a field name/);
+  });
+});

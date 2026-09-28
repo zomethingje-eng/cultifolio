@@ -150,7 +150,7 @@
     <div class="card"><div class="lab">Encryption</div><div class="val" style="font-family: var(--ui); font-size: 17px; font-weight: 700">AES-256-GCM</div><div class="sub">key never leaves your devices</div></div>
   </div>
   {#if sync.vaultFull}
-    <p class="notice bad" id="vault-full">Your vault is full ({mb(sync.vaultFull.bytes)} of {mb(sync.vaultFull.limit)} MB). Delete photographs or export and start a new vault. Changes made here are kept on this device and sent once there is room; receiving carries on.</p>
+    <p class="notice bad" id="vault-full">Your vault is full ({mb(sync.vaultFull.bytes)} of {mb(sync.vaultFull.limit)} MB). Removing photographs here does not free it: nothing on the server is ever rewritten or deleted. Back up, then set up a new vault for the collection to carry on syncing. Changes made here are kept on this device and sent once there is room; receiving carries on.</p>
   {/if}
   {#if sync.clockWarning}
     <p class="notice warn" id="clock-warning">{sync.clockWarning}</p>

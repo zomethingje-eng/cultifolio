@@ -2319,3 +2319,79 @@ test('round twenty-eight: a backup of four hundred plants with long notes is wri
   await expect(page.locator('.editform')).toHaveCount(0);
   await expect(page.getByText('12', { exact: false }).first()).toBeVisible();
 });
+
+test('round twenty-nine: the photo viewer removes the photograph it shows after a date edit re-sorts the set, with Undo; three photographs added at once keep their progress on screen', async ({ page }) => {
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await addPlant(page);
+  const acc = page.url().split('/').pop()!;
+  await page.setViewportSize({ width: 640, height: 480 });
+  const jpeg = await page.screenshot({ type: 'jpeg', quality: 60 });
+  await page.setViewportSize({ width: 1180, height: 900 });
+  // three at once: the add control stays on screen while the second and third store (round twenty-nine, 12)
+  await page.locator('#acc-photo-file').setInputFiles([{ name: 'a.jpg', mimeType: 'image/jpeg', buffer: jpeg }, { name: 'b.jpg', mimeType: 'image/jpeg', buffer: jpeg }, { name: 'c.jpg', mimeType: 'image/jpeg', buffer: jpeg }]);
+  await expect(page.locator('.phgrid .ph')).toHaveCount(3);
+  await expect(page.locator('.addrow')).toBeVisible();
+  await expect(page.locator('.addrow')).toContainText('Added 3');
+  // open the first, date it back to 2019 (it re-sorts to the end), then Remove: the 2019 one must be the one removed (round twenty-nine, 1)
+  await page.locator('.phgrid .ph').first().click();
+  await expect(page.getByRole('dialog')).toContainText('1 of 3');
+  await page.getByRole('button', { name: 'Caption / date' }).click();
+  await page.fill('#lb-caption', 'Oldest');
+  await page.fill('#lb-date', '2019-01-01');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByRole('dialog')).toContainText('Oldest');
+  await expect(page.getByRole('dialog')).toContainText('3 of 3'); // the viewer followed the photograph to its new place
+  await page.getByRole('button', { name: 'Remove', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Remove', exact: true }).click();
+  await expect(page.locator('.phgrid .ph')).toHaveCount(2);
+  await expect(page.locator('.phgrid .pd', { hasText: '2019-01-01' })).toHaveCount(0);
+  await expect(page.locator('.toast')).toContainText('Photograph removed');
+  await page.locator('.toast .undo').click();
+  await expect(page.locator('.phgrid .ph')).toHaveCount(3);
+  await expect(page.locator('.phgrid .pd', { hasText: '2019-01-01' })).toHaveCount(1);
+  await page.reload();
+  await expect(page.locator('.phgrid .ph')).toHaveCount(3); // the pixels came back with the record
+  await page.locator('.phgrid .ph').last().click();
+  await expect(page.locator('.stage img')).toBeVisible();
+  await expect(page.getByRole('dialog')).toContainText('Oldest');
+  expect(acc).toMatch(/\d{4}-\d{4}/);
+});
+
+test('round twenty-nine: a potting is judged by what was in the pot on its day, a count cannot go if a later potting rested on it, and an edit to the medium alone is not refused for a stored date', async ({ page }) => {
+  await page.goto('/propagation/new');
+  await page.selectOption('#s-method', 'seed');
+  await page.fill('#species-name', 'Copiapoa cinerea');
+  await page.locator('#species-name').blur();
+  await page.fill('#s-count', '10');
+  const day = (back: number) => new Date(Date.now() - back * 86_400_000).toISOString().slice(0, 10);
+  await page.fill('#s-date', day(30));
+  await page.getByRole('button', { name: 'Start batch' }).click();
+  await expect(page).toHaveURL(/\/propagation\/S\d{4}-\d{3}$/);
+  // 1 up on day −20, 8 up on day −5
+  await page.fill('#g-date', day(20));
+  await page.fill('#g-n', '1');
+  await page.getByRole('button', { name: 'Record count' }).click();
+  await expect(page.getByText('10%')).toBeVisible();
+  await page.fill('#g-date', day(5));
+  await page.fill('#g-n', '8');
+  await page.getByRole('button', { name: 'Record count' }).click();
+  await expect(page.getByText('80%')).toBeVisible();
+  // potting 2 dated day −10: only 1 was up then (round twenty-nine, 5)
+  await page.getByRole('button', { name: 'Pot up…' }).click();
+  await page.fill('#p-n', '2');
+  await page.fill('#p-date', day(10));
+  await page.getByRole('button', { name: 'Pot up 2' }).click();
+  await expect(page.locator('form', { has: page.locator('#p-n') })).toContainText(`Only 1 was in the pot on ${day(10)}`);
+  await page.fill('#p-n', '1');
+  await page.getByRole('button', { name: 'Pot up 1' }).click();
+  await expect(page.locator('.notice', { hasText: /Potted up 1:/ })).toBeVisible();
+  // the day −20 count cannot go: the potting on day −10 rests on it, whatever the totals say
+  const row = page.locator('.tl .tlrow', { hasText: day(20) }).first();
+  await expect(row).toContainText('kept: the potted plants rest on it');
+  // an edit to the medium alone, on a batch whose stored date is fine, saves; the check reads only what was typed
+  await page.getByRole('button', { name: 'Edit' }).click();
+  await page.fill('#se-medium', 'grit');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.locator('#se-msg')).toHaveCount(0);
+  await expect(page.getByText('grit')).toBeVisible();
+});

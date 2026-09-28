@@ -8,8 +8,17 @@
   import PhotoImg from './PhotoImg.svelte';
   import type { Photo } from '$lib/db/types';
 
+  import { toast } from './toast.svelte';
   let { photos, index = $bindable(0), acc = null, onclose }: { photos: Photo[]; index?: number; acc?: string | null; onclose: () => void } = $props();
-  const p = $derived(photos[index]);
+  // The viewer holds the photograph by id, not by its place in the list: saving a date re-sorts the list, and a viewer
+  // on `photos[index]` would then be showing, and removing, a neighbour (round twenty-nine, 1). `index` follows the id.
+  // svelte-ignore state_referenced_locally
+  let id = $state<string | null>(photos[index]?.id ?? null); // the initial value on purpose: the id is set once from where the viewer opened, and follows the arrows from then on
+  const p = $derived(photos.find((x) => x.id === id) ?? photos[index]);
+  $effect(() => {
+    const i = photos.findIndex((x) => x.id === id);
+    if (i >= 0 && i !== index) index = i;
+  });
   const isCover = $derived(!!acc && collection.accession(acc)?.cover === p?.id);
   let editing = $state(false);
   let caption = $state('');
@@ -47,6 +56,7 @@
   const go = (n: number) => {
     if (!photos.length) return;
     index = (index + n + photos.length) % photos.length;
+    id = photos[index]?.id ?? null;
   };
   function key(e: KeyboardEvent) {
     if (editing) return;
@@ -74,12 +84,12 @@
     await collection.setCover(acc, isCover ? null : p.id);
   }
   async function remove() {
-    const id = p.id;
-    const wasLast = photos.length === 1;
-    await collection.removePhoto(id);
-    if (wasLast) onclose();
-    else if (index >= photos.length - 1) index = Math.max(0, photos.length - 2);
+    const undo = await collection.removePhoto(p.id);
     confirming = false;
+    // The viewer closes on a removal: the Undo below sits on the page, which this modal keeps inert while it is open,
+    // and the grid is where the gap shows (round twenty-nine, 1). The removal is one tap; the way back is one too.
+    onclose();
+    toast.show('Photograph removed.', 8000, { label: 'Undo', run: () => { void undo(); } });
   }
 </script>
 

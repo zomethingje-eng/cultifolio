@@ -343,3 +343,19 @@ describe('/about/formats is enough to decrypt a vault, and says what the code do
     expect(doc.alphabet).toBe(B32);
   });
 });
+
+describe('the log refuses the words the types do not know (round twenty-nine, 13)', () => {
+  it('FIELD_ENUMS is the unions in db/types.ts and core/names.ts, and FIELD_TYPES names every field of every interface', async () => {
+    const { FIELD_ENUMS, FIELD_TYPES } = await import('$core/log');
+    expect(FIELD_ENUMS.accession!.status).toEqual(codeUnion('AccStatus'));
+    expect(FIELD_ENUMS.accession!.provenance).toEqual(codeUnion('Provenance'));
+    expect(FIELD_ENUMS.sowing!.provenance).toEqual(codeUnion('Provenance'));
+    expect(FIELD_ENUMS.accession!.nameKind).toEqual(codeUnion('NameKind', namesSrc));
+    expect(FIELD_ENUMS.sowing!.nameKind).toEqual(codeUnion('NameKind', namesSrc));
+    expect(FIELD_ENUMS.sowing!.status).toEqual(codeUnion('SowingStatus'));
+    expect(FIELD_ENUMS.sowing!.method).toEqual(codeUnion('PropMethod'));
+    expect(FIELD_ENUMS.photo!.dFrom).toEqual(codeUnion('PhotoDateFrom'));
+    expect(FIELD_ENUMS.location!.type).toEqual(codeUnion('LocationKind'));
+    for (const [kind, iface] of [['accession', 'Accession'], ['sowing', 'Sowing'], ['location', 'Location'], ['event', 'PlantEvent'], ['photo', 'Photo'], ['taxon', 'Taxon']] as const) expect(Object.keys(FIELD_TYPES[kind]).sort()).toEqual(codeFields(iface).sort());
+  });
+});

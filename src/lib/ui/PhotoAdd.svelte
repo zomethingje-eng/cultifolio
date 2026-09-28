@@ -5,10 +5,11 @@
    * original is not kept. Several at once are fine.
    */
   import { collection } from '$lib/db/collection.svelte';
+  import { storageErrorText } from '$lib/db/vault';
   import { processImage, today } from '$lib/photo/process';
   import type { Photo } from '$lib/db/types';
 
-  let { acc = null, sowing = null, id = 'photo', compact = false, tile = false, onadded }: { acc?: string | null; sowing?: string | null; id?: string; compact?: boolean; tile?: boolean; onadded?: (p: Photo[]) => void } = $props();
+  let { acc = null, sowing = null, id = 'photo', compact = false, tile = false, onadded, onstart }: { acc?: string | null; sowing?: string | null; id?: string; compact?: boolean; tile?: boolean; onadded?: (p: Photo[]) => void; onstart?: () => void } = $props();
   let busy = $state<string | null>(null);
   let error = $state<string | null>(null);
   let done = $state(0);
@@ -18,6 +19,7 @@
     const files = Array.from(input.files ?? []);
     input.value = '';
     if (!files.length) return;
+    onstart?.(); // the page keeps this control on screen from here: with several files, the first one stored used to unmount it mid-way, taking "Storing 2 of 5" and any error with it (round twenty-nine, 12)
     error = null;
     const added: Photo[] = [];
     for (let i = 0; i < files.length; i++) {
@@ -26,7 +28,9 @@
         const r = await processImage(files[i]);
         added.push(await collection.addPhoto({ acc, sowing, d: r.taken ?? today(), dFrom: r.taken ? 'exif' : 'added', caption: null, w: r.w, h: r.h, bytes: r.bytes, sha: r.sha, blob: r.blob, thumb: r.thumb }));
       } catch (err) {
-        error = err instanceof Error ? err.message : 'That file could not be read.';
+        // A full device is said as such, with the figure; Chrome's quota error has no message of its own (round twenty-nine, 4).
+        error = (await storageErrorText(err)) ?? (err instanceof Error && err.message ? err.message : 'That file could not be read.');
+        if (await storageErrorText(err)) break; // the next files would fail the same way
       }
     }
     busy = null;

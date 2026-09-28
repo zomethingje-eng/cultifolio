@@ -12,7 +12,7 @@ export const DUE_DAYS = 21;
 const yearOf = (d?: string | null): number | undefined => (d && /^\d{4}-/.test(d) ? Number(d.slice(0, 4)) : undefined);
 import { Clock, hlcDecode, hlcEncode, hlcCompare, hlcAfter } from '$core/hlc';
 import { tag36 } from '$core/tag';
-import { apply, diff, validateChanges, key as recKey, type Change, type Kind, type Record_, type State, hlcWall, revivedByImport } from '$core/log';
+import { apply, diff, readChanges, key as recKey, type Change, type Kind, type Record_, type State, hlcWall, revivedByImport } from '$core/log';
 import { nextAccession, DEFAULT_SCHEME, type NumberingScheme } from '$core/accession';
 import { allChanges, appendChanges, appendChangesClaiming, onOtherTabWrite, deviceId, requestPersistence, getMeta, setMeta, putPhotoBlobs, getPhotoBlobs, deletePhotoBlobs, holdVault, type NumberKind } from './vault';
 import type { Accession, PlantEvent, Taxon, Location, Sowing, Provenance, Photo } from './types';
@@ -595,14 +595,23 @@ class Collection {
     });
     return rec;
   }
-  async removePhoto(id: string): Promise<void> {
+  /**
+   * Remove a photograph and return the way back: the pixels are read before they are deleted and held by the returned
+   * function, so an Undo within the toast's life puts the record, the cover and the pixels back (round twenty-nine, 1).
+   */
+  async removePhoto(id: string): Promise<() => Promise<void>> {
     const p = this.photo(id);
+    const wasCover = !!p?.acc && this.accession(p.acc)?.cover === id;
+    const blobs = await getPhotoBlobs(id);
     await this.remove('photo', id);
-    if (p?.acc) {
-      const a = this.accession(p.acc);
-      if (a?.cover === id) await this.put('accession', a.id, { cover: null });
-    }
+    if (p?.acc && wasCover) await this.put('accession', p.acc, { cover: null });
     await deletePhotoBlobs(id);
+    this.urls.delete(id);
+    return async () => {
+      if (blobs) await putPhotoBlobs(blobs);
+      await this.restore('photo', id);
+      if (p?.acc && wasCover) await this.put('accession', p.acc, { cover: id });
+    };
   }
   async setCover(acc: string, photoId: string | null): Promise<void> {
     await this.put('accession', acc, { cover: photoId });
@@ -797,6 +806,9 @@ class Collection {
 
   async restore(kind: Kind, id: string): Promise<void> {
     await this.commit([{ t: this.tick(), kind, id, field: '_deleted', value: false }]);
+    // A plant brought back may share its number with one that arrived while it was removed (another device minted the
+    // same number offline; the repair skips removed plants), so the repair runs again now (round twenty-nine, 3).
+    if (kind === 'accession') await this.repairNumbers();
   }
 
   /** The next number, for the year of `acquired` when given: a plant acquired on 31 December filed at 00:05 is a 2026 plant, and the form's preview and the number it gets agree (round twenty-five, 4). */
@@ -913,8 +925,12 @@ class Collection {
    * applied, `lastWriteError` says so, and the repair runs again on the next
    * ingest.
    */
-  async ingest(changes: Change[], source: 'import' | 'server' = 'import', opts: { repair?: boolean; requireKey?: string } = {}): Promise<void> {
-    validateChanges(changes);
+  async ingest(incoming: Change[], source: 'import' | 'server' = 'import', opts: { repair?: boolean; requireKey?: string } = {}): Promise<void> {
+    // Mended where an older build wrote a number for text; a change of a type its field never takes is left out and
+    // said, and the rest are folded, rather than the file or the batch refused whole (round twenty-nine, 2).
+    const { changes, dropped } = readChanges(incoming);
+    if (dropped.length) console.warn(`${dropped.length} change${dropped.length === 1 ? '' : 's'} left out of this ${source === 'server' ? 'batch' : 'file'}:`, dropped.slice(0, 5));
+    if (!changes.length) return;
     for (const c of changes) this.clock?.observe(c.t);
     const overwritten = this.textAboutToBeReplaced(changes); // a pull, a restore or an import alike: a backup file is the one channel two unsynced devices share
     await this.commit(changes, source, opts.requireKey);

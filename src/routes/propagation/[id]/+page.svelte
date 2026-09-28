@@ -61,11 +61,23 @@
     if ((what === 'potting' || what === 'loss') && st.firstUp && d < st.firstUp) return `${what[0].toUpperCase()}${what.slice(1)} dated ${d} is before the first count that found anything ${upWord}, on ${st.firstUp}.`;
     return null;
   };
-  /** A count can go only if what is left still covers what was potted and lost: the batch never says 0 up and 2 potted. */
-  const canDropCount = (eventId: string): boolean => {
-    const rest = collection.events(id).filter((e) => e.t === 'germinate' && e.id !== eventId).map((e) => e.n ?? 0);
-    return (rest.length ? Math.max(...rest) : 0) >= st.potted + st.lost;
+  /**
+   * What was in the pot on a day: the latest count up to that day, less what had been potted or lost by then. A count
+   * on the same day comes first. `without` leaves one count out, for the question "could this count go?" (round twenty-nine, 5).
+   */
+  const inPotOn = (d: string, without?: string): number => {
+    const ev = collection.events(id).filter((e) => e.id !== without && e.d <= d);
+    const counts = ev.filter((e) => e.t === 'germinate').map((e) => e.n ?? 0);
+    const up = counts.length ? Math.max(...counts) : 0;
+    return up - ev.filter((e) => e.t === 'potup' || e.t === 'loss').reduce((n, e) => n + (e.n ?? 0), 0);
   };
+  /** A potting or a loss of n on day d must fit what was in the pot that day, not only what is in it now (round twenty-nine, 5). */
+  const fitsOn = (d: string, n: number, what: string): string => {
+    const had = inPotOn(d);
+    return n > had ? `Only ${Math.max(0, had)} ${had === 1 ? 'was' : 'were'} in the pot on ${d} by the counts recorded; ${what} ${n} cannot be dated then.` : '';
+  };
+  /** A count can go only if, on every day something was potted or lost, the counts that remain still cover it: the batch never says 0 up and 2 potted (round twenty-nine, 5: judged by date, not by totals). */
+  const canDropCount = (eventId: string): boolean => collection.events(id).filter((e) => e.t === 'potup' || e.t === 'loss').every((e) => inPotOn(e.d, eventId) >= 0);
   /* germination count */
   let gd = $state(day.current);
   let gn = $state<number | '' | null>(''); // null once a typed figure is cleared
@@ -90,7 +102,7 @@
     e.preventDefault();
     if (ln == null || ln === '' || ln < 1) return;
     const n = Number(ln);
-    lmsg = dateProblem(ld, 'loss') ?? (n > st.remaining ? (st.remaining ? `Only ${st.remaining} in the pot to lose.` : `Nothing in the pot to lose: ${countFirst.toLowerCase()}.`) : '');
+    lmsg = dateProblem(ld, 'loss') ?? (n > st.remaining ? (st.remaining ? `Only ${st.remaining} in the pot to lose.` : `Nothing in the pot to lose: ${countFirst.toLowerCase()}.`) : fitsOn(ld, n, 'losing'));
     if (lmsg) return;
     await collection.addEvent({ acc: id, d: ld, t: 'loss', n, cause: lcause.trim() || null });
     toast.show(`Recorded: ${n} lost.`);
@@ -109,7 +121,7 @@
     e.preventDefault();
     const n = Math.floor(numberOrNull(pn) ?? 0); // whole plants: a cleared box or 0.5 is refused with a sentence, never a silent return (round fifteen, 10)
     // A number is never reused, so a slip here would burn numbers for good: the pot decides how many can be potted.
-    pmsg = n < 1 ? 'Say how many to pot up: each gets a number that is never reused.' : (dateProblem(pd, 'potting') ?? (st.remaining < 1 ? `Nothing in the pot to pot up: ${countFirst.toLowerCase()}.` : n > st.remaining ? `Only ${st.remaining} in the pot; each potted plant gets a number that is never reused.` : ''));
+    pmsg = n < 1 ? 'Say how many to pot up: each gets a number that is never reused.' : (dateProblem(pd, 'potting') ?? (st.remaining < 1 ? `Nothing in the pot to pot up: ${countFirst.toLowerCase()}.` : n > st.remaining ? `Only ${st.remaining} in the pot; each potted plant gets a number that is never reused.` : fitsOn(pd, n, 'potting up')));
     if (pmsg) return;
     pottingBusy = true;
     try {
@@ -179,12 +191,15 @@
   /** The edit form is checked as the log forms are: a start date in the future, or after a line already on the log, and a started count below what has been counted are refused with a sentence (round twenty-eight, 5). */
   const editProblem = (): string => {
     if (!s) return '';
+    // Only what this edit typed is judged, as on the plant form: a batch whose stored date or count is already wrong (an older file) can still have its medium edited, and the wrong field corrected when the grower gets to it (round twenty-nine, 5).
     const sown = f.sown || s.sown;
-    if (sown > today()) return `The ${m.veg ? 'start' : 'sowing'} date ${sown} is in the future.`;
-    const first = events.reduce<string | null>((d, e) => (!d || e.d < d ? e.d : d), null);
-    if (first && sown > first) return `The ${m.veg ? 'start' : 'sowing'} date ${sown} is after the batch's first log entry on ${first}.`;
+    if (sown !== s.sown) {
+      if (sown > today()) return `The ${m.veg ? 'start' : 'sowing'} date ${sown} is in the future.`;
+      const first = events.reduce<string | null>((d, e) => (!d || e.d < d ? e.d : d), null);
+      if (first && sown > first) return `The ${m.veg ? 'start' : 'sowing'} date ${sown} is after the batch's first log entry on ${first}.`;
+    }
     const count = Math.max(1, Number(f.count) || s.count);
-    if (count < st.germinated) return `${count} started is fewer than the ${st.germinated} already counted ${upWord}.`;
+    if (count !== s.count && count < st.germinated) return `${count} started is fewer than the ${st.germinated} already counted ${upWord}.`;
     return '';
   };
   async function saveEdit() {

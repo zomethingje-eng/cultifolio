@@ -326,7 +326,7 @@
     await collection.remove('accession', id);
     goto('/plants');
     // The removal is one tap; the way back is one too (round twenty-six, 5). The record never left the log.
-    toast.show(`${no} removed.`, 8000, { label: 'Undo', run: () => { void collection.restore('accession', id).then(() => goto(`/plants/${no}`)); } });
+    toast.show(`${no} removed.`, 8000, { label: 'Undo', run: () => { void collection.restore('accession', id).then(() => goto(`/plants/${accNo(collection.accession(id) ?? { id })}`)); } }); // the number it holds after the restore: a repair on restore may have renumbered it (round twenty-nine, 3)
   }
   async function restoreRemoved() {
     const r = collection.removedAccession(param);
@@ -514,7 +514,7 @@
 
   <div class="secrule" id="photos"><h2>Photographs</h2><div class="line"></div><span class="n">{photos.length ? `${photos.length}` : ''}</span></div>
   {#if adding || !photos.length}
-    <div class="cult addrow"><PhotoAdd acc={id} id="acc-photo" onadded={() => (adding = true)} /></div>
+    <div class="cult addrow"><PhotoAdd acc={id} id="acc-photo" onstart={() => (adding = true)} onadded={() => (adding = true)} /></div>
   {/if}
   {#if photos.length}
     <div class="phgrid">

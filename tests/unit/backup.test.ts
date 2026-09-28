@@ -141,6 +141,32 @@ describe('batches.csv', () => {
   });
 });
 
+describe('old data in a backup is mended, not refused (round twenty-nine, 2)', () => {
+  it('a numeric price becomes its text; a value of a type its field never takes is left out and named; the rest is read', async () => {
+    const rows = [...log, c(30, 'accession', '2026-0001', 'price', 12), c(31, 'accession', '2026-0001', 'notes', { a: 1 })];
+    const r = await readBackup(new TextEncoder().encode(JSON.stringify({ format: 'cultifolio-changes', v: 1, changes: rows })));
+    expect(r.changes).toHaveLength(rows.length - 1);
+    expect(r.changes.find((x) => x.field === 'price')?.value).toBe('12');
+    expect(r.unreadable).toEqual(['change 18: notes of a accession must be a string, not {"a":1}']);
+  });
+});
+
+describe('a zip made to inflate past what a backup can hold is refused at its table of contents (round twenty-nine, 10)', () => {
+  it('an entry declared over the cap, or under a name a backup never has, is not inflated', async () => {
+    const big = new Uint8Array(4 * 1024 * 1024); // deflates to a few kilobytes; declared size is what the filter reads
+    const zipped = zipSync({ 'manifest.json': new TextEncoder().encode('{}'), 'changes.json': new TextEncoder().encode('[]'), 'evil.bin': big, 'photos/huge.jpg': new Uint8Array(0) });
+    await expect(readBackup(zipped)).rejects.toThrow(/not in a shape/); // the two unknown entries were skipped and the manifest is then read as usual
+  });
+  it('a numeric cell is written as a number, a text cell beginning like a formula is made text, after spaces and in full width too', () => {
+    const rows = [...log, c(30, 'sowing', 's1', 'no', 'S2026-001'), c(31, 'sowing', 's1', 'taxonName', 'Aloe'), c(32, 'sowing', 's1', 'method', 'seed'), c(33, 'sowing', 's1', 'sown', '2026-03-01'), c(34, 'sowing', 's1', 'count', 3), c(35, 'sowing', 's1', 'status', 'active'), c(36, 'sowing', 's1', 'bottomHeatC', -5), c(37, 'sowing', 's1', 'notes', '  =HYPERLINK("x")'), c(38, 'sowing', 's1', 'medium', '＝pumice')];
+    const { state } = materialise(rows);
+    const line = batchesCsv(live<Sowing & Record_>(state, 'sowing'), state).slice(1).split('\r\n')[1];
+    expect(line).toContain(',-5,');
+    expect(line).toContain(",\"'  =HYPERLINK(\"\"x\"\")\"");
+    expect(line).toContain(",'＝pumice,");
+  });
+});
+
 describe('a backup is checked before anything is stored', () => {
   const jpeg = (n: number) => new Uint8Array([0xff, 0xd8, 0xff, 0xe0, ...new Array(n).fill(0)]);
   it('a change whose timestamp is not an HLC is refused with its position', async () => {

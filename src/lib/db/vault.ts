@@ -4,7 +4,7 @@
  * changes through the same door local edits use.
  */
 import { openDB, deleteDB, type IDBPDatabase, type DBSchema, type IDBPTransaction } from 'idb';
-import type { Change } from '$core/log';
+import { mendChange, type Change } from '$core/log';
 
 /** The pixels for one photo record; metadata is in the change log. */
 export interface PhotoBlobs {
@@ -229,9 +229,30 @@ async function copyStagingIn(live: IDBPDatabase<VaultDB>): Promise<void> {
   await deleteDB(STAGING_NAME);
 }
 
+/**
+ * A storage failure in words. Chrome's QuotaExceededError carries an empty message, so a page that showed
+ * `err.message` said nothing at all when the device was full (round twenty-nine, 4). The figure is what the browser
+ * reports as in use, when it reports one.
+ */
+export async function storageErrorText(err: unknown): Promise<string | null> {
+  const name = err instanceof Error ? err.name : '';
+  const msg = err instanceof Error ? err.message : String(err ?? '');
+  if (!/quota|QuotaExceeded|NS_ERROR_DOM_QUOTA|out of space|disk is full/i.test(name + ' ' + msg)) return null;
+  let used = '';
+  try {
+    const est = await navigator.storage?.estimate?.();
+    if (est?.usage != null) used = `: ${Math.round(est.usage / 1048576)} MB in use${est.quota ? ` of the ${Math.round(est.quota / 1048576)} MB the browser allows this site` : ''}`;
+  } catch {
+    /* no estimate: the sentence stands without a figure */
+  }
+  return `This device is out of space for the collection${used}. Free some space, or back up and remove what you can spare.`;
+}
+
 export async function allChanges(): Promise<Change[]> {
   const db = await openVault();
-  return db.getAll('changes');
+  // Mended as they are read: a value an older build wrote with the wrong type (a numeric price from a v2 file) is put
+  // right for the fold, for a backup and for a push alike, so it stops travelling (round twenty-nine, 2).
+  return (await db.getAll('changes')).map(mendChange);
 }
 
 /* ---- numbers, issued once ----

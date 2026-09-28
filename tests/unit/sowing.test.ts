@@ -323,6 +323,11 @@ describe('notesBase, the gaps (round twenty-six, 2)', () => {
     // another tab's change stamped between the pair (round twenty-eight, 0): the cut still moves before the notes
     const mixed = [{ t: w('tab1'), field: 'price' }, { t: w('tab1'), field: 'notes', kind: 'accession', id: 'r1' }, { t: w('tab2'), field: 'price', kind: 'accession', id: 'r2' }, { t: w('tab1'), field: 'notesBase', kind: 'accession', id: 'r1' }] as never[];
     expect(cutBefore(mixed, 3)).toBe(1);
+    // a cut that falls between the pair without landing on the base itself moves too (round twenty-nine, 9)
+    expect(cutBefore(mixed, 2)).toBe(1);
+    // a pair at the very start of the batch cannot be cut before, so the cut goes after it
+    const first = [{ t: w('tab1'), field: 'notes', kind: 'accession', id: 'r1' }, { t: w('tab1'), field: 'notesBase', kind: 'accession', id: 'r1' }, { t: w('tab1'), field: 'price' }, { t: w('tab1'), field: 'acc' }] as never[];
+    expect(cutBefore(first, 1)).toBe(2);
     // the other tab's own edit of the same notes between them: not this pair, the cut stays
     const other = [{ t: w('tab1'), field: 'price' }, { t: w('tab1'), field: 'notes', kind: 'accession', id: 'r1' }, { t: w('tab2'), field: 'notes', kind: 'accession', id: 'r1' }, { t: w('tab1'), field: 'notesBase', kind: 'accession', id: 'r1' }] as never[];
     expect(cutBefore(other, 3)).toBe(3);

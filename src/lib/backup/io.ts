@@ -1,6 +1,6 @@
 /** Browser wiring for backups: the vault in, a download out, and a file back in. */
 import { collection } from '$lib/db/collection.svelte';
-import { getPhotoBlobs, putPhotoBlobs, photoBlobIds, getMeta, openStaging } from '$lib/db/vault';
+import { getPhotoBlobs, putPhotoBlobs, deletePhotoBlobs, photoBlobIds, getMeta, openStaging } from '$lib/db/vault';
 import { NUMBERING_SETTING } from '$lib/db/types';
 import { sync } from '$lib/sync/engine.svelte';
 import { DEFAULT_SCHEME, type NumberingScheme } from '$core/accession';
@@ -33,7 +33,7 @@ export async function prepareBackup(onProgress?: (done: number, total: number) =
       return { id, full: new Uint8Array(await b.blob.arrayBuffer()), thumb: new Uint8Array(await b.thumb.arrayBuffer()) };
     }
   });
-  return { name: backupName(), blob: new Blob([built.bytes as BlobPart], { type: 'application/zip' }), bytes: built.bytes.length, photosMissing: built.photosMissing };
+  return { name: backupName(), blob: new Blob(built.parts as BlobPart[], { type: 'application/zip' }), bytes: built.size, photosMissing: built.photosMissing };
 }
 
 export function downloadBackup(p: PreparedBackup): void {
@@ -103,14 +103,24 @@ export async function restoreBackup(o: Opened, mode: 'merge' | 'replace', onProg
   const have = new Set(await photoBlobIds());
   const ids = o.file.photoIds.filter((id) => !have.has(id));
   let photos = 0;
-  for (let i = 0; i < ids.length; i++) {
-    const p = o.file.readPhoto(ids[i]);
-    if (!p) continue;
-    await putPhotoBlobs({ id: p.id, blob: new Blob([p.full as BlobPart], { type: 'image/jpeg' }), thumb: new Blob([p.thumb as BlobPart], { type: 'image/jpeg' }) });
-    photos++;
-    onProgress?.(i + 1, ids.length);
+  // The pixels go in before the records that name them, so a reload between the two never shows a record with no
+  // photograph. If the device fills up part way, the pixels written so far are taken out again: without their records
+  // they would be bytes nothing can reach or remove (round twenty-nine, 4).
+  const written: string[] = [];
+  try {
+    for (let i = 0; i < ids.length; i++) {
+      const p = o.file.readPhoto(ids[i]);
+      if (!p) continue;
+      await putPhotoBlobs({ id: p.id, blob: new Blob([p.full as BlobPart], { type: 'image/jpeg' }), thumb: new Blob([p.thumb as BlobPart], { type: 'image/jpeg' }) });
+      written.push(p.id);
+      photos++;
+      onProgress?.(i + 1, ids.length);
+    }
+    await collection.ingest(changes);
+  } catch (e) {
+    for (const id of written) await deletePhotoBlobs(id).catch(() => {});
+    throw e;
   }
-  await collection.ingest(changes);
   let schemeRestored: NumberingScheme | null = null;
   const fileScheme = o.file.manifest?.scheme;
   const fileHasSetting = o.file.changes.some((c) => c.kind === 'setting' && c.id === NUMBERING_SETTING);

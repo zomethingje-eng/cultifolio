@@ -10,7 +10,7 @@
  */
 import type { Box } from '$core/geo';
 
-const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); // the title lands in an attribute too (round twenty-nine, 10)
 
 function boxRects(boxes: Box[], cls: string): string {
   return boxes

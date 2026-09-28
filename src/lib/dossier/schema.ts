@@ -235,8 +235,22 @@ export type Climate = v.InferOutput<typeof Climate>;
 export type Upstream = v.InferOutput<typeof Upstream>;
 export type Box = v.InferOutput<typeof BoxSchema>;
 
+/** A URL the page may render as a link: web addresses only. The CSP already blocks `javascript:`; this keeps a `data:` or a relative path out of an href too (round twenty-nine, 10). */
+const webUrl = (u: string | undefined): string | undefined => (u && /^https?:\/\//i.test(u) ? u : undefined);
+
+/** Every address in a dossier that a page turns into a link, scrubbed to web addresses; a photograph whose own address is not one is dropped. */
+export function safeUrls(d: Dossier): Dossier {
+  return {
+    ...d,
+    summary: d.summary ? { ...d.summary, url: webUrl(d.summary.url) ?? '' } : d.summary,
+    photos: d.photos.filter((p) => webUrl(p.url) && webUrl(p.thumb)).map((p) => ({ ...p, page: webUrl(p.page) })),
+    literature: d.literature.map((p) => ({ ...p, url: webUrl(p.url) })),
+    links: Object.fromEntries(Object.entries(d.links).filter(([, u]) => webUrl(u)))
+  };
+}
+
 export function parseDossier(json: unknown): Dossier {
-  return v.parse(Dossier, json);
+  return safeUrls(v.parse(Dossier, json));
 }
 
 export function dossierPath(key: number): string {

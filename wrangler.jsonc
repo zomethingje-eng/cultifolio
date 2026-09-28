@@ -13,7 +13,7 @@
 		"binding": "ASSETS"
 	},
 	"observability": {
-		"enabled": true
+		"enabled": false
 	},
 	// SYNC_OPEN must be exactly "1" for any vault to sync without a licence; unset or anything else closes it.
 	"vars": {

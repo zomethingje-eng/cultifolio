@@ -53,6 +53,11 @@ if (!skip.has('names')) {
   const a = await get(q);
   if (a.status !== 200) fail(`${q} first answer`, a);
   if (!new RegExp(genus, 'i').test(a.text)) fail(`${q} did not name ${genus}`, a);
+  // A fixed case as well as the rotating one: "gaster" unfiltered is twelve weevils, fishes and fungi and no Gasteria, so
+  // this proves the plants-only filter is on the deployed Worker, whatever the minute (round twenty-nine, R2-2).
+  const g = await get('/api/names?q=gaster');
+  if (g.status !== 200) fail('/api/names?q=gaster', g);
+  if (!/Gasteria/.test(g.text) || /Curculionidae|Gasterosteidae|Scombridae/.test(g.text)) fail('/api/names?q=gaster is not plants only: the deployed Worker asks GBIF without the Plantae filter', g);
   const b = await get(q);
   if (b.status !== 200) fail(`${q} second answer (the edge-cached one)`, b);
   headersOn(b, q);
@@ -60,7 +65,7 @@ if (!skip.has('names')) {
   if (c.status !== 200) fail(`${q} third answer`, c);
   const hit = [b, c].some((r) => /^HIT$/i.test(r.h('cf-cache-status')));
   if (!hit) console.warn(`  note  ${q}: no answer said CF-Cache-Status HIT (b: "${b.h('cf-cache-status')}", c: "${c.h('cf-cache-status')}"); the edge may be cold, not a failure`);
-  ok(`names: 200, 200, 200${hit ? ', edge HIT' : ''}`);
+  ok(`names: 200, 200, 200${hit ? ', edge HIT' : ''}; gaster is plants only`);
 }
 
 // Headers on a prerendered page (from `_headers`), a dynamic page (from the hook), the offline page and an API route.

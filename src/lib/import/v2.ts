@@ -129,17 +129,21 @@ export function importV2(json: unknown, opts: ImportOpts = {}): { changes: Chang
     return true;
   };
 
+  // A v2 file's text fields are taken as text and a number typed where text belongs (a price of 12, a bench id of 3) is
+  // written as text; anything else is dropped, so a stray value can never reach the log with a type the fold's readers
+  // do not expect, nor throw here (round twenty-eight, 0; round twenty-nine, 8: every field, not most).
+  const text = (v: unknown): string | null => (typeof v === 'string' ? v : typeof v === 'number' && Number.isFinite(v) ? String(v) : null);
   const taxonNames = new Map<string, string>();
   if (overlay)
     for (const [id, o] of Object.entries(overlay)) {
       if (!o || typeof o !== 'object') continue;
-      const name = o.name ?? id;
+      const name = text(o.name) ?? id;
       taxonNames.set(id, name);
       const slug = slugify(name);
       if (here('taxon', slug)) continue;
       at(modTime((o as { m?: unknown }).m, now) ?? base, 'taxon', slug);
       const gk = o.gk ?? opts.summaries?.[id]?.gk ?? null;
-      push('taxon', slug, { name, gbifKey: gk, myNotes: o.myNotes ?? null, removed: o.removed ?? null });
+      push('taxon', slug, { name, gbifKey: typeof gk === 'number' ? gk : null, myNotes: text(o.myNotes), removed: typeof o.removed === 'boolean' ? o.removed : null });
       report.taxa++;
     }
 
@@ -147,14 +151,16 @@ export function importV2(json: unknown, opts: ImportOpts = {}): { changes: Chang
   const benchByRef = new Map<string, string>();
   if (col?.benches) {
     const benches = Array.isArray(col.benches) ? (col.benches as V2Bench[]) : Object.values(col.benches);
-    for (const b of benches) {
-      if (!b?.id) continue;
-      const name = b.name ?? b.id;
+    for (const b0 of benches) {
+      const bid = b0 && typeof b0 === 'object' ? text(b0.id) : null;
+      if (!bid) continue;
+      const b = { ...b0, id: bid };
+      const name = text(b.name) ?? b.id;
       const lid = 'l-v2-' + slugify(name).slice(0, 24) + '-' + slugify(b.id).slice(0, 8);
       if (here('location', lid)) continue;
       at(modTime((b as { m?: unknown }).m, now) ?? base, 'location', lid);
       const outdoor = /out|garden|balcon|patio|yard/i.test(`${b.where ?? ''}`);
-      push('location', lid, { name, parentId: null, type: outdoor ? 'outdoor' : 'bench', indoor: outdoor ? false : b.where ? true : null, floorC: typeof b.floor === 'number' ? b.floor : null, ppfd: typeof b.ppfd === 'number' ? b.ppfd : null, lightHours: typeof b.hours === 'number' ? b.hours : null, lat: typeof b.lat === 'number' ? b.lat : null, lon: typeof b.lon === 'number' ? b.lon : null, notes: b.notes ?? null });
+      push('location', lid, { name, parentId: null, type: outdoor ? 'outdoor' : 'bench', indoor: outdoor ? false : b.where ? true : null, floorC: typeof b.floor === 'number' ? b.floor : null, ppfd: typeof b.ppfd === 'number' ? b.ppfd : null, lightHours: typeof b.hours === 'number' ? b.hours : null, lat: typeof b.lat === 'number' ? b.lat : null, lon: typeof b.lon === 'number' ? b.lon : null, notes: text(b.notes) });
       benchByRef.set(b.id, lid);
       benchByRef.set(name.toLowerCase(), lid);
       report.locations++;
@@ -179,7 +185,8 @@ export function importV2(json: unknown, opts: ImportOpts = {}): { changes: Chang
       const taxonId = str(w?.taxonId);
       const taxonName = (taxonId && taxonNames.get(taxonId)) || str(w?.name) || str(w?.taxon) || taxonId || 'Unknown';
       const count = num(w?.count) ?? num(w?.n) ?? num(w?.seeds) ?? num(w?.sownN) ?? 0;
-      const method = /cutting|offset|leaf|division|graft/i.test(String(w?.method ?? w?.type ?? '')) ? String(w?.method ?? w?.type).toLowerCase().replace(/s$/, '') : 'seed';
+      // The method word wherever it sits in v2's label: "Leaf cuttings" is leaf, "Offsets / pups" is offset (round twenty-nine, 13).
+      const method = /cutting|offset|leaf|division|graft|bulbil/i.exec(String(w?.method ?? w?.type ?? ''))?.[0].toLowerCase() ?? 'seed';
       const src = (w?.source ?? {}) as Record<string, unknown>;
       push('sowing', id, {
         taxonName,
@@ -190,7 +197,7 @@ export function importV2(json: unknown, opts: ImportOpts = {}): { changes: Chang
         count,
         sourceFrom: str(w?.from) ?? str(src.from) ?? null,
         sourceRef: str(w?.ref) ?? str(w?.lot) ?? str(src.ref) ?? null,
-        provenance: str(w?.provenance) ?? null,
+        provenance: ['wild', 'f1', 'fn', 'veg', 'unknown'].includes(str(w?.provenance) ?? '') ? str(w?.provenance) : null,
         medium: str(w?.medium) ?? str(w?.mix) ?? null,
         container: str(w?.container) ?? str(w?.pot) ?? null,
         treatment: str(w?.treatment) ?? str(w?.pretreat) ?? null,
@@ -216,9 +223,6 @@ export function importV2(json: unknown, opts: ImportOpts = {}): { changes: Chang
       }
     }
   }
-  // A v2 file's text fields are taken as text and a number typed where text belongs (a price of 12) is written as text;
-  // anything else is dropped, so a stray value can never reach the log with a type the fold's readers do not expect (round twenty-eight, 0).
-  const text = (v: unknown): string | null => (typeof v === 'string' ? v : typeof v === 'number' && Number.isFinite(v) ? String(v) : null);
   if (col?.accessions) {
     const list = Array.isArray(col.accessions) ? col.accessions : Object.values(col.accessions);
     const inFile = new Set<string>();
@@ -236,11 +240,11 @@ export function importV2(json: unknown, opts: ImportOpts = {}): { changes: Chang
       inFile.add(a.acc);
       if (here('accession', a.acc)) continue;
       at(modTime(a.m, now) ?? base, 'accession', a.acc); // the plant and its embedded events share the plant's modification time and writer
-      const taxonName = (a.taxonId && taxonNames.get(a.taxonId)) || a.nameAsReceived || a.taxonId || 'Unknown';
+      const taxonName = (typeof a.taxonId === 'string' && taxonNames.get(a.taxonId)) || text(a.nameAsReceived) || text(a.taxonId) || 'Unknown';
       const status = a.status === 'dead' ? 'dead' : a.status === 'archived' ? 'archived' : 'growing';
       push('accession', a.acc, {
         taxonName,
-        taxonKey: (a.taxonId && opts.summaries?.[a.taxonId]?.gk) ?? null,
+        taxonKey: (typeof a.taxonId === 'string' && opts.summaries?.[a.taxonId]?.gk) || null,
         nameAsReceived: text(a.nameAsReceived),
         fieldNumber: text(a.fieldNumber),
         provenance: ['wild', 'f1', 'fn', 'veg', 'unknown'].includes(a.provenance ?? '') ? a.provenance : null,
@@ -264,13 +268,13 @@ export function importV2(json: unknown, opts: ImportOpts = {}): { changes: Chang
       // skipped an earlier plant would otherwise give the same event a different id under the same stamp (round sixteen, 4).
       // Under a prefix no v2 id can have: v2's own ids are `e1`, `e2`…, and `e<n>` collided with them (round seventeen, 2).
       let ei = 0;
-      for (const e of a.events ?? []) {
-        if (!e?.d || !e?.t) continue;
+      for (const e of Array.isArray(a.events) ? a.events : []) {
+        if (!e || typeof e !== 'object' || !text(e.d) || typeof e.t !== 'string' || !e.t) continue;
         const measures: Record<string, number> = {};
         for (const k of MEASURE_KEYS) if (typeof e[k] === 'number') measures[k] = e[k] as number;
         push('event', e.id ? `v2-${a.acc}-${e.id}` : `v2-${a.acc}-#${ei++}`, {
           acc: a.acc,
-          d: e.d,
+          d: text(e.d),
           t: e.t,
           note: text(e.note),
           cause: text(e.cause),

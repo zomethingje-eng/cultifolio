@@ -43,14 +43,20 @@
 
   type Row = { key: number; canonicalName?: string; scientificName?: string; family?: string; rank?: string; status?: string };
   /** The name service's last answer, by the name asked: the exact-spelling check on blur asks the same question the search just asked, and reads this instead of sending it again (round twenty-eight, 14). */
-  let lastRows: { q: string; rows: Row[] } | null = null;
-  async function namesFor(q: string): Promise<Row[]> {
+  // The request itself is what is kept, not only its answer: a blur while the search's request is still in the air
+  // would otherwise ask the same question again (round twenty-nine, R2-3). A refused or failed request is forgotten, so
+  // the next asker tries again.
+  let lastRows: { q: string; rows: Promise<Row[]> } | null = null;
+  function namesFor(q: string): Promise<Row[]> {
     if (lastRows && lastRows.q === q) return lastRows.rows;
     // /api/names proxies GBIF's species/suggest (same JSON shape) from the Worker, so no name you type leaves this site from the browser.
-    const r = await fetch(`/api/names?q=${encodeURIComponent(q)}`);
-    if (!r.ok) throw new Error(String(r.status));
-    const rows = (await r.json()) as Row[];
-    lastRows = { q, rows };
+    const rows = fetch(`/api/names?q=${encodeURIComponent(q)}`).then(async (r) => {
+      if (!r.ok) throw new Error(String(r.status));
+      return (await r.json()) as Row[];
+    });
+    const entry = { q, rows };
+    lastRows = entry;
+    rows.catch(() => { if (lastRows === entry) lastRows = null; });
     return rows;
   }
 
