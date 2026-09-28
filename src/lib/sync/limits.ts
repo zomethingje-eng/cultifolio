@@ -18,5 +18,7 @@ export const batchName = (lastWall: number, device: string, fingerprint: string)
 export const BATCH_NAME = /^\d{13}-[0-9a-f]{4,6}-[a-z0-9]{1,16}(-[0-9a-f]{12})?$/;
 /** The plaintext a log batch seals: the format version, the pushing device and its changes. */
 export const logBatch = <C>(device: string, changes: C[]) => ({ v: 1, device, changes });
+/** The status each refusal answers with, named once so the formats page's figures are read from here (round twenty-six, 12). */
+export const STATUS = { differentContent: 409, tooBig: 413, rateLimited: 429, ceilings: 503, full: 507 } as const;
 /** The `after` parameter of a listing page: `<arrival ms>:<batch key>`. */
 export const listAfter = (at: number, key: string) => `${at}:${encodeURIComponent(key)}`;

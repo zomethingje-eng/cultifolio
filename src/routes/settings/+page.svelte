@@ -177,7 +177,7 @@
 <h2 class="sec" id="numbering">Numbering</h2>
 <div class="cult">
   <div class="body">
-    <p class="small" style="margin: 0 0 10px">How new plants are numbered; a number is never reused, and numbers already given are kept.</p>
+    <p class="small" style="margin: 0 0 10px">How new plants are numbered; a number is never reused, and numbers already given are kept. With the year scheme the year is the plant's acquisition year (a plant acquired on 31 December and filed on 2 January is a 2026 plant), and a batch's is the year it was started.</p>
     <div class="seg" role="group" aria-label="Numbering scheme">
       <button type="button" class:on={mode === 'year'} aria-pressed={mode === 'year'} onclick={() => (mode = 'year')}>Year: 2026-0001</button>
       <button type="button" class:on={mode === 'prefix'} aria-pressed={mode === 'prefix'} onclick={() => (mode = 'prefix')}>Prefix: ABC-0001</button>

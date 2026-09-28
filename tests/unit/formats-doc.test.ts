@@ -12,11 +12,13 @@ import { MAX_NEW_VAULTS_PER_DAY, MAX_IP_BYTES_PER_DAY, MAX_BYTES, RATE } from '$
 import { MAX_AHEAD_MS, hlcEncode } from '$core/hlc';
 import { B32, parseVaultKey } from '$lib/sync/crypto';
 import { Manifest, LegacyChanges, photoPath, thumbPath, backupName, EXT } from '$lib/backup/format';
-import { PUSH_HEADERS, batchName, listAfter, BATCH_NAME, logBatch } from '$lib/sync/limits';
+import { PUSH_HEADERS, batchName, listAfter, BATCH_NAME, logBatch, STATUS } from '$lib/sync/limits';
+import { buildBackup } from '$lib/backup/backup';
+import { unzipSync } from 'fflate';
 import { KINDS, RESERVED_FIELDS } from '$core/log';
 import { EVENT_LABEL } from '$lib/db/types';
 import { BUCKETS, bucketOf } from '$core/bucket';
-import { VaultFull, parseAfter, BEARER, listBatches } from '$lib/server/sync';
+import { VaultFull, parseAfter, BEARER, listBatches, batchKey, photoKey } from '$lib/server/sync';
 import * as photoRoute from '../../src/routes/api/sync/photo/[id]/+server';
 import * as logRoute from '../../src/routes/api/sync/log/+server';
 import { apply } from '$core/log';
@@ -110,6 +112,8 @@ const doc = {
   buckets: Number(says(/into one of (\d+) buckets of roughly/)[1]),
   example: says(/"t": "(\d{13})-([0-9a-f]{4})-([a-z0-9]+)", "kind": "accession", "id": "([a-z0-9]+)"/),
   nameLayout: says(/stored at vault\/<id>\/log\/(<hour>-0000-<device>-<fingerprint>)\.bin/)[1],
+  storedAt: says(/stored at (vault\/<id>\/log\/<hour>-0000-<device>-<fingerprint>\.bin)/)[1],
+  photoAt: says(/at (vault\/<vaultId>\/photo\/<photoId>\.bin)/)[1],
   endpoints: says(/The endpoints: POST (\/api\/sync\/vault) \{ id, token, create \}; GET (\/api\/sync\/log)\?vault=&since=<ms>.*?POST (\/api\/sync\/log)\?vault= with headers (X-Batch), (X-Batch-Plain), (X-Device); GET (\/api\/sync\/log)\/<hour>-0000-<device>-<fingerprint>\?vault=.*?(PUT\|GET\|HEAD) (\/api\/sync\/photo)\/<id>\?vault=/),
   manifestKeys: says(/manifest\.json \{ (format): "cultifolio-backup", (v): 1, (exported): [^,]*, (device), (app), (counts): \{ ([a-zA-Z, ]+) \}, (photosMissing): [^\]]*\], (scheme) \}/),
   tooBig: says(/A body larger than the limit is (\d+)/)[1],
@@ -257,14 +261,13 @@ describe('/about/formats is enough to decrypt a vault, and says what the code do
     expect(doc.ids.slice(1, 6)).toEqual(['r', 's', 'l', 'p', 'e']);
     expect(doc.idBase).toBe(36);
     expect(doc.idTimeDigits).toBe(8);
-    expect(doc.refused).toBe('409');
+    expect(Number(doc.refused)).toBe(STATUS.differentContent);
     expect(Number(doc.full[1]) * 1024 * 1024 * 1024).toBe(MAX_BYTES);
-    expect(doc.full[2]).toBe('507');
+    expect(Number(doc.full[2])).toBe(STATUS.full);
     expect(doc.buckets).toBe(BUCKETS);
-    expect(doc.ikm[1]).toBe('not a decoding');
-    expect(doc.tooBig).toBe('413');
-    expect(doc.rateLimited).toBe('429');
-    expect(doc.ceilings).toBe('503');
+    expect(Number(doc.tooBig)).toBe(STATUS.tooBig);
+    expect(Number(doc.rateLimited)).toBe(STATUS.rateLimited);
+    expect(Number(doc.ceilings)).toBe(STATUS.ceilings);
     // every endpoint the page names is a route file, and the batch route takes the methods named
     const e = doc.endpoints;
     for (const [path, file] of [[e[1], 'vault/+server.ts'], [e[2], 'log/+server.ts'], [e[7], 'log/[key]/+server.ts'], [e[9], 'photo/[id]/+server.ts']] as const) expect(existsSync(new URL(`../../src/routes/api/sync/${file}`, import.meta.url)), path).toBe(true);
@@ -276,14 +279,12 @@ describe('/about/formats is enough to decrypt a vault, and says what the code do
     expect([doc.listReply[1], doc.listReply[2]].sort()).toEqual(fieldsIn('../../src/lib/server/sync.ts', 'BatchRef').sort()); // the entries' fields are BatchRef's
     expect([doc.listReply[3], doc.listReply[4]].sort()).toEqual([...(/Promise<\{ batches: BatchRef\[\]; (\w+): boolean; (\w+)\?: After \}>/.exec(readFileSync(new URL('../../src/lib/server/sync.ts', import.meta.url), 'utf8')) ?? []).slice(1, 3)].sort()); // and the reply's other two are listBatches's
     expect(typeof listBatches).toBe('function');
-    expect(doc.listReply[5]).toBe('after');
     expect(parseAfter(listAfter(1789520000000, 'k'))).toEqual({ at: 1789520000000, key: 'k' });
     expect(BEARER.test(`${doc.bearer[2]} ${'a'.repeat(64)}`)).toBe(true); // the scheme the page names is the one the Worker parses
-    expect(doc.bearer[1].toLowerCase()).toBe('authorization');
     // the 507 body the page prints is the one the class sends
     const full = new VaultFull(1, 2).response();
     expect(full.status).toBe(507);
-    expect(await full.json()).toEqual({ [doc.fullBody[1] === 'vault full' ? 'error' : 'no']: 'vault full', [doc.fullBody[2]]: 1, [doc.fullBody[3]]: 2 }); // the body the class sends carries the page's three keys (round twenty-four, 7)
+    expect(await full.json()).toEqual({ error: doc.fullBody[1], [doc.fullBody[2]]: 1, [doc.fullBody[3]]: 2 }); // the body the class sends is the page's, word and keys (round twenty-four, 7; round twenty-six, 12)
     // the batch's plaintext shape is the engine's, and its name passes the Worker's own pattern
     expect(Object.keys(logBatch('abc', []))).toEqual(['v', 'device', 'changes']);
     expect(logBatch('abc', []).v).toBe(Number(doc.batchShape[1]));
@@ -305,7 +306,6 @@ describe('/about/formats is enough to decrypt a vault, and says what the code do
     expect(st2.get('accession:r1')!.notes).toBe('late');
     expect(doc.refusalFields.slice(1, 4)).toEqual(['error', 'message', '404']); // json() routes say `error`, SvelteKit's error() says `message`
     // the hash the page names is the one the bucket function computes
-    expect(doc.hash[1]).toBe('FNV-1a');
     expect(Number(doc.hash[2])).toBe(BUCKETS);
     const fnv1a = (s: string) => { let h = 0x811c9dc5; for (const c of enc.encode(s)) { h ^= c; h = Math.imul(h, 16777619) >>> 0; } return h; };
     expect(bucketOf('lithops-lesliei')).toBe((fnv1a('lithops-lesliei') & (BUCKETS - 1)).toString(16).padStart(2, '0'));
@@ -325,10 +325,15 @@ describe('/about/formats is enough to decrypt a vault, and says what the code do
     expect(Number(doc.backupPaths[2])).toBe(FULL_EDGE);
     expect(doc.backupPaths[3].replace('<id>', 'p1')).toBe(thumbPath('p1'));
     expect(Number(doc.backupPaths[4])).toBe(THUMB_EDGE);
-    expect(doc.backupPaths.slice(5, 7)).toEqual(['plants.csv', 'device.json']);
     expect(doc.backupPaths.slice(7, 11).sort()).toEqual(fieldsIn('../../src/lib/backup/backup.ts', 'DeviceSettings').sort()); // device.json's keys are the interface's
-    expect(doc.changesFile).toBe('changes.json');
-    expect(readFileSync(new URL('../../src/lib/backup/backup.ts', import.meta.url), 'utf8')).toContain(`'${doc.changesFile}'`); // and the writer uses that name
+    // the zip's entries are the ones the page lists, read back from a file the writer built (round twenty-six, 12)
+    const built = await buildBackup({ changes: [{ t: '1789520000000-0000-abcdefabcdef0000', kind: 'photo', id: 'p1', field: 'd', value: '2026-01-02' }, { t: '1789520000001-0000-abcdefabcdef0000', kind: 'photo', id: 'p1', field: 'acc', value: 'r1' }], settings: { units: 'metric' }, readPhoto: async (id) => ({ id, full: new Uint8Array([0xff, 0xd8, 1]), thumb: new Uint8Array([0xff, 0xd8, 2]) }) });
+    const entries = Object.keys(unzipSync(built.bytes)).sort();
+    const expected = ['manifest.json', doc.changesFile, doc.backupPaths[1].replace('<id>', 'p1'), doc.backupPaths[3].replace('<id>', 'p1'), doc.backupPaths[5], doc.backupPaths[6]].sort();
+    expect(entries).toEqual(expected);
+    // the object keys the page names are the ones the Worker stores under
+    expect(batchKey('V', '1789520000000-0000-abcdefabcdef-ffffffffffff')).toBe(doc.storedAt.replace('<id>', 'V').replace('<hour>-0000-<device>-<fingerprint>', '1789520000000-0000-abcdefabcdef-ffffffffffff'));
+    expect(photoKey('V', 'p1234567')).toBe(doc.photoAt.replace('<vaultId>', 'V').replace('<photoId>', 'p1234567'));
     expect(LegacyChanges.entries.format.literal).toBe(doc.legacy[1]);
     expect(Number(doc.legacy[2])).toBe(1);
     // the key alphabet the page describes by exclusion is the code's

@@ -85,10 +85,14 @@
   let nameUnresolved = $state(false);
   let nameArmed = $state(false);
   let picker = $state<{ check: () => Promise<boolean> } | null>(null);
+  let dateMsg = $state('');
   async function save(e: SubmitEvent) {
     e.preventDefault();
     if (!name.trim() || busy) return;
     if (ownTaken) return;
+    // The number is minted for the acquisition year and never reused, so a future date (2099 for 2026) would give the plant a wrong identity for good; refused before anything is checked or written (round twenty-six, 3).
+    dateMsg = acquired && acquired > localDate() ? `${acquired} is in the future.` : '';
+    if (dateMsg) { document.getElementById('f-date')?.focus(); return; }
     checking = true;
     try {
       if (keyCheck) await keyCheck.catch(() => undefined);
@@ -147,7 +151,7 @@
 {/if}
 <form class="form" onsubmit={save}>
   <PageHead title="Add a plant" kick="My plants" places={false}>
-    {#snippet subline()}{#if countN > 1}{#if useOwnNumber && ownNumber.trim()}The first will be numbered <span class="accno">{ownNumber.trim()}</span>, the rest from <span class="accno">{nextNo}</span>.{:else}They will be numbered from <span class="accno">{nextNo}</span>, one each.{/if}{:else}It will be numbered <span class="accno">{useOwnNumber && ownNumber ? ownNumber : nextNo}</span>.{/if} A number is never reused.{/snippet}
+    {#snippet subline()}{#if countN > 1}{#if useOwnNumber && ownNumber.trim()}The first will be numbered <span class="accno">{ownNumber.trim()}</span>, the rest from <span class="accno">{nextNo}</span>.{:else}They will be numbered from <span class="accno">{nextNo}</span>, one each.{/if}{:else}It will be numbered <span class="accno">{useOwnNumber && ownNumber ? ownNumber : nextNo}</span>.{/if} A number is never reused; its year is the year acquired.{/snippet}
   </PageHead>
   <div class="cult sheet">
 
@@ -181,7 +185,7 @@
   </div>
 
   <div class="two">
-    <label class="field"><span>Acquired</span><input id="f-date" type="date" bind:value={acquired} /></label>
+    <label class="field"><span>Acquired</span><input id="f-date" type="date" bind:value={acquired} oninput={() => (dateMsg = '')} aria-invalid={!!dateMsg} aria-describedby={dateMsg ? 'f-date-bad' : undefined} />{#if dateMsg}<span class="bad small" id="f-date-bad">{dateMsg}</span>{/if}</label>
     <label class="field"><span>From</span><input id="f-from" type="text" bind:value={sourceFrom} placeholder="Nursery, seller, friend" /></label>
     <label class="field"><span>Price <span class="faint">(optional)</span></span><input id="f-price" type="text" bind:value={price} placeholder="what it cost, as you like to write it" /></label>
   </div>

@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { store, vaultId, authed, batchKey, listBatches, parseAfter, storeOnce, readBody, batchMeta, VaultFull, DayQuota, MAX_BATCH_BYTES, limited, quotaOf } from '$lib/server/sync';
-import { PUSH_HEADERS } from '$lib/sync/limits';
+import { PUSH_HEADERS, STATUS } from '$lib/sync/limits';
 
 /**
  * Batches that arrived at or after ?since=<ms> (less a minute of overlap), oldest arrival first.
@@ -43,6 +43,6 @@ export const POST: RequestHandler = async ({ request, url, platform, getClientAd
     if (e instanceof VaultFull || e instanceof DayQuota) return e.response();
     throw e;
   }
-  if (r === 'different') return json({ error: 'a different batch already has that name' }, { status: 409 });
+  if (r === 'different') return json({ error: 'a different batch already has that name' }, { status: STATUS.differentContent });
   return json({ stored: r === 'stored', reason: r === 'same' ? 'already there' : undefined });
 };

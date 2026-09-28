@@ -152,7 +152,7 @@ export function parseAfter(raw: string | null): After | null {
 
 const refCompare = (a: BatchRef, b: BatchRef) => a.at - b.at || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
 
-import { OVERLAP_MS, PUSH_HEADERS, BATCH_NAME } from '$lib/sync/limits';
+import { OVERLAP_MS, PUSH_HEADERS, BATCH_NAME, STATUS } from '$lib/sync/limits';
 export { OVERLAP_MS };
 
 /**
@@ -202,7 +202,7 @@ export async function listBatches(r2: R2Bucket, id: string, sinceMs: number | nu
     if (after && refCompare(ref, after) <= 0) return;
     all.push(ref);
   });
-  if (!whole) error(503, `this vault holds more than ${MAX_LIST_PAGES * 1000} batches, which is past what one listing can walk`);
+  if (!whole) error(STATUS.ceilings, `this vault holds more than ${MAX_LIST_PAGES * 1000} batches, which is past what one listing can walk`);
   all.sort(refCompare);
   const batches = all.slice(0, limit);
   const more = all.length > limit;
@@ -228,7 +228,7 @@ export class VaultFull extends Error {
     super('this vault is full');
   }
   response(): Response {
-    return new Response(JSON.stringify({ error: 'vault full', bytes: this.bytes, limit: this.limit }), { status: 507, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
+    return new Response(JSON.stringify({ error: 'vault full', bytes: this.bytes, limit: this.limit }), { status: STATUS.full, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
   }
 }
 
@@ -414,10 +414,10 @@ export function batchMeta(request: Request): BatchMeta {
 /** Refuse an oversize body from its declared length, before reading it; the read itself is capped too. */
 export async function readBody(request: Request, max: number, what: string): Promise<Uint8Array> {
   const declared = Number(request.headers.get('content-length'));
-  if (declared > max) error(413, `${what} must be at most ${Math.round(max / 1048576)} MB`);
+  if (declared > max) error(STATUS.tooBig, `${what} must be at most ${Math.round(max / 1048576)} MB`);
   const body = new Uint8Array(await request.arrayBuffer());
   if (!body.length) error(400, `${what} is empty`);
-  if (body.length > max) error(413, `${what} must be at most ${Math.round(max / 1048576)} MB`);
+  if (body.length > max) error(STATUS.tooBig, `${what} must be at most ${Math.round(max / 1048576)} MB`);
   return body;
 }
 
@@ -487,6 +487,13 @@ export async function allowCreation(kv: KVNamespace | undefined, ip: string, now
   const perDay = ceilings.perDay ?? MAX_NEW_VAULTS_ALL_PER_DAY;
   const max = ceilings.max ?? MAX_VAULTS;
   const address = addressKey(ip);
+  // Without KV there is no byte allowance per address and the request windows are memory only, whatever the counter
+  // object says: a deploy with the object bound and no namespace is not one that should take vaults, and DEPLOY.md says
+  // the Worker fails closed without the binding (round twenty-six, 11).
+  if (!kv) {
+    noKv();
+    return 'total'; // "not taking new vaults for now": a deployment fault, not a moment's wait
+  }
   if (counters) {
     try {
       // The vaults made before the object existed are the KV total; the object takes it as its starting count, once
@@ -549,7 +556,7 @@ export const creationDay = (now = Date.now()) => day(now);
 
 /** A 429 the client can show: plain JSON, Retry-After in seconds, never cached. */
 export function tooMany(what: string, retryAfter: number, extra: Record<string, unknown> = {}): Response {
-  return json({ error: what, retryAfter, ...extra }, { status: 429, headers: { 'retry-after': String(retryAfter), 'cache-control': 'no-store' } });
+  return json({ error: what, retryAfter, ...extra }, { status: STATUS.rateLimited, headers: { 'retry-after': String(retryAfter), 'cache-control': 'no-store' } });
 }
 
 /** Requests one address may make per window, by what it is asking for. */
@@ -597,8 +604,12 @@ export async function rateLimit(kv: KVNamespace | undefined, bucket: RateBucket,
   const key = `rl:${bucket}:${ip}:${win}`;
   let w = windows.get(key);
   if (!w) {
-    // Windows before this one are over: they go now, not when the map is large or the isolate ends, so the isolate's memory holds only the current ten minutes of any address (round twenty-five, 8).
-    for (const k of windows.keys()) if (Number(k.slice(k.lastIndexOf(':') + 1)) < win && k.startsWith(`rl:${bucket}:`)) windows.delete(k);
+    // Windows that are over go now, in every bucket, not when the map is large or the isolate ends, so the isolate's memory holds only each address's current window (round twenty-five, 8; round twenty-six, 10). Each bucket has its own window length, so each is judged by its own.
+    for (const k of windows.keys()) {
+      const m = /^rl:([a-z]+):.*:(\d+)$/.exec(k); // the address in the middle may itself hold colons (IPv6)
+      const len = m && RATE[m[1] as RateBucket]?.windowMs;
+      if (m && len && Number(m[2]) < Math.floor(now / len)) windows.delete(k);
+    }
     if (windows.size > 5000) windows.clear();
     let remote = 0;
     if (kv) remote = Number((await kv.get(key).catch(() => null)) ?? 0);

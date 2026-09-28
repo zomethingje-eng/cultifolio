@@ -152,6 +152,11 @@ class Collection {
   isNumberTaken(no: string): boolean {
     return this.takenNumbers('accession').has(no.trim());
   }
+  /** A removed plant, by its number: its record stays in the log, and it can be brought back (round twenty-six, 4). */
+  removedAccession(no: string): Accession | undefined {
+    for (const r of this.state.values()) if (r.kind === 'accession' && r._deleted && (r as unknown as Accession).acc === no.trim()) return r as unknown as Accession;
+    return undefined;
+  }
   /** An identity for a new record: unique per change on every device (wall time, counter, device tag), never shown. */
   private newId(prefix: 'r' | 's'): string {
     return prefix + this.eventId().slice(1);
@@ -762,8 +767,20 @@ class Collection {
     // A notes edit says which text it was based on (the stamp of the notes it saw), so a device that receives it can tell
     // an edit made in sight of its text from one made blind to it, and log only the second (round twenty-five, 2). The
     // caller may say the base itself (an editor opened before a pull); otherwise it is the text on screen now.
-    if ('notes' in fields && !('notesBase' in fields) && (kind === 'accession' || kind === 'sowing')) fields = { ...fields, notesBase: this.notesStamp(kind, id) };
-    await this.commit(diff(kind, id, fields, current, this.tick));
+    let changes = diff(kind, id, fields, current, this.tick);
+    if (kind === 'accession' || kind === 'sowing') {
+      // The base goes out exactly when the notes do (round twenty-six, 2): a save that re-sends unchanged notes must not
+      // record a base, and a real edit must carry one even when it equals the last one `diff` would have dropped. The base
+      // is stamped right after the notes, by the same writer, which is how a reader pairs the two.
+      const notesChange = changes.find((c) => c.field === 'notes');
+      changes = changes.filter((c) => c.field !== 'notesBase');
+      if (notesChange) {
+        const base = 'notesBase' in fields ? (fields.notesBase as string | null) : this.notesStamp(kind, id);
+        const at = changes.indexOf(notesChange);
+        changes.splice(at + 1, 0, { t: this.tick(), kind, id, field: 'notesBase', value: base ?? null });
+      }
+    }
+    await this.commit(changes);
   }
   /** The stamp of a record's current `notes`, null when none: what an edit to them is based on. */
   notesStamp(kind: 'accession' | 'sowing', id: string): string | null {
@@ -858,14 +875,25 @@ class Collection {
 
   /** One commit for many events (watering a whole bench): all land or none do. */
   async addEvents(list: Array<Omit<PlantEvent, 'id'>>): Promise<number> {
+    return (await this.addEventsIds(list)).length;
+  }
+  /** The same, returning the ids written, so a place-wide action can be undone by removing exactly those lines (round twenty-six, 5). */
+  async addEventsIds(list: Array<Omit<PlantEvent, 'id'>>): Promise<string[]> {
     const changes: Change[] = [];
+    const ids: string[] = [];
     for (const e of list) {
       const id = this.eventId();
+      ids.push(id);
       const rec = { ...e, id } as unknown as Record<string, unknown>;
       changes.push(...diff('event', id, rec, undefined, this.tick));
     }
     await this.commit(changes);
-    return list.length;
+    return ids;
+  }
+  /** Remove several events in one commit: all go or none do. */
+  async removeEvents(ids: string[]): Promise<void> {
+    if (!ids.length) return;
+    await this.commit(ids.map((id) => ({ t: this.tick(), kind: 'event' as const, id, field: '_deleted', value: true })));
   }
 
   /** The numbering scheme, as a synced setting record; `meta` is written too for a build of this device that still reads it there. */
@@ -942,10 +970,13 @@ class Collection {
       const old = rec?.notes;
       if (!prev || !rec || rec._deleted || typeof old !== 'string' || !old.trim() || old === c.value) continue;
       if (hlcCompare(c.t, prev) <= 0 || !hlcDecode(prev).device.startsWith(this.deviceId) || hlcDecode(c.t).device.startsWith(this.deviceId)) continue;
-      const base = changes.find((b) => b.kind === c.kind && b.id === c.id && b.field === 'notesBase');
-      if (base && base.value === prev) continue; // edited from the text held here: seen, not lost
-      const dev = hlcDecode(c.t).device.slice(0, 12);
-      if (!out.has(k)) out.set(k, { kind: c.kind, id: c.id, old, how: `on another device (${dev.slice(0, 6)}…)` });
+      // The base that belongs to this edit: the same writer's next `notesBase` stamp after the notes, with no other notes
+      // change of the record between (a restore carries the whole log, older bases included; round twenty-six, 2).
+      const writer = hlcDecode(c.t).device;
+      const base = changes.filter((b) => b.kind === c.kind && b.id === c.id && b.field === 'notesBase' && hlcDecode(b.t).device === writer && hlcCompare(b.t, c.t) > 0).sort((x, y) => hlcCompare(x.t, y.t))[0];
+      const between = base && changes.some((b) => b.kind === c.kind && b.id === c.id && b.field === 'notes' && hlcCompare(b.t, c.t) > 0 && hlcCompare(b.t, base.t) < 0);
+      if (base && !between && base.value === prev) continue; // edited from the text held here: seen, not lost
+      if (!out.has(k)) out.set(k, { kind: c.kind, id: c.id, old, how: 'on another device' });
     }
     return [...out.values()];
   }

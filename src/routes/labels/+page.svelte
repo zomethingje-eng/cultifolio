@@ -78,7 +78,8 @@
   });
 
   const all = $derived(collection.accessions.filter((a) => a.status === 'growing' || chosen.has(a.id)));
-  const filtered = $derived(all.filter((a) => !q.trim() || `${accNo(a)} ${a.taxonName} ${a.cultivar ?? ''} ${a.fieldNumber ?? ''}`.toLowerCase().includes(q.trim().toLowerCase())));
+  // The filter reads the place and the source too, and matches every word, as the plants list does: "Windowsill" and "Mesa" find their plants (round twenty-six, 15).
+  const filtered = $derived.by(() => { const words = q.toLowerCase().split(/\s+/).filter(Boolean); return all.filter((a) => { const hay = `${accNo(a)} ${a.taxonName} ${a.cultivar ?? ''} ${a.fieldNumber ?? ''} ${a.locationId ? collection.locationName(a.locationId) : (a.location ?? '')} ${a.sourceFrom ?? ''}`.toLowerCase(); return words.every((w) => hay.includes(w)); }); });
   const picked = $derived(all.filter((a) => chosen.has(a.id)));
   const toggle = (id: string) => {
     const n = new Set(chosen);

@@ -68,6 +68,16 @@ interface SyncMeta {
 }
 
 const META = 'sync';
+/**
+ * Where a batch may be cut: never between a notes change and the `notesBase` that follows it for the same record, since
+ * a base that arrives in a later pull would make the edit look blind (round twenty-six, 2). Returns the index to cut
+ * before, at most one step back from `at`; a cut that cannot move (a two-change batch) stays where it is.
+ */
+export function cutBefore(list: Change[], at: number): number {
+  if (at <= 1 || at >= list.length) return at;
+  const prev = list[at - 1], next = list[at];
+  return next.field === 'notesBase' && prev.field === 'notes' && next.kind === prev.kind && next.id === prev.id ? at - 1 : at;
+}
 /** Written by "Stop syncing" (and a replace from backup, which goes through it): which vault this device was in, so the sync page can lead with rejoining rather than with making a second vault (round twenty-four, 10). */
 const WAS = 'sync-was';
 const BATCH_MAX = 2000;
@@ -150,6 +160,9 @@ class Sync {
     this.listening = true;
     onOtherTabWrite((what) => { if (what === 'sync-forgotten' && this.configured) { this.dropped(); void getMeta<typeof this.wasIn>(WAS).then((w) => (this.wasIn = w ?? null)); } });
     window.addEventListener('online', () => this.schedule(1000));
+    // Said at once, not after the first failed run: a page opened offline is offline from its first frame (round twenty-six, 16).
+    if (navigator.onLine === false && this.configured) { this.offline = true; this.unreached = 'offline'; }
+    window.addEventListener('offline', () => { if (this.configured) { this.offline = true; this.unreached = 'offline'; } });
     // An open, idle device pulls too: when it comes back into view, when it gets focus, and every few minutes while visible. Never while hidden.
     const visible = () => typeof document === 'undefined' || document.visibilityState === 'visible';
     document.addEventListener('visibilitychange', () => {
@@ -219,6 +232,15 @@ class Sync {
     if (was) { await setMeta(WAS, was); this.wasIn = was; }
     await outboxClear();
     announceSyncForgotten(); // and the other tabs drop theirs
+  }
+
+  /** A replace from backup on a device that had already stopped syncing: the former vault is now one a rejoin would merge back, so the record says so (round twenty-six, 7). */
+  async markReplaced(): Promise<void> {
+    const was = this.wasIn ?? (await getMeta<{ vaultId: string; at: string; why: 'stopped' | 'replaced' }>(WAS)) ?? null;
+    if (!was) return;
+    const next = { ...was, why: 'replaced' as const, at: new Date().toISOString() };
+    await setMeta(WAS, next);
+    this.wasIn = next;
   }
 
   private async countPending(): Promise<void> {
@@ -450,8 +472,10 @@ class Sync {
     this.pending = todo.length;
     let sent = 0;
     // A vault that was full last time is tried once more each run (one request); if it is still full the push stops there.
-    for (let i = 0; i < todo.length; i += BATCH_MAX) {
-      const batch = todo.slice(i, i + BATCH_MAX);
+    for (let i = 0; i < todo.length; ) {
+      const end = cutBefore(todo, Math.min(i + BATCH_MAX, todo.length));
+      const batch = todo.slice(i, end);
+      i = end;
       this.step(m, `Sending ${Math.min(i + batch.length, todo.length)} of ${todo.length} changes…`);
       sent += await this.pushBatch(m, batch);
       this.pending = todo.length - sent;
@@ -514,7 +538,7 @@ class Sync {
     const body = await sealJson(this.k(m), 'log', logBatch(collection.device, batch));
     if (body.length > MAX_BATCH_BYTES && mayResplit && batch.length > 1) {
       // Too big before it ever leaves: halve it. Each half is named by its own content.
-      const mid = Math.ceil(batch.length / 2);
+      const mid = cutBefore(batch, Math.ceil(batch.length / 2));
       return (await this.pushBatch(m, batch.slice(0, mid))) + (await this.pushBatch(m, batch.slice(mid)));
     }
     const headers: Record<string, string> = { ...this.h(m), [PUSH_HEADERS.batch]: key, [PUSH_HEADERS.plain]: plain };

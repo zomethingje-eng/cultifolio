@@ -179,7 +179,13 @@ test('benches: make a place, put a plant there, water the bench, audit it', asyn
   await page.locator('.tree .row', { hasText: 'Laundry room' }).click();
   await expect(page.getByText('1 growing plant')).toBeVisible();
   await page.getByRole('button', { name: /Water all 1/ }).click();
-  await expect(page.getByText('Watered 1 plant.')).toBeVisible();
+  await expect(page.locator('.toast')).toContainText('Watered 1 plant.');
+  // one tap back: Undo removes exactly the lines it wrote, then Water all again for the rest of the test (round twenty-six, 5)
+  await page.locator('.toast .undo').click();
+  await expect(page.locator('.toast')).toContainText('Undone');
+  await expect(page.locator('.card', { hasText: 'Last watered' })).toHaveCount(0);
+  await page.getByRole('button', { name: /Water all 1/ }).click();
+  await expect(page.locator('.toast')).toContainText('Watered 1 plant.');
   // audit: tick it present
   await page.getByRole('button', { name: 'Audit' }).click();
   await page.locator('label.row input[type=checkbox]').check();
@@ -1001,6 +1007,7 @@ test('every control has a name, headings do not jump, images have alt text, mute
   await page.goto('/places');
   await page.getByRole('button', { name: 'New place' }).click();
   await page.fill('#loc-name', 'Bench A');
+  await page.selectOption('#loc-kind', 'shelf'); // a kind is chosen, never defaulted (round twenty-six, 16)
   await page.getByRole('button', { name: 'Add', exact: true }).click();
   const findings: string[] = [];
   for (const r of ['/', '/plants', '/plants/new', '/places', '/propagation', '/propagation/new', '/labels', '/backup', '/sync', '/frost', '/offline', '/about/how', '/species/copiapoa-cinerea', '/species/refusia-testii', `/plants/${acc}`]) {
@@ -1132,6 +1139,28 @@ test('removing asks twice; a species photograph that fails to load leaves the na
   await expect(page).toHaveURL(new RegExp(`/plants/${acc}$`));
   await page.getByRole('button', { name: `Yes, remove ${acc}` }).click();
   await expect(page).toHaveURL(/\/plants$/);
+  // the removal offers Undo, and a removed plant's page offers to bring it back (round twenty-six, 4 and 5)
+  await expect(page.locator('.toast')).toContainText(`${acc} removed.`);
+  await page.locator('.toast .undo').click();
+  await expect(page).toHaveURL(new RegExp(`/plants/${acc}$`));
+  await expect(page.locator('h1.sci')).toContainText('Copiapoa cinerea');
+  await page.getByRole('button', { name: 'Remove this plant' }).click();
+  await page.getByRole('button', { name: `Yes, remove ${acc}` }).click();
+  await expect(page).toHaveURL(/\/plants$/);
+  await page.goto(`/plants/${acc}`);
+  await expect(page.locator('p.muted')).toContainText('can be brought back');
+  await page.getByRole('button', { name: 'Restore this plant' }).click();
+  await expect(page.locator('h1.sci')).toContainText('Copiapoa cinerea');
+  await expect(page.locator('.toast')).toContainText('restored');
+  // a future acquisition date is refused before any number is minted (round twenty-six, 3)
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.fill('#f-date', '2099-01-01');
+  await expect(page.locator('.secsub')).toContainText('2099-0001'); // the preview follows the date
+  await page.getByRole('button', { name: /^Add/ }).click();
+  await expect(page.locator('#f-date-bad')).toContainText('2099-01-01 is in the future');
+  await expect(page).toHaveURL(/\/plants\/new/);
+  await page.goto('/plants');
+  await expect(page.locator('.accrow', { hasText: '2099-0001' })).toHaveCount(0);
 });
 
 test('the browser talks to no third-party host while a name is typed, and the error page promises nothing', async ({ page }) => {
@@ -2019,6 +2048,7 @@ test('a place chosen on the add form while the reference is still answering is k
   for (const n of ['Greenhouse', 'Cold frame']) {
     await page.getByRole('button', { name: 'New place' }).click();
     await page.fill('#loc-name', n);
+    await page.selectOption('#loc-kind', 'shelf'); // a kind is chosen, never defaulted (round twenty-six, 16)
     await page.getByRole('button', { name: 'Add', exact: true }).click();
   }
   // make Greenhouse the last-used place
@@ -2086,8 +2116,9 @@ test('round twenty-three: a name the reference does not hold is added on the sec
   await page.selectOption('#loc-kind', 'outdoor');
   await page.getByRole('button', { name: 'Add', exact: true }).click();
   await page.getByRole('button', { name: 'New place' }).click();
-  await expect(page.locator('#loc-kind')).toHaveValue('room'); // the kind is chosen per place, not carried from the last one (round twenty-three, 19)
+  await expect(page.locator('#loc-kind')).toHaveValue(''); // the kind is chosen per place, never carried from the last one or defaulted (round twenty-three, 19; round twenty-six, 16)
   await page.fill('#loc-name', 'Cold frame');
+  await page.selectOption('#loc-kind', 'shelf'); // a kind is chosen, never defaulted (round twenty-six, 16)
   const porch = await page.locator('#loc-parent option', { hasText: 'Porch' }).getAttribute('value');
   await page.selectOption('#loc-parent', porch!);
   await page.getByRole('button', { name: 'Add', exact: true }).click();

@@ -163,6 +163,7 @@
   const daysAgo = (d: string | null | undefined) => (d ? daysBetween(d) : null);
   const lastOf = (t: string) => events.find((e) => e.t === t)?.d ?? null;
   const sinceWater = $derived(daysAgo(collection.lastWatered(id))); // the collection's figure: a future-dated line is not a watering (round twenty-five, 1)
+  const careDays = $derived(a ? collection.careDays(a) : 0); // and when nothing is logged, the days since the record was made: the same figure the list and Today count (round twenty-six, 6)
   const seen = $derived(daysAgo(collection.lastSeen(id)));
   const lastMeasure = $derived(events.find((e) => e.t === 'measure' && e.measures));
   const firstMeasure = $derived([...events].reverse().find((e) => e.t === 'measure' && e.measures));
@@ -247,8 +248,12 @@
     editing = true;
     void focusNext('#ed-name'); // the first field, so a keyboard user who chose Edit from the menu lands in the form (round twenty, 11)
   }
+  let edDateMsg = $state('');
   async function saveEdit() {
     if (!a) return;
+    // A date after today is a typo, and the number a plant carries is minted for its acquisition year (round twenty-six, 3).
+    edDateMsg = f.acquired && f.acquired > localDate() ? `${f.acquired} is in the future.` : '';
+    if (edDateMsg) { document.getElementById('ed-date')?.focus(); return; }
     const moved = (f.locationId ?? null) !== (a.locationId ?? null);
     // The name as the add form files it: a hybrid is filed under its genus (or nothogenus) with the cross as parentage and
     // no species key, since it has no habitat of its own; an edit into a hybrid must not keep the species' name, key and
@@ -261,7 +266,7 @@
     // A hybrid's key goes only when its name changes: an edit to a nothospecies' price keeps the key the list gave it (round twenty-four, 5).
     const taxonKey = hybrid && taxonName !== a.taxonName ? null : f.taxonName.trim() ? edKey : (a.taxonKey ?? null);
     const nameKind = hybrid ? 'hybrid' : f.nameKind;
-    const parentage = hybrid ? f.parentage.trim() || p.parentage || (p.kind === 'species' && p.epithet ? typed : null) : null;
+    const parentage = hybrid ? f.parentage.trim() || p.parentage || null : null; // a nothospecies' parentage is what the grower states, never its own name (round twenty-six, 1)
     const wasKind = kindOf(a); // read before the write: `a` is the live record and says the new kind once it is saved
     const renamed = taxonName !== a.taxonName || (f.cultivar.trim() || null) !== (a.cultivar ?? null) || nameKind !== wasKind;
     // A change of identity is provenance: the old name goes in the log, and into "name as received" if that was empty (round twenty-three, 3).
@@ -315,8 +320,17 @@
     editingMy = false;
   }
   async function remove() {
+    const no = accNo(a!);
     await collection.remove('accession', id);
     goto('/plants');
+    // The removal is one tap; the way back is one too (round twenty-six, 5). The record never left the log.
+    toast.show(`${no} removed.`, 8000, { label: 'Undo', run: () => { void collection.restore('accession', id).then(() => goto(`/plants/${no}`)); } });
+  }
+  async function restoreRemoved() {
+    const r = collection.removedAccession(param);
+    if (!r) return;
+    await collection.restore('accession', r.id);
+    toast.show(`${param} restored.`);
   }
 </script>
 
@@ -335,7 +349,12 @@
   </div>
 {:else if !a}
   <h1 class="q" style="margin-top: 24px">{param}</h1>
-  <p class="muted">{collection.isNumberTaken(param) ? `${param} was given to a plant since removed; the number stays reserved and its record stays in the change log and in any backup taken before.` : 'No plant with this number on this device.'}</p>
+  {#if collection.removedAccession(param)}
+    <p class="muted">{param} was given to a plant since removed. The number stays reserved and its record is still in the change log, so it can be brought back as it was, log and photographs included.</p>
+    <p><button class="btn pri" onclick={restoreRemoved}>Restore this plant</button></p>
+  {:else}
+    <p class="muted">{collection.isNumberTaken(param) ? `${param} was given to a plant since removed; the number stays reserved.` : 'No plant with this number on this device.'}</p>
+  {/if}
 {:else}
   {#if cover}
     <div class="hero own">
@@ -368,10 +387,10 @@
       {/if}
       {#if !hasHero && speciesThumb && thumbFailed}<p class="vern muted">The reference's photograph did not load.</p>{/if}
       {#if !hasHero && dossier?.thumb && !prefs.referencePhotos}<RefPhotoOffer link what="the reference’s photograph of this species" />{/if}
-      {#if a.status !== 'growing' || (sinceWater != null && sinceWater >= DUE_DAYS)}
+      {#if a.status !== 'growing' || careDays >= DUE_DAYS}
         <div class="pills">
           {#if a.status !== 'growing'}<span class="pill {a.status === 'dead' ? 'b' : ''}">{a.status}</span>{/if}
-          {#if sinceWater != null && sinceWater >= DUE_DAYS && a.status === 'growing'}<span class="pill w">not watered for {sinceWater} d</span>{/if}
+          {#if careDays >= DUE_DAYS && a.status === 'growing'}<span class="pill w">{sinceWater == null ? `no watering recorded in ${careDays} d` : `not watered for ${sinceWater} d`}</span>{/if}
         </div>
       {/if}
     </div>
@@ -400,7 +419,7 @@
       <label><span>Name as received</span><input id="ed-recv" type="text" bind:value={f.nameAsReceived} /></label>
       <label><span>Field number</span><input id="ed-fn" type="text" bind:value={f.fieldNumber} /></label>
       <label><span>Provenance</span><select id="ed-prov" bind:value={f.provenance}><option value="unknown">Not stated</option><option value="wild">Wild-collected</option><option value="f1">F1: raised from wild-collected seed</option><option value="fn">Cultivated seed (Fn)</option><option value="veg">Vegetative</option></select></label>
-      <label><span>Acquired</span><input id="ed-date" type="date" bind:value={f.acquired} /></label>
+      <label><span>Acquired</span><input id="ed-date" type="date" bind:value={f.acquired} oninput={() => (edDateMsg = '')} aria-invalid={!!edDateMsg} aria-describedby={edDateMsg ? 'ed-date-bad' : undefined} />{#if edDateMsg}<span class="bad small" id="ed-date-bad">{edDateMsg}</span>{/if}</label>
       <label><span>From</span><input id="ed-from" type="text" bind:value={f.sourceFrom} /></label>
       <label><span>Form</span><input id="ed-form" type="text" bind:value={f.sourceForm} placeholder="plant, seedling, seed, cutting" /></label>
       <label><span>Price</span><input id="ed-price" type="text" bind:value={f.price} /></label>
@@ -473,7 +492,7 @@
   {/if}
 
   <div class="cards">
-    {#if collection.lastWatered(id)}<div class="card"><div class="lab">Since watered</div><div class="val">{sinceWater == null ? '–' : sinceWater}<span class="u">{sinceWater == null ? '' : ' d'}</span></div><div class="sub">last {collection.lastWatered(id)}</div></div>{/if}
+    {#if a.status === 'growing' || collection.lastWatered(id)}<div class="card"><div class="lab">Since watered</div><div class="val">{sinceWater ?? careDays}<span class="u"> d</span></div><div class="sub">{sinceWater == null ? 'no watering recorded; counted from the day the record was made' : `last ${collection.lastWatered(id)}`}</div></div>{/if}
     {#if events.some((e) => e.t === 'audit')}<div class="card"><div class="lab">Last seen</div><div class="val">{seen == null ? '–' : seen}<span class="u">{seen == null ? '' : ' d'}</span></div><div class="sub">{collection.missedAt(id) ? `not seen at the audit of ${collection.missedAt(id)}; last logged ${collection.lastSeen(id)}` : `last logged ${collection.lastSeen(id)}`}</div></div>{/if}
     {#if lastMeasure}<div class="card"><div class="lab">{sizeKey ? (MEASURES.find((m) => m.k === sizeKey)?.label ?? 'Size') : 'Size'}</div><div class="val">{sizeKey && lastMeasure ? lastMeasure.measures![sizeKey] : '–'}<span class="u">{sizeKey ? ' ' + (MEASURES.find((m) => m.k === sizeKey)?.unit ?? '') : ''}</span></div>{#if growth != null}<div class="gauge"><i style="width: {Math.min(100, Math.max(8, (growth / Math.max(1, lastMeasure!.measures![sizeKey!])) * 100))}%"></i></div>{/if}<div class="sub">{growth != null ? `${growth >= 0 ? '+' : ''}${growth} since ${firstMeasure!.d}` : `measured ${lastMeasure.d}`}</div></div>{/if}
     <div class="card"><div class="lab">Habitat rain season</div><div class="val" style="font-family: var(--ui); font-size: 17px; font-weight: 700">{#if !season && dossier?.climate.status === 'refused'}<NotChecked what="Climate" why="A source did not answer when the species page was built{dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}." />{:else}{season ? season.label : dossier?.climate.status === 'pending' ? 'Climate pending' : dossier ? 'No habitat climate' : ref === 'unreachable' ? 'Reference not reached' : ref === 'none' ? (kind === 'hybrid' ? 'A hybrid' : 'No species page') : '…'}{/if}</div><div class="sub">{#if season}{season.note} <a href="/species/{speciesHref}#s-cultivation">The sheet</a>.{:else if dossier?.climate.status === 'refused'}No season is read from an answer that was not given.{:else if dossier?.climate.status === 'pending'}The habitat climate for this species has not been derived yet.{:else if dossier}Nothing to read a season from{dossier.climate.status === 'none' && dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}.{:else if ref === 'unreachable'}The species reference could not be reached from here; nothing is known either way.{:else if ref === 'none'}{kind === 'hybrid' ? (parentLinks.some((p) => p.slug) ? 'No habitat of its own; its parents have species pages.' : 'No habitat of its own.') : 'Not in the reference.'}{:else}reading the species dossier{/if}</div></div>
@@ -567,11 +586,12 @@
   {/if}
 
   <div class="secrule"><h2>Provenance</h2><div class="line"></div></div>
-  {#if !a.sourceFrom && !a.sourceForm && !a.fieldNumber && a.provenance === 'unknown' && !a.sowingId && !a.nameAsReceived && kind !== 'hybrid'}
+  {#if !a.sourceFrom && !a.sourceForm && !a.fieldNumber && a.provenance === 'unknown' && !a.sowingId && !a.nameAsReceived && kind !== 'hybrid' && !a.price && !a.sourceRef}
     <p class="empty">Nothing stated yet. <button class="linkish" type="button" onclick={startEdit}>Add where it came from</button></p>
   {:else}
   <div class="factgrid">
-    <div><b>Source</b>{[a.sourceFrom, a.sourceForm, a.acquired].filter(Boolean).join(' · ') || 'not stated'}{#if a.price}{' · '}{a.price}{/if}</div>
+    <div><b>Source</b>{#if a.sourceFrom}<a href="/plants?q={encodeURIComponent(a.sourceFrom)}" title="Every plant from this source">{a.sourceFrom}</a>{/if}{#each [a.sourceForm, a.acquired].filter(Boolean) as x, i}{i || a.sourceFrom ? ' · ' : ''}{x}{/each}{#if !a.sourceFrom && !a.sourceForm && !a.acquired}not stated{/if}{#if a.price}{' · '}{a.price}{/if}</div>
+    {#if a.sourceRef}<div><b>Lot or reference</b>{a.sourceRef}</div>{/if}
     <div><b>Field number</b>{a.fieldNumber ?? 'none'}</div>
     <div><b>Provenance</b>{provLabel(a.provenance)}</div>
     {#if a.sowingId}<div><b>Raised from</b><a href="/propagation/{a.sowingId}">{sowing ? sowNo(sowing) : a.sowingId}</a>{#if sowing} · {sowing.count} started, {collection.sowingStats(sowing.id).germinated} up, {collection.sowingStats(sowing.id).potted} potted{/if}</div>{/if}
@@ -581,7 +601,7 @@
   {/if}
 
   <div class="dangerrow">
-    <span class="small muted">Removing keeps the number reserved; the record stays in the change log and in any backup taken before.</span>
+    <span class="small muted">Removing keeps the number reserved; the record stays in the change log, and the plant's page offers to bring it back.</span>
     {#if confirmRemove}<span><button class="btn danger" onclick={remove}>Yes, remove {accNo(a)}</button> <button class="btn" onclick={() => (confirmRemove = false)}>Keep</button></span>{:else}<button class="btn danger" onclick={() => { confirmRemove = true; void focusNext('.dangerrow .btn.danger'); }}>Remove this plant</button>{/if}
   </div>
   {#if lightbox != null && photos.length}

@@ -187,7 +187,10 @@ export function previewMerge(current: Change[], incoming: Change[]) {
 
 const csvCell = (x: unknown) => {
   if (x == null) return '';
-  const s = String(x);
+  let s = String(x);
+  // A cell beginning =, +, -, @ or a tab is read as a formula by a spreadsheet; a note starting "-5 °C" is the real case.
+  // A leading apostrophe makes it text, which is what it is (round twenty-six, 14).
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
   return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 };
 
@@ -201,9 +204,9 @@ export function plantsCsv(accs: Array<Accession & Record_>, state: Map<string, R
     const parent = loc(r.parentId as string | null, seen);
     return parent ? `${parent} › ${r.name}` : String(r.name);
   };
-  const head = ['number', 'species', 'cultivar', 'kind', 'parentage', 'name as received', 'field number', 'provenance', 'status', 'location', 'acquired', 'from', 'form', 'price', 'sowing', 'notes'];
+  const head = ['number', 'species', 'cultivar', 'kind', 'parentage', 'name as received', 'field number', 'provenance', 'status', 'location', 'acquired', 'from', 'lot or reference', 'form', 'price', 'sowing', 'notes'];
   const rows = [...accs]
     .sort((a, b) => accNo(a).localeCompare(accNo(b)))
-    .map((a) => [accNo(a), a.taxonName, a.cultivar, kindOf(a), a.parentage, a.nameAsReceived, a.fieldNumber, a.provenance, a.status, a.locationId ? loc(a.locationId) : a.location, a.acquired, a.sourceFrom, a.sourceForm, a.price, a.sowingId ? sowNo((state.get(`sowing:${a.sowingId}`) as unknown as Sowing | undefined) ?? { id: a.sowingId }) : null, a.notes].map(csvCell).join(','));
+    .map((a) => [accNo(a), a.taxonName, a.cultivar, kindOf(a), a.parentage, a.nameAsReceived, a.fieldNumber, a.provenance, a.status, a.locationId ? loc(a.locationId) : a.location, a.acquired, a.sourceFrom, a.sourceRef, a.sourceForm, a.price, a.sowingId ? sowNo((state.get(`sowing:${a.sowingId}`) as unknown as Sowing | undefined) ?? { id: a.sowingId }) : null, a.notes].map(csvCell).join(','));
   return '﻿' + [head.join(','), ...rows].join('\r\n') + '\r\n';
 }

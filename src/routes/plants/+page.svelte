@@ -68,7 +68,7 @@
   /** Every word typed must be found somewhere in the plant's names, number, field number, place or notes: "humilis bench" finds a humilis on a bench (round twenty-five, 11). */
   const matches = (a: (typeof collection.accessions)[number], words: string[]) => {
     if (!words.length) return true;
-    const hay = `${a.taxonName} ${a.cultivar ?? ''} ${a.parentage ?? ''} ${a.nameAsReceived ?? ''} ${accNo(a)} ${a.fieldNumber ?? ''} ${a.locationId ? collection.locationName(a.locationId) : (a.location ?? '')} ${a.notes ?? ''} ${a.sourceFrom ?? ''}`.toLowerCase();
+    const hay = fold(`${a.taxonName} ${a.cultivar ?? ''} ${a.parentage ?? ''} ${a.nameAsReceived ?? ''} ${accNo(a)} ${a.fieldNumber ?? ''} ${a.locationId ? collection.locationName(a.locationId) : (a.location ?? '')} ${a.notes ?? ''} ${a.sourceFrom ?? ''}`);
     return words.every((w) => hay.includes(w));
   };
   const byName = (a: (typeof collection.accessions)[number], b: (typeof collection.accessions)[number]) => a.taxonName.localeCompare(b.taxonName) || (a.cultivar ?? '').localeCompare(b.cultivar ?? '') || accNo(a).localeCompare(accNo(b));
@@ -76,7 +76,7 @@
     number: () => 0, // the collection's order: newest number first
     name: byName,
     watered: (a, b) => collection.careDays(b) - collection.careDays(a) || byName(a, b), // longest since watered first
-    place: (a, b) => (a.locationId ? collection.locationName(a.locationId) : (a.location ?? '~')).localeCompare(b.locationId ? collection.locationName(b.locationId) : (b.location ?? '~')) || byName(a, b)
+    place: (a, b) => { const pa = a.locationId ? collection.locationName(a.locationId) : (a.location ?? ''), pb = b.locationId ? collection.locationName(b.locationId) : (b.location ?? ''); return (pa === '' ? 1 : 0) - (pb === '' ? 1 : 0) || pa.localeCompare(pb) || byName(a, b); } // unplaced plants last, not first (round twenty-six, 8)
   };
   const yearAgo = localDateYearAgo();
   const noPhoto = (id: string) => !collection.photos(id).some((p) => p.d >= yearAgo);
@@ -93,7 +93,9 @@
   // One figure for the row, the chip, the filter and Today: the collection's (round twenty-five, R1-1 and 2).
   const sinceWater = (id: string) => { const d = collection.lastWatered(id); return d ? daysBetween(d) : null; };
   const dueN = $derived(collection.due.length);
-  const words = $derived(q.toLowerCase().split(/\s+/).filter(Boolean));
+  /** Lower-cased with accents folded, as the species search does: "Echeveria agavoïdes" is found by "agavoides" (round twenty-six, 8). */
+  const fold = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const words = $derived(fold(q).split(/\s+/).filter(Boolean));
   const list = $derived(
     collection.accessions.filter((a) => (show === 'all' || a.status === 'growing') && (show !== 'due' || collection.careDays(a) >= DUE_DAYS) && (show !== 'nophoto' || noPhoto(a.id)) && matches(a, words)).sort(sorters[sort])
   );
@@ -108,6 +110,7 @@
 <div class="toolrow">
   <input id="plants-q" class="searchbar" type="search" placeholder="Search name, number, field number, place, notes…" aria-label="Search your plants" bind:value={q} />
   <select id="plants-sort" class="sortsel" aria-label="Sort" bind:value={sort}><option value="number">Newest number first</option><option value="name">By name</option><option value="watered">Longest since watered</option><option value="place">By place</option></select>
+  {#if (q.trim() || show !== 'growing') && list.length}<a class="btn small" href="/labels?acc={list.map((a) => a.id).join(',')}" title="Labels for exactly the plants listed here">Labels for these {list.length}</a>{/if}
   <div class="chiprow" style="margin: 0">
     <button class="chipbtn" class:on={show === 'growing'} aria-pressed={show === 'growing'} onclick={() => (show = 'growing')}>Growing<span class="n">{collection.accessions.filter((a) => a.status === 'growing').length}</span></button>
     <button class="chipbtn" class:on={show === 'due'} aria-pressed={show === 'due'} onclick={() => (show = 'due')} title="Not watered, or not recorded as watered, for three weeks or more: a fact about the record, not a verdict on the plant">Not watered 21+ days<span class="n">{dueN}</span></button>

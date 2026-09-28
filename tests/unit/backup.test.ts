@@ -116,8 +116,14 @@ describe('plants.csv', () => {
     const csv = plantsCsv(live<Accession & Record_>(state, 'accession'), state);
     expect(csv.charCodeAt(0)).toBe(0xfeff);
     const lines = csv.slice(1).split('\r\n');
-    expect(lines[0]).toBe('number,species,cultivar,kind,parentage,name as received,field number,provenance,status,location,acquired,from,form,price,sowing,notes');
-    expect(lines[1]).toBe('2026-0001,Copiapoa cinerea,,species,,,,,growing,Greenhouse › Bench 2,,,,,,"said ""sulks"", then\nflowered"');
+    expect(lines[0]).toBe('number,species,cultivar,kind,parentage,name as received,field number,provenance,status,location,acquired,from,lot or reference,form,price,sowing,notes');
+    expect(lines[1]).toBe('2026-0001,Copiapoa cinerea,,species,,,,,growing,Greenhouse › Bench 2,,,,,,,"said ""sulks"", then\nflowered"');
+  });
+  it('a cell that would be read as a formula is written as text, and the lot or reference travels (round twenty-six, 14)', () => {
+    const more = [...log, c(30, 'accession', '2026-0001', 'notes', '-5 °C on the sill, =SUM(A1) is not a note'), c(31, 'accession', '2026-0001', 'sourceRef', 'KK 1462'), c(32, 'accession', '2026-0001', 'nameAsReceived', '@handle')];
+    const { state } = materialise(more);
+    const line = plantsCsv(live<Accession & Record_>(state, 'accession'), state).slice(1).split('\r\n')[1];
+    expect(line).toBe("2026-0001,Copiapoa cinerea,,species,,'@handle,,,growing,Greenhouse › Bench 2,,,KK 1462,,,,'-5 °C on the sill, =SUM(A1) is not a note".replace(",'-5 °C on the sill, =SUM(A1) is not a note", ",\"'-5 °C on the sill, =SUM(A1) is not a note\""));
   });
 });
 

@@ -8,7 +8,8 @@
  *                                               environment does the same for `npm run deploy` on another deployment
  *
  * Exits 1 on the first failure, with the request and what came back. `LIVE_CHECK_SKIP=names,forecast` skips the checks
- * that need an upstream (a local `wrangler dev` with no GBIF credentials); never set for the real site. Nothing here creates
+ * that need an upstream (a local `wrangler dev` with no GBIF credentials) and `LIVE_CHECK_FIXTURE_OK=1` accepts the fixture
+ * corpus; neither is ever set for the real site. Nothing here creates
  * or changes anything on the server: every request is a GET, apart from one POST to the vault route with a body that
  * must be refused (round sixteen, 16); the requests do count against the address's rate limits like any visit's.
  */
@@ -78,6 +79,8 @@ for (const path of ['/about/how', `/species/${species}`, '/offline', '/api/corpu
   headersOn(r, path);
   if (path.startsWith('/species/') && !r.text.includes(path.slice(9).replace(/-/g, ' ').replace(/^./, (c) => c.toUpperCase()))) fail(`${path} does not name the species`, r);
   if (path === '/api/corpus' && !/"id":"[A-Za-z0-9._-]{4,}"/.test(r.text)) fail(`${path} carries no corpus id`, r);
+  // A deploy with no corpus in R2 falls back to the four fixture species and answers every check above; that is the most broken deploy there is, so it fails here unless a local run says the fixture is expected (round twenty-six, 9).
+  if (path === '/api/corpus' && /"id":"fixture"/.test(r.text) && !process.env.LIVE_CHECK_FIXTURE_OK) fail(`${path} says the corpus is the fixture: R2 holds no index.json, or the Worker cannot read it (set LIVE_CHECK_FIXTURE_OK=1 only for a local wrangler dev)`, r);
   ok(`${path}: 200 with both headers`);
 }
 

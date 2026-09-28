@@ -9,7 +9,7 @@
   import { accNo, sowNo } from '$lib/db/types';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
-  import { collection } from '$lib/db/collection.svelte';
+  import { collection, DUE_DAYS } from '$lib/db/collection.svelte';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
   import { LOCATION_KINDS, type LocationKind } from '$lib/db/types';
   import type { Forecast, Alert } from '$lib/weather/forecast';
@@ -38,6 +38,7 @@
   // The most recent watering of any plant here, and the longest wait among them, so "0 d ago" cannot stand for a place where two plants are at 35 d (round twenty-four, 12).
   const watering = $derived.by(() => { const ds = deep.map((a) => collection.lastWatered(a.id)); const dated = ds.filter((d): d is string => !!d).sort(); return { newest: dated.length ? dated[dated.length - 1] : null, oldest: dated.length ? dated[0] : null, never: ds.length - dated.length }; });
   const lastWater = $derived(watering.newest);
+  const dueHere = $derived(deep.filter((a) => collection.careDays(a) >= DUE_DAYS).length); // the same figure Today and the list count (round twenty-six, 6)
   const lastAudit = $derived.by(() => { const ds = deep.map((a) => collection.events(a.id).find((e) => e.t === 'audit')?.d).filter((d): d is string => !!d).sort(); return ds.length ? ds[ds.length - 1] : null; });
   // The same set Today counts: missed at the last audit, or seen and not for ninety days; a plant never audited is not "unseen" (round twenty-five, 14).
   const unseen = $derived(deep.filter((a) => { if (collection.missedAt(a.id)) return true; const d = daysSince(collection.lastSeen(a.id)); return d != null && d > 90; }).length);
@@ -76,10 +77,11 @@
   async function waterAll(t: 'water' | 'feed') {
     busy = t;
     // A place-wide line is not an observation of each plant, so it never counts as one being seen (round twenty-four, 3).
-    const n = await collection.addEvents(deep.map((a) => ({ acc: a.id, d: today(), t, note: `whole ${loc?.type ?? 'location'}: ${loc?.name ?? ''}`, auto: true })));
+    const ids = await collection.addEventsIds(deep.map((a) => ({ acc: a.id, d: today(), t, note: `whole ${loc?.type ?? 'location'}: ${loc?.name ?? ''}`, auto: true })));
     busy = '';
-    flash = `${t === 'water' ? 'Watered' : 'Fed'} ${n} plant${n === 1 ? '' : 's'}.`;
-    setTimeout(() => (flash = ''), 3000);
+    const n = ids.length;
+    // One tap wrote n lines; one tap takes exactly those back (round twenty-six, 5).
+    toast.show(`${t === 'water' ? 'Watered' : 'Fed'} ${n} plant${n === 1 ? '' : 's'}.`, 8000, { label: 'Undo', run: () => { void collection.removeEvents(ids).then(() => toast.show(`Undone: the ${n} ${t === 'water' ? 'watering' : 'feeding'} line${n === 1 ? '' : 's'} removed.`)); } });
   }
   let flash = $state('');
 
@@ -212,7 +214,7 @@
   <div class="cards">
     {#if cond.floorC != null}<div class="card"><div class="lab">Floor</div><div class="val">{cond.floorC == null ? '–' : tempN(cond.floorC, units.current, 1)}<span class="u">{cond.floorC == null ? '' : ' ' + tempUnit(units.current)}</span></div><div class="sub">{cond.floorC == null ? 'not stated' : cond.from.floorC && cond.from.floorC !== loc.name ? `from ${cond.from.floorC}` : 'set here'}</div></div>{/if}
     {#if dli != null}<div class="card"><div class="lab">Light</div><div class="val">{dli == null ? '–' : dli.toFixed(0)}<span class="u">{dli == null ? '' : ' DLI'}</span></div><div class="sub">{cond.ppfd == null ? 'not measured' : `${cond.ppfd} µmol × ${cond.lightHours ?? 12} h${cond.from.ppfd && cond.from.ppfd !== loc.name ? ` · from ${cond.from.ppfd}` : ''}`}</div></div>{/if}
-    {#if lastWater}<div class="card"><div class="lab">Last watered</div><div class="val">{lastWater ? daysSince(lastWater) : '–'}<span class="u">{lastWater ? ' d ago' : ''}</span></div><div class="sub">{lastWater ? `the most recently watered plant${watering.oldest === lastWater ? (deep.length > 1 ? ', and every plant here was watered that day' : '') : `; the longest waiting ${daysSince(watering.oldest)} d`}${watering.never ? `; ${watering.never} never watered` : ''}` : 'nothing recorded'}</div></div>{/if}
+    {#if lastWater}<div class="card"><div class="lab">Last watered</div><div class="val">{lastWater ? daysSince(lastWater) : '–'}<span class="u">{lastWater ? ' d ago' : ''}</span></div><div class="sub">{lastWater ? `the most recently watered plant${watering.oldest === lastWater ? (deep.length > 1 && !watering.never ? ', and every plant here was watered that day' : '') : `; the longest waiting ${daysSince(watering.oldest)} d`}${watering.never ? `; ${watering.never} with no watering recorded` : ''}${dueHere ? `; ${dueHere} due` : ''}` : 'nothing recorded'}</div></div>{/if}
     {#if lastAudit}<div class="card"><div class="lab">Last audit</div><div class="val">{lastAudit ? daysSince(lastAudit) : '–'}<span class="u">{lastAudit ? ' d ago' : ''}</span></div><div class="sub">{lastAudit ? lastAudit : 'never audited'}{missedNow ? ` · ${missedNow} not seen at it` : ''}{unseen - missedNow > 0 ? ` · ${unseen - missedNow} not seen in 90 d` : ''}</div></div>{/if}
   </div>
   {/if}

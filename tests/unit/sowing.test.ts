@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Change } from '$core/log';
-import { hlcEncode } from '$core/hlc';
+import { hlcEncode, hlcCompare } from '$core/hlc';
 import { accNo, sowNo } from '$lib/db/types';
 import { localDate } from '$core/dates';
 
@@ -253,7 +253,7 @@ describe('free text replaced by another device (round twenty-four, 1; round twen
     expect(collection.accession(a.id)!.notes).toBe('moved closer to the glass, looks etiolated');
     const lines = () => collection.events(a.id).filter((e) => e.t === 'note');
     expect(lines()).toHaveLength(1);
-    expect(lines()[0].note).toBe('Notes replaced by an edit made on another device (bbbbbb…); here they read: mealybug on the crown, treated with alcohol');
+    expect(lines()[0].note).toBe('Notes replaced by an edit made on another device; here they read: mealybug on the crown, treated with alcohol');
     expect(lines()[0].auto).toBe(true);
     // a change that loses (stamped before the one held) changes nothing and logs nothing
     await collection.ingest([{ t: hlcEncode({ wall: Date.now() - 60_000, count: 0, device: 'cccccccccccctab1' }), kind: 'accession', id: a.id, field: 'notes', value: 'older text' }], 'server');
@@ -278,6 +278,44 @@ describe('free text replaced by another device (round twenty-four, 1; round twen
     await collection.put('accession', a.id, { notes: 'second text' });
     expect(collection.accession(a.id)!.notesBase).toBe(first); // the second edit says it was made from the first text
     await collection.ingest([{ t: later(60_000, 'ddddddddddddtab1'), kind: 'accession', id: a.id, field: 'notes', value: 'from a backup made elsewhere' }], 'import'); // stamped after this device's clock, which the earlier test moved on
-    expect(collection.events(a.id).filter((e) => e.t === 'note').map((e) => e.note)).toEqual(['Notes replaced by an edit made on another device (dddddd…); here they read: second text']);
+    expect(collection.events(a.id).filter((e) => e.t === 'note').map((e) => e.note)).toEqual(['Notes replaced by an edit made on another device; here they read: second text']);
+  });
+});
+
+describe('notesBase, the gaps (round twenty-six, 2)', () => {
+  beforeEach(async () => { await collection.load(); });
+  const later = (ms: number, device: string, count = 0): string => hlcEncode({ wall: Date.now() + ms, count, device });
+  it('a save that re-sends unchanged notes writes no base; a real edit always writes one, stamped right after the notes', async () => {
+    const a = await collection.addAccession({ taxonName: 'Copiapoa', acc: 'NB-1' });
+    await collection.put('accession', a.id, { notes: 'one' });
+    const before = mem.changes.length;
+    await collection.put('accession', a.id, { notes: 'one', price: '5' }); // the form re-sends the notes unchanged
+    expect(mem.changes.slice(before).map((c) => c.field)).toEqual(['price']);
+    const s1 = collection.notesStamp('accession', a.id);
+    await collection.put('accession', a.id, { notes: 'two' });
+    const n = mem.changes.length;
+    await collection.put('accession', a.id, { notes: 'three' }); // the base equals what diff would drop only if it never changed; it changed
+    const last = mem.changes.slice(n).map((c) => c.field);
+    expect(last).toEqual(['notes', 'notesBase']);
+    expect(hlcCompare(mem.changes[n + 1].t, mem.changes[n].t)).toBeGreaterThan(0);
+    expect(mem.changes[n + 1].value).not.toBe(s1);
+  });
+  it('a restore carrying this device\'s own older base does not make a knowing edit look blind; a base is paired to its own edit', async () => {
+    const a = await collection.addAccession({ taxonName: 'Copiapoa', acc: 'NB-2' });
+    await collection.put('accession', a.id, { notes: 'mine' });
+    const mine = collection.notesStamp('accession', a.id)!;
+    // B's backup holds the whole log: an old base of B's, then B's knowing edit (based on `mine`) and its base
+    const old = { t: hlcEncode({ wall: Date.now() - 999_999, count: 0, device: 'bbbbbbbbbbbbtab1' }), kind: 'accession' as const, id: a.id, field: 'notesBase', value: 'x' };
+    const edit = { t: later(5000, 'bbbbbbbbbbbbtab1'), kind: 'accession' as const, id: a.id, field: 'notes', value: 'mine, and more' };
+    const base = { t: later(5000, 'bbbbbbbbbbbbtab1', 1), kind: 'accession' as const, id: a.id, field: 'notesBase', value: mine };
+    await collection.ingest([old, edit, base], 'import');
+    expect(collection.events(a.id).filter((e) => e.t === 'note')).toHaveLength(0);
+  });
+  it('a push is never cut between a notes change and its base', async () => {
+    const { cutBefore } = await import('$lib/sync/engine.svelte');
+    const list = [{ field: 'price' }, { field: 'notes', kind: 'accession', id: 'r1' }, { field: 'notesBase', kind: 'accession', id: 'r1' }, { field: 'acc' }] as never[];
+    expect(cutBefore(list, 2)).toBe(1);
+    expect(cutBefore(list, 3)).toBe(3);
+    expect(cutBefore(list, 1)).toBe(1);
   });
 });

@@ -7,7 +7,8 @@
   onMount(() => collection.load());
   let adding = $state(false);
   let name = $state('');
-  let kind = $state<LocationKind>('room');
+  let kind = $state<LocationKind | ''>(''); // chosen, never defaulted: a bench filed as a room says "whole room" on every watering line (round twenty-six, 16)
+  let kindMsg = $state('');
   let parent = $state<string | null>(null);
 
   type Row = { loc: Location; depth: number; n: number; deepN: number };
@@ -27,8 +28,10 @@
 
   async function add() {
     if (!name.trim()) return;
+    kindMsg = kind ? '' : 'Say what kind of place it is.';
+    if (!kind) { document.getElementById('loc-kind')?.focus(); return; }
     await collection.addLocation({ name: name.trim(), type: kind, parentId: parent });
-    name = ''; parent = null; kind = 'room'; adding = false; // the parent and the kind are chosen per place: the last one's must not file the next one inside it (round twenty-two, 3)
+    name = ''; parent = null; kind = ''; adding = false; // the parent and the kind are chosen per place: the last one's must not file the next one inside it (round twenty-two, 3)
   }
 </script>
 
@@ -41,7 +44,8 @@
 {#if adding}
   <form class="cult form" onsubmit={(e) => { e.preventDefault(); add(); }}>
     <input id="loc-name" type="text" placeholder="Name" aria-label="Name of the new place" bind:value={name} />
-    <select id="loc-kind" bind:value={kind} aria-label="Kind of place">{#each LOCATION_KINDS as k}<option value={k.k}>{k.label}</option>{/each}</select>
+    <select id="loc-kind" bind:value={kind} aria-label="Kind of place" aria-invalid={!!kindMsg} aria-describedby={kindMsg ? 'loc-kind-bad' : undefined} onchange={() => (kindMsg = '')}><option value="" disabled>Kind of place…</option>{#each LOCATION_KINDS as k}<option value={k.k}>{k.label}</option>{/each}</select>
+    {#if kindMsg}<span class="bad small" id="loc-kind-bad">{kindMsg}</span>{/if}
     <select id="loc-parent" bind:value={parent} aria-label="Inside which place">
       <option value={null}>Top level</option>
       {#each rows as r}<option value={r.loc.id}>{'  '.repeat(r.depth)}{r.loc.name}</option>{/each}
