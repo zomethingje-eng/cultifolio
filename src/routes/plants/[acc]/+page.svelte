@@ -243,6 +243,7 @@
   let f = $state({ taxonName: '', cultivar: '', nameKind: 'species' as 'species' | 'cultivar' | 'hybrid', parentage: '', nameAsReceived: '', fieldNumber: '', provenance: 'unknown' as Provenance, acquired: '', sourceFrom: '', sourceForm: '', price: '', locationId: null as string | null });
   function startEdit() {
     if (!a) return;
+    edDateMsg = ''; // a refusal belongs to the edit that was refused, not to the next one opened (round twenty-seven, R2-2)
     edKey = a.taxonKey ?? null;
     f = { taxonName: a.taxonName, cultivar: a.cultivar ?? '', nameKind: kindOf(a), parentage: a.parentage ?? '', nameAsReceived: a.nameAsReceived ?? '', fieldNumber: a.fieldNumber ?? '', provenance: a.provenance ?? 'unknown', acquired: a.acquired ?? '', sourceFrom: a.sourceFrom ?? '', sourceForm: a.sourceForm ?? '', price: a.price ?? '', locationId: a.locationId ?? null };
     editing = true;
@@ -424,7 +425,7 @@
       <label><span>Form</span><input id="ed-form" type="text" bind:value={f.sourceForm} placeholder="plant, seedling, seed, cutting" /></label>
       <label><span>Price</span><input id="ed-price" type="text" bind:value={f.price} /></label>
       <div class="wide"><span class="lbl">Place</span><LocationPicker bind:value={f.locationId} id="ed-loc" label="Place" /></div>
-      <div class="actions wide"><button class="btn" type="button" onclick={() => (editing = false)}>Cancel</button><button class="btn pri" type="submit">Save</button></div>
+      <div class="actions wide"><button class="btn" type="button" onclick={() => { editing = false; edDateMsg = ''; }}>Cancel</button><button class="btn pri" type="submit">Save</button></div>
     </form>
   {/if}
 

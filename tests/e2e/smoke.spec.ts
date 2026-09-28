@@ -388,6 +388,7 @@ test('backup: export a zip, wipe the device, restore it, and the collection is i
   await page.fill('#loc-name', 'Back porch');
   await page.selectOption('#loc-kind', 'outdoor');
   await page.getByRole('button', { name: 'Add', exact: true }).click();
+  await expect(page.locator('.tree .row', { hasText: 'Back porch' })).toBeVisible();
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
   const opt = await page.locator('#f-loc option', { hasText: 'Back porch' }).getAttribute('value');
   await page.selectOption('#f-loc', opt!);
@@ -612,6 +613,7 @@ test('sync: two devices share one encrypted vault; changes and photos cross both
   await a.fill('#loc-name', 'Kitchen sill');
   await a.selectOption('#loc-kind', 'windowsill');
   await a.getByRole('button', { name: 'Add', exact: true }).click();
+  await expect(a.locator('.tree .row', { hasText: 'Kitchen sill' })).toBeVisible();
   await a.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
   const opt = await a.locator('#f-loc option', { hasText: 'Kitchen sill' }).getAttribute('value');
   await a.selectOption('#f-loc', opt!);
@@ -1009,6 +1011,7 @@ test('every control has a name, headings do not jump, images have alt text, mute
   await page.fill('#loc-name', 'Bench A');
   await page.selectOption('#loc-kind', 'shelf'); // a kind is chosen, never defaulted (round twenty-six, 16)
   await page.getByRole('button', { name: 'Add', exact: true }).click();
+  await expect(page.locator('.tree .row', { hasText: 'Bench A' })).toBeVisible(); // the write is on screen before the page is left (round twenty-seven, R2-1)
   const findings: string[] = [];
   for (const r of ['/', '/plants', '/plants/new', '/places', '/propagation', '/propagation/new', '/labels', '/backup', '/sync', '/frost', '/offline', '/about/how', '/species/copiapoa-cinerea', '/species/refusia-testii', `/plants/${acc}`]) {
     await page.goto(r);
@@ -1152,6 +1155,16 @@ test('removing asks twice; a species photograph that fails to load leaves the na
   await page.getByRole('button', { name: 'Restore this plant' }).click();
   await expect(page.locator('h1.sci')).toContainText('Copiapoa cinerea');
   await expect(page.locator('.toast')).toContainText('restored');
+  // an edit refused for a future date, then cancelled: reopening shows the kept date with no stale refusal (round twenty-seven, R2-2)
+  await more(page, 'Edit');
+  await page.fill('#ed-date', '2099-01-01');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.locator('#ed-date-bad')).toContainText('2099-01-01 is in the future');
+  await page.locator('.editform').getByRole('button', { name: 'Cancel' }).click();
+  await more(page, 'Edit');
+  await expect(page.locator('#ed-date-bad')).toHaveCount(0);
+  await expect(page.locator('#ed-date')).not.toHaveValue('2099-01-01');
+  await page.locator('.editform').getByRole('button', { name: 'Cancel' }).click();
   // a future acquisition date is refused before any number is minted (round twenty-six, 3)
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
   await page.fill('#f-date', '2099-01-01');
@@ -2050,6 +2063,7 @@ test('a place chosen on the add form while the reference is still answering is k
     await page.fill('#loc-name', n);
     await page.selectOption('#loc-kind', 'shelf'); // a kind is chosen, never defaulted (round twenty-six, 16)
     await page.getByRole('button', { name: 'Add', exact: true }).click();
+    await expect(page.locator('.tree .row', { hasText: n })).toBeVisible();
   }
   // make Greenhouse the last-used place
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
@@ -2115,6 +2129,7 @@ test('round twenty-three: a name the reference does not hold is added on the sec
   await page.fill('#loc-name', 'Porch');
   await page.selectOption('#loc-kind', 'outdoor');
   await page.getByRole('button', { name: 'Add', exact: true }).click();
+  await expect(page.locator('.tree .row', { hasText: 'Porch' })).toBeVisible();
   await page.getByRole('button', { name: 'New place' }).click();
   await expect(page.locator('#loc-kind')).toHaveValue(''); // the kind is chosen per place, never carried from the last one or defaulted (round twenty-three, 19; round twenty-six, 16)
   await page.fill('#loc-name', 'Cold frame');

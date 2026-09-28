@@ -182,7 +182,7 @@
     }
     await collection.put('sowing', id, {
       taxonName: f.taxonName.trim() || s.taxonName, cultivar: f.cultivar.trim() || null, method: f.method, sown: f.sown || s.sown, count: Math.max(1, Number(f.count) || s.count),
-      sourceFrom: veg ? null : f.sourceFrom.trim() || null, sourceRef: veg ? null : f.sourceRef.trim() || null, provenance: veg ? 'veg' : f.provenance, medium: f.medium.trim() || null, container: f.container.trim() || null,
+      sourceFrom: veg ? null : f.sourceFrom.trim() || null, sourceRef: veg ? null : f.sourceRef.trim() || null, provenance: veg ? 'veg' : f.provenance === 'veg' ? 'unknown' : f.provenance, // a batch edited from cuttings back to seed does not keep 'veg', which the seed select cannot show medium: f.medium.trim() || null, container: f.container.trim() || null,
       treatment: f.treatment.trim() || null, bottomHeatC: heat.c, covered: f.covered, locationId: f.locationId ?? null, notes: f.notes.trim() || null, notesBase: notesBaseStamp
     });
     editing = false;
