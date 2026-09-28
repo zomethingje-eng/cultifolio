@@ -3,7 +3,7 @@
  * reader, a photo writer) so the same code is unit-tested in Node and run in
  * the browser; the vault wiring is in ./io.ts.
  */
-import { zip, unzip, strToU8, strFromU8, type Zippable } from 'fflate';
+import { zipSync, unzipSync, strToU8, strFromU8, type Zippable } from 'fflate';
 import * as v from 'valibot';
 import { materialise, live, changeError, type Change, type Record_ } from '$core/log';
 import { kindOf, accNo, sowNo, type Accession, type Photo, type Sowing } from '$lib/db/types';
@@ -96,7 +96,12 @@ export async function buildBackup(o: BuildOpts): Promise<BuiltBackup> {
   files['changes.json'] = strToU8(JSON.stringify(o.changes));
   if (o.settings && Object.keys(o.settings).length) files['device.json'] = strToU8(JSON.stringify(o.settings, null, 1));
   files['plants.csv'] = strToU8(plantsCsv(live<Accession & Record_>(s.state, 'accession'), s.state));
-  const bytes = await new Promise<Uint8Array>((resolve, reject) => zip(files, { level: 6 }, (err, out) => (err ? reject(err) : resolve(out))));
+  files['batches.csv'] = strToU8(batchesCsv(live<Sowing & Record_>(s.state, 'sowing'), s.state));
+  // The synchronous writer, on purpose: fflate's asynchronous one hands any entry of 160 kB or more to a worker it makes
+  // from a blob: URL, which the site's CSP (worker-src 'self') refuses, so a backup whose changes.json had grown past
+  // that (about a thousand changes) failed on every device while a small one passed. A few megabytes deflate in well
+  // under a second on the main thread (round twenty-eight, 0).
+  const bytes = zipSync(files, { level: 6 });
   return { bytes, photosMissing };
 }
 
@@ -129,7 +134,7 @@ export async function readBackup(bytes: Uint8Array): Promise<ReadBackup> {
     return { manifest: null, changes: checkRows(r.output.changes), settings: null, photoIds: [], readPhoto: () => null };
   }
   if (!(bytes[0] === 0x50 && bytes[1] === 0x4b)) throw new Error('That file is neither a Cultifolio backup zip nor a JSON export.');
-  const files = await new Promise<Record<string, Uint8Array>>((resolve, reject) => unzip(bytes, (err, out) => (err ? reject(err) : resolve(out))));
+  const files = unzipSync(bytes); // synchronous for the same reason as the writer: the asynchronous reader inflates entries over 512 kB in a blob: worker the CSP refuses
   if (!files['manifest.json'] || !files['changes.json']) throw new Error('That zip has no manifest.json and changes.json; it is not a Cultifolio backup.');
   const m = v.safeParse(Manifest, JSON.parse(strFromU8(files['manifest.json'])));
   if (!m.success) throw new Error('The backup manifest is not in a shape this version understands.');
@@ -194,19 +199,39 @@ const csvCell = (x: unknown) => {
   return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 };
 
+/** A place's full path for a sheet cell, "Greenhouse › Bench 2". */
+const locPath = (state: Map<string, Record_>, id: string | null | undefined, seen = new Set<string>()): string => {
+  if (!id || seen.has(id)) return ''; // a cycle in a damaged log ends here rather than never
+  seen.add(id);
+  const r = state.get(`location:${id}`);
+  if (!r || r._deleted) return '';
+  const parent = locPath(state, r.parentId as string | null, seen);
+  return parent ? `${parent} › ${r.name}` : String(r.name);
+};
+const csvSheet = (head: string[], rows: string[]) => '\ufeff' + [head.join(','), ...rows].join('\r\n') + '\r\n';
+
 /** The plants as a flat sheet: one row each, the fields a person would want in a spreadsheet. */
 export function plantsCsv(accs: Array<Accession & Record_>, state: Map<string, Record_>): string {
-  const loc = (id: string | null | undefined, seen = new Set<string>()): string => {
-    if (!id || seen.has(id)) return ''; // a cycle in a damaged log ends here rather than never
-    seen.add(id);
-    const r = state.get(`location:${id}`);
-    if (!r || r._deleted) return '';
-    const parent = loc(r.parentId as string | null, seen);
-    return parent ? `${parent} › ${r.name}` : String(r.name);
-  };
+  const loc = (id: string | null | undefined) => locPath(state, id);
   const head = ['number', 'species', 'cultivar', 'kind', 'parentage', 'name as received', 'field number', 'provenance', 'status', 'location', 'acquired', 'from', 'lot or reference', 'form', 'price', 'sowing', 'notes'];
   const rows = [...accs]
     .sort((a, b) => accNo(a).localeCompare(accNo(b)))
     .map((a) => [accNo(a), a.taxonName, a.cultivar, kindOf(a), a.parentage, a.nameAsReceived, a.fieldNumber, a.provenance, a.status, a.locationId ? loc(a.locationId) : a.location, a.acquired, a.sourceFrom, a.sourceRef, a.sourceForm, a.price, a.sowingId ? sowNo((state.get(`sowing:${a.sowingId}`) as unknown as Sowing | undefined) ?? { id: a.sowingId }) : null, a.notes].map(csvCell).join(','));
-  return '﻿' + [head.join(','), ...rows].join('\r\n') + '\r\n';
+  return csvSheet(head, rows);
+}
+
+/** The propagation batches as a sheet, with the figures the batch page shows: what went in, the latest count, what was potted and lost (round twenty-eight, 9). */
+export function batchesCsv(sowings: Array<Sowing & Record_>, state: Map<string, Record_>): string {
+  const head = ['number', 'species', 'cultivar', 'kind', 'parentage', 'method', 'parent plant', 'date', 'started', 'counted', 'potted', 'lost', 'from', 'lot', 'field number', 'provenance', 'medium', 'container', 'pre-treatment', 'bottom heat C', 'covered', 'location', 'status', 'notes'];
+  const events = new Map<string, Array<{ t: string; n: number }>>();
+  for (const r of state.values()) if (r.kind === 'event' && !r._deleted && typeof r.acc === 'string') { let l = events.get(r.acc); if (!l) events.set(r.acc, (l = [])); l.push({ t: String(r.t), n: typeof r.n === 'number' ? r.n : 0 }); }
+  const rows = [...sowings]
+    .sort((a, b) => sowNo(a).localeCompare(sowNo(b)))
+    .map((s) => {
+      const ev = events.get(s.id) ?? [];
+      const germ = ev.filter((e) => e.t === 'germinate');
+      const parent = s.parentAcc ? (state.get(`accession:${s.parentAcc}`) as unknown as Accession | undefined) : undefined;
+      return [sowNo(s), s.taxonName, s.cultivar, kindOf(s), s.parentage, s.method, parent ? accNo(parent) : s.parentAcc, s.sown, s.count, germ.length ? Math.max(...germ.map((e) => e.n)) : null, ev.filter((e) => e.t === 'potup').reduce((n, e) => n + e.n, 0) || null, ev.filter((e) => e.t === 'loss').reduce((n, e) => n + e.n, 0) || null, s.sourceFrom, s.sourceRef, s.fieldNumber, s.provenance, s.medium, s.container, s.treatment, s.bottomHeatC, s.covered ? 'yes' : null, locPath(state, s.locationId), s.status, s.notes].map(csvCell).join(',');
+    });
+  return csvSheet(head, rows);
 }

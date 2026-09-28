@@ -41,6 +41,19 @@
   const menuOpen = $derived(open && suggestions.length > 0);
   const optionId = (i: number) => `${listId}-${i}`;
 
+  type Row = { key: number; canonicalName?: string; scientificName?: string; family?: string; rank?: string; status?: string };
+  /** The name service's last answer, by the name asked: the exact-spelling check on blur asks the same question the search just asked, and reads this instead of sending it again (round twenty-eight, 14). */
+  let lastRows: { q: string; rows: Row[] } | null = null;
+  async function namesFor(q: string): Promise<Row[]> {
+    if (lastRows && lastRows.q === q) return lastRows.rows;
+    // /api/names proxies GBIF's species/suggest (same JSON shape) from the Worker, so no name you type leaves this site from the browser.
+    const r = await fetch(`/api/names?q=${encodeURIComponent(q)}`);
+    if (!r.ok) throw new Error(String(r.status));
+    const rows = (await r.json()) as Row[];
+    lastRows = { q, rows };
+    return rows;
+  }
+
   async function loadIndex() {
     if (index) return index;
     try {
@@ -72,17 +85,13 @@
     open = true;
     if (needle.length < 3) return;
     try {
-      // /api/names proxies GBIF's species/suggest (same JSON shape) from the Worker, so no name you type leaves this site from the browser.
-      const r = await fetch(`/api/names?q=${encodeURIComponent(p.scientific)}`);
-      if (!live()) return;
       // A refusal is said, not shown as an empty list: the grower can still type the name and let the plant page repair the key later (round seventeen, 1).
-      if (!r.ok) { nameServiceDown = true; return; }
-      nameServiceDown = false;
-      const rows = (await r.json()) as Array<{ key: number; canonicalName?: string; scientificName: string; family?: string; rank?: string; status?: string }>;
+      const rows = await namesFor(p.scientific);
       if (!live()) return;
+      nameServiceDown = false;
       const remote: Sugg[] = rows
         .filter((x) => (genusOnly ? x.rank === 'GENUS' : /SPECIES|SUBSPECIES|VARIETY|FORM/.test(x.rank ?? '')))
-        .map((x) => ({ key: x.key, name: x.canonicalName ?? x.scientificName, family: x.family, rank: x.rank, status: x.status }))
+        .map((x) => ({ key: x.key, name: x.canonicalName ?? x.scientificName ?? '', family: x.family, rank: x.rank, status: x.status }))
         .filter((x) => !local.some((l) => l.key === x.key))
         // The backbone lists a subspecies under several keys (accepted, synonyms of one another); one line per name and rank is enough.
         .filter((x, i, arr) => arr.findIndex((y) => y.name === x.name && y.rank === x.rank) === i);
@@ -126,9 +135,7 @@
     }
     try {
       // An exact spelling among the suggestions resolves the name; a genus-only name (a hybrid, a cultivar of unstated parentage) resolves at genus rank.
-      const r = await fetch(`/api/names?q=${encodeURIComponent(p.scientific)}`);
-      if (!r.ok) throw new Error(String(r.status));
-      const rows = (await r.json()) as Array<{ key: number; canonicalName?: string; scientificName?: string; rank?: string }>;
+      const rows = await namesFor(p.scientific);
       if (gen !== reqGen) return; // the field changed while this was asked
       const want = p.scientific.toLowerCase();
       const m = rows.find((x) => (x.canonicalName ?? x.scientificName ?? '').toLowerCase() === want && (p.epithet ? /SPECIES|SUBSPECIES|VARIETY|FORM/.test(x.rank ?? '') : x.rank === 'GENUS'));

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { importV2 } from '$lib/import/v2';
 import type { Change } from '$core/log';
-import { materialise, live } from '$core/log';
+import { materialise, live, validateChanges } from '$core/log';
 
 const backup = {
   collection: {
@@ -95,6 +95,19 @@ describe('v2 importer', () => {
     const third = importV2(backup, { now: 1_800_000_000_000, exists: (kind, id) => kind === 'accession' && id === '2025-0003' });
     expect(third.report).toMatchObject({ accessions: 1, events: 1, taxa: 2, alreadyHere: 1 });
     expect(third.changes.some((c) => c.id === '2025-0003' || c.id.startsWith('v2-2025-0003-'))).toBe(false);
+  });
+  it('a number typed as a number, a price typed as a number, and a second plant under a number in the file (round twenty-eight, 0)', () => {
+    const file = { collection: { accessions: [{ acc: 12, taxonId: 'copiapoa-cinerea', notes: 7, source: { price: 12.5 }, provenance: 'F1', status: 'growing' }, { acc: '12', taxonId: 'welwitschia-mirabilis', status: 'growing' }] } };
+    const { changes, report } = importV2(file, { now: 1_800_000_000_000 });
+    expect(report.accessions).toBe(1);
+    expect(report.skipped).toEqual(['a second plant numbered 12 in the file']);
+    const { state } = materialise(changes);
+    const a = state.get('accession:12')!;
+    expect(a.taxonName).toBe('copiapoa-cinerea');
+    expect(a.price).toBe('12.5');
+    expect(a.notes).toBe('7');
+    expect(a.provenance).toBeNull(); // 'F1' is not a provenance this build knows
+    expect(validateChanges(changes)).toHaveLength(changes.length); // every change has a value of the type its field takes
   });
   it('accepts a raw collection object too', () => {
     const { report } = importV2(backup.collection);

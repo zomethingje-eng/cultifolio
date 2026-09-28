@@ -154,9 +154,11 @@ export interface Sowing {
   sown: string; // YYYY-MM-DD
   /** Seeds sown, or cuttings/offsets started. */
   count: number;
-  /** Where the seed came from and its lot / field number; the provenance the seed carries. */
+  /** Where the seed came from, the seller's lot code, and the collector's field number; the provenance the seed carries. */
   sourceFrom?: string | null;
   sourceRef?: string | null;
+  /** The field number of the seed's collection (KK 1462), carried to every plant potted up as its own; the lot is the seller's and stays the plant's `sourceRef` (round twenty-eight, 4). */
+  fieldNumber?: string | null;
   provenance?: Provenance | null;
   medium?: string | null;
   container?: string | null;

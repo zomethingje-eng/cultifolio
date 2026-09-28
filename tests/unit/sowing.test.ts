@@ -41,8 +41,9 @@ describe('sowings', () => {
   });
 
   it('numbers batches per year, counts cumulatively, and pots up into numbered accessions', async () => {
-    const s = await collection.addSowing({ taxonName: 'Copiapoa cinerea', method: 'seed', sown: '2026-03-01', count: 20, sourceFrom: 'Mesa Garden', sourceRef: 'MG 456', provenance: 'wild' });
+    const s = await collection.addSowing({ taxonName: 'Copiapoa cinerea', method: 'seed', sown: '2026-03-01', count: 20, sourceFrom: 'Mesa Garden', sourceRef: 'MG 456', fieldNumber: 'KK 1462', provenance: 'wild' });
     expect(sowNo(s)).toBe('S2026-001');
+    expect(collection.sowingStats(s.id).rate).toBeNull(); // no count yet is not 0 % (round twenty-eight, 3)
     expect(s.id).not.toBe('S2026-001'); // identity and number are different things
     expect(s.status).toBe('active');
     await collection.addEvent({ acc: s.id, d: '2026-03-09', t: 'germinate', n: 4 });
@@ -64,7 +65,8 @@ describe('sowings', () => {
     const a = collection.accession(made[0].id)!;
     expect(a.sowingId).toBe(s.id);
     expect(a.provenance).toBe('f1'); // wild seed raises F1 plants
-    expect(a.fieldNumber).toBe('MG 456');
+    expect(a.fieldNumber).toBe('KK 1462'); // the field number is the collector's; the lot is the seller's and is not a field number (round twenty-eight, 4)
+    expect(a.sourceRef).toBe('MG 456');
     expect(a.sourceFrom).toBe('Mesa Garden');
     expect(a.sourceForm).toBe('seedling');
     expect(a.acquired).toBe('2026-06-01');
@@ -313,9 +315,16 @@ describe('notesBase, the gaps (round twenty-six, 2)', () => {
   });
   it('a push is never cut between a notes change and its base', async () => {
     const { cutBefore } = await import('$lib/sync/engine.svelte');
-    const list = [{ field: 'price' }, { field: 'notes', kind: 'accession', id: 'r1' }, { field: 'notesBase', kind: 'accession', id: 'r1' }, { field: 'acc' }] as never[];
+    const w = (tab: string) => `1789520000000-0000-aaaaaaaaaaaa${tab}`;
+    const list = [{ t: w('tab1'), field: 'price' }, { t: w('tab1'), field: 'notes', kind: 'accession', id: 'r1' }, { t: w('tab1'), field: 'notesBase', kind: 'accession', id: 'r1' }, { t: w('tab1'), field: 'acc' }] as never[];
     expect(cutBefore(list, 2)).toBe(1);
     expect(cutBefore(list, 3)).toBe(3);
     expect(cutBefore(list, 1)).toBe(1);
+    // another tab's change stamped between the pair (round twenty-eight, 0): the cut still moves before the notes
+    const mixed = [{ t: w('tab1'), field: 'price' }, { t: w('tab1'), field: 'notes', kind: 'accession', id: 'r1' }, { t: w('tab2'), field: 'price', kind: 'accession', id: 'r2' }, { t: w('tab1'), field: 'notesBase', kind: 'accession', id: 'r1' }] as never[];
+    expect(cutBefore(mixed, 3)).toBe(1);
+    // the other tab's own edit of the same notes between them: not this pair, the cut stays
+    const other = [{ t: w('tab1'), field: 'price' }, { t: w('tab1'), field: 'notes', kind: 'accession', id: 'r1' }, { t: w('tab2'), field: 'notes', kind: 'accession', id: 'r1' }, { t: w('tab1'), field: 'notesBase', kind: 'accession', id: 'r1' }] as never[];
+    expect(cutBefore(other, 3)).toBe(3);
   });
 });

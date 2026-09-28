@@ -75,8 +75,18 @@ const META = 'sync';
  */
 export function cutBefore(list: Change[], at: number): number {
   if (at <= 1 || at >= list.length) return at;
-  const prev = list[at - 1], next = list[at];
-  return next.field === 'notesBase' && prev.field === 'notes' && next.kind === prev.kind && next.id === prev.id ? at - 1 : at;
+  const next = list[at];
+  if (next.field !== 'notesBase') return at;
+  // The base's notes change is the same writer's nearest earlier notes change to the record; another tab's change
+  // stamped in the same millisecond can sit between them, so the walk back is a few steps, not one (round twenty-eight, 0).
+  const writer = (c: Change) => c.t.slice(c.t.lastIndexOf('-') + 1);
+  for (let j = at - 1; j >= Math.max(1, at - 8); j--) {
+    const c = list[j];
+    if (c.kind !== next.kind || c.id !== next.id) continue;
+    if (c.field === 'notes' && writer(c) === writer(next)) return j;
+    if (c.field === 'notes' || c.field === 'notesBase') break; // another edit of the same notes: the pair is not this one
+  }
+  return at;
 }
 /** Written by "Stop syncing" (and a replace from backup, which goes through it): which vault this device was in, so the sync page can lead with rejoining rather than with making a second vault (round twenty-four, 10). */
 const WAS = 'sync-was';

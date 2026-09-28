@@ -57,6 +57,8 @@
     if (!d) return `Give the ${what} a date.`;
     if (d > today()) return `${what[0].toUpperCase()}${what.slice(1)} dated ${d} is in the future.`;
     if (s && d < s.sown) return `${what[0].toUpperCase()}${what.slice(1)} dated ${d} is before the ${m.veg ? 'batch was started' : 'sowing'} on ${s.sown}.`;
+    // A potting or a loss takes from what a count put in the pot, so it cannot be dated before the first count that found anything (round twenty-eight, 6).
+    if ((what === 'potting' || what === 'loss') && st.firstUp && d < st.firstUp) return `${what[0].toUpperCase()}${what.slice(1)} dated ${d} is before the first count that found anything ${upWord}, on ${st.firstUp}.`;
     return null;
   };
   /** A count can go only if what is left still covers what was potted and lost: the batch never says 0 up and 2 potted. */
@@ -147,6 +149,7 @@
     ntext = '';
   }
   let confirmEvent = $state<string | null>(null);
+  let confirmDone = $state(false); // Mark done with plants still in the pot asks first: done means nothing more will be potted from it (round twenty-eight, 10)
   async function setStatus(status: 'active' | 'done' | 'failed') {
     await collection.put('sowing', id, { status });
     // The change goes in the log, dated today, so the batch's own timeline says when and the page says it happened (round twenty-three, 16).
@@ -162,27 +165,49 @@
 
   /* edit */
   let editing = $state(false);
-  let f = $state({ taxonName: '', cultivar: '', method: 'seed' as PropMethod, sown: '', count: 0, sourceFrom: '', sourceRef: '', provenance: 'unknown' as Provenance, medium: '', container: '', treatment: '', bottomHeatC: '' as string | number | null, covered: false, locationId: null as string | null, notes: '' });
+  let f = $state({ taxonName: '', cultivar: '', method: 'seed' as PropMethod, sown: '', count: 0, sourceFrom: '', sourceRef: '', fieldNumber: '', provenance: 'unknown' as Provenance, medium: '', container: '', treatment: '', bottomHeatC: '' as string | number | null, covered: false, locationId: null as string | null, notes: '' });
   let notesBaseStamp: string | null = null; // the notes the edit form opened on, so a text that arrives meanwhile is not written over as if seen (round twenty-six, 2)
   function startEdit() {
     if (!s) return;
     notesBaseStamp = collection.notesStamp('sowing', id);
-    f = { taxonName: s.taxonName, cultivar: s.cultivar ?? '', method: s.method, sown: s.sown, count: s.count, sourceFrom: s.sourceFrom ?? '', sourceRef: s.sourceRef ?? '', provenance: s.provenance ?? 'unknown', medium: s.medium ?? '', container: s.container ?? '', treatment: s.treatment ?? '', bottomHeatC: s.bottomHeatC == null ? '' : String(units.current === 'us' ? +cToF(s.bottomHeatC).toFixed(1) : s.bottomHeatC), covered: s.covered ?? false, locationId: s.locationId ?? null, notes: s.notes ?? '' };
+    edMsg = '';
+    f = { taxonName: s.taxonName, cultivar: s.cultivar ?? '', method: s.method, sown: s.sown, count: s.count, sourceFrom: s.sourceFrom ?? '', sourceRef: s.sourceRef ?? '', fieldNumber: s.fieldNumber ?? '', provenance: s.provenance ?? 'unknown', medium: s.medium ?? '', container: s.container ?? '', treatment: s.treatment ?? '', bottomHeatC: s.bottomHeatC == null ? '' : String(units.current === 'us' ? +cToF(s.bottomHeatC).toFixed(1) : s.bottomHeatC), covered: s.covered ?? false, locationId: s.locationId ?? null, notes: s.notes ?? '' };
     editing = true;
   }
   let heatMsg = $state('');
+  let edMsg = $state('');
+  /** The edit form is checked as the log forms are: a start date in the future, or after a line already on the log, and a started count below what has been counted are refused with a sentence (round twenty-eight, 5). */
+  const editProblem = (): string => {
+    if (!s) return '';
+    const sown = f.sown || s.sown;
+    if (sown > today()) return `The ${m.veg ? 'start' : 'sowing'} date ${sown} is in the future.`;
+    const first = events.reduce<string | null>((d, e) => (!d || e.d < d ? e.d : d), null);
+    if (first && sown > first) return `The ${m.veg ? 'start' : 'sowing'} date ${sown} is after the batch's first log entry on ${first}.`;
+    const count = Math.max(1, Number(f.count) || s.count);
+    if (count < st.germinated) return `${count} started is fewer than the ${st.germinated} already counted ${upWord}.`;
+    return '';
+  };
   async function saveEdit() {
     if (!s) return;
     const heat = heatCheck(f.bottomHeatC, units.current); // the same check as the new-batch form: 77 does not save as 77 °C here either
-    const veg = (PROP_METHODS.find((x) => x.k === f.method) ?? m).veg; // a cuttings batch has no seed source or seed provenance, as on the add form (round twenty-four, 13)
+    const veg = (PROP_METHODS.find((x) => x.k === f.method) ?? m).veg;
     heatMsg = heat.msg;
     if (heatMsg) {
       document.getElementById('se-heat')?.focus();
       return;
     }
+    edMsg = editProblem();
+    if (edMsg) return;
     await collection.put('sowing', id, {
       taxonName: f.taxonName.trim() || s.taxonName, cultivar: f.cultivar.trim() || null, method: f.method, sown: f.sown || s.sown, count: Math.max(1, Number(f.count) || s.count),
-      sourceFrom: veg ? null : f.sourceFrom.trim() || null, sourceRef: veg ? null : f.sourceRef.trim() || null, provenance: veg ? 'veg' : f.provenance === 'veg' ? 'unknown' : f.provenance, // a batch edited from cuttings back to seed does not keep 'veg', which the seed select cannot show medium: f.medium.trim() || null, container: f.container.trim() || null,
+      // The seed fields are kept whatever the method: a batch switched to cuttings by mistake keeps its seed source, lot and
+      // field number for the switch back, and the page hides them while the method is vegetative (round twenty-eight, 2).
+      // Only the provenance follows the method, since 'veg' is what a vegetative batch is and the seed select cannot show it.
+      sourceFrom: f.sourceFrom.trim() || null, sourceRef: f.sourceRef.trim() || null, fieldNumber: f.fieldNumber.trim() || null,
+      provenance: veg ? 'veg' : f.provenance === 'veg' ? 'unknown' : f.provenance,
+      // Every line here is one field, on its own line: round twenty-seven's fix put this comment at the end of a line
+      // that went on, and Medium and Container were never saved again (round twenty-eight, 1).
+      medium: f.medium.trim() || null, container: f.container.trim() || null,
       treatment: f.treatment.trim() || null, bottomHeatC: heat.c, covered: f.covered, locationId: f.locationId ?? null, notes: f.notes.trim() || null, notesBase: notesBaseStamp
     });
     editing = false;
@@ -210,8 +235,8 @@
       {#if kindOf(s) === 'hybrid' && s.parentage}<p class="vern"><SpeciesName name={s.parentage} /></p>{/if}
       <p class="vern">
         {s.count} {m.unit} on {s.sown}
-        {#if parent} from <a class="mono" href="/plants/{accNo(parent)}">{accNo(parent)}</a>{:else if s.sourceFrom} from {s.sourceFrom}{/if}{#if s.sourceRef} · <span class="fnchip">{s.sourceRef}</span>{/if}
-        {#if !m.veg} · {s.provenance === 'wild' ? 'wild-collected seed' : s.provenance === 'f1' ? 'seed from ex-habitat plants' : s.provenance === 'fn' ? 'seed from cultivated plants' : 'seed provenance not stated'}{/if}
+        {#if parent} from <a class="mono" href="/plants/{accNo(parent)}">{accNo(parent)}</a>{:else if s.sourceFrom} from {s.sourceFrom}{/if}{#if !m.veg && s.fieldNumber}{' · '}<span class="fnchip">{s.fieldNumber}</span>{/if}{#if !m.veg && s.sourceRef}{' · lot '}{s.sourceRef}{/if}
+        {#if !m.veg}{' · '}{s.provenance === 'wild' ? 'wild-collected seed' : s.provenance === 'f1' ? 'seed from ex-habitat plants' : s.provenance === 'fn' ? 'seed from cultivated plants' : 'seed provenance not stated'}{/if}
       </p>
       <div class="pills">
         <span class="pill {s.status === 'active' ? 'a' : s.status === 'failed' ? 'b' : ''}">{s.status === 'active' ? 'in progress' : s.status}</span>
@@ -225,7 +250,11 @@
       <a class="btn" href="/species/{speciesSlug(s.taxonName)}">Species page</a>
       <button class="btn" onclick={startEdit}>Edit</button>
       {#if s.status === 'active'}
-        <button class="btn" onclick={() => setStatus('done')}>Mark done</button>
+        {#if confirmDone}
+          <span class="small" id="done-ask">{st.remaining} still in the pot: </span><button class="btn" id="done-yes" onclick={() => { confirmDone = false; setStatus('done'); }}>Mark done anyway</button><button class="btn" onclick={() => (confirmDone = false)}>Keep open</button>
+        {:else}
+          <button class="btn" onclick={() => (st.remaining > 0 ? (confirmDone = true, void focusNext('#done-yes')) : setStatus('done'))}>Mark done</button>
+        {/if}
         {#if !raised.length}<button class="btn" onclick={() => setStatus('failed')}>Mark failed</button>{/if}
       {:else}
         <button class="btn" onclick={() => setStatus('active')}>Reopen</button>
@@ -237,12 +266,13 @@
     <form class="cult editform" onsubmit={(e) => { e.preventDefault(); saveEdit(); }}>
       <label><span>Species</span><input id="se-name" type="text" bind:value={f.taxonName} /></label>
       <label><span>Cultivar</span><input id="se-cv" type="text" bind:value={f.cultivar} /></label>
-      <label><span>Method</span><select id="se-method" bind:value={f.method}>{#each PROP_METHODS as pm}<option value={pm.k}>{pm.label}</option>{/each}</select></label>
+      <label><span>Method</span><select id="se-method" bind:value={f.method} onchange={() => { if (f.provenance === 'veg' && !(PROP_METHODS.find((x) => x.k === f.method) ?? m).veg) f.provenance = 'unknown'; }}>{#each PROP_METHODS as pm}<option value={pm.k}>{pm.label}</option>{/each}</select></label>
       <label><span>Date</span><input id="se-date" type="date" bind:value={f.sown} /></label>
       <label><span>Started</span><input id="se-count" type="number" min="1" bind:value={f.count} /></label>
       {#if !(PROP_METHODS.find((x) => x.k === f.method) ?? m).veg}
         <label><span>Seed from</span><input id="se-from" type="text" bind:value={f.sourceFrom} /></label>
-        <label><span>Lot / field no.</span><input id="se-ref" type="text" bind:value={f.sourceRef} /></label>
+        <label><span>Field number</span><input id="se-fn" type="text" bind:value={f.fieldNumber} placeholder="e.g. KK 1462" /></label>
+        <label><span>Lot</span><input id="se-ref" type="text" bind:value={f.sourceRef} placeholder="the seller's lot code" /></label>
         <label><span>Seed provenance</span><select id="se-prov" bind:value={f.provenance}><option value="unknown">Not stated</option><option value="wild">Wild-collected</option><option value="f1">Ex-habitat plants</option><option value="fn">Cultivated plants</option></select></label>
       {/if}
       <label><span>Medium</span><input id="se-medium" type="text" bind:value={f.medium} /></label>
@@ -252,6 +282,7 @@
       <label class="row"><input id="se-covered" type="checkbox" bind:checked={f.covered} /> Covered</label>
       <div class="wide"><span class="lbl">Where</span><LocationPicker bind:value={f.locationId} id="se-loc" label="Where" /></div>
       <label class="wide"><span>Notes</span><textarea id="se-notes" rows="3" bind:value={f.notes}></textarea></label>
+      {#if edMsg}<p class="bad small wide" id="se-msg" role="alert" style="margin: 0">{edMsg}</p>{/if}
       <div class="actions wide"><button class="btn" type="button" onclick={() => (editing = false)}>Cancel</button><button class="btn pri" type="submit">Save</button></div>
     </form>
   {/if}

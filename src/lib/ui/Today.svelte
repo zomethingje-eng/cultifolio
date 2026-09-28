@@ -9,7 +9,7 @@
    * that has nothing to say is not shown; a forecast that did not answer says so rather than nothing.
    */
   import { collection } from '$lib/db/collection.svelte';
-  import { accNo, sowNo } from '$lib/db/types';
+  import { accNo, sowNo, PROP_METHODS } from '$lib/db/types';
   import { onMount } from 'svelte';
   import { getForecast, forecastRefusal } from '$lib/weather/client';
   type Risk = { level: string; text: string };
@@ -43,7 +43,7 @@
       frostLine ? { href: '/frost', tone: frostLine.tone, text: frostLine.text } : null,
       dry.length ? { href: '/plants?show=due', tone: 'warn', text: `${dry.length} of ${growing.length} plants not watered, or not recorded as watered, for three weeks or more.` } : null,
       unseen.length ? { href: '/places', tone: 'warn', text: `${unseen.length} plant${unseen.length === 1 ? '' : 's'} missed at the last audit or not seen for ninety days${unseen.length <= 3 ? ': ' + unseen.map(accNo).join(', ') : ''}.` } : null,
-      sowings.length ? { href: '/propagation', tone: 'ok', text: `${sowings.length} propagation batch${sowings.length === 1 ? '' : 'es'} in the tray, the oldest ${sowNo(sowings[0])} (${sowings[0].taxonName}) sown ${sowings[0].sown}.` } : null,
+      sowings.length ? { href: '/propagation', tone: 'ok', text: `${sowings.length} propagation batch${sowings.length === 1 ? '' : 'es'} in the tray, the oldest ${sowNo(sowings[0])} (${sowings[0].taxonName}) ${PROP_METHODS.find((x) => x.k === sowings[0].method)?.veg ? 'started' : 'sown'} ${sowings[0].sown}.` } : null,
       unphotographed.length && growing.length ? { href: '/plants?show=nophoto', tone: 'muted', text: `${unphotographed.length} of ${growing.length} plants without a photograph in the last twelve months${unphotographed.length <= 3 ? ': ' + unphotographed.map(accNo).join(', ') : ''}.` } : null
     ].filter((x): x is { href: string; tone: string; text: string } => !!x)
   );

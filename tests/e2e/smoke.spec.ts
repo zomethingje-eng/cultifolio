@@ -205,7 +205,8 @@ test('sowings: sow seed, count germination, pot up into numbered plants, propaga
   await page.locator('#species-name').blur();
   await page.fill('#s-count', '12');
   await page.fill('#s-from', 'Mesa Garden');
-  await page.fill('#s-ref', 'MG 123');
+  await page.fill('#s-fn', 'MG 123');
+  await page.fill('#s-ref', 'lot 77');
   await page.selectOption('#s-prov', 'wild');
   await page.fill('#s-medium', 'pumice and loam');
   await page.getByRole('button', { name: 'Start batch' }).click();
@@ -951,8 +952,12 @@ test('a refused source is a distinct state on every surface: species page, front
   await expect(page.locator('.card', { hasText: 'Habitat rain season' })).toContainText('Climate pending');
 });
 
+test.describe('with the reference cut', () => {
+// Without the service worker: the route aborts below must catch every request for the reference, and the experimental
+// interception of a worker's own fetches let one through now and then, so the test passed alone and failed in the suite
+// on its first try (round twenty-eight, R1-2). The page's own fetches are what the routes see, every time.
+test.use({ serviceWorkers: 'block' });
 test('an unreachable reference is "not reached", never "not in the reference"', async ({ page }) => {
-  // Cut the reference before the plant page is ever opened: the worker keeps a reached sheet file for the build (round ten).
   await page.route('**/api/index', (r) => r.abort());
   await page.route('**/api/sheets**', (r) => r.abort()); // the plant asks for its species' sheet by hash bucket
   await page.route('**/api/dossier/**', (r) => r.abort());
@@ -965,6 +970,7 @@ test('an unreachable reference is "not reached", never "not in the reference"', 
   await expect(t).toContainText('Reference not reached');
   await expect(t).toContainText('could not be reached from here; nothing is known either way');
   await expect(t).not.toContainText('Not in the reference');
+});
 });
 
 test('the species page carries the envelope: median with its span, the cells it rests on, the marker named as a marker', async ({ page }) => {
@@ -2180,4 +2186,136 @@ test('round twenty-three: a name the reference does not hold is added on the sec
   await expect(page.locator('.accrow')).toHaveCount(1);
   await expect(page.locator('#plants-q')).toHaveValue('etiolated porch');
   await expect(page.locator('#plants-sort')).toHaveValue('name');
+});
+
+test('round twenty-eight: a batch edit saves its medium and container, keeps the seed fields across a method switch, judges its date and count; the field number and the lot travel apart; Mark done asks while plants are in the pot', async ({ page }) => {
+  await page.goto('/propagation/new');
+  await page.selectOption('#s-method', 'seed');
+  await page.fill('#species-name', 'Copiapoa cinerea');
+  await page.locator('#species-name').blur();
+  await page.fill('#s-count', '10');
+  await page.fill('#s-from', 'Kakteen Haage');
+  await page.fill('#s-fn', 'KK 1462');
+  await page.fill('#s-ref', 'H-2026-77');
+  await page.fill('#s-medium', 'pumice');
+  await page.getByRole('button', { name: 'Start batch' }).click();
+  await expect(page).toHaveURL(/\/propagation\/S\d{4}-\d{3}$/);
+  const url = page.url();
+  // the header: source, field number and lot, each set off with its separator (round twenty-eight, 14)
+  await expect(page.locator('.idcard .vern').first()).toContainText('from Kakteen Haage · KK 1462 · lot H-2026-77 · seed provenance not stated');
+  // no count yet is not 0 % (round twenty-eight, 3)
+  await expect(page.locator('.cards .card', { hasText: 'Germinated' })).toContainText('–');
+  await expect(page.locator('.cards .card', { hasText: 'Germinated' })).not.toContainText('0%');
+  // edit: method to cuttings hides the seed fields but keeps them; medium and container are saved (round twenty-eight, 1 and 2)
+  await page.getByRole('button', { name: 'Edit' }).click();
+  await page.selectOption('#se-method', 'cutting');
+  await expect(page.locator('#se-fn')).toHaveCount(0);
+  await page.fill('#se-medium', 'perlite');
+  await page.fill('#se-container', '9 cm square');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await page.reload();
+  await expect(page.locator('.cards .card', { hasText: 'Struck' }).first()).toBeVisible();
+  await expect(page.locator('.idcard .vern').first()).not.toContainText('KK 1462'); // hidden for cuttings, not gone
+  await expect(page.getByText('perlite')).toBeVisible();
+  await expect(page.getByText('9 cm square')).toBeVisible();
+  // and back to seed: the seed fields are still there, the provenance is a seed one again
+  await page.getByRole('button', { name: 'Edit' }).click();
+  await page.selectOption('#se-method', 'seed');
+  await expect(page.locator('#se-fn')).toHaveValue('KK 1462');
+  await expect(page.locator('#se-ref')).toHaveValue('H-2026-77');
+  await expect(page.locator('#se-prov')).toHaveValue('unknown');
+  // the edit form judges what it is told (round twenty-eight, 5): a start date in the future
+  await page.fill('#se-date', '2099-01-01');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.locator('#se-msg')).toContainText('2099-01-01 is in the future');
+  await page.fill('#se-date', new Date(Date.now() - 10 * 86_400_000).toISOString().slice(0, 10)); // sown ten days ago; the count below is today's
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.locator('#se-msg')).toHaveCount(0);
+  await expect(page.locator('.idcard .vern').first()).toContainText('KK 1462 · lot H-2026-77');
+  // count 6, then the started count cannot go below it
+  await page.fill('#g-n', '6');
+  await page.getByRole('button', { name: 'Record count' }).click();
+  await expect(page.getByText('60%')).toBeVisible();
+  await page.getByRole('button', { name: 'Edit' }).click();
+  await page.fill('#se-count', '4');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.locator('#se-msg')).toContainText('4 started is fewer than the 6 already counted');
+  await page.getByRole('button', { name: 'Cancel' }).click();
+  // a potting dated before the first count is refused (round twenty-eight, 6)
+  await page.getByRole('button', { name: 'Pot up…' }).click();
+  await page.fill('#p-n', '2');
+  const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+  await page.fill('#p-date', yesterday);
+  await page.getByRole('button', { name: 'Pot up 2' }).click();
+  await expect(page.locator('form', { has: page.locator('#p-n') })).toContainText('is before the first count that found anything up');
+  await page.fill('#p-date', new Date().toISOString().slice(0, 10));
+  await page.getByRole('button', { name: 'Pot up 2' }).click();
+  await expect(page.locator('.notice', { hasText: /Potted up 2:/ })).toBeVisible();
+  // the potted plant carries the field number as its own and the lot as its reference (round twenty-eight, 4)
+  await page.locator('.rows a.accrow').first().click();
+  await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
+  await expect(page.locator('.fnchip', { hasText: 'KK 1462' })).toBeVisible();
+  await expect(page.locator('.fnchip', { hasText: 'H-2026-77' })).toHaveCount(0);
+  await expect(page.getByText('H-2026-77')).toBeVisible();
+  // Mark done with plants still in the pot asks first (round twenty-eight, 10)
+  await page.goto(url);
+  await page.getByRole('button', { name: 'Mark done', exact: true }).click();
+  await expect(page.locator('#done-ask')).toContainText('4 still in the pot');
+  await expect(page.locator('.pill', { hasText: 'in progress' })).toBeVisible();
+  await page.getByRole('button', { name: 'Keep open' }).click();
+  await expect(page.locator('.pill', { hasText: 'in progress' })).toBeVisible();
+  await page.getByRole('button', { name: 'Mark done', exact: true }).click();
+  await page.getByRole('button', { name: 'Mark done anyway' }).click();
+  await expect(page.locator('.pill', { hasText: 'done' }).first()).toBeVisible();
+});
+
+test('round twenty-eight: a backup of four hundred plants with long notes is written and read under the site\'s CSP, and a plant whose stored date is in the future can still be edited', async ({ page }) => {
+  // Four hundred plants with a kilobyte of notes each: changes.json past the sizes at which fflate's asynchronous
+  // writer (160 kB) and reader (512 kB) hand the work to a blob: worker, which worker-src 'self' refuses (round twenty-eight, 0).
+  const wall = Date.now() - 3_600_000;
+  const changes: unknown[] = [];
+  let n = 0;
+  const c = (kind: string, id: string, field: string, value: unknown) => changes.push({ t: `${wall + n}-${(n++ % 65536).toString(16).padStart(4, '0')}-abcdefabcdef0000`.replace(/^(\d{13})\d*/, '$1'), kind, id, field, value });
+  const note = 'Grown hard on the south bench; watered when the pot is light. '.repeat(20);
+  for (let i = 1; i <= 400; i++) {
+    const id = `r-seed-${i}`;
+    c('accession', id, 'taxonName', i % 2 ? 'Copiapoa cinerea' : 'Welwitschia mirabilis');
+    c('accession', id, 'status', 'growing');
+    c('accession', id, 'acquired', i === 400 ? '2099-01-01' : '2025-03-01');
+    c('accession', id, 'notes', `${i}: ${note}`);
+    c('accession', id, 'acc', `2025-${String(i).padStart(4, '0')}`);
+  }
+  const json = JSON.stringify({ format: 'cultifolio-changes', v: 1, changes });
+  expect(json.length).toBeGreaterThan(524_288);
+  await page.goto('/backup');
+  await page.locator('#bk-file').setInputFiles({ name: 'seed.json', mimeType: 'application/json', buffer: Buffer.from(json) });
+  await expect(page.locator('.preview')).toContainText('400 plants');
+  await page.click('#bk-merge');
+  await expect(page.locator('#bk-done')).toContainText('400 plants');
+  // the backup is written
+  const dl = page.waitForEvent('download');
+  await page.click('#bk-export');
+  const file = await dl;
+  const path = (await file.path())!;
+  await expect(page.locator('.secrule .n', { hasText: 'last today' })).toBeVisible();
+  // wiped, then read back
+  await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((res) => { const r = indexedDB.open('cultifolio'); r.onsuccess = () => res(r.result); });
+    await Promise.all(['changes', 'photos'].map((s) => new Promise<void>((res) => { const r = db.transaction(s, 'readwrite').objectStore(s).clear(); r.onsuccess = () => res(); })));
+  });
+  await page.goto('/backup');
+  await page.locator('#bk-file').setInputFiles(path);
+  await expect(page.locator('.preview')).toContainText('400 plants');
+  await page.click('#bk-merge');
+  await expect(page.locator('#bk-done')).toContainText('400 plants');
+  await page.goto('/plants');
+  await expect(page.locator('.seccount').first()).toContainText('400');
+  // a plant whose stored acquired date is in the future (an older file) can have its price edited; only a date this edit types is judged (round twenty-eight, 0)
+  await page.goto('/plants/2025-0400');
+  await more(page, 'Edit');
+  await page.fill('#ed-price', '12');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.locator('#ed-date-bad')).toHaveCount(0);
+  await expect(page.locator('.editform')).toHaveCount(0);
+  await expect(page.getByText('12', { exact: false }).first()).toBeVisible();
 });

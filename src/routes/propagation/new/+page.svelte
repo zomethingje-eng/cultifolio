@@ -33,6 +33,7 @@
   let heatMsg = $state('');
   let sourceFrom = $state('');
   let sourceRef = $state('');
+  let fieldNumber = $state('');
   let provenance = $state<Provenance>('unknown');
   let medium = $state('');
   let container = $state('');
@@ -131,6 +132,7 @@
         count: n,
         sourceFrom: m.veg ? null : sourceFrom.trim() || null,
         sourceRef: m.veg ? null : sourceRef.trim() || null,
+        fieldNumber: m.veg ? null : fieldNumber.trim() || null,
         provenance: m.veg ? 'veg' : provenance,
         medium: medium.trim() || null,
         container: container.trim() || null,
@@ -189,7 +191,8 @@
   {#if !m.veg}
     <div class="two">
       <label class="field"><span>Seed from</span><input id="s-from" type="text" bind:value={sourceFrom} placeholder="Seller, society exchange, own pollination" /></label>
-      <label class="field"><span>Lot / field number</span><input id="s-ref" type="text" bind:value={sourceRef} placeholder="e.g. KK 1462, or the seller's lot code" /></label>
+      <label class="field"><span>Field number</span><input id="s-fn" type="text" bind:value={fieldNumber} placeholder="e.g. KK 1462: carried to every plant potted up" /></label>
+      <label class="field"><span>Lot</span><input id="s-ref" type="text" bind:value={sourceRef} placeholder="the seller's lot code" /></label>
     </div>
     <label class="field"><span>Seed provenance</span>
       <select id="s-prov" bind:value={provenance}>

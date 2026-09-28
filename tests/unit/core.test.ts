@@ -119,6 +119,15 @@ describe('change validation', () => {
     expect(() => materialise([{ ...ok, field: '_deleted=' } as Change])).toThrow(/reserved/);
     expect(() => materialise([{ ...ok, field: '*' } as Change])).toThrow(/reserved/);
   });
+  it('a known field with a value of the wrong type is refused; null and unknown fields pass (round twenty-eight, 0)', () => {
+    const ok = { t: '1700000000000-0000-x', kind: 'sowing', id: 's1', field: 'sown', value: '2026-03-01' };
+    expect(() => validateChanges([{ ...ok, value: 20260301 }])).toThrow(/change 0: sown of a sowing must be a string, not 20260301/);
+    expect(() => validateChanges([{ ...ok, field: 'count', value: '12' }])).toThrow(/count of a sowing must be a number/);
+    expect(() => validateChanges([{ ...ok, field: 'covered', value: 'yes' }])).toThrow(/must be a boolean/);
+    expect(() => validateChanges([{ ...ok, kind: 'event', field: 'measures', value: [1, 2] }])).toThrow(/must be a object/);
+    expect(() => validateChanges([{ ...ok, field: '_deleted', value: 'true' }])).toThrow(/_deleted of a sowing must be a boolean/);
+    expect(validateChanges([{ ...ok, value: null }, { ...ok, field: 'count', value: 12 }, { ...ok, field: 'aFieldFromNextYear', value: 7 }, { ...ok, field: '_deleted', value: true }])).toHaveLength(4);
+  });
 });
 
 describe('log', () => {

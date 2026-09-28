@@ -253,7 +253,8 @@
   async function saveEdit() {
     if (!a) return;
     // A date after today is a typo, and the number a plant carries is minted for its acquisition year (round twenty-six, 3).
-    edDateMsg = f.acquired && f.acquired > localDate() ? `${f.acquired} is in the future.` : '';
+    // Only a date this edit typed is judged: a plant whose stored date is already in the future (an older file) can still have its price or place edited, and the date corrected when the grower gets to it (round twenty-eight, 0).
+    edDateMsg = f.acquired && f.acquired !== (a.acquired ?? '') && f.acquired > localDate() ? `${f.acquired} is in the future.` : '';
     if (edDateMsg) { document.getElementById('ed-date')?.focus(); return; }
     const moved = (f.locationId ?? null) !== (a.locationId ?? null);
     // The name as the add form files it: a hybrid is filed under its genus (or nothogenus) with the cross as parentage and

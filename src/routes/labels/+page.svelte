@@ -10,7 +10,7 @@
    * opens the plant's page on this site.
    */
   import { onMount } from 'svelte';
-  import { accNo, sowNo } from '$lib/db/types';
+  import { accNo } from '$lib/db/types';
   import { page } from '$app/state';
   import QRCode from 'qrcode';
   import { collection } from '$lib/db/collection.svelte';

@@ -340,13 +340,14 @@
     {#if !visitor}<a class="btn pri headadd" href="/plants/new">Add a plant</a>{/if}
   </PageHead>
 
+  <!-- The way in comes before the pictures, so a phone's first screen has the pitch, the count and what to do, not a grid alone (round twenty-eight, 13). -->
+  {#if collection.ready && !hasMine && !collection.accessions.length && !welcomeHidden}
+    <p class="welcome" id="welcome"><b>New here.</b> <a href="/plants/new">Add your first plant</a> · <a href="/backup">Bring in a collection</a> (a backup file, or an export from the old Herbarium app) <button class="linkish" type="button" onclick={dismissWelcome}>Not now</button></p>
+  {/if}
+
   {#if visitor && data.featured.length}
     <!-- A stranger sees plants before a list of them: one photographed species from each of the largest genera, by rule, rotated daily. -->
     {@render featured()}
-  {/if}
-
-  {#if collection.ready && !hasMine && !collection.accessions.length && !welcomeHidden}
-    <p class="welcome" id="welcome"><b>New here.</b> <a href="/plants/new">Add your first plant</a> · <a href="/backup">Bring in a collection</a> (a backup file, or an export from the old Herbarium app) <button class="linkish" type="button" onclick={dismissWelcome}>Not now</button></p>
   {/if}
 
   <div class="stickyhead">

@@ -477,7 +477,7 @@ class Collection {
       potted,
       lost,
       remaining: Math.max(0, germinated - potted - lost),
-      rate: s && s.count > 0 ? germinated / s.count : null,
+      rate: s && s.count > 0 && germ.length ? germinated / s.count : null, // no count yet is not 0% (round twenty-eight, 3)
       firstUp,
       daysToFirst: s && firstUp ? since(s.sown, firstUp) : null,
       days: s ? since(s.sown, localDate()) : 0
@@ -531,7 +531,7 @@ class Collection {
         cultivar: s.cultivar ?? parent?.cultivar ?? null,
         nameKind: s.nameKind ?? parent?.nameKind ?? null,
         parentage: s.parentage ?? parent?.parentage ?? null,
-        fieldNumber: veg ? (parent?.fieldNumber ?? null) : (s.sourceRef ?? null),
+        fieldNumber: veg ? (parent?.fieldNumber ?? null) : (s.fieldNumber ?? null), // the lot is not a field number: it stays in sourceRef below (round twenty-eight, 4)
         provenance,
         status: 'growing',
         acquired: date,

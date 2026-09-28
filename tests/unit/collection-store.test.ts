@@ -542,3 +542,21 @@ describe('round sixteen', () => {
     expect(more.map((r) => accNo(r))).toEqual(['2030-0007', `${new Date().getFullYear()}-0004`]);
   });
 });
+
+describe('round twenty-eight', () => {
+  it('a removed plant keeps its number: the next plant takes the next number, and Undo brings the removed one back under its own (round twenty-eight, 0)', async () => {
+    const { collection } = await fresh('testdevice');
+    const y = new Date().getFullYear();
+    const [a] = await collection.addAccessions(1, { taxonName: 'Lithops', acquired: `${y}-03-01` });
+    expect(accNo(a)).toBe(`${y}-0001`);
+    await collection.remove('accession', a.id);
+    expect(collection.accessions).toEqual([]);
+    const [b] = await collection.addAccessions(1, { taxonName: 'Conophytum', acquired: `${y}-03-02` });
+    expect(accNo(b)).toBe(`${y}-0002`); // never reused, removed or not
+    await collection.restore('accession', a.id);
+    expect(collection.accessions.map((r) => accNo(r)).sort()).toEqual([`${y}-0001`, `${y}-0002`]);
+    const again = (await reload()) as typeof collection;
+    expect(again.accessions.map((r) => accNo(r)).sort()).toEqual([`${y}-0001`, `${y}-0002`]);
+    expect(again.accessions.every((r) => !r.acc || collection.accessions.filter((x) => x.acc === r.acc).length === 1)).toBe(true);
+  });
+});

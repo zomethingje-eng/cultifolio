@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { buildBackup, readBackup, previewMerge, summarise, plantsCsv, photoBytesError, photosWithoutPixels } from '$lib/backup/backup';
+import { buildBackup, readBackup, previewMerge, summarise, plantsCsv, batchesCsv, photoBytesError, photosWithoutPixels } from '$lib/backup/backup';
 import { zipSync } from 'fflate';
 import { materialise, live, type Change, type Record_ } from '$core/log';
-import type { Accession } from '$lib/db/types';
+import type { Accession, Sowing } from '$lib/db/types';
 
 const t = (n: number) => `${String(1700000000000 + n).padStart(13, '0')}-0000-dev1`;
 const c = (n: number, kind: Change['kind'], id: string, field: string, value: unknown): Change => ({ t: t(n), kind, id, field, value });
@@ -124,6 +124,20 @@ describe('plants.csv', () => {
     const { state } = materialise(more);
     const line = plantsCsv(live<Accession & Record_>(state, 'accession'), state).slice(1).split('\r\n')[1];
     expect(line).toBe("2026-0001,Copiapoa cinerea,,species,,'@handle,,,growing,Greenhouse › Bench 2,,,KK 1462,,,,'-5 °C on the sill, =SUM(A1) is not a note".replace(",'-5 °C on the sill, =SUM(A1) is not a note", ",\"'-5 °C on the sill, =SUM(A1) is not a note\""));
+  });
+});
+
+describe('batches.csv', () => {
+  it('one row per batch with the latest count, potted and lost, the lot and the field number apart (round twenty-eight, 9)', () => {
+    const more = [...log, c(30, 'sowing', 's1', 'no', 'S2026-001'), c(31, 'sowing', 's1', 'taxonName', 'Ariocarpus fissuratus'), c(32, 'sowing', 's1', 'method', 'seed'), c(33, 'sowing', 's1', 'sown', '2026-03-01'), c(34, 'sowing', 's1', 'count', 12), c(35, 'sowing', 's1', 'status', 'active'), c(36, 'sowing', 's1', 'sourceRef', 'lot 77'), c(37, 'sowing', 's1', 'fieldNumber', 'KK 1462'), c(38, 'sowing', 's1', 'locationId', 'L2'),
+      c(40, 'event', 'g1', 'acc', 's1'), c(41, 'event', 'g1', 'd', '2026-03-10'), c(42, 'event', 'g1', 't', 'germinate'), c(43, 'event', 'g1', 'n', 4),
+      c(44, 'event', 'g2', 'acc', 's1'), c(45, 'event', 'g2', 'd', '2026-03-20'), c(46, 'event', 'g2', 't', 'germinate'), c(47, 'event', 'g2', 'n', 9),
+      c(48, 'event', 'l1', 'acc', 's1'), c(49, 'event', 'l1', 'd', '2026-04-01'), c(50, 'event', 'l1', 't', 'loss'), c(51, 'event', 'l1', 'n', 2),
+      c(52, 'event', 'u1', 'acc', 's1'), c(53, 'event', 'u1', 'd', '2026-05-01'), c(54, 'event', 'u1', 't', 'potup'), c(55, 'event', 'u1', 'n', 3)];
+    const { state } = materialise(more);
+    const lines = batchesCsv(live<Sowing & Record_>(state, 'sowing'), state).slice(1).split('\r\n');
+    expect(lines[0]).toBe('number,species,cultivar,kind,parentage,method,parent plant,date,started,counted,potted,lost,from,lot,field number,provenance,medium,container,pre-treatment,bottom heat C,covered,location,status,notes');
+    expect(lines[1]).toBe('S2026-001,Ariocarpus fissuratus,,species,,seed,,2026-03-01,12,9,3,2,,lot 77,KK 1462,,,,,,,Greenhouse › Bench 2,active,');
   });
 });
 

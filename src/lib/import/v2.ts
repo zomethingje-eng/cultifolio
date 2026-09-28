@@ -216,13 +216,24 @@ export function importV2(json: unknown, opts: ImportOpts = {}): { changes: Chang
       }
     }
   }
+  // A v2 file's text fields are taken as text and a number typed where text belongs (a price of 12) is written as text;
+  // anything else is dropped, so a stray value can never reach the log with a type the fold's readers do not expect (round twenty-eight, 0).
+  const text = (v: unknown): string | null => (typeof v === 'string' ? v : typeof v === 'number' && Number.isFinite(v) ? String(v) : null);
   if (col?.accessions) {
     const list = Array.isArray(col.accessions) ? col.accessions : Object.values(col.accessions);
-    for (const a of list) {
-      if (!a?.acc) {
+    const inFile = new Set<string>();
+    for (const a0 of list) {
+      // A number typed as a number in the file is the same number; a second plant under a number already in the file is skipped and said (round twenty-eight, 0).
+      const a = a0 && typeof a0 === 'object' ? { ...a0, acc: typeof a0.acc === 'number' ? String(a0.acc) : a0.acc } : a0;
+      if (!a?.acc || typeof a.acc !== 'string') {
         report.skipped.push('accession without a number');
         continue;
       }
+      if (inFile.has(a.acc)) {
+        report.skipped.push(`a second plant numbered ${a.acc} in the file`);
+        continue;
+      }
+      inFile.add(a.acc);
       if (here('accession', a.acc)) continue;
       at(modTime(a.m, now) ?? base, 'accession', a.acc); // the plant and its embedded events share the plant's modification time and writer
       const taxonName = (a.taxonId && taxonNames.get(a.taxonId)) || a.nameAsReceived || a.taxonId || 'Unknown';
@@ -230,19 +241,19 @@ export function importV2(json: unknown, opts: ImportOpts = {}): { changes: Chang
       push('accession', a.acc, {
         taxonName,
         taxonKey: (a.taxonId && opts.summaries?.[a.taxonId]?.gk) ?? null,
-        nameAsReceived: a.nameAsReceived ?? null,
-        fieldNumber: a.fieldNumber ?? null,
-        provenance: a.provenance ?? null,
+        nameAsReceived: text(a.nameAsReceived),
+        fieldNumber: text(a.fieldNumber),
+        provenance: ['wild', 'f1', 'fn', 'veg', 'unknown'].includes(a.provenance ?? '') ? a.provenance : null,
         status,
-        location: a.bench ?? a.location ?? null,
-        locationId: (a.bench && (benchByRef.get(a.bench) ?? benchByRef.get(a.bench.toLowerCase()))) ?? null,
-        acquired: a.source?.date ?? null,
-        sourceFrom: a.source?.from ?? null,
-        sourceRef: a.source?.ref ?? null,
-        sourceForm: a.source?.form ?? null,
-        price: a.source?.price ?? null,
-        notes: a.notes ?? null,
-        sowingId: a.sowId ?? null,
+        location: text(a.bench ?? a.location),
+        locationId: (typeof a.bench === 'string' && (benchByRef.get(a.bench) ?? benchByRef.get(a.bench.toLowerCase()))) || null,
+        acquired: text(a.source?.date),
+        sourceFrom: text(a.source?.from),
+        sourceRef: text(a.source?.ref),
+        sourceForm: text(a.source?.form),
+        price: text(a.source?.price),
+        notes: text(a.notes),
+        sowingId: text(a.sowId),
         // The number as a field too, so the vault's ledger of issued numbers sees it (round twelve, 6). Last, so the
         // fields before it keep the stamps an earlier build gave them: the same file imported on two builds must give
         // the same stamp to the same change (round thirteen, 5).
@@ -261,9 +272,9 @@ export function importV2(json: unknown, opts: ImportOpts = {}): { changes: Chang
           acc: a.acc,
           d: e.d,
           t: e.t,
-          note: e.note ?? null,
-          cause: e.cause ?? null,
-          used: e.used ?? null,
+          note: text(e.note),
+          cause: text(e.cause),
+          used: text(e.used),
           measures: Object.keys(measures).length ? measures : null
         });
         report.events++;

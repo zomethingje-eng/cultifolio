@@ -202,7 +202,7 @@
 <article class="species">
   <div class="top" class:withhero={!!hero}>
   {#if hero && heroFailed}
-    <div class="hero"><div class="ph">The photograph did not load ({hero.attribution}); <a href={hero.page ?? hero.url} rel="noopener">its page is here</a>.</div></div>
+    <div class="hero"><div class="ph">The photograph did not load{#if hero.attribution?.trim()}{' '}({hero.attribution}){/if}; <a href={hero.page ?? hero.url} rel="noopener">its page is here</a>.</div></div>
   {:else if hero}
     <div class="hero">
       <a href={hero.page ?? hero.url} rel="noopener"><img src={photoAt(hero.url, 'large')} alt="{d.name.scientific}{hero.place ? ', ' + hero.place : ''}" loading="eager" fetchpriority="high" onerror={() => (heroFailed = true)} /></a>

@@ -60,7 +60,9 @@
     if (nav.from && nav.type !== 'popstate') hops++;
     else if (nav.type === 'popstate' && hops > 0) hops--;
     // A new page: focus its content, not the top bar again (a same-page hash jump keeps the browser's own focus handling).
-    if (nav.to?.url.hash) return;
+    // Not on the first load of the session (`from` is null): the browser's own start, the top of the document, is where a
+    // screen reader expects to begin, and a page that moves focus on arrival reads as having done something (round twenty-eight, 11).
+    if (!nav.from || nav.to?.url.hash) return;
     mainEl?.focus({ preventScroll: true });
   });
   const closeMenu = () => {
@@ -158,7 +160,7 @@
     {/each}
   </div>
   <!-- The five places, from every page, in the bar that is always there; the phone has them in the tab bar instead. -->
-  <nav class="seg topseg" aria-label="Places">
+  <nav class="seg topseg" aria-label="Main">
     {#each places as pl}<a href={pl.href} class:on={pl.on(page.url.pathname)}>{pl.label === 'Plants' ? 'My plants' : pl.label}</a>{/each}
   </nav>
   <a class="iconbtn sync" href="/sync" title={sync.configured ? (sync.busy ?? (sync.offline ? (sync.unreached === 'server' ? 'Sync: the server did not answer; changes are kept here' : 'Sync: offline; changes are kept here') : sync.lastError ? 'Sync: ' + sync.lastError : sync.runs ? 'Synced' : 'Sync: not checked yet')) : 'Sync'} aria-label="Sync" class:on={sync.configured} class:busy={!!sync.busy} class:err={!!sync.lastError}>⟳</a>
@@ -191,7 +193,7 @@
   <p>Taxonomy: GBIF Backbone (CC BY). Distributions: WCVP, RBG Kew (CC BY 4.0). Climate: CHELSA V2.1 (CC0), NASA POWER. Photographs carry their own licence and credit. Summaries: Wikipedia (CC BY-SA 4.0). Coastlines: Natural Earth. Nothing on this site is stored about you beyond short-lived rate counters and, with sync on, your encrypted vault, whose sizes and timing the server can see and whose contents it cannot; your collection lives on your device{#if sync.configured}, and in an encrypted vault only your key opens{/if}. <a href="/about/how">How it is made</a> · <a href="/about/formats">Formats</a> · <a href="https://github.com/zomethingje-eng/cultifolio">Source</a>.</p>
 </footer>
 
-<nav id="tabbar" aria-label="Places">
+<nav id="tabbar" aria-label="Tabs">
   {#each places as pl}
     <a href={pl.href} class:on={pl.on(page.url.pathname)}>
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
