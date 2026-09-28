@@ -24,15 +24,20 @@ type Row = { [K in (typeof FIELDS)[number]]?: unknown };
 /** Letters and marks of any script, space, period, apostrophe, hyphen, the hybrid sign. */
 export const _NAME_QUERY = /^[\p{L}\p{M}\s.'\-×]{2,80}$/u;
 
+/** The GBIF backbone key of the kingdom Plantae. */
+export const _PLANTAE = 6;
+
 const bad = (why: string) => json({ error: why }, { status: 502, headers: { 'cache-control': 'no-store' } });
 
 export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddress }) => {
   const q = (url.searchParams.get('q') ?? '').trim().slice(0, 80);
   if (q.length < 3) return json([], { headers: { 'cache-control': 'public, max-age=86400' } });
   if (!_NAME_QUERY.test(q)) return json({ error: 'a name is letters, spaces, periods, apostrophes, hyphens and ×' }, { status: 400, headers: { 'cache-control': 'no-store' } });
-  const upstream = `https://api.gbif.org/v1/species/suggest?datasetKey=d7dddbf4-2cf0-4f39-9b2a-bb099caae36c&limit=12&q=${encodeURIComponent(q)}`;
+  // Plants only (higherTaxonKey 6 is Plantae in the backbone): unfiltered, "gaster" answered twelve weevils, fishes and
+  // fungi and no Gasteria, since the suggest ranks across every kingdom and the picker shows the first twelve (round twenty-eight, deploy).
+  const upstream = `https://api.gbif.org/v1/species/suggest?datasetKey=d7dddbf4-2cf0-4f39-9b2a-bb099caae36c&higherTaxonKey=${_PLANTAE}&limit=12&q=${encodeURIComponent(q)}`;
   // Folded to lower case: GBIF suggest is itself case-insensitive, so one spelling's answer serves the others. If that ever changes, this key must carry the case.
-  const cacheKey = new Request(`https://cache.cultifolio/names?q=${encodeURIComponent(q.toLowerCase())}`);
+  const cacheKey = new Request(`https://cache.cultifolio/names2?q=${encodeURIComponent(q.toLowerCase())}`); // names2: the day of unfiltered answers cached under the old key is not served after the kingdom filter
   const cache = platform?.caches?.default;
   const hit = await cache?.match(cacheKey);
   if (hit) return new Response(hit.body, hit); // a copy: the cached response's own headers are immutable, and the hook adds two (round seventeen, 1)

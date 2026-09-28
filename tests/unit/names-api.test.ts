@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { GET, _NAME_QUERY as NAME_QUERY } from '../../src/routes/api/names/+server';
+import { GET, _PLANTAE as PLANTAE, _NAME_QUERY as NAME_QUERY } from '../../src/routes/api/names/+server';
 import { resetRateLimits, RATE } from '$lib/server/sync';
 
 type Cache = { match: (r: Request) => Promise<Response | undefined>; put: (r: Request, res: Response) => Promise<void> };
@@ -47,6 +47,7 @@ describe('/api/names', () => {
     const asked: string[] = [];
     const upstream = async (u: string) => {
       asked.push(new URL(u).searchParams.get('q')!);
+      expect(new URL(u).searchParams.get('higherTaxonKey')).toBe(String(PLANTAE)); // plants only: unfiltered, "gaster" was twelve animals and fungi and no Gasteria (round twenty-eight, deploy)
       return new Response(JSON.stringify([{ key: 1, canonicalName: 'Copiapoa', extra: 'dropped' }, null, 'junk']), { status: 200 });
     };
     const a = await call('Copiapoa', upstream, { cache });
@@ -56,7 +57,7 @@ describe('/api/names', () => {
     const b = await call('COPIAPOA', upstream, { cache });
     expect(await b.json()).toEqual([{ key: 1, canonicalName: 'Copiapoa' }, {}, {}]);
     expect(asked).toEqual(['Copiapoa']);
-    expect([...cache.store.keys()]).toEqual(['https://cache.cultifolio/names?q=copiapoa']);
+    expect([...cache.store.keys()]).toEqual(['https://cache.cultifolio/names2?q=copiapoa']);
   });
   it('the query must look like a name: letters of any script, spaces, periods, apostrophes, hyphens and ×; anything else is 400 and never reaches GBIF', async () => {
     for (const good of ['Copiapoa cinerea var. columna-alba', "Echinopsis 'Flying Saucer'", 'Ariocarpus × Lophophora', 'Ægagropila', 'Ботаника', '日本の植物']) expect(NAME_QUERY.test(good)).toBe(true);

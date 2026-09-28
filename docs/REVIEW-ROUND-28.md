@@ -37,6 +37,10 @@ The undo of a removal duplicating a number (R2-0) was not reproduced: the ledger
 
 **The Show HN post and licensing** (R2-8). The draft now carries a bracketed sentence to fill: sync is open today, the code has a gate for licensing hosted sync later, and the server is in the repository. What is intended is the author's to say.
 
+## Found by the deploy
+
+16. **The name service answered across every kingdom** (the live check, on the deploy after this round). `/api/names` forwarded to GBIF's suggest with no kingdom filter, and the picker shows the first twelve of what comes back: "gaster" was twelve weevils, fishes and fungi (Gasterosaga, Gasterosteus, Gasterella…) and no Gasteria at all. The live check rotates its genus and prefix by the minute and had not landed on a prefix an animal genus shares until this deploy. The suggest is asked with `higherTaxonKey=6` (Plantae), which for the same prefix gives Gasteria fourth among plants, and the edge cache key is renamed so the day of unfiltered answers already cached is not served. Unit test: the upstream request carries the filter.
+
 ## Deferred
 
 Tray labels for batches (R2-9, part): the labels page is built around plants (their species sheet's care line, their QR); a batch label is a smaller thing (number, name, date, count) and wants its own sheet choice; with the sold/traded status and the log editor for after the post.
