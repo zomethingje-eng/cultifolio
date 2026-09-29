@@ -55,12 +55,19 @@ function monthStat(cells: Month[][], q: number): Month[] {
 export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
   const cache = o.powerCache ?? memoryPowerCache();
 
-  /** One cell's twelve months, or null for sea, ice, or outside the grid. */
+  /**
+   * One cell's twelve months, or null for sea, ice, or outside the grid. Land is the elevation layer: CHELSA carries
+   * temperatures and rain over the ocean (20 °C days in the mid-Atlantic), so a cell with figures is not a land cell; the
+   * packer masks sea pixels before averaging ETOPO, so a cell with no land in it has no elevation. The known exceptions
+   * are the few basins whose whole cell lies below sea level (Death Valley's floor, the Qattara and Turfan depressions,
+   * the Caspian shore), which read as sea here.
+   */
   async function readCell(lat: number, lon: number): Promise<{ id: string; months: Month[]; elevationM?: number } | null> {
     const cell = await o.grid.cell(lat, lon);
     if (!cell) return null;
     const h = await o.grid.header();
     const v = decodeCell(h, cell.buf);
+    if (v.elevationM == null) return null;
     const need: ClimateVar[] = ['tasmax', 'tasmin', 'tas', 'pr'];
     if (!v.months.every((m) => need.every((k) => typeof m[k] === 'number'))) return null;
     const months = v.months.map((m) => ({
@@ -118,10 +125,10 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
   }
 
   /**
-   * How much of the NASA POWER cell (0.5° × 0.625°) around a point is land, by a 5 × 5 sample of the climate grid. A sea
-   * cell is read and found to hold no figures, as readCell judges it: the file grid on the build machine returns a buffer
-   * for every cell inside its extent, sea included, so the presence of a cell says nothing (the first corpus built with
-   * this rule found every cell 100% land).
+   * How much of the NASA POWER cell (0.5° × 0.625°) around a point is land, by a 5 × 5 sample of the climate grid, each
+   * point judged as readCell judges it (by the elevation layer). The first two corpora built with this rule found every
+   * cell 100% land: the first sample tested whether the grid had a cell there, and the file grid has one for every
+   * point in its extent; the second tested whether it held figures, and CHELSA has figures over the sea.
    */
   async function landFractionAround(lat: number, lon: number): Promise<number> {
     const pc = powerCell(lat, lon);
@@ -198,7 +205,7 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
       }
       const src: ClimateOk['src'] = {
         normals: `CHELSA V2.1 1981–2010 climatology, ${h.cell}° cells (each the mean of ~${Math.round((h.cell / 0.008333) ** 2)} 1 km pixels)`,
-        envelope: `median and 10th–90th percentile of each month across the ${used.length} distinct grid cells holding the ${points.length} in-range records${hemispheres ? ` on the ${hemispheres.used}ern side of the equator (${hemispheres.north} cells north, ${hemispheres.south} south: the two sides' seasons are not combined)` : ''}; extremes and elevation at the typical cell ${typical.id} (its coldest month's mean night nearest the median across cells${landFraction < 0.5 ? `, though its NASA POWER cell is only ${Math.round(landFraction * 100)}% land` : ''}); its position is the cell centre`,
+        envelope: `median and 10th–90th percentile of each month across the ${used.length} distinct grid cells holding the ${points.length} in-range records${sea ? ` (${sea} further cell${sea === 1 ? '' : 's'} with records at sea, by the elevation layer, left out)` : ''}${hemispheres ? ` on the ${hemispheres.used}ern side of the equator (${hemispheres.north} cells north, ${hemispheres.south} south: the two sides' seasons are not combined)` : ''}; extremes and elevation at the typical cell ${typical.id} (its coldest month's mean night nearest the median across cells${landFraction < 0.5 ? `, though its NASA POWER cell is only ${Math.round(landFraction * 100)}% land` : ''}); its position is the cell centre`,
         elevation: typical.elevationM != null ? `ETOPO 2022, ${Math.round(typical.elevationM)} m (cell mean)` : undefined
       };
       const { extremes, status: extremesStatus } = await extremesAt(typical.lat, typical.lon, typical.elevationM, src);
