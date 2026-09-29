@@ -426,10 +426,19 @@ export function bulkFetcher(base: JsonFetcher, src: BulkSources, stats = { wcvp:
         return { status: 'ok', data: { results: got.rows, kew: got.kew } as unknown as T };
       }
     } else if (src.media && (m = RE_MEDIA.exec(url))) {
-      const page = src.media.page(Number(m[1]));
+      const key = Number(m[1]);
+      const page = src.media.page(key);
       if (page) {
         stats.media++;
         return { status: 'ok', data: page as unknown as T };
+      }
+      // A species the download covers (its occurrence set is in the file) and multimedia.txt has nothing for: the answer
+      // is "no observation photographs", not a miss to fall through to the network. Falling through, and then keeping
+      // the previous GBIF set when offline, kept herbarium sheets from builds before round thirty on every such species
+      // (round thirty-two, 3).
+      if (src.occ?.get(key)) {
+        stats.media++;
+        return { status: 'ok', data: { results: [], endOfRecords: true, count: 0 } as unknown as T };
       }
     } else if (src.occ && (m = RE_OCC.exec(url))) {
       const key = Number(m[1]);

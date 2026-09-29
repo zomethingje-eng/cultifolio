@@ -126,7 +126,8 @@ describe('change validation', () => {
     expect(() => validateChanges([{ ...ok, field: 'covered', value: 'yes' }])).toThrow(/must be a boolean/);
     expect(() => validateChanges([{ ...ok, kind: 'event', field: 'measures', value: [1, 2] }])).toThrow(/must be a object/);
     expect(() => validateChanges([{ ...ok, field: '_deleted', value: 'true' }])).toThrow(/_deleted of a sowing must be a boolean/);
-    expect(validateChanges([{ ...ok, value: null }, { ...ok, field: 'count', value: 12 }, { ...ok, field: 'aFieldFromNextYear', value: 7 }, { ...ok, field: '_deleted', value: true }])).toHaveLength(4);
+    expect(() => validateChanges([{ ...ok, value: null }])).toThrow(/sown of a sowing cannot be null/); // a required field takes no null (round thirty-three, 1)
+    expect(validateChanges([{ ...ok, field: 'medium', value: null }, { ...ok, field: 'count', value: 12 }, { ...ok, field: 'aFieldFromNextYear', value: 7 }, { ...ok, field: '_deleted', value: true }])).toHaveLength(4);
   });
 });
 
@@ -139,7 +140,7 @@ describe('log', () => {
     value
   });
   it('folds field-level LWW regardless of order', () => {
-    const a = [ch('1', 'x', 'name', 'A'), ch('3', 'x', 'name', 'C'), ch('2', 'x', 'name', 'B'), ch('2', 'x', 'pot', '7cm')];
+    const a = [ch('1', 'x', 'taxonName', 'A'), ch('3', 'x', 'name', 'C'), ch('2', 'x', 'taxonName', 'B'), ch('2', 'x', 'pot', '7cm')];
     const s1 = materialise(a).state;
     const s2 = materialise([...a].reverse()).state;
     expect(s1.get('accession:x')?.name).toBe('C');
@@ -147,10 +148,10 @@ describe('log', () => {
     expect(s2.get('accession:x')?.pot).toBe('7cm');
   });
   it('a record edited after its tombstone survives', () => {
-    const s = materialise([ch('1', 'x', 'name', 'A'), ch('2', 'x', '_deleted', true)]).state;
+    const s = materialise([ch('1', 'x', 'taxonName', 'A'), ch('2', 'x', '_deleted', true)]).state;
     expect(live(s, 'accession')).toHaveLength(0);
-    const { state, seen } = materialise([ch('1', 'x', 'name', 'A'), ch('2', 'x', '_deleted', true)]);
-    apply(state, [ch('3', 'x', 'name', 'B')], seen);
+    const { state, seen } = materialise([ch('1', 'x', 'taxonName', 'A'), ch('2', 'x', '_deleted', true)]);
+    apply(state, [ch('3', 'x', 'taxonName', 'B')], seen);
     expect(live(state, 'accession')).toHaveLength(1);
     // but an older edit arriving late does not revive it
     apply(state, [ch('4', 'x', '_deleted', true), ch('1', 'x', 'pot', 'old')], seen);
@@ -295,26 +296,26 @@ describe('cultivars and hybrids', () => {
 describe('delete merging is order-independent', () => {
   const ch = (t: string, id: string, field: string, value: unknown): Change => ({ t: `170000000000${t}-0000-dev`, kind: 'accession', id, field, value });
   it('an older delete and a newer edit leave the record live whichever arrives first', () => {
-    const del = ch('2', 'x', '_deleted', true), edit = ch('3', 'x', 'name', 'B'), first = ch('1', 'x', 'name', 'A');
+    const del = ch('2', 'x', '_deleted', true), edit = ch('3', 'x', 'taxonName', 'B'), first = ch('1', 'x', 'taxonName', 'A');
     const a = materialise([first, del, edit]).state;
     const b = materialise([first, edit, del]).state;
     expect(live(a, 'accession')).toHaveLength(1);
     expect(live(b, 'accession')).toHaveLength(1);
-    expect(a.get('accession:x')?.name).toBe('B');
+    expect(a.get('accession:x')?.taxonName).toBe('B');
   });
   it('a newer delete and an older edit leave the record deleted whichever arrives first', () => {
-    const del = ch('5', 'x', '_deleted', true), edit = ch('3', 'x', 'name', 'B'), first = ch('1', 'x', 'name', 'A');
+    const del = ch('5', 'x', '_deleted', true), edit = ch('3', 'x', 'taxonName', 'B'), first = ch('1', 'x', 'taxonName', 'A');
     expect(live(materialise([first, del, edit]).state, 'accession')).toHaveLength(0);
     expect(live(materialise([first, edit, del]).state, 'accession')).toHaveLength(0);
   });
   it('a restore (later _deleted=false) wins over an earlier delete in any order, and an even later delete wins again', () => {
-    const first = ch('1', 'x', 'name', 'A'), del = ch('2', 'x', '_deleted', true), restore = ch('4', 'x', '_deleted', false), del2 = ch('6', 'x', '_deleted', true);
+    const first = ch('1', 'x', 'taxonName', 'A'), del = ch('2', 'x', '_deleted', true), restore = ch('4', 'x', '_deleted', false), del2 = ch('6', 'x', '_deleted', true);
     expect(live(materialise([first, restore, del]).state, 'accession')).toHaveLength(1);
     expect(live(materialise([first, del, restore]).state, 'accession')).toHaveLength(1);
     expect(live(materialise([del2, first, restore, del]).state, 'accession')).toHaveLength(0);
   });
   it('incremental apply with a shared seen map agrees with a fresh fold', () => {
-    const first = ch('1', 'x', 'name', 'A'), del = ch('4', 'x', '_deleted', true), edit = ch('3', 'x', 'pot', '7');
+    const first = ch('1', 'x', 'taxonName', 'A'), del = ch('4', 'x', '_deleted', true), edit = ch('3', 'x', 'pot', '7');
     const { state, seen } = materialise([first, edit]);
     apply(state, [del], seen);
     expect(live(state, 'accession')).toHaveLength(0);
@@ -353,21 +354,36 @@ describe('round twenty-nine: old data is mended, not refused', () => {
     expect(() => readChanges([ok, { ...ok, t: '~' }])).toThrow(/change 1: bad timestamp/); // structure still refuses the list whole
     expect(() => readChanges([{ ...ok, field: '*' }])).toThrow(/reserved/);
   });
-  it('a required field that cannot be read takes every change to its record in the list with it, so no half-made record goes live (round thirty, 1)', async () => {
-    const { readChanges } = await import('$core/log');
+  it('a change that cannot be read is left out on its own, and the fold keeps a record whole only when its required fields are there (round thirty, 1; round thirty-three, 1)', async () => {
+    const { readChanges, live, incomplete } = await import('$core/log');
     const t = (n: number) => `170000000000${n}-0000-x`;
     const r = readChanges([
       { t: t(0), kind: 'accession', id: 'r1', field: 'acc', value: '2026-0001' },
       { t: t(1), kind: 'accession', id: 'r1', field: 'taxonName', value: { bad: true } },
       { t: t(2), kind: 'accession', id: 'r1', field: 'status', value: 'growing' },
       { t: t(3), kind: 'accession', id: 'r2', field: 'taxonName', value: 'Aloe' },
-      { t: t(4), kind: 'accession', id: 'r2', field: 'notes', value: 7.5 }
+      { t: t(4), kind: 'accession', id: 'r2', field: 'notes', value: 7.5 },
+      { t: t(5), kind: 'sowing', id: 's1', field: 'count', value: '3' }
     ]);
-    expect(r.changes.map((c) => `${c.id}.${c.field}`)).toEqual(['r2.taxonName', 'r2.notes']);
-    expect(r.changes[1].value).toBe('7.5');
-    expect(r.dropped).toEqual(['change 1: taxonName of a accession must be a string, not {"bad":true}', 'every change to accession r1 in this list, since its taxonName/status could not be read']);
+    expect(r.changes.map((c) => `${c.id}.${c.field}`)).toEqual(['r1.acc', 'r1.status', 'r2.taxonName', 'r2.notes', 's1.count']);
+    expect(r.changes[3].value).toBe('7.5');
+    expect(r.changes[4].value).toBe(3); // a number written as text folds as the number (round thirty-three, 1)
+    expect(r.dropped).toEqual(['change 1: taxonName of a accession must be a string, not {"bad":true}']);
+    // r1 is in the fold but not live: it waits, counted, for a build that reads its name
     const { state } = materialise(r.changes);
-    expect(state.has('accession:r1')).toBe(false);
+    expect(live(state, 'accession').map((a) => a.id)).toEqual(['r2']);
+    expect(incomplete(state).map((x) => `${x.kind}:${x.id}`)).toEqual(['accession:r1', 'sowing:s1']);
+    // a later readable name makes it whole, whichever list it arrives in (round twenty-two's reviewer: a corrected name was lost with the bad one)
+    const { state: s2 } = materialise([...r.changes, { t: t(6), kind: 'accession', id: 'r1', field: 'taxonName', value: 'Aloe vera' }]);
+    expect(live(s2, 'accession').map((a) => a.id).sort()).toEqual(['r1', 'r2']);
+    // null in a required field is not a value a build writes: dropped, and the record stays as it was
+    const n = readChanges([{ t: t(7), kind: 'accession', id: 'r2', field: 'taxonName', value: null }]);
+    expect(n.changes).toEqual([]);
+    expect(n.dropped).toEqual(['change 0: taxonName of a accession cannot be null']);
+    // a set-aside batch that made r1, then a later batch that touches it: r1 is not live and the page cannot throw on it
+    const { state: s3 } = materialise([{ t: t(8), kind: 'accession', id: 'r9', field: 'price', value: '5' }, { t: t(9), kind: 'event', id: 'e1', field: 'acc', value: 'r9' }, { t: t(9), kind: 'event', id: 'e1', field: 'd', value: '2026-09-29' }, { t: t(9), kind: 'event', id: 'e1', field: 't', value: 'water' }]);
+    expect(live(s3, 'accession')).toEqual([]);
+    expect(incomplete(s3)).toHaveLength(1);
   });
   it('a word this build does not know is kept, and an older importer\'s words are mended (round thirty, 1)', async () => {
     const { readChanges, mendChange } = await import('$core/log');
@@ -379,7 +395,12 @@ describe('round twenty-nine: old data is mended, not refused', () => {
     expect(mendChange(c('method', 'leaf')).value).toBe('leaf');
     expect(mendChange(c('provenance', 'Wild collected')).value).toBe('wild');
     expect(mendChange(c('provenance', 'ex habitat')).value).toBe('f1');
-    expect(mendChange(c('provenance', 'garden centre')).value).toBe('unknown');
+    expect(mendChange(c('provenance', 'garden centre')).value).toBe('garden centre'); // not one of the old importer's words: kept as it is (round thirty-three, 2)
+    expect(mendChange(c('method', 'tissue culture')).value).toBe('tissue culture');
+    expect(mendChange(c('method', 'seedling graft')).value).toBe('seedling graft');
+    expect(mendChange(c('provenance', 'seed-grown from wild-collected seed')).value).toBe('f1');
+    expect(mendChange(c('provenance', 'not wild collected')).value).toBe('not wild collected');
+    expect(mendChange(c('provenance', 'F2')).value).toBe('F2');
     expect(mendChange(c('provenance', 'f1', 'accession')).value).toBe('f1');
   });
   it('a field named after Object.prototype is refused, whatever its value (round twenty-nine, 10)', async () => {

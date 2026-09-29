@@ -6,6 +6,7 @@
  * The builder never publishes a dossier if the taxonomy step failed; every
  * other section degrades independently and says so.
  */
+import { gbifThumb } from './md5';
 import type { JsonFetcher } from './fetch';
 import * as gbif from './sources/gbif';
 import { CULTIVATED_RE, type OccMedia } from './sources/gbif';
@@ -64,13 +65,17 @@ const countryName = (iso?: string): string | undefined => {
   }
 };
 
-/** GBIF media rows as dossier photographs, at most 24. iNaturalist's open-data bucket serves sizes by name; anything else goes through GBIF's image cache. */
+/**
+ * GBIF media rows as dossier photographs, at most 24. iNaturalist's open-data bucket serves sizes by name; anything else
+ * goes through GBIF's image cache by occurrence key and address hash, the one form the cache still answers (the bare
+ * address form was refused from 2026-09: 1,351 front-page tiles showed "photograph did not load").
+ */
 export function photosFromMedia(rows: OccMedia[]): Photo[] {
   // A photograph under CC BY or CC BY-SA without an author cannot be credited as its licence requires, so it is not
   // published; CC0 asks for no name (round sixteen, 3).
   return rows.filter((im) => im.creator || im.rightsHolder || im.licence === 'cc0').slice(0, 24).map((im) => {
     const inat = /^https:\/\/inaturalist-open-data\.s3\.amazonaws\.com\/photos\/\d+\/original\.(\w+)$/.exec(im.url);
-    const thumb = inat ? im.url.replace(/original\.(\w+)$/, 'medium.$1') : `https://api.gbif.org/v1/image/cache/fit-in/400x/${encodeURIComponent(im.url)}`;
+    const thumb = inat ? im.url.replace(/original\.(\w+)$/, 'medium.$1') : gbifThumb(im.id.split(':')[0], im.url);
     return { src: 'gbif', id: im.id, url: im.url, thumb, licence: im.licence as Photo['licence'], attribution: `${im.creator || im.rightsHolder || 'author not stated'}, ${licenceLabel(im.licence as Photo['licence'])}, ${inat ? 'iNaturalist via GBIF' : 'via GBIF'}`, page: im.page };
   });
 }
@@ -248,8 +253,10 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
       // observation with coordinates to three decimals or better (about a hundred metres), the way a phone records them;
       // a herbarium sheet placed at a locality's centre with no figure stays out, as the de-duplication above already
       // treats it (round thirty, R2-11). Takes effect when the corpus is next built.
-      const decimals = (x: number) => (String(x).split('.')[1] ?? '').length;
-      const precise = r.coordinateUncertaintyInMeters == null ? r.basisOfRecord === 'HUMAN_OBSERVATION' && decimals(lat) >= 3 && decimals(lon) >= 3 : r.coordinateUncertaintyInMeters <= 10_000;
+      // The decimals are counted on the coordinate as the record gives it, not after the rounding to three places
+      // above, which drops a trailing zero and made −33.120 two decimals (round thirty-three, 9).
+      const decimals = (x: number) => (String(x).split('.')[1] ?? '').replace(/e.*$/i, '').length;
+      const precise = r.coordinateUncertaintyInMeters == null ? r.basisOfRecord === 'HUMAN_OBSERVATION' && decimals(r.decimalLatitude!) >= 3 && decimals(r.decimalLongitude!) >= 3 : r.coordinateUncertaintyInMeters <= 10_000;
       if (precise) forClimate.push([lat, lon]);
       else nVague++;
     }

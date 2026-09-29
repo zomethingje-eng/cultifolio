@@ -7,7 +7,7 @@
  *   node scripts/live-check.mjs https://x.dev   checks another origin (a workers.dev preview); LIVE_CHECK_ORIGIN in the
  *                                               environment does the same for `npm run deploy` on another deployment
  *
- * Exits 1 on the first failure, with the request and what came back. `LIVE_CHECK_SKIP=names,forecast` skips the checks
+ * Exits 1 on the first failure, with the request and what came back. `LIVE_CHECK_SKIP=names,forecast,thumbs` skips the checks
  * that need an upstream (a local `wrangler dev` with no GBIF credentials) and `LIVE_CHECK_FIXTURE_OK=1` accepts the fixture
  * corpus; neither is ever set for the real site. Nothing here creates
  * or changes anything on the server: every request is a GET, apart from one POST to the vault route with a body that
@@ -131,6 +131,23 @@ if (!skip.has('forecast')) {
   if (r.status !== 200) fail(path, r);
   if (!/"risk"/.test(r.text) || !/"tmin"/.test(r.text)) fail(`${path} answered 200 with no forecast in it (an old object at the edge would say cf-cache-status HIT; this says "${r.h('cf-cache-status')}")`, r);
   ok('forecast: 200 with a risk line');
+}
+
+// The photographs behind the front page's tiles: one thumbnail served through GBIF's image cache, and one from
+// iNaturalist's bucket, must answer as images. GBIF's cache refused the bare address form from 2026-09 and 1,351 tiles
+// said "photograph did not load" for a fortnight before anyone looked (round thirty-two, 1). The fixture corpus has none.
+if (!skip.has('thumbs') && !process.env.LIVE_CHECK_FIXTURE_OK) {
+  const r = await get('/api/index');
+  if (r.status !== 200) fail('/api/index', r);
+  const idx = JSON.parse(r.text);
+  for (const host of ['api.gbif.org', 'inaturalist-open-data.s3.amazonaws.com']) {
+    const e = idx.find((x) => x.thumb && x.thumb.includes(`https://${host}/`));
+    if (!e) fail(`/api/index has no tile thumbnail on ${host}`, r);
+    const t = await fetch(e.thumb, { method: 'GET', headers: { 'user-agent': ua } });
+    const type = t.headers.get('content-type') ?? '';
+    if (t.status !== 200 || !type.startsWith('image/')) fail(`the tile thumbnail for ${e.name} (${e.thumb}) answered ${t.status} ${type}: the front page shows "photograph did not load" for every tile on ${host}`);
+    ok(`tile thumbnail on ${host}: ${t.status} ${type}`);
+  }
 }
 
 // The vault route refuses a body that is not an object with a 400, never a 500 (round sixteen, 16). Creates nothing.

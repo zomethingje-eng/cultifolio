@@ -12,7 +12,7 @@ export const DUE_DAYS = 21;
 const yearOf = (d?: string | null): number | undefined => (d && /^\d{4}-/.test(d) ? Number(d.slice(0, 4)) : undefined);
 import { Clock, hlcDecode, hlcEncode, hlcCompare, hlcAfter } from '$core/hlc';
 import { tag36 } from '$core/tag';
-import { apply, diff, readChanges, key as recKey, type Change, type Kind, type Record_, type State, hlcWall, revivedByImport } from '$core/log';
+import { apply, diff, readChanges, isComplete, incomplete as incompleteRecords, key as recKey, type Change, type Kind, type Record_, type State, hlcWall, revivedByImport } from '$core/log';
 import { nextAccession, DEFAULT_SCHEME, type NumberingScheme } from '$core/accession';
 import { allChanges, appendChanges, appendChangesClaiming, onOtherTabWrite, deviceId, requestPersistence, getMeta, setMeta, putPhotoBlobs, getPhotoBlobs, deletePhotoBlobs, holdVault, type NumberKind } from './vault';
 import type { Accession, PlantEvent, Taxon, Location, Sowing, Provenance, Photo } from './types';
@@ -100,7 +100,7 @@ class Collection {
   /** By identity, or, failing that, by the number people see (URLs and QR codes carry the identity; people type numbers). */
   accession(idOrNo: string): Accession | undefined {
     const r = this.state.get(recKey('accession', idOrNo));
-    if (r && !r._deleted) return r as unknown as Accession;
+    if (r && !r._deleted && isComplete(r)) return r as unknown as Accession;
     return this.live<Accession>('accession').find((a) => a.acc === idOrNo);
   }
   /** The vault's ledger of every number ever written on this device, read at load and after another tab writes: a replace from an older backup does not bring those numbers back into play. */
@@ -188,7 +188,7 @@ class Collection {
   }
   taxon(id: string): Taxon | undefined {
     const r = this.state.get(recKey('taxon', id));
-    return r && !r._deleted ? (r as unknown as Taxon) : undefined;
+    return r && !r._deleted && isComplete(r) ? (r as unknown as Taxon) : undefined;
   }
   /** Keep a species on your list without a plant of it (or stop). Diffed like any other write, so sync carries it unchanged. */
   async follow(slug: string, name: string, gbifKey: number | null | undefined, on: boolean): Promise<void> {
@@ -205,7 +205,7 @@ class Collection {
   }
   location(id: string): Location | undefined {
     const r = this.state.get(recKey('location', id));
-    return r && !r._deleted ? (r as unknown as Location) : undefined;
+    return r && !r._deleted && isComplete(r) ? (r as unknown as Location) : undefined;
   }
   /**
    * The tree as it is shown, derived from the log so every device draws the
@@ -449,7 +449,7 @@ class Collection {
   }
   sowing(idOrNo: string): Sowing | undefined {
     const r = this.state.get(recKey('sowing', idOrNo));
-    if (r && !r._deleted) return r as unknown as Sowing;
+    if (r && !r._deleted && isComplete(r)) return r as unknown as Sowing;
     return this.live<Sowing>('sowing').find((x) => x.no === idOrNo);
   }
   /** Plants that were potted up from a sowing. */
@@ -565,7 +565,7 @@ class Collection {
   }
   photo(id: string): Photo | undefined {
     const r = this.state.get(recKey('photo', id));
-    return r && !r._deleted ? (r as unknown as Photo) : undefined;
+    return r && !r._deleted && isComplete(r) ? (r as unknown as Photo) : undefined;
   }
   /** The plant's face: its chosen cover, else its newest photo. */
   cover(acc: string): Photo | undefined {
@@ -689,8 +689,13 @@ class Collection {
 
   private live<T>(kind: Kind): T[] {
     const out: T[] = [];
-    for (const r of this.state.values()) if (r.kind === kind && !r._deleted) out.push(r as unknown as T);
+    for (const r of this.state.values()) if (r.kind === kind && !r._deleted && isComplete(r)) out.push(r as unknown as T);
     return out;
+  }
+
+  /** Records here that lack a field their kind cannot be shown without: made by a batch this build could not read, touched by a later one (round thirty-three, 1). */
+  get incomplete(): number {
+    return incompleteRecords(this.state).length;
   }
 
   /* ---- writes ---- */

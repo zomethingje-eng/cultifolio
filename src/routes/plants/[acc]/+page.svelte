@@ -240,12 +240,12 @@
   let editing = $state(false);
   /** The species' key while editing: kept when the name is untouched, cleared by typing, set again by picking a suggestion. */
   let edKey = $state<number | null>(null);
-  let f = $state({ taxonName: '', cultivar: '', nameKind: 'species' as 'species' | 'cultivar' | 'hybrid', parentage: '', nameAsReceived: '', fieldNumber: '', provenance: 'unknown' as Provenance, acquired: '', sourceFrom: '', sourceForm: '', price: '', locationId: null as string | null });
+  let f = $state({ taxonName: '', cultivar: '', nameKind: 'species' as string, parentage: '', nameAsReceived: '', fieldNumber: '', provenance: 'unknown' as string, acquired: '', sourceFrom: '', sourceForm: '', price: '', locationId: null as string | null });
   function startEdit() {
     if (!a) return;
     edDateMsg = ''; // a refusal belongs to the edit that was refused, not to the next one opened (round twenty-seven, R2-2)
     edKey = a.taxonKey ?? null;
-    f = { taxonName: a.taxonName, cultivar: a.cultivar ?? '', nameKind: kindOf(a), parentage: a.parentage ?? '', nameAsReceived: a.nameAsReceived ?? '', fieldNumber: a.fieldNumber ?? '', provenance: a.provenance ?? 'unknown', acquired: a.acquired ?? '', sourceFrom: a.sourceFrom ?? '', sourceForm: a.sourceForm ?? '', price: a.price ?? '', locationId: a.locationId ?? null };
+    f = { taxonName: a.taxonName, cultivar: a.cultivar ?? '', nameKind: a.nameKind && !['species', 'cultivar', 'hybrid'].includes(a.nameKind) ? a.nameKind : kindOf(a), parentage: a.parentage ?? '', nameAsReceived: a.nameAsReceived ?? '', fieldNumber: a.fieldNumber ?? '', provenance: a.provenance ?? 'unknown', acquired: a.acquired ?? '', sourceFrom: a.sourceFrom ?? '', sourceForm: a.sourceForm ?? '', price: a.price ?? '', locationId: a.locationId ?? null };
     editing = true;
     void focusNext('#ed-name'); // the first field, so a keyboard user who chose Edit from the menu lands in the form (round twenty, 11)
   }
@@ -416,11 +416,11 @@
     <form class="cult editform" onsubmit={(e) => { e.preventDefault(); saveEdit(); }}>
       <label><span>Species</span><SpeciesPicker bind:value={f.taxonName} bind:taxonKey={edKey} id="ed-name" /></label>
       <label><span>Cultivar</span><input id="ed-cv" type="text" bind:value={f.cultivar} /></label>
-      <label><span>What it is</span><select id="ed-kind" bind:value={f.nameKind}><option value="species">A species</option><option value="cultivar">A cultivar of that species</option><option value="hybrid">A hybrid (filed under the genus)</option></select></label>
+      <label><span>What it is</span><select id="ed-kind" bind:value={f.nameKind}>{#if !['species', 'cultivar', 'hybrid'].includes(f.nameKind)}<option value={f.nameKind}>{f.nameKind} (a kind this build does not know)</option>{/if}<option value="species">A species</option><option value="cultivar">A cultivar of that species</option><option value="hybrid">A hybrid (filed under the genus)</option></select></label>
       {#if f.nameKind === 'hybrid'}<label><span>Parentage</span><input id="ed-parentage" type="text" bind:value={f.parentage} placeholder="Seed parent × pollen parent" /></label>{/if}
       <label><span>Name as received</span><input id="ed-recv" type="text" bind:value={f.nameAsReceived} /></label>
       <label><span>Field number</span><input id="ed-fn" type="text" bind:value={f.fieldNumber} /></label>
-      <label><span>Provenance</span><select id="ed-prov" bind:value={f.provenance}><option value="unknown">Not stated</option><option value="wild">Wild-collected</option><option value="f1">F1: raised from wild-collected seed</option><option value="fn">Cultivated seed (Fn)</option><option value="veg">Vegetative</option></select></label>
+      <label><span>Provenance</span><select id="ed-prov" bind:value={f.provenance}>{#if !['unknown', 'wild', 'f1', 'fn', 'veg'].includes(f.provenance)}<option value={f.provenance}>{f.provenance} (a word this build does not know)</option>{/if}<option value="unknown">Not stated</option><option value="wild">Wild-collected</option><option value="f1">F1: raised from wild-collected seed</option><option value="fn">Cultivated seed (Fn)</option><option value="veg">Vegetative</option></select></label>
       <label><span>Acquired</span><input id="ed-date" type="date" bind:value={f.acquired} oninput={() => (edDateMsg = '')} aria-invalid={!!edDateMsg} aria-describedby={edDateMsg ? 'ed-date-bad' : undefined} />{#if edDateMsg}<span class="bad small" id="ed-date-bad">{edDateMsg}</span>{/if}</label>
       <label><span>From</span><input id="ed-from" type="text" bind:value={f.sourceFrom} /></label>
       <label><span>Form</span><input id="ed-form" type="text" bind:value={f.sourceForm} placeholder="plant, seedling, seed, cutting" /></label>

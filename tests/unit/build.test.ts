@@ -204,12 +204,14 @@ describe('round five: deduplication keeps the precise record', () => {
     page.results = [
       { ...base, key: 9101, decimalLatitude: -25.301, decimalLongitude: -70.501, coordinateUncertaintyInMeters: undefined, basisOfRecord: 'HUMAN_OBSERVATION', license: 'http://creativecommons.org/licenses/by/4.0/legalcode' },
       { ...base, key: 9102, decimalLatitude: -25.4, decimalLongitude: -70.6, coordinateUncertaintyInMeters: undefined, basisOfRecord: 'PRESERVED_SPECIMEN', license: 'http://creativecommons.org/licenses/by/4.0/legalcode' },
-      { ...base, key: 9103, decimalLatitude: -25.5, decimalLongitude: -70.7, coordinateUncertaintyInMeters: undefined, basisOfRecord: 'HUMAN_OBSERVATION', license: 'http://creativecommons.org/licenses/by/4.0/legalcode' }
+      { ...base, key: 9103, decimalLatitude: -25.5, decimalLongitude: -70.7, coordinateUncertaintyInMeters: undefined, basisOfRecord: 'HUMAN_OBSERVATION', license: 'http://creativecommons.org/licenses/by/4.0/legalcode' },
+      // five decimals that round to two and one at three places: precise by the record, and counted so (round thirty-three, 9)
+      { ...base, key: 9104, decimalLatitude: -25.12046, decimalLongitude: -70.40012, coordinateUncertaintyInMeters: undefined, basisOfRecord: 'HUMAN_OBSERVATION', license: 'http://creativecommons.org/licenses/by/4.0/legalcode' }
     ];
     const r = await buildDossier('Copiapoa cinerea', { fetcher: fixtureFetcher(table), builtBy: 'node', quick: true });
     if (!r.ok) throw new Error(r.reason);
-    expect(r.dossier.occurrences.nOpenInRange).toBe(3); // all three on the map
-    expect(r.dossier.occurrences.nVague).toBe(2); // the sheet with no figure and the one-decimal observation stay off the climate
+    expect(r.dossier.occurrences.nOpenInRange).toBe(4); // all four on the map
+    expect(r.dossier.occurrences.nVague).toBe(2); // the sheet with no figure and the one-decimal observation stay off the climate; the five-decimal one is precise
   });
 });
 

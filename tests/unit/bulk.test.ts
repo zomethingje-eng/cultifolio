@@ -217,6 +217,18 @@ describe('photographs from a DWCA download', () => {
     expect(got.data.map((m) => m.url)).toEqual(['https://inaturalist-open-data.s3.amazonaws.com/photos/1/original.jpg']);
     expect(got.data[0].creator).toBe('A. Grower');
     expect(f.stats.media).toBe(2); // once for the raw page, once through the adapter
+    // a species the download covers with no observation photographs is "none", answered from the files, not a miss for the network (round thirty-two, 3)
+    let through = 0;
+    const g = bulkFetcher(async () => { through++; return { status: 'refused', detail: 'offline' }; }, { occ, media });
+    const occ2 = new OccIndex(2000);
+    occ2.add(parseOccRow(h, '20\t-30.1\t17.1\t100\tPRESERVED_SPECIMEN\tCC_BY_4_0\tStillImage')!); // species 100's only record: a sheet
+    occ2.seal();
+    const none = await adapter(bulkFetcher(async () => { through++; return { status: 'refused', detail: 'offline' }; }, { occ: occ2, media: new MediaIndex(occ2.withMedia) }), 100);
+    expect(none.status).toBe('none');
+    // a species the download does not hold at all still goes to the network
+    const miss = await adapter(g, 999);
+    expect(miss.status).toBe('refused');
+    expect(through).toBe(1);
   });
 });
 

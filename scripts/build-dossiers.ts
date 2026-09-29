@@ -713,8 +713,11 @@ async function main() {
         const from = `carried from build of ${prev.built?.slice(0, 10) ?? '?'} (rederive)`;
         // A carried refusal keeps its reason: "carried from build of …; that build: <why it refused>", not a bare "carried".
         const carried = (u: { detail?: string }) => (u.detail ? `${from}; that build: ${u.detail}` : from);
-        // Photographs carry over; a GBIF set read from the download this build replaces the previous GBIF set.
-        d.photos = d.upstream['gbif.media']?.status === 'ok' ? mergeGbifPhotos(prev.photos, d.photos.filter((p) => p.src === 'gbif')) : prev.photos;
+        // Photographs carry over; a GBIF set read from the download this build replaces the previous GBIF set, and a
+        // download that covers the species and has no observation photographs for it replaces the set with nothing
+        // (an older build's herbarium sheets would otherwise stay for good: round thirty-two, 3).
+        const fromFiles = mediaFromFiles && ['ok', 'none'].includes(d.upstream['gbif.media']?.status ?? '');
+        d.photos = fromFiles ? [...prev.photos.filter((p) => p.src !== 'gbif'), ...d.photos.filter((p) => p.src === 'gbif')] : d.upstream['gbif.media']?.status === 'ok' ? mergeGbifPhotos(prev.photos, d.photos.filter((p) => p.src === 'gbif')) : prev.photos;
         d.literature = prev.literature;
         d.summary = prev.summary;
         d.ids = { ...prev.ids, gbif: d.ids.gbif };

@@ -166,7 +166,7 @@ describe('climate envelope', () => {
     // the typical cell: coldest month's mean night nearest the median across cells (shift 0), and `at` is its centre
     expect(c.cell).toBe(centres[2].id);
     expect(c.at).toEqual({ lat: centres[2].lat, lon: centres[2].lon });
-    expect(c.src.envelope).toContain(`5 distinct grid cells holding the 7 in-range records`);
+    expect(c.src.envelope).toContain(`5 distinct grid cells holding 7 of the 7 in-range records`);
     expect(c.src.envelope).toContain(centres[2].id);
     // extremes read at that cell, lapse-corrected 620 m vs POWER's 120 m, the one freak frost carried as a count
     expect(c.extremes?.lapseAppliedM).toBe(500);
@@ -187,7 +187,8 @@ describe('climate envelope', () => {
     expect(c.hemispheres).toEqual({ north: 3, south: 5, used: 'south' });
     expect(c.cells).toBe(5); // the southern side alone
     expect(c.months[0].tmin).toBeCloseTo(15, 1); // the southern median, untouched by the +10 northern cells
-    expect(c.src.envelope).toContain('on the southern side of the equator (3 cells north, 5 south: the two sides\' seasons are not combined)');
+    expect(c.src.envelope).toContain('on the southern side of the equator (3 cells poleward of 10° north, 5 poleward of 10° south: the two sides\' seasons are not combined, and cells within 10° of the equator stay in)');
+    expect(c.records).toBe(5); // the records in the cells the envelope reads, not the eight (round thirty-three, 4)
     // two northern cells is not "in strength": everything is used and nothing is said
     const few = new Map(cells);
     few.delete(cellOf(h, -lat, lon - 2 * h.cell).id);
@@ -195,6 +196,16 @@ describe('climate envelope', () => {
     if (d.status !== 'ok') throw new Error(d.status);
     expect(d.hemispheres).toBeUndefined();
     expect(d.cells).toBe(7);
+    // an equatorial range, 5° N to 5° S, is one climate: nothing is split, however the cells fall either side of the line (round thirty-three, 8)
+    const eq = new Map<string, ArrayBuffer>();
+    const eqPoints: Array<[number, number]> = [];
+    [2, 3, 4, 5, 6].forEach((la, k) => { const c = cellOf(h, la, lon); eq.set(c.id, encodeCell(h, variant(k, 1))); eqPoints.push([la, lon]); });
+    [-1, -2, -3, -4, -5].forEach((la, k) => { const c = cellOf(h, la, lon); eq.set(c.id, encodeCell(h, variant(-4 + k, 1))); eqPoints.push([la, lon]); });
+    const e = await makeClimateProvider({ grid: memoryGridSource(h, eq), fetcher: fixtureFetcher({}), noExtremes: true }).envelope(eqPoints);
+    if (e.status !== 'ok') throw new Error(e.status);
+    expect(e.hemispheres).toBeUndefined();
+    expect(e.cells).toBe(10);
+    expect(e.records).toBe(10);
   });
   it('a typical cell whose POWER cell is mostly sea gives way to the next candidate on land; when none is, the fraction is written (round thirty-one, 2)', async () => {
     // Sea as the real grid holds it: a cell that is present, with CHELSA's temperatures and rain over the water, and no
@@ -234,8 +245,36 @@ describe('climate envelope', () => {
     const e = await makeClimateProvider({ grid: memoryGridSource(h, cells), fetcher: fixtureFetcher({}), noExtremes: true }).envelope([A, B, C, S]);
     if (e.status !== 'ok') throw new Error(e.status);
     expect(e.cells).toBe(3);
-    expect(e.records).toBe(4);
-    expect(e.src.envelope).toContain('holding the 4 in-range records (1 further cell with records at sea, by the elevation layer, left out)');
+    expect(e.records).toBe(3); // the record at sea is not among those the envelope reads
+    expect(e.src.envelope).toContain('holding 3 of the 4 in-range records (1 further cell with records at sea, by the elevation layer, left out)');
+  });
+  it('the land search does not hand the cold floor to an outlier: only candidates within 2 °C of the median coldest night are tried, and when none is on land the nearest stands (round thirty-three, 7)', async () => {
+    const sample = (la: number, lo: number) => {
+      const pc = powerCell(la, lo), out: Array<[number, number]> = [];
+      for (let i = 0; i < 5; i++) for (let j = 0; j < 5; j++) out.push([pc.lat - 0.25 + (i + 0.5) * 0.1, pc.lon - 0.3125 + (j + 0.5) * 0.125]);
+      return out;
+    };
+    const seaCell = () => { const v = variant(0, 1); delete v.elev; return encodeCell(h, v); };
+    const cells = new Map<string, ArrayBuffer>();
+    const points: Array<[number, number]> = [];
+    // eight coastal cells, each in a sea POWER cell, nights around 10 °C (shifts −1..+1 about the Atacama cell's)
+    for (let k = 0; k < 8; k++) {
+      const p: [number, number] = [lat, lon - k * 0.7];
+      for (const [la, lo] of sample(...p)) cells.set(cellOf(h, la, lo).id, seaCell());
+      cells.set(cellOf(h, ...p).id, encodeCell(h, variant((k % 3) - 1, 1)));
+      points.push(p);
+    }
+    // one inland cell on solid land with nights 14 °C colder: within twelve places of the median, outside 2 °C of it
+    const inland: [number, number] = [lat, lon + 0.7];
+    for (const [la, lo] of sample(...inland)) cells.set(cellOf(h, la, lo).id, encodeCell(h, variant(-14, 1)));
+    cells.set(cellOf(h, ...inland).id, encodeCell(h, variant(-14, 1)));
+    points.push(inland);
+    const c = await makeClimateProvider({ grid: memoryGridSource(h, cells), fetcher: fixtureFetcher({}), noExtremes: true }).envelope(points);
+    if (c.status !== 'ok') throw new Error(c.status);
+    expect(c.cell).not.toBe(cellOf(h, ...inland).id);
+    expect(c.landFraction).toBeLessThan(0.5);
+    expect(c.src.envelope).toContain('none of the');
+    expect(c.src.envelope).toContain('within 2 °C of the median was mostly land');
   });
   it('fewer than three land cells is "none", and says how many', async () => {
     const a = cellOf(h, lat, lon), b = cellOf(h, lat, lon - h.cell), sea = cellOf(h, lat, lon - 2 * h.cell);

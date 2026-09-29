@@ -4,6 +4,7 @@
  * the document, and a shape change is a version bump — the schema is what
  * makes forgetting impossible: a dossier that does not parse is not served.
  */
+import { mendGbifThumb } from './md5';
 import * as v from 'valibot';
 
 /** v2 (September 2026): the habitat climate is an envelope across every in-range record's cell, not one point. */
@@ -176,6 +177,8 @@ export const Climate = v.variant('status', [
     hemispheres: v.optional(v.object({ north: v.number(), south: v.number(), used: v.picklist(['north', 'south']) })),
     /** How much of the typical cell's NASA POWER cell (0.5°) is land, by sampling the climate grid: a figure read at a cell that is mostly sea is said to be (round thirty-one, 2). */
     landFraction: v.optional(v.number()),
+    /** In-range cells left out because the elevation layer holds no land in them: a record placed at sea (round thirty-one, corpus). */
+    seaCells: v.optional(v.number()),
     src: v.object({ normals: v.string(), envelope: v.string(), extremes: v.optional(v.string()), elevation: v.optional(v.string()) })
   }),
   v.object({ status: v.picklist(['pending', 'none', 'refused']), detail: v.optional(v.string()) })
@@ -239,7 +242,7 @@ export function safeUrls(d: Dossier): Dossier {
   return {
     ...d,
     summary: d.summary ? { ...d.summary, url: webUrl(d.summary.url) ?? '' } : d.summary,
-    photos: d.photos.filter((p) => webUrl(p.url) && webUrl(p.thumb)).map((p) => ({ ...p, page: webUrl(p.page) })),
+    photos: d.photos.filter((p) => webUrl(p.url) && webUrl(p.thumb)).map((p) => ({ ...p, thumb: mendGbifThumb(p.thumb, p.id, p.url), page: webUrl(p.page) })),
     // A specimen record under DiSSCo's DOI prefix is not a paper (round thirty-one, 6): dropped here as well as at the build, so dossiers built before the rule show none.
     literature: d.literature.filter((p) => !/^(https?:\/\/doi\.org\/)?10\.3535\//i.test(p.doi ?? '')).map((p) => ({ ...p, url: webUrl(p.url) })),
     links: Object.fromEntries(Object.entries(d.links).filter(([, u]) => webUrl(u)))

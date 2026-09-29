@@ -123,6 +123,9 @@ export async function restoreBackup(o: Opened, mode: 'merge' | 'replace', onProg
     for (const id of written) if (!collection.photo(id)) await deletePhotoBlobs(id).catch(() => {});
     throw e;
   }
+  // The same after a merge that landed: an older backup carries the pixels of a photograph removed on this device since,
+  // and the fold keeps it removed, so those pixels would be bytes nothing names (round thirty-three, small).
+  for (const id of written) if (!collection.photo(id)) { await deletePhotoBlobs(id).catch(() => {}); photos--; }
   let schemeRestored: NumberingScheme | null = null;
   const fileScheme = o.file.manifest?.scheme;
   const fileHasSetting = o.file.changes.some((c) => c.kind === 'setting' && c.id === NUMBERING_SETTING);

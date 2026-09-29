@@ -13,7 +13,7 @@
  */
 import { frostWording } from './extremes';
 import { MON3 } from './months';
-import { archFor, type ArchGuess } from './arch';
+import { archFor, aLabel, type ArchGuess } from './arch';
 import { temp, deltaT, rain, ruleRain, METRIC, type Units } from './units';
 
 export interface Month {
@@ -218,12 +218,12 @@ export function coldFloor(m: Month[] | null, ex: Extremes | null, guess: ArchGue
   }
   if (floor == null && minC == null) return null;
   if (floor == null) {
-    return { floor: minC!, habitat: null, raised: false, group: guess!.arch.lab.toLowerCase(), s: `Cold floor: ${T(minC!)}, the archetype table's conventional minimum for a ${guess!.arch.lab.toLowerCase()} (grouped by ${guess!.why}); no habitat figure is on file for this species.`, short: `Cold floor ${T(minC!)} (conventional for a ${guess!.arch.lab.toLowerCase()}, archetype table).`, hab: false };
+    return { floor: minC!, habitat: null, raised: false, group: aLabel(guess!.arch.lab), s: `Cold floor: ${T(minC!)}, the archetype table's conventional minimum for ${aLabel(guess!.arch.lab)} (grouped by ${guess!.why}); no habitat figure is on file for this species.`, short: `Cold floor ${T(minC!)} (conventional for ${aLabel(guess!.arch.lab)}, archetype table).`, hab: false };
   }
   if (minC != null && minC > floor) {
-    return { floor: minC, habitat: floor, raised: true, group: guess!.arch.lab.toLowerCase(), s: `Cold floor: ${T(minC)}. The habitat figure, ${quantity}, is ${T1(floor)}; the archetype table's conventional minimum for a ${guess!.arch.lab.toLowerCase()} (grouped by ${guess!.why}) is ${T(minC)}, which is higher, and the floor rule takes the higher.`, short: `Cold floor ${T(minC)} (archetype minimum for a ${guess!.arch.lab.toLowerCase()}, above the ${T1(floor)} habitat night).`, hab: true };
+    return { floor: minC, habitat: floor, raised: true, group: aLabel(guess!.arch.lab), s: `Cold floor: ${T(minC)}. The habitat figure, ${quantity}, is ${T1(floor)}; the archetype table's conventional minimum for ${aLabel(guess!.arch.lab)} (grouped by ${guess!.why}) is ${T(minC)}, which is higher, and the floor rule takes the higher.`, short: `Cold floor ${T(minC)} (archetype minimum for ${aLabel(guess!.arch.lab)}, above the ${T1(floor)} habitat night).`, hab: true };
   }
-  return { floor, habitat: floor, raised: false, group: minC != null ? guess!.arch.lab.toLowerCase() : null, s: `Cold floor: ${T1(floor)}, which is ${quantity}${minC != null ? `; the archetype table's minimum for a ${guess!.arch.lab.toLowerCase()}, ${T(minC)}, is lower and does not raise it` : ''}.`, short: `Cold floor ${T1(floor)} (${quantityShort}).`, hab: true };
+  return { floor, habitat: floor, raised: false, group: minC != null ? aLabel(guess!.arch.lab) : null, s: `Cold floor: ${T1(floor)}, which is ${quantity}${minC != null ? `; the archetype table's minimum for ${aLabel(guess!.arch.lab)}, ${T(minC)}, is lower and does not raise it` : ''}.`, short: `Cold floor ${T1(floor)} (${quantityShort}).`, hab: true };
 }
 
 export function cultivationSheet(input: SheetInput): { rows: Row[]; arch: ArchGuess | null; year: Year | null; floor: ColdFloor | null } {

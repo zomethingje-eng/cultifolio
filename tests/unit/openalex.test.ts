@@ -11,14 +11,17 @@ describe('literature screening', () => {
           { title: 'Leaf structure of Albuca spiralis', publication_year: 2015 },
           { title: 'Bulb dormancy in a Namaqualand geophyte', publication_year: 2018, abstract_inverted_index: { We: [0], studied: [1], 'A.': [2], spiralis: [3], in: [4], the: [5], field: [6] } },
           { title: 'Solar pump development', publication_year: 2020, abstract_inverted_index: { Albuca: [0] } }, // genus alone is not the species
-          { title: 'Occurrence Download', doi: 'https://doi.org/10.15468/dl.5xu4bv', publication_year: 2026, abstract_inverted_index: { Albuca: [0], spiralis: [1] } } // a GBIF download names it; it is a dataset, not a paper (round seven, 5)
+          { title: 'Occurrence Download', doi: 'https://doi.org/10.15468/dl.5xu4bv', publication_year: 2026, abstract_inverted_index: { Albuca: [0], spiralis: [1] } }, // a GBIF download names it; it is a dataset, not a paper (round seven, 5)
+          { title: 'Albuca spiralis L.f. (herbarium specimen)', doi: 'https://doi.org/10.3535/abc', publication_year: 2024 }, // a DiSSCo specimen (round thirty-one, 6)
+          { title: 'Herbarium specimen of Albuca spiralis', publication_year: 2024, primary_location: { source: { display_name: 'DiSSCo' } } },
+          { title: 'Flowering phenology of Albuca spiralis inferred from herbarium specimens', publication_year: 2021 } // a paper about specimens is a paper (round thirty-three, 13)
         ]
       }
     });
     const r = await literature(f, 'Albuca spiralis', 12, undefined);
     expect(r.status).toBe('ok');
     if (r.status !== 'ok') return;
-    expect(r.data.map((w) => w.title)).toEqual(['Leaf structure of Albuca spiralis', 'Bulb dormancy in a Namaqualand geophyte']);
+    expect(r.data.map((w) => w.title)).toEqual(['Leaf structure of Albuca spiralis', 'Bulb dormancy in a Namaqualand geophyte', 'Flowering phenology of Albuca spiralis inferred from herbarium specimens']);
   });
   it('is "none" when nothing survives screening, and passes refusals through', async () => {
     const f = fixtureFetcher({ 'https://api.openalex.org/works': { results: [{ title: 'Unrelated', abstract_inverted_index: null }] } });

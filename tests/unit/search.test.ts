@@ -51,6 +51,11 @@ describe('older names (round thirty-one, 3)', () => {
     expect(canonicalSynonym('Haworthia attenuata var. radula (Jacq.) M.B.Bayer')).toBe('Haworthia attenuata var. radula');
     expect(canonicalSynonym('? glabra Salm-Dyck')).toBeNull();
     expect(canonicalSynonym('Gasteria')).toBeNull();
+    // a section, a subgenus, an undetermined name and a misapplied one are not names of a species (round thirty-three, 13)
+    expect(canonicalSynonym('Opuntia sect. Tuna (Mill.) A.Berger')).toBeNull();
+    expect(canonicalSynonym('Haworthia subg. Hexangulares Uitewaal')).toBeNull();
+    expect(canonicalSynonym('Echinopsis sp.')).toBeNull();
+    expect(canonicalSynonym('Aloe glauca auct. non Mill.')).toBeNull();
   });
   it('a search finds a species under an older name, after the species that carry the words in their own names', async () => {
     const { prepare, search } = await import('$core/search');
@@ -62,5 +67,10 @@ describe('older names (round thirty-one, 3)', () => {
     expect(search(p, 'haworthia attenuata').map((x) => x.name)).toEqual(['Haworthiopsis attenuata']);
     expect(search(p, 'haworthia').map((x) => x.name)).toEqual(['Haworthia cooperi', 'Haworthiopsis attenuata']); // its own name first
     expect(search(p, 'aloe').map((x) => x.name)).toEqual(['Haworthiopsis attenuata']);
+    // the words of a query that fall to older names must come from one older name, and a rank marker is not a word (round thirty-three, 13)
+    const q = prepare([{ name: 'Tulista pumila', family: 'Asphodelaceae', syn: ['Aloe pumila', 'Haworthia margaritifera', 'Haworthia pumila var. margaritifera'] }]);
+    expect(search(q, 'haworthia margaritifera').map((x) => x.name)).toEqual(['Tulista pumila']);
+    expect(search(q, 'aloe margaritifera')).toEqual([]);
+    expect(search(q, 'var')).toEqual([]);
   });
 });

@@ -57,3 +57,6 @@ export function archFor(scientific: string, family?: string | null): ArchGuess |
   if (f) return { arch: ARCH[f], tier: 'family', of: family!, why: `${family}, which is usually but not always one kind of plant` };
   return null;
 }
+
+/** The label with its article, lower-cased: "an other epiphyte", "a cactus or succulent", "an orchid" ("a other epiphyte" was live: round thirty-three, R3-7). */
+export const aLabel = (lab: string): string => `${/^[aeiou]/i.test(lab) ? 'an' : 'a'} ${lab.toLowerCase()}`;

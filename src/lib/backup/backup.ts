@@ -163,6 +163,8 @@ export function photosWithoutPixels(file: Pick<ReadBackup, 'changes' | 'photoIds
 }
 
 /** The entries a backup carries and nothing else: the three JSON files, the two sheets, a photograph or its thumbnail. */
+/** The entries the writer deflates; every other entry is stored as it is. */
+const DEFLATED_ENTRY = /^(manifest\.json|changes\.json|device\.json|plants\.csv|batches\.csv)$/;
 const KNOWN_ENTRY = /^(manifest\.json|changes\.json|device\.json|plants\.csv|batches\.csv|photos\/[^\0]{1,200}\.jpg)$/; // a photo entry's name is judged below, so an impossible one is refused and said rather than skipped
 /** The most any one entry may inflate to: a photograph is bounded by the sync limit, and a log of a million changes is well under this. */
 export const MAX_ENTRY_BYTES = 256 * 1024 * 1024;
@@ -192,6 +194,10 @@ export async function readBackup(bytes: Uint8Array): Promise<ReadBackup> {
     filter: (f) => {
       if (!KNOWN_ENTRY.test(f.name) || f.originalSize > MAX_ENTRY_BYTES) return false;
       if (f.name === 'changes.json' && f.originalSize > MAX_CHANGES_BYTES) return false;
+      // The deflated entries (the log, the sheets, the manifest) have their own caps and compress by an order of
+      // magnitude, so they are not in the sum: bounding them by the file's size refused the app's own backup once its
+      // log passed about 74 MB (round thirty-three, 3). The sum is of the stored entries, the photographs.
+      if (DEFLATED_ENTRY.test(f.name)) return true;
       declared += f.originalSize;
       if (declared > bytes.length * 1.1 + 64 * 1048576) throw new Error('That zip declares far more content than a backup of its size can hold; it is not a Cultifolio backup.');
       return true;

@@ -212,7 +212,8 @@
   async function saveEdit() {
     if (!s) return;
     const heat = heatCheck(f.bottomHeatC, units.current); // the same check as the new-batch form: 77 does not save as 77 °C here either
-    const veg = (PROP_METHODS.find((x) => x.k === f.method) ?? m).veg;
+    const known = PROP_METHODS.find((x) => x.k === f.method);
+    const veg = known ? known.veg : null; // a method this build does not know says nothing about the provenance, so the edit leaves it alone (round thirty-three, 2)
     heatMsg = heat.msg;
     if (heatMsg) {
       document.getElementById('se-heat')?.focus();
@@ -226,7 +227,7 @@
       // field number for the switch back, and the page hides them while the method is vegetative (round twenty-eight, 2).
       // Only the provenance follows the method, since 'veg' is what a vegetative batch is and the seed select cannot show it.
       sourceFrom: f.sourceFrom.trim() || null, sourceRef: f.sourceRef.trim() || null, fieldNumber: f.fieldNumber.trim() || null,
-      provenance: veg ? 'veg' : f.provenance === 'veg' ? 'unknown' : f.provenance,
+      provenance: veg == null ? f.provenance : veg ? 'veg' : f.provenance === 'veg' ? 'unknown' : f.provenance,
       // Every line here is one field, on its own line: round twenty-seven's fix put this comment at the end of a line
       // that went on, and Medium and Container were never saved again (round twenty-eight, 1).
       medium: f.medium.trim() || null, container: f.container.trim() || null,
@@ -288,14 +289,14 @@
     <form class="cult editform" onsubmit={(e) => { e.preventDefault(); saveEdit(); }}>
       <label><span>Species</span><input id="se-name" type="text" bind:value={f.taxonName} /></label>
       <label><span>Cultivar</span><input id="se-cv" type="text" bind:value={f.cultivar} /></label>
-      <label><span>Method</span><select id="se-method" bind:value={f.method} onchange={() => { if (f.provenance === 'veg' && !(PROP_METHODS.find((x) => x.k === f.method) ?? m).veg) f.provenance = 'unknown'; }}>{#each PROP_METHODS as pm}<option value={pm.k}>{pm.label}</option>{/each}</select></label>
+      <label><span>Method</span><select id="se-method" bind:value={f.method} onchange={() => { const k = PROP_METHODS.find((x) => x.k === f.method); if (k && f.provenance === 'veg' && !k.veg) f.provenance = 'unknown'; }}>{#if !PROP_METHODS.some((x) => x.k === f.method)}<option value={f.method}>{f.method} (a method this build does not know)</option>{/if}{#each PROP_METHODS as pm}<option value={pm.k}>{pm.label}</option>{/each}</select></label>
       <label><span>Date</span><input id="se-date" type="date" bind:value={f.sown} /></label>
       <label><span>Started</span><input id="se-count" type="number" min="1" bind:value={f.count} /></label>
       {#if !(PROP_METHODS.find((x) => x.k === f.method) ?? m).veg}
         <label><span>Seed from</span><input id="se-from" type="text" bind:value={f.sourceFrom} /></label>
         <label><span>Field number</span><input id="se-fn" type="text" bind:value={f.fieldNumber} placeholder="e.g. KK 1462" /></label>
         <label><span>Lot</span><input id="se-ref" type="text" bind:value={f.sourceRef} placeholder="the seller's lot code" /></label>
-        <label><span>Seed provenance</span><select id="se-prov" bind:value={f.provenance}><option value="unknown">Not stated</option><option value="wild">Wild-collected</option><option value="f1">Ex-habitat plants</option><option value="fn">Cultivated plants</option></select></label>
+        <label><span>Seed provenance</span><select id="se-prov" bind:value={f.provenance}>{#if !['unknown', 'wild', 'f1', 'fn', 'veg'].includes(f.provenance)}<option value={f.provenance}>{f.provenance} (a word this build does not know)</option>{/if}<option value="unknown">Not stated</option><option value="wild">Wild-collected</option><option value="f1">Ex-habitat plants</option><option value="fn">Cultivated plants</option></select></label>
       {/if}
       <label><span>Medium</span><input id="se-medium" type="text" bind:value={f.medium} /></label>
       <label><span>Container</span><input id="se-container" type="text" bind:value={f.container} /></label>

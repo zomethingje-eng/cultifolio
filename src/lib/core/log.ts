@@ -42,7 +42,7 @@ export function assertField(field: string): void {
  * (a pull, a backup) goes through here in full BEFORE the fold touches it, so
  * a bad batch is refused whole rather than half-applied.
  */
-export function changeError(c: unknown): string | null {
+export function changeError(c: unknown, shapeOnly = false): string | null {
   if (!c || typeof c !== 'object') return 'not an object';
   const x = c as Record<string, unknown>;
   if (typeof x.t !== 'string' || !isHlc(x.t)) return `bad timestamp ${JSON.stringify(x.t)}`;
@@ -52,8 +52,12 @@ export function changeError(c: unknown): string | null {
   if (RESERVED_FIELDS.has(x.field)) return `"${x.field}" is a reserved field`;
   if (x.value === undefined) return `no value for ${x.field}`;
   if (x.field in Object.prototype) return `"${x.field}" is not a field name a record can carry`; // __proto__, constructor and the rest: a record with one folds with a poisoned prototype (round twenty-nine, 10)
+  if (shapeOnly) return null;
   const want = x.field === '_deleted' ? 'boolean' : Object.hasOwn(FIELD_TYPES[x.kind as Kind], x.field) ? FIELD_TYPES[x.kind as Kind][x.field] : undefined;
   if (want && x.value !== null && !valueIs(x.value, want)) return `${x.field} of a ${x.kind} must be a ${want}, not ${JSON.stringify(x.value)}`;
+  // A field the record cannot be shown without takes no null: a plant whose name is set to nothing is not a plant with
+  // no name, it is a change no build of this app writes (round thirty-three, 1).
+  if (x.value === null && REQUIRED_FIELDS[x.kind as Kind].includes(x.field)) return `${x.field} of a ${x.kind} cannot be null`;
   return null;
 }
 
@@ -93,19 +97,30 @@ export const FIELD_TYPES: Record<Kind, Record<string, ValueType>> = {
  * text (a v2 file's price of 12, written through before round twenty-eight) becomes its text. Nothing else is changed;
  * the same object comes back when there is nothing to mend (round twenty-nine, 2).
  */
+/** The v2 importer's method words (a label lower-cased, its last "s" cut, and the label itself), by the app's word. */
+const OLD_METHODS: Record<string, string> = { seeds: 'seed', 'leaf cutting': 'leaf', 'leaf cuttings': 'leaf', 'stem cutting': 'cutting', 'stem cuttings': 'cutting', cuttings: 'cutting', offsets: 'offset', 'offset / pup': 'offset', 'offsets / pups': 'offset', divisions: 'division', grafts: 'graft', bulbils: 'bulbil' };
+/** The provenance text the v2 importer passed through, by the app's word: only these, exactly. */
+const OLD_PROVENANCE: Record<string, string> = { 'wild collected': 'wild', 'wild-collected': 'wild', 'habitat collected': 'wild', 'habitat-collected': 'wild', 'ex habitat': 'f1', 'raised from wild-collected seed': 'f1', 'seed-grown from wild-collected seed': 'f1', cultivated: 'fn', 'nursery grown': 'fn', 'nursery-grown': 'fn', vegetative: 'veg', 'vegetatively propagated': 'veg', 'not known': 'unknown', '?': 'unknown' };
+
 export function mendChange(c: Change): Change {
   const want = Object.hasOwn(FIELD_TYPES[c.kind] ?? {}, c.field) ? FIELD_TYPES[c.kind][c.field] : undefined;
   if (want === 'string' && typeof c.value === 'number' && Number.isFinite(c.value)) return { ...c, value: String(c.value) };
+  // And the other way: a count written as "3" by an old build folds as 3, rather than setting its batch aside on every
+  // device for good, since no later build would read a string there either (round thirty-three, 1).
+  if (want === 'number' && typeof c.value === 'string' && /^-?\d+(\.\d+)?$/.test(c.value.trim())) return { ...c, value: Number(c.value) };
   // Words the v2 importer wrote before round twenty-eight: a method as the label lower-cased with its last "s" cut
-  // ("leaf cutting", "stem cutting"), a provenance as the file's own text ("Wild collected"). Mended to the words the
-  // app uses wherever the log is read, so old batches keep their method on every device (round thirty, 1).
+  // ("leaf cutting", "stem cutting"), a provenance as the file's own text ("Wild collected"). Those exact spellings are
+  // mended to the words the app uses wherever the log is read, so old batches keep their method on every device (round
+  // thirty, 1). Nothing else is touched: a word this build does not know ("tissue culture", "f2") folds as it is and
+  // is shown by its word, so a newer build's word survives a pass through an older one (round thirty-three, 2); a guess
+  // at a claim about wild origin was worse than the word itself.
   if (c.kind === 'sowing' && c.field === 'method' && typeof c.value === 'string' && !FIELD_ENUMS.sowing!.method.includes(c.value)) {
-    const w = /cutting|offset|leaf|division|graft|bulbil|seed/i.exec(c.value)?.[0].toLowerCase();
-    return { ...c, value: w ?? 'seed' };
+    const m = OLD_METHODS[c.value.trim().toLowerCase()];
+    return m ? { ...c, value: m } : c;
   }
   if ((c.kind === 'sowing' || c.kind === 'accession') && c.field === 'provenance' && typeof c.value === 'string' && !FIELD_ENUMS.accession!.provenance.includes(c.value)) {
-    const v = c.value.toLowerCase();
-    return { ...c, value: /wild|habitat.?collect/.test(v) ? 'wild' : /^f1\b|ex.?habitat/.test(v) ? 'f1' : /^fn\b|cultivat|nursery/.test(v) ? 'fn' : /veg|cutting|offset|division/.test(v) ? 'veg' : 'unknown' };
+    const m = OLD_PROVENANCE[c.value.trim().toLowerCase()];
+    return m ? { ...c, value: m } : c;
   }
   return c;
 }
@@ -117,11 +132,11 @@ export function mendChange(c: Change): Change {
  * what it had (round thirty, 1).
  */
 export const REQUIRED_FIELDS: Record<Kind, readonly string[]> = {
-  accession: ['taxonName', 'status'],
-  sowing: ['taxonName', 'method', 'sown', 'count', 'status'],
+  accession: ['taxonName'],
+  sowing: ['taxonName', 'method', 'sown'],
   location: ['name'],
   event: ['acc', 'd', 't'],
-  photo: ['d', 'w', 'h'],
+  photo: ['d'],
   taxon: ['name'],
   setting: []
 };
@@ -136,24 +151,21 @@ export function readChanges(rows: unknown): { changes: Change[]; dropped: string
   if (!Array.isArray(rows)) throw new Error('changes is not a list');
   const kept: Change[] = [];
   const dropped: string[] = [];
-  const brokenRecords = new Set<string>(); // `${kind}:${id}` whose required field could not be read: every change to it in this list goes
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
     const c = r && typeof r === 'object' && typeof (r as Change).kind === 'string' && typeof (r as Change).field === 'string' ? mendChange(r as Change) : r;
     // Structure is still refused whole (a bad stamp, an unknown kind, a reserved name: the list is damaged or from
-    // somewhere else); only a value of the wrong type is left out on its own.
-    const shape = c && typeof c === 'object' && (c as Change).value !== undefined ? changeError({ ...(c as Change), value: null }) : changeError(c);
+    // somewhere else); only a value that cannot be read is left out on its own. What that leaves of a record is the
+    // fold's to judge: a record without the fields its kind needs is not live until a build that reads them arrives,
+    // and a record whose later change is readable is whole again (round thirty-three, 1). Dropping every change to the
+    // record here, as round thirty did, lost a plant whose name was corrected after a bad first value.
+    const shape = changeError(c, true);
     if (shape) throw new Error(`change ${i}: ${shape}`);
     const e = changeError(c);
-    if (e) {
-      dropped.push(`change ${i}: ${e}`);
-      const ch = c as Change;
-      if (REQUIRED_FIELDS[ch.kind].includes(ch.field)) brokenRecords.add(key(ch.kind, ch.id));
-    } else kept.push(c as Change);
+    if (e) dropped.push(`change ${i}: ${e}`);
+    else kept.push(c as Change);
   }
-  const changes = brokenRecords.size ? kept.filter((c) => !brokenRecords.has(key(c.kind, c.id))) : kept;
-  if (brokenRecords.size) for (const k of brokenRecords) dropped.push(`every change to ${k.replace(':', ' ')} in this list, since its ${REQUIRED_FIELDS[k.split(':')[0] as Kind].join('/')} could not be read`);
-  return { changes, dropped };
+  return { changes: kept, dropped };
 }
 
 /** Throws with the first problem found; returns the changes typed. */
@@ -276,9 +288,27 @@ export function materialise(changes: Iterable<Change>): { state: State; seen: Ma
   return { state, seen };
 }
 
+/**
+ * Whether a record has every field its kind cannot be shown without. A record that lacks one is not live: it is a
+ * record whose making this device has not read yet (a set-aside batch created it, a later batch touched it), and it
+ * waits, counted, until a build that reads the batch completes it. One rule in the fold, so no path (a pull, a restore,
+ * an import, or any order of those) can make a half plant that throws on the plants page (round thirty-three, 1).
+ */
+export function isComplete(rec: Record_): boolean {
+  for (const f of REQUIRED_FIELDS[rec.kind] ?? []) if (rec[f] == null) return false;
+  return true;
+}
+
 export function live<T extends Record_>(state: State, kind: Kind): T[] {
   const out: T[] = [];
-  for (const r of state.values()) if (r.kind === kind && !r._deleted) out.push(r as T);
+  for (const r of state.values()) if (r.kind === kind && !r._deleted && isComplete(r)) out.push(r as T);
+  return out;
+}
+
+/** The records that are not removed and not complete: waiting for changes this device cannot read yet. */
+export function incomplete(state: State): Record_[] {
+  const out: Record_[] = [];
+  for (const r of state.values()) if (!r._deleted && !isComplete(r)) out.push(r);
   return out;
 }
 

@@ -5,7 +5,7 @@
   import { browser } from '$app/environment';
   import { page } from '$app/state';
   import { accNo } from '$lib/db/types';
-  import { photoAt } from '$dossier/photo-size';
+  import { photoAt, srcsetOf } from '$dossier/photo-size';
   import { entriesFor } from '$lib/ui/index.svelte';
   import PageHead from '$lib/ui/PageHead.svelte';
   import { collection } from '$lib/db/collection.svelte';
@@ -54,7 +54,7 @@
    * render up to what they need before they scroll to it, so they land where they say. Search and the chips read the
    * index, not these rows, and are unaffected.
    */
-  const WINDOW = 120, CHUNK = 160;
+  const WINDOW = 60, CHUNK = 160; // sixty rows first (a phone shows about ten), then chunks as the reader nears the end: the first visit fetched forty-four group thumbnails it did not show (round thirty-three, R3-5)
   /** Where the window starts: the letter asked for with `?from=` (a reader without JavaScript), else the top. */
   // svelte-ignore state_referenced_locally
   let start = $state(data.start);
@@ -261,7 +261,7 @@
     <div class="strip">
       {#each data.featured as c (c.slug)}
         <a class="ftile" href="/species/{c.slug}">
-          <img src={c.thumb} alt="" loading="lazy" onerror={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = 'hidden')} />
+          <img src={c.thumb} srcset={srcsetOf(c.thumb, ['small', 'medium'])} sizes="150px" width="500" height="500" alt="" loading="lazy" onerror={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = 'hidden')} />
           <span class="fnm"><SpeciesName name={c.name} /></span>
           {#if c.common}<span class="fcom">{c.common}</span>{/if}
         </a>
@@ -400,7 +400,7 @@
       {#each visibleRows as r, i (r.id)}
         {#if r.letter && (i === 0 || data.rows[start + i - 1].letter !== r.letter)}<h2 class="letter" id="l-{r.letter}">{r.letter}</h2>{/if}
         <a class="grow" class:open={r.id === data.open} id="g-{r.id}" href={rowHref(r.id)} data-sveltekit-noscroll aria-expanded={r.id === data.open}>
-          {#if r.map}<div class="gmap">{@html r.map}</div>{:else if r.thumb}<div class="gthumb"><img src={photoAt(r.thumb, 'small')} alt="" loading="lazy" onerror={(e) => { const im = e.currentTarget as HTMLImageElement; im.remove(); }} /></div>{:else}<div class="gthumb mono" aria-hidden="true">{r.label[0] ?? ''}</div>{/if}
+          {#if r.map}<div class="gmap">{@html r.map}</div>{:else if r.thumb}<div class="gthumb"><img src={photoAt(r.thumb, 'small')} srcset={srcsetOf(r.thumb, ['square', 'small'])} sizes="56px" width="56" height="56" alt="" loading="lazy" onerror={(e) => { const im = e.currentTarget as HTMLImageElement; im.remove(); }} /></div>{:else}<div class="gthumb mono" aria-hidden="true">{r.label[0] ?? ''}</div>{/if}
           <div class="gtx">
             <span class="gname" class:sci={data.by === 'genus'}>{r.label}</span>
             {#if r.sub}<span class="d">{r.sub}</span>{/if}

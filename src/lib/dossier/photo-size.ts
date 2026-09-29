@@ -4,12 +4,15 @@
  * original); GBIF's image cache resizes on request. A dossier stores the
  * large and the medium; a 48-pixel row thumbnail should not fetch 500 pixels,
  * and a phone's hero should not fetch the original. Any other host is left
- * as it is.
+ * as it is. A `srcset` of these, with the box's `sizes`, lets the browser
+ * take the size its pixel density needs (round thirty-three, R3-5).
  */
-export type PhotoSize = 'small' | 'medium' | 'large';
+export const srcsetOf = (url: string, sizes: PhotoSize[]): string => sizes.map((s) => `${photoAt(url, s)} ${WIDTH[s]}w`).join(', ');
+const WIDTH: Record<PhotoSize, number> = { square: 75, small: 240, medium: 500, large: 1024 };
+export type PhotoSize = 'square' | 'small' | 'medium' | 'large';
 const INAT = /^(https:\/\/(?:inaturalist-open-data\.s3\.amazonaws\.com|static\.inaturalist\.org)\/photos\/\d+\/)(square|small|medium|large|original)(\.\w+)$/;
 const GBIF = /^https:\/\/api\.gbif\.org\/v1\/image\/cache\/fit-in\/\d+x\//;
-const PX: Record<PhotoSize, number> = { small: 160, medium: 400, large: 1024 };
+const PX: Record<PhotoSize, number> = { square: 120, small: 160, medium: 400, large: 1024 };
 
 export function photoAt(url: string, size: PhotoSize): string {
   const m = INAT.exec(url);

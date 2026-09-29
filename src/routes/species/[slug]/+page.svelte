@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { aLabel } from '$core/arch';
   import NotChecked from '$lib/ui/NotChecked.svelte';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
   import { accNo, sowNo } from '$lib/db/types';
@@ -11,7 +12,7 @@
   import CompareButton from '$lib/ui/CompareButton.svelte';
   import ShareCard from '$lib/ui/ShareCard.svelte';
   import { isDatasetDoi } from '$dossier/sources/openalex';
-  import { photoAt } from '$dossier/photo-size';
+  import { photoAt, srcsetOf } from '$dossier/photo-size';
   import { firstSentences } from '$core/text';
   import { frostWording } from '$core/extremes';
   import { setCrumb } from '$lib/ui/crumb.svelte';
@@ -210,7 +211,7 @@
     <div class="hero"><div class="ph">The photograph did not load{#if hero.attribution?.trim()}{' '}({hero.attribution}){/if}; <a href={hero.page ?? hero.url} rel="noopener">its page is here</a>.</div></div>
   {:else if hero}
     <div class="hero">
-      <a href={hero.page ?? hero.url} rel="noopener"><img src={photoAt(hero.url, 'large')} alt="{d.name.scientific}{hero.place ? ', ' + hero.place : ''}" loading="eager" fetchpriority="high" onerror={() => (heroFailed = true)} /></a>
+      <a href={hero.page ?? hero.url} rel="noopener"><img src={photoAt(hero.url, 'large')} srcset={srcsetOf(hero.url, ['medium', 'large'])} sizes="(max-width: 640px) 100vw, 480px" alt="{d.name.scientific}{hero.place ? ', ' + hero.place : ''}" loading="eager" fetchpriority="high" onerror={() => (heroFailed = true)} /></a>
       <a class="cred" href={hero.page ?? hero.url} rel="noopener">{hero.attribution}{hero.captive === true ? ' · in cultivation' : hero.captive === false ? ' · observed growing wild' : ''}{hero.observedOn ? ' · ' + hero.observedOn : ''}</a>
     </div>
   {:else}
@@ -276,7 +277,7 @@
     <section class="glance" aria-label="At a glance">
       {#if glance}
         <div class="cards">
-          <button class="card unitbtn" type="button" title="Switch to {u === 'us' ? 'Celsius and millimetres' : 'Fahrenheit and inches'}" onclick={() => units.toggle()}><div class="lab">Cold floor</div>{#if sheet.floor?.raised}<div class="val">{tempN(sheet.floor.floor, u)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">the archetype table's minimum for a {sheet.floor.group}, above the habitat's {glance.ex ? `1st-percentile night ${temp(glance.ex.minP01, u, 1)} (NASA POWER)` : `coldest mean night ${temp(glance.cold.v, u, 1)} (CHELSA)`}</div>{:else if glance.ex}<div class="val">{tempN(glance.ex.minP01, u, 1)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">1st-percentile night at the typical site over {glance.ex.years} years; lowest there {temp(glance.ex.minAbs, u, 1)}, {frostWording(glance.ex)} (NASA POWER); coldest mean night across the range {temp(glance.cold.v, u, 1)}, {glance.cold.mo} (CHELSA)</div>{:else}<div class="val">{tempN(glance.cold.v, u, 1)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">{glance.cold.mo}, mean night (CHELSA); {d.climate.status === 'ok' && d.climate.extremesStatus === 'refused' ? 'extremes not checked: NASA POWER did not answer when this page was built' : d.climate.status === 'ok' && d.climate.extremesStatus === 'skipped' ? 'extremes not asked for when this page was built' : 'no extremes series for this cell'}</div>{/if}<span class="swap">tap for {u === 'us' ? '°C' : '°F'}</span></button>
+          <button class="card unitbtn" type="button" title="Switch to {u === 'us' ? 'Celsius and millimetres' : 'Fahrenheit and inches'}" onclick={() => units.toggle()}><div class="lab">Cold floor</div>{#if sheet.floor?.raised}<div class="val">{tempN(sheet.floor.floor, u)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">the archetype table's minimum for {sheet.floor.group}, above the habitat's {glance.ex ? `1st-percentile night ${temp(glance.ex.minP01, u, 1)} (NASA POWER)` : `coldest mean night ${temp(glance.cold.v, u, 1)} (CHELSA)`}</div>{:else if glance.ex}<div class="val">{tempN(glance.ex.minP01, u, 1)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">1st-percentile night at the typical site over {glance.ex.years} years; lowest there {temp(glance.ex.minAbs, u, 1)}, {frostWording(glance.ex)} (NASA POWER); coldest mean night across the range {temp(glance.cold.v, u, 1)}, {glance.cold.mo} (CHELSA)</div>{:else}<div class="val">{tempN(glance.cold.v, u, 1)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">{glance.cold.mo}, mean night (CHELSA); {d.climate.status === 'ok' && d.climate.extremesStatus === 'refused' ? 'extremes not checked: NASA POWER did not answer when this page was built' : d.climate.status === 'ok' && d.climate.extremesStatus === 'skipped' ? 'extremes not asked for when this page was built' : 'no extremes series for this cell'}</div>{/if}<span class="swap">tap for {u === 'us' ? '°C' : '°F'}</span></button>
           <div class="card"><div class="lab">Warmest month</div><div class="val">{tempN(glance.hot.v, u)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">{glance.hot.mo}, mean day; nights {temp(glance.hot.night, u)} (CHELSA)</div></div>
           <div class="card"><div class="lab">Rain</div><div class="val">{rainN(glance.rain, u)}<span class="u"> {rainUnit(u)}/yr</span></div><div class="gauge"><i class="c" style="width:{Math.min(100, glance.rain / 12)}%"></i></div><div class="sub">{glance.wetMonths === 0 ? `no month over 25 mm (1 in)` : `${glance.wetMonths} month${glance.wetMonths === 1 ? '' : 's'} over 25 mm (1 in)`} · peak {glance.wet.mo} {rain(glance.wet.v, u)} (CHELSA)</div></div>
           {#if glance.dli}<div class="card"><div class="lab">Light</div><div class="val">{glance.dli.lo.toFixed(0)}–{glance.dli.hi.toFixed(0)}<span class="u"> DLI</span></div><div class="gauge"><i class="w" style="width:{Math.min(100, glance.dli.hi / 0.7)}%"></i></div><div class="sub">mol/m²/day, winter to summer, open sky (CHELSA shortwave)</div></div>{/if}
@@ -323,7 +324,7 @@
     {/if}
     {#if sheet.arch}
       <details class="why archwhy">
-        <summary>Grouped as a {sheet.arch.arch.lab.toLowerCase()}</summary>
+        <summary>Grouped as {aLabel(sheet.arch.arch.lab)}</summary>
         <div class="whybody">By {sheet.arch.why}, from the archetype table. {sheet.arch.arch.minC != null ? 'The table supplies one figure for this group, a conventional minimum for the cold floor, and no prose.' : (d.climate.status === 'ok' ? 'The table holds no figure for this group, which spans too much for one minimum; the cold floor is the habitat\'s alone, and no prose comes from the table.' : 'The table holds no figure for this group, which spans too much for one minimum, and no habitat climate is derived yet; no cold floor is given, and no prose comes from the table.')}</div>
       </details>
     {/if}
@@ -377,12 +378,12 @@
       <p class="notice small" id="hemispheres">Records on both sides of the equator: these figures are the {d.climate.hemispheres.used}ern side's alone ({d.climate.hemispheres.used === 'north' ? d.climate.hemispheres.north : d.climate.hemispheres.south} cells); the {d.climate.hemispheres.used === 'north' ? 'southern' : 'northern'} side's {d.climate.hemispheres.used === 'north' ? d.climate.hemispheres.south : d.climate.hemispheres.north} cells have their seasons six months apart and are not combined into a year no place has.</p>
     {/if}
     {#if d.climate.landFraction != null && d.climate.landFraction < 0.5 && d.climate.extremes}
-      <p class="notice small" id="seacell">The extremes were read at a NASA POWER cell that is {Math.round(d.climate.landFraction * 100)}% land: no in-range cell sits in a cell that is mostly land, so the coldest nights here are moderated by the sea beside them.</p>
+      <p class="notice small" id="seacell">The extremes were read at a NASA POWER cell that is {Math.round(d.climate.landFraction * 100)}% land: neither it nor the next candidates whose coldest night is within 2 °C of the median across cells sit in a POWER cell that is mostly land, so the coldest nights here are moderated by the sea beside them.</p>
     {/if}
     <details class="why">
       <summary>Where these figures come from</summary>
       <div class="whybody">
-      Each figure is the median across the {d.climate.cells} grid cells holding the {d.climate.records} in-range records, with the 10th–90th percentile span across those cells after the slash where it differs. A dash is a month one or more of those cells has no figure for in the grid (a variable CHELSA does not carry there), so no median is taken rather than one over fewer cells. Extremes and elevation were read at the typical cell {d.climate.cell} ({d.climate.at.lat}, {d.climate.at.lon}).
+      Each figure is the median across the {d.climate.cells} grid cells {#if d.climate.seaCells}on land that hold in-range records ({d.climate.records} records in all; {d.climate.seaCells} more {d.climate.seaCells === 1 ? 'cell holds' : 'cells hold'} records but no land by the elevation layer, so those records sit at sea and the {d.climate.seaCells === 1 ? 'cell is' : 'cells are'} left out){:else}holding the {d.climate.records} in-range records{/if}, with the 10th–90th percentile span across those cells after the slash where it differs. A dash is a month one or more of those cells has no figure for in the grid (a variable CHELSA does not carry there), so no median is taken rather than one over fewer cells. Extremes and elevation were read at the typical cell {d.climate.cell} ({d.climate.at.lat}, {d.climate.at.lon}).
       {#if d.climate.extremes}Over {d.climate.extremes.years} years there: absolute minimum {temp(d.climate.extremes.minAbs, u, 1)}, 1st-percentile night {temp(d.climate.extremes.minP01, u, 1)}, 99th-percentile day {temp(d.climate.extremes.maxP99, u, 1)}.{/if}{#if u === 'us'}{' '}Shown in Fahrenheit and inches; the sources measure in °C and mm.{/if}
       Normals: {d.climate.src.normals}. Envelope: {d.climate.src.envelope}.{#if d.climate.src.extremes}{' '}Extremes: {d.climate.src.extremes}.{/if}{#if d.climate.src.elevation}{' '}Elevation: {d.climate.src.elevation}.{/if}
       </div>
@@ -392,7 +393,7 @@
   {:else if d.climate.status === 'refused'}
     <div class="notice"><b>Not checked.</b> {sentence(d.climate.detail, 'An upstream source did not answer when this page was built')} This is not a statement that no climate exists.</div>
   {:else}
-    <div class="cult"><div class="none">No habitat climate can be derived: {sentence(d.climate.detail, 'no in-range records to read one at')}{#if d.occurrences.nVague}{' '}{d.occurrences.nVague} of the {d.occurrences.nOpenInRange + (d.occurrences.nRestrictedInRange ?? 0)} in-range records {d.occurrences.nVague === 1 ? 'is' : 'are'} placed to worse than 10 km (a locality's centre, or no stated accuracy) and cannot place a climate cell, though {d.occurrences.nVague === 1 ? 'it counts' : 'they count'} for the map and its marker.{/if}</div></div>
+    <div class="cult"><div class="none">No habitat climate can be derived: {sentence(d.climate.detail, 'no in-range records to read one at')}{#if d.occurrences.nVague}{' '}{d.occurrences.nVague} of the {d.occurrences.nOpenInRange + (d.occurrences.nRestrictedInRange ?? 0)} in-range records {d.occurrences.nVague === 1 ? 'is' : 'are'} placed to worse than 10 km, or to no stated accuracy and fewer than three decimals or by something other than a person's observation, and cannot place a climate cell, though {d.occurrences.nVague === 1 ? 'it counts' : 'they count'} for the map and its marker.{/if}</div></div>
   {/if}
 
   <h2 class="sec" id="s-habitat">Natural habitat</h2>
@@ -406,7 +407,7 @@
     {#if d.distribution.extinct?.length}<div><b>Extinct in</b>{d.distribution.extinct.map((r) => r.name).join(', ')}<span class="small muted"> · recorded as extinct by WCVP: history, not habitat; no records are tested against these regions</span></div>{/if}
     {#if d.distribution.kew?.lifeform || d.distribution.kew?.climate}<div class="wide"><b>Kew's description</b>{[d.distribution.kew.lifeform, d.distribution.kew.climate].filter(Boolean).map((t) => `“${t}”`).join(' · ')}<span class="small muted">{' · '}quoted from WCVP, RBG Kew (CC BY 4.0); not derived here</span></div>{/if}
     {#if d.distribution.ambiguous}<div class="wide"><b>Name not resolved</b>{d.distribution.ambiguous}<span class="small muted"> · WCVP lists this name more than once and authorship did not decide, so no range is attached and nothing is derived from records</span></div>{/if}
-    <div class="wide"><b>Evidence used</b>{evidence.text}{#if d.occurrences.nVague}{' '}{d.occurrences.nVague} in-range record{d.occurrences.nVague === 1 ? ' is' : 's are'} placed to worse than 10 km and stay{d.occurrences.nVague === 1 ? 's' : ''} on the map but off the climate.{/if}</div>
+    <div class="wide"><b>Evidence used</b>{evidence.text}{#if d.occurrences.nVague}{' '}{d.occurrences.nVague} in-range record{d.occurrences.nVague === 1 ? ' is' : 's are'} placed to worse than 10 km, or with no stated accuracy (admitted only as a person's observation to three decimals), and stay{d.occurrences.nVague === 1 ? 's' : ''} on the map but off the climate.{/if}</div>
     {#if d.distribution.native.length && !d.distribution.boxes.length}<div><b>Range source</b>{d.distribution.source}: country level only, so records are not tested against it.</div>{/if}
   </div>
   {#if d.centroid}

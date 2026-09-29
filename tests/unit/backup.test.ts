@@ -160,6 +160,12 @@ describe('a zip made to inflate past what a backup can hold is refused at its ta
     const many: Record<string, Uint8Array> = { 'manifest.json': new TextEncoder().encode('{}'), 'changes.json': new TextEncoder().encode('[]') };
     for (let i = 0; i < 6; i++) many[`photos/p${i}.jpg`] = new Uint8Array(40 * 1024 * 1024);
     await expect(readBackup(zipSync(many))).rejects.toThrow(/declares far more content/);
+    // but the app's own backup of a log that compresses well (a 70 MB note deflates to well under a megabyte) is read:
+    // the deflated entries have their own caps and are not in the sum (round thirty-three, 3)
+    const { bytes } = await buildBackup({ changes: [...log, c(40, 'accession', '2026-0001', 'notes', 'a'.repeat(70 * 1024 * 1024))], readPhoto: async () => null });
+    expect(bytes.length).toBeLessThan(2 * 1024 * 1024);
+    const r = await readBackup(bytes);
+    expect(r.changes.filter((x) => x.field === 'notes').some((x) => (x.value as string).length === 70 * 1024 * 1024)).toBe(true);
   });
   it('a numeric cell is written as a number, a text cell beginning like a formula is made text, after spaces and in full width too', () => {
     const rows = [...log, c(30, 'sowing', 's1', 'no', 'S2026-001'), c(31, 'sowing', 's1', 'taxonName', 'Aloe'), c(32, 'sowing', 's1', 'method', 'seed'), c(33, 'sowing', 's1', 'sown', '2026-03-01'), c(34, 'sowing', 's1', 'count', 3), c(35, 'sowing', 's1', 'status', 'active'), c(36, 'sowing', 's1', 'bottomHeatC', -5), c(37, 'sowing', 's1', 'notes', '  =HYPERLINK("x")'), c(38, 'sowing', 's1', 'medium', '＝pumice')];

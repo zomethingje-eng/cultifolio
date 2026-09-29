@@ -40,8 +40,12 @@ export function namesSpecies(text: string, scientificName: string): boolean {
  * under which each digitised herbarium specimen has a DOI that names the species in its title (round thirty-one, 6).
  */
 export const isDatasetDoi = (doi: string | null | undefined): boolean => /^(https?:\/\/doi\.org\/)?10\.(15468|3535)\//i.test(doi ?? '');
-/** A work whose venue or title says it is a specimen record rather than a paper. */
-const isSpecimenRecord = (w: Work): boolean => /dissco|herbarium specimen|preserved specimen/i.test(`${w.primary_location?.source?.display_name ?? ''} ${w.title ?? ''}`);
+/**
+ * A work whose venue says it is a specimen record rather than a paper, or whose title is a specimen's (the species name
+ * and "specimen" and nothing that reads as a sentence). A paper about herbarium specimens ("…inferred from herbarium
+ * specimens") is a paper, and the title-word test of round thirty-one dropped it (round thirty-three, 13).
+ */
+const isSpecimenRecord = (w: Work): boolean => /dissco/i.test(w.primary_location?.source?.display_name ?? '') || /^(herbarium|preserved) specimen( of)? [A-Z][a-z]+ [a-z-]+/i.test((w.title ?? '').trim()) || /^[A-Z][a-z]+ [a-z-]+.{0,40}\((herbarium|preserved) specimen\)$/.test((w.title ?? '').trim());
 
 export async function literature(f: JsonFetcher, scientificName: string, max = 12, apiKey = typeof process !== 'undefined' ? process.env?.OPENALEX_KEY?.trim() : undefined) {
   // Title-and-abstract search, not full text: a full-text hit can be a chassis paper that cites a

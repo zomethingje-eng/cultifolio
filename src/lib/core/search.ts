@@ -51,28 +51,43 @@ export interface Prepared<T> {
   item: T;
   nameWords: string[];
   otherWords: string[];
+  /** Each older name's words, kept apart: the words of a query that fall to the synonyms must all sit in one of them. */
+  synWords: string[][];
   sortKey: string;
 }
+
+const RANK_MARKERS = new Set(['var', 'subsp', 'ssp', 'f']);
 
 export function prepare<T extends Searchable>(items: T[]): Prepared<T>[] {
   return items.map((item) => ({
     item,
     nameWords: words(item.name),
-    otherWords: [...words(item.common ?? ''), ...words(item.family ?? ''), ...(item.origin ?? []).flatMap(words), ...(item.syn ?? []).flatMap(words)],
+    otherWords: [...words(item.common ?? ''), ...words(item.family ?? ''), ...(item.origin ?? []).flatMap(words)],
+    synWords: (item.syn ?? []).map((x) => words(x).filter((w) => !RANK_MARKERS.has(w))),
     sortKey: fold(item.name)
   }));
 }
 
-/** Rank: 0 every query word starts a name word, the first one the genus; 1 name words only; 2 mixed; 3 other fields only. */
+/**
+ * Rank: 0 every query word starts a name word, the first one the genus; 1 name words only; 2 mixed; 3 other fields
+ * only. A query word not in the name or the other fields may come from an older name, but every such word must come
+ * from the same older name: "aloe margaritifera" found Tulista pumila through two of its synonyms, Aloe x and
+ * Haworthia margaritifera, which is a name nobody wrote (round thirty-three, 13).
+ */
 function rank(p: Prepared<unknown>, qs: string[], match: (q: string, w: string) => boolean): number | null {
   let inName = 0, inOther = 0, genus = false;
+  const fromSyn: string[] = [];
   for (const q of qs) {
     const n = p.nameWords.some((w) => match(q, w));
     const o = !n && p.otherWords.some((w) => match(q, w));
-    if (!n && !o) return null;
     if (n) inName++;
-    else inOther++;
+    else if (o) inOther++;
+    else fromSyn.push(q);
     if (n && match(q, p.nameWords[0])) genus = true;
+  }
+  if (fromSyn.length) {
+    if (!p.synWords.some((g) => fromSyn.every((q) => g.some((w) => match(q, w))))) return null;
+    inOther += fromSyn.length;
   }
   if (inOther === 0) return genus ? 0 : 1;
   return inName ? 2 : 3;

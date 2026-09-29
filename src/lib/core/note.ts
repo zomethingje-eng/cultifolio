@@ -12,7 +12,7 @@
  * come from the sheet's own `runs()`, so a label and a sheet agree.
  */
 import { cultivationSheet, runs, forReader, coldFloor, type SheetInput } from './sheet';
-import { archFor, type ArchGuess } from './arch';
+import { archFor, aLabel, type ArchGuess } from './arch';
 import { temp, METRIC } from './units';
 
 /** "Nov–Feb" style span for a label; wraps the year and lists a bimodal season as two runs. */
@@ -43,7 +43,7 @@ export function generatedNote(input: SheetInput, o: NoteOpts = {}): Condensed | 
   const from: string[] = [];
   // Without a habitat climate the sentence says which kind of without: pending, not checked, or none derivable. Three different facts.
   const why = input.climateStatus === 'pending' ? 'the habitat climate is pending' : input.climateStatus === 'refused' ? 'the habitat climate was not checked (a source did not answer)' : 'no habitat climate could be derived for this species';
-  if (arch) s.push(`Grouped as a ${arch.arch.lab.toLowerCase()} by ${arch.why} (archetype table)${year ? '.' : `; ${why}.`}`);
+  if (arch) s.push(`Grouped as ${aLabel(arch.arch.lab)} by ${arch.why} (archetype table)${year ? '.' : `; ${why}.`}`);
   for (const r of picked) {
     s.push(r.short!);
     from.push(r.k);

@@ -1,10 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
 
 vi.mock('$lib/server/dossiers', () => ({
-  getIndex: async () => [{ key: 2776776, slug: 'haworthiopsis-attenuata', name: 'Haworthiopsis attenuata', photos: 0, open: 0, climate: 'ok' }]
+  getIndex: async () => [
+    { key: 2776776, slug: 'haworthiopsis-attenuata', name: 'Haworthiopsis attenuata', photos: 0, open: 0, climate: 'ok' },
+    { key: 4201127, slug: 'tylecodon-paniculatus', name: 'Tylecodon paniculatus', photos: 0, open: 0, climate: 'ok', syn: ['Cotyledon paniculata', 'Cotyledon tardiflora'] }
+  ]
 }));
 
-import { nameFromSlug, synonymOf } from '$lib/server/synonyms';
+import { nameFromSlug, synonymOf, synonymInIndex } from '$lib/server/synonyms';
 
 const gbif = (body: unknown) => (async (_url: string) => new Response(JSON.stringify(body), { status: 200 })) as unknown as typeof fetch;
 
@@ -29,5 +32,16 @@ describe('an old name at a species address (round thirty, R2-8)', () => {
     expect(await synonymOf(undefined, gbif({ matchType: 'NONE' }), 'nosuch-plant')).toBeNull();
     expect(await synonymOf(undefined, gbif({ synonym: true, matchType: 'HIGHERRANK', acceptedUsageKey: 2776776, species: 'x' }), 'haworthia-attenuata')).toBeNull(); // a match at a higher rank is not this name
     expect(await synonymOf(undefined, gbif({}), 'haworthia')).toBeNull(); // a bare genus is not asked
+  });
+  it('a name the index lists under a species is answered from the index, with no request (round thirty-two, 2)', async () => {
+    const asked: string[] = [];
+    const f = (url: string) => { asked.push(url); return gbif({ matchType: 'HIGHERRANK', usageKey: 2406, canonicalName: 'Crassulaceae' })(url); }; // what the live service says to "Cotyledon paniculata"
+    const a = await synonymInIndex(undefined, f as unknown as typeof fetch, 'cotyledon-paniculata');
+    expect(a).toEqual({ matched: 'Cotyledon paniculata', acceptedKey: 4201127, acceptedName: 'Tylecodon paniculatus', slug: 'tylecodon-paniculatus' });
+    expect(asked).toEqual([]);
+    expect(await synonymInIndex(undefined, f as unknown as typeof fetch, 'cotyledon-nosuch')).toBeNull();
+    expect(await synonymInIndex(undefined, f as unknown as typeof fetch, 'tylecodon')).toBeNull();
+    // the backbone alone would have made this a 404
+    expect(await synonymOf(undefined, f as unknown as typeof fetch, 'cotyledon-paniculata')).toBeNull();
   });
 });

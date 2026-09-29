@@ -131,13 +131,19 @@ export function speciesOf(name: string): string {
 /** The slug of the species a plant's name belongs to: what its species page, its taxon record, its thumbnail and its care line are joined on. A subspecies or a variety is one of its species' plants. */
 export const speciesSlug = (name: string): string => slugify(speciesOf(name));
 
+const RANK_WORDS = new Set(['sect', 'subsect', 'subg', 'subgen', 'ser', 'subser', 'sp', 'spp', 'aff', 'cf', 'nothosubsp', 'nothovar', 'var', 'subsp', 'ssp', 'f', 'fo', 'hybrid', 'auct']);
+
 /**
  * A synonym as the backbone lists it, cut to its binomial (or trinomial) without authorship: "Haworthia attenuata (Haw.)
  * Haw." is "Haworthia attenuata". Null for anything that is not a name (the backbone lists a few malformed entries such
  * as "? glabra Salm-Dyck") (round thirty-one, 3).
  */
 export function canonicalSynonym(s: string): string | null {
-  const m = /^([A-Z][a-z]+(?:-[a-z]+)?) ([a-z][a-z-]+)(?: (?:var\.|subsp\.|ssp\.|f\.) ([a-z][a-z-]+))?/.exec(s.trim());
+  const t = s.trim();
+  const m = /^([A-Z][a-z]+(?:-[a-z]+)?) ([a-z][a-z-]+)(?: (?:var\.|subsp\.|ssp\.|f\.) ([a-z][a-z-]+))?/.exec(t);
   if (!m) return null;
+  // Not a name of a species: a section or subgenus ("Opuntia sect. Tuna"), an undetermined one ("Echinopsis sp."), a rank
+  // word where the epithet would be, or a misapplied name (auct.), which is a use of the name and not a name (round thirty-three, 13).
+  if (t[m[0].length] === '.' || RANK_WORDS.has(m[2]) || /\bauct\b/.test(t)) return null;
   return m[3] ? `${m[1]} ${m[2]} ${/subsp\.|ssp\./.test(s) ? 'subsp.' : /var\./.test(s) ? 'var.' : 'f.'} ${m[3]}` : `${m[1]} ${m[2]}`;
 }
