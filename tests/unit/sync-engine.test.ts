@@ -850,17 +850,21 @@ describe('a batch that cannot be read is set aside, not a wall', () => {
     const real = globalThis.fetch;
     let release: () => void = () => {};
     const gate = new Promise<void>((r) => (release = r));
+    // The stop is issued once the run is provably at the held request, not after a fixed wait: on a slow machine a
+    // fifty-millisecond wait ended before the run reached it, and the held request itself was then counted as "after the stop" (round thirty, deploy).
+    let reached: () => void = () => {};
+    const reachedP = new Promise<void>((r) => (reached = r));
     let held = 0;
     const after: string[] = [];
     let stopped = false;
     globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
       const u = String(input);
-      if ((!init?.method || init.method === 'GET') && /\/api\/sync\/log\?/.test(u) && held++ === 0) await gate;
       if (stopped) after.push(`${init?.method ?? 'GET'} ${new URL(u, 'http://x').pathname}`);
+      if ((!init?.method || init.method === 'GET') && /\/api\/sync\/log\?/.test(u) && held++ === 0) { reached(); await gate; }
       return real(input, init);
     }) as typeof fetch;
     const run = A.sync.run().catch((e: Error) => e);
-    await new Promise((r) => setTimeout(r, 50));
+    await reachedP;
     await A.sync.forget();
     stopped = true;
     release();
@@ -881,14 +885,16 @@ describe('a batch that cannot be read is set aside, not a wall', () => {
     after.length = 0;
     stopped = false;
     const gate2 = new Promise<void>((r) => (release = r));
+    let reached2: () => void = () => {};
+    const reachedP2 = new Promise<void>((r) => (reached2 = r));
     globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
       const u = String(input);
-      if (stopped) after.push(`${init?.method ?? 'GET'} ${new URL(u, 'http://x').pathname}`);
-      if (u.includes(`/api/sync/log/${key}`) && held++ === 0) await gate2;
+      if (stopped) after.push(`${init?.method ?? 'GET'} ${new URL(u, 'http://x').pathname}`); // judged as the request is made: the held one was made before the stop
+      if (u.includes(`/api/sync/log/${key}`) && held++ === 0) { reached2(); await gate2; }
       return real(input, init);
     }) as typeof fetch;
     const run2 = B.sync.run().catch((e: Error) => e);
-    await new Promise((r) => setTimeout(r, 50));
+    await reachedP2;
     await B.sync.forget();
     stopped = true;
     release();
