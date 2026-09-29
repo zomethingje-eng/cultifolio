@@ -117,7 +117,12 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
 
   }
 
-  /** How much of the NASA POWER cell (0.5° × 0.625°) around a point is land, by a 5 × 5 sample of the climate grid (null cells are sea or ice). */
+  /**
+   * How much of the NASA POWER cell (0.5° × 0.625°) around a point is land, by a 5 × 5 sample of the climate grid. A sea
+   * cell is read and found to hold no figures, as readCell judges it: the file grid on the build machine returns a buffer
+   * for every cell inside its extent, sea included, so the presence of a cell says nothing (the first corpus built with
+   * this rule found every cell 100% land).
+   */
   async function landFractionAround(lat: number, lon: number): Promise<number> {
     const pc = powerCell(lat, lon);
     let land = 0, n = 0;
@@ -126,7 +131,7 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
       if (la > 90 || la < -90) continue;
       n++;
       try {
-        if (await o.grid.cell(la, lo)) land++;
+        if (await readCell(la, lo)) land++;
       } catch {
         /* outside the grid counts as not land */
       }

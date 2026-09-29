@@ -13,6 +13,10 @@ Not a review round. Round thirty's note deferred the species-reference findings 
 7. **The genus pages in the sitemap** (R2-13). A genus, family or origin opened by its address has its own title ("Copiapoa — 2 species — Cultifolio"), description and canonical link; the home page's canonical is its own.
 8. The records-with-no-accuracy rule (round thirty, 14) and the media query without preserved specimens (round thirty, 13) are already in the builder and take effect with the same rederive.
 
+## Found by the corpus
+
+The first rederive made every POWER cell 100% land (Melocactus intortus, on Caribbean islands, `landFraction: 1`; no species in the corpus under 0.5). The land sample tested whether the grid had a cell at each of its 25 points, and the file grid used for the build has one for every point in its extent, sea included: a sea cell is a present cell full of nodata. The tests' in-memory grid answers null for an absent cell, which is why the rule looked right there. The sample now reads each cell and counts it as land only when it holds figures, which is the test `readCell` already made for the envelope. The unit test encodes the sea as the grid does and fails against the old line: a median cell alone in a sea POWER cell gives way to a land candidate, and when every candidate is at sea the fraction is written and the source line names it. One more offline rederive and an upload of the dossiers; the index carries nothing of this and is not rebuilt.
+
 ## Not taken
 
 A photograph taken outside the native range (R2-12): a photograph carries no coordinates in the dossier, only a place name, so the check would need the sources asked again for each; it goes with the next photograph pass.
@@ -23,4 +27,4 @@ In DEPLOY.md, section 5, "Round thirty-one's corpus step": an offline rederive (
 
 ## After the changes
 
-`npx svelte-check --threshold warning` clean; `npx vitest run` 37 files, 378 tests; `npx playwright test tests/e2e/smoke.spec.ts --workers=1` 73 tests, no retries; the local live check's seven upstream-free checks pass; `/?by=genus&open=copiapoa` carries its own title and canonical.
+`npx svelte-check --threshold warning` clean; `npx vitest run` 37 files, 379 tests; `npx playwright test tests/e2e/smoke.spec.ts --workers=1` 73 tests, no retries; the local live check's seven upstream-free checks pass; `/?by=genus&open=copiapoa` carries its own title and canonical.

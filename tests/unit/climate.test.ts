@@ -196,6 +196,37 @@ describe('climate envelope', () => {
     expect(d.hemispheres).toBeUndefined();
     expect(d.cells).toBe(7);
   });
+  it('a typical cell whose POWER cell is mostly sea gives way to the next candidate on land; when none is, the fraction is written (round thirty-one, 2)', async () => {
+    // Sea as the real grid holds it: a cell that is present and full of nodata, not a missing cell. The first corpus
+    // built with the rule counted presence and found every POWER cell 100% land; this test encodes the sea.
+    const sample = (la: number, lo: number) => {
+      const pc = powerCell(la, lo), out: Array<[number, number]> = [];
+      for (let i = 0; i < 5; i++) for (let j = 0; j < 5; j++) out.push([pc.lat - 0.25 + (i + 0.5) * 0.1, pc.lon - 0.3125 + (j + 0.5) * 0.125]);
+      return out;
+    };
+    const cells = new Map<string, ArrayBuffer>();
+    // A: the median cell (shift 0), alone on land in a POWER cell of sea. B and C: a POWER cell away each, on solid land.
+    const A: [number, number] = [lat, lon], B: [number, number] = [lat, lon - 0.7], C: [number, number] = [lat, lon - 1.4];
+    for (const [la, lo] of sample(...A)) cells.set(cellOf(h, la, lo).id, encodeCell(h, { elev: -1500 }));
+    for (const p of [B, C]) for (const [la, lo] of sample(...p)) cells.set(cellOf(h, la, lo).id, encodeCell(h, variant(0, 1)));
+    cells.set(cellOf(h, ...A).id, encodeCell(h, variant(0, 1)));
+    cells.set(cellOf(h, ...B).id, encodeCell(h, variant(-1, 1)));
+    cells.set(cellOf(h, ...C).id, encodeCell(h, variant(1, 1)));
+    const c = await makeClimateProvider({ grid: memoryGridSource(h, cells), fetcher: fixtureFetcher({}), noExtremes: true }).envelope([A, B, C]);
+    if (c.status !== 'ok') throw new Error(c.status);
+    expect(c.cell).not.toBe(cellOf(h, ...A).id);
+    expect(c.landFraction).toBe(1);
+    expect(c.src.envelope).not.toContain('% land');
+    // every candidate at sea: the nearest stands and the page is told how much land its POWER cell has
+    for (const p of [B, C]) for (const [la, lo] of sample(...p)) cells.set(cellOf(h, la, lo).id, encodeCell(h, { elev: -1500 }));
+    cells.set(cellOf(h, ...B).id, encodeCell(h, variant(-1, 1)));
+    cells.set(cellOf(h, ...C).id, encodeCell(h, variant(1, 1)));
+    const d = await makeClimateProvider({ grid: memoryGridSource(h, cells), fetcher: fixtureFetcher({}), noExtremes: true }).envelope([A, B, C]);
+    if (d.status !== 'ok') throw new Error(d.status);
+    expect(d.cell).toBe(cellOf(h, ...A).id);
+    expect(d.landFraction).toBe(0);
+    expect(d.src.envelope).toContain('though its NASA POWER cell is only 0% land');
+  });
   it('fewer than three land cells is "none", and says how many', async () => {
     const a = cellOf(h, lat, lon), b = cellOf(h, lat, lon - h.cell), sea = cellOf(h, lat, lon - 2 * h.cell);
     const cells = new Map([[a.id, encodeCell(h, variant(0, 1))], [b.id, encodeCell(h, variant(1, 1))], [sea.id, encodeCell(h, { elev: -1500 })]]);
