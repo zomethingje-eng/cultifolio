@@ -52,7 +52,8 @@ export async function synonymOf(platform: Platform, fetch: Fetch, slug: string):
       return null;
     }
   }
-  if (!body || body.synonym !== true || typeof body.acceptedUsageKey !== 'number') return null;
+  // The match service says `status: "SYNONYM"`; older replies said `synonym: true`. Either is the answer (found on the first deploy: the live check's Haworthia attenuata came back a plain 404).
+  if (!body || !(body.synonym === true || body.status === 'SYNONYM') || typeof body.acceptedUsageKey !== 'number') return null;
   const matchType = String(body.matchType ?? '');
   if (matchType !== 'EXACT' && matchType !== 'FUZZY') return null;
   const acceptedName = String(body.species ?? body.canonicalName ?? '');
