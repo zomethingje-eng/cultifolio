@@ -244,7 +244,13 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
       }
       if (isOpen(tag)) open.push([lat, lon, r.year ?? null, r.countryCode ?? null, r.basisOfRecord ?? null, tag!]);
       else restrictedInRange.push([lat, lon]);
-      if ((r.coordinateUncertaintyInMeters ?? 0) <= 10_000) forClimate.push([lat, lon]);
+      // A record with no stated accuracy is not a precise one: it enters the climate figures only when it is a human
+      // observation with coordinates to three decimals or better (about a hundred metres), the way a phone records them;
+      // a herbarium sheet placed at a locality's centre with no figure stays out, as the de-duplication above already
+      // treats it (round thirty, R2-11). Takes effect when the corpus is next built.
+      const decimals = (x: number) => (String(x).split('.')[1] ?? '').length;
+      const precise = r.coordinateUncertaintyInMeters == null ? r.basisOfRecord === 'HUMAN_OBSERVATION' && decimals(lat) >= 3 && decimals(lon) >= 3 : r.coordinateUncertaintyInMeters <= 10_000;
+      if (precise) forClimate.push([lat, lon]);
       else nVague++;
     }
   }

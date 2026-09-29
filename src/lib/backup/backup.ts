@@ -166,6 +166,8 @@ export function photosWithoutPixels(file: Pick<ReadBackup, 'changes' | 'photoIds
 const KNOWN_ENTRY = /^(manifest\.json|changes\.json|device\.json|plants\.csv|batches\.csv|photos\/[^\0]{1,200}\.jpg)$/; // a photo entry's name is judged below, so an impossible one is refused and said rather than skipped
 /** The most any one entry may inflate to: a photograph is bounded by the sync limit, and a log of a million changes is well under this. */
 export const MAX_ENTRY_BYTES = 256 * 1024 * 1024;
+/** The most changes.json may inflate to: a log of a million changes is about a hundred megabytes. */
+export const MAX_CHANGES_BYTES = 192 * 1024 * 1024;
 
 /** Parse a backup from bytes: a zip, or the older JSON. Throws a readable error for anything else. */
 export async function readBackup(bytes: Uint8Array): Promise<ReadBackup> {
@@ -181,7 +183,20 @@ export async function readBackup(bytes: Uint8Array): Promise<ReadBackup> {
   // Synchronous for the same reason as the writer: the asynchronous reader inflates entries over 512 kB in a blob: worker
   // the CSP refuses. Only the entries a backup has are inflated, each within a size a backup entry can have: a zip made
   // to inflate to gigabytes is refused at its table of contents, not after the page has frozen on it (round twenty-nine, 10).
-  const files = unzipSync(bytes, { filter: (f) => KNOWN_ENTRY.test(f.name) && f.originalSize <= MAX_ENTRY_BYTES });
+  // The sum of what the table of contents declares is bounded by the file's own size too (JPEGs are stored, so a
+  // backup inflates to little more than itself), and changes.json by its own cap, so ten entries each under the
+  // per-entry cap cannot add up to gigabytes (round thirty, R2-7). An entry that inflates past what it declared is cut
+  // by fflate at the declared size.
+  let declared = 0;
+  const files = unzipSync(bytes, {
+    filter: (f) => {
+      if (!KNOWN_ENTRY.test(f.name) || f.originalSize > MAX_ENTRY_BYTES) return false;
+      if (f.name === 'changes.json' && f.originalSize > MAX_CHANGES_BYTES) return false;
+      declared += f.originalSize;
+      if (declared > bytes.length * 1.1 + 64 * 1048576) throw new Error('That zip declares far more content than a backup of its size can hold; it is not a Cultifolio backup.');
+      return true;
+    }
+  });
   if (!files['manifest.json'] || !files['changes.json']) throw new Error('That zip has no manifest.json and changes.json; it is not a Cultifolio backup.');
   const m = v.safeParse(Manifest, JSON.parse(strFromU8(files['manifest.json'])));
   if (!m.success) throw new Error('The backup manifest is not in a shape this version understands.');

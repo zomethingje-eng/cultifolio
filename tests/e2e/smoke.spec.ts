@@ -9,6 +9,12 @@ async function addPlant(p: import('@playwright/test').Page) {
   if (await asked.isVisible()) await p.getByRole('button', { name: /^Add/ }).click();
   await expect(p).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
 }
+/** A day on the machine's own calendar, as the app dates things: `toISOString()` is UTC and is tomorrow for four evening hours in the Americas (round thirty, R1-3). */
+function localDay(offset: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + offset);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 async function more(p: import('@playwright/test').Page, name: string) {
   await p.locator('.idcard .cardmenu > button').click();
   await p.locator('#card-menu [role=menuitem]', { hasText: name }).click();
@@ -2228,7 +2234,7 @@ test('round twenty-eight: a batch edit saves its medium and container, keeps the
   await page.fill('#se-date', '2099-01-01');
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.locator('#se-msg')).toContainText('2099-01-01 is in the future');
-  await page.fill('#se-date', new Date(Date.now() - 10 * 86_400_000).toISOString().slice(0, 10)); // sown ten days ago; the count below is today's
+  await page.fill('#se-date', localDay(-10)); // sown ten days ago; the count below is today's
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.locator('#se-msg')).toHaveCount(0);
   await expect(page.locator('.idcard .vern').first()).toContainText('KK 1462 · lot H-2026-77');
@@ -2244,11 +2250,11 @@ test('round twenty-eight: a batch edit saves its medium and container, keeps the
   // a potting dated before the first count is refused (round twenty-eight, 6)
   await page.getByRole('button', { name: 'Pot up…' }).click();
   await page.fill('#p-n', '2');
-  const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+  const yesterday = localDay(-1); // the app's calendar is local; toISOString() is UTC and was a day ahead for four evening hours (round thirty, R1-3)
   await page.fill('#p-date', yesterday);
   await page.getByRole('button', { name: 'Pot up 2' }).click();
   await expect(page.locator('form', { has: page.locator('#p-n') })).toContainText('is before the first count that found anything up');
-  await page.fill('#p-date', new Date().toISOString().slice(0, 10));
+  await page.fill('#p-date', localDay(0));
   await page.getByRole('button', { name: 'Pot up 2' }).click();
   await expect(page.locator('.notice', { hasText: /Potted up 2:/ })).toBeVisible();
   // the potted plant carries the field number as its own and the lot as its reference (round twenty-eight, 4)
@@ -2363,7 +2369,7 @@ test('round twenty-nine: a potting is judged by what was in the pot on its day, 
   await page.fill('#species-name', 'Copiapoa cinerea');
   await page.locator('#species-name').blur();
   await page.fill('#s-count', '10');
-  const day = (back: number) => new Date(Date.now() - back * 86_400_000).toISOString().slice(0, 10);
+  const day = (back: number) => localDay(-back);
   await page.fill('#s-date', day(30));
   await page.getByRole('button', { name: 'Start batch' }).click();
   await expect(page).toHaveURL(/\/propagation\/S\d{4}-\d{3}$/);

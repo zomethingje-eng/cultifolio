@@ -14,12 +14,14 @@ import { importV2 } from '$lib/import/v2';
 type Mem = {
   changes: Map<string, Change>;
   meta: Map<string, unknown>;
+  photos: Map<string, unknown>;
   device: string;
   fail: string | null;
 };
 const newMem = (device: string): Mem => ({
   changes: new Map(),
   meta: new Map(),
+  photos: new Map(),
   device,
   fail: null
 });
@@ -42,6 +44,10 @@ vi.mock('$lib/db/vault', () => {
   // The claiming write of the real vault, over the same in-memory log: `build` sees the numbers the caller knows.
   m.appendChangesClaiming = async (_k: string, known: Set<string>, build: (s: Set<string>) => { changes: Change[]; result: unknown }) => { const b = build(new Set(known)); await m.appendChanges(b.changes); return b.result; };
   m.onOtherTabWrite = () => () => {};
+  m.holdVault = async (work: () => Promise<unknown>) => work();
+  m.putPhotoBlobs = async (p: { id: string }) => void mem.photos.set(p.id, p);
+  m.getPhotoBlobs = async (id: string) => mem.photos.get(id);
+  m.deletePhotoBlobs = async (id: string) => void mem.photos.delete(id);
   m.announceSyncForgotten = () => {};
   return m;
 });
@@ -577,5 +583,24 @@ describe('round twenty-nine', () => {
     expect(nos).toEqual(['2026-0007', '2026-0008']);
     expect(accNo(x.collection.accession(mine.id)!)).toBe('2026-0007'); // the earlier identity keeps the number
     expect(accNo(x.collection.accession(theirs.id)!)).toBe('2026-0008');
+  });
+  it('a photograph whose record cannot be written (a full device) leaves no pixels behind; a cover picked after a removal survives the Undo (round thirty, R1-2 and R2-3)', async () => {
+    const { collection } = await fresh('testdevice');
+    const a = await collection.addAccession({ taxonName: 'Aloe', acquired: '2026-03-01' });
+    const blob = new Blob([new Uint8Array([0xff, 0xd8, 1])]);
+    mem.fail = 'QuotaExceededError';
+    await expect(collection.addPhoto({ acc: a.id, d: '2026-03-02', dFrom: 'added', caption: null, w: 1, h: 1, bytes: 3, sha: null, blob, thumb: blob })).rejects.toThrow(/Quota/);
+    expect(mem.photos.size).toBe(0); // the pixels came out again
+    expect(collection.photos(a.id)).toHaveLength(0);
+    mem.fail = null;
+    const p0 = await collection.addPhoto({ acc: a.id, d: '2026-03-02', dFrom: 'added', caption: null, w: 1, h: 1, bytes: 3, sha: null, blob, thumb: blob });
+    const p1 = await collection.addPhoto({ acc: a.id, d: '2026-03-03', dFrom: 'added', caption: null, w: 1, h: 1, bytes: 3, sha: null, blob, thumb: blob });
+    await collection.setCover(a.id, p0.id);
+    const undo = await collection.removePhoto(p0.id);
+    expect(collection.accession(a.id)!.cover).toBeNull();
+    await collection.setCover(a.id, p1.id); // a choice made after the removal
+    await undo();
+    expect(collection.photos(a.id).map((p) => p.id).sort()).toEqual([p0.id, p1.id].sort());
+    expect(collection.accession(a.id)!.cover).toBe(p1.id); // stands
   });
 });

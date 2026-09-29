@@ -198,16 +198,6 @@ export const Paper = v.object({
   venue: v.optional(v.string())
 });
 
-export const Note = v.object({
-  text: v.string(),
-  model: v.string(),
-  built: v.string(),
-  arch: v.string(),
-  season: v.string(),
-  mode: v.picklist(['habitat', 'practice']),
-  evidenceHash: v.string()
-});
-
 export const Dossier = v.object({
   v: v.literal(DOSSIER_V),
   key: v.number(),
@@ -224,7 +214,6 @@ export const Dossier = v.object({
   photos: v.array(Photo),
   literature: v.array(Paper),
   links: v.record(v.string(), v.string()),
-  note: v.optional(Note),
   upstream: v.record(v.string(), Upstream)
 });
 

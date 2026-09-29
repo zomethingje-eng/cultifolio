@@ -156,6 +156,10 @@ describe('a zip made to inflate past what a backup can hold is refused at its ta
     const big = new Uint8Array(4 * 1024 * 1024); // deflates to a few kilobytes; declared size is what the filter reads
     const zipped = zipSync({ 'manifest.json': new TextEncoder().encode('{}'), 'changes.json': new TextEncoder().encode('[]'), 'evil.bin': big, 'photos/huge.jpg': new Uint8Array(0) });
     await expect(readBackup(zipped)).rejects.toThrow(/not in a shape/); // the two unknown entries were skipped and the manifest is then read as usual
+    // many entries each under the cap but adding up past what a file of this size could hold (round thirty, R2-7)
+    const many: Record<string, Uint8Array> = { 'manifest.json': new TextEncoder().encode('{}'), 'changes.json': new TextEncoder().encode('[]') };
+    for (let i = 0; i < 6; i++) many[`photos/p${i}.jpg`] = new Uint8Array(40 * 1024 * 1024);
+    await expect(readBackup(zipSync(many))).rejects.toThrow(/declares far more content/);
   });
   it('a numeric cell is written as a number, a text cell beginning like a formula is made text, after spaces and in full width too', () => {
     const rows = [...log, c(30, 'sowing', 's1', 'no', 'S2026-001'), c(31, 'sowing', 's1', 'taxonName', 'Aloe'), c(32, 'sowing', 's1', 'method', 'seed'), c(33, 'sowing', 's1', 'sown', '2026-03-01'), c(34, 'sowing', 's1', 'count', 3), c(35, 'sowing', 's1', 'status', 'active'), c(36, 'sowing', 's1', 'bottomHeatC', -5), c(37, 'sowing', 's1', 'notes', '  =HYPERLINK("x")'), c(38, 'sowing', 's1', 'medium', '＝pumice')];

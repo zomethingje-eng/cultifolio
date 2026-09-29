@@ -449,7 +449,7 @@ export async function changesByKeys(ts: string[]): Promise<Change[]> {
   const db = await openVault();
   const tx = db.transaction('changes');
   const out = await Promise.all(ts.map((t) => tx.store.get(t)));
-  return out.filter((c): c is Change => !!c);
+  return out.filter((c): c is Change => !!c).map(mendChange); // mended on the way out too, so an older value stops travelling (round thirty, 5)
 }
 
 export async function getMeta<T>(k: string): Promise<T | undefined> {

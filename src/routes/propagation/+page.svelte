@@ -22,7 +22,7 @@
   });
   // Nothing in progress but batches on file: open on All rather than on an empty list.
   $effect(() => { if (collection.ready && collection.sowings.length && !collection.sowings.some((s) => s.status === 'active')) show = 'all'; });
-  const rows = $derived(collection.sowings.filter((s) => show === 'all' || s.status === 'active').map((s) => ({ s, st: collection.sowingStats(s.id), m: PROP_METHODS.find((m) => m.k === s.method) ?? PROP_METHODS[0] })));
+  const rows = $derived(collection.sowings.filter((s) => show === 'all' || s.status === 'active').map((s) => ({ s, st: collection.sowingStats(s.id), m: PROP_METHODS.find((m) => m.k === s.method) ?? { k: s.method, label: s.method, unit: 'units', veg: false } })));  // a method this build does not know (a newer build's) is shown by its word, not as seed (round thirty, 1)
   const pct = (r: number | null) => (r == null ? '–' : `${Math.round(r * 100)}%`);
 </script>
 

@@ -913,6 +913,37 @@ describe('a batch that cannot be read is set aside, not a wall', () => {
     expect(D.collection.accession('r1')).toBeUndefined();
     expect(mem.changes.size).toBe(0);
   });
+  it('a batch with one value of a type its field never takes is set aside whole, so a later build can read it; a word this build does not know folds as it is; an older importer\'s words are mended (round thirty, 1)', async () => {
+    const r2 = fakeR2();
+    const B = await boot(newMem('bbbbbbbbbbbb'), r2);
+    await B.sync.setup(KEY, 'create');
+    const keys = await deriveKeys(KEY);
+    const bad = [
+      { t: '1700000000000-0000-x', kind: 'accession', id: 'r1', field: 'taxonName', value: 'Aloe' },
+      { t: '1700000000000-0001-x', kind: 'accession', id: 'r1', field: 'status', value: 'growing' },
+      { t: '1700000000000-0002-x', kind: 'accession', id: 'r1', field: 'notes', value: { a: 1 } }
+    ];
+    await post(keys, '1700000000000-0002-x', await sealJson(keys, 'log', { v: 1, device: 'x', changes: bad }));
+    const good = [
+      { t: '1700000000010-0000-x', kind: 'accession', id: 'r2', field: 'taxonName', value: 'Lithops' },
+      { t: '1700000000010-0001-x', kind: 'accession', id: 'r2', field: 'status', value: 'sold' }, // a status a newer build wrote
+      { t: '1700000000010-0002-x', kind: 'sowing', id: 's1', field: 'taxonName', value: 'Haworthia' },
+      { t: '1700000000010-0003-x', kind: 'sowing', id: 's1', field: 'method', value: 'leaf cutting' }, // as the v2 importer wrote it before round twenty-eight
+      { t: '1700000000010-0004-x', kind: 'sowing', id: 's1', field: 'provenance', value: 'Wild collected' },
+      { t: '1700000000010-0005-x', kind: 'sowing', id: 's1', field: 'sown', value: '2026-01-01' },
+      { t: '1700000000010-0006-x', kind: 'sowing', id: 's1', field: 'count', value: 3 },
+      { t: '1700000000010-0007-x', kind: 'sowing', id: 's1', field: 'status', value: 'active' }
+    ];
+    await post(keys, '1700000000010-0007-x', await sealJson(keys, 'log', { v: 1, device: 'x', changes: good }));
+    const D = await boot(newMem('dddddddddddd'), r2);
+    await D.sync.setup(KEY, 'join');
+    expect(D.sync.quarantined).toHaveLength(1);
+    expect(D.sync.quarantined[0]?.error).toMatch(/notes of a accession must be a string/);
+    expect(D.collection.accession('r1')).toBeUndefined(); // nothing of the set-aside batch, not even its good changes
+    expect(D.collection.accession('r2')?.status).toBe('sold');
+    expect(D.collection.sowing('s1')?.method).toBe('leaf');
+    expect(D.collection.sowing('s1')?.provenance).toBe('wild');
+  });
 });
 
 describe('what the server refuses from this device does not stop it receiving', () => {

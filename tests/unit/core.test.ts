@@ -353,6 +353,35 @@ describe('round twenty-nine: old data is mended, not refused', () => {
     expect(() => readChanges([ok, { ...ok, t: '~' }])).toThrow(/change 1: bad timestamp/); // structure still refuses the list whole
     expect(() => readChanges([{ ...ok, field: '*' }])).toThrow(/reserved/);
   });
+  it('a required field that cannot be read takes every change to its record in the list with it, so no half-made record goes live (round thirty, 1)', async () => {
+    const { readChanges } = await import('$core/log');
+    const t = (n: number) => `170000000000${n}-0000-x`;
+    const r = readChanges([
+      { t: t(0), kind: 'accession', id: 'r1', field: 'acc', value: '2026-0001' },
+      { t: t(1), kind: 'accession', id: 'r1', field: 'taxonName', value: { bad: true } },
+      { t: t(2), kind: 'accession', id: 'r1', field: 'status', value: 'growing' },
+      { t: t(3), kind: 'accession', id: 'r2', field: 'taxonName', value: 'Aloe' },
+      { t: t(4), kind: 'accession', id: 'r2', field: 'notes', value: 7.5 }
+    ]);
+    expect(r.changes.map((c) => `${c.id}.${c.field}`)).toEqual(['r2.taxonName', 'r2.notes']);
+    expect(r.changes[1].value).toBe('7.5');
+    expect(r.dropped).toEqual(['change 1: taxonName of a accession must be a string, not {"bad":true}', 'every change to accession r1 in this list, since its taxonName/status could not be read']);
+    const { state } = materialise(r.changes);
+    expect(state.has('accession:r1')).toBe(false);
+  });
+  it('a word this build does not know is kept, and an older importer\'s words are mended (round thirty, 1)', async () => {
+    const { readChanges, mendChange } = await import('$core/log');
+    const c = (field: string, value: unknown, kind = 'sowing') => ({ t: '1700000000000-0000-x', kind, id: 's1', field, value }) as Change;
+    expect(readChanges([c('status', 'banana', 'accession')]).changes[0].value).toBe('banana');
+    expect(mendChange(c('method', 'leaf cutting')).value).toBe('leaf');
+    expect(mendChange(c('method', 'stem cutting')).value).toBe('cutting');
+    expect(mendChange(c('method', 'Offsets / pups')).value).toBe('offset');
+    expect(mendChange(c('method', 'leaf')).value).toBe('leaf');
+    expect(mendChange(c('provenance', 'Wild collected')).value).toBe('wild');
+    expect(mendChange(c('provenance', 'ex habitat')).value).toBe('f1');
+    expect(mendChange(c('provenance', 'garden centre')).value).toBe('unknown');
+    expect(mendChange(c('provenance', 'f1', 'accession')).value).toBe('f1');
+  });
   it('a field named after Object.prototype is refused, whatever its value (round twenty-nine, 10)', async () => {
     const { validateChanges } = await import('$core/log');
     for (const field of ['__proto__', 'constructor', 'toString', 'hasOwnProperty']) expect(() => validateChanges([{ ...ok, field, value: null }])).toThrow(/not a field name/);

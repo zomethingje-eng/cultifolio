@@ -118,7 +118,9 @@ export async function restoreBackup(o: Opened, mode: 'merge' | 'replace', onProg
     }
     await collection.ingest(changes);
   } catch (e) {
-    for (const id of written) await deletePhotoBlobs(id).catch(() => {});
+    // Only the pixels whose records did not land: the ingest is not one write (the changes, then the import-day stamps),
+    // so a failure after the records are stored must leave their pixels in place (round thirty, R2-2).
+    for (const id of written) if (!collection.photo(id)) await deletePhotoBlobs(id).catch(() => {});
     throw e;
   }
   let schemeRestored: NumberingScheme | null = null;

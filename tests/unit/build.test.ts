@@ -193,6 +193,24 @@ describe('round five: deduplication keeps the precise record', () => {
     expect(r.dossier.occurrences.nRestrictedInRange).toBe(0); // the restricted 10 m record lost to the open one at its coordinate
     expect(r.dossier.occurrences.nVague).toBe(1); // 9004 at 50 km stays on the map and off the climate; 9002 at 1 km does not
   });
+  it('a record with no stated accuracy counts for the climate only as a human observation with coordinates to three decimals (round thirty, R2-11)', async () => {
+    const { copiapoa } = await import('../../fixtures/upstream');
+    const { buildDossier } = await import('$dossier/build');
+    const { fixtureFetcher } = await import('$dossier/fetch');
+    const table = copiapoa();
+    const occUrl = Object.keys(table).find((k) => k.includes('occurrence/search') && k.includes('hasCoordinate'))!;
+    const page = table[occUrl] as { results: Array<Record<string, unknown>> };
+    const base = page.results[0];
+    page.results = [
+      { ...base, key: 9101, decimalLatitude: -25.301, decimalLongitude: -70.501, coordinateUncertaintyInMeters: undefined, basisOfRecord: 'HUMAN_OBSERVATION', license: 'http://creativecommons.org/licenses/by/4.0/legalcode' },
+      { ...base, key: 9102, decimalLatitude: -25.4, decimalLongitude: -70.6, coordinateUncertaintyInMeters: undefined, basisOfRecord: 'PRESERVED_SPECIMEN', license: 'http://creativecommons.org/licenses/by/4.0/legalcode' },
+      { ...base, key: 9103, decimalLatitude: -25.5, decimalLongitude: -70.7, coordinateUncertaintyInMeters: undefined, basisOfRecord: 'HUMAN_OBSERVATION', license: 'http://creativecommons.org/licenses/by/4.0/legalcode' }
+    ];
+    const r = await buildDossier('Copiapoa cinerea', { fetcher: fixtureFetcher(table), builtBy: 'node', quick: true });
+    if (!r.ok) throw new Error(r.reason);
+    expect(r.dossier.occurrences.nOpenInRange).toBe(3); // all three on the map
+    expect(r.dossier.occurrences.nVague).toBe(2); // the sheet with no figure and the one-decimal observation stay off the climate
+  });
 });
 
 describe('round five: an offline re-derivation carries the name block', () => {

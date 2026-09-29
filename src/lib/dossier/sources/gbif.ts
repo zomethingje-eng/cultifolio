@@ -174,7 +174,8 @@ export interface OccMedia {
 
 /** Still images attached to occurrences, already filtered to open licences. */
 export async function media(f: JsonFetcher, key: number): Promise<FetchResult<OccMedia[]>> {
-  const r = await f<OccPage>(`${GBIF}/occurrence/search?taxonKey=${key}&mediaType=StillImage&limit=100`);
+  // Not preserved specimens: a herbarium sheet's scan is not a photograph of the plant growing (round thirty, R2-12); the bulk path already leaves them out.
+  const r = await f<OccPage>(`${GBIF}/occurrence/search?taxonKey=${key}&mediaType=StillImage&basisOfRecord=HUMAN_OBSERVATION&basisOfRecord=OBSERVATION&basisOfRecord=MACHINE_OBSERVATION&limit=100`);
   if (r.status !== 'ok') return r;
   const out: OccMedia[] = [];
   for (const o of r.data.results) {

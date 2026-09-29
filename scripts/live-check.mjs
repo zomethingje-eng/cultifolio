@@ -66,6 +66,11 @@ if (!skip.has('names')) {
   const hit = [b, c].some((r) => /^HIT$/i.test(r.h('cf-cache-status')));
   if (!hit) console.warn(`  note  ${q}: no answer said CF-Cache-Status HIT (b: "${b.h('cf-cache-status')}", c: "${c.h('cf-cache-status')}"); the edge may be cold, not a failure`);
   ok(`names: 200, 200, 200${hit ? ', edge HIT' : ''}; gaster is plants only`);
+  // An old name is sent on to the accepted species' page (round thirty, R2-8): the backbone is asked from the Worker,
+  // so this needs the upstream too and is skipped with the names check.
+  const syn = await get('/species/haworthia-attenuata');
+  if (syn.status !== 301 || !/\/species\/haworthiopsis-attenuata\?was=/.test(syn.h('location'))) fail('/species/haworthia-attenuata should be a 301 to /species/haworthiopsis-attenuata?was=…: either the backbone was not reached or the reference lacks Haworthiopsis attenuata', syn);
+  ok('an old name redirects to the accepted species');
 }
 
 // Headers on a prerendered page (from `_headers`), a dynamic page (from the hook), the offline page and an API route.

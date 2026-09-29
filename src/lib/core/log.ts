@@ -54,8 +54,6 @@ export function changeError(c: unknown): string | null {
   if (x.field in Object.prototype) return `"${x.field}" is not a field name a record can carry`; // __proto__, constructor and the rest: a record with one folds with a poisoned prototype (round twenty-nine, 10)
   const want = x.field === '_deleted' ? 'boolean' : Object.hasOwn(FIELD_TYPES[x.kind as Kind], x.field) ? FIELD_TYPES[x.kind as Kind][x.field] : undefined;
   if (want && x.value !== null && !valueIs(x.value, want)) return `${x.field} of a ${x.kind} must be a ${want}, not ${JSON.stringify(x.value)}`;
-  const allowed = FIELD_ENUMS[x.kind as Kind]?.[x.field];
-  if (allowed && x.value !== null && !allowed.includes(x.value as string)) return `${x.field} of a ${x.kind} must be one of ${allowed.join(', ')}, not ${JSON.stringify(x.value)}`;
   return null;
 }
 
@@ -68,10 +66,11 @@ type ValueType = 'string' | 'number' | 'boolean' | 'object';
 const valueIs = (v: unknown, t: ValueType) => (t === 'object' ? typeof v === 'object' && !Array.isArray(v) : typeof v === t);
 const strings = (...f: string[]): Record<string, ValueType> => Object.fromEntries(f.map((x) => [x, 'string']));
 /**
- * The words a few fields may hold (the type unions in db/types.ts, kept in step by a test): a status of "banana" hid
- * a plant from every list but All, a method of "Leaf cuttings" rendered as seed (round twenty-nine, 13). An event's
- * type is not listed here on purpose: a newer build's new event type must still reach an older device, which shows it
- * by its word.
+ * The words a few fields hold in this build (the type unions in db/types.ts, kept in step by a test). They guard the
+ * entry points, the forms and the importer, and are NOT applied to a pulled or restored change: a word this build does
+ * not know (a newer build's new status) folds as it is and is shown by its word, as an event's type always was, so it
+ * is still there when this device upgrades. Round twenty-nine refused such a change on a pull and dropped it for good
+ * on every device that had not upgraded (round thirty, 1).
  */
 export const FIELD_ENUMS: Partial<Record<Kind, Record<string, readonly string[]>>> = {
   accession: { status: ['growing', 'archived', 'dead'], provenance: ['wild', 'f1', 'fn', 'veg', 'unknown'], nameKind: ['species', 'cultivar', 'hybrid'] },
@@ -97,8 +96,35 @@ export const FIELD_TYPES: Record<Kind, Record<string, ValueType>> = {
 export function mendChange(c: Change): Change {
   const want = Object.hasOwn(FIELD_TYPES[c.kind] ?? {}, c.field) ? FIELD_TYPES[c.kind][c.field] : undefined;
   if (want === 'string' && typeof c.value === 'number' && Number.isFinite(c.value)) return { ...c, value: String(c.value) };
+  // Words the v2 importer wrote before round twenty-eight: a method as the label lower-cased with its last "s" cut
+  // ("leaf cutting", "stem cutting"), a provenance as the file's own text ("Wild collected"). Mended to the words the
+  // app uses wherever the log is read, so old batches keep their method on every device (round thirty, 1).
+  if (c.kind === 'sowing' && c.field === 'method' && typeof c.value === 'string' && !FIELD_ENUMS.sowing!.method.includes(c.value)) {
+    const w = /cutting|offset|leaf|division|graft|bulbil|seed/i.exec(c.value)?.[0].toLowerCase();
+    return { ...c, value: w ?? 'seed' };
+  }
+  if ((c.kind === 'sowing' || c.kind === 'accession') && c.field === 'provenance' && typeof c.value === 'string' && !FIELD_ENUMS.accession!.provenance.includes(c.value)) {
+    const v = c.value.toLowerCase();
+    return { ...c, value: /wild|habitat.?collect/.test(v) ? 'wild' : /^f1\b|ex.?habitat/.test(v) ? 'f1' : /^fn\b|cultivat|nursery/.test(v) ? 'fn' : /veg|cutting|offset|division/.test(v) ? 'veg' : 'unknown' };
+  }
   return c;
 }
+
+/**
+ * The fields without which a record of the kind cannot be shown at all: a plant with no name, an event with no plant
+ * or day. A change to one of these that cannot be read takes every change to that record in the same list with it,
+ * so a new record is never made half (a live plant with no name threw on the plants page); a record already here keeps
+ * what it had (round thirty, 1).
+ */
+export const REQUIRED_FIELDS: Record<Kind, readonly string[]> = {
+  accession: ['taxonName', 'status'],
+  sowing: ['taxonName', 'method', 'sown', 'count', 'status'],
+  location: ['name'],
+  event: ['acc', 'd', 't'],
+  photo: ['d', 'w', 'h'],
+  taxon: ['name'],
+  setting: []
+};
 
 /**
  * Changes from outside (a file, a pull), mended where they can be and refused one at a time where they cannot: a
@@ -108,8 +134,9 @@ export function mendChange(c: Change): Change {
  */
 export function readChanges(rows: unknown): { changes: Change[]; dropped: string[] } {
   if (!Array.isArray(rows)) throw new Error('changes is not a list');
-  const changes: Change[] = [];
+  const kept: Change[] = [];
   const dropped: string[] = [];
+  const brokenRecords = new Set<string>(); // `${kind}:${id}` whose required field could not be read: every change to it in this list goes
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
     const c = r && typeof r === 'object' && typeof (r as Change).kind === 'string' && typeof (r as Change).field === 'string' ? mendChange(r as Change) : r;
@@ -118,9 +145,14 @@ export function readChanges(rows: unknown): { changes: Change[]; dropped: string
     const shape = c && typeof c === 'object' && (c as Change).value !== undefined ? changeError({ ...(c as Change), value: null }) : changeError(c);
     if (shape) throw new Error(`change ${i}: ${shape}`);
     const e = changeError(c);
-    if (e) dropped.push(`change ${i}: ${e}`);
-    else changes.push(c as Change);
+    if (e) {
+      dropped.push(`change ${i}: ${e}`);
+      const ch = c as Change;
+      if (REQUIRED_FIELDS[ch.kind].includes(ch.field)) brokenRecords.add(key(ch.kind, ch.id));
+    } else kept.push(c as Change);
   }
+  const changes = brokenRecords.size ? kept.filter((c) => !brokenRecords.has(key(c.kind, c.id))) : kept;
+  if (brokenRecords.size) for (const k of brokenRecords) dropped.push(`every change to ${k.replace(':', ' ')} in this list, since its ${REQUIRED_FIELDS[k.split(':')[0] as Kind].join('/')} could not be read`);
   return { changes, dropped };
 }
 

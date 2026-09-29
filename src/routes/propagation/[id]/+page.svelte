@@ -27,7 +27,7 @@
   const param = $derived(page.params.id!);
   const s = $derived(collection.sowing(param));
   const id = $derived(s?.id ?? param);
-  const m = $derived(PROP_METHODS.find((x) => x.k === s?.method) ?? PROP_METHODS[0]);
+  const m = $derived(PROP_METHODS.find((x) => x.k === s?.method) ?? (s?.method ? { k: s.method, label: s.method, unit: 'units', veg: false } : PROP_METHODS[0])); // a method this build does not know is shown by its word (round thirty, 1)
   const st = $derived(collection.sowingStats(id));
   const events = $derived(collection.events(id));
   const raised = $derived(collection.raisedFrom(id));
@@ -71,10 +71,17 @@
     const up = counts.length ? Math.max(...counts) : 0;
     return up - ev.filter((e) => e.t === 'potup' || e.t === 'loss').reduce((n, e) => n + (e.n ?? 0), 0);
   };
-  /** A potting or a loss of n on day d must fit what was in the pot that day, not only what is in it now (round twenty-nine, 5). */
+  /**
+   * A potting or a loss of n on day d must fit what was in the pot that day and on every later day something was potted
+   * or lost: taking 2 on the 12th from a pot that was emptied on the 20th leaves the 20th at −2 (round twenty-nine, 5; round thirty, R2-4).
+   */
   const fitsOn = (d: string, n: number, what: string): string => {
-    const had = inPotOn(d);
-    return n > had ? `Only ${Math.max(0, had)} ${had === 1 ? 'was' : 'were'} in the pot on ${d} by the counts recorded; ${what} ${n} cannot be dated then.` : '';
+    const days = [d, ...collection.events(id).filter((e) => (e.t === 'potup' || e.t === 'loss') && e.d > d).map((e) => e.d)];
+    for (const day of days) {
+      const had = inPotOn(day);
+      if (n > had) return day === d ? `Only ${Math.max(0, had)} ${had === 1 ? 'was' : 'were'} in the pot on ${d} by the counts recorded; ${what} ${n} cannot be dated then.` : `${what[0].toUpperCase()}${what.slice(1)} ${n} on ${d} would leave the pot short on ${day}, when only ${Math.max(0, had)} ${had === 1 ? 'was' : 'were'} left by the counts recorded.`;
+    }
+    return '';
   };
   /** A count can go only if, on every day something was potted or lost, the counts that remain still cover it: the batch never says 0 up and 2 potted (round twenty-nine, 5: judged by date, not by totals). */
   const canDropCount = (eventId: string): boolean => collection.events(id).filter((e) => e.t === 'potup' || e.t === 'loss').every((e) => inPotOn(e.d, eventId) >= 0);

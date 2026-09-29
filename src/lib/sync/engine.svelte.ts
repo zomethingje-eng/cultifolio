@@ -637,9 +637,11 @@ class Sync {
       const batch = await openJson<{ v: number; device: string; changes: unknown }>(keys, 'log', bytes);
       if (!batch || typeof batch !== 'object' || batch.v !== 1) throw new Error('not a batch this version understands');
       const read = readChanges(batch.changes);
-      // A change of a type its field never takes is left out and said; the rest of the batch is folded (round twenty-nine, 2).
-      if (read.dropped.length) console.warn(`batch ${key}: ${read.dropped.length} change${read.dropped.length === 1 ? '' : 's'} left out:`, read.dropped.slice(0, 5));
-      if (read.dropped.length && !read.changes.length) throw new Error(read.dropped[0]);
+      // A batch with anything in it this build cannot read is set aside whole, under its name, for a later build to
+      // read again: folding the rest and moving the cursor past it would lose the change on this device for good
+      // (round thirty, 1). Values are mended first (a number for text, an older importer's words), so only a value of
+      // a type its field never takes gets here.
+      if (read.dropped.length) throw new Error(read.dropped[0]);
       changes = read.changes;
     } catch (e) {
       this.note(m, 'quarantined', key, e instanceof Error ? e.message : String(e));

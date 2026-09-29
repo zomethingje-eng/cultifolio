@@ -591,7 +591,14 @@ class Collection {
     // Held as one unit: a vault reload between the pixels and the record would leave pixels no record names.
     await holdVault(async () => {
       await putPhotoBlobs({ id, blob, thumb });
-      await this.put('photo', id, rec as unknown as Record<string, unknown>);
+      try {
+        await this.put('photo', id, rec as unknown as Record<string, unknown>);
+      } catch (e) {
+        // The pixels went in and the record did not (a full device): without the record nothing could name or remove
+        // them, so they come out again. The id is fresh, so this cannot touch an earlier photograph (round thirty, R1-2).
+        await deletePhotoBlobs(id).catch(() => {});
+        throw e;
+      }
     });
     return rec;
   }
@@ -610,7 +617,8 @@ class Collection {
     return async () => {
       if (blobs) await putPhotoBlobs(blobs);
       await this.restore('photo', id);
-      if (p?.acc && wasCover) await this.put('accession', p.acc, { cover: id });
+      // The cover goes back only if nothing has been chosen since: a cover picked between the removal and the Undo stands (round thirty, R2-3).
+      if (p?.acc && wasCover && !this.accession(p.acc)?.cover) await this.put('accession', p.acc, { cover: id });
     };
   }
   async setCover(acc: string, photoId: string | null): Promise<void> {
