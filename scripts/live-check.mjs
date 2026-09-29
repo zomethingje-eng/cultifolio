@@ -66,11 +66,13 @@ if (!skip.has('names')) {
   const hit = [b, c].some((r) => /^HIT$/i.test(r.h('cf-cache-status')));
   if (!hit) console.warn(`  note  ${q}: no answer said CF-Cache-Status HIT (b: "${b.h('cf-cache-status')}", c: "${c.h('cf-cache-status')}"); the edge may be cold, not a failure`);
   ok(`names: 200, 200, 200${hit ? ', edge HIT' : ''}; gaster is plants only`);
-  // An old name is sent on to the accepted species' page (round thirty, R2-8): the backbone is asked from the Worker,
-  // so this needs the upstream too and is skipped with the names check.
+  // An old name is sent on to the accepted species' page (round thirty, R2-8), a 302 since round thirty-three (a 301 is
+  // kept by a browser for good, and the backbone changes its mind). Since round thirty-two the index answers this name
+  // itself, so the check no longer needs the upstream; a name the index lacks is what asks the backbone.
   const syn = await get('/species/haworthia-attenuata');
-  if (syn.status !== 301 || !/\/species\/haworthiopsis-attenuata\?was=/.test(syn.h('location'))) fail('/species/haworthia-attenuata should be a 301 to /species/haworthiopsis-attenuata?was=…: either the backbone was not reached or the reference lacks Haworthiopsis attenuata', syn);
-  ok('an old name redirects to the accepted species');
+  if (syn.status !== 302 || !/\/species\/haworthiopsis-attenuata\?was=/.test(syn.h('location'))) fail('/species/haworthia-attenuata should be a 302 to /species/haworthiopsis-attenuata?was=…: the index lacks Haworthiopsis attenuata or its synonyms, or the deployed Worker is older than round thirty-three', syn);
+  if (!/max-age=86400/.test(syn.h('cache-control'))) fail('the synonym redirect should be cached for a day (public, max-age=86400)', syn);
+  ok('an old name redirects (302, cached a day) to the accepted species');
 }
 
 // Headers on a prerendered page (from `_headers`), a dynamic page (from the hook), the offline page and an API route.
