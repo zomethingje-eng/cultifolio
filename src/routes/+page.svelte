@@ -157,8 +157,8 @@
       const r = await fetch('/api/index');
       if (!r.ok) fullFailed = true;
       if (r.ok) {
-        const idx = (await r.json()) as Array<{ key: number; slug: string; name: string; family?: string; common?: string; origin?: string[]; thumb?: string; photos: number; open: number; climate: string }>;
-        full = idx.map((e) => ({ key: e.key, slug: e.slug, name: e.name, family: e.family, common: e.common, origin: e.origin ?? [], thumb: e.thumb, alt: e.thumb ? e.name : undefined, photos: e.photos, open: e.open, climate: e.climate }));
+        const idx = (await r.json()) as Array<{ key: number; slug: string; name: string; family?: string; common?: string; origin?: string[]; syn?: string[]; thumb?: string; photos: number; open: number; climate: string }>;
+        full = idx.map((e) => ({ key: e.key, slug: e.slug, name: e.name, family: e.family, common: e.common, origin: e.origin ?? [], syn: e.syn, thumb: e.thumb, alt: e.thumb ? e.name : undefined, photos: e.photos, open: e.open, climate: e.climate }));
       }
     } catch {
       fullFailed = true;
@@ -178,7 +178,7 @@
     if (ownFailed) return;
     const m = await entriesFor([...mine.keys()]);
     if (!m) { ownFailed = true; return; }
-    ownEntries = new Map([...m.values()].map((e) => [e.slug, { key: e.key, slug: e.slug, name: e.name, family: e.family, common: e.common, origin: e.origin ?? [], thumb: prefs.referencePhotos ? e.thumb : undefined, alt: prefs.referencePhotos && e.thumb ? e.name : undefined, thumbOff: !prefs.referencePhotos && !!e.thumb, photos: e.photos, open: e.open, climate: e.climate } as Item]));
+    ownEntries = new Map([...m.values()].map((e) => [e.slug, { key: e.key, slug: e.slug, name: e.name, family: e.family, common: e.common, origin: e.origin ?? [], syn: e.syn, thumb: prefs.referencePhotos ? e.thumb : undefined, alt: prefs.referencePhotos && e.thumb ? e.name : undefined, thumbOff: !prefs.referencePhotos && !!e.thumb, photos: e.photos, open: e.open, climate: e.climate } as Item]));
   }
   $effect(() => { if (hasMine && !full) { mine.size; prefs.referencePhotos; loadOwn(); } }); // rebuilt when the photograph preference changes
   const retryOwn = () => { ownFailed = false; loadOwn(); };
@@ -235,8 +235,16 @@
 </script>
 
 <svelte:head>
-  <title>Cultifolio — a record of a living collection</title>
-  <meta name="description" content="A species reference that shows its sources, and a collection record that stays on your device." />
+  {#if openRow}
+    <!-- A genus (or family, or origin) opened by its address is its own page to a crawler: its own title, description and canonical, not the home page's 1,321 times over (round thirty-one, 5). -->
+    <title>{openRow.label} — {openRow.count} species — Cultifolio</title>
+    <meta name="description" content="{openRow.label}: {openRow.count} species in the reference, each with its native range, habitat climate and sources." />
+    <link rel="canonical" href="https://cultifolio.com/?by={data.by}&open={data.open}" />
+  {:else}
+    <title>Cultifolio — a record of a living collection</title>
+    <meta name="description" content="A species reference that shows its sources, and a collection record that stays on your device." />
+    <link rel="canonical" href="https://cultifolio.com/" />
+  {/if}
 </svelte:head>
 
 {#snippet plantsFound()}

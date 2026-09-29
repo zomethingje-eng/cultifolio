@@ -18,7 +18,7 @@
   import { generatedNote } from '$core/note';
   import { cultivationSheet, CARD_ORDER } from '$core/sheet';
   import { collection } from '$lib/db/collection.svelte';
-  import { slugify, genusOf, speciesSlug } from '$core/names';
+  import { slugify, genusOf, speciesSlug, canonicalSynonym } from '$core/names';
   import { unitName } from '$core/regions';
   import { onMount } from 'svelte';
   import { units } from '$lib/ui/units.svelte';
@@ -30,6 +30,8 @@
   const d = $derived(data.d);
   const common = $derived(d.name.vernacular.filter((v) => !v.lang || v.lang === 'eng').map((v) => v.name).slice(0, 4));
   const hero = $derived(d.photos.find((p) => !p.captive) ?? d.photos[0]);
+  // Synonyms as names, not as the backbone's strings: authorship dropped, and a malformed entry ("? glabra Salm-Dyck") left out (round thirty-one, 3).
+  const synonyms = $derived([...new Set(d.name.synonyms.map(canonicalSynonym).filter((x): x is string => !!x && x !== d.name.scientific))]);
   const desc = $derived(d.summary?.text.slice(0, 155) ?? `${d.name.scientific}, ${d.name.family ?? ''}: native range, habitat climate, photographs and cultivation notes with sources.`);
   const jsonld = $derived(
     JSON.stringify({
@@ -263,8 +265,8 @@
   {/if}
 
   <div class="facts">
-    <div class="fact"><div class="lab">Family</div><div class="v">{d.name.family ?? '–'}</div></div>
-    <div class="fact"><div class="lab">Described by</div><div class="v">{d.name.authorship ?? '–'}</div></div>
+    <div class="fact"><div class="lab">Family</div><div class="v">{d.name.family ?? 'not stated by the backbone'}</div></div>
+    <div class="fact"><div class="lab">Described by</div><div class="v">{d.name.authorship ?? 'authorship not stated by the backbone'}</div></div>
     <div class="fact"><div class="lab">Native to</div><div class="v">{#if d.distribution.native.length}{d.distribution.native.slice(0, 3).map((r) => unitName(r.name)).join(', ')}{d.distribution.native.length > 3 ? ` +${d.distribution.native.length - 3}` : ''}{:else}<span class="muted">not verified</span>{/if}</div></div>
     <div class="fact"><div class="lab">Wild records</div><div class="v">{#if d.occurrences.nOpenInRange || d.occurrences.nRestrictedInRange}{d.occurrences.nOpenInRange + d.occurrences.nRestrictedInRange} {d.occurrences.rangeTested === false ? 'georeferenced' : 'in range'}<span class="small muted">{' · '}{d.occurrences.nOpenInRange} open{d.occurrences.rangeTested === false ? ' · range not tested' : ''}</span>{:else if ['refused', 'error'].includes(d.upstream['gbif.occurrences']?.status ?? '')}<span class="muted">not checked</span>{:else if d.occurrences.rangeTested === false}<span class="muted">no georeferenced records · range not tested</span>{:else}<span class="muted">none in range</span>{/if}</div></div>
   </div>
@@ -371,10 +373,16 @@
       </table>
     </div>
     </details>
+    {#if d.climate.hemispheres}
+      <p class="notice small" id="hemispheres">Records on both sides of the equator: these figures are the {d.climate.hemispheres.used}ern side's alone ({d.climate.hemispheres.used === 'north' ? d.climate.hemispheres.north : d.climate.hemispheres.south} cells); the {d.climate.hemispheres.used === 'north' ? 'southern' : 'northern'} side's {d.climate.hemispheres.used === 'north' ? d.climate.hemispheres.south : d.climate.hemispheres.north} cells have their seasons six months apart and are not combined into a year no place has.</p>
+    {/if}
+    {#if d.climate.landFraction != null && d.climate.landFraction < 0.5 && d.climate.extremes}
+      <p class="notice small" id="seacell">The extremes were read at a NASA POWER cell that is {Math.round(d.climate.landFraction * 100)}% land: no in-range cell sits in a cell that is mostly land, so the coldest nights here are moderated by the sea beside them.</p>
+    {/if}
     <details class="why">
       <summary>Where these figures come from</summary>
       <div class="whybody">
-      Each figure is the median across the {d.climate.cells} grid cells holding the {d.climate.records} in-range records, with the 10th–90th percentile span across those cells after the slash where it differs. Extremes and elevation were read at the typical cell {d.climate.cell} ({d.climate.at.lat}, {d.climate.at.lon}).
+      Each figure is the median across the {d.climate.cells} grid cells holding the {d.climate.records} in-range records, with the 10th–90th percentile span across those cells after the slash where it differs. A dash is a month one or more of those cells has no figure for in the grid (a variable CHELSA does not carry there), so no median is taken rather than one over fewer cells. Extremes and elevation were read at the typical cell {d.climate.cell} ({d.climate.at.lat}, {d.climate.at.lon}).
       {#if d.climate.extremes}Over {d.climate.extremes.years} years there: absolute minimum {temp(d.climate.extremes.minAbs, u, 1)}, 1st-percentile night {temp(d.climate.extremes.minP01, u, 1)}, 99th-percentile day {temp(d.climate.extremes.maxP99, u, 1)}.{/if}{#if u === 'us'}{' '}Shown in Fahrenheit and inches; the sources measure in °C and mm.{/if}
       Normals: {d.climate.src.normals}. Envelope: {d.climate.src.envelope}.{#if d.climate.src.extremes}{' '}Extremes: {d.climate.src.extremes}.{/if}{#if d.climate.src.elevation}{' '}Elevation: {d.climate.src.elevation}.{/if}
       </div>
@@ -384,7 +392,7 @@
   {:else if d.climate.status === 'refused'}
     <div class="notice"><b>Not checked.</b> {sentence(d.climate.detail, 'An upstream source did not answer when this page was built')} This is not a statement that no climate exists.</div>
   {:else}
-    <div class="cult"><div class="none">No habitat climate can be derived: {sentence(d.climate.detail, 'no in-range records to read one at')}</div></div>
+    <div class="cult"><div class="none">No habitat climate can be derived: {sentence(d.climate.detail, 'no in-range records to read one at')}{#if d.occurrences.nVague}{' '}{d.occurrences.nVague} of the {d.occurrences.nOpenInRange + (d.occurrences.nRestrictedInRange ?? 0)} in-range records {d.occurrences.nVague === 1 ? 'is' : 'are'} placed to worse than 10 km (a locality's centre, or no stated accuracy) and cannot place a climate cell, though {d.occurrences.nVague === 1 ? 'it counts' : 'they count'} for the map and its marker.{/if}</div></div>
   {/if}
 
   <h2 class="sec" id="s-habitat">Natural habitat</h2>
@@ -462,8 +470,8 @@
   {/if}
 
   <h2 class="sec" id="s-registers">Names &amp; registers</h2>
-  {#if d.name.synonyms.length}
-    <p class="small muted names"><b>Also known as</b> {d.name.synonyms.slice(0, 5).join('; ')}{d.name.synonyms.length > 5 ? ` and ${d.name.synonyms.length - 5} more` : ''}{d.name.synonyms.slice(0, 5).join('; ').endsWith('.') && d.name.synonyms.length <= 5 ? '' : '.'}</p>
+  {#if synonyms.length}
+    <p class="small muted names"><b>Also known as</b> {synonyms.slice(0, 5).join('; ')}{synonyms.length > 5 ? ` and ${synonyms.length - 5} more` : ''}{synonyms.slice(0, 5).join('; ').endsWith('.') && synonyms.length <= 5 ? '' : '.'} <span class="faint">(GBIF Backbone)</span></p>
   {/if}
   <div class="links">
     {#each Object.entries(d.links) as [k, url]}

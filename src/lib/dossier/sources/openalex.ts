@@ -35,8 +35,13 @@ export function namesSpecies(text: string, scientificName: string): boolean {
  * OPENALEX_KEY in the environment; the key goes in the query string as
  * OpenAlex asks, never in the dossier.
  */
-/** GBIF's DOI prefix: every occurrence download is minted under it. */
-export const isDatasetDoi = (doi: string | null | undefined): boolean => /^(https?:\/\/doi\.org\/)?10\.15468\//i.test(doi ?? '');
+/**
+ * DOIs that name a record, not a paper: GBIF's prefix (every occurrence download is minted under it) and DiSSCo's,
+ * under which each digitised herbarium specimen has a DOI that names the species in its title (round thirty-one, 6).
+ */
+export const isDatasetDoi = (doi: string | null | undefined): boolean => /^(https?:\/\/doi\.org\/)?10\.(15468|3535)\//i.test(doi ?? '');
+/** A work whose venue or title says it is a specimen record rather than a paper. */
+const isSpecimenRecord = (w: Work): boolean => /dissco|herbarium specimen|preserved specimen/i.test(`${w.primary_location?.source?.display_name ?? ''} ${w.title ?? ''}`);
 
 export async function literature(f: JsonFetcher, scientificName: string, max = 12, apiKey = typeof process !== 'undefined' ? process.env?.OPENALEX_KEY?.trim() : undefined) {
   // Title-and-abstract search, not full text: a full-text hit can be a chassis paper that cites a
@@ -49,7 +54,7 @@ export async function literature(f: JsonFetcher, scientificName: string, max = 1
   const out = r.data.results
     .filter((w) => w.title || w.display_name)
     // A GBIF occurrence download (DOI prefix 10.15468, often this very build's own) is a dataset that names the species, not a paper about it.
-    .filter((w) => !isDatasetDoi(w.doi))
+    .filter((w) => !isDatasetDoi(w.doi) && !isSpecimenRecord(w))
     .filter((w) => namesSpecies(`${w.title ?? w.display_name ?? ''} ${abstractText(w.abstract_inverted_index)}`, scientificName))
     .slice(0, max)
     .map((w) => ({

@@ -90,6 +90,17 @@ rclone copy static\s\v2\index.json r2:cultifolio/s/v2 --s3-no-check-bucket -P
 
 No API calls; a minute on the PC. 53 species are left without a photograph by it; all 53 have iNaturalist and Commons recorded as having nothing for them, so no fill can give them one until a source does (round seventeen, 13: the pass reopens a dossier's photo sources for the next fill only where a source had answered). Round seventeen's version of the pass also rewords the CC0 credits that read "unknown" to "author not stated" (1,018 photographs), so it is run once more, with `--index` and the two uploads after it. Round sixteen also adds a dev dependency (`fake-indexeddb`, for tests that run the real vault on an in-memory IndexedDB), so `npm install` once before `npm run deploy`.
 
+**Round thirty-one's corpus step, once.** Four rules changed in the builder and take effect only when the dossiers are rederived: a record with no stated accuracy counts for the climate only as a human observation with coordinates to three decimals (round thirty, R2-11); a species with records on both sides of the equator in strength takes its envelope from the larger side alone and says so (round thirty-one, 1); the typical cell for the daily extremes is the nearest-to-median cell whose NASA POWER cell is mostly land, and the fraction is written when none is (round thirty-one, 2); and the index carries each species' older names, so the search and the picker find a species under a name it no longer has (round thirty-one, 3). The rederive is offline (the range, the records, the centre and the climate from the bulk files and the grid; no API calls), then the index, then the two uploads. Zip the current `static\s\v2` first, as section 6 says.
+
+```
+npm run dossier -- static\s\v2\index.json --offline --grid climate --bulk bulk
+npm run dossier -- --index
+rclone copy static\s\v2 r2:cultifolio/s/v2 --transfers 32 --checkers 32 --exclude report.txt --exclude index.json --s3-no-check-bucket -P
+rclone copy static\s\v2\index.json r2:cultifolio/s/v2 --s3-no-check-bucket -P
+```
+
+The rederive rereads the climate grid for every species (about nine thousand envelopes, each now sampling the grid around its typical cell), so expect it to take a while longer than the photograph pass; `report.txt` says what changed. After the upload, `/species/rhipsalis-baccifera` should carry the hemisphere line, `/species/melocactus-intortus` the sea-cell line under its cold floor, and a search for "haworthia attenuata" on the front page should list Haworthiopsis attenuata. No deploy is needed for the corpus; the deploy for the round's code changes goes first, since the pages that show the new fields must be live before the fields arrive.
+
 ## 6. If something is wrong after a deploy
 
 `wrangler deploy` is atomic and the previous version is kept: Workers → cultifolio → Deployments → roll back. HTML is cached for at most a minute and open pages reload on their next navigation after a deploy, so a rollback is live within a minute too. The corpus is not versioned by the deploy; a bad corpus upload is fixed by uploading the previous `static\s\v2` again (keep the last good one zipped somewhere before a rederive).

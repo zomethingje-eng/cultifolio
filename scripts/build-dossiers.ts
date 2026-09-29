@@ -54,7 +54,7 @@ import * as gbif from '../src/lib/dossier/sources/gbif';
 import { literature } from '../src/lib/dossier/sources/openalex';
 import * as inat from '../src/lib/dossier/sources/inat';
 import * as wm from '../src/lib/dossier/sources/wikimedia';
-import { genusOf, slugify } from '../src/lib/core/names';
+import { genusOf, slugify, canonicalSynonym } from '../src/lib/core/names';
 import { makeFetcher, fixtureFetcher } from '../src/lib/dossier/fetch';
 import { dossierPath, DOSSIER_V, parseDossier } from '../src/lib/dossier/schema';
 import { sheetOf, type Sheet } from '../src/lib/dossier/sheet';
@@ -110,11 +110,16 @@ function diskPowerCache(dir: string): PowerCache {
   };
 }
 
-type IndexEntry = { key: number; slug: string; name: string; family?: string; common?: string; origin: string[]; thumb?: string; photos: number; open: number; climate: string; near?: number[] };
-type Dossierish = { key: number; slug: string; name: { scientific: string; family?: string; status?: string; vernacular: Array<{ name: string; lang?: string }> }; distribution: { native: Array<{ name: string }> }; photos: Array<{ thumb: string; captive?: boolean }>; occurrences: { nOpenInRange: number; nRestrictedInRange?: number; nOutsideRange?: number }; climate: { status: string; months?: Array<{ tmax: number; tmin: number; precipMm: number }> } };
+type IndexEntry = { key: number; slug: string; name: string; family?: string; common?: string; origin: string[]; thumb?: string; photos: number; open: number; climate: string; near?: number[]; syn?: string[] };
+type Dossierish = { key: number; slug: string; name: { scientific: string; family?: string; status?: string; vernacular: Array<{ name: string; lang?: string }>; synonyms?: string[] }; distribution: { native: Array<{ name: string }> }; photos: Array<{ thumb: string; captive?: boolean }>; occurrences: { nOpenInRange: number; nRestrictedInRange?: number; nOutsideRange?: number }; climate: { status: string; months?: Array<{ tmax: number; tmin: number; precipMm: number }> } };
 function indexEntry(d: Dossierish): IndexEntry & { status?: string } {
   const hero = d.photos.find((p) => !p.captive) ?? d.photos[0];
-  return { status: d.name.status, key: d.key, slug: d.slug, name: d.name.scientific, family: d.name.family, common: d.name.vernacular.find((v) => v.lang === 'eng')?.name, origin: d.distribution.native.map((n) => n.name), thumb: hero?.thumb, photos: d.photos.length, open: d.occurrences.nOpenInRange, climate: d.climate.status };
+  // Older names, as binomials, other-genus ones first (the ones a label most often carries), six at most, so the
+  // search and the picker find a species under a name it no longer has (round thirty-one, 3).
+  const accepted = d.name.scientific;
+  const genus = accepted.split(' ')[0];
+  const syn = [...new Set((d.name.synonyms ?? []).map(canonicalSynonym).filter((x): x is string => !!x && x !== accepted))].sort((a, b) => Number(a.startsWith(genus + ' ')) - Number(b.startsWith(genus + ' '))).slice(0, 6);
+  return { status: d.name.status, key: d.key, slug: d.slug, name: d.name.scientific, family: d.name.family, common: d.name.vernacular.find((v) => v.lang === 'eng')?.name, origin: d.distribution.native.map((n) => n.name), thumb: hero?.thumb, photos: d.photos.length, open: d.occurrences.nOpenInRange, climate: d.climate.status, ...(syn.length ? { syn } : {}) };
 }
 
 /** Every dossier on disk, as index entries. The corpus is the files; the index is derived from them. */

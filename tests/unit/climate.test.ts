@@ -174,6 +174,28 @@ describe('climate envelope', () => {
     expect(c.extremes?.frostNights).toBe(1);
     expect(c.extremes?.frostDaysPerYear).toBeCloseTo(1 / 44, 3);
   });
+  it('records on both sides of the equator in strength: the larger side alone makes the envelope, and the split is written (round thirty-one, 1)', async () => {
+    const cells = new Map<string, ArrayBuffer>();
+    const points: Array<[number, number]> = [];
+    // five southern cells (shifts −2..+4, as above) and three northern ones a hemisphere away with nights +10 warmer
+    [-2, -1, 0, 1, 4].forEach((dT, k) => { const c = cellOf(h, lat, lon - k * h.cell); cells.set(c.id, encodeCell(h, variant(dT, k + 1))); points.push([lat, lon - k * h.cell]); });
+    [10, 11, 12].forEach((dT, k) => { const c = cellOf(h, -lat, lon - k * h.cell); cells.set(c.id, encodeCell(h, variant(dT, 1))); points.push([-lat, lon - k * h.cell]); });
+    const provider = makeClimateProvider({ grid: memoryGridSource(h, cells), fetcher: fixtureFetcher({}), noExtremes: true });
+    const c = await provider.envelope(points);
+    expect(c.status).toBe('ok');
+    if (c.status !== 'ok') return;
+    expect(c.hemispheres).toEqual({ north: 3, south: 5, used: 'south' });
+    expect(c.cells).toBe(5); // the southern side alone
+    expect(c.months[0].tmin).toBeCloseTo(15, 1); // the southern median, untouched by the +10 northern cells
+    expect(c.src.envelope).toContain('on the southern side of the equator (3 cells north, 5 south: the two sides\' seasons are not combined)');
+    // two northern cells is not "in strength": everything is used and nothing is said
+    const few = new Map(cells);
+    few.delete(cellOf(h, -lat, lon - 2 * h.cell).id);
+    const d = await makeClimateProvider({ grid: memoryGridSource(h, few), fetcher: fixtureFetcher({}), noExtremes: true }).envelope(points.slice(0, 7));
+    if (d.status !== 'ok') throw new Error(d.status);
+    expect(d.hemispheres).toBeUndefined();
+    expect(d.cells).toBe(7);
+  });
   it('fewer than three land cells is "none", and says how many', async () => {
     const a = cellOf(h, lat, lon), b = cellOf(h, lat, lon - h.cell), sea = cellOf(h, lat, lon - 2 * h.cell);
     const cells = new Map([[a.id, encodeCell(h, variant(0, 1))], [b.id, encodeCell(h, variant(1, 1))], [sea.id, encodeCell(h, { elev: -1500 })]]);

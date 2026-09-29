@@ -42,3 +42,25 @@ describe('species search', () => {
     expect(search(idx, 'c', 2)).toHaveLength(2);
   });
 });
+
+describe('older names (round thirty-one, 3)', () => {
+  it('a synonym is cut to its binomial without authorship, and a malformed entry is dropped', async () => {
+    const { canonicalSynonym } = await import('$core/names');
+    expect(canonicalSynonym('Haworthia attenuata (Haw.) Haw.')).toBe('Haworthia attenuata');
+    expect(canonicalSynonym('Aloe attenuata Haw.')).toBe('Aloe attenuata');
+    expect(canonicalSynonym('Haworthia attenuata var. radula (Jacq.) M.B.Bayer')).toBe('Haworthia attenuata var. radula');
+    expect(canonicalSynonym('? glabra Salm-Dyck')).toBeNull();
+    expect(canonicalSynonym('Gasteria')).toBeNull();
+  });
+  it('a search finds a species under an older name, after the species that carry the words in their own names', async () => {
+    const { prepare, search } = await import('$core/search');
+    const items = [
+      { name: 'Haworthiopsis attenuata', family: 'Asphodelaceae', syn: ['Haworthia attenuata', 'Aloe attenuata'] },
+      { name: 'Haworthia cooperi', family: 'Asphodelaceae' }
+    ];
+    const p = prepare(items);
+    expect(search(p, 'haworthia attenuata').map((x) => x.name)).toEqual(['Haworthiopsis attenuata']);
+    expect(search(p, 'haworthia').map((x) => x.name)).toEqual(['Haworthia cooperi', 'Haworthiopsis attenuata']); // its own name first
+    expect(search(p, 'aloe').map((x) => x.name)).toEqual(['Haworthiopsis attenuata']);
+  });
+});

@@ -20,6 +20,8 @@ export interface IndexEntry {
   climate: string;
   /** The six species whose habitat climate is nearest (src/lib/core/near.ts), written at index time. */
   near?: number[];
+  /** Older names for the species, as binomials, written at index time (round thirty-one, 3). */
+  syn?: string[];
 }
 
 export type Fetch = typeof fetch;

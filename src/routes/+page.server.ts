@@ -18,6 +18,7 @@ export const load: PageServerLoad = async ({ platform, fetch, setHeaders, url, c
     family: e.family,
     common: e.common,
     origin: e.origin ?? [],
+    syn: e.syn,
     thumb: e.thumb,
     alt: e.thumb ? e.name : undefined,
     photos: e.photos,

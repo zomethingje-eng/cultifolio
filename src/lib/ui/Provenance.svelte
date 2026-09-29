@@ -16,10 +16,10 @@
   <summary><span class="k">Where this page came from</span> <span class="faint small">built {dossier.built.slice(0, 10)} · dossier v{dossier.v} · {dossier.builtBy}</span></summary>
   <div class="rows">
     {#each rows as [src, u]}
-      <div class="row"><code>{src}</code> <span class="pill {tone(u.status)}">{label[u.status] ?? u.status}</span>{#if u.detail}<span class="faint small">{u.detail}</span>{/if}</div>
+      <div class="row"><code>{src}</code> <span class="pill {tone(u.status)}">{label[u.status] ?? u.status}</span>{#if u.at}<span class="faint small">asked {u.at.slice(0, 10)}</span>{/if}{#if u.detail}<span class="faint small">{u.detail}</span>{/if}</div>
     {/each}
   </div>
-  <p class="faint small">Every upstream is recorded as having answered, reported nothing, or refused. Only “nothing to report” is ever shown as an absence. {#if dossier.occurrences.datasets.length}Records came from {dossier.occurrences.datasets.length} datasets via GBIF.org; each carries its own licence.{/if}</p>
+  <p class="faint small">Every upstream is recorded as having answered, reported nothing, or refused, and when it was asked: the figures are as the source held them that day (round thirty-one, 4). Only “nothing to report” is ever shown as an absence. {#if dossier.occurrences.datasets.length}Records came from {dossier.occurrences.datasets.length} datasets via GBIF.org; each carries its own licence.{/if}</p>
 </details>
 
 <style>

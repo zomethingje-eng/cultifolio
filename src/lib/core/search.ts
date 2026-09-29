@@ -15,6 +15,8 @@ export interface Searchable {
   common?: string;
   family?: string;
   origin?: string[];
+  /** Older names for the same species, as binomials: a label's "Haworthia attenuata" finds Haworthiopsis attenuata (round thirty-one, 3). */
+  syn?: string[];
 }
 
 const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -56,7 +58,7 @@ export function prepare<T extends Searchable>(items: T[]): Prepared<T>[] {
   return items.map((item) => ({
     item,
     nameWords: words(item.name),
-    otherWords: [...words(item.common ?? ''), ...words(item.family ?? ''), ...(item.origin ?? []).flatMap(words)],
+    otherWords: [...words(item.common ?? ''), ...words(item.family ?? ''), ...(item.origin ?? []).flatMap(words), ...(item.syn ?? []).flatMap(words)],
     sortKey: fold(item.name)
   }));
 }

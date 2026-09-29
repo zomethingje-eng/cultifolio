@@ -117,6 +117,23 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
 
   }
 
+  /** How much of the NASA POWER cell (0.5° × 0.625°) around a point is land, by a 5 × 5 sample of the climate grid (null cells are sea or ice). */
+  async function landFractionAround(lat: number, lon: number): Promise<number> {
+    const pc = powerCell(lat, lon);
+    let land = 0, n = 0;
+    for (let i = 0; i < 5; i++) for (let j = 0; j < 5; j++) {
+      const la = pc.lat - 0.25 + (i + 0.5) * 0.1, lo = pc.lon - 0.3125 + (j + 0.5) * 0.125;
+      if (la > 90 || la < -90) continue;
+      n++;
+      try {
+        if (await o.grid.cell(la, lo)) land++;
+      } catch {
+        /* outside the grid counts as not land */
+      }
+    }
+    return n ? land / n : 0;
+  }
+
   return {
     async envelope(points): Promise<Climate> {
       const h = await o.grid.header().catch((e) => ({ error: e instanceof Error ? e.message : String(e) }));
@@ -141,7 +158,19 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
         return { status: 'refused', detail: `climate grid unavailable: ${e instanceof Error ? e.message : String(e)}` };
       }
       if (read.length < 3) return { status: 'none', detail: `only ${read.length} distinct land cell${read.length === 1 ? '' : 's'} of the climate grid hold${read.length === 1 ? 's' : ''} an in-range record${sea ? ` (${sea} at sea or ice)` : ''}; three are needed for an envelope` };
-      const years = read.map((c) => c.months);
+      // A species with records on both sides of the equator in strength (a fifth or more of its cells on the smaller side,
+      // three at least) has no one calendar: a January median over both sides is a month no place has. The larger side's
+      // cells make the envelope, the split is recorded, and the page says so (round thirty-one, 1).
+      const north = read.filter((c) => c.lat >= 0), south = read.filter((c) => c.lat < 0);
+      const minor = Math.min(north.length, south.length);
+      let hemispheres: ClimateOk['hemispheres'];
+      let used = read;
+      if (minor >= 3 && minor >= 0.2 * read.length) {
+        const useNorth = north.length >= south.length;
+        used = useNorth ? north : south;
+        hemispheres = { north: north.length, south: south.length, used: useNorth ? 'north' : 'south' };
+      }
+      const years = used.map((c) => c.months);
       const months = monthStat(years, 0.5), p10 = monthStat(years, 0.1), p90 = monthStat(years, 0.9);
       // Annual rain per cell, then its percentiles: a sum of monthly percentiles would be a year no cell has.
       const annual = years.map((y) => y.reduce((a, m) => a + m.precipMm, 0)).sort((a, b) => a - b);
@@ -149,15 +178,26 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
       // The typical cell: the one whose coldest month's mean night is nearest the median of that across cells. Monthly means are
       // what the grid holds; the coldest single night is a POWER figure, read there afterwards.
       const coldest = (y: Month[]) => Math.min(...y.map((m) => m.tmin));
-      const medCold = quantile(read.map((c) => coldest(c.months)).sort((a, b) => a - b), 0.5);
-      const typical = read.reduce((a, b) => (Math.abs(coldest(b.months) - medCold) < Math.abs(coldest(a.months) - medCold) ? b : a));
+      const medCold = quantile(used.map((c) => coldest(c.months)).sort((a, b) => a - b), 0.5);
+      // The typical cell is the one nearest the median coldest night whose NASA POWER cell is mostly land: a POWER cell
+      // (0.5°) over a coast or an island is averaged with the sea, and its extremes are the sea's, not the plant's
+      // (round thirty-one, 2). The candidates are tried nearest first; when none is mostly land the nearest is taken and
+      // the fraction is written, so the page can say it.
+      const byNearness = [...used].sort((a, b) => Math.abs(coldest(a.months) - medCold) - Math.abs(coldest(b.months) - medCold));
+      let typical = byNearness[0];
+      let landFraction = await landFractionAround(typical.lat, typical.lon);
+      for (const c of byNearness.slice(1, 12)) {
+        if (landFraction >= 0.5) break;
+        const f = await landFractionAround(c.lat, c.lon);
+        if (f > landFraction) { typical = c; landFraction = f; }
+      }
       const src: ClimateOk['src'] = {
         normals: `CHELSA V2.1 1981–2010 climatology, ${h.cell}° cells (each the mean of ~${Math.round((h.cell / 0.008333) ** 2)} 1 km pixels)`,
-        envelope: `median and 10th–90th percentile of each month across the ${read.length} distinct grid cells holding the ${points.length} in-range records; extremes and elevation at the typical cell ${typical.id} (its coldest month's mean night nearest the median across cells); its position is the cell centre`,
+        envelope: `median and 10th–90th percentile of each month across the ${used.length} distinct grid cells holding the ${points.length} in-range records${hemispheres ? ` on the ${hemispheres.used}ern side of the equator (${hemispheres.north} cells north, ${hemispheres.south} south: the two sides' seasons are not combined)` : ''}; extremes and elevation at the typical cell ${typical.id} (its coldest month's mean night nearest the median across cells${landFraction < 0.5 ? `, though its NASA POWER cell is only ${Math.round(landFraction * 100)}% land` : ''}); its position is the cell centre`,
         elevation: typical.elevationM != null ? `ETOPO 2022, ${Math.round(typical.elevationM)} m (cell mean)` : undefined
       };
       const { extremes, status: extremesStatus } = await extremesAt(typical.lat, typical.lon, typical.elevationM, src);
-      return { status: 'ok', cells: read.length, records: points.length, cell: typical.id, at: { lat: +typical.lat.toFixed(3), lon: +typical.lon.toFixed(3) }, months, p10, p90, annualRain, extremes, extremesStatus, src };
+      return { status: 'ok', cells: used.length, records: points.length, cell: typical.id, at: { lat: +typical.lat.toFixed(3), lon: +typical.lon.toFixed(3) }, months, p10, p90, annualRain, extremes, extremesStatus, ...(hemispheres ? { hemispheres } : {}), landFraction: r2(landFraction), src };
     },
     async at(lat, lon): Promise<Climate> {
       // One point: an envelope of one cell, for the plant page's bench comparison and for tests.
