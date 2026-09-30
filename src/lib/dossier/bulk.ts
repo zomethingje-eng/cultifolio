@@ -432,14 +432,13 @@ export function bulkFetcher(base: JsonFetcher, src: BulkSources, stats = { wcvp:
         stats.media++;
         return { status: 'ok', data: page as unknown as T };
       }
-      // A species the download covers (its occurrence set is in the file) and multimedia.txt has nothing for: the answer
-      // is "no observation photographs", not a miss to fall through to the network. Falling through, and then keeping
-      // the previous GBIF set when offline, kept herbarium sheets from builds before round thirty on every such species
-      // (round thirty-two, 3).
-      if (src.occ?.get(key)) {
-        stats.media++;
-        return { status: 'ok', data: { results: [], endOfRecords: true, count: 0 } as unknown as T };
-      }
+      // A download with a multimedia member is asked for the whole list of names, so for any species built with it,
+      // nothing in the files is the answer: no observation photographs with coordinates. Falling through to the network
+      // instead, and then keeping the previous GBIF set when offline, kept herbarium sheets from builds before round
+      // thirty on 235 species; a first fix asked only for species with an occurrence set, and 1,407 have none (round
+      // thirty-two, 3; round thirty-three).
+      stats.media++;
+      return { status: 'ok', data: { results: [], endOfRecords: true, count: 0 } as unknown as T };
     } else if (src.occ && (m = RE_OCC.exec(url))) {
       const key = Number(m[1]);
       const rows = src.occ.get(key);

@@ -225,10 +225,10 @@ describe('photographs from a DWCA download', () => {
     occ2.seal();
     const none = await adapter(bulkFetcher(async () => { through++; return { status: 'refused', detail: 'offline' }; }, { occ: occ2, media: new MediaIndex(occ2.withMedia) }), 100);
     expect(none.status).toBe('none');
-    // a species the download does not hold at all still goes to the network
+    // a species with no record in the download at all is "none" too: the download was asked for every name (round thirty-three)
     const miss = await adapter(g, 999);
-    expect(miss.status).toBe('refused');
-    expect(through).toBe(1);
+    expect(miss.status).toBe('none');
+    expect(through).toBe(0);
   });
 });
 
