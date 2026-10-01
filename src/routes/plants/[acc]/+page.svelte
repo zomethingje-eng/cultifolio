@@ -274,7 +274,11 @@
     // A change of identity is provenance: the old name goes in the log, and into "name as received" if that was empty (round twenty-three, 3).
     const oldFull = `${a.taxonName}${a.cultivar ? ` '${a.cultivar}'` : ''}`;
     const newFull = `${taxonName}${f.cultivar.trim() ? ` '${f.cultivar.trim()}'` : ''}`;
-    await collection.put('accession', id, { taxonName, taxonKey, cultivar: f.cultivar.trim() || null, nameKind, parentage, nameAsReceived: f.nameAsReceived.trim() || (oldFull !== newFull && !a.nameAsReceived ? oldFull : null), fieldNumber: f.fieldNumber.trim() || null, provenance: f.provenance, acquired: f.acquired || null, sourceFrom: f.sourceFrom.trim() || null, sourceForm: f.sourceForm.trim() || null, price: f.price.trim() || null, locationId: f.locationId ?? null, location: f.locationId ? null : a.location ?? null });
+    // A field the record never had, left on the form's default, is not written: a price edit wrote `nameKind: species`
+    // and `provenance: unknown` on a plant that had neither, two claims the grower never made (round thirty-five, R1-5).
+    const nameKindOut = a.nameKind == null && !hybrid && f.nameKind === kindOf(a) ? null : nameKind;
+    const provenanceOut = a.provenance == null && f.provenance === 'unknown' ? null : f.provenance;
+    await collection.put('accession', id, { taxonName, taxonKey, cultivar: f.cultivar.trim() || null, nameKind: nameKindOut, parentage, nameAsReceived: f.nameAsReceived.trim() || (oldFull !== newFull && !a.nameAsReceived ? oldFull : null), fieldNumber: f.fieldNumber.trim() || null, provenance: provenanceOut, acquired: f.acquired || null, sourceFrom: f.sourceFrom.trim() || null, sourceForm: f.sourceForm.trim() || null, price: f.price.trim() || null, locationId: f.locationId ?? null, location: f.locationId ? null : a.location ?? null });
     const kindWord = nameKind === 'hybrid' ? 'a hybrid' : nameKind === 'cultivar' ? 'a cultivar' : 'a species';
     if (renamed) await collection.addEvent({ acc: id, d: localDate(), t: 'note', note: oldFull !== newFull ? `Renamed from ${oldFull} to ${newFull}${nameKind !== wasKind ? ` (now ${kindWord})` : ''}` : `Now recorded as ${kindWord}`, auto: true });
     if (moved && f.locationId) await collection.addEvent({ acc: id, d: localDate(), t: 'move', note: `to ${collection.locationName(f.locationId)}` });

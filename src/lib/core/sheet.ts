@@ -48,7 +48,7 @@ export interface SheetInput {
   p90?: Pick<Month, 'tmin' | 'dli'>[] | null;
   extremes?: Extremes | null;
   /** Why there are no extremes, when there are none: 'refused' (the source did not answer when the dossier was built) is said as not checked, never as none on file (round sixteen, 7). */
-  extremesStatus?: 'ok' | 'none' | 'refused' | 'skipped' | null;
+  extremesStatus?: 'ok' | 'none' | 'refused' | 'skipped' | 'sea' | null;
   /** Habitat latitude (the map marker's), for the hemisphere. */
   lat?: number | null;
   /** The grower's latitude, if known: the one-sentence shorts print months for that hemisphere. */
@@ -213,7 +213,7 @@ export function coldFloor(m: Month[] | null, ex: Extremes | null, guess: ArchGue
   } else if (m) {
     const i = m.reduce((b, x, j) => (x.tmin < m[b].tmin ? j : b), 0);
     floor = m[i].tmin;
-    quantity = `the coldest month's mean night, ${mon(i + 1)}, in the median year (CHELSA); ${exStatus === 'refused' ? 'the daily extremes were not checked (NASA POWER did not answer when this page was built)' : exStatus === 'skipped' ? 'the daily extremes were not asked for when this page was built' : 'no daily extremes are on file'}`;
+    quantity = `the coldest month's mean night, ${mon(i + 1)}, in the median year (CHELSA); ${exStatus === 'refused' ? 'the daily extremes were not checked (NASA POWER did not answer when this page was built)' : exStatus === 'skipped' ? 'the daily extremes were not asked for when this page was built' : exStatus === 'sea' ? 'the daily extremes were read at a weather cell that is mostly sea and are not used as a floor' : 'no daily extremes are on file'}`;
     quantityShort = `coldest month's mean night, CHELSA`;
   }
   if (floor == null && minC == null) return null;

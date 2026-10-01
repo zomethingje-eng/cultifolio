@@ -2401,3 +2401,21 @@ test('round twenty-nine: a potting is judged by what was in the pot on its day, 
   await expect(page.locator('#se-msg')).toHaveCount(0);
   await expect(page.getByText('grit')).toBeVisible();
 });
+
+test('round thirty-four: a genus address opens the catalogue for a grower with plants, not their own list', async ({ page }) => {
+  await page.goto('/species/copiapoa-cinerea');
+  await page.getByRole('link', { name: 'Add one to my plants' }).click();
+  await addPlant(page);
+  // the front page is the grower's own species now
+  await page.goto('/');
+  await expect(page.getByRole('button', { name: 'Your species' })).toHaveAttribute('aria-current', 'true');
+  // but the genus page's own address (the sitemap's, a shared link's) shows the genus
+  await page.goto('/?by=genus&open=copiapoa');
+  await expect(page).toHaveTitle(/^Copiapoa/);
+  await expect(page.locator('.grow.open', { hasText: 'Copiapoa' })).toBeVisible();
+  await expect(page.locator('a.tile .nm', { hasText: 'Copiapoa cinerea' })).toBeVisible();
+  // and "Your species" is one click away
+  await page.getByRole('button', { name: 'Your species' }).click();
+  await expect(page.locator('a.tile', { hasText: 'Copiapoa cinerea' })).toBeVisible();
+  await expect(page.locator('.grow')).toHaveCount(0);
+});

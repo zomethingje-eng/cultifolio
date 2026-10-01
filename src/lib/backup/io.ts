@@ -120,12 +120,14 @@ export async function restoreBackup(o: Opened, mode: 'merge' | 'replace', onProg
   } catch (e) {
     // Only the pixels whose records did not land: the ingest is not one write (the changes, then the import-day stamps),
     // so a failure after the records are stored must leave their pixels in place (round thirty, R2-2).
-    for (const id of written) if (!collection.photo(id)) await deletePhotoBlobs(id).catch(() => {});
+    for (const id of written) if (!collection.photoKnown(id)) await deletePhotoBlobs(id).catch(() => {});
     throw e;
   }
   // The same after a merge that landed: an older backup carries the pixels of a photograph removed on this device since,
-  // and the fold keeps it removed, so those pixels would be bytes nothing names (round thirty-three, small).
-  for (const id of written) if (!collection.photo(id)) { await deletePhotoBlobs(id).catch(() => {}); photos--; }
+  // and the fold keeps it removed, so those pixels would be bytes nothing names (round thirty-three, small). Removed,
+  // not merely waiting: a photograph a set-aside batch has yet to complete keeps its pixels for the day it does
+  // (round thirty-five, R1-3).
+  for (const id of written) if (collection.photoRemoved(id)) { await deletePhotoBlobs(id).catch(() => {}); photos--; }
   let schemeRestored: NumberingScheme | null = null;
   const fileScheme = o.file.manifest?.scheme;
   const fileHasSetting = o.file.changes.some((c) => c.kind === 'setting' && c.id === NUMBERING_SETTING);

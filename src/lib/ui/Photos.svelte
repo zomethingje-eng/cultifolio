@@ -1,12 +1,13 @@
 <script lang="ts">
   import type { Photo } from '$dossier/schema';
+  import { heroOf } from '$dossier/dedupe';
   import { licenceLabel } from '$core/licence';
   let { photos, name, strip = false }: { photos: Photo[]; name: string; strip?: boolean } = $props();
   // "Wild" is what a source says, not what it leaves unsaid: iNaturalist marks each photograph; Commons and GBIF media
   // carry no flag, so those go unsaid rather than captioned as wild (round thirty, R2-12).
   const wild = $derived(photos.filter((p) => !p.captive));
   const cult = $derived(photos.filter((p) => p.captive));
-  const hero = $derived(wild[0] ?? cult[0]);
+  const hero = $derived(heroOf(photos));
   const rest = $derived(photos.filter((p) => p !== hero));
   let showAll = $state(false);
   const LIMIT = 6;

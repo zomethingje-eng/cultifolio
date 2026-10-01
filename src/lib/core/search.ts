@@ -95,7 +95,7 @@ function rank(p: Prepared<unknown>, qs: string[], match: (q: string, w: string) 
 
 /** The matches for `q`, best first. Empty query: nothing (the caller shows its own default). */
 export function search<T extends Searchable>(prepared: Prepared<T>[], q: string, limit = Infinity): T[] {
-  const qs = words(q);
+  const qs = words(q).filter((w) => !RANK_MARKERS.has(w)); // "var." on a label is not a search word either (round thirty-five, R2-3)
   if (!qs.length) return [];
   const exact = (x: string, w: string) => w.startsWith(x);
   let hits = collect(prepared, qs, exact);

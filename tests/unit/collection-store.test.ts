@@ -104,7 +104,7 @@ describe('every write goes to the vault before memory (finding 6)', () => {
       status: 'growing'
     });
     mem.fail = 'QuotaExceededError';
-    const batch = [remote(Date.now() + 1000, 0, 'phone0000000', 'accession', a.id, 'status', 'dead'), remote(Date.now() + 1000, 1, 'phone0000000', 'accession', 'rnewplant000', 'taxonName', 'Lithops')];
+    const batch = [remote(Date.now() + 1000, 0, 'phone0000000', 'accession', a.id, 'status', 'dead'), remote(Date.now() + 1000, 1, 'phone0000000', 'accession', 'rnewplant000', 'taxonName', 'Lithops'), remote(Date.now() + 1000, 2, 'phone0000000', 'accession', 'rnewplant000', 'status', 'growing')];
     await expect(collection.ingest(batch, 'server')).rejects.toThrow(/Quota/);
     expect(collection.accession(a.id)?.status).toBe('growing');
     expect(collection.accession('rnewplant000')).toBeUndefined();
@@ -346,7 +346,7 @@ describe('round nine', () => {
   it('a record that arrived in a file counts from the day it arrived, whatever its changes are stamped (round nine, 3)', async () => {
     const { collection } = await fresh('testdevice');
     const old = Date.now() - 500 * 86_400_000;
-    await collection.ingest([remote(old, 0, 'v2import', 'accession', 'A-1', 'acc', 'A-1'), remote(old, 1, 'v2import', 'accession', 'A-1', 'taxonName', 'Lithops')]);
+    await collection.ingest([remote(old, 0, 'v2import', 'accession', 'A-1', 'acc', 'A-1'), remote(old, 1, 'v2import', 'accession', 'A-1', 'taxonName', 'Lithops'), remote(old, 2, 'v2import', 'accession', 'A-1', 'status', 'growing')]);
     expect(collection.madeOn('accession', 'A-1')).toBe(localDate());
     const again = (await reload()) as typeof collection;
     expect(again.madeOn('accession', 'A-1')).toBe(localDate()); // kept across a reload
@@ -357,7 +357,7 @@ describe('round ten', () => {
   it('the import day is a field on the record, so a second device that receives the log counts from the same day (round ten, 3)', async () => {
     const { collection, mem: first } = await fresh('testdevice');
     const old = Date.now() - 500 * 86_400_000;
-    await collection.ingest([remote(old, 0, 'v2import', 'accession', 'A-1', 'acc', 'A-1'), remote(old, 1, 'v2import', 'accession', 'A-1', 'taxonName', 'Lithops')]);
+    await collection.ingest([remote(old, 0, 'v2import', 'accession', 'A-1', 'acc', 'A-1'), remote(old, 1, 'v2import', 'accession', 'A-1', 'taxonName', 'Lithops'), remote(old, 2, 'v2import', 'accession', 'A-1', 'status', 'growing')]);
     const imported = [...first.changes.values()].filter((c) => c.field === 'importedOn');
     expect(imported).toHaveLength(1);
     expect(imported[0].value).toBe(localDate());
@@ -467,7 +467,7 @@ describe('round thirteen', () => {
     // Two tabs of this device (the device id with two tab tags) stamped two fields of one record at the same wall and count
     // while the clock was three months fast: applied, since they are this device's own, and never followed by the clock.
     const wall = Date.now() + 90 * 86_400_000;
-    await collection.ingest([remote(wall, 3, 'testdevicea1b2', 'accession', 'X-1', 'notes', 'n1'), remote(wall, 3, 'testdevicec3d4', 'accession', 'X-1', 'price', 'p1'), remote(wall, 4, 'testdevicea1b2', 'accession', 'X-1', 'taxonName', 'Lithops')], 'server');
+    await collection.ingest([remote(wall, 3, 'testdevicea1b2', 'accession', 'X-1', 'notes', 'n1'), remote(wall, 3, 'testdevicec3d4', 'accession', 'X-1', 'price', 'p1'), remote(wall, 4, 'testdevicea1b2', 'accession', 'X-1', 'taxonName', 'Lithops'), remote(wall, 5, 'testdevicea1b2', 'accession', 'X-1', 'status', 'growing')], 'server');
     await collection.put('accession', 'X-1', { notes: 'n2' }); // stepped past notes' stamp: wall, count 4, this writer
     await collection.put('accession', 'X-1', { price: 'p2' }); // stepped past price's stamp: the same wall and count, the same writer, unless the store is checked
     expect(collection.lastWriteError).toBeNull();
@@ -516,6 +516,7 @@ describe('round sixteen', () => {
     put(remote(wall + 5000, 0, 'testdevice00', 'accession', 'A-2', 'importedOn', '2026-09-20'));
     // and a plant removed and then edited on purpose, which is a real revival and stays
     put(remote(wall, 0, 'bbbbbbbbbbbb', 'accession', 'B-1', 'taxonName', 'Lithops'));
+    put(remote(wall, 2, 'bbbbbbbbbbbb', 'accession', 'B-1', 'status', 'growing'));
     put(remote(wall, 1, 'bbbbbbbbbbbb', 'accession', 'B-1', '_deleted', true));
     put(remote(wall + 5000, 0, 'bbbbbbbbbbbb', 'accession', 'B-1', 'notes', 'back'));
     const before = mem.changes.size;

@@ -87,6 +87,32 @@ describe('GBIF occurrence download', () => {
     expect(idx.get(101)).toHaveLength(1);
     expect(idx.get(999)).toBeUndefined();
   });
+  it('carries the decimal places as the file wrote them, and a stated precision: "-33.120" is three, which Number() forgets (round thirty-five, R2-2)', async () => {
+    const h2 = occHeader('gbifID\tdecimalLatitude\tdecimalLongitude\tspeciesKey\tbasisOfRecord\tlicense\tcoordinatePrecision');
+    const a = parseOccRow(h2, '20\t-33.120\t18.420\t100\tHUMAN_OBSERVATION\tCC_BY_4_0\t')!;
+    expect(a).toMatchObject({ decimalLatitude: -33.12, coordDecimals: 3, coordinatePrecision: undefined });
+    const b = parseOccRow(h2, '21\t-33.1\t18.42\t100\tHUMAN_OBSERVATION\tCC_BY_4_0\t0.0001')!;
+    expect(b).toMatchObject({ coordDecimals: 1, coordinatePrecision: 0.0001 });
+    const idx = new OccIndex(10);
+    idx.add(a); idx.add(b); idx.seal();
+    expect(idx.get(100)!.map((o) => [o.key, o.coordDecimals, o.coordinatePrecision])).toEqual([[20, 3, undefined], [21, 1, 0.0001]]);
+    // and the build admits both to the climate: three written decimals, or a stated precision of 0.001° or finer
+    const { buildDossier } = await import('$dossier/build');
+    const { fixtureFetcher } = await import('$dossier/fetch');
+    const { copiapoa } = await import('../../fixtures/upstream');
+    const table = copiapoa();
+    const occUrl = Object.keys(table).find((k) => k.includes('occurrence/search') && k.includes('hasCoordinate'))!;
+    const page = table[occUrl] as { results: Array<Record<string, unknown>> };
+    const base = page.results[0];
+    page.results = [
+      { ...base, key: 9201, decimalLatitude: -25.12, decimalLongitude: -70.42, coordinateUncertaintyInMeters: undefined, basisOfRecord: 'HUMAN_OBSERVATION', coordDecimals: 3, license: 'http://creativecommons.org/licenses/by/4.0/legalcode' },
+      { ...base, key: 9202, decimalLatitude: -25.3, decimalLongitude: -70.5, coordinateUncertaintyInMeters: undefined, basisOfRecord: 'HUMAN_OBSERVATION', coordinatePrecision: 0.0001, license: 'http://creativecommons.org/licenses/by/4.0/legalcode' },
+      { ...base, key: 9203, decimalLatitude: -25.4, decimalLongitude: -70.6, coordinateUncertaintyInMeters: undefined, basisOfRecord: 'HUMAN_OBSERVATION', license: 'http://creativecommons.org/licenses/by/4.0/legalcode' }
+    ];
+    const r = await buildDossier('Copiapoa cinerea', { fetcher: fixtureFetcher(table), builtBy: 'node', quick: true });
+    if (!r.ok) throw new Error(r.reason);
+    expect(r.dossier.occurrences.nVague).toBe(1); // only the one-decimal record with nothing stated
+  });
 });
 
 describe('the sample', () => {

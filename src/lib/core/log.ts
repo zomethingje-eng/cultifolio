@@ -97,8 +97,14 @@ export const FIELD_TYPES: Record<Kind, Record<string, ValueType>> = {
  * text (a v2 file's price of 12, written through before round twenty-eight) becomes its text. Nothing else is changed;
  * the same object comes back when there is nothing to mend (round twenty-nine, 2).
  */
-/** The v2 importer's method words (a label lower-cased, its last "s" cut, and the label itself), by the app's word. */
-const OLD_METHODS: Record<string, string> = { seeds: 'seed', 'leaf cutting': 'leaf', 'leaf cuttings': 'leaf', 'stem cutting': 'cutting', 'stem cuttings': 'cutting', cuttings: 'cutting', offsets: 'offset', 'offset / pup': 'offset', 'offsets / pups': 'offset', divisions: 'division', grafts: 'graft', bulbils: 'bulbil' };
+/**
+ * The v2 importer's method words before round twenty-eight: it wrote a label lower-cased with one trailing "s" cut
+ * (`label.toLowerCase().replace(/s$/, '')`), so "Offsets / pups" was stored as "offsets / pup", which is the one
+ * spelling the hand-written list of round thirty-three missed (round thirty-five, R1-1). The table is made by that
+ * rule over the labels the v2 app had, and the labels themselves, so the test checks what was written.
+ */
+const V2_METHOD_LABELS: Array<[string, string]> = [['Seeds', 'seed'], ['Seed', 'seed'], ['Cuttings', 'cutting'], ['Stem cuttings', 'cutting'], ['Offsets / pups', 'offset'], ['Offsets', 'offset'], ['Leaf cuttings', 'leaf'], ['Division', 'division'], ['Divisions', 'division'], ['Bulbils / bulblets', 'bulbil'], ['Bulbils', 'bulbil'], ['Grafts', 'graft']];
+export const OLD_METHODS: Record<string, string> = Object.fromEntries(V2_METHOD_LABELS.flatMap(([label, k]) => [[label.toLowerCase(), k], [label.toLowerCase().replace(/s$/, ''), k]]));
 /** The provenance text the v2 importer passed through, by the app's word: only these, exactly. */
 const OLD_PROVENANCE: Record<string, string> = { 'wild collected': 'wild', 'wild-collected': 'wild', 'habitat collected': 'wild', 'habitat-collected': 'wild', 'ex habitat': 'f1', 'raised from wild-collected seed': 'f1', 'seed-grown from wild-collected seed': 'f1', cultivated: 'fn', 'nursery grown': 'fn', 'nursery-grown': 'fn', vegetative: 'veg', 'vegetatively propagated': 'veg', 'not known': 'unknown', '?': 'unknown' };
 
@@ -132,11 +138,13 @@ export function mendChange(c: Change): Change {
  * what it had (round thirty, 1).
  */
 export const REQUIRED_FIELDS: Record<Kind, readonly string[]> = {
-  accession: ['taxonName'],
-  sowing: ['taxonName', 'method', 'sown'],
+  // The fields the types in db/types.ts do not mark optional: round thirty-three had narrowed this to what the pages
+  // threw on, and a batch without its count folded live and walked past the pot guard (round thirty-five, R2-1).
+  accession: ['taxonName', 'status'],
+  sowing: ['taxonName', 'method', 'sown', 'count', 'status'],
   location: ['name'],
   event: ['acc', 'd', 't'],
-  photo: ['d'],
+  photo: ['d', 'w', 'h', 'bytes'],
   taxon: ['name'],
   setting: []
 };

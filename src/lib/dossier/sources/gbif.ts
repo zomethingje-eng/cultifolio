@@ -128,6 +128,10 @@ export interface GbifOccurrence {
   degreeOfEstablishment?: string;
   /** Metres; a record vaguer than the climate grid (5 km) is kept on the map but not read for climate. */
   coordinateUncertaintyInMeters?: number;
+  /** GBIF's stated precision of the coordinates, in degrees (0.001 is three decimals), when the publisher gave one. */
+  coordinatePrecision?: number;
+  /** The decimal places the coordinates were written with, the fewer of the two, read from the download's text (a JSON number loses a trailing zero: round thirty-five, R2-2). */
+  coordDecimals?: number;
   /** Set on records served from a GBIF occurrence download: its DOI, which the dossier cites. */
   downloadDoi?: string;
   /** DWCA downloads: 'StillImage' when the record carries images (their rows are in multimedia.txt). */

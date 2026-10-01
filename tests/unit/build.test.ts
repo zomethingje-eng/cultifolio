@@ -162,7 +162,7 @@ describe('photographs from the download', () => {
     expect(fresh[0].thumb).toBe('https://inaturalist-open-data.s3.amazonaws.com/photos/99/medium.jpg');
     expect(fresh[0].attribution).toBe('A, CC BY, iNaturalist via GBIF');
     expect(fresh[1].thumb).toMatch(/^https:\/\/api\.gbif\.org\/v1\/image\/cache\/fit-in\/400x\//);
-    const prev = [{ src: 'inat', id: 'i' }, { src: 'commons', id: 'c' }, { src: 'gbif', id: 'old' }] as never[];
+    const prev = [{ src: 'inat', id: 'i', url: 'https://inaturalist-open-data.s3.amazonaws.com/photos/7/original.jpg' }, { src: 'commons', id: 'c', url: 'https://upload.wikimedia.org/c.jpg' }, { src: 'gbif', id: 'old', url: 'https://example.org/old.jpg' }] as never[];
     const merged = mergeGbifPhotos(prev, fresh);
     expect(merged.map((p) => p.id)).toEqual(['i', 'c', '1:0', '2:0']);
     expect(mergeGbifPhotos(prev, [])).toBe(prev);

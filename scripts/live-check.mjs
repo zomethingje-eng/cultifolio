@@ -7,7 +7,7 @@
  *   node scripts/live-check.mjs https://x.dev   checks another origin (a workers.dev preview); LIVE_CHECK_ORIGIN in the
  *                                               environment does the same for `npm run deploy` on another deployment
  *
- * Exits 1 on the first failure, with the request and what came back. `LIVE_CHECK_SKIP=names,forecast,thumbs` skips the checks
+ * Exits 1 on the first failure, with the request and what came back. `LIVE_CHECK_SKIP=names,forecast,thumbs,weight` skips the checks
  * that need an upstream (a local `wrangler dev` with no GBIF credentials) and `LIVE_CHECK_FIXTURE_OK=1` accepts the fixture
  * corpus; neither is ever set for the real site. Nothing here creates
  * or changes anything on the server: every request is a GET, apart from one POST to the vault route with a body that
@@ -150,6 +150,27 @@ if (!skip.has('thumbs') && !process.env.LIVE_CHECK_FIXTURE_OK) {
     if (t.status !== 200 || !type.startsWith('image/')) fail(`the tile thumbnail for ${e.name} (${e.thumb}) answered ${t.status} ${type}: the front page shows "photograph did not load" for every tile on ${host}`);
     ok(`tile thumbnail on ${host}: ${t.status} ${type}`);
   }
+}
+
+// The front page's first-screen photographs, by weight: every image the server-rendered home page names (the featured
+// strip and the group thumbnails) is fetched, and the check fails on any one over 300 kB or on more than 1.5 MB in all.
+// The daily rotation once put a four-megabyte animated GIF in the strip and a phone's home page at seven megabytes
+// (round thirty-five, R2-7). The fixture corpus has no photographs to weigh.
+if (!skip.has('weight') && !process.env.LIVE_CHECK_FIXTURE_OK) {
+  const r = await get('/', { headers: { accept: 'text/html' } });
+  if (r.status !== 200) fail('/ for the weight check', r);
+  const srcs = [...new Set([...r.text.matchAll(/<img[^>]+src="([^"]+)"/g)].map((m) => m[1]).filter((u) => /^https?:\/\//.test(u)))];
+  if (!srcs.length) fail('the home page names no photographs to weigh');
+  let total = 0;
+  for (const u of srcs) {
+    const h = await fetch(u, { method: 'HEAD', headers: { 'user-agent': ua } }).catch(() => null);
+    const len = Number(h?.headers.get('content-length') ?? 0);
+    if (!h || h.status !== 200) fail(`a home-page photograph did not answer: ${u} (${h?.status ?? 'no response'})`);
+    if (len > 300 * 1024) fail(`a home-page photograph weighs ${(len / 1024).toFixed(0)} kB, over the 300 kB a tile may: ${u}`);
+    total += len;
+  }
+  if (total > 1.5 * 1024 * 1024) fail(`the home page's ${srcs.length} photographs weigh ${(total / 1048576).toFixed(2)} MB together, over 1.5 MB`);
+  ok(`home-page photographs: ${srcs.length}, ${(total / 1024).toFixed(0)} kB together, none over 300 kB`);
 }
 
 // The vault route refuses a body that is not an object with a 400, never a 500 (round sixteen, 16). Creates nothing.

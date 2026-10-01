@@ -87,15 +87,15 @@ describe('a displaced change leaves the screen (round seventeen, 3)', () => {
     await collection.load();
     const a = ch(0, 'ghost', 'taxonName', 'Aloe');
     const b = ch(0, 'kept', 'taxonName', 'Lithops'); // ranks higher (its id sorts later)
-    await collection.ingest([a], 'server', { repair: false });
+    await collection.ingest([a, ch(2, 'ghost', 'status', 'growing'), ch(3, 'kept', 'status', 'growing')], 'server', { repair: false });
     expect(collection.accessions.map((r) => r.id)).toEqual(['ghost']);
     await collection.ingest([b], 'server', { repair: false });
-    expect(collection.accessions.map((r) => r.id)).toEqual(['kept']); // the ghost is gone without a reload
-    expect((await allChanges()).map((c) => c.id)).toEqual(['kept']);
+    expect(collection.accessions.map((r) => r.id)).toEqual(['kept']); // the ghost is gone without a reload (its name displaced, it is not whole)
+    expect((await allChanges()).filter((c) => c.field === 'taxonName').map((c) => c.id)).toEqual(['kept']);
     const c = ch(1, 'one', 'taxonName', 'Conophytum');
     const d = ch(1, 'two', 'taxonName', 'Crassula');
     const out = await appendChanges([c, d], true);
     expect(out.kept.map((x) => x.id)).toEqual(['two']); // reduced to one per stamp by rank, not by order
-    expect((await allChanges()).map((x) => x.id).sort()).toEqual(['kept', 'two']);
+    expect((await allChanges()).filter((x) => x.field === 'taxonName').map((x) => x.id).sort()).toEqual(['kept', 'two']);
   });
 });

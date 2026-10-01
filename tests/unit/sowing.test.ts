@@ -99,6 +99,17 @@ describe('sowings', () => {
     expect(made[0].sourceFrom).toBe(`own plant ${accNo(mother)}`);
     expect(made[0].sourceForm).toBe('cutting');
   });
+  it('a batch under a method this build does not know pots up with an unknown provenance and no source form, never as seed (round thirty-five, R1-1)', async () => {
+    const { collection } = await import('$lib/db/collection.svelte');
+    await collection.load();
+    const s = await collection.addSowing({ taxonName: 'Lachenalia viridiflora', method: 'seed', sown: '2026-09-01', count: 6, provenance: 'wild' });
+    await collection.put('sowing', s.id, { method: 'twin-scaling' }); // a newer build's word, pulled by this one
+    await collection.addEvent({ acc: s.id, d: '2026-10-01', t: 'germinate', n: 4 });
+    const made = await collection.potUp(s.id, 2, { date: '2026-11-01' });
+    expect(made[0].provenance).toBe('unknown'); // not "f1 from wild-collected seed": the method says nothing this build can read
+    expect(made[0].sourceForm).toBeNull();
+    expect(collection.sowing(s.id)?.method).toBe('twin-scaling');
+  });
 });
 
 describe('identity is not the number', () => {

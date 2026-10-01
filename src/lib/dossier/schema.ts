@@ -5,6 +5,7 @@
  * makes forgetting impossible: a dossier that does not parse is not served.
  */
 import { mendGbifThumb } from './md5';
+import { dedupePhotos } from './dedupe';
 import * as v from 'valibot';
 
 /** v2 (September 2026): the habitat climate is an envelope across every in-range record's cell, not one point. */
@@ -142,6 +143,16 @@ const Year = v.pipe(v.array(MonthRow), v.length(12));
  * sheet reads; `p10`/`p90` are the range the species is recorded in. Extremes
  * and elevation are read at one cell, the typical one, and `at` says which.
  */
+const Extremes = v.object({
+  years: v.number(),
+  minAbs: v.number(),
+  minP01: v.number(),
+  maxP99: v.number(),
+  frostDaysPerYear: v.number(),
+  frostNights: v.optional(v.number()),
+  lapseAppliedM: v.number()
+});
+
 export const Climate = v.variant('status', [
   v.object({
     status: v.literal('ok'),
@@ -157,24 +168,20 @@ export const Climate = v.variant('status', [
     p90: Year,
     /** 10th and 90th percentile of the per-cell annual rain totals: a range of years cells actually have, unlike a sum of monthly percentiles. */
     annualRain: v.optional(v.object({ p10: v.number(), p90: v.number() })),
-    extremes: v.optional(
-      v.object({
-        years: v.number(),
-        minAbs: v.number(),
-        minP01: v.number(),
-        maxP99: v.number(),
-        frostDaysPerYear: v.number(),
-        frostNights: v.optional(v.number()),
-        lapseAppliedM: v.number()
-      })
-    ),
-    /** Whether the daily extremes were read: 'refused' is NASA POWER not answering, which is not the same as no series (round sixteen, 7). */
-    extremesStatus: v.optional(v.picklist(['ok', 'none', 'refused', 'skipped'])),
+    extremes: v.optional(Extremes),
+    /**
+     * The daily extremes read at a POWER cell that is mostly sea (`landFraction` under a half): set aside here by the
+     * parser, not shown as a cold floor, since a figure the page itself says is the sea's is nearer a refusal than a
+     * measurement (round thirty-five, R1-11). The notice under the cold floor still says what was read there.
+     */
+    extremesSea: v.optional(Extremes),
+    /** Whether the daily extremes were read: 'refused' is NASA POWER not answering, which is not the same as no series (round sixteen, 7); 'sea' is read at a cell that is mostly sea and set aside. */
+    extremesStatus: v.optional(v.picklist(['ok', 'none', 'refused', 'skipped', 'sea'])),
     /**
      * Records on both sides of the equator in strength: the envelope is the larger side's cells alone, since a January
      * median over both would be a month no place has; the other side's count is kept so the page can say so (round thirty-one, 1).
      */
-    hemispheres: v.optional(v.object({ north: v.number(), south: v.number(), used: v.picklist(['north', 'south']) })),
+    hemispheres: v.optional(v.object({ north: v.number(), south: v.number(), used: v.picklist(['north', 'south']), equatorial: v.optional(v.number()) })),
     /** How much of the typical cell's NASA POWER cell (0.5°) is land, by sampling the climate grid: a figure read at a cell that is mostly sea is said to be (round thirty-one, 2). */
     landFraction: v.optional(v.number()),
     /** In-range cells left out because the elevation layer holds no land in them: a record placed at sea (round thirty-one, corpus). */
@@ -239,10 +246,14 @@ const webUrl = (u: string | undefined): string | undefined => (u && /^https?:\/\
 
 /** Every address in a dossier that a page turns into a link, scrubbed to web addresses; a photograph whose own address is not one is dropped. */
 export function safeUrls(d: Dossier): Dossier {
+  // Extremes read at a POWER cell that is mostly sea are set aside (round thirty-five, R1-11): the cold floor then comes
+  // from the range's coldest mean night, and the page says what the sea cell gave.
+  const climate = d.climate.status === 'ok' && d.climate.extremes && d.climate.landFraction != null && d.climate.landFraction < 0.5 ? { ...d.climate, extremes: undefined, extremesSea: d.climate.extremes, extremesStatus: 'sea' as const } : d.climate;
   return {
     ...d,
+    climate,
     summary: d.summary ? { ...d.summary, url: webUrl(d.summary.url) ?? '' } : d.summary,
-    photos: d.photos.filter((p) => webUrl(p.url) && webUrl(p.thumb)).map((p) => ({ ...p, thumb: mendGbifThumb(p.thumb, p.id, p.url), page: webUrl(p.page) })),
+    photos: dedupePhotos(d.photos.filter((p) => webUrl(p.url) && webUrl(p.thumb)).map((p) => ({ ...p, thumb: mendGbifThumb(p.thumb, p.id, p.url), page: webUrl(p.page) }))),
     // A specimen record under DiSSCo's DOI prefix is not a paper (round thirty-one, 6): dropped here as well as at the build, so dossiers built before the rule show none.
     literature: d.literature.filter((p) => !/^(https?:\/\/doi\.org\/)?10\.3535\//i.test(p.doi ?? '')).map((p) => ({ ...p, url: webUrl(p.url) })),
     links: Object.fromEntries(Object.entries(d.links).filter(([, u]) => webUrl(u)))

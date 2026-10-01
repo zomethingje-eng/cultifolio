@@ -76,7 +76,9 @@ export async function synonymOf(platform: Platform, fetch: Fetch, slug: string):
   // An exact match, or a fuzzy one the service is sure of and in the same genus: a typo, or a name the backbone lacks,
   // can fuzzy-match a neighbouring synonym, and the page would then state "X is a synonym" as fact (round thirty-three, 12).
   const matchType = String(body.matchType ?? '');
-  const matched = String(body.canonicalName ?? name);
+  // The name as the reader wrote it when the match is exact (the backbone's canonical form drops "var.", and the page
+  // then could not find the name among the species' own); the backbone's spelling when the match corrected one.
+  const matched = matchType === 'EXACT' ? name : String(body.canonicalName ?? name);
   if (matchType !== 'EXACT' && !(matchType === 'FUZZY' && Number(body.confidence ?? 0) >= 90 && matched.split(' ')[0] === name.split(' ')[0])) return null;
   const acceptedName = String(body.species ?? body.canonicalName ?? '');
   if (!acceptedName) return null;

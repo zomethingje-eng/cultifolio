@@ -5,7 +5,7 @@
   import { browser } from '$app/environment';
   import { page } from '$app/state';
   import { accNo } from '$lib/db/types';
-  import { photoAt, srcsetOf } from '$dossier/photo-size';
+  import { photoAt } from '$dossier/photo-size';
   import { entriesFor } from '$lib/ui/index.svelte';
   import PageHead from '$lib/ui/PageHead.svelte';
   import { collection } from '$lib/db/collection.svelte';
@@ -141,7 +141,12 @@
   const mine = $derived(collection.ready ? collection.mySpecies : new Map<string, MySpecies>());
   const hasMine = $derived(mine.size > 0);
   // The page is a switch: your species when you have any, the catalogue otherwise or when you ask to browse it.
-  let browsing = $state(false);
+  // A link that names a group, a grouping or a letter (the genus pages' canonical addresses, the sitemap's) opens the
+  // catalogue whatever the collection holds: a grower following `/?by=genus&open=copiapoa` got their own species
+  // under a title that said Copiapoa (round thirty-four, 1).
+  // svelte-ignore state_referenced_locally
+  let browsing = $state(data.browse);
+  $effect(() => { if (data.browse) browsing = true; });
   const yourView = $derived(hasMine && !browsing);
   // The hint says "your species" is coming; hold the catalogue back until the collection says which view this is.
   const settling = $derived(expectMine && !collection.ready);
@@ -261,7 +266,8 @@
     <div class="strip">
       {#each data.featured as c (c.slug)}
         <a class="ftile" href="/species/{c.slug}">
-          <img src={c.thumb} srcset={srcsetOf(c.thumb, ['small', 'medium'])} sizes="150px" width="500" height="500" alt="" loading="lazy" onerror={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = 'hidden')} />
+          <!-- One size by surface, not by pixel density: a 150 px tile at `small` (240 px), never `medium`, which a phone's density promoted every tile to and made the phone's home page seven megabytes (round thirty-five, R2-7). -->
+          <img src={photoAt(c.thumb, 'small')} width="240" height="240" alt="" loading="lazy" onerror={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = 'hidden')} />
           <span class="fnm"><SpeciesName name={c.name} /></span>
           {#if c.common}<span class="fcom">{c.common}</span>{/if}
         </a>
@@ -400,7 +406,7 @@
       {#each visibleRows as r, i (r.id)}
         {#if r.letter && (i === 0 || data.rows[start + i - 1].letter !== r.letter)}<h2 class="letter" id="l-{r.letter}">{r.letter}</h2>{/if}
         <a class="grow" class:open={r.id === data.open} id="g-{r.id}" href={rowHref(r.id)} data-sveltekit-noscroll aria-expanded={r.id === data.open}>
-          {#if r.map}<div class="gmap">{@html r.map}</div>{:else if r.thumb}<div class="gthumb"><img src={photoAt(r.thumb, 'small')} srcset={srcsetOf(r.thumb, ['square', 'small'])} sizes="56px" width="56" height="56" alt="" loading="lazy" onerror={(e) => { const im = e.currentTarget as HTMLImageElement; im.remove(); }} /></div>{:else}<div class="gthumb mono" aria-hidden="true">{r.label[0] ?? ''}</div>{/if}
+          {#if r.map}<div class="gmap">{@html r.map}</div>{:else if r.thumb}<div class="gthumb"><img src={photoAt(r.thumb, 'square')} width="56" height="56" alt="" loading="lazy" onerror={(e) => { const im = e.currentTarget as HTMLImageElement; im.remove(); }} /></div>{:else}<div class="gthumb mono" aria-hidden="true">{r.label[0] ?? ''}</div>{/if}
           <div class="gtx">
             <span class="gname" class:sci={data.by === 'genus'}>{r.label}</span>
             {#if r.sub}<span class="d">{r.sub}</span>{/if}

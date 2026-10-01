@@ -7,6 +7,8 @@
  * other section degrades independently and says so.
  */
 import { gbifThumb } from './md5';
+import { dedupePhotos } from './dedupe';
+export { dedupePhotos, inatPhotoId } from './dedupe';
 import type { JsonFetcher } from './fetch';
 import * as gbif from './sources/gbif';
 import { CULTIVATED_RE, type OccMedia } from './sources/gbif';
@@ -86,8 +88,9 @@ export function photosFromMedia(rows: OccMedia[]): Photo[] {
  */
 export function mergeGbifPhotos(prev: Photo[], fresh: Photo[]): Photo[] {
   if (!fresh.length) return prev;
-  return [...prev.filter((p) => p.src !== 'gbif'), ...fresh];
+  return dedupePhotos([...prev.filter((p) => p.src !== 'gbif'), ...fresh]);
 }
+
 
 export async function buildDossier(nameOrKey: string | number, o: BuildOptions): Promise<BuildResult> {
   const f = o.fetcher;
@@ -253,10 +256,13 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
       // observation with coordinates to three decimals or better (about a hundred metres), the way a phone records them;
       // a herbarium sheet placed at a locality's centre with no figure stays out, as the de-duplication above already
       // treats it (round thirty, R2-11). Takes effect when the corpus is next built.
-      // The decimals are counted on the coordinate as the record gives it, not after the rounding to three places
-      // above, which drops a trailing zero and made −33.120 two decimals (round thirty-three, 9).
+      // The decimals are counted as the record wrote them: the download's text keeps a trailing zero ("-33.120" is
+      // three) and the parser carries the count; a JSON number from the API has lost it, so the count from the number
+      // is a floor, never an overstatement (round thirty-three, 9; round thirty-five, R2-2). A publisher's stated
+      // coordinatePrecision of 0.001° or finer counts the same as three decimals.
       const decimals = (x: number) => (String(x).split('.')[1] ?? '').replace(/e.*$/i, '').length;
-      const precise = r.coordinateUncertaintyInMeters == null ? r.basisOfRecord === 'HUMAN_OBSERVATION' && decimals(r.decimalLatitude!) >= 3 && decimals(r.decimalLongitude!) >= 3 : r.coordinateUncertaintyInMeters <= 10_000;
+      const written = r.coordDecimals ?? Math.min(decimals(r.decimalLatitude!), decimals(r.decimalLongitude!));
+      const precise = r.coordinateUncertaintyInMeters == null ? r.basisOfRecord === 'HUMAN_OBSERVATION' && (written >= 3 || (r.coordinatePrecision != null && r.coordinatePrecision <= 0.001)) : r.coordinateUncertaintyInMeters <= 10_000;
       if (precise) forClimate.push([lat, lon]);
       else nVague++;
     }
@@ -360,6 +366,8 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     if (m.status === 'ok') photos.push(...photosFromMedia(m.data));
   }
 
+  const photosOut = dedupePhotos(photos);
+
   /* ---- 7. Literature (not load-bearing) ---- */
   let papers: Dossier['literature'] = [];
   if (!o.quick && !skip('openalex')) {
@@ -408,7 +416,7 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     },
     centroid,
     climate,
-    photos,
+    photos: photosOut,
     literature: papers,
     links,
     upstream

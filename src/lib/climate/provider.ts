@@ -186,7 +186,7 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
       if (minor >= 3 && minor >= 0.2 * sided) {
         const useNorth = northPole.length >= southPole.length;
         used = read.filter((c) => (useNorth ? c.lat > -10 : c.lat < 10));
-        hemispheres = { north: northPole.length, south: southPole.length, used: useNorth ? 'north' : 'south' };
+        hemispheres = { north: northPole.length, south: southPole.length, used: useNorth ? 'north' : 'south', equatorial: read.length - sided }; // the cells within 10° of the equator, which stay in (round thirty-five, R2-5)
       }
       const records = used.reduce((a, c) => a + c.n, 0); // the records in the cells the envelope reads, not every in-range record (round thirty-three, 4)
       const years = used.map((c) => c.months);

@@ -172,10 +172,15 @@ export function parseOccRow(h: string[], line: string): GbifOccurrence & { speci
   const lat = Number(g.decimalLatitude), lon = Number(g.decimalLongitude);
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
   const unc = Number(g.coordinateUncertaintyInMeters);
+  const prec = Number(g.coordinatePrecision);
+  // The decimal places as the download writes them, before Number() loses a trailing zero: "-33.120" is three (round thirty-five, R2-2).
+  const dec = (x: string) => (x.trim().split('.')[1] ?? '').replace(/e.*$/i, '').length;
   return {
     key: Number(g.gbifID),
     decimalLatitude: lat,
     decimalLongitude: lon,
+    coordDecimals: Math.min(dec(g.decimalLatitude), dec(g.decimalLongitude)),
+    coordinatePrecision: Number.isFinite(prec) && prec > 0 ? prec : undefined,
     year: g.year ? Number(g.year) : undefined,
     countryCode: g.countryCode || undefined,
     basisOfRecord: g.basisOfRecord || undefined,
@@ -221,7 +226,7 @@ export function idHash(id: number): number {
  * only species in `wanted` (when given) are kept at all, and a kept row is a
  * flat array with its strings interned, about a tenth of an object per row.
  */
-type Row = [h: number, key: number, lat: number, lon: number, year: number, cc: string, basis: string, lic: string, ds: string, est: string, unc: number];
+type Row = [h: number, key: number, lat: number, lon: number, year: number, cc: string, basis: string, lic: string, ds: string, est: string, unc: number, dec: number, prec: number];
 
 export class OccIndex {
   private by = new Map<number, Row[]>();
@@ -274,7 +279,7 @@ export class OccIndex {
       if (!this.isWanted(k)) continue;
       if (h >= (this.worst.get(k) ?? Infinity)) continue;
       const arr = this.by.get(k) ?? [];
-      arr.push([h, o.key, o.decimalLatitude ?? NaN, o.decimalLongitude ?? NaN, o.year ?? 0, this.intern(o.countryCode), this.intern(o.basisOfRecord), this.intern(o.license), this.intern(o.datasetKey), this.intern(o.establishmentMeans), o.coordinateUncertaintyInMeters ?? 0]);
+      arr.push([h, o.key, o.decimalLatitude ?? NaN, o.decimalLongitude ?? NaN, o.year ?? 0, this.intern(o.countryCode), this.intern(o.basisOfRecord), this.intern(o.license), this.intern(o.datasetKey), this.intern(o.establishmentMeans), o.coordinateUncertaintyInMeters ?? 0, o.coordDecimals ?? -1, o.coordinatePrecision ?? 0]);
       if (arr.length > this.cap * 1.25) this.trim(k, arr);
       this.by.set(k, arr);
     }
@@ -306,6 +311,8 @@ export class OccIndex {
       datasetKey: r[8] || undefined,
       establishmentMeans: r[9] || undefined,
       coordinateUncertaintyInMeters: r[10] || undefined,
+      coordDecimals: r[11] >= 0 ? r[11] : undefined,
+      coordinatePrecision: r[12] || undefined,
       downloadDoi: this.doi
     }));
   }

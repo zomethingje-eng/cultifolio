@@ -68,7 +68,7 @@ const t = (n: number) => `${String(1700000000000 + n).padStart(13, '0')}-0000-de
 const c = (n: number, kind: Change['kind'], id: string, field: string, value: unknown): Change => ({ t: t(n), kind, id, field, value });
 const jpg = (s: string) => new Uint8Array([0xff, 0xd8, 0xff, 0xe0, ...new TextEncoder().encode(s)]);
 
-const fileLog: Change[] = [c(1, 'accession', 'r1', 'taxonName', 'Copiapoa cinerea'), c(2, 'accession', 'r1', 'status', 'growing'), c(3, 'photo', 'p1', 'acc', 'r1'), c(4, 'photo', 'p1', 'd', '2026-09-02'), c(5, 'photo', 'p2', 'acc', 'r1'), c(6, 'photo', 'p2', 'd', '2026-09-03')];
+const fileLog: Change[] = [c(1, 'accession', 'r1', 'taxonName', 'Copiapoa cinerea'), c(2, 'accession', 'r1', 'status', 'growing'), c(3, 'photo', 'p1', 'acc', 'r1'), c(4, 'photo', 'p1', 'd', '2026-09-02'), c(5, 'photo', 'p2', 'acc', 'r1'), c(6, 'photo', 'p2', 'd', '2026-09-03'), ...(['p1', 'p2'] as const).flatMap((id, i) => [c(7 + i * 3, 'photo', id, 'w', 1), c(8 + i * 3, 'photo', id, 'h', 1), c(9 + i * 3, 'photo', id, 'bytes', 3)])];
 
 async function fileWith(changes: Change[], photos: string[], scheme?: unknown): Promise<ReadBackup> {
   const { bytes } = await buildBackup({
@@ -101,7 +101,7 @@ describe('replace through a staged copy', () => {
     });
     expect(m.log).toEqual(['open', 'wipe', 'copy']);
     expect(switched).toBe(true);
-    expect(r).toEqual({ changes: 6, photos: 2, photosMissing: 0 });
+    expect(r).toEqual({ changes: 12, photos: 2, photosMissing: 0 });
     expect([...live.changes.values()]).toEqual(fileLog);
     expect([...live.outbox]).toEqual(fileLog.map((x) => x.t));
     expect([...live.photos.keys()].sort()).toEqual(['p1', 'p2']);
@@ -144,8 +144,8 @@ describe('replace through a staged copy', () => {
     const file = await fileWith(fileLog, ['p1']); // p2's pixels were not on the exporting device
     expect(file.manifest?.photosMissing).toEqual(['p2']);
     const r = await replaceThroughStaging(file, model(live).open);
-    expect(r).toEqual({ changes: 6, photos: 1, photosMissing: 1 });
-    expect(live.changes.size).toBe(6);
+    expect(r).toEqual({ changes: 12, photos: 1, photosMissing: 1 });
+    expect(live.changes.size).toBe(12);
     expect([...live.photos.keys()]).toEqual(['p1']);
   });
   it('a file from before the scheme was synced carries its manifest scheme in as the setting record, stamped after everything in the file', async () => {
@@ -155,8 +155,8 @@ describe('replace through a staged copy', () => {
       width: 3
     });
     const changes = replacementChanges(file);
-    expect(changes).toHaveLength(7);
-    const s = changes[6];
+    expect(changes).toHaveLength(13);
+    const s = changes[12];
     expect(s).toMatchObject({
       kind: 'setting',
       id: NUMBERING_SETTING,
@@ -176,6 +176,6 @@ describe('replace through a staged copy', () => {
       [],
       { mode: 'prefix', prefix: 'GH', width: 3 }
     );
-    expect(replacementChanges(withSetting)).toHaveLength(7);
+    expect(replacementChanges(withSetting)).toHaveLength(13);
   });
 });

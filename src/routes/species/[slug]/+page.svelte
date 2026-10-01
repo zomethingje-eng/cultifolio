@@ -13,6 +13,7 @@
   import ShareCard from '$lib/ui/ShareCard.svelte';
   import { isDatasetDoi } from '$dossier/sources/openalex';
   import { photoAt, srcsetOf } from '$dossier/photo-size';
+  import { heroOf } from '$dossier/dedupe';
   import { firstSentences } from '$core/text';
   import { frostWording } from '$core/extremes';
   import { setCrumb } from '$lib/ui/crumb.svelte';
@@ -30,7 +31,7 @@
   const u = $derived(units.current);
   const d = $derived(data.d);
   const common = $derived(d.name.vernacular.filter((v) => !v.lang || v.lang === 'eng').map((v) => v.name).slice(0, 4));
-  const hero = $derived(d.photos.find((p) => !p.captive) ?? d.photos[0]);
+  const hero = $derived(heroOf(d.photos));
   // Synonyms as names, not as the backbone's strings: authorship dropped, and a malformed entry ("? glabra Salm-Dyck") left out (round thirty-one, 3).
   const synonyms = $derived([...new Set(d.name.synonyms.map(canonicalSynonym).filter((x): x is string => !!x && x !== d.name.scientific))]);
   const desc = $derived(d.summary?.text.slice(0, 155) ?? `${d.name.scientific}, ${d.name.family ?? ''}: native range, habitat climate, photographs and cultivation notes with sources.`);
@@ -69,10 +70,13 @@
     const where = o.rangeTested === false ? 'not tested against the range (stated at country level only)' : 'inside the native range';
     if (o.rangeTested === false) return { tone: 'muted', text: `${all} georeferenced record${all === 1 ? '' : 's'}, ${where}; no map marker or climate envelope is derived without a range to test them against. ${o.nOpenInRange ? `The map shows the ${o.nOpenInRange} openly licensed one${o.nOpenInRange === 1 ? '' : 's'}.` : 'None carries a licence permitting republication, so the map shows no points.'}` };
     const climateOk = d.climate.status === 'ok';
-    // The marker rests on every in-range record; the envelope only on those placed well enough (within 10 km) to read a grid cell at, which is what `climate.records` counts.
+    // The marker rests on every in-range record; the envelope only on those placed well enough (within 10 km) to read a
+    // grid cell at, and among those only on the ones in the land cells it reads (`climate.records`, since round
+    // thirty-three); the ones placed well enough are the rest after the vague ones (round thirty-five, R1-7).
     const climRecs = d.climate.status === 'ok' ? d.climate.records : all;
+    const placed = all - (o.nVague ?? 0);
     let t = climateOk && climRecs < all
-      ? `The map marker rests on all ${all} georeferenced records ${where}; the climate envelope on the ${climRecs} of them placed to within 10 km`
+      ? `The map marker rests on all ${all} georeferenced records ${where}; the climate envelope on the ${climRecs} of them${climRecs < placed ? ` in the land cells it reads, of ${placed}` : ''} placed to within 10 km`
       : `The map marker${climateOk ? ' and the climate envelope' : ''} rest${climateOk ? '' : 's'} on all ${all} georeferenced record${all === 1 ? '' : 's'} ${where}`;
     if (!o.nOpenInRange) t += `; none carries a licence permitting republication, so the map shows no points.`;
     else if (o.nRestrictedInRange) t += `; the map shows only the ${o.nOpenInRange} openly licensed one${o.nOpenInRange === 1 ? '' : 's'}` + (o.restrictedShiftKm != null && o.restrictedShiftKm >= 1 ? `, which alone would put the marker ${o.restrictedShiftKm} km away` : o.restrictedShiftKm != null ? ', which alone would put the marker in the same place' : '') + '.';
@@ -204,7 +208,7 @@
 
 <article class="species">
   {#if data.was}
-    <p class="notice" id="was-synonym"><b>{data.was}</b> is a synonym: the GBIF backbone accepts this species as <i>{d.name.scientific}</i>, and the reference files it under that name.</p>
+    <p class="notice" id="was-synonym"><b>{data.was}</b> is {data.wasVariety ? 'an older name of a variety of this species' : 'a synonym'}: the GBIF backbone accepts {data.wasVariety ? 'it under' : 'this species as'} <i>{d.name.scientific}</i>, and the reference files it under that name.</p>
   {/if}
   <div class="top" class:withhero={!!hero}>
   {#if hero && heroFailed}
@@ -215,7 +219,7 @@
       <a class="cred" href={hero.page ?? hero.url} rel="noopener">{hero.attribution}{hero.captive === true ? ' · in cultivation' : hero.captive === false ? ' · observed growing wild' : ''}{hero.observedOn ? ' · ' + hero.observedOn : ''}</a>
     </div>
   {:else}
-    <div class="hero"><div class="ph">{#if refusedPhotoNames.length}Photographs: {refusedPhotoNames.join(' and ')} {refusedPhotoSources.every((k) => (d.upstream[k]?.detail ?? '').startsWith('no credited photograph')) ? 'answered, but every photograph they gave lacked an author to credit under its licence, so none is shown' : refusedPhotoSources.every((k) => d.upstream[k]?.status === 'skipped') ? 'were not asked when this page was built' : 'did not answer when this page was built'}. Not a statement that none exist.{:else}No openly licensed photograph on file. If you grow this plant, add your own photo to your record.{/if}</div></div>
+    <div class="hero"><div class="ph">{#if refusedPhotoNames.length}Photographs: {refusedPhotoNames.join(' and ')} {refusedPhotoSources.every((k) => (d.upstream[k]?.detail ?? '').startsWith('no credited photograph')) ? 'answered, but every photograph they gave lacked an author to credit under its licence, so none is shown' : refusedPhotoSources.every((k) => d.upstream[k]?.status === 'skipped') ? `${refusedPhotoNames.length === 1 ? 'was' : 'were'} not asked when this page was built` : `did not answer when this page was built`}{#if d.upstream['gbif.media']?.status === 'none' && !refusedPhotoSources.includes('gbif.media')}; GBIF's observation records with coordinates hold none{/if}. Not a statement that none exist.{:else}No openly licensed photograph on file. If you grow this plant, add your own photo to your record.{/if}</div></div>
   {/if}
   <div class="idcard">
     <div class="who">
@@ -228,7 +232,7 @@
       {#if d.climate.status !== 'ok' || (!d.photos.length && refusedPhotoNames.length)}
         <div class="pills">
           {#if d.climate.status === 'pending'}<span class="pill">Climate pending</span>{:else if d.climate.status === 'refused'}<NotChecked what="Climate" why={sentence(d.climate.detail, 'A source did not answer when this page was built')} />{:else if d.climate.status !== 'ok'}<span class="pill">No habitat climate</span>{/if}
-          {#if !d.photos.length && refusedPhotoNames.length}<NotChecked what="Photographs" why="{refusedPhotoNames.join(' and ')} did not answer when this page was built." />{/if}
+          {#if !d.photos.length && refusedPhotoNames.length}<NotChecked what="Photographs" why="{refusedPhotoNames.join(' and ')} {refusedPhotoSources.every((k) => d.upstream[k]?.status === 'skipped') ? `${refusedPhotoNames.length === 1 ? 'was' : 'were'} not asked` : 'did not answer'} when this page was built." />{/if}
         </div>
       {/if}
       {#if sheet.arch}<p class="vern small muted" title="Grouped by {sheet.arch.why}; the cultivation cards say where the group's table is used">{sheet.arch.arch.lab} (by {sheet.arch.tier})</p>{/if}
@@ -277,7 +281,7 @@
     <section class="glance" aria-label="At a glance">
       {#if glance}
         <div class="cards">
-          <button class="card unitbtn" type="button" title="Switch to {u === 'us' ? 'Celsius and millimetres' : 'Fahrenheit and inches'}" onclick={() => units.toggle()}><div class="lab">Cold floor</div>{#if sheet.floor?.raised}<div class="val">{tempN(sheet.floor.floor, u)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">the archetype table's minimum for {sheet.floor.group}, above the habitat's {glance.ex ? `1st-percentile night ${temp(glance.ex.minP01, u, 1)} (NASA POWER)` : `coldest mean night ${temp(glance.cold.v, u, 1)} (CHELSA)`}</div>{:else if glance.ex}<div class="val">{tempN(glance.ex.minP01, u, 1)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">1st-percentile night at the typical site over {glance.ex.years} years; lowest there {temp(glance.ex.minAbs, u, 1)}, {frostWording(glance.ex)} (NASA POWER); coldest mean night across the range {temp(glance.cold.v, u, 1)}, {glance.cold.mo} (CHELSA)</div>{:else}<div class="val">{tempN(glance.cold.v, u, 1)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">{glance.cold.mo}, mean night (CHELSA); {d.climate.status === 'ok' && d.climate.extremesStatus === 'refused' ? 'extremes not checked: NASA POWER did not answer when this page was built' : d.climate.status === 'ok' && d.climate.extremesStatus === 'skipped' ? 'extremes not asked for when this page was built' : 'no extremes series for this cell'}</div>{/if}<span class="swap">tap for {u === 'us' ? '°C' : '°F'}</span></button>
+          <button class="card unitbtn" type="button" title="Switch to {u === 'us' ? 'Celsius and millimetres' : 'Fahrenheit and inches'}" onclick={() => units.toggle()}><div class="lab">Cold floor</div>{#if sheet.floor?.raised}<div class="val">{tempN(sheet.floor.floor, u)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">the archetype table's minimum for {sheet.floor.group}, above the habitat's {glance.ex ? `1st-percentile night ${temp(glance.ex.minP01, u, 1)} (NASA POWER)` : `coldest mean night ${temp(glance.cold.v, u, 1)} (CHELSA)`}</div>{:else if glance.ex}<div class="val">{tempN(glance.ex.minP01, u, 1)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">1st-percentile night at the typical site over {glance.ex.years} years; lowest there {temp(glance.ex.minAbs, u, 1)}, {frostWording(glance.ex)} (NASA POWER); coldest mean night across the range {temp(glance.cold.v, u, 1)}, {glance.cold.mo} (CHELSA)</div>{:else}<div class="val">{tempN(glance.cold.v, u, 1)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">{glance.cold.mo}, mean night (CHELSA); {d.climate.status === 'ok' && d.climate.extremesStatus === 'refused' ? 'extremes not checked: NASA POWER did not answer when this page was built' : d.climate.status === 'ok' && d.climate.extremesStatus === 'skipped' ? 'extremes not asked for when this page was built' : d.climate.status === 'ok' && d.climate.extremesStatus === 'sea' ? 'the daily extremes were read at a weather cell that is mostly sea and are not used as a floor (below)' : 'no extremes series for this cell'}</div>{/if}<span class="swap">tap for {u === 'us' ? '°C' : '°F'}</span></button>
           <div class="card"><div class="lab">Warmest month</div><div class="val">{tempN(glance.hot.v, u)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">{glance.hot.mo}, mean day; nights {temp(glance.hot.night, u)} (CHELSA)</div></div>
           <div class="card"><div class="lab">Rain</div><div class="val">{rainN(glance.rain, u)}<span class="u"> {rainUnit(u)}/yr</span></div><div class="gauge"><i class="c" style="width:{Math.min(100, glance.rain / 12)}%"></i></div><div class="sub">{glance.wetMonths === 0 ? `no month over 25 mm (1 in)` : `${glance.wetMonths} month${glance.wetMonths === 1 ? '' : 's'} over 25 mm (1 in)`} · peak {glance.wet.mo} {rain(glance.wet.v, u)} (CHELSA)</div></div>
           {#if glance.dli}<div class="card"><div class="lab">Light</div><div class="val">{glance.dli.lo.toFixed(0)}–{glance.dli.hi.toFixed(0)}<span class="u"> DLI</span></div><div class="gauge"><i class="w" style="width:{Math.min(100, glance.dli.hi / 0.7)}%"></i></div><div class="sub">mol/m²/day, winter to summer, open sky (CHELSA shortwave)</div></div>{/if}
@@ -375,15 +379,18 @@
     </div>
     </details>
     {#if d.climate.hemispheres}
-      <p class="notice small" id="hemispheres">Records on both sides of the equator: these figures are the {d.climate.hemispheres.used}ern side's alone ({d.climate.hemispheres.used === 'north' ? d.climate.hemispheres.north : d.climate.hemispheres.south} cells); the {d.climate.hemispheres.used === 'north' ? 'southern' : 'northern'} side's {d.climate.hemispheres.used === 'north' ? d.climate.hemispheres.south : d.climate.hemispheres.north} cells have their seasons six months apart and are not combined into a year no place has.</p>
+      {@const hs = d.climate.hemispheres}
+      {@const other = hs.used === 'north' ? hs.south : hs.north}
+      {@const eq = hs.equatorial ?? Math.max(0, d.climate.cells - (hs.used === 'north' ? hs.north : hs.south))}
+      <p class="notice small" id="hemispheres">Records on both sides of the equator: the {other} {other === 1 ? 'cell' : 'cells'} more than 10° {hs.used === 'north' ? 'south' : 'north'} of it {other === 1 ? 'has' : 'have'} seasons six months apart and {other === 1 ? 'is' : 'are'} left out, not combined into a year no place has. These figures are across the {d.climate.cells} cells that remain: the {hs.used === 'north' ? hs.north : hs.south} more than 10° {hs.used}{#if eq} and the {eq} within 10° of the equator, where there is no season to reverse{/if}.</p>
     {/if}
-    {#if d.climate.landFraction != null && d.climate.landFraction < 0.5 && d.climate.extremes}
-      <p class="notice small" id="seacell">The extremes were read at a NASA POWER cell that is {Math.round(d.climate.landFraction * 100)}% land: neither it nor the next candidates whose coldest night is within 2 °C of the median across cells sit in a POWER cell that is mostly land, so the coldest nights here are moderated by the sea beside them.</p>
+    {#if d.climate.extremesSea && d.climate.landFraction != null}
+      <p class="notice small" id="seacell">The daily extremes were read at a NASA POWER cell that is {Math.round(d.climate.landFraction * 100)}% land: neither it nor the next candidates whose coldest night is within 2 °C of the median across cells sit in a POWER cell that is mostly land, so those nights are the sea's beside the plants, and they are not shown as the cold floor. What that cell gave over {d.climate.extremesSea.years} years: absolute minimum {temp(d.climate.extremesSea.minAbs, u, 1)}, 1st-percentile night {temp(d.climate.extremesSea.minP01, u, 1)}, 99th-percentile day {temp(d.climate.extremesSea.maxP99, u, 1)}.</p>
     {/if}
     <details class="why">
       <summary>Where these figures come from</summary>
       <div class="whybody">
-      Each figure is the median across the {d.climate.cells} grid cells {#if d.climate.seaCells}on land that hold in-range records ({d.climate.records} records in all; {d.climate.seaCells} more {d.climate.seaCells === 1 ? 'cell holds' : 'cells hold'} records but no land by the elevation layer, so those records sit at sea and the {d.climate.seaCells === 1 ? 'cell is' : 'cells are'} left out){:else}holding the {d.climate.records} in-range records{/if}, with the 10th–90th percentile span across those cells after the slash where it differs. A dash is a month one or more of those cells has no figure for in the grid (a variable CHELSA does not carry there), so no median is taken rather than one over fewer cells. Extremes and elevation were read at the typical cell {d.climate.cell} ({d.climate.at.lat}, {d.climate.at.lon}).
+      Each figure is the median across the {d.climate.cells} grid cells {#if d.climate.seaCells}on land that hold in-range records ({d.climate.records} records in those cells; {d.climate.seaCells} more {d.climate.seaCells === 1 ? 'cell holds' : 'cells hold'} records but no land by the elevation layer, so those records sit at sea and the {d.climate.seaCells === 1 ? 'cell is' : 'cells are'} left out){:else}holding the {d.climate.records} in-range records{/if}, with the 10th–90th percentile span across those cells after the slash where it differs. A dash is a month one or more of those cells has no figure for in the grid (a variable CHELSA does not carry there), so no median is taken rather than one over fewer cells. Extremes and elevation were read at the typical cell {d.climate.cell} ({d.climate.at.lat}, {d.climate.at.lon}).
       {#if d.climate.extremes}Over {d.climate.extremes.years} years there: absolute minimum {temp(d.climate.extremes.minAbs, u, 1)}, 1st-percentile night {temp(d.climate.extremes.minP01, u, 1)}, 99th-percentile day {temp(d.climate.extremes.maxP99, u, 1)}.{/if}{#if u === 'us'}{' '}Shown in Fahrenheit and inches; the sources measure in °C and mm.{/if}
       Normals: {d.climate.src.normals}. Envelope: {d.climate.src.envelope}.{#if d.climate.src.extremes}{' '}Extremes: {d.climate.src.extremes}.{/if}{#if d.climate.src.elevation}{' '}Elevation: {d.climate.src.elevation}.{/if}
       </div>

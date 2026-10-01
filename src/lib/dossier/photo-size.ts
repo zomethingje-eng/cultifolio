@@ -7,7 +7,13 @@
  * as it is. A `srcset` of these, with the box's `sizes`, lets the browser
  * take the size its pixel density needs (round thirty-three, R3-5).
  */
-export const srcsetOf = (url: string, sizes: PhotoSize[]): string => sizes.map((s) => `${photoAt(url, s)} ${WIDTH[s]}w`).join(', ');
+export const srcsetOf = (url: string, sizes: PhotoSize[]): string | undefined => {
+  // The widths are the host's: iNaturalist's fixed sizes, or the pixels GBIF's cache is asked for; a host with no sizes
+  // gets no srcset, since one address at two declared widths downloads the original either way (round thirty-five, R1-13).
+  if (INAT.test(url)) return sizes.map((s) => `${photoAt(url, s)} ${WIDTH[s]}w`).join(', ');
+  if (GBIF.test(url)) return sizes.map((s) => `${photoAt(url, s)} ${PX[s]}w`).join(', ');
+  return undefined;
+};
 const WIDTH: Record<PhotoSize, number> = { square: 75, small: 240, medium: 500, large: 1024 };
 export type PhotoSize = 'square' | 'small' | 'medium' | 'large';
 const INAT = /^(https:\/\/(?:inaturalist-open-data\.s3\.amazonaws\.com|static\.inaturalist\.org)\/photos\/\d+\/)(square|small|medium|large|original)(\.\w+)$/;

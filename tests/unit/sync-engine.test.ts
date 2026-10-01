@@ -430,7 +430,7 @@ describe('the pull cursor', () => {
     const wall = 1700000000000;
     for (let i = 0; i < 501; i++) {
       const t = `${wall + i}-0000-bbbbbbbbbbbb`;
-      const body = await sealJson(keys, 'log', { v: 1, device: 'bbbbbbbbbbbb', changes: [{ t, kind: 'accession', id: 'r' + i, field: 'taxonName', value: 'Plant ' + i }] });
+      const body = await sealJson(keys, 'log', { v: 1, device: 'bbbbbbbbbbbb', changes: [{ t, kind: 'accession', id: 'r' + i, field: 'taxonName', value: 'Plant ' + i }, { t: `${wall + i}-0001-bbbbbbbbbbbb`, kind: 'accession', id: 'r' + i, field: 'status', value: 'growing' }] });
       expect((await post(keys, `${t}-0123456789ab`, body)).status).toBe(200);
     }
     for (const k of logKeys(r2)) r2.objs.get(k)!.uploaded = 7_000_000; // one arrival time for all of them

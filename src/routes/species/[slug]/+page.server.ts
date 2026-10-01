@@ -25,6 +25,8 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
       setHeaders({ 'cache-control': 'public, max-age=86400' });
       redirect(302, `/species/${syn.slug}?was=${encodeURIComponent(syn.matched)}`);
     }
+    // A 404 is cached for a few minutes only: the reference grows, and the backbone's answer is cached a day upstream already (round thirty-five, R1-13).
+    setHeaders({ 'cache-control': 'public, max-age=300' });
     if (syn) error(404, { message: `${syn.matched} is ${syn.acceptedName} in the GBIF backbone, and that species is not in the reference yet` });
     error(404, { message: `No dossier for “${params.slug}” yet` });
   }
@@ -52,10 +54,20 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   // Shown only when the name is one this species' own record lists (the index's binomials, or the dossier's synonyms):
   // `?was=` is a statement anyone can write into a link, and the page printed it as fact (round thirty-three, 12).
   const was = url.searchParams.get('was');
-  const ownNames = new Set([...(me?.syn ?? []), ...(d.name.synonyms ?? []).map((x) => canonicalSynonym(x)).filter((x): x is string => !!x)].map((x) => x.toLowerCase()));
+  // Compared without rank markers, since the backbone's canonical form of a variety drops "var." (round thirty-four).
+  const plain = (x: string) => x.toLowerCase().replace(/\b(var|subsp|ssp|f)\.? /g, '').replace(/\s+/g, ' ').trim();
+  const listed = [...(me?.syn ?? []), ...(d.name.synonyms ?? []).map((x) => canonicalSynonym(x)).filter((x): x is string => !!x)].map(plain);
+  const ownNames = new Set(listed);
+  // The binomial of a listed variety counts too: the backbone files "Trichocereus pachanoi" under a variety of
+  // T. macrogonus, and the address `trichocereus-pachanoi` reached the page with no line saying why (round thirty-five, R1-12).
+  const binomialOf = (x: string) => x.split(' ').slice(0, 2).join(' ');
+  const wasPlain = was ? plain(was) : '';
+  const asVariety = !!wasPlain && !ownNames.has(wasPlain) && listed.some((x) => x.split(' ').length > 2 && binomialOf(x) === wasPlain);
   return {
     /** The old name this page was reached by, when the address was a synonym the backbone resolved (round thirty, R2-8). */
-    was: was && /^[\p{L}\p{M} .'\-×]{3,80}$/u.test(was) && ownNames.has(was.toLowerCase()) ? was : null,
+    was: was && /^[\p{L}\p{M} .'\-×]{3,80}$/u.test(was) && (ownNames.has(wasPlain) || asVariety) ? was : null,
+    /** The old name is the binomial of a variety the backbone places under this species, not of the species itself. */
+    wasVariety: asVariety,
     units: unitsFor(cookies, request),
     // The grower's hemisphere, when their site has been saved on this device: seeds the months before the site store loads.
     hemiLat: cookies.get('cultifolio.hemi') === 's' ? -1 : cookies.get('cultifolio.hemi') === 'n' ? 1 : null,

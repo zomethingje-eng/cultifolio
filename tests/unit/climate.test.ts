@@ -184,7 +184,7 @@ describe('climate envelope', () => {
     const c = await provider.envelope(points);
     expect(c.status).toBe('ok');
     if (c.status !== 'ok') return;
-    expect(c.hemispheres).toEqual({ north: 3, south: 5, used: 'south' });
+    expect(c.hemispheres).toEqual({ north: 3, south: 5, used: 'south', equatorial: 0 });
     expect(c.cells).toBe(5); // the southern side alone
     expect(c.months[0].tmin).toBeCloseTo(15, 1); // the southern median, untouched by the +10 northern cells
     expect(c.src.envelope).toContain('on the southern side of the equator (3 cells poleward of 10° north, 5 poleward of 10° south: the two sides\' seasons are not combined, and cells within 10° of the equator stay in)');

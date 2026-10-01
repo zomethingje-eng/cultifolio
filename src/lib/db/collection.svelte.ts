@@ -270,7 +270,7 @@ class Collection {
       if (cur === l.id) return { parent: null, loop: true };
       const r = this.state.get(recKey('location', cur));
       if (!r) return { parent: null, loop: false };
-      if (!r._deleted) return { parent: cur, loop: false };
+      if (!r._deleted && isComplete(r)) return { parent: cur, loop: false }; // an incomplete place is walked past like a removed one (round thirty-five, R1-2)
       if (seen.has(cur)) return { parent: null, loop: false };
       seen.add(cur);
       cur = (r.parentId as string | null | undefined) ?? null;
@@ -315,7 +315,7 @@ class Collection {
     while (cur && !seen.has(cur)) {
       const r = this.state.get(recKey('location', cur));
       if (!r) return null;
-      if (!r._deleted) return cur;
+      if (!r._deleted && isComplete(r)) return cur;
       seen.add(cur);
       cur = (r.parentId as string | null | undefined) ?? null;
     }
@@ -512,10 +512,14 @@ class Collection {
     if (!s || n < 1) return [];
     const date = opts.date ?? localDate();
     const m = PROP_METHODS.find((x) => x.k === s.method);
+    // A method this build does not know says nothing about what the plant is: not seed, so not a claim that the plant
+    // was raised from the batch's seed (an offset batch from an old import potted up as "F1 from wild-collected seed":
+    // round thirty-five, R1-1). Its plants carry an unknown provenance and no source form until a build that knows the word.
+    const known = !!m;
     const veg = m?.veg ?? false;
     const parent = s.parentAcc ? this.accession(s.parentAcc) : undefined;
     // Seed keeps the provenance the seed carried; a wild-collected seed lot raises F1 plants. Vegetative material is 'veg'.
-    const provenance: Provenance = veg ? 'veg' : s.provenance === 'wild' ? 'f1' : s.provenance === 'f1' ? 'fn' : (s.provenance ?? 'unknown');
+    const provenance: Provenance = !known ? 'unknown' : veg ? 'veg' : s.provenance === 'wild' ? 'f1' : s.provenance === 'f1' ? 'fn' : (s.provenance ?? 'unknown');
     return this.claim('accession', (taken) => {
     const changes: Change[] = [];
     const made: Accession[] = [];
@@ -537,7 +541,7 @@ class Collection {
         acquired: date,
         sourceFrom: veg ? (parent ? `own plant ${accNo(parent)}` : null) : (s.sourceFrom ?? null),
         sourceRef: s.sourceRef ?? null,
-        sourceForm: veg ? (m?.k === 'graft' ? 'graft' : 'cutting') : 'seedling',
+        sourceForm: !known ? null : veg ? (m.k === 'graft' ? 'graft' : 'cutting') : 'seedling',
         locationId: opts.locationId ?? s.locationId ?? null,
         sowingId: s.id,
         notes: null
@@ -562,6 +566,16 @@ class Collection {
     return this.live<Photo>('photo')
       .filter((p) => p.sowing === id)
       .sort((a, b) => b.d.localeCompare(a.d) || b.id.localeCompare(a.id));
+  }
+  /** Whether a photograph's record is here and removed: its pixels are bytes nothing names. */
+  photoRemoved(id: string): boolean {
+    const r = this.state.get(recKey('photo', id));
+    return !!r && !!r._deleted;
+  }
+  /** Whether a photograph's record is here at all, whole or waiting for a field: its pixels have a record to belong to. */
+  photoKnown(id: string): boolean {
+    const r = this.state.get(recKey('photo', id));
+    return !!r && !r._deleted;
   }
   photo(id: string): Photo | undefined {
     const r = this.state.get(recKey('photo', id));

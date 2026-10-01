@@ -46,7 +46,7 @@
 
   /* ---- edit conditions ---- */
   let editing = $state(false);
-  let f = $state<{ name: string; kind: LocationKind | ''; parent: string | null; indoor: '' | 'yes' | 'no'; floorC: string; ppfd: string; lightHours: string; lat: string; lon: string; altM: string; notes: string }>({ name: '', kind: '', parent: null, indoor: '', floorC: '', ppfd: '', lightHours: '', lat: '', lon: '', altM: '', notes: '' });
+  let f = $state<{ name: string; kind: LocationKind | string; parent: string | null; indoor: '' | 'yes' | 'no'; floorC: string; ppfd: string; lightHours: string; lat: string; lon: string; altM: string; notes: string }>({ name: '', kind: '', parent: null, indoor: '', floorC: '', ppfd: '', lightHours: '', lat: '', lon: '', altM: '', notes: '' });
   /** Places this one could sit inside: everything but itself and what is under it. */
   const homes = $derived.by(() => {
     const under = new Set(collection.subtree(id));
@@ -182,7 +182,7 @@
   {#if editing}
     <form class="cult form" onsubmit={(e) => { e.preventDefault(); save(); }}>
       <label><span>Name</span><input id="e-name" type="text" bind:value={f.name} /></label>
-      <label><span>Kind</span><select id="e-kind" bind:value={f.kind}><option value="">—</option>{#each LOCATION_KINDS as k}<option value={k.k}>{k.label}</option>{/each}</select></label>
+      <label><span>Kind</span><select id="e-kind" bind:value={f.kind}><option value="">—</option>{#if f.kind && !LOCATION_KINDS.some((k) => k.k === f.kind)}<option value={f.kind}>{f.kind} (a kind this build does not know)</option>{/if}{#each LOCATION_KINDS as k}<option value={k.k}>{k.label}</option>{/each}</select></label>
       <label><span>Inside</span><select id="e-parent" bind:value={f.parent}><option value={null}>Top level</option>{#each homes as h}<option value={h.id}>{h.name}</option>{/each}</select></label>
       <label><span>Indoors?</span><select id="e-indoor" bind:value={f.indoor}><option value="">Inherit</option><option value="yes">Yes</option><option value="no">No</option></select></label>
       <label><span>Temperature floor {tempUnit(units.current)}</span><input id="e-floor" type="text" inputmode="decimal" bind:value={f.floorC} placeholder="heater set-point, or what it bottoms out at" /></label>

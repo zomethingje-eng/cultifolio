@@ -20,9 +20,15 @@ const log: Change[] = [
   c(10, 'event', 'e1', 't', 'water'),
   c(11, 'photo', 'p1', 'acc', '2026-0001'),
   c(12, 'photo', 'p1', 'd', '2026-09-02'),
+  c(41, 'photo', 'p1', 'w', 1),
+  c(42, 'photo', 'p1', 'h', 1),
+  c(43, 'photo', 'p1', 'bytes', 3),
   c(13, 'photo', 'p2', 'acc', '2026-0001'),
   c(14, 'photo', 'p2', 'd', '2026-09-03'),
-  c(15, 'photo', 'p2', '_deleted', true),
+  c(44, 'photo', 'p2', 'w', 1),
+  c(45, 'photo', 'p2', 'h', 1),
+  c(46, 'photo', 'p2', 'bytes', 3),
+  c(47, 'photo', 'p2', '_deleted', true),
   c(16, 'taxon', 'copiapoa-cinerea', 'name', 'Copiapoa cinerea')
 ];
 const px = (s: string) => new TextEncoder().encode(s);
@@ -47,7 +53,7 @@ describe('backup round trip', () => {
     expect(photosMissing).toEqual([]);
     const r = await readBackup(bytes);
     expect(r.manifest?.format).toBe('cultifolio-backup');
-    expect(r.manifest?.counts).toMatchObject({ changes: 16, accessions: 1, events: 1, locations: 2, photos: 1, taxa: 1, photoBytes: 22 });
+    expect(r.manifest?.counts).toMatchObject({ changes: 22, accessions: 1, events: 1, locations: 2, photos: 1, taxa: 1, photoBytes: 22 });
     expect(r.manifest?.photosMissing).toBeUndefined();
     expect(r.manifest?.scheme).toEqual({ mode: 'year', width: 4 });
     expect(r.changes).toEqual(log);
@@ -70,7 +76,7 @@ describe('backup round trip', () => {
     const json = new TextEncoder().encode(JSON.stringify({ format: 'cultifolio-changes', v: 1, changes: log }));
     const r = await readBackup(json);
     expect(r.manifest).toBeNull();
-    expect(r.changes).toHaveLength(16);
+    expect(r.changes).toHaveLength(22);
   });
   it('refuses things that are not backups, with a reason', async () => {
     await expect(readBackup(px('hello'))).rejects.toThrow(/neither/);
@@ -102,11 +108,12 @@ describe('merging a backup into a live collection', () => {
     expect(m.addedDeleted).toBe(0);
   });
   it('the preview counts what is added by kind, live records apart from deleted ones, so the page can say it in the words of the "In the file" line (round twenty-three, 18)', () => {
-    const more = [...log, c(30, 'accession', 'r9', 'taxonName', 'Ariocarpus fissuratus'), c(31, 'taxon', 'ariocarpus-fissuratus', 'followed', true), c(32, 'event', 'e9', 'acc', 'r9'), c(33, 'accession', 'r8', '_deleted', true)];
+    const more = [...log, c(30, 'accession', 'r9', 'taxonName', 'Ariocarpus fissuratus'), c(31, 'taxon', 'ariocarpus-fissuratus', 'name', 'Ariocarpus fissuratus'), c(32, 'event', 'e9', 'acc', 'r9'), c(33, 'accession', 'r8', '_deleted', true), c(34, 'accession', 'r9', 'status', 'growing'), c(35, 'event', 'e9', 'd', '2026-09-01'), c(36, 'event', 'e9', 't', 'water'), c(37, 'sowing', 's9', 'taxonName', 'Aloe')];
     const m = previewMerge(log, more);
-    expect(m.added).toBe(4);
+    expect(m.added).toBe(5);
     expect(m.addedByKind).toEqual({ accession: 1, taxon: 1, event: 1 });
     expect(m.addedDeleted).toBe(1);
+    expect(m.addedWaiting).toBe(1); // the batch with only a name: in the fold, not shown, and not counted as a batch added (round thirty-five, R1-4)
   });
 });
 
@@ -147,7 +154,7 @@ describe('old data in a backup is mended, not refused (round twenty-nine, 2)', (
     const r = await readBackup(new TextEncoder().encode(JSON.stringify({ format: 'cultifolio-changes', v: 1, changes: rows })));
     expect(r.changes).toHaveLength(rows.length - 1);
     expect(r.changes.find((x) => x.field === 'price')?.value).toBe('12');
-    expect(r.unreadable).toEqual(['change 18: notes of a accession must be a string, not {"a":1}']);
+    expect(r.unreadable).toEqual(['change 24: notes of a accession must be a string, not {"a":1}']);
   });
 });
 
@@ -160,6 +167,14 @@ describe('a zip made to inflate past what a backup can hold is refused at its ta
     const many: Record<string, Uint8Array> = { 'manifest.json': new TextEncoder().encode('{}'), 'changes.json': new TextEncoder().encode('[]') };
     for (let i = 0; i < 6; i++) many[`photos/p${i}.jpg`] = new Uint8Array(40 * 1024 * 1024);
     await expect(readBackup(zipSync(many))).rejects.toThrow(/declares far more content/);
+    // the sheets are never inflated, the manifest has a small cap, and a name seen twice is refused: eight deflated
+    // entries alternating the two sheet names at 40 MB each are not touched (round thirty-five, R1-6, R2-4)
+    const sheetsBomb: Record<string, Uint8Array> = { 'manifest.json': new TextEncoder().encode('{}'), 'changes.json': new TextEncoder().encode('[]'), 'plants.csv': new Uint8Array(40 * 1024 * 1024), 'batches.csv': new Uint8Array(40 * 1024 * 1024) };
+    const t0 = Date.now();
+    await expect(readBackup(zipSync(sheetsBomb))).rejects.toThrow(/not in a shape/); // the sheets were skipped and the (empty) manifest refused as usual
+    expect(Date.now() - t0).toBeLessThan(3000);
+    await expect(readBackup(zipSync({ 'manifest.json': new Uint8Array(5 * 1024 * 1024), 'changes.json': new TextEncoder().encode('[]') }))).rejects.toThrow(/no manifest.json/); // a 5 MB manifest is not inflated: it is not ours
+    // (a zip naming an entry twice cannot be made with fflate's writer; the refusal is by the name set in the filter)
     // but the app's own backup of a log that compresses well (a 70 MB note deflates to well under a megabyte) is read:
     // the deflated entries have their own caps and are not in the sum (round thirty-three, 3)
     const { bytes } = await buildBackup({ changes: [...log, c(40, 'accession', '2026-0001', 'notes', 'a'.repeat(70 * 1024 * 1024))], readPhoto: async () => null });
@@ -181,9 +196,9 @@ describe('a backup is checked before anything is stored', () => {
   const jpeg = (n: number) => new Uint8Array([0xff, 0xd8, 0xff, 0xe0, ...new Array(n).fill(0)]);
   it('a change whose timestamp is not an HLC is refused with its position', async () => {
     const bad = [...log, { t: '~', kind: 'accession', id: '2026-0001', field: 'notes', value: 'wins forever' }];
-    await expect(readBackup(px(JSON.stringify({ format: 'cultifolio-changes', v: 1, changes: bad })))).rejects.toThrow(/Change 17 .*bad timestamp/);
+    await expect(readBackup(px(JSON.stringify({ format: 'cultifolio-changes', v: 1, changes: bad })))).rejects.toThrow(/Change 23 .*bad timestamp/);
     const { bytes } = await buildBackup({ changes: bad as Change[], readPhoto: async () => null });
-    await expect(readBackup(bytes)).rejects.toThrow(/Change 17/);
+    await expect(readBackup(bytes)).rejects.toThrow(/Change 23/);
   });
   it('photo entries must be JPEGs under the sync limit, with sane names', async () => {
     expect(photoBytesError(jpeg(10), jpeg(2))).toBeNull();

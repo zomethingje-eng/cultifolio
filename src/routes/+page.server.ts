@@ -100,6 +100,8 @@ export const load: PageServerLoad = async ({ platform, fetch, setHeaders, url, c
     featured,
     by,
     open: rows.some((r) => r.id === open) ? open : '',
+    /** The address asked for the catalogue (a grouping, an opened group, a letter): a grower with plants lands on the catalogue, not on their own list (round thirty-four, 1). */
+    browse: byParam != null || !!open || url.searchParams.has('from') || url.searchParams.has('at'),
     rows,
     letters,
     // `?from=L`: the server-rendered window starts at that letter, so a reader without JavaScript (and a crawler) can follow the letter index; with JavaScript the index jumps in place.

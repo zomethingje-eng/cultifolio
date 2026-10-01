@@ -51,6 +51,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, unlink
 import { execSync } from 'node:child_process';
 import { buildDossier, NETWORK_EXTRAS, photosFromMedia, mergeGbifPhotos, type SkippableSource } from '../src/lib/dossier/build';
 import { mendGbifThumb } from '../src/lib/dossier/md5';
+import { heroOf } from '../src/lib/dossier/dedupe';
 import * as gbif from '../src/lib/dossier/sources/gbif';
 import { literature } from '../src/lib/dossier/sources/openalex';
 import * as inat from '../src/lib/dossier/sources/inat';
@@ -114,7 +115,7 @@ function diskPowerCache(dir: string): PowerCache {
 type IndexEntry = { key: number; slug: string; name: string; family?: string; common?: string; origin: string[]; thumb?: string; photos: number; open: number; climate: string; near?: number[]; syn?: string[] };
 type Dossierish = { key: number; slug: string; name: { scientific: string; family?: string; status?: string; vernacular: Array<{ name: string; lang?: string }>; synonyms?: string[] }; distribution: { native: Array<{ name: string }> }; photos: Array<{ id: string; url: string; thumb: string; captive?: boolean }>; occurrences: { nOpenInRange: number; nRestrictedInRange?: number; nOutsideRange?: number }; climate: { status: string; months?: Array<{ tmax: number; tmin: number; precipMm: number }> } };
 function indexEntry(d: Dossierish): IndexEntry & { status?: string } {
-  const hero = d.photos.find((p) => !p.captive) ?? d.photos[0];
+  const hero = heroOf(d.photos);
   // Older names, as binomials, other-genus ones first (the ones a label most often carries), six at most, so the
   // search and the picker find a species under a name it no longer has (round thirty-one, 3).
   const accepted = d.name.scientific;
@@ -673,7 +674,9 @@ async function main() {
         const now = d.upstream[src]?.status, before = prev.upstream?.[src]?.status;
         // Skipped this build (a --skip source) counts the same as refused: what the last build had is kept.
         if ((now === 'refused' || now === 'error' || now === 'skipped') && (before === 'ok' || before === 'none') && copy()) {
-          d.upstream[src] = { ...prev.upstream[src], detail: `carried from build of ${prev.built?.slice(0, 10) ?? '?'}; this build: ${d.upstream[src].detail ?? now}` };
+          // A row already carried keeps the build that asked (round thirty-five, R1-10).
+          const origin = prev.upstream[src].detail?.startsWith('carried from build of') ? prev.upstream[src].detail!.replace(/;.*$/, '') : `carried from build of ${prev.built?.slice(0, 10) ?? '?'}`;
+          d.upstream[src] = { ...prev.upstream[src], detail: `${origin}; this build: ${d.upstream[src].detail ?? now}` };
         }
       };
       carry('openalex', () => ((d.literature = prev.literature), true));
@@ -714,7 +717,9 @@ async function main() {
       if (rederive) {
         const from = `carried from build of ${prev.built?.slice(0, 10) ?? '?'} (rederive)`;
         // A carried refusal keeps its reason: "carried from build of …; that build: <why it refused>", not a bare "carried".
-        const carried = (u: { detail?: string }) => (u.detail ? `${from}; that build: ${u.detail}` : from);
+        // A row carried through several rederives names the build that asked, not the chain of builds that carried it:
+        // "carried from build of 2026-09-29 (rederive); that build: carried from build of …" nested nine deep (round thirty-five, R1-10).
+        const carried = (u: { detail?: string }) => (u.detail?.startsWith('carried from build of') ? u.detail : u.detail ? `${from}; that build: ${u.detail}` : from);
         // Photographs carry over; a GBIF set read from the download this build replaces the previous GBIF set, and a
         // download that covers the species and has no observation photographs for it replaces the set with nothing
         // (an older build's herbarium sheets would otherwise stay for good: round thirty-two, 3).

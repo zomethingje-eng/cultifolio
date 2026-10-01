@@ -135,7 +135,8 @@
       k.photo ? `${k.photo} photo record${k.photo === 1 ? '' : 's'}` : '',
       k.taxon ? `${k.taxon} species record${k.taxon === 1 ? '' : 's'} (the app's own, one per species grown or followed)` : '',
       k.setting ? 'the numbering scheme' : '',
-      m.addedDeleted ? `${m.addedDeleted} deleted record${m.addedDeleted === 1 ? '' : 's'}` : ''
+      m.addedDeleted ? `${m.addedDeleted} deleted record${m.addedDeleted === 1 ? '' : 's'}` : '',
+      m.addedWaiting ? `${m.addedWaiting} record${m.addedWaiting === 1 ? '' : 's'} the file leaves without a field ${m.addedWaiting === 1 ? 'it' : 'they'} cannot be shown without (not shown until a later file or sync completes ${m.addedWaiting === 1 ? 'it' : 'them'})` : ''
     ].filter(Boolean);
     if (!parts.length) return 'no records';
     return parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;

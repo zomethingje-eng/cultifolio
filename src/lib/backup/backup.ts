@@ -5,7 +5,7 @@
  */
 import { Zip, ZipPassThrough, ZipDeflate, unzipSync, strToU8, strFromU8 } from 'fflate';
 import * as v from 'valibot';
-import { materialise, live, readChanges, type Change, type Record_ } from '$core/log';
+import { materialise, live, readChanges, isComplete, type Change, type Record_ } from '$core/log';
 import { kindOf, accNo, sowNo, type Accession, type Photo, type Sowing } from '$lib/db/types';
 import { MAX_PHOTO_BYTES, SEAL_OVERHEAD } from '$lib/sync/limits';
 import { BACKUP_FORMAT, BACKUP_V, Manifest, ChangeRow, LegacyChanges, photoPath, thumbPath } from './format';
@@ -163,13 +163,13 @@ export function photosWithoutPixels(file: Pick<ReadBackup, 'changes' | 'photoIds
 }
 
 /** The entries a backup carries and nothing else: the three JSON files, the two sheets, a photograph or its thumbnail. */
-/** The entries the writer deflates; every other entry is stored as it is. */
-const DEFLATED_ENTRY = /^(manifest\.json|changes\.json|device\.json|plants\.csv|batches\.csv)$/;
 const KNOWN_ENTRY = /^(manifest\.json|changes\.json|device\.json|plants\.csv|batches\.csv|photos\/[^\0]{1,200}\.jpg)$/; // a photo entry's name is judged below, so an impossible one is refused and said rather than skipped
 /** The most any one entry may inflate to: a photograph is bounded by the sync limit, and a log of a million changes is well under this. */
 export const MAX_ENTRY_BYTES = 256 * 1024 * 1024;
 /** The most changes.json may inflate to: a log of a million changes is about a hundred megabytes. */
 export const MAX_CHANGES_BYTES = 192 * 1024 * 1024;
+/** The manifest and the device settings: a few kilobytes each; anything declaring more is not one of ours. */
+export const MAX_SMALL_ENTRY_BYTES = 4 * 1024 * 1024;
 
 /** Parse a backup from bytes: a zip, or the older JSON. Throws a readable error for anything else. */
 export async function readBackup(bytes: Uint8Array): Promise<ReadBackup> {
@@ -189,15 +189,22 @@ export async function readBackup(bytes: Uint8Array): Promise<ReadBackup> {
   // backup inflates to little more than itself), and changes.json by its own cap, so ten entries each under the
   // per-entry cap cannot add up to gigabytes (round thirty, R2-7). An entry that inflates past what it declared is cut
   // by fflate at the declared size.
+  // What is inflated, and how much of it: the log under its own cap (it compresses by an order of magnitude, so the
+  // file's size says nothing about it: round thirty-three, 3); the manifest and the device settings, which are a few
+  // kilobytes, under a small cap; the sheets not at all, since a restore never reads them (they are made again from the
+  // log); the photographs, which are stored, bounded by the file's own size. A name seen twice is refused: eight
+  // entries alternating the two sheet names at 250 MB each inflated two gigabytes before the manifest was read
+  // (round thirty-five, R1-6, R2-4).
   let declared = 0;
+  const seen = new Set<string>();
   const files = unzipSync(bytes, {
     filter: (f) => {
       if (!KNOWN_ENTRY.test(f.name) || f.originalSize > MAX_ENTRY_BYTES) return false;
-      if (f.name === 'changes.json' && f.originalSize > MAX_CHANGES_BYTES) return false;
-      // The deflated entries (the log, the sheets, the manifest) have their own caps and compress by an order of
-      // magnitude, so they are not in the sum: bounding them by the file's size refused the app's own backup once its
-      // log passed about 74 MB (round thirty-three, 3). The sum is of the stored entries, the photographs.
-      if (DEFLATED_ENTRY.test(f.name)) return true;
+      if (seen.has(f.name)) throw new Error(`That zip names ${f.name} twice; it is not a Cultifolio backup.`);
+      seen.add(f.name);
+      if (f.name === 'plants.csv' || f.name === 'batches.csv') return false;
+      if (f.name === 'changes.json') return f.originalSize <= MAX_CHANGES_BYTES;
+      if (f.name === 'manifest.json' || f.name === 'device.json') return f.originalSize <= MAX_SMALL_ENTRY_BYTES;
       declared += f.originalSize;
       if (declared > bytes.length * 1.1 + 64 * 1048576) throw new Error('That zip declares far more content than a backup of its size can hold; it is not a Cultifolio backup.');
       return true;
@@ -242,20 +249,22 @@ export function previewMerge(current: Change[], incoming: Change[]) {
   const fresh = incoming.filter((c) => !have.has(c.t));
   const before = materialise(current).state;
   const after = materialise([...current, ...fresh]).state;
-  let added = 0, changed = 0, addedDeleted = 0;
+  let added = 0, changed = 0, addedDeleted = 0, addedWaiting = 0;
   // Added, by kind, live records only, so the preview can say "5 plants, 20 timeline entries" in the words the "In the
-  // file" line uses, rather than a total that also counts species notes, the numbering record and deleted records
-  // (round twenty-three, 18).
+  // file" line uses, rather than a total that also counts species notes, the numbering record, deleted records
+  // (round twenty-three, 18) and records the file leaves without a required field, which the pages will not show
+  // (round thirty-five, R1-4).
   const addedByKind: Record<string, number> = {};
   for (const [k, r] of after) {
     const b = before.get(k);
     if (!b) {
       added++;
       if (r._deleted) addedDeleted++;
+      else if (!isComplete(r)) addedWaiting++;
       else addedByKind[r.kind] = (addedByKind[r.kind] ?? 0) + 1;
     } else if (b._t !== r._t) changed++;
   }
-  return { fresh, added, changed, unchanged: after.size - added - changed, addedByKind, addedDeleted };
+  return { fresh, added, changed, unchanged: after.size - added - changed, addedByKind, addedDeleted, addedWaiting };
 }
 
 const csvCell = (x: unknown) => {
@@ -273,7 +282,7 @@ const locPath = (state: Map<string, Record_>, id: string | null | undefined, see
   if (!id || seen.has(id)) return ''; // a cycle in a damaged log ends here rather than never
   seen.add(id);
   const r = state.get(`location:${id}`);
-  if (!r || r._deleted) return '';
+  if (!r || r._deleted || !isComplete(r)) return '';
   const parent = locPath(state, r.parentId as string | null, seen);
   return parent ? `${parent} › ${r.name}` : String(r.name);
 };
@@ -293,7 +302,7 @@ export function plantsCsv(accs: Array<Accession & Record_>, state: Map<string, R
 export function batchesCsv(sowings: Array<Sowing & Record_>, state: Map<string, Record_>): string {
   const head = ['number', 'species', 'cultivar', 'kind', 'parentage', 'method', 'parent plant', 'date', 'started', 'counted', 'potted', 'lost', 'from', 'lot', 'field number', 'provenance', 'medium', 'container', 'pre-treatment', 'bottom heat C', 'covered', 'location', 'status', 'notes'];
   const events = new Map<string, Array<{ t: string; n: number }>>();
-  for (const r of state.values()) if (r.kind === 'event' && !r._deleted && typeof r.acc === 'string') { let l = events.get(r.acc); if (!l) events.set(r.acc, (l = [])); l.push({ t: String(r.t), n: typeof r.n === 'number' ? r.n : 0 }); }
+  for (const r of state.values()) if (r.kind === 'event' && !r._deleted && isComplete(r) && typeof r.acc === 'string') { let l = events.get(r.acc); if (!l) events.set(r.acc, (l = [])); l.push({ t: String(r.t), n: typeof r.n === 'number' ? r.n : 0 }); }
   const rows = [...sowings]
     .sort((a, b) => sowNo(a).localeCompare(sowNo(b)))
     .map((s) => {
