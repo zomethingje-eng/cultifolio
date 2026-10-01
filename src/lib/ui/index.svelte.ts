@@ -1,22 +1,9 @@
-/** The dossier index, fetched once per page life and shared by every client page that wants a species thumb or key. */
+/** The reference as the client pages read it: a few species by hash bucket, a search by the server, a sheet by bucket. */
 import type { IndexEntry } from '$lib/server/dossiers';
 import { bucketOf } from '$core/bucket';
 import { speciesOf, speciesSlug } from '$core/names';
-let cache: Promise<IndexEntry[] | null> | null = null;
-/** The index, or null when it could not be fetched: "the reference could not be reached" is a different fact from "not in the reference", and a page must not confuse them. */
-export function speciesIndex(): Promise<IndexEntry[] | null> {
-  if (!cache)
-    cache = fetch('/api/index')
-      .then((r) => (r.ok ? (r.json() as Promise<IndexEntry[]>) : null))
-      .catch(() => null);
-  cache.then((v) => { if (v === null) cache = null; }); // a failed fetch is retried on the next ask
-  return cache;
-}
-/** The entry for a slug; undefined when the index has no such species; null when the index could not be reached. */
-export const bySlug = async (slug: string): Promise<IndexEntry | undefined | null> => {
-  const idx = await speciesIndex();
-  return idx === null ? null : idx.find((e) => e.slug === slug);
-};
+// The whole index is no longer fetched by any page (round thirty-nine): a species is asked for by hash bucket
+// (`entriesFor`), and a search is answered by the server (`searchCatalogue`).
 
 /**
  * Entries for a few species (a grower's own), asked for by hash bucket so the names never leave the device: the plants
@@ -53,8 +40,6 @@ export async function entriesFor(slugs: Iterable<string>): Promise<Map<string, I
   const list = [...new Set(slugs)].filter(Boolean);
   const out = new Map<string, IndexEntry>();
   if (!list.length) return out;
-  const cached = cache ? await cache : null; // the whole index, if some page already fetched it
-  if (cached) { for (const e of cached) if (list.includes(e.slug)) out.set(e.slug, e); return out; }
   const want = new Set(list);
   const buckets = [...new Set(list.map(bucketOf))].sort();
   const missing = buckets.filter((b) => !bucketCache.has(b));
@@ -69,6 +54,26 @@ export async function entriesFor(slugs: Iterable<string>): Promise<Map<string, I
     for (const e of entries) if (want.has(e.slug)) out.set(e.slug, e);
   }
   return out;
+}
+
+/** A catalogue search answer: an index entry, as the front page's tiles read them. */
+export type Found = IndexEntry;
+/**
+ * The catalogue search, answered by the server from the index it holds (round thirty-nine): the index never comes to the
+ * browser whole. Null when the reference could not be reached (a different fact from "nothing matches"). What is sent
+ * is the text in a public catalogue's search box, listed on /about/how; a plant's record never is.
+ */
+export async function searchCatalogue(q: string, n = 60): Promise<Found[] | null> {
+  const text = q.trim().slice(0, 80);
+  if (!text) return [];
+  try {
+    const r = await withCorpus(`/api/search?q=${encodeURIComponent(text)}&n=${n}`).then(timed);
+    if (r.status === 400) return []; // not a search (symbols the index has no words in): nothing matches
+    if (!r.ok) return null;
+    return (await r.json()) as Found[];
+  } catch {
+    return null;
+  }
 }
 
 export type { Sheet } from '$lib/server/sheets';

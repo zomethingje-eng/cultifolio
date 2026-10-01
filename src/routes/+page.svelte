@@ -6,7 +6,7 @@
   import { page } from '$app/state';
   import { accNo } from '$lib/db/types';
   import { photoAt } from '$dossier/photo-size';
-  import { entriesFor } from '$lib/ui/index.svelte';
+  import { entriesFor, searchCatalogue, type Found } from '$lib/ui/index.svelte';
   import PageHead from '$lib/ui/PageHead.svelte';
   import { collection } from '$lib/db/collection.svelte';
   import { onMount, tick } from 'svelte';
@@ -14,7 +14,6 @@
   import { slugify, speciesSlug } from '$core/names';
   import { groupFor } from '$core/regions';
   import type { MySpecies } from '$lib/db/species-list';
-  import { prepare, search } from '$core/search';
   import Today from '$lib/ui/Today.svelte';
   import RefPhotoOffer from '$lib/ui/RefPhotoOffer.svelte';
   let { data } = $props();
@@ -40,7 +39,8 @@
     if (!needle || !collection.ready || needle.length < 2) return [];
     return collection.accessions.filter((a) => accNo(a).toLowerCase().includes(needle) || (a.fieldNumber ?? '').toLowerCase().includes(needle) || (a.nameAsReceived ?? '').toLowerCase().includes(needle) || (a.cultivar ?? '').toLowerCase().includes(needle)).slice(0, 5);
   });
-  let chip = $state<'all' | 'owned' | 'climate' | 'noclimate'>('all');
+  /** The climate chips are the server's now (`?chip=`): they filter the grouped catalogue rather than flattening the whole index on the client (round thirty-nine). */
+  const chip = $derived(data.chip);
   let welcomeHidden = $state(true);
   // A returning grower's device remembers that the page will be their species, not the catalogue: until the collection is
   // open, the server-rendered catalogue is swapped for a light skeleton so neither the wrong head nor "You grow 0" shows.
@@ -151,31 +151,30 @@
   // The hint says "your species" is coming; hold the catalogue back until the collection says which view this is.
   const settling = $derived(expectMine && !collection.ready);
   type Item = NonNullable<(typeof data.rows)[number]['items']>[number];
-  // The full catalogue, fetched once and only when a search or a chip needs to cut across the grouping.
-  let full = $state<Item[] | null>(null);
-  let loadingFull = $state(false);
-  let fullFailed = $state(false);
-  async function loadFull() {
-    if (full || loadingFull || fullFailed) return; // a failed load (offline) is retried by the button, never by the effect
-    loadingFull = true;
-    try {
-      const r = await fetch('/api/index');
-      if (!r.ok) fullFailed = true;
-      if (r.ok) {
-        const idx = (await r.json()) as Array<{ key: number; slug: string; name: string; family?: string; common?: string; origin?: string[]; syn?: string[]; thumb?: string; photos: number; open: number; climate: string }>;
-        full = idx.map((e) => ({ key: e.key, slug: e.slug, name: e.name, family: e.family, common: e.common, origin: e.origin ?? [], syn: e.syn, thumb: e.thumb, alt: e.thumb ? e.name : undefined, photos: e.photos, open: e.open, climate: e.climate }));
-      }
-    } catch {
-      fullFailed = true;
-    } finally {
-      loadingFull = false;
-    }
-  }
-  const retryFull = () => { fullFailed = false; loadFull(); };
-  const flat = $derived(!!q.trim() || chip !== 'all');
+  // The search is the server's: the index never comes to the browser whole (round thirty-nine). Debounced a little,
+  // and an answer is used only if it is still for the text in the box.
+  let found = $state<Found[]>([]);
+  let searching = $state(false);
+  let searchFailed = $state(false);
+  let searchGen = 0;
+  let searchTimer: ReturnType<typeof setTimeout> | undefined;
   $effect(() => {
-    if (flat) loadFull();
+    const text = q.trim();
+    const gen = ++searchGen;
+    clearTimeout(searchTimer);
+    if (!text) { found = []; searching = false; searchFailed = false; return; }
+    searching = true;
+    searchTimer = setTimeout(async () => {
+      const r = await searchCatalogue(text);
+      if (gen !== searchGen) return;
+      searching = false;
+      if (r === null) { searchFailed = true; found = []; return; }
+      searchFailed = false;
+      found = r;
+    }, 150);
   });
+  const retrySearch = () => { const t = q; q = ''; q = t; };
+  const flat = $derived(!!q.trim());
   // A grower's own tiles come from a small request for their own species; the whole catalogue is fetched only for a search or a chip.
   let ownEntries = $state<Map<string, Item> | null>(null);
   let ownFailed = $state(false);
@@ -185,35 +184,24 @@
     if (!m) { ownFailed = true; return; }
     ownEntries = new Map([...m.values()].map((e) => [e.slug, { key: e.key, slug: e.slug, name: e.name, family: e.family, common: e.common, origin: e.origin ?? [], syn: e.syn, thumb: prefs.referencePhotos ? e.thumb : undefined, alt: prefs.referencePhotos && e.thumb ? e.name : undefined, thumbOff: !prefs.referencePhotos && !!e.thumb, photos: e.photos, open: e.open, climate: e.climate } as Item]));
   }
-  $effect(() => { if (hasMine && !full) { mine.size; prefs.referencePhotos; loadOwn(); } }); // rebuilt when the photograph preference changes
+  $effect(() => { if (hasMine) { mine.size; prefs.referencePhotos; loadOwn(); } }); // rebuilt when the photograph preference changes
   const retryOwn = () => { ownFailed = false; loadOwn(); };
   const ownedN = $derived.by(() => {
-    if (full) return [...owned.keys()].filter((k) => full!.some((c) => c.slug === k)).length;
     if (ownEntries) return [...owned.keys()].filter((k) => ownEntries!.has(k)).length;
-    return [...owned.keys()].length; // until the full index is here, count what you grow, not what the corpus has of it
-  });
-  const prepared = $derived(full ? prepare(full) : null);
-  const chipOk = (c: Item) => (chip === 'owned' ? owned.has(c.slug) : chip === 'climate' ? c.climate === 'ok' : chip === 'noclimate' ? c.climate !== 'ok' : true);
-  // A search or a chip flattens the catalogue: matches across every group, so nothing hides inside a closed row. A search
-  // is ranked (genus first, then names, then common names, families and origins; one typing error forgiven when the
-  // exact spelling finds nothing); a chip alone is alphabetical.
-  const found = $derived.by(() => {
-    if (!flat || !full || !prepared) return [];
-    const base = q.trim() ? search(prepared, q) : [...full].sort((a, b) => a.name.localeCompare(b.name));
-    return base.filter(chipOk);
+    return [...owned.keys()].length; // until the entries are here, count what you grow, not what the corpus has of it
   });
   const byLabel = { genus: 'Genus', origin: 'Origin', family: 'Family' } as const;
   const fmtN = (n: number) => n.toLocaleString('en-US');
   // A visitor: no plants on this device (until the collection has opened, the server's catalogue stands as the visitor's page).
   const visitor = $derived(!collection.ready || (!hasMine && !collection.accessions.length));
   const openRow = $derived(data.rows.find((r) => r.id === data.open));
-  const rowHref = (id: string) => `?by=${data.by}${id === data.open ? '' : `&open=${id}`}`;
+  const rowHref = (id: string) => `?by=${data.by}${chip !== 'all' ? `&chip=${chip}` : ''}${id === data.open ? '' : `&open=${id}`}`;
   /* ---- your species ---- */
   // A tile's data: a catalogue entry, or, until the index is here, the name alone. `missing`: the index is here and has no such species.
   type Tile = { slug: string; key?: number; name: string; family?: string; common?: string; thumb?: string; alt?: string; open?: number; climate?: string; missing?: boolean; /** the reference has a photograph, and the grower has it switched off for their own tiles */ thumbOff?: boolean };
   const mineTiles = $derived.by(() => {
     const list = [...mine.values()].sort((a, b) => a.name.localeCompare(b.name));
-    const bySlug = full ? new Map(full.map((c) => [c.slug, c])) : ownEntries;
+    const bySlug = ownEntries;
     const toTile = (s: { slug: string; name: string }): Tile => {
       const e = bySlug?.get(s.slug) as Tile | undefined;
       if (!e) return { slug: s.slug, name: s.name, missing: !!bySlug };
@@ -224,8 +212,8 @@
   });
   const grownN = $derived(mineTiles.grow.length);
   const followingN = $derived(mineTiles.follow.length);
-  // Catalogue matches for a search typed on your species view: the whole corpus, flat and alphabetical.
-  const hits = $derived(yourView && q.trim() && prepared ? search(prepared, q) : []);
+  // Catalogue matches for a search typed on your species view: the same server search, ranked.
+  const hits = $derived(yourView && q.trim() ? found : []);
   const startBrowsing = () => {
     browsing = true;
     q = '';
@@ -233,7 +221,6 @@
   const stopBrowsing = () => {
     browsing = false;
     q = '';
-    chip = 'all';
   };
   /** The climate state in words: a refusal is never shown as an absence. */
   const climateWord = (c: string) => (c === 'ok' ? 'habitat climate known' : c === 'pending' ? 'habitat climate pending' : c === 'refused' ? 'habitat climate not checked: a source did not answer' : 'no habitat climate derived');
@@ -281,7 +268,7 @@
   {@const own = owned.get(c.slug) ?? (c.key != null ? owned.get(`key:${c.key}`) : undefined)}
   <a class="tile" href="/species/{c.slug}">
     {#if own?.length}<span class="ownchip" title="You grow {own.length === 1 ? own[0] : own.length + ' of these'}" aria-label="You grow {own.length === 1 ? own[0] : own.length + ' of these'}">{own.length === 1 ? own[0] : `× ${own.length}`}</span>{:else if mine.get(c.slug)?.followed}<span class="ownchip following" title="On your list without a plant of it" aria-label="Following: on your list without a plant of it">following</span>{/if}
-    {#if c.thumb}<div class="im"><img src={c.thumb} alt={c.alt} loading="lazy" onerror={(e) => { const im = e.currentTarget as HTMLImageElement; im.style.display = 'none'; im.parentElement?.classList.add('ph'); im.parentElement && (im.parentElement.textContent = 'photograph did not load'); }} /></div>{:else if c.thumbOff}<div class="im"><Placeholder name={c.name} family={c.family} caption="reference photograph off" title="The reference has a photograph; showing it on your own tiles is off" /></div>{:else if c.climate}<div class="im"><Placeholder name={c.name} family={c.family} caption="no open photograph on file" /></div>{:else if c.missing}<div class="im"><Placeholder name={c.name} family={c.family} caption="not in the reference yet" /></div>{:else}<div class="im ph">{loadingFull ? 'loading…' : fullFailed || ownFailed ? 'reference not reached' : ''}</div>{/if}
+    {#if c.thumb}<div class="im"><img src={c.thumb} alt={c.alt} loading="lazy" onerror={(e) => { const im = e.currentTarget as HTMLImageElement; im.style.display = 'none'; im.parentElement?.classList.add('ph'); im.parentElement && (im.parentElement.textContent = 'photograph did not load'); }} /></div>{:else if c.thumbOff}<div class="im"><Placeholder name={c.name} family={c.family} caption="reference photograph off" title="The reference has a photograph; showing it on your own tiles is off" /></div>{:else if c.climate}<div class="im"><Placeholder name={c.name} family={c.family} caption="no open photograph on file" /></div>{:else if c.missing}<div class="im"><Placeholder name={c.name} family={c.family} caption="not in the reference yet" /></div>{:else}<div class="im ph">{ownFailed ? 'reference not reached' : 'loading…'}</div>{/if}
     <div class="tx">
       <div class="nm"><SpeciesName name={c.name} /></div>
       <div class="fam">{c.common ?? c.family ?? ''}</div>
@@ -316,8 +303,10 @@
 
   {#if q.trim()}
     {@render plantsFound()}
-    {#if !full}
-      <p class="seccount" style="margin-top: 14px">{fullFailed ? 'The catalogue could not be reached.' : 'Loading the whole catalogue…'}{#if fullFailed} <button class="linkish" type="button" onclick={retryFull}>Try again</button>{/if}</p>
+    {#if searchFailed}
+      <p class="seccount" style="margin-top: 14px">The catalogue could not be reached. <button class="linkish" type="button" onclick={retrySearch}>Try again</button></p>
+    {:else if searching && !hits.length}
+      <p class="seccount" style="margin-top: 14px">Searching…</p>
     {:else if !hits.length}
       <div class="emptybox"><p class="muted">Nothing in the catalogue matches.</p></div>
     {:else}
@@ -327,8 +316,8 @@
       <p class="seccount" style="margin-top: 14px" role="status">{fmtN(hits.length)} of {fmtN(data.total)} match; Enter opens the first.</p>
     {/if}
   {:else}
-    {#if fullFailed || ownFailed}
-      <p class="seccount" style="margin-top: 14px">The reference could not be reached, so your tiles are without their photographs and climate. <button class="linkish" type="button" onclick={() => { retryFull(); retryOwn(); }}>Try again</button></p>
+    {#if ownFailed}
+      <p class="seccount" style="margin-top: 14px">The reference could not be reached, so your tiles are without their photographs and climate. <button class="linkish" type="button" onclick={retryOwn}>Try again</button></p>
     {/if}
     {#if mineTiles.grow.length}
       <h2 class="q grouptitle">You grow</h2>
@@ -379,9 +368,9 @@
     </nav>
   </div>
   <div class="chiprow">
-    <button class="chipbtn" class:on={chip === 'all'} aria-pressed={chip === 'all'} onclick={() => (chip = 'all')}>All<span class="n">{fmtN(data.total)}</span></button>
-    <button class="chipbtn" class:on={chip === 'climate'} aria-pressed={chip === 'climate'} onclick={() => (chip = 'climate')}>Climate known<span class="n">{fmtN(data.withClimate)}</span></button>
-    <button class="chipbtn" class:on={chip === 'noclimate'} aria-pressed={chip === 'noclimate'} onclick={() => (chip = 'noclimate')}>Without climate<span class="n">{fmtN(data.total - data.withClimate)}</span></button>
+    <a class="chipbtn" class:on={chip === 'all'} aria-current={chip === 'all' ? 'true' : undefined} href="?by={data.by}" data-sveltekit-noscroll>All<span class="n">{fmtN(data.total)}</span></a>
+    <a class="chipbtn" class:on={chip === 'climate'} aria-current={chip === 'climate' ? 'true' : undefined} href="?by={data.by}&chip=climate" data-sveltekit-noscroll>Climate known<span class="n">{fmtN(data.withClimate)}</span></a>
+    <a class="chipbtn" class:on={chip === 'noclimate'} aria-current={chip === 'noclimate' ? 'true' : undefined} href="?by={data.by}&chip=noclimate" data-sveltekit-noscroll>Without climate<span class="n">{fmtN(data.total - data.withClimate)}</span></a>
   </div>
   {#if !flat && data.letters.length > 1}
     <nav class="letters" aria-label="Jump to a letter">
@@ -392,15 +381,17 @@
 
   {#if flat}
     {#if q.trim()}{@render plantsFound()}{/if}
-    {#if !full}
-      <p class="seccount" style="margin-top: 14px">{loadingFull ? 'Loading the whole catalogue…' : 'The catalogue could not be reached.'}{#if fullFailed} <button class="linkish" type="button" onclick={retryFull}>Try again</button>{/if}</p>
+    {#if searchFailed}
+      <p class="seccount" style="margin-top: 14px">The catalogue could not be reached. <button class="linkish" type="button" onclick={retrySearch}>Try again</button></p>
+    {:else if searching && !found.length}
+      <p class="seccount" style="margin-top: 14px">Searching…</p>
     {:else if !found.length}
       <div class="emptybox"><p class="muted">Nothing matches.</p></div>
     {:else}
       <div class="hgrid">
         {#each found as c (c.slug)}{@render tile(c)}{/each}
       </div>
-      <p class="seccount" style="margin-top: 14px" role="status">{fmtN(found.length)} of {fmtN(data.total)} shown{q.trim() ? '; Enter opens the first' : ''}.</p>
+      <p class="seccount" style="margin-top: 14px" role="status">{fmtN(found.length)} {found.length === 1 ? 'match' : 'matches'} of {fmtN(data.total)}; Enter opens the first.</p>
     {/if}
   {:else}
     <div class="rows" class:withletters={data.letters.length > 1}>

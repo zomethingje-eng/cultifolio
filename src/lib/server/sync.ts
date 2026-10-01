@@ -599,6 +599,8 @@ export const RATE = {
   forecast: { limit: 60, windowMs: 600_000 },
   /** A sheet bucket the edge did not hold, charged per bucket derived: a device asks for at most 32 in a life, and a bucket is one R2 read when the corpus build wrote it, a few hundred when not. */
   sheets: { limit: 200, windowMs: 600_000 },
+  /** A catalogue search: a person typing makes a few a second for a few seconds, each answered from memory (round thirty-nine). */
+  search: { limit: 600, windowMs: 600_000 },
   /** A species address the reference does not hold, asked of the backbone's match service: a person follows a few old labels an hour; a script could mint them without end (round thirty-three, 12). */
   match: { limit: 60, windowMs: 600_000 }
 } as const;

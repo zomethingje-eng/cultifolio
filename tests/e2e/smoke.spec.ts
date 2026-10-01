@@ -880,28 +880,39 @@ test('the app shell is installed for offline use: collection pages, a species pa
   await ctx.close();
 });
 
-test('the front page carries closed rows and fetches the whole catalogue only when a search or a chip cuts across them', async ({ page }) => {
+test('the front page carries closed rows, never fetches the whole index, and a search or a chip is answered by the server (round thirty-nine)', async ({ page }) => {
   await page.goto('/');
-  const calls: string[] = [];
-  page.on('request', (r) => { if (r.url().includes('/api/index')) calls.push(r.url()); });
+  const index: string[] = [];
+  const searches: string[] = [];
+  page.on('request', (r) => { if (r.url().includes('/api/index')) index.push(r.url()); if (r.url().includes('/api/search')) searches.push(r.url()); });
   await expect(page.locator('.grow')).toHaveCount(3);
   // opening a row is a navigation, not an index fetch
   await page.locator('.grow', { hasText: 'Welwitschia' }).click();
   await expect(page.locator('a.tile')).toHaveCount(1);
-  expect(calls).toHaveLength(0);
-  // a search flattens: every match across every genus, and the rows step aside
+  expect(index).toHaveLength(0);
+  // a search flattens: every match across every genus, and the rows step aside; the index did not come to the browser
   await page.fill('.searchbar', 'welwit');
   await expect(page.locator('a.tile')).toHaveCount(1);
   await expect(page.locator('.grow')).toHaveCount(0);
-  expect(calls.length).toBeGreaterThan(0);
-  await expect(page.locator('.seccount').last()).toContainText('1 of 4 shown');
-  // a chip does the same, and "You grow" is not offered to someone who grows nothing
+  expect(index).toHaveLength(0);
+  expect(searches.length).toBeGreaterThan(0);
+  expect(searches.every((u) => /[?&]c=fixture(&|$)/.test(u))).toBe(true); // under the corpus id, like every reference request
+  await expect(page.locator('.seccount').last()).toContainText('1 match of 4');
+  // a chip filters the grouped catalogue on the server, and "You grow" is not offered to someone who grows nothing
   await page.fill('.searchbar', '');
   await expect(page.locator('.grow')).toHaveCount(3);
   await expect(page.locator('.chipbtn', { hasText: 'You grow' })).toHaveCount(0);
   await page.locator('.chipbtn', { hasText: 'Without climate' }).click();
-  await expect(page.locator('a.tile')).toHaveCount(2);
-  await expect(page.locator('.seccount').last()).toContainText('2 of 4 shown');
+  await expect(page).toHaveURL(/chip=noclimate/);
+  await expect(page.locator('.chipbtn.on')).toContainText('Without climate');
+  await expect(page.locator('.grow')).toHaveCount(2); // only the genera with a species without climate (Refusia refused, Welwitschia pending)
+  await expect(page.locator('.seccount').last()).toContainText('2 genera');
+  await page.locator('.grow', { hasText: 'Welwitschia' }).click();
+  await expect(page).toHaveURL(/chip=noclimate.*open=welwitschia|open=welwitschia.*chip=noclimate/);
+  await expect(page.locator('a.tile')).toHaveCount(1);
+  await page.locator('.chipbtn', { hasText: 'All' }).click();
+  await expect(page.locator('.grow')).toHaveCount(3);
+  expect(index).toHaveLength(0);
 });
 
 test('the about pages are served without JavaScript and say what the app refuses to guess', async ({ browser }) => {
@@ -965,6 +976,7 @@ test.describe('with the reference cut', () => {
 test.use({ serviceWorkers: 'block' });
 test('an unreachable reference is "not reached", never "not in the reference"', async ({ page }) => {
   await page.route('**/api/index', (r) => r.abort());
+  await page.route('**/api/search**', (r) => r.abort());
   await page.route('**/api/sheets**', (r) => r.abort()); // the plant asks for its species' sheet by hash bucket
   await page.route('**/api/dossier/**', (r) => r.abort());
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
@@ -1420,7 +1432,7 @@ test('pages about your own plants ask no outside host for anything unless the re
   await page.waitForTimeout(500);
   expect(outside.filter((u) => !u.startsWith('/ ->'))).toEqual([]); // the plant page and the list asked no outside host for anything
   expect(outside.filter((u) => u.includes('700/medium'))).toEqual([]); // and the front page fetched nothing about the plant grown (its rows and strip are the public catalogue)
-  // after a search the whole index is here, with every photograph; the own tile still shows none
+  // after a search (answered by the server, the index never fetched whole) the own tile still shows no photograph
   await page.fill('.searchbar', 'welwit');
   await expect(page.locator('a.tile')).toHaveCount(1);
   await page.fill('.searchbar', '');

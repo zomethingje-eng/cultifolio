@@ -1,8 +1,8 @@
 <script lang="ts">
   /**
-   * Type a name; get suggestions from the dossier index first (instant, local
-   * to this site) and from the GBIF backbone as you type, through this site's
-   * /api/names so the browser talks to no third-party host. Picking sets the
+   * Type a name; get suggestions from the reference's own index first (this
+   * site's /api/search) and from the GBIF backbone as you type, through this
+   * site's /api/names so the browser talks to no third-party host. Picking sets the
    * accepted name and the GBIF key; typing a name nobody resolves is allowed
    * and flagged, never silently guessed.
    *
@@ -14,16 +14,13 @@
    * resolved is flagged, with the nearest reference name offered by name.
    */
   import { parseName } from '$core/names';
-  import { prepare, search as searchIndex, type Prepared } from '$core/search';
+  import { searchCatalogue } from '$lib/ui/index.svelte';
   import SpeciesName from './SpeciesName.svelte';
   import type { NameKind } from '$core/names';
   let { value = $bindable(''), taxonKey = $bindable<number | null>(null), cultivar = $bindable<string | null>(null), kind = $bindable<NameKind>('species'), parentage = $bindable<string | null>(null), id = 'species-name', unresolved = $bindable(false), armed = $bindable(false) }: { value?: string; taxonKey?: number | null; cultivar?: string | null; kind?: NameKind; parentage?: string | null; id?: string; unresolved?: boolean; armed?: boolean } = $props();
   type Sugg = { key: number; name: string; family?: string; rank?: string; status?: string; local?: boolean; far?: boolean };
   let suggestions = $state<Sugg[]>([]);
   let open = $state(false);
-  type Entry = { key: number; slug: string; name: string; family?: string; common?: string };
-  let index: Entry[] | null = null;
-  let prepared: Prepared<Entry>[] | null = null;
   let timer: ReturnType<typeof setTimeout> | undefined;
   /** Bumped on every keystroke: a search or exact check answers only if it is still the latest, so a slow answer for text since changed never replaces the menu (round eighteen, B2). */
   let reqGen = 0;
@@ -60,16 +57,6 @@
     return rows;
   }
 
-  async function loadIndex() {
-    if (index) return index;
-    try {
-      index = await (await fetch('/api/index')).json();
-    } catch {
-      index = [];
-    }
-    return index!;
-  }
-
   async function search(q: string) {
     const gen = ++reqGen;
     const live = () => gen === reqGen;
@@ -79,13 +66,14 @@
     parentage = p.parentage ?? null;
     const genusOnly = !p.epithet;
     const needle = p.scientific.toLowerCase();
-    const idx = await loadIndex();
+    // The reference's own suggestions come from the server's search over the index (round thirty-nine), not from the
+    // whole index fetched here; the name typed already went to /api/names, so nothing new leaves the device. The corpus
+    // index is species-level; for a genus-only name (a hybrid) its rows would be wrong suggestions.
+    const fromIndex = genusOnly || needle.length < 2 ? [] : ((await searchCatalogue(needle, 6)) ?? []);
     if (!live()) return;
-    // The corpus index is species-level; for a genus-only name (a hybrid) its rows would be wrong suggestions.
-    if (!prepared) prepared = prepare(idx);
-    // A local hit whose genus is not the one typed came from the one-edit fallback ("polyphylla" → Lupinus polyphyllus): say so.
+    // A hit whose genus is not the one typed came from the one-edit fallback ("polyphylla" → Lupinus polyphyllus): say so.
     const typedGenus = needle.split(/\s+/)[0] ?? '';
-    const local: Sugg[] = genusOnly ? [] : searchIndex(prepared!, needle, 6).map((e) => ({ key: e.key, name: e.name, family: e.family, local: true, far: !e.name.toLowerCase().startsWith(typedGenus.slice(0, Math.min(4, typedGenus.length))) }));
+    const local: Sugg[] = fromIndex.map((e) => ({ key: e.key, name: e.name, family: e.family, local: true, far: !e.name.toLowerCase().startsWith(typedGenus.slice(0, Math.min(4, typedGenus.length))) }));
     suggestions = local;
     hi = -1;
     open = true;

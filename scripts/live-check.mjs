@@ -152,6 +152,21 @@ if (!skip.has('thumbs') && !process.env.LIVE_CHECK_FIXTURE_OK) {
   }
 }
 
+// The catalogue search is the server's (round thirty-nine): a genus must answer with its species, ranked, under the corpus
+// id and cacheable; the browser no longer fetches the index whole, so a dead route is a front page that cannot search.
+{
+  const c = await get('/api/corpus');
+  const id = c.status === 200 ? JSON.parse(c.text).id : '';
+  const name = process.env.LIVE_CHECK_FIXTURE_OK ? 'copiapoa' : 'haworthia';
+  const r = await get(`/api/search?q=${name}&c=${encodeURIComponent(id)}`);
+  if (r.status !== 200) fail('/api/search', r);
+  const hits = JSON.parse(r.text);
+  if (!Array.isArray(hits) || !hits.length || !hits.every((h) => typeof h.slug === 'string' && typeof h.name === 'string')) fail(`/api/search?q=${name} answered no hits`, r);
+  if (!hits[0].name.toLowerCase().startsWith(name)) fail(`/api/search?q=${name}: the first hit is ${hits[0].name}, not the genus asked for`, r);
+  if (!/max-age=86400/.test(r.h('cache-control') ?? '')) fail(`/api/search under the current corpus id should be cacheable for a day (cache-control: ${r.h('cache-control')})`, r);
+  ok(`search: ${hits.length} hits for ${name}, first ${hits[0].name}, cacheable`);
+}
+
 // The front page's first-screen photographs, by weight: every image the server-rendered home page names (the featured
 // strip and the group thumbnails) is fetched, and the check fails on any one over 300 kB or on more than 1.5 MB in all.
 // The daily rotation once put a four-megabyte animated GIF in the strip and a phone's home page at seven megabytes

@@ -29,6 +29,11 @@ export const load: PageServerLoad = async ({ platform, fetch, setHeaders, url, c
   const byParam = url.searchParams.get('by');
   const by: By = (BYS as readonly string[]).includes(byParam ?? '') ? (byParam as By) : 'genus';
   const open = url.searchParams.get('open') ?? '';
+  // The climate chips filter the grouped catalogue on the server (`?chip=`): the client used to fetch the whole index to
+  // flatten it by chip, which the index's size would make unusable first (round thirty-nine).
+  const chipParam = url.searchParams.get('chip');
+  const chip: 'all' | 'climate' | 'noclimate' = chipParam === 'climate' || chipParam === 'noclimate' ? chipParam : 'all';
+  const shown = chip === 'climate' ? list.filter((c) => c.climate === 'ok') : chip === 'noclimate' ? list.filter((c) => c.climate !== 'ok') : list;
   // Short and never stale: HTML names the build's hashed chunks, and a stale page after a deploy would import chunks that are gone.
   setHeaders({ 'cache-control': 'private, max-age=60', vary: 'accept-language, cookie' }); // private: the page is rendered in the reader's units, so no shared cache may hand one reader's page to another
 
@@ -37,7 +42,7 @@ export const load: PageServerLoad = async ({ platform, fetch, setHeaders, url, c
   // its little map; family is for those who think that way. Search and the chips cut across the grouping on the client.
   const keyOf = (c: Item): string => (by === 'genus' ? genusOf(c.name) : by === 'family' ? (c.family ?? 'Family not stated') : groupFor(c.origin));
   const groups = new Map<string, Item[]>();
-  for (const c of list) {
+  for (const c of shown) {
     const k = keyOf(c);
     groups.set(k, [...(groups.get(k) ?? []), c]);
   }
@@ -101,7 +106,8 @@ export const load: PageServerLoad = async ({ platform, fetch, setHeaders, url, c
     by,
     open: rows.some((r) => r.id === open) ? open : '',
     /** The address asked for the catalogue (a grouping, an opened group, a letter): a grower with plants lands on the catalogue, not on their own list (round thirty-four, 1). */
-    browse: byParam != null || !!open || url.searchParams.has('from') || url.searchParams.has('at'),
+    browse: byParam != null || !!open || chip !== 'all' || url.searchParams.has('from') || url.searchParams.has('at'),
+    chip,
     rows,
     letters,
     // `?from=L`: the server-rendered window starts at that letter, so a reader without JavaScript (and a crawler) can follow the letter index; with JavaScript the index jumps in place.
