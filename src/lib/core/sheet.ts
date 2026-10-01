@@ -221,7 +221,8 @@ export function coldFloor(m: Month[] | null, ex: Extremes | null, guess: ArchGue
     return { floor: minC!, habitat: null, raised: false, group: aLabel(guess!.arch.lab), s: `Cold floor: ${T(minC!)}, the archetype table's conventional minimum for ${aLabel(guess!.arch.lab)} (grouped by ${guess!.why}); no habitat figure is on file for this species.`, short: `Cold floor ${T(minC!)} (conventional for ${aLabel(guess!.arch.lab)}, archetype table).`, hab: false };
   }
   if (minC != null && minC > floor) {
-    return { floor: minC, habitat: floor, raised: true, group: aLabel(guess!.arch.lab), s: `Cold floor: ${T(minC)}. The habitat figure, ${quantity}, is ${T1(floor)}; the archetype table's conventional minimum for ${aLabel(guess!.arch.lab)} (grouped by ${guess!.why}) is ${T(minC)}, which is higher, and the floor rule takes the higher.`, short: `Cold floor ${T(minC)} (archetype minimum for ${aLabel(guess!.arch.lab)}, above the ${T1(floor)} habitat night).`, hab: true };
+    // "habitat night" only for a night reading; a month's mean is named as the mean (round thirty-eight, R1 wording).
+    return { floor: minC, habitat: floor, raised: true, group: aLabel(guess!.arch.lab), s: `Cold floor: ${T(minC)}. The habitat figure, ${quantity}, is ${T1(floor)}; the archetype table's conventional minimum for ${aLabel(guess!.arch.lab)} (grouped by ${guess!.why}) is ${T(minC)}, which is higher, and the floor rule takes the higher.`, short: `Cold floor ${T(minC)} (archetype minimum for ${aLabel(guess!.arch.lab)}, above the ${T1(floor)} habitat ${ex ? 'night' : 'coldest mean night'}).`, hab: true };
   }
   // A month's mean night is not a floor: it is the mean of a month's lows, above the nights a floor is read from. Headed
   // "Cold floor" over a sea notice that printed a colder figure, it told a grower the coast was safer than it is (round
@@ -312,7 +313,7 @@ export function cultivationSheet(input: SheetInput): { rows: Row[]; arch: ArchGu
     floorOut = coldFloor(m, ex, guess, U, input.extremesStatus);
     const floor = floorOut;
     if (floor) bits.push(floor.s);
-    add('Warmth and air', 'Temperature', bits.join(' '), `${ex ? `NASA POWER daily minima and maxima 1981–2024 at the typical cell${ex.lapseAppliedM ? ', lapse-corrected to its elevation' : ', without lapse correction'}; ` : ''}CHELSA monthly means, ${ENV}. The cold floor is the figure named in its sentence${guess?.arch.minC != null ? `, and the archetype table's group minimum where that is higher` : ''}. Not a measured survival limit for any plant in a pot.`, true, floor?.short);
+    add('Warmth and air', 'Temperature', bits.join(' '), `${ex ? `NASA POWER daily minima and maxima 1981–2024 at the typical cell${ex.lapseAppliedM ? ', lapse-corrected to its elevation' : ', without lapse correction'}; ` : ''}CHELSA monthly means, ${ENV}. ${ex || floor?.raised ? `The cold floor is the figure named in its sentence${guess?.arch.minC != null ? `, and the archetype table's group minimum where that is higher` : ''}.` : 'No cold floor is read without a daily extremes series; the mean night named in its sentence is not one.'} Not a measured survival limit for any plant in a pot.`, true, floor?.short);
     const rhs = m.map((x) => x.rh).filter((x): x is number => x != null);
     if (rhs.length) add('Warmth and air', 'Humidity', `Relative humidity at the habitat: ${Math.round(Math.min(...rhs)) === Math.round(Math.max(...rhs)) ? `${Math.round(Math.min(...rhs))}% all year` : `${Math.round(Math.min(...rhs))} to ${Math.round(Math.max(...rhs))}% across the year`} (monthly means, ${ENV}). A figure about the air, saying nothing about how the plant takes water.`, `CHELSA relative humidity, ${ENV.replace(', CHELSA', '')}.`, true);
   } else {

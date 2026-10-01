@@ -82,8 +82,9 @@ const V = 1;
 /**
  * version(1) | iv(12) | ciphertext. Associated data binds the blob to its
  * vault and purpose, so a batch cannot be replayed as a photo or into another
- * vault; with `name` (a photo's id) it is bound to that object too, so the
- * server cannot hand out one photo under another's id.
+ * vault; with `name` (a photo's id, a batch's name) it is bound to that object
+ * too, so the server cannot hand out one photo under another's id, nor a batch
+ * under another's name.
  */
 export async function seal(k: VaultKeys, kind: string, plain: Uint8Array, name?: string): Promise<Uint8Array> {
   const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -97,7 +98,7 @@ export async function seal(k: VaultKeys, kind: string, plain: Uint8Array, name?:
 
 const aad = (k: VaultKeys, kind: string, name?: string) => enc.encode(name ? `${k.id}|${kind}|${name}` : `${k.id}|${kind}`);
 
-/** Photos sealed before ids were bound open under the unnamed data; both are tried. */
+/** Photos sealed before ids were bound, and batches sealed before names were (round thirty-eight, R1-7), open under the unnamed data; both are tried. */
 export async function open(k: VaultKeys, kind: string, blob: Uint8Array, name?: string): Promise<Uint8Array> {
   if (blob.length < 14 || blob[0] !== V) throw new Error('not a sealed blob this version understands');
   for (const ad of name ? [aad(k, kind, name), aad(k, kind)] : [aad(k, kind)]) {
@@ -112,8 +113,9 @@ export async function open(k: VaultKeys, kind: string, blob: Uint8Array, name?: 
 
 export const sha256hex = async (b: Uint8Array) => hex(new Uint8Array(await crypto.subtle.digest('SHA-256', b as BufferSource)));
 
-export const sealJson = (k: VaultKeys, kind: string, v: unknown) => seal(k, kind, enc.encode(JSON.stringify(v)));
-export const openJson = async <T>(k: VaultKeys, kind: string, blob: Uint8Array): Promise<T> => JSON.parse(dec.decode(await open(k, kind, blob))) as T;
+/** With `name` (a batch's name on the server) the batch is bound to it, as a photo is to its id: a batch fetched with the token cannot be posted again under a fresh name and opened there (round thirty-eight, R1-7). */
+export const sealJson = (k: VaultKeys, kind: string, v: unknown, name?: string) => seal(k, kind, enc.encode(JSON.stringify(v)), name);
+export const openJson = async <T>(k: VaultKeys, kind: string, blob: Uint8Array, name?: string): Promise<T> => JSON.parse(dec.decode(await open(k, kind, blob, name))) as T;
 
 /** Pack a photo's two JPEGs into one blob: u32 length of the full image, then both. */
 export function packPhoto(full: Uint8Array, thumb: Uint8Array): Uint8Array {

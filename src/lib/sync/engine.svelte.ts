@@ -38,7 +38,7 @@
 import { collection } from '$lib/db/collection.svelte';
 import { StoppedError, getMeta, setMeta, setMetaIfKey, getPhotoBlobs, putPhotoBlobs, photoBlobIds, outboxKeys, outboxAck, outboxFill, outboxClear, changesByKeys, allChanges, appendChanges, onOtherTabWrite, announceSyncForgotten } from '$lib/db/vault';
 import { deriveKeys, sealJson, openJson, seal, open, packPhoto, unpackPhoto, parseVaultKey, batchFingerprint, sha256hex, type VaultKeys } from './crypto';
-import { MAX_BATCH_BYTES, MAX_PHOTO_BYTES, SEAL_OVERHEAD, OVERLAP_MS, PUSH_HEADERS, batchName, listAfter, logBatch } from './limits';
+import { MAX_BATCH_BYTES, MAX_PHOTO_BYTES, SEAL_OVERHEAD, OVERLAP_MS, CURSOR_SLACK_MS, PUSH_HEADERS, batchName, listAfter, logBatch } from './limits';
 import { readChanges, isHeld, dueAt, hlcWall, type Change } from '$core/log';
 import { hlcCompare, MAX_AHEAD_MS } from '$core/hlc';
 import { version as BUILD } from '$app/environment';
@@ -123,6 +123,8 @@ class Sync {
   quarantined = $state<Array<{ key: string; error: string; at: string }>>([]);
   /** What the server refused from this device. */
   refused = $state<Array<{ key: string; error: string; at: string }>>([]);
+  /** A listing dated past this clock plus the slack: said on the sync page, not kept (round thirty-eight, R1-5). */
+  clockAhead = $state<string | null>(null);
   /** Changes stored here but held out of the fold because a peer's clock was ahead; and when the last of them comes due (ms). */
   held = $state(0);
   heldUntil = $state<number | null>(null);
@@ -553,7 +555,7 @@ class Sync {
     const lastWall = hlcWall(batch[batch.length - 1].t);
     const plain = await batchFingerprint(this.k(m), utf8.encode(JSON.stringify(batch)));
     const key = batchName(lastWall, collection.device, plain);
-    const body = await sealJson(this.k(m), 'log', logBatch(collection.device, batch));
+    const body = await sealJson(this.k(m), 'log', logBatch(collection.device, batch), key); // bound to its name (round thirty-eight, R1-7)
     if (body.length > MAX_BATCH_BYTES && mayResplit && batch.length > 1) {
       // Too big before it ever leaves: halve it. Each half is named by its own content.
       const mid = cutBefore(batch, Math.ceil(batch.length / 2));
@@ -635,7 +637,7 @@ class Sync {
     let changes: Change[] | null = null;
     const keys = this.k(m); // outside the try: a stale run stops here, and is never read as bad ciphertext (round eighteen, 4)
     try {
-      const batch = await openJson<{ v: number; device: string; changes: unknown }>(keys, 'log', bytes);
+      const batch = await openJson<{ v: number; device: string; changes: unknown }>(keys, 'log', bytes, key); // a batch sealed before names were bound opens under the unnamed data
       if (!batch || typeof batch !== 'object' || batch.v !== 1) throw new Error('not a batch this version understands');
       const read = readChanges(batch.changes);
       // A batch with anything in it this build cannot read is set aside whole, under its name, for a later build to
@@ -667,6 +669,7 @@ class Sync {
   /** Returns how many batches were folded this run. */
   private async pull(m: SyncMeta): Promise<number> {
     let got = 0;
+    this.clockAhead = null; // this run's listings decide it afresh
     // The first page of a run starts a minute before the cursor; later pages continue strictly after the last batch listed.
     let after: { at: number; key: string } | null = null;
     for (;;) {
@@ -689,7 +692,13 @@ class Sync {
             have.add(b.key);
           }
           (m.haveAt ??= {})[b.key] = b.at;
-          if (b.at > m.since) m.since = b.at;
+          // The cursor never moves past this clock by more than the slack: one listing with a far-future arrival (a server
+          // clock, or a listing shaped by whoever holds the token) would otherwise make every later `since=` answer empty for
+          // good, silently (round thirty-eight, R1-5). Such an arrival leaves the cursor where it was and is said on the sync
+          // page; the batch itself is folded like any other, and `have` keeps it from folding twice when it is listed again.
+          const cap = Date.now() + CURSOR_SLACK_MS;
+          if (b.at > cap) this.clockAhead = `The server dated a batch ${Math.round((b.at - Date.now()) / 60000)} minutes ahead of this device's clock; the batch was read, and the cursor stays before it, so listings are longer until the clocks agree.`;
+          else if (b.at > m.since) m.since = b.at;
         }
       } finally {
         // One write per page, not per batch (round twelve, 10). A run that stops mid-page keeps what it applied: a

@@ -127,7 +127,7 @@
 {:else if collection.ready && collection.persisted === false && !sync.configured}
   <p class="small muted keepline" id="storage-notice">Kept in this browser only; <a href="/backup">back up</a> or install the app to keep it safe.</p>
 {/if}
-{#if collection.incomplete}<p class="small muted" id="incomplete-notice">{collection.incomplete} {collection.incomplete === 1 ? 'record waits' : 'records wait'} for a field this device does not have{#if sync.quarantined.length} (a batch from a newer build, set aside on <a href="/sync">Sync</a>){:else} (a file that never had it, or a batch from a newer build that has not arrived){/if}, and {collection.incomplete === 1 ? 'is' : 'are'} not shown until it comes; a plant's own page, by its number, says which field.</p>{/if}
+{#if collection.incomplete}<p class="small muted" id="incomplete-notice">{collection.incomplete} {collection.incomplete === 1 ? 'record waits' : 'records wait'} for a field this device does not have ({#if sync.quarantined.length}a batch from a newer build, set aside on <a href="/sync">Sync</a>{:else}a file that never had it, or a batch from a newer build that has not arrived{/if}), and {collection.incomplete === 1 ? 'is' : 'are'} not shown until it comes; a plant's own page, by its number, says which field.</p>{/if}
 
 {#if !collection.ready}
   <p class="muted">Opening your collection…</p>

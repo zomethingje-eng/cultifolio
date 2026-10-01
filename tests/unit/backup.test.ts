@@ -138,7 +138,7 @@ describe('merging a backup into a live collection', () => {
     expect(m.addedByKind).toEqual({ accession: 1, taxon: 1, event: 1 });
     expect(m.addedDeleted).toBe(1);
     expect(m.addedWaiting).toBe(1); // the batch with only a name: in the fold, not shown, and not counted as a batch added (round thirty-five, R1-4)
-    expect(m.waitingNames).toEqual(['batch Aloe']); // and named (round thirty-seven, R1-4)
+    expect(m.waitingNames).toEqual(['batch s9']); // by its number as the page addresses it, its id here (round thirty-eight, R1-3) // and named (round thirty-seven, R1-4)
   });
 });
 
@@ -199,12 +199,13 @@ describe('old data in a backup is mended, not refused (round twenty-nine, 2)', (
 describe('a zip made to inflate past what a backup can hold is refused at its table of contents (round twenty-nine, 10)', () => {
   it('an entry declared over the cap, or under a name a backup never has, is not inflated', async () => {
     const big = new Uint8Array(4 * 1024 * 1024); // deflates to a few kilobytes; declared size is what the filter reads
-    const zipped = zipSync({ 'manifest.json': new TextEncoder().encode('{}'), 'changes.json': new TextEncoder().encode('[]'), 'evil.bin': big, 'photos/huge.jpg': new Uint8Array(0) });
+    const zipped = zipSync({ 'manifest.json': new TextEncoder().encode('{}'), 'changes.json': new TextEncoder().encode('[]'), 'evil.bin': big, 'photos/huge.jpg': [new Uint8Array(0), { level: 0 }] });
     await expect(readBackup(zipped)).rejects.toThrow(/not in a shape/); // the two unknown entries were skipped and the manifest is then read as usual
-    // many entries each under the cap but adding up past what a file of this size could hold (round thirty, R2-7)
+    // many deflated photograph entries each under the cap but adding up past what a file of this size could hold (round
+    // thirty, R2-7) are refused earlier now: a deflated photograph is not one any writer made (round thirty-eight, R1-11)
     const many: Record<string, Uint8Array> = { 'manifest.json': new TextEncoder().encode('{}'), 'changes.json': new TextEncoder().encode('[]') };
     for (let i = 0; i < 6; i++) many[`photos/p${i}.jpg`] = new Uint8Array(40 * 1024 * 1024);
-    await expect(readBackup(zipSync(many))).rejects.toThrow(/declares far more content/);
+    await expect(readBackup(zipSync(many))).rejects.toThrow(/compresses photos\/p0.jpg/);
     // the sheets are never inflated, the manifest has a small cap, and a name seen twice is refused: eight deflated
     // entries alternating the two sheet names at 40 MB each are not touched (round thirty-five, R1-6, R2-4)
     const sheetsBomb: Record<string, Uint8Array> = { 'manifest.json': new TextEncoder().encode('{}'), 'changes.json': new TextEncoder().encode('[]'), 'plants.csv': new Uint8Array(40 * 1024 * 1024), 'batches.csv': new Uint8Array(40 * 1024 * 1024) };
@@ -292,9 +293,11 @@ describe('a backup is checked before anything is stored', () => {
     expect(photoBytesError(px('<html>'), jpeg(2))).toMatch(/JPEG/);
     expect(photoBytesError(jpeg(12 * 1024 * 1024), jpeg(2))).toMatch(/over the 12 MB limit/);
     const files = { 'manifest.json': px(JSON.stringify({ format: 'cultifolio-backup', v: 1, exported: 'x', counts: { changes: 0, accessions: 0, events: 0, locations: 0, sowings: 0, taxa: 0, photos: 0, photoBytes: 0 } })), 'changes.json': px('[]') };
-    await expect(readBackup(zipSync({ ...files, 'photos/p1.jpg': px('GIF89a'), 'photos/p1.t.jpg': jpeg(1) }))).rejects.toThrow(/Photo p1 .*not a JPEG/);
-    await expect(readBackup(zipSync({ ...files, 'photos/../x.jpg': jpeg(1), 'photos/../x.t.jpg': jpeg(1) }))).rejects.toThrow(/impossible name/);
-    const r = await readBackup(zipSync({ ...files, 'photos/p1.jpg': jpeg(1), 'photos/p1.t.jpg': jpeg(1) }));
+    const stored = (b: Uint8Array): [Uint8Array, { level: 0 }] => [b, { level: 0 }];
+    await expect(readBackup(zipSync({ ...files, 'photos/p1.jpg': stored(px('GIF89a')), 'photos/p1.t.jpg': stored(jpeg(1)) }))).rejects.toThrow(/Photo p1 .*not a JPEG/);
+    await expect(readBackup(zipSync({ ...files, 'photos/../x.jpg': stored(jpeg(1)), 'photos/../x.t.jpg': stored(jpeg(1)) }))).rejects.toThrow(/impossible name/);
+    await expect(readBackup(zipSync({ ...files, 'photos/p1.jpg': jpeg(1), 'photos/p1.t.jpg': jpeg(1) }))).rejects.toThrow(/compresses photos\/p1.jpg/); // deflated: not ours (round thirty-eight, R1-11)
+    const r = await readBackup(zipSync({ ...files, 'photos/p1.jpg': stored(jpeg(1)), 'photos/p1.t.jpg': stored(jpeg(1)) }));
     expect(r.photoIds).toEqual(['p1']);
   });
 });

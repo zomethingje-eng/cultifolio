@@ -11,6 +11,7 @@
   import { onMount } from 'svelte';
   import { prefs } from '$lib/ui/prefs.svelte';
   import { collection, DUE_DAYS } from '$lib/db/collection.svelte';
+  import WaitingRecord from '$lib/ui/WaitingRecord.svelte';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
   import LocationPicker from '$lib/ui/LocationPicker.svelte';
   import type { Provenance } from '$lib/db/types';
@@ -332,13 +333,7 @@
     // The removal is one tap; the way back is one too (round twenty-six, 5). The record never left the log.
     toast.show(`${no} removed.`, 8000, { label: 'Undo', run: () => { void collection.restore('accession', id).then(() => goto(`/plants/${accNo(collection.accession(id) ?? { id })}`)); } }); // the number it holds after the restore: a repair on restore may have renumbered it (round twenty-nine, 3)
   }
-  const waiting = $derived(a ? undefined : collection.waitingAccession(param));
-  const FIELD_WORD: Record<string, string> = { taxonName: 'name', status: 'status' };
-  async function markGrowing() {
-    if (!waiting) return;
-    await collection.put('accession', waiting.id, { status: 'growing' });
-    toast.show(`${param} marked as growing.`);
-  }
+  const waiting = $derived(a ? undefined : collection.waiting('accession', param));
   async function restoreRemoved() {
     const r = collection.removedAccession(param);
     if (!r) return;
@@ -366,11 +361,7 @@
     <p class="muted">{param} was given to a plant since removed. The number stays reserved and its record is still in the change log, so it can be brought back as it was, log and photographs included.</p>
     <p><button class="btn pri" onclick={restoreRemoved}>Restore this plant</button></p>
   {:else if waiting}
-    <!-- Not removed: here, and waiting for a field. It used to be told it was removed (round thirty-seven, R1-4). -->
-    <p class="muted" id="waiting-notice">{param}'s record is on this device but not whole: it has no {waiting.missing.map((f) => FIELD_WORD[f] ?? f).join(' and no ')}. A change from a newer build may still bring {waiting.missing.length === 1 ? 'it' : 'them'} (a batch set aside on <a href="/sync">Sync</a>), or the file it came from never had {waiting.missing.length === 1 ? 'it' : 'them'}. Until then the plant is not listed.</p>
-    {#if waiting.missing.length === 1 && waiting.missing[0] === 'status'}
-      <p><button class="btn pri" onclick={markGrowing}>Mark it as growing</button></p>
-    {/if}
+    <WaitingRecord kind="accession" label={param} {waiting} />
   {:else}
     <p class="muted">{collection.isNumberTaken(param) ? `${param} was given to a plant since removed; the number stays reserved.` : 'No plant with this number on this device.'}</p>
   {/if}

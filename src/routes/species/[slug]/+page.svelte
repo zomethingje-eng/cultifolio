@@ -166,6 +166,16 @@
   const excerpt = $derived(d.summary ? firstSentences(d.summary.text, 4) : null);
   const genusName = $derived(genusOf(d.name.scientific));
   const genusExcerpt = $derived(data.genusRecord?.summary ? firstSentences(data.genusRecord.summary.text, 3) : null);
+  /**
+   * A monotypic genus has one Wikipedia article for the genus and the species, and the two excerpts were the same
+   * paragraph twice, one heading apart (round thirty-eight, R2-3). When the genus excerpt is the species excerpt or a
+   * prefix of it (or the reverse), spacing and case aside, it is not shown: a rule over two quoted strings, not a word of prose.
+   */
+  const norm = (t: string | undefined) => (t ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const genusRepeats = $derived.by(() => {
+    const g = norm(genusExcerpt?.text), sp = norm(excerpt?.text);
+    return !!g && !!sp && (sp.startsWith(g) || g.startsWith(sp));
+  });
   const genusSlug = $derived(slugify(genusName));
   const sheetCards = $derived(CARD_ORDER.map((c) => ({ title: c, rows: sheet.rows.filter((r) => r.card === c) })).filter((c) => c.rows.length));
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -260,7 +270,7 @@
     <div class="notice"><b>Not checked.</b> Wikipedia did not answer when this page was built. Not a statement that it has no article.</div>
   {/if}
 
-  {#if data.genusRecord?.status === 'ok' && data.genusRecord.summary}
+  {#if data.genusRecord?.status === 'ok' && data.genusRecord.summary && !genusRepeats}
     <h2 class="sec" id="s-genus">About the genus · <i>{genusName}</i></h2>
     <div class="sumbody"><p>{genusExcerpt?.text}{#if genusExcerpt?.more}{' '}<a class="more" href={data.genusRecord.summary.url} rel="noopener">More on Wikipedia ›</a>{/if}</p></div>
     <p class="small muted">{genusExcerpt?.more ? 'The opening of' : 'Text from'} <a href={data.genusRecord.summary.url} rel="noopener">Wikipedia, “{data.genusRecord.summary.title}”</a>, {data.genusRecord.summary.licence}, quoted as written.</p>

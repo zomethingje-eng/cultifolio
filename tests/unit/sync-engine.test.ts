@@ -290,9 +290,42 @@ describe('batches are named by content and acked only when the server holds thos
     expect((await fetch(`/api/sync/log?vault=${keys.id}`)).status).toBe(401);
     expect((await fetch(`/api/sync/vault`, { method: 'POST', body: JSON.stringify({ id: keys.id, token: '1'.repeat(64), create: true }) })).status).toBe(403);
     expect([...r2.objs.keys()].every((k) => k.startsWith(`vault/${keys.id}/`))).toBe(true);
+    // The creation route, which has no token to check first, stops reading a body at a kilobyte rather than buffering what a
+    // stranger streams (round thirty-eight, R1-4): a chunked body that would carry megabytes is a 413 after a few chunks.
+    let pulled = 0;
+    const endless = new ReadableStream<Uint8Array>({ pull(c) { pulled++; if (pulled > 64) throw new Error('read past the cap'); c.enqueue(new Uint8Array(512).fill(0x20)); } });
+    const flood = await fetch(`/api/sync/vault`, { method: 'POST', body: endless, duplex: 'half' } as RequestInit);
+    expect(flood.status).toBe(413);
+    expect(pulled).toBeLessThanOrEqual(4);
+    expect((await fetch(`/api/sync/vault`, { method: 'POST', body: 'null' })).status).toBe(400); // a body that is not an object is still a plain 400
+    expect((await fetch(`/api/sync/vault`, { method: 'POST' })).status).toBe(400); // and no body at all
     // An oversize body is refused from its declared length.
     const big = await fetch(`/api/sync/log?vault=${keys.id}`, { method: 'POST', headers: { ...h, 'x-batch': '1700000000000-0000-dev', 'content-length': String(17 * 1024 * 1024) }, body: new Uint8Array(3) as BodyInit });
     expect(big.status).toBe(413);
+  });
+});
+
+describe('the pull cursor never runs ahead of the device clock (round thirty-eight, R1-5)', () => {
+  it('a listing that dates a batch a day ahead moves the cursor only to now plus the slack, says so, and later batches still arrive', async () => {
+    const r2 = fakeR2();
+    const B = await boot(newMem('bbbbbbbbbbbb'), r2);
+    await B.collection.addAccession({ taxonName: 'Copiapoa cinerea', acc: 'B-1' });
+    await B.sync.setup(KEY, 'create');
+    // The server's clock (or whoever shapes the listing) dates the one batch a day ahead.
+    for (const k of logKeys(r2)) r2.objs.get(k)!.uploaded = Date.now() + 86_400_000;
+    const memD = newMem('dddddddddddd');
+    const D = await boot(memD, r2);
+    await D.sync.setup(KEY, 'join');
+    const since = (memD.meta.get('sync') as { since: number }).since;
+    expect(since).toBeLessThanOrEqual(Date.now()); // the cursor did not move for it
+    expect(D.collection.accessions.map((a) => a.acc)).toEqual(['B-1']); // the batch itself still folded
+    expect(D.sync.clockAhead).toMatch(/ahead of this device's clock/);
+    expect(D.sync.refused).toEqual([]); // not a refusal of anything from this device
+    // A batch dated normally afterwards is not behind a cursor parked a day ahead.
+    await B.collection.addAccession({ taxonName: 'Lithops', acc: 'B-2' });
+    await B.sync.run();
+    await D.sync.run();
+    expect(D.collection.accessions.map((a) => a.acc).sort()).toEqual(['B-1', 'B-2']);
   });
 });
 

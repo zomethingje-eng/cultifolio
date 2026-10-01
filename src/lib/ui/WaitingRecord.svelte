@@ -1,0 +1,28 @@
+<script lang="ts">
+  /**
+   * A record that is here and not whole: what it has no value for, where the value may still come from, and (for a plant
+   * whose only missing field is its status, while nothing is set aside on Sync) the one default it is safe to write.
+   * It used to be told it was removed, or that there was no such record (round thirty-seven, R1-4; round thirty-eight, R1-1, R1-3).
+   */
+  import { sync } from '$lib/sync/engine.svelte';
+  import { collection } from '$lib/db/collection.svelte';
+  import { toast } from '$lib/ui/toast.svelte';
+
+  let { kind, label, waiting }: { kind: 'accession' | 'sowing' | 'location'; label: string; waiting: { id: string; missing: string[] } } = $props();
+  const WORD: Record<string, string> = { taxonName: 'name', status: 'status', method: 'method', sown: 'date', count: 'count', name: 'name' };
+  const what = $derived(kind === 'accession' ? 'plant' : kind === 'sowing' ? 'batch' : 'place');
+  const missing = $derived(waiting.missing.map((f) => WORD[f] ?? f));
+  const them = $derived(missing.length === 1 ? 'it' : 'them');
+  /** Set aside on Sync: a batch from a newer build may hold the real value, and a default written now would be newer than it and win on every device (round thirty-eight, R1-1). */
+  const setAside = $derived(sync.quarantined.some((q: { kind?: string; error: string }) => !(q.kind === 'photo' || (!q.kind && q.error.startsWith('photo:'))))); // a set-aside photograph holds no field
+  const offerStatus = $derived(kind === 'accession' && missing.length === 1 && waiting.missing[0] === 'status' && !setAside);
+  async function markGrowing() {
+    await collection.put('accession', waiting.id, { status: 'growing' });
+    toast.show(`${label} marked as growing.`);
+  }
+</script>
+
+<p class="muted" id="waiting-notice">{label}'s record is on this device but not whole: it has no {missing.join(' and no ')}. {#if setAside}A batch set aside on <a href="/sync">Sync</a> (from a newer build) may hold {them}; this build will read it when it can.{:else}A change from a newer build may still bring {them}, or the file it came from never had {them}.{/if} Until then the {what} is not listed.</p>
+{#if offerStatus}
+  <p><button class="btn pri" onclick={markGrowing}>Mark it as growing</button></p>
+{/if}

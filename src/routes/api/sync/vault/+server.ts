@@ -1,7 +1,10 @@
 import { json } from '@sveltejs/kit';
 import { STATUS } from '$lib/sync/limits';
 import type { RequestHandler } from './$types';
-import { store, vaultId, vaultIdFor, ensureVault, authed, readMeta, recount, vaultBytes, allowCreation, refundCreation, creationCeilings, clientIp, limited } from '$lib/server/sync';
+import { store, vaultId, vaultIdFor, ensureVault, authed, readMeta, recount, vaultBytes, allowCreation, refundCreation, creationCeilings, clientIp, limited, readBody } from '$lib/server/sync';
+
+/** The most a creation body may be: its three fields are under two hundred bytes. */
+const MAX_VAULT_BODY = 1024;
 
 /**
  * Create or open a vault. Body: { id, token, create }. The token is hashed
@@ -13,7 +16,16 @@ export const POST: RequestHandler = async ({ request, platform, getClientAddress
   const stop = await limited(platform, getClientAddress, 'sync');
   if (stop) return stop;
   // A body that is valid JSON but not an object (`null`, a number) is treated like no body: a 400 below, never a 500 (round sixteen, 16).
-  const raw: unknown = await request.json().catch(() => ({}));
+  // Read through the capped reader, not `request.json()`: this is the one route with no token to check first, and it read
+  // whatever a stranger streamed, up to the platform's limit, before judging it (round thirty-eight, R1-4). A creation body is a
+  // few hundred bytes; a kilobyte is generous.
+  const text = await readBody(request, MAX_VAULT_BODY, 'a vault request').then((b) => new TextDecoder().decode(b)).catch((e: unknown) => { if ((e as { status?: number })?.status === STATUS.tooBig) throw e; return ''; });
+  let raw: unknown = {};
+  try {
+    raw = text ? JSON.parse(text) : {};
+  } catch {
+    raw = {};
+  }
   const body = (raw && typeof raw === 'object' ? raw : {}) as { id?: string; token?: string; create?: boolean };
   const id = vaultId(body.id ?? null);
   if (!body.token || !/^[0-9a-f]{64}$/.test(body.token)) return json({ error: 'token required' }, { status: 400 });

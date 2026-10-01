@@ -124,7 +124,7 @@
           const readerLat = site.current?.lat ?? collection.locations.map((l) => l.lat).find((x): x is number => x != null) ?? null;
           const line = careLine({ scientific: a.taxonName, climateStatus: d?.climate.status, family: d?.name.family, months: d?.climate.status === 'ok' ? d.climate.months : null, extremes: d?.climate.status === 'ok' ? (d.climate.extremes ?? null) : null, extremesStatus: d?.climate.status === 'ok' ? d.climate.extremesStatus : null, lat: d?.habitatLat ?? null, units: units.current }, { readerLat });
           care = { ...care, [a.id]: line };
-          if (d && d.climate.status === 'ok' && !d.climate.extremes && (d.climate.extremesStatus === 'refused' || d.climate.extremesStatus === 'skipped' || d.climate.extremesStatus === 'sea')) nightOff = new Set([...nightOff, a.id]); // the night is left off this label; counted below (round seventeen, 7)
+          if (d && d.climate.status === 'ok' && !d.climate.extremes) nightOff = new Set([...nightOff, a.id]); // the night is left off this label; counted below (round seventeen, 7)
         }).catch(() => { done(); care = { ...care, [a.id]: null }; });
       }
     }
@@ -167,7 +167,7 @@
         <p class="small muted" role="status">{refused.length === 1 ? 'One care line' : `${refused.length} care lines`} <NotChecked inline why="The climate source did not answer when the species page was built." />: the preview marks {refused.length === 1 ? 'it' : 'them'}; the printed labels leave {refused.length === 1 ? 'it' : 'them'} blank.</p>
       {/if}
       {#if withCare && nightOffCount}
-        <p class="small muted" role="status">{nightOffCount === 1 ? 'One label prints' : `${nightOffCount} labels print`} no habitat night: the daily extremes were not checked when the species page was built (the source did not answer, or was not asked), or were read at a weather cell that is mostly sea and set aside; the mean night is a different figure, so it is left off rather than printed in its place.</p>
+        <p class="small muted" role="status">{nightOffCount === 1 ? 'One label prints' : `${nightOffCount} labels print`} no habitat night: the species has no daily extremes series on file (none read, the source did not answer or was not asked, or it was read at a weather cell that is mostly sea and set aside); the mean night is a different, warmer figure, so it is left off rather than printed in its place.</p>
       {/if}
       {#if withCare && unchecked.length}
         <div class="notice" id="lb-unchecked" role="status">{unchecked.length === 1 ? 'One care line' : `${unchecked.length} care lines`} <NotChecked inline why="The species reference could not be reached from here." />: the preview marks {unchecked.length === 1 ? 'it' : 'them'}; the printed labels leave {unchecked.length === 1 ? 'it' : 'them'} blank. <button type="button" class="linkish" onclick={retryCare}>Try again</button> before printing.</div>

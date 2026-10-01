@@ -102,7 +102,7 @@ self.addEventListener('fetch', (e) => {
         if (hit) return hit;
         // A build file not cached at install (a font subset fetched for one name): kept once it has been asked for.
         const r = await fetch(request);
-        if (r.ok && r.type === 'basic') void cache.put(request, r.clone()).catch(() => {});
+        if (r.ok && r.type === 'basic') e.waitUntil(cache.put(request, r.clone()).catch(() => {}));
         return r;
       }
       if (request.mode === 'navigate') {
@@ -129,7 +129,7 @@ self.addEventListener('fetch', (e) => {
         }
         try {
           const r = await fetch(request);
-          if (cacheableHtml(r)) void cache.put(url.origin + url.pathname, r.clone()).catch(() => {}); // under the path alone, never a query
+          if (cacheableHtml(r)) e.waitUntil(cache.put(url.origin + url.pathname, r.clone()).catch(() => {})); // under the path alone, never a query
           return r;
         } catch {
           // The section's shell renders the same page from the vault; asset URLs are absolute (paths.relative is off), so it works from a nested path.
@@ -148,7 +148,7 @@ self.addEventListener('fetch', (e) => {
           const r = await fetch(request);
           // A `no-store` answer is the server declining to vouch for it (a sheet or entries bucket asked for under a corpus id
           // that is not the current one): kept out of here too, or a device would hold it until the next deploy (round sixteen, 12).
-          if (r.ok && r.type === 'basic' && !/no-store/.test(r.headers.get('cache-control') ?? '')) void cache.put(request, r.clone()).catch(() => {});
+          if (r.ok && r.type === 'basic' && !/no-store/.test(r.headers.get('cache-control') ?? '')) e.waitUntil(cache.put(request, r.clone()).catch(() => {}));
           return r;
         } catch {
           return Response.error();
@@ -157,19 +157,28 @@ self.addEventListener('fetch', (e) => {
       if (url.pathname.startsWith('/species/') || url.pathname.startsWith('/s/') || url.pathname.startsWith('/about/') || url.pathname === '/' || url.pathname === '/settings') {
         // These pages vary on the units cookie; offline, the copy cached under the other units is the page (it re-reads the units on hydration), so Vary is ignored.
         const kept = await cache.match(request, { ignoreVary: true });
-        const keep = (r: Response) => {
-          if (request.mode === 'navigate' ? cacheableHtml(r) : r.ok && r.type === 'basic') void cache.put(request, r.clone()).catch(() => {});
-          return r;
-        };
+        const good = (r: Response) => (request.mode === 'navigate' ? cacheableHtml(r) : r.ok && r.type === 'basic');
+        // The cache write is a promise of its own, handed to `waitUntil`: a write started with `void` after the response
+        // was returned could be cut off with the event, and the copy the next visit found was the old one (round thirty-eight, R2-2).
+        const keep = (r: Response) => ({ r, written: good(r) ? cache.put(request, r.clone()).catch(() => {}) : Promise.resolve() });
         try {
           const live = fetch(request).then(keep);
-          if (!kept) return await live;
+          if (!kept) {
+            const got = await live;
+            e.waitUntil(got.written);
+            return got.r;
+          }
           // A page read before: the network gets a few seconds, and past that the copy already held answers, with the
           // fetch left to finish and refresh the copy for next time. A fetch on one bar of signal in a greenhouse neither
           // succeeds nor fails for a long time, and before this the page waited on it the whole way (round thirty-six, 2).
-          const r = await Promise.race([live, new Promise<null>((ok) => setTimeout(() => ok(null), NETWORK_BUDGET_MS))]);
-          if (r) return r;
-          e.waitUntil(live.catch(() => {}));
+          // Only an answer worth keeping wins the race: a quick 502, or a captive portal's 200, is not better than the
+          // page already held (round thirty-eight, R1-9).
+          const got = await Promise.race([live, new Promise<null>((ok) => setTimeout(() => ok(null), NETWORK_BUDGET_MS))]);
+          if (got && good(got.r)) {
+            e.waitUntil(got.written);
+            return got.r;
+          }
+          e.waitUntil(live.then((x) => x.written).catch(() => {}));
           return kept;
         } catch {
           return kept ?? (request.mode === 'navigate' ? ((await cache.match('/offline')) ?? Response.error()) : Response.error());

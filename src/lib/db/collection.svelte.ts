@@ -60,6 +60,10 @@ class Collection {
         const scheme = await getMeta<NumberingScheme>('scheme');
         if (isScheme(scheme)) this.metaScheme = scheme;
         await this.readLedger();
+        // Two records under one number from before the ledger, or from a merge whose repair failed to store, were carried
+        // across every reload: a merge and a pull repair duplicates, a load did not, and the plant's page answered to the
+        // first of the two for good (round thirty-eight, R2-1). The same deterministic repair runs here, before the pages read.
+        await this.repairNumbers();
         this.ready = true;
         // Plants an earlier build's import brought back nameless (a tombstone, then its `importedOn`) are removed again,
         // once: the removal is a change like any other, so it syncs, and after it nothing matches again (round sixteen, 5).
@@ -152,11 +156,17 @@ class Collection {
   isNumberTaken(no: string): boolean {
     return this.takenNumbers('accession').has(no.trim());
   }
-  /** A plant whose record is here, not removed, and not whole, by its number: which required fields it waits for (round thirty-seven, R1-4). */
-  waitingAccession(no: string): { id: string; missing: string[] } | undefined {
+  /**
+   * A record that is here, not removed, and not whole, by its number or id: which required fields it waits for (round
+   * thirty-seven, R1-4). By `accNo`/`sowNo`, so a plant whose number is its id (the oldest shape) is found too; batches and
+   * places as well as plants (round thirty-eight, R1-3).
+   */
+  waiting(kind: 'accession' | 'sowing' | 'location', idOrNo: string): { id: string; missing: string[] } | undefined {
+    const want = idOrNo.trim();
     for (const r of this.state.values()) {
-      if (r.kind !== 'accession' || r._deleted || isComplete(r) || (r as unknown as Accession).acc !== no.trim()) continue;
-      return { id: r.id, missing: REQUIRED_FIELDS.accession.filter((f) => r[f] == null) };
+      if (r.kind !== kind || r._deleted || isComplete(r)) continue;
+      const no = kind === 'accession' ? accNo(r as unknown as Accession) : kind === 'sowing' ? sowNo(r as unknown as Sowing) : null;
+      if (r.id === want || no === want) return { id: r.id, missing: REQUIRED_FIELDS[kind].filter((f) => r[f] == null) };
     }
     return undefined;
   }

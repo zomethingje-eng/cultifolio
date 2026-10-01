@@ -2442,3 +2442,13 @@ test('round thirty-seven: the hemisphere notice is one sentence with its spaces,
   expect(m![1]).toContain('across the 40 cells that remain: the 31 at least 10° south and the 6 within 10° of the equator, where there is no season to reverse.');
   expect(m![1]).not.toMatch(/southand|northand/);
 });
+
+test('round thirty-eight: a monotypic genus does not quote the species paragraph twice', async ({ page }) => {
+  // The genus article is the species article: the "About the genus" block would repeat the Summary one heading down (R2-3).
+  await page.goto('/species/welwitschia-mirabilis');
+  await expect(page.locator('#s-summary + .sumbody')).toContainText('Welwitschia is a monotypic genus');
+  await expect(page.locator('#s-genus')).toHaveCount(0);
+  // A genus with its own article keeps its block.
+  await page.goto('/species/copiapoa-cinerea');
+  await expect(page.locator('#s-genus + .sumbody')).toContainText('Copiapoa is a genus of cactus');
+});

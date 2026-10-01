@@ -39,7 +39,7 @@ export function climateCardSvg(c: CardInput): string {
   // The same floor rule as the sheet, so the card never names a figure the page does not.
   const fl = coldFloor(m.map((x) => ({ ...x, tmean: (x.tmax + x.tmin) / 2 })), ex, archFor(c.name, c.family), u); // coldFloor reads only tmin; the mean is the type's, not the rule's
   const figs: Array<[string, string, string]> = [
-    fl?.raised ? ['Cold floor', temp(fl.floor, u), `${fl.group} group minimum · hab. night ${temp(fl.habitat!, u, 1)}`] : ex ? ['Cold floor', temp(ex.minP01, u, 1), `1st-percentile night, ${ex.years} yrs · ${frostWording(ex)}`] : ['Coldest month', temp(m[cold].tmin, u), `${MON[cold]}, mean night`],
+    fl?.raised ? ['Cold floor', temp(fl.floor, u), `${fl.group} group minimum · ${ex ? 'hab. night' : 'coldest mean night'} ${temp(fl.habitat!, u, 1)}`] : ex ? ['Cold floor', temp(ex.minP01, u, 1), `1st-percentile night, ${ex.years} yrs · ${frostWording(ex)}`] : ['Coldest month', temp(m[cold].tmin, u), `${MON[cold]}, mean night`],
     ['Warmest month', temp(m[hot].tmax, u), `${MON[hot]}, mean day`],
     ['Rain', `${rain(rainYear, u)}/yr`, wetMonths === 0 ? `no month over 25 mm (1 in)` : `${wetMonths} month${wetMonths === 1 ? '' : 's'} over 25 mm (1 in)`],
     dlis.length ? ['Light', `${Math.min(...dlis).toFixed(0)}–${Math.max(...dlis).toFixed(0)} DLI`, 'mol/m²/day, winter to summer'] : ['Cells', String(c.cells), 'habitat grid cells read']

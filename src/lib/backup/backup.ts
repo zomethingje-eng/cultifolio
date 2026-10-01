@@ -202,6 +202,10 @@ export async function readBackup(bytes: Uint8Array): Promise<ReadBackup> {
   const files = unzipSync(bytes, {
     filter: (f) => {
       if (!KNOWN_ENTRY.test(f.name) || f.originalSize > MAX_ENTRY_BYTES) return false;
+      // Every writer has stored the photographs as they are (JPEGs do not compress), so a deflated photograph entry is not
+      // ours, and inflating one is the one cost the declared size does not bound: a 205 kB stream declared as 300 bytes
+      // inflated 200 MB before it was cut to the declared size (round thirty-eight, R1-11).
+      if (f.name.startsWith('photos/') && f.compression !== 0) throw new Error(`That zip compresses ${f.name}; a Cultifolio backup stores its photographs as they are.`);
       if (seen.has(f.name)) throw new Error(`That zip names ${f.name} twice; it is not a Cultifolio backup.`);
       seen.add(f.name);
       if (f.name === 'plants.csv' || f.name === 'batches.csv') return false;
@@ -270,7 +274,7 @@ export function previewMerge(current: Change[], incoming: Change[]) {
       if (r._deleted) addedDeleted++;
       else if (!isComplete(r)) {
         addedWaiting++;
-        const what = r.acc ?? r.no ?? r.name ?? r.taxonName ?? r.id;
+        const what = r.kind === 'accession' ? accNo(r as unknown as Accession) : r.kind === 'sowing' ? sowNo(r as unknown as Sowing) : (r.name ?? r.id);
         waitingNames.push(`${r.kind === 'accession' ? 'plant' : r.kind === 'sowing' ? 'batch' : r.kind === 'location' ? 'place' : r.kind} ${String(what)}`);
       }
       else addedByKind[r.kind] = (addedByKind[r.kind] ?? 0) + 1;

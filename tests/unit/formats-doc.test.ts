@@ -87,6 +87,7 @@ const doc = {
   version: Number(says(/one version byte \((\d)\)/)[1]),
   ivLen: Number(says(/a (\d+)-byte IV/)[1]),
   aad: says(/associated data the UTF-8 bytes of (\S+), where kind is (\w+) or (\w+)/),
+  aadBatch: says(/A log batch's data likewise carries its name on the server \((\S+), the name without/),
   aadPhoto: says(/a photo's data also carries its id \((\S+)\)/)[1],
   aadOldPhoto: says(/builds before that binding carry (\S+) alone/)[1],
   hourDigits: Number(says(/the hour \(in ms, padded to (\d+) digits\)/)[1]),
@@ -188,6 +189,11 @@ describe('/about/formats is enough to decrypt a vault, and says what the code do
     const blob = await sealJson(app, 'log', { v: 1, device: 'abc', changes: [{ t: '1789520000000-0000-abcdef', kind: 'accession', id: 'r1', field: 'notes', value: 'sulked all summer' }] });
     const text = new TextDecoder().decode(await openFromTheDoc(d, fill(doc.aad[1], d, 'log'), blob));
     expect(JSON.parse(text)).toMatchObject({ v: 1, device: 'abc' });
+    // A batch sealed under its name, as the app seals them since round thirty-eight, opens under the page's named form.
+    expect(doc.aadBatch[1]).toBe('vaultId|log|batchName');
+    const named = await sealJson(app, 'log', { v: 1, device: 'abc', changes: [] }, '1700000000000-0000-abc-0123456789ab');
+    const aad = doc.aadBatch[1].replace('vaultId', d.id).replace('batchName', '1700000000000-0000-abc-0123456789ab');
+    expect(JSON.parse(new TextDecoder().decode(await openFromTheDoc(d, aad, named)))).toMatchObject({ v: 1 });
   });
   it('a key pasted from the pairing link, in lower case, with spaces and a line break, derives the same keys by the page\'s cleaning rule', async () => {
     const key = newVaultKey();

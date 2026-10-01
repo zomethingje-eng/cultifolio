@@ -5,6 +5,8 @@ export const MAX_PHOTO_BYTES = 12 * 1024 * 1024;
 export const SEAL_OVERHEAD = 1 + 12 + 16 + 4;
 
 /** How far behind its cursor a client re-reads (the server subtracts this from `since`), so a put that committed a little late is still seen. */
+/** How far ahead of this device's clock the pull cursor may be moved by a listing's arrival times (round thirty-eight, R1-5). */
+export const CURSOR_SLACK_MS = 10 * 60 * 1000;
 export const OVERLAP_MS = 60_000;
 
 /** The push headers, named once for the device that sends them and the Worker that reads them (round twenty-three, 10). */

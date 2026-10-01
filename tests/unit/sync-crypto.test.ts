@@ -34,6 +34,12 @@ describe('sealing', () => {
     expect(blob[0]).toBe(1);
     expect(await openJson(a, 'log', blob)).toEqual({ changes: [{ t: '1', kind: 'accession', id: '2026-0001', field: 'notes', value: 'sulks' }] });
     await expect(openJson(b, 'log', blob)).rejects.toThrow(/wrong vault key/);
+    // A batch sealed under its name opens under that name and no other; one sealed before names were bound still opens under any (round thirty-eight, R1-7).
+    const named = await sealJson(a, 'log', { v: 1 }, '1700000000000-0000-dev-0123456789ab');
+    expect(await openJson(a, 'log', named, '1700000000000-0000-dev-0123456789ab')).toEqual({ v: 1 });
+    await expect(openJson(a, 'log', named, '1700000000000-0001-dev-0123456789ab')).rejects.toThrow(/wrong vault key|altered/);
+    await expect(openJson(a, 'log', named)).rejects.toThrow(/wrong vault key|altered/);
+    expect(await openJson(a, 'log', blob, 'any-name')).toEqual({ changes: [{ t: '1', kind: 'accession', id: '2026-0001', field: 'notes', value: 'sulks' }] });
     await expect(openJson(a, 'photo', blob)).rejects.toThrow(/wrong vault key/);
     const tampered = new Uint8Array(blob);
     tampered[tampered.length - 1] ^= 1;

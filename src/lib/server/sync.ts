@@ -70,11 +70,14 @@ export function vaultId(raw: string | null): string {
  * The vault id a token stands for: the first 26 symbols of SHA-256("id:" +
  * token) in the key alphabet, exactly as `deriveKeys` in $lib/sync/crypto.ts
  * makes it (the alphabet is repeated here because that module keeps it
- * private; the unit test holds the two together). The client sends the raw
- * token once, at creation, over TLS; from then on only the bearer, whose hash
- * the server keeps. So creation is the one moment the server can check that
- * the id belongs to the token, and it does: a vault cannot be made under a
- * name that its own key would never derive.
+ * private; the unit test holds the two together). The client sends the token
+ * in the creation body and then as the bearer of every request, over TLS; the
+ * server keeps only its hash, and compares the bearer against that. (An earlier
+ * version of this comment said the token travelled once; it travels every time,
+ * which is why /about/how says a holder of the token can fill the vault: round
+ * thirty-eight, R1-6.) Creation is the one moment the server checks that the
+ * id belongs to the token, and it does: a vault cannot be made under a name
+ * that its own key would never derive.
  */
 const B32 = 'ABCDEFGHJKMNPQRSTVWXYZ23456789';
 export async function vaultIdFor(token: string): Promise<string> {
@@ -500,7 +503,7 @@ export function creationCeilings(env: Record<string, unknown> | undefined): Crea
   return { perDay: n(env?.SYNC_VAULTS_PER_DAY), max: n(env?.SYNC_VAULTS_MAX) };
 }
 /** The counters' Durable Object namespace, typed loosely so this module needs nothing from `cloudflare:workers`. */
-export type CountersNs = { idFromName(name: string): DurableObjectId; get(id: DurableObjectId): { create(address: string, day: string, perAddress: number, perDay: number, max: number, seed?: number | null): Promise<Creation>; refund(address: string, day: string): Promise<void> } };
+export type CountersNs = { idFromName(name: string): DurableObjectId; get(id: DurableObjectId): { create(address: string, day: string, perAddress: number, perDay: number, max: number, seed?: number | null, now?: number, net?: string | null): Promise<Creation>; refund(address: string, day: string, net?: string | null): Promise<void> } };
 /**
  * With the Durable Object bound (production), the decision and the count are one atomic step and a burst is counted
  * exactly (round twenty-one, 1). Without it (tests, a `wrangler dev` before the migration), the KV counters below bound
@@ -532,7 +535,7 @@ export async function allowCreation(kv: KVNamespace | undefined, ip: string, now
           seed = null;
         }
       }
-      return await counters.get(counters.idFromName('vaults')).create(address, day(now), MAX_NEW_VAULTS_PER_DAY, perDay, max, seed);
+      return await counters.get(counters.idFromName('vaults')).create(address, day(now), MAX_NEW_VAULTS_PER_DAY, perDay, max, seed, now, networkKey(ip));
     } catch (e) {
       console.error('sync: the vault-creation counter object did not answer; creation refused for now', e);
       return 'unavailable';
@@ -572,7 +575,7 @@ export async function allowCreation(kv: KVNamespace | undefined, ip: string, now
 /** A creation counted by the object and then not made (the vault write threw): the count goes back, so a grower retrying through an R2 blip is not told they made too many (round twenty-two, 1). Best-effort. */
 export async function refundCreation(counters: CountersNs | undefined, ip: string, now = Date.now()): Promise<void> {
   if (!counters) return;
-  await counters.get(counters.idFromName('vaults')).refund(addressKey(ip), day(now)).catch((e) => console.warn('sync: a vault-creation refund did not land', e));
+  await counters.get(counters.idFromName('vaults')).refund(addressKey(ip), day(now), networkKey(ip)).catch((e) => console.warn('sync: a vault-creation refund did not land', e));
 }
 /** The day key of the address-keyed counters, for callers that need to pair a count with its refund. */
 export const creationDay = (now = Date.now()) => day(now);
@@ -687,6 +690,13 @@ export function addressKey(ip: string): string {
   const t = tail ? tail.split(':') : [];
   const groups = ip.includes('::') ? [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill('0'), ...t] : h;
   return groups.slice(0, 4).map((g) => g.toLowerCase().replace(/^0+(?=\w)/, '')).join(':') + '::/64';
+}
+
+/** The wider network an IPv6 address sits in, its /48, for the second creation allowance; null for IPv4 (round thirty-eight, R1-8). */
+export function networkKey(ip: string): string | null {
+  const k = addressKey(ip);
+  if (!k.endsWith('::/64')) return null;
+  return k.slice(0, -5).split(':').slice(0, 3).join(':') + '::/48';
 }
 
 /** Check the bucket for this request; a 429 Response to return, or null to go on. */

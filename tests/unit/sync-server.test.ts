@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { listBatches, parseAfter, storeCounted, storeOnce, batchMeta, readBody, batchKey, recount, vaultBytes, vaultIdFor, ensureVault, MAX_BYTES, MAX_IP_BYTES_PER_DAY, MAX_LIST_PAGES, META_FLUSH_BYTES, META_FLUSH_MS, OVERLAP_MS, MAX_NEW_VAULTS_PER_DAY, allowCreation, refundCreation, creationCeilings, addressKey, clientIp, rateLimit, resetRateLimits, resetMetaFlush, resetKvWarning, tooMany, VaultFull, DayQuota, type VaultMeta } from '$lib/server/sync';
+import { listBatches, parseAfter, storeCounted, storeOnce, batchMeta, readBody, batchKey, recount, vaultBytes, vaultIdFor, ensureVault, MAX_BYTES, MAX_IP_BYTES_PER_DAY, MAX_LIST_PAGES, META_FLUSH_BYTES, META_FLUSH_MS, OVERLAP_MS, MAX_NEW_VAULTS_PER_DAY, allowCreation, refundCreation, creationCeilings, addressKey, networkKey, clientIp, rateLimit, resetRateLimits, resetMetaFlush, resetKvWarning, tooMany, VaultFull, DayQuota, type VaultMeta } from '$lib/server/sync';
 import { deriveKeys, newVaultKey } from '$lib/sync/crypto';
 
 /** Just enough of R2 for the sync store: keys, bytes, upload times we control. */
@@ -259,6 +259,9 @@ describe('vault creation is bounded per address, per day for everyone, and in al
     expect(addressKey('203.0.113.7')).toBe('203.0.113.7');
     expect(addressKey('2001:db8:85a3:8d3:1319:8a2e:370:7348')).toBe('2001:db8:85a3:8d3::/64');
     expect(addressKey('2001:DB8:85A3:08D3::1')).toBe('2001:db8:85a3:8d3::/64');
+    expect(networkKey('2001:DB8:85A3:08D3::1')).toBe('2001:db8:85a3::/48');
+    expect(networkKey('203.0.113.7')).toBeNull();
+    expect(networkKey('::ffff:203.0.113.7')).toBeNull();
     expect(addressKey('2001:db8::1')).toBe('2001:db8:0:0::/64');
     expect(addressKey('::1')).toBe('0:0:0:0::/64');
     expect(addressKey('::ffff:203.0.113.7')).toBe('203.0.113.7');

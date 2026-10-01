@@ -6,7 +6,7 @@
  * could not make or, once that was made non-fatal, not counted at all.
  *
  * One object, named "vaults", holds every counter; creations are rare (thousands in all, by design) so one is enough.
- * Keys: `ip:<address>:<day>` (5 a day), `day:<day>` (the shared day ceiling), `all` (the ceiling in all). A daily alarm
+ * Keys: `ip:<address>:<day>` (5 a day), `net:<prefix>:<day>` (an IPv6 /48, 20 a day), `day:<day>` (the shared day ceiling), `all` (the ceiling in all). A daily alarm
  * deletes every `ip:` and `day:` key older than two days, so an address is kept for at most that long (round
  * twenty-two, 6); `all` is seeded once from the KV count that ran before the object existed, so the ceiling in all counts
  * every vault, not only those made since the migration. A creation counted and then not made (the vault write failed) is
@@ -21,29 +21,34 @@ import { DurableObject } from 'cloudflare:workers';
 export type Creation = 'ok' | 'address' | 'day' | 'total' | 'unavailable';
 const DAY_MS = 86_400_000;
 /** The next UTC midnight after `now`: the alarm runs there, so "older than two days" is counted in whole UTC days from a fixed point (round twenty-three, 8). */
+/** A /48's allowance of new vaults a day, as a multiple of one address's. */
+export const NET_FACTOR = 4;
 export const nextMidnight = (now: number) => Math.floor(now / DAY_MS) * DAY_MS + DAY_MS;
 
 export class Counters extends DurableObject {
   /** Decide and count one creation. `address` is already keyed (an IPv4 address or an IPv6 /64); `day` is YYYY-MM-DD; `seed` is the count of vaults made before this object existed. */
-  async create(address: string, day: string, perAddress: number, perDay: number, max: number, seed: number | null = 0, now = Date.now()): Promise<Creation> {
-    const kIp = `ip:${address}:${day}`, kDay = `day:${day}`;
-    const got = await this.ctx.storage.get<number>([kIp, kDay, 'all']);
-    const nIp = got.get(kIp) ?? 0, nDay = got.get(kDay) ?? 0;
+  async create(address: string, day: string, perAddress: number, perDay: number, max: number, seed: number | null = 0, now = Date.now(), net: string | null = null): Promise<Creation> {
+    // `net` is the wider network an IPv6 address sits in (its /48), counted at four times the address's allowance: a /48
+    // holds 65,536 /64s, so by /64s alone forty of them could spend the day's shared ceiling (round thirty-eight, R1-8).
+    const kIp = `ip:${address}:${day}`, kDay = `day:${day}`, kNet = net ? `net:${net}:${day}` : null;
+    const got = await this.ctx.storage.get<number>([kIp, kDay, 'all', ...(kNet ? [kNet] : [])]);
+    const nIp = got.get(kIp) ?? 0, nDay = got.get(kDay) ?? 0, nNet = kNet ? (got.get(kNet) ?? 0) : 0;
     if (got.get('all') == null && seed == null) return 'unavailable'; // not yet seeded and the count before this object could not be read: wait, do not start from zero
     const nAll = got.get('all') ?? seed ?? 0;
     if (nIp >= perAddress) return 'address';
+    if (kNet && nNet >= perAddress * NET_FACTOR) return 'address';
     if (nAll >= max) return 'total';
     if (nDay >= perDay) return 'day';
-    await this.ctx.storage.put({ [kIp]: nIp + 1, [kDay]: nDay + 1, all: nAll + 1 });
+    await this.ctx.storage.put({ [kIp]: nIp + 1, [kDay]: nDay + 1, all: nAll + 1, ...(kNet ? { [kNet]: nNet + 1 } : {}) });
     if ((await this.ctx.storage.getAlarm()) == null) await this.ctx.storage.setAlarm(nextMidnight(now));
     return 'ok';
   }
   /** A creation that was counted and then not made: the counts go back by one, never below zero. */
-  async refund(address: string, day: string): Promise<void> {
-    const kIp = `ip:${address}:${day}`, kDay = `day:${day}`;
-    const got = await this.ctx.storage.get<number>([kIp, kDay, 'all']);
+  async refund(address: string, day: string, net: string | null = null): Promise<void> {
+    const kIp = `ip:${address}:${day}`, kDay = `day:${day}`, kNet = net ? `net:${net}:${day}` : null;
+    const got = await this.ctx.storage.get<number>([kIp, kDay, 'all', ...(kNet ? [kNet] : [])]);
     const dec = (k: string) => Math.max(0, (got.get(k) ?? 0) - 1);
-    await this.ctx.storage.put({ [kIp]: dec(kIp), [kDay]: dec(kDay), all: dec('all') });
+    await this.ctx.storage.put({ [kIp]: dec(kIp), [kDay]: dec(kDay), all: dec('all'), ...(kNet ? { [kNet]: dec(kNet) } : {}) });
   }
   /** The running totals, for a look from the outside. */
   async totals(day: string): Promise<{ day: number; all: number; addresses: number }> {
@@ -69,6 +74,7 @@ export class Counters extends DurableObject {
     const keep = new Set([new Date(now).toISOString().slice(0, 10), new Date(now - DAY_MS).toISOString().slice(0, 10)]);
     const stale: string[] = [];
     for (const k of (await this.ctx.storage.list({ prefix: 'ip:' })).keys()) if (!keep.has(k.slice(k.lastIndexOf(':') + 1))) stale.push(k);
+    for (const k of (await this.ctx.storage.list({ prefix: 'net:' })).keys()) if (!keep.has(k.slice(k.lastIndexOf(':') + 1))) stale.push(k);
     for (const k of (await this.ctx.storage.list({ prefix: 'day:' })).keys()) if (!keep.has(k.slice(4))) stale.push(k);
     for (let i = 0; i < stale.length; i += 128) await this.ctx.storage.delete(stale.slice(i, i + 128));
     return stale;

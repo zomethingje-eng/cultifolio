@@ -10,6 +10,7 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { collection, DUE_DAYS } from '$lib/db/collection.svelte';
+  import WaitingRecord from '$lib/ui/WaitingRecord.svelte';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
   import { LOCATION_KINDS, type LocationKind } from '$lib/db/types';
   import type { Forecast, Alert } from '$lib/weather/forecast';
@@ -23,6 +24,7 @@
 
   const id = $derived(page.params.id!);
   const loc = $derived(collection.location(id));
+  const waiting = $derived(loc ? undefined : collection.waiting('location', id));
   const path = $derived(collection.locationPath(id));
   const parentName = $derived(path.length > 1 ? path.slice(0, -1).map((p) => p.name).join(' › ') : null);
   const kids = $derived(collection.children(id));
@@ -157,7 +159,7 @@
 {#if !collection.ready}
   <p class="muted">Opening your collection…</p>
 {:else if !loc}
-  <h1 class="q" style="margin-top: 24px">Not here</h1><p class="muted">No location with that id on this device. <a href="/places">All locations</a>.</p>
+  {#if waiting}<h1 class="q" style="margin-top: 24px">Not whole</h1><WaitingRecord kind="location" label="This place" {waiting} /><p class="muted"><a href="/places">All locations</a>.</p>{:else}<h1 class="q" style="margin-top: 24px">Not here</h1><p class="muted">No location with that id on this device. <a href="/places">All locations</a>.</p>{/if}
 {:else}
   <div class="hero band"><div class="ph">{LOCATION_KINDS.find((k) => k.k === loc.type)?.label ?? 'Place'}{path.length > 1 ? ' inside ' + path.slice(0, -1).map((p) => p.name).join(' › ') : ''}</div></div>
   <div class="idcard">

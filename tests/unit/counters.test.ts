@@ -56,6 +56,20 @@ describe('Counters', () => {
     expect(await c.create('b', '2026-09-25', 5, 5, 2000, 0)).toBe('day');
     expect(await c.create('b', '2026-09-25', 5, 200, 5, 0)).toBe('total');
   });
+  it('an IPv6 /48 has four times one address\'s allowance across its /64s, refunded with the address, and swept with it (round thirty-eight, R1-8)', async () => {
+    const { c, storage } = make();
+    const rs: string[] = [];
+    // 21 creations from 21 different /64s of one /48, each under its own address allowance.
+    for (let i = 0; i < 21; i++) rs.push(await c.create(`2001:db8:1:${i.toString(16)}::/64`, '2026-09-25', 5, 200, 2000, 0, T0, '2001:db8:1::/48'));
+    expect(rs.filter((r) => r === 'ok')).toHaveLength(20);
+    expect(rs[20]).toBe('address');
+    await c.refund('2001:db8:1:14::/64', '2026-09-25', '2001:db8:1::/48');
+    expect(await c.create('2001:db8:1:15::/64', '2026-09-25', 5, 200, 2000, 0, T0, '2001:db8:1::/48')).toBe('ok');
+    expect(await c.create('2001:db8:2:0::/64', '2026-09-25', 5, 200, 2000, 0, T0, '2001:db8:2::/48')).toBe('ok'); // another /48 is not affected
+    expect(await c.create('203.0.113.7', '2026-09-25', 5, 200, 2000, 0, T0, null)).toBe('ok'); // IPv4 carries no network key
+    expect((await storage.get(['net:2001:db8:1::/48:2026-09-25'])).get('net:2001:db8:1::/48:2026-09-25')).toBe(20);
+    expect((await c.sweep(T0 + 3 * 86_400_000)).some((k) => k.startsWith('net:'))).toBe(true);
+  });
   it('a seed that could not be read does not become zero: the object waits until it can be seeded, then takes the count once (round twenty-three, 6)', async () => {
     const { c, storage } = make();
     expect(await c.create('a', '2026-09-25', 5, 200, 200, null)).toBe('unavailable');

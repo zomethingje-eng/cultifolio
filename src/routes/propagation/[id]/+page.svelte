@@ -9,6 +9,7 @@
   import { onMount } from 'svelte';
   import { prefs } from '$lib/ui/prefs.svelte';
   import { collection } from '$lib/db/collection.svelte';
+  import WaitingRecord from '$lib/ui/WaitingRecord.svelte';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
   import LocationPicker from '$lib/ui/LocationPicker.svelte';
   import { slugify, speciesSlug } from '$core/names';
@@ -26,6 +27,7 @@
   onMount(() => collection.load());
   const param = $derived(page.params.id!);
   const s = $derived(collection.sowing(param));
+  const waiting = $derived(s ? undefined : collection.waiting('sowing', param));
   const id = $derived(s?.id ?? param);
   const m = $derived(PROP_METHODS.find((x) => x.k === s?.method) ?? (s?.method ? { k: s.method, label: s.method, unit: 'units', veg: false } : PROP_METHODS[0])); // a method this build does not know is shown by its word (round thirty, 1)
   const st = $derived(collection.sowingStats(id));
@@ -249,7 +251,7 @@
   <p class="muted">Opening your collection…</p>
 {:else if !s}
   <h1 class="q" style="margin-top: 24px">{param}</h1>
-  <p class="muted">No batch with this number on this device.</p>
+  {#if waiting}<WaitingRecord kind="sowing" label={param} {waiting} />{:else}<p class="muted">No batch with this number on this device.</p>{/if}
 {:else}
   <div class="hero">
     {#if idx?.thumb && prefs.referencePhotos && !thumbFailed}<img src={idx.thumb} alt={s.taxonName} style="max-height: 220px" onerror={() => (thumbFailed = true)} /><span class="cred">species photograph</span>{:else if idx?.thumb && prefs.referencePhotos}<div class="ph empty" style="height: 120px">No photograph yet.</div>{:else}<div class="ph" style="height: auto; min-height: 120px; flex-direction: column; gap: 10px; padding: 16px">{m.label}{#if idx?.thumb && !prefs.referencePhotos}<RefPhotoOffer center what="the reference’s photograph of this species" />{/if}</div>{/if}

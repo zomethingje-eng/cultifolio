@@ -4,7 +4,7 @@
  * (round sixteen, 1).
  */
 import 'fake-indexeddb/auto';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { appendChanges, allChanges, outboxKeys, outboxAck, getMeta, setMeta, setMetaIfKey, wipeVault } from '$lib/db/vault';
 import { hlcEncode } from '$core/hlc';
 import type { Change } from '$core/log';
@@ -97,5 +97,21 @@ describe('a displaced change leaves the screen (round seventeen, 3)', () => {
     const out = await appendChanges([c, d], true);
     expect(out.kept.map((x) => x.id)).toEqual(['two']); // reduced to one per stamp by rank, not by order
     expect((await allChanges()).filter((x) => x.field === 'taxonName').map((x) => x.id).sort()).toEqual(['kept', 'two']);
+  });
+});
+
+describe('a duplicate number already in the log is repaired at load (round thirty-eight, R2-1)', () => {
+  it('two whole plants under one number: the later-created one is renumbered before the collection is ready, with the note', async () => {
+    await appendChanges([
+      ch(10, 'a1', 'acc', '2026-0013'), ch(11, 'a1', 'taxonName', 'Welwitschia mirabilis'), ch(12, 'a1', 'status', 'growing'),
+      ch(13, 'a2', 'acc', '2026-0013'), ch(14, 'a2', 'taxonName', 'Welwitschia mirabilis'), ch(15, 'a2', 'status', 'growing')
+    ], true);
+    vi.resetModules(); // a fresh store, as a new tab has: its load must do the repair by itself
+    const { collection } = await import('$lib/db/collection.svelte');
+    await collection.load();
+    const nos = collection.accessions.map((r) => r.acc).sort();
+    expect(nos).toEqual(['2026-0013', '2026-0014']);
+    expect(collection.accession('2026-0014')?.id).toBe('a2');
+    expect((await allChanges()).some((c) => c.kind === 'event' && c.field === 'note' && /Renumbered from 2026-0013 to 2026-0014/.test(String(c.value)))).toBe(true);
   });
 });

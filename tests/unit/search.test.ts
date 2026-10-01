@@ -78,6 +78,7 @@ describe('older names (round thirty-one, 3)', () => {
     expect(search(typing, 'aloe var').map((x) => x.name)).toEqual(['Aloe variegata']);
     expect(search(typing, 'aloe v').map((x) => x.name)).toEqual(['Aloe variegata']);
     expect(search(typing, 'haworthia pumila var').map((x) => x.name)).toEqual(['Tulista pumila']); // typed up to the marker: the words before it still find the name
+    expect(search(typing, 'ferocactus latispinas var').map((x) => x.name)).toEqual(['Ferocactus latispinus']); // a misspelling and a trailing marker: the near match runs without the marker too (round thirty-eight, R1-10)
     for (const typed of ['haworthia pumila var. margaritifera', 'haworthia pumila var margaritifera', 'Haworthia pumila subsp. margaritifera', 'haworthia pumila ssp. margaritifera', 'haworthia pumila f. margaritifera']) expect(search(q, typed).map((x) => x.name), typed).toEqual(['Tulista pumila']); // the label as written (round thirty-five, R2-3)
   });
 });

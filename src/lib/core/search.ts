@@ -104,8 +104,11 @@ export function search<T extends Searchable>(prepared: Prepared<T>[], q: string,
   if (!qs.length) return [];
   const exact = (x: string, w: string) => w.startsWith(x);
   let hits = collect(prepared, qs, exact);
-  if (!hits.length && qs.length > 1 && RANK_MARKERS.has(qs[qs.length - 1])) hits = collect(prepared, qs.slice(0, -1), exact);
+  const trailingMarker = qs.length > 1 && RANK_MARKERS.has(qs[qs.length - 1]);
+  if (!hits.length && trailingMarker) hits = collect(prepared, qs.slice(0, -1), exact);
   if (!hits.length && qs.some((x) => x.length >= 4)) hits = collect(prepared, qs, nearPrefix);
+  // The near match too without the marker: "copiapoa cinera var" found the species before the marker was a word (round thirty-eight, R1-10).
+  if (!hits.length && trailingMarker && qs.slice(0, -1).some((x) => x.length >= 4)) hits = collect(prepared, qs.slice(0, -1), nearPrefix);
   return hits.slice(0, limit).map((h) => h.p.item);
 }
 
