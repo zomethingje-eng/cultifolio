@@ -12,7 +12,7 @@
   import CompareButton from '$lib/ui/CompareButton.svelte';
   import ShareCard from '$lib/ui/ShareCard.svelte';
   import { isDatasetDoi } from '$dossier/sources/openalex';
-  import { photoAt, srcsetOf } from '$dossier/photo-size';
+  import { photoAt, srcsetOf, photoHosts } from '$dossier/photo-size';
   import { heroOf } from '$dossier/dedupe';
   import { firstSentences } from '$core/text';
   import { frostWording } from '$core/extremes';
@@ -211,6 +211,14 @@
   <meta property="og:title" content={d.name.scientific} />
   <meta property="og:description" content={desc} />
   {#if hero}<meta property="og:image" content={hero.url} />{/if}
+  {#if hero}
+    <!-- The photograph is the largest paint on a phone and lives on a third party's host. Preloaded from the head, one size by
+         surface (the 500 px file under 640 px, the 1024 px file above), so the handshake and the download start with the
+         stylesheet, not when the parser reaches the image (round forty-two, 1). The hosts are preconnected for the rest. -->
+    <link rel="preload" as="image" href={photoAt(hero.url, 'medium')} media="(max-width: 640px)" fetchpriority="high" />
+    <link rel="preload" as="image" href={photoAt(hero.url, 'large')} imagesrcset={srcsetOf(hero.url, ['medium', 'large'])} imagesizes="480px" media="(min-width: 641px)" fetchpriority="high" />
+    {#each photoHosts([hero.url]) as h (h)}<link rel="preconnect" href={h} />{/each}
+  {/if}
   <link rel="canonical" href="https://cultifolio.com/species/{d.slug}" />
   <!-- A vernacular name is user-contributed upstream; a "<" in it must not end this script early. -->
   {@html `<script type="application/ld+json">${jsonld.replace(/</g, '\\u003c')}</script>`}
@@ -224,8 +232,11 @@
   {#if hero && heroFailed}
     <div class="hero"><div class="ph">The photograph did not load{#if hero.attribution?.trim()}{' '}({hero.attribution}){/if}; <a href={hero.page ?? hero.url} rel="noopener">its page is here</a>.</div></div>
   {:else if hero}
-    <div class="hero">
-      <a href={hero.page ?? hero.url} rel="noopener"><img src={photoAt(hero.url, 'large')} srcset={srcsetOf(hero.url, ['medium', 'large'])} sizes="(max-width: 640px) 100vw, 480px" alt="{d.name.scientific}{hero.place ? ', ' + hero.place : ''}" loading="eager" fetchpriority="high" onerror={() => (heroFailed = true)} /></a>
+    <!-- The box is a fixed 150 px band on a phone, so the page lays out once and does not shift down when the photograph lands (round forty-two, 1). -->
+    <div class="hero photo">
+      <!-- One size by surface, not by pixel density (round thirty-five, R2-7): under 640 px the 500 px file fills a 150 px band cropped to cover,
+           and a phone's density promoted it to the 1024 px one, three times the bytes for a crop that showed a third of it (round forty-two, 1). -->
+      <a href={hero.page ?? hero.url} rel="noopener"><picture><source media="(max-width: 640px)" srcset={photoAt(hero.url, 'medium')} /><img src={photoAt(hero.url, 'large')} srcset={srcsetOf(hero.url, ['medium', 'large'])} sizes="480px" alt="{d.name.scientific}{hero.place ? ', ' + hero.place : ''}" loading="eager" fetchpriority="high" onerror={() => (heroFailed = true)} /></picture></a>
       <a class="cred" href={hero.page ?? hero.url} rel="noopener">{hero.attribution}{hero.captive === true ? ' · in cultivation' : hero.captive === false ? ' · observed growing wild' : ''}{hero.observedOn ? ' · ' + hero.observedOn : ''}</a>
     </div>
   {:else}
@@ -586,5 +597,5 @@
   .archwhy { margin: 0 0 10px; }
   .names { margin: 0 0 8px; }
 
-  @media (max-width: 640px) { .hero { margin-top: 0; } }
+  @media (max-width: 640px) { .hero { margin-top: 0; } .hero.photo { height: 150px; } .hero.photo img { height: 100%; max-height: none; } }
 </style>

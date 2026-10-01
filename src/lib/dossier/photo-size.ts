@@ -26,3 +26,18 @@ export function photoAt(url: string, size: PhotoSize): string {
   if (GBIF.test(url)) return url.replace(/fit-in\/\d+x\//, `fit-in/${PX[size]}x/`);
   return url;
 }
+
+/**
+ * The origins a page's photographs come from, each once, for a `preconnect` in the head: the first-screen photograph is
+ * on a third party's host, and the handshake to it (DNS, TCP, TLS) is paid before its first byte. Only the hosts the
+ * reference's photographs are known to live on; any other address is left to the browser (round forty-two, 1).
+ */
+export const photoHosts = (urls: Array<string | null | undefined>): string[] => {
+  const out: string[] = [];
+  for (const u of urls) {
+    if (!u || !(INAT.test(u) || GBIF.test(u))) continue;
+    const o = new URL(u).origin;
+    if (!out.includes(o)) out.push(o);
+  }
+  return out;
+};

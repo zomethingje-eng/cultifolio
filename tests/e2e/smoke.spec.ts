@@ -2564,3 +2564,26 @@ test('round forty-one: a plant with no place, no photograph and no site offers "
   await expect(setup.locator('.setuprow', { hasText: 'Set your site' })).toHaveCount(0);
   await expect(setup.locator('.setuprow', { hasText: 'Give it a place' })).toBeVisible();
 });
+
+test('round forty-two: the species photograph is preloaded from the head, one size by surface, in a box that is laid out before it lands (1)', async ({ page }) => {
+  // The photograph's host is never reached here; the request is held open so the box is measured before anything arrives.
+  await page.route(/inaturalist-open-data\.s3\.amazonaws\.com/, () => new Promise(() => {}));
+  await page.setViewportSize({ width: 390, height: 800 });
+  await page.goto('/species/copiapoa-cinerea', { waitUntil: 'domcontentloaded' }); // the held request means the load event never fires
+  await expect(page.locator('head link[rel="preload"][as="image"][media="(max-width: 640px)"]')).toHaveAttribute('href', /photos\/900\/medium\.jpg$/);
+  await expect(page.locator('head link[rel="preload"][as="image"][media="(min-width: 641px)"]')).toHaveAttribute('imagesrcset', /medium\.jpg 500w, .*large\.jpg 1024w/);
+  await expect(page.locator('head link[rel="preconnect"]')).toHaveAttribute('href', 'https://inaturalist-open-data.s3.amazonaws.com');
+  const box = await page.locator('.hero.photo').boundingBox();
+  expect(box?.height).toBe(150);
+  // the phone's source is the medium file alone; the wide screen's img chooses between medium and large for a 480 px box
+  await expect(page.locator('.hero.photo source')).toHaveAttribute('srcset', /photos\/900\/medium\.jpg$/);
+  await expect(page.locator('.hero.photo source')).toHaveAttribute('media', '(max-width: 640px)');
+  await expect(page.locator('.hero.photo img')).toHaveAttribute('srcset', /medium\.jpg 500w, .*large\.jpg 1024w/);
+  await expect(page.locator('.hero.photo img')).toHaveAttribute('sizes', '480px');
+});
+
+test('round forty-two: the home page preloads the first featured tile and preconnects to its host (1)', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('head link[rel="preload"][as="image"]')).toHaveAttribute('href', /\/small\.jpe?g$/);
+  await expect(page.locator('head link[rel="preconnect"]').first()).toHaveAttribute('href', /^https:\/\/(inaturalist-open-data\.s3\.amazonaws\.com|api\.gbif\.org)$/);
+});

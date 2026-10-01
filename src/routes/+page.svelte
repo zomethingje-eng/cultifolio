@@ -5,7 +5,7 @@
   import { browser } from '$app/environment';
   import { page } from '$app/state';
   import { accNo } from '$lib/db/types';
-  import { photoAt } from '$dossier/photo-size';
+  import { photoAt, photoHosts } from '$dossier/photo-size';
   import { entriesFor, searchCatalogue, type Found } from '$lib/ui/index.svelte';
   import PageHead from '$lib/ui/PageHead.svelte';
   import { collection } from '$lib/db/collection.svelte';
@@ -263,6 +263,13 @@
     <title>Cultifolio — a record of a living collection</title>
     <meta name="description" content="A species reference that shows its sources, and a collection record that stays on your device." />
     <link rel="canonical" href="https://cultifolio.com/" />
+  {/if}
+  {#if visitor && data.featured.length}
+    <!-- A visitor's largest first-screen paint is a featured tile on a third party's host: the first is preloaded from the head and the
+         hosts of the first three are preconnected, so the handshakes start with the stylesheet (round forty-two, 1). A grower's own
+         page replaces the strip after the collection opens; the one small file this costs them is cached by then. -->
+    <link rel="preload" as="image" href={photoAt(data.featured[0].thumb, 'small')} fetchpriority="high" />
+    {#each photoHosts(data.featured.slice(0, 3).map((c) => c.thumb)) as h (h)}<link rel="preconnect" href={h} />{/each}
   {/if}
 </svelte:head>
 

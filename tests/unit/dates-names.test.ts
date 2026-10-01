@@ -51,6 +51,11 @@ describe('photo sizes (round seven, 17)', () => {
     expect(photoAt('https://api.gbif.org/v1/image/cache/fit-in/400x/https%3A%2F%2Fx.org%2Fa.jpg', 'small')).toBe('https://api.gbif.org/v1/image/cache/fit-in/160x/https%3A%2F%2Fx.org%2Fa.jpg');
     expect(photoAt('https://upload.wikimedia.org/a.jpg', 'small')).toBe('https://upload.wikimedia.org/a.jpg');
   });
+  it('names the hosts a page should preconnect to, each once, and only the hosts the photographs are known to live on (round forty-two, 1)', async () => {
+    const { photoHosts } = await import('$dossier/photo-size');
+    expect(photoHosts(['https://inaturalist-open-data.s3.amazonaws.com/photos/1/large.jpeg', 'https://inaturalist-open-data.s3.amazonaws.com/photos/2/small.jpg', 'https://api.gbif.org/v1/image/cache/fit-in/400x/https%3A%2F%2Fx.org%2Fa.jpg', 'https://upload.wikimedia.org/a.jpg', null, undefined])).toEqual(['https://inaturalist-open-data.s3.amazonaws.com', 'https://api.gbif.org']);
+    expect(photoHosts([])).toEqual([]);
+  });
 });
 
 describe('index buckets (round nine, 1; round ten, 1)', () => {
