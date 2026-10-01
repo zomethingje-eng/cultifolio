@@ -48,7 +48,7 @@
 
   /* ---- edit conditions ---- */
   let editing = $state(false);
-  let f = $state<{ name: string; kind: LocationKind | string; parent: string | null; indoor: '' | 'yes' | 'no'; floorC: string; ppfd: string; lightHours: string; lat: string; lon: string; altM: string; notes: string }>({ name: '', kind: '', parent: null, indoor: '', floorC: '', ppfd: '', lightHours: '', lat: '', lon: '', altM: '', notes: '' });
+  let f = $state<{ name: string; kind: LocationKind | string; parent: string | null; indoor: '' | 'yes' | 'no'; floorC: string; floorHeld: 'held' | 'bottoms'; ppfd: string; lightHours: string; lat: string; lon: string; altM: string; notes: string }>({ name: '', kind: '', parent: null, indoor: '', floorC: '', floorHeld: 'bottoms', ppfd: '', lightHours: '', lat: '', lon: '', altM: '', notes: '' });
   /** Places this one could sit inside: everything but itself and what is under it. */
   const homes = $derived.by(() => {
     const under = new Set(collection.subtree(id));
@@ -56,7 +56,7 @@
   });
   function startEdit() {
     if (!loc) return;
-    f = { name: loc.name, kind: loc.type ?? '', parent: path.length > 1 ? path[path.length - 2].id : null, indoor: loc.indoor == null ? '' : loc.indoor ? 'yes' : 'no', floorC: loc.floorC == null ? '' : (units.current === 'us' ? +cToF(loc.floorC).toFixed(1) : +loc.floorC.toFixed(1)).toString(), ppfd: loc.ppfd?.toString() ?? '', lightHours: loc.lightHours?.toString() ?? '', lat: loc.lat?.toString() ?? '', lon: loc.lon?.toString() ?? '', altM: loc.altM?.toString() ?? '', notes: loc.notes ?? '' };
+    f = { name: loc.name, kind: loc.type ?? '', parent: path.length > 1 ? path[path.length - 2].id : null, indoor: loc.indoor == null ? '' : loc.indoor ? 'yes' : 'no', floorC: loc.floorC == null ? '' : (units.current === 'us' ? +cToF(loc.floorC).toFixed(1) : +loc.floorC.toFixed(1)).toString(), floorHeld: loc.floorHeld ? 'held' : 'bottoms', ppfd: loc.ppfd?.toString() ?? '', lightHours: loc.lightHours?.toString() ?? '', lat: loc.lat?.toString() ?? '', lon: loc.lon?.toString() ?? '', altM: loc.altM?.toString() ?? '', notes: loc.notes ?? '' };
     editing = true;
   }
   const num = (s: string) => (s.trim() === '' || Number.isNaN(Number(s)) ? null : Number(s));
@@ -66,7 +66,7 @@
     const alt = num(f.altM);
     altMsg = alt != null && (alt < -500 || alt > 9000) ? `${f.altM} is outside −500 to 9000 m${alt > 9000 && alt < 30000 ? `; in feet that would be ${Math.round(alt * 0.3048)} m` : ''}.` : '';
     if (altMsg) { document.getElementById('e-alt')?.focus(); return; }
-    await collection.put('location', id, { name: f.name.trim() || loc?.name, type: f.kind || null, indoor: f.indoor === '' ? null : f.indoor === 'yes', floorC: (() => { const v = num(f.floorC); return v == null ? null : units.current === 'us' ? +fToC(v).toFixed(2) : v; })(), ppfd: num(f.ppfd), lightHours: num(f.lightHours), lat: num(f.lat), lon: num(f.lon), altM: num(f.altM), notes: f.notes.trim() || null });
+    await collection.put('location', id, { name: f.name.trim() || loc?.name, type: f.kind || null, indoor: f.indoor === '' ? null : f.indoor === 'yes', floorC: (() => { const v = num(f.floorC); return v == null ? null : units.current === 'us' ? +fToC(v).toFixed(2) : v; })(), floorHeld: num(f.floorC) == null ? null : f.floorHeld === 'held', ppfd: num(f.ppfd), lightHours: num(f.lightHours), lat: num(f.lat), lon: num(f.lon), altM: num(f.altM), notes: f.notes.trim() || null });
     if ((f.parent ?? null) !== (loc?.parentId ?? null) || collection.needsHome(id)) await collection.moveLocation(id, f.parent ?? null);
     editing = false;
   }
@@ -139,6 +139,11 @@
     if (forecast.risk.level === 'warning') return forecast.risk;
     const F = temp(floor, units.current, 1);
     const nights = forecast.forecast.days.filter((d) => d.tmin <= floor);
+    // A heater's set-point: outside reaching it is the heater's work, and the line says what the plants get, not a warning (round forty, own).
+    if (cond.floorHeld) {
+      const coldest = forecast.forecast.days.length ? forecast.forecast.days.reduce((a, b) => (b.tmin < a.tmin ? b : a)) : null;
+      return { level: 'none', text: `Held at ${F} by its heater${coldest ? `; outside falls to ${temp(coldest.tmin, units.current, 1)} on ${coldest.date} (MET Norway)` : ''}. A plant that needs more than ${F} is the one at risk here.` };
+    }
     if (nights.length) return { level: 'floor', text: `Forecast reaches this place's ${F} floor on ${nights[0].date} (${temp(nights[0].tmin, units.current, 1)} outside).` };
     const above = `Outside stays above the ${F} floor for the ${forecast.forecast.hoursCovered} hours of forecast.`;
     return forecast.risk.level === 'none' ? { level: 'none', text: above } : { level: forecast.risk.level, text: `${forecast.risk.text} ${above}` };
@@ -167,7 +172,7 @@
       <h1 class="q" style="margin: 0">{loc.name}</h1>
       <p class="vern">{LOCATION_KINDS.find((k) => k.k === loc.type)?.label ?? 'Place'} · {plural(deep.length, 'growing plant')}{kids.length ? ` in ${plural(collection.subtree(id).length, 'place')}` : ''}{#if cond.indoor != null} · {cond.indoor ? 'indoors' : 'outdoors'}{/if}</p>
       <div class="pills">
-        {#if cond.floorC != null}<span class="pill c">floor {temp(cond.floorC, units.current, 1)}</span>{/if}
+        {#if cond.floorC != null}<span class="pill c">{cond.floorHeld ? 'held at' : 'floor'} {temp(cond.floorC, units.current, 1)}</span>{/if}
         {#if dli != null}<span class="pill w">DLI {dli.toFixed(0)}</span>{/if}
         {#if watchable && effectiveRisk}<span class="pill {effectiveRisk.level === 'none' ? 'a' : effectiveRisk.level === 'cold' ? 'w' : 'b'}">{effectiveRisk.level === 'none' ? (alertsUnchecked ? 'forecast clear; alerts not checked' : 'frost: clear') : effectiveRisk.level === 'cold' ? 'cold night coming' : effectiveRisk.level === 'floor' ? 'reaches the floor' : effectiveRisk.level === 'warning' ? 'weather warning' : 'frost forecast'}</span>{/if}
         {#if unseen && deep.length}<span class="pill w">{unseen} not seen{missedNow === unseen ? ' at the last audit' : ' in 90 d'}</span>{/if}
@@ -187,7 +192,9 @@
       <label><span>Kind</span><select id="e-kind" bind:value={f.kind}><option value="">—</option>{#if f.kind && !LOCATION_KINDS.some((k) => k.k === f.kind)}<option value={f.kind}>{f.kind} (a kind this build does not know)</option>{/if}{#each LOCATION_KINDS as k}<option value={k.k}>{k.label}</option>{/each}</select></label>
       <label><span>Inside</span><select id="e-parent" bind:value={f.parent}><option value={null}>Top level</option>{#each homes as h}<option value={h.id}>{h.name}</option>{/each}</select></label>
       <label><span>Indoors?</span><select id="e-indoor" bind:value={f.indoor}><option value="">Inherit</option><option value="yes">Yes</option><option value="no">No</option></select></label>
-      <label><span>Temperature floor {tempUnit(units.current)}</span><input id="e-floor" type="text" inputmode="decimal" bind:value={f.floorC} placeholder="heater set-point, or what it bottoms out at" /></label>
+      <label><span>Temperature floor {tempUnit(units.current)}</span><input id="e-floor" type="text" inputmode="decimal" bind:value={f.floorC} placeholder="the coldest it gets" /></label>
+      <!-- A set-point and a bottoming-out figure read oppositely on a cold night: outside reaching a set-point is the heater's job; reaching a bottoming-out figure is the plants' (round forty, own). -->
+      <label><span>That floor is</span><select id="e-floorkind" bind:value={f.floorHeld}><option value="bottoms">what it bottoms out at (unheated)</option><option value="held">held by a heater (its set-point)</option></select></label>
       <label><span><span style="text-transform: none">µ</span>mol/m²/s of light</span><input id="e-ppfd" type="text" inputmode="decimal" bind:value={f.ppfd} /></label>
       <label><span>Light hours/day</span><input id="e-hours" type="text" inputmode="decimal" bind:value={f.lightHours} /></label>
       <label><span>Latitude</span><input id="e-lat" type="text" inputmode="decimal" bind:value={f.lat} /></label>
@@ -214,7 +221,7 @@
     <p class="empty" style="margin: 14px 0 0">No floor, light, watering or audit recorded here yet. <button class="linkish" type="button" onclick={startEdit}>Set the floor and the light</button></p>
   {:else}
   <div class="cards">
-    {#if cond.floorC != null}<div class="card"><div class="lab">Floor</div><div class="val">{cond.floorC == null ? '–' : tempN(cond.floorC, units.current, 1)}<span class="u">{cond.floorC == null ? '' : ' ' + tempUnit(units.current)}</span></div><div class="sub">{cond.floorC == null ? 'not stated' : cond.from.floorC && cond.from.floorC !== loc.name ? `from ${cond.from.floorC}` : 'set here'}</div></div>{/if}
+    {#if cond.floorC != null}<div class="card"><div class="lab">{cond.floorHeld ? 'Held at' : 'Floor'}</div><div class="val">{cond.floorC == null ? '–' : tempN(cond.floorC, units.current, 1)}<span class="u">{cond.floorC == null ? '' : ' ' + tempUnit(units.current)}</span></div><div class="sub">{cond.floorC == null ? 'not stated' : cond.from.floorC && cond.from.floorC !== loc.name ? `from ${cond.from.floorC}` : 'set here'}</div></div>{/if}
     {#if dli != null}<div class="card"><div class="lab">Light</div><div class="val">{dli == null ? '–' : dli.toFixed(0)}<span class="u">{dli == null ? '' : ' DLI'}</span></div><div class="sub">{cond.ppfd == null ? 'not measured' : `${cond.ppfd} µmol × ${cond.lightHours ?? 12} h${cond.from.ppfd && cond.from.ppfd !== loc.name ? ` · from ${cond.from.ppfd}` : ''}`}</div></div>{/if}
     {#if lastWater}<div class="card"><div class="lab">Last watered</div><div class="val">{lastWater ? daysSince(lastWater) : '–'}<span class="u">{lastWater ? ' d ago' : ''}</span></div><div class="sub">{lastWater ? `the most recently watered plant${watering.oldest === lastWater ? (deep.length > 1 && !watering.never ? ', and every plant here was watered that day' : '') : `; the longest waiting ${daysSince(watering.oldest)} d`}${watering.never ? `; ${watering.never} with no watering recorded` : ''}${dueHere ? `; ${dueHere} due` : ''}` : 'nothing recorded'}</div></div>{/if}
     {#if lastAudit}<div class="card"><div class="lab">Last audit</div><div class="val">{lastAudit ? daysSince(lastAudit) : '–'}<span class="u">{lastAudit ? ' d ago' : ''}</span></div><div class="sub">{lastAudit ? lastAudit : 'never audited'}{missedNow ? ` · ${missedNow} not seen at it` : ''}{unseen - missedNow > 0 ? ` · ${unseen - missedNow} not seen in 90 d` : ''}</div></div>{/if}

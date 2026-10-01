@@ -63,12 +63,13 @@ export type Found = IndexEntry;
  * browser whole. Null when the reference could not be reached (a different fact from "nothing matches"). What is sent
  * is the text in a public catalogue's search box, listed on /about/how; a plant's record never is.
  */
-export async function searchCatalogue(q: string, n = 60): Promise<Found[] | null> {
+export async function searchCatalogue(q: string, n = 60): Promise<Found[] | { limited: number } | null> {
   const text = q.trim().slice(0, 80);
   if (!text) return [];
   try {
     const r = await withCorpus(`/api/search?q=${encodeURIComponent(text)}&n=${n}`).then(timed);
-    if (r.status === 400) return []; // not a search (symbols the index has no words in): nothing matches
+    if (r.status === 400) return []; // not a search (nothing the index has words in): nothing matches
+    if (r.status === 429) return { limited: Math.max(1, Number(r.headers.get('retry-after')) || 60) }; // the address's allowance is spent: a wait, not "not reached" (round forty, R1-3)
     if (!r.ok) return null;
     return (await r.json()) as Found[];
   } catch {

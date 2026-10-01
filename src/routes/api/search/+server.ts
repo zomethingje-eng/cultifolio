@@ -16,15 +16,20 @@ import { limited } from '$lib/server/sync';
  * the entries and sheets routes are, and `no-store` when asked under another id (round thirteen, 4; round sixteen, 12).
  */
 const prepared = new WeakMap<IndexEntry[], Prepared<IndexEntry>[]>();
-/** Letters and marks of any script, digits, space, period, apostrophe, hyphen, the hybrid sign: what a name, a common name or a region is written in. */
-export const _SEARCH_QUERY = /^[\p{L}\p{M}\p{N}\s.'\-×]{1,80}$/u;
+/**
+ * Anything that is not a letter, a mark or a digit becomes a space before the search, since the tokeniser splits on it
+ * anyway: the route refused "Lithops ’Ruby’" (iOS writes every apostrophe as ’), "copiapoa, cinerea" and "Aloe/Gasteria"
+ * with a 400 the page showed as "Nothing matches" (round forty, R1-1). A query that is nothing but such characters is an
+ * empty search.
+ */
+export const _clean = (q: string) => q.replace(/[^\p{L}\p{M}\p{N}]+/gu, ' ').trim().slice(0, 80);
 export const _MAX_HITS = 100;
 const DEFAULT_HITS = 60;
 
 export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddress }) => {
-  const q = (url.searchParams.get('q') ?? '').trim().slice(0, 80);
+  const q = _clean((url.searchParams.get('q') ?? '').slice(0, 200));
   if (!q) return json([], { headers: { 'cache-control': 'public, max-age=86400' } });
-  if (!_SEARCH_QUERY.test(q)) return json({ error: 'a search is letters, digits, spaces, periods, apostrophes, hyphens and ×' }, { status: 400, headers: { 'cache-control': 'no-store' } });
+  // The limit answers with a Retry-After the page turns into "try again in N minutes", not "could not be reached" (round forty, R1-3).
   const stop = await limited(platform, getClientAddress, 'search');
   if (stop) return stop;
   const n = Math.min(_MAX_HITS, Math.max(1, Number(url.searchParams.get('n')) || DEFAULT_HITS));

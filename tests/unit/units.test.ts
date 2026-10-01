@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { temp, deltaT, rain, ruleRain, unitsForLocale, cToF, fToC } from '$core/units';
+import { temp, deltaT, rain, ruleRain, unitsForLocale, cToF, fToC, length, lengthN, lengthUnit, lengthToMm } from '$core/units';
 import { cultivationSheet } from '$core/sheet';
 import { generatedNote, careLine } from '$core/note';
 
@@ -28,6 +28,18 @@ describe('units', () => {
     expect(unitsForLocale('en-GB')).toBe('metric');
     expect(unitsForLocale('de-DE')).toBe('metric');
     expect(unitsForLocale(null)).toBe('metric');
+  });
+});
+
+describe('a plant measurement in the reader\'s units (round forty, R2-2)', () => {
+  it('a US grower\'s "2" is stored as 50.8 mm and read back as 2.00 in; metric passes through; a count has no unit', () => {
+    expect(lengthToMm(2, 'us')).toBe(50.8);
+    expect(lengthToMm(120, 'metric')).toBe(120);
+    expect(length(50.8, 'us')).toBe('2.00 in');
+    expect(length(50.8, 'metric')).toBe('50.8 mm');
+    expect(length(120, 'metric')).toBe('120 mm');
+    expect(lengthN(50.8, 'us')).toBe(2);
+    expect(lengthUnit('us')).toBe('in');
   });
 });
 

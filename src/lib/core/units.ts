@@ -85,3 +85,19 @@ export function bottomHeat(raw: unknown, u: Units): { c: number | null; msg: str
   if (c < 5) return { c: null, msg: `${n} ${tempUnit(u)} is colder than no heat at all; bottom heat is 5 to 45 °C.` };
   return { c: +c.toFixed(2), msg: '' };
 }
+
+/** A plant's measurement, stored in mm, in the reader's units: "120 mm" or "4.72 in". Heads and leaves carry no unit and pass through. */
+export function lengthUnit(u: Units): string {
+  return u === 'us' ? 'in' : 'mm';
+}
+export function length(mm: number, u: Units): string {
+  return u === 'us' ? `${fixed(mmToIn(mm), 2)} in` : `${fixed(mm, mm === Math.round(mm) ? 0 : 1)} mm`;
+}
+/** The number alone, for a card or a form box: "4.72". */
+export function lengthN(mm: number, u: Units): number {
+  return u === 'us' ? Number(fixed(mmToIn(mm), 2)) : mm;
+}
+/** A typed length in the reader's units, as the millimetres the log stores (round forty, R2-2): a US grower's "2" is 50.8 mm, never 2 mm. */
+export function lengthToMm(typed: number, u: Units): number {
+  return u === 'us' ? Math.round(inToMm(typed) * 10) / 10 : typed;
+}

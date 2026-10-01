@@ -46,7 +46,10 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   const me = byKey.get(key);
   const card = (e: NonNullable<typeof me>) => ({ key: e.key, slug: e.slug, name: e.name, family: e.family, common: e.common, thumb: e.thumb, open: e.open, climate: e.climate });
   const genus = genusOf(d.name.scientific);
-  const siblings = index.filter((e) => e.key !== key && genusOf(e.name) === genus).sort((a, b) => a.name.localeCompare(b.name)).map(card);
+  // The page shows twelve and a count: the rest of a large genus (six hundred cards, taken whole) is not sent (round forty, own).
+  const allSiblings = index.filter((e) => e.key !== key && genusOf(e.name) === genus).sort((a, b) => a.name.localeCompare(b.name));
+  const siblings = allSiblings.slice(0, 12).map(card);
+  const siblingCount = allSiblings.length;
   // Only a species with a derived climate can be near anything; the build writes it so, and a stale index is not trusted to.
   const near = (me?.near ?? []).map((k) => byKey.get(k)).filter((e): e is NonNullable<typeof me> => !!e && e.climate === 'ok').map(card);
   // About the genus: its Wikipedia lead, written by `--fill genus`; null when that pass has not run for this genus.
@@ -80,6 +83,7 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
     d,
     genusRecord,
     siblings,
+    siblingCount,
     near,
     worldSvg: worldSvg(d.distribution.boxes, d.centroid, `Native range of ${d.name.scientific}`),
     regionSvg: regionSvg(d.distribution.boxes, pts, d.centroid, `Openly licensed records of ${d.name.scientific}`)

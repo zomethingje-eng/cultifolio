@@ -14,7 +14,7 @@
    * resolved is flagged, with the nearest reference name offered by name.
    */
   import { parseName } from '$core/names';
-  import { searchCatalogue } from '$lib/ui/index.svelte';
+  import { searchCatalogue, type Found } from '$lib/ui/index.svelte';
   import SpeciesName from './SpeciesName.svelte';
   import type { NameKind } from '$core/names';
   let { value = $bindable(''), taxonKey = $bindable<number | null>(null), cultivar = $bindable<string | null>(null), kind = $bindable<NameKind>('species'), parentage = $bindable<string | null>(null), id = 'species-name', unresolved = $bindable(false), armed = $bindable(false) }: { value?: string; taxonKey?: number | null; cultivar?: string | null; kind?: NameKind; parentage?: string | null; id?: string; unresolved?: boolean; armed?: boolean } = $props();
@@ -69,31 +69,38 @@
     // The reference's own suggestions come from the server's search over the index (round thirty-nine), not from the
     // whole index fetched here; the name typed already went to /api/names, so nothing new leaves the device. The corpus
     // index is species-level; for a genus-only name (a hybrid) its rows would be wrong suggestions.
-    const fromIndex = genusOnly || needle.length < 2 ? [] : ((await searchCatalogue(needle, 6)) ?? []);
-    if (!live()) return;
-    // A hit whose genus is not the one typed came from the one-edit fallback ("polyphylla" → Lupinus polyphyllus): say so.
+    // Both asked at once (round forty, R2-3): the reference's own suggestions and the name service are independent, and a
+    // slow catalogue search must not hold the backbone's answer for its ten seconds.
     const typedGenus = needle.split(/\s+/)[0] ?? '';
-    const local: Sugg[] = fromIndex.map((e) => ({ key: e.key, name: e.name, family: e.family, local: true, far: !e.name.toLowerCase().startsWith(typedGenus.slice(0, Math.min(4, typedGenus.length))) }));
-    suggestions = local;
+    let local: Sugg[] = [];
+    let remote: Sugg[] = [];
+    const show = () => {
+      suggestions = [...local, ...remote.filter((x) => !local.some((l) => l.key === x.key))];
+      if (hi >= suggestions.length) hi = -1;
+      open = true;
+    };
     hi = -1;
     open = true;
-    if (needle.length < 3) return;
-    try {
-      // A refusal is said, not shown as an empty list: the grower can still type the name and let the plant page repair the key later (round seventeen, 1).
-      const rows = await namesFor(p.scientific);
+    const indexP = (genusOnly || needle.length < 2 ? Promise.resolve([] as Found[]) : searchCatalogue(needle, 6)).then((answer) => {
+      if (!live()) return;
+      // A hit whose genus is not the one typed came from the one-edit fallback ("polyphylla" → Lupinus polyphyllus): say so.
+      local = (Array.isArray(answer) ? answer : []).map((e) => ({ key: e.key, name: e.name, family: e.family, local: true, far: !e.name.toLowerCase().startsWith(typedGenus.slice(0, Math.min(4, typedGenus.length))) }));
+      show();
+    });
+    const namesP = needle.length < 3 ? Promise.resolve() : namesFor(p.scientific).then((rows) => {
       if (!live()) return;
       nameServiceDown = false;
-      const remote: Sugg[] = rows
+      remote = rows
         .filter((x) => (genusOnly ? x.rank === 'GENUS' : /SPECIES|SUBSPECIES|VARIETY|FORM/.test(x.rank ?? '')))
         .map((x) => ({ key: x.key, name: x.canonicalName ?? x.scientificName ?? '', family: x.family, rank: x.rank, status: x.status }))
-        .filter((x) => !local.some((l) => l.key === x.key))
         // The backbone lists a subspecies under several keys (accepted, synonyms of one another); one line per name and rank is enough.
         .filter((x, i, arr) => arr.findIndex((y) => y.name === x.name && y.rank === x.rank) === i);
-      suggestions = [...local, ...remote];
-      if (hi >= suggestions.length) hi = -1;
-    } catch {
+      show();
+    }, () => {
+      // A refusal is said, not shown as an empty list: the grower can still type the name and let the plant page repair the key later (round seventeen, 1).
       if (live()) nameServiceDown = true; // offline: local suggestions only, and said
-    }
+    });
+    await Promise.all([indexP, namesP]);
   }
 
   function onInput() {

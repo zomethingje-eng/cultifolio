@@ -393,7 +393,7 @@ class Collection {
     await this.put('location', id, { parentId });
   }
   /** Conditions as they apply at a node: the nearest ancestor's value wins for anything the node leaves null. */
-  conditions(id: string): { indoor: boolean | null; floorC: number | null; ppfd: number | null; lightHours: number | null; lat: number | null; lon: number | null; altM: number | null; from: Record<string, string> } {
+  conditions(id: string): { indoor: boolean | null; floorC: number | null; floorHeld: boolean; ppfd: number | null; lightHours: number | null; lat: number | null; lon: number | null; altM: number | null; from: Record<string, string> } {
     const path = this.locationPath(id).reverse(); // node first
     const pick = <K extends keyof Location>(k: K): { v: Location[K] | null; from: string } => {
       for (const l of path) if (l[k] != null) return { v: l[k], from: l.name };
@@ -405,7 +405,9 @@ class Collection {
       if (r.from) from[k as string] = r.from;
       return r.v as Location[K] | null;
     };
-    return { indoor: g('indoor') as boolean | null, floorC: g('floorC') as number | null, ppfd: g('ppfd') as number | null, lightHours: g('lightHours') as number | null, lat: g('lat') as number | null, lon: g('lon') as number | null, altM: g('altM') as number | null, from };
+    // The floor's kind comes from the place that supplied the floor, not from a nearer one that set only the kind.
+    const floorFrom = path.find((l) => l.floorC != null);
+    return { indoor: g('indoor') as boolean | null, floorC: g('floorC') as number | null, floorHeld: !!floorFrom?.floorHeld, ppfd: g('ppfd') as number | null, lightHours: g('lightHours') as number | null, lat: g('lat') as number | null, lon: g('lon') as number | null, altM: g('altM') as number | null, from };
   }
   /** Growing plants at a node (deep: including every node beneath it). A plant whose own place was removed counts at the nearest place above it. */
   plantsAt(id: string, deep = true): Accession[] {

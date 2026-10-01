@@ -1,4 +1,4 @@
-# Genera taken whole (every accepted species in the GBIF backbone), whatever their iNaturalist counts.
+# Genera taken whole (every accepted species as WCVP lists them; the derivation reads Kew's checklist, not the GBIF backbone), whatever their iNaturalist counts.
 # The collector genera: cacti, mesembs, other succulents, caudiciforms, the winter-growing bulbs.
 # Very large genera (Euphorbia, Senecio, Oxalis, Dioscorea, Peperomia, Hoya, Ceropegia, Aloe, Ornithogalum,
 # Gladiolus, Moraea, Pelargonium) are deliberately not here; their cultivated species come in through the counts.
@@ -129,6 +129,7 @@ Momordica
 Monsonia
 Operculicarya
 Othonna
+Crassothonna
 Portulacaria
 Pseudobombax
 Pterodiscus

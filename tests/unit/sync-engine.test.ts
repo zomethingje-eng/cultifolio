@@ -20,6 +20,8 @@ import { MAX_BYTES } from '$lib/server/sync';
  */
 const quota = () => new DOMException('The quota has been exceeded.', 'QuotaExceededError');
 type Mem = { device: string; changes: Map<string, Change>; outbox: Set<string>; meta: Map<string, unknown>; photos: Map<string, { id: string; blob: Blob; thumb: Blob }>; failAppend?: (cs: Change[], fromServer: boolean) => boolean; failPutPhoto?: (id: string) => boolean };
+/** What the listing's Date header says the server's clock is; null for no header. */
+let serverClock: number | null = null;
 const newMem = (device: string): Mem => ({ device, changes: new Map(), outbox: new Set(), meta: new Map(), photos: new Map() });
 let mem: Mem = newMem('dev0');
 
@@ -130,6 +132,8 @@ async function boot(m: Mem, r2: ReturnType<typeof fakeR2>) {
   const QUEUE = { get: async (k: string, type?: string) => (type === 'json' ? JSON.parse(kvm.get(k) ?? 'null') : (kvm.get(k) ?? null)), put: async (k: string, v: string) => void kvm.set(k, v) };
   const platform = { env: { STORE: r2, QUEUE, SYNC_OPEN: '1' } } as unknown as App.Platform;
   const calls: string[] = [];
+  /** The server's clock as the Date header carries it: null leaves the header off, as a test harness without one did (round forty, R1-6). */
+  const dated = (r: Response) => { if (serverClock == null) return r; const out = new Response(r.body, r); out.headers.set('date', new Date(serverClock).toUTCString()); return out; };
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(String(input), 'http://x');
     const request = new Request(url, init);
@@ -138,7 +142,7 @@ async function boot(m: Mem, r2: ReturnType<typeof fakeR2>) {
     try {
       let mm: RegExpExecArray | null;
       if (url.pathname === '/api/sync/vault') return await (routes.vault as never as Record<string, (e: unknown) => Promise<Response>>)[request.method](ev);
-      if (url.pathname === '/api/sync/log') return await (routes.log as never as Record<string, (e: unknown) => Promise<Response>>)[request.method](ev);
+      if (url.pathname === '/api/sync/log') return dated(await (routes.log as never as Record<string, (e: unknown) => Promise<Response>>)[request.method](ev));
       if ((mm = /^\/api\/sync\/log\/([^/]+)$/.exec(url.pathname))) return await routes.batch.GET({ ...ev, params: { key: mm[1] } } as never);
       if ((mm = /^\/api\/sync\/photo\/([^/]+)$/.exec(url.pathname))) return await (routes.photo as never as Record<string, (e: unknown) => Promise<Response>>)[request.method]({ ...ev, params: { id: mm[1] } });
       return new Response('nope', { status: 404 });
@@ -305,6 +309,28 @@ describe('batches are named by content and acked only when the server holds thos
   });
 });
 
+describe('the pull cursor is judged against the server clock, not the device clock (round forty, R1-6)', () => {
+  it('a device clock a day behind the server still advances its cursor, since the arrivals are near the Date header', async () => {
+    const r2 = fakeR2();
+    const B = await boot(newMem('bbbbbbbbbbbb'), r2);
+    await B.collection.addAccession({ taxonName: 'Copiapoa cinerea', acc: 'B-1' });
+    await B.sync.setup(KEY, 'create');
+    // The server (and the batches' arrivals) sit a day ahead of this device's clock.
+    for (const k of logKeys(r2)) r2.objs.get(k)!.uploaded = Date.now() + 86_400_000;
+    serverClock = Date.now() + 86_400_000 + 5000;
+    try {
+      const memD = newMem('dddddddddddd');
+      const D = await boot(memD, r2);
+      await D.sync.setup(KEY, 'join');
+      expect((memD.meta.get('sync') as { since: number }).since).toBeGreaterThan(Date.now() + 86_000_000); // advanced to the arrival
+      expect(D.sync.clockAhead).toBeNull();
+      expect(D.collection.accessions.map((a) => a.acc)).toEqual(['B-1']);
+    } finally {
+      serverClock = null;
+    }
+  });
+});
+
 describe('the pull cursor never runs ahead of the device clock (round thirty-eight, R1-5)', () => {
   it('a listing that dates a batch a day ahead moves the cursor only to now plus the slack, says so, and later batches still arrive', async () => {
     const r2 = fakeR2();
@@ -319,7 +345,7 @@ describe('the pull cursor never runs ahead of the device clock (round thirty-eig
     const since = (memD.meta.get('sync') as { since: number }).since;
     expect(since).toBeLessThanOrEqual(Date.now()); // the cursor did not move for it
     expect(D.collection.accessions.map((a) => a.acc)).toEqual(['B-1']); // the batch itself still folded
-    expect(D.sync.clockAhead).toMatch(/ahead of this device's clock/);
+    expect(D.sync.clockAhead).toMatch(/ahead of its own clock/);
     expect(D.sync.refused).toEqual([]); // not a refusal of anything from this device
     // A batch dated normally afterwards is not behind a cursor parked a day ahead.
     await B.collection.addAccession({ taxonName: 'Lithops', acc: 'B-2' });

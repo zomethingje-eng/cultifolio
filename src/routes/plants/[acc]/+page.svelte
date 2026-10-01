@@ -3,7 +3,7 @@
   import { toast } from '$lib/ui/toast.svelte';
   import { site } from '$lib/ui/site.svelte';
   import { localDate, daysBetween } from '$core/dates';
-  import { temp, tempN, rain, deltaT, numberOrNull } from '$core/units';
+  import { temp, tempN, rain, deltaT, numberOrNull, length, lengthN, lengthUnit, lengthToMm } from '$core/units';
   import { plural } from '$core/words';
   import { page } from '$app/state';
   import { accNo, sowNo } from '$lib/db/types';
@@ -130,7 +130,7 @@
     // With no extremes, say why, as the species page and compare do: a refusal or a skip is not an absence (round eighteen, 8).
     const p01 = habitat.ex ? `; 1st-percentile night over ${habitat.ex.years} years at the typical cell ${temp(habitat.ex.minP01, u, 1)} (NASA POWER)` : habitat.exStatus === 'refused' ? '; the daily extremes were not checked (NASA POWER did not answer when the species page was built)' : habitat.exStatus === 'skipped' ? '; the daily extremes were not asked for when the species page was built' : habitat.exStatus === 'sea' ? '; the daily extremes were read at a weather cell that is mostly sea and are set aside, so no floor is read (the species page says what that cell gave)' : '';
     if (cond?.floorC == null) return { here: null, text: `${night}${p01}; no floor set for this place` };
-    return { here: cond.floorC, text: `this place is set to bottom out at ${temp(cond.floorC, u, 1)}; ${night}${p01}` };
+    return { here: cond.floorC, text: `this place is ${cond.floorHeld ? 'held at' : 'set to bottom out at'} ${temp(cond.floorC, u, 1)}; ${night}${p01}` };
   });
   const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   // The habitat rain season as a figure: the rain rule's reading in habitat months and shifted to this place's hemisphere. No verdict.
@@ -297,7 +297,8 @@
     evmsg = !ed ? 'Give the entry a date.' : ed > localDate() ? `${ed} is in the future.` : '';
     if (evmsg) { document.getElementById('ev-date')?.focus(); throw new Error(evmsg); }
     const m: Record<string, number> = {};
-    for (const [k, v] of Object.entries(measures)) { const n = numberOrNull(v); if (n != null) m[k] = n; } // a cleared box is no measurement, not 0
+    // A length is typed in the reader's units and stored in millimetres (round forty, R2-2); heads and leaves are counts.
+    for (const [k, v] of Object.entries(measures)) { const n = numberOrNull(v); if (n != null) m[k] = MEASURES.find((x) => x.k === k)?.unit === 'mm' ? lengthToMm(n, u) : n; } // a cleared box is no measurement, not 0
     await collection.addEvent({ acc: id, d: ed, t: et, note: enote.trim() || null, used: et === 'treat' || et === 'feed' ? eused.trim() || null : null, cause: et === 'death' ? ecause.trim() || null : null, measures: Object.keys(m).length ? m : null, followUp: et === 'treat' ? 10 : null });
     if (et === 'death') await collection.put('accession', id, { status: 'dead' });
     enote = '';
@@ -481,7 +482,7 @@
         {#if et === 'measure'}
           <div class="measures">
             {#each MEASURES as m}
-              <label><span class="lab">{m.label}{m.unit ? ` (${m.unit})` : ''}</span><input type="number" step="any" bind:value={measures[m.k]} /></label>
+              <label><span class="lab">{m.label}{m.unit ? ` (${lengthUnit(u)})` : ''}</span><input type="number" step="any" bind:value={measures[m.k]} /></label>
             {/each}
           </div>
         {/if}
@@ -502,9 +503,9 @@
   {/if}
 
   <div class="cards">
-    {#if a.status === 'growing' || collection.lastWatered(id)}<div class="card"><div class="lab">Since watered</div><div class="val">{sinceWater ?? careDays}<span class="u"> d</span></div><div class="sub">{sinceWater == null ? 'no watering recorded; counted from the day the record was made' : `last ${collection.lastWatered(id)}`}</div></div>{/if}
+    {#if a.status === 'growing' || collection.lastWatered(id)}<div class="card"><div class="lab">Since watered</div><div class="val">{sinceWater ?? '–'}{#if sinceWater != null}<span class="u"> d</span>{/if}</div><div class="sub">{sinceWater == null ? `no watering recorded; the record is ${careDays} ${careDays === 1 ? 'day' : 'days'} old` : `last ${collection.lastWatered(id)}`}</div></div>{/if}
     {#if events.some((e) => e.t === 'audit')}<div class="card"><div class="lab">Last seen</div><div class="val">{seen == null ? '–' : seen}<span class="u">{seen == null ? '' : ' d'}</span></div><div class="sub">{#if collection.missedAt(id)}not seen at the audit of <span class="date">{collection.missedAt(id)}</span>; {/if}last logged <span class="date">{collection.lastSeen(id)}</span></div></div>{/if}
-    {#if lastMeasure}<div class="card"><div class="lab">{sizeKey ? (MEASURES.find((m) => m.k === sizeKey)?.label ?? 'Size') : 'Size'}</div><div class="val">{sizeKey && lastMeasure ? lastMeasure.measures![sizeKey] : '–'}<span class="u">{sizeKey ? ' ' + (MEASURES.find((m) => m.k === sizeKey)?.unit ?? '') : ''}</span></div>{#if growth != null}<div class="gauge"><i style="width: {Math.min(100, Math.max(8, (growth / Math.max(1, lastMeasure!.measures![sizeKey!])) * 100))}%"></i></div>{/if}<div class="sub">{growth != null ? `${growth >= 0 ? '+' : ''}${growth} since ${firstMeasure!.d}` : `measured ${lastMeasure.d}`}</div></div>{/if}
+    {#if lastMeasure}<div class="card"><div class="lab">{sizeKey ? (MEASURES.find((m) => m.k === sizeKey)?.label ?? 'Size') : 'Size'}</div><div class="val">{sizeKey && lastMeasure ? (MEASURES.find((m) => m.k === sizeKey)?.unit ? lengthN(lastMeasure.measures![sizeKey], u) : lastMeasure.measures![sizeKey]) : '–'}<span class="u">{sizeKey && MEASURES.find((m) => m.k === sizeKey)?.unit ? ' ' + lengthUnit(u) : ''}</span></div>{#if growth != null}<div class="gauge"><i style="width: {Math.min(100, Math.max(8, (growth / Math.max(1, lastMeasure!.measures![sizeKey!])) * 100))}%"></i></div>{/if}<div class="sub">{growth != null ? `${growth >= 0 ? '+' : ''}${MEASURES.find((m) => m.k === sizeKey)?.unit ? lengthN(growth, u) : growth} since ${firstMeasure!.d}` : `measured ${lastMeasure.d}`}</div></div>{/if}
     <div class="card"><div class="lab">Habitat rain season</div><div class="val" style="font-family: var(--ui); font-size: 17px; font-weight: 700">{#if !season && dossier?.climate.status === 'refused'}<NotChecked what="Climate" why="A source did not answer when the species page was built{dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}." />{:else}{season ? season.label : dossier?.climate.status === 'pending' ? 'Climate pending' : dossier ? 'No habitat climate' : ref === 'unreachable' ? 'Reference not reached' : ref === 'none' ? (kind === 'hybrid' ? 'A hybrid' : 'No species page') : '…'}{/if}</div><div class="sub">{#if season}{season.note} <a href="/species/{speciesHref}#s-cultivation">The sheet</a>.{:else if dossier?.climate.status === 'refused'}No season is read from an answer that was not given.{:else if dossier?.climate.status === 'pending'}The habitat climate for this species has not been derived yet.{:else if dossier}Nothing to read a season from{dossier.climate.status === 'none' && dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}.{:else if ref === 'unreachable'}The species reference could not be reached from here; nothing is known either way.{:else if ref === 'none'}{kind === 'hybrid' ? (parentLinks.some((p) => p.slug) ? 'No habitat of its own; its parents have species pages.' : 'No habitat of its own.') : 'Not in the reference.'}{:else}reading the species dossier{/if}</div></div>
   </div>
 
@@ -546,7 +547,7 @@
           {@const e = row.e}
           <div class="tlrow" class:auto={!!e.auto} title={e.auto ? 'Written by the app or by a place-wide action, not an observation of this plant' : undefined}>
             <span class="d">{e.d}</span>
-            <span class="t">{e.t === 'audit' && e.note === 'not seen' ? 'Not seen at audit' : (EVENT_LABEL[e.t] ?? e.t)}{#if e.used}<span class="x2">{' · '}{e.used}</span>{/if}{#if e.cause}<span class="x2">{' · '}{e.cause}</span>{/if}{#if e.measures}<span class="x2">{' · '}{Object.entries(e.measures).map(([k, v]) => { const m = MEASURES.find((x) => x.k === k); return `${m?.label ?? k} ${v}${m?.unit ? ' ' + m.unit : ''}`; }).join(', ')}</span>{/if}{#if e.note && !(e.t === 'audit' && e.note === 'not seen')}<span class="x2">{' · '}{e.note}</span>{/if}</span>
+            <span class="t">{e.t === 'audit' && e.note === 'not seen' ? 'Not seen at audit' : (EVENT_LABEL[e.t] ?? e.t)}{#if e.used}<span class="x2">{' · '}{e.used}</span>{/if}{#if e.cause}<span class="x2">{' · '}{e.cause}</span>{/if}{#if e.measures}<span class="x2">{' · '}{Object.entries(e.measures).map(([k, v]) => { const m = MEASURES.find((x) => x.k === k); return `${m?.label ?? k} ${m?.unit ? length(v, u) : v}`; }).join(', ')}</span>{/if}{#if e.note && !(e.t === 'audit' && e.note === 'not seen')}<span class="x2">{' · '}{e.note}</span>{/if}</span>
             {#if confirmEvent === e.id}<button class="rm confirm" type="button" onclick={() => { collection.remove('event', e.id); confirmEvent = null; }}>Remove?</button>{:else}<button class="rm" type="button" title="Remove this entry" aria-label="Remove this entry" onclick={() => { confirmEvent = e.id; void focusNext('.rm.confirm'); }}>×</button>{/if}
           </div>
         {:else}
@@ -600,7 +601,7 @@
     <p class="empty">Nothing stated yet. <button class="linkish" type="button" onclick={startEdit}>Add where it came from</button></p>
   {:else}
   <div class="factgrid">
-    <div><b>Source</b>{#if a.sourceFrom}<a href="/plants?q={encodeURIComponent(a.sourceFrom)}" title="Every plant from this source">{a.sourceFrom}</a>{/if}{#each [a.sourceForm, a.acquired].filter(Boolean) as x, i}{i || a.sourceFrom ? ' · ' : ''}{x}{/each}{#if !a.sourceFrom && !a.sourceForm && !a.acquired}not stated{/if}{#if a.price}{' · '}{a.price}{/if}</div>
+    <div><b>Source</b>{#if a.sourceFrom}<a href="/plants?q={encodeURIComponent(a.sourceFrom)}" title="Every plant from this source">{a.sourceFrom}</a>{/if}{#if a.sourceForm}{a.sourceFrom ? ' · ' : ''}as {a.sourceForm === 'plant' ? 'a plant' : a.sourceForm === 'seed' ? 'seed' : a.sourceForm === 'seedling' ? 'a seedling' : a.sourceForm === 'cutting' ? 'a cutting' : a.sourceForm}{/if}{#if a.acquired}{a.sourceFrom || a.sourceForm ? ', ' : ''}{a.acquired}{/if}{#if !a.sourceFrom && !a.sourceForm && !a.acquired}not stated{/if}{#if a.price}{' · '}{a.price}{/if}</div>
     {#if a.sourceRef}<div><b>Lot or reference</b>{a.sourceRef}</div>{/if}
     <div><b>Field number</b>{a.fieldNumber ?? 'none'}</div>
     <div><b>Provenance</b>{provLabel(a.provenance)}</div>

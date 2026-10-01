@@ -680,6 +680,9 @@ class Sync {
       if (r.status === 429) this.limited(r);
       if (!r.ok) throw new Error(`pull failed: ${r.status}`);
       const { batches, more, next } = (await r.json()) as { batches: Array<{ key: string; at: number }>; more: boolean; next?: { at: number; key: string } };
+      // The clock the arrivals are judged against is the server's own, from the answer's Date header, not this device's:
+      // a device clock far behind the server made every arrival look far ahead and parked the cursor for good (round forty, R1-6).
+      const serverNow = Date.parse(r.headers.get('date') ?? '') || Date.now();
       const have = new Set(m.have);
       const fresh = batches.filter((b) => !have.has(b.key));
       let n = 0;
@@ -696,8 +699,8 @@ class Sync {
           // clock, or a listing shaped by whoever holds the token) would otherwise make every later `since=` answer empty for
           // good, silently (round thirty-eight, R1-5). Such an arrival leaves the cursor where it was and is said on the sync
           // page; the batch itself is folded like any other, and `have` keeps it from folding twice when it is listed again.
-          const cap = Date.now() + CURSOR_SLACK_MS;
-          if (b.at > cap) this.clockAhead = `The server dated a batch ${Math.round((b.at - Date.now()) / 60000)} minutes ahead of this device's clock; the batch was read, and the cursor stays before it, so listings are longer until the clocks agree.`;
+          const cap = serverNow + CURSOR_SLACK_MS;
+          if (b.at > cap) this.clockAhead = `The server dated a batch ${Math.round((b.at - serverNow) / 60000)} minutes ahead of its own clock; the batch was read, and the cursor stays before it, so listings are longer until that is sorted out.`;
           else if (b.at > m.since) m.since = b.at;
         }
       } finally {

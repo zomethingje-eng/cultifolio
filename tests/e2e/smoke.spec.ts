@@ -1734,10 +1734,11 @@ test('settings: numbering is previewed and saved as the vault setting; appearanc
   expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBeUndefined();
 });
 
-test('the species page reads in reference order: summary, the genus, the facts, the figures, then the cards closed to one line each', async ({ page }) => {
+test('the species page reads in reference order: the facts and the figures, then the quoted summary and the genus, then the cards closed to one line each', async ({ page }) => {
   await page.goto('/species/copiapoa-cinerea');
+  // The figures come before the encyclopedia's paragraph since round forty: what is derived here is what the page is for.
   const order = await page.locator('h2.sec').allInnerTexts();
-  expect(order.slice(0, 4).map((t) => t.replace(/\s+/g, ' ').toLowerCase())).toEqual(['summary', 'about the genus · copiapoa', 'at a glance', 'cultivation']);
+  expect(order.slice(0, 4).map((t) => t.replace(/\s+/g, ' ').toLowerCase())).toEqual(['at a glance', 'summary', 'about the genus · copiapoa', 'cultivation']);
   await expect(page.locator('#s-genus + .sumbody')).toContainText('Copiapoa is a genus of cactus');
   await expect(page.locator('.facts .fact', { hasText: 'Described by' })).toContainText('(Phil.) Britton & Rose');
   await expect(page.locator('.facts .fact', { hasText: 'Wild records' })).toContainText('352 in range');
@@ -2463,4 +2464,63 @@ test('round thirty-eight: a monotypic genus does not quote the species paragraph
   // A genus with its own article keeps its block.
   await page.goto('/species/copiapoa-cinerea');
   await expect(page.locator('#s-genus + .sumbody')).toContainText('Copiapoa is a genus of cactus');
+});
+
+test('round forty: on "Your species" the search box stays on the device; the catalogue is one deliberate step away; punctuation and chips in a catalogue search', async ({ page }) => {
+  await page.goto('/species/copiapoa-cinerea');
+  await page.getByRole('link', { name: 'Add one to my plants' }).click();
+  await addPlant(page);
+  const searches: string[] = [];
+  page.on('request', (r) => { if (r.url().includes('/api/search')) searches.push(r.url()); });
+  await page.goto('/');
+  await expect(page.getByRole('button', { name: 'Your species' })).toHaveAttribute('aria-current', 'true');
+  // A number, a field number, a name: found on the device, and nothing goes to the server or the URL (R2-1).
+  await page.fill('.searchbar', '2026-0001');
+  await expect(page.locator('.plantsfound .accrow')).toHaveCount(1);
+  await page.fill('.searchbar', 'copiapoa');
+  await expect(page.locator('a.tile .nm', { hasText: 'Copiapoa cinerea' })).toBeVisible();
+  await page.waitForTimeout(500);
+  expect(searches).toEqual([]);
+  expect(page.url()).not.toContain('q=');
+  // The catalogue is one explicit step away, and that step is the one that sends the text.
+  await page.locator('#search-catalogue').click();
+  await expect(page.locator('a.tile .nm', { hasText: 'Copiapoa humilis' })).toBeVisible();
+  expect(searches.length).toBeGreaterThan(0);
+  expect(page.url()).toContain('q=copiapoa');
+  // Punctuation an iPhone types is not a refusal (R1-1).
+  await page.fill('.searchbar', 'copiapoa, ’cinerea’');
+  await expect(page.locator('a.tile')).toHaveCount(1);
+  // A chip that is on filters the search too (R1-4).
+  await page.fill('.searchbar', '');
+  await page.locator('.chipbtn', { hasText: 'Without climate' }).click();
+  await expect(page.locator('.chipbtn.on')).toContainText('Without climate');
+  await page.fill('.searchbar', 'copiapoa');
+  await expect(page.locator('.emptybox')).toContainText('Nothing matches with the chip on (2 without it)');
+  await page.fill('.searchbar', 'welwit');
+  await expect(page.locator('a.tile')).toHaveCount(1);
+  // The grouping links keep the chip.
+  await page.fill('.searchbar', '');
+  await page.locator('nav.seg[aria-label="Group by"] a', { hasText: 'Family' }).click();
+  await expect(page).toHaveURL(/by=family.*chip=noclimate|chip=noclimate.*by=family/);
+});
+
+test('round forty: a measurement typed in inches is stored in millimetres and read back in the reader\'s units (R2-2)', async ({ page }) => {
+  await page.goto('/species/copiapoa-cinerea');
+  await page.getByRole('link', { name: 'Add one to my plants' }).click();
+  await addPlant(page);
+  await page.goto('/settings');
+  await page.getByRole('button', { name: /°F and inches/ }).click();
+  await page.goto('/plants/2026-0001');
+  await page.locator('.quickbar .more').click();
+  await page.getByRole('button', { name: 'Measure', exact: true }).click();
+  await expect(page.locator('.measures label').first()).toContainText('(in)');
+  await page.locator('.measures input').first().fill('2');
+  await page.getByRole('button', { name: 'Record', exact: true }).click();
+  await expect(page.locator('.card', { hasText: 'Diameter' })).toContainText('2');
+  await expect(page.locator('.card', { hasText: 'Diameter' }).locator('.u')).toContainText('in');
+  await page.goto('/settings');
+  await page.getByRole('button', { name: /°C and mm/ }).click();
+  await page.goto('/plants/2026-0001');
+  await expect(page.locator('.card', { hasText: 'Diameter' })).toContainText('50.8');
+  await expect(page.locator('.tlrow', { hasText: 'Measure' })).toContainText('Diameter 50.8 mm');
 });

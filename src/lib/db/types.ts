@@ -208,8 +208,10 @@ export interface Location {
   type?: LocationKind | null;
   /** Inherited when null. */
   indoor?: boolean | null;
-  /** Coldest the space is allowed to get, °C (heater set-point, or what the garage bottoms out at). */
+  /** Coldest the space gets, °C: a heater's set-point (`floorHeld` true) or what the space bottoms out at (`floorHeld` false or unset). The two read differently on a cold night (round forty, own). */
   floorC?: number | null;
+  /** True when `floorC` is held by a heater: outside reaching it is the heater's job, not the plants'. Inherited with the floor. */
+  floorHeld?: boolean | null;
   /** Light at plant level, µmol/m²/s, and hours per day, when known. */
   ppfd?: number | null;
   lightHours?: number | null;

@@ -261,24 +261,6 @@
   </div>
   <p class="small muted derived">Every figure here is derived from public data by a stated rule and names its source; nothing is written by a person or a model except the marked, credited quotations. <a href="/about/how">How&nbsp;→</a></p>
 
-  {#if d.summary}
-    <h2 class="sec" id="s-summary">Summary</h2>
-    <div class="sumbody"><p>{excerpt?.text}{#if excerpt?.more}{' '}<a class="more" href={d.summary.url} rel="noopener">More on Wikipedia ›</a>{/if}</p></div>
-    <p class="small muted">{excerpt?.more ? 'The opening of' : 'Text from'} <a href={d.summary.url} rel="noopener">Wikipedia, “{d.summary.title}”</a>, {d.summary.licence}, quoted as written. Kept separate from everything derived here.</p>
-  {:else if refused('wikipedia')}
-    <h2 class="sec" id="s-summary">Summary</h2>
-    <div class="notice"><b>Not checked.</b> Wikipedia did not answer when this page was built. Not a statement that it has no article.</div>
-  {/if}
-
-  {#if data.genusRecord?.status === 'ok' && data.genusRecord.summary && !genusRepeats}
-    <h2 class="sec" id="s-genus">About the genus · <i>{genusName}</i></h2>
-    <div class="sumbody"><p>{genusExcerpt?.text}{#if genusExcerpt?.more}{' '}<a class="more" href={data.genusRecord.summary.url} rel="noopener">More on Wikipedia ›</a>{/if}</p></div>
-    <p class="small muted">{genusExcerpt?.more ? 'The opening of' : 'Text from'} <a href={data.genusRecord.summary.url} rel="noopener">Wikipedia, “{data.genusRecord.summary.title}”</a>, {data.genusRecord.summary.licence}, quoted as written.</p>
-  {:else if data.genusRecord?.status === 'refused'}
-    <h2 class="sec" id="s-genus">About the genus · <i>{genusName}</i></h2>
-    <div class="notice"><b>Not checked.</b> Wikipedia did not answer for the genus when this was built. Not a statement that it has no article.</div>
-  {/if}
-
   <div class="facts">
     <div class="fact"><div class="lab">Family</div><div class="v">{d.name.family ?? 'not stated by the backbone'}</div></div>
     <div class="fact"><div class="lab">Described by</div><div class="v">{d.name.authorship ?? 'authorship not stated by the backbone'}</div></div>
@@ -305,6 +287,25 @@
         </details>
       {/if}
     </section>
+  {/if}
+
+  <!-- The quoted summary comes after the figures: a phone reader reached At a glance only after a screen of Wikipedia (round forty, R2 design 1; R1 R12). -->
+  {#if d.summary}
+    <h2 class="sec" id="s-summary">Summary</h2>
+    <div class="sumbody"><p>{excerpt?.text}{#if excerpt?.more}{' '}<a class="more" href={d.summary.url} rel="noopener">More on Wikipedia ›</a>{/if}</p></div>
+    <p class="small muted">{excerpt?.more ? 'The opening of' : 'Text from'} <a href={d.summary.url} rel="noopener">Wikipedia, “{d.summary.title}”</a>, {d.summary.licence}, quoted as written. Kept separate from everything derived here.</p>
+  {:else if refused('wikipedia')}
+    <h2 class="sec" id="s-summary">Summary</h2>
+    <div class="notice"><b>Not checked.</b> Wikipedia did not answer when this page was built. Not a statement that it has no article.</div>
+  {/if}
+
+  {#if data.genusRecord?.status === 'ok' && data.genusRecord.summary && !genusRepeats}
+    <h2 class="sec" id="s-genus">About the genus · <i>{genusName}</i></h2>
+    <div class="sumbody"><p>{genusExcerpt?.text}{#if genusExcerpt?.more}{' '}<a class="more" href={data.genusRecord.summary.url} rel="noopener">More on Wikipedia ›</a>{/if}</p></div>
+    <p class="small muted">{genusExcerpt?.more ? 'The opening of' : 'Text from'} <a href={data.genusRecord.summary.url} rel="noopener">Wikipedia, “{data.genusRecord.summary.title}”</a>, {data.genusRecord.summary.licence}, quoted as written.</p>
+  {:else if data.genusRecord?.status === 'refused'}
+    <h2 class="sec" id="s-genus">About the genus · <i>{genusName}</i></h2>
+    <div class="notice"><b>Not checked.</b> Wikipedia did not answer for the genus when this was built. Not a statement that it has no article.</div>
   {/if}
 
   <nav class="tabs" aria-label="Sections">
@@ -370,6 +371,9 @@
     {#if sheetCards.length}<p class="small muted">The figures the cards read from are in <a href="#s-climate">Climate</a> below, and where they came from in <a href="#s-habitat">Natural habitat</a>.</p>{/if}
   </div>
 
+  <!-- Below the cultivation sheet, the long sections are laid out as the reader reaches them (`content-visibility`): the
+       opening text no longer waits for the whole document's style and layout (round forty, R2-6). Anchors and find-in-page still work. -->
+  <div class="deep">
   <h2 class="sec" id="s-climate">Climate across the habitat</h2>
   {#if d.climate.status === 'ok'}
     <Climograph climate={{ months: d.climate.months, p10: d.climate.p10, p90: d.climate.p90, cells: d.climate.cells, extremes: d.climate.extremes ?? null }} />
@@ -481,10 +485,10 @@
       </div>
     {/if}
     {#if data.siblings.length}
-      <p class="relhead"><b>Other <i>{genusName}</i></b> <span class="small muted">{data.siblings.length} in the reference</span></p>
+      <p class="relhead"><b>Other <i>{genusName}</i></b> <span class="small muted">{data.siblingCount} in the reference</span></p>
       <div class="relstrip">
-        {#each data.siblings.slice(0, 12) as c (c.key)}{@render rel(c)}{/each}
-        {#if data.siblings.length > 12}<a class="reltile more" href="/?by=genus&open={genusSlug}"><span>all {data.siblings.length + 1} ›</span></a>{/if}
+        {#each data.siblings as c (c.key)}{@render rel(c)}{/each}
+        {#if data.siblingCount > 12}<a class="reltile more" href="/?by=genus&open={genusSlug}"><span>all {data.siblingCount + 1} ›</span></a>{/if}
       </div>
     {/if}
   {/if}
@@ -499,10 +503,12 @@
     {/each}
   </div>
 
+  </div>
   <Provenance dossier={d} />
 </article>
 
 <style>
+  .deep > :global(*) { content-visibility: auto; contain-intrinsic-size: auto 480px; }
   .thinline { margin: 6px 0 0; }
   .myph { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-top: 10px; }
   .myph .ph { position: relative; display: block; padding: 0; border: 0; background: var(--sunk); border-radius: 9px; overflow: hidden; aspect-ratio: 1; cursor: zoom-in; box-shadow: var(--sh); }

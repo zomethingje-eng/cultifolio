@@ -27,9 +27,14 @@ describe('/api/search', () => {
     expect(((await (await call('q=copiapao&c=fixture')).json()) as Array<{ slug: string }>).length).toBeGreaterThan(0); // one typing error forgiven, as before
     expect(((await (await call('q=namibia&c=fixture')).json()) as Array<{ slug: string }>).map((h) => h.slug)).toContain('welwitschia-mirabilis');
   });
-  it('an empty search is nothing, a search in symbols is a 400, a stale corpus id is no-store, and the limit is capped', async () => {
+  it('an empty search is nothing, punctuation is a space (an iPhone’s ’, a comma, a slash), a stale corpus id is no-store, and the limit is capped', async () => {
     expect(await (await call('q=&c=fixture')).json()).toEqual([]);
-    expect((await call('q=%3Cscript%3E&c=fixture')).status).toBe(400);
+    expect(await (await call('q=%3C%3E%2F&c=fixture')).json()).toEqual([]); // nothing but symbols: an empty search, not a 400 (round forty, R1-1)
+    for (const typed of ['copiapoa, cinerea', 'Copiapoa (cinerea)', 'copiapoa/cinerea', 'Copiapoa ’cinerea’', 'Copiapoa "cinerea"', 'copiapoa & cinerea']) {
+      const r = await call(`q=${encodeURIComponent(typed)}&c=fixture`);
+      expect(r.status, typed).toBe(200);
+      expect(((await r.json()) as Array<{ slug: string }>).map((h) => h.slug), typed).toEqual(['copiapoa-cinerea']);
+    }
     expect((await call('q=copiapoa&c=old')).headers.get('cache-control')).toBe('no-store');
     expect((await call('q=copiapoa')).headers.get('cache-control')).toBe('no-store');
     expect(((await (await call(`q=co&n=${MAX_HITS * 10}&c=fixture`)).json()) as unknown[]).length).toBeLessThanOrEqual(MAX_HITS);

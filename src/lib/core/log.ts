@@ -85,7 +85,7 @@ export const FIELD_ENUMS: Partial<Record<Kind, Record<string, readonly string[]>
 export const FIELD_TYPES: Record<Kind, Record<string, ValueType>> = {
   accession: { ...strings('acc', 'taxonName', 'nameAsReceived', 'cultivar', 'nameKind', 'parentage', 'fieldNumber', 'provenance', 'status', 'location', 'locationId', 'acquired', 'sourceFrom', 'sourceRef', 'sourceForm', 'price', 'notes', 'notesBase', 'sowingId', 'cover', 'importedOn'), taxonKey: 'number' },
   sowing: { ...strings('no', 'taxonName', 'cultivar', 'nameKind', 'parentage', 'method', 'parentAcc', 'sown', 'sourceFrom', 'sourceRef', 'fieldNumber', 'provenance', 'medium', 'container', 'treatment', 'locationId', 'status', 'notes', 'notesBase', 'importedOn'), taxonKey: 'number', count: 'number', bottomHeatC: 'number', covered: 'boolean' },
-  location: { ...strings('name', 'parentId', 'type', 'notes'), indoor: 'boolean', floorC: 'number', ppfd: 'number', lightHours: 'number', lat: 'number', lon: 'number', altM: 'number', sort: 'number' },
+  location: { ...strings('name', 'parentId', 'type', 'notes'), indoor: 'boolean', floorC: 'number', floorHeld: 'boolean', ppfd: 'number', lightHours: 'number', lat: 'number', lon: 'number', altM: 'number', sort: 'number' },
   event: { ...strings('acc', 'd', 't', 'note', 'cause', 'used'), followUp: 'number', n: 'number', measures: 'object', auto: 'boolean' },
   photo: { ...strings('acc', 'sowing', 'd', 'dFrom', 'caption', 'sha'), w: 'number', h: 'number', bytes: 'number' },
   taxon: { ...strings('name', 'myNotes'), gbifKey: 'number', removed: 'boolean', followed: 'boolean' },

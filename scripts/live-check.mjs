@@ -80,10 +80,14 @@ if (!skip.has('names')) {
 // (a fixed slug would 404 on a corpus without it and send the deployer to roll back a good deploy; round twenty-five, 10).
 let species = process.env.LIVE_CHECK_SPECIES;
 if (!species) {
-  const sm = await get('/sitemap.xml');
-  if (sm.status !== 200) fail('/sitemap.xml', sm);
+  // The sitemap is an index of files since round forty; the first file names the species pages.
+  const idx = await get('/sitemap.xml');
+  if (idx.status !== 200) fail('/sitemap.xml', idx);
+  if (!/<sitemapindex/.test(idx.text) || !/sitemap-1\.xml/.test(idx.text)) fail('/sitemap.xml should be a sitemap index naming /sitemap-1.xml', idx);
+  const sm = await get('/sitemap-1.xml');
+  if (sm.status !== 200) fail('/sitemap-1.xml', sm);
   species = /<loc>[^<]*\/species\/([a-z0-9-]+)<\/loc>/.exec(sm.text)?.[1];
-  if (!species) fail('/sitemap.xml names no species page', sm);
+  if (!species) fail('/sitemap-1.xml names no species page', sm);
 }
 for (const path of ['/about/how', `/species/${species}`, '/offline', '/api/corpus']) {
   const r = await get(path, { headers: { accept: 'text/html,*/*' } });

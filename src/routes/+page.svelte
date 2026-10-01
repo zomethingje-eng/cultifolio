@@ -19,19 +19,29 @@
   let { data } = $props();
   // The search lives in the URL (?q=) so the back button and a shared link bring it back; the server ignores it.
   let q = $state(browser ? (new URLSearchParams(location.search).get('q') ?? '') : '');
-  // The search lives in the URL (?q=) so the back button and a shared link bring it back; the server ignores it.
+  // Only on the catalogue view: on "Your species" the box searches your own plants and species, and what is typed there
+  // (a number, a field number, a name as received) is the collection's, so it goes neither to the URL nor to the server (round forty, R2-1).
   $effect(() => {
     if (!browser) return;
     const u = new URL(location.href);
-    if (q.trim()) u.searchParams.set('q', q.trim()); else u.searchParams.delete('q');
+    if (q.trim() && !yourView) u.searchParams.set('q', q.trim()); else u.searchParams.delete('q');
     if (u.href !== location.href) replaceState(u, page.state);
   });
-  /** Enter in the search opens the first match: the way a search box is expected to behave. */
-  function openTop(e: KeyboardEvent) {
+  /** Enter in the search opens the first match: the way a search box is expected to behave. While a catalogue search is in flight, Enter waits for its answer rather than opening the previous query's first hit (round forty, R1-2). */
+  async function openTop(e: KeyboardEvent) {
     if (e.key !== 'Enter') return;
     if (plantHits.length) { e.preventDefault(); goto(`/plants/${accNo(plantHits[0])}`); return; }
-    const top = (yourView ? hits : found)[0];
-    if (top) { e.preventDefault(); goto(`/species/${top.slug}`); }
+    if (yourView) {
+      const own = ownHits[0];
+      if (own) { e.preventDefault(); goto(`/species/${own.slug}`); }
+      return;
+    }
+    e.preventDefault();
+    const gen = searchGen;
+    if (searching && pendingSearch) await pendingSearch;
+    if (gen !== searchGen) return; // the text changed while waiting: nothing opens
+    const top = shownFound[0];
+    if (top) goto(`/species/${top.slug}`);
   }
   /** The one search box also finds the grower's own plants by number, field number or name: a returning grower types "2026-0007" here first. */
   const plantHits = $derived.by(() => {
@@ -39,6 +49,8 @@
     if (!needle || !collection.ready || needle.length < 2) return [];
     return collection.accessions.filter((a) => accNo(a).toLowerCase().includes(needle) || (a.fieldNumber ?? '').toLowerCase().includes(needle) || (a.nameAsReceived ?? '').toLowerCase().includes(needle) || (a.cultivar ?? '').toLowerCase().includes(needle)).slice(0, 5);
   });
+  /** Featured tiles whose photograph did not load: shown as placeholders rather than blank cards. */
+  let failedTiles = $state(new Set<string>());
   /** The climate chips are the server's now (`?chip=`): they filter the grouped catalogue rather than flattening the whole index on the client (round thirty-nine). */
   const chip = $derived(data.chip);
   let welcomeHidden = $state(true);
@@ -155,26 +167,41 @@
   // and an answer is used only if it is still for the text in the box.
   let found = $state<Found[]>([]);
   let searching = $state(false);
-  let searchFailed = $state(false);
+  /** Why the last search gave nothing usable: not reached, rate-limited (with the wait in seconds), or offline. */
+  let searchFailed = $state<null | { kind: 'unreached' | 'limited' | 'offline'; wait?: number }>(null);
   let searchGen = 0;
   let searchTimer: ReturnType<typeof setTimeout> | undefined;
+  let pendingSearch: Promise<unknown> | null = null;
   $effect(() => {
     const text = q.trim();
     const gen = ++searchGen;
     clearTimeout(searchTimer);
-    if (!text) { found = []; searching = false; searchFailed = false; return; }
+    // The catalogue is searched only on the catalogue view (round forty, R2-1).
+    if (!text || yourView) { found = []; searching = false; searchFailed = null; return; }
     searching = true;
-    searchTimer = setTimeout(async () => {
-      const r = await searchCatalogue(text);
-      if (gen !== searchGen) return;
-      searching = false;
-      if (r === null) { searchFailed = true; found = []; return; }
-      searchFailed = false;
-      found = r;
+    searchTimer = setTimeout(() => {
+      pendingSearch = searchCatalogue(text).then((r) => {
+        if (gen !== searchGen) return;
+        searching = false;
+        if (r === null) { searchFailed = { kind: typeof navigator !== 'undefined' && navigator.onLine === false ? 'offline' : 'unreached' }; found = []; return; }
+        if ('limited' in r) { searchFailed = { kind: 'limited', wait: r.limited }; found = []; return; }
+        searchFailed = null;
+        found = r;
+      });
     }, 150);
   });
   const retrySearch = () => { const t = q; q = ''; q = t; };
   const flat = $derived(!!q.trim());
+  /** The search's hits under the chip: a chip that is on filters the matches too (round forty, R1-4). */
+  const shownFound = $derived(chip === 'climate' ? found.filter((c) => c.climate === 'ok') : chip === 'noclimate' ? found.filter((c) => c.climate !== 'ok') : found);
+  /** The matches among your own species, found here and not on the server (round forty, R2-1). */
+  const ownHits = $derived.by(() => {
+    const needle = q.trim().toLowerCase();
+    if (!needle || !yourView) return [];
+    return [...mineTiles.grow, ...mineTiles.follow].filter((t) => t.name.toLowerCase().includes(needle) || (t.common ?? '').toLowerCase().includes(needle) || (t.family ?? '').toLowerCase().includes(needle));
+  });
+  /** Take the typed text to the catalogue: the one deliberate step on which what was typed leaves the device. */
+  const searchTheCatalogue = () => { browsing = true; };
   // A grower's own tiles come from a small request for their own species; the whole catalogue is fetched only for a search or a chip.
   let ownEntries = $state<Map<string, Item> | null>(null);
   let ownFailed = $state(false);
@@ -212,8 +239,6 @@
   });
   const grownN = $derived(mineTiles.grow.length);
   const followingN = $derived(mineTiles.follow.length);
-  // Catalogue matches for a search typed on your species view: the same server search, ranked.
-  const hits = $derived(yourView && q.trim() ? found : []);
   const startBrowsing = () => {
     browsing = true;
     q = '';
@@ -254,8 +279,10 @@
       {#each data.featured as c, i (c.slug)}
         <a class="ftile" href="/species/{c.slug}">
           <!-- One size by surface, not by pixel density: a 150 px tile at `small` (240 px), never `medium`, which a phone's density promoted every tile to and made the phone's home page seven megabytes (round thirty-five, R2-7). -->
-          <!-- The first tile is the phone's largest first-screen paint: fetched at once and first, the rest lazily (round thirty-seven, R2-4). -->
-          <img src={photoAt(c.thumb, 'small')} width="240" height="240" alt="" loading={i === 0 ? 'eager' : 'lazy'} fetchpriority={i === 0 ? 'high' : 'auto'} onerror={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = 'hidden')} />
+          <!-- The first phone viewport shows two or three tiles, and whichever is largest is the first-screen paint: the first three
+               are fetched at once, the first with priority, the rest of the strip lazily (round thirty-seven, R2-4; round forty, R2-5).
+               A photograph that does not load leaves a placeholder with the name, not a blank card (round forty, own). -->
+          {#if failedTiles.has(c.slug)}<div class="fph"><Placeholder name={c.name} family={c.family} caption="photograph did not load" /></div>{:else}<img src={photoAt(c.thumb, 'small')} width="240" height="240" alt="" loading={i < 3 ? 'eager' : 'lazy'} fetchpriority={i === 0 ? 'high' : 'auto'} onerror={() => (failedTiles = new Set([...failedTiles, c.slug]))} />{/if}
           <span class="fnm"><SpeciesName name={c.name} /></span>
           {#if c.common}<span class="fcom">{c.common}</span>{/if}
         </a>
@@ -294,7 +321,7 @@
   <Today />
 
   <div class="toolrow">
-    <input class="searchbar" type="search" placeholder="Search all {fmtN(data.total)} species by name, genus, family or origin…" bind:value={q} onkeydown={openTop} aria-label="Search the whole species catalogue" />
+    <input class="searchbar" type="search" placeholder="Search your plants by number, name or field number…" bind:value={q} onkeydown={openTop} aria-label="Search your plants and species (on this device)" />
     <nav class="seg viewseg" aria-label="Which species">
       <button type="button" class="on" aria-current="true">Your species</button>
       <button type="button" onclick={startBrowsing}>All {fmtN(data.total)}</button>
@@ -303,18 +330,16 @@
 
   {#if q.trim()}
     {@render plantsFound()}
-    {#if searchFailed}
-      <p class="seccount" style="margin-top: 14px">The catalogue could not be reached. <button class="linkish" type="button" onclick={retrySearch}>Try again</button></p>
-    {:else if searching && !hits.length}
-      <p class="seccount" style="margin-top: 14px">Searching…</p>
-    {:else if !hits.length}
-      <div class="emptybox"><p class="muted">Nothing in the catalogue matches.</p></div>
-    {:else}
-      <div class="hgrid">
-        {#each hits as c (c.slug)}{@render tile(c)}{/each}
+    {#if ownHits.length}
+      <div class="hgrid" data-sveltekit-preload-data="off">
+        {#each ownHits as c (c.slug)}{@render tile(c)}{/each}
       </div>
-      <p class="seccount" style="margin-top: 14px" role="status">{fmtN(hits.length)} of {fmtN(data.total)} match; Enter opens the first.</p>
+      <p class="seccount" style="margin-top: 14px" role="status">{fmtN(ownHits.length)} of your species {ownHits.length === 1 ? 'matches' : 'match'}{plantHits.length ? '' : '; Enter opens the first'}.</p>
+    {:else if !plantHits.length}
+      <div class="emptybox"><p class="muted">None of your plants or species matches.</p></div>
     {/if}
+    <!-- Searched here, on the device; the catalogue is one deliberate step away, and that step is the one on which the text leaves the device (round forty, R2-1). -->
+    <p class="seccount" style="margin-top: 10px"><button class="linkish" type="button" id="search-catalogue" onclick={searchTheCatalogue}>Search the whole catalogue for “{q.trim()}”</button></p>
   {:else}
     {#if ownFailed}
       <p class="seccount" style="margin-top: 14px">The reference could not be reached, so your tiles are without their photographs and climate. <button class="linkish" type="button" onclick={retryOwn}>Try again</button></p>
@@ -362,9 +387,9 @@
         <button type="button" class="on" aria-current="true">All {fmtN(data.total)}</button>
       </nav>
     {/if}
-    <input class="searchbar" type="search" placeholder="Search by name, genus, family or origin…" bind:value={q} onkeydown={openTop} aria-label="Search species" />
+    <input class="searchbar" type="search" placeholder="Search the catalogue by name, genus, family or origin…" bind:value={q} onkeydown={openTop} aria-label="Search the whole species catalogue" />
     <nav class="seg" aria-label="Group by">
-      {#each ['genus', 'origin', 'family'] as const as b (b)}<a href="?by={b}" class:on={data.by === b} aria-current={data.by === b ? 'true' : undefined}>{byLabel[b]}</a>{/each}
+      {#each ['genus', 'origin', 'family'] as const as b (b)}<a href="?by={b}{chip !== 'all' ? `&chip=${chip}` : ''}" class:on={data.by === b} aria-current={data.by === b ? 'true' : undefined}>{byLabel[b]}</a>{/each}
     </nav>
   </div>
   <div class="chiprow">
@@ -374,7 +399,7 @@
   </div>
   {#if !flat && data.letters.length > 1}
     <nav class="letters" aria-label="Jump to a letter">
-      {#each data.letters as l (l)}<a href="?by={data.by}&from={l}#l-{l}" onclick={(e) => { e.preventDefault(); jumpToLetter(l); }}>{l}</a>{/each}
+      {#each data.letters as l (l)}<a href="?by={data.by}{chip !== 'all' ? `&chip=${chip}` : ''}&from={l}#l-{l}" onclick={(e) => { e.preventDefault(); jumpToLetter(l); }}>{l}</a>{/each}
     </nav>
   {/if}
   </div>
@@ -382,16 +407,16 @@
   {#if flat}
     {#if q.trim()}{@render plantsFound()}{/if}
     {#if searchFailed}
-      <p class="seccount" style="margin-top: 14px">The catalogue could not be reached. <button class="linkish" type="button" onclick={retrySearch}>Try again</button></p>
+      <p class="seccount" style="margin-top: 14px" role="status">{searchFailed.kind === 'offline' ? 'Offline: the catalogue search needs a connection; your own plants are under “Your species”.' : searchFailed.kind === 'limited' ? `Too many searches from this network; try again in ${Math.max(1, Math.ceil((searchFailed.wait ?? 60) / 60))} minute${(searchFailed.wait ?? 60) > 60 ? 's' : ''}.` : 'The catalogue could not be reached.'} <button class="linkish" type="button" onclick={retrySearch}>Try again</button></p>
     {:else if searching && !found.length}
       <p class="seccount" style="margin-top: 14px">Searching…</p>
-    {:else if !found.length}
-      <div class="emptybox"><p class="muted">Nothing matches.</p></div>
+    {:else if !shownFound.length}
+      <div class="emptybox"><p class="muted">Nothing matches{chip !== 'all' && found.length ? ` with the chip on (${fmtN(found.length)} without it)` : ''}.</p></div>
     {:else}
       <div class="hgrid">
-        {#each found as c (c.slug)}{@render tile(c)}{/each}
+        {#each shownFound as c (c.slug)}{@render tile(c)}{/each}
       </div>
-      <p class="seccount" style="margin-top: 14px" role="status">{fmtN(found.length)} {found.length === 1 ? 'match' : 'matches'} of {fmtN(data.total)}; Enter opens the first.</p>
+      <p class="seccount" style="margin-top: 14px" role="status">{fmtN(shownFound.length)} {shownFound.length === 1 ? 'match' : 'matches'} of {fmtN(data.total)}{chip !== 'all' && shownFound.length !== found.length ? ` (${fmtN(found.length - shownFound.length)} more without the chip)` : ''}; Enter opens the first.</p>
     {/if}
   {:else}
     <div class="rows" class:withletters={data.letters.length > 1}>
@@ -436,6 +461,7 @@
   .ftile { scroll-snap-align: start; display: block; border-radius: var(--r); overflow: hidden; background: var(--card); box-shadow: var(--sh); color: inherit; text-decoration: none; transition: transform 0.18s, box-shadow 0.18s; }
   .ftile:hover { transform: translateY(-2px); box-shadow: var(--sh2); text-decoration: none; color: inherit; }
   .ftile img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; background: var(--sunk); }
+  .ftile .fph { width: 100%; aspect-ratio: 1; }
   .ftile .fnm { display: block; padding: 8px 11px 0; font-family: var(--serif); font-style: italic; font-size: 14px; font-weight: 600; line-height: 1.25; }
   .ftile .fcom { display: block; padding: 2px 11px 10px; font-size: 11.5px; color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ftile .fnm:last-child { padding-bottom: 10px; }
