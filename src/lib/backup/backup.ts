@@ -5,7 +5,7 @@
  */
 import { Zip, ZipPassThrough, ZipDeflate, unzipSync, strToU8, strFromU8 } from 'fflate';
 import * as v from 'valibot';
-import { materialise, live, readChanges, isComplete, type Change, type Record_ } from '$core/log';
+import { materialise, live, known, readChanges, isComplete, type Change, type Record_ } from '$core/log';
 import { kindOf, accNo, sowNo, type Accession, type Photo, type Sowing } from '$lib/db/types';
 import { MAX_PHOTO_BYTES, SEAL_OVERHEAD } from '$lib/sync/limits';
 import { BACKUP_FORMAT, BACKUP_V, Manifest, ChangeRow, LegacyChanges, photoPath, thumbPath } from './format';
@@ -79,7 +79,9 @@ export interface BuiltBackup {
 
 export async function buildBackup(o: BuildOpts): Promise<BuiltBackup> {
   const s = summarise(o.changes);
-  const photos = live<Photo & Record_>(s.state, 'photo');
+  // Every photograph with a record that is not removed, waiting ones included: round thirty-five kept their pixels on the
+  // device for the day the record completes, and a backup made in between must carry them too (round thirty-seven, 1).
+  const photos = known<Pick<Photo, 'id'> & Record_>(s.state, 'photo');
   // Written as a stream, one entry at a time: a photograph is read, pushed through the zip and let go before the next
   // is read, and the zip's own output is kept as the pieces it comes in rather than joined. A backup of six hundred
   // photographs held every photograph, the whole zip and a copy of it at once, about three times the file, which is
@@ -154,10 +156,10 @@ export interface ReadBackup {
   readPhoto: (id: string) => PhotoBytes | null;
 }
 
-/** Live photo records in a backup whose pixels are not in it, counted from the file itself (the manifest's list is what the exporting device said; this is what the file holds). */
+/** Photo records in a backup (not removed, whole or waiting) whose pixels are not in it, counted from the file itself (the manifest's list is what the exporting device said; this is what the file holds). */
 export function photosWithoutPixels(file: Pick<ReadBackup, 'changes' | 'photoIds'>): string[] {
   const have = new Set(file.photoIds);
-  return live<Photo & Record_>(materialise(file.changes).state, 'photo')
+  return known<Pick<Photo, 'id'> & Record_>(materialise(file.changes).state, 'photo')
     .map((p) => p.id)
     .filter((id) => !have.has(id));
 }
@@ -205,7 +207,12 @@ export async function readBackup(bytes: Uint8Array): Promise<ReadBackup> {
       if (f.name === 'plants.csv' || f.name === 'batches.csv') return false;
       if (f.name === 'changes.json') return f.originalSize <= MAX_CHANGES_BYTES;
       if (f.name === 'manifest.json' || f.name === 'device.json') return f.originalSize <= MAX_SMALL_ENTRY_BYTES;
-      declared += f.originalSize;
+      // A stored entry is copied by its compressed size, whatever it declares as its original: a table of contents whose
+      // entries all point at one stored block and each declare a byte of content passed the sum and cost a copy of the
+      // block apiece (round thirty-seven, R1-5). The larger of the two counts, and a stored entry whose two sizes differ
+      // is not one a writer makes.
+      if (f.compression === 0 && f.size !== f.originalSize) throw new Error(`That zip stores ${f.name} with two different sizes; it is not a Cultifolio backup.`);
+      declared += Math.max(f.size, f.originalSize);
       if (declared > bytes.length * 1.1 + 64 * 1048576) throw new Error('That zip declares far more content than a backup of its size can hold; it is not a Cultifolio backup.');
       return true;
     }
@@ -250,6 +257,7 @@ export function previewMerge(current: Change[], incoming: Change[]) {
   const before = materialise(current).state;
   const after = materialise([...current, ...fresh]).state;
   let added = 0, changed = 0, addedDeleted = 0, addedWaiting = 0;
+  const waitingNames: string[] = []; // named, so the grower can find them: a count alone gave nothing to act on (round thirty-seven, R1-4)
   // Added, by kind, live records only, so the preview can say "5 plants, 20 timeline entries" in the words the "In the
   // file" line uses, rather than a total that also counts species notes, the numbering record, deleted records
   // (round twenty-three, 18) and records the file leaves without a required field, which the pages will not show
@@ -260,11 +268,15 @@ export function previewMerge(current: Change[], incoming: Change[]) {
     if (!b) {
       added++;
       if (r._deleted) addedDeleted++;
-      else if (!isComplete(r)) addedWaiting++;
+      else if (!isComplete(r)) {
+        addedWaiting++;
+        const what = r.acc ?? r.no ?? r.name ?? r.taxonName ?? r.id;
+        waitingNames.push(`${r.kind === 'accession' ? 'plant' : r.kind === 'sowing' ? 'batch' : r.kind === 'location' ? 'place' : r.kind} ${String(what)}`);
+      }
       else addedByKind[r.kind] = (addedByKind[r.kind] ?? 0) + 1;
     } else if (b._t !== r._t) changed++;
   }
-  return { fresh, added, changed, unchanged: after.size - added - changed, addedByKind, addedDeleted, addedWaiting };
+  return { fresh, added, changed, unchanged: after.size - added - changed, addedByKind, addedDeleted, addedWaiting, waitingNames };
 }
 
 const csvCell = (x: unknown) => {
@@ -282,7 +294,10 @@ const locPath = (state: Map<string, Record_>, id: string | null | undefined, see
   if (!id || seen.has(id)) return ''; // a cycle in a damaged log ends here rather than never
   seen.add(id);
   const r = state.get(`location:${id}`);
-  if (!r || r._deleted || !isComplete(r)) return '';
+  if (!r) return '';
+  // A removed or incomplete place is walked past to its parent, as the store's own walk does (`rawParent`): the plant
+  // the app shows in House was a blank cell in the sheet of the same backup (round thirty-seven, R2-1).
+  if (r._deleted || !isComplete(r)) return locPath(state, r.parentId as string | null, seen);
   const parent = locPath(state, r.parentId as string | null, seen);
   return parent ? `${parent} › ${r.name}` : String(r.name);
 };

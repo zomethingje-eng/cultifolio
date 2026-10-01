@@ -112,6 +112,15 @@ rclone copy static\s\v2\index.json r2:cultifolio/s/v2 --s3-no-check-bucket -P
 
 Before the upload: `(Select-String -Path static\s\v2\index.json -Pattern 'image/cache/fit-in/400x/https' -SimpleMatch -Quiet)` should print `False` (no bare-form thumbnail left; the first run printed `True` because 1,407 species with no coordinated record kept an old set, fixed in round thirty-three) and `(Select-String -Path static\s\v2\*.json -Pattern 'iiif.rbge.org.uk|medialib.naturalis.nl|sweetgum.nybg.org|oxalis.br.fgov.be' -List | Measure-Object).Count` should be far below its value before (herbarium hosts). After: the front page's tiles for Haworthiopsis attenuata and Acharagma aguirreana show photographs, `/species/albuca-yerburyi` has no herbarium sheet, and the live check's thumbnail check passes (`npm run live-check`).
 
+**Round thirty-seven's corpus step, once, after `npm run deploy`: the index alone.** The sheet buckets were built before round thirty-five's sea rule and carry a sea cell's extremes raw, so plant pages and labels still printed them (round thirty-seven, R1-3). `sheetOf` reads a parsed dossier, which the rule is applied to, so rewriting the sheets is enough; no rederive, so the first of the four lines is left out:
+
+```
+npm run dossier -- --index
+rclone copy static\s\v2 r2:cultifolio/s/v2 --transfers 32 --checkers 32 --exclude report.txt --exclude index.json --s3-no-check-bucket -P
+rclone copy static\s\v2\index.json r2:cultifolio/s/v2 --s3-no-check-bucket -P
+```
+
+The copy uploads the 32 sheet files and the index; the dossiers are unchanged and skipped. Before the upload: `(Select-String -Path static\s\v2\sheets\*.json -Pattern '"extremesStatus":"sea"' -SimpleMatch -List | Measure-Object).Count` should be above zero (89 species have a cell under half land, spread over the buckets). After: a plant of Melocactus intortus on `/plants/<number>` says the daily extremes were read at a weather cell that is mostly sea and set aside, and its label prints no habitat night. A later full rederive writes `hemispheres.equatorial` and cuts the carried-row chains in the files themselves; until then the pages do both as they read.
 
 ## 6. If something is wrong after a deploy
 

@@ -83,7 +83,9 @@ export function buildBundle(c: Corpus, opts: { version: string; homepage: string
     }
     const native = (get<Array<{ name: string }>>(d, 'distribution.native') ?? []).map((x) => x.name).join('; ');
     const introduced = (get<Array<{ name: string }>>(d, 'distribution.introduced') ?? []).map((x) => x.name).join('; ');
-    const ex = get<{ minP01?: number; frostDaysPerYear?: number }>(d, 'climate.extremes');
+    // Extremes read at a POWER cell that is mostly sea are set aside, as the pages set them aside (round thirty-seven, R1-3).
+    const land = get<number>(d, 'climate.landFraction');
+    const ex = land != null && land < 0.5 ? undefined : get<{ minP01?: number; frostDaysPerYear?: number }>(d, 'climate.extremes');
     speciesCsv += row([
       r.key,
       get(d, 'ids.gbif'),

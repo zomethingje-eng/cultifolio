@@ -313,6 +313,17 @@ export function live<T extends Record_>(state: State, kind: Kind): T[] {
   return out;
 }
 
+/**
+ * The records of a kind that are not removed, whole or waiting for a field. What a backup and a photo push go by: a
+ * photograph whose record waits for its size still has pixels, and they are the grower's whether or not this build
+ * can show the record yet (round thirty-seven, 1).
+ */
+export function known<T extends Record_>(state: State, kind: Kind): T[] {
+  const out: T[] = [];
+  for (const r of state.values()) if (r.kind === kind && !r._deleted) out.push(r as T);
+  return out;
+}
+
 /** The records that are not removed and not complete: waiting for changes this device cannot read yet. */
 export function incomplete(state: State): Record_[] {
   const out: Record_[] = [];

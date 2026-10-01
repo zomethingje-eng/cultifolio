@@ -81,6 +81,8 @@ const moved = (path: string): string | null => {
 };
 /** Only our own server's HTML goes in the cache: a captive portal's 200 must not become the app shell until the next build. */
 const cacheableHtml = (r: Response) => r.ok && r.type === 'basic' && (r.headers.get('content-type') ?? '').startsWith('text/html');
+/** How long a page already in the cache waits on the network before the held copy answers. */
+const NETWORK_BUDGET_MS = 4000;
 
 self.addEventListener('fetch', (e) => {
   const { request } = e;
@@ -127,7 +129,7 @@ self.addEventListener('fetch', (e) => {
         }
         try {
           const r = await fetch(request);
-          if (cacheableHtml(r)) cache.put(url.origin + url.pathname, r.clone()); // under the path alone, never a query
+          if (cacheableHtml(r)) void cache.put(url.origin + url.pathname, r.clone()).catch(() => {}); // under the path alone, never a query
           return r;
         } catch {
           // The section's shell renders the same page from the vault; asset URLs are absolute (paths.relative is off), so it works from a nested path.
@@ -146,20 +148,31 @@ self.addEventListener('fetch', (e) => {
           const r = await fetch(request);
           // A `no-store` answer is the server declining to vouch for it (a sheet or entries bucket asked for under a corpus id
           // that is not the current one): kept out of here too, or a device would hold it until the next deploy (round sixteen, 12).
-          if (r.ok && r.type === 'basic' && !/no-store/.test(r.headers.get('cache-control') ?? '')) cache.put(request, r.clone());
+          if (r.ok && r.type === 'basic' && !/no-store/.test(r.headers.get('cache-control') ?? '')) void cache.put(request, r.clone()).catch(() => {});
           return r;
         } catch {
           return Response.error();
         }
       }
       if (url.pathname.startsWith('/species/') || url.pathname.startsWith('/s/') || url.pathname.startsWith('/about/') || url.pathname === '/' || url.pathname === '/settings') {
-        try {
-          const r = await fetch(request);
-          if (request.mode === 'navigate' ? cacheableHtml(r) : r.ok && r.type === 'basic') cache.put(request, r.clone());
+        // These pages vary on the units cookie; offline, the copy cached under the other units is the page (it re-reads the units on hydration), so Vary is ignored.
+        const kept = await cache.match(request, { ignoreVary: true });
+        const keep = (r: Response) => {
+          if (request.mode === 'navigate' ? cacheableHtml(r) : r.ok && r.type === 'basic') void cache.put(request, r.clone()).catch(() => {});
           return r;
+        };
+        try {
+          const live = fetch(request).then(keep);
+          if (!kept) return await live;
+          // A page read before: the network gets a few seconds, and past that the copy already held answers, with the
+          // fetch left to finish and refresh the copy for next time. A fetch on one bar of signal in a greenhouse neither
+          // succeeds nor fails for a long time, and before this the page waited on it the whole way (round thirty-six, 2).
+          const r = await Promise.race([live, new Promise<null>((ok) => setTimeout(() => ok(null), NETWORK_BUDGET_MS))]);
+          if (r) return r;
+          e.waitUntil(live.catch(() => {}));
+          return kept;
         } catch {
-          // These pages vary on the units cookie; offline, the copy cached under the other units is the page (it re-reads the units on hydration), so Vary is ignored.
-          return (await cache.match(request, { ignoreVary: true })) ?? (request.mode === 'navigate' ? ((await cache.match('/offline')) ?? Response.error()) : Response.error());
+          return kept ?? (request.mode === 'navigate' ? ((await cache.match('/offline')) ?? Response.error()) : Response.error());
         }
       }
       return fetch(request);

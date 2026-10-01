@@ -72,6 +72,12 @@ describe('older names (round thirty-one, 3)', () => {
     expect(search(q, 'haworthia margaritifera').map((x) => x.name)).toEqual(['Tulista pumila']);
     expect(search(q, 'aloe margaritifera')).toEqual([]);
     expect(search(q, 'var')).toEqual([]);
+    // A marker is a word again while it is the last thing typed: "f" is Ferocactus on its way, "aloe var" a variegata (round thirty-seven, R1-7).
+    const typing = prepare([{ name: 'Ferocactus latispinus' }, { name: 'Aloe variegata' }, { name: 'Aloe ferox' }, { name: 'Tulista pumila', syn: ['Haworthia pumila var. margaritifera'] }]);
+    expect(search(typing, 'f').map((x) => x.name)).toEqual(['Ferocactus latispinus', 'Aloe ferox']);
+    expect(search(typing, 'aloe var').map((x) => x.name)).toEqual(['Aloe variegata']);
+    expect(search(typing, 'aloe v').map((x) => x.name)).toEqual(['Aloe variegata']);
+    expect(search(typing, 'haworthia pumila var').map((x) => x.name)).toEqual(['Tulista pumila']); // typed up to the marker: the words before it still find the name
     for (const typed of ['haworthia pumila var. margaritifera', 'haworthia pumila var margaritifera', 'Haworthia pumila subsp. margaritifera', 'haworthia pumila ssp. margaritifera', 'haworthia pumila f. margaritifera']) expect(search(q, typed).map((x) => x.name), typed).toEqual(['Tulista pumila']); // the label as written (round thirty-five, R2-3)
   });
 });

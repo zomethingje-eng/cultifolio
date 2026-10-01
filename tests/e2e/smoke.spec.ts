@@ -2419,3 +2419,26 @@ test('round thirty-four: a genus address opens the catalogue for a grower with p
   await expect(page.locator('a.tile', { hasText: 'Copiapoa cinerea' })).toBeVisible();
   await expect(page.locator('.grow')).toHaveCount(0);
 });
+
+test('round thirty-seven: the old-name line shows for a variety of a listed older name, and for nothing the record does not hold', async ({ page }) => {
+  // The record lists Echinocactus cinereus; the address named a variety of it (R1-8).
+  await page.goto('/species/copiapoa-cinerea?was=Echinocactus%20cinereus%20var.%20columna-alba');
+  await expect(page.locator('#was-synonym')).toContainText('Echinocactus cinereus var. columna-alba is a variety under an older name of this species');
+  // The older name itself, as before.
+  await page.goto('/species/copiapoa-cinerea?was=Echinocactus%20cinereus');
+  await expect(page.locator('#was-synonym')).toContainText('is a synonym');
+  // A name the record does not hold is not printed as fact, trinomial or not.
+  await page.goto('/species/copiapoa-cinerea?was=Copiapoa%20bogus%20var.%20alba');
+  await expect(page.locator('#was-synonym')).toHaveCount(0);
+});
+
+test('round thirty-seven: the hemisphere notice is one sentence with its spaces, and counts the cells as the split does', async ({ page }) => {
+  // Server-rendered text, read before hydration can repaint it: the boundary comment of a block ate the space before "and" (R2-2).
+  const r = await page.request.get('/species/copiapoa-humilis');
+  const html = await r.text();
+  const m = /<p class="notice small" id="hemispheres">([^<]*)<\/p>/.exec(html);
+  expect(m, 'the notice is rendered').toBeTruthy();
+  expect(m![1]).toContain('the 3 cells at least 10° north of it have seasons six months apart');
+  expect(m![1]).toContain('across the 40 cells that remain: the 31 at least 10° south and the 6 within 10° of the equator, where there is no season to reverse.');
+  expect(m![1]).not.toMatch(/southand|northand/);
+});

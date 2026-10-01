@@ -49,6 +49,8 @@ describe('the label line', () => {
     // since it is a warmer and different quantity and the label cannot say so (round seventeen, 7)
     expect(careLine({ scientific: 'Tylecodon pearsonii', family: 'Crassulaceae', months: namaqua, lat: -30, extremes: null, extremesStatus: 'none' })).toContain('hab. night 6.0 °C');
     expect(careLine({ scientific: 'Tylecodon pearsonii', family: 'Crassulaceae', months: namaqua, lat: -30, extremes: null, extremesStatus: 'refused' })).toBe('winter rain Nov–Feb · sky 20–58 DLI');
+    // Extremes read at a sea cell and set aside: the mean night is not printed as the habitat night either (round thirty-seven, R1-2).
+    expect(careLine({ scientific: 'Tylecodon pearsonii', family: 'Crassulaceae', months: namaqua, lat: -30, extremes: null, extremesStatus: 'sea' })).toBe('winter rain Nov–Feb · sky 20–58 DLI');
     expect(careLine({ scientific: 'Tylecodon pearsonii', family: 'Crassulaceae', months: namaqua, lat: -30, extremes: ex }, { readerLat: -34 })).toBe('winter rain May–Aug · hab. night 4.1 °C · sky 20–58 DLI');
     expect(careLine({ scientific: 'Aglaonema commutatum', family: 'Araceae', months: equatorial, lat: 1 })).toBe('rain Mar–May, Oct–Nov, flat T · hab. night 16.0 °C');
     expect(careLine({ scientific: 'Monstera deliciosa', family: 'Araceae' })).toBe('group min 12 °C');

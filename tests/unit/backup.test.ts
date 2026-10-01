@@ -61,6 +61,30 @@ describe('backup round trip', () => {
     expect(marker(r.readPhoto('p1')!.full)).toBe('FULL-JPEG');
     expect(r.readPhoto('p2')).toBeNull();
   });
+  it('a photograph whose record waits for a field travels with its pixels, and is counted as missing when they are not there (round thirty-seven, 1)', async () => {
+    // p3 has its plant and day; its size sits in a batch set aside. Round thirty-five kept its pixels on the device for the
+    // day the record completes; a backup made before that day must carry them, or "Replace this device" loses them.
+    const waiting = [...log, c(50, 'photo', 'p3', 'acc', '2026-0001'), c(51, 'photo', 'p3', 'd', '2026-09-04')];
+    const seen: string[] = [];
+    const built = await buildBackup({
+      changes: waiting,
+      readPhoto: async (id) => {
+        seen.push(id);
+        return { id, full: jpg(`FULL-${id}`), thumb: jpg('THUMB') };
+      }
+    });
+    expect(seen.sort()).toEqual(['p1', 'p3']);
+    expect(built.photosMissing).toEqual([]);
+    const r = await readBackup(built.bytes);
+    expect(r.photoIds.sort()).toEqual(['p1', 'p3']);
+    expect(marker(r.readPhoto('p3')!.full)).toBe('FULL-p3');
+    expect(r.manifest?.counts.photos).toBe(2);
+    expect(photosWithoutPixels(r)).toEqual([]);
+    // Without pixels, the waiting record is named as missing like a whole one.
+    const bare = await buildBackup({ changes: waiting, readPhoto: async () => null });
+    expect(bare.photosMissing.sort()).toEqual(['p1', 'p3']);
+    expect(photosWithoutPixels(await readBackup(bare.bytes)).sort()).toEqual(['p1', 'p3']);
+  });
   it('a photo record whose pixels are missing still travels, without pixels, and the file says so: the count is what is in the file and the record is named', async () => {
     const built = await buildBackup({ changes: log, readPhoto: async () => null });
     expect(built.photosMissing).toEqual(['p1']); // the builder tells the page before download
@@ -114,6 +138,7 @@ describe('merging a backup into a live collection', () => {
     expect(m.addedByKind).toEqual({ accession: 1, taxon: 1, event: 1 });
     expect(m.addedDeleted).toBe(1);
     expect(m.addedWaiting).toBe(1); // the batch with only a name: in the fold, not shown, and not counted as a batch added (round thirty-five, R1-4)
+    expect(m.waitingNames).toEqual(['batch Aloe']); // and named (round thirty-seven, R1-4)
   });
 });
 
@@ -125,6 +150,19 @@ describe('plants.csv', () => {
     const lines = csv.slice(1).split('\r\n');
     expect(lines[0]).toBe('number,species,cultivar,kind,parentage,name as received,field number,provenance,status,location,acquired,from,lot or reference,form,price,sowing,notes');
     expect(lines[1]).toBe('2026-0001,Copiapoa cinerea,,species,,,,,growing,Greenhouse › Bench 2,,,,,,,"said ""sulks"", then\nflowered"');
+  });
+  it('a plant under an incomplete or removed place is filed under the nearest whole place above it, as the app shows it (round thirty-seven, R2-1)', () => {
+    // L3 has only a parent (its name sits in a batch set aside); L4 is removed. The app walks past both to Bench 2.
+    const more = [...log, c(30, 'location', 'L3', 'parentId', 'L2'), c(31, 'accession', '2026-0001', 'locationId', 'L3'),
+      c(32, 'location', 'L4', 'name', 'Shelf'), c(33, 'location', 'L4', 'parentId', 'L1'), c(34, 'location', 'L4', '_deleted', true),
+      c(35, 'accession', '2026-0002', 'taxonName', 'Aloe'), c(36, 'accession', '2026-0002', 'status', 'growing'), c(37, 'accession', '2026-0002', 'locationId', 'L4'),
+      c(38, 'sowing', 's1', 'no', 'S2026-001'), c(39, 'sowing', 's1', 'taxonName', 'Aloe'), c(40, 'sowing', 's1', 'method', 'seed'), c(41, 'sowing', 's1', 'sown', '2026-03-01'), c(42, 'sowing', 's1', 'count', 1), c(43, 'sowing', 's1', 'status', 'active'), c(44, 'sowing', 's1', 'locationId', 'L3')];
+    const { state } = materialise(more);
+    const lines = plantsCsv(live<Accession & Record_>(state, 'accession'), state).slice(1).split('\r\n');
+    expect(lines[1].split(',')[9]).toBe('Greenhouse › Bench 2');
+    expect(lines[2].split(',')[9]).toBe('Greenhouse');
+    const batch = batchesCsv(live<Sowing & Record_>(state, 'sowing'), state).slice(1).split('\r\n')[1];
+    expect(batch).toContain(',Greenhouse › Bench 2,');
   });
   it('a cell that would be read as a formula is written as text, and the lot or reference travels (round twenty-six, 14)', () => {
     const more = [...log, c(30, 'accession', '2026-0001', 'notes', '-5 °C on the sill, =SUM(A1) is not a note'), c(31, 'accession', '2026-0001', 'sourceRef', 'KK 1462'), c(32, 'accession', '2026-0001', 'nameAsReceived', '@handle')];
@@ -175,6 +213,55 @@ describe('a zip made to inflate past what a backup can hold is refused at its ta
     expect(Date.now() - t0).toBeLessThan(3000);
     await expect(readBackup(zipSync({ 'manifest.json': new Uint8Array(5 * 1024 * 1024), 'changes.json': new TextEncoder().encode('[]') }))).rejects.toThrow(/no manifest.json/); // a 5 MB manifest is not inflated: it is not ours
     // (a zip naming an entry twice cannot be made with fflate's writer; the refusal is by the name set in the filter)
+  });
+  it('a table of contents whose entries all point at one stored block, each declaring a byte, is refused by the block\'s own size (round thirty-seven, R1-5)', async () => {
+    // fflate copies a stored entry by its compressed size, whatever the entry declares as its original: 100 entries over
+    // one 1 MB block declared a hundred bytes and cost a hundred megabytes. Made by hand: one stored entry, its central
+    // directory record repeated under a hundred names, every record pointing at the same local header.
+    const block = new Uint8Array(1024 * 1024);
+    block.set([0xff, 0xd8, 0xff, 0xe0]);
+    const one = zipSync({ 'manifest.json': new TextEncoder().encode('{}'), 'changes.json': new TextEncoder().encode('[]'), 'photos/a000.jpg': block }, { level: 0 });
+    const dv = new DataView(one.buffer, one.byteOffset, one.byteLength);
+    const eocd = one.length - 22;
+    const cdOff = dv.getUint32(eocd + 16, true);
+    const cdSize = dv.getUint32(eocd + 12, true);
+    const cd = one.subarray(cdOff, cdOff + cdSize);
+    // The three records: find the photo's by its name, and keep the other two as they are.
+    const recs: Uint8Array[] = [];
+    let at = 0;
+    let photo: Uint8Array | null = null;
+    while (at < cd.length) {
+      const nameLen = cd[at + 28] | (cd[at + 29] << 8);
+      const extraLen = cd[at + 30] | (cd[at + 31] << 8);
+      const commentLen = cd[at + 32] | (cd[at + 33] << 8);
+      const rec = cd.subarray(at, at + 46 + nameLen + extraLen + commentLen);
+      const name = new TextDecoder().decode(rec.subarray(46, 46 + nameLen));
+      if (name === 'photos/a000.jpg') photo = rec;
+      else recs.push(rec);
+      at += rec.length;
+    }
+    const N = 100;
+    for (let i = 0; i < N; i++) {
+      const r = new Uint8Array(photo!);
+      r.set(new TextEncoder().encode(`photos/a${String(i).padStart(3, '0')}.jpg`), 46);
+      // declared original size: one byte (offset 24); the compressed size (offset 20) is the block's, as fflate copies it
+      new DataView(r.buffer).setUint32(24, 1, true);
+      recs.push(r);
+    }
+    const dir = new Uint8Array(recs.reduce((n, r) => n + r.length, 0));
+    let o = 0;
+    for (const r of recs) { dir.set(r, o); o += r.length; }
+    const tail = new Uint8Array(one.subarray(eocd));
+    const tv = new DataView(tail.buffer);
+    tv.setUint16(8, recs.length, true);
+    tv.setUint16(10, recs.length, true);
+    tv.setUint32(12, dir.length, true);
+    tv.setUint32(16, cdOff, true);
+    const bomb = new Uint8Array(cdOff + dir.length + tail.length);
+    bomb.set(one.subarray(0, cdOff));
+    bomb.set(dir, cdOff);
+    bomb.set(tail, cdOff + dir.length);
+    await expect(readBackup(bomb)).rejects.toThrow(/two different sizes|declares far more content/);
     // but the app's own backup of a log that compresses well (a 70 MB note deflates to well under a megabyte) is read:
     // the deflated entries have their own caps and are not in the sum (round thirty-three, 3)
     const { bytes } = await buildBackup({ changes: [...log, c(40, 'accession', '2026-0001', 'notes', 'a'.repeat(70 * 1024 * 1024))], readPhoto: async () => null });

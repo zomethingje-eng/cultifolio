@@ -213,8 +213,8 @@ export function coldFloor(m: Month[] | null, ex: Extremes | null, guess: ArchGue
   } else if (m) {
     const i = m.reduce((b, x, j) => (x.tmin < m[b].tmin ? j : b), 0);
     floor = m[i].tmin;
-    quantity = `the coldest month's mean night, ${mon(i + 1)}, in the median year (CHELSA); ${exStatus === 'refused' ? 'the daily extremes were not checked (NASA POWER did not answer when this page was built)' : exStatus === 'skipped' ? 'the daily extremes were not asked for when this page was built' : exStatus === 'sea' ? 'the daily extremes were read at a weather cell that is mostly sea and are not used as a floor' : 'no daily extremes are on file'}`;
-    quantityShort = `coldest month's mean night, CHELSA`;
+    quantity = `the coldest month's mean night, ${mon(i + 1)}, in the median year (CHELSA); ${exStatus === 'refused' ? 'the daily extremes were not checked (NASA POWER did not answer when this page was built)' : exStatus === 'skipped' ? 'the daily extremes were not asked for when this page was built' : exStatus === 'sea' ? 'the daily extremes were read at a weather cell that is mostly sea and are set aside' : 'no daily extremes are on file'}`;
+    quantityShort = `coldest month's mean night, CHELSA; no floor read`;
   }
   if (floor == null && minC == null) return null;
   if (floor == null) {
@@ -223,6 +223,10 @@ export function coldFloor(m: Month[] | null, ex: Extremes | null, guess: ArchGue
   if (minC != null && minC > floor) {
     return { floor: minC, habitat: floor, raised: true, group: aLabel(guess!.arch.lab), s: `Cold floor: ${T(minC)}. The habitat figure, ${quantity}, is ${T1(floor)}; the archetype table's conventional minimum for ${aLabel(guess!.arch.lab)} (grouped by ${guess!.why}) is ${T(minC)}, which is higher, and the floor rule takes the higher.`, short: `Cold floor ${T(minC)} (archetype minimum for ${aLabel(guess!.arch.lab)}, above the ${T1(floor)} habitat night).`, hab: true };
   }
+  // A month's mean night is not a floor: it is the mean of a month's lows, above the nights a floor is read from. Headed
+  // "Cold floor" over a sea notice that printed a colder figure, it told a grower the coast was safer than it is (round
+  // thirty-seven, R1-2). It is named as what it is wherever it stands in.
+  if (!ex) return { floor, habitat: floor, raised: false, group: minC != null ? aLabel(guess!.arch.lab) : null, s: `Cold floor: none read. The nearest figure is ${T1(floor)}, ${quantity}; a month's mean night is warmer than the nights a floor is read from${minC != null ? `, and the archetype table's minimum for ${aLabel(guess!.arch.lab)}, ${T(minC)}, is lower still` : ''}.`, short: `Coldest mean night ${T1(floor)} (${quantityShort}).`, hab: true };
   return { floor, habitat: floor, raised: false, group: minC != null ? aLabel(guess!.arch.lab) : null, s: `Cold floor: ${T1(floor)}, which is ${quantity}${minC != null ? `; the archetype table's minimum for ${aLabel(guess!.arch.lab)}, ${T(minC)}, is lower and does not raise it` : ''}.`, short: `Cold floor ${T1(floor)} (${quantityShort}).`, hab: true };
 }
 

@@ -58,7 +58,7 @@ import * as inat from '../src/lib/dossier/sources/inat';
 import * as wm from '../src/lib/dossier/sources/wikimedia';
 import { genusOf, slugify, canonicalSynonym } from '../src/lib/core/names';
 import { makeFetcher, fixtureFetcher } from '../src/lib/dossier/fetch';
-import { dossierPath, DOSSIER_V, parseDossier } from '../src/lib/dossier/schema';
+import { dossierPath, DOSSIER_V, parseDossier, unchain } from '../src/lib/dossier/schema';
 import { sheetOf, type Sheet } from '../src/lib/dossier/sheet';
 import { bucketOf, BUCKETS } from '../src/lib/core/bucket';
 import { welwitschia, copiapoa, refused } from '../fixtures/upstream';
@@ -675,7 +675,7 @@ async function main() {
         // Skipped this build (a --skip source) counts the same as refused: what the last build had is kept.
         if ((now === 'refused' || now === 'error' || now === 'skipped') && (before === 'ok' || before === 'none') && copy()) {
           // A row already carried keeps the build that asked (round thirty-five, R1-10).
-          const origin = prev.upstream[src].detail?.startsWith('carried from build of') ? prev.upstream[src].detail!.replace(/;.*$/, '') : `carried from build of ${prev.built?.slice(0, 10) ?? '?'}`;
+          const origin = prev.upstream[src].detail?.startsWith('carried from build of') ? unchain(prev.upstream[src].detail)!.replace(/;.*$/, '') : `carried from build of ${prev.built?.slice(0, 10) ?? '?'}`;
           d.upstream[src] = { ...prev.upstream[src], detail: `${origin}; this build: ${d.upstream[src].detail ?? now}` };
         }
       };
@@ -719,7 +719,8 @@ async function main() {
         // A carried refusal keeps its reason: "carried from build of …; that build: <why it refused>", not a bare "carried".
         // A row carried through several rederives names the build that asked, not the chain of builds that carried it:
         // "carried from build of 2026-09-29 (rederive); that build: carried from build of …" nested nine deep (round thirty-five, R1-10).
-        const carried = (u: { detail?: string }) => (u.detail?.startsWith('carried from build of') ? u.detail : u.detail ? `${from}; that build: ${u.detail}` : from);
+        // A chain already in the file is cut to the build that asked and its reason (round thirty-seven, R1-6).
+        const carried = (u: { detail?: string }) => (u.detail?.startsWith('carried from build of') ? unchain(u.detail) : u.detail ? `${from}; that build: ${u.detail}` : from);
         // Photographs carry over; a GBIF set read from the download this build replaces the previous GBIF set, and a
         // download that covers the species and has no observation photographs for it replaces the set with nothing
         // (an older build's herbarium sheets would otherwise stay for good: round thirty-two, 3).

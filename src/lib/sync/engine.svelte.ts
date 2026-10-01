@@ -41,7 +41,6 @@ import { deriveKeys, sealJson, openJson, seal, open, packPhoto, unpackPhoto, par
 import { MAX_BATCH_BYTES, MAX_PHOTO_BYTES, SEAL_OVERHEAD, OVERLAP_MS, PUSH_HEADERS, batchName, listAfter, logBatch } from './limits';
 import { readChanges, isHeld, dueAt, hlcWall, type Change } from '$core/log';
 import { hlcCompare, MAX_AHEAD_MS } from '$core/hlc';
-import type { Photo } from '$lib/db/types';
 import { version as BUILD } from '$app/environment';
 
 interface SyncMeta {
@@ -508,7 +507,9 @@ class Sync {
     // Photos we have that the server may not.
     const have = new Set(await photoBlobIds());
     const pushed = new Set(m.photosPushed);
-    const live = new Set(collectionPhotos().map((p) => p.id));
+    // Every photograph with a record, waiting ones too: their pixels are kept for the day the record completes, and the
+    // other device needs them that day (round thirty-seven, 1).
+    const live = new Set(collection.knownPhotos().map((p) => p.id));
     let n = 0;
     const toSend = [...have].filter((id) => !pushed.has(id) && live.has(id)).length; // the total, so a first sync says "592 of 598", not "592…" (round twenty-nine, 13)
     for (const id of have) {
@@ -738,7 +739,7 @@ class Sync {
     await collection.repairNumbers();
     // Photos that records mention and we lack.
     const have = new Set(await photoBlobIds());
-    const missing = collectionPhotos().filter((p) => !have.has(p.id));
+    const missing = collection.knownPhotos().filter((p) => !have.has(p.id));
     for (let i = 0; i < missing.length; i++) {
       this.step(m, `Receiving photo ${i + 1} of ${missing.length}…`);
       const p = missing[i];
@@ -774,11 +775,5 @@ const stopped = () => new StoppedError();
 /** A full vault is probed with a photograph at most this often. */
 const PROBE_MS = 3600_000;
 
-function collectionPhotos(): Photo[] {
-  const out: Photo[] = [];
-  for (const a of collection.accessions) out.push(...collection.photos(a.id));
-  for (const s of collection.sowings) out.push(...collection.photosOfSowing(s.id));
-  return out;
-}
 
 export const sync = new Sync();

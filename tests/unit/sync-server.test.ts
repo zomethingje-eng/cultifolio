@@ -478,4 +478,27 @@ describe('a name stands for one content', () => {
     await expect(readBody(req(null, new Uint8Array(2000)), 1024, 'a batch')).rejects.toMatchObject({ status: 413 });
     expect((await readBody(req(null, new Uint8Array(3)), 1024, 'a batch')).length).toBe(3);
   });
+  it('readBody stops reading a body sent without a length at the cap, rather than buffering all of it first (round thirty-six, 1)', async () => {
+    // A chunked body that would carry 64 MB: the reader must give up at the cap and never pull the chunks past it.
+    let pulled = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled++;
+        if (pulled > 8) throw new Error('read past the cap');
+        controller.enqueue(new Uint8Array(1024));
+      }
+    });
+    const req = new Request('http://x/', { method: 'POST', body: stream, duplex: 'half' } as RequestInit);
+    await expect(readBody(req, 4096, 'a batch')).rejects.toMatchObject({ status: 413 });
+    expect(pulled).toBeLessThanOrEqual(6);
+    // Within the cap, a chunked body is read whole, in order.
+    const ok = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1, 2]));
+        controller.enqueue(new Uint8Array([3]));
+        controller.close();
+      }
+    });
+    expect([...(await readBody(new Request('http://x/', { method: 'POST', body: ok, duplex: 'half' } as RequestInit), 4096, 'a batch'))]).toEqual([1, 2, 3]);
+  });
 });

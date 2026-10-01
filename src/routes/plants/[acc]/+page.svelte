@@ -127,7 +127,7 @@
     const n = habitat.night;
     const night = `coldest month's mean night at the habitat ${temp(n.v, u, 1)} in ${MONTHS[n.mo - 1]} (median year; across the ${habitat.cells} envelope cells ${tempN(n.lo, u)} to ${tempN(n.hi, u)}; CHELSA)`;
     // With no extremes, say why, as the species page and compare do: a refusal or a skip is not an absence (round eighteen, 8).
-    const p01 = habitat.ex ? `; 1st-percentile night over ${habitat.ex.years} years at the typical cell ${temp(habitat.ex.minP01, u, 1)} (NASA POWER)` : habitat.exStatus === 'refused' ? '; the daily extremes were not checked (NASA POWER did not answer when the species page was built)' : habitat.exStatus === 'skipped' ? '; the daily extremes were not asked for when the species page was built' : '';
+    const p01 = habitat.ex ? `; 1st-percentile night over ${habitat.ex.years} years at the typical cell ${temp(habitat.ex.minP01, u, 1)} (NASA POWER)` : habitat.exStatus === 'refused' ? '; the daily extremes were not checked (NASA POWER did not answer when the species page was built)' : habitat.exStatus === 'skipped' ? '; the daily extremes were not asked for when the species page was built' : habitat.exStatus === 'sea' ? '; the daily extremes were read at a weather cell that is mostly sea and are set aside, so no floor is read (the species page says what that cell gave)' : '';
     if (cond?.floorC == null) return { here: null, text: `${night}${p01}; no floor set for this place` };
     return { here: cond.floorC, text: `this place is set to bottom out at ${temp(cond.floorC, u, 1)}; ${night}${p01}` };
   });
@@ -332,6 +332,13 @@
     // The removal is one tap; the way back is one too (round twenty-six, 5). The record never left the log.
     toast.show(`${no} removed.`, 8000, { label: 'Undo', run: () => { void collection.restore('accession', id).then(() => goto(`/plants/${accNo(collection.accession(id) ?? { id })}`)); } }); // the number it holds after the restore: a repair on restore may have renumbered it (round twenty-nine, 3)
   }
+  const waiting = $derived(a ? undefined : collection.waitingAccession(param));
+  const FIELD_WORD: Record<string, string> = { taxonName: 'name', status: 'status' };
+  async function markGrowing() {
+    if (!waiting) return;
+    await collection.put('accession', waiting.id, { status: 'growing' });
+    toast.show(`${param} marked as growing.`);
+  }
   async function restoreRemoved() {
     const r = collection.removedAccession(param);
     if (!r) return;
@@ -358,6 +365,12 @@
   {#if collection.removedAccession(param)}
     <p class="muted">{param} was given to a plant since removed. The number stays reserved and its record is still in the change log, so it can be brought back as it was, log and photographs included.</p>
     <p><button class="btn pri" onclick={restoreRemoved}>Restore this plant</button></p>
+  {:else if waiting}
+    <!-- Not removed: here, and waiting for a field. It used to be told it was removed (round thirty-seven, R1-4). -->
+    <p class="muted" id="waiting-notice">{param}'s record is on this device but not whole: it has no {waiting.missing.map((f) => FIELD_WORD[f] ?? f).join(' and no ')}. A change from a newer build may still bring {waiting.missing.length === 1 ? 'it' : 'them'} (a batch set aside on <a href="/sync">Sync</a>), or the file it came from never had {waiting.missing.length === 1 ? 'it' : 'them'}. Until then the plant is not listed.</p>
+    {#if waiting.missing.length === 1 && waiting.missing[0] === 'status'}
+      <p><button class="btn pri" onclick={markGrowing}>Mark it as growing</button></p>
+    {/if}
   {:else}
     <p class="muted">{collection.isNumberTaken(param) ? `${param} was given to a plant since removed; the number stays reserved.` : 'No plant with this number on this device.'}</p>
   {/if}
@@ -499,7 +512,7 @@
 
   <div class="cards">
     {#if a.status === 'growing' || collection.lastWatered(id)}<div class="card"><div class="lab">Since watered</div><div class="val">{sinceWater ?? careDays}<span class="u"> d</span></div><div class="sub">{sinceWater == null ? 'no watering recorded; counted from the day the record was made' : `last ${collection.lastWatered(id)}`}</div></div>{/if}
-    {#if events.some((e) => e.t === 'audit')}<div class="card"><div class="lab">Last seen</div><div class="val">{seen == null ? '–' : seen}<span class="u">{seen == null ? '' : ' d'}</span></div><div class="sub">{collection.missedAt(id) ? `not seen at the audit of ${collection.missedAt(id)}; last logged ${collection.lastSeen(id)}` : `last logged ${collection.lastSeen(id)}`}</div></div>{/if}
+    {#if events.some((e) => e.t === 'audit')}<div class="card"><div class="lab">Last seen</div><div class="val">{seen == null ? '–' : seen}<span class="u">{seen == null ? '' : ' d'}</span></div><div class="sub">{#if collection.missedAt(id)}not seen at the audit of <span class="date">{collection.missedAt(id)}</span>; {/if}last logged <span class="date">{collection.lastSeen(id)}</span></div></div>{/if}
     {#if lastMeasure}<div class="card"><div class="lab">{sizeKey ? (MEASURES.find((m) => m.k === sizeKey)?.label ?? 'Size') : 'Size'}</div><div class="val">{sizeKey && lastMeasure ? lastMeasure.measures![sizeKey] : '–'}<span class="u">{sizeKey ? ' ' + (MEASURES.find((m) => m.k === sizeKey)?.unit ?? '') : ''}</span></div>{#if growth != null}<div class="gauge"><i style="width: {Math.min(100, Math.max(8, (growth / Math.max(1, lastMeasure!.measures![sizeKey!])) * 100))}%"></i></div>{/if}<div class="sub">{growth != null ? `${growth >= 0 ? '+' : ''}${growth} since ${firstMeasure!.d}` : `measured ${lastMeasure.d}`}</div></div>{/if}
     <div class="card"><div class="lab">Habitat rain season</div><div class="val" style="font-family: var(--ui); font-size: 17px; font-weight: 700">{#if !season && dossier?.climate.status === 'refused'}<NotChecked what="Climate" why="A source did not answer when the species page was built{dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}." />{:else}{season ? season.label : dossier?.climate.status === 'pending' ? 'Climate pending' : dossier ? 'No habitat climate' : ref === 'unreachable' ? 'Reference not reached' : ref === 'none' ? (kind === 'hybrid' ? 'A hybrid' : 'No species page') : '…'}{/if}</div><div class="sub">{#if season}{season.note} <a href="/species/{speciesHref}#s-cultivation">The sheet</a>.{:else if dossier?.climate.status === 'refused'}No season is read from an answer that was not given.{:else if dossier?.climate.status === 'pending'}The habitat climate for this species has not been derived yet.{:else if dossier}Nothing to read a season from{dossier.climate.status === 'none' && dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}.{:else if ref === 'unreachable'}The species reference could not be reached from here; nothing is known either way.{:else if ref === 'none'}{kind === 'hybrid' ? (parentLinks.some((p) => p.slug) ? 'No habitat of its own; its parents have species pages.' : 'No habitat of its own.') : 'Not in the reference.'}{:else}reading the species dossier{/if}</div></div>
   </div>
@@ -616,6 +629,8 @@
 {/if}
 
 <style>
+  /* A date in a narrow card's subline stays on one line: at 390 px it broke after "2026-09-" (round thirty-seven, R2 design). */
+  .sub .date { white-space: nowrap; }
   .hero { margin-top: 14px; }
   /* Without a picture the card does not overlap a hero that is not there. */
   .idcard.flat { margin-top: 14px; }

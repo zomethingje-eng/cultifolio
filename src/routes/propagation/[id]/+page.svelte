@@ -227,7 +227,9 @@
       // field number for the switch back, and the page hides them while the method is vegetative (round twenty-eight, 2).
       // Only the provenance follows the method, since 'veg' is what a vegetative batch is and the seed select cannot show it.
       sourceFrom: f.sourceFrom.trim() || null, sourceRef: f.sourceRef.trim() || null, fieldNumber: f.fieldNumber.trim() || null,
-      provenance: s.provenance == null && f.provenance === 'unknown' ? null : veg == null ? f.provenance : veg ? 'veg' : f.provenance === 'veg' ? 'unknown' : f.provenance, // a provenance the batch never had, left on the default, stays unset (round thirty-five, R1-5)
+      // A provenance the batch never had, left on the default, stays unset (round thirty-five, R1-5); unless the method is
+      // vegetative, which says what the provenance is: 'veg', not null (round thirty-seven, R1 small).
+      provenance: veg ? 'veg' : s.provenance == null && f.provenance === 'unknown' ? null : veg == null ? f.provenance : f.provenance === 'veg' ? 'unknown' : f.provenance,
       // Every line here is one field, on its own line: round twenty-seven's fix put this comment at the end of a line
       // that went on, and Medium and Container were never saved again (round twenty-eight, 1).
       medium: f.medium.trim() || null, container: f.container.trim() || null,

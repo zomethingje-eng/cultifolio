@@ -244,6 +244,27 @@ export type Box = v.InferOutput<typeof BoxSchema>;
 /** A URL the page may render as a link: web addresses only. The CSP already blocks `javascript:`; this keeps a `data:` or a relative path out of an href too (round twenty-nine, 10). */
 const webUrl = (u: string | undefined): string | undefined => (u && /^https?:\/\//i.test(u) ? u : undefined);
 
+/**
+ * A carried row's detail, cut to the build that asked and the reason that build gave. Each rederive wrapped the previous
+ * row's detail ("carried from build of 2026-09-29 (rederive); that build: carried from build of …"), nine deep on a page;
+ * round thirty-five stopped the builder adding to a chain and left the chains that were already there (round thirty-seven,
+ * R1-6). Applied as a dossier is read, so no rebuild is needed, and by the builder, so the files stop carrying it.
+ */
+export function unchain(detail: string | undefined): string | undefined {
+  if (!detail || !detail.startsWith('carried from build of')) return detail;
+  const parts = detail.split(/; (?:that|this) build: /);
+  if (parts.length < 2) return detail;
+  let origin = parts[0];
+  let reason: string | null = null;
+  for (let i = 1; i < parts.length; i++) {
+    if (parts[i].startsWith('carried from build of')) origin = parts[i];
+    else reason = parts[i];
+  }
+  // The clause after a chain is the reason the asking build gave ("that build: …") or what this build got ("this build: …"): the words that stood before it are kept.
+  const sep = reason == null ? '' : detail.includes(`; this build: ${reason}`) ? '; this build: ' : '; that build: ';
+  return reason == null ? origin : `${origin}${sep}${reason}`;
+}
+
 /** Every address in a dossier that a page turns into a link, scrubbed to web addresses; a photograph whose own address is not one is dropped. */
 export function safeUrls(d: Dossier): Dossier {
   // Extremes read at a POWER cell that is mostly sea are set aside (round thirty-five, R1-11): the cold floor then comes
@@ -256,7 +277,8 @@ export function safeUrls(d: Dossier): Dossier {
     photos: dedupePhotos(d.photos.filter((p) => webUrl(p.url) && webUrl(p.thumb)).map((p) => ({ ...p, thumb: mendGbifThumb(p.thumb, p.id, p.url), page: webUrl(p.page) }))),
     // A specimen record under DiSSCo's DOI prefix is not a paper (round thirty-one, 6): dropped here as well as at the build, so dossiers built before the rule show none.
     literature: d.literature.filter((p) => !/^(https?:\/\/doi\.org\/)?10\.3535\//i.test(p.doi ?? '')).map((p) => ({ ...p, url: webUrl(p.url) })),
-    links: Object.fromEntries(Object.entries(d.links).filter(([, u]) => webUrl(u)))
+    links: Object.fromEntries(Object.entries(d.links).filter(([, u]) => webUrl(u))),
+    upstream: Object.fromEntries(Object.entries(d.upstream).map(([k, u]) => [k, u.detail?.startsWith('carried from build of') ? { ...u, detail: unchain(u.detail) } : u]))
   };
 }
 

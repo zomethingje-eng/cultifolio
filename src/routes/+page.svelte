@@ -264,10 +264,11 @@
   <section class="featured" aria-label="From the reference">
     {#if titled}<h2 class="q grouptitle">From the reference</h2>{/if}
     <div class="strip">
-      {#each data.featured as c (c.slug)}
+      {#each data.featured as c, i (c.slug)}
         <a class="ftile" href="/species/{c.slug}">
           <!-- One size by surface, not by pixel density: a 150 px tile at `small` (240 px), never `medium`, which a phone's density promoted every tile to and made the phone's home page seven megabytes (round thirty-five, R2-7). -->
-          <img src={photoAt(c.thumb, 'small')} width="240" height="240" alt="" loading="lazy" onerror={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = 'hidden')} />
+          <!-- The first tile is the phone's largest first-screen paint: fetched at once and first, the rest lazily (round thirty-seven, R2-4). -->
+          <img src={photoAt(c.thumb, 'small')} width="240" height="240" alt="" loading={i === 0 ? 'eager' : 'lazy'} fetchpriority={i === 0 ? 'high' : 'auto'} onerror={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = 'hidden')} />
           <span class="fnm"><SpeciesName name={c.name} /></span>
           {#if c.common}<span class="fcom">{c.common}</span>{/if}
         </a>

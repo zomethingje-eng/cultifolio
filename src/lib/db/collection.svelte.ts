@@ -12,7 +12,7 @@ export const DUE_DAYS = 21;
 const yearOf = (d?: string | null): number | undefined => (d && /^\d{4}-/.test(d) ? Number(d.slice(0, 4)) : undefined);
 import { Clock, hlcDecode, hlcEncode, hlcCompare, hlcAfter } from '$core/hlc';
 import { tag36 } from '$core/tag';
-import { apply, diff, readChanges, isComplete, incomplete as incompleteRecords, key as recKey, type Change, type Kind, type Record_, type State, hlcWall, revivedByImport } from '$core/log';
+import { apply, diff, readChanges, isComplete, REQUIRED_FIELDS, incomplete as incompleteRecords, key as recKey, type Change, type Kind, type Record_, type State, hlcWall, revivedByImport } from '$core/log';
 import { nextAccession, DEFAULT_SCHEME, type NumberingScheme } from '$core/accession';
 import { allChanges, appendChanges, appendChangesClaiming, onOtherTabWrite, deviceId, requestPersistence, getMeta, setMeta, putPhotoBlobs, getPhotoBlobs, deletePhotoBlobs, holdVault, type NumberKind } from './vault';
 import type { Accession, PlantEvent, Taxon, Location, Sowing, Provenance, Photo } from './types';
@@ -151,6 +151,14 @@ class Collection {
   }
   isNumberTaken(no: string): boolean {
     return this.takenNumbers('accession').has(no.trim());
+  }
+  /** A plant whose record is here, not removed, and not whole, by its number: which required fields it waits for (round thirty-seven, R1-4). */
+  waitingAccession(no: string): { id: string; missing: string[] } | undefined {
+    for (const r of this.state.values()) {
+      if (r.kind !== 'accession' || r._deleted || isComplete(r) || (r as unknown as Accession).acc !== no.trim()) continue;
+      return { id: r.id, missing: REQUIRED_FIELDS.accession.filter((f) => r[f] == null) };
+    }
+    return undefined;
   }
   /** A removed plant, by its number: its record stays in the log, and it can be brought back (round twenty-six, 4). */
   removedAccession(no: string): Accession | undefined {
@@ -576,6 +584,12 @@ class Collection {
   photoKnown(id: string): boolean {
     const r = this.state.get(recKey('photo', id));
     return !!r && !r._deleted;
+  }
+  /** Every photograph with a record here that is not removed, whole or waiting: the pixels sync carries (round thirty-seven, 1). */
+  knownPhotos(): Array<{ id: string; sha?: string }> {
+    const out: Array<{ id: string; sha?: string }> = [];
+    for (const r of this.state.values()) if (r.kind === 'photo' && !r._deleted) out.push({ id: r.id, sha: typeof r.sha === 'string' ? r.sha : undefined });
+    return out;
   }
   photo(id: string): Photo | undefined {
     const r = this.state.get(recKey('photo', id));

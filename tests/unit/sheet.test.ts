@@ -108,6 +108,15 @@ describe('the sheet', () => {
     const temp = rows.find((r) => r.k === 'Temperature')!;
     expect(temp.s).toContain('the 1st-percentile night over 44 years at the typical cell is 4.1 °C');
     expect(temp.s).toContain('Cold floor: 4.1 °C, which is the 1st-percentile night over 44 years at the typical cell (NASA POWER).');
+    // Without the extremes, the month's mean night stands in and is named as what it is, never headed as a floor: a mean of
+    // lows is warmer than the nights a floor is read from (round thirty-seven, R1-2).
+    for (const extremesStatus of ['sea', 'none', 'refused'] as const) {
+      const sea = cultivationSheet({ scientific: 'Tylecodon pearsonii', family: 'Crassulaceae', months: namaqua, lat: -30, extremes: null, extremesStatus });
+      expect(sea.floor?.s).toMatch(/^Cold floor: none read\. The nearest figure is 6\.0 °C, the coldest month's mean night, .*warmer than the nights a floor is read from/);
+      expect(sea.floor?.short).toMatch(/^Coldest mean night 6\.0 °C \(coldest month's mean night, CHELSA; no floor read\)\.$/);
+      expect(sea.floor?.raised).toBe(false);
+    }
+    expect(cultivationSheet({ scientific: 'Tylecodon pearsonii', family: 'Crassulaceae', months: namaqua, lat: -30, extremes: null, extremesStatus: 'sea' }).floor?.s).toContain('read at a weather cell that is mostly sea and are set aside');
     expect(rows.every((r) => r.why.length > 20)).toBe(true);
     expect(rows.every((r) => r.hab)).toBe(true);
   });

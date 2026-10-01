@@ -95,10 +95,16 @@ function rank(p: Prepared<unknown>, qs: string[], match: (q: string, w: string) 
 
 /** The matches for `q`, best first. Empty query: nothing (the caller shows its own default). */
 export function search<T extends Searchable>(prepared: Prepared<T>[], q: string, limit = Infinity): T[] {
-  const qs = words(q).filter((w) => !RANK_MARKERS.has(w)); // "var." on a label is not a search word either (round thirty-five, R2-3)
+  // "var." on a label is not a search word either (round thirty-five, R2-3), but only once another word follows it: "f"
+  // on its own is Ferocactus being typed, and "aloe var" is a variegata on its way (round thirty-seven, R1-7).
+  // A trailing marker is tried as a word first, and dropped when nothing starts with it ("haworthia pumila var" still
+  // finds the name the words before it find).
+  const all = words(q);
+  const qs = all.filter((w, i) => !(RANK_MARKERS.has(w) && i < all.length - 1));
   if (!qs.length) return [];
   const exact = (x: string, w: string) => w.startsWith(x);
   let hits = collect(prepared, qs, exact);
+  if (!hits.length && qs.length > 1 && RANK_MARKERS.has(qs[qs.length - 1])) hits = collect(prepared, qs.slice(0, -1), exact);
   if (!hits.length && qs.some((x) => x.length >= 4)) hits = collect(prepared, qs, nearPrefix);
   return hits.slice(0, limit).map((h) => h.p.item);
 }

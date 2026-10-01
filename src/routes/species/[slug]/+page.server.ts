@@ -63,11 +63,17 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   const binomialOf = (x: string) => x.split(' ').slice(0, 2).join(' ');
   const wasPlain = was ? plain(was) : '';
   const asVariety = !!wasPlain && !ownNames.has(wasPlain) && listed.some((x) => x.split(' ').length > 2 && binomialOf(x) === wasPlain);
+  // And a variety of a listed older name: `haworthia-attenuata-var-radula` reached Haworthiopsis attenuata with no line,
+  // because the record lists Haworthia attenuata and not that variety of it (round thirty-seven, R1-8). What the line
+  // may say is what the record holds: the binomial is an older name of this species, and the address named a variety of it.
+  const ofOlder = !!wasPlain && !ownNames.has(wasPlain) && !asVariety && wasPlain.split(' ').length > 2 && ownNames.has(binomialOf(wasPlain));
   return {
     /** The old name this page was reached by, when the address was a synonym the backbone resolved (round thirty, R2-8). */
-    was: was && /^[\p{L}\p{M} .'\-×]{3,80}$/u.test(was) && (ownNames.has(wasPlain) || asVariety) ? was : null,
+    was: was && /^[\p{L}\p{M} .'\-×]{3,80}$/u.test(was) && (ownNames.has(wasPlain) || asVariety || ofOlder) ? was : null,
     /** The old name is the binomial of a variety the backbone places under this species, not of the species itself. */
     wasVariety: asVariety,
+    /** The old name is a variety of a binomial the record lists as an older name of this species. */
+    wasOfOlder: ofOlder,
     units: unitsFor(cookies, request),
     // The grower's hemisphere, when their site has been saved on this device: seeds the months before the site store loads.
     hemiLat: cookies.get('cultifolio.hemi') === 's' ? -1 : cookies.get('cultifolio.hemi') === 'n' ? 1 : null,

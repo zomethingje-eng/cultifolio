@@ -411,13 +411,38 @@ export function batchMeta(request: Request): BatchMeta {
   return { plain: plain ?? undefined, device: device ?? undefined };
 }
 
-/** Refuse an oversize body from its declared length, before reading it; the read itself is capped too. */
+/**
+ * Refuse an oversize body from its declared length, before reading it; and the read itself stops at the cap, chunk by
+ * chunk, rather than buffering whatever arrives and measuring it afterwards. A body sent without a length (chunked) used
+ * to be read whole before it was judged, so a holder of a token could have the Worker hold up to the platform's own request
+ * limit in memory for one 413 (round thirty-six, 1).
+ */
 export async function readBody(request: Request, max: number, what: string): Promise<Uint8Array> {
+  const tooBig = () => error(STATUS.tooBig, `${what} must be at most ${Math.round(max / 1048576)} MB`);
   const declared = Number(request.headers.get('content-length'));
-  if (declared > max) error(STATUS.tooBig, `${what} must be at most ${Math.round(max / 1048576)} MB`);
-  const body = new Uint8Array(await request.arrayBuffer());
-  if (!body.length) error(400, `${what} is empty`);
-  if (body.length > max) error(STATUS.tooBig, `${what} must be at most ${Math.round(max / 1048576)} MB`);
+  if (declared > max) tooBig();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  const reader = request.body?.getReader();
+  if (reader) {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.length;
+      if (total > max) {
+        await reader.cancel().catch(() => {});
+        tooBig();
+      }
+      chunks.push(value);
+    }
+  }
+  if (!total) error(400, `${what} is empty`);
+  const body = new Uint8Array(total);
+  let at = 0;
+  for (const c of chunks) {
+    body.set(c, at);
+    at += c.length;
+  }
   return body;
 }
 
