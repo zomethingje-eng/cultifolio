@@ -81,10 +81,13 @@ if (!skip.has('names')) {
 let species = process.env.LIVE_CHECK_SPECIES;
 if (!species) {
   // The sitemap is an index of files since round forty; the first file names the species pages.
-  const idx = await get('/sitemap.xml');
+  // Asked past the edge cache (a query the cache keys on): the day-old copy of the previous build's sitemap is what a
+  // plain request gets for up to a day after a deploy, which is fine for crawlers and wrong for a check of this build.
+  const fresh = `check=${Date.now()}`;
+  const idx = await get(`/sitemap.xml?${fresh}`);
   if (idx.status !== 200) fail('/sitemap.xml', idx);
   if (!/<sitemapindex/.test(idx.text) || !/sitemap-1\.xml/.test(idx.text)) fail('/sitemap.xml should be a sitemap index naming /sitemap-1.xml', idx);
-  const sm = await get('/sitemap-1.xml');
+  const sm = await get(`/sitemap-1.xml?${fresh}`);
   if (sm.status !== 200) fail('/sitemap-1.xml', sm);
   species = /<loc>[^<]*\/species\/([a-z0-9-]+)<\/loc>/.exec(sm.text)?.[1];
   if (!species) fail('/sitemap-1.xml names no species page', sm);
