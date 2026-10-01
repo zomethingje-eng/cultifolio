@@ -49,6 +49,8 @@
     if (!needle || !collection.ready || needle.length < 2) return [];
     return collection.accessions.filter((a) => accNo(a).toLowerCase().includes(needle) || (a.fieldNumber ?? '').toLowerCase().includes(needle) || (a.nameAsReceived ?? '').toLowerCase().includes(needle) || (a.cultivar ?? '').toLowerCase().includes(needle)).slice(0, 5);
   });
+  /** Focus the box on a desktop (a keyboard is there); never on a phone, where focus raises the keyboard over the page. */
+  const focusOnDesktop = (el: HTMLInputElement) => { if (window.matchMedia('(min-width: 701px)').matches && !el.value) el.focus({ preventScroll: true }); };
   /** Featured tiles whose photograph did not load: shown as placeholders rather than blank cards. */
   let failedTiles = $state(new Set<string>());
   /** The climate chips are the server's now (`?chip=`): they filter the grouped catalogue rather than flattening the whole index on the client (round thirty-nine). */
@@ -295,7 +297,7 @@
   {@const own = owned.get(c.slug) ?? (c.key != null ? owned.get(`key:${c.key}`) : undefined)}
   <a class="tile" href="/species/{c.slug}">
     {#if own?.length}<span class="ownchip" title="You grow {own.length === 1 ? own[0] : own.length + ' of these'}" aria-label="You grow {own.length === 1 ? own[0] : own.length + ' of these'}">{own.length === 1 ? own[0] : `× ${own.length}`}</span>{:else if mine.get(c.slug)?.followed}<span class="ownchip following" title="On your list without a plant of it" aria-label="Following: on your list without a plant of it">following</span>{/if}
-    {#if c.thumb}<div class="im"><img src={c.thumb} alt={c.alt} loading="lazy" onerror={(e) => { const im = e.currentTarget as HTMLImageElement; im.style.display = 'none'; im.parentElement?.classList.add('ph'); im.parentElement && (im.parentElement.textContent = 'photograph did not load'); }} /></div>{:else if c.thumbOff}<div class="im"><Placeholder name={c.name} family={c.family} caption="reference photograph off" title="The reference has a photograph; showing it on your own tiles is off" /></div>{:else if c.climate}<div class="im"><Placeholder name={c.name} family={c.family} caption="no open photograph on file" /></div>{:else if c.missing}<div class="im"><Placeholder name={c.name} family={c.family} caption="not in the reference yet" /></div>{:else}<div class="im ph">{ownFailed ? 'reference not reached' : 'loading…'}</div>{/if}
+    {#if c.thumb}<div class="im"><img src={c.thumb} alt={c.alt} loading="lazy" onerror={(e) => { const im = e.currentTarget as HTMLImageElement; im.style.display = 'none'; im.parentElement?.classList.add('ph'); im.parentElement && (im.parentElement.textContent = 'photograph did not load'); }} /></div>{:else if c.thumbOff}<div class="im"><Placeholder name={c.name} family={c.family} caption="reference photograph off" title="The reference has a photograph; showing it on your own tiles is off" /></div>{:else if c.climate}<div class="im"><Placeholder name={c.name} family={c.family} caption="no open photograph on file" /></div>{:else if c.missing}<div class="im"><Placeholder name={c.name} family={c.family} caption="not in the reference" /></div>{:else}<div class="im ph">{ownFailed ? 'reference not reached' : 'loading…'}</div>{/if}
     <div class="tx">
       <div class="nm"><SpeciesName name={c.name} /></div>
       <div class="fam">{c.common ?? c.family ?? ''}</div>
@@ -318,15 +320,16 @@
     <a class="btn pri headadd" href="/plants/new">Add a plant</a>
   </PageHead>
 
-  <Today />
-
+  <!-- The box above Today, focused on a desktop: a returning grower's first act is "find 2026-0013" (round forty-one, R11). -->
   <div class="toolrow">
-    <input class="searchbar" type="search" placeholder="Search your plants by number, name or field number…" bind:value={q} onkeydown={openTop} aria-label="Search your plants and species (on this device)" />
+    <input class="searchbar" type="search" placeholder="Search your plants by number, name or field number…" bind:value={q} onkeydown={openTop} aria-label="Search your plants and species (on this device)" use:focusOnDesktop />
     <nav class="seg viewseg" aria-label="Which species">
       <button type="button" class="on" aria-current="true">Your species</button>
       <button type="button" onclick={startBrowsing}>All {fmtN(data.total)}</button>
     </nav>
   </div>
+
+  {#if !q.trim()}<Today />{/if}
 
   {#if q.trim()}
     {@render plantsFound()}
@@ -372,6 +375,9 @@
   <!-- The way in comes before the pictures, so a phone's first screen has the pitch, the count and what to do, not a grid alone (round twenty-eight, 13). -->
   {#if collection.ready && !hasMine && !collection.accessions.length && !welcomeHidden}
     <p class="welcome" id="welcome"><b>New here.</b> <a href="/plants/new">Add your first plant</a> · <a href="/backup">Bring in a collection</a> (a backup file, or an export from the old Herbarium app) <button class="linkish" type="button" onclick={dismissWelcome}>Not now</button></p>
+  {:else if collection.ready && !hasMine && !collection.accessions.length}
+    <!-- "Not now" hides the welcome for good; the way in stays, in one line, or a visitor who comes back has to find /plants/new by the tab bar (round forty-one, R9). -->
+    <p class="welcome quiet" id="welcome-after"><a href="/plants/new">Keep a record of your plants</a> on this device; nothing leaves it.</p>
   {/if}
 
   {#if visitor && data.featured.length}
@@ -453,6 +459,7 @@
   .viewseg > button { font-weight: 700; }
   @media (max-width: 700px) { .viewseg { flex-basis: 100%; } .viewseg > button { flex: 1; text-align: center; } }
   .welcome a { font-weight: 600; }
+  .welcome.quiet { color: var(--ink3); font-size: 13px; }
   .linkish { background: none; border: 0; padding: 0 4px; font: inherit; font-size: 13px; color: var(--accent); cursor: pointer; text-decoration: underline; }
   .welcome .linkish { color: var(--ink3); margin-left: 4px; }
   /* the featured strip: one row, scrolls sideways on a phone, six-up on a desktop */

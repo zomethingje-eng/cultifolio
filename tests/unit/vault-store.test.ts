@@ -115,3 +115,21 @@ describe('a duplicate number already in the log is repaired at load (round thirt
     expect((await allChanges()).some((c) => c.kind === 'event' && c.field === 'note' && /Renumbered from 2026-0013 to 2026-0014/.test(String(c.value)))).toBe(true);
   });
 });
+
+describe('the oldest record shape is given its number as a field at load (round forty-one, R4)', () => {
+  it('a plant whose number is its id gets an `acc` change, once; a batch likewise gets `no`; a record that has one is untouched', async () => {
+    await appendChanges([
+      ch(20, '2019-0003', 'taxonName', 'Haworthia attenuata'), ch(21, '2019-0003', 'status', 'growing'),
+      ch(22, 'r7', 'acc', '2026-0007'), ch(23, 'r7', 'taxonName', 'Lithops'), ch(24, 'r7', 'status', 'growing'),
+      { t: t(25), kind: 'sowing', id: 'S2024-002', field: 'taxonName', value: 'Aloe' }, { t: t(26), kind: 'sowing', id: 'S2024-002', field: 'method', value: 'seed' }, { t: t(27), kind: 'sowing', id: 'S2024-002', field: 'sown', value: '2024-03-01' }, { t: t(28), kind: 'sowing', id: 'S2024-002', field: 'count', value: 3 }, { t: t(29), kind: 'sowing', id: 'S2024-002', field: 'status', value: 'active' }
+    ], true);
+    vi.resetModules();
+    const { collection } = await import('$lib/db/collection.svelte');
+    await collection.load();
+    const all = await allChanges();
+    expect(all.filter((c) => c.kind === 'accession' && c.id === '2019-0003' && c.field === 'acc').map((c) => c.value)).toEqual(['2019-0003']);
+    expect(all.filter((c) => c.kind === 'accession' && c.id === 'r7' && c.field === 'acc')).toHaveLength(1); // the one it had
+    expect(all.filter((c) => c.kind === 'sowing' && c.id === 'S2024-002' && c.field === 'no').map((c) => c.value)).toEqual(['S2024-002']);
+    expect(collection.accession('2019-0003')?.acc).toBe('2019-0003');
+  });
+});

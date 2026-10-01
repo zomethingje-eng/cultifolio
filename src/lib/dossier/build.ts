@@ -299,6 +299,9 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   else if (!verified || !boxes.length) climate = { status: 'none', detail: !verified ? 'native range not verified: no WCVP distribution with native status for this name, so records cannot be told from cultivation and no habitat climate is derived' : 'native range is stated at country level only, with no region boxes to test records against' };
   else if (forClimate.length) climate = await (o.climate ?? noClimate).envelope(forClimate);
   else if (allPts.length) climate = { status: 'none', detail: `${allPts.length} in-range record${allPts.length === 1 ? '' : 's'}, none placed to within 10 km` };
+  // Extremes read at a POWER cell that is mostly sea are set aside at the build, as the reader sets them aside (round
+  // thirty-five, R1-11): a fresh file carries what the page will show, and every read-time mend is a no-op on it (round forty-one, R5).
+  if (climate.status === 'ok' && climate.extremes && climate.landFraction != null && climate.landFraction < 0.5) climate = { ...climate, extremes: undefined, extremesSea: climate.extremes, extremesStatus: 'sea' };
   if (climate.status === 'pending') upstream.climate = { status: 'skipped', at: now(), detail: climate.detail };
   else mark('climate', climate.status === 'ok' ? { status: 'ok' } : { status: climate.status, detail: climate.detail });
   // The daily extremes are their own upstream: a refusal here is a reason to build again, which `climate: ok` alone would hide (round sixteen, 7).

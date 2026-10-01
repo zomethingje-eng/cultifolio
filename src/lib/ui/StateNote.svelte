@@ -1,0 +1,24 @@
+<script lang="ts">
+  /**
+   * A system state in two words, with its sentence behind "Why?": the app's careful sentences ("records wait for changes
+   * this build cannot read yet (a batch from a newer build, set aside on Sync)") read as errors to a grower; the word says
+   * what, the disclosure says why (round forty-one, R14). The glossary on /about/how defines the words.
+   */
+  import type { Snippet } from 'svelte';
+  let { word, id = undefined, children }: { word: string; id?: string; children: Snippet } = $props();
+</script>
+
+<p class="statenote small" {id}>
+  <span class="word">{word}</span>
+  <details class="why"><summary>Why?</summary><span class="text">{@render children()}</span></details>
+</p>
+
+<style>
+  .statenote { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin: 10px 0; color: var(--ink2); }
+  .word { font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink); background: var(--sunk); padding: 3px 9px; border-radius: 999px; }
+  .why { display: inline; }
+  .why summary { display: inline; cursor: pointer; color: var(--accent); text-decoration: underline; font-size: 13px; list-style: none; }
+  .why summary::-webkit-details-marker { display: none; }
+  .why[open] summary { margin-right: 6px; }
+  .text { line-height: 1.5; }
+</style>

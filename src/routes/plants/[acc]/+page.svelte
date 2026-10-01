@@ -196,13 +196,16 @@
   /** Whether the first screen has a picture: the grower's own, or the reference's where it is shown. Without one there is no hero; a tile beside the name stands in (improvements, 4). */
   const hasHero = $derived(!!cover || (!!speciesThumb && !thumbFailed));
   const fmtDate = (d: string | null | undefined) => (d ? new Date(d + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '');
-  // What a new plant's page is missing: a place, a photograph, a first measurement. Each line goes when it is done; the card goes when two of three are.
+  // What a new plant's page is missing: a place, a photograph, a first measurement, a site. Each line goes when it is done; the card goes when one line is left.
   const setup = $derived.by(() => {
     if (!a || a.status !== 'growing') return [];
     const rows: { k: string; n: string; t: string; w: string; go: () => void }[] = [];
     if (!collection.placeOf(a.locationId)) rows.push({ k: 'place', n: '1', t: 'Give it a place', w: 'the greenhouse, bench, shelf or windowsill it lives on; conditions and the frost watch follow', go: () => { moveTo = null; moving = true; } });
     if (!photos.length) rows.push({ k: 'photo', n: '2', t: 'Add a photograph', w: 'the page and the labels use it', go: () => { adding = true; setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0); } });
     if (!lastMeasure) rows.push({ k: 'measure', n: '3', t: 'Measure it', w: 'growth is read from the first measurement on', go: () => { moreActs = true; quick('measure'); } });
+    // The site is what the hemisphere, the day length and the frost watch are read from when the place has no coordinates of its
+    // own; without it every seasonal sentence on this page is shifted to the north and says so (round forty-one, own).
+    if (!site.current && cond?.lat == null) rows.push({ k: 'site', n: '4', t: 'Set your site', w: 'seasons, day length and the frost watch are read from where you grow', go: () => goto('/settings#site') });
     return rows.length >= 2 ? rows : [];
   });
   const provLabel = (p: string | null | undefined) => (p === 'wild' ? 'wild-collected' : p === 'f1' ? 'F1, raised from wild-collected seed' : p === 'fn' ? 'cultivated seed (Fn)' : p === 'veg' ? 'vegetative' : 'provenance not stated');

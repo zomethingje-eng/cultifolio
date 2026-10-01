@@ -14,7 +14,14 @@
   import { page } from '$app/state';
   import QRCode from 'qrcode';
   import { collection } from '$lib/db/collection.svelte';
-  import { kindOf, type Accession } from '$lib/db/types';
+  import { kindOf, sowNo, type Accession, type Sowing } from '$lib/db/types';
+  /**
+   * What a label is printed for: a plant, or a propagation batch (round forty-one, R10). A seed sower labels trays
+   * first; the batch label carries the number, the name, the date sown and the count, and its code opens the batch.
+   */
+  type Item = { id: string; batch: boolean; no: string; taxonName: string; cultivar: string | null; fieldNumber: string | null; parentage: string | null; taxonKey: number | null; locationId: string | null; location: string | null; sourceFrom: string | null; when: string | null; count: number | null; method: string | null; rec: Accession | Sowing };
+  const ofPlant = (a: Accession): Item => ({ id: a.id, batch: false, no: accNo(a), taxonName: a.taxonName, cultivar: a.cultivar ?? null, fieldNumber: a.fieldNumber ?? null, parentage: a.parentage ?? null, taxonKey: a.taxonKey ?? null, locationId: a.locationId ?? null, location: a.location ?? null, sourceFrom: a.sourceFrom ?? null, when: a.acquired ?? null, count: null, method: null, rec: a });
+  const ofBatch = (s: Sowing): Item => ({ id: s.id, batch: true, no: sowNo(s), taxonName: s.taxonName, cultivar: s.cultivar ?? null, fieldNumber: s.fieldNumber ?? null, parentage: s.parentage ?? null, taxonKey: s.taxonKey ?? null, locationId: s.locationId ?? null, location: null, sourceFrom: s.sourceFrom ?? null, when: s.sown ?? null, count: s.count ?? null, method: s.method ?? null, rec: s });
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import { sheetForName, sheetsFor, type Sheet as SpeciesSheet } from '$lib/ui/index.svelte';
   import { slugify, speciesSlug, speciesOf } from '$core/names';
@@ -48,8 +55,10 @@
     site.load();
     await collection.load();
     const acc = page.url.searchParams.get('acc');
+    const batch = page.url.searchParams.get('batch');
     const loc = page.url.searchParams.get('loc');
     if (acc) chosen = new Set(acc.split(',').map((x) => collection.accession(x)?.id).filter((x): x is string => !!x)); // numbers or ids in the URL; identities inside
+    else if (batch) chosen = new Set(batch.split(',').map((x) => collection.sowing(x)?.id).filter((x): x is string => !!x)); // a tray's label from the batch page (round forty-one, R10)
     else if (loc) chosen = new Set(collection.plantsAt(loc, true).map((a) => a.id));
     else chosen = new Set(collection.accessions.filter((a) => a.status === 'growing').map((a) => a.id));
     try {
@@ -77,10 +86,12 @@
     }
   });
 
-  const all = $derived(collection.accessions.filter((a) => a.status === 'growing' || chosen.has(a.id)));
+  const all = $derived<Item[]>([...collection.accessions.filter((a) => a.status === 'growing' || chosen.has(a.id)).map(ofPlant), ...collection.sowings.filter((b) => b.status === 'active' || chosen.has(b.id)).map(ofBatch)]);
   // The filter reads the place and the source too, and matches every word, as the plants list does: "Windowsill" and "Mesa" find their plants (round twenty-six, 15).
-  const filtered = $derived.by(() => { const words = q.toLowerCase().split(/\s+/).filter(Boolean); return all.filter((a) => { const hay = `${accNo(a)} ${a.taxonName} ${a.cultivar ?? ''} ${a.fieldNumber ?? ''} ${a.locationId ? collection.locationName(a.locationId) : (a.location ?? '')} ${a.sourceFrom ?? ''}`.toLowerCase(); return words.every((w) => hay.includes(w)); }); });
+  const filtered = $derived.by(() => { const words = q.toLowerCase().split(/\s+/).filter(Boolean); return all.filter((a) => { const hay = `${a.no} ${a.taxonName} ${a.cultivar ?? ''} ${a.fieldNumber ?? ''} ${a.locationId ? collection.locationName(a.locationId) : (a.location ?? '')} ${a.sourceFrom ?? ''}`.toLowerCase(); return words.every((w) => hay.includes(w)); }); });
   const picked = $derived(all.filter((a) => chosen.has(a.id)));
+  const plantsShown = $derived(filtered.filter((x) => !x.batch));
+  const batchesShown = $derived(filtered.filter((x) => x.batch));
   const toggle = (id: string) => {
     const n = new Set(chosen);
     if (n.has(id)) n.delete(id);
@@ -90,8 +101,8 @@
   const pickAll = (on: boolean) => (chosen = on ? new Set([...chosen, ...filtered.map((a) => a.id)]) : new Set([...chosen].filter((id) => !filtered.some((a) => a.id === id))));
 
   /** A plant's species sheet, by hash bucket: the labels page never names or keys the species it prints. Five Astrophytum labels are one lookup in one cached bucket. */
-  async function dossierFor(a: Accession): Promise<SpeciesSheet | null | 'unreachable'> {
-    const d = await sheetForName(a.taxonName, a.taxonKey, (k) => { if (a.taxonKey !== k) collection.put('accession', a.id, { taxonKey: k }); });
+  async function dossierFor(a: Item): Promise<SpeciesSheet | null | 'unreachable'> {
+    const d = await sheetForName(a.taxonName, a.taxonKey, (k) => { if (a.taxonKey !== k) collection.put(a.batch ? 'sowing' : 'accession', a.id, { taxonKey: k }); });
     return d === null ? 'unreachable' : d === 'none' ? null : d;
   }
   /** Care lines that could not be made because the reference was not reached: said on the sheet and on the page, never printed as if the species had no data (round thirteen, 6). */
@@ -112,10 +123,10 @@
   // QR codes and care lines are made once per plant, lazily.
   $effect(() => {
     // Every bucket the picked plants need, asked for in one request; the per-plant lookups below then find their bucket cached.
-    if (withCare) void sheetsFor(picked.filter((a) => care[a.id] === undefined && kindOf(a) !== 'hybrid').map((a) => speciesSlug(a.taxonName)));
+    if (withCare) void sheetsFor(picked.filter((a) => care[a.id] === undefined && kindOf(a.rec) !== 'hybrid').map((a) => speciesSlug(a.taxonName)));
     for (const a of picked) {
-      if (withQr && !qrs[a.id]) QRCode.toString(`${location.origin}/plants/${a.id}`, { type: 'svg', errorCorrectionLevel: 'M', margin: 0 }).then((svg) => (qrs = { ...qrs, [a.id]: svg }));
-      if (withCare && care[a.id] === undefined && !asking.has(a.id) && kindOf(a) !== 'hybrid') {
+      if (withQr && !qrs[a.id]) QRCode.toString(`${location.origin}/${a.batch ? 'propagation' : 'plants'}/${a.id}`, { type: 'svg', errorCorrectionLevel: 'M', margin: 0 }).then((svg) => (qrs = { ...qrs, [a.id]: svg }));
+      if (withCare && care[a.id] === undefined && !asking.has(a.id) && kindOf(a.rec) !== 'hybrid') {
         asking = new Set([...asking, a.id]);
         const done = () => { const n = new Set(asking); n.delete(a.id); asking = n; };
         dossierFor(a).then(async (d) => {
@@ -133,14 +144,16 @@
   /** Cells per page, with `skip` blanks first; then pages. */
   const perPage = $derived(sheet.cols * sheet.rows);
   const skipN = $derived(Math.min(Math.max(0, Math.floor(numberOrNull(skip) ?? 0)), Math.max(0, perPage - 1)));
-  const cells = $derived<Array<Accession | null>>([...Array(skipN).fill(null), ...picked]);
+  const cells = $derived<Array<Item | null>>([...Array(skipN).fill(null), ...picked]);
   // The box says what the sheet uses: 99 typed on a 30-cell sheet, or 25 left over from a 30-cell sheet after choosing a
   // 24-cell one, becomes the clamped figure in the box itself, not only in the print (round twenty-three, 18).
   $effect(() => {
     if (skip != null && skip !== skipN && (skip < 0 || skip > perPage - 1 || !Number.isInteger(skip))) skip = skipN;
   });
   const pages = $derived(Array.from({ length: Math.max(1, Math.ceil(cells.length / perPage)) }, (_, p) => cells.slice(p * perPage, (p + 1) * perPage)));
-  const sourceLine = (a: Accession) => [a.sourceFrom, a.acquired].filter(Boolean).join(' · ');
+  const sourceLine = (a: Item) => [a.sourceFrom, a.when].filter(Boolean).join(' · ');
+  /** A batch's own line: the date sown, the count, the method. */
+  const batchLine = (a: Item) => [a.when ? `sown ${a.when}` : null, a.count != null ? `${a.count} ${a.method === 'seed' || !a.method ? (a.count === 1 ? 'seed' : 'seeds') : a.method}` : null].filter(Boolean).join(' · ');
   const tiny = $derived(sheet.h < 16);
 </script>
 
@@ -150,7 +163,7 @@
 </svelte:head>
 
 <div class="ui">
-  <PageHead title="Labels" kick="My plants" places={false} sub="Pick plants and a sheet, then print at 100%; each label carries the number, the name and a code that opens the plant." />
+  <PageHead title="Labels" kick="My plants" places={false} sub="Pick plants or batches and a sheet, then print at 100%; each label carries the number, the name and a code that opens the record." />
 
   <div class="cult opts">
     <div class="body">
@@ -175,19 +188,30 @@
     </div>
   </div>
 
-  <div class="secrule"><h2>Plants</h2><div class="line"></div><span class="n">{picked.length} of {all.length} picked</span></div>
+  <div class="secrule"><h2>Plants</h2><div class="line"></div><span class="n">{picked.filter((x) => !x.batch).length} of {all.filter((x) => !x.batch).length} picked</span></div>
   <div class="toolrow" style="position: static">
     <input id="lb-q" class="searchbar" type="search" placeholder="Filter by name, number, field number…" aria-label="Filter plants" bind:value={q} />
     <button class="chipbtn" onclick={() => pickAll(true)}>Pick all shown</button>
     <button class="chipbtn" onclick={() => pickAll(false)}>Clear shown</button>
   </div>
   <div class="cult picklist">
-    {#each filtered as a (a.id)}
-      <label class="pick"><input type="checkbox" checked={chosen.has(a.id)} onchange={() => toggle(a.id)} /><span class="accno">{accNo(a)}</span><span class="nm"><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}‘{a.cultivar}’{/if}</span>{#if a.fieldNumber}<span class="fnchip">{a.fieldNumber}</span>{/if}{#if a.locationId}<span class="faint">{collection.locationName(a.locationId)}</span>{/if}</label>
+    {#each plantsShown as a (a.id)}
+      <label class="pick"><input type="checkbox" checked={chosen.has(a.id)} onchange={() => toggle(a.id)} /><span class="accno">{a.no}</span><span class="nm"><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}‘{a.cultivar}’{/if}</span>{#if a.fieldNumber}<span class="fnchip">{a.fieldNumber}</span>{/if}{#if a.locationId}<span class="faint">{collection.locationName(a.locationId)}</span>{/if}</label>
     {:else}
       <div class="none">No plants match.</div>
     {/each}
   </div>
+
+  {#if batchesShown.length || collection.sowings.some((b) => b.status === 'active')}
+    <div class="secrule"><h2>Batches</h2><div class="line"></div><span class="n">{picked.filter((x) => x.batch).length} of {all.filter((x) => x.batch).length} picked</span></div>
+    <div class="cult picklist" id="batch-picks">
+      {#each batchesShown as a (a.id)}
+        <label class="pick"><input type="checkbox" checked={chosen.has(a.id)} onchange={() => toggle(a.id)} /><span class="accno">{a.no}</span><span class="nm"><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}‘{a.cultivar}’{/if}</span><span class="faint">{batchLine(a)}</span></label>
+      {:else}
+        <div class="none">No batches match.</div>
+      {/each}
+    </div>
+  {/if}
 
   <div class="secrule"><h2>Preview</h2><div class="line"></div><span class="n">{pages.length} {pages.length === 1 ? 'page' : 'pages'}</span></div>
   <p class="small muted previewnote">The sheet is shown at its true size, {sheet.page[0]} mm wide; on a narrow screen it scrolls sideways.</p>
@@ -203,8 +227,9 @@
           {#if a}
             {#if withQr && sheet.qr && qrs[a.id]}<div class="qr">{@html qrs[a.id]}</div>{/if}
             <div class="txt">
-              <div class="no">{accNo(a)}{#if a.fieldNumber} <span class="fn">{a.fieldNumber}</span>{/if}</div>
-              <div class="sci"><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}<span class="cv">‘{a.cultivar}’</span>{/if}{#if kindOf(a) === 'hybrid' && a.parentage}{' '}<span class="cv">({a.parentage})</span>{/if}</div>
+              <div class="no">{a.no}{#if a.fieldNumber} <span class="fn">{a.fieldNumber}</span>{/if}</div>
+              <div class="sci"><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}<span class="cv">‘{a.cultivar}’</span>{/if}{#if kindOf(a.rec) === 'hybrid' && a.parentage}{' '}<span class="cv">({a.parentage})</span>{/if}</div>
+              {#if a.batch && batchLine(a)}<div class="src">{batchLine(a)}</div>{/if}
               {#if withCare && care[a.id]}<div class="care" class:unchecked={care[a.id] === 'climate not checked'}>{care[a.id]}</div>{:else if withCare && care[a.id] === null}<div class="care unchecked">care line not checked: the reference was not reached</div>{/if}
               {#if withSource && sourceLine(a)}<div class="src">{sourceLine(a)}</div>{/if}
             </div>

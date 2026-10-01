@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildDossier } from '$dossier/build';
+import { parseDossier } from '$dossier/schema';
 import { fixtureFetcher } from '$dossier/fetch';
 import { welwitschia, copiapoa, refused } from '../../fixtures/upstream';
 
@@ -235,5 +236,17 @@ describe('round five: an offline re-derivation carries the name block', () => {
     // By name, the carried block is ignored and the backbone is asked (and here refused).
     const byName = await buildDossier('Copiapoa cinerea', { fetcher: fixtureFetcher(table), builtBy: 'node', quick: true, taxon: { key: prev.key, name: prev.name } });
     expect(byName.ok).toBe(false);
+  });
+});
+
+describe('the read-time mends are no-ops on a fresh build (round forty-one, R5)', () => {
+  it('parsing a dossier the builder just wrote changes nothing: the sea rule, the thumbnail form, the carried chain, the photo set and the literature filter all already hold in the file', async () => {
+    for (const [name, table] of [['Welwitschia', welwitschia()], ['Copiapoa cinerea', copiapoa()]] as const) {
+      const r = await buildDossier(name, opts(table));
+      expect(r.ok, name).toBe(true);
+      if (!r.ok) return;
+      const file = JSON.parse(JSON.stringify(r.dossier));
+      expect(JSON.parse(JSON.stringify(parseDossier(file))), name).toEqual(file);
+    }
   });
 });

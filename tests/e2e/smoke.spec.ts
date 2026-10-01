@@ -124,10 +124,15 @@ test('a refusal is rendered as "not checked", never as an absence', async ({ pag
   await expect(page.locator('.factgrid', { hasText: 'not a statement that none exist' })).toBeVisible();
 });
 
-test('unknown species is a 404 with a way forward', async ({ page }) => {
+test('unknown species is a 404 with a way forward: what the reference holds of the genus, and where the name is held (round forty-one, R15)', async ({ page }) => {
   const res = await page.goto('/species/nonsensia-fakeii');
   expect(res?.status()).toBe(404);
-  await expect(page.getByText('no dossier yet')).toBeVisible();
+  await expect(page.locator('.err')).toContainText('The reference has no Nonsensia: it is built from a fixed list of names');
+  await expect(page.locator('.err a', { hasText: 'POWO' })).toHaveAttribute('href', /powo\.science\.kew\.org.*Nonsensia%20fakeii/);
+  await expect(page.locator('.err a', { hasText: 'add it as a plant' })).toHaveAttribute('href', '/plants/new?species=Nonsensia%20fakeii');
+  // A genus the reference holds and takes whole: the count, and that the name is one Kew does not accept under it.
+  await page.goto('/species/copiapoa-fakeii');
+  await expect(page.locator('.err')).toContainText('The reference has 2 Copiapoa species, and takes the genus whole');
 });
 
 test('add a plant, record an event, survive a reload', async ({ page }) => {
@@ -639,7 +644,10 @@ test('sync: two devices share one encrypted vault; changes and photos cross both
   await a.click('#sync-start');
   const key = (await a.locator('#vault-key').textContent())!.trim();
   expect(key).toMatch(/^([A-HJKMNP-TV-Z2-9]{5}-){5}[A-HJKMNP-TV-Z2-9]{5}$/);
-  await a.check('#key-saved');
+  await expect(a.locator('#sync-create')).toBeDisabled(); // until the last group is typed back (round forty-one, R9)
+  await a.fill('#key-typeback', 'wrong');
+  await expect(a.locator('#sync-create')).toBeDisabled();
+  await a.fill('#key-typeback', key.slice(-5).toLowerCase());
   await a.click('#sync-create');
   await expect(a.locator('.card', { hasText: 'Status' })).toContainText('Synced');
   await expect(a.locator('.card', { hasText: 'Waiting to send' })).toContainText('0');
@@ -725,7 +733,7 @@ test('sync: an offline edit uploaded late is still discovered, and a backup merg
   await a.goto('/sync');
   await a.click('#sync-start');
   const key = (await a.locator('#vault-key').textContent())!.trim();
-  await a.check('#key-saved');
+  await a.fill('#key-typeback', key.slice(-5)); // the last group typed back, not a box ticked (round forty-one, R9)
   await a.click('#sync-create');
   await expect(a.locator('.card', { hasText: 'Status' })).toContainText('Synced');
   const B = await browser.newContext();
@@ -1210,8 +1218,9 @@ test('the browser talks to no third-party host while a name is typed, and the er
   await page.waitForTimeout(600);
   expect(away).toEqual([]);
   await page.goto('/species/nonsensia-fakeii');
-  await expect(page.locator('.err')).toContainText('the reference is built from a fixed list of names');
+  await expect(page.locator('.err')).toContainText('The reference has no Nonsensia: it is built from a fixed list of names');
   await expect(page.locator('.err')).not.toContainText('will be prepared');
+  await expect(page.locator('.err')).not.toContainText('yet');
 });
 
 test('offline, a plant page not yet cached still opens from the section shell', async ({ browser }) => {
@@ -2523,4 +2532,35 @@ test('round forty: a measurement typed in inches is stored in millimetres and re
   await page.goto('/plants/2026-0001');
   await expect(page.locator('.card', { hasText: 'Diameter' })).toContainText('50.8');
   await expect(page.locator('.tlrow', { hasText: 'Measure' })).toContainText('Diameter 50.8 mm');
+});
+
+test('round forty-one: a batch gets a label from its own page, with the sowing line on it (R10)', async ({ page }) => {
+  await page.goto('/propagation/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.fill('#s-count', '20');
+  await page.getByRole('button', { name: 'Start batch' }).click();
+  await expect(page).toHaveURL(/\/propagation\/S\d{4}-\d{3}$/);
+  const no = page.url().split('/').pop()!;
+  await page.getByRole('link', { name: 'Label' }).click();
+  await expect(page).toHaveURL(/\/labels\?batch=/);
+  await expect(page.locator('#batch-picks .pick input')).toBeChecked();
+  await expect(page.locator('.sheets .label', { hasText: no })).toHaveCount(1);
+  await expect(page.locator('.sheets .label', { hasText: no }).locator('.src').first()).toContainText('20 seeds');
+});
+
+test('round forty-one: a plant with no place, no photograph and no site offers "Set your site", and the step goes once a site is set (own)', async ({ page }) => {
+  await page.goto('/plants/new');
+  await page.fill('#species-name', 'Copiapoa cinerea');
+  await page.locator('#species-name').blur();
+  await addPlant(page);
+  const setup = page.locator('.setup');
+  await expect(setup.locator('.setuprow', { hasText: 'Set your site' })).toBeVisible();
+  await setup.locator('.setuprow', { hasText: 'Set your site' }).click();
+  await expect(page).toHaveURL(/\/settings#site$/);
+  await page.getByLabel('Latitude').fill('-25.5');
+  await page.getByLabel('Longitude').fill('-70.3');
+  await page.getByLabel('Latitude').locator('xpath=ancestor::div[contains(@class,"cult")]').getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByRole('button', { name: 'Clear' })).toBeVisible();
+  await page.goto('/plants/2026-0001');
+  await expect(setup.locator('.setuprow', { hasText: 'Set your site' })).toHaveCount(0);
+  await expect(setup.locator('.setuprow', { hasText: 'Give it a place' })).toBeVisible();
 });

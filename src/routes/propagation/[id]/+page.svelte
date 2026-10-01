@@ -275,6 +275,7 @@
     </div>
     <div class="acts">
       <a class="btn" href="/species/{speciesSlug(s.taxonName)}">Species page</a>
+      <a class="btn" href="/labels?batch={s.id}">Label</a>
       <button class="btn" onclick={startEdit}>Edit</button>
       {#if s.status === 'active'}
         {#if confirmDone}

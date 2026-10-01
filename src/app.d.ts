@@ -1,6 +1,11 @@
 /// <reference types="@cloudflare/workers-types" />
 declare global {
   namespace App {
+    interface Error {
+      message: string;
+      /** A species address the reference does not hold: the name as read from the address, what the reference holds of its genus, and whether the genus is one the list takes whole (round forty-one, R15). */
+      species?: { name: string; genus: string; inGenus: number; wholeGenus: boolean; accepted?: string };
+    }
     interface Platform {
       env: {
         STORE?: R2Bucket;

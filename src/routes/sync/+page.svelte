@@ -16,7 +16,6 @@
   let mode = $state<'idle' | 'create' | 'join'>('idle');
   let freshKey = $state('');
   let typed = $state('');
-  let saved = $state(false);
   let err = $state('');
   let busy = $state(false);
   let showKey = $state(false);
@@ -43,9 +42,14 @@
     else qr = '';
   });
 
+  /** The last group of the fresh key, typed back: the one proof the key was kept, not glanced at (round forty-one, R9). */
+  let typedBack = $state('');
+  let copied = $state(false);
+  const saved = $derived(!!freshKey && typedBack.trim().toUpperCase() === freshKey.slice(-5).toUpperCase());
   function startCreate() {
     freshKey = newVaultKey();
-    saved = false;
+    typedBack = '';
+    copied = false;
     err = '';
     mode = 'create';
   }
@@ -121,7 +125,7 @@
   async function copyKey(k: string) {
     try {
       await navigator.clipboard.writeText(k);
-      saved = true;
+      copied = true;
     } catch {
       /* the key is on screen */
     }
@@ -173,7 +177,7 @@
           <div>
             <div class="keytext mono" id="vault-key">{sync.key}</div>
             <p class="small muted">On the other device: My plants → Sync → <b>I have a key</b>, then scan this code or type the key. Anyone with this key can read your collection; keep it where you keep passwords.</p>
-            <button class="btn" onclick={() => copyKey(sync.key!)}>{saved ? 'Copied' : 'Copy'}</button>
+            <button class="btn" onclick={() => copyKey(sync.key!)}>{copied ? 'Copied' : 'Copy'}</button>
           </div>
         </div>
       </div>
@@ -202,11 +206,14 @@
         <div class="qr">{@html qr}</div>
         <div>
           <div class="keytext mono" id="vault-key">{freshKey}</div>
-          <p class="small muted">This is the only key. It encrypts your collection and it is what a second device needs. If it is lost the vault cannot be opened by anyone, including us; your collection on this device and in backups is unaffected. Put it in a password manager now.</p>
+          <p class="small muted">This is the only key. It encrypts your collection and it is what a second device needs. There is no account behind it and no way to recover it: if it is lost the vault cannot be opened by anyone, including us; your collection on this device and in backups is unaffected. Put it in a password manager, or print this card and keep it with your seed packets.</p>
           <div class="row">
-            <button class="btn" onclick={() => copyKey(freshKey)}>{saved ? 'Copied' : 'Copy key'}</button>
-            <label class="check"><input id="key-saved" type="checkbox" bind:checked={saved} /> I have saved it</label>
+            <button class="btn" onclick={() => copyKey(freshKey)}>{copied ? 'Copied' : 'Copy key'}</button>
+            <button class="btn" type="button" onclick={() => window.print()}>Print this card</button>
+            <a class="btn" href="/backup">Take a backup first</a>
           </div>
+          <!-- Typing the last group back is the one check that the key was read and kept, not only glanced at (round forty-one, R9). -->
+          <label class="typeback"><span>Type the last five symbols of the key to go on</span><input id="key-typeback" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="5" bind:value={typedBack} /></label>
         </div>
       </div>
       {#if err}<p class="bad" id="sync-err" role="alert">{err}</p>{/if}
@@ -267,6 +274,15 @@
 {/if}
 
 <style>
+  .typeback { display: grid; gap: 4px; margin-top: 12px; max-width: 320px; }
+  .typeback span { font-size: 12px; color: var(--ink2); }
+  .typeback input { font-family: var(--mono); letter-spacing: 0.12em; text-transform: uppercase; }
+  /* "Print this card": the key card alone on paper, the QR code and the key, nothing else of the page (round forty-one, R9). */
+  @media print {
+    :global(#topbar), :global(#tabbar), :global(footer.credits), :global(.phead), .pair .row, .pair .typeback, .pair .actions { display: none !important; }
+    .pair { box-shadow: none; border: 1px solid #000; }
+    .keytext { font-size: 18px; }
+  }
   .cult { margin-top: 12px; }
   .cult .body { padding: 14px 17px; font-family: var(--ui); }
   .prose p { margin: 0 0 10px; font-size: 14px; line-height: 1.55; color: var(--ink2); }
@@ -278,7 +294,6 @@
   .qr :global(svg) { width: 100%; height: 100%; display: block; }
   .keytext { font-size: 17px; letter-spacing: 0.06em; word-break: break-all; padding: 10px 12px; background: var(--sunk); border-radius: 8px; margin-bottom: 10px; user-select: all; }
   .keyin { width: 100%; font-size: 16px; letter-spacing: 0.06em; padding: 10px 12px; border: 1px solid var(--rule); border-radius: 9px; background: var(--card); color: var(--ink); text-transform: uppercase; }
-  .check { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; }
   .scan { width: 100%; max-height: 60vh; border-radius: 10px; background: #000; }
   .bad { color: var(--bad); font-size: 13.5px; margin: 8px 0 0; }
   .notice { margin: 12px 0 0; padding: 10px 14px; border: 1px solid var(--rule); border-radius: 9px; font-family: var(--ui); font-size: 13.5px; line-height: 1.5; color: var(--ink2); }

@@ -523,10 +523,13 @@ describe('round sixteen', () => {
     const again = (await reload()) as typeof collection;
     expect(again.accession('A-2')).toBeUndefined();
     expect(again.accession('B-1')?.notes).toBe('back');
-    expect(mem.changes.size).toBe(before + 1); // one removal written, and it syncs like any change
+    // one removal written, and it syncs like any change; and B-1, a record of the oldest shape, is given its number as a change
+    // of its own on the same load (round forty-one, R4), which is also written once
+    expect(mem.changes.size).toBe(before + 2);
+    expect(again.accession('B-1')?.acc).toBe('B-1');
     const third = (await reload()) as typeof collection;
     expect(third.accession('A-2')).toBeUndefined();
-    expect(mem.changes.size).toBe(before + 1); // once
+    expect(mem.changes.size).toBe(before + 2); // once
     void collection;
   });
   it('several plants at once are one commit: a refused write stores none of them and issues no number; a good one stores all, consecutively (round sixteen, 14)', async () => {

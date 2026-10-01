@@ -7,6 +7,7 @@
   import { sync } from '$lib/sync/engine.svelte';
   import { collection } from '$lib/db/collection.svelte';
   import { toast } from '$lib/ui/toast.svelte';
+  import StateNote from '$lib/ui/StateNote.svelte';
 
   let { kind, label, waiting }: { kind: 'accession' | 'sowing' | 'location'; label: string; waiting: { id: string; missing: string[] } } = $props();
   const WORD: Record<string, string> = { taxonName: 'name', status: 'status', method: 'method', sown: 'date', count: 'count', name: 'name' };
@@ -22,7 +23,7 @@
   }
 </script>
 
-<p class="muted" id="waiting-notice">{label}'s record is on this device but not whole: it has no {missing.join(' and no ')}. {#if setAside}A batch set aside on <a href="/sync">Sync</a> (from a newer build) may hold {them}; this build will read it when it can.{:else}A change from a newer build may still bring {them}, or the file it came from never had {them}.{/if} Until then the {what} is not listed.</p>
+<StateNote word="Waiting" id="waiting-notice">{label}'s record is on this device but not whole: it has no {missing.join(' and no ')}. {#if setAside}A batch set aside on <a href="/sync">Sync</a> (from a newer build) may hold {them}; this build will read it when it can.{:else}A change from a newer build may still bring {them}, or the file it came from never had {them}.{/if} Until then the {what} is not listed. <a href="/about/how#glossary">Glossary</a>.</StateNote>
 {#if offerStatus}
   <p><button class="btn pri" onclick={markGrowing}>Mark it as growing</button></p>
 {/if}

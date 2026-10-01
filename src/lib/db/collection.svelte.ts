@@ -69,6 +69,16 @@ class Collection {
         // once: the removal is a change like any other, so it syncs, and after it nothing matches again (round sixteen, 5).
         const revived = revivedByImport(changes);
         if (revived.length) await this.commit(revived.map((r) => ({ t: this.tick(), kind: r.kind, id: r.id, field: '_deleted', value: true })), 'local').catch(() => {});
+        // The oldest shape gave a plant or a batch its number as its id and no `acc`/`no` field; readers have carried both
+        // shapes since. A load writes the number as a field, once, as an ordinary change that syncs, so every record is
+        // one shape and the dual paths can go (round forty-one, R4). `accNo`/`sowNo` keep reading either, for files in flight.
+        const oneShape: Change[] = [];
+        for (const r of this.state.values()) {
+          if (r._deleted) continue;
+          if (r.kind === 'accession' && r.acc == null) oneShape.push({ t: this.tick(), kind: 'accession', id: r.id, field: 'acc', value: r.id });
+          if (r.kind === 'sowing' && r.no == null) oneShape.push({ t: this.tick(), kind: 'sowing', id: r.id, field: 'no', value: r.id });
+        }
+        if (oneShape.length) await this.commit(oneShape, 'local').catch(() => {});
         onOtherTabWrite((what) => {
           // Another tab replaced the whole collection from a file: this tab's fold is of a log that no longer exists, and a
           // note saved here would be diffed against records the new log does not have. The page reloads onto the new one.

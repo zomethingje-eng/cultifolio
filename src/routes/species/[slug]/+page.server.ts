@@ -1,6 +1,9 @@
 import { error, redirect } from '@sveltejs/kit';
 import { getDossier, resolveSlug, getIndex, getGenus } from '$lib/server/dossiers';
-import { synonymOf, synonymInIndex } from '$lib/server/synonyms';
+import { synonymOf, synonymInIndex, nameFromSlug } from '$lib/server/synonyms';
+import generaList from '../../../../scripts/specialist-genera.txt?raw';
+/** The genera the species list takes whole (the file the derivation reads), for the 404 to say so. */
+const WHOLE_GENERA = new Set(generaList.split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#')));
 import { limited } from '$lib/server/sync';
 import { genusOf, slugify, canonicalSynonym } from '$core/names';
 import { worldSvg, regionSvg } from '$lib/map/still';
@@ -27,11 +30,18 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
     }
     // A 404 is cached for a few minutes only: the reference grows, and the backbone's answer is cached a day upstream already (round thirty-five, R1-13).
     setHeaders({ 'cache-control': 'public, max-age=300' });
-    if (syn) error(404, { message: `${syn.matched} is ${syn.acceptedName} in the GBIF backbone, and that species is not in the reference yet` });
-    error(404, { message: `No dossier for “${params.slug}” yet` });
+    // What the 404 can say that helps: the name as asked, how many of its genus the reference holds, and whether the
+    // genus is taken whole or only by the cultivated count (round forty-one, R15). An aloe grower's most common first
+    // visit was a dead end that said nothing.
+    const asked = nameFromSlug(params.slug);
+    const genus = asked.split(' ')[0] ?? '';
+    const index = await getIndex(platform, fetch);
+    const species = genus ? { name: asked, genus, inGenus: index.filter((e) => genusOf(e.name) === genus).length, wholeGenus: WHOLE_GENERA.has(genus), ...(syn ? { accepted: syn.acceptedName } : {}) } : undefined;
+    if (syn) error(404, { message: `${syn.matched} is ${syn.acceptedName} in the GBIF backbone, and that species is not in the reference`, species });
+    error(404, { message: `No dossier for “${params.slug}”`, species });
   }
   const loaded = await getDossier(platform, fetch, key);
-  if (!loaded) error(404, { message: `No dossier for “${params.slug}” yet` });
+  if (!loaded) error(404, { message: `No dossier for “${params.slug}”` });
   // The page's own slug is the index's: a homonym whose plain slug the index gave to the other species carries that
   // plain slug in its file, and every link, Compare, Follow and note keyed on it would point at the other (round seventeen, 6).
   const d = params.slug !== loaded.slug ? { ...loaded, slug: params.slug } : loaded;
