@@ -1,4 +1,21 @@
 /* Cultifolio — the "Bench" look, carried over from v2 as tokens. */
+/*
+ * The fallback faces, with the web fonts' metrics. The two faces every page sets in arrive after the first paint on a
+ * phone's network, and text set in the system's font until then reflowed when they landed: a layout shift of 0.08 to
+ * 0.10 on the species and home pages in Lighthouse, and 0.17 on the species page with the fonts held back locally. Each local face the stacks fall back to is
+ * declared again with ascent, descent, line gap and size adjusted to the web font's own, so a line set in it is the
+ * height and nearly the width it will be when the web font replaces it. The figures are the fonts' tables (capsize's
+ * metrics of Newsreader, Public Sans, Georgia, Times New Roman, Noto Serif, Segoe UI, Roboto, Helvetica Neue and
+ * Arial); a device without the local face skips its entry (round forty-four, 1).
+ */
+@font-face { font-family: 'Newsreader Fallback Georgia'; src: local('Georgia'); ascent-override: 76.4676%; descent-override: 27.5699%; size-adjust: 96.1192%; }
+@font-face { font-family: 'Newsreader Fallback Times'; src: local('Times New Roman'), local('TimesNewRomanPSMT'); ascent-override: 69.6835%; descent-override: 25.124%; line-gap-override: 0%; size-adjust: 105.4769%; }
+@font-face { font-family: 'Newsreader Fallback Noto'; src: local('Noto Serif Regular'), local('NotoSerif-Regular'); ascent-override: 82.5053%; descent-override: 29.7468%; size-adjust: 89.0852%; }
+@font-face { font-family: 'Public Sans Fallback Segoe'; src: local('Segoe UI'), local('SegoeUI'); ascent-override: 90.0944%; descent-override: 21.3382%; size-adjust: 105.4449%; }
+@font-face { font-family: 'Public Sans Fallback Roboto'; src: local('Roboto Regular'), local('Roboto-Regular'); descent-override: 21.4087%; size-adjust: 105.0977%; }
+@font-face { font-family: 'Public Sans Fallback Helvetica Neue'; src: local('Helvetica Neue'), local('HelveticaNeue'); ascent-override: 91.4439%; descent-override: 21.6578%; line-gap-override: 0%; size-adjust: 103.8889%; }
+@font-face { font-family: 'Public Sans Fallback Arial'; src: local('Arial'), local('ArialMT'); ascent-override: 90.5905%; descent-override: 21.4557%; line-gap-override: 0%; size-adjust: 104.8675%; }
+
 :root {
   --bg: #f3f5f4; --card: #fff; --sunk: #e8ecea;
   --ink: #16211d; --ink2: #586761; --ink3: #5f6d67; /* --ink3 is every hint and source line: 5.4:1 on the card, 4.6:1 on the sunk field */
@@ -11,8 +28,8 @@
   --r: 10px;
   --sh: 0 1px 2px rgba(16, 33, 29, 0.055), 0 3px 10px rgba(16, 33, 29, 0.04);
   --sh2: 0 3px 7px rgba(16, 33, 29, 0.08), 0 12px 24px rgba(16, 33, 29, 0.07);
-  --ui: 'Public Sans Variable', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --serif: 'Newsreader Variable', Georgia, 'Times New Roman', serif;
+  --ui: 'Public Sans Variable', 'Public Sans Fallback Segoe', 'Public Sans Fallback Roboto', 'Public Sans Fallback Helvetica Neue', 'Public Sans Fallback Arial', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --serif: 'Newsreader Variable', 'Newsreader Fallback Georgia', 'Newsreader Fallback Times', 'Newsreader Fallback Noto', Georgia, 'Times New Roman', serif;
   --mono: 'DM Mono', ui-monospace, Menlo, Consolas, monospace;
   --maxw: 1180px;
   --section-gap: 36px; /* one gap between sections on every page */
