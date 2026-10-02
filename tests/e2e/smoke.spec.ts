@@ -2633,3 +2633,20 @@ test('round forty-eight: a window opened partway (a letter, ?at=) fills in the r
   await expect(page.locator('.rows .before')).toHaveCount(0); // nothing earlier is left
   await expect(page.locator('.rows h2.letter').first()).toContainText('C');
 });
+
+test('round forty-eight: a letter tapped on a phone lands with its heading just under the pinned search row (4)', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await page.locator('.letters a', { hasText: 'W' }).click();
+  await page.waitForTimeout(300);
+  const bar = await page.locator('.stickyhead .toolrow').boundingBox();
+  const h = await page.locator('#l-W').boundingBox();
+  expect(h!.y).toBeGreaterThanOrEqual(bar!.y + bar!.height); // not under the row
+  // and right below it, unless the fixture's short page has no further to scroll (W is its last letter)
+  const atEnd = await page.evaluate(() => window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 1);
+  if (!atEnd) expect(h!.y).toBeLessThan(bar!.y + bar!.height + 16);
+  // the computed offset is the pinned row's, not the head's, which is `display: contents` on a phone and has no height
+  const under = await page.evaluate(() => { const head = document.querySelector<HTMLElement>('.stickyhead')!; const row = document.querySelector<HTMLElement>('.stickyhead .toolrow')!; return [head.offsetHeight, row.offsetHeight]; });
+  expect(under[0]).toBe(0);
+  expect(under[1]).toBeGreaterThan(60);
+});

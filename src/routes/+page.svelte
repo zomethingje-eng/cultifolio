@@ -166,10 +166,13 @@
     // fixed scroll margin that left the previous letter's last card showing above the heading on a phone (round forty-nine).
     const h = document.getElementById(`l-${l}`);
     if (h) {
+      // On a desktop the whole head is pinned and has a height; on a phone it is `display: contents` (height 0) and the
+      // search row inside it is what is pinned. The larger of the two is what is in the way. (Reading the head's computed
+      // position found "sticky" on the phone too, where the rule still applies to a box that no longer exists, and placed
+      // the heading under the row; the author's phone, M.)
       const pinned = document.querySelector<HTMLElement>('.stickyhead .toolrow');
       const head = document.querySelector<HTMLElement>('.stickyhead');
-      const headPinned = head && getComputedStyle(head).position === 'sticky';
-      const under = 44 + ((headPinned ? head : pinned)?.offsetHeight ?? 0) + 4;
+      const under = 44 + Math.max(head?.offsetHeight ?? 0, pinned?.offsetHeight ?? 0) + 4;
       window.scrollTo({ top: h.getBoundingClientRect().top + window.scrollY - under });
     }
     history.replaceState(history.state, '', `#l-${l}`);
