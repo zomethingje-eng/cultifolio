@@ -99,8 +99,6 @@ export function cutBefore(list: Change[], at: number): number {
 const WAS = 'sync-was';
 const BATCH_MAX = 2000;
 /** While the page is visible, pull this often even with nothing to push: a laptop left on /plants follows the phone. */
-/** The Web Lock one browser's tabs take turns on. */
-const SYNC_LOCK = 'cultifolio-sync';
 const IDLE_PULL_MS = 5 * 60_000;
 
 const utf8 = new TextEncoder();
@@ -420,19 +418,6 @@ class Sync {
   }
 
   async run(): Promise<void> {
-    if (!this.configured || !this.keys || !this.meta || this.busy) return;
-    // One run per browser at a time: two tabs each pushing and pulling the same vault with their own copy of the cursor
-    // and the arrival list wrote the sync record over each other, and one tab's pull could be listed as had by the other
-    // before it was stored (round forty-nine, 1). The other tab's run is tried again when the lock is free.
-    const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
-    if (!locks) return this.runLocked();
-    await locks.request(SYNC_LOCK, { ifAvailable: true }, async (lock) => {
-      if (lock) await this.runLocked();
-      else this.schedule(4000);
-    });
-  }
-
-  private async runLocked(): Promise<void> {
     if (!this.configured || !this.keys || !this.meta || this.busy) return;
     // The generation this run belongs to: "Stop syncing" or a new vault during the run makes it stale, and a stale run
     // leaves the status, the busy flag and the run count to the vault that replaced it (round sixteen, 2).
