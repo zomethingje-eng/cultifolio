@@ -83,7 +83,7 @@
   let rows = $state<Row[]>(data.rows);
   /** Bumped when the server's window replaces the rows (a new grouping, letter or opened row): a fetch begun before it lands nowhere (round forty-nine, 2). */
   let rowsGen = 0;
-  $effect(() => { data.rows; data.start; start = data.start; rows = data.rows; rowsGen++; }); // a new grouping, letter or opened row: start again from what the server sent
+  $effect(() => { data.rows; data.start; start = data.start; rows = data.rows; rowsGen++; tailPad = 0; }); // a new grouping, letter or opened row: start again from what the server sent
   const visibleRows = $derived(rows);
   const end = $derived(start + rows.length);
   let sentinel = $state<HTMLElement | null>(null);
@@ -131,6 +131,7 @@
       const wasAt = anchor?.getBoundingClientRect().top;
       rows = [...got.rows.map((r) => ({ ...r, items: undefined })), ...rows];
       start = at;
+      tailPad = 0;
       await tick();
       if (anchor && wasAt != null && anchor.isConnected) window.scrollBy(0, anchor.getBoundingClientRect().top - wasAt);
       return got.rows.length > 0;
@@ -194,9 +195,17 @@
       const head = document.querySelector<HTMLElement>('.stickyhead');
       const under = 44 + Math.max(head?.offsetHeight ?? 0, pinned?.offsetHeight ?? 0) + 4;
       window.scrollTo({ top: h.getBoundingClientRect().top + window.scrollY - under });
+      // A letter near the end (W, Z) has fewer rows below it than a screen holds, so the page could not scroll far enough
+      // and the browser clamped at the footer with the heading just above the fold (the author's phone, round forty-nine).
+      // The list is padded by what was short, so the heading sits under the bar; the padding goes once a chunk has filled in above.
+      const short = h.getBoundingClientRect().top - under;
+      tailPad = short > 2 ? short : 0;
+      if (tailPad) { await tick(); window.scrollTo({ top: h.getBoundingClientRect().top + window.scrollY - under }); }
     }
     history.replaceState(history.state, '', `#l-${l}`);
   }
+  /** Padding under the rows after a jump to a letter the page is too short to place; see `jumpToLetter`. Dropped once a chunk has filled in above (the page is tall enough then, and taking it away moves nothing on screen) or the server's window replaces the rows. */
+  let tailPad = $state(0);
   let lettersEl = $state<HTMLElement | null>(null);
   /** Scroll the chips and the letter index back under the pinned search row, and put the keyboard on the first letter. */
   function showLetters() {
@@ -545,7 +554,7 @@
       <p class="seccount" style="margin-top: 14px" role="status">{fmtN(shownFound.length)} {shownFound.length === 1 ? 'match' : 'matches'} of {fmtN(data.total)}{chip !== 'all' && shownFound.length !== found.length ? ` (${fmtN(found.length - shownFound.length)} more without the chip)` : ''}; Enter opens the first.</p>
     {/if}
   {:else}
-    <div class="rows" class:withletters={data.letters.length > 1}>
+    <div class="rows" class:withletters={data.letters.length > 1} style:padding-bottom={tailPad ? `${tailPad}px` : undefined}>
       {#if start > 0}<div class="more before" bind:this={topSentinel}><a class="btn small" href="?by={data.by}{chip !== 'all' ? `&chip=${chip}` : ''}&at={Math.max(0, start - 60)}" onclick={async (e) => { e.preventDefault(); if (!(await growBefore())) location.href = (e.currentTarget as HTMLAnchorElement).href; }}>Earlier {data.by === 'genus' ? 'genera' : data.by === 'family' ? 'families' : 'regions'}</a></div>{/if}
       {#each visibleRows as r, i (r.id)}
         {#if r.letter && (i === 0 || rows[i - 1].letter !== r.letter)}<h2 class="letter" id="l-{r.letter}">{r.letter}</h2>{/if}

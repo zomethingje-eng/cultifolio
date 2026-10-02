@@ -48,3 +48,7 @@ Three reviews read together: my own deep pass after round forty-eight, the first
 ## Counts
 
 437 unit tests on 44 files (one new), 89 e2e (three new), local live check 10 of 10.
+
+## After the deploy (the author's phone)
+
+A tap on W landed at the foot of the page, Ziziphus and the footer showing, the W heading just above the fold: W is the last letter but one, its window is twenty rows, shorter than a screen, so the page could not scroll far enough to put the heading under the bar and the browser clamped at the end. (The old build had hidden this by filling to A.) After a jump the list is padded by what the page was short, so the heading is placed; the padding goes once a chunk fills in above or the server's window replaces the rows. e2e. 90 e2e.

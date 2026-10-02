@@ -2739,3 +2739,15 @@ test('round forty-nine: a place takes plants in from a ticked list, in one commi
   await page.locator('.rows a.row', { hasText: 'Welwitschia' }).click();
   await expect(page.locator('.tlrow', { hasText: 'to Cold frame' })).toBeVisible();
 });
+
+test('round forty-nine: a letter near the end of the catalogue still lands with its heading under the bar; the list is padded, and the padding goes once rows fill in above (4)', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await page.locator('.letters a', { hasText: 'W' }).click();
+  await page.waitForTimeout(300);
+  const bar = await page.locator('.stickyhead .toolrow').boundingBox();
+  const h = await page.locator('#l-W').boundingBox();
+  expect(h!.y).toBeGreaterThanOrEqual(bar!.y + bar!.height);
+  expect(h!.y).toBeLessThan(bar!.y + bar!.height + 40); // placed, not clamped at the footer
+  await expect(page.locator('.rows')).toHaveAttribute('style', /padding-bottom/); // the fixture's rows are all loaded, so nothing fills in and the padding stays
+});
