@@ -79,11 +79,11 @@ if (!skip.has('names')) {
 // The species page is one the deployment's own corpus holds: the first in its sitemap, unless LIVE_CHECK_SPECIES names one
 // (a fixed slug would 404 on a corpus without it and send the deployer to roll back a good deploy; round twenty-five, 10).
 let species = process.env.LIVE_CHECK_SPECIES;
+const fresh = `check=${Date.now()}`;
 if (!species) {
   // The sitemap is an index of files since round forty; the first file names the species pages.
   // Asked past the edge cache (a query the cache keys on): the day-old copy of the previous build's sitemap is what a
   // plain request gets for up to a day after a deploy, which is fine for crawlers and wrong for a check of this build.
-  const fresh = `check=${Date.now()}`;
   const idx = await get(`/sitemap.xml?${fresh}`);
   if (idx.status !== 200) fail('/sitemap.xml', idx);
   if (!/<sitemapindex/.test(idx.text) || !/sitemap-1\.xml/.test(idx.text)) fail('/sitemap.xml should be a sitemap index naming /sitemap-1.xml', idx);
@@ -101,6 +101,20 @@ for (const path of ['/about/how', `/species/${species}`, '/offline', '/api/corpu
   // A deploy with no corpus in R2 falls back to the four fixture species and answers every check above; that is the most broken deploy there is, so it fails here unless a local run says the fixture is expected (round twenty-six, 9).
   if (path === '/api/corpus' && /"id":"fixture"/.test(r.text) && !process.env.LIVE_CHECK_FIXTURE_OK) fail(`${path} says the corpus is the fixture: R2 holds no index.json, or the Worker cannot read it (set LIVE_CHECK_FIXTURE_OK=1 only for a local wrangler dev)`, r);
   ok(`${path}: 200 with both headers`);
+}
+
+// A species page rendered once is answered from the Worker's own cache for the next minute (round forty-three, 3): the
+// second request within a second says so, and the page is still private to the browser. A fresh query defeats any copy
+// held from an earlier run, so the first request is the render.
+{
+  const path = `/species/${species}?${fresh}`;
+  const a = await get(path, { headers: { accept: 'text/html' } });
+  const b = await get(path, { headers: { accept: 'text/html' } });
+  if (a.h('x-cultifolio-page') !== 'rendered') fail(`${path}: the first request was not rendered by the Worker (x-cultifolio-page "${a.h('x-cultifolio-page')}")`, a);
+  if (b.h('x-cultifolio-page') !== 'held') fail(`${path}: the second request was not answered from the Worker's cache (x-cultifolio-page "${b.h('x-cultifolio-page')}")`, b);
+  if (!/^private, max-age=60$/.test(b.h('cache-control'))) fail(`${path}: a held page must stay private to the browser`, b);
+  if (b.text !== a.text) fail(`${path}: the held page differs from the rendered one`, b);
+  ok(`species page: rendered once, held for the next request, private to the browser`);
 }
 
 // No analytics beacon injected at the edge (round eight, 1): checked with an HTML Accept, which is what gets the injection.

@@ -45,3 +45,62 @@ describe('hooks.server handle', () => {
     expect(await at('/plants/2026-0001')).toBeNull();
   });
 });
+
+/** The Worker's own cache of rendered species pages, keyed by the page, the units and the hemisphere (round forty-three, 3). */
+describe('the species page cache (round forty-three, 3)', () => {
+  function world() {
+    const store = new Map<string, Response>();
+    const cache = { match: async (r: Request) => store.get(r.url)?.clone(), put: async (r: Request, res: Response) => { store.set(r.url, res); } };
+    const waited: Promise<unknown>[] = [];
+    const platform = { caches: { default: cache }, context: { waitUntil: (p: Promise<unknown>) => { waited.push(p); } } };
+    let renders = 0;
+    const event = (path: string, cookies: Record<string, string> = {}, headers: Record<string, string> = {}) => ({
+      url: new URL('http://x' + path),
+      request: new Request('http://x' + path, { headers }),
+      cookies: { get: (k: string) => cookies[k] },
+      platform
+    });
+    const page = async (status = 200, type = 'text/html', extra: Record<string, string> = {}) => { renders++; return new Response(`<p>render ${renders}</p>`, { status, headers: { 'content-type': type, 'cache-control': 'private, max-age=60', vary: 'accept-language, cookie', ...extra } }); };
+    return { store, waited, event, page, renders: () => renders };
+  }
+  it('renders a species page once per minute per location and answers the next reader in the same units from the copy', async () => {
+    const w = world();
+    const a = await handle({ event: w.event('/species/copiapoa-cinerea'), resolve: () => w.page() } as never);
+    expect(a.headers.get('x-cultifolio-page')).toBe('rendered');
+    expect(a.headers.get('cache-control')).toBe('private, max-age=60'); // the reader's copy keeps its private header
+    expect(await a.text()).toBe('<p>render 1</p>');
+    await Promise.all(w.waited);
+    expect([...w.store.keys()]).toEqual(['https://cache.cultifolio/page?p=%2Fspecies%2Fcopiapoa-cinerea&u=metric&h=']);
+    expect(w.store.values().next().value?.headers.get('cache-control')).toBe('public, max-age=60'); // the stored copy, under the Worker's own key
+    const b = await handle({ event: w.event('/species/copiapoa-cinerea'), resolve: () => w.page() } as never);
+    expect(b.headers.get('x-cultifolio-page')).toBe('held');
+    expect(b.headers.get('cache-control')).toBe('private, max-age=60');
+    expect(b.headers.get('referrer-policy')).toBe('no-referrer');
+    expect(await b.text()).toBe('<p>render 1</p>');
+    expect(w.renders()).toBe(1);
+  });
+  it('a reader in other units, or another hemisphere, or on another address, is rendered for', async () => {
+    const w = world();
+    await handle({ event: w.event('/species/copiapoa-cinerea'), resolve: () => w.page() } as never);
+    await handle({ event: w.event('/species/copiapoa-cinerea', { 'cultifolio.units': 'us' }), resolve: () => w.page() } as never);
+    await handle({ event: w.event('/species/copiapoa-cinerea', { 'cultifolio.hemi': 's' }), resolve: () => w.page() } as never);
+    await handle({ event: w.event('/species/copiapoa-cinerea?was=Copiapoa%20x'), resolve: () => w.page() } as never);
+    // a browser language is read into the units before the key is made, so en-US is the `us` copy above, not a sixth
+    const us = await handle({ event: w.event('/species/copiapoa-cinerea', {}, { 'accept-language': 'en-US' }), resolve: () => w.page() } as never);
+    expect(us.headers.get('x-cultifolio-page')).toBe('held');
+    expect(w.renders()).toBe(4);
+    await Promise.all(w.waited);
+    expect(w.store.size).toBe(4);
+  });
+  it('a 404, a non-HTML answer, a response that sets a cookie, and any other page are not stored', async () => {
+    const w = world();
+    await handle({ event: w.event('/species/nonsensia-fakeii'), resolve: () => w.page(404) } as never);
+    await handle({ event: w.event('/species/copiapoa-cinerea'), resolve: () => w.page(200, 'application/json') } as never);
+    await handle({ event: w.event('/species/copiapoa-cinerea'), resolve: () => w.page(200, 'text/html', { 'set-cookie': 'a=b' }) } as never);
+    await handle({ event: w.event('/plants/2026-0001'), resolve: () => w.page() } as never);
+    await handle({ event: w.event('/'), resolve: () => w.page() } as never);
+    await Promise.all(w.waited);
+    expect(w.store.size).toBe(0);
+    expect(w.renders()).toBe(5);
+  });
+});

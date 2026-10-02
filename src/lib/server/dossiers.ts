@@ -47,9 +47,17 @@ const merge = (a: IndexEntry[], b: IndexEntry[]) => {
   return [...a, ...b.filter((x) => !seen.has(x.key))];
 };
 
-/** The parsed index, kept for a minute per isolate: the homepage, slug resolution and the API all read it, and parsing thousands of rows per request is waste. */
-let cached: { at: number; idx: IndexEntry[]; bySlug: Map<string, number>; corpus: string } | null = null;
+/**
+ * The parsed index, kept per isolate: the homepage, slug resolution and the API all read it, and parsing thousands of
+ * rows per request is waste. It is trusted for a minute without a question; past that, the bucket is asked for the
+ * object's etag alone (a `head`, a few milliseconds), and the parsed copy is kept while the etag is the one it came
+ * with. Before this the minute lapsed into a full re-read, four megabytes fetched and parsed, on the first request of
+ * nearly every minute of a quiet site, which was most of a species page's time to first byte (round forty-three, 1).
+ */
+let cached: { at: number; idx: IndexEntry[]; bySlug: Map<string, number>; corpus: string; etag: string | null } | null = null;
 const CACHE_MS = 60_000;
+/** For tests: forget the parsed index. */
+export const _forgetIndex = () => { cached = null; };
 
 async function staticJson<T>(fetch: Fetch, path: string): Promise<T | null> {
   try {
@@ -86,12 +94,24 @@ async function loadIndex(platform: Platform, fetch: Fetch): Promise<NonNullable<
   if (cached && Date.now() - cached.at < CACHE_MS) return cached;
   let idx: IndexEntry[] = [];
   let corpus = '';
+  let etag: string | null = null;
   const store = platform?.env?.STORE;
   if (store) {
-    const obj = await store.get(`s/v${DOSSIER_V}/index.json`);
+    const path = `s/v${DOSSIER_V}/index.json`;
+    if (cached?.etag) {
+      // The minute is up: the object's etag says whether the copy held is still the bucket's. A head answers from
+      // metadata alone; the four megabytes are read again only after an upload (round forty-three, 1).
+      const h = await store.head(path);
+      if (h?.etag === cached.etag) {
+        cached.at = Date.now();
+        return cached;
+      }
+    }
+    const obj = await store.get(path);
     if (obj) {
       const text = await obj.text();
       idx = JSON.parse(text) as IndexEntry[];
+      etag = obj.etag || null;
       corpus = (obj.etag || fnv(text)).replace(/[^A-Za-z0-9._-]/g, '').slice(0, 16);
     }
   }
@@ -102,7 +122,7 @@ async function loadIndex(platform: Platform, fetch: Fetch): Promise<NonNullable<
   }
   // Fixtures only fill in when nothing real exists, so a real corpus never shows synthetic species.
   const out = idx.length ? idx : fixtureIndex;
-  cached = { at: Date.now(), idx: out, bySlug: new Map(out.map((e) => [e.slug, e.key])), corpus: idx.length ? corpus : 'fixture' };
+  cached = { at: Date.now(), idx: out, bySlug: new Map(out.map((e) => [e.slug, e.key])), corpus: idx.length ? corpus : 'fixture', etag };
   return cached;
 }
 

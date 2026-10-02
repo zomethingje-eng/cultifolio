@@ -40,7 +40,12 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
     if (syn) error(404, { message: `${syn.matched} is ${syn.acceptedName} in the GBIF backbone, and that species is not in the reference`, species });
     error(404, { message: `No dossier for “${params.slug}”`, species });
   }
-  const loaded = await getDossier(platform, fetch, key);
+  // The dossier and the genus record are two objects in the bucket, read together, since the genus is known from the
+  // index before the dossier arrives; read one after the other they were two round trips on every page (round forty-three, 2).
+  const index = await getIndex(platform, fetch);
+  const byKey = new Map(index.map((e) => [e.key, e]));
+  const me = byKey.get(key);
+  const [loaded, genusRecordEarly] = await Promise.all([getDossier(platform, fetch, key), me ? getGenus(platform, fetch, slugify(genusOf(me.name))) : Promise.resolve(undefined)]);
   if (!loaded) error(404, { message: `No dossier for “${params.slug}”` });
   // The page's own slug is the index's: a homonym whose plain slug the index gave to the other species carries that
   // plain slug in its file, and every link, Compare, Follow and note keyed on it would point at the other (round seventeen, 6).
@@ -51,9 +56,6 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   // Short and never stale: HTML names the build's hashed chunks, and a stale page after a deploy would import chunks that are gone.
   setHeaders({ 'cache-control': 'private, max-age=60', vary: 'accept-language, cookie' }); // private: the page is rendered in the reader's units, so no shared cache may hand one reader's page to another
   // Related: the rest of the genus, and the species whose habitat climate is nearest (from the index; nothing computed here).
-  const index = await getIndex(platform, fetch);
-  const byKey = new Map(index.map((e) => [e.key, e]));
-  const me = byKey.get(key);
   const card = (e: NonNullable<typeof me>) => ({ key: e.key, slug: e.slug, name: e.name, family: e.family, common: e.common, thumb: e.thumb, open: e.open, climate: e.climate });
   const genus = genusOf(d.name.scientific);
   // The page shows twelve and a count: the rest of a large genus (six hundred cards, taken whole) is not sent (round forty, own).
@@ -63,7 +65,7 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   // Only a species with a derived climate can be near anything; the build writes it so, and a stale index is not trusted to.
   const near = (me?.near ?? []).map((k) => byKey.get(k)).filter((e): e is NonNullable<typeof me> => !!e && e.climate === 'ok').map(card);
   // About the genus: its Wikipedia lead, written by `--fill genus`; null when that pass has not run for this genus.
-  const genusRecord = await getGenus(platform, fetch, slugify(genus));
+  const genusRecord = genusRecordEarly !== undefined ? genusRecordEarly : await getGenus(platform, fetch, slugify(genus));
   // Shown only when the name is one this species' own record lists (the index's binomials, or the dossier's synonyms):
   // `?was=` is a statement anyone can write into a link, and the page printed it as fact (round thirty-three, 12).
   const was = url.searchParams.get('was');
