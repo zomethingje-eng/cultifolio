@@ -83,7 +83,32 @@
   let rows = $state<Row[]>(data.rows);
   /** Bumped when the server's window replaces the rows (a new grouping, letter or opened row): a fetch begun before it lands nowhere (round forty-nine, 2). */
   let rowsGen = 0;
-  $effect(() => { data.rows; data.start; start = data.start; rows = data.rows; rowsGen++; tailPad = 0; }); // a new grouping, letter or opened row: start again from what the server sent
+  let firstWindow = true;
+  // svelte-ignore state_referenced_locally
+  let shownStart = data.start;
+  $effect(() => {
+    data.rows; data.start;
+    const moved = data.start !== shownStart;
+    shownStart = data.start;
+    start = data.start; rows = data.rows; rowsGen++; tailPad = 0;
+    // A row opened from a window other than the server's (after a letter jump, the server's window for `?open=` starts
+    // fifteen rows above the row, not where the jump did) replaced the rows under a scroll position that no longer
+    // meant anything, and the short tail of the catalogue clamped at the footer (the author's phone, round forty-nine).
+    // When the window's start moved, the opened row is placed under the bar; when it did not (a row tapped within the
+    // first window), the rows are the same rows and the row stays where it was tapped.
+    if (firstWindow) { firstWindow = false; return; }
+    if (data.open && moved) void tick().then(() => placeRow(data.open));
+  });
+  /** Put the opened row under the pinned bar, padding the list when the page is too short to. */
+  function placeRow(id: string) {
+    const el = document.getElementById(`g-${id}`);
+    if (!el) return;
+    const under = 44 + Math.max(document.querySelector<HTMLElement>('.stickyhead')?.offsetHeight ?? 0, document.querySelector<HTMLElement>('.stickyhead .toolrow')?.offsetHeight ?? 0) + 4;
+    const top = el.getBoundingClientRect().top;
+    window.scrollTo({ top: top + window.scrollY - under });
+    const short = el.getBoundingClientRect().top - under;
+    if (short > 2) { tailPad = short; void tick().then(() => window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - under })); }
+  } // a new grouping, letter or opened row: start again from what the server sent
   const visibleRows = $derived(rows);
   const end = $derived(start + rows.length);
   let sentinel = $state<HTMLElement | null>(null);
@@ -220,10 +245,7 @@
   }
   onMount(() => {
     // A page opened at ?open=<row> (a link, a bookmark, the back button) starts at the row, not at the top of a thousand rows.
-    if (data.open && window.scrollY < 10) {
-      const el = document.getElementById(`g-${data.open}`);
-      if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 120 });
-    }
+    if (data.open && window.scrollY < 10) placeRow(data.open);
     const fromHash = () => { const m = /^#l-(.+)$/.exec(location.hash); if (m) jumpToLetter(decodeURIComponent(m[1])); };
     fromHash();
     window.addEventListener('hashchange', fromHash);
