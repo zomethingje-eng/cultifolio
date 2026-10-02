@@ -162,7 +162,16 @@
       rows = got.rows.map((r) => ({ ...r, items: undefined }));
     }
     await tick();
-    document.getElementById(`l-${l}`)?.scrollIntoView();
+    // Placed by hand under whatever is pinned (the whole head on a desktop, the search row on a phone), rather than by a
+    // fixed scroll margin that left the previous letter's last card showing above the heading on a phone (round forty-nine).
+    const h = document.getElementById(`l-${l}`);
+    if (h) {
+      const pinned = document.querySelector<HTMLElement>('.stickyhead .toolrow');
+      const head = document.querySelector<HTMLElement>('.stickyhead');
+      const headPinned = head && getComputedStyle(head).position === 'sticky';
+      const under = 44 + ((headPinned ? head : pinned)?.offsetHeight ?? 0) + 4;
+      window.scrollTo({ top: h.getBoundingClientRect().top + window.scrollY - under });
+    }
     history.replaceState(history.state, '', `#l-${l}`);
   }
   let lettersEl = $state<HTMLElement | null>(null);
@@ -589,6 +598,7 @@
   .letters a { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--ink2); min-width: 30px; min-height: 30px; display: inline-flex; align-items: center; justify-content: center; border-radius: 7px; }
   .letters a:hover { background: var(--sunk); text-decoration: none; color: var(--ink); }
   .letter { font-family: var(--mono); font-size: 12px; letter-spacing: 0.12em; color: var(--ink3); margin: 22px 0 6px; scroll-margin-top: 210px; }
+  @media (max-width: 640px) { .letter { scroll-margin-top: 150px; } } /* the `#l-X` hash without JavaScript: under the pinned search row, not the desktop's whole head */
   .rows { display: flex; flex-direction: column; gap: 6px; }
   .more { display: flex; justify-content: center; padding: 18px 0 6px; } /* a button for a reader without the observer (or without JavaScript, where it does nothing) */
   .grow { display: grid; grid-template-columns: 56px minmax(0, 1fr) 28px; gap: 14px; align-items: center; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); padding: 8px 12px 8px 8px; color: inherit; text-decoration: none; min-height: 56px; scroll-margin-top: 210px; }
