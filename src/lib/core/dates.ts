@@ -5,13 +5,16 @@
  * an event is stamped with goes through here; the server's own stamps (sync
  * quotas, forecast reduction) stay UTC and say so where they are.
  */
-export function localDate(d: Date = new Date()): string {
+import { nowMs } from './hlc';
+
+/** Today where the reader is, by the corrected clock: a phone set to 2031 dated its waterings 2031 while its stamps were being corrected (round fifty-one, 1). */
+export function localDate(d: Date = new Date(nowMs())): string {
   const p = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
 /** The same day a year ago, on the local calendar (29 February becomes 1 March, as Date does). */
-export function localDateYearAgo(d: Date = new Date()): string {
+export function localDateYearAgo(d: Date = new Date(nowMs())): string {
   return localDate(new Date(d.getFullYear() - 1, d.getMonth(), d.getDate()));
 }
 

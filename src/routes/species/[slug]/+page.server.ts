@@ -1,5 +1,5 @@
 import { error, redirect } from '@sveltejs/kit';
-import { getDossier, resolveSlug, getIndex, getGenus } from '$lib/server/dossiers';
+import { getDossier, resolveSlug, getIndex, getGenus, indexMaps } from '$lib/server/dossiers';
 import { synonymOf, synonymInIndex, nameFromSlug } from '$lib/server/synonyms';
 import generaList from '../../../../scripts/specialist-genera.txt?raw';
 /** The genera the species list takes whole (the file the derivation reads), for the 404 to say so. */
@@ -36,14 +36,14 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
     const asked = nameFromSlug(params.slug);
     const genus = asked.split(' ')[0] ?? '';
     const index = await getIndex(platform, fetch);
-    const species = genus ? { name: asked, genus, inGenus: index.filter((e) => genusOf(e.name) === genus).length, wholeGenus: WHOLE_GENERA.has(genus), ...(syn ? { accepted: syn.acceptedName } : {}) } : undefined;
+    const species = genus ? { name: asked, genus, inGenus: indexMaps(index).byGenus.get(genus)?.length ?? 0, wholeGenus: WHOLE_GENERA.has(genus), ...(syn ? { accepted: syn.acceptedName } : {}) } : undefined;
     if (syn) error(404, { message: `${syn.matched} is ${syn.acceptedName} in the GBIF backbone, and that species is not in the reference`, species });
     error(404, { message: `No dossier for “${params.slug}”`, species });
   }
   // The dossier and the genus record are two objects in the bucket, read together, since the genus is known from the
   // index before the dossier arrives; read one after the other they were two round trips on every page (round forty-three, 2).
   const index = await getIndex(platform, fetch);
-  const byKey = new Map(index.map((e) => [e.key, e]));
+  const { byKey, byGenus } = indexMaps(index); // once per index, not a map of fifty thousand entries per page (round fifty-one, 6)
   const me = byKey.get(key);
   const [loaded, genusRecordEarly] = await Promise.all([getDossier(platform, fetch, key), me ? getGenus(platform, fetch, slugify(genusOf(me.name))) : Promise.resolve(undefined)]);
   if (!loaded) error(404, { message: `No dossier for “${params.slug}”` });
@@ -59,7 +59,7 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   const card = (e: NonNullable<typeof me>) => ({ key: e.key, slug: e.slug, name: e.name, family: e.family, common: e.common, thumb: e.thumb, open: e.open, climate: e.climate });
   const genus = genusOf(d.name.scientific);
   // The page shows twelve and a count: the rest of a large genus (six hundred cards, taken whole) is not sent (round forty, own).
-  const allSiblings = index.filter((e) => e.key !== key && genusOf(e.name) === genus).sort((a, b) => a.name.localeCompare(b.name));
+  const allSiblings = (byGenus.get(genus) ?? []).filter((e) => e.key !== key);
   const siblings = allSiblings.slice(0, 12).map(card);
   const siblingCount = allSiblings.length;
   // Only a species with a derived climate can be near anything; the build writes it so, and a stale index is not trusted to.

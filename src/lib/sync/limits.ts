@@ -11,6 +11,8 @@ export const OVERLAP_MS = 60_000;
 
 /** The push headers, named once for the device that sends them and the Worker that reads them (round twenty-three, 10). */
 export const PUSH_HEADERS = { batch: 'x-batch', plain: 'x-batch-plain', device: 'x-device' } as const;
+/** The proof a photograph's upload leaves with the server and its removal must repeat: the keyed fingerprint of `drop:<id>` under the vault's naming key, which only a key-holder can make (round fifty-one, 2). */
+export const PHOTO_DROP_HEADER = 'x-photo-drop';
 /**
  * The name the server files a batch under: the hour (in ms, 13 digits) of the batch's last change, a fixed counter,
  * the pushing device's id and twelve hex digits of the keyed fingerprint of the content.

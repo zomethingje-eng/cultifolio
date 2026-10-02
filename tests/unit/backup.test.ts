@@ -122,6 +122,16 @@ describe('merging a backup into a live collection', () => {
     const { state } = materialise([...newer, ...m.fresh]);
     expect(state.get('accession:2026-0001')?.notes).toBe('moved on');
   });
+  it('round fifty-one, 4: the preview names the plants here that a merge renumbers, and the file\'s that it renumbers', () => {
+    // Here: 2026-0001 (id "2026-0001", created first). The file: another plant under the same number, created later (a later id), and a third under 2026-0005 created before one here under that number.
+    const here = [...log, c(60, 'accession', 'r-late', 'taxonName', 'Lithops'), c(61, 'accession', 'r-late', 'status', 'growing'), c(62, 'accession', 'r-late', 'acc', '2026-0005')];
+    const file = [c(140, 'accession', 'zz-later', 'taxonName', 'Aloe'), c(141, 'accession', 'zz-later', 'status', 'growing'), c(142, 'accession', 'zz-later', 'acc', '2026-0001'), c(143, 'accession', 'a-early', 'taxonName', 'Haworthia'), c(144, 'accession', 'a-early', 'status', 'growing'), c(145, 'accession', 'a-early', 'acc', '2026-0005')];
+    const m = previewMerge(here, file);
+    expect(m.renumbered).toEqual([
+      { no: '2026-0001', here: false, name: 'Aloe' }, // the file's plant loses to the earlier one here
+      { no: '2026-0005', here: true, name: 'Lithops' } // this device's plant loses to the earlier one in the file
+    ]);
+  });
   it('a file with an extra plant adds it and reports it', () => {
     const more = [...log, c(30, 'accession', '2026-0002', 'taxonName', 'Ariocarpus fissuratus'), c(31, 'accession', '2026-0002', 'status', 'growing')];
     const m = previewMerge(log, more);
@@ -175,19 +185,24 @@ describe('plants.csv', () => {
 describe('events.csv (round forty-nine, 1)', () => {
   it('every timeline entry, oldest first, with the plant or batch number and species, the label, and the figures; the sheet is in the zip', async () => {
     const more = [...log,
-      c(30, 'event', 'e2', 'acc', '2026-0001'), c(31, 'event', 'e2', 'd', '2026-08-01'), c(32, 'event', 'e2', 't', 'measure'), c(33, 'event', 'e2', 'measures', { height: 42, width: 30 }),
+      c(30, 'event', 'e2', 'acc', '2026-0001'), c(31, 'event', 'e2', 'd', '2026-08-01'), c(32, 'event', 'e2', 't', 'measure'), c(33, 'event', 'e2', 'measures', { h: 42, heads: 3, width: 30 }),
       c(34, 'event', 'e3', 'acc', '2026-0001'), c(35, 'event', 'e3', 'd', '2026-09-03'), c(36, 'event', 'e3', 't', 'treat'), c(37, 'event', 'e3', 'used', 'neem'), c(38, 'event', 'e3', 'note', 'mealy, = top'), c(39, 'event', 'e3', 'auto', true),
       c(40, 'sowing', 's1', 'taxonName', 'Ariocarpus fissuratus'), c(41, 'sowing', 's1', 'method', 'seed'), c(42, 'sowing', 's1', 'sown', '2026-03-01'), c(43, 'sowing', 's1', 'count', 12), c(44, 'sowing', 's1', 'status', 'active'), c(45, 'sowing', 's1', 'no', 'S2026-001'),
       c(46, 'event', 'g1', 'acc', 's1'), c(47, 'event', 'g1', 'd', '2026-03-20'), c(48, 'event', 'g1', 't', 'germinate'), c(49, 'event', 'g1', 'n', 9)];
     const { state } = materialise(more);
     const lines = eventsCsv(live<PlantEvent & Record_>(state, 'event'), state).slice(1).split('\r\n');
-    expect(lines[0]).toBe('date,number,species,entry,note,count,cause,used,measurements,by the app');
+    expect(lines[0]).toBe('date,number,species,entry,note,count,cause,used,measurements,by the app,record removed');
+    // a measurement names its unit, as the label does; a key this build does not know is written as it is (round fifty-one, 5)
     expect(lines.slice(1, 5)).toEqual([
-      '2026-03-20,S2026-001,Ariocarpus fissuratus,Germination count,,9,,,,',
-      '2026-08-01,2026-0001,Copiapoa cinerea,Measured,,,,,height 42; width 30,',
-      '2026-09-01,2026-0001,Copiapoa cinerea,Watered,,,,,,',
-      '2026-09-03,2026-0001,Copiapoa cinerea,Treated,"mealy, = top",,,neem,,yes'
+      '2026-03-20,S2026-001,Ariocarpus fissuratus,Germination count,,9,,,,,',
+      '2026-08-01,2026-0001,Copiapoa cinerea,Measured,,,,,height 42 mm; heads 3; width 30,,',
+      '2026-09-01,2026-0001,Copiapoa cinerea,Watered,,,,,,,',
+      '2026-09-03,2026-0001,Copiapoa cinerea,Treated,"mealy, = top",,,neem,,yes,'
     ]);
+    // an entry on a removed plant is kept and marked
+    const gone = materialise([...more, c(60, 'accession', '2026-0001', '_deleted', true)]).state;
+    const goneLines = eventsCsv(live<PlantEvent & Record_>(gone, 'event'), gone).slice(1).split('\r\n');
+    expect(goneLines[3]).toBe('2026-09-01,2026-0001,Copiapoa cinerea,Watered,,,,,,,yes');
     const { bytes } = await buildBackup({ changes: more, readPhoto: async () => null });
     const r = await readBackup(bytes);
     expect(r.changes.length).toBe(more.length); // the sheet is for people; the file reads as before

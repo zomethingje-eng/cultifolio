@@ -21,26 +21,63 @@ export const MAX_COUNT = 0xffffff;
 
 /** Past this, the device clock is taken as wrong and the server's `Date` stands in for it; under it, the device clock is left alone, since a few seconds either way change nothing and a jittering offset would. */
 export const TRUST_SERVER_PAST_MS = 30_000;
-let offsetMs = 0;
+/** A correction this large is taken only when two readings in a row agree on it: one wrong `Date` (a captive portal, a proxy) must not move a device's stamps by years (round fifty-one, 1). */
+export const TRUST_SERVER_TWICE_PAST_MS = 2 * 86_400_000;
+/** Where the correction is kept between loads, so the first edit of a tab is stamped right, not only the ones after its first pull (round fifty-one, 1). */
+const OFFSET_KEY = 'cultifolio.clockOffsetMs';
+let offsetMs = readStoredOffset();
+/** A large correction seen once, waiting for a second reading that agrees. */
+let pendingMs: number | null = null;
+function readStoredOffset(): number {
+  try {
+    const v = typeof localStorage !== 'undefined' ? Number(localStorage.getItem(OFFSET_KEY)) : 0;
+    return Number.isFinite(v) ? v : 0;
+  } catch {
+    return 0;
+  }
+}
+function storeOffset(ms: number): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    if (ms) localStorage.setItem(OFFSET_KEY, String(ms));
+    else localStorage.removeItem(OFFSET_KEY);
+  } catch {
+    /* storage refused: the offset lives for this load */
+  }
+}
 /**
- * The time changes are stamped and holds judged by: the device clock, corrected by the server's when they disagree by more
- * than half a minute (round forty-nine, 1). A device set to 2031 stamped every change six years ahead, and every
- * other device held them all until then; and the hold itself was judged against that same wrong clock, so the
- * device that was wrong saw nothing wrong. The server's `Date` header is read on every sync; a device that never
- * syncs keeps its own clock, which is all it has.
+ * The time changes are stamped, event dates are read from, and holds are judged by: the device clock, corrected by the
+ * server's when they disagree by more than half a minute (round forty-nine, 1). A device set to 2031 stamped every
+ * change six years ahead, and every other device held them all until then; and the hold itself was judged against
+ * that same wrong clock, so the device that was wrong saw nothing wrong. The server's `Date` header is read on every
+ * sync; a device that never syncs keeps its own clock, which is all it has. The correction is kept across loads.
  */
 export const nowMs = () => Date.now() + offsetMs;
-/** Fold in the server's time (ms since the epoch) as read at `localMs`; the offset moves only past the threshold, and is dropped when the clocks agree again. */
+/**
+ * Fold in the server's time (ms since the epoch) as read at `localMs`. The offset moves only past the threshold and is
+ * dropped once the clocks agree to within half of it (no flapping at the edge); a correction of days or more is taken
+ * only when a second reading agrees with the first to within the threshold. Returns the offset in force.
+ */
 export function trustServerTime(serverMs: number, localMs = Date.now()): number {
   if (!Number.isFinite(serverMs) || serverMs <= 0) return offsetMs;
   const delta = serverMs - localMs;
-  offsetMs = Math.abs(delta) > TRUST_SERVER_PAST_MS ? delta : 0;
+  const far = Math.abs(delta) > TRUST_SERVER_PAST_MS;
+  const agree = Math.abs(delta) <= TRUST_SERVER_PAST_MS / 2;
+  let next = offsetMs;
+  if (agree) next = 0;
+  else if (far || offsetMs !== 0) {
+    if (Math.abs(delta - offsetMs) <= TRUST_SERVER_PAST_MS) next = offsetMs; // the same correction as before, give or take the threshold: no jitter
+    else if (Math.abs(delta) > TRUST_SERVER_TWICE_PAST_MS && (pendingMs === null || Math.abs(delta - pendingMs) > TRUST_SERVER_PAST_MS)) { pendingMs = delta; return offsetMs; }
+    else next = delta;
+  }
+  pendingMs = null;
+  if (next !== offsetMs) { offsetMs = next; storeOffset(next); }
   return offsetMs;
 }
 /** The current correction, for the clock warning to say how far off the device is. */
 export const clockOffsetMs = () => offsetMs;
 /** Tests only. */
-export const _resetClockOffset = () => void (offsetMs = 0);
+export const _resetClockOffset = () => { offsetMs = 0; pendingMs = null; storeOffset(0); };
 
 const HLC_RE = /^(\d{13})-([0-9a-f]{4,6})-([a-z0-9]{1,16})$/;
 

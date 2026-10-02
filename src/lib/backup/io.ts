@@ -1,7 +1,7 @@
 /** Browser wiring for backups: the vault in, a download out, and a file back in. */
 import { collection } from '$lib/db/collection.svelte';
 import { getPhotoBlobs, putPhotoBlobs, deletePhotoBlobs, photoBlobIds, getMeta, openStaging } from '$lib/db/vault';
-import { NUMBERING_SETTING } from '$lib/db/types';
+import { NUMBERING_SETTING, accNo, sowNo } from '$lib/db/types';
 import { sync } from '$lib/sync/engine.svelte';
 import { DEFAULT_SCHEME, type NumberingScheme } from '$core/accession';
 import { buildBackup, readBackup, previewMerge, summarise, photosWithoutPixels, type ReadBackup } from './backup';
@@ -54,6 +54,8 @@ export interface Opened {
   missingPixels: string[];
   /** Device settings in the file that this device lacks and a restore would apply ('site', 'units', 'label settings', 'preferences'). */
   settings: string[];
+  /** Plants and batches here that the file does not hold, by number: what Replace loses (round fifty-one, 4). */
+  onlyHere: string[];
 }
 
 /** Read and size up a backup without changing anything. */
@@ -64,7 +66,9 @@ export async function openBackup(f: File): Promise<Opened> {
   const have = new Set(await photoBlobIds());
   const newPhotos = file.photoIds.filter((id) => !have.has(id)).length;
   const missingPixels = photosWithoutPixels(file).filter((id) => !have.has(id));
-  return { file, counts, merge, newPhotos, missingPixels, settings: previewDeviceSettings(file.settings) };
+  const inFile = new Set(file.changes.map((c) => `${c.kind}:${c.id}`));
+  const onlyHere = [...collection.accessions.filter((a) => !inFile.has(`accession:${a.id}`)).map(accNo), ...collection.sowings.filter((s) => !inFile.has(`sowing:${s.id}`)).map(sowNo)];
+  return { file, counts, merge, newPhotos, missingPixels, settings: previewDeviceSettings(file.settings), onlyHere };
 }
 
 export interface RestoreReport {

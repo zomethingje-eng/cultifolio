@@ -49,6 +49,7 @@
   let q = $state('');
   let chosen = $state<Set<string>>(new Set());
   let qrs = $state<Record<string, string>>({});
+  const qrInflight = new Set<string>();
   let care = $state<Record<string, string | null>>({}); // '' while asked, null when the reference was not reached
 
   onMount(async () => {
@@ -129,19 +130,29 @@
   $effect(() => {
     // Every bucket the picked plants need, asked for in one request; the per-plant lookups below then find their bucket cached.
     if (withCare) void sheetsFor(picked.filter((a) => care[a.id] === undefined && kindOf(a.rec) !== 'hybrid').map((a) => speciesSlug(a.taxonName)));
+    // The codes are made in one batch and assigned once: one assignment per code copied the whole map each time, which
+    // with fifteen hundred plants was thirty seconds with the page frozen (round fifty-one, 5).
+    const needQr = withQr ? picked.filter((a) => !qrs[a.id] && !qrInflight.has(a.id)) : [];
+    if (needQr.length) {
+      for (const a of needQr) qrInflight.add(a.id);
+      void Promise.all(needQr.map((a) => QRCode.toString(`${location.origin}/${a.batch ? 'propagation' : 'plants'}/${a.id}`, { type: 'svg', errorCorrectionLevel: 'M', margin: 0 }).then((svg) => [a.id, svg] as const, () => [a.id, ''] as const))).then((pairs) => {
+        const next = { ...qrs };
+        for (const [id, svg] of pairs) { if (svg) next[id] = svg; qrInflight.delete(id); }
+        qrs = next;
+      });
+    }
     for (const a of picked) {
-      if (withQr && !qrs[a.id]) QRCode.toString(`${location.origin}/${a.batch ? 'propagation' : 'plants'}/${a.id}`, { type: 'svg', errorCorrectionLevel: 'M', margin: 0 }).then((svg) => (qrs = { ...qrs, [a.id]: svg }));
       if (withCare && care[a.id] === undefined && !asking.has(a.id) && kindOf(a.rec) !== 'hybrid') {
         asking = new Set([...asking, a.id]);
         const done = () => { const n = new Set(asking); n.delete(a.id); asking = n; };
         dossierFor(a).then(async (d) => {
           done();
-          if (d === 'unreachable') { care = { ...care, [a.id]: null }; return; } // not "no data": not reached
+          if (d === 'unreachable') { care[a.id] = null; return; } // not "no data": not reached
           const readerLat = site.current?.lat ?? collection.locations.map((l) => l.lat).find((x): x is number => x != null) ?? null;
           const line = careLine({ scientific: a.taxonName, climateStatus: d?.climate.status, family: d?.name.family, months: d?.climate.status === 'ok' ? d.climate.months : null, extremes: d?.climate.status === 'ok' ? (d.climate.extremes ?? null) : null, extremesStatus: d?.climate.status === 'ok' ? d.climate.extremesStatus : null, lat: d?.habitatLat ?? null, units: units.current }, { readerLat });
-          care = { ...care, [a.id]: line };
+          care[a.id] = line; // one key, not a copy of the map per answer (round fifty-one, 5)
           if (d && d.climate.status === 'ok' && !d.climate.extremes) nightOff = new Set([...nightOff, a.id]); // the night is left off this label; counted below (round seventeen, 7)
-        }).catch(() => { done(); care = { ...care, [a.id]: null }; });
+        }).catch(() => { done(); care[a.id] = null; });
       }
     }
   });
@@ -266,6 +277,8 @@
   /* The sheet, at true size on screen and on paper. */
   .sheets { margin: 12px 0 40px; display: grid; gap: 16px; overflow-x: auto; }
   .page { position: relative; width: var(--pw); height: var(--ph); background: #fff; box-shadow: var(--sh2); color: #000; }
+  /* A page off screen is not laid out until it scrolls near: fifty preview pages were twenty-six thousand nodes laid out at once (round fifty-one, 5). Print lays out every page. */
+  @media screen { .page { content-visibility: auto; contain-intrinsic-size: auto var(--pw) auto var(--ph); } }
   .label { position: absolute; width: var(--lw); height: var(--lh); display: flex; gap: 1.5mm; padding: 1.6mm 2mm; box-sizing: border-box; overflow: hidden; outline: 0.2mm dashed #bbb; outline-offset: -0.2mm; }
   /* The code never takes more than 22 mm: on a tall label (4 × 2 in) the name, not the code, gets the room. */
   .qr { flex: none; height: 100%; max-height: 22mm; aspect-ratio: 1; align-self: center; }

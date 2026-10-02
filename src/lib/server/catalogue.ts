@@ -70,8 +70,11 @@ export function catalogueOf(index: IndexEntry[], by: By, chip: Chip): Catalogue 
   return c;
 }
 
-function build(index: IndexEntry[], by: By, chip: Chip): Catalogue {
-  const list: Item[] = index.map((e) => ({
+/** The rows as items, once per index: nine catalogues (three groupings by three chips) each held their own copy of every row, seventy megabytes at fifty thousand species (round fifty-one, 6). */
+const items = new WeakMap<IndexEntry[], Item[]>();
+function itemsOf(index: IndexEntry[]): Item[] {
+  let list = items.get(index);
+  if (!list) items.set(index, (list = index.map((e) => ({
     key: e.key,
     slug: e.slug,
     name: e.name,
@@ -84,7 +87,12 @@ function build(index: IndexEntry[], by: By, chip: Chip): Catalogue {
     photos: e.photos,
     open: e.open,
     climate: e.climate
-  }));
+  }))));
+  return list;
+}
+
+function build(index: IndexEntry[], by: By, chip: Chip): Catalogue {
+  const list = itemsOf(index);
   const shown = chip === 'climate' ? list.filter((c) => c.climate === 'ok') : chip === 'noclimate' ? list.filter((c) => c.climate !== 'ok') : list;
   // The catalogue is browsed as closed groups, one open at a time (`?open=`): a genus is what a grower thinks in, so it is
   // the default; origin keeps its little map; family is for those who think that way.
@@ -92,7 +100,8 @@ function build(index: IndexEntry[], by: By, chip: Chip): Catalogue {
   const groups = new Map<string, Item[]>();
   for (const c of shown) {
     const k = keyOf(c);
-    groups.set(k, [...(groups.get(k) ?? []), c]);
+    const g = groups.get(k);
+    if (g) g.push(c); else groups.set(k, [c]); // appended, not copied: a genus of three hundred species was copied three hundred times (round fifty-one, 6)
   }
   const groupMap = (items: Item[]) => {
     const boxes = [...new Set(items.flatMap((c) => c.origin))].map((u) => boxByName.get(u)).filter((b): b is { s: number; w: number; n: number; e: number } => !!b);

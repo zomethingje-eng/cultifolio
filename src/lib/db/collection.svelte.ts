@@ -11,6 +11,9 @@ import { localDate, madeOn, daysBetween } from '$core/dates';
 export const DUE_DAYS = 21;
 const yearOf = (d?: string | null): number | undefined => (d && /^\d{4}-/.test(d) ? Number(d.slice(0, 4)) : undefined);
 import { Clock, hlcDecode, hlcEncode, hlcCompare, hlcAfter, hlcBefore, nowMs } from '$core/hlc';
+
+/** How far ahead of the corrected clock a held stamp may be for a local edit to its field to be stamped just past it (round fifty-one, 1). */
+export const FOLLOW_HELD_MS = 86_400_000;
 import { tag36 } from '$core/tag';
 import { apply, diff, readChanges, isComplete, REQUIRED_FIELDS, incomplete as incompleteRecords, key as recKey, type Change, type Kind, type Record_, type State, hlcWall, revivedByImport } from '$core/log';
 import { nextAccession, DEFAULT_SCHEME, type NumberingScheme } from '$core/accession';
@@ -426,9 +429,13 @@ class Collection {
   }
   /** Move a node; refused when it would make a loop. */
   async moveLocation(id: string, parentId: string | null): Promise<void> {
+    this.checkMove(id, parentId);
+    await this.put('location', id, { parentId });
+  }
+  /** What a move must satisfy, for a caller that writes the new parent with the rest of an edit in one commit (round fifty-one, 3). */
+  checkMove(id: string, parentId: string | null): void {
     if (this.wouldCycle(id, parentId)) throw new Error('A place cannot be put inside itself.');
     if (parentId && !this.location(parentId)) throw new Error('That parent place does not exist.');
-    await this.put('location', id, { parentId });
   }
   /** Conditions as they apply at a node: the nearest ancestor's value wins for anything the node leaves null. */
   conditions(id: string): { indoor: boolean | null; floorC: number | null; floorHeld: boolean; ppfd: number | null; lightHours: number | null; lat: number | null; lon: number | null; altM: number | null; from: Record<string, string> } {
@@ -873,8 +880,12 @@ class Collection {
       if (c.field === '_deleted') { const e = this.seen.get(k + '\0*'); if (e !== undefined && (prev === undefined || hlcCompare(e, prev) > 0)) prev = e; }
       // A peer's change to this field that the fold is holding (stamped far ahead by a wrong clock) would take the field
       // when it comes due; an edit made here in the meantime is stamped past it instead, since the person saw the field as it is (round forty-nine, 1).
+      // But only past one within a day of the corrected clock (a clock a few hours wrong): a stamp years ahead is a broken
+      // clock's, not an edit to defer to, and stamping past it would carry the bad clock to this device and to every
+      // device that then held this edit too (round fifty-one, 1). Such an edit is stamped at real time and shows
+      // everywhere at once; the held change, when it comes due, is the last word then.
       const heldT = this.seen.get(k + '\0held\0' + c.field);
-      if (heldT !== undefined && (prev === undefined || hlcCompare(heldT, prev) > 0)) prev = heldT;
+      if (heldT !== undefined && hlcWall(heldT) <= nowMs() + FOLLOW_HELD_MS && (prev === undefined || hlcCompare(heldT, prev) > 0)) prev = heldT;
       if (prev !== undefined && hlcCompare(c.t, prev) <= 0) c.t = hlcAfter(prev, this.writer);
       // A field left at real time keeps its stamp; only an actual collision moves: with a stamp given out in this commit, or with
       // one already in the fold (two commits bumped past the same held stamp, round thirteen, 7), since the store refuses a repeat.
@@ -886,6 +897,24 @@ class Collection {
 
   /** Upsert any record kind from a plain object. Only changed fields are written. */
   async put(kind: Kind, id: string, fields: Record<string, unknown>): Promise<void> {
+    await this.commit(this.putChanges(kind, id, fields));
+  }
+  /**
+   * A record edit, the lines it stands for and the other records it touches, in one commit (round fifty-one, 3): the
+   * plant edit form wrote the place, then the move line, then the rename note, then the acquired line, and a page closed
+   * between any two left a move with no line or a line with no move. Each entry of `also` is another record's fields;
+   * each of `events` a line on the timeline.
+   */
+  async putWith(kind: Kind, id: string, fields: Record<string, unknown>, events: Array<Omit<PlantEvent, 'id'>> = [], also: Array<{ kind: Kind; id: string; fields: Record<string, unknown> }> = []): Promise<void> {
+    const changes = this.putChanges(kind, id, fields);
+    for (const o of also) changes.push(...this.putChanges(o.kind, o.id, o.fields));
+    for (const e of events) {
+      const eid = this.eventId();
+      changes.push(...diff('event', eid, { ...e, id: eid } as unknown as Record<string, unknown>, undefined, this.tick));
+    }
+    await this.commit(changes);
+  }
+  private putChanges(kind: Kind, id: string, fields: Record<string, unknown>): Change[] {
     const current = this.state.get(recKey(kind, id));
     // A notes edit says which text it was based on (the stamp of the notes it saw), so a device that receives it can tell
     // an edit made in sight of its text from one made blind to it, and log only the second (round twenty-five, 2). The
@@ -903,7 +932,7 @@ class Collection {
         changes.splice(at + 1, 0, { t: this.tick(), kind, id, field: 'notesBase', value: base ?? null });
       }
     }
-    await this.commit(changes);
+    return changes;
   }
   /** The stamp of a record's current `notes`, null when none: what an edit to them is based on. */
   notesStamp(kind: 'accession' | 'sowing', id: string): string | null {
@@ -1017,17 +1046,39 @@ class Collection {
    * a place's "Move plants here" moves a benchful at once, and a plant's own Move was two commits.
    */
   async movePlants(ids: string[], locationId: string | null): Promise<number> {
+    return (await this.movePlantsUndoable(ids, locationId)).n;
+  }
+  /**
+   * The same, with the way back: each plant's place as it was and the lines written, so one Undo puts the plants back
+   * and removes exactly those lines, in one commit (round fifty-one, 4). A plant moved on since the move is left where it is.
+   */
+  async movePlantsUndoable(ids: string[], locationId: string | null): Promise<{ n: number; undo: () => Promise<void> }> {
     const changes: Change[] = [];
-    let n = 0;
+    const back: Array<{ id: string; locationId: string | null; location: string | null }> = [];
+    const lines: string[] = [];
     for (const id of ids) {
       const cur = this.state.get(recKey('accession', id));
       if (!cur || cur._deleted || (cur.locationId ?? null) === locationId) continue;
+      back.push({ id, locationId: (cur.locationId as string | null) ?? null, location: (cur.location as string | null) ?? null });
       changes.push(...diff('accession', id, { locationId, location: locationId ? null : (cur.location ?? null) }, cur, this.tick));
-      if (locationId) changes.push(...diff('event', this.eventId(), { acc: id, d: localDate(), t: 'move', note: `to ${this.locationName(locationId)}` }, undefined, this.tick));
-      n++;
+      if (locationId) {
+        const eid = this.eventId();
+        lines.push(eid);
+        changes.push(...diff('event', eid, { acc: id, d: localDate(), t: 'move', note: `to ${this.locationName(locationId)}` }, undefined, this.tick));
+      }
     }
     if (changes.length) await this.commit(changes);
-    return n;
+    const undo = async () => {
+      const cs: Change[] = [];
+      for (const b of back) {
+        const cur = this.state.get(recKey('accession', b.id));
+        if (!cur || cur._deleted || (cur.locationId ?? null) !== locationId) continue; // moved on since: left there
+        cs.push(...diff('accession', b.id, { locationId: b.locationId, location: b.location }, cur, this.tick));
+      }
+      for (const eid of lines) if (this.state.get(recKey('event', eid))?._deleted !== true) cs.push({ t: this.tick(), kind: 'event', id: eid, field: '_deleted', value: true });
+      if (cs.length) await this.commit(cs);
+    };
+    return { n: back.length, undo };
   }
 
   /** One commit for many events (watering a whole bench): all land or none do. */
@@ -1197,7 +1248,7 @@ class Collection {
           changes.push({ t: stamp(0), kind, id: r.id, field: kind === 'accession' ? 'acc' : 'no', value: fresh });
           const eid = 'e' + wall.toString(36) + '00' + device;
           // The day is taken in UTC, not the reader's zone: two devices in different zones must write the identical note, or the one that arrives second wins by chance.
-          const note = { acc: r.id, d: when.toISOString().slice(0, 10), t: 'note', note: `Renumbered from ${no} to ${fresh}: another ${kind === 'accession' ? 'plant' : 'batch'} had been given ${no} on a device that was offline at the time.` };
+          const note = { acc: r.id, d: when.toISOString().slice(0, 10), t: 'note', note: `Renumbered from ${no} to ${fresh}: another ${kind === 'accession' ? 'plant' : 'batch'}, created earlier, had been given ${no} (on another device, or in a file merged in).` };
           let count = 1;
           for (const [field, value] of Object.entries(note)) changes.push({ t: stamp(count++), kind: 'event', id: eid, field, value });
           renumbered++;

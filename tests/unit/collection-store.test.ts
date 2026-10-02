@@ -163,7 +163,7 @@ describe('the numbering scheme is a synced setting (finding 32)', () => {
     const notes = (c: typeof x.collection) => c.events(theirs.id).filter((e) => e.t === 'note' && /Renumbered/.test(e.note ?? ''));
     expect(notes(x.collection)).toHaveLength(1);
     expect(notes(y.collection)).toHaveLength(1);
-    expect(notes(x.collection)[0].note).toBe('Renumbered from 2026-0007 to 2026-0008: another plant had been given 2026-0007 on a device that was offline at the time.');
+    expect(notes(x.collection)[0].note).toBe('Renumbered from 2026-0007 to 2026-0008: another plant, created earlier, had been given 2026-0007 (on another device, or in a file merged in).');
     // Each then receives the other's repair: nothing new, nothing doubled.
     const xAfter = [...x.mem.changes.values()],
       yAfter = [...y.mem.changes.values()];
@@ -640,5 +640,24 @@ describe('what belongs together is written together (round forty-nine, 1)', () =
     expect(heard).toHaveLength(1);
     expect(heard[0].map((c) => c.kind + ':' + c.field).sort()).toEqual(['accession:cover', 'photo:_deleted']);
     expect(collection.accession(a.id)?.cover).toBeNull();
+  });
+  it('round fifty-one, 3: a record edit, its lines and the other records it restates are one commit (putWith), and a refused vault keeps all of it out', async () => {
+    const { collection, mem } = await fresh('testdevice');
+    const a = await collection.addAccession({ taxonName: 'Aloe', status: 'growing' });
+    const acq = await collection.addEvent({ acc: a.id, d: '2026-01-01', t: 'acquire', note: null });
+    const heard: Change[][] = [];
+    collection.onLocalChange((cs) => heard.push(cs));
+    await collection.putWith('accession', a.id, { taxonName: 'Aloe vera', location: 'sill' }, [{ acc: a.id, d: localDate(), t: 'note', note: 'Renamed from Aloe to Aloe vera', auto: true }, { acc: a.id, d: localDate(), t: 'move', note: 'to sill' }], [{ kind: 'event', id: acq.id, fields: { d: '2026-02-02', note: 'from a friend' } }]);
+    expect(heard).toHaveLength(1);
+    const kinds = heard[0].map((c) => c.kind + ':' + c.field);
+    expect(kinds).toContain('accession:taxonName');
+    expect(kinds.filter((k) => k === 'event:t')).toHaveLength(2); // two new lines
+    expect(heard[0].some((c) => c.kind === 'event' && c.id === acq.id && c.field === 'd' && c.value === '2026-02-02')).toBe(true);
+    expect(collection.events(a.id).map((e) => e.t).sort()).toEqual(['acquire', 'move', 'note']);
+    expect(collection.events(a.id).find((e) => e.t === 'acquire')?.note).toBe('from a friend');
+    mem.fail = 'QuotaExceededError';
+    await expect(collection.putWith('accession', a.id, { taxonName: 'Aloe ferox' }, [{ acc: a.id, d: localDate(), t: 'note', note: 'Renamed', auto: true }])).rejects.toThrow();
+    expect(collection.accession(a.id)?.taxonName).toBe('Aloe vera');
+    expect(collection.events(a.id)).toHaveLength(3);
   });
 });

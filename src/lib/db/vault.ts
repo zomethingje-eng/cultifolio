@@ -315,8 +315,15 @@ async function storeIn(tx: Tx, changes: Change[], fromServer: boolean, extra: Pa
   }
   const kept: Change[] = [];
   const replaced: Change[] = [];
+  // A large batch (a restore, a merge) read the store once per change to find collisions, in sequence: a hundred thousand
+  // reads, ten seconds. The keys in the batch's range come in one read, and only a stamp among them is read in full (round fifty-one, 5).
+  let existing: Set<string> | null = null;
+  if (!strict && byStamp.size > 64) {
+    const ts = [...byStamp.keys()].sort();
+    existing = new Set((await ch.getAllKeys(IDBKeyRange.bound(ts[0], ts[ts.length - 1]))) as string[]);
+  }
   for (const c of byStamp.values()) {
-    const had = strict ? undefined : await ch.get(c.t);
+    const had = strict || (existing && !existing.has(c.t)) ? undefined : await ch.get(c.t);
     if (had && !sameChange(had, c)) {
       if (rank(c) > rank(had)) {
         console.warn(`change ${c.t} is already stored with other content; this one ranks higher and replaces it`);

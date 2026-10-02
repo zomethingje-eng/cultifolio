@@ -30,6 +30,8 @@ export async function sheetsIn(platform: Platform, fetch: Fetch, bucket: string,
       for (const s of got) if (s) out.push(s);
     }
   }
+  // An older corpus's buckets stayed in the map for the isolate's life (round fifty-one, 6): a refresh drops them.
+  for (const k of cache.keys()) if (!k.startsWith(`${corpus}:`)) cache.delete(k);
   cache.set(ck, { at: Date.now(), sheets: out });
   return out;
 }

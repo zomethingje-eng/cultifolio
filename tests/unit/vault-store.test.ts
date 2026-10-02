@@ -6,7 +6,7 @@
 import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { appendChanges, allChanges, outboxKeys, outboxAck, getMeta, setMeta, setMetaIfKey, wipeVault } from '$lib/db/vault';
-import { hlcEncode, hlcCompare, MAX_AHEAD_MS } from '$core/hlc';
+import { hlcEncode, hlcDecode, hlcCompare, MAX_AHEAD_MS } from '$core/hlc';
 import type { Change } from '$core/log';
 
 const t = (count: number) => hlcEncode({ wall: 1_700_000_000_000, count, device: 'aaaaaaaaaaaa' });
@@ -173,5 +173,18 @@ describe('an edit made while a peer\'s change to the field is held keeps the fie
     await collection.put('accession', 'p1', { notes: 'what I see' });
     const mine = (await allChanges()).find((c) => c.id === 'p1' && c.field === 'notes' && c.value === 'what I see')!;
     expect(hlcCompare(mine.t, ahead)).toBeGreaterThan(0);
+  });
+  it('but not past one years ahead: that is a broken clock, and following it would carry it to every correct device (round fifty-one, 1)', async () => {
+    const ahead = hlcEncode({ wall: Date.now() + 5 * 365 * 86_400_000, count: 0, device: 'bbbbbbbbbbbb' });
+    await appendChanges([ch(20, 'p1', 'acc', '2026-0001'), ch(21, 'p1', 'taxonName', 'Lithops'), ch(22, 'p1', 'status', 'growing'), { t: ahead, kind: 'accession', id: 'p1', field: 'notes', value: 'from the 2031 phone' }], true);
+    vi.resetModules();
+    const { collection } = await import('$lib/db/collection.svelte');
+    await collection.load();
+    expect(collection.accession('2026-0001')?.notes).toBeUndefined(); // held
+    await collection.put('accession', 'p1', { notes: 'what I see' });
+    expect(collection.accession('2026-0001')?.notes).toBe('what I see'); // shown here, since the other is held
+    const mine = (await allChanges()).find((c) => c.id === 'p1' && c.field === 'notes' && c.value === 'what I see')!;
+    expect(hlcCompare(mine.t, ahead)).toBeLessThan(0); // stamped at real time: every correct device shows it at once
+    expect(hlcDecode(mine.t).wall).toBeLessThan(Date.now() + MAX_AHEAD_MS);
   });
 });

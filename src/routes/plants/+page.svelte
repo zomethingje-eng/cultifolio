@@ -68,16 +68,21 @@
     if (new URL(location.href).search !== want) replaceState(`/plants${want}`, page.state);
   });
   /** Every word typed must be found somewhere in the plant's names, number, field number, place or notes: "humilis bench" finds a humilis on a bench (round twenty-five, 11). */
+  // Each plant's searchable text, folded once per change to the collection rather than once per plant per keystroke (round fifty-one, 5).
+  const hays = $derived(new Map(collection.accessions.map((a) => [a.id, hayOf(a)])));
   const matches = (a: (typeof collection.accessions)[number], words: string[]) => {
     if (!words.length) return true;
-    const hay = fold(`${a.taxonName} ${a.cultivar ?? ''} ${a.parentage ?? ''} ${a.nameAsReceived ?? ''} ${accNo(a)} ${a.fieldNumber ?? ''} ${a.locationId ? collection.locationName(a.locationId) : (a.location ?? '')} ${a.notes ?? ''} ${a.sourceFrom ?? ''}`);
+    const hay = hays.get(a.id) ?? hayOf(a);
     return words.every((w) => hay.includes(w));
+  };
+  const hayOf = (a: (typeof collection.accessions)[number]) => {
+    return fold(`${a.taxonName} ${a.cultivar ?? ''} ${a.parentage ?? ''} ${a.nameAsReceived ?? ''} ${accNo(a)} ${a.fieldNumber ?? ''} ${a.locationId ? collection.locationName(a.locationId) : (a.location ?? '')} ${a.notes ?? ''} ${a.sourceFrom ?? ''}`);
   };
   const byName = (a: (typeof collection.accessions)[number], b: (typeof collection.accessions)[number]) => a.taxonName.localeCompare(b.taxonName) || (a.cultivar ?? '').localeCompare(b.cultivar ?? '') || accNo(a).localeCompare(accNo(b));
   const sorters: Record<Sort, (a: (typeof collection.accessions)[number], b: (typeof collection.accessions)[number]) => number> = {
     number: () => 0, // the collection's order: newest number first
     name: byName,
-    watered: (a, b) => collection.careDays(b) - collection.careDays(a) || byName(a, b), // longest since watered first
+    watered: (a, b) => care(b) - care(a) || byName(a, b), // longest since watered first
     place: (a, b) => { const pa = a.locationId ? collection.locationName(a.locationId) : (a.location ?? ''), pb = b.locationId ? collection.locationName(b.locationId) : (b.location ?? ''); return (pa === '' ? 1 : 0) - (pb === '' ? 1 : 0) || pa.localeCompare(pb) || byName(a, b); } // unplaced plants last, not first (round twenty-six, 8)
   };
   const yearAgo = localDateYearAgo();
@@ -109,9 +114,25 @@
       watering = '';
     }
   }
-  const list = $derived(
-    collection.accessions.filter((a) => (show === 'all' || a.status === 'growing') && (show !== 'due' || collection.careDays(a) >= DUE_DAYS) && (show !== 'nophoto' || noPhoto(a.id)) && matches(a, words)).sort(sorters[sort])
-  );
+  /** Days since watered per plant, read once per list rather than once per comparison in the sort (round fifty-one, 5). */
+  let careMap = new Map<string, number>();
+  const care = (a: Accession) => { let d = careMap.get(a.id); if (d === undefined) careMap.set(a.id, (d = collection.careDays(a))); return d; };
+  const list = $derived.by(() => {
+    careMap = new Map();
+    return collection.accessions.filter((a) => (show === 'all' || a.status === 'growing') && (show !== 'due' || care(a) >= DUE_DAYS) && (show !== 'nophoto' || noPhoto(a.id)) && matches(a, words)).sort(sorters[sort]);
+  });
+  // The list is drawn in pages of two hundred as the reader scrolls: fifteen hundred rows at once was five seconds to paint (round fifty-one, 5).
+  const PAGE = 200;
+  let limit = $state(PAGE);
+  const shown = $derived(list.slice(0, limit));
+  let moreEl = $state<HTMLElement | null>(null);
+  $effect(() => { void list; limit = PAGE; });
+  $effect(() => {
+    if (!moreEl) return;
+    const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) limit += PAGE; }, { rootMargin: '600px 0px' });
+    io.observe(moreEl);
+    return () => io.disconnect();
+  });
 </script>
 
 <svelte:head><title>My plants — Cultifolio</title></svelte:head>
@@ -158,7 +179,7 @@
     <div style="margin: 0 0 8px"><RefPhotoOffer link buckets what="the reference’s photographs for plants without their own" /></div>
   {/if}
   <div class="rows">
-    {#each list as a (a.id)}
+    {#each shown as a (a.id)}
       {@const w = sinceWater(a.id)}
       {@const th = thumbs.get(speciesSlug(a.taxonName))}
       {@const own = collection.cover(a.id)}
@@ -176,11 +197,13 @@
       </div>
     {/each}
   </div>
+  {#if shown.length < list.length}<div class="more" bind:this={moreEl}><button class="btn small" type="button" onclick={() => (limit += PAGE)}>More ({list.length - shown.length} further down)</button></div>{/if}
   <p class="seccount">{list.length} of {collection.accessions.length} shown</p>
 {/if}
 
 <style>
   .keepline { margin: -6px 0 10px; }
+  .more { display: flex; justify-content: center; padding: 10px 0; }
   .sortsel { border: 1px solid var(--rule); background: var(--card); border-radius: 9px; padding: 8px 10px; font: inherit; font-size: 13px; color: var(--ink); }
   .muted { color: var(--ink3); }
   .notice .linkish { background: none; border: 0; padding: 0; color: var(--ink3); font: inherit; text-decoration: underline; cursor: pointer; }

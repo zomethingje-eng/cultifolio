@@ -17,6 +17,13 @@ import { build, files, version } from '$service-worker';
 declare const self: ServiceWorkerGlobalScope;
 
 const CACHE = `cultifolio-${version}`;
+/**
+ * The reference's answers (a dossier, an entries bucket, a sheet bucket) are keyed by corpus (`?c=`), not by build: they
+ * live in a cache of their own that a deploy leaves alone, so a device does not download its species again after every
+ * deploy; a corpus refresh drops the old corpus's answers when the first new one is kept (round fifty-one, 6).
+ */
+const CORPUS_CACHE = 'cultifolio-corpus';
+let corpusSeen = '';
 /** Collection pages render on the device from the vault; their HTML is a shell that is the same for everyone. */
 const SHELLS = ['/plants', '/plants/new', '/places', '/propagation', '/propagation/new', '/labels', '/backup', '/sync', '/frost', '/settings', '/offline'];
 const BUILD = new Set(build);
@@ -57,8 +64,8 @@ self.addEventListener('activate', (e) => {
       .keys()
       .then((keys) => {
         // This build's cache and the newest one before it stay; everything older goes.
-        const ours = keys.filter((k) => k.startsWith('cultifolio-') && k !== CACHE).sort();
-        const keep = new Set([CACHE, ...ours.slice(-1)]);
+        const ours = keys.filter((k) => k.startsWith('cultifolio-') && k !== CACHE && k !== CORPUS_CACHE).sort();
+        const keep = new Set([CACHE, CORPUS_CACHE, ...ours.slice(-1)]);
         return Promise.all(keys.filter((k) => !keep.has(k)).map((k) => caches.delete(k)));
       })
       .then(() => self.clients.claim())
@@ -142,13 +149,22 @@ self.addEventListener('fetch', (e) => {
       // index bucket or a sheet bucket is asked for once per corpus and then served from here, so a device that has its species
       // asks the server nothing more about them, online or off, and a corpus refresh (an upload, no deploy) is a new URL (round twelve, 7).
       if (url.pathname.startsWith('/api/dossier/') || url.pathname.startsWith('/api/entries') || url.pathname.startsWith('/api/sheets')) {
-        const hit = await cache.match(request);
+        const corpusCache = await caches.open(CORPUS_CACHE);
+        const hit = (await corpusCache.match(request)) ?? (await cache.match(request));
         if (hit) return hit;
         try {
           const r = await fetch(request);
           // A `no-store` answer is the server declining to vouch for it (a sheet or entries bucket asked for under a corpus id
           // that is not the current one): kept out of here too, or a device would hold it until the next deploy (round sixteen, 12).
-          if (r.ok && r.type === 'basic' && !/no-store/.test(r.headers.get('cache-control') ?? '')) e.waitUntil(cache.put(request, r.clone()).catch(() => {}));
+          if (r.ok && r.type === 'basic' && !/no-store/.test(r.headers.get('cache-control') ?? '')) {
+            const c = url.searchParams.get('c') ?? '';
+            e.waitUntil((async () => {
+              // The first answer under a new corpus id drops the old corpus's answers: they are a new URL and would never be asked for again.
+              if (c && corpusSeen && c !== corpusSeen) for (const k of await corpusCache.keys()) if (new URL(k.url).searchParams.get('c') !== c) await corpusCache.delete(k);
+              if (c) corpusSeen = c;
+              await corpusCache.put(request, r.clone());
+            })().catch(() => {}));
+          }
           return r;
         } catch {
           return Response.error();
@@ -156,11 +172,14 @@ self.addEventListener('fetch', (e) => {
       }
       if (url.pathname.startsWith('/species/') || url.pathname.startsWith('/s/') || url.pathname.startsWith('/about/') || url.pathname === '/' || url.pathname === '/settings') {
         // These pages vary on the units cookie; offline, the copy cached under the other units is the page (it re-reads the units on hydration), so Vary is ignored.
-        const kept = await cache.match(request, { ignoreVary: true });
+        // A navigation is held under its path alone: `/?by=origin&chip=climate` and `/species/x?was=y` each minted a copy, and
+        // the query is read again on hydration (round fifty-one, 6).
+        const under = request.mode === 'navigate' ? url.origin + url.pathname : request;
+        const kept = await cache.match(under, { ignoreVary: true, ignoreSearch: request.mode === 'navigate' });
         const good = (r: Response) => (request.mode === 'navigate' ? cacheableHtml(r) : r.ok && r.type === 'basic');
         // The cache write is a promise of its own, handed to `waitUntil`: a write started with `void` after the response
         // was returned could be cut off with the event, and the copy the next visit found was the old one (round thirty-eight, R2-2).
-        const keep = (r: Response) => ({ r, written: good(r) ? cache.put(request, r.clone()).catch(() => {}) : Promise.resolve() });
+        const keep = (r: Response) => ({ r, written: good(r) ? cache.put(under, r.clone()).catch(() => {}) : Promise.resolve() });
         try {
           const live = fetch(request).then(keep);
           if (!kept) {

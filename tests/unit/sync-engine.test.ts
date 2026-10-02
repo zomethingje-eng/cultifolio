@@ -1414,4 +1414,49 @@ describe('a removed photograph\'s pixels go from every device and from the serve
     await B.sync.run(); // asked once, not every run
     expect(D.calls.filter((c) => c === `DELETE /api/sync/photo/${pid2}`)).toHaveLength(1);
   });
+  it('round fifty-one, 2: a photograph brought back after a peer had the server drop its bytes is sent again from the device that kept the pixels, and the removal carries a proof the token alone cannot make', async () => {
+    const r2 = fakeR2();
+    const memB = newMem('bbbbbbbbbbbb');
+    mem = memB;
+    const B = await boot(memB, r2);
+    const a = await B.collection.addAccession({ taxonName: 'Aloe', acc: 'B-1' });
+    const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3]);
+    const pid = 'pone000000001';
+    const sha = await sha256hex(jpeg);
+    memB.photos.set(pid, { id: pid, blob: new Blob([jpeg]), thumb: new Blob([jpeg]) });
+    await B.collection.put('photo', pid, { acc: a.id, d: '2026-01-01', w: 1, h: 1, bytes: 6, sha });
+    await B.sync.setup(KEY, 'create');
+    const memD = newMem('dddddddddddd');
+    const D = await boot(memD, r2);
+    await D.sync.setup(KEY, 'join');
+    const photoKeys = () => [...r2.objs.keys()].filter((k) => k.includes('/photo/'));
+    expect(photoKeys()).toHaveLength(1);
+    expect(r2.objs.get(photoKeys()[0])!.md?.drop).toMatch(/^[0-9a-f]{64}$/); // the upload left its proof
+    // B removes it; the removal reaches D, which drops its pixels. The removal is then old enough on D for the server to be asked.
+    mem = memB;
+    await (await import('$lib/db/collection.svelte')).collection.load();
+    const undo = await B.collection.removePhoto(pid);
+    await B.sync.run();
+    mem = memD;
+    await D.sync.run();
+    expect(memD.photos.size).toBe(0);
+    vi.useFakeTimers({ now: Date.now() + 11 * 60_000, toFake: ['Date'] });
+    try {
+      await D.sync.run();
+      expect(D.calls.filter((c) => c === `DELETE /api/sync/photo/${pid}`)).toHaveLength(1);
+      expect(photoKeys()).toHaveLength(0); // gone from the server, with the proof
+      // B, meanwhile offline, taps Undo: the pixels are back on B and the record is live. B's next run sends it again,
+      // although `photosPushed` lists it, and D's next pull has it.
+      mem = memB;
+      await undo();
+      expect(memB.photos.size).toBe(1);
+      await B.sync.run();
+      expect(photoKeys()).toHaveLength(1);
+      mem = memD;
+      await D.sync.run();
+      expect(memD.photos.size).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

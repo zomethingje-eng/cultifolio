@@ -67,8 +67,10 @@
     altMsg = alt != null && (alt < -500 || alt > 9000) ? `${f.altM} is outside −500 to 9000 m${alt > 9000 && alt < 30000 ? `; in feet that would be ${Math.round(alt * 0.3048)} m` : ''}.` : '';
     if (altMsg) { document.getElementById('e-alt')?.focus(); return; }
     // "Bottoms out" is the unset reading too: a place that never said is not given `floorHeld: false` by an unrelated edit (round forty-nine, 2; round thirty-five, R1-6).
-    await collection.put('location', id, { name: f.name.trim() || loc?.name, type: f.kind || null, indoor: f.indoor === '' ? null : f.indoor === 'yes', floorC: (() => { const v = num(f.floorC); return v == null ? null : units.current === 'us' ? +fToC(v).toFixed(2) : v; })(), floorHeld: num(f.floorC) == null ? null : f.floorHeld === 'held' ? true : loc?.floorHeld ? false : (loc?.floorHeld ?? null), ppfd: num(f.ppfd), lightHours: num(f.lightHours), lat: num(f.lat), lon: num(f.lon), altM: num(f.altM), notes: f.notes.trim() || null });
-    if ((f.parent ?? null) !== (loc?.parentId ?? null) || collection.needsHome(id)) await collection.moveLocation(id, f.parent ?? null);
+    // The place's fields and its new parent are one commit: a page closed between the two left a place edited but not moved (round fifty-one, 3).
+    const moving = (f.parent ?? null) !== (loc?.parentId ?? null) || collection.needsHome(id);
+    if (moving) collection.checkMove(id, f.parent ?? null);
+    await collection.put('location', id, { ...{ name: f.name.trim() || loc?.name, type: f.kind || null, indoor: f.indoor === '' ? null : f.indoor === 'yes', floorC: (() => { const v = num(f.floorC); return v == null ? null : units.current === 'us' ? +fToC(v).toFixed(2) : v; })(), floorHeld: num(f.floorC) == null ? null : f.floorHeld === 'held' ? true : loc?.floorHeld ? false : (loc?.floorHeld ?? null), ppfd: num(f.ppfd), lightHours: num(f.lightHours), lat: num(f.lat), lon: num(f.lon), altM: num(f.altM), notes: f.notes.trim() || null }, ...(moving ? { parentId: f.parent ?? null } : {}) });
     editing = false;
   }
   function useMyLocation() {
@@ -96,12 +98,19 @@
   const moveShown = $derived.by(() => { const n = moveQ.trim().toLowerCase(); return n ? movable.filter((a) => accNo(a).toLowerCase().includes(n) || a.taxonName.toLowerCase().includes(n) || (a.locationId ? collection.locationName(a.locationId).toLowerCase().includes(n) : false)) : movable; });
   const moveN = $derived(Object.values(moveChosen).filter(Boolean).length);
   function startMove() { movingIn = true; moveQ = ''; moveChosen = {}; }
+  let movingBusy = $state(false);
   async function finishMove() {
+    if (movingBusy) return; // a second tap while the first commits wrote the move twice (round fifty-one, 4)
     const ids = Object.entries(moveChosen).filter(([, v]) => v).map(([k]) => k);
     if (!ids.length) { movingIn = false; return; }
-    const n = await collection.movePlants(ids, id);
-    movingIn = false;
-    toast.show(`Moved ${n} plant${n === 1 ? '' : 's'} to ${loc?.name ?? 'here'}.`);
+    movingBusy = true;
+    try {
+      const { n, undo } = await collection.movePlantsUndoable(ids, id);
+      movingIn = false;
+      toast.show(`Moved ${n} plant${n === 1 ? '' : 's'} to ${loc?.name ?? 'here'}.`, 8000, { label: 'Undo', run: () => { void undo().then(() => toast.show(`Undone: ${n} plant${n === 1 ? '' : 's'} back where ${n === 1 ? 'it was' : 'they were'}.`)); } });
+    } finally {
+      movingBusy = false;
+    }
   }
 
   /* ---- audit ---- */
@@ -264,7 +273,7 @@
           {#if moveShown.length > 200}<p class="small muted">{moveShown.length - 200} more: filter to find them.</p>{/if}
           {#if !moveShown.length}<p class="small muted">No plant matches.</p>{/if}
         </div>
-        <div class="actions"><span class="small muted">{moveN} picked</span><span class="grow"></span><button class="btn" type="button" onclick={() => (movingIn = false)}>Cancel</button><button class="btn pri" type="button" onclick={finishMove} disabled={!moveN}>Move {moveN || ''}</button></div>
+        <div class="actions"><span class="small muted">{moveN} picked</span><span class="grow"></span><button class="btn" type="button" onclick={() => (movingIn = false)}>Cancel</button><button class="btn pri" type="button" onclick={finishMove} disabled={!moveN || movingBusy}>Move {moveN || ''}</button></div>
       </div>
     </div>
   {/if}

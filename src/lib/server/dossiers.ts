@@ -4,6 +4,7 @@
  * scripts/build-dossiers.ts writes, served as assets), then the fixture
  * corpus compiled into the build (so tests work with nothing else present).
  */
+import { genusOf } from '$core/names';
 import { parseDossier, dossierPath, genusPath, GenusRecord, DOSSIER_V, type Dossier } from '$dossier/schema';
 import * as v from 'valibot';
 
@@ -54,7 +55,12 @@ const merge = (a: IndexEntry[], b: IndexEntry[]) => {
  * with. Before this the minute lapsed into a full re-read, four megabytes fetched and parsed, on the first request of
  * nearly every minute of a quiet site, which was most of a species page's time to first byte (round forty-three, 1).
  */
-let cached: { at: number; idx: IndexEntry[]; bySlug: Map<string, number>; corpus: string; etag: string | null } | null = null;
+type Loaded = { at: number; idx: IndexEntry[]; bySlug: Map<string, number>; corpus: string; etag: string | null; fromStore: boolean };
+let cached: Loaded | null = null;
+/** One load at a time: after an upload, concurrent requests each parsed their own copy of the index (round fifty-one, 6). */
+let loading: Promise<Loaded> | null = null;
+/** Whether the corpus in use came from the bucket: then a record the bucket lacks is absent, and the Worker's own origin is not asked for it (a subrequest that always answered 404; round fifty-one, 6). */
+const storeIsCorpus = () => !!cached?.fromStore;
 const CACHE_MS = 60_000;
 /** For tests: forget the parsed index. */
 export const _forgetIndex = () => { cached = null; };
@@ -90,8 +96,12 @@ export async function getCorpusId(platform: Platform, fetch: Fetch): Promise<str
 
 const fnv = (s: string) => { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(16).padStart(8, '0'); };
 
-async function loadIndex(platform: Platform, fetch: Fetch): Promise<NonNullable<typeof cached>> {
+async function loadIndex(platform: Platform, fetch: Fetch): Promise<Loaded> {
   if (cached && Date.now() - cached.at < CACHE_MS) return cached;
+  if (!loading) loading = loadIndexNow(platform, fetch).finally(() => { loading = null; });
+  return loading;
+}
+async function loadIndexNow(platform: Platform, fetch: Fetch): Promise<Loaded> {
   let idx: IndexEntry[] = [];
   let corpus = '';
   let etag: string | null = null;
@@ -115,14 +125,15 @@ async function loadIndex(platform: Platform, fetch: Fetch): Promise<NonNullable<
       corpus = (obj.etag || fnv(text)).replace(/[^A-Za-z0-9._-]/g, '').slice(0, 16);
     }
   }
-  const stat = await staticJson<IndexEntry[]>(fetch, `s/v${DOSSIER_V}/index.json`);
+  const fromStore = idx.length > 0;
+  const stat = fromStore ? null : await staticJson<IndexEntry[]>(fetch, `s/v${DOSSIER_V}/index.json`);
   if (stat) {
     idx = merge(idx, stat);
     corpus = corpus || fnv(JSON.stringify(stat));
   }
   // Fixtures only fill in when nothing real exists, so a real corpus never shows synthetic species.
   const out = idx.length ? idx : fixtureIndex;
-  cached = { at: Date.now(), idx: out, bySlug: new Map(out.map((e) => [e.slug, e.key])), corpus: idx.length ? corpus : 'fixture', etag };
+  cached = { at: Date.now(), idx: out, bySlug: new Map(out.map((e) => [e.slug, e.key])), corpus: idx.length ? corpus : 'fixture', etag, fromStore };
   return cached;
 }
 
@@ -139,7 +150,7 @@ export async function getDossier(platform: Platform, fetch: Fetch, key: number):
       }
     }
   }
-  const stat = await staticJson<unknown>(fetch, dossierPath(key));
+  const stat = storeIsCorpus() ? null : await staticJson<unknown>(fetch, dossierPath(key));
   if (stat) {
     try {
       return parseDossier(stat);
@@ -172,7 +183,28 @@ export async function getGenus(platform: Platform, fetch: Fetch, slug: string): 
     const obj = await store.get(genusPath(slug));
     if (obj) return parse(await obj.json());
   }
-  const stat = await staticJson<unknown>(fetch, genusPath(slug));
+  const stat = storeIsCorpus() ? null : await staticJson<unknown>(fetch, genusPath(slug));
   if (stat) return parse(stat);
   return parse(fixtureGenera[`/fixtures/dossiers/s/v2/g/${slug}.json`]) ?? null;
+}
+
+/** Maps over the index, built once per index load rather than per request: by key, and the species of each genus sorted by name (round fifty-one, 6). */
+type IndexMaps = { byKey: Map<number, IndexEntry>; byGenus: Map<string, IndexEntry[]>; bySynonym: Map<string, { entry: IndexEntry; matched: string }> };
+const maps = new WeakMap<IndexEntry[], IndexMaps>();
+export function indexMaps(index: IndexEntry[]): IndexMaps {
+  let m = maps.get(index);
+  if (m) return m;
+  const byKey = new Map<number, IndexEntry>();
+  const byGenus = new Map<string, IndexEntry[]>();
+  const bySynonym = new Map<string, { entry: IndexEntry; matched: string }>();
+  for (const e of index) {
+    byKey.set(e.key, e);
+    const g = genusOf(e.name);
+    const xs = byGenus.get(g);
+    if (xs) xs.push(e); else byGenus.set(g, [e]);
+    for (const syn of e.syn ?? []) { const k = syn.toLowerCase(); if (!bySynonym.has(k)) bySynonym.set(k, { entry: e, matched: syn }); }
+  }
+  for (const xs of byGenus.values()) xs.sort((a, b) => a.name.localeCompare(b.name));
+  maps.set(index, (m = { byKey, byGenus, bySynonym }));
+  return m;
 }

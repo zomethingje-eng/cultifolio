@@ -516,24 +516,31 @@ describe('a removed photograph\'s bytes leave the vault and its count (round for
     const r2 = fakeR2();
     const kv = fakeKV();
     const m = meta();
-    await storeCounted(r2 as never, 'v', m, 'vault/v/photo/p1.bin', new Uint8Array(100), undefined, {}, q(kv));
-    await storeCounted(r2 as never, 'v', m, 'vault/v/photo/p2.bin', new Uint8Array(30), undefined, {}, q(kv));
+    const P = 'ab'.repeat(32); // the proof the upload leaves (round fifty-one, 2)
+    await storeCounted(r2 as never, 'v', m, 'vault/v/photo/p1.bin', new Uint8Array(100), undefined, { drop: P }, q(kv));
+    await storeCounted(r2 as never, 'v', m, 'vault/v/photo/p2.bin', new Uint8Array(30), undefined, { drop: P }, q(kv));
     expect(await kv.get('bytes:v', 'json')).toEqual({ bytes: 130, day: '2026-09-20' });
-    expect(await deleteCounted(r2 as never, 'v', m, 'vault/v/photo/p1.bin', q(kv))).toBe(true);
+    // the token alone cannot destroy: no proof, or another, is refused and changes nothing
+    expect(await deleteCounted(r2 as never, 'v', m, 'vault/v/photo/p1.bin', q(kv))).toBe('noproof');
+    expect(await deleteCounted(r2 as never, 'v', m, 'vault/v/photo/p1.bin', q(kv), 'cd'.repeat(32))).toBe('noproof');
+    expect(r2.objs.has('vault/v/photo/p1.bin')).toBe(true);
+    expect(await deleteCounted(r2 as never, 'v', m, 'vault/v/photo/p1.bin', q(kv), P)).toBe(true);
     expect(r2.objs.has('vault/v/photo/p1.bin')).toBe(false);
     expect(await kv.get('bytes:v', 'json')).toEqual({ bytes: 30, day: '2026-09-20' });
     expect(m.bytes).toBe(30);
     expect(JSON.parse(new TextDecoder().decode(r2.objs.get('vault/v/meta.json')!.body)).bytes).toBe(30);
-    expect(await deleteCounted(r2 as never, 'v', m, 'vault/v/photo/p1.bin', q(kv))).toBe(false);
+    expect(await deleteCounted(r2 as never, 'v', m, 'vault/v/photo/p1.bin', q(kv), P)).toBe(false);
     expect(await kv.get('bytes:v', 'json')).toEqual({ bytes: 30, day: '2026-09-20' });
   });
-  it('without KV the snapshot is the counter', async () => {
+  it('without KV the snapshot is the counter; an object stored before proofs were kept cannot be deleted at all', async () => {
     const r2 = fakeR2();
     const m = meta();
-    await storeCounted(r2 as never, 'v', m, 'vault/v/photo/p1.bin', new Uint8Array(100));
-    expect(m.bytes).toBe(100);
-    expect(await deleteCounted(r2 as never, 'v', m, 'vault/v/photo/p1.bin')).toBe(true);
-    expect(m.bytes).toBe(0);
-    expect(JSON.parse(new TextDecoder().decode(r2.objs.get('vault/v/meta.json')!.body)).bytes).toBe(0);
+    await storeCounted(r2 as never, 'v', m, 'vault/v/photo/p0.bin', new Uint8Array(10));
+    expect(await deleteCounted(r2 as never, 'v', m, 'vault/v/photo/p0.bin', undefined, 'ab'.repeat(32))).toBe('noproof');
+    await storeCounted(r2 as never, 'v', m, 'vault/v/photo/p1.bin', new Uint8Array(100), undefined, { drop: 'ab'.repeat(32) });
+    expect(m.bytes).toBe(110);
+    expect(await deleteCounted(r2 as never, 'v', m, 'vault/v/photo/p1.bin', undefined, 'ab'.repeat(32))).toBe(true);
+    expect(m.bytes).toBe(10);
+    expect(JSON.parse(new TextDecoder().decode(r2.objs.get('vault/v/meta.json')!.body)).bytes).toBe(10);
   });
 });

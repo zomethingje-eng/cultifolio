@@ -14,7 +14,7 @@
   import WaitingRecord from '$lib/ui/WaitingRecord.svelte';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
   import LocationPicker from '$lib/ui/LocationPicker.svelte';
-  import type { Provenance } from '$lib/db/types';
+  import type { Provenance, PlantEvent } from '$lib/db/types';
   import { slugify, speciesOf, speciesSlug, parseName } from '$core/names';
   import SpeciesPicker from '$lib/ui/SpeciesPicker.svelte';
   import { setCrumb } from '$lib/ui/crumb.svelte';
@@ -156,9 +156,10 @@
   let moveTo = $state<string | null>(null);
   async function doMove() {
     if (!a || (moveTo ?? null) === (a.locationId ?? null)) { moving = false; return; }
-    await collection.movePlants([id], moveTo ?? null); // the place and the line in one commit (round forty-nine, 1)
-    toast.show(moveTo ? `Moved to ${collection.locationName(moveTo)}` : 'Place cleared');
+    const to = moveTo ?? null;
+    const { undo } = await collection.movePlantsUndoable([id], to); // the place and the line in one commit (round forty-nine, 1), with the way back (round fifty-one, 4)
     moving = false;
+    toast.show(to ? `Moved to ${collection.locationName(to)}` : 'Place cleared', 8000, { label: 'Undo', run: () => { void undo().then(() => toast.show('Undone: back where it was.')); } });
   }
   const daysAgo = (d: string | null | undefined) => (d ? daysBetween(d) : null);
   const lastOf = (t: string) => events.find((e) => e.t === t)?.d ?? null;
@@ -294,14 +295,16 @@
     // and `provenance: unknown` on a plant that had neither, two claims the grower never made (round thirty-five, R1-5).
     const nameKindOut = a.nameKind == null && !hybrid && f.nameKind === kindOf(a) ? null : nameKind;
     const provenanceOut = a.provenance == null && f.provenance === 'unknown' ? null : f.provenance;
-    await collection.put('accession', id, { taxonName, taxonKey, cultivar: f.cultivar.trim() || null, nameKind: nameKindOut, parentage, nameAsReceived: f.nameAsReceived.trim() || (oldFull !== newFull && !a.nameAsReceived ? oldFull : null), fieldNumber: f.fieldNumber.trim() || null, provenance: provenanceOut, acquired: f.acquired || null, sourceFrom: f.sourceFrom.trim() || null, sourceForm: f.sourceForm.trim() || null, price: f.price.trim() || null, locationId: f.locationId ?? null, location: f.locationId ? null : a.location ?? null });
     const kindWord = nameKind === 'hybrid' ? 'a hybrid' : nameKind === 'cultivar' ? 'a cultivar' : 'a species';
-    if (renamed) await collection.addEvent({ acc: id, d: localDate(), t: 'note', note: oldFull !== newFull ? `Renamed from ${oldFull} to ${newFull}${nameKind !== wasKind ? ` (now ${kindWord})` : ''}` : `Now recorded as ${kindWord}`, auto: true });
-    if (moved && f.locationId) await collection.addEvent({ acc: id, d: localDate(), t: 'move', note: `to ${collection.locationName(f.locationId)}` });
+    // The edit, its rename note, its move line and the acquired line it restates are one commit (round fifty-one, 3).
+    const lines: Array<Omit<PlantEvent, 'id'>> = [];
+    if (renamed) lines.push({ acc: id, d: localDate(), t: 'note', note: oldFull !== newFull ? `Renamed from ${oldFull} to ${newFull}${nameKind !== wasKind ? ` (now ${kindWord})` : ''}` : `Now recorded as ${kindWord}`, auto: true });
+    if (moved && f.locationId) lines.push({ acc: id, d: localDate(), t: 'move', note: `to ${collection.locationName(f.locationId)}` });
     // The log's "Acquired" line is the same fact as the card's date and source: it follows an edit rather than keeping the old one.
     const acq = events.find((e) => e.t === 'acquire');
     const newDate = f.acquired || null, newNote = f.sourceFrom.trim() ? `from ${f.sourceFrom.trim()}` : null;
-    if (acq && newDate && (acq.d !== newDate || (acq.note ?? null) !== newNote)) await collection.put('event', acq.id, { d: newDate, note: newNote });
+    const also = acq && newDate && (acq.d !== newDate || (acq.note ?? null) !== newNote) ? [{ kind: 'event' as const, id: acq.id, fields: { d: newDate, note: newNote } }] : [];
+    await collection.putWith('accession', id, { taxonName, taxonKey, cultivar: f.cultivar.trim() || null, nameKind: nameKindOut, parentage, nameAsReceived: f.nameAsReceived.trim() || (oldFull !== newFull && !a.nameAsReceived ? oldFull : null), fieldNumber: f.fieldNumber.trim() || null, provenance: provenanceOut, acquired: f.acquired || null, sourceFrom: f.sourceFrom.trim() || null, sourceForm: f.sourceForm.trim() || null, price: f.price.trim() || null, locationId: f.locationId ?? null, location: f.locationId ? null : a.location ?? null }, lines, also);
     editing = false;
   }
 
@@ -333,9 +336,9 @@
     const current = a?.notes ?? '';
     const next = notesDraft.trim() || null;
     const currentStamp = collection.notesStamp('accession', id);
-    await collection.put('accession', id, { notes: next, notesBase: notesBaseStamp });
-    // A text that arrived under the open editor from this device's other tab is logged here; one from another device is that device's to log, when it sees this edit's base (round twenty-five, 2).
-    if (current && current !== notesBase && current !== next && collection.isOwnStamp(currentStamp)) await collection.addEvent({ acc: id, d: localDate(), t: 'note', note: `Notes replaced by this edit; before it they read: ${current}`, auto: true });
+    // A text that arrived under the open editor from this device's other tab is logged here; one from another device is that device's to log, when it sees this edit's base (round twenty-five, 2). The notes and the line are one commit (round fifty-one, 3).
+    const replaced = current && current !== notesBase && current !== next && collection.isOwnStamp(currentStamp);
+    await collection.putWith('accession', id, { notes: next, notesBase: notesBaseStamp }, replaced ? [{ acc: id, d: localDate(), t: 'note', note: `Notes replaced by this edit; before it they read: ${current}`, auto: true }] : []);
     editingNotes = false;
   }
   async function saveMyNotes() {
@@ -519,7 +522,7 @@
   {/if}
 
   <div class="cards">
-    {#if a.status === 'growing' || collection.lastWatered(id)}<div class="card"><div class="lab">Since watered</div><div class="val">{sinceWater ?? '–'}{#if sinceWater != null}<span class="u"> d</span>{/if}</div><div class="sub">{sinceWater == null ? `no watering recorded; the record is ${careDays} ${careDays === 1 ? 'day' : 'days'} old` : `last ${collection.lastWatered(id)}`}</div></div>{/if}
+    {#if a.status === 'growing' || collection.lastWatered(id)}<div class="card"><div class="lab">Since watered</div><div class="val">{sinceWater ?? '–'}{#if sinceWater != null}<span class="u"> d</span>{/if}</div><div class="sub">{sinceWater == null ? `no watering recorded${careDays === 0 ? ' yet; added today' : ` in the ${careDays} ${careDays === 1 ? 'day' : 'days'} since it was added`}` : `last ${collection.lastWatered(id)}`}</div></div>{/if}
     {#if events.some((e) => e.t === 'audit')}<div class="card"><div class="lab">Last seen</div><div class="val">{seen == null ? '–' : seen}<span class="u">{seen == null ? '' : ' d'}</span></div><div class="sub">{#if collection.missedAt(id)}not seen at the audit of <span class="date">{collection.missedAt(id)}</span>; {/if}last logged <span class="date">{collection.lastSeen(id)}</span></div></div>{/if}
     {#if lastMeasure}<div class="card"><div class="lab">{sizeKey ? (MEASURES.find((m) => m.k === sizeKey)?.label ?? 'Size') : 'Size'}</div><div class="val">{sizeKey && lastMeasure ? (MEASURES.find((m) => m.k === sizeKey)?.unit ? lengthN(lastMeasure.measures![sizeKey], u) : lastMeasure.measures![sizeKey]) : '–'}<span class="u">{sizeKey && MEASURES.find((m) => m.k === sizeKey)?.unit ? ' ' + lengthUnit(u) : ''}</span></div>{#if growth != null}<div class="gauge"><i style="width: {Math.min(100, Math.max(8, (growth / Math.max(1, lastMeasure!.measures![sizeKey!])) * 100))}%"></i></div>{/if}<div class="sub">{growth != null ? `${growth >= 0 ? '+' : ''}${MEASURES.find((m) => m.k === sizeKey)?.unit ? lengthN(growth, u) : growth} since ${firstMeasure!.d}` : `measured ${lastMeasure.d}`}</div></div>{/if}
     <div class="card"><div class="lab">Habitat rain season</div><div class="val" style="font-family: var(--ui); font-size: 17px; font-weight: 700">{#if !season && dossier?.climate.status === 'refused'}<NotChecked what="Climate" why="A source did not answer when the species page was built{dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}." />{:else}{season ? season.label : dossier?.climate.status === 'pending' ? 'Climate pending' : dossier ? 'No habitat climate' : ref === 'unreachable' ? 'Reference not reached' : ref === 'none' ? (kind === 'hybrid' ? 'A hybrid' : 'No species page') : '…'}{/if}</div><div class="sub">{#if season}{season.note} <a href="/species/{speciesHref}#s-cultivation">The sheet</a>.{:else if dossier?.climate.status === 'refused'}No season is read from an answer that was not given.{:else if dossier?.climate.status === 'pending'}The habitat climate for this species has not been derived yet.{:else if dossier}Nothing to read a season from{dossier.climate.status === 'none' && dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}.{:else if ref === 'unreachable'}The species reference could not be reached from here; nothing is known either way.{:else if ref === 'none'}{kind === 'hybrid' ? (parentLinks.some((p) => p.slug) ? 'No habitat of its own; its parents have species pages.' : 'No habitat of its own.') : 'Not in the reference.'}{:else}reading the species dossier{/if}</div></div>

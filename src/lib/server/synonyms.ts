@@ -8,7 +8,7 @@
  * server, never from the browser, and only for an address the reference does
  * not hold; the answer is cached at the edge for a day.
  */
-import { getIndex, type Platform, type Fetch } from './dossiers';
+import { getIndex, indexMaps, type Platform, type Fetch } from './dossiers';
 
 export interface SynonymAnswer {
   /** The name as the backbone matched it. */
@@ -43,10 +43,9 @@ export async function synonymInIndex(platform: Platform, fetch: Fetch, slug: str
   if (!name || !/^[A-Z][a-z]+ [a-z]/.test(name)) return null;
   const want = name.toLowerCase();
   const index = await getIndex(platform, fetch);
-  const entry = index.find((e) => e.syn?.some((s) => s.toLowerCase() === want));
-  if (!entry) return null;
-  const matched = entry.syn!.find((s) => s.toLowerCase() === want)!;
-  return { matched, acceptedKey: entry.key, acceptedName: entry.name, slug: entry.slug };
+  const hit = indexMaps(index).bySynonym.get(want); // one map per index, not a scan of every synonym per unknown address (round fifty-one, 6)
+  if (!hit) return null;
+  return { matched: hit.matched, acceptedKey: hit.entry.key, acceptedName: hit.entry.name, slug: hit.entry.slug };
 }
 
 /**

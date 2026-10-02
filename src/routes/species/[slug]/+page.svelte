@@ -247,7 +247,7 @@
   {/if}
   <div class="top" class:withhero={!!hero}>
   {#if hero && heroFailed}
-    <div class="hero"><div class="ph"><span>The photograph did not load{#if hero.attribution?.trim()}{' '}({hero.attribution}){/if}; <a href={hero.page ?? hero.url} rel="noopener">its page is here</a>.</span></div></div>
+    <div class="hero"><div class="ph"><span>The photograph did not load; <a href={hero.page ?? hero.url} rel="noopener">its page is here</a>.{#if hero.attribution?.trim()}{' '}Credit: {hero.attribution}.{/if}</span></div></div>
   {:else if hero}
     <!-- The box is a fixed 150 px band on a phone, so the page lays out once and does not shift down when the photograph lands (round forty-two, 1). -->
     <div class="hero photo">

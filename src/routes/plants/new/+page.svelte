@@ -89,18 +89,24 @@
   /** "Save and add another" keeps the form open with the place, the date, the source and the provenance; the name and what belongs to the one plant are cleared (round forty-nine, 3). */
   let addAnother = $state(false);
   /** Whether the form has anything typed that leaving would lose; a save clears it before the page moves on. */
-  const dirty = $derived(!!(name.trim() || nameAsReceived.trim() || fieldNumber.trim() || notes.trim() || sourceFrom.trim()));
+  const dirty = $derived(!!(name.trim() || nameAsReceived.trim() || fieldNumber.trim() || notes.trim() || sourceFrom.trim() || price.trim() || (count ?? 1) !== 1 || provenance !== 'unknown' || acquired !== acquiredDefault));
   let saved = $state(false);
   beforeNavigate((nav) => {
-    // An in-app move away from a half-filled form asks first (a tab-bar tap, the back button); a full unload is the browser's to ask about (round forty-nine, 3).
+    // An in-app move away from a half-filled form asks first (a tab-bar tap, the back button); a full unload is asked about below (round forty-nine, 3; round fifty-one, 4).
     if (!dirty || saved || nav.type === 'leave' || nav.willUnload) return;
     if (!confirm('Leave this page? What you typed for this plant will be lost.')) nav.cancel();
   });
+  /** A reload, a closed tab or Back out of the app: the browser asks, since the form would be lost (round fifty-one, 4). */
+  function guardUnload(e: BeforeUnloadEvent) {
+    if (dirty && !saved && !busy) e.preventDefault();
+  }
+  // The toast sits above the pinned action bar on this page, not on it: after "Save and add another" it covered the buttons for eight seconds (round fifty-one, 4).
+  $effect(() => { document.body.classList.add('stickyacts'); return () => document.body.classList.remove('stickyacts'); });
   /** The fields a second plant from the same source shares; the rest are the one plant's. */
   let moreOpen = $state(false);
   async function save(e: SubmitEvent) {
     e.preventDefault();
-    if (!name.trim() || busy) return;
+    if (!name.trim() || busy || checking) return; // a second tap during a slow name check made a second plant (round fifty-one, 4)
     if (ownTaken) return;
     // The number is minted for the acquisition year and never reused, so a future date (2099 for 2026) would give the plant a wrong identity for good; refused before anything is checked or written (round twenty-six, 3).
     dateMsg = acquired && acquired > localDate() ? `${acquired} is in the future.` : '';
@@ -163,6 +169,7 @@
 </script>
 
 <svelte:head><title>Add plant — Cultifolio</title></svelte:head>
+<svelte:window onbeforeunload={guardUnload} />
 
 {#if collection.lastWriteError}
   {@const numberClash = /already used/.test(collection.lastWriteError)}
@@ -232,10 +239,11 @@
   </div>
 
   <!-- Pinned on a phone, so Add is under the thumb however long the form; "Add as typed" is the second press for a name the reference does not know (round forty-nine, 3). -->
+  <!-- Add is first in the markup, so Enter (the phone's Go) is Add, not "Save and add another"; the order on screen is set by CSS (round fifty-one, 4). -->
   <div class="actions sticky">
-    <a class="btn" href="/plants">Cancel</a>
-    <button class="btn" type="submit" onclick={() => (addAnother = true)} disabled={!name.trim() || busy || ownTaken} title="Add this plant and keep the form open for the next, with the place, date, source and provenance kept">Save and add another</button>
-    <button class="btn pri" type="submit" onclick={() => (addAnother = false)} disabled={!name.trim() || busy || ownTaken} aria-live="polite">{checking ? 'Checking the name…' : busy ? 'Adding…' : nameArmed ? 'Add as typed' : `Add${countN > 1 ? ` ${countN} plants` : ''}`}</button>
+    <button class="btn pri add" type="submit" onclick={() => (addAnother = false)} disabled={!name.trim() || busy || checking || ownTaken} aria-live="polite">{checking ? 'Checking the name…' : busy ? 'Adding…' : nameArmed ? 'Add as typed' : `Add${countN > 1 ? ` ${countN} plants` : ''}`}</button>
+    <a class="btn cancel" href="/plants">Cancel</a>
+    <button class="btn another" type="submit" onclick={() => (addAnother = true)} disabled={!name.trim() || busy || checking || ownTaken} title="Add this plant and keep the form open for the next, with the place, date, source and provenance kept">Save and add another</button>
   </div>
 </form>
 
@@ -252,6 +260,7 @@
   .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
   .moredetails { margin-top: 8px; }
   .moredetails > summary { cursor: pointer; font-size: 13px; padding: 8px 0; }
+  .actions.sticky .cancel { order: 1; } .actions.sticky .another { order: 2; } .actions.sticky .add { order: 3; }
   @media (max-width: 700px) { .actions.sticky { position: sticky; bottom: calc(56px + env(safe-area-inset-bottom)); background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(8px); padding: 10px 0; margin: 8px -4px 0; z-index: 5; } }
   .own { margin-top: 8px; }
   .own summary { cursor: pointer; font-size: 13px; }

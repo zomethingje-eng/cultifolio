@@ -70,6 +70,9 @@ export async function deriveKeys(vaultKey: string): Promise<VaultKeys> {
   return { key, id, token, enc: encKey, name: nameKey };
 }
 
+/** The proof a photograph's upload leaves with the server and its removal must repeat: HMAC of `drop:<id>` under the naming key, which the server never holds (round fifty-one, 2). */
+export const dropProof = async (k: VaultKeys, id: string) => hex(new Uint8Array(await crypto.subtle.sign('HMAC', k.name, enc.encode('drop:' + id))));
+
 /** A keyed fingerprint of a batch's plaintext: equal for equal content on the same vault (so a re-send after a lost reply is recognised), meaningless to anyone without the key. */
 export const batchFingerprint = async (k: VaultKeys, b: Uint8Array) => hex(new Uint8Array(await crypto.subtle.sign('HMAC', k.name, b as BufferSource)));
 

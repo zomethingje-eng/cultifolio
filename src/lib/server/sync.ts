@@ -60,9 +60,13 @@ const TOKEN = /^[0-9a-f]{64}$/;
  * stayed in the bucket for good, counted against the vault's allowance, and the key that could read it was the
  * grower's; now the device that folded the removal asks for the bytes to go. False when nothing was there.
  */
-export async function deleteCounted(r2: R2Bucket, id: string, meta: VaultMeta, key: string, quota?: Quota): Promise<boolean> {
+export async function deleteCounted(r2: R2Bucket, id: string, meta: VaultMeta, key: string, quota?: Quota, proof?: string | null): Promise<boolean | 'noproof'> {
   const existing = await r2.head(key);
   if (!existing) return false;
+  // The token alone could add; it must not be able to destroy. The object carries the proof its upload left, and only a
+  // key-holder can repeat it. An object stored before proofs were kept cannot be deleted (round fifty-one, 2).
+  const kept = existing.customMetadata?.drop;
+  if (!kept || !proof || kept !== proof) return 'noproof';
   await r2.delete(key);
   const size = existing.size;
   const kv = quota?.kv;
@@ -180,7 +184,7 @@ export function parseAfter(raw: string | null): After | null {
 
 const refCompare = (a: BatchRef, b: BatchRef) => a.at - b.at || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
 
-import { OVERLAP_MS, PUSH_HEADERS, BATCH_NAME, STATUS } from '$lib/sync/limits';
+import { OVERLAP_MS, PUSH_HEADERS, BATCH_NAME, STATUS, PHOTO_DROP_HEADER } from '$lib/sync/limits';
 export { OVERLAP_MS };
 
 /**
@@ -285,6 +289,8 @@ export interface BatchMeta {
   plain?: string;
   /** The device that pushed it. */
   device?: string;
+  /** A photograph's removal proof, 64 hex digits, kept with the object and demanded back by DELETE (round fifty-one, 2). */
+  drop?: string;
 }
 
 /** Where the counters live, and who is asking. `kv` absent means no KV is bound (tests, a bare `wrangler dev`). */
@@ -346,6 +352,7 @@ export async function storeCounted(r2: R2Bucket, id: string, meta: VaultMeta, ke
   const customMetadata: Record<string, string> = { sha: sha ?? (await sha256hex(body)) };
   if (extra.plain) customMetadata.plain = extra.plain;
   if (extra.device) customMetadata.device = extra.device;
+  if (extra.drop) customMetadata.drop = extra.drop;
   const put = () => r2.put(key, body, { httpMetadata: { contentType: 'application/octet-stream' }, customMetadata });
 
   const kv = quota?.kv;
@@ -437,6 +444,12 @@ export function batchMeta(request: Request): BatchMeta {
   if (plain != null && !PLAIN.test(plain)) error(400, 'x-batch-plain must be 64 hex digits');
   if (device != null && !DEVICE.test(device)) error(400, 'x-device must be a device id');
   return { plain: plain ?? undefined, device: device ?? undefined };
+}
+/** The photograph's removal proof from its header, or null; malformed is 400. */
+export function dropProof(request: Request): string | null {
+  const p = request.headers.get(PHOTO_DROP_HEADER);
+  if (p != null && !PLAIN.test(p)) error(400, `${PHOTO_DROP_HEADER} must be 64 hex digits`);
+  return p;
 }
 
 /**
@@ -627,7 +640,9 @@ export const RATE = {
   /** A catalogue search: a person typing makes a few a second for a few seconds, each answered from memory and cached at the edge, so only unique queries reach here; an office or a campus behind one address is many people (round forty, R1-3). */
   search: { limit: 3000, windowMs: 600_000 },
   /** A species address the reference does not hold, asked of the backbone's match service: a person follows a few old labels an hour; a script could mint them without end (round thirty-three, 12). */
-  match: { limit: 60, windowMs: 600_000 }
+  match: { limit: 60, windowMs: 600_000 },
+  /** The whole index: megabytes per answer, which no page needs (the catalogue and the search are served in windows), so a handful an hour is plenty (round fifty-one, 6). */
+  index: { limit: 6, windowMs: 600_000 }
 } as const;
 export type RateBucket = keyof typeof RATE;
 

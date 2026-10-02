@@ -2878,3 +2878,32 @@ test('round fifty: typing a search is a mode on a phone: the box pinned, the str
   await expect(page.locator('.filters .chiprow')).toBeVisible();
   await expect(page.locator('.cancelsearch')).toHaveCount(0);
 });
+
+test('round fifty-one: a move into a place has an Undo that puts the plant back and removes its line; Enter on the Add form is Add, not Save and add another (4)', async ({ page }) => {
+  await page.goto('/places');
+  await page.getByRole('button', { name: 'New place' }).click();
+  await page.fill('#loc-name', 'Cold frame');
+  await page.selectOption('#loc-kind', 'room');
+  await page.getByRole('button', { name: 'Add', exact: true }).click();
+  await expect(page.locator('.tree .row', { hasText: 'Cold frame' })).toBeVisible();
+  // Enter in a field submits the primary action: the page moves to the plant, not back to an emptied form
+  await page.goto('/plants/new?species=Welwitschia%20mirabilis&key=5411106');
+  await page.locator('details.moredetails > summary').click();
+  await page.locator('#f-field').fill('WM 1');
+  await page.locator('#f-field').press('Enter');
+  await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
+  const acc = page.url().split('/').pop()!;
+  await page.goto('/places');
+  await page.locator('.tree .row', { hasText: 'Cold frame' }).click();
+  await page.getByRole('button', { name: 'Move plants here' }).click();
+  await page.locator('.moverows label.row input').check();
+  await page.getByRole('button', { name: /^Move 1$/ }).click();
+  await expect(page.locator('.toast')).toContainText('Moved 1 plant to Cold frame');
+  await expect(page.locator('.rows a.row', { hasText: 'Welwitschia' })).toHaveCount(1);
+  await page.locator('.toast .undo').click();
+  await expect(page.locator('.toast')).toContainText('Undone');
+  await expect(page.locator('.rows a.row', { hasText: 'Welwitschia' })).toHaveCount(0);
+  await page.goto(`/plants/${acc}`);
+  await expect(page.locator('.tlrow', { hasText: 'to Cold frame' })).toHaveCount(0);
+  await expect(page.locator('.idcard a.place')).toHaveCount(0);
+});

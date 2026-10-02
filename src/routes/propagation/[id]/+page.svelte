@@ -136,7 +136,7 @@
     try {
       const made = await collection.potUp(id, n, { date: pd, locationId: ploc, note: pnote.trim() || null });
       potted = made.map((a) => accNo(a));
-      toast.show(`Potted up ${made.length}: ${potted.join(', ')}.`);
+      // No toast: the notice under the cards says the same, with the numbers as links (round fifty-one, 5).
       potting = false;
       pnote = '';
     } catch {

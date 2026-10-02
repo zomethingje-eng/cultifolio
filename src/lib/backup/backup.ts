@@ -6,7 +6,7 @@
 import { Zip, ZipPassThrough, ZipDeflate, unzipSync, strToU8, strFromU8 } from 'fflate';
 import * as v from 'valibot';
 import { materialise, live, known, readChanges, isComplete, type Change, type Record_ } from '$core/log';
-import { kindOf, accNo, sowNo, EVENT_LABEL, type Accession, type Photo, type Sowing, type PlantEvent } from '$lib/db/types';
+import { kindOf, accNo, sowNo, EVENT_LABEL, MEASURES, type Accession, type Photo, type Sowing, type PlantEvent } from '$lib/db/types';
 import { MAX_PHOTO_BYTES, SEAL_OVERHEAD } from '$lib/sync/limits';
 import { BACKUP_FORMAT, BACKUP_V, Manifest, ChangeRow, LegacyChanges, photoPath, thumbPath } from './format';
 
@@ -281,7 +281,26 @@ export function previewMerge(current: Change[], incoming: Change[]) {
       else addedByKind[r.kind] = (addedByKind[r.kind] ?? 0) + 1;
     } else if (b._t !== r._t) changed++;
   }
-  return { fresh, added, changed, unchanged: after.size - added - changed, addedByKind, addedDeleted, addedWaiting, waitingNames };
+  // Numbers the merge would settle: a plant here and a plant in the file under one number. The earlier-created record
+  // keeps it and the other is renumbered after the merge, which the preview did not say; a label printed for a plant
+  // here then pointed at the file's (round fifty-one, 4).
+  const renumbered: Array<{ no: string; here: boolean; name: string }> = [];
+  for (const kind of ['accession', 'sowing'] as const) {
+    const byNo = new Map<string, Array<Record_>>();
+    for (const r of after.values()) {
+      if (r.kind !== kind || r._deleted || !isComplete(r)) continue;
+      const no = kind === 'accession' ? accNo(r as unknown as Accession) : sowNo(r as unknown as Sowing);
+      const xs = byNo.get(no);
+      if (xs) xs.push(r); else byNo.set(no, [r]);
+    }
+    for (const [no, recs] of byNo) {
+      if (recs.length < 2) continue;
+      recs.sort((a, b) => a.id.localeCompare(b.id)); // the rule the repair uses: the earliest creation keeps the number
+      for (const r of recs.slice(1)) renumbered.push({ no, here: before.has(`${kind}:${r.id}`), name: String(r.taxonName ?? '') });
+    }
+  }
+  renumbered.sort((a, b) => a.no.localeCompare(b.no));
+  return { fresh, added, changed, unchanged: after.size - added - changed, addedByKind, addedDeleted, addedWaiting, waitingNames, renumbered };
 }
 
 const csvCell = (x: unknown) => {
@@ -324,7 +343,9 @@ export function plantsCsv(accs: Array<Accession & Record_>, state: Map<string, R
  * changes file only, which a spreadsheet cannot open.
  */
 export function eventsCsv(events: Array<PlantEvent & Record_>, state: Map<string, Record_>): string {
-  const head = ['date', 'number', 'species', 'entry', 'note', 'count', 'cause', 'used', 'measurements', 'by the app'];
+  // Measurements are written as the label and the unit ("height 42 mm"), not the stored key in bare millimetres, which a
+  // reader in inches misread; an entry on a removed record says so in its own column (round fifty-one, 5).
+  const head = ['date', 'number', 'species', 'entry', 'note', 'count', 'cause', 'used', 'measurements', 'by the app', 'record removed'];
   const rows = [...events]
     .sort((a, b) => a.d.localeCompare(b.d) || a.id.localeCompare(b.id))
     .map((e) => {
@@ -332,8 +353,9 @@ export function eventsCsv(events: Array<PlantEvent & Record_>, state: Map<string
       const sow = acc ? undefined : (state.get(`sowing:${e.acc}`) as unknown as (Sowing & Record_) | undefined);
       const no = acc ? accNo(acc) : sow ? sowNo(sow) : e.acc;
       const name = acc?.taxonName ?? sow?.taxonName ?? null;
-      const measures = e.measures && typeof e.measures === 'object' ? Object.entries(e.measures).map(([k, v]) => `${k} ${v}`).join('; ') : null;
-      return [e.d, no, name, EVENT_LABEL[e.t as keyof typeof EVENT_LABEL] ?? e.t, e.note, e.n, e.cause, e.used, measures, e.auto ? 'yes' : null].map(csvCell).join(',');
+      const measures = e.measures && typeof e.measures === 'object' ? Object.entries(e.measures).map(([k, v]) => { const m = MEASURES.find((x) => x.k === k); return `${(m?.label ?? k).toLowerCase()} ${v}${m?.unit ? ` ${m.unit}` : ''}`; }).join('; ') : null;
+      const removed = (acc ?? sow)?._deleted ? 'yes' : null;
+      return [e.d, no, name, EVENT_LABEL[e.t as keyof typeof EVENT_LABEL] ?? e.t, e.note, e.n, e.cause, e.used, measures, e.auto ? 'yes' : null, removed].map(csvCell).join(',');
     });
   return csvSheet(head, rows);
 }

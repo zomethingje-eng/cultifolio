@@ -60,9 +60,10 @@ describe('apply() with a hold', () => {
 
 describe('the clock holds are judged by follows the server past half a minute of disagreement (round forty-nine, 1)', () => {
   afterEach(() => _resetClockOffset());
-  it('a device years ahead stamps by the server\'s time once it has synced, and its holds are judged by it', () => {
+  it('a device years ahead stamps by the server\'s time once two readings agree, and its holds are judged by it', () => {
     const local = NOW + 6 * 365 * 86_400_000; // the phone says 2031
-    expect(trustServerTime(NOW, local)).toBe(NOW - local);
+    expect(trustServerTime(NOW, local)).toBe(0); // a correction of days or more waits for a second reading (round fifty-one, 1)
+    expect(trustServerTime(NOW + 1_000, local + 1_000)).toBe(NOW - local);
     expect(nowMs() + (local - Date.now())).toBeCloseTo(NOW, -3); // nowMs is the real clock plus the offset: the real clock stands in for `local` here
     const clock = new Clock('me'); // the default `now` is the corrected one
     expect(hlcDecode(clock.tick()).wall).toBeLessThan(Date.now() + MAX_AHEAD_MS);
@@ -74,5 +75,34 @@ describe('the clock holds are judged by follows the server past half a minute of
     expect(clockOffsetMs()).toBe(86_400_000);
     expect(trustServerTime(NOW, NOW + 5_000)).toBe(0);
     expect(trustServerTime(NaN, NOW)).toBe(0); // a missing Date header changes nothing
+  });
+  it('round fifty-one, 1: a correction holds at the edge instead of flapping, a lone reading of days does not move the clock, and the correction is kept for the next load', () => {
+    // A stand-in for the browser's storage: a Node with a `localStorage` global of its own (newer Nodes, behind a flag) must not be written to, so the property is replaced for this test and put back after (the round-forty-nine lesson about browser globals that differ between Nodes).
+    const store = new Map<string, string>();
+    const had = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+    Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v), removeItem: (k: string) => void store.delete(k) } });
+    try {
+    // 31 s off: taken; 29 s off next time: kept (not dropped at the threshold); 14 s: dropped
+    expect(trustServerTime(NOW, NOW - 31_000)).toBe(31_000);
+    expect(trustServerTime(NOW, NOW - 29_000)).toBe(31_000);
+    expect(trustServerTime(NOW, NOW - 14_000)).toBe(0);
+    // one reading of a 3-day disagreement (a captive portal's Date) moves nothing; two that agree do
+    expect(trustServerTime(NOW, NOW - 3 * 86_400_000)).toBe(0);
+    expect(trustServerTime(NOW, NOW - 10 * 86_400_000)).toBe(0); // a different lone reading replaces the pending one
+    expect(trustServerTime(NOW + 5_000, NOW + 5_000 - 10 * 86_400_000)).toBe(10 * 86_400_000);
+    expect(store.get('cultifolio.clockOffsetMs')).toBe(String(10 * 86_400_000));
+    _resetClockOffset();
+    expect(store.has('cultifolio.clockOffsetMs')).toBe(false);
+    } finally {
+      if (had) Object.defineProperty(globalThis, 'localStorage', had); else delete (globalThis as { localStorage?: unknown }).localStorage;
+    }
+  });
+  it('round fifty-one, 1: event dates come from the corrected clock, not the device\'s', async () => {
+    const { localDate } = await import('$core/dates');
+    const before = localDate();
+    trustServerTime(NOW - 400 * 86_400_000, NOW); // the server says the device is 400 days fast
+    trustServerTime(NOW - 400 * 86_400_000 + 2_000, NOW + 2_000); // and says so again
+    expect(localDate()).not.toBe(before);
+    expect(localDate()).toBe(localDate(new Date(nowMs())));
   });
 });

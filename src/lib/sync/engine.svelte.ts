@@ -37,8 +37,8 @@
  */
 import { collection } from '$lib/db/collection.svelte';
 import { StoppedError, getMeta, setMeta, setMetaIfKey, getPhotoBlobs, putPhotoBlobs, deletePhotoBlobs, photoBlobIds, outboxKeys, outboxAck, outboxFill, outboxClear, changesByKeys, allChanges, appendChanges, onOtherTabWrite, announceSyncForgotten } from '$lib/db/vault';
-import { deriveKeys, sealJson, openJson, seal, open, packPhoto, unpackPhoto, parseVaultKey, batchFingerprint, sha256hex, type VaultKeys } from './crypto';
-import { MAX_BATCH_BYTES, MAX_PHOTO_BYTES, SEAL_OVERHEAD, OVERLAP_MS, CURSOR_SLACK_MS, PUSH_HEADERS, batchName, listAfter, logBatch } from './limits';
+import { deriveKeys, sealJson, openJson, seal, open, packPhoto, unpackPhoto, parseVaultKey, batchFingerprint, dropProof, sha256hex, type VaultKeys } from './crypto';
+import { MAX_BATCH_BYTES, MAX_PHOTO_BYTES, SEAL_OVERHEAD, OVERLAP_MS, CURSOR_SLACK_MS, PUSH_HEADERS, PHOTO_DROP_HEADER, batchName, listAfter, logBatch } from './limits';
 import { readChanges, isHeld, dueAt, hlcWall, type Change } from '$core/log';
 import { hlcCompare, MAX_AHEAD_MS, nowMs, trustServerTime, clockOffsetMs } from '$core/hlc';
 import { version as BUILD } from '$app/environment';
@@ -65,6 +65,8 @@ interface SyncMeta {
   photosPushed: string[];
   /** Removed photographs whose ciphertext this device has asked the server to drop, or found gone (round forty-nine, 1). */
   photosDropped?: string[];
+  /** Photographs seen removed at the last run: one of them live again, with pixels here, is sent again whatever `photosPushed` says, since a peer may have asked the server to drop it meanwhile (round fifty-one, 2). */
+  photosRemoved?: string[];
   lastSync: string | null;
 }
 
@@ -517,6 +519,7 @@ class Sync {
     if (probing && m.vaultFull && Date.now() - Date.parse(m.vaultFull.at) < PROBE_MS) return;
     // Photos we have that the server may not.
     const have = new Set(await photoBlobIds());
+    this.noteRevived(m, have);
     const pushed = new Set(m.photosPushed);
     // Every photograph with a record, waiting ones too: their pixels are kept for the day the record completes, and the
     // other device needs them that day (round thirty-seven, 1).
@@ -533,7 +536,8 @@ class Sync {
         continue;
       }
       const packed = packPhoto(new Uint8Array(await b.blob.arrayBuffer()), new Uint8Array(await b.thumb.arrayBuffer()));
-      const r = await fetch(`${this.base}/api/sync/photo/${id}?vault=${this.k(m).id}`, { method: 'PUT', headers: this.h(m), body: (await seal(this.k(m), 'photo', packed, id)) as BodyInit });
+      // The upload leaves the proof its removal must repeat: a token-holder without the key can add, never destroy (round fifty-one, 2).
+      const r = await fetch(`${this.base}/api/sync/photo/${id}?vault=${this.k(m).id}`, { method: 'PUT', headers: { ...this.h(m), [PHOTO_DROP_HEADER]: await dropProof(this.k(m), id) }, body: (await seal(this.k(m), 'photo', packed, id)) as BodyInit });
       const full = await this.fullFrom(r);
       if (full) {
         this.setFull(m, full);
@@ -691,11 +695,24 @@ class Sync {
       const { batches, more, next } = (await r.json()) as { batches: Array<{ key: string; at: number }>; more: boolean; next?: { at: number; key: string } };
       // The clock the arrivals are judged against is the server's own, from the answer's Date header, not this device's:
       // a device clock far behind the server made every arrival look far ahead and parked the cursor for good (round forty, R1-6).
-      const serverNow = Date.parse(r.headers.get('date') ?? '') || Date.now();
+      const dateHeader = Date.parse(r.headers.get('date') ?? '');
+      const serverNow = dateHeader || Date.now();
       // And the clock holds are judged by, from here on: a device set years ahead stamped its changes so, judged
       // them against its own clock and saw nothing wrong, while every other device held them (round forty-nine, 1).
-      const wasOff = clockOffsetMs();
-      if (trustServerTime(serverNow) !== wasOff) { if (clockOffsetMs() === 0) this.clockWarning = null; this.warnClock(''); }
+      // Only from an answer that carries a Date: one without (a dev server) leaves the correction as it was, rather
+      // than resetting it mid-run (round fifty-one, 1). A correction that changes re-folds the log, since the holds
+      // were judged by the old clock: a device hours behind held its peers' latest changes at load.
+      if (dateHeader) {
+        const wasOff = clockOffsetMs();
+        if (trustServerTime(serverNow) !== wasOff) {
+          if (clockOffsetMs() === 0) this.clockWarning = null;
+          this.warnClock('');
+          await collection.rebuild();
+          if (this.meta !== m) throw stopped();
+          await this.scanClock();
+          await this.refold(m);
+        }
+      }
       const have = new Set(m.have);
       const fresh = batches.filter((b) => !have.has(b.key));
       let n = 0;
@@ -797,6 +814,23 @@ class Sync {
   }
 
   /**
+   * A photograph seen removed at the last run and live again now (an Undo, a restore), with its pixels still here, is
+   * sent again whatever `photosPushed` says. Another device may have folded the removal, dropped its pixels and asked the
+   * server to drop the bytes in between; without this no device ever uploaded it again, and the record showed blank
+   * everywhere but here, for good (round fifty-one, 2).
+   */
+  private noteRevived(m: SyncMeta, have: Set<string>): void {
+    if (!m.photosRemoved?.length) return;
+    const removedNow = new Set(collection.removedPhotos().map((r) => r.id));
+    const live = new Set(collection.knownPhotos().map((p) => p.id));
+    for (const id of m.photosRemoved) {
+      if (removedNow.has(id) || !live.has(id) || !have.has(id)) continue;
+      m.photosPushed = m.photosPushed.filter((x) => x !== id);
+      m.photosDropped = (m.photosDropped ?? []).filter((x) => x !== id);
+    }
+  }
+
+  /**
    * A removed photograph's pixels are bytes nothing names: they go from this device, and the server is asked to drop
    * its copy once the removal is old enough that an Undo is past (round forty-nine, 1). The server's 404 counts as
    * done. The id leaves `photosPushed`, so a record brought back later is pushed again from a device that kept the pixels.
@@ -804,13 +838,23 @@ class Sync {
   private async dropRemoved(m: SyncMeta, have: Set<string>): Promise<void> {
     const dropped = new Set(m.photosDropped ?? []);
     let changed = false;
-    for (const { id, at } of collection.removedPhotos()) {
+    const removed = collection.removedPhotos();
+    const removedNow = new Set(removed.map((r) => r.id));
+    if (!sameList(m.photosRemoved ?? [], [...removedNow])) { m.photosRemoved = [...removedNow]; changed = true; }
+    for (const { id, at } of removed) {
       if (have.has(id)) { await deletePhotoBlobs(id).catch(() => {}); collection.forgetPhotoUrls(id); }
       if (dropped.has(id) || nowMs() - at < DROP_AFTER_MS) continue;
-      const r = await fetch(`${this.base}/api/sync/photo/${id}?vault=${this.k(m).id}`, { method: 'DELETE', headers: this.h(m) });
+      const r = await fetch(`${this.base}/api/sync/photo/${id}?vault=${this.k(m).id}`, { method: 'DELETE', headers: { ...this.h(m), [PHOTO_DROP_HEADER]: await dropProof(this.k(m), id) } });
       if (r.status === 429) this.limited(r);
-      if (!r.ok && r.status !== 404) throw new Error(`photo ${id} removal: ${r.status}`);
       if (this.meta !== m) throw stopped();
+      if (r.status === 403) {
+        // Stored before proofs were kept, or under another vault's proof: the bytes stay, counted, and the sync page says so once (round fifty-one, 2).
+        this.note(m, 'refused', id, 'photo: the server kept the bytes of a removed photograph, since its upload left no removal proof (uploaded by an older build)');
+      } else if (!r.ok && r.status !== 404) {
+        // A failed removal is a note, not a failed run: the pull succeeded, and the bytes are asked for again next run (round fifty-one, 2).
+        this.lastError = `photo ${id} removal: ${r.status} (tried again next time)`;
+        continue;
+      }
       (m.photosDropped ??= []).push(id);
       m.photosPushed = m.photosPushed.filter((x) => x !== id);
       changed = true;
@@ -818,6 +862,7 @@ class Sync {
     if (changed) await this.save(m);
   }
 }
+const sameList = (a: string[], b: string[]) => a.length === b.length && a.every((x, i) => x === b[i]);
 /** How old a photograph's removal must be before the server is asked to drop the bytes: past any Undo. */
 const DROP_AFTER_MS = 10 * 60_000;
 
