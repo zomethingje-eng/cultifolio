@@ -195,6 +195,21 @@ const collectionHolds = await (async () => {
   return X.collection.accession('probe') === undefined;
 })();
 
+/**
+ * A gate a fake fetch holds a request at, and a promise that settles once a request has reached it. The tests that stop
+ * syncing or set up another vault mid-run must do so with the run held at the gate; a fixed 50 ms wait assumed the run
+ * had got there, and on a loaded machine it had not, so the stale run listed the vault after the stop and the test
+ * failed on the author's deploy, once in forty-four rounds (round forty-four).
+ */
+function gated() {
+  let release = () => {};
+  let arrive = () => {};
+  const open = new Promise<void>((r) => (release = r));
+  const reached = new Promise<void>((r) => (arrive = r));
+  const hold = async () => { arrive(); await open; };
+  return { hold, reached, release: () => release() };
+}
+
 describe('batches are named by content and acked only when the server holds those bytes', () => {
   it('an offline edit restored alongside synced changes still reaches every device', async () => {
     const r2 = fakeR2();
@@ -759,13 +774,13 @@ describe('a batch that cannot be read is set aside, not a wall', () => {
     // The listing answers, then the batch body takes a while; "Stop syncing" is pressed in the meantime.
     const real = globalThis.fetch;
     let release: () => void = () => {};
-    const gate = new Promise<void>((r) => (release = r));
+    const gate = gated(); release = gate.release;
     globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
-      if (/\/api\/sync\/log\/[^?]+/.test(String(input))) await gate;
+      if (/\/api\/sync\/log\/[^?]+/.test(String(input))) await gate.hold();
       return real(input, init);
     }) as typeof fetch;
     const run = D3.sync.run().catch((e: Error) => e);
-    await new Promise((r) => setTimeout(r, 50));
+    await gate.reached; // the run is at the gate, however loaded the machine (round forty-four)
     await D3.sync.forget();
     release();
     const err = await run;
@@ -788,13 +803,13 @@ describe('a batch that cannot be read is set aside, not a wall', () => {
     const D3 = await reboot(memD, r2);
     const real = globalThis.fetch;
     let release: () => void = () => {};
-    const gate = new Promise<void>((r) => (release = r));
+    const gate = gated(); release = gate.release;
     globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
-      if (/\/api\/sync\/log\/[^?]+/.test(String(input))) await gate;
+      if (/\/api\/sync\/log\/[^?]+/.test(String(input))) await gate.hold();
       return real(input, init);
     }) as typeof fetch;
     const run = D3.sync.run().catch((e: Error) => e);
-    await new Promise((r) => setTimeout(r, 50));
+    await gate.reached; // the run is at the gate, however loaded the machine (round forty-four)
     memD.meta.set('sync', null); // the other tab's forget(): on disk only; this tab has not heard the broadcast
     memD.outbox.clear();
     const before = memD.changes.size;
@@ -815,14 +830,14 @@ describe('a batch that cannot be read is set aside, not a wall', () => {
     // The old vault's push is held at the POST; meanwhile the grower stops syncing and joins another vault.
     const real = globalThis.fetch;
     let release: () => void = () => {};
-    const gate = new Promise<void>((r) => (release = r));
+    const gate = gated(); release = gate.release;
     let held = 0;
     globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
-      if (init?.method === 'POST' && /\/api\/sync\/log\?/.test(String(input)) && held++ === 0) await gate;
+      if (init?.method === 'POST' && /\/api\/sync\/log\?/.test(String(input)) && held++ === 0) await gate.hold();
       return real(input, init);
     }) as typeof fetch;
     const old = A.sync.run().catch((e: Error) => e);
-    await new Promise((r) => setTimeout(r, 50));
+    await gate.reached; // the run is at the gate, however loaded the machine (round forty-four)
     await A.sync.forget();
     const KEY2 = newVaultKey();
     const setup = A.sync.setup(KEY2, 'create'); // refills the outbox with everything for the new vault
@@ -847,19 +862,19 @@ describe('a batch that cannot be read is set aside, not a wall', () => {
     // The old vault's push is held at the POST and then answered 429, which run() catches so the pull can still happen.
     const real = globalThis.fetch;
     let release: () => void = () => {};
-    const gate = new Promise<void>((r) => (release = r));
+    const gate = gated(); release = gate.release;
     let held = 0;
     const gets: string[] = [];
     globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
       if (init?.method === 'POST' && /\/api\/sync\/log\?/.test(String(input)) && held++ === 0) {
-        await gate;
+        await gate.hold();
         return new Response('{"error":"wait"}', { status: 429, headers: { 'retry-after': '30' } });
       }
       if ((!init?.method || init.method === 'GET') && /\/api\/sync\/log\?/.test(String(input))) gets.push(String(input));
       return real(input, init);
     }) as typeof fetch;
     const old = A.sync.run().catch((e: Error) => e);
-    await new Promise((r) => setTimeout(r, 50));
+    await gate.reached; // the run is at the gate, however loaded the machine (round forty-four)
     await A.sync.forget();
     expect(A.sync.busy).toBeNull();
     release();
@@ -875,17 +890,17 @@ describe('a batch that cannot be read is set aside, not a wall', () => {
     await A.sync.setup(KEY, 'create'); // back on the first vault; its plant is on the server already, so this run pushes nothing
     await A.collection.addAccession({ taxonName: 'Conophytum', acc: 'A-2' }); // something to push
     held = 0;
-    const gate2 = new Promise<void>((r) => (release = r));
+    const gate2 = gated(); release = gate2.release;
     globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
       if (init?.method === 'POST' && /\/api\/sync\/log\?/.test(String(input)) && held++ === 0) {
-        await gate2;
+        await gate2.hold();
         return new Response('{"error":"wait"}', { status: 429, headers: { 'retry-after': '30' } });
       }
       if ((!init?.method || init.method === 'GET') && /\/api\/sync\/log\?/.test(String(input))) gets.push(String(input));
       return real(input, init);
     }) as typeof fetch;
     const old2 = A.sync.run().catch((e: Error) => e);
-    await new Promise((r) => setTimeout(r, 50));
+    await gate2.reached; // the run is at the gate, however loaded the machine (round forty-four)
     await A.sync.forget();
     gets.length = 0;
     await A.sync.setup(KEY2, 'create'); // its own first run pushes and lists; the POST it makes is not the held one (held is past 0)
@@ -1169,15 +1184,15 @@ describe('a run that outlives the vault it belongs to (round seventeen, A1 and 4
     await A.collection.addAccession({ taxonName: 'Lithops', acc: 'A-1' });
     const real = globalThis.fetch;
     let release: () => void = () => {};
-    const gate = new Promise<void>((r) => (release = r));
+    const gate = gated(); release = gate.release;
     let held = 0;
     globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
       const r = await real(input, init);
-      if (init?.method === 'POST' && /\/api\/sync\/log\?/.test(String(input)) && held++ === 0) await gate; // the server has stored the batch; the answer is on its way
+      if (init?.method === 'POST' && /\/api\/sync\/log\?/.test(String(input)) && held++ === 0) await gate.hold(); // the server has stored the batch; the answer is on its way
       return r;
     }) as typeof fetch;
     const old = A.sync.run().catch((e: Error) => e);
-    await new Promise((r) => setTimeout(r, 50));
+    await gate.reached; // the run is at the gate, however loaded the machine (round forty-four)
     // another tab: stop syncing, join vault B, refill the outbox for it; this tab's engine has heard nothing yet
     const KEY2 = newVaultKey();
     memA.meta.set('sync', { key: KEY2, since: 0, have: [], photosPushed: [], lastSync: null });
@@ -1203,14 +1218,14 @@ describe('a run that outlives the vault it belongs to (round seventeen, A1 and 4
     const D3 = await reboot(memD, r2);
     const real = globalThis.fetch;
     let release: () => void = () => {};
-    const gate = new Promise<void>((r) => (release = r));
+    const gate = gated(); release = gate.release;
     globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
       const r = await real(input, init);
-      if (/\/api\/sync\/log\/[^?]+/.test(String(input))) await gate; // the batch body has arrived; the fold is next
+      if (/\/api\/sync\/log\/[^?]+/.test(String(input))) await gate.hold(); // the batch body has arrived; the fold is next
       return r;
     }) as typeof fetch;
     const run = D3.sync.run().catch((e: Error) => e);
-    await new Promise((r) => setTimeout(r, 50));
+    await gate.reached; // the run is at the gate, however loaded the machine (round forty-four)
     memD.meta.set('sync', { key: newVaultKey(), since: 0, have: [], photosPushed: [], lastSync: null }); // another tab moved this device to vault B
     const before = memD.changes.size;
     release();
@@ -1231,14 +1246,14 @@ describe('a run that outlives the vault it belongs to (round seventeen, A1 and 4
     const A2 = await reboot(memA, r2);
     const real = globalThis.fetch;
     let release: () => void = () => {};
-    const gate = new Promise<void>((r) => (release = r));
+    const gate = gated(); release = gate.release;
     let held = 0;
     globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
-      if (!init?.method && /\/api\/sync\/log\?vault=/.test(String(input)) && held++ === 0) { const r = await real(input, init); await gate; return r; } // the old vault's listing takes a long time
+      if (!init?.method && /\/api\/sync\/log\?vault=/.test(String(input)) && held++ === 0) { const r = await real(input, init); await gate.hold(); return r; } // the old vault's listing takes a long time
       return real(input, init);
     }) as typeof fetch;
     const old = A2.sync.run().catch((e: Error) => e);
-    await new Promise((r) => setTimeout(r, 50));
+    await gate.reached; // the run is at the gate, however loaded the machine (round forty-four)
     await A2.sync.forget();
     await A2.sync.setup(newVaultKey(), 'create'); // its first run completes while the old listing is still pending
     const runsAfterSetup = A2.sync.runs;
@@ -1260,14 +1275,14 @@ describe('a stale run\'s verdicts never land on the new vault (round eighteen, 4
     await A.collection.addAccession({ taxonName: 'Lithops', acc: 'A-1' });
     const real = globalThis.fetch;
     let release: () => void = () => {};
-    const gate = new Promise<void>((r) => (release = r));
+    const gate = gated(); release = gate.release;
     let held = 0;
     globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
-      if (init?.method === 'POST' && /\/api\/sync\/log\?/.test(String(input)) && held++ === 0) { await gate; return new Response('{"bytes":123,"limit":456}', { status: 507 }); }
+      if (init?.method === 'POST' && /\/api\/sync\/log\?/.test(String(input)) && held++ === 0) { await gate.hold(); return new Response('{"bytes":123,"limit":456}', { status: 507 }); }
       return real(input, init);
     }) as typeof fetch;
     const old = A.sync.run().catch((e: Error) => e);
-    await new Promise((r) => setTimeout(r, 50));
+    await gate.reached; // the run is at the gate, however loaded the machine (round forty-four)
     await A.sync.forget();
     await A.sync.setup(newVaultKey(), 'create'); // the new vault's first run completes
     release();
@@ -1288,14 +1303,14 @@ describe('a stale run\'s verdicts never land on the new vault (round eighteen, 4
     const A2 = await reboot(memA, r2);
     const real = globalThis.fetch;
     let release: () => void = () => {};
-    const gate = new Promise<void>((r) => (release = r));
+    const gate = gated(); release = gate.release;
     globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
       const r = await real(input, init);
-      if (/\/api\/sync\/log\/[^?]+/.test(String(input))) await gate; // the batch body is in; the open comes next
+      if (/\/api\/sync\/log\/[^?]+/.test(String(input))) await gate.hold(); // the batch body is in; the open comes next
       return r;
     }) as typeof fetch;
     const old = A2.sync.run().catch((e: Error) => e);
-    await new Promise((r) => setTimeout(r, 50));
+    await gate.reached; // the run is at the gate, however loaded the machine (round forty-four)
     await A2.sync.forget();
     await A2.sync.setup(newVaultKey(), 'create');
     release();

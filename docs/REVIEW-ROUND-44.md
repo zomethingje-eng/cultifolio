@@ -15,3 +15,7 @@ This sandbox has none of those local faces, so the change is verified here only 
 ## Counts
 
 413 unit tests on 42 files, 83 e2e, local live check 9 of 9. One file changed.
+
+## The deploy's one failed test
+
+`npm run deploy` for this round stopped at the unit tests: the sync-engine test "a push answered 429 after Stop syncing does not go on to pull" failed once, on a run where every file took half again as long as usual. Ten tests in that file start a run, wait a fixed 50 ms for it to reach a request a fake fetch holds, and then stop syncing or set up another vault; on a loaded machine the run had not reached the held request in 50 ms, so the stop came first and the run went on to list the vault. The wait is now on the request reaching the gate (`gated()`), not on the clock. The engine was not at fault, and nothing in this round touched it; the test was.
