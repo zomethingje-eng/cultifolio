@@ -2605,3 +2605,31 @@ test('round forty-six: a client-side navigation to a species page whose HTML the
   await page.goBack();
   await expect(page.locator('.searchbar')).toHaveValue('copiapoa cin');
 });
+
+test('round forty-eight: on a phone the search row stays pinned through the list, and A–Z brings the index back (1)', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await expect(page.locator('.letters')).toBeVisible();
+  const h = await page.evaluate(() => document.documentElement.scrollHeight);
+  await page.evaluate((y) => window.scrollTo(0, y), Math.max(500, h - 900));
+  await page.waitForTimeout(200);
+  const bar = await page.locator('.stickyhead .toolrow').boundingBox();
+  expect(Math.round(bar!.y)).toBe(44); // pinned under the top bar, not scrolled away with the chips and the letters
+  await expect(page.locator('.azbtn')).toBeVisible();
+  await page.locator('.azbtn').click();
+  await page.waitForTimeout(600);
+  const letters = await page.locator('.letters').boundingBox();
+  expect(letters!.y).toBeGreaterThan(44);
+  expect(letters!.y).toBeLessThan(400);
+});
+
+test('round forty-eight: a window opened partway (a letter, ?at=) fills in the rows before it as the reader scrolls up, and the list is whole (2)', async ({ page }) => {
+  const res = await page.goto('/?at=2');
+  expect(res?.status()).toBe(200);
+  // the server's window starts at the third row; the rows before it come from the API as soon as the top is near
+  await expect(page.locator('.rows .grow').first()).toContainText('Welwitschia');
+  await expect(page.locator('.rows .grow')).toHaveCount(3);
+  await expect(page.locator('.rows .grow').first()).toContainText('Copiapoa');
+  await expect(page.locator('.rows .before')).toHaveCount(0); // nothing earlier is left
+  await expect(page.locator('.rows h2.letter').first()).toContainText('C');
+});

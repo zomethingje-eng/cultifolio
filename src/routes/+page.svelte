@@ -98,6 +98,36 @@
     });
     return fetching;
   }
+  /**
+   * Prepend the chunk before the loaded rows, keeping what is on screen where it is: a window opened at a letter (W) has
+   * everything before it still to come, and scrolling up must find it, not the top of the page (round forty-eight, 2).
+   * The scroll is corrected by hand, since Safari does not anchor it.
+   */
+  let fetchingBefore: Promise<boolean> | null = null;
+  function growBefore(): Promise<boolean> {
+    if (fetchingBefore) return fetchingBefore;
+    if (start <= 0) return Promise.resolve(false);
+    const at = Math.max(0, start - CHUNK);
+    const n = start - at;
+    fetchingBefore = catalogueRows(data.by, data.chip, at, n).then(async (got) => {
+      fetchingBefore = null;
+      if (!got || got.at !== at || at + n !== start) return false;
+      const before = document.documentElement.scrollHeight;
+      rows = [...got.rows.map((r) => ({ ...r, items: undefined })), ...rows];
+      start = at;
+      await tick();
+      window.scrollBy(0, document.documentElement.scrollHeight - before);
+      return got.rows.length > 0;
+    });
+    return fetchingBefore;
+  }
+  let topSentinel = $state<HTMLElement | null>(null);
+  $effect(() => {
+    if (!topSentinel || start <= 0) return;
+    const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) growBefore(); }, { rootMargin: '1600px 0px' });
+    io.observe(topSentinel);
+    return () => io.disconnect();
+  });
   /** Keep appending while the end of the list is still within reach of the viewport (a tall screen, a fling that landed on it). */
   async function growWhileNear() {
     while (sentinel && end < data.rowCount && sentinel.getBoundingClientRect().top < window.innerHeight + 1600) {
@@ -128,6 +158,16 @@
     await tick();
     document.getElementById(`l-${l}`)?.scrollIntoView();
     history.replaceState(history.state, '', `#l-${l}`);
+  }
+  let lettersEl = $state<HTMLElement | null>(null);
+  /** Scroll the chips and the letter index back under the pinned search row, and put the keyboard on the first letter. */
+  function showLetters() {
+    if (!lettersEl) return;
+    const bar = document.querySelector<HTMLElement>('.stickyhead .toolrow');
+    const under = 44 + (bar?.offsetHeight ?? 0) + 8;
+    const chips = document.querySelector<HTMLElement>('.chiprow') ?? lettersEl;
+    window.scrollTo({ top: chips.getBoundingClientRect().top + window.scrollY - under, behavior: 'smooth' });
+    lettersEl.querySelector<HTMLElement>('a')?.focus({ preventScroll: true });
   }
   onMount(() => {
     // A page opened at ?open=<row> (a link, a bookmark, the back button) starts at the row, not at the top of a thousand rows.
@@ -431,6 +471,8 @@
     <nav class="seg" aria-label="Group by">
       {#each ['genus', 'origin', 'family'] as const as b (b)}<a href="?by={b}{chip !== 'all' ? `&chip=${chip}` : ''}" class:on={data.by === b} aria-current={data.by === b ? 'true' : undefined}>{byLabel[b]}</a>{/each}
     </nav>
+    <!-- On a phone the chips and the letter index scroll away under the pinned search row; this brings them back (round forty-eight, 1) -->
+    {#if !flat && data.letters.length > 1}<button class="btn small azbtn" type="button" onclick={showLetters} aria-label="Show the letter index">A–Z</button>{/if}
   </div>
   <div class="chiprow">
     <a class="chipbtn" class:on={chip === 'all'} aria-current={chip === 'all' ? 'true' : undefined} href="?by={data.by}" data-sveltekit-noscroll>All<span class="n">{fmtN(data.total)}</span></a>
@@ -438,7 +480,7 @@
     <a class="chipbtn" class:on={chip === 'noclimate'} aria-current={chip === 'noclimate' ? 'true' : undefined} href="?by={data.by}&chip=noclimate" data-sveltekit-noscroll>Without climate<span class="n">{fmtN(data.total - data.withClimate)}</span></a>
   </div>
   {#if !flat && data.letters.length > 1}
-    <nav class="letters" aria-label="Jump to a letter">
+    <nav class="letters" aria-label="Jump to a letter" bind:this={lettersEl}>
       {#each data.letters as l (l)}<a href="?by={data.by}{chip !== 'all' ? `&chip=${chip}` : ''}&from={l}#l-{l}" onclick={(e) => { e.preventDefault(); jumpToLetter(l); }}>{l}</a>{/each}
     </nav>
   {/if}
@@ -460,6 +502,7 @@
     {/if}
   {:else}
     <div class="rows" class:withletters={data.letters.length > 1}>
+      {#if start > 0}<div class="more before" bind:this={topSentinel}><a class="btn small" href="?by={data.by}{chip !== 'all' ? `&chip=${chip}` : ''}&at={Math.max(0, start - CHUNK)}" onclick={async (e) => { e.preventDefault(); if (!(await growBefore())) location.href = (e.currentTarget as HTMLAnchorElement).href; }}>Earlier {data.by === 'genus' ? 'genera' : data.by === 'family' ? 'families' : 'regions'}</a></div>{/if}
       {#each visibleRows as r, i (r.id)}
         {#if r.letter && (i === 0 || rows[i - 1].letter !== r.letter)}<h2 class="letter" id="l-{r.letter}">{r.letter}</h2>{/if}
         <a class="grow" class:open={r.id === data.open} id="g-{r.id}" href={rowHref(r.id)} data-sveltekit-noscroll aria-expanded={r.id === data.open}>
@@ -521,10 +564,17 @@
   .stickyhead { position: sticky; top: 44px; z-index: 40; background: var(--bg); margin: 16px 0 6px; padding-bottom: 4px; border-bottom: 1px solid var(--rule); }
   .stickyhead .toolrow { position: static; margin-top: 0; }
   @media (max-height: 480px) { .stickyhead { position: static; } }
-  /* On a phone the whole block would take a quarter of the screen while scrolling: only the search row stays pinned there (round seventeen, design note) */
+  .rows { overflow-anchor: none; }
+  .azbtn { display: none; }
+  /* On a phone the whole block would take a quarter of the screen while scrolling: only the search row stays pinned there
+     (round seventeen, design note). The block is `display: contents` so the row's containing block is the page and it stays
+     pinned through the whole list: as a child of the block it unpinned as soon as the block scrolled past, a few rows in,
+     and the chips scrolled up underneath it meanwhile (round forty-eight, 1). The A–Z button brings the index back. */
   @media (max-width: 640px) {
-    .stickyhead { position: static; border-bottom: 0; padding-bottom: 0; }
-    .stickyhead .toolrow { position: sticky; top: 44px; z-index: 40; background: var(--bg); }
+    .stickyhead { display: contents; }
+    .stickyhead .toolrow { position: sticky; top: 44px; z-index: 40; background: var(--bg); margin-top: 16px; padding-bottom: 8px; border-bottom: 1px solid var(--rule); }
+    .azbtn { display: inline-flex; margin-left: auto; }
+    .chiprow { margin-top: 10px; }
   }
   .offer { margin: -4px 0 10px; }
   .letters { display: flex; flex-wrap: wrap; gap: 2px; margin: 0 0 2px; }
