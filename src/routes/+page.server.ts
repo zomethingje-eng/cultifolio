@@ -1,101 +1,41 @@
 import { getIndex } from '$lib/server/dossiers';
-import { groupFor, unitName } from '$core/regions';
-import { slugify, genusOf } from '$core/names';
-import { worldSvg } from '$lib/map/still';
-import tdwg from '$dossier/tdwg3.json';
+import { genusOf } from '$core/names';
 import { unitsFor } from '$lib/server/units';
+import { catalogueOf, byOf, chipOf, type Item } from '$lib/server/catalogue';
 import type { PageServerLoad } from './$types';
 
-const BYS = ['genus', 'origin', 'family'] as const;
-type By = (typeof BYS)[number];
+/** Rows in the first window: a phone shows about ten; the rest come from /api/rows as the reader nears the end (round forty-seven, 1). */
+export const _WINDOW = 60;
 
 export const load: PageServerLoad = async ({ platform, fetch, setHeaders, url, cookies, request }) => {
   const index = await getIndex(platform, fetch);
-  const list = index.map((e) => ({
-    key: e.key,
-    slug: e.slug,
-    name: e.name,
-    family: e.family,
-    common: e.common,
-    origin: e.origin ?? [],
-    syn: e.syn,
-    thumb: e.thumb,
-    alt: e.thumb ? e.name : undefined,
-    photos: e.photos,
-    open: e.open,
-    climate: e.climate
-  }));
-  type Item = (typeof list)[number];
   const byParam = url.searchParams.get('by');
-  const by: By = (BYS as readonly string[]).includes(byParam ?? '') ? (byParam as By) : 'genus';
+  const by = byOf(byParam);
   const open = url.searchParams.get('open') ?? '';
   // The climate chips filter the grouped catalogue on the server (`?chip=`): the client used to fetch the whole index to
   // flatten it by chip, which the index's size would make unusable first (round thirty-nine).
-  const chipParam = url.searchParams.get('chip');
-  const chip: 'all' | 'climate' | 'noclimate' = chipParam === 'climate' || chipParam === 'noclimate' ? chipParam : 'all';
-  const shown = chip === 'climate' ? list.filter((c) => c.climate === 'ok') : chip === 'noclimate' ? list.filter((c) => c.climate !== 'ok') : list;
+  const chip = chipOf(url.searchParams.get('chip'));
   // Short and never stale: HTML names the build's hashed chunks, and a stale page after a deploy would import chunks that are gone.
   setHeaders({ 'cache-control': 'private, max-age=60', vary: 'accept-language, cookie' }); // private: the page is rendered in the reader's units, so no shared cache may hand one reader's page to another
-
-  // The catalogue is browsed as closed groups, one open at a time (`?open=`), so the page carries eight hundred rows and one
-  // group's tiles rather than nine thousand tiles: a genus is what a grower thinks in, so it is the default; origin keeps
-  // its little map; family is for those who think that way. Search and the chips cut across the grouping on the client.
-  const keyOf = (c: Item): string => (by === 'genus' ? genusOf(c.name) : by === 'family' ? (c.family ?? 'Family not stated') : groupFor(c.origin));
-  const groups = new Map<string, Item[]>();
-  for (const c of shown) {
-    const k = keyOf(c);
-    groups.set(k, [...(groups.get(k) ?? []), c]);
-  }
-  type Row = [string, string, number, number, number, number];
-  const boxByName = new Map((tdwg as Row[]).map((r) => [r[1], { s: r[2], w: r[3], n: r[4], e: r[5] }]));
-  const groupMap = (items: Item[]) => {
-    const boxes = [...new Set(items.flatMap((c) => c.origin))].map((u) => boxByName.get(u)).filter((b): b is { s: number; w: number; n: number; e: number } => !!b);
-    return worldSvg(boxes, undefined, 'Where this group grows');
-  };
-  const commonest = (xs: string[]): string | undefined => {
-    const t = new Map<string, number>();
-    for (const x of xs) t.set(x, (t.get(x) ?? 0) + 1);
-    return [...t.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
-  };
-  const rows = [...groups.entries()].map(([label, items]) => {
-    const sorted = items.sort((a, b) => a.name.localeCompare(b.name));
-    const id = slugify(label);
-    const hero = sorted.find((c) => c.thumb && c.climate === 'ok') ?? sorted.find((c) => c.thumb);
-    const genera = new Set(sorted.map((c) => genusOf(c.name))).size;
-    const sub =
-      by === 'genus'
-        ? (commonest(sorted.map((c) => c.family).filter((f): f is string => !!f)) ?? '')
-        : by === 'family'
-          ? `${genera} ${genera === 1 ? 'genus' : 'genera'}`
-          : (() => {
-              // The region's own commonest units, not every unit its species also reach: a maple native from Florida to the Yukon
-              // belongs under Eastern North America without putting the Yukon in that row's subtitle.
-              const t = new Map<string, number>();
-              for (const c of sorted) for (const u of c.origin) if (groupFor([u]) === label) t.set(u, (t.get(u) ?? 0) + 1);
-              const top = [...t.entries()].sort((a, b) => b[1] - a[1]).map(([u]) => unitName(u));
-              return top.slice(0, 6).join(', ') + (top.length > 6 ? ' …' : '');
-            })();
-    return {
-      id,
-      label,
-      sub,
-      count: sorted.length,
-      withClimate: sorted.filter((c) => c.climate === 'ok').length,
-      thumb: by === 'origin' ? undefined : hero?.thumb,
-      alt: hero?.name,
-      map: by === 'origin' ? groupMap(sorted) : undefined,
-      letter: by === 'origin' ? '' : /^[A-Za-z]/.test(label) ? label[0].toUpperCase() : '#',
-      items: id === open ? sorted : undefined
-    };
-  });
-  const unplaced = (r: (typeof rows)[number]) => (r.label === 'Origin not stated' || r.label === 'Family not stated' ? 1 : 0);
-  rows.sort((a, b) => unplaced(a) - unplaced(b) || (by === 'origin' ? b.count - a.count : a.label.localeCompare(b.label)));
-  const letters = [...new Set(rows.map((r) => r.letter).filter(Boolean))];
+  const cat = catalogueOf(index, by, chip);
+  const { rows, list } = cat;
+  const openIndex = open ? rows.findIndex((r) => r.id === open) : -1;
+  // `?from=L`: the server-rendered window starts at that letter, so a reader without JavaScript (and a crawler) can follow
+  // the letter index; `?at=N` is "More" without JavaScript. With JavaScript the index jumps in place.
+  const start = (() => {
+    const at = Number(url.searchParams.get('at'));
+    if (Number.isInteger(at) && at > 0 && at < rows.length) return at;
+    return Math.max(0, cat.letterAt[(url.searchParams.get('from') ?? '').toUpperCase()] ?? -1);
+  })();
+  // The window: sixty rows from the start, or up to thirty past an opened row that lies beyond them, so a `?open=` link
+  // lands on its row. Only the opened row carries its species.
+  const end = Math.max(start + _WINDOW, openIndex >= 0 ? openIndex + 30 : 0);
+  const window = rows.slice(start, end).map((r) => (r.id === open ? { ...r, items: cat.itemsOf(r.id) } : { ...r, items: undefined as Item[] | undefined }));
   // What a stranger sees first: twelve photographed species with a derived climate, one from each of the largest
   // genera, chosen by rule (the most-recorded species of the genus) and rotated by the day so the strip is not editorial.
   const byGenus = new Map<string, Item[]>();
   // Eight or more photographs: a species photographed that often is photographed alive, not as a pressed sheet.
-  for (const c of list) if (c.thumb && c.climate === 'ok' && c.photos >= 8) byGenus.set(genusOf(c.name), [...(byGenus.get(genusOf(c.name)) ?? []), c]);
+  for (const c of list) if (c.thumb && c.climate === 'ok' && (c.photos ?? 0) >= 8) byGenus.set(genusOf(c.name), [...(byGenus.get(genusOf(c.name)) ?? []), c]);
   const genera = [...byGenus.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
   const day = Math.floor(Date.now() / 86_400_000);
   const pool = genera.slice(0, 48).map(([, xs]) => xs.sort((a, b) => b.open - a.open)[0]);
@@ -104,19 +44,16 @@ export const load: PageServerLoad = async ({ platform, fetch, setHeaders, url, c
     units: unitsFor(cookies, request),
     featured,
     by,
-    open: rows.some((r) => r.id === open) ? open : '',
+    open: openIndex >= 0 ? open : '',
     /** The address asked for the catalogue (a grouping, an opened group, a letter): a grower with plants lands on the catalogue, not on their own list (round thirty-four, 1). */
     browse: byParam != null || !!open || chip !== 'all' || url.searchParams.has('from') || url.searchParams.has('at'),
     chip,
-    rows,
-    letters,
-    // `?from=L`: the server-rendered window starts at that letter, so a reader without JavaScript (and a crawler) can follow the letter index; with JavaScript the index jumps in place.
-    start: (() => {
-      const at = Number(url.searchParams.get('at'));
-      if (Number.isInteger(at) && at > 0 && at < rows.length) return at; // "More" without JavaScript: the next window by row
-      return Math.max(0, rows.findIndex((r) => r.letter === (url.searchParams.get('from') ?? '').toUpperCase()));
-    })(),
-    total: index.length,
-    withClimate: list.filter((c) => c.climate === 'ok').length
+    rows: window,
+    rowCount: rows.length,
+    letters: cat.letters,
+    letterAt: cat.letterAt,
+    start,
+    total: cat.total,
+    withClimate: cat.withClimate
   };
 };

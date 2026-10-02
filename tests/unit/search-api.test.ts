@@ -46,3 +46,31 @@ describe('/api/search', () => {
     expect((await call('q=a&c=fixture', '9.9.9.8')).status).toBe(200);
   });
 });
+
+describe('/api/rows (round forty-seven, 1)', () => {
+  it('answers a window of the catalogue rows, cacheable under the current corpus id, no-store under another, and the front page sends only its window', async () => {
+    const { GET: rowsGET } = await import('../../src/routes/api/rows/+server');
+    const { GET: corpusGET } = await import('../../src/routes/api/corpus/+server');
+    const noStatic = (async () => new Response('', { status: 404 })) as typeof fetch;
+    const platform = { env: {} } as unknown as App.Platform;
+    const corpus = ((await (await corpusGET({ platform, fetch: noStatic } as never)).json()) as { id: string }).id;
+    const call = (q: string) => rowsGET({ url: new URL(`http://x/api/rows?${q}`), platform, fetch: noStatic } as never);
+    const a = await call(`by=genus&chip=all&at=0&n=2&c=${corpus}`);
+    expect(a.headers.get('cache-control')).toBe('public, max-age=86400');
+    const body = (await a.json()) as { at: number; count: number; rows: Array<{ id: string; letter: string; items?: unknown }> };
+    expect(body.at).toBe(0);
+    expect(body.rows.length).toBeLessThanOrEqual(2);
+    expect(body.count).toBeGreaterThan(0);
+    expect(body.rows[0]).not.toHaveProperty('items'); // the species of a row come with the page that opens it, never here
+    const b = await call('by=genus&chip=all&at=0&n=2&c=stale');
+    expect(b.headers.get('cache-control')).toBe('no-store');
+    const past = (await (await call(`by=genus&at=99999&n=5&c=${corpus}`)).json()) as { rows: unknown[] };
+    expect(past.rows).toEqual([]);
+    // the page's own load sends the window, the count and the letters, not every row
+    const { load, _WINDOW } = await import('../../src/routes/+page.server');
+    const page = (await load({ platform, fetch: noStatic, setHeaders: () => {}, url: new URL('http://x/'), cookies: { get: () => undefined }, request: new Request('http://x/') } as never)) as { rows: unknown[]; rowCount: number; letterAt: Record<string, number>; letters: string[] };
+    expect(page.rows.length).toBeLessThanOrEqual(_WINDOW);
+    expect(page.rowCount).toBe(body.count);
+    expect(Object.keys(page.letterAt)).toEqual(page.letters);
+  });
+});

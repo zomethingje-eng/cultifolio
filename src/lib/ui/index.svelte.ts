@@ -77,6 +77,22 @@ export async function searchCatalogue(q: string, n = 60): Promise<Found[] | { li
   }
 }
 
+export type { Row as CatalogueRow } from '$lib/server/catalogue';
+import type { Row as CatalogueRow } from '$lib/server/catalogue';
+/**
+ * A window of the catalogue's rows from the server, for the front page to append or to jump to a letter (round forty-seven, 1).
+ * Null when the reference could not be reached; the page's "More" link still works as a navigation then.
+ */
+export async function catalogueRows(by: string, chip: string, at: number, n: number): Promise<{ at: number; count: number; rows: CatalogueRow[] } | null> {
+  try {
+    const r = await withCorpus(`/api/rows?by=${encodeURIComponent(by)}&chip=${encodeURIComponent(chip)}&at=${at}&n=${n}`).then(timed);
+    if (!r.ok) return null;
+    return (await r.json()) as { at: number; count: number; rows: CatalogueRow[] };
+  } catch {
+    return null;
+  }
+}
+
 export type { Sheet } from '$lib/server/sheets';
 import type { Sheet } from '$lib/server/sheets';
 /**

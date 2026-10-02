@@ -6,7 +6,7 @@
   import { page } from '$app/state';
   import { accNo } from '$lib/db/types';
   import { photoAt, photoHosts } from '$dossier/photo-size';
-  import { entriesFor, searchCatalogue, type Found } from '$lib/ui/index.svelte';
+  import { entriesFor, searchCatalogue, catalogueRows, type Found } from '$lib/ui/index.svelte';
   import PageHead from '$lib/ui/PageHead.svelte';
   import { collection } from '$lib/db/collection.svelte';
   import { onMount, tick } from 'svelte';
@@ -66,41 +66,65 @@
   const HINT = 'cultifolio.hasMine';
   let expectMine = $state(false);
   /*
-   * The catalogue is 1,321 genera; as HTML that is ten thousand nodes, which a phone lays out before it can scroll. So
-   * the page renders a first window of rows (enough to fill several screens) and appends the rest as the reader nears
-   * the end, in chunks large enough that a fling does not outrun it. A letter tap, a `#l-X` link and a `?open=` row all
-   * render up to what they need before they scroll to it, so they land where they say. Search and the chips read the
-   * index, not these rows, and are unaffected.
+   * The catalogue is 1,321 genera; as HTML that is ten thousand nodes, which a phone lays out before it can scroll, and as
+   * data it was fifty kilobytes gzipped in every copy of the page before anything could paint (round forty-seven, 1). So
+   * the server sends a first window of rows (enough to fill several screens) and the page fetches the rest from /api/rows
+   * as the reader nears the end, in chunks large enough that a fling does not outrun it. A letter tap, a `#l-X` link and
+   * a `?open=` row fetch what they need before they scroll to it, so they land where they say. Search and the chips read
+   * the index, not these rows, and are unaffected. The "More" link is a plain navigation (`?at=`) for a reader without
+   * JavaScript, and the fallback when a fetch fails.
    */
-  const WINDOW = 60, CHUNK = 160; // sixty rows first (a phone shows about ten), then chunks as the reader nears the end: the first visit fetched forty-four group thumbnails it did not show (round thirty-three, R3-5)
-  /** Where the window starts: the letter asked for with `?from=` (a reader without JavaScript), else the top. */
+  const CHUNK = 160;
+  /** The rows loaded, contiguous from `start`: the server's window first, then what the API appended. */
   // svelte-ignore state_referenced_locally
   let start = $state(data.start);
-  const firstNeeded = () => { const i = data.open ? data.rows.findIndex((r) => r.id === data.open) : -1; return Math.max(WINDOW, i - data.start + 30); };
-  let shown = $state(firstNeeded());
-  $effect(() => { data.rows; data.open; data.start; start = data.start; shown = firstNeeded(); }); // a new grouping, letter or opened row: start again from what it needs
-  const visibleRows = $derived(data.rows.slice(start, start + shown));
+  // svelte-ignore state_referenced_locally
+  let rows = $state<Row[]>(data.rows);
+  $effect(() => { data.rows; data.start; start = data.start; rows = data.rows; }); // a new grouping, letter or opened row: start again from what the server sent
+  const visibleRows = $derived(rows);
+  const end = $derived(start + rows.length);
   let sentinel = $state<HTMLElement | null>(null);
-  /** Append a chunk, and keep appending while the end of the list is still within reach of the viewport (a tall screen, a fling that landed on it). */
+  let fetching: Promise<boolean> | null = null;
+  /** Append the next chunk from the API; false when it could not be reached (the "More" link then navigates). */
+  function growOnce(): Promise<boolean> {
+    if (fetching) return fetching;
+    if (end >= data.rowCount) return Promise.resolve(false);
+    const at = end;
+    fetching = catalogueRows(data.by, data.chip, at, CHUNK).then((got) => {
+      fetching = null;
+      if (!got || got.at !== at || at !== start + rows.length) return false;
+      rows = [...rows, ...got.rows.map((r) => ({ ...r, items: undefined }))];
+      return got.rows.length > 0;
+    });
+    return fetching;
+  }
+  /** Keep appending while the end of the list is still within reach of the viewport (a tall screen, a fling that landed on it). */
   async function growWhileNear() {
-    while (sentinel && start + shown < data.rows.length && sentinel.getBoundingClientRect().top < window.innerHeight + 1600) {
-      shown = Math.min(data.rows.length - start, shown + CHUNK);
+    while (sentinel && end < data.rowCount && sentinel.getBoundingClientRect().top < window.innerHeight + 1600) {
+      if (!(await growOnce())) return;
       await tick();
     }
   }
   $effect(() => {
-    if (!sentinel || start + shown >= data.rows.length) return;
+    if (!sentinel || end >= data.rowCount) return;
     const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) growWhileNear(); }, { rootMargin: '1600px 0px' });
     io.observe(sentinel);
     return () => io.disconnect();
   });
-  /** Render every row up to the end of a letter, then scroll to its heading; the hash is kept so the back button and a copied link behave. */
+  /**
+   * Scroll to a letter's heading, fetching its rows first when they are not loaded: a letter past the loaded rows opens a
+   * window from its first row (as `?from=` does on the server); a letter above them is already there. The hash is kept
+   * so the back button and a copied link behave.
+   */
   async function jumpToLetter(l: string) {
-    let first = -1, last = -1;
-    data.rows.forEach((r, i) => { if (r.letter === l) { if (first < 0) first = i; last = i; } });
-    if (last < 0) return;
-    if (first < start) { shown += start; start = 0; } // a letter above the window: the window opens from the top
-    shown = Math.max(shown, last + 1 - start);
+    const first = data.letterAt[l];
+    if (first == null) return;
+    if (first < start || first >= end) {
+      const got = await catalogueRows(data.by, data.chip, first, CHUNK);
+      if (!got) { location.href = `?by=${data.by}${chip !== 'all' ? `&chip=${chip}` : ''}&from=${l}#l-${l}`; return; }
+      start = first;
+      rows = got.rows.map((r) => ({ ...r, items: undefined }));
+    }
     await tick();
     document.getElementById(`l-${l}`)?.scrollIntoView();
     history.replaceState(history.state, '', `#l-${l}`);
@@ -166,7 +190,8 @@
   const yourView = $derived(hasMine && !browsing);
   // The hint says "your species" is coming; hold the catalogue back until the collection says which view this is.
   const settling = $derived(expectMine && !collection.ready);
-  type Item = NonNullable<(typeof data.rows)[number]['items']>[number];
+  type Row = (typeof data.rows)[number];
+  type Item = NonNullable<Row['items']>[number];
   // The search is the server's: the index never comes to the browser whole (round thirty-nine). Debounced a little,
   // and an answer is used only if it is still for the text in the box.
   let found = $state<Found[]>([]);
@@ -436,7 +461,7 @@
   {:else}
     <div class="rows" class:withletters={data.letters.length > 1}>
       {#each visibleRows as r, i (r.id)}
-        {#if r.letter && (i === 0 || data.rows[start + i - 1].letter !== r.letter)}<h2 class="letter" id="l-{r.letter}">{r.letter}</h2>{/if}
+        {#if r.letter && (i === 0 || rows[i - 1].letter !== r.letter)}<h2 class="letter" id="l-{r.letter}">{r.letter}</h2>{/if}
         <a class="grow" class:open={r.id === data.open} id="g-{r.id}" href={rowHref(r.id)} data-sveltekit-noscroll aria-expanded={r.id === data.open}>
           {#if r.map}<div class="gmap">{@html r.map}</div>{:else if r.thumb}<div class="gthumb"><img src={photoAt(r.thumb, 'square')} width="56" height="56" alt="" loading="lazy" onerror={(e) => { const im = e.currentTarget as HTMLImageElement; im.remove(); }} /></div>{:else}<div class="gthumb mono" aria-hidden="true">{r.label[0] ?? ''}</div>{/if}
           <div class="gtx">
@@ -452,9 +477,9 @@
           </div>
         {/if}
       {/each}
-      {#if start + shown < data.rows.length}<div class="more" bind:this={sentinel}><a class="btn small" href="?by={data.by}&at={start + shown}" onclick={(e) => { e.preventDefault(); shown = Math.min(data.rows.length - start, shown + CHUNK); }}>More of the {fmtN(data.rows.length)} {data.by === 'genus' ? 'genera' : data.by === 'family' ? 'families' : 'regions'}</a></div>{/if}
+      {#if end < data.rowCount}<div class="more" bind:this={sentinel}><a class="btn small" href="?by={data.by}{chip !== 'all' ? `&chip=${chip}` : ''}&at={end}" onclick={async (e) => { e.preventDefault(); if (!(await growOnce())) location.href = (e.currentTarget as HTMLAnchorElement).href; }}>More of the {fmtN(data.rowCount)} {data.by === 'genus' ? 'genera' : data.by === 'family' ? 'families' : 'regions'}</a></div>{/if}
     </div>
-    <p class="seccount" style="margin-top: 14px">{fmtN(data.rows.length)} {data.by === 'genus' ? 'genera' : data.by === 'family' ? 'families' : 'regions'} · {fmtN(data.total)} species</p>
+    <p class="seccount" style="margin-top: 14px">{fmtN(data.rowCount)} {data.by === 'genus' ? 'genera' : data.by === 'family' ? 'families' : 'regions'} · {fmtN(data.total)} species</p>
   {/if}
 {/if}
 

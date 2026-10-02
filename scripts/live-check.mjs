@@ -193,6 +193,13 @@ if (!skip.has('thumbs') && !process.env.LIVE_CHECK_FIXTURE_OK) {
   if (!hits[0].name.toLowerCase().startsWith(name)) fail(`/api/search?q=${name}: the first hit is ${hits[0].name}, not the genus asked for`, r);
   if (!/max-age=86400/.test(r.h('cache-control') ?? '')) fail(`/api/search under the current corpus id should be cacheable for a day (cache-control: ${r.h('cache-control')})`, r);
   ok(`search: ${hits.length} hits for ${name}, first ${hits[0].name}, cacheable`);
+  // The catalogue's rows past the page's window come from the API (round forty-seven, 1): the second window, cacheable.
+  const rows = await get(`/api/rows?by=genus&chip=all&at=1&n=2&c=${encodeURIComponent(id)}`);
+  if (rows.status !== 200) fail('/api/rows', rows);
+  const win = JSON.parse(rows.text);
+  if (win.at !== 1 || !Array.isArray(win.rows) || !(win.count > 0)) fail(`/api/rows answered without a window (at ${win.at}, count ${win.count})`, rows);
+  if (!/max-age=86400/.test(rows.h('cache-control') ?? '')) fail(`/api/rows under the current corpus id should be cacheable for a day (cache-control: ${rows.h('cache-control')})`, rows);
+  ok(`rows: ${win.rows.length} of ${win.count} from the second, cacheable`);
 }
 
 // The front page's first-screen photographs, by weight: every image the server-rendered home page names (the featured
