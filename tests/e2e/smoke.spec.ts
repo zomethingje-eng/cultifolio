@@ -2593,3 +2593,15 @@ test('round forty-two: the home page preloads the first featured tile and precon
   await expect(page.locator('head link[rel="preload"][as="image"]')).toHaveAttribute('href', /\/small\.jpe?g$/);
   await expect(page.locator('head link[rel="preconnect"]').first()).toHaveAttribute('href', /^https:\/\/(inaturalist-open-data\.s3\.amazonaws\.com|api\.gbif\.org)$/);
 });
+
+test('round forty-six: a client-side navigation to a species page whose HTML the Worker holds gets its data, not the held HTML (3)', async ({ page }) => {
+  await page.goto('/species/copiapoa-cinerea'); // the HTML is held for a minute now
+  await page.goto('/');
+  await page.fill('.searchbar', 'copiapoa cin');
+  await page.locator('a.tile', { hasText: 'Copiapoa cinerea' }).first().click(); // a client-side navigation: the data request goes under the page's URL
+  await expect(page).toHaveURL(/\/species\/copiapoa-cinerea$/);
+  await expect(page.locator('h1')).toContainText('Copiapoa cinerea');
+  await expect(page.locator('main')).not.toContainText('Internal Error');
+  await page.goBack();
+  await expect(page.locator('.searchbar')).toHaveValue('copiapoa cin');
+});

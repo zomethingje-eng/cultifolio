@@ -115,6 +115,9 @@ for (const path of ['/about/how', `/species/${species}`, '/offline', '/api/corpu
   if (b.h('x-cultifolio-page') !== 'held') fail(`${path}: the second request was not answered from the Worker's cache (x-cultifolio-page "${b.h('x-cultifolio-page')}")`, b);
   if (!/^private, max-age=60$/.test(b.h('cache-control'))) fail(`${path}: a held page must stay private to the browser`, b);
   if (b.text !== a.text) fail(`${path}: the held page differs from the rendered one`, b);
+  // a client-side navigation's data request under the same URL must get JSON, never the held HTML (round forty-six, 3)
+  const d = await get(`/species/${species}/__data.json?x-sveltekit-invalidated=01`, { headers: { accept: '*/*' } });
+  if (d.status !== 200 || !d.h('content-type').startsWith('application/json') || d.h('x-cultifolio-page')) fail(`/species/${species}/__data.json: the data request was not answered with JSON (status ${d.status}, type "${d.h('content-type')}", x-cultifolio-page "${d.h('x-cultifolio-page')}")`, d);
   ok(`species page: ${a.h('x-cultifolio-page')} then held, private to the browser`);
 }
 
@@ -124,7 +127,10 @@ for (const path of ['/about/how', `/species/${species}`, '/offline', '/api/corpu
   if (r.status !== 200) fail('/', r);
   if (/cloudflareinsights/.test(r.text)) fail('the front page carries the Cloudflare Web Analytics beacon; turn off automatic setup in the dashboard (docs/DEPLOY.md, section 2)', r);
   if (!/<meta name="referrer" content="no-referrer"/.test(r.text)) fail('the front page has no referrer meta', r);
-  ok('/: no beacon, referrer meta present');
+  // and it is held by the Worker like a species page (round forty-six, 2): the second request within a second says so
+  const r2 = await get('/', { headers: { accept: 'text/html' } });
+  if (r2.h('x-cultifolio-page') !== 'held') fail(`/: the second request was not answered from the Worker's cache (x-cultifolio-page "${r2.h('x-cultifolio-page')}")`, r2);
+  ok('/: no beacon, referrer meta present, held for the next request');
 }
 
 // The reference under a stale corpus id is answered but not stored anywhere (round sixteen, 12).

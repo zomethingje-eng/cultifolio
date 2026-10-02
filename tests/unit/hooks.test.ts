@@ -54,11 +54,12 @@ describe('the species page cache (round forty-three, 3)', () => {
     const waited: Promise<unknown>[] = [];
     const platform = { caches: { default: cache }, context: { waitUntil: (p: Promise<unknown>) => { waited.push(p); } } };
     let renders = 0;
-    const event = (path: string, cookies: Record<string, string> = {}, headers: Record<string, string> = {}) => ({
+    const event = (path: string, cookies: Record<string, string> = {}, headers: Record<string, string> = {}, isDataRequest = false) => ({
       url: new URL('http://x' + path),
       request: new Request('http://x' + path, { headers }),
       cookies: { get: (k: string) => cookies[k] },
-      platform
+      platform,
+      isDataRequest
     });
     const page = async (status = 200, type = 'text/html', extra: Record<string, string> = {}) => { renders++; return new Response(`<p>render ${renders}</p>`, { status, headers: { 'content-type': type, 'cache-control': 'private, max-age=60', vary: 'accept-language, cookie', ...extra } }); };
     return { store, waited, event, page, renders: () => renders };
@@ -70,7 +71,7 @@ describe('the species page cache (round forty-three, 3)', () => {
     expect(a.headers.get('cache-control')).toBe('private, max-age=60'); // the reader's copy keeps its private header
     expect(await a.text()).toBe('<p>render 1</p>');
     await Promise.all(w.waited);
-    expect([...w.store.keys()]).toEqual(['https://cache.cultifolio/page?p=%2Fspecies%2Fcopiapoa-cinerea&w=&u=metric&h=']);
+    expect([...w.store.keys()]).toEqual(['https://cache.cultifolio/page?p=%2Fspecies%2Fcopiapoa-cinerea&q=&u=metric&h=']);
     expect(w.store.values().next().value?.headers.get('cache-control')).toBe('public, max-age=60'); // the stored copy, under the Worker's own key
     const b = await handle({ event: w.event('/species/copiapoa-cinerea'), resolve: () => w.page() } as never);
     expect(b.headers.get('x-cultifolio-page')).toBe('held');
@@ -103,9 +104,35 @@ describe('the species page cache (round forty-three, 3)', () => {
     await handle({ event: w.event('/species/copiapoa-cinerea'), resolve: () => w.page(200, 'application/json') } as never);
     await handle({ event: w.event('/species/copiapoa-cinerea'), resolve: () => w.page(200, 'text/html', { 'set-cookie': 'a=b' }) } as never);
     await handle({ event: w.event('/plants/2026-0001'), resolve: () => w.page() } as never);
-    await handle({ event: w.event('/'), resolve: () => w.page() } as never);
+    await handle({ event: w.event('/about/how'), resolve: () => w.page() } as never);
     await Promise.all(w.waited);
     expect(w.store.size).toBe(0);
     expect(w.renders()).toBe(5);
+  });
+  it('a data request (a client-side navigation asking for the page\'s data under its URL) is neither answered from the copy nor stored (round forty-six, 3)', async () => {
+    const w = world();
+    await handle({ event: w.event('/species/copiapoa-cinerea'), resolve: () => w.page() } as never);
+    await Promise.all(w.waited);
+    const data = await handle({ event: w.event('/species/copiapoa-cinerea?x-sveltekit-invalidated=01', {}, {}, true), resolve: () => w.page(200, 'application/json') } as never);
+    expect(data.headers.get('x-cultifolio-page')).toBeNull();
+    expect(data.headers.get('content-type')).toBe('application/json');
+    const home = await handle({ event: w.event('/?x-sveltekit-trailing-slash=1', {}, {}, true), resolve: () => w.page(200, 'application/json') } as never);
+    expect(home.headers.get('x-cultifolio-page')).toBeNull();
+    expect(w.renders()).toBe(3);
+    expect(w.store.size).toBe(1);
+  });
+  it('the home page is held too, by the queries it reads and not by the search typed into it (round forty-six, 2)', async () => {
+    const w = world();
+    await handle({ event: w.event('/'), resolve: () => w.page() } as never);
+    const again = await handle({ event: w.event('/?q=copiapoa'), resolve: () => w.page() } as never); // the search is the client's; the HTML is the same
+    expect(again.headers.get('x-cultifolio-page')).toBe('held');
+    await handle({ event: w.event('/?by=family'), resolve: () => w.page() } as never);
+    await handle({ event: w.event('/?by=family&open=cactaceae'), resolve: () => w.page() } as never);
+    await handle({ event: w.event('/?chip=climate'), resolve: () => w.page() } as never);
+    const hemi = await handle({ event: w.event('/', { 'cultifolio.hemi': 's' }), resolve: () => w.page() } as never); // the home page does not read it
+    expect(hemi.headers.get('x-cultifolio-page')).toBe('held');
+    expect(w.renders()).toBe(4);
+    await Promise.all(w.waited);
+    expect(w.store.size).toBe(4);
   });
 });
