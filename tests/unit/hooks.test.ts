@@ -70,7 +70,7 @@ describe('the species page cache (round forty-three, 3)', () => {
     expect(a.headers.get('cache-control')).toBe('private, max-age=60'); // the reader's copy keeps its private header
     expect(await a.text()).toBe('<p>render 1</p>');
     await Promise.all(w.waited);
-    expect([...w.store.keys()]).toEqual(['https://cache.cultifolio/page?p=%2Fspecies%2Fcopiapoa-cinerea&u=metric&h=']);
+    expect([...w.store.keys()]).toEqual(['https://cache.cultifolio/page?p=%2Fspecies%2Fcopiapoa-cinerea&w=&u=metric&h=']);
     expect(w.store.values().next().value?.headers.get('cache-control')).toBe('public, max-age=60'); // the stored copy, under the Worker's own key
     const b = await handle({ event: w.event('/species/copiapoa-cinerea'), resolve: () => w.page() } as never);
     expect(b.headers.get('x-cultifolio-page')).toBe('held');
@@ -88,6 +88,11 @@ describe('the species page cache (round forty-three, 3)', () => {
     // a browser language is read into the units before the key is made, so en-US is the `us` copy above, not a sixth
     const us = await handle({ event: w.event('/species/copiapoa-cinerea', {}, { 'accept-language': 'en-US' }), resolve: () => w.page() } as never);
     expect(us.headers.get('x-cultifolio-page')).toBe('held');
+    // a query the page never reads, and a hemisphere cookie that is neither value, share the plain copy rather than minting one
+    const x = await handle({ event: w.event('/species/copiapoa-cinerea?x=1&check=5'), resolve: () => w.page() } as never);
+    expect(x.headers.get('x-cultifolio-page')).toBe('held');
+    const odd = await handle({ event: w.event('/species/copiapoa-cinerea', { 'cultifolio.hemi': 'x&u=us' }), resolve: () => w.page() } as never);
+    expect(odd.headers.get('x-cultifolio-page')).toBe('held');
     expect(w.renders()).toBe(4);
     await Promise.all(w.waited);
     expect(w.store.size).toBe(4);

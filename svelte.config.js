@@ -25,10 +25,10 @@ const config = {
       mode: 'hash',
       directives: {
         'default-src': ['self'],
-        // The hash is app.html's one inline line (the theme before first paint); change that line and this hash together.
+        // The hash is app.html's one inline line (the theme and the dismissed welcome, before first paint); change that line and this hash together.
         // The second hash is Svelte's own `this.__e=event` on images and iframes, which lets a load or error that fires
         // before hydration be replayed after it; `unsafe-hashes` is what lets a hash cover an attribute handler.
-        'script-src': ['self', 'sha256-ZQQX2ILV9DPyiEPs7JZE3Oi94h8HRWjrR5AWwUjCafM=', 'unsafe-hashes', 'sha256-7dQwUgLau1NFCCGjfn9FsYptB6ZtWxJin6VohGIu20I='],
+        'script-src': ['self', 'sha256-6F3iVc/Vyc5Y1XD9YC4W7+8rGunvEhPEIGulefPMwxk=', 'unsafe-hashes', 'sha256-7dQwUgLau1NFCCGjfn9FsYptB6ZtWxJin6VohGIu20I='],
         'style-src': ['self', 'unsafe-inline'],
         'img-src': ['self', 'data:', 'blob:', 'https:'],
         'font-src': ['self'],

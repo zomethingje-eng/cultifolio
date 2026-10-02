@@ -98,7 +98,7 @@ async function loadIndex(platform: Platform, fetch: Fetch): Promise<NonNullable<
   const store = platform?.env?.STORE;
   if (store) {
     const path = `s/v${DOSSIER_V}/index.json`;
-    if (cached?.etag) {
+    if (cached?.etag && typeof store.head === 'function') {
       // The minute is up: the object's etag says whether the copy held is still the bucket's. A head answers from
       // metadata alone; the four megabytes are read again only after an upload (round forty-three, 1).
       const h = await store.head(path);

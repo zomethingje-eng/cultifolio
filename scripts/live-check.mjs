@@ -104,17 +104,18 @@ for (const path of ['/about/how', `/species/${species}`, '/offline', '/api/corpu
 }
 
 // A species page rendered once is answered from the Worker's own cache for the next minute (round forty-three, 3): the
-// second request within a second says so, and the page is still private to the browser. A fresh query defeats any copy
-// held from an earlier run, so the first request is the render.
+// second request within a second says so, and the page is still private to the browser. The key ignores a query the page
+// does not read (round forty-five), so the first request may itself be a copy held from the check a moment ago; either
+// way it says which, and the second is held.
 {
   const path = `/species/${species}?${fresh}`;
   const a = await get(path, { headers: { accept: 'text/html' } });
   const b = await get(path, { headers: { accept: 'text/html' } });
-  if (a.h('x-cultifolio-page') !== 'rendered') fail(`${path}: the first request was not rendered by the Worker (x-cultifolio-page "${a.h('x-cultifolio-page')}")`, a);
+  if (!['rendered', 'held'].includes(a.h('x-cultifolio-page'))) fail(`${path}: the first request says neither rendered nor held (x-cultifolio-page "${a.h('x-cultifolio-page')}")`, a);
   if (b.h('x-cultifolio-page') !== 'held') fail(`${path}: the second request was not answered from the Worker's cache (x-cultifolio-page "${b.h('x-cultifolio-page')}")`, b);
   if (!/^private, max-age=60$/.test(b.h('cache-control'))) fail(`${path}: a held page must stay private to the browser`, b);
   if (b.text !== a.text) fail(`${path}: the held page differs from the rendered one`, b);
-  ok(`species page: rendered once, held for the next request, private to the browser`);
+  ok(`species page: ${a.h('x-cultifolio-page')} then held, private to the browser`);
 }
 
 // No analytics beacon injected at the edge (round eight, 1): checked with an HTML Accept, which is what gets the injection.

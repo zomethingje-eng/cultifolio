@@ -35,8 +35,12 @@ export const handle: Handle = async ({ event, resolve }) => {
   const cache = isSpeciesPage(event.url) && event.request.method === 'GET' ? event.platform?.caches?.default : undefined;
   let key: Request | undefined;
   if (cache) {
-    // The key carries everything the rendering reads from the request: the path and query, the units, the hemisphere cookie.
-    key = new Request(`https://cache.cultifolio/page?p=${encodeURIComponent(event.url.pathname + event.url.search)}&u=${unitsFor(event.cookies, event.request)}&h=${event.cookies.get('cultifolio.hemi') ?? ''}`);
+    // The key carries everything the rendering reads from the request, and nothing else: the path, the one query the page
+    // reads (`was`), the units, and the hemisphere cookie as one of its two values. A query the page never reads
+    // (`?x=1`, a tracking tag, a check's timestamp) is the same page, so it shares the copy rather than minting one.
+    const hemi = event.cookies.get('cultifolio.hemi');
+    const was = event.url.searchParams.get('was');
+    key = new Request(`https://cache.cultifolio/page?p=${encodeURIComponent(event.url.pathname)}&w=${encodeURIComponent(was ?? '')}&u=${unitsFor(event.cookies, event.request)}&h=${hemi === 'n' || hemi === 's' ? hemi : ''}`);
     const hit = await cache.match(key);
     if (hit) {
       const r = new Response(hit.body, hit);

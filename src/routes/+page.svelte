@@ -55,7 +55,11 @@
   let failedTiles = $state(new Set<string>());
   /** The climate chips are the server's now (`?chip=`): they filter the grouped catalogue rather than flattening the whole index on the client (round thirty-nine). */
   const chip = $derived(data.chip);
-  let welcomeHidden = $state(true);
+  // Shown from the server's render, so a stranger's first screen has it before hydration and nothing moves when the
+  // scripts arrive: inserted on hydration it pushed the featured strip down by a line or two (a layout shift of 0.05,
+  // half the home page's score; round forty-five, 1). A device that dismissed it hides it before first paint by a
+  // flag app.html's inline script sets from localStorage, and the state here catches up at mount.
+  let welcomeHidden = $state(false);
   // A returning grower's device remembers that the page will be their species, not the catalogue: until the collection is
   // open, the server-rendered catalogue is swapped for a light skeleton so neither the wrong head nor "You grow 0" shows.
   // The server never sees the hint, so crawlers and first visits get the catalogue at once.
@@ -115,14 +119,12 @@
     } catch {
       expectMine = false;
     }
-    (async () => {
-      await collection.load();
-      try {
-        welcomeHidden = localStorage.getItem('cultifolio.welcomed') === '1';
-      } catch {
-        welcomeHidden = false;
-      }
-    })();
+    try {
+      welcomeHidden = localStorage.getItem('cultifolio.welcomed') === '1';
+    } catch {
+      welcomeHidden = false;
+    }
+    void collection.load();
     return () => window.removeEventListener('hashchange', fromHash);
   });
   $effect(() => {
@@ -380,7 +382,7 @@
   </PageHead>
 
   <!-- The way in comes before the pictures, so a phone's first screen has the pitch, the count and what to do, not a grid alone (round twenty-eight, 13). -->
-  {#if collection.ready && !hasMine && !collection.accessions.length && !welcomeHidden}
+  {#if (!collection.ready || (!hasMine && !collection.accessions.length)) && !welcomeHidden}
     <p class="welcome" id="welcome"><b>New here.</b> <a href="/plants/new">Add your first plant</a> · <a href="/backup">Bring in a collection</a> (a backup file, or an export from the old Herbarium app) <button class="linkish" type="button" onclick={dismissWelcome}>Not now</button></p>
   {:else if collection.ready && !hasMine && !collection.accessions.length}
     <!-- "Not now" hides the welcome for good; the way in stays, in one line, or a visitor who comes back has to find /plants/new by the tab bar (round forty-one, R9). -->
@@ -467,6 +469,8 @@
   @media (max-width: 700px) { .viewseg { flex-basis: 100%; } .viewseg > button { flex: 1; text-align: center; } }
   .welcome a { font-weight: 600; }
   .welcome.quiet { color: var(--ink3); font-size: 13px; }
+  /* dismissed on this device: hidden before first paint, by the flag app.html sets, until the state catches up at mount */
+  :global(html[data-welcomed]) .welcome:not(.quiet) { display: none; }
   .linkish { background: none; border: 0; padding: 0 4px; font: inherit; font-size: 13px; color: var(--accent); cursor: pointer; text-decoration: underline; }
   .welcome .linkish { color: var(--ink3); margin-left: 4px; }
   /* the featured strip: one row, scrolls sideways on a phone, six-up on a desktop */

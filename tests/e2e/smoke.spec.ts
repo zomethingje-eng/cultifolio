@@ -589,6 +589,9 @@ test('the species page condenses its cultivation sheet into a note by rule', asy
 });
 
 test('first run: the front page explains itself once, and stops once there is a plant or it is dismissed', async ({ page }) => {
+  // in the server's HTML, so a stranger's first screen has it before the scripts arrive and nothing moves when they do (round forty-five, 1)
+  const html = await (await page.request.get('/')).text();
+  expect(html).toContain('id="welcome"');
   await page.goto('/');
   await expect(page.locator('#welcome')).toContainText('New here');
   await page.getByRole('button', { name: 'Not now' }).click();
@@ -596,6 +599,9 @@ test('first run: the front page explains itself once, and stops once there is a 
   await page.reload();
   await expect(page.locator('.grow').first()).toBeVisible();
   await expect(page.locator('#welcome')).toHaveCount(0);
+  // the dismissal is read before first paint by app.html's inline line, under the CSP's hash of it (round forty-five, 1)
+  expect(await page.evaluate(() => document.documentElement.dataset.welcomed)).toBe('1');
+  await expect(page.locator('#welcome-after')).toContainText('Keep a record of your plants');
   // a fresh browser sees it again, until it owns something
   await page.evaluate(() => localStorage.removeItem('cultifolio.welcomed'));
   await page.reload();
