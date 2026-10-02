@@ -580,7 +580,7 @@ test('labels: pick plants, choose a sheet, print at true size with a code that o
 
 test('the species page condenses its cultivation sheet into a note by rule', async ({ page }) => {
   await page.goto('/species/copiapoa-cinerea');
-  await expect(page.locator('#gen-note')).toContainText('condensed by rule');
+  await expect(page.locator('#gen-note')).toContainText('by rule, from the cards');
   await expect(page.locator('#gen-note')).toHaveAttribute('open', ''); // open at rest: the paragraph a grower reads first (round forty-nine, 3)
   await expect(page.locator('#gen-note .body')).toContainText("Rain rule: no rainy season to read (72 mm a year); the temperature rule's cooler six months are November to April in the northern hemisphere.");
   await expect(page.locator('#gen-note .body')).not.toContainText(/fog/);
@@ -611,7 +611,7 @@ test('first run: the front page explains itself once, and stops once there is a 
   await page.evaluate(() => localStorage.removeItem('cultifolio.welcomed'));
   await page.reload();
   await expect(page.locator('#welcome')).toBeVisible();
-  await page.locator('#welcome a', { hasText: 'Add your first plant' }).click();
+  await page.locator('#welcome a', { hasText: 'Add a plant' }).click();
   await page.fill('#species-name', 'Copiapoa cinerea');
   await page.locator('#species-name').blur();
   await page.getByRole('button', { name: /^Add/ }).click();
@@ -913,7 +913,7 @@ test('the front page carries closed rows, never fetches the whole index, and a s
   expect(index).toHaveLength(0);
   // a search flattens: every match across every genus, and the rows step aside; the index did not come to the browser
   await page.fill('.searchbar', 'welwit');
-  await expect(page.locator('a.tile')).toHaveCount(1);
+  await expect(page.locator('.hitrow')).toHaveCount(1); // a match is a row (round fifty, 2)
   await expect(page.locator('.grow')).toHaveCount(0);
   expect(index).toHaveLength(0);
   expect(searches.length).toBeGreaterThan(0);
@@ -1455,7 +1455,7 @@ test('pages about your own plants ask no outside host for anything unless the re
   expect(outside.filter((u) => u.includes('700/medium'))).toEqual([]); // and the front page fetched nothing about the plant grown (its rows and strip are the public catalogue)
   // after a search (answered by the server, the index never fetched whole) the own tile still shows no photograph
   await page.fill('.searchbar', 'welwit');
-  await expect(page.locator('a.tile')).toHaveCount(1);
+  await expect(page.locator('.hitrow')).toHaveCount(1);
   await page.fill('.searchbar', '');
   await expect(page.locator('a.tile', { hasText: 'Welwitschia' }).first()).toContainText('reference photograph off');
   expect(api.filter((u) => /^\/api\/(sheets|entries)/.test(u)).every((u) => /[?&]c=fixture(&|$)/.test(u))).toBe(true); // every reference request names the corpus
@@ -1464,7 +1464,10 @@ test('pages about your own plants ask no outside host for anything unless the re
   // the photographs at once and Settings reads the same preference; the plant page then fetches the species' photograph from
   // the image host, and from nowhere else
   await expect(page.locator('.hero img')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Show the reference’s photographs on your tiles' }).click();
+  // the offer is one line; what showing discloses opens on tap, and the switch is thrown there (round fifty, 4)
+  await page.locator('details.rpo summary', { hasText: 'Show the reference’s photographs on your tiles' }).click();
+  await expect(page.locator('details.rpo')).toContainText('which then sees which species you grow');
+  await page.locator('details.rpo .go', { hasText: 'Show it' }).click();
   await expect.poll(() => outside.some((u) => u === '/ -> https://inaturalist-open-data.s3.amazonaws.com/photos/700/medium.jpg'), { timeout: 10000 }).toBe(true); // the tile asked the image host at once (the stub refuses it, so the tile says it did not load)
   await expect(page.locator('a.tile', { hasText: 'Welwitschia' }).first()).toContainText('photograph did not load');
   await page.goto('/settings');
@@ -1591,11 +1594,11 @@ test('search forgives a typing error, ranks the genus first, and the picker does
   await page.goto('/');
   await page.waitForLoadState('networkidle'); // a value typed before hydration is dropped when the bound input hydrates
   await page.fill('.searchbar', 'copiapao');
-  await expect(page.locator('a.tile .nm', { hasText: 'Copiapoa cinerea' })).toBeVisible();
+  await expect(page.locator('.hitrow .nm', { hasText: 'Copiapoa cinerea' })).toBeVisible();
   await page.fill('.searchbar', 'welwit mirab');
-  await expect(page.locator('a.tile')).toHaveCount(1);
+  await expect(page.locator('.hitrow')).toHaveCount(1);
   await page.fill('.searchbar', 'namibia');
-  await expect(page.locator('a.tile .nm', { hasText: 'Welwitschia' })).toBeVisible();
+  await expect(page.locator('.hitrow .nm', { hasText: 'Welwitschia' })).toBeVisible();
   await page.goto('/plants/new');
   await page.fill('#species-name', 'Copiapao cin');
   await expect(page.getByRole('option', { name: /Copiapoa cinerea/ })).toBeVisible();
@@ -1765,8 +1768,14 @@ test('the species page reads in reference order: the facts and the figures, then
   const order = await page.locator('h2.sec').allInnerTexts();
   expect(order.slice(0, 4).map((t) => t.replace(/\s+/g, ' ').toLowerCase())).toEqual(['at a glance', 'summary', 'about the genus · copiapoa', 'cultivation']);
   await expect(page.locator('#s-genus + .sumbody')).toContainText('Copiapoa is a genus of cactus');
-  await expect(page.locator('.facts .fact', { hasText: 'Described by' })).toContainText('(Phil.) Britton & Rose');
-  await expect(page.locator('.facts .fact', { hasText: 'Wild records' })).toContainText('352 in range');
+  // the id card is the name, the common names and one line of family · origin · archetype; the facts grid sits at the foot since round fifty
+  await expect(page.locator('.idcard .vern.meta')).toContainText('Cactaceae');
+  await expect(page.locator('.idcard')).not.toContainText('Described by');
+  await expect(page.locator('#s-facts + .facts .fact', { hasText: 'Described by' })).toContainText('(Phil.) Britton & Rose');
+  await expect(page.locator('#s-facts + .facts .fact', { hasText: 'Wild records' })).toContainText('352 in range');
+  // one primary action; the other verbs are a quieter row under it
+  await expect(page.locator('.idcard .acts .btn.pri')).toHaveText('Add one to my plants');
+  await expect(page.locator('.idcard .acts2 .btn').first()).toHaveText('Sow seed');
   // the cards: the first open, the rest closed to their one-line form, opened with a click and no JavaScript needed
   const cards = page.locator('details.acc:not(#gen-note)');
   await expect(cards).toHaveCount(4);
@@ -1796,7 +1805,7 @@ test('a visitor sees all five places from the start, and the menu has them too',
   await expect(page.locator('.derived')).toContainText('nothing is written by a person or a model');
   await expect(page.locator('.pill', { hasText: 'open records' })).toHaveCount(0); // the fact strip says it
   await expect(page.locator('.facts')).toContainText('52 open');
-  await expect(page.locator('h2.sec', { hasText: 'At a glance' })).toBeVisible();
+  await expect(page.locator('h2.sec#s-glance')).toHaveCount(1); // the heading is there for the section bar and readers; the figures speak for themselves on screen
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
@@ -1920,7 +1929,7 @@ test('keyboard: the menu keeps Tab inside and Escape returns focus; Enter in the
   await expect.poll(() => page.evaluate(() => document.activeElement?.getAttribute('aria-label'))).toBe('Menu');
   // the search: Enter opens the first match
   await page.fill('.searchbar', 'copiapoa hum');
-  await expect(page.locator('a.tile').first()).toBeVisible();
+  await expect(page.locator('.hitrow').first()).toBeVisible();
   await page.locator('.searchbar').press('Enter');
   await expect(page).toHaveURL(/\/species\/copiapoa-humilis$/);
   // back keeps the search
@@ -2142,7 +2151,9 @@ test('a species page you grow six of does not scroll sideways on a phone (round 
   await expect(page).toHaveURL(/\/plants$/);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/species/copiapoa-cinerea');
-  await expect(page.locator('.mine .accno')).toHaveCount(6);
+  // three numbers and a count: the rest are one tap away on My plants (round fifty, 3)
+  await expect(page.locator('.mine .accno')).toHaveCount(3);
+  await expect(page.locator('.mine')).toContainText('+3');
   const w = await page.evaluate(() => ({ doc: document.documentElement.scrollWidth, mine: document.querySelector('.mine')!.scrollWidth }));
   expect(w.doc).toBeLessThanOrEqual(390);
   expect(w.mine).toBeLessThanOrEqual(390);
@@ -2505,13 +2516,13 @@ test('round forty: on "Your species" the search box stays on the device; the cat
   await page.fill('.searchbar', '2026-0001');
   await expect(page.locator('.plantsfound .accrow')).toHaveCount(1);
   await page.fill('.searchbar', 'copiapoa');
-  await expect(page.locator('a.tile .nm', { hasText: 'Copiapoa cinerea' })).toBeVisible();
+  await expect(page.locator('.hitrow .nm', { hasText: 'Copiapoa cinerea' })).toBeVisible();
   await page.waitForTimeout(500);
   expect(searches).toEqual([]);
   expect(page.url()).not.toContain('q=');
   // The catalogue is one explicit step away, and that step is the one that sends the text.
   await page.locator('#search-catalogue').click();
-  await expect(page.locator('a.tile .nm', { hasText: 'Copiapoa humilis' })).toBeVisible();
+  await expect(page.locator('.hitrow .nm', { hasText: 'Copiapoa humilis' })).toBeVisible();
   expect(searches.length).toBeGreaterThan(0);
   expect(page.url()).toContain('q=copiapoa');
   // On the catalogue view too, a plant's number and anything shaped like one stays on the device (round forty-nine, 3; round thirty-five, R1-2).
@@ -2524,7 +2535,7 @@ test('round forty: on "Your species" the search box stays on the device; the cat
   expect(page.url()).not.toContain('q=');
   // Punctuation an iPhone types is not a refusal (R1-1).
   await page.fill('.searchbar', 'copiapoa, ’cinerea’');
-  await expect(page.locator('a.tile')).toHaveCount(1);
+  await expect(page.locator('.hitrow')).toHaveCount(1);
   // A chip that is on filters the search too (R1-4).
   await page.fill('.searchbar', '');
   await page.locator('.chipbtn', { hasText: 'Without climate' }).click();
@@ -2532,7 +2543,7 @@ test('round forty: on "Your species" the search box stays on the device; the cat
   await page.fill('.searchbar', 'copiapoa');
   await expect(page.locator('.emptybox')).toContainText('Nothing matches with the chip on (2 without it)');
   await page.fill('.searchbar', 'welwit');
-  await expect(page.locator('a.tile')).toHaveCount(1);
+  await expect(page.locator('.hitrow')).toHaveCount(1);
   // The grouping links keep the chip.
   await page.fill('.searchbar', '');
   await page.locator('nav.seg[aria-label="Group by"] a', { hasText: 'Family' }).click();
@@ -2618,7 +2629,7 @@ test('round forty-six: a client-side navigation to a species page whose HTML the
   await page.goto('/species/copiapoa-cinerea'); // the HTML is held for a minute now
   await page.goto('/');
   await page.fill('.searchbar', 'copiapoa cin');
-  await page.locator('a.tile', { hasText: 'Copiapoa cinerea' }).first().click(); // a client-side navigation: the data request goes under the page's URL
+  await page.locator('.hitrow', { hasText: 'Copiapoa cinerea' }).first().click(); // a client-side navigation: the data request goes under the page's URL
   await expect(page).toHaveURL(/\/species\/copiapoa-cinerea$/);
   await expect(page.locator('h1')).toContainText('Copiapoa cinerea');
   await expect(page.locator('main')).not.toContainText('Internal Error');
@@ -2750,4 +2761,120 @@ test('round forty-nine: a letter near the end of the catalogue still lands with 
   expect(h!.y).toBeGreaterThanOrEqual(bar!.y + bar!.height);
   expect(h!.y).toBeLessThan(bar!.y + bar!.height + 40); // placed, not clamped at the footer
   await expect(page.locator('.rows')).toHaveAttribute('style', /padding-bottom/); // the fixture's rows are all loaded, so nothing fills in and the padding stays
+});
+
+/** Everything below the top bar and above the phone's tab bar: a thing "on the first screen" fits here without a scroll. */
+async function firstScreen(page: import('@playwright/test').Page) {
+  const tabs = await page.locator('#tabbar').boundingBox();
+  return { top: 44, bottom: tabs ? tabs.y : 844 };
+}
+
+test('round fifty: on a phone the first screen of the catalogue, My plants and a place shows records, not only controls (1, 4)', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  // a visitor: the search, the sampler of photographs and the first catalogue row, all on one screen
+  await page.goto('/');
+  let fs = await firstScreen(page);
+  const firstRow = await page.locator('.rows .grow').first().boundingBox();
+  expect(firstRow!.y + 24).toBeLessThan(fs.bottom); // the first genus row begins above the tab bar
+  const strip = await page.locator('.strip').boundingBox();
+  const search = await page.locator('.toolrow .searchbar').boundingBox();
+  expect(strip!.y).toBeGreaterThan(search!.y); // the strip sits under the search, a sampler rather than the page
+  expect(strip!.height).toBeLessThan(200);
+  // the lead tile is double width; the rest are 112px
+  const tiles = page.locator('.strip .ftile');
+  const lead = await tiles.first().boundingBox();
+  expect(lead!.width).toBeGreaterThan(200);
+  if (await tiles.count() > 1) { const second = await tiles.nth(1).boundingBox(); expect(Math.round(second!.width)).toBe(112); }
+  // a grower with two plants on a shelf
+  await page.goto('/places');
+  await page.getByRole('button', { name: 'New place' }).click();
+  await page.fill('#loc-name', 'Porch');
+  await page.selectOption('#loc-kind', 'room');
+  await page.getByRole('button', { name: 'Add', exact: true }).click();
+  for (const sp of ['Copiapoa%20cinerea&key=5384013', 'Welwitschia%20mirabilis&key=5411106']) {
+    await page.goto(`/plants/new?species=${sp}`);
+    const v = await page.locator('#f-loc option', { hasText: 'Porch' }).getAttribute('value');
+    await page.selectOption('#f-loc', v!);
+    await addPlant(page);
+  }
+  // My plants: the head is one line (the + in the top bar adds), the search and the sort share a row, the chips are one row, and both plants are on the first screen
+  await page.goto('/plants');
+  fs = await firstScreen(page);
+  await expect(page.locator('.phead .acts .btn')).toBeHidden();
+  await expect(page.locator('.phead .inlinecount')).toContainText('2 growing');
+  const sb = await page.locator('#plants-q').boundingBox();
+  const sort = await page.locator('#plants-sort').boundingBox();
+  expect(Math.abs(sb!.y - sort!.y)).toBeLessThan(4);
+  const rows = page.locator('.rows .accrow');
+  await expect(rows).toHaveCount(2);
+  const second = await rows.nth(1).boundingBox();
+  expect(second!.y + second!.height).toBeLessThanOrEqual(fs.bottom + 1);
+  // the reference-photograph offer is one line until opened
+  await expect(page.locator('details.rpo')).not.toHaveAttribute('open', ''); // closed: the disclosure is behind the summary
+  await expect(page.locator('details.rpo .why')).toBeHidden();
+  await expect(page.locator('details.rpo summary')).toBeVisible();
+  // the place: no band above the card, the empty pills row gone, the actions as one row of buttons and one of words, and both plants on the first screen
+  await page.goto('/places');
+  await page.locator('.tree .row', { hasText: 'Porch' }).click();
+  await expect(page.locator('.hero.band')).toHaveCount(0);
+  await expect(page.locator('.idcard .pills')).toHaveCount(0);
+  await expect(page.locator('.idcard .vern')).toContainText('Room · 2 growing plants');
+  await expect(page.locator('.quickbar.words .btn', { hasText: 'Edit' })).toBeVisible();
+  await expect(page.locator('.quickbar .btn.pri')).toHaveText('Water all 2');
+  await expect(page.locator('.empty')).toContainText('and coordinates for frost watch');
+  fs = await firstScreen(page);
+  const placeRows = page.locator('.rows .accrow');
+  await expect(placeRows).toHaveCount(2);
+  const last = await placeRows.nth(1).boundingBox();
+  expect(last!.y + last!.height).toBeLessThanOrEqual(fs.bottom + 1);
+  // the grower's front page: Today under the toolrow, the own tiles three to a row, the second tile on the first screen
+  await page.goto('/');
+  fs = await firstScreen(page);
+  const own = page.locator('.hgrid.mine a.tile');
+  await expect(own).toHaveCount(2);
+  const t0 = await own.nth(0).boundingBox(); const t1 = await own.nth(1).boundingBox();
+  expect(Math.abs(t0!.y - t1!.y)).toBeLessThan(2); // side by side
+  expect(t0!.width).toBeLessThan(140); // three to a row
+  expect(t1!.y + 60).toBeLessThan(fs.bottom);
+  // the plant page: the checklist is one row of steps, scrolled sideways
+  await page.goto('/plants/2026-0001');
+  const steps = page.locator('.setup .setuprow');
+  await expect(steps.first()).toBeVisible();
+  const s0 = await steps.nth(0).boundingBox(); const s1 = await steps.nth(1).boundingBox();
+  expect(Math.abs(s0!.y - s1!.y)).toBeLessThan(2);
+});
+
+test('round fifty: typing a search is a mode on a phone: the box pinned, the strip and chips away, the matches as rows, Cancel puts the page back (2)', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await expect(page.locator('.strip')).toBeVisible();
+  await expect(page.locator('.filters .chiprow')).toBeVisible();
+  const box = page.locator('.toolrow .searchbar');
+  await box.click();
+  await box.fill('Copia');
+  await expect(page.locator('.cancelsearch')).toBeVisible();
+  await expect(page.locator('.strip')).toHaveCount(0);
+  await expect(page.locator('.filters')).toHaveCount(0);
+  await expect(page.locator('.toolrow .seg')).toHaveCount(0);
+  await expect(page.locator('#welcome')).toHaveCount(0);
+  // the box is at the top: the head steps aside too, so even a page too short to scroll has the box under the bar
+  await expect(page.locator('.phead')).toBeHidden();
+  const tb = await page.locator('.toolrow').boundingBox();
+  expect(tb!.y).toBeGreaterThanOrEqual(44); expect(tb!.y).toBeLessThan(70);
+  // matches are rows with a thumbnail or an initial, the name and one line of family · origin · climate, and the count above them
+  await expect(page.locator('.rows.hits .hitrow')).toHaveCount(2);
+  await expect(page.locator('.hitrow').first()).toContainText('Cactaceae');
+  await expect(page.locator('.hits').locator('..').locator('.seccount').first()).toContainText('2');
+  // Enter opens the first
+  await box.press('Enter');
+  await expect(page).toHaveURL(/\/species\/copiapoa-/);
+  await page.goBack();
+  // Cancel: the box empty, the strip and chips back
+  await page.locator('.toolrow .searchbar').fill('Welw');
+  await expect(page.locator('.hitrow')).toHaveCount(1);
+  await page.locator('.cancelsearch').click();
+  await expect(page.locator('.toolrow .searchbar')).toHaveValue('');
+  await expect(page.locator('.strip')).toBeVisible();
+  await expect(page.locator('.filters .chiprow')).toBeVisible();
+  await expect(page.locator('.cancelsearch')).toHaveCount(0);
 });

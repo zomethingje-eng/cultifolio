@@ -180,6 +180,23 @@
   const sheetCards = $derived(CARD_ORDER.map((c) => ({ title: c, rows: sheet.rows.filter((r) => r.card === c) })).filter((c) => c.rows.length));
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   // The numbers a grower reads first, each with the month it belongs to.
+  /**
+   * The grower's places against this habitat's cold floor: the first place with a floor set, its floor beside the
+   * habitat's, and the difference; or, with places but no floor, the way to set one (round fifty, 3). Only once the
+   * collection is open, and only when the page has a floor to compare with.
+   */
+  const placeLine = $derived.by(() => {
+    if (!collection.ready || !glance) return null;
+    const floorC = sheet.floor?.raised ? sheet.floor.floor : glance.ex ? glance.ex.minP01 : null;
+    if (floorC == null) return null;
+    const places = collection.locations;
+    if (!places.length) return null;
+    const withFloor = places.map((l) => ({ l, c: collection.conditions(l.id) })).find((x) => x.c.floorC != null);
+    if (!withFloor) return { text: `Your ${places[0].name} has no floor set. Set one to see how it compares with this habitat's cold floor.`, href: `/places/${places[0].id}`, under: false };
+    const diff = withFloor.c.floorC! - floorC;
+    const by = Math.abs(diff) < 0.3 ? 'about the same as' : `${temp(Math.abs(diff), u, 1).replace(/^-/, '')} ${diff < 0 ? 'under' : 'over'}`;
+    return { text: `Your ${withFloor.l.name}: ${withFloor.c.floorHeld ? 'held at' : 'floor'} ${temp(withFloor.c.floorC!, u, 1)}, ${by} this habitat's cold floor of ${temp(floorC, u, 1)}.`, href: `/places/${withFloor.l.id}`, under: diff < -0.3 };
+  });
   const glance = $derived.by(() => {
     if (d.climate.status !== 'ok') return null;
     const m = d.climate.months;
@@ -230,7 +247,7 @@
   {/if}
   <div class="top" class:withhero={!!hero}>
   {#if hero && heroFailed}
-    <div class="hero"><div class="ph">The photograph did not load{#if hero.attribution?.trim()}{' '}({hero.attribution}){/if}; <a href={hero.page ?? hero.url} rel="noopener">its page is here</a>.</div></div>
+    <div class="hero"><div class="ph"><span>The photograph did not load{#if hero.attribution?.trim()}{' '}({hero.attribution}){/if}; <a href={hero.page ?? hero.url} rel="noopener">its page is here</a>.</span></div></div>
   {:else if hero}
     <!-- The box is a fixed 150 px band on a phone, so the page lays out once and does not shift down when the photograph lands (round forty-two, 1). -->
     <div class="hero photo">
@@ -240,15 +257,17 @@
       <a class="cred" href={hero.page ?? hero.url} rel="noopener">{hero.attribution}{hero.captive === true ? ' · in cultivation' : hero.captive === false ? ' · observed growing wild' : ''}{hero.observedOn ? ' · ' + hero.observedOn : ''}</a>
     </div>
   {:else}
-    <div class="hero"><div class="ph">{#if refusedPhotoNames.length}Photographs: {refusedPhotoNames.join(' and ')} {refusedPhotoSources.every((k) => (d.upstream[k]?.detail ?? '').startsWith('no credited photograph')) ? 'answered, but every photograph they gave lacked an author to credit under its licence, so none is shown' : refusedPhotoSources.every((k) => d.upstream[k]?.status === 'skipped') ? `${refusedPhotoNames.length === 1 ? 'was' : 'were'} not asked when this page was built` : `did not answer when this page was built`}{#if d.upstream['gbif.media']?.status === 'none' && !refusedPhotoSources.includes('gbif.media')}; GBIF's observation records with coordinates hold none{/if}. Not a statement that none exist.{:else}No openly licensed photograph on file. If you grow this plant, add your own photo to your record.{/if}</div></div>
+    <div class="hero"><div class="ph"><span>{#if refusedPhotoNames.length}Photographs: {refusedPhotoNames.join(' and ')} {refusedPhotoSources.every((k) => (d.upstream[k]?.detail ?? '').startsWith('no credited photograph')) ? 'answered, but every photograph they gave lacked an author to credit under its licence, so none is shown' : refusedPhotoSources.every((k) => d.upstream[k]?.status === 'skipped') ? `${refusedPhotoNames.length === 1 ? 'was' : 'were'} not asked when this page was built` : `did not answer when this page was built`}{#if d.upstream['gbif.media']?.status === 'none' && !refusedPhotoSources.includes('gbif.media')}; GBIF's observation records with coordinates hold none{/if}. Not a statement that none exist.{:else}No openly licensed photograph on file. If you grow this plant, add your own photo to your record.{/if}</span></div></div>
   {/if}
   <div class="idcard">
     <div class="who">
       <h1 class="sci"><SpeciesName name={d.name.scientific} authorship={d.name.authorship} /></h1>
+      <!-- One line under the name: common names, then family, native range and the group; the facts grid they came from is at the foot of the page now (round fifty, 3). -->
       <p class="vern">
-        {#if common.length}{common.join(', ')}{:else}{d.name.family ?? ''}{/if}
+        {#if common.length}{common.join(', ')}{/if}
         {#if d.name.status === 'synonym' && d.name.acceptedName}· <span class="pill w">synonym of {d.name.acceptedName}</span>{:else if d.name.status !== 'accepted'}· <span class="pill">{d.name.status}</span>{/if}
       </p>
+      <p class="vern meta">{[d.name.family, d.distribution.native.length ? d.distribution.native.slice(0, 2).map((r) => unitName(r.name)).join(', ') + (d.distribution.native.length > 2 ? ` +${d.distribution.native.length - 2}` : '') : null, sheet.arch ? sheet.arch.arch.lab.toLowerCase() : null].filter(Boolean).join(' · ')}</p>
       <!-- Pills say a state that is not the usual one; what is known is shown, not announced. Counts and groupings are plain text (improvements, 7). -->
       {#if d.climate.status !== 'ok' || (!d.photos.length && refusedPhotoNames.length)}
         <div class="pills">
@@ -256,13 +275,15 @@
           {#if !d.photos.length && refusedPhotoNames.length}<NotChecked what="Photographs" why="{refusedPhotoNames.join(' and ')} {refusedPhotoSources.every((k) => d.upstream[k]?.status === 'skipped') ? `${refusedPhotoNames.length === 1 ? 'was' : 'were'} not asked` : 'did not answer'} when this page was built." />{/if}
         </div>
       {/if}
-      {#if sheet.arch}<p class="vern small muted" title="Grouped by {sheet.arch.why}; the cultivation cards say where the group's table is used">{sheet.arch.arch.lab} (by {sheet.arch.tier})</p>{/if}
-      {#if mine.length}
-        <p class="vern mine">Yours: {#each mine as a, i}{#if i}, {/if}<a class="accno" href="/plants/{accNo(a)}">{accNo(a)}</a>{#if a.status !== 'growing'} <span class="small muted">({a.status})</span>{/if}{/each}</p>
-      {/if}
     </div>
+    <!-- One primary action, the grower's own numbers beside it, and the other four verbs as a quieter row: five equal buttons were a bar nobody could read (round fifty, 3). -->
     <div class="acts">
       <a class="btn pri" href="/plants/new?species={encodeURIComponent(d.name.scientific)}&key={d.key}">Add one to my plants</a>
+      {#if mine.length}
+        <span class="vern mine">{#each mine.slice(0, 3) as a, i}{#if i}, {/if}<a class="accno" href="/plants/{accNo(a)}" title={a.status !== 'growing' ? a.status : 'yours'}>{accNo(a)}</a>{/each}{#if mine.length > 3} +{mine.length - 3}{/if}</span>
+      {/if}
+    </div>
+    <div class="acts acts2">
       <a class="btn" href="/propagation/new?species={encodeURIComponent(d.name.scientific)}&key={d.key}">Sow seed</a>
       <FollowButton slug={d.slug} name={d.name.scientific} gbifKey={d.key} />
       <CompareButton slug={d.slug} name={d.name.scientific} />
@@ -270,17 +291,9 @@
     </div>
   </div>
   </div>
-  <p class="small muted derived">Every figure here is derived from public data by a stated rule and names its source; nothing is written by a person or a model except the marked, credited quotations. <a href="/about/how">How&nbsp;→</a></p>
-
-  <div class="facts">
-    <div class="fact"><div class="lab">Family</div><div class="v">{d.name.family ?? 'not stated by the backbone'}</div></div>
-    <div class="fact"><div class="lab">Described by</div><div class="v">{d.name.authorship ?? 'authorship not stated by the backbone'}</div></div>
-    <div class="fact"><div class="lab">Native to</div><div class="v">{#if d.distribution.native.length}{d.distribution.native.slice(0, 3).map((r) => unitName(r.name)).join(', ')}{d.distribution.native.length > 3 ? ` +${d.distribution.native.length - 3}` : ''}{:else}<span class="muted">not verified</span>{/if}</div></div>
-    <div class="fact"><div class="lab">Wild records</div><div class="v">{#if d.occurrences.nOpenInRange || d.occurrences.nRestrictedInRange}{d.occurrences.nOpenInRange + d.occurrences.nRestrictedInRange} {d.occurrences.rangeTested === false ? 'georeferenced' : 'in range'}<span class="small muted">{' · '}{d.occurrences.nOpenInRange} open{d.occurrences.rangeTested === false ? ' · range not tested' : ''}</span>{:else if ['refused', 'error'].includes(d.upstream['gbif.occurrences']?.status ?? '')}<span class="muted">not checked</span>{:else if d.occurrences.rangeTested === false}<span class="muted">no georeferenced records · range not tested</span>{:else}<span class="muted">none in range</span>{/if}</div></div>
-  </div>
 
   {#if glance || note}
-    <h2 class="sec" id="s-glance">At a glance</h2>
+    <h2 class="sec visually-hidden" id="s-glance">At a glance</h2>
     <section class="glance" aria-label="At a glance">
       {#if glance}
         <div class="cards">
@@ -293,10 +306,15 @@
       {/if}
       {#if note}
         <!-- Open from the start: it is the one paragraph a grower reads first, and it was the one thing on the page folded shut (round forty-nine, 3; S1). -->
-        <details class="cult acc notecard" id="gen-note" open>
-          <summary><span class="t">In short</span><span class="one">the figures as one paragraph, condensed by rule from the cultivation cards · not written by a person</span><span class="pm" aria-hidden="true"><span class="pmw">open</span></span></summary>
-          <div class="body">{note.text}</div><div class="foot">Each sentence is one card's own one-line form, written by the same rule as the card ({note.from.map((c) => (c === 'Temperature' || c === 'Humidity' ? 'Warmth and air' : c)).filter((c, i, a) => a.indexOf(c) === i).join(', ')}); the note cannot say what a card does not. {#if note.hab}Months are given for {readerLat != null && readerLat < 0 ? 'the southern' : 'the northern'} hemisphere{readerLat == null ? ' (set your site in ' : site.current || !site.loaded ? ', from your site' : ', from your places'}{#if readerLat == null}<a href="/settings#site">Settings</a> to change this){/if}, and the habitat's own alongside.{/if} <a href="#s-cultivation">The cards</a> · <a href="#s-climate">the figures</a>.</div>
+        <!-- The paragraph itself, with one grey line under it saying what it is; the heading row and the fold are gone (round fifty, 3). -->
+        <details class="cult acc notecard plain" id="gen-note" open>
+          <summary><span class="t">In short</span><span class="one">by rule, from the cards · not written by a person</span><span class="pm" aria-hidden="true"><span class="pmw">open</span></span></summary>
+          <div class="body">{note.text}</div><div class="foot">Each sentence is a card's one-line form ({note.from.map((c) => (c === 'Temperature' || c === 'Humidity' ? 'Warmth and air' : c)).filter((c, i, a) => a.indexOf(c) === i).join(', ')}). {#if note.hab}Months for {readerLat != null && readerLat < 0 ? 'the southern' : 'the northern'} hemisphere{readerLat == null ? ' (set your site in ' : site.current || !site.loaded ? ', from your site' : ', from your places'}{#if readerLat == null}<a href="/settings#site">Settings</a> to change this){/if}, the habitat's own alongside.{/if} <a href="#s-cultivation">The cards</a> · <a href="#s-climate">the figures</a>.</div>
         </details>
+      {/if}
+      {#if placeLine}
+        <!-- The grower's own place against this habitat's cold floor: the one comparison the site can make that no other does, one line under the figures (round fifty, 3). Nothing is inferred; two figures and their difference. -->
+        <a class="placeline" class:warn={placeLine.under} href={placeLine.href}>{placeLine.text}<span class="chev">›</span></a>
       {/if}
     </section>
   {/if}
@@ -516,6 +534,15 @@
   </div>
 
   </div>
+  <!-- The facts that led the page until round fifty, and the sentence about derivation: here, where someone checking the page looks. -->
+  <h2 class="sec" id="s-facts">Where this page came from</h2>
+  <div class="facts">
+    <div class="fact"><div class="lab">Family</div><div class="v">{d.name.family ?? 'not stated by the backbone'}</div></div>
+    <div class="fact"><div class="lab">Described by</div><div class="v">{d.name.authorship ?? 'authorship not stated by the backbone'}</div></div>
+    <div class="fact"><div class="lab">Native to</div><div class="v">{#if d.distribution.native.length}{d.distribution.native.slice(0, 3).map((r) => unitName(r.name)).join(', ')}{d.distribution.native.length > 3 ? ` +${d.distribution.native.length - 3}` : ''}{:else}<span class="muted">not verified</span>{/if}</div></div>
+    <div class="fact"><div class="lab">Wild records</div><div class="v">{#if d.occurrences.nOpenInRange || d.occurrences.nRestrictedInRange}{d.occurrences.nOpenInRange + d.occurrences.nRestrictedInRange} {d.occurrences.rangeTested === false ? 'georeferenced' : 'in range'}<span class="small muted">{' · '}{d.occurrences.nOpenInRange} open{d.occurrences.rangeTested === false ? ' · range not tested' : ''}</span>{:else if ['refused', 'error'].includes(d.upstream['gbif.occurrences']?.status ?? '')}<span class="muted">not checked</span>{:else if d.occurrences.rangeTested === false}<span class="muted">no georeferenced records · range not tested</span>{:else}<span class="muted">none in range</span>{/if}</div></div>
+  </div>
+  <p class="small muted derived">Every figure here is derived from public data by a stated rule and names its source; nothing is written by a person or a model except the marked, credited quotations. <a href="/about/how">How&nbsp;→</a></p>
   <Provenance dossier={d} />
 </article>
 
@@ -524,13 +551,28 @@
      than that was a horizontal scroll until they rendered (round forty-nine, 2; round twenty-seven, 4). */
   .deep > :global(*) { content-visibility: auto; contain-intrinsic-width: none; contain-intrinsic-height: auto 480px; }
   .thinline { margin: 6px 0 0; }
+  /* One centred run of text: the sentence and its link were two flex columns, the link's words stacked, so the placeholder's
+     text is one span and the flex box centres that (round fifty, 3). */
   .myph { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-top: 10px; }
   .myph .ph { position: relative; display: block; padding: 0; border: 0; background: var(--sunk); border-radius: 9px; overflow: hidden; aspect-ratio: 1; cursor: zoom-in; box-shadow: var(--sh); }
   .myph .ph :global(img) { width: 100%; height: 100%; object-fit: cover; display: block; }
   .myph .pd { position: absolute; left: 7px; bottom: 6px; font-family: var(--mono); font-size: 10px; color: #fff; background: rgba(8, 20, 16, 0.6); padding: 2px 6px; border-radius: 5px; }
   .species { max-width: 980px; }
   .hero { margin-top: 14px; }
-  .glance { margin-top: 0; }
+  .glance { margin-top: 12px; }
+  .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .idcard .meta { margin-top: 3px; font-size: 12.5px; color: var(--ink3); }
+  .idcard .acts { margin-top: 12px; }
+  .idcard .acts .mine { margin: 0; display: inline-flex; gap: 6px; align-items: center; }
+  .idcard .acts2 { margin-top: 0; gap: 0 14px; }
+  .idcard .acts2 :global(.btn) { background: none; border: 0; box-shadow: none; padding: 6px 0; min-height: 40px; color: var(--accent); font-weight: 600; font-size: 13.5px; }
+  .idcard .acts2 :global(.btn:hover) { text-decoration: underline; }
+  .placeline { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 10px 0 0; padding: 11px 14px; background: color-mix(in srgb, var(--accent) 9%, var(--card)); border-left: 3px solid var(--accent); border-radius: var(--r); color: var(--ink); font-size: 13.5px; text-decoration: none; }
+  .placeline.warn { border-left-color: var(--bad); background: color-mix(in srgb, var(--bad) 8%, var(--card)); }
+  .placeline .chev { color: var(--accent); font-weight: 700; }
+  .notecard.plain > summary .one { font-size: 11.5px; }
+  .notecard.plain .foot { font-size: 12px; }
+  @media (max-width: 640px) { .glance .card .sub { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; } .glance .card:focus .sub, .glance .card:hover .sub { -webkit-line-clamp: unset; line-clamp: unset; } }
   .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0; margin: 16px 0 0; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); overflow: hidden; }
   .fact { padding: 12px 16px; border-right: 1px solid var(--rule); min-width: 0; }
   .fact:last-child { border-right: 0; }

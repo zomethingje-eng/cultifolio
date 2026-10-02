@@ -195,20 +195,20 @@
 {:else if !loc}
   {#if waiting}<h1 class="q" style="margin-top: 24px">Not whole</h1><WaitingRecord kind="location" label="This place" {waiting} /><p class="muted"><a href="/places">All places</a>.</p>{:else}<h1 class="q" style="margin-top: 24px">Not here</h1><p class="muted">No place with that id on this device. <a href="/places">All places</a>.</p>{/if}
 {:else}
-  <div class="hero band"><div class="ph">{LOCATION_KINDS.find((k) => k.k === loc.type)?.label ?? 'Place'}{path.length > 1 ? ' inside ' + path.slice(0, -1).map((p) => p.name).join(' › ') : ''}</div></div>
-  <div class="idcard">
+  <!-- No band above the card: it carried only the kind, which the line under the name says, and on a phone it was a grey
+       block before anything the grower came for. The path to the place is in that line now (round fifty, 4). -->
+  <div class="idcard flat">
     <div class="who">
       <h1 class="q" style="margin: 0">{loc.name}</h1>
-      <p class="vern">{LOCATION_KINDS.find((k) => k.k === loc.type)?.label ?? 'Place'} · {plural(deep.length, 'growing plant')}{kids.length ? ` in ${plural(collection.subtree(id).length, 'place')}` : ''}{#if cond.indoor != null} · {cond.indoor ? 'indoors' : 'outdoors'}{/if}</p>
+      <p class="vern">{LOCATION_KINDS.find((k) => k.k === loc.type)?.label ?? 'Place'}{path.length > 1 ? ' inside ' + path.slice(0, -1).map((p) => p.name).join(' › ') : ''} · {plural(deep.length, 'growing plant')}{kids.length ? ` in ${plural(collection.subtree(id).length, 'place')}` : ''}{#if cond.indoor != null} · {cond.indoor ? 'indoors' : 'outdoors'}{/if}</p>
+      {#if cond.floorC != null || dli != null || (watchable && effectiveRisk) || (unseen && deep.length)}
       <div class="pills">
         {#if cond.floorC != null}<span class="pill c">{cond.floorHeld ? 'held at' : 'floor'} {temp(cond.floorC, units.current, 1)}</span>{/if}
         {#if dli != null}<span class="pill w">DLI {dli.toFixed(0)}</span>{/if}
         {#if watchable && effectiveRisk}<span class="pill {effectiveRisk.level === 'none' ? 'a' : effectiveRisk.level === 'cold' ? 'w' : 'b'}">{effectiveRisk.level === 'none' ? (alertsUnchecked ? 'forecast clear; alerts not checked' : 'frost: clear') : effectiveRisk.level === 'cold' ? 'cold night coming' : effectiveRisk.level === 'floor' ? 'reaches the floor' : effectiveRisk.level === 'warning' ? 'weather warning' : 'frost forecast'}</span>{/if}
         {#if unseen && deep.length}<span class="pill w">{unseen} not seen{missedNow === unseen ? ' at the last audit' : ' in 90 d'}</span>{/if}
       </div>
-    </div>
-    <div class="acts">
-      <button class="btn" onclick={startEdit}>Edit</button>
+      {/if}
     </div>
   </div>
 
@@ -234,16 +234,22 @@
     </form>
   {/if}
 
+  <!-- What is done to the plants here leads; what is done to the place is a quieter row of words beneath it (round fifty, 4). -->
   <div class="quickbar">
     {#if deep.length}
       <button class="btn pri" onclick={() => waterAll('water')} disabled={!!busy}>Water all {deep.length}</button>
       <button class="btn" onclick={() => waterAll('feed')} disabled={!!busy}>Feed all</button>
       <button class="btn" onclick={startAudit} disabled={auditing}>Audit</button>
+    {:else}
+      <a class="btn pri" href="/plants/new?loc={id}">Add a plant here</a>
     {/if}
-    <a class="btn" class:pri={!deep.length} href="/plants/new?loc={id}">Add a plant here</a>
+  </div>
+  <div class="quickbar words">
+    {#if deep.length}<a class="btn" href="/plants/new?loc={id}">Add a plant here</a>{/if}
     {#if movable.length}<button class="btn" type="button" onclick={startMove} disabled={movingIn}>Move plants here</button>{/if}
     <a class="btn" href="/propagation/new?loc={id}">Start a batch here</a>
     <a class="btn" href="/labels?loc={id}">Labels</a>
+    <button class="btn" type="button" onclick={startEdit}>Edit</button>
   </div>
 
   {#if movingIn}
@@ -264,7 +270,7 @@
   {/if}
 
   {#if cond.floorC == null && dli == null && !lastWater && !lastAudit}
-    <p class="empty" style="margin: 14px 0 0">No floor, light, watering or audit recorded here yet. <button class="linkish" type="button" onclick={startEdit}>Set the floor and the light</button></p>
+    <p class="empty" style="margin: 14px 0 0">No floor, light, watering or audit recorded here yet. <button class="linkish" type="button" onclick={startEdit}>Set the floor and the light</button>{#if !watchable && cond.indoor !== true}, and coordinates for frost watch{/if}.</p>
   {:else}
   <div class="cards">
     {#if cond.floorC != null}<div class="card"><div class="lab">{cond.floorHeld ? 'Held at' : 'Floor'}</div><div class="val">{cond.floorC == null ? '–' : tempN(cond.floorC, units.current, 1)}<span class="u">{cond.floorC == null ? '' : ' ' + tempUnit(units.current)}</span></div><div class="sub">{cond.floorC == null ? 'not stated' : cond.from.floorC && cond.from.floorC !== loc.name ? `from ${cond.from.floorC}` : 'set here'}</div></div>{/if}
@@ -282,7 +288,7 @@
       <div class="notice {effectiveRisk?.level === 'none' ? 'ok' : effectiveRisk?.level === 'cold' ? '' : 'err'}"><b>{effectiveRisk?.level === 'none' ? (alertsUnchecked ? 'Forecast clear.' : 'All clear.') : effectiveRisk?.level === 'cold' ? 'Cold night coming.' : effectiveRisk?.level === 'floor' ? 'Below the floor.' : effectiveRisk?.level === 'warning' ? 'Warning in force.' : 'Frost forecast.'}</b> {effectiveRisk?.text}{#if alertsUnchecked} Alerts not checked: the National Weather Service did not answer, and this is not a statement that no alert is in force.{/if}</div>
       <p class="small muted">{forecast.attribution.join(' · ')}. <a href="/frost">Full forecast</a>.</p>
     {/if}
-  {:else if cond.indoor !== true}
+  {:else if cond.indoor !== true && !(cond.floorC == null && dli == null && !lastWater && !lastAudit)}
     <p class="small muted" style="margin-top: 10px"><button type="button" class="linkish" onclick={startEdit}>Add coordinates</button> to this place (or a parent) to watch the forecast for frost.</p>
   {/if}
 
@@ -351,8 +357,11 @@
 <style>
   .dangerrow { margin: 46px 0 10px; display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; font-size: 12.5px; color: var(--ink3); }
   .linkish { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-decoration: underline; }
-  .hero.band { margin-top: 14px; min-height: 0; }
-  .hero.band .ph { height: 72px; background: linear-gradient(135deg, var(--sunk), color-mix(in srgb, var(--sunk) 70%, var(--accent-soft))); }
+  .idcard.flat { margin-top: 14px; }
+  .quickbar.words { margin-top: -6px; gap: 2px 14px; }
+  .quickbar.words .btn { background: none; border: 0; box-shadow: none; padding: 6px 0; min-height: 40px; color: var(--accent); font-weight: 600; }
+  .quickbar.words .btn:hover { text-decoration: underline; }
+  .quickbar.words .btn:disabled { color: var(--ink3); }
   .muted { color: var(--ink3); }
   .movein { margin-top: 12px; }
   .movein .body { padding: 10px 14px 14px; }
@@ -375,5 +384,5 @@
   .accrow .nm .accno { font-style: normal; vertical-align: 2px; }
   .azrow.accrow .fam.phoneonly { display: none; } /* outranks the theme's .azrow.accrow .fam { display: flex }, which printed the status twice at desktop width (round twenty-five, 13) */
   .fam.due { color: var(--warm); }
-  @media (max-width: 640px) { .form { grid-template-columns: 1fr 1fr; } .hero.band { margin-top: 0; } .azrow .fig { display: none; } .azrow.accrow .fam.phoneonly { display: flex; } }
+  @media (max-width: 640px) { .form { grid-template-columns: 1fr 1fr; } .idcard.flat { margin-top: 10px; } .azrow .fig { display: none; } .azrow.accrow .fam.phoneonly { display: flex; } }
 </style>

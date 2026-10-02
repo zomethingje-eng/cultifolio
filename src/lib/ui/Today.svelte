@@ -157,4 +157,11 @@
   .muted { color: var(--ink3); }
   .todaynote { margin: 8px 0 0; }
   .linkish { background: none; border: 0; padding: 0; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; }
+  /* Tighter on a phone: the lines are a glance before the grower's own plants, not the page (round fifty, 4). */
+  @media (max-width: 640px) {
+    .today { margin: 8px 0 2px; }
+    .line { padding: 8px 12px; font-size: 13px; line-height: 1.4; }
+    .today > .small { padding: 6px 12px; font-size: 12px; }
+    .withact .btn { min-height: 32px; padding: 4px 10px; font-size: 12.5px; }
+  }
 </style>

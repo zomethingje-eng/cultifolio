@@ -37,7 +37,7 @@
 
 <svelte:head><title>Places — Cultifolio</title></svelte:head>
 
-<PageHead title="Places" sub="Where your plants live: a greenhouse, a bench, a shelf or a windowsill; conditions set on a place apply to everything inside it." count="{rows.length} place{rows.length === 1 ? '' : 's'}{unplaced ? ` · ${unplaced} unplaced` : ''}">
+<PageHead compact title="Places" sub="Where your plants live: a greenhouse, a bench, a shelf or a windowsill; conditions set on a place apply to everything inside it." count="{rows.length} place{rows.length === 1 ? '' : 's'}{unplaced ? ` · ${unplaced} unplaced` : ''}">
   <button class="btn pri" onclick={() => (adding = !adding)}>New place</button>
 </PageHead>
 

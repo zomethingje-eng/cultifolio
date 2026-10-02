@@ -722,6 +722,17 @@
   .setuprow.later { padding-top: 9px; padding-bottom: 9px; }
   .quickbar .more { color: var(--ink2); }
   .confirmrow { display: inline-flex; gap: 6px; }
-  @media (max-width: 640px) { .setuprow .w { display: none; } }
+  /* On a phone the checklist is one row of steps, scrolled sideways, the next step set in the accent: four stacked rows
+     stood between the name and the plant's first figures on the first screen (round fifty, 4). */
+  @media (max-width: 640px) {
+    .setup .sum .hint { display: none; }
+    .setup .setupbody { display: flex; gap: 6px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding: 0 12px 12px; }
+    .setup .setupbody::-webkit-scrollbar { display: none; }
+    .setuprow, .setuprow.next, .setuprow.later { display: inline-flex; width: auto; flex: none; gap: 6px; align-items: center; min-height: 36px; padding: 6px 12px; border: 1px solid var(--rule); border-radius: 999px; background: var(--card); white-space: nowrap; }
+    .setuprow.next { border-color: var(--accent); }
+    .setuprow .n { font-size: 11px; }
+    .setuprow .t, .setuprow.next .t, .setuprow.later .t { font-size: 13px; }
+    .setuprow .w { display: none; }
+  }
   @media (max-width: 640px) { .editform { grid-template-columns: 1fr 1fr; } .hero { margin-top: 0; } .hero.own { min-height: 260px; } .heroimg :global(img) { height: 260px; } .idcard.flat { margin-top: 10px; display: grid; grid-template-columns: 80px minmax(0, 1fr); --tile: 80px; } .idcard.flat .acts { grid-column: 1 / -1; } .idcard.flat .who { flex-basis: auto; } .idcard.flat h1.sci { font-size: 23px; } .idcard.flat .accno.lead { display: table; margin: 0 0 4px; vertical-align: baseline; } }
 </style>

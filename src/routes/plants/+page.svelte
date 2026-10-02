@@ -116,15 +116,16 @@
 
 <svelte:head><title>My plants — Cultifolio</title></svelte:head>
 
-<PageHead title="My plants" sub="Your plants, each under its own number, kept on this device." count="{collection.accessions.filter((a) => a.status === 'growing').length} growing · {collection.numbersIssued} number{collection.numbersIssued === 1 ? '' : 's'} given">
-  <a class="btn pri" href="/plants/new">Add a plant</a>
+<PageHead compact title="My plants" sub="Your plants, each under its own number, kept on this device." count="{collection.accessions.filter((a) => a.status === 'growing').length} growing · {collection.numbersIssued} number{collection.numbersIssued === 1 ? '' : 's'} given">
+  <!-- The + in the top bar is the phone's add button; the head keeps its one line (round fifty, 4). -->
+  <a class="btn pri wideonly" href="/plants/new">Add a plant</a>
 </PageHead>
 
-<div class="toolrow">
+<div class="toolrow plantstools">
   <input id="plants-q" class="searchbar" type="search" placeholder="Search name, number, field number, place, notes…" aria-label="Search your plants" bind:value={q} />
   <select id="plants-sort" class="sortsel" aria-label="Sort" bind:value={sort}><option value="number">Newest number first</option><option value="name">By name</option><option value="watered">Longest since watered</option><option value="place">By place</option></select>
   {#if (q.trim() || show !== 'growing') && list.length}<a class="btn small" href="/labels?acc={list.map((a) => a.id).join(',')}" title="Labels for exactly the plants listed here">Labels for these {list.length}</a>{/if}
-  <div class="chiprow" style="margin: 0">
+  <div class="chiprow showrow" style="margin: 0">
     <button class="chipbtn" class:on={show === 'growing'} aria-pressed={show === 'growing'} onclick={() => (show = 'growing')}>Growing<span class="n">{collection.accessions.filter((a) => a.status === 'growing').length}</span></button>
     <button class="chipbtn" class:on={show === 'due'} aria-pressed={show === 'due'} onclick={() => (show = 'due')} title="Not watered, or not recorded as watered, for three weeks or more: a fact about the record, not a verdict on the plant">Not watered 21+ days<span class="n">{dueN}</span></button>
     <button class="chipbtn" class:on={show === 'nophoto'} aria-pressed={show === 'nophoto'} onclick={() => (show = 'nophoto')} title="Growing plants with no photograph in the last year">No photo in 12 months<span class="n">{noPhotoN}</span></button>
@@ -138,7 +139,7 @@
 {#if collection.ready && storageLow && !storageNoticeHidden}
   <div class="notice" id="storage-notice">This browser's storage is nearly full{collection.persisted === false ? ', and it has not promised to keep this site\'s data' : ''}: it may clear photographs to make room. <a href="/backup">Back up now</a>. <button class="linkish" type="button" onclick={hideStorageNotice}>Hide for now</button></div>
 {:else if collection.ready && collection.persisted === false && !sync.configured}
-  <p class="small muted keepline" id="storage-notice">Kept in this browser only; <a href="/backup">back up</a> or install the app to keep it safe.</p>
+  <p class="small muted keepline" id="storage-notice">Kept in this browser only: <a href="/backup">back up</a> or install the app.</p>
 {/if}
 {#if collection.incomplete}<StateNote word="{collection.incomplete} waiting" id="incomplete-notice">{collection.incomplete} {collection.incomplete === 1 ? 'record waits' : 'records wait'} for a field this device does not have ({#if sync.quarantined.length}a batch from a newer build, set aside on <a href="/sync">Sync</a>{:else}a file that never had it, or a batch from a newer build that has not arrived{/if}), and {collection.incomplete === 1 ? 'is' : 'are'} not shown until it comes; a plant's own page, by its number, says which field. <a href="/about/how#glossary">Glossary</a>.</StateNote>{/if}
 
@@ -153,7 +154,8 @@
   <div class="emptybox"><p class="muted">No plants match.</p></div>
 {:else}
   {#if !prefs.referencePhotos && list.some((a) => !collection.cover(a.id))}
-    <div style="margin: 0 0 8px"><RefPhotoOffer compact buckets what="the reference’s photographs for plants without their own" /></div>
+    <!-- One line, the disclosure behind it: the paragraph stood between the chips and the first plant on a phone (round fifty, 4). -->
+    <div style="margin: 0 0 8px"><RefPhotoOffer link buckets what="the reference’s photographs for plants without their own" /></div>
   {/if}
   <div class="rows">
     {#each list as a (a.id)}
@@ -188,5 +190,14 @@
   .wbtn { min-height: 40px; }
   .im :global(img) { width: 100%; height: 100%; object-fit: cover; }
   /* On a phone the figure goes under the name instead of away: "which of these did I water last" is the question the list is for. */
+  /* The first screen is for the list: the search and the sort share a row, the chips are one row scrolled sideways (round fifty, 4). */
+  @media (max-width: 640px) {
+    .plantstools { margin-top: 0; padding-top: 4px; row-gap: 6px; }
+    .plantstools .searchbar { min-width: 0; }
+    .plantstools .sortsel { flex: none; max-width: 44%; }
+    .plantstools .showrow { flex-basis: 100%; flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; margin: 0 -16px !important; padding: 2px 16px; }
+    .plantstools .showrow::-webkit-scrollbar { display: none; }
+    .plantstools .showrow .chipbtn { flex: none; white-space: nowrap; }
+  }
   @media (max-width: 640px) { .azrow { grid-template-columns: 40px minmax(0, 1fr); } .azrow .fig { grid-column: 2; justify-content: flex-start; text-align: left; font-size: 11.5px; margin-top: -4px; } }
 </style>

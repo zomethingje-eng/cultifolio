@@ -9,7 +9,8 @@ class Toast {
   action = $state<{ label: string; run: () => void } | null>(null);
   private timer: ReturnType<typeof setTimeout> | null = null;
   private shownAt = 0;
-  show(text: string, ms = 3200, action: { label: string; run: () => void } | null = null) {
+  /** 2.4 s at rest: the page says the same thing in full, so the line is a nod, not a notice; one with an action stays 8 s (round fifty, 4). */
+  show(text: string, ms = 2400, action: { label: string; run: () => void } | null = null) {
     this.text = text;
     this.action = action;
     if (action) ms = Math.max(ms, 8000); // long enough to read and press

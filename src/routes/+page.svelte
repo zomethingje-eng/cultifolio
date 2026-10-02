@@ -336,6 +336,20 @@
   });
   const retrySearch = () => { const t = q; q = ''; q = t; };
   const flat = $derived(!!q.trim());
+  /** Typing is a mode: with text in the box the strip, the grouping, the chips and the letters step aside and the matches draw as rows under the pinned box; Cancel or an empty box puts the page back (round fifty, 2). */
+  const searchMode = $derived(!!q.trim());
+  let toolrowEl = $state<HTMLElement | null>(null);
+  let filtersEl = $state<HTMLElement | null>(null);
+  /** On a phone, focus pins the box under the top bar, so what is typed and what matches share the half of the screen the keyboard leaves. */
+  function pinSearch() {
+    if (!toolrowEl || !window.matchMedia('(max-width: 640px)').matches) return;
+    const top = toolrowEl.getBoundingClientRect().top;
+    if (top > 46) window.scrollTo({ top: window.scrollY + top - 44 });
+  }
+  function cancelSearch() {
+    q = '';
+    (document.activeElement as HTMLElement | null)?.blur?.();
+  }
   /** The search's hits under the chip: a chip that is on filters the matches too (round forty, R1-4). */
   const shownFound = $derived(chip === 'climate' ? found.filter((c) => c.climate === 'ok') : chip === 'noclimate' ? found.filter((c) => c.climate !== 'ok') : found);
   /** The matches among your own species, found here and not on the server (round forty, R2-1). */
@@ -456,6 +470,18 @@
   </a>
 {/snippet}
 
+{#snippet hit(c: Tile)}
+  <!-- A match as a row, not a tile: five or six fit between the pinned box and a phone's keyboard, and update as the letters go in (round fifty, 2). -->
+  <a class="azrow hitrow" href="/species/{c.slug}">
+    <span class="im">{#if c.thumb}<img src={photoAt(c.thumb, 'square')} width="40" height="40" alt="" loading="lazy" onerror={(e) => ((e.currentTarget as HTMLImageElement).style.display = 'none')} />{:else}<span class="ini">{c.name[0] ?? ''}</span>{/if}</span>
+    <span>
+      <span class="nm"><SpeciesName name={c.name} /></span>
+      <span class="fam">{[c.common, c.family, c.climate === 'ok' ? 'climate known' : c.climate === 'pending' ? 'climate pending' : c.climate ? 'no habitat climate' : ''].filter(Boolean).join(' · ')}</span>
+    </span>
+    <span class="fig">›</span>
+  </a>
+{/snippet}
+
 {#if settling}
   <div class="skeleton" aria-busy="true" aria-label="Opening your species">
     <div class="sk head"></div>
@@ -465,17 +491,23 @@
     </div>
   </div>
 {:else if yourView}
-  <PageHead title="Species" sub="The species you grow, want, or are reading up on; the whole reference is one switch away." count="{grownN} you grow{followingN ? ` · ${followingN} following` : ''}">
+  <PageHead title="Species" compact sub="The species you grow, want, or are reading up on; the whole reference is one switch away." count="{grownN} you grow{followingN ? ` · ${followingN} following` : ''}">
     <a class="btn pri headadd" href="/plants/new">Add a plant</a>
   </PageHead>
 
   <!-- The box above Today, focused on a desktop: a returning grower's first act is "find 2026-0013" (round forty-one, R11). -->
-  <div class="toolrow">
-    <input class="searchbar" type="search" placeholder="Search your plants by number, name or field number…" bind:value={q} onkeydown={openTop} aria-label="Search your plants and species (on this device)" use:focusOnDesktop />
-    <nav class="seg viewseg" aria-label="Which species">
-      <button type="button" class="on" aria-current="true">Your species</button>
-      <button type="button" onclick={startBrowsing}>All {fmtN(data.total)}</button>
-    </nav>
+  <div class="stickyhead">
+  <div class="toolrow" bind:this={toolrowEl}>
+    <input class="searchbar" type="search" placeholder="Search your plants by number, name or field number…" bind:value={q} onkeydown={openTop} onfocus={pinSearch} aria-label="Search your plants and species (on this device)" use:focusOnDesktop />
+    {#if searchMode}
+      <button class="btn small cancelsearch" type="button" onclick={cancelSearch}>Cancel</button>
+    {:else}
+      <nav class="seg viewseg" aria-label="Which species">
+        <button type="button" class="on" aria-current="true">Your species</button>
+        <button type="button" onclick={startBrowsing}>All {fmtN(data.total)}</button>
+      </nav>
+    {/if}
+  </div>
   </div>
 
   {#if !q.trim()}<Today />{/if}
@@ -483,10 +515,10 @@
   {#if q.trim()}
     {@render plantsFound()}
     {#if ownHits.length}
-      <div class="hgrid" data-sveltekit-preload-data="off">
-        {#each ownHits as c (c.slug)}{@render tile(c)}{/each}
+      <p class="seccount" style="margin: 8px 0" role="status">{fmtN(ownHits.length)} of your species {ownHits.length === 1 ? 'matches' : 'match'}{plantHits.length ? '' : ' · Enter opens the first'}</p>
+      <div class="rows hits" data-sveltekit-preload-data="off">
+        {#each ownHits as c (c.slug)}{@render hit(c)}{/each}
       </div>
-      <p class="seccount" style="margin-top: 14px" role="status">{fmtN(ownHits.length)} of your species {ownHits.length === 1 ? 'matches' : 'match'}{plantHits.length ? '' : '; Enter opens the first'}.</p>
     {:else if !plantHits.length}
       <div class="emptybox"><p class="muted">None of your plants or species matches.</p></div>
     {/if}
@@ -498,16 +530,17 @@
     {/if}
     {#if mineTiles.grow.length}
       <h2 class="q grouptitle">You grow</h2>
-      {#if [...mineTiles.grow, ...mineTiles.follow].some((c) => c.thumbOff)}
-        <div class="offer"><RefPhotoOffer what="the reference’s photographs on your tiles" /></div>
-      {/if}
-      <div class="hgrid" data-sveltekit-preload-data="off">
+      <div class="hgrid mine" data-sveltekit-preload-data="off">
         {#each mineTiles.grow as c (c.slug)}{@render tile(c)}{/each}
       </div>
+      <!-- The offer after the tiles, one line: it was a heading, a link and a paragraph between the grower and their plants (round fifty, 1). -->
+      {#if [...mineTiles.grow, ...mineTiles.follow].some((c) => c.thumbOff)}
+        <div class="offer"><RefPhotoOffer link what="the reference’s photographs on your tiles" /></div>
+      {/if}
     {/if}
     {#if mineTiles.follow.length}
       <h2 class="q grouptitle">Following</h2>
-      <div class="hgrid" data-sveltekit-preload-data="off">
+      <div class="hgrid mine" data-sveltekit-preload-data="off">
         {#each mineTiles.follow as c (c.slug)}{@render tile(c)}{/each}
       </div>
     {/if}
@@ -517,49 +550,62 @@
 
   {/if}
 {:else}
-  <PageHead title="Species" sub={visitor ? 'A reference to the plants people grow, every figure with its source; your own plants stay on this device.' : undefined} count="{fmtN(data.total)} species · {fmtN(data.withClimate)} with habitat climate{ownedN ? ` · ${ownedN} you grow` : ''}">
+  <!-- While a search is typed on a phone the head steps aside with the strip and the chips: the box is the page then (round fifty, 2). -->
+  <div class="headwrap" class:searching={searchMode}>
+  <PageHead title="Species" compact sub={visitor ? 'A reference to the plants people grow, every figure with its source; your own plants stay on this device.' : undefined} count="{fmtN(data.total)} species · {fmtN(data.withClimate)} with habitat climate{ownedN ? ` · ${ownedN} you grow` : ''}">
     {#if !visitor}<a class="btn pri headadd" href="/plants/new">Add a plant</a>{/if}
   </PageHead>
+  </div>
 
-  <!-- The way in comes before the pictures, so a phone's first screen has the pitch, the count and what to do, not a grid alone (round twenty-eight, 13). -->
-  {#if (!collection.ready || (!hasMine && !collection.accessions.length)) && !welcomeHidden}
-    <p class="welcome" id="welcome"><b>New here.</b> <a href="/plants/new">Add your first plant</a> · <a href="/backup">Bring in a collection</a> (a backup file, or an export from the old Herbarium app) <button class="linkish" type="button" onclick={dismissWelcome}>Not now</button></p>
-  {:else if collection.ready && !hasMine && !collection.accessions.length}
+  <!-- The way in, in one line (round twenty-eight, 13; one line since round fifty, 1: the first screen is for the search, a glimpse of the photographs and the first rows). -->
+  {#if (!collection.ready || (!hasMine && !collection.accessions.length)) && !welcomeHidden && !searchMode}
+    <p class="welcome" id="welcome"><span><b>New here?</b> <a href="/plants/new">Add a plant</a> · <a href="/backup">bring in a collection</a></span><button class="linkish dismiss" type="button" onclick={dismissWelcome} aria-label="Not now" title="Not now">×</button></p>
+  {:else if collection.ready && !hasMine && !collection.accessions.length && !searchMode}
     <!-- "Not now" hides the welcome for good; the way in stays, in one line, or a visitor who comes back has to find /plants/new by the tab bar (round forty-one, R9). -->
     <p class="welcome quiet" id="welcome-after"><a href="/plants/new">Keep a record of your plants</a> on this device; nothing leaves it.</p>
   {/if}
 
-  {#if visitor && data.featured.length}
-    <!-- A stranger sees plants before a list of them: one photographed species from each of the largest genera, by rule, rotated daily. -->
-    {@render featured()}
-  {/if}
-
   <div class="stickyhead">
-  <div class="toolrow">
-    {#if hasMine}
+  <div class="toolrow" bind:this={toolrowEl}>
+    {#if hasMine && !searchMode}
       <nav class="seg viewseg" aria-label="Which species">
         <button type="button" onclick={stopBrowsing}>Your species</button>
         <button type="button" class="on" aria-current="true">All {fmtN(data.total)}</button>
       </nav>
     {/if}
-    <input class="searchbar" type="search" placeholder="Search the catalogue by name, genus, family or origin…" bind:value={q} onkeydown={openTop} aria-label="Search the whole species catalogue" />
-    <nav class="seg" aria-label="Group by">
-      {#each ['genus', 'origin', 'family'] as const as b (b)}<a href="?by={b}{chip !== 'all' ? `&chip=${chip}` : ''}" class:on={data.by === b} aria-current={data.by === b ? 'true' : undefined}>{byLabel[b]}</a>{/each}
-    </nav>
-    <!-- On a phone the chips and the letter index scroll away under the pinned search row; this brings them back (round forty-eight, 1) -->
-    {#if !flat && data.letters.length > 1}<button class="btn small azbtn" type="button" onclick={showLetters} aria-label="Show the letter index">A–Z</button>{/if}
+    <input class="searchbar" type="search" placeholder="Search the catalogue by name, genus, family or origin…" bind:value={q} onkeydown={openTop} onfocus={pinSearch} aria-label="Search the whole species catalogue" />
+    {#if searchMode}
+      <!-- Typing is a mode on a phone: the box pinned under the top bar, the strip, the grouping, the chips and the letters out of the way, the matches as rows under it, and Cancel to put the page back (round fifty, 2). -->
+      <button class="btn small cancelsearch" type="button" onclick={cancelSearch}>Cancel</button>
+    {:else}
+      <nav class="seg" aria-label="Group by">
+        {#each ['genus', 'origin', 'family'] as const as b (b)}<a href="?by={b}{chip !== 'all' ? `&chip=${chip}` : ''}" class:on={data.by === b} aria-current={data.by === b ? 'true' : undefined}>{byLabel[b]}</a>{/each}
+      </nav>
+      <!-- The chips and the letter index scroll away under the pinned search row; this brings them back (round forty-eight, 1) -->
+      {#if data.letters.length > 1}<button class="btn small azbtn" type="button" onclick={showLetters} aria-label="Show the letter index">A–Z</button>{/if}
+    {/if}
   </div>
+  </div>
+
+  {#if visitor && data.featured.length && !searchMode}
+    <!-- A stranger sees plants before a list of them: one photographed species from each of the largest genera, by rule, rotated daily; under the search since round fifty, as a sampler rather than the page. -->
+    {@render featured()}
+  {/if}
+
+  {#if !searchMode}
+  <div class="filters" bind:this={filtersEl}>
   <div class="chiprow">
     <a class="chipbtn" class:on={chip === 'all'} aria-current={chip === 'all' ? 'true' : undefined} href="?by={data.by}" data-sveltekit-noscroll>All<span class="n">{fmtN(data.total)}</span></a>
     <a class="chipbtn" class:on={chip === 'climate'} aria-current={chip === 'climate' ? 'true' : undefined} href="?by={data.by}&chip=climate" data-sveltekit-noscroll>Climate known<span class="n">{fmtN(data.withClimate)}</span></a>
     <a class="chipbtn" class:on={chip === 'noclimate'} aria-current={chip === 'noclimate' ? 'true' : undefined} href="?by={data.by}&chip=noclimate" data-sveltekit-noscroll>Without climate<span class="n">{fmtN(data.total - data.withClimate)}</span></a>
   </div>
-  {#if !flat && data.letters.length > 1}
+  {#if data.letters.length > 1}
     <nav class="letters" aria-label="Jump to a letter" bind:this={lettersEl}>
       {#each data.letters as l (l)}<a href="?by={data.by}{chip !== 'all' ? `&chip=${chip}` : ''}&from={l}#l-{l}" onclick={(e) => { e.preventDefault(); jumpToLetter(l); }}>{l}</a>{/each}
     </nav>
   {/if}
   </div>
+  {/if}
 
   {#if flat}
     {#if q.trim()}{@render plantsFound()}{/if}
@@ -570,10 +616,10 @@
     {:else if !shownFound.length}
       <div class="emptybox"><p class="muted">Nothing matches{chip !== 'all' && found.length ? ` with the chip on (${fmtN(found.length)} without it)` : ''}.</p></div>
     {:else}
-      <div class="hgrid">
-        {#each shownFound as c (c.slug)}{@render tile(c)}{/each}
+      <p class="seccount" style="margin: 8px 0" role="status">{fmtN(shownFound.length)} {shownFound.length === 1 ? 'match' : 'matches'} of {fmtN(data.total)}{chip !== 'all' && shownFound.length !== found.length ? ` (${fmtN(found.length - shownFound.length)} more without the chip)` : ''} · Enter opens the first</p>
+      <div class="rows hits">
+        {#each shownFound as c (c.slug)}{@render hit(c)}{/each}
       </div>
-      <p class="seccount" style="margin-top: 14px" role="status">{fmtN(shownFound.length)} {shownFound.length === 1 ? 'match' : 'matches'} of {fmtN(data.total)}{chip !== 'all' && shownFound.length !== found.length ? ` (${fmtN(found.length - shownFound.length)} more without the chip)` : ''}; Enter opens the first.</p>
     {/if}
   {:else}
     <div class="rows" class:withletters={data.letters.length > 1} style:padding-bottom={tailPad ? `${tailPad}px` : undefined}>
@@ -604,10 +650,12 @@
 <style>
   .plantsfound { margin: 12px 0 4px; }
   .plantsfound .accrow .nm .accno { font-style: normal; vertical-align: 2px; }
-  .welcome { margin: 12px 0 0; font-size: 13.5px; color: var(--ink2); line-height: 1.6; }
+  .welcome { margin: 10px 0 0; font-size: 13.5px; color: var(--ink2); line-height: 1.6; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .welcome .dismiss { font-size: 20px; line-height: 1; padding: 4px 8px; min-height: 0; text-decoration: none; }
   /* the grower's main switch: yours or everything; it leads the tool row on both views */
   .viewseg { order: -1; }
-  @media (max-width: 700px) { .headadd { display: none; } } /* the + in the top bar is the phone's add button */
+  @media (max-width: 700px) { .headadd { display: none; } }
+  @media (max-width: 640px) { .headwrap.searching { display: none; } } /* the + in the top bar is the phone's add button */
   .viewseg > button { font-weight: 700; }
   @media (max-width: 700px) { .viewseg { flex-basis: 100%; } .viewseg > button { flex: 1; text-align: center; } }
   .welcome a { font-weight: 600; }
@@ -617,15 +665,20 @@
   .linkish { background: none; border: 0; padding: 0 4px; font: inherit; font-size: 13px; color: var(--accent); cursor: pointer; text-decoration: underline; }
   .welcome .linkish { color: var(--ink3); margin-left: 4px; }
   /* the featured strip: one row, scrolls sideways on a phone, six-up on a desktop */
-  .featured { margin: 14px 0 6px; }
-  .strip { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(150px, 1fr); gap: 12px; overflow-x: auto; scroll-snap-type: x proximity; padding: 2px 2px 8px; margin: 0 -2px; scrollbar-width: thin; }
+  .featured { margin: 12px 0 2px; }
+  /* A sampler, not the page: on a phone the tiles are 112px squares, three and a half across, the first one two tiles
+     wide so one photograph gets room; on a desktop the six-up grid as before (round fifty, 1). */
+  .strip { display: grid; grid-auto-flow: column; grid-auto-columns: 112px; gap: 10px; overflow-x: auto; scroll-snap-type: x proximity; padding: 2px 2px 8px; margin: 0 -2px; scrollbar-width: thin; }
+  .ftile:first-child { grid-column: span 2; }
+  .ftile:first-child img, .ftile:first-child .fph { aspect-ratio: 2 / 1; }
   .ftile { scroll-snap-align: start; display: block; border-radius: var(--r); overflow: hidden; background: var(--card); box-shadow: var(--sh); color: inherit; text-decoration: none; transition: transform 0.18s, box-shadow 0.18s; }
   .ftile:hover { transform: translateY(-2px); box-shadow: var(--sh2); text-decoration: none; color: inherit; }
   .ftile img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; background: var(--sunk); }
   .ftile .fph { width: 100%; aspect-ratio: 1; }
-  .ftile .fnm { display: block; padding: 8px 11px 0; font-family: var(--serif); font-style: italic; font-size: 14px; font-weight: 600; line-height: 1.25; }
-  .ftile .fcom { display: block; padding: 2px 11px 10px; font-size: 11.5px; color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ftile .fnm:last-child { padding-bottom: 10px; }
+  .ftile .fnm { display: block; padding: 6px 9px 0; font-family: var(--serif); font-style: italic; font-size: 13px; font-weight: 600; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ftile .fcom { display: block; padding: 1px 9px 8px; font-size: 11px; color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ftile .fnm:last-child { padding-bottom: 8px; }
+  @media (min-width: 701px) { .ftile .fnm { padding: 8px 11px 0; font-size: 14px; white-space: normal; } .ftile .fcom { padding: 2px 11px 10px; font-size: 11.5px; } .ftile:first-child { grid-column: auto; } .ftile:first-child img, .ftile:first-child .fph { aspect-ratio: 1; } }
   @media (min-width: 701px) { .strip { grid-auto-columns: minmax(0, 1fr); grid-template-columns: repeat(6, minmax(0, 1fr)); grid-auto-flow: row; overflow: visible; } .ftile:nth-child(n + 7) { display: none; } }
   @media (min-width: 1000px) { .strip { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
   .muted { color: var(--ink3); }
@@ -635,22 +688,28 @@
   .sk.head { height: 34px; width: 40%; max-width: 220px; margin-bottom: 12px; }
   .sk.line { height: 14px; width: 70%; margin-bottom: 26px; }
   .sk.tile { aspect-ratio: 1 / 1.15; }
-  /* The search, the grouping, the filter chips and the letters stick together under the top bar while the list scrolls; the tool row's own stickiness is off inside it. */
-  .stickyhead { position: sticky; top: 44px; z-index: 40; background: var(--bg); margin: 16px 0 6px; padding-bottom: 4px; border-bottom: 1px solid var(--rule); }
-  .stickyhead .toolrow { position: static; margin-top: 0; }
-  @media (max-height: 480px) { .stickyhead { position: static; } }
+  /* The search row alone stays pinned under the top bar while the list scrolls, at every width (round fifty, 1: the chips
+     and the letters used to pin with it on a desktop; the strip now sits between the row and them, and a pinned strip is
+     no strip). The block is `display: contents` so the row's containing block is the page and it stays pinned through the
+     whole list (round forty-eight, 1). The A–Z button brings the chips and the index back. */
+  .stickyhead { display: contents; }
+  .stickyhead .toolrow { position: sticky; top: 44px; z-index: 40; background: var(--bg); margin: 10px 0 0; padding: 4px 0 8px; border-bottom: 1px solid var(--rule); }
+  @media (max-height: 480px) { .stickyhead .toolrow { position: static; } }
   .rows { overflow-anchor: none; }
-  .azbtn { display: none; }
-  /* On a phone the whole block would take a quarter of the screen while scrolling: only the search row stays pinned there
-     (round seventeen, design note). The block is `display: contents` so the row's containing block is the page and it stays
-     pinned through the whole list: as a child of the block it unpinned as soon as the block scrolled past, a few rows in,
-     and the chips scrolled up underneath it meanwhile (round forty-eight, 1). The A–Z button brings the index back. */
-  @media (max-width: 640px) {
-    .stickyhead { display: contents; }
-    .stickyhead .toolrow { position: sticky; top: 44px; z-index: 40; background: var(--bg); margin-top: 16px; padding-bottom: 8px; border-bottom: 1px solid var(--rule); }
-    .azbtn { display: inline-flex; margin-left: auto; }
-    .chiprow { margin-top: 10px; }
-  }
+  .azbtn { display: inline-flex; margin-left: auto; }
+  .cancelsearch { margin-left: auto; }
+  .filters { margin: 6px 0 0; }
+  .filters .chiprow { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 4px 0 6px; }
+  .filters .chiprow .chipbtn { flex: none; }
+  /* A match as a row: a 40px thumbnail or the initial, the name, the family and whether its climate is known. */
+  .hitrow .im { background: var(--sunk); }
+  .hitrow .im .ini { font-family: var(--serif); font-style: italic; font-size: 18px; color: var(--ink3); }
+  .hitrow .nm, .hitrow .fam { display: block; }
+  .hitrow .fam { font-size: 12px; text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--ink2); }
+  .hitrow .fig { font-size: 16px; }
+  .hits { margin-top: 4px; }
+  /* The grower's tiles three across on a phone, two was a screen per four plants (round fifty, 1). */
+  @media (max-width: 640px) { .hgrid.mine { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; } }
   .offer { margin: -4px 0 10px; }
   .letters { display: flex; flex-wrap: wrap; gap: 2px; margin: 0 0 2px; }
   .letters a { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--ink2); min-width: 30px; min-height: 30px; display: inline-flex; align-items: center; justify-content: center; border-radius: 7px; }
