@@ -112,11 +112,17 @@
     fetchingBefore = catalogueRows(data.by, data.chip, at, n).then(async (got) => {
       fetchingBefore = null;
       if (!got || got.at !== at || at + n !== start) return false;
-      const before = document.documentElement.scrollHeight;
+      // The anchor is the first loaded row: when it sits above the pinned edge the reader is within the rows, and the view
+      // is moved by what was put in above it so nothing on screen jumps. When it sits below the edge (the reader is on the
+      // chips or the letters above the list, as after A–Z) the rows grow downward out of sight and the view stays where it is.
+      const bar = document.querySelector<HTMLElement>('.stickyhead .toolrow');
+      const edge = 44 + (bar?.offsetHeight ?? 0);
+      const anchor = document.querySelector<HTMLElement>('.rows .grow');
+      const wasAt = anchor ? anchor.getBoundingClientRect().top : Infinity;
       rows = [...got.rows.map((r) => ({ ...r, items: undefined })), ...rows];
       start = at;
       await tick();
-      window.scrollBy(0, document.documentElement.scrollHeight - before);
+      if (anchor && wasAt < edge) window.scrollBy(0, anchor.getBoundingClientRect().top - wasAt);
       return got.rows.length > 0;
     });
     return fetchingBefore;
@@ -166,7 +172,9 @@
     const bar = document.querySelector<HTMLElement>('.stickyhead .toolrow');
     const under = 44 + (bar?.offsetHeight ?? 0) + 8;
     const chips = document.querySelector<HTMLElement>('.chiprow') ?? lettersEl;
-    window.scrollTo({ top: chips.getBoundingClientRect().top + window.scrollY - under, behavior: 'smooth' });
+    // An instant move, not a smooth one: a smooth scroll upward crosses the sentinel above the rows, the chunk it fetches
+    // lands mid-animation, and Safari stops the animation where it is, part of the way (the author's phone, round forty-nine).
+    window.scrollTo({ top: chips.getBoundingClientRect().top + window.scrollY - under });
     lettersEl.querySelector<HTMLElement>('a')?.focus({ preventScroll: true });
   }
   onMount(() => {

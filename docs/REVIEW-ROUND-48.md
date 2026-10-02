@@ -8,3 +8,7 @@ Two findings from the author scrolling the deployed home page on a phone.
 ## Counts
 
 419 unit tests on 43 files, 86 e2e (two new), local live check 10 of 10.
+
+## After the deploy (round forty-nine, on the author's phone)
+
+3. **A–Z moved the page part of the way** (3). The button scrolled smoothly; the way up crossed the sentinel above the loaded rows, the chunk it fetched landed mid-animation, and the scroll correction (made for a reader within the rows) pushed the view back down, so Safari ended the animation part way and the button had to be pressed again. Two changes: the move is instant, and the correction anchors on the first loaded row only when that row sits above the pinned edge (the reader is within the rows); when the reader is above the list, on the chips or the letters, the rows grow downward out of sight and the view stays put.
