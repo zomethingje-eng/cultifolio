@@ -60,7 +60,12 @@
     if (acc) chosen = new Set(acc.split(',').map((x) => collection.accession(x)?.id).filter((x): x is string => !!x)); // numbers or ids in the URL; identities inside
     else if (batch) chosen = new Set(batch.split(',').map((x) => collection.sowing(x)?.id).filter((x): x is string => !!x)); // a tray's label from the batch page (round forty-one, R10)
     else if (loc) chosen = new Set(collection.plantsAt(loc, true).map((a) => a.id));
-    else chosen = new Set(collection.accessions.filter((a) => a.status === 'growing').map((a) => a.id));
+    else {
+      // From the menu: every growing plant is picked when they fit a sheet or two; past that nothing is, since a tap
+      // on Print was three hundred labels, and "Pick all shown" is one tap (round forty-nine, 3).
+      const growing = collection.accessions.filter((a) => a.status === 'growing');
+      chosen = new Set(growing.length <= 24 ? growing.map((a) => a.id) : []);
+    }
     try {
       const s = localStorage.getItem('cultifolio.labels');
       if (s) {

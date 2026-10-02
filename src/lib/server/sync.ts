@@ -55,6 +55,31 @@ const BATCH = BATCH_NAME;
 const PHOTO = /^p[a-z0-9]{6,32}$/;
 const TOKEN = /^[0-9a-f]{64}$/;
 
+/**
+ * Remove an object and take its bytes off the vault's count (round forty-nine, 1). A removed photograph's ciphertext
+ * stayed in the bucket for good, counted against the vault's allowance, and the key that could read it was the
+ * grower's; now the device that folded the removal asks for the bytes to go. False when nothing was there.
+ */
+export async function deleteCounted(r2: R2Bucket, id: string, meta: VaultMeta, key: string, quota?: Quota): Promise<boolean> {
+  const existing = await r2.head(key);
+  if (!existing) return false;
+  await r2.delete(key);
+  const size = existing.size;
+  const kv = quota?.kv;
+  if (!kv) {
+    meta.bytes = Math.max(0, meta.bytes - size);
+    await writeMeta(r2, id, meta).catch(() => {});
+    return true;
+  }
+  const now = quota.now ?? Date.now();
+  const before = await vaultBytes(r2, kv, id, meta, now);
+  const after = Math.max(0, before - size);
+  await kv.put(`bytes:${id}`, JSON.stringify({ bytes: after, day: day(now) } satisfies BytesRow)).catch(() => {});
+  meta.bytes = after;
+  await writeMeta(r2, id, meta).catch(() => {});
+  return true;
+}
+
 export function store(platform: App.Platform | undefined): R2Bucket {
   const s = platform?.env?.STORE;
   if (!s) error(503, 'sync storage is not configured on this deployment');

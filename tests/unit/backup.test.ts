@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { buildBackup, readBackup, previewMerge, summarise, plantsCsv, batchesCsv, photoBytesError, photosWithoutPixels } from '$lib/backup/backup';
+import { buildBackup, readBackup, previewMerge, summarise, plantsCsv, batchesCsv, eventsCsv, photoBytesError, photosWithoutPixels } from '$lib/backup/backup';
 import { zipSync } from 'fflate';
 import { materialise, live, type Change, type Record_ } from '$core/log';
-import type { Accession, Sowing } from '$lib/db/types';
+import type { Accession, Sowing, PlantEvent } from '$lib/db/types';
 
 const t = (n: number) => `${String(1700000000000 + n).padStart(13, '0')}-0000-dev1`;
 const c = (n: number, kind: Change['kind'], id: string, field: string, value: unknown): Change => ({ t: t(n), kind, id, field, value });
@@ -169,6 +169,29 @@ describe('plants.csv', () => {
     const { state } = materialise(more);
     const line = plantsCsv(live<Accession & Record_>(state, 'accession'), state).slice(1).split('\r\n')[1];
     expect(line).toBe("2026-0001,Copiapoa cinerea,,species,,'@handle,,,growing,Greenhouse › Bench 2,,,KK 1462,,,,'-5 °C on the sill, =SUM(A1) is not a note".replace(",'-5 °C on the sill, =SUM(A1) is not a note", ",\"'-5 °C on the sill, =SUM(A1) is not a note\""));
+  });
+});
+
+describe('events.csv (round forty-nine, 1)', () => {
+  it('every timeline entry, oldest first, with the plant or batch number and species, the label, and the figures; the sheet is in the zip', async () => {
+    const more = [...log,
+      c(30, 'event', 'e2', 'acc', '2026-0001'), c(31, 'event', 'e2', 'd', '2026-08-01'), c(32, 'event', 'e2', 't', 'measure'), c(33, 'event', 'e2', 'measures', { height: 42, width: 30 }),
+      c(34, 'event', 'e3', 'acc', '2026-0001'), c(35, 'event', 'e3', 'd', '2026-09-03'), c(36, 'event', 'e3', 't', 'treat'), c(37, 'event', 'e3', 'used', 'neem'), c(38, 'event', 'e3', 'note', 'mealy, = top'), c(39, 'event', 'e3', 'auto', true),
+      c(40, 'sowing', 's1', 'taxonName', 'Ariocarpus fissuratus'), c(41, 'sowing', 's1', 'method', 'seed'), c(42, 'sowing', 's1', 'sown', '2026-03-01'), c(43, 'sowing', 's1', 'count', 12), c(44, 'sowing', 's1', 'status', 'active'), c(45, 'sowing', 's1', 'no', 'S2026-001'),
+      c(46, 'event', 'g1', 'acc', 's1'), c(47, 'event', 'g1', 'd', '2026-03-20'), c(48, 'event', 'g1', 't', 'germinate'), c(49, 'event', 'g1', 'n', 9)];
+    const { state } = materialise(more);
+    const lines = eventsCsv(live<PlantEvent & Record_>(state, 'event'), state).slice(1).split('\r\n');
+    expect(lines[0]).toBe('date,number,species,entry,note,count,cause,used,measurements,by the app');
+    expect(lines.slice(1, 5)).toEqual([
+      '2026-03-20,S2026-001,Ariocarpus fissuratus,Germination count,,9,,,,',
+      '2026-08-01,2026-0001,Copiapoa cinerea,Measured,,,,,height 42; width 30,',
+      '2026-09-01,2026-0001,Copiapoa cinerea,Watered,,,,,,',
+      '2026-09-03,2026-0001,Copiapoa cinerea,Treated,"mealy, = top",,,neem,,yes'
+    ]);
+    const { bytes } = await buildBackup({ changes: more, readPhoto: async () => null });
+    const r = await readBackup(bytes);
+    expect(r.changes.length).toBe(more.length); // the sheet is for people; the file reads as before
+    expect(new TextDecoder().decode(bytes)).toContain('events.csv');
   });
 });
 

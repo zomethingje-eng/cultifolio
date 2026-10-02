@@ -51,9 +51,16 @@ describe('the catalogue rows (round forty-seven, 1)', () => {
     const far = cat.rows[250].id;
     const opened = await pageAt(p, `open=${far}`);
     expect(opened.open).toBe(far);
-    expect(opened.rows.length).toBe(280); // from the top to thirty past the opened row (rows 0 to 279)
+    // From fifteen rows above the opened row to the window's end, not from the top: a deep link sent the whole catalogue (round forty-nine, 2).
+    expect(opened.start).toBe(235);
+    expect(opened.rows.length).toBe(_WINDOW);
     expect(opened.rows.find((r) => r.id === far)?.items?.length).toBe(3);
     expect(opened.rows.filter((r) => r.items).length).toBe(1);
+    // An opened row inside the first window keeps the window at the top; one just past it is reached by the thirty-row allowance.
+    expect((await pageAt(p, `open=${cat.rows[40].id}`)).start).toBe(0);
+    const near = await pageAt(p, `open=${cat.rows[70].id}`);
+    expect(near.start).toBe(55);
+    expect(near.rows.some((r) => r.id === cat.rows[70].id)).toBe(true);
   });
   it('the API serves a window by position, capped, and nothing past the end', async () => {
     const p = platformWith(bigIndex());

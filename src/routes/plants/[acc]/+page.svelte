@@ -156,8 +156,7 @@
   let moveTo = $state<string | null>(null);
   async function doMove() {
     if (!a || (moveTo ?? null) === (a.locationId ?? null)) { moving = false; return; }
-    await collection.put('accession', id, { locationId: moveTo ?? null, location: moveTo ? null : a.location ?? null });
-    if (moveTo) await collection.addEvent({ acc: id, d: localDate(), t: 'move', note: `to ${collection.locationName(moveTo)}` });
+    await collection.movePlants([id], moveTo ?? null); // the place and the line in one commit (round forty-nine, 1)
     toast.show(moveTo ? `Moved to ${collection.locationName(moveTo)}` : 'Place cleared');
     moving = false;
   }
@@ -212,6 +211,19 @@
   let logOpen = $state(false);
   /** The toast after a log line: "Watering recorded", not "Watered recorded" (round twenty-two, 21). */
   const recordedText = (label: string) => ({ Watered: 'Watering recorded', Fed: 'Feeding recorded', Treated: 'Treatment recorded', Repotted: 'Repotting recorded', Measured: 'Measurement recorded', Flowered: 'Flowering recorded', Note: 'Note recorded', Died: 'Death recorded', Pruned: 'Pruning recorded', Moved: 'Move recorded' } as Record<string, string>)[label] ?? `${label} recorded`;
+  /** Water is one tap: a watering today, with an Undo for a few seconds; a watering with a date or a note goes through Log (round forty-nine, 3). */
+  let wateringNow = $state(false);
+  async function waterNow() {
+    wateringNow = true;
+    try {
+      const ev = await collection.addEvent({ acc: id, d: localDate(), t: 'water' });
+      toast.show('Watering recorded', 8000, { label: 'Undo', run: () => { void collection.removeEvents([ev.id]).then(() => toast.show('Undone: the watering line removed.')); } });
+    } finally {
+      wateringNow = false;
+    }
+  }
+  /** Archive asks once: it is one tap on the bar, and it takes the plant off every list (round forty-nine, 3). */
+  let confirmArchive = $state(false);
   function quick(t: EventType) {
     et = t;
     ed = localDate(); // today as of opening the form, not as of loading the page (round twenty-four, 2)
@@ -302,17 +314,18 @@
     const m: Record<string, number> = {};
     // A length is typed in the reader's units and stored in millimetres (round forty, R2-2); heads and leaves are counts.
     for (const [k, v] of Object.entries(measures)) { const n = numberOrNull(v); if (n != null) m[k] = MEASURES.find((x) => x.k === k)?.unit === 'mm' ? lengthToMm(n, u) : n; } // a cleared box is no measurement, not 0
-    await collection.addEvent({ acc: id, d: ed, t: et, note: enote.trim() || null, used: et === 'treat' || et === 'feed' ? eused.trim() || null : null, cause: et === 'death' ? ecause.trim() || null : null, measures: Object.keys(m).length ? m : null, followUp: et === 'treat' ? 10 : null });
-    if (et === 'death') await collection.put('accession', id, { status: 'dead' });
+    const ev = { acc: id, d: ed, t: et, note: enote.trim() || null, used: et === 'treat' || et === 'feed' ? eused.trim() || null : null, cause: et === 'death' ? ecause.trim() || null : null, measures: Object.keys(m).length ? m : null, followUp: et === 'treat' ? 10 : null };
+    // A death is its line and the plant's status in one commit: closed between the two, the page left a dead plant marked growing (round forty-nine, 1).
+    if (et === 'death') await collection.addEventWith(ev, 'accession', id, { status: 'dead' });
+    else await collection.addEvent(ev);
     enote = '';
     eused = '';
     ecause = '';
     measures = {};
   }
   async function setStatus(s: 'growing' | 'archived' | 'dead') {
-    await collection.put('accession', id, { status: s });
-    // A status change is a line in the log too, so the timeline says when the plant was archived or grown again; a death is recorded through "Died…", with its date and cause (round twenty-two, 16).
-    await collection.addEvent({ acc: id, d: localDate(), t: 'note', note: s === 'archived' ? 'Archived' : s === 'growing' ? 'Marked growing again' : 'Marked dead' });
+    // A status change is a line in the log too, so the timeline says when the plant was archived or grown again; a death is recorded through "Died…", with its date and cause (round twenty-two, 16). Status and line are one commit (round forty-nine, 1).
+    await collection.addEventWith({ acc: id, d: localDate(), t: 'note', note: s === 'archived' ? 'Archived' : s === 'growing' ? 'Marked growing again' : 'Marked dead' }, 'accession', id, { status: s });
     toast.show(s === 'archived' ? 'Archived, and logged' : s === 'growing' ? 'Marked growing, and logged' : 'Marked dead, and logged');
     void focusNext('#status-toggle'); // the button that replaced the one just pressed
   }
@@ -444,7 +457,7 @@
 
   <!-- The four verbs a grower uses most, then the rest on request: a new plant's page is not the tracker's whole vocabulary. A plant that is dead or archived is not watered first: Log leads and Water waits behind More (round twenty-three, 19). -->
   <div class="quickbar">
-    {#if a.status === 'growing'}<button class="btn pri" onclick={() => quick('water')}>Water</button>{/if}
+    {#if a.status === 'growing'}<button class="btn pri" onclick={waterNow} disabled={wateringNow}>Water</button>{/if}
     {#if hasHero}<button class="btn" onclick={() => { adding = !adding; if (adding) setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0); }}>Photo</button>{/if}
     <button class="btn" class:pri={a.status !== 'growing'} onclick={() => quick('note')}>Log</button>
     <button class="btn" onclick={() => { moveTo = a.locationId ?? null; moving = !moving; }}>Move</button>
@@ -455,7 +468,7 @@
       <button class="btn" onclick={() => quick('measure')}>Measure</button>
       <button class="btn" onclick={() => quick('treat')}>Treat</button>
       <button class="btn" onclick={() => quick('flower')}>Flower</button>
-      {#if a.status === 'growing'}<button class="btn" id="status-toggle" onclick={() => setStatus('archived')}>Archive</button>{:else}<button class="btn" id="status-toggle" onclick={() => setStatus('growing')}>Mark growing</button>{/if}
+      {#if a.status === 'growing'}{#if confirmArchive}<span class="confirmrow"><button class="btn" id="status-toggle" onclick={() => { confirmArchive = false; setStatus('archived'); }}>Yes, archive</button><button class="btn" type="button" onclick={() => (confirmArchive = false)}>Keep</button></span>{:else}<button class="btn" id="status-toggle" onclick={() => { confirmArchive = true; void focusNext('#status-toggle'); }} title="Takes the plant off the growing list; it can be marked growing again">Archive</button>{/if}{:else}<button class="btn" id="status-toggle" onclick={() => setStatus('growing')}>Mark growing</button>{/if}
     {:else}
       <button class="btn more" type="button" aria-expanded="false" onclick={() => { moreActs = true; void focusNext('#verb-feed'); }}>More ▾</button>
     {/if}
@@ -708,6 +721,7 @@
   .setuprow.later .t { font-weight: 500; color: var(--ink2); font-size: 13.5px; }
   .setuprow.later { padding-top: 9px; padding-bottom: 9px; }
   .quickbar .more { color: var(--ink2); }
+  .confirmrow { display: inline-flex; gap: 6px; }
   @media (max-width: 640px) { .setuprow .w { display: none; } }
   @media (max-width: 640px) { .editform { grid-template-columns: 1fr 1fr; } .hero { margin-top: 0; } .hero.own { min-height: 260px; } .heroimg :global(img) { height: 260px; } .idcard.flat { margin-top: 10px; display: grid; grid-template-columns: 80px minmax(0, 1fr); --tile: 80px; } .idcard.flat .acts { grid-column: 1 / -1; } .idcard.flat .who { flex-basis: auto; } .idcard.flat h1.sci { font-size: 23px; } .idcard.flat .accno.lead { display: table; margin: 0 0 4px; vertical-align: baseline; } }
 </style>

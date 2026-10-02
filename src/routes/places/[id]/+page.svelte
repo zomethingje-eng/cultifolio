@@ -66,7 +66,8 @@
     const alt = num(f.altM);
     altMsg = alt != null && (alt < -500 || alt > 9000) ? `${f.altM} is outside −500 to 9000 m${alt > 9000 && alt < 30000 ? `; in feet that would be ${Math.round(alt * 0.3048)} m` : ''}.` : '';
     if (altMsg) { document.getElementById('e-alt')?.focus(); return; }
-    await collection.put('location', id, { name: f.name.trim() || loc?.name, type: f.kind || null, indoor: f.indoor === '' ? null : f.indoor === 'yes', floorC: (() => { const v = num(f.floorC); return v == null ? null : units.current === 'us' ? +fToC(v).toFixed(2) : v; })(), floorHeld: num(f.floorC) == null ? null : f.floorHeld === 'held', ppfd: num(f.ppfd), lightHours: num(f.lightHours), lat: num(f.lat), lon: num(f.lon), altM: num(f.altM), notes: f.notes.trim() || null });
+    // "Bottoms out" is the unset reading too: a place that never said is not given `floorHeld: false` by an unrelated edit (round forty-nine, 2; round thirty-five, R1-6).
+    await collection.put('location', id, { name: f.name.trim() || loc?.name, type: f.kind || null, indoor: f.indoor === '' ? null : f.indoor === 'yes', floorC: (() => { const v = num(f.floorC); return v == null ? null : units.current === 'us' ? +fToC(v).toFixed(2) : v; })(), floorHeld: num(f.floorC) == null ? null : f.floorHeld === 'held' ? true : loc?.floorHeld ? false : (loc?.floorHeld ?? null), ppfd: num(f.ppfd), lightHours: num(f.lightHours), lat: num(f.lat), lon: num(f.lon), altM: num(f.altM), notes: f.notes.trim() || null });
     if ((f.parent ?? null) !== (loc?.parentId ?? null) || collection.needsHome(id)) await collection.moveLocation(id, f.parent ?? null);
     editing = false;
   }
@@ -79,13 +80,29 @@
   async function waterAll(t: 'water' | 'feed') {
     busy = t;
     // A place-wide line is not an observation of each plant, so it never counts as one being seen (round twenty-four, 3).
-    const ids = await collection.addEventsIds(deep.map((a) => ({ acc: a.id, d: today(), t, note: `whole ${loc?.type ?? 'location'}: ${loc?.name ?? ''}`, auto: true })));
+    const ids = await collection.addEventsIds(deep.map((a) => ({ acc: a.id, d: today(), t, note: `whole ${loc?.type ?? 'place'}: ${loc?.name ?? ''}`, auto: true })));
     busy = '';
     const n = ids.length;
     // One tap wrote n lines; one tap takes exactly those back (round twenty-six, 5).
     toast.show(`${t === 'water' ? 'Watered' : 'Fed'} ${n} plant${n === 1 ? '' : 's'}.`, 8000, { label: 'Undo', run: () => { void collection.removeEvents(ids).then(() => toast.show(`Undone: the ${n} ${t === 'water' ? 'watering' : 'feeding'} line${n === 1 ? '' : 's'} removed.`)); } });
   }
-  let flash = $state('');
+
+  /* ---- move plants here ---- */
+  /** A benchful moved in one go, from a list of growing plants elsewhere, filtered as typed; one commit, with each plant's move line (round forty-nine, 3). */
+  let movingIn = $state(false);
+  let moveQ = $state('');
+  let moveChosen = $state<Record<string, boolean>>({});
+  const movable = $derived(collection.accessions.filter((a) => a.status === 'growing' && !deep.some((d) => d.id === a.id)));
+  const moveShown = $derived.by(() => { const n = moveQ.trim().toLowerCase(); return n ? movable.filter((a) => accNo(a).toLowerCase().includes(n) || a.taxonName.toLowerCase().includes(n) || (a.locationId ? collection.locationName(a.locationId).toLowerCase().includes(n) : false)) : movable; });
+  const moveN = $derived(Object.values(moveChosen).filter(Boolean).length);
+  function startMove() { movingIn = true; moveQ = ''; moveChosen = {}; }
+  async function finishMove() {
+    const ids = Object.entries(moveChosen).filter(([, v]) => v).map(([k]) => k);
+    if (!ids.length) { movingIn = false; return; }
+    const n = await collection.movePlants(ids, id);
+    movingIn = false;
+    toast.show(`Moved ${n} plant${n === 1 ? '' : 's'} to ${loc?.name ?? 'here'}.`);
+  }
 
   /* ---- audit ---- */
   let auditing = $state(false);
@@ -93,6 +110,19 @@
   function startAudit() {
     present = Object.fromEntries(deep.map((a) => [a.id, false]));
     auditing = true;
+    auditResult = '';
+    confirmCancel = false;
+  }
+  const tickedN = $derived(Object.values(present).filter(Boolean).length);
+  /** Tick every plant, then untick the one or two missing: a bench of forty where all but one are there was forty taps (round forty-nine, 3). */
+  const tickAll = (v: boolean) => { present = Object.fromEntries(deep.map((a) => [a.id, v])); };
+  /** Cancel with ticks made asks once; the result stays under the list, where the finger is, until the next audit. */
+  let confirmCancel = $state(false);
+  let auditResult = $state('');
+  function cancelAudit() {
+    if (tickedN && !confirmCancel) { confirmCancel = true; return; }
+    auditing = false;
+    confirmCancel = false;
   }
   async function finishAudit() {
     const seen = deep.filter((a) => present[a.id]);
@@ -101,9 +131,8 @@
     const d = today();
     await collection.addEvents([...seen.map((a) => ({ acc: a.id, d, t: 'audit' as const, note: null })), ...missed.map((a) => ({ acc: a.id, d, t: 'audit' as const, note: 'not seen' }))]);
     const missing = missed.length;
-    flash = `${seen.length} present${missing ? `, ${missing} not seen: ${missed.map(accNo).join(', ')}` : ''}.`;
+    auditResult = `Audit recorded: ${seen.length} present${missing ? `, ${missing} not seen: ${missed.map(accNo).join(', ')}` : ''}.`;
     auditing = false;
-    setTimeout(() => (flash = ''), 4000);
   }
   const daysSince = (d: string | null) => (d ? daysBetween(d) : null);
 
@@ -164,7 +193,7 @@
 {#if !collection.ready}
   <p class="muted">Opening your collection…</p>
 {:else if !loc}
-  {#if waiting}<h1 class="q" style="margin-top: 24px">Not whole</h1><WaitingRecord kind="location" label="This place" {waiting} /><p class="muted"><a href="/places">All locations</a>.</p>{:else}<h1 class="q" style="margin-top: 24px">Not here</h1><p class="muted">No location with that id on this device. <a href="/places">All locations</a>.</p>{/if}
+  {#if waiting}<h1 class="q" style="margin-top: 24px">Not whole</h1><WaitingRecord kind="location" label="This place" {waiting} /><p class="muted"><a href="/places">All places</a>.</p>{:else}<h1 class="q" style="margin-top: 24px">Not here</h1><p class="muted">No place with that id on this device. <a href="/places">All places</a>.</p>{/if}
 {:else}
   <div class="hero band"><div class="ph">{LOCATION_KINDS.find((k) => k.k === loc.type)?.label ?? 'Place'}{path.length > 1 ? ' inside ' + path.slice(0, -1).map((p) => p.name).join(' › ') : ''}</div></div>
   <div class="idcard">
@@ -212,10 +241,27 @@
       <button class="btn" onclick={startAudit} disabled={auditing}>Audit</button>
     {/if}
     <a class="btn" class:pri={!deep.length} href="/plants/new?loc={id}">Add a plant here</a>
-    <a class="btn" href="/propagation/new?loc={id}">Sow here</a>
+    {#if movable.length}<button class="btn" type="button" onclick={startMove} disabled={movingIn}>Move plants here</button>{/if}
+    <a class="btn" href="/propagation/new?loc={id}">Start a batch here</a>
     <a class="btn" href="/labels?loc={id}">Labels</a>
-    {#if flash}<span class="flash">{flash}</span>{/if}
   </div>
+
+  {#if movingIn}
+    <div class="cult movein">
+      <div class="sum">Move plants here <span class="hint">tick the plants, then Move; each gets a move line on its timeline</span></div>
+      <div class="body">
+        <input class="searchbar" type="search" placeholder="Filter by number, name or place…" bind:value={moveQ} aria-label="Filter plants to move" />
+        <div class="rows moverows">
+          {#each moveShown.slice(0, 200) as a (a.id)}
+            <label class="azrow accrow row"><input type="checkbox" bind:checked={moveChosen[a.id]} /><span><span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} /></span><span class="fam">{a.locationId ? collection.locationName(a.locationId) : a.location ?? 'no place'}</span></span></label>
+          {/each}
+          {#if moveShown.length > 200}<p class="small muted">{moveShown.length - 200} more: filter to find them.</p>{/if}
+          {#if !moveShown.length}<p class="small muted">No plant matches.</p>{/if}
+        </div>
+        <div class="actions"><span class="small muted">{moveN} picked</span><span class="grow"></span><button class="btn" type="button" onclick={() => (movingIn = false)}>Cancel</button><button class="btn pri" type="button" onclick={finishMove} disabled={!moveN}>Move {moveN || ''}</button></div>
+      </div>
+    </div>
+  {/if}
 
   {#if cond.floorC == null && dli == null && !lastWater && !lastAudit}
     <p class="empty" style="margin: 14px 0 0">No floor, light, watering or audit recorded here yet. <button class="linkish" type="button" onclick={startEdit}>Set the floor and the light</button></p>
@@ -258,7 +304,7 @@
 
   <div class="secrule"><h2>{auditing ? 'Audit: tick what you can see' : `Plants${kids.length ? ' (including places inside)' : ''}`}</h2><div class="line"></div><span class="n">{deep.length}</span></div>
   {#if !deep.length}
-    <div class="cult"><div class="none">Nothing here yet. <a href="/plants/new?loc={id}">Add a plant here</a>, <a href="/propagation/new?loc={id}">sow here</a>, or move one in from its own page.</div></div>
+    <div class="cult"><div class="none">Nothing here yet. <a href="/plants/new?loc={id}">Add a plant here</a>, <a href="/propagation/new?loc={id}">start a batch here</a>, or move plants in with the button above.</div></div>
   {:else}
     <div class="rows">
       {#each deep as a (a.id)}
@@ -270,16 +316,25 @@
           <label class="azrow accrow row"><input type="checkbox" bind:checked={present[a.id]} /><span><span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} /></span></span><span class="fig">{a.locationId !== id ? collection.location(a.locationId!)?.name ?? '' : ''}</span></label>
         {:else}
           <a class="azrow accrow row" href="/plants/{accNo(a)}">
-            <span class="dot statedot {missed ? 'wake' : ds == null ? '' : ds > 90 ? 'wake' : 'grow'}" role="img" aria-label={ds == null ? 'never audited' : ds > 90 ? `not seen for ${ds} days` : `seen ${ds} days ago`} title={ds == null ? 'never audited' : ds > 90 ? `not seen for ${ds} days` : `seen ${ds} days ago`}></span>
+            <!-- "Never audited" is said only once this place has had an audit: before the first, every row said it, which read as a reproach on a new grower's first bench (round forty-nine, 3). -->
+            {#if lastAudit || ds != null}<span class="dot statedot {missed ? 'wake' : ds == null ? '' : ds > 90 ? 'wake' : 'grow'}" role="img" aria-label={ds == null ? 'never audited' : ds > 90 ? `not seen for ${ds} days` : `seen ${ds} days ago`} title={ds == null ? 'never audited' : ds > 90 ? `not seen for ${ds} days` : `seen ${ds} days ago`}></span>{:else}<span class="dot statedot" aria-hidden="true"></span>{/if}
             <span><span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} /></span><span class="fam">{a.locationId !== id ? collection.location(a.locationId!)?.name ?? '' : ''}</span></span>
-            <span class="fig" class:due={missed || (ds != null && ds > 90)}>{missed ? `not seen at the audit of ${missedAt}` : ds == null ? 'never audited' : ds > 90 ? `not seen for ${ds} days` : ds === 0 ? 'seen today' : ds === 1 ? 'seen yesterday' : `seen ${ds} d ago`}</span>
-            {#if missed || (ds != null && ds > 90) || ds == null}<span class="fam due phoneonly">{missed ? `not seen at the audit of ${missedAt}` : ds == null ? 'never audited' : `not seen for ${ds} days`}</span>{/if}
+            <span class="fig" class:due={missed || (ds != null && ds > 90)}>{missed ? `not seen at the audit of ${missedAt}` : ds == null ? (lastAudit ? 'never audited' : '') : ds > 90 ? `not seen for ${ds} days` : ds === 0 ? 'seen today' : ds === 1 ? 'seen yesterday' : `seen ${ds} d ago`}</span>
+            {#if missed || (ds != null && ds > 90) || (ds == null && lastAudit)}<span class="fam due phoneonly">{missed ? `not seen at the audit of ${missedAt}` : ds == null ? 'never audited' : `not seen for ${ds} days`}</span>{/if}
           </a>
         {/if}
       {/each}
     </div>
     {#if auditing}
-      <p class="actions" style="margin-top: 10px"><button class="btn" onclick={() => (auditing = false)}>Cancel</button><button class="btn pri" onclick={finishAudit}>Finish audit</button></p>
+      <p class="actions auditacts" style="margin-top: 10px">
+        <button class="btn" type="button" onclick={() => tickAll(true)} disabled={tickedN === deep.length}>Tick all</button>
+        <button class="btn" type="button" onclick={() => tickAll(false)} disabled={!tickedN}>Clear</button>
+        <span class="small muted">{tickedN} of {deep.length} ticked</span>
+        {#if confirmCancel}<span class="small">Drop the {tickedN} tick{tickedN === 1 ? '' : 's'}?</span><button class="btn" type="button" onclick={cancelAudit}>Yes, cancel</button><button class="btn" type="button" onclick={() => (confirmCancel = false)}>Keep going</button>{:else}<button class="btn" type="button" onclick={cancelAudit}>Cancel</button>{/if}
+        <button class="btn pri" onclick={finishAudit}>Finish audit</button>
+      </p>
+    {:else if auditResult}
+      <p class="small auditresult" role="status" id="audit-result">{auditResult}</p>
     {/if}
   {/if}
 
@@ -299,7 +354,13 @@
   .hero.band { margin-top: 14px; min-height: 0; }
   .hero.band .ph { height: 72px; background: linear-gradient(135deg, var(--sunk), color-mix(in srgb, var(--sunk) 70%, var(--accent-soft))); }
   .muted { color: var(--ink3); }
-  .flash { color: var(--accent); font-weight: 600; align-self: center; }
+  .movein { margin-top: 12px; }
+  .movein .body { padding: 10px 14px 14px; }
+  .movein .searchbar { width: 100%; margin-bottom: 6px; }
+  .moverows { max-height: 50vh; overflow: auto; }
+  .movein .actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .auditacts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .auditresult { color: var(--accent); font-weight: 600; margin: 10px 0 0; }
   .form { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 12px; padding: 14px 17px; margin-top: 16px; }
   .form label { display: grid; gap: 4px; }
   .form label > span { font-size: 10.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink3); font-weight: 700; }

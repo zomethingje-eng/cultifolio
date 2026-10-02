@@ -225,6 +225,11 @@ export function apply(state: State, changes: Iterable<Change>, seen?: Map<string
     assertField(c.field);
     if (hold && isHeld(c.t, hold)) {
       held.push(c);
+      // The held stamp is noted under its field, so a local edit to that field made meanwhile can be stamped past it
+      // and keep the field when the held change comes due; the fold itself does not see it (round forty-nine, 1).
+      const hk = key(c.kind, c.id) + '\0held\0' + c.field;
+      const h = latest.get(hk);
+      if (!h || hlcCompare(c.t, h) > 0) latest.set(hk, c.t);
       continue;
     }
     const k = key(c.kind, c.id);

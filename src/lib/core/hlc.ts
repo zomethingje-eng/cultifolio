@@ -19,6 +19,29 @@ export const MAX_AHEAD_MS = 5 * 60_000;
 /** The counter's ceiling (six hex digits); past it the wall time takes a millisecond. */
 export const MAX_COUNT = 0xffffff;
 
+/** Past this, the device clock is taken as wrong and the server's `Date` stands in for it; under it, the device clock is left alone, since a few seconds either way change nothing and a jittering offset would. */
+export const TRUST_SERVER_PAST_MS = 30_000;
+let offsetMs = 0;
+/**
+ * The time changes are stamped and holds judged by: the device clock, corrected by the server's when they disagree by more
+ * than half a minute (round forty-nine, 1). A device set to 2031 stamped every change six years ahead, and every
+ * other device held them all until then; and the hold itself was judged against that same wrong clock, so the
+ * device that was wrong saw nothing wrong. The server's `Date` header is read on every sync; a device that never
+ * syncs keeps its own clock, which is all it has.
+ */
+export const nowMs = () => Date.now() + offsetMs;
+/** Fold in the server's time (ms since the epoch) as read at `localMs`; the offset moves only past the threshold, and is dropped when the clocks agree again. */
+export function trustServerTime(serverMs: number, localMs = Date.now()): number {
+  if (!Number.isFinite(serverMs) || serverMs <= 0) return offsetMs;
+  const delta = serverMs - localMs;
+  offsetMs = Math.abs(delta) > TRUST_SERVER_PAST_MS ? delta : 0;
+  return offsetMs;
+}
+/** The current correction, for the clock warning to say how far off the device is. */
+export const clockOffsetMs = () => offsetMs;
+/** Tests only. */
+export const _resetClockOffset = () => void (offsetMs = 0);
+
 const HLC_RE = /^(\d{13})-([0-9a-f]{4,6})-([a-z0-9]{1,16})$/;
 
 export const isHlc = (s: string) => HLC_RE.test(s);
@@ -49,7 +72,7 @@ export class Clock {
   private last: Hlc;
   constructor(
     public readonly device: string,
-    private readonly now: () => number = () => Date.now()
+    private readonly now: () => number = nowMs
   ) {
     this.last = { wall: 0, count: 0, device };
   }
@@ -80,4 +103,10 @@ export class Clock {
 export function hlcAfter(prev: string, device: string): string {
   const p = hlcDecode(prev);
   return hlcEncode(p.count >= MAX_COUNT ? { wall: p.wall + 1, count: 0, device } : { wall: p.wall, count: p.count + 1, device });
+}
+
+/** The stamp one millisecond before `next`, as `device`: for a machine-made change that must rank below every change a person made to the record (round forty-nine, 1). Unique while `device` is a per-tab writer that stamps nothing else there; the store's collision rule moves it by a count if it is not. */
+export function hlcBefore(next: string, device: string): string {
+  const n = hlcDecode(next);
+  return hlcEncode({ wall: Math.max(0, n.wall - 1), count: 0, device });
 }

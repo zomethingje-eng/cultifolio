@@ -5,6 +5,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { handle } from '../../src/hooks.server';
+import { version } from '$app/environment';
 
 class FrozenHeaders extends Headers {
   override set(): void {
@@ -59,10 +60,11 @@ describe('the species page cache (round forty-three, 3)', () => {
       request: new Request('http://x' + path, { headers }),
       cookies: { get: (k: string) => cookies[k] },
       platform,
+      fetch: async () => new Response('', { status: 404 }), // no static index: the fixture corpus (Copiapoa, Refusia, Welwitschia)
       isDataRequest
     });
     const page = async (status = 200, type = 'text/html', extra: Record<string, string> = {}) => { renders++; return new Response(`<p>render ${renders}</p>`, { status, headers: { 'content-type': type, 'cache-control': 'private, max-age=60', vary: 'accept-language, cookie', ...extra } }); };
-    return { store, waited, event, page, renders: () => renders };
+    return { store, waited, event, page, platform, renders: () => renders };
   }
   it('renders a species page once per minute per location and answers the next reader in the same units from the copy', async () => {
     const w = world();
@@ -71,7 +73,7 @@ describe('the species page cache (round forty-three, 3)', () => {
     expect(a.headers.get('cache-control')).toBe('private, max-age=60'); // the reader's copy keeps its private header
     expect(await a.text()).toBe('<p>render 1</p>');
     await Promise.all(w.waited);
-    expect([...w.store.keys()]).toEqual(['https://cache.cultifolio/page?p=%2Fspecies%2Fcopiapoa-cinerea&q=&u=metric&h=']);
+    expect([...w.store.keys()]).toEqual([`https://cache.cultifolio/page?v=${encodeURIComponent(version)}&p=%2Fspecies%2Fcopiapoa-cinerea&q=&u=metric&h=`]);
     expect(w.store.values().next().value?.headers.get('cache-control')).toBe('public, max-age=60'); // the stored copy, under the Worker's own key
     const b = await handle({ event: w.event('/species/copiapoa-cinerea'), resolve: () => w.page() } as never);
     expect(b.headers.get('x-cultifolio-page')).toBe('held');
@@ -85,7 +87,6 @@ describe('the species page cache (round forty-three, 3)', () => {
     await handle({ event: w.event('/species/copiapoa-cinerea'), resolve: () => w.page() } as never);
     await handle({ event: w.event('/species/copiapoa-cinerea', { 'cultifolio.units': 'us' }), resolve: () => w.page() } as never);
     await handle({ event: w.event('/species/copiapoa-cinerea', { 'cultifolio.hemi': 's' }), resolve: () => w.page() } as never);
-    await handle({ event: w.event('/species/copiapoa-cinerea?was=Copiapoa%20x'), resolve: () => w.page() } as never);
     // a browser language is read into the units before the key is made, so en-US is the `us` copy above, not a sixth
     const us = await handle({ event: w.event('/species/copiapoa-cinerea', {}, { 'accept-language': 'en-US' }), resolve: () => w.page() } as never);
     expect(us.headers.get('x-cultifolio-page')).toBe('held');
@@ -94,9 +95,42 @@ describe('the species page cache (round forty-three, 3)', () => {
     expect(x.headers.get('x-cultifolio-page')).toBe('held');
     const odd = await handle({ event: w.event('/species/copiapoa-cinerea', { 'cultifolio.hemi': 'x&u=us' }), resolve: () => w.page() } as never);
     expect(odd.headers.get('x-cultifolio-page')).toBe('held');
-    expect(w.renders()).toBe(4);
+    expect(w.renders()).toBe(3);
     await Promise.all(w.waited);
-    expect(w.store.size).toBe(4);
+    expect(w.store.size).toBe(3);
+  });
+  it('a page reached by an old name (`?was=`) is rendered every time and never stored: the query is anyone\'s to write, and each spelling minted a copy (round forty-nine, 2)', async () => {
+    const w = world();
+    for (const q of ['Copiapoa%20x', 'Copiapoa%20y', 'Copiapoa%20x']) {
+      const r = await handle({ event: w.event(`/species/copiapoa-cinerea?was=${q}`), resolve: () => w.page() } as never);
+      expect(r.headers.get('x-cultifolio-page')).toBeNull();
+    }
+    await Promise.all(w.waited);
+    expect(w.store.size).toBe(0);
+    expect(w.renders()).toBe(3);
+  });
+  it('the key carries the build, so a copy held across a deploy is not served by the new build (round forty-nine, 2)', async () => {
+    const w = world();
+    await handle({ event: w.event('/species/copiapoa-cinerea'), resolve: () => w.page() } as never);
+    await Promise.all(w.waited);
+    expect([...w.store.keys()][0]).toContain(`?v=${encodeURIComponent(version)}&`);
+  });
+  it('a held copy carries the Vary the page set (round forty-nine, 2; round thirty-five, R1-6)', async () => {
+    const w = world();
+    await handle({ event: w.event('/species/copiapoa-cinerea'), resolve: () => w.page() } as never);
+    await Promise.all(w.waited);
+    const held = await handle({ event: w.event('/species/copiapoa-cinerea'), resolve: () => w.page() } as never);
+    expect(held.headers.get('x-cultifolio-page')).toBe('held');
+    expect(held.headers.get('vary')).toBe('accept-language, cookie');
+  });
+  it('a cache that throws on match or put is a page rendered, not a 500 (round forty-nine, 2)', async () => {
+    const w = world();
+    const broken = { ...w.platform, caches: { default: { match: async () => { throw new Error('cache down'); }, put: async () => { throw new Error('cache down'); } } } };
+    const ev = { ...w.event('/species/copiapoa-cinerea'), platform: broken };
+    const r = await handle({ event: ev, resolve: () => w.page() } as never);
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe('<p>render 1</p>');
+    await Promise.all(w.waited);
   });
   it('a 404, a non-HTML answer, a response that sets a cookie, and any other page are not stored', async () => {
     const w = world();
@@ -134,5 +168,18 @@ describe('the species page cache (round forty-three, 3)', () => {
     expect(w.renders()).toBe(4);
     await Promise.all(w.waited);
     expect(w.store.size).toBe(4);
+  });
+  it('the home page\'s queries are reduced to what the page reads before they key a copy: an unknown or odd `open`, a bad `at`, a long `from`, an unknown grouping share the plain copy (round forty-nine, 2; round twenty-seven, 3)', async () => {
+    const w = world();
+    await handle({ event: w.event('/'), resolve: () => w.page() } as never);
+    for (const q of ['?open=nonsensia', '?open=Copiapoa', '?open=' + 'a'.repeat(200), '?at=-3', '?at=x', '?at=999', '?from=ab', '?from=q', '?chip=odd', '?open=cactaceae']) {
+      const r = await handle({ event: w.event('/' + q), resolve: () => w.page() } as never);
+      expect(r.headers.get('x-cultifolio-page'), q).toBe('held');
+    }
+    // a real row of the grouping, a letter the catalogue has, a page, a grouping (any spelling of `by` is the catalogue, not the grower's list): each its own copy
+    for (const q of ['?open=copiapoa', '?by=family&open=cactaceae', '?from=w', '?from=W&x=1', '?at=2', '?by=nonsense', '?by=genus']) await handle({ event: w.event('/' + q), resolve: () => w.page() } as never);
+    expect(w.renders()).toBe(6); // from=w and from=W are one; by=nonsense and by=genus are one
+    await Promise.all(w.waited);
+    expect(w.store.size).toBe(6);
   });
 });

@@ -3,7 +3,8 @@
   import { collection, DUE_DAYS } from '$lib/db/collection.svelte';
   import StateNote from '$lib/ui/StateNote.svelte';
   import { localDate, localDateYearAgo, daysBetween } from '$core/dates';
-  import { accNo, sowNo } from '$lib/db/types';
+  import { accNo, sowNo, type Accession } from '$lib/db/types';
+  import { toast } from '$lib/ui/toast.svelte';
   import { kindOf } from '$lib/db/types';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
   import { slugify, speciesSlug } from '$core/names';
@@ -97,6 +98,17 @@
   /** Lower-cased with accents folded, as the species search does: "Echeveria agavoïdes" is found by "agavoides" (round twenty-six, 8). */
   const fold = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   const words = $derived(fold(q).split(/\s+/).filter(Boolean));
+  /** One tap writes one line, dated today; the toast takes exactly that line back (round forty-nine, 3). */
+  let watering = $state('');
+  async function water(a: Accession) {
+    watering = a.id;
+    try {
+      const ev = await collection.addEvent({ acc: a.id, d: localDate(), t: 'water' });
+      toast.show(`${accNo(a)} watered.`, 8000, { label: 'Undo', run: () => { void collection.removeEvents([ev.id]).then(() => toast.show(`Undone: the watering line removed.`)); } });
+    } finally {
+      watering = '';
+    }
+  }
   const list = $derived(
     collection.accessions.filter((a) => (show === 'all' || a.status === 'growing') && (show !== 'due' || collection.careDays(a) >= DUE_DAYS) && (show !== 'nophoto' || noPhoto(a.id)) && matches(a, words)).sort(sorters[sort])
   );
@@ -148,14 +160,18 @@
       {@const w = sinceWater(a.id)}
       {@const th = thumbs.get(speciesSlug(a.taxonName))}
       {@const own = collection.cover(a.id)}
-      <a class="azrow accrow" href="/plants/{accNo(a)}">
-        <span class="im" class:own={!!own}>{#if own}<PhotoImg id={own.id} alt="" loading="lazy" />{:else if th}<img src={th} alt="" loading="lazy" onerror={(e) => ((e.currentTarget as HTMLImageElement).style.display = 'none')} />{:else}<span>–</span>{/if}</span>
-        <span>
-          <span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}‘{a.cultivar}’{/if}</span>
-          <span class="fam">{#if kindOf(a) !== 'species'}<span class="pill c">{kindOf(a)}</span>{/if}{#if a.fieldNumber}<span class="fnchip">{a.fieldNumber}</span>{/if}{#if a.locationId}<span>{collection.locationName(a.locationId)}</span>{:else if a.location}<span>{a.location}</span>{/if}{#if a.status !== 'growing'}<span class="pill">{a.status}</span>{/if}</span>
-        </span>
-        <span class="fig" class:due={a.status === 'growing' && collection.careDays(a) >= DUE_DAYS}>{w == null ? 'no watering recorded' : w === 0 ? 'watered today' : `watered ${w} d ago`}</span>
-      </a>
+      <div class="accline">
+        <a class="azrow accrow" href="/plants/{accNo(a)}">
+          <span class="im" class:own={!!own}>{#if own}<PhotoImg id={own.id} alt="" loading="lazy" />{:else if th}<img src={th} alt="" loading="lazy" onerror={(e) => ((e.currentTarget as HTMLImageElement).style.display = 'none')} />{:else}<span>–</span>{/if}</span>
+          <span>
+            <span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}‘{a.cultivar}’{/if}</span>
+            <span class="fam">{#if kindOf(a) !== 'species'}<span class="pill c">{kindOf(a)}</span>{/if}{#if a.fieldNumber}<span class="fnchip">{a.fieldNumber}</span>{/if}{#if a.locationId}<span>{collection.locationName(a.locationId)}</span>{:else if a.location}<span>{a.location}</span>{/if}{#if a.status !== 'growing'}<span class="pill">{a.status}</span>{/if}</span>
+          </span>
+          <span class="fig" class:due={a.status === 'growing' && collection.careDays(a) >= DUE_DAYS}>{w == null ? 'no watering recorded' : w === 0 ? 'watered today' : `watered ${w} d ago`}</span>
+        </a>
+        <!-- The one thing done to a plant without opening its page: a watering today, with an Undo (round forty-nine, 3). -->
+        {#if a.status === 'growing'}<button class="btn small wbtn" type="button" onclick={() => water(a)} disabled={watering === a.id} aria-label="Record {accNo(a)} watered today" title="Record watered today">Water</button>{/if}
+      </div>
     {/each}
   </div>
   <p class="seccount">{list.length} of {collection.accessions.length} shown</p>
@@ -168,6 +184,8 @@
   .notice .linkish { background: none; border: 0; padding: 0; color: var(--ink3); font: inherit; text-decoration: underline; cursor: pointer; }
   .accrow .nm .accno { font-style: normal; vertical-align: 2px; }
   .im.own { box-shadow: inset 0 0 0 2px var(--accent); }
+  .accline { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px; }
+  .wbtn { min-height: 40px; }
   .im :global(img) { width: 100%; height: 100%; object-fit: cover; }
   /* On a phone the figure goes under the name instead of away: "which of these did I water last" is the question the list is for. */
   @media (max-width: 640px) { .azrow { grid-template-columns: 40px minmax(0, 1fr); } .azrow .fig { grid-column: 2; justify-content: flex-start; text-align: left; font-size: 11.5px; margin-top: -4px; } }

@@ -9,6 +9,8 @@ import { browser } from '$app/environment';
 const KEY = 'cultifolio.prefs';
 interface Prefs {
   referencePhotos: boolean;
+  /** The "Kept on this device" line on Today, hidden at the grower's request (round forty-nine, 3). */
+  hideKeeping?: boolean;
 }
 const DEFAULTS: Prefs = { referencePhotos: false };
 
@@ -22,7 +24,7 @@ class PrefStore {
     try {
       const s = localStorage.getItem(KEY);
       const v = s ? (JSON.parse(s) as Partial<Prefs>) : null;
-      this.current = { ...DEFAULTS, referencePhotos: v?.referencePhotos === true };
+      this.current = { ...DEFAULTS, referencePhotos: v?.referencePhotos === true, hideKeeping: v?.hideKeeping === true };
       this.stored = !!s;
     } catch {
       this.current = { ...DEFAULTS };
@@ -43,6 +45,12 @@ class PrefStore {
     } catch {
       /* a private window keeps it for the page */
     }
+  }
+  get hideKeeping(): boolean {
+    return this.loaded && !!this.current.hideKeeping;
+  }
+  set hideKeeping(v: boolean) {
+    this.set({ hideKeeping: v });
   }
   /** True only once loaded and switched on: before the store loads, no request goes out. */
   get referencePhotos(): boolean {

@@ -6,7 +6,7 @@
 import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { appendChanges, allChanges, outboxKeys, outboxAck, getMeta, setMeta, setMetaIfKey, wipeVault } from '$lib/db/vault';
-import { hlcEncode } from '$core/hlc';
+import { hlcEncode, hlcCompare, MAX_AHEAD_MS } from '$core/hlc';
 import type { Change } from '$core/log';
 
 const t = (count: number) => hlcEncode({ wall: 1_700_000_000_000, count, device: 'aaaaaaaaaaaa' });
@@ -131,5 +131,47 @@ describe('the oldest record shape is given its number as a field at load (round 
     expect(all.filter((c) => c.kind === 'accession' && c.id === 'r7' && c.field === 'acc')).toHaveLength(1); // the one it had
     expect(all.filter((c) => c.kind === 'sowing' && c.id === 'S2024-002' && c.field === 'no').map((c) => c.value)).toEqual(['S2024-002']);
     expect(collection.accession('2019-0003')?.acc).toBe('2019-0003');
+  });
+});
+
+describe('the written number never beats a person\'s, and is not written where it might (round forty-nine, 1; round thirty-five, R1-1)', () => {
+  it('the `acc` change is stamped below the record\'s oldest change, so a number edit made anywhere, at any time, outranks it', async () => {
+    await appendChanges([ch(20, '2019-0003', 'taxonName', 'Haworthia attenuata'), ch(21, '2019-0003', 'status', 'growing')], true);
+    vi.resetModules();
+    const { collection } = await import('$lib/db/collection.svelte');
+    await collection.load();
+    const written = (await allChanges()).find((c) => c.id === '2019-0003' && c.field === 'acc')!;
+    expect(written).toBeTruthy();
+    expect(hlcCompare(written.t, t(20))).toBeLessThan(0);
+    // The other device renumbered the plant while offline, before this load ran; its change arrives later and still wins.
+    await collection.ingest([ch(19, '2019-0003', 'acc', '2019-0001')], 'server', { repair: false });
+    expect(collection.accession('2019-0001')?.id).toBe('2019-0003');
+  });
+  it('a record whose log already holds a number change (one the fold is holding, stamped far ahead) is left alone, as is an incomplete record', async () => {
+    const ahead = hlcEncode({ wall: Date.now() + MAX_AHEAD_MS + 3_600_000, count: 0, device: 'bbbbbbbbbbbb' });
+    await appendChanges([
+      ch(20, '2019-0003', 'taxonName', 'Haworthia attenuata'), ch(21, '2019-0003', 'status', 'growing'), { t: ahead, kind: 'accession', id: '2019-0003', field: 'acc', value: '2019-0009' },
+      ch(30, '2019-0004', 'taxonName', 'Lithops') // no status: not whole, so not a plant this build may shape
+    ], true);
+    vi.resetModules();
+    const { collection } = await import('$lib/db/collection.svelte');
+    await collection.load();
+    const all = await allChanges();
+    expect(all.filter((c) => c.id === '2019-0003' && c.field === 'acc').map((c) => c.t)).toEqual([ahead]);
+    expect(all.filter((c) => c.id === '2019-0004' && c.field === 'acc')).toHaveLength(0);
+  });
+});
+
+describe('an edit made while a peer\'s change to the field is held keeps the field when the held change comes due (round forty-nine, 1)', () => {
+  it('the local stamp is bumped past the held one', async () => {
+    const ahead = hlcEncode({ wall: Date.now() + MAX_AHEAD_MS + 3_600_000, count: 0, device: 'bbbbbbbbbbbb' });
+    await appendChanges([ch(20, 'p1', 'acc', '2026-0001'), ch(21, 'p1', 'taxonName', 'Lithops'), ch(22, 'p1', 'status', 'growing'), { t: ahead, kind: 'accession', id: 'p1', field: 'notes', value: 'from the wrong clock' }], true);
+    vi.resetModules();
+    const { collection } = await import('$lib/db/collection.svelte');
+    await collection.load();
+    expect(collection.accession('2026-0001')?.notes).toBeUndefined(); // held
+    await collection.put('accession', 'p1', { notes: 'what I see' });
+    const mine = (await allChanges()).find((c) => c.id === 'p1' && c.field === 'notes' && c.value === 'what I see')!;
+    expect(hlcCompare(mine.t, ahead)).toBeGreaterThan(0);
   });
 });

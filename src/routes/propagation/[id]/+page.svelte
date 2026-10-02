@@ -171,17 +171,24 @@
   }
   let confirmEvent = $state<string | null>(null);
   let confirmDone = $state(false); // Mark done with plants still in the pot asks first: done means nothing more will be potted from it (round twenty-eight, 10)
+  /** Mark failed asks once and can be undone from the toast: it ends the batch in a tap (round forty-nine, 3). */
+  let confirmFailed = $state(false);
   async function setStatus(status: 'active' | 'done' | 'failed') {
-    await collection.put('sowing', id, { status });
-    // The change goes in the log, dated today, so the batch's own timeline says when and the page says it happened (round twenty-three, 16).
+    // The change goes in the log, dated today, so the batch's own timeline says when and the page says it happened (round twenty-three, 16); status and line in one commit (round forty-nine, 1).
     const said = status === 'failed' ? 'Marked failed' : status === 'done' ? 'Marked done' : 'Reopened';
-    await collection.addEvent({ acc: id, d: today(), t: 'note', note: said });
-    toast.show(`${said}.`);
+    const was = s?.status ?? 'active';
+    const ev = await collection.addEventWith({ acc: id, d: today(), t: 'note', note: said }, 'sowing', id, { status });
+    if (status === 'failed') toast.show(`${said}.`, 8000, { label: 'Undo', run: () => { void collection.addEventWith({ acc: id, d: today(), t: 'note', note: 'Reopened (undo)' }, 'sowing', id, { status: was }).then(() => collection.removeEvents([ev.id])).then(() => toast.show('Undone: the batch is open again.')); } });
+    else toast.show(`${said}.`);
   }
+  let confirmRemove = $state(false);
   async function remove() {
     if (raised.length) return;
+    const no = s ? sowNo(s) : id;
     await collection.remove('sowing', id);
     goto('/propagation');
+    // One tap removed it; the toast on the list puts it back (round forty-nine, 3).
+    toast.show(`${no} removed.`, 8000, { label: 'Undo', run: () => { void collection.restore('sowing', id).then(() => goto(`/propagation/${id}`)); } });
   }
 
   /* edit */
@@ -283,7 +290,7 @@
         {:else}
           <button class="btn" onclick={() => (st.remaining > 0 ? (confirmDone = true, void focusNext('#done-yes')) : setStatus('done'))}>Mark done</button>
         {/if}
-        {#if !raised.length}<button class="btn" onclick={() => setStatus('failed')}>Mark failed</button>{/if}
+        {#if !raised.length}{#if confirmFailed}<button class="btn" id="failed-yes" onclick={() => { confirmFailed = false; setStatus('failed'); }}>Yes, mark failed</button><button class="btn" onclick={() => (confirmFailed = false)}>Keep open</button>{:else}<button class="btn" onclick={() => { confirmFailed = true; void focusNext('#failed-yes'); }}>Mark failed</button>{/if}{/if}
       {:else}
         <button class="btn" onclick={() => setStatus('active')}>Reopen</button>
       {/if}
@@ -417,7 +424,7 @@
   {#if !raised.length}
     <div class="dangerrow">
       <span class="small muted">A batch that raised no plants can be removed; one that did keeps its number.</span>
-      <button class="btn danger" onclick={remove}>Remove batch</button>
+      {#if confirmRemove}<span><button class="btn danger" id="remove-yes" onclick={remove}>Yes, remove {s ? sowNo(s) : ''}</button> <button class="btn" onclick={() => (confirmRemove = false)}>Keep</button></span>{:else}<button class="btn danger" onclick={() => { confirmRemove = true; void focusNext('#remove-yes'); }}>Remove batch</button>{/if}
     </div>
   {/if}
 {/if}

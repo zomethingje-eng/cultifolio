@@ -7,6 +7,7 @@
   import { accNo } from '$lib/db/types';
   import { photoAt, photoHosts } from '$dossier/photo-size';
   import { entriesFor, searchCatalogue, catalogueRows, type Found } from '$lib/ui/index.svelte';
+  import { fillBefore } from '$lib/ui/fill';
   import PageHead from '$lib/ui/PageHead.svelte';
   import { collection } from '$lib/db/collection.svelte';
   import { onMount, tick } from 'svelte';
@@ -24,7 +25,7 @@
   $effect(() => {
     if (!browser) return;
     const u = new URL(location.href);
-    if (q.trim() && !yourView) u.searchParams.set('q', q.trim()); else u.searchParams.delete('q');
+    if (q.trim() && !keepLocal) u.searchParams.set('q', q.trim()); else u.searchParams.delete('q');
     if (u.href !== location.href) replaceState(u, page.state);
   });
   /** Enter in the search opens the first match: the way a search box is expected to behave. While a catalogue search is in flight, Enter waits for its answer rather than opening the previous query's first hit (round forty, R1-2). */
@@ -80,7 +81,9 @@
   let start = $state(data.start);
   // svelte-ignore state_referenced_locally
   let rows = $state<Row[]>(data.rows);
-  $effect(() => { data.rows; data.start; start = data.start; rows = data.rows; }); // a new grouping, letter or opened row: start again from what the server sent
+  /** Bumped when the server's window replaces the rows (a new grouping, letter or opened row): a fetch begun before it lands nowhere (round forty-nine, 2). */
+  let rowsGen = 0;
+  $effect(() => { data.rows; data.start; start = data.start; rows = data.rows; rowsGen++; }); // a new grouping, letter or opened row: start again from what the server sent
   const visibleRows = $derived(rows);
   const end = $derived(start + rows.length);
   let sentinel = $state<HTMLElement | null>(null);
@@ -90,9 +93,12 @@
     if (fetching) return fetching;
     if (end >= data.rowCount) return Promise.resolve(false);
     const at = end;
+    const gen = rowsGen;
     fetching = catalogueRows(data.by, data.chip, at, CHUNK).then((got) => {
       fetching = null;
-      if (!got || got.at !== at || at !== start + rows.length) return false;
+      // A window from another catalogue than the page's (the corpus was replaced since the HTML was rendered: a different
+      // row count) is not spliced in; the link then navigates, and the page comes back whole (round forty-nine, 2).
+      if (!got || gen !== rowsGen || got.count !== data.rowCount || got.at !== at || at !== start + rows.length) return false;
       rows = [...rows, ...got.rows.map((r) => ({ ...r, items: undefined }))];
       return got.rows.length > 0;
     });
@@ -104,25 +110,29 @@
    * The scroll is corrected by hand, since Safari does not anchor it.
    */
   let fetchingBefore: Promise<boolean> | null = null;
+  /** Where the pinned bar ends: what is above it is out of sight. */
+  const pinnedEdge = () => 44 + (document.querySelector<HTMLElement>('.stickyhead .toolrow')?.offsetHeight ?? 0);
+  /** The first loaded row's top, on screen. */
+  const anchorTop = () => document.querySelector<HTMLElement>('.rows .grow')?.getBoundingClientRect().top ?? Infinity;
   function growBefore(): Promise<boolean> {
     if (fetchingBefore) return fetchingBefore;
     if (start <= 0) return Promise.resolve(false);
     const at = Math.max(0, start - CHUNK);
     const n = start - at;
+    const gen = rowsGen;
     fetchingBefore = catalogueRows(data.by, data.chip, at, n).then(async (got) => {
       fetchingBefore = null;
-      if (!got || got.at !== at || at + n !== start) return false;
-      // The anchor is the first loaded row: when it sits above the pinned edge the reader is within the rows, and the view
-      // is moved by what was put in above it so nothing on screen jumps. When it sits below the edge (the reader is on the
-      // chips or the letters above the list, as after A–Z) the rows grow downward out of sight and the view stays where it is.
-      const bar = document.querySelector<HTMLElement>('.stickyhead .toolrow');
-      const edge = 44 + (bar?.offsetHeight ?? 0);
-      const anchor = document.querySelector<HTMLElement>('.rows .grow');
-      const wasAt = anchor ? anchor.getBoundingClientRect().top : Infinity;
+      if (!got || gen !== rowsGen || got.count !== data.rowCount || got.at !== at || at + n !== start) return false;
+      // The view is moved by what the first loaded row moved, so what was on screen stays where it was: round
+      // forty-eight corrected only when that row sat above the pinned edge, and after a jump to W it sat just under
+      // it, so the chunk above pushed W down, the sentinel came back into reach, and the fill ran to A (round
+      // forty-nine, 2; round twenty-seven, 1). Whether the fill runs on its own is decided before, in `fillBefore`.
+      const anchor = document.querySelector<HTMLElement>('.rows .grow'); // the row itself, since the first row is another once the chunk is in
+      const wasAt = anchor?.getBoundingClientRect().top;
       rows = [...got.rows.map((r) => ({ ...r, items: undefined })), ...rows];
       start = at;
       await tick();
-      if (anchor && wasAt < edge) window.scrollBy(0, anchor.getBoundingClientRect().top - wasAt);
+      if (anchor && wasAt != null && anchor.isConnected) window.scrollBy(0, anchor.getBoundingClientRect().top - wasAt);
       return got.rows.length > 0;
     });
     return fetchingBefore;
@@ -130,9 +140,17 @@
   let topSentinel = $state<HTMLElement | null>(null);
   $effect(() => {
     if (!topSentinel || start <= 0) return;
-    const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) growBefore(); }, { rootMargin: '1600px 0px' });
-    io.observe(topSentinel);
-    return () => io.disconnect();
+    // The fill runs on its own only while the reader is within the rows (the first row at or under the pinned bar): on the
+    // chips or the letters above them, as after A–Z, nothing is fetched, and the view stays on them (round forty-nine, 2).
+    const el = topSentinel;
+    const near = () => el.getBoundingClientRect().bottom > -1600 && el.getBoundingClientRect().top < window.innerHeight + 1600;
+    const maybe = () => { if (near() && fillBefore(anchorTop(), pinnedEdge())) growBefore(); };
+    const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) maybe(); }, { rootMargin: '1600px 0px' });
+    io.observe(el);
+    // The observer fires on a change of reach, not on every scroll: a sentinel already within reach while the reader was on the
+    // chips must still be filled from once they scroll into the rows.
+    window.addEventListener('scroll', maybe, { passive: true });
+    return () => { io.disconnect(); window.removeEventListener('scroll', maybe); };
   });
   /** Keep appending while the end of the list is still within reach of the viewport (a tall screen, a fling that landed on it). */
   async function growWhileNear() {
@@ -156,8 +174,10 @@
     const first = data.letterAt[l];
     if (first == null) return;
     if (first < start || first >= end) {
+      const gen = rowsGen;
       const got = await catalogueRows(data.by, data.chip, first, CHUNK);
-      if (!got) { location.href = `?by=${data.by}${chip !== 'all' ? `&chip=${chip}` : ''}&from=${l}#l-${l}`; return; }
+      if (gen !== rowsGen) return; // the page moved on meanwhile
+      if (!got || got.count !== data.rowCount) { location.href = `?by=${data.by}${chip !== 'all' ? `&chip=${chip}` : ''}&from=${l}#l-${l}`; return; }
       start = first;
       rows = got.rows.map((r) => ({ ...r, items: undefined }));
     }
@@ -248,6 +268,10 @@
   let browsing = $state(data.browse);
   $effect(() => { if (data.browse) browsing = true; });
   const yourView = $derived(hasMine && !browsing);
+  // And in three more cases the text stays here whichever view this is (round forty-nine, 3; round thirty-five, R1-2):
+  // before the collection has opened (the view is not yet known, and a grower's first keystrokes were going to the
+  // server), while the text matches one of the grower's plants, and when it is shaped like a plant number.
+  const keepLocal = $derived(yourView || !collection.ready || plantHits.length > 0 || /^\d{2,4}-?\d/.test(q.trim()));
   // The hint says "your species" is coming; hold the catalogue back until the collection says which view this is.
   const settling = $derived(expectMine && !collection.ready);
   type Row = (typeof data.rows)[number];
@@ -265,8 +289,8 @@
     const text = q.trim();
     const gen = ++searchGen;
     clearTimeout(searchTimer);
-    // The catalogue is searched only on the catalogue view (round forty, R2-1).
-    if (!text || yourView) { found = []; searching = false; searchFailed = null; return; }
+    // The catalogue is searched only on the catalogue view (round forty, R2-1), and never with text that is the collection's (`keepLocal`).
+    if (!text || keepLocal) { found = []; searching = false; searchFailed = null; return; }
     searching = true;
     searchTimer = setTimeout(() => {
       pendingSearch = searchCatalogue(text).then((r) => {
@@ -378,7 +402,7 @@
           <!-- The first phone viewport shows two or three tiles, and whichever is largest is the first-screen paint: the first three
                are fetched at once, the first with priority, the rest of the strip lazily (round thirty-seven, R2-4; round forty, R2-5).
                A photograph that does not load leaves a placeholder with the name, not a blank card (round forty, own). -->
-          {#if failedTiles.has(c.slug)}<div class="fph"><Placeholder name={c.name} family={c.family} caption="photograph did not load" /></div>{:else}<img src={photoAt(c.thumb, 'small')} width="240" height="240" alt="" loading={i < 3 ? 'eager' : 'lazy'} fetchpriority={i === 0 ? 'high' : 'auto'} onerror={() => (failedTiles = new Set([...failedTiles, c.slug]))} />{/if}
+          {#if failedTiles.has(c.slug)}<div class="fph"><Placeholder name={c.name} family={c.family} caption="photograph did not load" /></div>{:else}<img src={photoAt(c.thumb, 'small')} width="240" height="240" alt="" loading={i < 3 ? 'eager' : 'lazy'} fetchpriority={i < 2 ? 'high' : 'auto'} onerror={() => (failedTiles = new Set([...failedTiles, c.slug]))} />{/if}
           <span class="fnm"><SpeciesName name={c.name} /></span>
           {#if c.common}<span class="fcom">{c.common}</span>{/if}
         </a>
@@ -522,7 +546,7 @@
     {/if}
   {:else}
     <div class="rows" class:withletters={data.letters.length > 1}>
-      {#if start > 0}<div class="more before" bind:this={topSentinel}><a class="btn small" href="?by={data.by}{chip !== 'all' ? `&chip=${chip}` : ''}&at={Math.max(0, start - CHUNK)}" onclick={async (e) => { e.preventDefault(); if (!(await growBefore())) location.href = (e.currentTarget as HTMLAnchorElement).href; }}>Earlier {data.by === 'genus' ? 'genera' : data.by === 'family' ? 'families' : 'regions'}</a></div>{/if}
+      {#if start > 0}<div class="more before" bind:this={topSentinel}><a class="btn small" href="?by={data.by}{chip !== 'all' ? `&chip=${chip}` : ''}&at={Math.max(0, start - 60)}" onclick={async (e) => { e.preventDefault(); if (!(await growBefore())) location.href = (e.currentTarget as HTMLAnchorElement).href; }}>Earlier {data.by === 'genus' ? 'genera' : data.by === 'family' ? 'families' : 'regions'}</a></div>{/if}
       {#each visibleRows as r, i (r.id)}
         {#if r.letter && (i === 0 || rows[i - 1].letter !== r.letter)}<h2 class="letter" id="l-{r.letter}">{r.letter}</h2>{/if}
         <a class="grow" class:open={r.id === data.open} id="g-{r.id}" href={rowHref(r.id)} data-sveltekit-noscroll aria-expanded={r.id === data.open}>

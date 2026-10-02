@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { listBatches, parseAfter, storeCounted, storeOnce, batchMeta, readBody, batchKey, recount, vaultBytes, vaultIdFor, ensureVault, MAX_BYTES, MAX_IP_BYTES_PER_DAY, MAX_LIST_PAGES, META_FLUSH_BYTES, META_FLUSH_MS, OVERLAP_MS, MAX_NEW_VAULTS_PER_DAY, allowCreation, refundCreation, creationCeilings, addressKey, networkKey, clientIp, rateLimit, resetRateLimits, resetMetaFlush, resetKvWarning, tooMany, VaultFull, DayQuota, type VaultMeta } from '$lib/server/sync';
+import { listBatches, parseAfter, storeCounted, storeOnce, deleteCounted, batchMeta, readBody, batchKey, recount, vaultBytes, vaultIdFor, ensureVault, MAX_BYTES, MAX_IP_BYTES_PER_DAY, MAX_LIST_PAGES, META_FLUSH_BYTES, META_FLUSH_MS, OVERLAP_MS, MAX_NEW_VAULTS_PER_DAY, allowCreation, refundCreation, creationCeilings, addressKey, networkKey, clientIp, rateLimit, resetRateLimits, resetMetaFlush, resetKvWarning, tooMany, VaultFull, DayQuota, type VaultMeta } from '$lib/server/sync';
 import { deriveKeys, newVaultKey } from '$lib/sync/crypto';
 
 /** Just enough of R2 for the sync store: keys, bytes, upload times we control. */
@@ -12,7 +12,10 @@ function fakeR2(now = { t: 1_000_000 }) {
     },
     async head(key: string) {
       const o = objs.get(key);
-      return o ? { customMetadata: o.md ?? (o.sha ? { sha: o.sha } : {}) } : null;
+      return o ? { customMetadata: o.md ?? (o.sha ? { sha: o.sha } : {}), size: o.body.length } : null;
+    },
+    async delete(key: string) {
+      objs.delete(key);
     },
     async get(key: string) {
       const o = objs.get(key);
@@ -503,5 +506,34 @@ describe('a name stands for one content', () => {
       }
     });
     expect([...(await readBody(new Request('http://x/', { method: 'POST', body: ok, duplex: 'half' } as RequestInit), 4096, 'a batch'))]).toEqual([1, 2, 3]);
+  });
+});
+
+describe('a removed photograph\'s bytes leave the vault and its count (round forty-nine, 1)', () => {
+  beforeEach(() => resetMetaFlush());
+  const q = (kv: ReturnType<typeof fakeKV>, ip = '1.2.3.4', now = T0) => ({ kv: kv as never, ip, now });
+  it('deleteCounted removes the object and takes its size off the live counter and the snapshot; nothing there is false and changes nothing', async () => {
+    const r2 = fakeR2();
+    const kv = fakeKV();
+    const m = meta();
+    await storeCounted(r2 as never, 'v', m, 'vault/v/photo/p1.bin', new Uint8Array(100), undefined, {}, q(kv));
+    await storeCounted(r2 as never, 'v', m, 'vault/v/photo/p2.bin', new Uint8Array(30), undefined, {}, q(kv));
+    expect(await kv.get('bytes:v', 'json')).toEqual({ bytes: 130, day: '2026-09-20' });
+    expect(await deleteCounted(r2 as never, 'v', m, 'vault/v/photo/p1.bin', q(kv))).toBe(true);
+    expect(r2.objs.has('vault/v/photo/p1.bin')).toBe(false);
+    expect(await kv.get('bytes:v', 'json')).toEqual({ bytes: 30, day: '2026-09-20' });
+    expect(m.bytes).toBe(30);
+    expect(JSON.parse(new TextDecoder().decode(r2.objs.get('vault/v/meta.json')!.body)).bytes).toBe(30);
+    expect(await deleteCounted(r2 as never, 'v', m, 'vault/v/photo/p1.bin', q(kv))).toBe(false);
+    expect(await kv.get('bytes:v', 'json')).toEqual({ bytes: 30, day: '2026-09-20' });
+  });
+  it('without KV the snapshot is the counter', async () => {
+    const r2 = fakeR2();
+    const m = meta();
+    await storeCounted(r2 as never, 'v', m, 'vault/v/photo/p1.bin', new Uint8Array(100));
+    expect(m.bytes).toBe(100);
+    expect(await deleteCounted(r2 as never, 'v', m, 'vault/v/photo/p1.bin')).toBe(true);
+    expect(m.bytes).toBe(0);
+    expect(JSON.parse(new TextDecoder().decode(r2.objs.get('vault/v/meta.json')!.body)).bytes).toBe(0);
   });
 });

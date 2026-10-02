@@ -63,7 +63,7 @@
       <p class="faint small">Turn each into a real place; its plants move there.</p>
       <ul>
         {#each collection.legacyLocations as l}
-          <li><span>{l.text}</span> <span class="faint">{l.n} plant{l.n === 1 ? '' : 's'}</span> <button class="btn small" onclick={() => collection.convertLegacyLocation(l.text)}>Make it a location</button></li>
+          <li><span>{l.text}</span> <span class="faint">{l.n} plant{l.n === 1 ? '' : 's'}</span> <button class="btn small" onclick={() => collection.convertLegacyLocation(l.text)}>Make it a place</button></li>
         {/each}
       </ul>
     </div>

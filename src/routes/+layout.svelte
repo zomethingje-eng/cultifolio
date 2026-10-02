@@ -164,7 +164,8 @@
     {#each places as pl}<a href={pl.href} class:on={pl.on(page.url.pathname)}>{pl.label === 'Plants' ? 'My plants' : pl.label}</a>{/each}
   </nav>
   <a class="iconbtn sync" href="/sync" title={sync.configured ? (sync.busy ?? (sync.offline ? (sync.unreached === 'server' ? 'Sync: the server did not answer; changes are kept here' : 'Sync: offline; changes are kept here') : sync.lastError ? 'Sync: ' + sync.lastError : sync.runs ? 'Synced' : 'Sync: not checked yet')) : 'Sync'} aria-label="Sync" class:on={sync.configured} class:busy={!!sync.busy} class:err={!!sync.lastError}>⟳</a>
-  <a class="iconbtn" href="/plants/new" title="Add a plant" aria-label="Add a plant">+</a>
+  <!-- Not on the add page itself: pressed there it threw the half-filled form away for an empty one (round forty-nine, 3). -->
+  {#if page.url.pathname !== '/plants/new'}<a class="iconbtn" href="/plants/new" title="Add a plant" aria-label="Add a plant">+</a>{/if}
 </div>
 {#if menuOpen}
   <div class="scrim" onclick={closeMenu} aria-hidden="true"></div>
@@ -203,7 +204,7 @@
         {:else if pl.label === 'Propagation'}<path d="M4 19h16M6 19c0-6 3-9 6-9s6 3 6 9M12 10V4M9 7l3-3 3 3" />
         {:else}<path d="M12 3v18M4 7.5l16 9M20 7.5l-16 9M12 3l-2.5 2.5M12 3l2.5 2.5M12 21l-2.5-2.5M12 21l2.5-2.5M4 7.5l.9 3.4M4 7.5l3.4-.9M20 16.5l-.9-3.4M20 16.5l-3.4.9M20 7.5l-.9 3.4M20 7.5l-3.4-.9M4 16.5l.9-3.4M4 16.5l3.4.9" />{/if}
       </svg>
-      <span>{pl.label}</span>
+      <span>{pl.label === 'Plants' ? 'My plants' : pl.label}</span>
     </a>
   {/each}
 </nav>
@@ -250,7 +251,7 @@
   @media (max-width: 700px) {
     main { padding-bottom: calc(56px + 2rem + env(safe-area-inset-bottom)); }
     #tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 70; display: grid; grid-template-columns: repeat(5, 1fr); background: color-mix(in srgb, var(--card) 94%, transparent); backdrop-filter: blur(10px); border-top: 1px solid var(--rule); padding-bottom: env(safe-area-inset-bottom); }
-    #tabbar a { color: var(--ink3); font-size: 10.5px; font-weight: 600; letter-spacing: 0.02em; min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
+    #tabbar a { color: var(--ink2); font-size: 11.5px; font-weight: 600; letter-spacing: 0.02em; min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
     #tabbar a:hover { text-decoration: none; }
     #tabbar a.on { color: var(--accent); }
   }

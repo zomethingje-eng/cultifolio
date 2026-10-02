@@ -6,7 +6,7 @@
 import { Zip, ZipPassThrough, ZipDeflate, unzipSync, strToU8, strFromU8 } from 'fflate';
 import * as v from 'valibot';
 import { materialise, live, known, readChanges, isComplete, type Change, type Record_ } from '$core/log';
-import { kindOf, accNo, sowNo, type Accession, type Photo, type Sowing } from '$lib/db/types';
+import { kindOf, accNo, sowNo, EVENT_LABEL, type Accession, type Photo, type Sowing, type PlantEvent } from '$lib/db/types';
 import { MAX_PHOTO_BYTES, SEAL_OVERHEAD } from '$lib/sync/limits';
 import { BACKUP_FORMAT, BACKUP_V, Manifest, ChangeRow, LegacyChanges, photoPath, thumbPath } from './format';
 
@@ -129,6 +129,7 @@ export async function buildBackup(o: BuildOpts): Promise<BuiltBackup> {
   if (o.settings && Object.keys(o.settings).length) entry('device.json', strToU8(JSON.stringify(o.settings, null, 1)), true);
   entry('plants.csv', strToU8(plantsCsv(live<Accession & Record_>(s.state, 'accession'), s.state)), true);
   entry('batches.csv', strToU8(batchesCsv(live<Sowing & Record_>(s.state, 'sowing'), s.state)), true);
+  entry('events.csv', strToU8(eventsCsv(live<PlantEvent & Record_>(s.state, 'event'), s.state)), true);
   zip.end();
   if (failed) throw failed;
   return {
@@ -165,7 +166,7 @@ export function photosWithoutPixels(file: Pick<ReadBackup, 'changes' | 'photoIds
 }
 
 /** The entries a backup carries and nothing else: the three JSON files, the two sheets, a photograph or its thumbnail. */
-const KNOWN_ENTRY = /^(manifest\.json|changes\.json|device\.json|plants\.csv|batches\.csv|photos\/[^\0]{1,200}\.jpg)$/; // a photo entry's name is judged below, so an impossible one is refused and said rather than skipped
+const KNOWN_ENTRY = /^(manifest\.json|changes\.json|device\.json|plants\.csv|batches\.csv|events\.csv|photos\/[^\0]{1,200}\.jpg)$/; // a photo entry's name is judged below, so an impossible one is refused and said rather than skipped
 /** The most any one entry may inflate to: a photograph is bounded by the sync limit, and a log of a million changes is well under this. */
 export const MAX_ENTRY_BYTES = 256 * 1024 * 1024;
 /** The most changes.json may inflate to: a log of a million changes is about a hundred megabytes. */
@@ -208,7 +209,7 @@ export async function readBackup(bytes: Uint8Array): Promise<ReadBackup> {
       if (f.name.startsWith('photos/') && f.compression !== 0) throw new Error(`That zip compresses ${f.name}; a Cultifolio backup stores its photographs as they are.`);
       if (seen.has(f.name)) throw new Error(`That zip names ${f.name} twice; it is not a Cultifolio backup.`);
       seen.add(f.name);
-      if (f.name === 'plants.csv' || f.name === 'batches.csv') return false;
+      if (f.name === 'plants.csv' || f.name === 'batches.csv' || f.name === 'events.csv') return false;
       if (f.name === 'changes.json') return f.originalSize <= MAX_CHANGES_BYTES;
       if (f.name === 'manifest.json' || f.name === 'device.json') return f.originalSize <= MAX_SMALL_ENTRY_BYTES;
       // A stored entry is copied by its compressed size, whatever it declares as its original: a table of contents whose
@@ -314,6 +315,26 @@ export function plantsCsv(accs: Array<Accession & Record_>, state: Map<string, R
   const rows = [...accs]
     .sort((a, b) => accNo(a).localeCompare(accNo(b)))
     .map((a) => [accNo(a), a.taxonName, a.cultivar, kindOf(a), a.parentage, a.nameAsReceived, a.fieldNumber, a.provenance, a.status, a.locationId ? loc(a.locationId) : a.location, a.acquired, a.sourceFrom, a.sourceRef, a.sourceForm, a.price, a.sowingId ? sowNo((state.get(`sowing:${a.sowingId}`) as unknown as Sowing | undefined) ?? { id: a.sowingId }) : null, a.notes].map(csvCell).join(','));
+  return csvSheet(head, rows);
+}
+
+/**
+ * The timeline as a sheet: every entry on every plant and batch, oldest first, with the plant's number and species so
+ * the sheet reads on its own (round forty-nine, 1). The years of waterings, repottings and measurements were in the
+ * changes file only, which a spreadsheet cannot open.
+ */
+export function eventsCsv(events: Array<PlantEvent & Record_>, state: Map<string, Record_>): string {
+  const head = ['date', 'number', 'species', 'entry', 'note', 'count', 'cause', 'used', 'measurements', 'by the app'];
+  const rows = [...events]
+    .sort((a, b) => a.d.localeCompare(b.d) || a.id.localeCompare(b.id))
+    .map((e) => {
+      const acc = state.get(`accession:${e.acc}`) as unknown as (Accession & Record_) | undefined;
+      const sow = acc ? undefined : (state.get(`sowing:${e.acc}`) as unknown as (Sowing & Record_) | undefined);
+      const no = acc ? accNo(acc) : sow ? sowNo(sow) : e.acc;
+      const name = acc?.taxonName ?? sow?.taxonName ?? null;
+      const measures = e.measures && typeof e.measures === 'object' ? Object.entries(e.measures).map(([k, v]) => `${k} ${v}`).join('; ') : null;
+      return [e.d, no, name, EVENT_LABEL[e.t as keyof typeof EVENT_LABEL] ?? e.t, e.note, e.n, e.cause, e.used, measures, e.auto ? 'yes' : null].map(csvCell).join(',');
+    });
   return csvSheet(head, rows);
 }
 

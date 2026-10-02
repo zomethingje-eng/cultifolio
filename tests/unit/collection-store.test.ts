@@ -608,3 +608,37 @@ describe('round twenty-nine', () => {
     expect(collection.accession(a.id)!.cover).toBe(p1.id); // stands
   });
 });
+
+describe('what belongs together is written together (round forty-nine, 1)', () => {
+  it('an event and the status it stands for are one commit: the listener hears once, and a vault that refuses keeps both out', async () => {
+    const { collection, mem } = await fresh('testdevice');
+    const a = await collection.addAccession({ taxonName: 'Aloe', status: 'growing' });
+    const heard: Change[][] = [];
+    collection.onLocalChange((cs) => heard.push(cs));
+    await collection.addEventWith({ acc: a.id, d: localDate(), t: 'death', note: null }, 'accession', a.id, { status: 'dead' });
+    expect(heard).toHaveLength(1);
+    expect(heard[0].map((c) => c.kind + ':' + c.field).sort()).toEqual(['accession:status', 'event:acc', 'event:d', 'event:note', 'event:t']);
+    expect(collection.accession(a.id)?.status).toBe('dead');
+    mem.fail = 'QuotaExceededError';
+    await expect(collection.addEventWith({ acc: a.id, d: localDate(), t: 'note', note: 'Marked growing again' }, 'accession', a.id, { status: 'growing' })).rejects.toThrow();
+    expect(collection.accession(a.id)?.status).toBe('dead');
+    expect(collection.events(a.id).filter((e) => e.t === 'note')).toHaveLength(0);
+  });
+  it('a batch and the line on its parent plant are one commit; a photograph\'s removal and the cover it clears are one commit', async () => {
+    const { collection } = await fresh('testdevice');
+    const a = await collection.addAccession({ taxonName: 'Aloe', status: 'growing' });
+    const heard: Change[][] = [];
+    collection.onLocalChange((cs) => heard.push(cs));
+    const s = await collection.addSowing({ taxonName: 'Aloe', method: 'offset', sown: localDate(), count: 2, parentAcc: a.id });
+    expect(heard).toHaveLength(1);
+    expect(heard[0].some((c) => c.kind === 'event' && c.field === 't' && c.value === 'propagate')).toBe(true);
+    expect(heard[0].some((c) => c.kind === 'sowing' && c.id === s.id)).toBe(true);
+    const p = await collection.addPhoto({ acc: a.id, d: localDate(), w: 10, h: 10, bytes: 1, blob: new Blob(['x']), thumb: new Blob(['t']) });
+    await collection.setCover(a.id, p.id);
+    heard.length = 0;
+    await collection.removePhoto(p.id);
+    expect(heard).toHaveLength(1);
+    expect(heard[0].map((c) => c.kind + ':' + c.field).sort()).toEqual(['accession:cover', 'photo:_deleted']);
+    expect(collection.accession(a.id)?.cover).toBeNull();
+  });
+});

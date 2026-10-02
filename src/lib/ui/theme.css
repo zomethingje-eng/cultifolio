@@ -350,6 +350,10 @@ details.why > .whybody { font-family: var(--ui); font-size: 12.5px; line-height:
   .cult .sum { flex-wrap: wrap; row-gap: 2px; }
   .cult .sum .hint { margin-left: 0; text-align: left; flex-basis: 100%; }
   .searchbar { font-size: 16px; }
+  /* Every text field at 16px on a phone: under that iOS zooms the page in on focus and leaves it zoomed (round forty-nine, 3; U2). */
+  .field input, .field textarea, .field select, input[type='text'], input[type='search'], input[type='number'], input[type='date'], input[type='email'], textarea, select { font-size: 16px; }
+  /* The one-tap row buttons and the timeline's remove: 40px (U8). */
+  .rm, .sortsel, .undo { min-height: 40px; }
   .ownchip { font-size: 9px; padding: 2px 5px; }
 }
 

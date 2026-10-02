@@ -148,6 +148,15 @@ describe('replace through a staged copy', () => {
     expect(live.changes.size).toBe(12);
     expect([...live.photos.keys()]).toEqual(['p1']);
   });
+  it('a file with a change this build cannot read is not taken as a replacement: the live vault is untouched and the sentence says to merge (round forty-nine, 1)', async () => {
+    const live = liveWith();
+    const before = live.changes.size;
+    const { bytes } = await buildBackup({ changes: [...fileLog, c(40, 'accession', 'r1', 'notes', { a: 1 } as never)], readPhoto: async () => null });
+    const file = await readBackup(bytes);
+    expect(file.unreadable).toHaveLength(1);
+    await expect(replaceThroughStaging(file, model(live).open)).rejects.toThrow(/cannot be read by this version.*Merge instead.*this device is unchanged/);
+    expect(live.changes.size).toBe(before);
+  });
   it('a file from before the scheme was synced carries its manifest scheme in as the setting record, stamped after everything in the file', async () => {
     const file = await fileWith(fileLog, [], {
       mode: 'prefix',

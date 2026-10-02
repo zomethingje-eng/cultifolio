@@ -4,7 +4,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import { apply, isHeld, dueAt, hlcWall, type Change, type State } from '$core/log';
-import { hlcEncode, MAX_AHEAD_MS } from '$core/hlc';
+import { hlcEncode, hlcDecode, MAX_AHEAD_MS, Clock, nowMs, trustServerTime, clockOffsetMs, TRUST_SERVER_PAST_MS, _resetClockOffset } from '$core/hlc';
+import { afterEach } from 'vitest';
 
 const NOW = 1_800_000_000_000;
 const at = (offset: number, device = 'peer', count = 0) => hlcEncode({ wall: NOW + offset, count, device });
@@ -54,5 +55,24 @@ describe('apply() with a hold', () => {
     expect(isHeld(t, { now: dueAt(t) - 1 })).toBe(true);
     expect(isHeld(t, { now: NOW, except: 'peer' })).toBe(false);
     expect(dueAt(t)).toBe(NOW + 3_600_000 - MAX_AHEAD_MS);
+  });
+});
+
+describe('the clock holds are judged by follows the server past half a minute of disagreement (round forty-nine, 1)', () => {
+  afterEach(() => _resetClockOffset());
+  it('a device years ahead stamps by the server\'s time once it has synced, and its holds are judged by it', () => {
+    const local = NOW + 6 * 365 * 86_400_000; // the phone says 2031
+    expect(trustServerTime(NOW, local)).toBe(NOW - local);
+    expect(nowMs() + (local - Date.now())).toBeCloseTo(NOW, -3); // nowMs is the real clock plus the offset: the real clock stands in for `local` here
+    const clock = new Clock('me'); // the default `now` is the corrected one
+    expect(hlcDecode(clock.tick()).wall).toBeLessThan(Date.now() + MAX_AHEAD_MS);
+    expect(clockOffsetMs()).toBe(NOW - local);
+  });
+  it('a disagreement under the threshold leaves the device clock alone, and a return to agreement drops the offset', () => {
+    expect(trustServerTime(NOW, NOW - TRUST_SERVER_PAST_MS)).toBe(0);
+    trustServerTime(NOW, NOW - 86_400_000);
+    expect(clockOffsetMs()).toBe(86_400_000);
+    expect(trustServerTime(NOW, NOW + 5_000)).toBe(0);
+    expect(trustServerTime(NaN, NOW)).toBe(0); // a missing Date header changes nothing
   });
 });

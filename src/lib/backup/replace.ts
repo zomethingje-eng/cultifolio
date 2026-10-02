@@ -46,6 +46,10 @@ export interface ReplaceResult {
  * finishes the copy the next time it opens.
  */
 export async function replaceThroughStaging(file: ReadBackup, open: () => Promise<StagedReplacement>, opts: ReplaceOpts = {}): Promise<ReplaceResult> {
+  // A change this build cannot read is left out of a merge and stays in the file; a replacement is the file and nothing
+  // else, so the same change would be gone from the device for good, and a backup from a newer build is the file most
+  // likely to hold one (round forty-nine, 1; round thirty-five, R1). Refused, with the first such change named.
+  if (file.unreadable.length) throw new Error(`${file.unreadable.length} ${file.unreadable.length === 1 ? 'change' : 'changes'} in that file cannot be read by this version (${file.unreadable[0]}), and a replacement would lose ${file.unreadable.length === 1 ? 'it' : 'them'} for good. Merge instead, which leaves ${file.unreadable.length === 1 ? 'it' : 'them'} in the file, or replace from a newer version of the app; this device is unchanged.`);
   const changes = replacementChanges(file);
   const stage = await open();
   let switching = false;

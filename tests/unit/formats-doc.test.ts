@@ -115,7 +115,7 @@ const doc = {
   nameLayout: says(/stored at vault\/<id>\/log\/(<hour>-0000-<device>-<fingerprint>)\.bin/)[1],
   storedAt: says(/stored at (vault\/<id>\/log\/<hour>-0000-<device>-<fingerprint>\.bin)/)[1],
   photoAt: says(/at (vault\/<vaultId>\/photo\/<photoId>\.bin)/)[1],
-  endpoints: says(/The endpoints: POST (\/api\/sync\/vault) \{ id, token, create \}; GET (\/api\/sync\/log)\?vault=&since=<ms>.*?POST (\/api\/sync\/log)\?vault= with headers (X-Batch), (X-Batch-Plain), (X-Device); GET (\/api\/sync\/log)\/<hour>-0000-<device>-<fingerprint>\?vault=.*?(PUT\|GET\|HEAD) (\/api\/sync\/photo)\/<id>\?vault=/),
+  endpoints: says(/The endpoints: POST (\/api\/sync\/vault) \{ id, token, create \}; GET (\/api\/sync\/log)\?vault=&since=<ms>.*?POST (\/api\/sync\/log)\?vault= with headers (X-Batch), (X-Batch-Plain), (X-Device); GET (\/api\/sync\/log)\/<hour>-0000-<device>-<fingerprint>\?vault=.*?(PUT\|GET\|HEAD\|DELETE) (\/api\/sync\/photo)\/<id>\?vault=/),
   manifestKeys: says(/manifest\.json \{ (format): "cultifolio-backup", (v): 1, (exported): [^,]*, (device), (app), (counts): \{ ([a-zA-Z, ]+) \}, (photosMissing): [^\]]*\], (scheme) \}/),
   tooBig: says(/A body larger than the limit is (\d+)/)[1],
   rateLimited: says(/past any of these the answer is (\d+) with Retry-After/)[1],
@@ -127,7 +127,7 @@ const doc = {
   reserved: says(/The fields (\w+), (\w+) and (\w+) belong to the record and cannot be set by a change \(nor can the names (\S+) and (\S+)\)/),
   eventTypes: says(/t \(([a-z, ]+)\), and as the type needs/)[1].split(/,\s*/),
   backupFile: says(/(cultifolio-YYYY-MM-DD\.cultifolio\.zip), an ordinary zip/)[1],
-  backupPaths: says(/(photos\/<id>\.jpg) full-size JPEG, long edge (\d+) px (photos\/<id>\.t\.jpg) (\d+) px thumbnail (plants\.csv) one row per plant[^)]*\) (batches\.csv) one row per propagation batch[^)]*\) (device\.json) the exporting device's settings \{ (site): \{ lat, lon, name\? \} \(as entered, not rounded\), (units), (labels), (prefs) \}/),
+  backupPaths: says(/(photos\/<id>\.jpg) full-size JPEG, long edge (\d+) px (photos\/<id>\.t\.jpg) (\d+) px thumbnail (plants\.csv) one row per plant[^)]*\) (batches\.csv) one row per propagation batch[^)]*\) (events\.csv) one row per timeline entry[^)]*\) (device\.json) the exporting device's settings \{ (site): \{ lat, lon, name\? \} \(as entered, not rounded\), (units), (labels), (prefs) \}/),
   legacy: says(/older changes-only JSON export \(\{ "format": "(cultifolio-changes)", "v": (\d), "changes": \[\.\.\.\] \}\)/),
   listReply: says(/returns \{ batches: \[\{ (key), (at) \}\], (more), (next)\?: \{ at, key \} \}; the next page is &(after)=<at>:<key>/),
   bearer: says(/All but creation take (Authorization): (Bearer) <token>/),
@@ -331,11 +331,11 @@ describe('/about/formats is enough to decrypt a vault, and says what the code do
     expect(Number(doc.backupPaths[2])).toBe(FULL_EDGE);
     expect(doc.backupPaths[3].replace('<id>', 'p1')).toBe(thumbPath('p1'));
     expect(Number(doc.backupPaths[4])).toBe(THUMB_EDGE);
-    expect(doc.backupPaths.slice(8, 12).sort()).toEqual(fieldsIn('../../src/lib/backup/backup.ts', 'DeviceSettings').sort()); // device.json's keys are the interface's
+    expect(doc.backupPaths.slice(9, 13).sort()).toEqual(fieldsIn('../../src/lib/backup/backup.ts', 'DeviceSettings').sort()); // device.json's keys are the interface's
     // the zip's entries are the ones the page lists, read back from a file the writer built (round twenty-six, 12)
     const built = await buildBackup({ changes: [{ t: '1789520000000-0000-abcdefabcdef0000', kind: 'photo', id: 'p1', field: 'd', value: '2026-01-02' }, { t: '1789520000001-0000-abcdefabcdef0000', kind: 'photo', id: 'p1', field: 'acc', value: 'r1' }, { t: '1789520000002-0000-abcdefabcdef0000', kind: 'photo', id: 'p1', field: 'w', value: 1 }, { t: '1789520000003-0000-abcdefabcdef0000', kind: 'photo', id: 'p1', field: 'h', value: 1 }, { t: '1789520000004-0000-abcdefabcdef0000', kind: 'photo', id: 'p1', field: 'bytes', value: 3 }], settings: { units: 'metric' }, readPhoto: async (id) => ({ id, full: new Uint8Array([0xff, 0xd8, 1]), thumb: new Uint8Array([0xff, 0xd8, 2]) }) });
     const entries = Object.keys(unzipSync(built.bytes)).sort();
-    const expected = ['manifest.json', doc.changesFile, doc.backupPaths[1].replace('<id>', 'p1'), doc.backupPaths[3].replace('<id>', 'p1'), doc.backupPaths[5], doc.backupPaths[6], doc.backupPaths[7]].sort();
+    const expected = ['manifest.json', doc.changesFile, doc.backupPaths[1].replace('<id>', 'p1'), doc.backupPaths[3].replace('<id>', 'p1'), doc.backupPaths[5], doc.backupPaths[6], doc.backupPaths[7], doc.backupPaths[8]].sort();
     expect(entries).toEqual(expected);
     // the object keys the page names are the ones the Worker stores under
     expect(batchKey('V', '1789520000000-0000-abcdefabcdef-ffffffffffff')).toBe(doc.storedAt.replace('<id>', 'V').replace('<hour>-0000-<device>-<fingerprint>', '1789520000000-0000-abcdefabcdef-ffffffffffff'));

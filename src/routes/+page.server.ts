@@ -22,11 +22,16 @@ export const load: PageServerLoad = async ({ platform, fetch, setHeaders, url, c
   const openIndex = open ? rows.findIndex((r) => r.id === open) : -1;
   // `?from=L`: the server-rendered window starts at that letter, so a reader without JavaScript (and a crawler) can follow
   // the letter index; `?at=N` is "More" without JavaScript. With JavaScript the index jumps in place.
-  const start = (() => {
-    const at = Number(url.searchParams.get('at'));
-    if (Number.isInteger(at) && at > 0 && at < rows.length) return at;
-    return Math.max(0, cat.letterAt[(url.searchParams.get('from') ?? '').toUpperCase()] ?? -1);
-  })();
+  // Read as the Worker's page cache reads them (hooks.server.ts, `homeQuery`): a value the page would not act on is
+  // the same page as none, there and here, so `browse` below is judged on the same reading (round forty-nine, 2).
+  const at = Number(url.searchParams.get('at'));
+  const atValid = Number.isInteger(at) && at > 0 && at < rows.length;
+  const fromLetter = (url.searchParams.get('from') ?? '').toUpperCase();
+  const fromValid = /^[A-Z]$/.test(fromLetter) && cat.letterAt[fromLetter] != null;
+  // A `?open=` link to a row deep in the catalogue starts the window a little above it, not at A: a link to Welwitschia
+  // sent the whole catalogue to reach row 1,300 (round forty-nine, 2; round thirty-five, R1-4). The rows above come
+  // through "Earlier" and the upward fill, as after a letter jump.
+  const start = atValid ? at : fromValid ? cat.letterAt[fromLetter] : openIndex >= _WINDOW ? Math.max(0, openIndex - 15) : 0;
   // The window: sixty rows from the start, or up to thirty past an opened row that lies beyond them, so a `?open=` link
   // lands on its row. Only the opened row carries its species.
   const end = Math.max(start + _WINDOW, openIndex >= 0 ? openIndex + 30 : 0);
@@ -46,7 +51,7 @@ export const load: PageServerLoad = async ({ platform, fetch, setHeaders, url, c
     by,
     open: openIndex >= 0 ? open : '',
     /** The address asked for the catalogue (a grouping, an opened group, a letter): a grower with plants lands on the catalogue, not on their own list (round thirty-four, 1). */
-    browse: byParam != null || !!open || chip !== 'all' || url.searchParams.has('from') || url.searchParams.has('at'),
+    browse: byParam != null || openIndex >= 0 || chip !== 'all' || fromValid || atValid,
     chip,
     rows: window,
     rowCount: rows.length,

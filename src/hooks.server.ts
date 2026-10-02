@@ -1,6 +1,8 @@
-import { redirect, type Handle } from '@sveltejs/kit';
+import { redirect, type Handle, type RequestEvent } from '@sveltejs/kit';
 import { unitsFor } from '$lib/server/units';
-import { building } from '$app/environment';
+import { building, version } from '$app/environment';
+import { getIndex } from '$lib/server/dossiers';
+import { catalogueOf, byOf, chipOf } from '$lib/server/catalogue';
 
 /**
  * A species page is public content rendered in the reader's units and hemisphere, which is why its own header is
@@ -16,10 +18,38 @@ const PAGE_CACHE_S = 60;
  * every request (grouping nine thousand species, the day's featured tiles) and was the one page a stranger always
  * lands on with nothing holding it.
  */
-const HELD_PAGES: Array<{ test: (url: URL) => boolean; params: string[]; hemi: boolean }> = [
-  { test: (url) => /^\/species\/[^/]+$/.test(url.pathname), params: ['was'], hemi: true },
-  { test: (url) => url.pathname === '/', params: ['by', 'open', 'chip', 'from', 'at'], hemi: false }
+const HELD_PAGES: Array<{ test: (url: URL) => boolean; query: (event: RequestEvent) => Promise<string | null>; hemi: boolean }> = [
+  // A species page reached by an old name (`?was=`) is a page in its own right, since the line it prints names the
+  // address; it is not held, since anyone can write that query into a link and each spelling minted a copy (round forty-nine, 2).
+  { test: (url) => /^\/species\/[^/]+$/.test(url.pathname), query: async (e) => (e.url.searchParams.has('was') ? null : ''), hemi: true },
+  { test: (url) => url.pathname === '/', query: homeQuery, hemi: false }
 ];
+
+/**
+ * The home page's query as the page reads it, and nothing else: the grouping and the chip reduced to their known
+ * values, `from` to one letter, `at` to a positive whole number, and `open` only when it names a row of that grouping,
+ * so a link with an unknown `open` (or one spelt with capitals, or with a tracking tag) shares the plain page's copy
+ * rather than minting one (round forty-nine, 2; round twenty-seven, 3). Reads nothing the page's own load does not.
+ */
+async function homeQuery(event: RequestEvent): Promise<string> {
+  const p = event.url.searchParams;
+  const parts: string[] = [];
+  const by = byOf(p.get('by'));
+  const chip = chipOf(p.get('chip'));
+  if (p.has('by')) parts.push(`by=${by}`); // present at all, the page is the catalogue, not the grower's list
+  if (chip !== 'all') parts.push(`chip=${chip}`);
+  const from = (p.get('from') ?? '').toUpperCase();
+  const at = Number(p.get('at'));
+  const open = p.get('open') ?? '';
+  const wantsRows = /^[A-Z]$/.test(from) || (Number.isInteger(at) && at > 0) || /^[a-z0-9-]{1,80}$/.test(open);
+  if (wantsRows) {
+    const cat = catalogueOf(await getIndex(event.platform, event.fetch), by, chip);
+    if (/^[A-Z]$/.test(from) && cat.letterAt[from] != null) parts.push(`from=${from}`);
+    if (Number.isInteger(at) && at > 0 && at < cat.rows.length) parts.push(`at=${at}`);
+    if (open && cat.rows.some((r) => r.id === open)) parts.push(`open=${open}`);
+  }
+  return parts.join('&');
+}
 
 /** The two sections renamed before the launch: a bookmark or an installed app's cached shell still says the old path. */
 const MOVED: Array<[RegExp, string]> = [
@@ -52,19 +82,25 @@ export const handle: Handle = async ({ event, resolve }) => {
   const cache = held && !building && !event.isDataRequest && event.request.method === 'GET' ? event.platform?.caches?.default : undefined;
   let key: Request | undefined;
   if (cache && held) {
-    // The key carries everything the rendering reads from the request, and nothing else: the path, the queries the page
-    // reads, the units, and (where the page reads it) the hemisphere cookie as one of its two values. A query the page
-    // never reads (`?x=1`, a tracking tag, a check's timestamp, the search typed into `?q=`) is the same page, so it
-    // shares the copy rather than minting one.
+    // The key carries everything the rendering reads from the request, and nothing else: the build (a page held across a
+    // deploy named chunks that were gone, round forty-nine, 2), the path, the queries the page reads, the units, and
+    // (where the page reads it) the hemisphere cookie as one of its two values. A query the page never reads (`?x=1`,
+    // a tracking tag, a check's timestamp, the search typed into `?q=`) is the same page, so it shares the copy rather
+    // than minting one.
     const hemi = held.hemi ? event.cookies.get('cultifolio.hemi') : undefined;
-    const q = held.params.filter((k) => event.url.searchParams.has(k)).map((k) => `${k}=${encodeURIComponent(event.url.searchParams.get(k) ?? '')}`).join('&');
-    key = new Request(`https://cache.cultifolio/page?p=${encodeURIComponent(event.url.pathname)}&q=${encodeURIComponent(q)}&u=${unitsFor(event.cookies, event.request)}&h=${hemi === 'n' || hemi === 's' ? hemi : ''}`);
-    const hit = await cache.match(key);
-    if (hit) {
-      const r = new Response(hit.body, hit);
-      r.headers.set('cache-control', `private, max-age=${PAGE_CACHE_S}`);
-      r.headers.set('x-cultifolio-page', 'held');
-      return policy(r);
+    const q = await held.query(event);
+    if (q !== null) {
+      key = new Request(`https://cache.cultifolio/page?v=${encodeURIComponent(version)}&p=${encodeURIComponent(event.url.pathname)}&q=${encodeURIComponent(q)}&u=${unitsFor(event.cookies, event.request)}&h=${hemi === 'n' || hemi === 's' ? hemi : ''}`);
+      // A cache that fails to answer is a page rendered, not a 500 (round forty-nine, 2).
+      const hit = await cache.match(key).catch(() => undefined);
+      if (hit) {
+        const r = new Response(hit.body, hit);
+        r.headers.set('cache-control', `private, max-age=${PAGE_CACHE_S}`);
+        // The Vary the page set, which the stored copy dropped: a shared cache in front of the Worker must still keep the units and the hemisphere apart (round forty-nine, 2; round thirty-five, R1-6).
+        r.headers.set('vary', 'accept-language, cookie');
+        r.headers.set('x-cultifolio-page', 'held');
+        return policy(r);
+      }
     }
   }
   const res = await resolve(event);
@@ -77,7 +113,7 @@ export const handle: Handle = async ({ event, resolve }) => {
     copy.headers.set('cache-control', `public, max-age=${PAGE_CACHE_S}`);
     copy.headers.delete('vary');
     r.headers.set('x-cultifolio-page', 'rendered');
-    const put = cache.put(key, copy);
+    const put = cache.put(key, copy).catch(() => {});
     if (event.platform?.context?.waitUntil) event.platform.context.waitUntil(put);
     else await put;
   }

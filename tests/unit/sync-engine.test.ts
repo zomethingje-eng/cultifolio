@@ -98,7 +98,10 @@ function fakeR2() {
     },
     async head(key: string) {
       const o = objs.get(key);
-      return o ? { customMetadata: o.md ?? (o.sha ? { sha: o.sha } : {}) } : null;
+      return o ? { customMetadata: o.md ?? (o.sha ? { sha: o.sha } : {}), size: o.body.length } : null;
+    },
+    async delete(key: string) {
+      objs.delete(key);
     },
     async get(key: string) {
       const o = objs.get(key);
@@ -1357,5 +1360,58 @@ describe('a stale run\'s verdicts never land on the new vault (round eighteen, 4
     await A2.sync.run(); // did not throw "stopped"
     expect(A2.sync.lastError).toBeNull();
     expect(A2.sync.runs).toBe(1);
+  });
+});
+
+describe('a removed photograph\'s pixels go from every device and from the server (round forty-nine, 1)', () => {
+  it('the device that folds the removal drops its pixels; past ten minutes one device asks the server to drop the bytes, which leave the count, and the id leaves photosPushed', async () => {
+    const r2 = fakeR2();
+    const memB = newMem('bbbbbbbbbbbb');
+    const B = await boot(memB, r2);
+    const a = await B.collection.addAccession({ taxonName: 'Aloe', acc: 'B-1' });
+    const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3]);
+    const pid = 'pone000000001';
+    const pid2 = 'ptwo000000002';
+    const sha = await sha256hex(jpeg);
+    memB.photos.set(pid, { id: pid, blob: new Blob([jpeg]), thumb: new Blob([jpeg]) });
+    await B.collection.put('photo', pid, { acc: a.id, d: '2026-01-01', w: 1, h: 1, bytes: 6, sha });
+    // The second was taken twenty minutes ago on another device, and restored here from its file.
+    memB.photos.set(pid2, { id: pid2, blob: new Blob([jpeg]), thumb: new Blob([jpeg]) });
+    const old = (count: number, field: string, value: unknown) => ({ t: hlcEncode({ wall: Date.now() - 20 * 60_000, count, device: 'cccccccccccc' }), kind: 'photo' as const, id: pid2, field, value });
+    await B.collection.ingest([old(0, 'acc', a.id), old(1, 'd', '2026-01-01'), old(2, 'w', 1), old(3, 'h', 1), old(4, 'bytes', 6), old(5, 'sha', sha)], 'import');
+    await B.sync.setup(KEY, 'create');
+    const memD = newMem('dddddddddddd');
+    const D = await boot(memD, r2);
+    await D.sync.setup(KEY, 'join');
+    expect(memD.photos.size).toBe(2);
+    const photoKeys = () => [...r2.objs.keys()].filter((k) => k.includes('/photo/'));
+    expect(photoKeys()).toHaveLength(2);
+    // B removes it, just now: the server keeps the bytes for the Undo's sake.
+    mem = memB;
+    await (await import('$lib/db/collection.svelte')).collection.load();
+    const Bc = B.collection;
+    await Bc.removePhoto(pid);
+    expect(memB.photos.size).toBe(1);
+    await B.sync.run();
+    expect(photoKeys()).toHaveLength(2);
+    expect(D.calls.filter((c) => c.startsWith('DELETE'))).toHaveLength(0);
+    // D folds the removal: its pixels go.
+    mem = memD;
+    await D.sync.run();
+    expect(memD.photos.size).toBe(1);
+    expect(memD.photos.has(pid2)).toBe(true);
+    // A removal eleven minutes old (one made on another device, say, arriving now): the server is asked.
+    mem = memB;
+    await Bc.ingest([{ t: hlcEncode({ wall: Date.now() - 11 * 60_000, count: 0, device: 'cccccccccccc' }), kind: 'photo', id: pid2, field: '_deleted', value: true }], 'import');
+    await B.sync.run();
+    // (global fetch is the last booted device's, so every call from here is in D's list)
+    expect(D.calls.filter((c) => c === `DELETE /api/sync/photo/${pid2}`)).toHaveLength(1);
+    expect(photoKeys()).toHaveLength(1);
+    expect(memB.photos.size).toBe(0);
+    const sm = memB.meta.get('sync') as { photosPushed: string[]; photosDropped?: string[] };
+    expect(sm.photosPushed).not.toContain(pid2);
+    expect(sm.photosDropped).toEqual([pid2]);
+    await B.sync.run(); // asked once, not every run
+    expect(D.calls.filter((c) => c === `DELETE /api/sync/photo/${pid2}`)).toHaveLength(1);
   });
 });

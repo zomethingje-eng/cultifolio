@@ -170,6 +170,7 @@
 <div class="cult">
   <div class="body">
     <label class="check"><input id="pref-refphotos" type="checkbox" checked={prefs.current.referencePhotos} onchange={(e) => prefs.set({ referencePhotos: e.currentTarget.checked })} /> Show the reference's photograph of the species on my plants, my batches and my tiles when a plant has no photograph of its own.</label>
+    <label class="check"><input id="pref-keeping" type="checkbox" checked={!prefs.current.hideKeeping} onchange={(e) => prefs.set({ hideKeeping: !e.currentTarget.checked })} /> Show on Today where the collection stands: the last backup, sync, and records waiting.</label>
     <p class="small muted" style="margin: 6px 0 0">Off, your own pages ask no outside host for anything. On, the photograph comes straight from iNaturalist or the GBIF image cache, so that host sees this address ask for that species' picture; Cultifolio's server is not involved and learns nothing. Species pages you open are unaffected either way.</p>
   </div>
 </div>
@@ -179,7 +180,8 @@
   <div class="body">
     <p class="small" style="margin: 0 0 10px">How new plants are numbered; a number is never reused, and numbers already given are kept. With the year scheme the year is the plant's acquisition year (a plant acquired on 31 December and filed on 2 January is a 2026 plant), and a batch's is the year it was started.</p>
     <div class="seg" role="group" aria-label="Numbering scheme">
-      <button type="button" class:on={mode === 'year'} aria-pressed={mode === 'year'} onclick={() => (mode = 'year')}>Year: 2026-0001</button>
+      <!-- Year needs nothing typed, so the tap is the save; Prefix waits for its letters and Save (round forty-nine, 3). -->
+      <button type="button" class:on={mode === 'year'} aria-pressed={mode === 'year'} onclick={() => { mode = 'year'; if (collection.ready) void saveScheme(); }}>Year: 2026-0001</button>
       <button type="button" class:on={mode === 'prefix'} aria-pressed={mode === 'prefix'} onclick={() => (mode = 'prefix')}>Prefix: ABC-0001</button>
     </div>
     <div class="fields" style="margin-top: 10px">

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { goto } from '$app/navigation';
+  import { goto, beforeNavigate } from '$app/navigation';
   import { toast } from '$lib/ui/toast.svelte';
   import PageHead from '$lib/ui/PageHead.svelte';
   import { localDate } from '$core/dates';
@@ -86,6 +86,18 @@
   let nameArmed = $state(false);
   let picker = $state<{ check: () => Promise<boolean> } | null>(null);
   let dateMsg = $state('');
+  /** "Save and add another" keeps the form open with the place, the date, the source and the provenance; the name and what belongs to the one plant are cleared (round forty-nine, 3). */
+  let addAnother = $state(false);
+  /** Whether the form has anything typed that leaving would lose; a save clears it before the page moves on. */
+  const dirty = $derived(!!(name.trim() || nameAsReceived.trim() || fieldNumber.trim() || notes.trim() || sourceFrom.trim()));
+  let saved = $state(false);
+  beforeNavigate((nav) => {
+    // An in-app move away from a half-filled form asks first (a tab-bar tap, the back button); a full unload is the browser's to ask about (round forty-nine, 3).
+    if (!dirty || saved || nav.type === 'leave' || nav.willUnload) return;
+    if (!confirm('Leave this page? What you typed for this plant will be lost.')) nav.cancel();
+  });
+  /** The fields a second plant from the same source shares; the rest are the one plant's. */
+  let moreOpen = $state(false);
   async function save(e: SubmitEvent) {
     e.preventDefault();
     if (!name.trim() || busy) return;
@@ -131,6 +143,14 @@
       });
       const firstId = accNo(recs[0]);
       try { if (locationId) localStorage.setItem('cultifolio.lastLocation', locationId); } catch { /* fine */ }
+      if (addAnother) {
+        addAnother = false;
+        toast.show(wanted > 1 ? `${wanted} plants added` : `${firstId} added`, 8000, { label: wanted > 1 ? 'See them' : `Open ${firstId}`, run: () => { void goto(wanted > 1 ? '/plants' : `/plants/${firstId}`); } });
+        name = ''; taxonKey = null; cultivar = null; kind = 'species'; parentage = null; nameAsReceived = ''; fieldNumber = ''; notes = ''; price = ''; count = 1; useOwnNumber = false; ownNumber = ''; nameArmed = false;
+        setTimeout(() => document.querySelector<HTMLElement>('.picker input')?.focus(), 0);
+        return;
+      }
+      saved = true;
       toast.show(wanted > 1 ? `${wanted} plants added` : `${firstId} added`);
       goto(wanted > 1 ? '/plants' : `/plants/${firstId}`);
     } catch {
@@ -162,6 +182,14 @@
   {/if}
 
   <div class="two">
+    <div class="field"><span>Place</span><LocationPicker bind:value={locationId} id="f-loc" label="Place" /></div>
+    <label class="field"><span>Acquired</span><input id="f-date" type="date" bind:value={acquired} oninput={() => (dateMsg = '')} aria-invalid={!!dateMsg} aria-describedby={dateMsg ? 'f-date-bad' : undefined} />{#if dateMsg}<span class="bad small" id="f-date-bad">{dateMsg}</span>{/if}</label>
+  </div>
+
+  <!-- The short form is the species, the place and the date: what every plant has. The rest is one tap away, and stays open once opened (round forty-nine, 3; U3). -->
+  <details class="moredetails" bind:open={moreOpen}>
+  <summary class="faint">More: name as received, field number, provenance, source, price, how many, notes</summary>
+  <div class="two">
     <label class="field"><span>Name as received <span class="faint">(if different)</span></span><input id="f-received" type="text" bind:value={nameAsReceived} placeholder="e.g. Copiapoa cinerea v. albispina" /></label>
     <label class="field"><span>Field number</span><input id="f-field" type="text" bind:value={fieldNumber} placeholder="e.g. KK 1462" /></label>
   </div>
@@ -185,17 +213,16 @@
   </div>
 
   <div class="two">
-    <label class="field"><span>Acquired</span><input id="f-date" type="date" bind:value={acquired} oninput={() => (dateMsg = '')} aria-invalid={!!dateMsg} aria-describedby={dateMsg ? 'f-date-bad' : undefined} />{#if dateMsg}<span class="bad small" id="f-date-bad">{dateMsg}</span>{/if}</label>
     <label class="field"><span>From</span><input id="f-from" type="text" bind:value={sourceFrom} placeholder="Nursery, seller, friend" /></label>
     <label class="field"><span>Price <span class="faint">(optional)</span></span><input id="f-price" type="text" bind:value={price} placeholder="what it cost, as you like to write it" /></label>
   </div>
 
   <div class="two">
-    <div class="field"><span>Place</span><LocationPicker bind:value={locationId} id="f-loc" label="Place" /></div>
     <label class="field"><span>How many</span><input id="f-count" type="number" min="1" max="200" step="1" bind:value={count} /><span class="faint small">Each gets its own number.{#if numberOrNull(count) != null && numberOrNull(count) !== countN} {countN === 1 ? 'One plant' : `${countN} plants`} will be added.{/if}</span></label>
   </div>
 
   <label class="field"><span>Notes</span><textarea id="f-notes" rows="3" bind:value={notes}></textarea></label>
+  </details>
 
   <details class="own">
     <summary class="faint">Use my own number</summary>
@@ -204,9 +231,11 @@
   </details>
   </div>
 
-  <div class="actions">
+  <!-- Pinned on a phone, so Add is under the thumb however long the form; "Add as typed" is the second press for a name the reference does not know (round forty-nine, 3). -->
+  <div class="actions sticky">
     <a class="btn" href="/plants">Cancel</a>
-    <button class="btn pri" type="submit" disabled={!name.trim() || busy || ownTaken} aria-live="polite">{checking ? 'Checking the name…' : busy ? 'Adding…' : `Add${countN > 1 ? ` ${countN} plants` : ''}`}</button>
+    <button class="btn" type="submit" onclick={() => (addAnother = true)} disabled={!name.trim() || busy || ownTaken} title="Add this plant and keep the form open for the next, with the place, date, source and provenance kept">Save and add another</button>
+    <button class="btn pri" type="submit" onclick={() => (addAnother = false)} disabled={!name.trim() || busy || ownTaken} aria-live="polite">{checking ? 'Checking the name…' : busy ? 'Adding…' : nameArmed ? 'Add as typed' : `Add${countN > 1 ? ` ${countN} plants` : ''}`}</button>
   </div>
 </form>
 
@@ -220,7 +249,10 @@
   .field input:focus, .field select:focus, .field textarea:focus { outline: 0; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
   .field .small { display: block; margin-top: 4px; font-size: 12px; }
   .two { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; align-items: start; }
-  .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+  .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+  .moredetails { margin-top: 8px; }
+  .moredetails > summary { cursor: pointer; font-size: 13px; padding: 8px 0; }
+  @media (max-width: 700px) { .actions.sticky { position: sticky; bottom: calc(56px + env(safe-area-inset-bottom)); background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(8px); padding: 10px 0; margin: 8px -4px 0; z-index: 5; } }
   .own { margin-top: 8px; }
   .own summary { cursor: pointer; font-size: 13px; }
   .ownrow { display: flex; align-items: center; gap: 8px; margin-top: 8px; }

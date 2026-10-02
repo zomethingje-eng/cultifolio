@@ -25,10 +25,17 @@
   let video: HTMLVideoElement | undefined = $state();
   let stream: MediaStream | null = null;
 
+  /** A fresh key is kept for the tab's life, not the page's: a reload between its showing and "Start syncing" (a phone's browser restarted; the print dialog) lost a key the card had called the only one (round forty-nine, 3). */
+  const FRESH = 'cultifolio.freshKey';
   onMount(async () => {
     await collection.load();
     await sync.init();
+    try {
+      const kept = sessionStorage.getItem(FRESH);
+      if (kept && !sync.configured && mode === 'idle') { freshKey = kept; typedBack = ''; mode = 'create'; }
+    } catch { /* no session storage: the key lives in the page only */ }
   });
+  const dropFresh = () => { try { sessionStorage.removeItem(FRESH); } catch { /* fine */ } };
   $effect(() => {
     setCrumb([{ label: 'My plants', href: '/plants' }, { label: 'Sync' }]);
     return () => {
@@ -48,6 +55,7 @@
   const saved = $derived(!!freshKey && typedBack.trim().toUpperCase() === freshKey.slice(-5).toUpperCase());
   function startCreate() {
     freshKey = newVaultKey();
+    try { sessionStorage.setItem(FRESH, freshKey); } catch { /* fine */ }
     typedBack = '';
     copied = false;
     err = '';
@@ -58,6 +66,7 @@
     err = '';
     try {
       await sync.setup(freshKey);
+      dropFresh();
       mode = 'idle';
     } catch (e) {
       err = e instanceof Error ? e.message : String(e);
@@ -205,20 +214,21 @@
       <div class="pairrow">
         <div class="qr">{@html qr}</div>
         <div>
-          <div class="keytext mono" id="vault-key">{freshKey}</div>
+          <!-- Each group is one piece: a key wrapped mid-group was copied wrong by hand (round forty-nine, 3; U6). -->
+          <div class="keytext mono" id="vault-key">{#each freshKey.split('-') as g, i (i)}<span class="kg">{g}</span>{#if i < 5}<span class="kd">-</span>{/if}{/each}</div>
+          <!-- Typing the last group back is the one check that the key was read and kept, not only glanced at (round forty-one, R9); it sits under the key it asks about (round forty-nine, 3). -->
+          <label class="typeback"><span>Type the last five symbols of the key to go on</span><input id="key-typeback" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="5" bind:value={typedBack} /></label>
           <p class="small muted">This is the only key. It encrypts your collection and it is what a second device needs. There is no account behind it and no way to recover it: if it is lost the vault cannot be opened by anyone, including us; your collection on this device and in backups is unaffected. Put it in a password manager, or print this card and keep it with your seed packets.</p>
           <div class="row">
             <button class="btn" onclick={() => copyKey(freshKey)}>{copied ? 'Copied' : 'Copy key'}</button>
             <button class="btn" type="button" onclick={() => window.print()}>Print this card</button>
             <a class="btn" href="/backup">Take a backup first</a>
           </div>
-          <!-- Typing the last group back is the one check that the key was read and kept, not only glanced at (round forty-one, R9). -->
-          <label class="typeback"><span>Type the last five symbols of the key to go on</span><input id="key-typeback" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="5" bind:value={typedBack} /></label>
         </div>
       </div>
       {#if err}<p class="bad" id="sync-err" role="alert">{err}</p>{/if}
       <div class="actions">
-        <button class="btn" onclick={() => (mode = 'idle')} disabled={busy}>Cancel</button>
+        <button class="btn" onclick={() => { dropFresh(); mode = 'idle'; }} disabled={busy}>Cancel</button>
         <button id="sync-create" class="btn pri" onclick={create} disabled={!saved || busy}>{busy ? 'Setting up…' : 'Start syncing'}</button>
       </div>
     </div>
@@ -292,7 +302,9 @@
   .pairrow { display: grid; grid-template-columns: 180px 1fr; gap: 18px; align-items: start; }
   .qr { width: 180px; height: 180px; background: #fff; border-radius: 10px; padding: 8px; box-shadow: var(--sh); }
   .qr :global(svg) { width: 100%; height: 100%; display: block; }
-  .keytext { font-size: 17px; letter-spacing: 0.06em; word-break: break-all; padding: 10px 12px; background: var(--sunk); border-radius: 8px; margin-bottom: 10px; user-select: all; }
+  .keytext { font-size: 17px; letter-spacing: 0.06em; padding: 10px 12px; background: var(--sunk); border-radius: 8px; margin-bottom: 10px; user-select: all; }
+  .keytext .kg { white-space: nowrap; display: inline-block; }
+  .typeback { margin-top: 0; margin-bottom: 12px; }
   .keyin { width: 100%; font-size: 16px; letter-spacing: 0.06em; padding: 10px 12px; border: 1px solid var(--rule); border-radius: 9px; background: var(--card); color: var(--ink); text-transform: uppercase; }
   .scan { width: 100%; max-height: 60vh; border-radius: 10px; background: #000; }
   .bad { color: var(--bad); font-size: 13.5px; margin: 8px 0 0; }

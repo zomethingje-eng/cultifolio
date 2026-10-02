@@ -159,7 +159,7 @@
 <div class="secrule"><h2>Take a backup</h2><div class="line"></div><span class="n">{lastBackup ? `last ${ago(lastBackup)}` : 'never'}</span></div>
 <div class="cult">
   <div class="body">
-    <p>One zip file: <code>changes.json</code> (the collection itself, every change ever made), a folder of photographs, and <code>plants.csv</code> for a spreadsheet. Restoring it on another device merges by the same rule sync will use, so nothing is lost by restoring an old file over a newer collection, and restoring twice changes nothing.</p>
+    <p>One zip file: <code>changes.json</code> (the collection itself, every change ever made), a folder of photographs, and <code>plants.csv</code>, <code>batches.csv</code> and <code>events.csv</code> for a spreadsheet. Restoring it on another device merges by the same rule sync will use, so nothing is lost by restoring an old file over a newer collection, and restoring twice changes nothing.</p>
     <div class="row">
       <button id="bk-export" class="btn pri" onclick={doExport} disabled={!collection.ready || !!exporting}>{exporting ?? 'Download backup'}</button>
       {#if exported}<span class="ok">Saved <span class="mono">{exported.name}</span>, {mb(exported.bytes)}. Put it somewhere that is not this device.</span>{/if}
@@ -198,6 +198,10 @@
           <span class="bad">The file is stored in full first; then everything on this device is replaced by it{#if sync.configured}, and sync is turned off (a synced vault would merge straight back in; you can create a new vault or re-join afterwards){/if}. Sure?</span>
           <button id="bk-replace-yes" class="btn danger" onclick={() => doRestore('replace')} disabled={!!busy}>Yes, replace</button>
           <button class="btn" onclick={() => (confirmReplace = false)}>Keep</button>
+        {:else if opened.file.unreadable.length}
+          <!-- A replacement is the file and nothing else: a change this build cannot read would be gone for good (round forty-nine, 1). -->
+          <button id="bk-replace" class="btn" disabled title="Not offered for a file with changes this version cannot read">Replace this device with the file</button>
+          <span class="muted" id="bk-replace-why">Replacing is not offered for this file: {opened.file.unreadable.length === 1 ? 'a change' : `${opened.file.unreadable.length} changes`} in it cannot be read by this version and would be lost for good. Merge keeps {opened.file.unreadable.length === 1 ? 'it' : 'them'} in the file.</span>
         {:else}
           <button id="bk-replace" class="btn" onclick={() => (confirmReplace = true)} disabled={!!busy}>Replace this device with the file</button>
         {/if}

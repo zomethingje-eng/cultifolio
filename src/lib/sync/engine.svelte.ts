@@ -36,11 +36,11 @@
  * what records mention that we lack.
  */
 import { collection } from '$lib/db/collection.svelte';
-import { StoppedError, getMeta, setMeta, setMetaIfKey, getPhotoBlobs, putPhotoBlobs, photoBlobIds, outboxKeys, outboxAck, outboxFill, outboxClear, changesByKeys, allChanges, appendChanges, onOtherTabWrite, announceSyncForgotten } from '$lib/db/vault';
+import { StoppedError, getMeta, setMeta, setMetaIfKey, getPhotoBlobs, putPhotoBlobs, deletePhotoBlobs, photoBlobIds, outboxKeys, outboxAck, outboxFill, outboxClear, changesByKeys, allChanges, appendChanges, onOtherTabWrite, announceSyncForgotten } from '$lib/db/vault';
 import { deriveKeys, sealJson, openJson, seal, open, packPhoto, unpackPhoto, parseVaultKey, batchFingerprint, sha256hex, type VaultKeys } from './crypto';
 import { MAX_BATCH_BYTES, MAX_PHOTO_BYTES, SEAL_OVERHEAD, OVERLAP_MS, CURSOR_SLACK_MS, PUSH_HEADERS, batchName, listAfter, logBatch } from './limits';
 import { readChanges, isHeld, dueAt, hlcWall, type Change } from '$core/log';
-import { hlcCompare, MAX_AHEAD_MS } from '$core/hlc';
+import { hlcCompare, MAX_AHEAD_MS, nowMs, trustServerTime, clockOffsetMs } from '$core/hlc';
 import { version as BUILD } from '$app/environment';
 
 interface SyncMeta {
@@ -63,6 +63,8 @@ interface SyncMeta {
   /** The server said the vault is full: what it held and the limit, in bytes. Cleared when a push is taken again. */
   vaultFull?: { bytes: number; limit: number; at: string };
   photosPushed: string[];
+  /** Removed photographs whose ciphertext this device has asked the server to drop, or found gone (round forty-nine, 1). */
+  photosDropped?: string[];
   lastSync: string | null;
 }
 
@@ -97,6 +99,8 @@ export function cutBefore(list: Change[], at: number): number {
 const WAS = 'sync-was';
 const BATCH_MAX = 2000;
 /** While the page is visible, pull this often even with nothing to push: a laptop left on /plants follows the phone. */
+/** The Web Lock one browser's tabs take turns on. */
+const SYNC_LOCK = 'cultifolio-sync';
 const IDLE_PULL_MS = 5 * 60_000;
 
 const utf8 = new TextEncoder();
@@ -340,7 +344,7 @@ class Sync {
   /* ---- held changes and the clock ---- */
 
   private hold() {
-    return { now: Date.now(), except: collection.device };
+    return { now: nowMs(), except: collection.device };
   }
 
   /**
@@ -383,9 +387,16 @@ class Sync {
   }
 
   private warnClock(ownLast: string): void {
-    if (ownLast && hlcWall(ownLast) > Date.now() + MAX_AHEAD_MS) {
+    if (ownLast && hlcWall(ownLast) > nowMs() + MAX_AHEAD_MS) {
       const until = new Date(hlcWall(ownLast));
       this.clockWarning = `This device's clock appears to have jumped back; edits it made before ${until.toLocaleString()} keep their stamps, and a later edit to the same field is stamped just past them.`;
+    } else if (Math.abs(clockOffsetMs()) > 0) {
+      // The device clock disagrees with the server's by more than half a minute: changes are stamped by the server's
+      // time while this device syncs, and the warning says so, since the device's own clock is what the grower sees (round forty-nine, 1).
+      const off = clockOffsetMs();
+      const mins = Math.round(Math.abs(off) / 60_000);
+      const by = mins >= 120 ? `${Math.round(mins / 60)} hours` : mins >= 2 ? `${mins} minutes` : 'about a minute';
+      this.clockWarning = `This device's clock is ${by} ${off > 0 ? 'behind' : 'ahead of'} the server's; changes made here are stamped by the server's time until it is set right.`;
     }
   }
 
@@ -409,6 +420,19 @@ class Sync {
   }
 
   async run(): Promise<void> {
+    if (!this.configured || !this.keys || !this.meta || this.busy) return;
+    // One run per browser at a time: two tabs each pushing and pulling the same vault with their own copy of the cursor
+    // and the arrival list wrote the sync record over each other, and one tab's pull could be listed as had by the other
+    // before it was stored (round forty-nine, 1). The other tab's run is tried again when the lock is free.
+    const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
+    if (!locks) return this.runLocked();
+    await locks.request(SYNC_LOCK, { ifAvailable: true }, async (lock) => {
+      if (lock) await this.runLocked();
+      else this.schedule(4000);
+    });
+  }
+
+  private async runLocked(): Promise<void> {
     if (!this.configured || !this.keys || !this.meta || this.busy) return;
     // The generation this run belongs to: "Stop syncing" or a new vault during the run makes it stale, and a stale run
     // leaves the status, the busy flag and the run count to the vault that replaced it (round sixteen, 2).
@@ -683,6 +707,10 @@ class Sync {
       // The clock the arrivals are judged against is the server's own, from the answer's Date header, not this device's:
       // a device clock far behind the server made every arrival look far ahead and parked the cursor for good (round forty, R1-6).
       const serverNow = Date.parse(r.headers.get('date') ?? '') || Date.now();
+      // And the clock holds are judged by, from here on: a device set years ahead stamped its changes so, judged
+      // them against its own clock and saw nothing wrong, while every other device held them (round forty-nine, 1).
+      const wasOff = clockOffsetMs();
+      if (trustServerTime(serverNow) !== wasOff) { if (clockOffsetMs() === 0) this.clockWarning = null; this.warnClock(''); }
       const have = new Set(m.have);
       const fresh = batches.filter((b) => !have.has(b.key));
       let n = 0;
@@ -779,9 +807,34 @@ class Sync {
       }
       await this.save(m);
     }
+    await this.dropRemoved(m, have);
     return got;
   }
+
+  /**
+   * A removed photograph's pixels are bytes nothing names: they go from this device, and the server is asked to drop
+   * its copy once the removal is old enough that an Undo is past (round forty-nine, 1). The server's 404 counts as
+   * done. The id leaves `photosPushed`, so a record brought back later is pushed again from a device that kept the pixels.
+   */
+  private async dropRemoved(m: SyncMeta, have: Set<string>): Promise<void> {
+    const dropped = new Set(m.photosDropped ?? []);
+    let changed = false;
+    for (const { id, at } of collection.removedPhotos()) {
+      if (have.has(id)) { await deletePhotoBlobs(id).catch(() => {}); collection.forgetPhotoUrls(id); }
+      if (dropped.has(id) || nowMs() - at < DROP_AFTER_MS) continue;
+      const r = await fetch(`${this.base}/api/sync/photo/${id}?vault=${this.k(m).id}`, { method: 'DELETE', headers: this.h(m) });
+      if (r.status === 429) this.limited(r);
+      if (!r.ok && r.status !== 404) throw new Error(`photo ${id} removal: ${r.status}`);
+      if (this.meta !== m) throw stopped();
+      (m.photosDropped ??= []).push(id);
+      m.photosPushed = m.photosPushed.filter((x) => x !== id);
+      changed = true;
+    }
+    if (changed) await this.save(m);
+  }
 }
+/** How old a photograph's removal must be before the server is asked to drop the bytes: past any Undo. */
+const DROP_AFTER_MS = 10 * 60_000;
 
 const stopped = () => new StoppedError();
 /** A full vault is probed with a photograph at most this often. */

@@ -139,6 +139,7 @@ test('add a plant, record an event, survive a reload', async ({ page }) => {
   await page.goto('/plants/new');
   await page.fill('#species-name', 'Copiapoa cinerea');
   await page.locator('#species-name').blur();
+  await page.locator('details.moredetails > summary').click(); // the short form is the species, the place and the date (round forty-nine, 3)
   await page.fill('#f-field', 'KK 1462');
   await page.selectOption('#f-prov', 'f1');
   await page.getByRole('button', { name: /^Add/ }).click();
@@ -199,9 +200,13 @@ test('benches: make a place, put a plant there, water the bench, audit it', asyn
   await expect(page.locator('.toast')).toContainText('Watered 1 plant.');
   // audit: tick it present
   await page.getByRole('button', { name: 'Audit' }).click();
-  await page.locator('label.row input[type=checkbox]').check();
+  // Cancel with a tick made asks first; Tick all ticks the bench (round forty-nine, 3)
+  await page.getByRole('button', { name: 'Tick all' }).click();
+  await expect(page.locator('label.row input[type=checkbox]')).toBeChecked();
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.getByRole('button', { name: 'Keep going' }).click();
   await page.getByRole('button', { name: 'Finish audit' }).click();
-  await expect(page.getByText('1 present.')).toBeVisible();
+  await expect(page.locator('#audit-result')).toContainText('1 present.');
   await expect(page.getByText(/seen today/)).toBeVisible();
   // the plant's timeline has both entries
   await page.locator('.rows a.row', { hasText: 'Tylecodon' }).first().click();
@@ -407,7 +412,8 @@ test('backup: export a zip, wipe the device, restore it, and the collection is i
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   const acc = page.url().split('/').pop()!;
-  await page.getByRole('button', { name: 'Water', exact: true }).click();
+  await page.getByRole('button', { name: 'Log', exact: true }).click();
+  await page.selectOption('#ev-type', 'water');
   await page.fill('#ev-note', 'first drink');
   await page.getByRole('button', { name: 'Record' }).click();
   const jpeg = await page.screenshot({ type: 'jpeg', quality: 70 });
@@ -575,8 +581,7 @@ test('labels: pick plants, choose a sheet, print at true size with a code that o
 test('the species page condenses its cultivation sheet into a note by rule', async ({ page }) => {
   await page.goto('/species/copiapoa-cinerea');
   await expect(page.locator('#gen-note')).toContainText('condensed by rule');
-  await expect(page.locator('#gen-note')).not.toHaveAttribute('open', ''); // closed at rest: the four figures above say it
-  await page.locator('#gen-note summary').click();
+  await expect(page.locator('#gen-note')).toHaveAttribute('open', ''); // open at rest: the paragraph a grower reads first (round forty-nine, 3)
   await expect(page.locator('#gen-note .body')).toContainText("Rain rule: no rainy season to read (72 mm a year); the temperature rule's cooler six months are November to April in the northern hemisphere.");
   await expect(page.locator('#gen-note .body')).not.toContainText(/fog/);
   await expect(page.locator('#gen-note .body')).toContainText('Cold floor 6.5 °C (1st-percentile habitat night, NASA POWER).');
@@ -638,7 +643,8 @@ test('sync: two devices share one encrypted vault; changes and photos cross both
   await a.getByRole('button', { name: /^Add/ }).click();
   await expect(a).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   const acc = a.url().split('/').pop()!;
-  await a.getByRole('button', { name: 'Water', exact: true }).click();
+  await a.getByRole('button', { name: 'Log', exact: true }).click();
+  await a.selectOption('#ev-type', 'water');
   await a.fill('#ev-note', 'from device A');
   await a.getByRole('button', { name: 'Record' }).click();
   await expect(a.locator('.tlrow', { hasText: 'from device A' })).toBeVisible(); // Record awaits the write; the test waits for the row before moving on (round fourteen, B1)
@@ -757,7 +763,8 @@ test('sync: an offline edit uploaded late is still discovered, and a backup merg
   await expect.poll(async () => b.evaluate(async () => { for (const n of await caches.keys()) if (await (await caches.open(n)).match('/plants')) return true; return false; }), { timeout: 30000 }).toBe(true);
   await B.setOffline(true);
   await expect(b.getByRole('button', { name: 'Water', exact: true })).toBeVisible({ timeout: 20000 }); // the offline page renders from the vault; under load that takes longer than the default wait
-  await b.getByRole('button', { name: 'Water', exact: true }).click();
+  await b.getByRole('button', { name: 'Log', exact: true }).click();
+  await b.selectOption('#ev-type', 'water');
   await b.fill('#ev-note', 'B, offline, first');
   await b.getByRole('button', { name: 'Record' }).click();
   await expect(b.locator('.tlrow', { hasText: 'B, offline, first' })).toBeVisible();
@@ -1125,7 +1132,7 @@ test('long and unicode names: nothing overflows at 360 px, the number chip never
     await page.goto('/plants/new');
     await page.fill('#species-name', name);
     await page.locator('#species-name').blur();
-    if (field) await page.fill('#f-field', field);
+    if (field) { await page.locator('details.moredetails > summary').click(); await page.fill('#f-field', field); }
     await addPlant(page);
     return page.url().split('/').pop()!;
   };
@@ -1169,8 +1176,7 @@ test('removing asks twice; a species photograph that fails to load leaves the na
   await expect(page.locator('.hero .ph')).toContainText('The photograph did not load');
   // a log entry: × then Remove?; the plant: Remove then Yes
   await page.goto(`/plants/${acc}`);
-  await page.getByRole('button', { name: 'Water', exact: true }).click();
-  await page.getByRole('button', { name: 'Record', exact: true }).click();
+  await page.getByRole('button', { name: 'Water', exact: true }).click(); // one tap, no form (round forty-nine, 3)
   await expect(page.locator('.tlrow', { hasText: 'Watered' })).toBeVisible();
   await page.locator('.tlrow', { hasText: 'Watered' }).getByRole('button', { name: 'Remove this entry' }).click();
   await expect(page.locator('.tlrow', { hasText: 'Watered' })).toBeVisible();
@@ -1567,7 +1573,6 @@ test('at 390 px every tap target is a finger wide: top-bar icons, breadcrumb, se
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   await page.getByRole('button', { name: 'Water', exact: true }).click();
-  await page.getByRole('button', { name: 'Record', exact: true }).click();
   await expect(page.locator('.tlrow', { hasText: 'Watered' })).toBeVisible();
   await expect(page.locator('.crumb a')).toBeVisible();
   expect(await sample()).toEqual([]);
@@ -1646,6 +1651,9 @@ test('the share card is a PNG with the figures and the link drawn in, and is off
 
 test('a grower\'s home says what needs them: sowings in the tray and plants without a photograph, each a link', async ({ page }) => {
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  // acquired seven months ago: the photograph line counts records older than six months, not a plant filed today (round forty-nine, 3)
+  const ago = new Date(); ago.setMonth(ago.getMonth() - 7);
+  await page.fill('#f-date', `${ago.getFullYear()}-${String(ago.getMonth() + 1).padStart(2, '0')}-${String(ago.getDate()).padStart(2, '0')}`);
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   await page.goto('/');
@@ -1658,7 +1666,8 @@ test('a grower\'s home says what needs them: sowings in the tray and plants with
   // a plant last watered a month ago, by its log: Today says so, in the words of the plants list's Due chip (round twenty-four, 11)
   await expect(today).toHaveCount(0);
   await page.locator('.accrow').first().click();
-  await page.locator('.quickbar .btn', { hasText: /^Water$/ }).click();
+  await page.locator('.quickbar .btn', { hasText: /^Log$/ }).click(); // a dated watering goes through Log; Water is one tap for today (round forty-nine, 3)
+  await page.selectOption('#ev-type', 'water');
   // exactly twenty-one days: the boundary the chip's "21+" and Today's "three weeks or more" both include (round twenty-five, 2)
   const d = new Date(); d.setDate(d.getDate() - 21);
   const threeWeeks = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -1677,7 +1686,8 @@ test('a grower\'s home says what needs them: sowings in the tray and plants with
   await expect(page.locator('.accrow')).toHaveCount(1);
   // a future-dated line is refused with a sentence and never becomes the last watering (round twenty-five, 1)
   await page.locator('.accrow').first().click();
-  await page.locator('.quickbar .btn', { hasText: /^Water$/ }).click();
+  await page.locator('.quickbar .btn', { hasText: /^Log$/ }).click();
+  await page.selectOption('#ev-type', 'water');
   await page.fill('#ev-date', '2099-01-01');
   await page.locator('.evform button[type=submit]').click();
   await expect(page.locator('#ev-bad')).toContainText('2099-01-01 is in the future');
@@ -2126,6 +2136,7 @@ test('a place chosen on the add form while the reference is still answering is k
 
 test('a species page you grow six of does not scroll sideways on a phone (round seventeen, 11)', async ({ page }) => {
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.locator('details.moredetails > summary').click();
   await page.fill('#f-count', '6');
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants$/);
@@ -2198,6 +2209,7 @@ test('round twenty-three: a name the reference does not hold is added on the sec
   await page.getByRole('button', { name: 'Start batch' }).click();
   await expect(page).toHaveURL(/\/propagation\/S\d{4}-001$/);
   await page.getByRole('button', { name: 'Mark failed' }).click();
+  await page.getByRole('button', { name: 'Yes, mark failed' }).click(); // asks first (round forty-nine, 3)
   await expect(page.locator('.toast')).toContainText('Marked failed');
   await expect(page.locator('.tlrow', { hasText: 'Marked failed' })).toBeVisible();
   await expect(page.locator('.pill', { hasText: 'failed' }).first()).toBeVisible();
@@ -2502,6 +2514,14 @@ test('round forty: on "Your species" the search box stays on the device; the cat
   await expect(page.locator('a.tile .nm', { hasText: 'Copiapoa humilis' })).toBeVisible();
   expect(searches.length).toBeGreaterThan(0);
   expect(page.url()).toContain('q=copiapoa');
+  // On the catalogue view too, a plant's number and anything shaped like one stays on the device (round forty-nine, 3; round thirty-five, R1-2).
+  const sent = searches.length;
+  await page.fill('.searchbar', '2026-0001');
+  await expect(page.locator('.plantsfound .accrow')).toHaveCount(1);
+  await page.fill('.searchbar', '2031-07');
+  await page.waitForTimeout(500);
+  expect(searches.length).toBe(sent);
+  expect(page.url()).not.toContain('q=');
   // Punctuation an iPhone types is not a refusal (R1-1).
   await page.fill('.searchbar', 'copiapoa, ’cinerea’');
   await expect(page.locator('a.tile')).toHaveCount(1);
@@ -2624,14 +2644,26 @@ test('round forty-eight: on a phone the search row stays pinned through the list
 });
 
 test('round forty-eight: a window opened partway (a letter, ?at=) fills in the rows before it as the reader scrolls up, and the list is whole (2)', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 480 }); // short enough that the fixture's one-row list can be scrolled up under the bar
   const res = await page.goto('/?at=2');
   expect(res?.status()).toBe(200);
-  // the server's window starts at the third row; the rows before it come from the API as soon as the top is near
+  // the server's window starts at the third row; the rows before it come from the API once the reader is within the
+  // rows, not while the chips and the letters above them are what is on screen (round forty-nine, 2: a jump to W on the
+  // live site filled all the way to A and landed there)
   await expect(page.locator('.rows .grow').first()).toContainText('Welwitschia');
+  await page.waitForTimeout(700);
+  await expect(page.locator('.rows .grow')).toHaveCount(1);
+  await expect(page.locator('.rows .before')).toHaveCount(1);
+  // the reader scrolls the rows up under the pinned bar: the fill runs, and the row they were looking at stays where it was
+  await page.evaluate(() => { const r = document.querySelector('.rows .grow')!.getBoundingClientRect(); window.scrollTo(0, window.scrollY + r.top - 100); });
+  const before = await page.locator('.rows .grow', { hasText: 'Welwitschia' }).boundingBox();
   await expect(page.locator('.rows .grow')).toHaveCount(3);
   await expect(page.locator('.rows .grow').first()).toContainText('Copiapoa');
   await expect(page.locator('.rows .before')).toHaveCount(0); // nothing earlier is left
   await expect(page.locator('.rows h2.letter').first()).toContainText('C');
+  await page.waitForTimeout(200);
+  const after = await page.locator('.rows .grow', { hasText: 'Welwitschia' }).boundingBox();
+  expect(Math.abs(after!.y - before!.y)).toBeLessThan(4);
 });
 
 test('round forty-eight: a letter tapped on a phone lands with its heading just under the pinned search row (4)', async ({ page }) => {
@@ -2649,4 +2681,61 @@ test('round forty-eight: a letter tapped on a phone lands with its heading just 
   const under = await page.evaluate(() => { const head = document.querySelector<HTMLElement>('.stickyhead')!; const row = document.querySelector<HTMLElement>('.stickyhead .toolrow')!; return [head.offsetHeight, row.offsetHeight]; });
   expect(under[0]).toBe(0);
   expect(under[1]).toBeGreaterThan(60);
+});
+
+test('round forty-nine: Water is one tap with an Undo, on the plant page and on the list; Archive asks first (3)', async ({ page }) => {
+  await page.goto('/species/copiapoa-cinerea');
+  await page.getByRole('link', { name: 'Add one to my plants' }).click();
+  await addPlant(page);
+  const acc = page.url().split('/').pop()!;
+  // the plant page: one tap writes the line; Undo takes it back
+  await page.getByRole('button', { name: 'Water', exact: true }).click();
+  await expect(page.locator('.tlrow', { hasText: 'Watered' })).toHaveCount(1);
+  await page.getByRole('button', { name: 'Undo' }).click();
+  await expect(page.locator('.tlrow', { hasText: 'Watered' })).toHaveCount(0);
+  // the list: the row's own button, without opening the page
+  await page.goto('/plants');
+  await page.getByRole('button', { name: `Record ${acc} watered today` }).click();
+  await expect(page.locator('a.accrow .fig', { hasText: 'watered today' })).toBeVisible();
+  await page.getByRole('button', { name: 'Undo' }).click();
+  await expect(page.locator('a.accrow .fig', { hasText: 'no watering recorded' })).toBeVisible();
+  // Archive asks; Keep leaves the plant growing
+  await page.goto(`/plants/${acc}`);
+  await page.locator('.quickbar .more').click();
+  await page.getByRole('button', { name: 'Archive', exact: true }).click();
+  await page.getByRole('button', { name: 'Keep' }).click();
+  await expect(page.locator('.tlrow', { hasText: 'Archived' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Archive', exact: true }).click();
+  await page.getByRole('button', { name: 'Yes, archive' }).click();
+  await expect(page.locator('.tlrow', { hasText: 'Archived' })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Mark growing' })).toBeVisible();
+});
+
+test('round forty-nine: a place takes plants in from a ticked list, in one commit, each with its move line (3)', async ({ page }) => {
+  await page.goto('/places');
+  await page.getByRole('button', { name: 'New place' }).click();
+  await page.fill('#loc-name', 'Cold frame');
+  await page.selectOption('#loc-kind', 'room');
+  await page.getByRole('button', { name: 'Add', exact: true }).click();
+  await expect(page.locator('.tree .row', { hasText: 'Cold frame' })).toBeVisible();
+  const accs: string[] = [];
+  for (const n of ['Copiapoa cinerea', 'Welwitschia mirabilis']) {
+    await page.goto('/plants/new');
+    await page.fill('#species-name', n);
+    await page.locator('#species-name').blur();
+    await addPlant(page);
+    accs.push(page.url().split('/').pop()!);
+  }
+  await page.goto('/places');
+  await page.locator('.tree .row', { hasText: 'Cold frame' }).click();
+  await page.getByRole('button', { name: 'Move plants here' }).click();
+  await page.fill('.movein .searchbar', 'welw');
+  await expect(page.locator('.moverows label.row')).toHaveCount(1);
+  await page.locator('.moverows label.row input').check();
+  await page.getByRole('button', { name: /^Move 1$/ }).click();
+  await expect(page.locator('.toast')).toContainText('Moved 1 plant to Cold frame');
+  await expect(page.locator('.rows a.row', { hasText: 'Welwitschia' })).toBeVisible();
+  await expect(page.locator('.rows a.row', { hasText: 'Copiapoa' })).toHaveCount(0);
+  await page.locator('.rows a.row', { hasText: 'Welwitschia' }).click();
+  await expect(page.locator('.tlrow', { hasText: 'to Cold frame' })).toBeVisible();
 });

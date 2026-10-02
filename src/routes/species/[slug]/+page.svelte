@@ -292,7 +292,8 @@
         {#if d.climate.status === 'ok' && d.climate.records < 12}<p class="small muted thinline">Under a dozen records behind these figures ({d.climate.records}): treat them as indicative. <a href="#s-habitat">The records.</a></p>{/if}
       {/if}
       {#if note}
-        <details class="cult acc notecard" id="gen-note">
+        <!-- Open from the start: it is the one paragraph a grower reads first, and it was the one thing on the page folded shut (round forty-nine, 3; S1). -->
+        <details class="cult acc notecard" id="gen-note" open>
           <summary><span class="t">In short</span><span class="one">the figures as one paragraph, condensed by rule from the cultivation cards · not written by a person</span><span class="pm" aria-hidden="true"><span class="pmw">open</span></span></summary>
           <div class="body">{note.text}</div><div class="foot">Each sentence is one card's own one-line form, written by the same rule as the card ({note.from.map((c) => (c === 'Temperature' || c === 'Humidity' ? 'Warmth and air' : c)).filter((c, i, a) => a.indexOf(c) === i).join(', ')}); the note cannot say what a card does not. {#if note.hab}Months are given for {readerLat != null && readerLat < 0 ? 'the southern' : 'the northern'} hemisphere{readerLat == null ? ' (set your site in ' : site.current || !site.loaded ? ', from your site' : ', from your places'}{#if readerLat == null}<a href="/settings#site">Settings</a> to change this){/if}, and the habitat's own alongside.{/if} <a href="#s-cultivation">The cards</a> · <a href="#s-climate">the figures</a>.</div>
         </details>
@@ -369,7 +370,7 @@
           <details class="why">
             <summary>How this is read</summary>
             <div class="whybody">
-              <p class="hintline">{c.rows.some((r) => r.hab) ? (c.title === 'Its year' ? 'This species’ habitat figures, and what two fixed rules read from them.' : 'This species’ habitat figures, with their source.') : 'The archetype table’s figure; no habitat figure for this species.'}</p>
+              <p class="hintline">{c.rows.some((r) => r.hab) ? (c.title === 'Its year' ? 'This species’ habitat figures, and what two fixed rules read from them.' : c.title === 'Light' ? 'This species’ habitat light, with its source.' : c.title === 'Warmth and air' ? 'This species’ habitat warmth and air, with their source.' : 'This species’ habitat figures, with their source.') : 'The archetype table’s figure; no habitat figure for this species.'}</p>
               {#each c.rows as r}<p class="whyline">{#if c.rows.length > 1}<b>{r.k}.</b> {/if}{r.why}</p>{/each}
             </div>
           </details>
@@ -490,7 +491,7 @@
   {#if data.siblings.length || data.near.length}
     <h2 class="sec" id="s-related">Related</h2>
     {#if data.near.length}
-      <p class="relhead"><b>Similar habitat climate</b> <span class="small muted">the {data.near.length} species whose habitat climate is nearest this one's: mean day and night, month by month, and rain on a log scale, in calendar order, so a habitat with the same seasons six months out is far, not near. Nothing else counts: not range, not family.</span></p>
+      <p class="relhead"><b>Similar habitat climate</b> <span class="small muted">The {data.near.length} species whose habitat climate is nearest this one's: mean day and night, month by month, and rain on a log scale, in calendar order, so a habitat with the same seasons six months out is far, not near. Nothing else counts: not range, not family.</span></p>
       <div class="relstrip">
         {#each data.near as c (c.key)}{@render rel(c)}{/each}
       </div>
@@ -519,7 +520,9 @@
 </article>
 
 <style>
-  .deep > :global(*) { content-visibility: auto; contain-intrinsic-size: auto 480px; }
+  /* A placeholder height only: the shorthand gave the unrendered sections a 480px width too, which on a phone narrower
+     than that was a horizontal scroll until they rendered (round forty-nine, 2; round twenty-seven, 4). */
+  .deep > :global(*) { content-visibility: auto; contain-intrinsic-width: none; contain-intrinsic-height: auto 480px; }
   .thinline { margin: 6px 0 0; }
   .myph { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-top: 10px; }
   .myph .ph { position: relative; display: block; padding: 0; border: 0; background: var(--sunk); border-radius: 9px; overflow: hidden; aspect-ratio: 1; cursor: zoom-in; box-shadow: var(--sh); }
@@ -597,5 +600,6 @@
   .archwhy { margin: 0 0 10px; }
   .names { margin: 0 0 8px; }
 
-  @media (max-width: 640px) { .hero { margin-top: 0; } .hero.photo { height: 150px; } .hero.photo img { height: 100%; max-height: none; } }
+  /* The failed-photograph line takes the photograph's own box on a phone, not a 200px one of its own: the page below did not move when it failed (round forty-nine, 3; S2). */
+  @media (max-width: 640px) { .hero { margin-top: 0; } .hero.photo { height: 150px; } .hero.photo img { height: 100%; max-height: none; } .hero .ph { height: 150px; } }
 </style>
