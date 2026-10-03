@@ -305,8 +305,10 @@ async function issuedIn(tx: Tx, kind: NumberKind): Promise<Set<string>> {
 export interface Stored {
   kept: Change[];
   replaced: Change[];
-  /** The last arrival number this write took, 0 when it took none: a tab's own writes move its catch-up frontier past them (round fifty-four, 2). */
+  /** The last arrival number this write took, 0 when it took none. */
   seq: number;
+  /** The first arrival number this write took, 0 when it took none: a tab moves its catch-up frontier over its own write only when the write's rows follow the frontier with no gap, since a gap is another tab's row it has not folded (round fifty-five, 1; both reviewers). */
+  first: number;
 }
 export class StoppedError extends Error {
   constructor() {
@@ -387,7 +389,8 @@ async function storeIn(tx: Tx, changes: Change[], fromServer: boolean, extra: Pa
   }
   await Promise.all([...puts, tx.done]);
   const last = rows.length ? Number(await rows[rows.length - 1]) : 0;
-  return { kept, replaced, seq: last };
+  const first = rows.length ? Number(await rows[0]) : 0;
+  return { kept, replaced, seq: last, first };
 }
 const sameChange = (a: Change, b: Change) => a.kind === b.kind && a.id === b.id && a.field === b.field && JSON.stringify(a.value ?? null) === JSON.stringify(b.value ?? null);
 /** A total order on a change's content, for two under one stamp: the same on every device, whatever order they met them in. */
@@ -395,7 +398,7 @@ const rank = (c: Change) => `${c.kind}\0${c.id}\0${c.field}\0${JSON.stringify(c.
 
 /** Append changes; unless they came from the server (`fromServer`), they also go in the outbox to be pushed. One transaction, so the two stores cannot disagree. */
 export async function appendChanges(changes: Change[], fromServer = false, strict = false, requireKey?: string): Promise<Stored> {
-  if (!changes.length) return { kept: [], replaced: [], seq: 0 };
+  if (!changes.length) return { kept: [], replaced: [], seq: 0, first: 0 };
   const out = await writing(async () => {
     const db = await openVault();
     return storeIn(db.transaction(STORES, 'readwrite'), changes, fromServer, {}, strict, requireKey);
@@ -443,6 +446,8 @@ export type VaultNotice = 'written' | 'replaced' | 'refold' | 'sync-forgotten';
 function announce(what: VaultNotice = 'written'): void {
   try { chan?.postMessage(what); } catch { /* a closed channel is nothing to report */ }
 }
+/** Tell the other tabs to fold the log again: the inputs of the fold changed under them (a stamp parked; round fifty-five, 2). */
+export const announceRefold = () => announce('refold');
 /** Tell the other tabs something they must not sync through: the sync key was forgotten here (round fifteen, 2). */
 export const announceSyncForgotten = () => announce('sync-forgotten');
 /** Called when another tab wrote to the vault ('written'), replaced the whole collection ('replaced'), or stopped syncing ('sync-forgotten'). */
@@ -614,18 +619,36 @@ export async function readFold(): Promise<{ fold: FoldSnapshot; gen: number } | 
 export async function foldGen(): Promise<number> {
   return Number((await getMeta<number>(FOLD_GEN)) ?? 0);
 }
-/** Write the snapshot, unless the log changed under it since `gen` was read; false then, and nothing is written. */
+/** Write the snapshot, unless the log changed under it since `gen` was read, or the snapshot stored is a newer build's; false then, and nothing is written. */
 export async function writeFold(fold: FoldSnapshot, gen: number): Promise<boolean> {
   return writing(async () => {
     const tx = (await openVault()).transaction('meta', 'readwrite');
     const now = Number((await tx.store.get(FOLD_GEN)) ?? 0);
-    if (now !== gen) {
+    const had = (await tx.store.get(FOLD)) as FoldSnapshot | undefined;
+    // An old build's shell, still open after a deploy, must not overwrite the new build's snapshot, nor the new the old's
+    // back and forth: a build's id is its build time, and the newer one keeps the snapshot (round fifty-five, 2; the first reviewer's finding 14).
+    const newer = !!had?.build && /^\d+$/.test(had.build) && /^\d+$/.test(fold.build) && Number(had.build) > Number(fold.build);
+    if (now !== gen || newer) {
       await tx.done;
       return false;
     }
     await Promise.all([tx.store.put(fold, FOLD), tx.done]);
     return true;
   });
+}
+/** Park stamps and drop the snapshot in one transaction: a load between the two would fold a parked change into a snapshot it could then write (round fifty-five, 2; the first reviewer's finding 7). */
+export async function parkStamps(stamps: string[], drop = true): Promise<string[]> {
+  const all = await writing(async () => {
+    const tx = (await openVault()).transaction('meta', 'readwrite');
+    // A union with what is stored, read in the same transaction: two tabs parking at once must not write each other's stamps away.
+    const had = (await tx.store.get('parked')) as string[] | undefined;
+    const out = [...new Set([...(Array.isArray(had) ? had : []), ...stamps])];
+    await Promise.all([tx.store.put(out, 'parked'), ...(drop ? [dropFoldIn(tx)] : [])]);
+    await tx.done;
+    return out;
+  });
+  if (drop) announceRefold();
+  return all;
 }
 export async function dropFold(): Promise<void> {
   await writing(async () => {

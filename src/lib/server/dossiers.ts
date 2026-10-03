@@ -124,6 +124,7 @@ async function loadIndexNow(platform: Platform, fetch: Fetch): Promise<Loaded> {
     if (mObj) {
       const m = (await mObj.json().catch(() => null)) as unknown;
       if (isManifest(m)) { manifest = m; mEtag = mObj.etag || null; }
+      else console.warn('s/v2/manifest.json is not a manifest this build reads (no files, another version, or not JSON); the corpus is read without products');
     }
     // A manifest is adopted only with the index it names: one whose index is not there yet (an upload that landed the
     // manifest first) is not a corpus, and the top-level index must never be served under its id, where every cache
@@ -181,32 +182,64 @@ export async function getCorpus(platform: Platform, fetch: Fetch): Promise<{ id:
  * the map is cleared with the index. Null when the manifest names no such
  * product, or it cannot be read: the caller derives from the index then.
  */
-const products = new Map<string, Promise<unknown>>();
+/**
+ * Each entry: the promise, its size in characters once read, and for a file the bucket lacked, the moment it may be asked
+ * for again. The miss's minute runs from the miss, not from the last request that met it: a busy product renewed its
+ * miss for ever and an upload was never seen (round fifty-five, 4; the second reviewer's finding 5). A read that threw
+ * (R2 did not answer) is not remembered at all. The cache is bounded by size as well as count: one search shard can be
+ * tens of megabytes at fifty thousand species (the first reviewer's finding 21).
+ */
+type Held = { p: Promise<unknown>; size: number; retryAt?: number };
+const products = new Map<string, Held>();
 const PRODUCTS_HELD = 24;
+const PRODUCTS_BYTES = 24 * 1024 * 1024;
+const MISS_MS = 60_000;
 export async function product<T>(platform: Platform, fetch: Fetch, name: string): Promise<T | null> {
   const c = await loadIndex(platform, fetch);
   const m = c.manifest;
   if (!m) return null;
   if (!(name in (m.files ?? {}))) return null;
   const k = `${m.id}/${name}`;
-  let p = products.get(k);
-  if (!p) {
-    p = (async () => {
+  let h = products.get(k);
+  if (h?.retryAt !== undefined && Date.now() >= h.retryAt) { products.delete(k); h = undefined; }
+  if (!h) {
+    const held: Held = { p: Promise.resolve(null), size: 0 };
+    held.p = (async () => {
       const path = productPath(m.id, name);
       const store = platform?.env?.STORE;
+      let text: string | null = null;
       if (store) {
         const obj = await store.get(path);
-        if (obj) return obj.json();
+        if (obj) text = await obj.text();
       }
-      return c.fromStore ? null : staticJson<unknown>(fetch, path);
-    })().catch(() => null);
-    products.set(k, p);
-    if (products.size > PRODUCTS_HELD) products.delete(products.keys().next().value!);
+      if (text === null && !c.fromStore) { try { const r = await fetch(`/${path}`); if (r.ok) text = await r.text(); } catch { /* no static file */ } }
+      if (text === null) { held.retryAt = Date.now() + MISS_MS; return null; }
+      held.size = text.length;
+      trim(k);
+      return JSON.parse(text) as unknown;
+    })();
+    held.p.catch(() => { if (products.get(k) === held) products.delete(k); }); // a read that threw is not a miss to remember
+    products.set(k, held);
+    h = held;
+  } else {
+    products.delete(k); // most recently used last
+    products.set(k, h);
   }
-  const v = (await p) as T | null;
-  // A file the manifest names and the bucket lacks is remembered as lacking for a minute, not asked for on every request (round fifty-four, 3).
-  if (v === null) { const miss = Promise.resolve(null); products.set(k, miss); setTimeout(() => { if (products.get(k) === miss) products.delete(k); }, 60_000); }
-  return v;
+  try {
+    return (await h.p) as T | null;
+  } catch {
+    return null;
+  }
+}
+function trim(keep: string): void {
+  let total = 0;
+  for (const v of products.values()) total += v.size;
+  for (const [k, v] of products) {
+    if (products.size <= PRODUCTS_HELD && total <= PRODUCTS_BYTES) break;
+    if (k === keep) continue;
+    products.delete(k);
+    total -= v.size;
+  }
 }
 
 export async function getDossier(platform: Platform, fetch: Fetch, key: number): Promise<Dossier | null> {
@@ -325,7 +358,17 @@ export async function hasProducts(platform: Platform, fetch: Fetch): Promise<boo
   return !!(await loadIndex(platform, fetch)).manifest;
 }
 /** The whole index prepared for one request, under a manifest: for the near pass a shard cannot answer; not kept (round fifty-four, 3). */
+/** One whole-index preparation in flight per index at a time: concurrent misses share it, and it is let go when the last of them is answered (round fifty-five, 4; both reviewers). */
+let wholeInFlight: { idx: IndexEntry[]; p: Promise<Prepared<IndexEntry>[]>; users: number } | null = null;
 export async function searchWhole(platform: Platform, fetch: Fetch): Promise<Prepared<IndexEntry>[]> {
   const c = await loadIndex(platform, fetch);
-  return c.manifest ? prepare(c.idx) : searchIndex(c.idx);
+  if (!c.manifest) return searchIndex(c.idx);
+  if (!wholeInFlight || wholeInFlight.idx !== c.idx) wholeInFlight = { idx: c.idx, p: Promise.resolve().then(() => prepare(c.idx)), users: 0 };
+  const w = wholeInFlight;
+  w.users++;
+  try {
+    return await w.p;
+  } finally {
+    if (--w.users === 0 && wholeInFlight === w) wholeInFlight = null;
+  }
 }

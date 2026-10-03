@@ -192,7 +192,7 @@
             <span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}‘{a.cultivar}’{/if}</span>
             <span class="fam">{#if kindOf(a) !== 'species'}<span class="pill c">{kindOf(a)}</span>{/if}{#if a.fieldNumber}<span class="fnchip">{a.fieldNumber}</span>{/if}{#if a.locationId}<span>{collection.locationName(a.locationId)}</span>{:else if a.location}<span>{a.location}</span>{/if}{#if a.status !== 'growing'}<span class="pill">{a.status}</span>{/if}</span>
           </span>
-          <span class="fig" class:due={a.status === 'growing' && collection.careDays(a) >= DUE_DAYS}>{w == null ? 'no watering recorded' : w === 0 ? 'watered today' : `watered ${w} d ago`}</span>
+          <span class="fig" class:due={a.status === 'growing' && collection.careDays(a) >= DUE_DAYS && !collection.wateringAhead(a.id)}>{w == null ? collection.wateringWords(a) : w === 0 ? 'watered today' : `watered ${w} d ago`}</span>
         </a>
         <!-- The one thing done to a plant without opening its page: a watering today, with an Undo (round forty-nine, 3). -->
         {#if a.status === 'growing'}<button class="btn small wbtn" type="button" onclick={() => water(a)} disabled={watering === a.id} aria-label="Record {accNo(a)} watered today" title="Record watered today">Water</button>{/if}

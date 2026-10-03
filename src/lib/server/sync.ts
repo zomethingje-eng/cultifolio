@@ -639,6 +639,8 @@ export const RATE = {
   sheets: { limit: 200, windowMs: 600_000 },
   /** A catalogue search: a person typing makes a few a second for a few seconds, each answered from memory and cached at the edge, so only unique queries reach here; an office or a campus behind one address is many people (round forty, R1-3). */
   search: { limit: 3000, windowMs: 600_000 },
+  /** A search the shard found nothing for, tried over the whole index: a second of work at fifty thousand species, so few a minute (round fifty-five, 4; both reviewers). */
+  searchmiss: { limit: 60, windowMs: 600_000 },
   /** A species address the reference does not hold, asked of the backbone's match service: a person follows a few old labels an hour; a script could mint them without end (round thirty-three, 12). */
   match: { limit: 60, windowMs: 600_000 },
   /** The whole index: megabytes per answer, which no page needs (the catalogue and the search are served in windows), so a handful an hour is plenty (round fifty-one, 6). */

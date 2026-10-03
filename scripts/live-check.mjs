@@ -28,15 +28,24 @@ async function get(path, init = {}) {
 // deploy does); a page naming another build is the previous Worker still answering, and two pages agreeing is not proof
 // the deploy took (round fifty-four, 5; the second reviewer's finding 20).
 import { readdirSync, existsSync } from 'node:fs';
+// The build to expect: LIVE_CHECK_BUILD when given; else the output on disk, but only when it was built in the last
+// fifteen minutes (npm run deploy builds just before it checks). A build left on disk by a test run, or none (a fresh
+// clone), names no deploy, and the check then compares the two pages with each other only (round fifty-five, 6; both reviewers).
+import { statSync } from 'node:fs';
 const expectedBuild = (() => {
+  if (process.env.LIVE_CHECK_BUILD) return process.env.LIVE_CHECK_BUILD;
   try {
     const dir = '.svelte-kit/output/client/_app/immutable/entry';
     if (!existsSync(dir)) return '';
     const f = readdirSync(dir).find((x) => /^start\.[A-Za-z0-9_-]+\.js$/.test(x));
-    return f ? f.slice(6, -3) : '';
+    if (!f) return '';
+    if (Date.now() - statSync(`${dir}/${f}`).mtimeMs > 15 * 60_000) { console.log('  note  the build on disk is older than fifteen minutes: not taken for the deploy; set LIVE_CHECK_BUILD to name one'); return ''; }
+    return f.slice(6, -3);
   } catch { return ''; }
 })();
-if (expectedBuild) console.log(`  expecting build ${expectedBuild} (from the output on disk)`);
+if (expectedBuild) console.log(`  expecting build ${expectedBuild}`);
+// The whole check gives up after five minutes, however slow each answer (the second reviewer: thirteen twenty-second pairs could run near ten).
+setTimeout(() => { console.error('\nlive-check FAILED: the check did not finish within five minutes'); process.exit(1); }, 5 * 60_000).unref();
 function fail(what, r) {
   console.error(`\nlive-check FAILED: ${what}`);
   if (r) console.error(`  status ${r.status}; cache-control "${r.h('cache-control')}"; cf-cache-status "${r.h('cf-cache-status')}"; ${r.text.slice(0, 200).replace(/\s+/g, ' ')}`);
@@ -135,16 +144,17 @@ for (const path of ['/about/how', `/species/${species}`, '/offline', '/api/corpu
   // pair is asked for again a few seconds later, until one build answers both (round fifty-three, 4).
   const buildOf = (r) => /\/_app\/immutable\/entry\/start\.([A-Za-z0-9_-]+)\.js/.exec(r.text)?.[1] ?? '';
   let a, b;
+  const rolloverStart = Date.now();
   for (let tries = 0; ; tries++) {
     a = await get(path, { headers: { accept: 'text/html' } });
     b = await get(path, { headers: { accept: 'text/html' } });
     const agree = a.text === b.text || buildOf(a) === buildOf(b);
     const expected = !expectedBuild || (buildOf(a) === expectedBuild && buildOf(b) === expectedBuild);
-    if ((agree && expected) || tries >= 12) break;
+    if ((agree && expected) || tries >= 12 || Date.now() - rolloverStart > 90_000) break;
     console.log(`  note  ${path}: ${agree ? `build ${buildOf(a)} answering, expecting ${expectedBuild}` : `two builds answering (${buildOf(a)} and ${buildOf(b)})`}: the deploy is still rolling out; asking again in five seconds`);
     await new Promise((r) => setTimeout(r, 5000));
   }
-  if (expectedBuild && buildOf(b) !== expectedBuild) fail(`${path}: the page names build ${buildOf(b) || '?'}, not the build just deployed (${expectedBuild}); the deploy did not take, or a minute was not enough for the rollover`, b);
+  if (expectedBuild && buildOf(b) !== expectedBuild) fail(`${path}: the page names build ${buildOf(b) || '?'}, not the build just deployed (${expectedBuild}); the deploy did not take, or ninety seconds were not enough for the rollover`, b);
   if (!['rendered', 'held'].includes(a.h('x-cultifolio-page'))) fail(`${path}: the first request says neither rendered nor held (x-cultifolio-page "${a.h('x-cultifolio-page')}")`, a);
   if (b.h('x-cultifolio-page') !== 'held') fail(`${path}: the second request was not answered from the Worker's cache (x-cultifolio-page "${b.h('x-cultifolio-page')}")`, b);
   if (!/^private, max-age=60$/.test(b.h('cache-control'))) fail(`${path}: a held page must stay private to the browser`, b);
@@ -207,7 +217,7 @@ if (!skip.has('thumbs') && !process.env.LIVE_CHECK_FIXTURE_OK) {
   for (const host of ['api.gbif.org', 'inaturalist-open-data.s3.amazonaws.com']) {
     const e = idx.find((x) => x.thumb && x.thumb.includes(`https://${host}/`));
     if (!e) fail(`/api/index has no tile thumbnail on ${host}`, r);
-    const t = await fetch(e.thumb, { method: 'GET', headers: { 'user-agent': ua } });
+    const t = await fetch(e.thumb, { method: 'GET', signal: AbortSignal.timeout(20_000), headers: { 'user-agent': ua } });
     const type = t.headers.get('content-type') ?? '';
     if (t.status !== 200 || !type.startsWith('image/')) fail(`the tile thumbnail for ${e.name} (${e.thumb}) answered ${t.status} ${type}: the front page shows "photograph did not load" for every tile on ${host}`);
     ok(`tile thumbnail on ${host}: ${t.status} ${type}`);
@@ -247,7 +257,7 @@ if (!skip.has('weight') && !process.env.LIVE_CHECK_FIXTURE_OK) {
   if (!srcs.length) fail('the home page names no photographs to weigh');
   let total = 0;
   for (const u of srcs) {
-    const h = await fetch(u, { method: 'HEAD', headers: { 'user-agent': ua } }).catch(() => null);
+    const h = await fetch(u, { method: 'HEAD', signal: AbortSignal.timeout(20_000), headers: { 'user-agent': ua } }).catch(() => null);
     const len = Number(h?.headers.get('content-length') ?? 0);
     if (!h || h.status !== 200) fail(`a home-page photograph did not answer: ${u} (${h?.status ?? 'no response'})`);
     if (len > 300 * 1024) fail(`a home-page photograph weighs ${(len / 1024).toFixed(0)} kB, over the 300 kB a tile may: ${u}`);

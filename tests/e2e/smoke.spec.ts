@@ -3009,10 +3009,12 @@ test('round fifty-three: the Today tab lists what needs you by place, "no wateri
   await expect(page.locator('#frost tr.frost')).toHaveCount(1);
   // Water here: one line per plant on the stop, dated today (the shifted today); the stop stays where it was, marked, with its own Undo (round fifty-four, 4)
   await page.locator('#water .stop', { hasText: 'Bench' }).getByRole('button', { name: 'Water 2 here' }).click();
-  await expect(page.locator('.toast')).toContainText('Watered 2 plants at Bench');
-  await expect(page.locator('#water .stop', { hasText: 'Bench' }).locator('.done')).toContainText('Watered 2');
+  await expect(page.locator('.toast')).toContainText('Watered 2 plants at Bench; Undo is on the stop');
+  await expect(page.locator('#water .stop', { hasText: 'Bench' }).locator('.row.done')).toContainText('Watered just now');
+  await expect(page.locator('#water .stop', { hasText: 'Bench' }).locator('.row.done a')).toHaveCount(2); // the watered plants stay on the stop, so it keeps its height (round fifty-five, 5)
+  await expect(page.locator('.toast').getByRole('button', { name: 'Undo' })).toHaveCount(0); // the toast has no Undo of its own: it sits where the next stop's button was
   await expect(page.locator('#nothing')).toHaveCount(0);
-  await page.locator('#water .stop', { hasText: 'Bench' }).locator('.done').getByRole('button', { name: 'Undo' }).click();
+  await page.locator('#water .stop', { hasText: 'Bench' }).getByRole('button', { name: 'Undo' }).click();
   await expect(page.locator('#water .stop', { hasText: 'Bench' }).getByRole('button', { name: 'Water 2 here' })).toBeVisible();
   // the old address
   await page.goto('/frost');
@@ -3068,7 +3070,7 @@ test('round fifty-four: a Today page left open overnight dates the morning\'s wa
   await page.evaluate(() => { (globalThis as { __shift?: number }).__shift = 26 * 86_400_000; }); // past midnight, by the clock; the day store notices within a minute, the tap reads it then
   await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
   await stop.getByRole('button', { name: /^Water 2 here$/ }).click();
-  await expect(stop.locator('.done')).toContainText('Watered 2');
+  await expect(stop.locator('.row.done a')).toHaveCount(2);
   const d = new Date(Date.now() + 26 * 86_400_000);
   const expectDay = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   await page.goto(`/plants/${second}`);
@@ -3085,5 +3087,48 @@ test('round fifty-four: a Today page left open overnight dates the morning\'s wa
   await page.goto('/today');
   await expect(page.locator('#water .stop .row.ahead')).toContainText(aheadDay);
   await expect(page.locator('#water .stop .row.unknown')).toHaveCount(0);
+  await C.close();
+});
+
+test('round fifty-five: a watered stop keeps its height and the next stop does not move under the finger; the Undo survives a trip to another tab (5)', async ({ browser }) => {
+  const C = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 844 }, hasTouch: true });
+  await C.addInitScript(() => { const real = Date.now; const OD = Date; let shift = 0; try { shift = Number(localStorage.getItem('__shift') ?? 0); } catch { /* none */ } (globalThis as { __shift?: number }).__shift = shift; globalThis.Date = class extends OD { constructor(...args: unknown[]) { if (args.length === 0) super(real() + ((globalThis as { __shift?: number }).__shift ?? 0)); else super(...(args as [number])); } static now() { return real() + ((globalThis as { __shift?: number }).__shift ?? 0); } } as DateConstructor; });
+  const page = await C.newPage();
+  await page.goto('/places');
+  for (const name of ['Bench A', 'Bench B']) {
+    await page.getByRole('button', { name: 'New place' }).click();
+    await page.fill('#loc-name', name);
+    await page.selectOption('#loc-kind', 'bench');
+    await page.getByRole('button', { name: 'Add', exact: true }).click();
+    await expect(page.locator('.tree .row', { hasText: name })).toBeVisible();
+  }
+  for (const name of ['Bench A', 'Bench A', 'Bench A', 'Bench B', 'Bench B']) {
+    await page.goto('/plants/new?species=Refusia%20testii&key=999');
+    const opt = await page.locator('#f-loc option', { hasText: name }).getAttribute('value');
+    await page.selectOption('#f-loc', opt!);
+    await addPlant(page);
+  }
+  await page.evaluate(() => localStorage.setItem('__shift', String(25 * 86_400_000)));
+  await page.goto('/today');
+  const a = page.locator('#water .stop', { hasText: 'Bench A' });
+  const b = page.locator('#water .stop', { hasText: 'Bench B' });
+  await expect(b.getByRole('button', { name: 'Water 2 here' })).toBeEnabled();
+  // both stops on screen, B's button clear of the tab bar, as a grower would hold the page
+  await page.evaluate(() => { const el = document.querySelectorAll('#water .stop')[1] as HTMLElement; scrollTo(0, el.getBoundingClientRect().top + scrollY - 420); });
+  const before = await b.boundingBox();
+  await a.getByRole('button', { name: 'Water 3 here' }).click();
+  await expect(a.locator('.row.done a')).toHaveCount(3);
+  const after = await b.boundingBox();
+  expect(Math.abs(after!.y - before!.y)).toBeLessThan(24); // the stop below stays where the finger expects it
+  // what is under where B's button was is B's button, not the toast's Undo
+  const box = await b.getByRole('button', { name: 'Water 2 here' }).boundingBox();
+  const hit = await page.evaluate(([x, y]) => { const el = document.elementFromPoint(x, y); return el?.closest('button')?.textContent?.trim() ?? el?.tagName; }, [box!.x + box!.width / 2, box!.y + box!.height / 2]);
+  expect(hit).toBe('Water 2 here');
+  // to My plants and back: the mark and its Undo are still there
+  await page.locator('#tabbar a', { hasText: 'My plants' }).click();
+  await page.locator('#tabbar a', { hasText: 'Today' }).click();
+  await expect(a.locator('.row.done')).toContainText('Watered just now');
+  await a.getByRole('button', { name: 'Undo' }).click();
+  await expect(a.getByRole('button', { name: 'Water 3 here' })).toBeVisible();
   await C.close();
 });

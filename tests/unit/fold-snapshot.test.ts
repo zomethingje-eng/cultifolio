@@ -8,6 +8,7 @@
 import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { hlcEncode, MAX_AHEAD_MS } from '$core/hlc';
+import { FOLD_REFRESH } from '$lib/db/collection.svelte';
 import type { Change } from '$core/log';
 
 type Store = typeof import('$lib/db/collection.svelte');
@@ -232,9 +233,12 @@ describe('the fold snapshot', () => {
     expect(await b.store.collection.snapshotWritten).toBe(true);
     await b.store.collection.markParked([{ t: stamp(base, 0), kind: 'accession', id: 'p1', field: 'taxonName', value: 'Species 1' }]);
     expect(await b.vault.readFold()).toBeUndefined();
+    // the tab that parked told the others to fold again; whichever path the next load takes, the parked name is not folded
+    await new Promise((r) => setTimeout(r, 50));
     b = await boot();
     await b.store.collection.load();
-    expect(b.store.collection.loaded.from).toBe('log');
+    expect(b.store.collection.accession('p1')).toBeUndefined();
+    expect(b.store.collection.parkedFor('accession', 'p1')).toHaveLength(1);
     await b.store.collection.snapshotWritten;
     const good = (await b.vault.readFold())!;
     await b.vault.writeFold({ ...good.fold, build: 'another-build' }, good.gen);
@@ -278,5 +282,92 @@ describe('the fold snapshot', () => {
     const tail = await b.vault.arrivalsAfter(f.seq);
     expect(tail.changes.map((c) => c.id)).toEqual(['p2', 'p2', 'p2']); // numbered after the old snapshot's rows: the numbers alone would not have told
     expect(tail.gen).not.toBe(gen0);
+  });
+
+  it('round fifty-five: an own write that lands past another tab\'s unread row does not carry the frontier over it', async () => {
+    const base = Date.now() - 86_400_000;
+    const { vault } = await boot();
+    await vault.appendChanges([...plant(1, base)], true);
+    const a = await boot();
+    await a.store.collection.load();
+    // another tab (here: the vault directly) stores a plant; before A hears of it, A writes its own
+    await a.vault.appendChanges([...plant(2, base + 1000)], true);
+    await a.store.collection.put('accession', 'p1', { notes: 'mine' });
+    await new Promise((r) => setTimeout(r, 30)); // the catch-up the gap asked for
+    expect(a.store.collection.accessions.map((x) => x.id).sort()).toEqual(['p1', 'p2']);
+    expect(a.store.collection.accession('p1')?.notes).toBe('mine');
+  });
+
+  it('round fifty-five: a refreshed snapshot names the tail it folded, so the next load reads none of it again', async () => {
+    const base = Date.now() - 86_400_000;
+    const { vault } = await boot();
+    await vault.appendChanges([...plant(1, base)], true);
+    let b = await boot();
+    await b.store.collection.load();
+    await b.store.collection.snapshotWritten;
+    const first = (await b.vault.readFold())!.fold.seq;
+    const many: Change[] = [];
+    for (let i = 0; i < FOLD_REFRESH; i++) many.push({ t: stamp(base + 10_000 + i), kind: 'location', id: `l${i}`, field: 'name', value: `Place ${i}` });
+    await b.vault.appendChanges(many, true);
+    b = await boot();
+    await b.store.collection.load();
+    expect(b.store.collection.loaded).toMatchObject({ from: 'snapshot', changes: FOLD_REFRESH });
+    expect(await b.store.collection.snapshotWritten).toBe(true);
+    expect((await b.vault.readFold())!.fold.seq).toBe(first + FOLD_REFRESH);
+    b = await boot();
+    await b.store.collection.load();
+    expect(b.store.collection.loaded).toMatchObject({ from: 'snapshot', changes: 0 });
+    expect(b.store.collection.locations).toHaveLength(FOLD_REFRESH);
+  });
+
+  it('round fifty-five: a snapshot holding a record of a kind this build does not know is not read; the log is folded', async () => {
+    const base = Date.now() - 86_400_000;
+    const { vault } = await boot();
+    await vault.appendChanges([{ t: stamp(base), kind: 'location', id: 'l1', field: 'name', value: 'Bench' }], true);
+    let b = await boot();
+    await b.store.collection.load();
+    await b.store.collection.snapshotWritten;
+    const good = (await b.vault.readFold())!;
+    await b.vault.writeFold({ ...good.fold, records: (good.fold.records as Array<Record<string, unknown>>).map((r) => ({ ...r, kind: 'unknown-kind' })) }, good.gen);
+    b = await boot();
+    await b.store.collection.load();
+    expect(b.store.collection.loaded.from).toBe('log');
+    expect(b.store.collection.locations.map((l) => l.name)).toEqual(['Bench']);
+  });
+
+  it('round fifty-five: a dismissed parked number still keeps the one-shape pass off the record, on a snapshot load as on a whole one', async () => {
+    const base = Date.now() - 86_400_000;
+    const { vault } = await boot();
+    await vault.appendChanges([{ t: stamp(base, 0), kind: 'accession', id: '2024-0001', field: 'taxonName', value: 'Legacy' }, { t: stamp(base, 1), kind: 'accession', id: '2024-0001', field: 'status', value: 'growing' }, { t: stamp(base + 3 * 365 * 86_400_000), kind: 'accession', id: '2024-0001', field: 'acc', value: '2024-9999' }], true);
+    let b = await boot();
+    await b.store.collection.load();
+    await b.store.collection.dismissParked('accession', '2024-0001');
+    await b.store.collection.snapshotWritten;
+    b = await boot();
+    await b.store.collection.load();
+    expect(b.store.collection.loaded.from).toBe('snapshot');
+    expect(b.store.collection.parkedFor('accession', '2024-0001')).toHaveLength(0);
+    expect((await b.vault.allChanges()).filter((c) => c.field === 'acc')).toHaveLength(1);
+  });
+
+  it('round fifty-five: an older build does not overwrite a newer build\'s snapshot', async () => {
+    const { vault } = await boot();
+    const base = { rules: 2, device: DEV, offset: 0, seq: 0, records: [], seen: [], born: [], parents: [], held: [], last: '', changes: 0 };
+    const gen = await vault.foldGen();
+    expect(await vault.writeFold({ ...base, build: '2000' }, gen)).toBe(true);
+    expect(await vault.writeFold({ ...base, build: '1000' }, gen)).toBe(false);
+    expect((await vault.readFold())!.fold.build).toBe('2000');
+    expect(await vault.writeFold({ ...base, build: '3000' }, gen)).toBe(true);
+  });
+
+  it('round fifty-five: an import stamp after a removal is not an edit, in the fold itself; nothing is written', async () => {
+    const base = Date.now() - 86_400_000;
+    const { vault } = await boot();
+    await vault.appendChanges([...plant(1, base), { t: stamp(base + 100), kind: 'accession', id: 'p1', field: '_deleted', value: true }, { t: stamp(base + 200), kind: 'accession', id: 'p1', field: 'importedOn', value: '2024-01-01' }], true);
+    const before = (await vault.allChanges()).length;
+    const b = await boot();
+    await b.store.collection.load();
+    expect(b.store.collection.accession('p1')).toBeUndefined();
+    expect((await b.vault.allChanges()).length).toBe(before);
   });
 });

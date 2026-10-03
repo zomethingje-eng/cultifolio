@@ -49,6 +49,7 @@ vi.mock('$lib/db/vault', () => {
   m.writeFold = async () => false;
   m.foldGen = async () => 0;
   m.dropFold = async () => {};
+  m.parkStamps = async (st: string[]) => { const had = (mem.meta.get('parked') as string[] | undefined) ?? []; const out = [...new Set([...had, ...st])]; mem.meta.set('parked', out); return out; };
   if (!m.changesOfRecord) m.changesOfRecord = async (kind: string, id: string) => (await m.allChanges()).filter((c: Change) => c.kind === kind && c.id === id);
   m.lastArrival = async () => 0;
   m.arrivalsAfter = async () => ({ changes: [...mem.changes.values()], seq: 0, gen: 0 });
@@ -561,13 +562,14 @@ describe('round sixteen', () => {
     const again = (await reload()) as typeof collection;
     expect(again.accession('A-2')).toBeUndefined();
     expect(again.accession('B-1')?.notes).toBe('back');
-    // one removal written, and it syncs like any change; and B-1, a record of the oldest shape, is given its number as a change
-    // of its own on the same load (round forty-one, R4), which is also written once
-    expect(mem.changes.size).toBe(before + 2);
+    // No removal written: since round fifty-five an `importedOn` is not an edit in the fold, so A-2 folds as removed on every
+    // load and every device without a change to sync (FOLD_RULES 2). B-1, a record of the oldest shape, is given its number
+    // as a change of its own on the same load (round forty-one, R4), once.
+    expect(mem.changes.size).toBe(before + 1);
     expect(again.accession('B-1')?.acc).toBe('B-1');
     const third = (await reload()) as typeof collection;
     expect(third.accession('A-2')).toBeUndefined();
-    expect(mem.changes.size).toBe(before + 2); // once
+    expect(mem.changes.size).toBe(before + 1); // once
     void collection;
   });
   it('several plants at once are one commit: a refused write stores none of them and issues no number; a good one stores all, consecutively (round sixteen, 14)', async () => {

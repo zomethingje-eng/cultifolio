@@ -131,7 +131,7 @@
     // the tab when the site changed or the answer is older than half an hour, so a page left open overnight shows the
     // frost that appeared (round fifty-four, 4).
     void frost.check();
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') void frost.check(); });
+    frost.start();
     await sync.init();
     if (sync.configured) sync.schedule(1500);
   });

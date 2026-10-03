@@ -35,7 +35,7 @@ export const key = (kind: Kind, id: string) => `${kind}:${id}`;
  * of the folded state built under another number is not read; the log is folded again (round fifty-three, 1). Bump it
  * with any change to those rules, since a snapshot is a fold this build never ran.
  */
-export const FOLD_RULES = 1;
+export const FOLD_RULES = 2;
 
 /** Field names the record itself owns, plus the fold's own bookkeeping names; a change may never set them. */
 export const RESERVED_FIELDS = new Set(['id', 'kind', '_t', '_deleted=', '*']);
@@ -280,8 +280,12 @@ export function apply(state: State, changes: Iterable<Change>, seen?: Map<string
     if (c.field === '_deleted') latest.set(k + ' _deleted=', c.value ? '1' : '0');
     else {
       rec[c.field] = c.value;
-      const e = latest.get(k + ' *');
-      if (!e || hlcCompare(c.t, e) > 0) latest.set(k + ' *', c.t); // the latest edit to any ordinary field
+      // The day a record came in a file is not an edit: a removal followed only by an import stamp stays a removal. This was a
+      // repair written to the log at each load, which a snapshot load could not judge the same way (round fifty-five, 2; FOLD_RULES 2).
+      if (c.field !== 'importedOn') {
+        const e = latest.get(k + ' *');
+        if (!e || hlcCompare(c.t, e) > 0) latest.set(k + ' *', c.t); // the latest edit to any ordinary field
+      }
     }
     if (hlcCompare(c.t, rec._t) > 0) rec._t = c.t;
     // Visibility is a function of two maxima, so it comes out the same whatever order the changes

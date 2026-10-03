@@ -16,7 +16,8 @@
   import Today from '$lib/ui/Today.svelte';
   import { collection, DUE_DAYS } from '$lib/db/collection.svelte';
   import { accNo, kindOf, type Accession, type Location } from '$lib/db/types';
-  import { daysBetween } from '$core/dates';
+  import { daysBetween, localDate } from '$core/dates';
+  import { wateredHere, type Watered } from '$lib/ui/watered.svelte';
   import { toast } from '$lib/ui/toast.svelte';
   import { today as day } from '$lib/ui/day.svelte';
   import { sheetsFor, type Sheet } from '$lib/ui/index.svelte';
@@ -28,29 +29,37 @@
   let err = $state('');
   let busy = $state(false);
 
+  /** The full forecast follows the watch: when the watch reads again (a timer, a return to the tab), this card reads the same answer, so the card and the bar never disagree (round fifty-five, 5; the first reviewer's finding 4). An answer to an earlier read publishes nothing. */
+  let loadGen = 0;
+  $effect(() => {
+    void frost.readAt;
+    const s = site.current;
+    if (s) void load(s.lat, s.lon);
+  });
   async function load(la: number, lo: number) {
+    const gen = ++loadGen;
     busy = true; err = '';
     try {
       const r = await getForecast<Payload>(la, lo, units.current);
+      if (gen !== loadGen) return;
       if (!r.ok && r.status === 400) {
         // The one refusal with a reason worth repeating: the coordinates themselves.
         err = 'Latitude is −90 to 90 and longitude −180 to 180; check the figures.';
         return;
       }
-      if (!r.ok) { err = forecastRefusal(r.status); return; }
+      if (!r.ok) { err = forecastRefusal(r.status); data = null; return; }
       data = r.body;
     } catch {
       // Whatever went wrong, the page says the check did not happen: never a status code, never that the nights are clear.
-      err = forecastRefusal(null);
+      if (gen === loadGen) { err = forecastRefusal(null); data = null; }
     }
-    finally { busy = false; }
+    finally { if (gen === loadGen) busy = false; }
   }
   const watched = $derived(collection.locations.filter((l) => { const c = collection.conditions(l.id); return c.lat != null && c.lon != null && c.indoor !== true && (l.lat != null || !l.parentId); }));
   onMount(() => {
     collection.load();
     site.load();
     void frost.check();
-    if (site.current) load(site.current.lat, site.current.lon);
   });
 
   /* ---- by place, in walking order ---- */
@@ -61,15 +70,14 @@
   const today = $derived(day.current);
   onMount(() => day.start());
   type Stop = { key: string; place: Location | null; depth: number; overdue: Accession[]; unknown: Accession[]; ahead: Accession[]; resting: Accession[]; unseen: Accession[]; n: number; watered: Watered | null };
-  /** A stop watered from this page stays where it was, marked, with its own Undo, for as long as the toast would have lasted and longer: the stop below must not slide under the finger (round fifty-four, 4; both reviewers' first finding). */
-  type Watered = { ids: string[]; n: number; at: number };
-  let wateredHere = $state(new Map<string, Watered>());
-  /** The species in their habitat's dry season now, by the sheets the front page reads too (round fifty-four, 4; the second reviewer's finding 23). */
+  /** The species in their habitat's dry season now, by the sheets the front page reads too (round fifty-four, 4; the second reviewer's finding 23). Until the sheets have answered (or failed), the Water buttons wait: a button whose count changes as the sheets arrive moves under a reading eye (round fifty-five, 5). */
   let sheets = $state<Map<string, Sheet> | null>(null);
+  let sheetsSettled = $state(false);
   $effect(() => {
     const slugs = [...new Set(growing.filter((a) => due.has(a.id) && kindOf(a) === 'species').map((a) => speciesSlug(a.taxonName)))];
-    if (!slugs.length) { sheets = null; return; }
-    void sheetsFor(slugs).then((m) => { if (m) sheets = m; });
+    if (!slugs.length) { sheets = null; sheetsSettled = true; return; }
+    sheetsSettled = false;
+    void sheetsFor(slugs).then((m) => { sheets = m; }).finally(() => { sheetsSettled = true; });
   });
   const isResting = (a: Accession) => {
     if (!sheets || kindOf(a) !== 'species') return false;
@@ -83,6 +91,7 @@
   /** The places as a walk through the tree, each with what needs doing there; a place with nothing to do is not a stop, unless it was watered from here just now. Plants with no place come last. */
   const stops = $derived.by(() => {
     if (!collection.ready) return [] as Stop[];
+    void wateredHere.map;
     const out: Stop[] = [];
     const byPlace = new Map<string | null, Accession[]>();
     for (const a of growing) { const k = a.locationId && collection.location(a.locationId) ? collection.placeOf(a.locationId) : null; (byPlace.get(k) ?? byPlace.set(k, []).get(k)!).push(a); }
@@ -90,16 +99,16 @@
       const key = place?.id ?? 'none';
       const here = (byPlace.get(place?.id ?? null) ?? []).sort(byNo);
       const dry = here.filter((a) => due.has(a.id));
-      // Four kinds of "not watered", said apart: not for three weeks; never, by the record; a watering dated ahead of today (a line typed ahead, an import), which is neither; and dry on purpose, in the habitat's rest.
-      const ahead = dry.filter((a) => collection.wateringAhead(a.id));
-      const rest = dry.filter((a) => !collection.wateringAhead(a.id));
-      const resting = rest.filter(isResting);
-      const active = rest.filter((a) => !isResting(a));
+      // Said apart: not for three weeks; never, by the record; dry on purpose, in the habitat's rest. A watering dated
+      // ahead of today is not due (one reading of it everywhere, round fifty-five, 5) and is said as a fact, with no button.
+      const ahead = here.filter((a) => collection.wateringAhead(a.id));
+      const resting = dry.filter(isResting);
+      const active = dry.filter((a) => !isResting(a));
       const unknown = active.filter((a) => !collection.lastWatered(a.id));
       const overdue = active.filter((a) => collection.lastWatered(a.id));
       const unseen = here.filter((a) => { if (collection.missedAt(a.id)) return true; const s = collection.lastSeen(a.id); return s != null && daysBetween(s) > 90; });
-      const watered = wateredHere.get(key) ?? null;
-      if (dry.length || unseen.length || watered) out.push({ key, place, depth, overdue, unknown, ahead, resting, unseen, n: place ? collection.plantsAt(place.id).filter((a) => a.status === 'growing').length : here.length, watered });
+      const watered = wateredHere.get(key);
+      if (dry.length || unseen.length || ahead.length || watered) out.push({ key, place, depth, overdue, unknown, ahead, resting, unseen, n: place ? collection.plantsAt(place.id).filter((a) => a.status === 'growing').length : here.length, watered });
     };
     const walk = (parent: string | null, depth: number) => {
       for (const l of collection.children(parent)) { stop(l, depth); walk(l.id, depth + 1); }
@@ -108,41 +117,39 @@
     stop(null, 0);
     return out;
   });
-  /** Plants that need something, each counted once whatever it needs (round fifty-four, 4). */
-  const todo = $derived(new Set(stops.flatMap((s) => [...s.overdue, ...s.unknown, ...s.ahead, ...s.unseen].map((a) => a.id))).size);
+  /** Plants that need something, each counted once whatever it needs (round fifty-four, 4); a watering dated ahead is not a need. */
+  const todo = $derived(new Set(stops.flatMap((s) => [...s.overdue, ...s.unknown, ...s.resting, ...s.unseen].map((a) => a.id))).size);
   const days = (a: Accession) => { const w = collection.lastWatered(a.id); return w ? daysBetween(w) : daysBetween(collection.madeOn('accession', a.id) ?? a.acquired ?? today); };
   let watering = $state<string | null>(null);
-  /** One line per plant given, dated today, as a place's "Water all" does; the stop stays in place, marked, with its own Undo (round fifty-two, 3: one tap, one set of lines). */
+  /**
+   * One line per plant given, dated today, as a place's "Water all" does. The stop keeps its place and its height: the
+   * plants just watered stay on it as a done row with the stop's own Undo, so the stop below never slides under the
+   * finger; and the toast says what was done without an Undo of its own, since it sits where the next stop's button was
+   * (round fifty-five, 5; the first reviewer's findings 1 and 2).
+   */
   async function waterHere(s: Stop, plants: Accession[]) {
     if (watering || !plants.length) return;
     watering = s.key;
     try {
-      const d = day.current; // read at the tap, not when the page opened
+      // The day at the tap, from the corrected clock: the day store looks once a minute, and a tap in the first minute after midnight took yesterday (round fifty-five, 5; both reviewers).
+      const d = localDate();
+      if (day.current !== d) day.current = d;
+      const height = (document.getElementById(`stop-${s.key}`)?.getBoundingClientRect().height ?? 0);
       const ids = await collection.addEventsIds(plants.map((a) => ({ acc: a.id, d, t: 'water' as const, note: `from Today: ${s.place ? s.place.name : 'plants with no place'}`, auto: true })));
-      const had = wateredHere.get(s.key);
-      wateredHere.set(s.key, { ids: [...(had?.ids ?? []), ...ids], n: (had?.n ?? 0) + ids.length, at: Date.now() });
-      wateredHere = new Map(wateredHere);
-      toast.show(`Watered ${ids.length} plant${ids.length === 1 ? '' : 's'} at ${s.place ? s.place.name : 'no place'}.`, 8000, { label: 'Undo', run: () => void undoHere(s.key) });
+      wateredHere.add(s.key, ids, plants.map((a) => ({ id: a.id, no: accNo(a) })), height);
+      toast.show(`Watered ${ids.length} plant${ids.length === 1 ? '' : 's'} at ${s.place ? s.place.name : 'no place'}; Undo is on the stop.`);
     } finally {
       watering = null;
     }
   }
   async function undoHere(key: string) {
-    const w = wateredHere.get(key);
+    const w = wateredHere.take(key);
     if (!w) return;
-    wateredHere.delete(key);
-    wateredHere = new Map(wateredHere);
     await collection.removeEvents(w.ids);
     toast.show(`Undone: the ${w.ids.length} watering line${w.ids.length === 1 ? '' : 's'} removed.`);
   }
-  /** The marks are let go after a while, so a stop watered an hour ago is not still shown as a stop. */
   $effect(() => {
-    const t = setInterval(() => {
-      const cut = Date.now() - 10 * 60_000;
-      let changed = false;
-      for (const [k, w] of wateredHere) if (w.at < cut) { wateredHere.delete(k); changed = true; }
-      if (changed) wateredHere = new Map(wateredHere);
-    }, 30_000);
+    const t = setInterval(() => wateredHere.prune(), 30_000);
     return () => clearInterval(t);
   });
 </script>
@@ -201,15 +208,20 @@
       <p class="small muted">{todo} plant{todo === 1 ? '' : 's'} need{todo === 1 ? 's' : ''} something across {stops.length} {stops.length === 1 ? 'place' : 'places'}, in the order the places are kept. A plant with no watering recorded is counted from the day its record was made, and said so.</p>
       <ol class="stops">
         {#each stops as s (s.key)}
-          <li class="stop" style="--depth: {s.depth}">
+          <li class="stop" id="stop-{s.key}" style="--depth: {s.depth}{s.watered?.height ? `; min-height: ${s.watered.height}px` : ''}">
             <div class="head">
               <h3>{#if s.place}<a href="/places/{s.place.id}">{s.place.name}</a>{:else}No place{/if} <span class="muted small">{s.n} growing</span></h3>
-              {#if s.watered}
-                <span class="done">Watered {s.watered.n} ✓ <button class="btn small" type="button" onclick={() => undoHere(s.key)}>Undo</button></span>
-              {:else if s.overdue.length || s.unknown.length}
-                <button class="btn small" type="button" onclick={() => waterHere(s, [...s.overdue, ...s.unknown])} disabled={!!watering} title="One watering line on each, dated today; Undo takes them back">Water {s.overdue.length + s.unknown.length} here</button>
+              <!-- The button keeps its place: Water while there is something to water, else the stop's Undo in the same spot, so the header keeps its height (round fifty-five, 5). -->
+              {#if s.overdue.length || s.unknown.length}
+                <button class="btn small water" type="button" onclick={() => waterHere(s, [...s.overdue, ...s.unknown])} disabled={!!watering || !sheetsSettled} title={sheetsSettled ? 'One watering line on each, dated today; Undo on the stop takes them back' : 'Reading the species sheets for the dry season first'}>Water {s.overdue.length + s.unknown.length} here</button>
+              {:else if s.watered}
+                <button class="btn small water" type="button" onclick={() => undoHere(s.key)}>Undo</button>
               {/if}
             </div>
+            {#if s.watered}
+              <!-- The plants just watered stay on the stop, in a row shaped like the one they left, so the stop keeps its height and the next stop does not move under the finger. -->
+              <p class="row done"><span class="lab">Watered just now{#if s.overdue.length || s.unknown.length} · <button class="linkish" type="button" onclick={() => undoHere(s.key)}>Undo</button>{/if}</span> {#each s.watered.plants as p, i}{i ? ' ' : ''}<a href="/plants/{p.id}">{p.no} <span class="muted">✓</span></a>{/each}</p>
+            {/if}
             {#if s.overdue.length}
               <p class="row warn"><span class="lab">Not watered for three weeks or more</span> {#each s.overdue as a, i}{i ? ' ' : ''}<a href="/plants/{a.id}">{accNo(a)} <span class="muted">{days(a)} d</span></a>{/each}</p>
             {/if}
@@ -217,10 +229,10 @@
               <p class="row unknown"><span class="lab">No watering recorded</span> {#each s.unknown as a, i}{i ? ' ' : ''}<a href="/plants/{a.id}">{accNo(a)} <span class="muted">no record · {days(a)} d</span></a>{/each}</p>
             {/if}
             {#if s.ahead.length}
-              <p class="row ahead"><span class="lab">Watering dated ahead of today</span> {#each s.ahead as a, i}{i ? ' ' : ''}<a href="/plants/{a.id}">{accNo(a)} <span class="muted">{collection.wateringAhead(a.id)}</span></a>{/each}</p>
+              <p class="row ahead"><span class="lab">Watering dated ahead of today, so not counted as due</span> {#each s.ahead as a, i}{i ? ' ' : ''}<a href="/plants/{a.id}">{accNo(a)} <span class="muted">dated {collection.wateringAhead(a.id)}</span></a>{/each}</p>
             {/if}
             {#if s.resting.length}
-              <p class="row resting"><span class="lab">Not watered, and in the habitat's dry season by the species sheet</span> {#each s.resting as a, i}{i ? ' ' : ''}<a href="/plants/{a.id}">{accNo(a)} <span class="muted">{days(a)} d</span></a>{/each} {#if !s.watered}<button class="btn small" type="button" onclick={() => waterHere(s, s.resting)} disabled={!!watering}>Water these too</button>{/if}</p>
+              <p class="row resting"><span class="lab">Not watered, and in the habitat's dry season by the species sheet</span> {#each s.resting as a, i}{i ? ' ' : ''}<a href="/plants/{a.id}">{accNo(a)} <span class="muted">{days(a)} d</span></a>{/each} <button class="btn small water" type="button" onclick={() => waterHere(s, s.resting)} disabled={!!watering}>Water these too</button></p>
             {/if}
             {#if s.unseen.length}
               <p class="row warn"><span class="lab">Missed at the last audit, or not seen for ninety days</span> {#each s.unseen as a, i}{i ? ' ' : ''}<a href="/plants/{a.id}">{accNo(a)}</a>{/each}</p>
@@ -248,7 +260,7 @@
   .alerts { padding-left: 1.1rem; }
   .small { font-size: 12.5px; }
   .stops { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-  .stop { background: var(--card); border-radius: var(--r); box-shadow: var(--sh); padding: 10px 14px; margin-left: calc(var(--depth) * 14px); }
+  .stop { box-sizing: border-box; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); padding: 10px 14px; margin-left: calc(var(--depth) * 14px); }
   .stop .head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .stop h3 { margin: 0; font-size: 15px; font-weight: 600; }
   .stop h3 .small { font-weight: 400; margin-left: 6px; }
@@ -259,10 +271,13 @@
   .row .lab { display: block; font-size: 12px; color: var(--ink3); }
   .row.ahead { border-left-color: var(--accent); }
   .row.resting { border-left-color: var(--rule); }
-  .row > a { display: inline-block; padding: 5px 6px 5px 0; min-height: 28px; } /* a tap target, not a line of text (round fifty-four, 4) */
+  .row > a { display: inline-block; padding: 9px 8px 9px 0; min-height: 40px; } /* a tap target, not a line of text (round fifty-four, 4) */
   .row .btn { margin-left: 6px; vertical-align: middle; }
-  .done { font-size: 13px; font-weight: 600; color: var(--accent); white-space: nowrap; }
-  .done .btn { margin-left: 6px; }
+  .row.done { border-left-color: var(--accent); }
+  .row.done .lab { color: var(--accent); font-weight: 600; }
+  .linkish { background: none; border: 0; padding: 0; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; }
+  .stop { scroll-margin-bottom: 96px; } /* clear of the tab bar when a control is scrolled to (the second reviewer's phone check) */
+  .btn.water { min-height: 44px; } /* a thumb's width */
   .nights > summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--ink2); padding: 4px 0; }
   .muted { color: var(--ink3); }
   @media (max-width: 640px) {

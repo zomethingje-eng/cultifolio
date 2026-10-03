@@ -178,11 +178,11 @@ describe('the Worker and the manifest', () => {
     const platform = platformWith(store);
     expect(manifest.buckets).toBe(64);
     expect(await (await call(corpusGET as never, '/api/corpus', platform)).json()).toEqual({ id: manifest.id, buckets: 64 });
-    const ok = await call(entriesGET as never, `/api/entries?b=3f&c=${manifest.id}`, platform);
+    const ok = await call(entriesGET as never, `/api/entries?b=3f&n=64&c=${manifest.id}`, platform);
     expect(ok.status).toBe(200);
     for (const e of (await ok.json()) as IndexEntry[]) expect(bucketOf(e.slug, 64)).toBe('3f');
-    await expect(call(entriesGET as never, `/api/entries?b=40&c=${manifest.id}`, platform)).rejects.toMatchObject({ status: 400 });
-    await expect(call(sheetsGET as never, `/api/sheets?b=040&c=${manifest.id}`, platform)).rejects.toMatchObject({ status: 400 });
+    await expect(call(entriesGET as never, `/api/entries?b=40&n=64&c=${manifest.id}`, platform)).rejects.toMatchObject({ status: 400 });
+    await expect(call(sheetsGET as never, `/api/sheets?b=040&n=64&c=${manifest.id}`, platform)).rejects.toMatchObject({ status: 400 });
   });
 
   it('round fifty-four: the id names every product, so a sheet changed by a dossier is a new id; a manifest whose index is not there is not adopted and the corpus held before stands', async () => {
@@ -231,5 +231,43 @@ describe('the Worker and the manifest', () => {
     expect(hits.length).toBe(idx.filter((e) => e.origin?.[0] === 'Chile North').length);
     // and a query with no words at all is nothing, with nothing prepared
     expect(await (await call(searchGET as never, `/api/search?q=%E6%A4%8D%E7%89%A9&c=${manifest.id}`, platform)).json()).toEqual([]);
+  });
+
+  it('round fifty-five: a missing product is asked for again a minute after the miss, however busy, and a read that threw is not remembered', async () => {
+    const idx = index(40);
+    const { manifest, store } = bucketFor(idx, { drop: ['search/a.json'] });
+    let gets = 0, fail = false;
+    const objects = new Map<string, unknown>();
+    const counting = { get: async (k: string) => { if (k.endsWith('search/a.json')) { gets++; if (fail) throw new Error('R2 did not answer'); const v = objects.get(k); return v ? { json: async () => v, text: async () => JSON.stringify(v), etag: '"x"' } : null; } return store.get(k); }, head: store.head };
+    const platform = platformWith(counting as never);
+    vi.useFakeTimers(); vi.setSystemTime(1_800_000_000_000);
+    try {
+      expect(await product(platform, noStatic, 'search/a.json')).toBeNull();
+      const built = buildProducts(idx, JSON.stringify(idx, null, 1), () => new Map());
+      objects.set(productPath(manifest.id, 'search/a.json'), JSON.parse(built.files.get('search/a.json')!));
+      for (let t = 0; t < 3; t++) { vi.setSystemTime(1_800_000_000_000 + 15_000 * (t + 1)); const v = await product(platform, noStatic, "search/a.json"); expect({ t, gets, v: v === null }).toEqual({ t, gets: 1, v: true }); }
+      expect(gets).toBe(1); // busy, and still the one read
+      vi.setSystemTime(1_800_000_000_000 + 61_000);
+      expect(await product(platform, noStatic, 'search/a.json')).not.toBeNull(); // the minute is from the miss
+      expect(gets).toBe(2);
+    } finally { vi.useRealTimers(); }
+    // a read that throws is asked again at the next request
+    _forgetIndex();
+    fail = true;
+    const before = gets;
+    expect(await product(platform, noStatic, 'search/a.json')).toBeNull();
+    fail = false;
+    await product(platform, noStatic, 'search/a.json');
+    expect(gets).toBe(before + 2);
+  });
+  it('round fifty-five: a query with no word, or a short first word the shards lack, prepares nothing; a longer one is tried over the whole under its own rate', async () => {
+    const idx = index(60);
+    const { manifest, store } = bucketFor(idx);
+    const platform = platformWith(store);
+    const dossiers = await import('$lib/server/dossiers');
+    const spy = vi.spyOn(dossiers, 'searchWhole');
+    for (const q of ['%E6%A4%8D%E7%89%A9', 'zzz', 'ab']) expect(await (await call(searchGET as never, `/api/search?q=${q}&c=${manifest.id}`, platform)).json()).toEqual([]);
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
   });
 });

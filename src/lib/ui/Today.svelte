@@ -59,10 +59,12 @@
    * Species only (a hybrid has no one habitat); read from the sheets the page already fetches for its tiles.
    */
   let sheets = $state<Map<string, Sheet> | null>(null);
+  let sheetsSettled = $state(false); // the button waits for the sheets, as the Today tab's do: its count must not change under a reading eye (round fifty-five, 5)
   $effect(() => {
     const slugs = [...new Set(dry.filter((a) => kindOf(a) === 'species').map((a) => speciesSlug(a.taxonName)))];
-    if (!slugs.length) { sheets = null; return; }
-    void sheetsFor(slugs).then((m) => { if (m) sheets = m; });
+    if (!slugs.length) { sheets = null; sheetsSettled = true; return; }
+    sheetsSettled = false;
+    void sheetsFor(slugs).then((m) => { if (m) sheets = m; }).finally(() => { sheetsSettled = true; });
   });
   const resting = $derived.by(() => {
     if (!sheets) return [];
@@ -82,7 +84,7 @@
     if (watering) return; // one tap, one set of lines (round fifty-two, 3)
     watering = true;
     try {
-      const ids = await collection.addEventsIds(dry.map((a) => ({ acc: a.id, d: localDate(), t: 'water' as const, note: 'from Today: every plant on the not-watered line', auto: true })));
+      const ids = await collection.addEventsIds(toWater.map((a) => ({ acc: a.id, d: localDate(), t: 'water' as const, note: 'from Today: every plant on the not-watered line', auto: true })));
       toast.show(`Watered ${ids.length} plant${ids.length === 1 ? '' : 's'}.`, 8000, { label: 'Undo', run: () => { void collection.removeEvents(ids).then(() => toast.show(`Undone: the ${ids.length} watering line${ids.length === 1 ? '' : 's'} removed.`)); } });
     } finally {
       watering = false;
@@ -101,14 +103,15 @@
   const frostLine = $derived(frost.line); // the sentence names its level itself ("Frost forecast: …"), so the level is not said twice (round twenty-five, 16)
   // A plant with no watering recorded is not a plant not watered for three weeks: it is a plant whose waterings were never
   // written down, counted from the day its record was made. The two are said apart (round fifty-three, 3; the second reviewer's condition).
-  const ahead = $derived(dry.filter((a) => collection.wateringAhead(a.id))); // a watering dated after today: neither recorded nor missing, said on its own (round fifty-four, 4)
-  const unknown = $derived(dry.filter((a) => !collection.lastWatered(a.id) && !collection.wateringAhead(a.id)));
-  const overdue = $derived(dry.length - unknown.length - ahead.length);
+  // A watering dated ahead of today is not due (round fifty-five, 5): `dry` has none, and the line does not count them.
+  const unknown = $derived(dry.filter((a) => !collection.lastWatered(a.id)));
+  const overdue = $derived(dry.length - unknown.length);
+  /** What "Water these" waters: the dry plants not in their habitat's rest, as the Today tab's stop button does; the resting ones are said, not watered by the one tap (round fifty-five, 5; the first reviewer's finding 6). */
+  const toWater = $derived(dry.filter((a) => !resting.includes(a)));
   const dryText = $derived.by(() => {
     const parts: string[] = [];
     if (overdue) parts.push(`${overdue} of ${growing.length} plants not watered for three weeks or more`);
     if (unknown.length) parts.push(`${unknown.length}${overdue ? '' : ` of ${growing.length}`} with no watering recorded yet, ${unknown.length === 1 ? 'its record' : 'their records'} three weeks old or more`);
-    if (ahead.length) parts.push(`${ahead.length} with a watering dated ahead of today`);
     return parts.join(', and ') + (resting.length ? `; ${resting.length === dry.length ? (dry.length === 1 ? 'it is' : 'all of them are') : `${resting.length} of them ${resting.length === 1 ? 'is' : 'are'}`} in the habitat's dry season by the species sheet` : '') + '.';
   });
   type Line = { href: string; tone: string; text: string; water?: boolean; keeping?: boolean };
@@ -128,7 +131,7 @@
   <div class="today" aria-label="Today" data-sveltekit-preload-data="off">
     {#each lines as l (l.href)}
       {#if l.water}
-        <div class="line {l.tone} withact"><a href={l.href}>{l.text}</a><button class="btn small" type="button" onclick={waterDry} disabled={watering} title="One watering line on each, dated today; Undo takes them back">Water these {dry.length}</button></div>
+        <div class="line {l.tone} withact"><a href={l.href}>{l.text}</a>{#if toWater.length}<button class="btn small" type="button" onclick={waterDry} disabled={watering || !sheetsSettled} title="One watering line on each, dated today, leaving the plants in their habitat's rest; Undo takes them back">Water these {toWater.length}</button>{/if}</div>
       {:else if l.keeping}
         <div class="line {l.tone} withact"><a href={l.href}>{l.text}</a><button class="btn small" type="button" onclick={() => (prefs.hideKeeping = true)} title="Hide this line; Settings brings it back">Hide</button></div>
       {:else}

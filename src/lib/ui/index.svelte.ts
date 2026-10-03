@@ -37,15 +37,21 @@ export function corpusInfo(): Promise<CorpusInfo> {
         // An answer that did not come (offline) is not kept for the page's life: the next ask tries the server again, so a
         // device that comes online mid-session reads the corpus it is now served (round fifty-four, 3; both reviewers).
         if (!id) { if (corpusP === p) corpusP = null; return remembered(); }
-        return { id, buckets };
+        const got = { id, buckets };
+        if (corpusP === p) corpusResolved = got;
+        return got;
       })
       .catch(() => { if (corpusP === p) corpusP = null; return remembered(); });
     corpusP = p;
   }
   return corpusP;
 }
-/** Forget the corpus read: a 409 from a bucket route says the count has changed, and the next ask reads it afresh. */
-export const forgetCorpus = () => { corpusP = null; };
+/**
+ * Forget the corpus read that a bucket request was made under: a 409 says its count is not the one served. Only that
+ * read is forgotten: a read another caller started since is left alone (round fifty-five, 3; the first reviewer's finding 18).
+ */
+const forgetCorpus = (used: CorpusInfo) => { if (corpusResolved === used) { corpusP = null; corpusResolved = null; } };
+let corpusResolved: CorpusInfo | null = null;
 export const corpusId = () => corpusInfo().then((c) => c.id);
 const remembered = (): CorpusInfo => {
   try {
@@ -54,37 +60,42 @@ const remembered = (): CorpusInfo => {
     return { id: raw, buckets: BUCKETS }; // the id alone, as builds before this round kept it
   } catch { return { id: '', buckets: BUCKETS }; }
 };
-const withCorpus = async (url: string) => { const c = await corpusInfo(); return c.id ? `${url}&c=${encodeURIComponent(c.id)}&n=${c.buckets}` : url; };
+/** The corpus id on a request that is not a bucket (a search, a window of rows): `n` there is the request's own limit, and no count is named (the first reviewer's finding 24). */
+const withCorpus = async (url: string) => { const c = await corpusInfo(); return c.id ? `${url}&c=${encodeURIComponent(c.id)}` : url; };
 /**
- * A bucket request answered 409: the count the device hashed by is not the one served. The corpus is read again and the
- * caller asks once more under the new count; a second 409 is "not reached", never an empty bucket (round fifty-four, 3).
+ * A bucket request under one captured corpus read: the id and the count it names are the ones its bucket names were
+ * hashed by, never a second read (round fifty-five, 3; both reviewers). A 409 says the count is not the one served; the
+ * read is forgotten and the caller hashes again under a fresh one, once. A second 409 is "not reached", never an empty bucket.
  */
-async function bucketFetch(url: string): Promise<Response | null> {
-  const r = await withCorpus(url).then(timed);
-  if (r.status === 409) { forgetCorpus(); bucketCache.clear(); sheetBucketCache.clear(); return null; } // the caller hashes again under the count now served
+async function bucketFetch(url: string, info: CorpusInfo): Promise<Response | null> {
+  const r = await timed(`${url}${info.id ? `&c=${encodeURIComponent(info.id)}` : ''}&n=${info.buckets}`);
+  if (r.status === 409) { forgetCorpus(info); return null; }
   return r;
 }
 /** A reference request gives up after ten seconds: a half-open connection (greenhouse Wi-Fi, a captive portal) otherwise hangs a page for minutes, where "not reached" is the answer it should give (round fourteen, 4). */
 const timed = (url: string) => fetch(url, { signal: AbortSignal.timeout(10_000) });
+/** A bucket's cache key carries the corpus and the count: a bucket named under one count is another set of species under another (round fifty-five, 3; the first reviewer's finding 17). */
+const ckey = (info: CorpusInfo, b: string) => `${info.id}/${info.buckets}/${b}`;
 export async function entriesFor(slugs: Iterable<string>, again = false): Promise<Map<string, IndexEntry> | null> {
   const list = [...new Set(slugs)].filter(Boolean);
   const out = new Map<string, IndexEntry>();
   if (!list.length) return out;
   const want = new Set(list);
-  const count = (await corpusInfo()).buckets;
+  const info = await corpusInfo();
+  const count = info.buckets;
   const buckets = [...new Set(list.map((s) => bucketOf(s, count)))].sort();
-  const missing = buckets.filter((b) => !bucketCache.has(b));
+  const missing = buckets.filter((b) => !bucketCache.has(ckey(info, b)));
   for (let i = 0; i < missing.length; i += 4) {
     const chunk = missing.slice(i, i + 4); // four a request: each bucket is its own edge-cache entry, and a request names few enough that the URLs repeat
-    const p = bucketFetch(`/api/entries?b=${chunk.join(',')}`).then((r) => (r?.ok ? (r.json() as Promise<IndexEntry[]>) : null)).catch(() => null);
-    for (const b of chunk) bucketCache.set(b, p.then((all) => (all ? all.filter((e) => bucketOf(e.slug, count) === b) : null)));
+    const p = bucketFetch(`/api/entries?b=${chunk.join(',')}`, info).then((r) => (r?.ok ? (r.json() as Promise<IndexEntry[]>) : null)).catch(() => null);
+    for (const b of chunk) bucketCache.set(ckey(info, b), p.then((all) => (all ? all.filter((e) => bucketOf(e.slug, count) === b) : null)));
   }
   for (const b of buckets) {
-    const entries = await bucketCache.get(b);
+    const entries = await bucketCache.get(ckey(info, b));
     if (!entries) {
-      bucketCache.delete(b);
+      bucketCache.delete(ckey(info, b));
       // The count changed under the request (a 409): hashed again under the one now served, once.
-      if (!again && (await corpusInfo()).buckets !== count) return entriesFor(slugs, true);
+      if (!again && (await corpusInfo()).buckets !== count) return entriesFor(list, true);
       return null; // not reached: asked again next time
     }
     for (const e of entries) if (want.has(e.slug)) out.set(e.slug, e);
@@ -142,17 +153,18 @@ export async function sheetsFor(slugs: Iterable<string>, again = false): Promise
   const out = new Map<string, Sheet>();
   if (!list.length) return out;
   const want = new Set(list);
-  const count = (await corpusInfo()).buckets;
+  const info = await corpusInfo();
+  const count = info.buckets;
   const buckets = [...new Set(list.map((s) => bucketOf(s, count)))].sort();
-  const missing = buckets.filter((b) => !sheetBucketCache.has(b));
+  const missing = buckets.filter((b) => !sheetBucketCache.has(ckey(info, b)));
   // One bucket a request: the URL is then the edge cache's own key for that bucket, and the worker's, so it repeats
   // across devices and visits; the requests run in parallel.
-  for (const b of missing) sheetBucketCache.set(b, bucketFetch(`/api/sheets?b=${b}`).then((r) => (r?.ok ? (r.json() as Promise<Sheet[]>) : null)).catch(() => null));
+  for (const b of missing) sheetBucketCache.set(ckey(info, b), bucketFetch(`/api/sheets?b=${b}`, info).then((r) => (r?.ok ? (r.json() as Promise<Sheet[]>) : null)).catch(() => null));
   for (const b of buckets) {
-    const sheets = await sheetBucketCache.get(b);
+    const sheets = await sheetBucketCache.get(ckey(info, b));
     if (!sheets) {
-      sheetBucketCache.delete(b);
-      if (!again && (await corpusInfo()).buckets !== count) return sheetsFor(slugs, true);
+      sheetBucketCache.delete(ckey(info, b));
+      if (!again && (await corpusInfo()).buckets !== count) return sheetsFor(list, true);
       return null;
     }
     for (const s of sheets) if (want.has(s.slug)) out.set(s.slug, s);
