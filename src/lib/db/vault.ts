@@ -318,12 +318,19 @@ async function storeIn(tx: Tx, changes: Change[], fromServer: boolean, extra: Pa
   // A large batch (a restore, a merge) read the store once per change to find collisions, in sequence: a hundred thousand
   // reads, ten seconds. The keys in the batch's range come in one read, and only a stamp among them is read in full (round fifty-one, 5).
   let existing: Set<string> | null = null;
+  // A merge of a file of this same collection collides on every stamp, and reading each in full in sequence was the
+  // whole cost (round fifty-two, 5): past a few hundred collisions the stored changes in the range come in one read.
+  let stored: Map<string, Change> | null = null;
   if (!strict && byStamp.size > 64) {
     const ts = [...byStamp.keys()].sort();
-    existing = new Set((await ch.getAllKeys(IDBKeyRange.bound(ts[0], ts[ts.length - 1]))) as string[]);
+    const range = IDBKeyRange.bound(ts[0], ts[ts.length - 1]);
+    existing = new Set((await ch.getAllKeys(range)) as string[]);
+    let collisions = 0;
+    for (const t of byStamp.keys()) if (existing.has(t)) collisions++;
+    if (collisions > 200) stored = new Map(((await ch.getAll(range)) as Change[]).map((c) => [c.t, c]));
   }
   for (const c of byStamp.values()) {
-    const had = strict || (existing && !existing.has(c.t)) ? undefined : await ch.get(c.t);
+    const had = strict || (existing && !existing.has(c.t)) ? undefined : stored ? stored.get(c.t) : await ch.get(c.t);
     if (had && !sameChange(had, c)) {
       if (rank(c) > rank(had)) {
         console.warn(`change ${c.t} is already stored with other content; this one ranks higher and replaces it`);

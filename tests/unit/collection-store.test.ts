@@ -304,7 +304,7 @@ describe('a clock that was fast (round eight, 4)', () => {
     const real = Date.parse('2026-09-25T12:00:00Z');
     vi.useFakeTimers();
     try {
-      vi.setSystemTime(real + 365 * 86_400_000); // a year fast
+      vi.setSystemTime(real + 20 * 3_600_000); // twenty hours fast: within the day a device still follows (past two days the stamps are parked instead: round fifty-two, 1)
       const { collection } = await fresh('fastdevice00');
       const a = await collection.addAccession({ taxonName: 'Lithops', acc: 'L-1', notes: 'first' });
       vi.setSystemTime(real); // put right, and the app reloads
@@ -324,12 +324,40 @@ describe('a clock that was fast (round eight, 4)', () => {
   });
 });
 
+describe('round fifty-two, 1: a device a year fast, once its clock is right, parks what it stamped then and can apply it afresh', () => {
+  it('the record it added is parked at the next load (not shown), listed with its fields, and Apply writes it again at real time', async () => {
+    const real = Date.parse('2026-09-25T12:00:00Z');
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(real + 365 * 86_400_000);
+      const { collection } = await fresh('fastdevice00');
+      const a = await collection.addAccession({ taxonName: 'Lithops', acc: 'L-1', notes: 'first' });
+      expect(collection.accession(a.id)?.notes).toBe('first'); // shown while the device believes its clock
+      vi.setSystemTime(real); // put right, and the app reloads
+      const c2 = (await reload()) as typeof collection;
+      expect(c2.accession(a.id)).toBeUndefined(); // parked: a stamp a year past the clock is a wrong clock's, this device's own included
+      expect(c2.parkedRecords).toBe(1);
+      expect(c2.parkedFor('accession', a.id).map((c) => c.field).sort()).toEqual(['acc', 'notes', 'status', 'taxonName']);
+      await c2.applyParked('accession', a.id);
+      expect(c2.accession(a.id)?.notes).toBe('first');
+      expect(c2.parkedFor('accession', a.id)).toHaveLength(0);
+      const stamps = [...mem.changes.values()].filter((c) => c.id === a.id && c.value === 'first').map((c) => hlcDecode(c.t).wall);
+      expect(Math.min(...stamps)).toBeLessThan(real + 60_000); // the re-write is at real time
+      const c3 = (await reload()) as typeof collection;
+      expect(c3.accession(a.id)?.notes).toBe('first');
+      expect(c3.parkedRecords).toBe(0); // dismissed stamps stay dismissed
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe('round nine', () => {
   it('a removal after a fast-clock edit takes: the removal is stamped past the record\'s latest edit, not only its own field (round nine, 2)', async () => {
     const real = Date.parse('2026-09-25T12:00:00Z');
     vi.useFakeTimers();
     try {
-      vi.setSystemTime(real + 365 * 86_400_000);
+      vi.setSystemTime(real + 20 * 3_600_000);
       const { collection } = await fresh('fastdevice00');
       const e = await collection.addEvent({ acc: 'x', d: '2026-09-25', t: 'water', note: 'logged while fast' });
       vi.setSystemTime(real);
@@ -408,7 +436,7 @@ describe('round twelve', () => {
     const real = Date.parse('2026-09-25T12:00:00Z');
     vi.useFakeTimers();
     try {
-      vi.setSystemTime(real + 90 * 86_400_000); // three months fast
+      vi.setSystemTime(real + 20 * 3_600_000); // twenty hours fast (round fifty-two, 1: past two days such stamps are parked, not followed)
       const { collection } = await fresh('fastdevice00');
       const a = await collection.addAccession({ taxonName: 'Lithops', acc: 'L-1', notes: 'n1', price: 'p1' });
       vi.setSystemTime(real);
@@ -465,8 +493,8 @@ describe('round thirteen', () => {
   it('two commits, each bumping a different field past stamps that differ only by writer, do not collide in the store (round thirteen, 7)', async () => {
     const { collection } = await fresh('testdevice');
     // Two tabs of this device (the device id with two tab tags) stamped two fields of one record at the same wall and count
-    // while the clock was three months fast: applied, since they are this device's own, and never followed by the clock.
-    const wall = Date.now() + 90 * 86_400_000;
+    // while the clock was twenty hours fast: applied, since they are this device's own, and never followed by the clock.
+    const wall = Date.now() + 20 * 3_600_000;
     await collection.ingest([remote(wall, 3, 'testdevicea1b2', 'accession', 'X-1', 'notes', 'n1'), remote(wall, 3, 'testdevicec3d4', 'accession', 'X-1', 'price', 'p1'), remote(wall, 4, 'testdevicea1b2', 'accession', 'X-1', 'taxonName', 'Lithops'), remote(wall, 5, 'testdevicea1b2', 'accession', 'X-1', 'status', 'growing')], 'server');
     await collection.put('accession', 'X-1', { notes: 'n2' }); // stepped past notes' stamp: wall, count 4, this writer
     await collection.put('accession', 'X-1', { price: 'p2' }); // stepped past price's stamp: the same wall and count, the same writer, unless the store is checked

@@ -56,19 +56,26 @@ export interface Opened {
   settings: string[];
   /** Plants and batches here that the file does not hold, by number: what Replace loses (round fifty-one, 4). */
   onlyHere: string[];
+  /** Records the file holds that have changes here it lacks: what Replace also loses (round fifty-two, 4). */
+  changedHere: number;
 }
 
 /** Read and size up a backup without changing anything. */
 export async function openBackup(f: File): Promise<Opened> {
   const file = await readBackup(new Uint8Array(await f.arrayBuffer()));
   const counts = summarise(file.changes);
-  const merge = previewMerge(await collection.exportChanges(), file.changes);
+  const current = await collection.exportChanges();
+  const merge = previewMerge(current, file.changes);
   const have = new Set(await photoBlobIds());
   const newPhotos = file.photoIds.filter((id) => !have.has(id)).length;
   const missingPixels = photosWithoutPixels(file).filter((id) => !have.has(id));
   const inFile = new Set(file.changes.map((c) => `${c.kind}:${c.id}`));
   const onlyHere = [...collection.accessions.filter((a) => !inFile.has(`accession:${a.id}`)).map(accNo), ...collection.sowings.filter((s) => !inFile.has(`sowing:${s.id}`)).map(sowNo)];
-  return { file, counts, merge, newPhotos, missingPixels, settings: previewDeviceSettings(file.settings), onlyHere };
+  // And the records the file does hold that were edited here since: a note written after the merge is gone with a replace too (round fifty-two, 4).
+  const stamps = new Set(file.changes.map((c) => c.t));
+  const changedHere = new Set<string>();
+  for (const c of current) if (!stamps.has(c.t) && inFile.has(`${c.kind}:${c.id}`)) changedHere.add(`${c.kind}:${c.id}`);
+  return { file, counts, merge, newPhotos, missingPixels, settings: previewDeviceSettings(file.settings), onlyHere, changedHere: changedHere.size };
 }
 
 export interface RestoreReport {

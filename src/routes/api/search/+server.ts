@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { getIndexWithCorpus, type IndexEntry } from '$lib/server/dossiers';
-import { prepare, search, type Prepared } from '$core/search';
+import { getIndexWithCorpus, searchIndex } from '$lib/server/dossiers';
+import { search } from '$core/search';
 import { limited } from '$lib/server/sync';
 
 /**
@@ -15,7 +15,6 @@ import { limited } from '$lib/server/sync';
  * new one and lets the old go). Answers are cacheable at the edge and in the browser for a day under the corpus id, as
  * the entries and sheets routes are, and `no-store` when asked under another id (round thirteen, 4; round sixteen, 12).
  */
-const prepared = new WeakMap<IndexEntry[], Prepared<IndexEntry>[]>();
 /**
  * Anything that is not a letter, a mark or a digit becomes a space before the search, since the tokeniser splits on it
  * anyway: the route refused "Lithops ’Ruby’" (iOS writes every apostrophe as ’), "copiapoa, cinerea" and "Aloe/Gasteria"
@@ -34,8 +33,7 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   if (stop) return stop;
   const n = Math.min(_MAX_HITS, Math.max(1, Number(url.searchParams.get('n')) || DEFAULT_HITS));
   const { idx, corpus } = await getIndexWithCorpus(platform, fetch);
-  let p = prepared.get(idx);
-  if (!p) prepared.set(idx, (p = prepare(idx)));
+  const p = searchIndex(idx); // built with the index, not here (round fifty-two, 5)
   const asked = (url.searchParams.get('c') ?? '').replace(/[^A-Za-z0-9._-]/g, '').slice(0, 40);
   const current = asked === corpus;
   return json(search(p, q, n), { headers: { 'cache-control': current ? 'public, max-age=86400' : 'no-store' } });

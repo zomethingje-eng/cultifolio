@@ -38,7 +38,7 @@
   {#if rest.length}
     <div class="grid">
       {#each shown as p, i (p.src + p.id)}
-        <a class="ph" href={p.page ?? p.url} rel="noopener" title="{credit(p)}{p.captive ? ' · in cultivation' : ''}" aria-label="{name}{p.captive ? ', in cultivation' : ''}: photograph {i + 1} of {shown.length}, {credit(p)}"><img src={p.thumb} alt="" loading="lazy" />{#if p.captive}<span class="tag">cultivated</span>{/if}</a>
+        <a class="ph" href={p.page ?? p.url} rel="noopener" title="{credit(p)}{p.captive ? ' · in cultivation' : ''}" aria-label="{name}{p.captive ? ', in cultivation' : ''}: photograph {i + 1} of {shown.length}, {credit(p)}"><img src={p.thumb} alt="" loading="lazy" onerror={(e) => { const a = (e.currentTarget as HTMLImageElement).closest('a'); a?.classList.add('failed'); }} />{#if p.captive}<span class="tag">cultivated</span>{/if}<span class="nope">did not load</span></a>
       {/each}
     </div>
     <p class="credits faint">Photographs: {credits}.{#if rest.length > LIMIT}{' '}<button class="linkish" type="button" onclick={() => (showAll = !showAll)}>{showAll ? 'Show fewer' : `Show all ${photos.length}`}</button>{/if}</p>
@@ -51,6 +51,10 @@
 {/if}
 
 <style>
+  /* A thumbnail the host did not serve: a word in its square, not the browser's broken-image icon (round fifty-two, 6). */
+  .ph .nope { display: none; position: absolute; inset: 0; align-items: center; justify-content: center; font-family: var(--mono); font-size: 10px; color: var(--ink3); text-align: center; padding: 4px; }
+  .ph:global(.failed) img { visibility: hidden; }
+  .ph:global(.failed) .nope { display: flex; }
   .hero { margin: 0 0 0.6rem; overflow: hidden; }
   .hero img { width: 100%; max-height: 440px; object-fit: cover; }
   .hero figcaption { padding: 0.45rem 0.8rem; }

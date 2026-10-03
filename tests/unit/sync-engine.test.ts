@@ -89,7 +89,9 @@ vi.mock('$lib/db/vault', () => {
 /** Just enough of R2 for the routes: keys, bytes, upload times. */
 function fakeR2() {
   const objs = new Map<string, { body: Uint8Array; uploaded: number; sha?: string; md?: Record<string, string> }>();
-  let clock = 1_000_000;
+  // Arrivals by a clock near real time, a second apart: a batch's arrival is what the fold judges a broken-clock stamp
+  // against (round fifty-two, 1), and arrivals in 1970 would park every real-time change.
+  let clock = Date.now() - 3_600_000;
   return {
     objs,
     async put(key: string, body: unknown, opts?: { customMetadata?: Record<string, string> }) {
@@ -510,7 +512,8 @@ describe('the pull cursor', () => {
       const body = await sealJson(keys, 'log', { v: 1, device: 'bbbbbbbbbbbb', changes: [{ t, kind: 'accession', id: 'r' + i, field: 'taxonName', value: 'Plant ' + i }, { t: `${wall + i}-0001-bbbbbbbbbbbb`, kind: 'accession', id: 'r' + i, field: 'status', value: 'growing' }] });
       expect((await post(keys, `${t}-0123456789ab`, body)).status).toBe(200);
     }
-    for (const k of logKeys(r2)) r2.objs.get(k)!.uploaded = 7_000_000; // one arrival time for all of them
+    const oneSecond = Date.now() - 1000;
+    for (const k of logKeys(r2)) r2.objs.get(k)!.uploaded = oneSecond; // one arrival time for all of them
     const D = await boot(newMem('dddddddddddd'), r2);
     await D.sync.setup(KEY, 'join');
     expect(D.sync.lastError).toBeNull();
@@ -1452,6 +1455,170 @@ describe('a removed photograph\'s pixels go from every device and from the serve
       expect(memB.photos.size).toBe(1);
       await B.sync.run();
       expect(photoKeys()).toHaveLength(1);
+      mem = memD;
+      await D.sync.run();
+      expect(memD.photos.size).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('round fifty-two, 1: a change from a clock years ahead is parked, not held, and the device that made it converges once corrected', () => {
+  it('peers park it by its arrival; the fast device, corrected, parks its own and stops stamping ahead; Apply re-writes it at real time everywhere', async () => {
+    // The correction and its pending reading live in localStorage, which this Node lacks: a stand-in, so a reboot keeps them as a browser would.
+    const store = new Map<string, string>();
+    const had = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+    // One store per device (keyed by the device whose vault is in play), as each browser has its own.
+    const sk = (k: string) => `${mem.device}:${k}`;
+    Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: (k: string) => store.get(sk(k)) ?? null, setItem: (k: string, v: string) => void store.set(sk(k), v), removeItem: (k: string) => void store.delete(sk(k)) } });
+    try {
+    const r2 = fakeR2();
+    const memA = newMem('aaaaaaaaaaaa');
+    const memP = newMem('pppppppppppp');
+    let A = await boot(memA, r2);
+    const plant = await A.collection.addAccession({ taxonName: 'Copiapoa cinerea', acc: 'A-1', notes: 'bought at the show' });
+    await A.sync.setup(KEY, 'create');
+    // P is five years ahead. Its join is one reading; its edit is stamped 2031.
+    const real = Date.now();
+    serverClock = real;
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(real + 5 * 365 * 86_400_000);
+    let P = await boot(memP, r2);
+    await P.sync.setup(KEY, 'join');
+    await P.collection.put('accession', plant.id, { notes: 'from 2031' });
+    await P.sync.run();
+    expect(P.collection.accession(plant.id)?.notes).toBe('from 2031'); // its own, on its own screen, while it still believes its clock
+    // A pulls: parked by arrival, not held; nothing comes due; the record's page lists it.
+    vi.setSystemTime(real);
+    A = await reboot(memA, r2);
+    await A.sync.run();
+    expect(A.collection.accession(plant.id)?.notes).toBe('bought at the show');
+    expect(A.sync.held).toBe(0);
+    expect(A.collection.parkedFor('accession', plant.id).map((c) => c.field).sort()).toEqual(['notes', 'notesBase']);
+    expect(A.collection.parkedRecords).toBe(1);
+    // A's own edit is stamped now and shows at once on a third, correct device.
+    await A.collection.put('accession', plant.id, { notes: 'no: leave it until spring' });
+    await A.sync.run();
+    const C = await boot(newMem('cccccccccccc'), r2);
+    await C.sync.setup(KEY, 'join');
+    expect(C.collection.accession(plant.id)?.notes).toBe('no: leave it until spring');
+    expect(C.collection.parkedRecords).toBe(1);
+    // P syncs again a minute later: the second reading corrects it. Its 2031 stamps are parked here too, its view
+    // converges, and its next edit is stamped by real time, not just past its 2031 stamp.
+    vi.setSystemTime(real + 5 * 365 * 86_400_000 + 90_000);
+    serverClock = real + 90_000;
+    P = await reboot(memP, r2);
+    await P.sync.run();
+    expect(P.collection.accession(plant.id)?.notes).toBe('no: leave it until spring');
+    expect(P.collection.parkedFor('accession', plant.id).length).toBeGreaterThan(0);
+    await P.collection.put('accession', plant.id, { notes: 'P, corrected' });
+    const mine = [...memP.changes.values()].find((c) => c.value === 'P, corrected')!;
+    expect(hlcWall(mine.t)).toBeLessThan(real + 86_400_000); // real time, not 2031
+    await P.sync.run();
+    vi.setSystemTime(real + 120_000); // A and C are correct devices: the fake clock is theirs again
+    serverClock = real + 120_000;
+    await A.sync.run();
+    expect(A.collection.accession(plant.id)?.notes).toBe('P, corrected');
+    // Apply on A takes the parked values as an edit made now; the parked stamps stay parked everywhere.
+    await A.collection.applyParked('accession', plant.id);
+    expect(A.collection.accession(plant.id)?.notes).toBe('from 2031');
+    expect(A.collection.parkedFor('accession', plant.id)).toHaveLength(0);
+    await A.sync.run();
+    await C.sync.run();
+    expect(C.collection.accession(plant.id)?.notes).toBe('from 2031');
+    expect(C.sync.held).toBe(0);
+    } finally {
+      vi.useRealTimers();
+      serverClock = null;
+      if (had) Object.defineProperty(globalThis, 'localStorage', had); else delete (globalThis as { localStorage?: unknown }).localStorage;
+    }
+  });
+});
+
+describe('round fifty-two, 2: a revived photograph is sent again whichever device revives it and whatever failed in between', () => {
+  const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3]);
+  it('the removing device pushed the removal but its pull failed; a peer had the bytes dropped; Undo here still re-sends', async () => {
+    const r2 = fakeR2();
+    const memB = newMem('bbbbbbbbbbbb');
+    mem = memB;
+    const B = await boot(memB, r2);
+    const a = await B.collection.addAccession({ taxonName: 'Aloe', acc: 'B-1' });
+    const pid = 'pone000000001';
+    const sha = await sha256hex(jpeg);
+    memB.photos.set(pid, { id: pid, blob: new Blob([jpeg]), thumb: new Blob([jpeg]) });
+    await B.collection.put('photo', pid, { acc: a.id, d: '2026-01-01', w: 1, h: 1, bytes: 6, sha });
+    await B.sync.setup(KEY, 'create');
+    const memD = newMem('dddddddddddd');
+    const D = await boot(memD, r2);
+    await D.sync.setup(KEY, 'join');
+    const photoKeys = () => [...r2.objs.keys()].filter((k) => k.includes('/photo/'));
+    expect(photoKeys()).toHaveLength(1);
+    mem = memB;
+    await (await import('$lib/db/collection.svelte')).collection.load();
+    const undo = await B.collection.removePhoto(pid);
+    // the push lands, the listing after it fails: no successful pull records the removal for the last-run rule
+    const realFetch = globalThis.fetch;
+    let failed = false;
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => { if (!failed && String(input).includes('/api/sync/log?') && (!init?.method || init.method === 'GET')) { failed = true; throw new TypeError('Failed to fetch'); } return realFetch(input, init); }) as typeof fetch;
+    await B.sync.run().catch(() => {});
+    globalThis.fetch = realFetch;
+    expect(failed).toBe(true);
+    mem = memD;
+    await D.sync.run();
+    expect(memD.photos.size).toBe(0);
+    vi.useFakeTimers({ now: Date.now() + 11 * 60_000, toFake: ['Date'] });
+    try {
+      await D.sync.run();
+      expect(photoKeys()).toHaveLength(0);
+      mem = memB;
+      await undo();
+      await B.sync.run();
+      expect(photoKeys()).toHaveLength(1); // verified by HEAD, found gone, sent again
+      mem = memD;
+      await D.sync.run();
+      expect(memD.photos.size).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it('a third device, offline through the removal and the drop, edits the caption; its pixels are sent when it syncs', async () => {
+    const r2 = fakeR2();
+    const memB = newMem('bbbbbbbbbbbb');
+    mem = memB;
+    const B = await boot(memB, r2);
+    const a = await B.collection.addAccession({ taxonName: 'Aloe', acc: 'B-1' });
+    const pid = 'pone000000001';
+    const sha = await sha256hex(jpeg);
+    memB.photos.set(pid, { id: pid, blob: new Blob([jpeg]), thumb: new Blob([jpeg]) });
+    await B.collection.put('photo', pid, { acc: a.id, d: '2026-01-01', w: 1, h: 1, bytes: 6, sha });
+    await B.sync.setup(KEY, 'create');
+    const memC = newMem('cccccccccccc');
+    const C = await boot(memC, r2);
+    await C.sync.setup(KEY, 'join');
+    expect(memC.photos.size).toBe(1);
+    const memD = newMem('dddddddddddd');
+    const D = await boot(memD, r2);
+    await D.sync.setup(KEY, 'join');
+    const photoKeys = () => [...r2.objs.keys()].filter((k) => k.includes('/photo/'));
+    // B removes and pushes; D folds and, eleven minutes on, has the bytes dropped. C is offline the whole time.
+    mem = memB;
+    await (await import('$lib/db/collection.svelte')).collection.load();
+    await B.collection.removePhoto(pid);
+    await B.sync.run();
+    mem = memD;
+    await D.sync.run();
+    vi.useFakeTimers({ now: Date.now() + 11 * 60_000, toFake: ['Date'] });
+    try {
+      await D.sync.run();
+      expect(photoKeys()).toHaveLength(0);
+      // C, still offline, captions the photograph: an edit after a removal revives the record. Then it syncs.
+      mem = memC;
+      await (await import('$lib/db/collection.svelte')).collection.load();
+      await C.collection.put('photo', pid, { caption: 'the first flower' });
+      await C.sync.run();
+      expect(C.collection.photo(pid)).toBeDefined();
+      expect(photoKeys()).toHaveLength(1); // C saw the removal fold as it pulled, asked the server, and sent its pixels
       mem = memD;
       await D.sync.run();
       expect(memD.photos.size).toBe(1);

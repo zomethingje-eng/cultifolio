@@ -23,7 +23,8 @@ const CACHE = `cultifolio-${version}`;
  * deploy; a corpus refresh drops the old corpus's answers when the first new one is kept (round fifty-one, 6).
  */
 const CORPUS_CACHE = 'cultifolio-corpus';
-let corpusSeen = '';
+/** Which corpus ids this worker has pruned the corpus cache down to: the first answer under an id drops every entry under another, once per worker life, so a restarted worker prunes too (round fifty-two, 5). */
+const prunedTo = new Set<string>();
 /** Collection pages render on the device from the vault; their HTML is a shell that is the same for everyone. */
 const SHELLS = ['/plants', '/plants/new', '/places', '/propagation', '/propagation/new', '/labels', '/backup', '/sync', '/frost', '/settings', '/offline'];
 const BUILD = new Set(build);
@@ -159,9 +160,8 @@ self.addEventListener('fetch', (e) => {
           if (r.ok && r.type === 'basic' && !/no-store/.test(r.headers.get('cache-control') ?? '')) {
             const c = url.searchParams.get('c') ?? '';
             e.waitUntil((async () => {
-              // The first answer under a new corpus id drops the old corpus's answers: they are a new URL and would never be asked for again.
-              if (c && corpusSeen && c !== corpusSeen) for (const k of await corpusCache.keys()) if (new URL(k.url).searchParams.get('c') !== c) await corpusCache.delete(k);
-              if (c) corpusSeen = c;
+              // The first answer under a corpus id in this worker's life drops the answers under any other: they are a different URL and would never be asked for again.
+              if (c && !prunedTo.has(c)) { prunedTo.add(c); for (const k of await corpusCache.keys()) if (new URL(k.url).searchParams.get('c') !== c) await corpusCache.delete(k); }
               await corpusCache.put(request, r.clone());
             })().catch(() => {}));
           }

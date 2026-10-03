@@ -66,8 +66,8 @@ export function changeError(c: unknown, shapeOnly = false): string | null {
  * another type is refused before the fold, since a batch date stored as a number would throw on the front page for good
  * (round twenty-eight, 0). A field this build does not know passes, so a newer build's records still sync to an older one.
  */
-type ValueType = 'string' | 'number' | 'boolean' | 'object';
-const valueIs = (v: unknown, t: ValueType) => (t === 'object' ? typeof v === 'object' && !Array.isArray(v) : typeof v === t);
+type ValueType = 'string' | 'number' | 'boolean' | 'object' | 'array';
+const valueIs = (v: unknown, t: ValueType) => (t === 'object' ? typeof v === 'object' && !Array.isArray(v) : t === 'array' ? Array.isArray(v) : typeof v === t);
 const strings = (...f: string[]): Record<string, ValueType> => Object.fromEntries(f.map((x) => [x, 'string']));
 /**
  * The words a few fields hold in this build (the type unions in db/types.ts, kept in step by a test). They guard the
@@ -86,7 +86,7 @@ export const FIELD_TYPES: Record<Kind, Record<string, ValueType>> = {
   accession: { ...strings('acc', 'taxonName', 'nameAsReceived', 'cultivar', 'nameKind', 'parentage', 'fieldNumber', 'provenance', 'status', 'location', 'locationId', 'acquired', 'sourceFrom', 'sourceRef', 'sourceForm', 'price', 'notes', 'notesBase', 'sowingId', 'cover', 'importedOn'), taxonKey: 'number' },
   sowing: { ...strings('no', 'taxonName', 'cultivar', 'nameKind', 'parentage', 'method', 'parentAcc', 'sown', 'sourceFrom', 'sourceRef', 'fieldNumber', 'provenance', 'medium', 'container', 'treatment', 'locationId', 'status', 'notes', 'notesBase', 'importedOn'), taxonKey: 'number', count: 'number', bottomHeatC: 'number', covered: 'boolean' },
   location: { ...strings('name', 'parentId', 'type', 'notes'), indoor: 'boolean', floorC: 'number', floorHeld: 'boolean', ppfd: 'number', lightHours: 'number', lat: 'number', lon: 'number', altM: 'number', sort: 'number' },
-  event: { ...strings('acc', 'd', 't', 'note', 'cause', 'used'), followUp: 'number', n: 'number', measures: 'object', auto: 'boolean' },
+  event: { ...strings('acc', 'd', 't', 'note', 'cause', 'used'), followUp: 'number', n: 'number', measures: 'object', auto: 'boolean', plants: 'array' },
   photo: { ...strings('acc', 'sowing', 'd', 'dFrom', 'caption', 'sha'), w: 'number', h: 'number', bytes: 'number' },
   taxon: { ...strings('name', 'myNotes'), gbifKey: 'number', removed: 'boolean', followed: 'boolean' },
   setting: { scheme: 'object' }
@@ -197,6 +197,24 @@ export function validateChanges(changes: unknown): Change[] {
 export interface Hold {
   now: number;
   except?: string;
+  /** When the batch these changes came in reached the server, by the server's clock: a change stamped more than a day past it is a broken clock's, and is parked rather than held (round fifty-two, 1). Absent for a local commit or a load, where `now` stands in. */
+  arrival?: number;
+  /** Stamps parked before, by this device or by the arrival rule: never folded, whatever the clock says now. */
+  parked?: Set<string>;
+  /** Told of each change the fold parks. */
+  onParked?: (c: Change) => void;
+}
+/**
+ * Past this far ahead of its arrival (or of the clock, for a change made here), a change is parked: kept in the log,
+ * never folded on its own, shown on its record as from a device whose clock was wrong, with Apply. Held changes come
+ * due and then overwrite real edits made meanwhile; a stamp a year ahead would do so in a year, silently, on every
+ * device (round fifty-two, 1). Two days is far past any clock drift (a clock a day wrong is held and comes due) and short of any typo in a year.
+ */
+export const PARK_MS = 2 * 86_400_000;
+/** Whether the fold parks the change: already parked, or stamped more than two days past its arrival (or the clock). This device's own changes are not exempt: once its clock is corrected, what it stamped years ahead is wrong here too. */
+export function isParked(t: string, hold: Hold): boolean {
+  if (hold.parked?.has(t)) return true;
+  return hlcWall(t) > (hold.arrival ?? hold.now) + PARK_MS;
 }
 
 /** The wall-clock millisecond of an HLC string, without a full decode. */
@@ -205,6 +223,7 @@ export const hlcWall = (t: string) => Number(t.slice(0, 13));
 /** Whether the fold with this clock would hold the change. */
 export function isHeld(t: string, hold: Hold): boolean {
   if (hlcWall(t) <= hold.now + MAX_AHEAD_MS) return false;
+  if (isParked(t, hold)) return false; // parked is not held: it never comes due
   // A writer is the device plus a per-tab tag, so the device is a prefix of the writer; every tab of this device counts as "here".
   return !hold.except || !t.slice(t.lastIndexOf('-') + 1).startsWith(hold.except);
 }
@@ -223,6 +242,10 @@ export function apply(state: State, changes: Iterable<Change>, seen?: Map<string
   const held: Change[] = [];
   for (const c of changes) {
     assertField(c.field);
+    if (hold && isParked(c.t, hold)) {
+      hold.onParked?.(c);
+      continue;
+    }
     if (hold && isHeld(c.t, hold)) {
       held.push(c);
       // The held stamp is noted under its field, so a local edit to that field made meanwhile can be stamped past it

@@ -106,6 +106,8 @@
   /** One tap writes one line, dated today; the toast takes exactly that line back (round forty-nine, 3). */
   let watering = $state('');
   async function water(a: Accession) {
+    if (watering) return;
+    if (collection.lastWatered(a.id) === localDate()) { toast.show(`${accNo(a)} is already recorded as watered today.`); return; } // one watering a day: two taps are one (round fifty-two, 3)
     watering = a.id;
     try {
       const ev = await collection.addEvent({ acc: a.id, d: localDate(), t: 'water' });
@@ -216,7 +218,8 @@
   /* The first screen is for the list: the search and the sort share a row, the chips are one row scrolled sideways (round fifty, 4). */
   @media (max-width: 640px) {
     .plantstools { margin-top: 0; padding-top: 4px; row-gap: 6px; }
-    .plantstools .searchbar { min-width: 0; }
+    .plantstools .searchbar { min-width: 0; flex-basis: 160px; }
+    .plantstools > a.btn.small { flex: none; order: 3; } /* the labels link does not squeeze the search box (round fifty-two, 6) */
     .plantstools .sortsel { flex: none; max-width: 44%; }
     .plantstools .showrow { flex-basis: 100%; flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; margin: 0 -16px !important; padding: 2px 16px; }
     .plantstools .showrow::-webkit-scrollbar { display: none; }

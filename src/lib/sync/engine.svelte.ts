@@ -39,8 +39,8 @@ import { collection } from '$lib/db/collection.svelte';
 import { StoppedError, getMeta, setMeta, setMetaIfKey, getPhotoBlobs, putPhotoBlobs, deletePhotoBlobs, photoBlobIds, outboxKeys, outboxAck, outboxFill, outboxClear, changesByKeys, allChanges, appendChanges, onOtherTabWrite, announceSyncForgotten } from '$lib/db/vault';
 import { deriveKeys, sealJson, openJson, seal, open, packPhoto, unpackPhoto, parseVaultKey, batchFingerprint, dropProof, sha256hex, type VaultKeys } from './crypto';
 import { MAX_BATCH_BYTES, MAX_PHOTO_BYTES, SEAL_OVERHEAD, OVERLAP_MS, CURSOR_SLACK_MS, PUSH_HEADERS, PHOTO_DROP_HEADER, batchName, listAfter, logBatch } from './limits';
-import { readChanges, isHeld, dueAt, hlcWall, type Change } from '$core/log';
-import { hlcCompare, MAX_AHEAD_MS, nowMs, trustServerTime, clockOffsetMs } from '$core/hlc';
+import { readChanges, isHeld, isParked, dueAt, hlcWall, type Change } from '$core/log';
+import { hlcCompare, MAX_AHEAD_MS, nowMs, trustServerTime, clockOffsetMs, clearClockOffset, onClockOffsetChange } from '$core/hlc';
 import { version as BUILD } from '$app/environment';
 
 interface SyncMeta {
@@ -148,6 +148,8 @@ class Sync {
   async init(base = ''): Promise<void> {
     this.base = base;
     if (this.meta) return;
+    // Another tab's correction (a `storage` event) re-judges this tab's holds too (round fifty-two, 1).
+    onClockOffsetChange(() => { void collection.rebuild().then(() => this.scanClock()).catch(() => {}); });
     this.wasIn = (await getMeta<{ vaultId: string; at: string; why: 'stopped' | 'replaced' }>(WAS)) ?? null;
     const m = await getMeta<SyncMeta & { own?: string[]; cursor?: string; firstPushDone?: boolean }>(META);
     if (m?.key) {
@@ -249,6 +251,7 @@ class Sync {
     // Why matters to the page: after a replace from backup, rejoining would merge the vault's records back into the restored collection, so Rejoin is not the lead there (round twenty-five, 6).
     const was = this.vaultId ? { vaultId: this.vaultId, at: new Date().toISOString(), why } : null;
     this.dropped(); // this.meta is null from here: a run in flight cannot write the old record back (round fifteen, 2)
+    clearClockOffset(); // no server to confirm a correction against: the device clock is what there is (round fifty-two, 1)
     await setMeta(META, null);
     if (was) { await setMeta(WAS, was); this.wasIn = was; }
     await outboxClear();
@@ -343,8 +346,8 @@ class Sync {
 
   /* ---- held changes and the clock ---- */
 
-  private hold() {
-    return { now: nowMs(), except: collection.device };
+  private hold(arrival?: number) {
+    return { now: nowMs(), except: collection.device, arrival, parked: collection.parkedStamps };
   }
 
   /**
@@ -362,6 +365,7 @@ class Sync {
     const held = new Set(this.meta.held ?? []);
     let ownLast = '';
     for (const c of all) {
+      if (isParked(c.t, hold)) continue; // parked is neither held nor a sign the clock jumped back: it is a stamp from when the clock was wrong (round fifty-two, 1)
       if (isHeld(c.t, hold)) held.add(c.t);
       else if (hold.except && ownStamp(c.t, hold.except) && hlcCompare(c.t, ownLast) > 0) ownLast = c.t;
     }
@@ -377,6 +381,7 @@ class Sync {
     let ownLast = '';
     let added = false;
     for (const c of changes) {
+      if (isParked(c.t, hold)) continue;
       if (isHeld(c.t, hold)) {
         if (!this.meta.held?.includes(c.t)) (this.meta.held ??= []).push(c.t);
         added = true;
@@ -394,9 +399,7 @@ class Sync {
       // The device clock disagrees with the server's by more than half a minute: changes are stamped by the server's
       // time while this device syncs, and the warning says so, since the device's own clock is what the grower sees (round forty-nine, 1).
       const off = clockOffsetMs();
-      const mins = Math.round(Math.abs(off) / 60_000);
-      const by = mins >= 120 ? `${Math.round(mins / 60)} hours` : mins >= 2 ? `${mins} minutes` : 'about a minute';
-      this.clockWarning = `This device's clock is ${by} ${off > 0 ? 'behind' : 'ahead of'} the server's; changes made here are stamped by the server's time until it is set right.`;
+      this.clockWarning = `This device's clock is ${spanWords(Math.abs(off))} ${off > 0 ? 'behind' : 'ahead of'} the server's; changes made here are stamped by the server's time until it is set right.`;
     }
   }
 
@@ -443,6 +446,9 @@ class Sync {
       }
       if (this.meta !== m) throw stopped(); // the 429 was caught above; a stop or a new vault during the push still ends the run here
       const got = await this.pull(m);
+      // A removal folded by this pull may have revived under an edit made here, with the pixels here: the photographs
+      // noted by the pull are checked and sent in the same run, not the next (round fifty-two, 2).
+      if (collection.unverifiedPhotos().length && !this.vaultFull) await this.push(m);
       m.lastSync = new Date().toISOString();
       this.offline = false;
       this.unreached = null;
@@ -520,6 +526,7 @@ class Sync {
     // Photos we have that the server may not.
     const have = new Set(await photoBlobIds());
     this.noteRevived(m, have);
+    await this.verifyPhotos(m, have);
     const pushed = new Set(m.photosPushed);
     // Every photograph with a record, waiting ones too: their pixels are kept for the day the record completes, and the
     // other device needs them that day (round thirty-seven, 1).
@@ -642,7 +649,7 @@ class Sync {
    * throws here, the run stops, and the batch is fetched again next run. Only bytes that arrived whole and cannot be
    * opened are set aside (by name, so they never block what came after them). True when the batch folded.
    */
-  private async takeBatch(m: SyncMeta, key: string): Promise<boolean> {
+  private async takeBatch(m: SyncMeta, key: string, arrival?: number): Promise<boolean> {
     const res = await fetch(`${this.base}/api/sync/log/${key}?vault=${this.k(m).id}`, { headers: this.h(m) });
     if (res.status === 429) this.limited(res);
     if (!res.ok) throw new Error(`batch ${key}: ${res.status}`);
@@ -667,7 +674,16 @@ class Sync {
     // and the error stops this run, so the next run fetches it again.
     // Never fold a batch of a vault this device has left into a log that has since been replaced: the key is checked
     // inside the write's own transaction (round sixteen, 1; round seventeen, A1).
-    const hold = this.hold();
+    const hold = this.hold(arrival);
+    // A change stamped more than a day past the batch's arrival at the server is a broken clock's: into the log, never
+    // into the fold, listed on its record with Apply (round fifty-two, 1). The same on every device, since the arrival
+    // is the server's.
+    const parked = changes.filter((c) => isParked(c.t, hold));
+    if (parked.length) {
+      await appendChanges(parked, true, false, m.key);
+      await collection.markParked(parked);
+      changes = changes.filter((c) => !isParked(c.t, hold));
+    }
     const ahead = changes.filter((c) => isHeld(c.t, hold));
     if (ahead.length) {
       // Stamped too far ahead of this clock: into the log, not into the fold, until the clock reaches them.
@@ -702,7 +718,9 @@ class Sync {
       // Only from an answer that carries a Date: one without (a dev server) leaves the correction as it was, rather
       // than resetting it mid-run (round fifty-one, 1). A correction that changes re-folds the log, since the holds
       // were judged by the old clock: a device hours behind held its peers' latest changes at load.
-      if (dateHeader) {
+      // One reading per run: the pages of one pull are seconds apart and would count as the two readings a large
+      // correction needs (round fifty-two, 1).
+      if (dateHeader && !after) {
         const wasOff = clockOffsetMs();
         if (trustServerTime(serverNow) !== wasOff) {
           if (clockOffsetMs() === 0) this.clockWarning = null;
@@ -720,7 +738,7 @@ class Sync {
         for (const b of batches) {
           if (!have.has(b.key)) {
             this.step(m, `Receiving ${++n} of ${fresh.length}…`);
-            if (await this.takeBatch(m, b.key)) got++;
+            if (await this.takeBatch(m, b.key, b.at)) got++;
             m.have.push(b.key);
             have.add(b.key);
           }
@@ -759,7 +777,7 @@ class Sync {
       this.step(m, 'Reading a batch set aside by an earlier build…');
       let ok: boolean;
       try {
-        ok = await this.takeBatch(m, q.key);
+        ok = await this.takeBatch(m, q.key, m.haveAt?.[q.key]);
       } catch (e) {
         if ((e as { retryAfterMs?: number })?.retryAfterMs) throw e;
         if (e instanceof StoppedError || this.meta !== m) throw e; // a stop, from this tab (the meta gone) or another (the stored key gone, seen inside the vault write): the run must not go on into the number repair (round twenty-one, 4; round twenty-two, 8)
@@ -814,6 +832,35 @@ class Sync {
   }
 
   /**
+   * A photograph whose removal this device has seen, live again and with pixels here, is asked about before its upload
+   * record is trusted: one HEAD each, and a 404 (a peer had the bytes dropped meanwhile) takes it off `photosPushed` so
+   * the push below sends it. Covers the cases the last-run list below cannot: a removal pushed but never followed by a
+   * successful pull, and a revival made on a device that never saw the removal folded (round fifty-two, 2).
+   */
+  private async verifyPhotos(m: SyncMeta, have: Set<string>): Promise<void> {
+    const ids = collection.unverifiedPhotos();
+    if (!ids.length) return;
+    const live = new Set(collection.knownPhotos().map((p) => p.id));
+    const done: string[] = [];
+    const removedAt = new Map(collection.removedPhotos().map((r) => [r.id, r.at]));
+    for (const id of ids) {
+      if (!live.has(id)) {
+        // Still removed: kept while an Undo could bring the pixels back here; past that window, with no pixels, there is nothing this device could send.
+        if (!have.has(id) && nowMs() - (removedAt.get(id) ?? 0) > DROP_AFTER_MS) done.push(id);
+        continue;
+      }
+      if (!have.has(id)) { done.push(id); continue; } // live, no pixels here: another device's to send
+      const r = await fetch(`${this.base}/api/sync/photo/${id}?vault=${this.k(m).id}`, { method: 'HEAD', headers: this.h(m) });
+      if (r.status === 429) this.limited(r);
+      if (r.status === 404) { m.photosPushed = m.photosPushed.filter((x) => x !== id); m.photosDropped = (m.photosDropped ?? []).filter((x) => x !== id); done.push(id); }
+      else if (r.ok) done.push(id);
+      // any other answer: asked again next run
+    }
+    if (this.meta !== m) throw stopped();
+    await collection.verifiedPhotos(done);
+  }
+
+  /**
    * A photograph seen removed at the last run and live again now (an Undo, a restore), with its pixels still here, is
    * sent again whatever `photosPushed` says. Another device may have folded the removal, dropped its pixels and asked the
    * server to drop the bytes in between; without this no device ever uploaded it again, and the record showed blank
@@ -861,6 +908,20 @@ class Sync {
     }
     if (changed) await this.save(m);
   }
+}
+/** A span in the largest whole unit that reads: "8760 hours" said nothing a reader could use (round fifty-two, 1). */
+export function spanWords(ms: number): string {
+  const mins = Math.round(ms / 60_000);
+  if (mins < 2) return 'about a minute';
+  if (mins < 120) return `${mins} minutes`;
+  const hours = Math.round(mins / 60);
+  if (hours < 48) return `${hours} hours`;
+  const days = Math.round(hours / 24);
+  if (days < 60) return `${days} days`;
+  const months = Math.round(days / 30.4);
+  if (months < 11) return `about ${months} months`;
+  const years = days / 365.25;
+  return years < 1.5 ? 'about a year' : `about ${Math.round(years)} years`;
 }
 const sameList = (a: string[], b: string[]) => a.length === b.length && a.every((x, i) => x === b[i]);
 /** How old a photograph's removal must be before the server is asked to drop the bytes: past any Undo. */

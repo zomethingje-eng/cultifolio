@@ -207,7 +207,7 @@ test('benches: make a place, put a plant there, water the bench, audit it', asyn
   await page.getByRole('button', { name: 'Keep going' }).click();
   await page.getByRole('button', { name: 'Finish audit' }).click();
   await expect(page.locator('#audit-result')).toContainText('1 present.');
-  await expect(page.getByText(/seen today/)).toBeVisible();
+  await expect(page.locator('.azrow .fig', { hasText: /seen today/ })).toBeVisible(); // and a phone's row says it too, in its own span (round fifty-two, 6)
   // the plant's timeline has both entries
   await page.locator('.rows a.row', { hasText: 'Tylecodon' }).first().click();
   await expect(page.locator('.tlrow .t', { hasText: 'Seen at audit' })).toBeVisible();
@@ -2840,8 +2840,8 @@ test('round fifty: on a phone the first screen of the catalogue, My plants and a
   await page.goto('/plants/2026-0001');
   const steps = page.locator('.setup .setuprow');
   await expect(steps.first()).toBeVisible();
-  const s0 = await steps.nth(0).boundingBox(); const s1 = await steps.nth(1).boundingBox();
-  expect(Math.abs(s0!.y - s1!.y)).toBeLessThan(2);
+  // polled: the row's layout settles a moment after the fonts and the page's stylesheet do
+  await expect.poll(async () => { const s0 = await steps.nth(0).boundingBox(); const s1 = await steps.nth(1).boundingBox(); return Math.abs(s0!.y - s1!.y); }).toBeLessThan(2);
 });
 
 test('round fifty: typing a search is a mode on a phone: the box pinned, the strip and chips away, the matches as rows, Cancel puts the page back (2)', async ({ page }) => {
@@ -2906,4 +2906,44 @@ test('round fifty-one: a move into a place has an Undo that puts the plant back 
   await page.goto(`/plants/${acc}`);
   await expect(page.locator('.tlrow', { hasText: 'to Cold frame' })).toHaveCount(0);
   await expect(page.locator('.idcard a.place')).toHaveCount(0);
+});
+
+test('round fifty-two: a device a year ahead is corrected by the server\'s clock after two runs a minute apart and its watering is dated today everywhere; a change from a clock five years ahead is parked on every record page with Apply (1)', async ({ browser }) => {
+  const shifted = async (ms: number) => { const c = await browser.newContext(); await c.addInitScript((off: number) => { const real = Date.now; const OD = Date; (globalThis as { __shift?: number }).__shift = off; globalThis.Date = class extends OD { constructor(...args: unknown[]) { if (args.length === 0) super(real() + ((globalThis as { __shift?: number }).__shift ?? 0)); else super(...(args as [number])); } static now() { return real() + ((globalThis as { __shift?: number }).__shift ?? 0); } } as DateConstructor; }, ms); return c; };
+  const A = await browser.newContext(); const a = await A.newPage();
+  await a.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await addPlant(a);
+  const acc = a.url().split('/').pop()!;
+  await a.goto('/sync'); await a.click('#sync-start'); const key = (await a.locator('#vault-key').textContent())!.trim();
+  await a.fill('#key-typeback', key.slice(-5).toLowerCase()); await a.click('#sync-create');
+  await expect(a.locator('.card', { hasText: 'Status' })).toContainText('Synced');
+  const join = async (p: import('@playwright/test').Page) => { await p.goto('/sync'); await p.click('#sync-have-key'); await p.fill('#sync-key', key.toLowerCase()); await p.click('#sync-join'); await expect(p.locator('.card', { hasText: 'Status' })).toContainText('Synced'); };
+  const syncNow = async (p: import('@playwright/test').Page) => { if (!p.url().endsWith('/sync')) await p.goto('/sync'); await p.click('#sync-now'); await expect(p.locator('#sync-now')).toBeEnabled(); await p.waitForTimeout(300); };
+  // P: a year ahead. The join is one reading; a second run a minute later (by its own clock) corrects it.
+  const P = await shifted(365 * 86_400_000); const p = await P.newPage();
+  await join(p);
+  await p.evaluate(() => { (globalThis as { __shift?: number }).__shift! += 61_000; });
+  await syncNow(p);
+  await expect(p.locator('#clock-warning')).toContainText('about a year ahead');
+  expect(Number(JSON.parse((await p.evaluate(() => localStorage.getItem('cultifolio.clockOffsetMs')))!).offset)).toBeLessThan(-360 * 86_400_000);
+  await p.goto(`/plants/${acc}`);
+  await p.getByRole('button', { name: 'Water', exact: true }).click();
+  await expect(p.locator('.tlrow', { hasText: 'Watered' }).first()).toContainText(localDay(0)); // dated by the corrected clock
+  await syncNow(p); await syncNow(a);
+  await a.goto(`/plants/${acc}`);
+  await expect(a.locator('.tlrow', { hasText: 'Watered' }).first()).toContainText(localDay(0));
+  // Q: five years ahead, one reading only: its note is parked on A, listed on the record with Apply, and on the sync page.
+  const Q = await shifted(5 * 365 * 86_400_000); const q = await Q.newPage();
+  await join(q);
+  await q.goto(`/plants/${acc}`); await q.getByRole('button', { name: 'Add a note' }).click(); await q.locator('textarea').first().fill('from 2031'); await q.getByRole('button', { name: 'Save' }).first().click();
+  await syncNow(q); await syncNow(a);
+  await a.goto(`/plants/${acc}`);
+  await expect(a.locator('.parked')).toContainText('from a device whose clock was wrong');
+  await expect(a.locator('body')).not.toContainText('from 2031');
+  await a.goto('/sync');
+  await expect(a.locator('#parked')).toContainText('1 record has edits from a device whose clock was wrong');
+  await a.goto(`/plants/${acc}`);
+  await a.locator('.parked').getByRole('button', { name: /Apply/ }).click();
+  await expect(a.locator('.parked')).toHaveCount(0);
+  await expect(a.locator('body')).toContainText('from 2031');
+  await Promise.all([A.close(), P.close(), Q.close()]);
 });

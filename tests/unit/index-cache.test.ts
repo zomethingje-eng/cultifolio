@@ -63,3 +63,20 @@ describe('the index cache (round forty-three, 1)', () => {
     expect(store.state).toMatchObject({ gets: 2, heads: 1 });
   });
 });
+
+describe('round fifty-two, 5: fixtures stand in only under the fixture corpus', () => {
+  beforeEach(() => { _forgetIndex(); });
+  it('a real index that names a species whose record the bucket lacks gets no record, not the synthetic one; the fixture corpus still does', async () => {
+    const { getDossier, getGenus } = await import('$lib/server/dossiers');
+    // a bucket whose index lists Copiapoa cinerea's key but holds no dossier or genus object for it
+    const store = { get: async (path: string) => (path.endsWith('index.json') ? { text: async () => JSON.stringify([{ key: 5384013, slug: 'copiapoa-cinerea', name: 'Copiapoa cinerea', family: 'Cactaceae', climate: 'ok', open: 0, photos: 0 }]), etag: '"real"' } : null), head: async () => ({ etag: '"real"' }) };
+    const p = { env: { STORE: store } } as unknown as App.Platform;
+    expect(await getIndex(p, noStatic)).toHaveLength(1);
+    expect(await getDossier(p, noStatic, 5384013)).toBeNull();
+    expect(await getGenus(p, noStatic, 'copiapoa')).toBeNull();
+    // no bucket, no static corpus: the fixtures are the corpus, and answer
+    _forgetIndex();
+    expect((await getIndex(undefined, noStatic)).length).toBeGreaterThan(1);
+    expect((await getDossier(undefined, noStatic, 5384013))?.name.scientific).toBe('Copiapoa cinerea');
+  });
+});

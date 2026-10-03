@@ -77,7 +77,7 @@ describe('sowings', () => {
     expect(collection.raisedFrom(s.id)).toHaveLength(3);
     const potup = collection.events(s.id).find((e) => e.t === 'potup')!;
     expect(potup.n).toBe(3);
-    expect(potup.note).toContain(accNo(made[2]));
+    expect(potup.plants).toEqual(made.map((a) => a.id)); // the plants by id: the line names them by their current numbers, whatever a later repair renumbers (round fifty-two, 4)
 
     // a second batch the same year gets the next number; a later year restarts
     expect(sowNo(await collection.addSowing({ taxonName: 'X', method: 'seed', sown: '2026-05-05', count: 5 }))).toBe('S2026-002');
@@ -109,6 +109,24 @@ describe('sowings', () => {
     expect(made[0].provenance).toBe('unknown'); // not "f1 from wild-collected seed": the method says nothing this build can read
     expect(made[0].sourceForm).toBeNull();
     expect(collection.sowing(s.id)?.method).toBe('twin-scaling');
+  });
+});
+
+describe('round fifty-two, 3: the pot is read inside the claim, and an overdrawn pot is said', () => {
+  beforeEach(async () => {
+    await collection.load();
+  });
+  it('two pot-ups in flight for the last seedling make one plant; a merge that overdraws the pot is counted, not clamped away', async () => {
+    const s = await collection.addSowing({ taxonName: 'Lithops', method: 'seed', sown: '2026-03-01', count: 5 });
+    await collection.addEvent({ acc: s.id, d: '2026-03-16', t: 'germinate', n: 1 });
+    const [a, b] = await Promise.all([collection.potUp(s.id, 1, { date: '2026-06-01' }), collection.potUp(s.id, 1, { date: '2026-06-01' }).catch(() => [])]);
+    expect(a.length + b.length).toBe(1);
+    expect(collection.sowingStats(s.id).remaining).toBe(0);
+    expect(collection.sowingStats(s.id).overdrawn).toBe(0);
+    // a peer potted the same seedling while apart: the merged pot is one over
+    await collection.ingest([{ t: `${String(Date.now() - 1000).padStart(13, '0')}-0000-peerdevice00`, kind: 'event', id: 'e-peer', field: 'acc', value: s.id }, { t: `${String(Date.now() - 999).padStart(13, '0')}-0000-peerdevice00`, kind: 'event', id: 'e-peer', field: 'd', value: '2026-06-01' }, { t: `${String(Date.now() - 998).padStart(13, '0')}-0000-peerdevice00`, kind: 'event', id: 'e-peer', field: 't', value: 'potup' }, { t: `${String(Date.now() - 997).padStart(13, '0')}-0000-peerdevice00`, kind: 'event', id: 'e-peer', field: 'n', value: 1 }], 'server');
+    expect(collection.sowingStats(s.id).overdrawn).toBe(1);
+    expect(collection.sowingStats(s.id).remaining).toBe(0);
   });
 });
 

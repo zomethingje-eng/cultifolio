@@ -55,7 +55,8 @@ export function generatedNote(input: SheetInput, o: NoteOpts = {}): Condensed | 
 export function careLine(input: SheetInput, o: NoteOpts = {}): string {
   // A climate that was not checked (the source refused when the page was built) is said so, never printed as the blank a
   // species with no climate gets: the label follows the same refusal rule as the pages (round fifteen, 5).
-  if (input.climateStatus === 'refused' || input.climateStatus === 'pending') return 'climate not checked';
+  if (input.climateStatus === 'refused') return 'climate not checked';
+  if (input.climateStatus === 'pending') return 'climate pending'; // a build still to run is not a refusal (round fifty-two, 6)
   const { rows, year } = cultivationSheet(input);
   if (!rows.length) return '';
   const bits: string[] = [];

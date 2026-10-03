@@ -109,7 +109,8 @@
     if (!name.trim() || busy || checking) return; // a second tap during a slow name check made a second plant (round fifty-one, 4)
     if (ownTaken) return;
     // The number is minted for the acquisition year and never reused, so a future date (2099 for 2026) would give the plant a wrong identity for good; refused before anything is checked or written (round twenty-six, 3).
-    dateMsg = acquired && acquired > localDate() ? `${acquired} is in the future.` : '';
+    // And a year before any living collection (1026 for 2026) would mint 1026-0001 for good, the same way (round fifty-two, 4).
+    dateMsg = acquired && acquired > localDate() ? `${acquired} is in the future.` : acquired && acquired < '1900-01-01' ? `${acquired} is before 1900; the number would be minted for that year, for good.` : '';
     if (dateMsg) { document.getElementById('f-date')?.focus(); return; }
     checking = true;
     try {
@@ -261,7 +262,7 @@
   .moredetails { margin-top: 8px; }
   .moredetails > summary { cursor: pointer; font-size: 13px; padding: 8px 0; }
   .actions.sticky .cancel { order: 1; } .actions.sticky .another { order: 2; } .actions.sticky .add { order: 3; }
-  @media (max-width: 700px) { .actions.sticky { position: sticky; bottom: calc(56px + env(safe-area-inset-bottom)); background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(8px); padding: 10px 0; margin: 8px -4px 0; z-index: 5; } }
+  @media (max-width: 700px) { .actions.sticky { position: sticky; bottom: calc(56px + env(safe-area-inset-bottom)); background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(8px); padding: 10px 0; margin: 8px 0 0; z-index: 5; } }
   .own { margin-top: 8px; }
   .own summary { cursor: pointer; font-size: 13px; }
   .ownrow { display: flex; align-items: center; gap: 8px; margin-top: 8px; }

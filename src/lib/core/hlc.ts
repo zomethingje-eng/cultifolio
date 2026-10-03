@@ -21,29 +21,57 @@ export const MAX_COUNT = 0xffffff;
 
 /** Past this, the device clock is taken as wrong and the server's `Date` stands in for it; under it, the device clock is left alone, since a few seconds either way change nothing and a jittering offset would. */
 export const TRUST_SERVER_PAST_MS = 30_000;
-/** A correction this large is taken only when two readings in a row agree on it: one wrong `Date` (a captive portal, a proxy) must not move a device's stamps by years (round fifty-one, 1). */
+/** A correction this large is taken only when two readings from two sync runs, at least a minute apart, agree on it: one wrong `Date` (an intercepting proxy) must not move a device's stamps by years (round fifty-one, 1; round fifty-two, 1). */
 export const TRUST_SERVER_TWICE_PAST_MS = 2 * 86_400_000;
-/** Where the correction is kept between loads, so the first edit of a tab is stamped right, not only the ones after its first pull (round fifty-one, 1). */
+/** The two readings a large correction needs must be this far apart: two pages of one pull are one reading (round fifty-two, 1). */
+export const TRUST_AGREE_GAP_MS = 60_000;
+/** And agree to within this: a device whose clock also drifts a little between the two readings still gets its correction, while one wrong answer (off by hours or days) never agrees with a right one. */
+export const TRUST_AGREE_TOL_MS = 5 * 60_000;
+/** A correction not confirmed by a reading for this long is dropped: a device that stopped syncing with a correction in force would otherwise stamp by it for good, long after its clock was set right (round fifty-two, 1). */
+export const TRUST_EXPIRES_MS = 7 * 86_400_000;
+/** Where the correction is kept between loads, so the first edit of a tab is stamped right, not only the ones after its first pull (round fifty-one, 1). The pending reading is kept too, so one sync per page load still gets a device corrected (round fifty-two, 1). */
 const OFFSET_KEY = 'cultifolio.clockOffsetMs';
-let offsetMs = readStoredOffset();
-/** A large correction seen once, waiting for a second reading that agrees. */
-let pendingMs: number | null = null;
-function readStoredOffset(): number {
-  try {
-    const v = typeof localStorage !== 'undefined' ? Number(localStorage.getItem(OFFSET_KEY)) : 0;
-    return Number.isFinite(v) ? v : 0;
-  } catch {
-    return 0;
-  }
-}
-function storeOffset(ms: number): void {
+const PENDING_KEY = 'cultifolio.clockPending';
+type Stored = { offset: number; confirmedAt: number };
+let offsetMs = 0;
+/** When a reading last confirmed the offset in force, by the device clock. */
+let confirmedAt = 0;
+/** A large correction seen once, waiting for a second reading that agrees, and when it was seen (device clock). */
+let pending: { delta: number; at: number } | null = null;
+const listeners = new Set<(offset: number) => void>();
+function readStored(): void {
   try {
     if (typeof localStorage === 'undefined') return;
-    if (ms) localStorage.setItem(OFFSET_KEY, String(ms));
+    const raw = localStorage.getItem(OFFSET_KEY);
+    if (raw) {
+      // Older builds kept the bare number; this one keeps when it was last confirmed.
+      const v = raw.startsWith('{') ? (JSON.parse(raw) as Stored) : { offset: Number(raw), confirmedAt: Date.now() };
+      if (Number.isFinite(v.offset) && Date.now() - (v.confirmedAt || 0) < TRUST_EXPIRES_MS) { offsetMs = v.offset; confirmedAt = v.confirmedAt || Date.now(); }
+      else localStorage.removeItem(OFFSET_KEY);
+    }
+    const p = localStorage.getItem(PENDING_KEY);
+    if (p) { const v = JSON.parse(p) as { delta: number; at: number }; if (Number.isFinite(v.delta) && Date.now() - v.at < TRUST_EXPIRES_MS) pending = v; else localStorage.removeItem(PENDING_KEY); }
+  } catch {
+    /* storage refused or unreadable: no correction */
+  }
+}
+function store(): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    if (offsetMs) localStorage.setItem(OFFSET_KEY, JSON.stringify({ offset: offsetMs, confirmedAt } satisfies Stored));
     else localStorage.removeItem(OFFSET_KEY);
+    if (pending) localStorage.setItem(PENDING_KEY, JSON.stringify(pending));
+    else localStorage.removeItem(PENDING_KEY);
   } catch {
     /* storage refused: the offset lives for this load */
   }
+}
+readStored();
+// Another tab's correction reaches this one: a tab already open went on stamping by the old offset until its own next sync (round fifty-two, 1).
+try {
+  if (typeof addEventListener !== 'undefined' && typeof localStorage !== 'undefined') addEventListener('storage', (e) => { if ((e as StorageEvent).key === OFFSET_KEY || (e as StorageEvent).key === PENDING_KEY) { const was = offsetMs; offsetMs = 0; pending = null; readStored(); if (offsetMs !== was) for (const l of listeners) l(offsetMs); } });
+} catch {
+  /* no window */
 }
 /**
  * The time changes are stamped, event dates are read from, and holds are judged by: the device clock, corrected by the
@@ -53,10 +81,16 @@ function storeOffset(ms: number): void {
  * sync; a device that never syncs keeps its own clock, which is all it has. The correction is kept across loads.
  */
 export const nowMs = () => Date.now() + offsetMs;
+/** Called when the correction changes (a reading here, or another tab's): the clock that mints stamps restarts from the corrected time. */
+export function onClockOffsetChange(l: (offset: number) => void): () => void {
+  listeners.add(l);
+  return () => void listeners.delete(l);
+}
 /**
- * Fold in the server's time (ms since the epoch) as read at `localMs`. The offset moves only past the threshold and is
- * dropped once the clocks agree to within half of it (no flapping at the edge); a correction of days or more is taken
- * only when a second reading agrees with the first to within the threshold. Returns the offset in force.
+ * Fold in the server's time (ms since the epoch) as read at `localMs`, once per sync run. The offset moves only past the
+ * threshold and is dropped once the clocks agree to within half of it (no flapping at the edge); a correction of days
+ * or more is taken only when a second reading, at least a minute after the first, agrees with it to within the
+ * threshold. Returns the offset in force.
  */
 export function trustServerTime(serverMs: number, localMs = Date.now()): number {
   if (!Number.isFinite(serverMs) || serverMs <= 0) return offsetMs;
@@ -67,17 +101,34 @@ export function trustServerTime(serverMs: number, localMs = Date.now()): number 
   if (agree) next = 0;
   else if (far || offsetMs !== 0) {
     if (Math.abs(delta - offsetMs) <= TRUST_SERVER_PAST_MS) next = offsetMs; // the same correction as before, give or take the threshold: no jitter
-    else if (Math.abs(delta) > TRUST_SERVER_TWICE_PAST_MS && (pendingMs === null || Math.abs(delta - pendingMs) > TRUST_SERVER_PAST_MS)) { pendingMs = delta; return offsetMs; }
-    else next = delta;
+    else if (Math.abs(delta) > TRUST_SERVER_TWICE_PAST_MS) {
+      const seen = pending;
+      if (!seen || Math.abs(delta - seen.delta) > TRUST_AGREE_TOL_MS) { pending = { delta, at: localMs }; store(); return offsetMs; } // a first reading of a large correction, or one that disagrees with the last: wait
+      if (localMs - seen.at < TRUST_AGREE_GAP_MS) return offsetMs; // the same run, or one straight after: not a second reading yet
+      next = delta;
+    } else next = delta;
   }
-  pendingMs = null;
-  if (next !== offsetMs) { offsetMs = next; storeOffset(next); }
+  pending = null;
+  confirmedAt = localMs;
+  const was = offsetMs;
+  offsetMs = next;
+  store();
+  if (next !== was) for (const l of listeners) l(offsetMs);
   return offsetMs;
 }
 /** The current correction, for the clock warning to say how far off the device is. */
 export const clockOffsetMs = () => offsetMs;
+/** Stop syncing: no server to confirm a correction against, so none is kept (round fifty-two, 1). */
+export function clearClockOffset(): void {
+  const was = offsetMs;
+  offsetMs = 0;
+  pending = null;
+  confirmedAt = 0;
+  store();
+  if (was) for (const l of listeners) l(0);
+}
 /** Tests only. */
-export const _resetClockOffset = () => { offsetMs = 0; pendingMs = null; storeOffset(0); };
+export const _resetClockOffset = () => { clearClockOffset(); };
 
 const HLC_RE = /^(\d{13})-([0-9a-f]{4,6})-([a-z0-9]{1,16})$/;
 
@@ -116,6 +167,10 @@ export class Clock {
   /** Next local timestamp: monotonic even if the wall clock steps backwards. */
   tick(): string {
     const wall = this.now();
+    // A clock that ticked while the device was a year fast carried that wall forward after the correction, so every
+    // later stamp was still a year ahead and held everywhere: once the corrected time is far behind the last stamp, the
+    // clock restarts from it (round fifty-two, 1). Monotonic against a clock stepping back by less than the window.
+    if (this.last.wall > wall + MAX_AHEAD_MS) this.last = { wall: 0, count: 0, device: this.device };
     if (wall > this.last.wall) this.last = { wall, count: 0, device: this.device };
     else this.last = this.bump(this.last.wall, this.last.count);
     return hlcEncode(this.last);

@@ -6,6 +6,7 @@
  */
 import { SvelteMap } from 'svelte/reactivity';
 import { localDate, madeOn, daysBetween } from '$core/dates';
+import { today as day } from '$lib/ui/day.svelte';
 
 /** Three weeks: the Due chip's "21+ days" and Today's "three weeks or more" both mean this many days, inclusive (round twenty-five, 2). */
 export const DUE_DAYS = 21;
@@ -15,7 +16,7 @@ import { Clock, hlcDecode, hlcEncode, hlcCompare, hlcAfter, hlcBefore, nowMs } f
 /** How far ahead of the corrected clock a held stamp may be for a local edit to its field to be stamped just past it (round fifty-one, 1). */
 export const FOLLOW_HELD_MS = 86_400_000;
 import { tag36 } from '$core/tag';
-import { apply, diff, readChanges, isComplete, REQUIRED_FIELDS, incomplete as incompleteRecords, key as recKey, type Change, type Kind, type Record_, type State, hlcWall, revivedByImport } from '$core/log';
+import { apply, diff, readChanges, isComplete, REQUIRED_FIELDS, incomplete as incompleteRecords, key as recKey, type Change, type Kind, type Record_, type State, type Hold, hlcWall, revivedByImport } from '$core/log';
 import { nextAccession, DEFAULT_SCHEME, type NumberingScheme } from '$core/accession';
 import { allChanges, appendChanges, appendChangesClaiming, onOtherTabWrite, deviceId, requestPersistence, getMeta, setMeta, putPhotoBlobs, getPhotoBlobs, deletePhotoBlobs, holdVault, type NumberKind } from './vault';
 import type { Accession, PlantEvent, Taxon, Location, Sowing, Provenance, Photo } from './types';
@@ -45,6 +46,90 @@ class Collection {
   /** Every `parentId` a place has had, by HLC, so a loop can be cut back to where the place was before the move. */
   private parentHist = new Map<string, Map<string, string | null>>();
 
+  /**
+   * Changes parked by the fold: stamped more than a day past their arrival (a broken clock's), kept in the log and never
+   * folded on their own, listed on their record with Apply (round fifty-two, 1). The stamps are kept in meta so a parked
+   * change stays parked at every later load, whatever the clock then says; the changes themselves are gathered per fold.
+   */
+  parkedStamps = new Set<string>();
+  private parkedByRecord = $state(new Map<string, Change[]>());
+  /** Stamps the person applied or dismissed here: not listed again. */
+  private parkedDone = new Set<string>();
+  private hold(arrival?: number): Hold {
+    return { now: nowMs(), except: this.device, arrival, parked: this.parkedStamps, onParked: (c) => this.notePark(c) };
+  }
+  private notePark(c: Change): void {
+    this.parkedStamps.add(c.t);
+    const k = recKey(c.kind, c.id);
+    const list = this.parkedByRecord.get(k) ?? [];
+    if (!list.some((x) => x.t === c.t)) { list.push(c); this.parkedByRecord.set(k, list); this.parkedByRecord = new Map(this.parkedByRecord); }
+  }
+  /** Parked changes for one record, latest per field, not yet applied or dismissed here. */
+  parkedFor(kind: Kind, id: string): Change[] {
+    const list = (this.parkedByRecord.get(recKey(kind, id)) ?? []).filter((c) => !this.parkedDone.has(c.t));
+    const latest = new Map<string, Change>();
+    for (const c of list) { const h = latest.get(c.field); if (!h || hlcCompare(c.t, h.t) > 0) latest.set(c.field, c); }
+    return [...latest.values()];
+  }
+  /** Every record with parked changes still listed, named as well as the parked values allow: the sync page lists them, since a record created under a wrong clock has no page of its own to list them on (round fifty-two, 1). */
+  parkedList(): Array<{ kind: Kind; id: string; label: string; fields: string[] }> {
+    const out: Array<{ kind: Kind; id: string; label: string; fields: string[] }> = [];
+    for (const [k, list] of this.parkedByRecord) {
+      const live = list.filter((c) => !this.parkedDone.has(c.t));
+      if (!live.length) continue;
+      const kind = live[0].kind, id = live[0].id;
+      const v = (f: string) => { const c = live.filter((x) => x.field === f).sort((a, b) => hlcCompare(b.t, a.t))[0]; return c ? String(c.value ?? '') : ''; };
+      const rec = this.state.get(k);
+      const label = kind === 'accession' ? [v('acc') || (rec?.acc as string) || '', v('taxonName') || (rec?.taxonName as string) || ''].filter(Boolean).join(' ') : kind === 'sowing' ? [v('no') || (rec?.no as string) || '', v('taxonName') || (rec?.taxonName as string) || ''].filter(Boolean).join(' ') : kind === 'location' ? v('name') || (rec?.name as string) || id : kind === 'event' ? `a log line (${v('t') || (rec?.t as string) || 'entry'}, ${v('d') || (rec?.d as string) || ''})` : `${kind} ${id}`;
+      out.push({ kind, id, label: label || `${kind} ${id}`, fields: [...new Set(live.map((c) => c.field))] });
+    }
+    return out;
+  }
+  /** Records with parked changes still listed, for the sync page's count. */
+  get parkedRecords(): number {
+    let n = 0;
+    for (const list of this.parkedByRecord.values()) if (list.some((c) => !this.parkedDone.has(c.t))) n++;
+    return n;
+  }
+  /** Apply a record's parked changes as edits made now: the same values, stamped by the corrected clock, so every device takes them; the parked stamps stay parked. */
+  async applyParked(kind: Kind, id: string): Promise<void> {
+    const list = this.parkedFor(kind, id);
+    if (!list.length) return;
+    const fields: Record<string, unknown> = {};
+    for (const c of list) if (c.field !== '_deleted') fields[c.field] = c.value;
+    const removal = list.find((c) => c.field === '_deleted' && c.value === true);
+    if (Object.keys(fields).length) await this.put(kind, id, fields);
+    if (removal) await this.remove(kind, id);
+    await this.dismissParked(kind, id);
+  }
+  async dismissParked(kind: Kind, id: string): Promise<void> {
+    for (const c of this.parkedByRecord.get(recKey(kind, id)) ?? []) this.parkedDone.add(c.t);
+    this.parkedByRecord = new Map(this.parkedByRecord);
+    await setMeta('parkedDone', [...this.parkedDone]);
+  }
+  /** The engine parks changes by their batch's arrival before they reach the fold: noted here so the fold never folds them later. */
+  async markParked(changes: Change[]): Promise<void> {
+    for (const c of changes) this.notePark(c);
+    await setMeta('parked', [...this.parkedStamps]);
+  }
+  private async saveParked(): Promise<void> {
+    await setMeta('parked', [...this.parkedStamps]);
+  }
+  /** Photographs whose removal this device has seen: their upload record is not trusted until the server is asked (round fifty-two, 2). */
+  private photosUnverified = new Set<string>();
+  private async noteUnverified(ids: string[]): Promise<void> {
+    for (const id of ids) this.photosUnverified.add(id);
+    await setMeta('photosUnverified', [...this.photosUnverified]);
+  }
+  unverifiedPhotos(): string[] {
+    return [...this.photosUnverified];
+  }
+  async verifiedPhotos(ids: string[]): Promise<void> {
+    if (!ids.length) return;
+    for (const id of ids) this.photosUnverified.delete(id);
+    await setMeta('photosUnverified', [...this.photosUnverified]);
+  }
+
   load(): Promise<void> {
     if (!this.loading)
       this.loading = (async () => {
@@ -56,7 +141,12 @@ class Collection {
         // machine to sync and to the hold rule (which matches the writer by that prefix).
         this.clock = new Clock(dev + Array.from(crypto.getRandomValues(new Uint8Array(4)), (b) => (b % 36).toString(36)).join(''));
         const changes = await allChanges();
-        apply(this.state, changes, this.seen, { now: nowMs(), except: dev }); // a change stamped far ahead of this clock is held, not applied (round five, 4)
+        this.parkedStamps = new Set((await getMeta<string[]>('parked')) ?? []);
+        this.photosUnverified = new Set((await getMeta<string[]>('photosUnverified')) ?? []);
+        this.parkedDone = new Set((await getMeta<string[]>('parkedDone')) ?? []);
+        const parkedBefore = this.parkedStamps.size;
+        apply(this.state, changes, this.seen, this.hold()); // a change stamped far ahead of this clock is held, not applied (round five, 4); one a day past it is parked (round fifty-two, 1)
+        if (this.parkedStamps.size !== parkedBefore) await this.saveParked();
         for (const c of changes) this.applied.add(c.t);
         this.noteParents(changes);
         for (const c of changes) this.clock.observe(c.t);
@@ -80,6 +170,10 @@ class Collection {
         // whose log holds a number change already (held, or a `null` the fold shows as missing) is left alone, and so is an
         // incomplete one, which a later build may yet give its shape (round forty-nine, 1; round thirty-five, R1-1).
         const oneShape: Change[] = [];
+        // Nor while a batch is set aside unread: it may hold the record's number, and a written number stamped below what
+        // this build can see would still outrank it (round fifty-two, 4; the first reviewer's finding 11). The pass runs again at a later load.
+        const syncMeta = await getMeta<{ quarantined?: unknown[] }>('sync');
+        const batchesSetAside = !!syncMeta?.quarantined?.length;
         const numbered = new Set<string>();
         const oldest = new Map<string, string>();
         for (const c of changes) {
@@ -96,7 +190,7 @@ class Collection {
           if (r.kind === 'accession' && r.acc == null) oneShape.push({ t: hlcBefore(first, this.writer), kind: 'accession', id: r.id, field: 'acc', value: r.id });
           if (r.kind === 'sowing' && r.no == null) oneShape.push({ t: hlcBefore(first, this.writer), kind: 'sowing', id: r.id, field: 'no', value: r.id });
         }
-        if (oneShape.length) await this.commit(oneShape, 'local').catch(() => {});
+        if (oneShape.length && !batchesSetAside) await this.commit(oneShape, 'local').catch(() => {});
         onOtherTabWrite((what) => {
           // Another tab replaced the whole collection from a file: this tab's fold is of a log that no longer exists, and a
           // note saved here would be diffed against records the new log does not have. The page reloads onto the new one.
@@ -166,7 +260,10 @@ class Collection {
     this.seen = new Map();
     this.applied = new Set();
     this.parentHist = new Map();
-    apply(this.state, changes, this.seen, { now: nowMs(), except: this.device });
+    this.parkedByRecord = new Map();
+    const parkedBefore = this.parkedStamps.size;
+    apply(this.state, changes, this.seen, this.hold());
+    if (this.parkedStamps.size !== parkedBefore) await this.saveParked();
     for (const c of changes) { this.applied.add(c.t); this.clock?.observe(c.t); }
     this.noteParents(changes);
     await this.readLedger();
@@ -180,7 +277,7 @@ class Collection {
     if (gen !== this.foldGen) return; // a rebuild landed meanwhile: it read the same log and more; what was read here would put a displaced change back
     if (!changes.length) return;
     for (const c of changes) { this.clock?.observe(c.t); this.applied.add(c.t); }
-    apply(this.state, changes, this.seen, { now: nowMs(), except: this.device });
+    apply(this.state, changes, this.seen, this.hold());
     this.noteParents(changes);
     for (const k of new Set(changes.map((c) => recKey(c.kind, c.id)))) {
       const r = this.state.get(k);
@@ -303,9 +400,10 @@ class Collection {
       if (back && liveIds.has(back) && !loop.includes(back) && !reaches(back, root)) parent.set(root, back);
       else needsHome.add(root);
     };
-    for (const id of selfLoops) cut(id, [id]);
+    for (const id of [...selfLoops].sort()) cut(id, [id]);
     const done = new Set<string>();
-    for (const l of live) {
+    // Walked in id order, so two interlocking loops are found and cut the same way on every device, whatever order the records entered memory (round fifty-two, 4; the first reviewer's finding 12).
+    for (const l of [...live].sort((a, b) => a.id.localeCompare(b.id))) {
       if (done.has(l.id)) continue;
       const path: string[] = [];
       let cur: string | null = l.id;
@@ -527,7 +625,7 @@ class Collection {
     return this.sowings.filter((s) => s.parentAcc === acc);
   }
   /** Derived counts for a sowing. Germination counts are cumulative ("seedlings up so far"), so the latest wins. */
-  sowingStats(id: string): { germinated: number; potted: number; lost: number; remaining: number; rate: number | null; firstUp: string | null; daysToFirst: number | null; days: number } {
+  sowingStats(id: string): { germinated: number; potted: number; lost: number; remaining: number; overdrawn: number; rate: number | null; firstUp: string | null; daysToFirst: number | null; days: number } {
     const s = this.sowing(id);
     const ev = this.events(id); // newest first
     const germ = ev.filter((e) => e.t === 'germinate');
@@ -543,20 +641,22 @@ class Collection {
       potted,
       lost,
       remaining: Math.max(0, germinated - potted - lost),
+      // Below zero after a merge: two devices potted the same last seedlings offline. Said on the page, not clamped away (round fifty-two, 3; the second reviewer's finding 1).
+      overdrawn: Math.max(0, potted + lost - germinated),
       rate: s && s.count > 0 && germ.length ? germinated / s.count : null, // no count yet is not 0% (round twenty-eight, 3)
       firstUp,
       daysToFirst: s && firstUp ? since(s.sown, firstUp) : null,
       days: s ? since(s.sown, localDate()) : 0
     };
   }
-  nextSowingNumber(year = new Date().getFullYear()): string {
+  nextSowingNumber(year = new Date(nowMs()).getFullYear()): string {
     return nextAccession(this.takenNumbers('sowing'), { mode: 'prefix', prefix: `S${year}`, width: 3 });
   }
   async addSowing(sw: Omit<Sowing, 'id' | 'status'> & { id?: string; status?: Sowing['status'] }): Promise<Sowing> {
     const wanted = sw.no?.trim() || null;
     const id = sw.id ?? this.newId('s');
     const rec = await this.claim('sowing', (issued) => {
-      const year = Number(sw.sown.slice(0, 4)) || new Date().getFullYear();
+      const year = Number(sw.sown.slice(0, 4)) || new Date(nowMs()).getFullYear();
       const no = wanted ?? nextAccession(issued, { mode: 'prefix', prefix: `S${year}`, width: 3 });
       if (wanted && issued.has(no)) throw new Error(`Batch number ${no} is already used.`);
       const r: Sowing = { status: 'active', ...sw, id, no };
@@ -589,6 +689,10 @@ class Collection {
     // Seed keeps the provenance the seed carried; a wild-collected seed lot raises F1 plants. Vegetative material is 'veg'.
     const provenance: Provenance = !known ? 'unknown' : veg ? 'veg' : s.provenance === 'wild' ? 'f1' : s.provenance === 'f1' ? 'fn' : (s.provenance ?? 'unknown');
     return this.claim('accession', (taken) => {
+    // The pot is read inside the claim, not before it: two submits in flight each saw the full pot and together potted twice (round fifty-two, 3).
+    const room = this.sowingStats(sowingId).remaining;
+    if (room < 1) throw new Error('Nothing left in the pot to pot up.');
+    if (n > room) n = room;
     const changes: Change[] = [];
     const made: Accession[] = [];
     for (let i = 0; i < n; i++) {
@@ -620,7 +724,7 @@ class Collection {
       made.push(rec);
     }
     const pid = this.eventId();
-    changes.push(...diff('event', pid, { acc: s.id, d: date, t: 'potup', n, note: [made.map((a) => accNo(a)).join(', '), opts.note?.trim() || null].filter(Boolean).join(' · ') }, undefined, this.tick));
+    changes.push(...diff('event', pid, { acc: s.id, d: date, t: 'potup', n, plants: made.map((a) => a.id), note: opts.note?.trim() || null }, undefined, this.tick));
     return { changes, result: made };
     });
   }
@@ -754,9 +858,10 @@ class Collection {
     const w = this.lastWatered(a.id);
     return daysBetween(w ?? this.madeOn('accession', a.id) ?? a.acquired ?? localDate());
   }
-  /** Growing plants not watered, or not recorded as watered, for `DUE_DAYS` days or more. */
+  /** Growing plants not watered, or not recorded as watered, for `DUE_DAYS` days or more. Derived once per change and per day, not scanned on every read: Today, the chip and the list each read it per render (round fifty-two, 5). */
+  private dueList = $derived.by(() => { void this.eventsByAcc; void day.current; return this.accessions.filter((a) => a.status === 'growing' && this.careDays(a) >= DUE_DAYS); });
   get due(): Accession[] {
-    return this.accessions.filter((a) => a.status === 'growing' && this.careDays(a) >= DUE_DAYS);
+    return this.dueList;
   }
   /** Last time each plant was marked present at an audit (or acquired), for "not seen since". */
   /** The last day the plant was in front of the grower: its last audit, else the day its record was made (not the acquisition date it was given, which may be years back for a collection entered late). */
@@ -827,6 +932,12 @@ class Collection {
       // higher) is not shown here either, so the screen and the disk agree without a reload (round sixteen, 4).
       const stored = await appendChanges(changes, source === 'server', source === 'local', requireKey);
       changes = stored.kept;
+      // A photograph's removal seen from anywhere (here, a pull, a file) is noted at once, whatever the record folds to:
+      // the server may drop the bytes on a peer's say-so, and a later revival (an Undo, an edit made offline elsewhere)
+      // then needs the pixels sent again from whoever kept them. The engine checks each noted photograph against the
+      // server before trusting its upload record (round fifty-two, 2).
+      const removedIds = changes.filter((c) => c.kind === 'photo' && c.field === '_deleted' && c.value === true).map((c) => c.id);
+      if (removedIds.length) await this.noteUnverified(removedIds);
       // A stored change displaced under its stamp (a higher-ranking one arrived) has no inverse in the incremental fold:
       // the fold is rebuilt from the log, so the displaced record leaves the screen and cannot be edited into a fragment
       // the disk does not have (round seventeen, 3). Other tabs rebuild on the 'refold' notice.
@@ -843,7 +954,7 @@ class Collection {
     this.lastWriteError = null;
     if (!changes.length) return;
     for (const c of changes) this.applied.add(c.t);
-    apply(this.state, changes, this.seen, { now: nowMs(), except: this.device });
+    apply(this.state, changes, this.seen, this.hold());
     this.noteParents(changes);
     // apply() mutates records in place; re-set a copy so the reactive map notices.
     for (const k of new Set(changes.map((c) => recKey(c.kind, c.id)))) {
@@ -886,6 +997,10 @@ class Collection {
       // everywhere at once; the held change, when it comes due, is the last word then.
       const heldT = this.seen.get(k + '\0held\0' + c.field);
       if (heldT !== undefined && hlcWall(heldT) <= nowMs() + FOLLOW_HELD_MS && (prev === undefined || hlcCompare(heldT, prev) > 0)) prev = heldT;
+      // Nor past this device's own stamp from when its clock was wrong: a corrected device went on stamping just past
+      // its year-ahead stamps, so every edit was held everywhere again (round fifty-two, 1). The edit is stamped now;
+      // the old stamp is parked on the next rebuild.
+      if (prev !== undefined && hlcWall(prev) > nowMs() + FOLLOW_HELD_MS) prev = undefined;
       if (prev !== undefined && hlcCompare(c.t, prev) <= 0) c.t = hlcAfter(prev, this.writer);
       // A field left at real time keeps its stamp; only an actual collision moves: with a stamp given out in this commit, or with
       // one already in the fold (two commits bumped past the same held stamp, round thirteen, 7), since the store refuses a repeat.
@@ -996,7 +1111,14 @@ class Collection {
   }
 
   /** A write that mints numbers: the vault hands `build` every number ever issued here, `build` chooses outside it, and the changes are stored and applied as one commit. */
-  private async claim<T>(kind: NumberKind, build: (issued: Set<string>) => { changes: Change[]; result: T }): Promise<T> {
+  /** Claims run one at a time in this tab: the build reads the fold, and a second claim must see the first's result (a pot-up reading the pot) before it builds (round fifty-two, 3). */
+  private claimChain: Promise<unknown> = Promise.resolve();
+  private claim<T>(kind: NumberKind, build: (issued: Set<string>) => { changes: Change[]; result: T }): Promise<T> {
+    const run = this.claimChain.then(() => this.claimNow(kind, build));
+    this.claimChain = run.catch(() => undefined);
+    return run;
+  }
+  private async claimNow<T>(kind: NumberKind, build: (issued: Set<string>) => { changes: Change[]; result: T }): Promise<T> {
     let made: Change[] = [];
     let out: T;
     try {
@@ -1011,7 +1133,7 @@ class Collection {
     }
     this.lastWriteError = null;
     for (const c of made) { const k = numberField(c); if (k && typeof c.value === 'string') this.ledger[k].add(c.value); this.applied.add(c.t); }
-    apply(this.state, made, this.seen, { now: nowMs(), except: this.device });
+    apply(this.state, made, this.seen, this.hold());
     this.noteParents(made);
     for (const k of new Set(made.map((c) => recKey(c.kind, c.id)))) {
       const r = this.state.get(k);

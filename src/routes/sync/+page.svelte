@@ -172,6 +172,17 @@
   {#if sync.held}
     <p class="notice" id="held">{sync.held} {sync.held === 1 ? 'change' : 'changes'} from a device whose clock was ahead {sync.held === 1 ? 'is' : 'are'} held until {sync.heldUntil ? when(sync.heldUntil) : 'this device catches up'}. {sync.held === 1 ? 'It is' : 'They are'} stored here and will show then.</p>
   {/if}
+  {#if collection.parkedRecords}
+    <!-- A change stamped more than a day past its arrival is a broken clock's: parked, never folded on its own, and offered on its record with Apply (round fifty-two, 1). -->
+    <div class="notice" id="parked">
+      <p style="margin: 0 0 6px">{collection.parkedRecords} {collection.parkedRecords === 1 ? 'record has' : 'records have'} edits from a device whose clock was wrong, kept but not applied. Apply writes them again as edits made now, so every device takes them.</p>
+      <ul class="parkedlist">
+        {#each collection.parkedList() as p (p.kind + ':' + p.id)}
+          <li><span>{p.label}</span> <span class="small muted">({p.fields.join(', ')})</span> <button class="btn small" type="button" onclick={() => collection.applyParked(p.kind, p.id)}>Apply</button> <button class="linkish" type="button" onclick={() => collection.dismissParked(p.kind, p.id)}>Leave</button></li>
+        {/each}
+      </ul>
+    </div>
+  {/if}
   <div class="quickbar">
     <button id="sync-now" class="btn pri" onclick={() => sync.run().catch(() => {})} disabled={!!sync.busy}>Sync now</button>
     <button id="sync-show-key" class="btn" onclick={() => (showKey = !showKey)}>{showKey ? 'Hide the key' : 'Add another device'}</button>
@@ -284,6 +295,9 @@
 {/if}
 
 <style>
+  .parkedlist { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+  .parkedlist li { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+  .parkedlist .linkish { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); text-decoration: underline; cursor: pointer; }
   .typeback { display: grid; gap: 4px; margin-top: 12px; max-width: 320px; }
   .typeback span { font-size: 12px; color: var(--ink2); }
   .typeback input { font-family: var(--mono); letter-spacing: 0.12em; text-transform: uppercase; }

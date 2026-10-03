@@ -5,6 +5,8 @@
  * corpus compiled into the build (so tests work with nothing else present).
  */
 import { genusOf } from '$core/names';
+import { prepare, type Prepared } from '$core/search';
+import { bucketOf } from '$core/bucket';
 import { parseDossier, dossierPath, genusPath, GenusRecord, DOSSIER_V, type Dossier } from '$dossier/schema';
 import * as v from 'valibot';
 
@@ -102,6 +104,9 @@ async function loadIndex(platform: Platform, fetch: Fetch): Promise<Loaded> {
   return loading;
 }
 async function loadIndexNow(platform: Platform, fetch: Fetch): Promise<Loaded> {
+  // A refresh parses the new index while the old one, with its catalogues and prepared search, is still held: two
+  // generations at once, past the isolate's memory at fifty thousand species (round fifty-two, 5). The old one is let
+  // go first; a request that arrives meanwhile waits on the shared load. Only when a bucket has an index to replace it with.
   let idx: IndexEntry[] = [];
   let corpus = '';
   let etag: string | null = null;
@@ -117,6 +122,7 @@ async function loadIndexNow(platform: Platform, fetch: Fetch): Promise<Loaded> {
         return cached;
       }
     }
+    if (cached?.fromStore) cached = null; // an upload: the old generation goes before the new is parsed (round fifty-two, 5)
     const obj = await store.get(path);
     if (obj) {
       const text = await obj.text();
@@ -134,6 +140,9 @@ async function loadIndexNow(platform: Platform, fetch: Fetch): Promise<Loaded> {
   // Fixtures only fill in when nothing real exists, so a real corpus never shows synthetic species.
   const out = idx.length ? idx : fixtureIndex;
   cached = { at: Date.now(), idx: out, bySlug: new Map(out.map((e) => [e.slug, e.key])), corpus: idx.length ? corpus : 'fixture', etag, fromStore };
+  // The search's structure and the bucket map are built with the index, not inside the first request that needs them (round fifty-two, 5).
+  preparedSearch.set(out, prepare(out));
+  indexMaps(out);
   return cached;
 }
 
@@ -158,7 +167,9 @@ export async function getDossier(platform: Platform, fetch: Fetch, key: number):
       console.warn(`static dossier ${key} failed schema`, e);
     }
   }
-  return fixturesByKey.get(key) ?? null;
+  // The fixtures stand in only while the fixture corpus is the corpus: under a real one, a record the bucket lacks is
+  // absent, never a synthetic species with made-up figures and a quotation (round fifty-two, 5; the second reviewer's finding 10).
+  return cached?.corpus === 'fixture' ? (fixturesByKey.get(key) ?? null) : null;
 }
 
 export async function resolveSlug(platform: Platform, fetch: Fetch, slug: string): Promise<number | null> {
@@ -185,7 +196,7 @@ export async function getGenus(platform: Platform, fetch: Fetch, slug: string): 
   }
   const stat = storeIsCorpus() ? null : await staticJson<unknown>(fetch, genusPath(slug));
   if (stat) return parse(stat);
-  return parse(fixtureGenera[`/fixtures/dossiers/s/v2/g/${slug}.json`]) ?? null;
+  return cached?.corpus === 'fixture' ? (parse(fixtureGenera[`/fixtures/dossiers/s/v2/g/${slug}.json`]) ?? null) : null;
 }
 
 /** Maps over the index, built once per index load rather than per request: by key, and the species of each genus sorted by name (round fifty-one, 6). */
@@ -206,5 +217,24 @@ export function indexMaps(index: IndexEntry[]): IndexMaps {
   }
   for (const xs of byGenus.values()) xs.sort((a, b) => a.name.localeCompare(b.name));
   maps.set(index, (m = { byKey, byGenus, bySynonym }));
+  return m;
+}
+
+/** The search's prepared structure per index, built at load (round fifty-two, 5). */
+const preparedSearch = new WeakMap<IndexEntry[], Prepared<IndexEntry>[]>();
+export function searchIndex(index: IndexEntry[]): Prepared<IndexEntry>[] {
+  let p = preparedSearch.get(index);
+  if (!p) preparedSearch.set(index, (p = prepare(index)));
+  return p;
+}
+/** The entries of each bucket, hashed once per index rather than every slug per request (round fifty-two, 5). */
+const bucketed = new WeakMap<IndexEntry[], Map<string, IndexEntry[]>>();
+export function entriesByBucket(index: IndexEntry[]): Map<string, IndexEntry[]> {
+  let m = bucketed.get(index);
+  if (!m) {
+    m = new Map();
+    for (const e of index) { const b = bucketOf(e.slug); const xs = m.get(b); if (xs) xs.push(e); else m.set(b, [e]); }
+    bucketed.set(index, m);
+  }
   return m;
 }

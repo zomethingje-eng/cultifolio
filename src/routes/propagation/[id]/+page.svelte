@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Parked from '$lib/ui/Parked.svelte';
   import { units } from '$lib/ui/units.svelte';
   import { localDate } from '$core/dates';
   import { temp, tempUnit, cToF, bottomHeat as heatCheck, numberOrNull } from '$core/units';
@@ -92,13 +93,19 @@
   let gn = $state<number | '' | null>(''); // null once a typed figure is cleared
   let gnote = $state('');
   let gmsg = $state('');
+  let countBusy = false;
   async function count(e: SubmitEvent) {
     e.preventDefault();
-    if (!s || gn == null || gn === '' || gn < 0) return;
+    if (countBusy || !s || gn == null || gn === '' || gn < 0) return;
     const n = Number(gn);
     gmsg = dateProblem(gd, 'count') ?? (n > s.count ? `${n} is more than the ${s.count} that went in; edit the batch if the count was wrong.` : n < st.germinated ? `${n} is fewer than the ${st.germinated} already counted; the count is the total ${upWord} so far, so record losses instead.` : '');
     if (gmsg) return;
-    await collection.addEvent({ acc: id, d: gd, t: 'germinate', n, note: gnote.trim() || null });
+    countBusy = true;
+    try {
+      await collection.addEvent({ acc: id, d: gd, t: 'germinate', n, note: gnote.trim() || null });
+    } finally {
+      countBusy = false;
+    }
     toast.show(`Recorded: ${n} ${upWord} so far.`);
     gn = ''; gnote = '';
   }
@@ -107,13 +114,19 @@
   let ln = $state<number | '' | null>('');
   let lcause = $state('');
   let lmsg = $state('');
+  let lossBusy = false;
   async function loss(e: SubmitEvent) {
     e.preventDefault();
-    if (ln == null || ln === '' || ln < 1) return;
+    if (lossBusy || ln == null || ln === '' || ln < 1) return;
     const n = Number(ln);
     lmsg = dateProblem(ld, 'loss') ?? (n > st.remaining ? (st.remaining ? `Only ${st.remaining} in the pot to lose.` : `Nothing in the pot to lose: ${countFirst.toLowerCase()}.`) : fitsOn(ld, n, 'losing'));
     if (lmsg) return;
-    await collection.addEvent({ acc: id, d: ld, t: 'loss', n, cause: lcause.trim() || null });
+    lossBusy = true;
+    try {
+      await collection.addEvent({ acc: id, d: ld, t: 'loss', n, cause: lcause.trim() || null });
+    } finally {
+      lossBusy = false;
+    }
     toast.show(`Recorded: ${n} lost.`);
     ln = ''; lcause = '';
   }
@@ -128,6 +141,7 @@
   let pottingBusy = $state(false);
   async function potUp(e: SubmitEvent) {
     e.preventDefault();
+    if (pottingBusy) return; // a second submit while the first commits potted twice (round fifty-two, 3)
     const n = Math.floor(numberOrNull(pn) ?? 0); // whole plants: a cleared box or 0.5 is refused with a sentence, never a silent return (round fifteen, 10)
     // A number is never reused, so a slip here would burn numbers for good: the pot decides how many can be potted.
     pmsg = n < 1 ? 'Say how many to pot up: each gets a number that is never reused.' : (dateProblem(pd, 'potting') ?? (st.remaining < 1 ? `Nothing in the pot to pot up: ${countFirst.toLowerCase()}.` : n > st.remaining ? `Only ${st.remaining} in the pot; each potted plant gets a number that is never reused.` : fitsOn(pd, n, 'potting up')));
@@ -322,6 +336,7 @@
     </form>
   {/if}
 
+  <Parked kind="sowing" id={id} />
   <div class="cards">
     <div class="card"><div class="lab">Day</div><div class="val">{st.days}</div><div class="sub">since {s.sown}</div></div>
     <div class="card"><div class="lab">{m.veg ? 'Struck' : 'Germinated'}</div><div class="val">{st.germinated}<span class="u"> / {s.count}</span></div><div class="gauge"><i style="width: {Math.min(100, (st.rate ?? 0) * 100)}%"></i></div><div class="sub">{pct(st.rate)}{#if st.daysToFirst != null} · first at day {st.daysToFirst}{/if}</div></div>
@@ -329,6 +344,10 @@
     <div class="card"><div class="lab">{m.veg ? 'Struck, not yet potted' : 'Still in the pot'}</div>{#if !events.some((e) => e.t === 'germinate') && !st.potted && !st.lost}<div class="val">–</div><div class="sub">not counted yet</div>{:else}<div class="val">{st.remaining}</div><div class="sub">{st.lost ? `${st.lost} lost` : 'no losses recorded'}</div>{/if}</div>
   </div>
 
+  {#if st.overdrawn}
+    <!-- Two devices that potted or counted losses from the same pot offline merge to more out than came up: said, not clamped to zero (round fifty-two, 3). -->
+    <div class="notice err" id="overdrawn">{st.potted + st.lost} potted or lost against {st.germinated} counted up: {st.overdrawn} more than the pot held. Two devices may have potted the same seedlings while apart, or a count was missed; correct the count, or remove the line that is wrong.</div>
+  {/if}
   {#if potted.length}
     <div class="notice ok">Potted up {potted.length}: {#each potted as p, i}{#if i}{', '}{/if}<a class="mono" href="/plants/{p}">{p}</a>{/each}.</div>
   {/if}
@@ -405,7 +424,7 @@
       {#each events as e}
         <div class="tlrow">
           <span class="d">{e.d}</span>
-          <span class="t">{eventLabel(e.t)}{#if e.n != null}&nbsp;<b>{e.n}</b>{/if}{#if e.cause}<span class="x2">{' · '}{e.cause}</span>{/if}{#if e.note}<span class="x2">{' · '}{e.note}</span>{/if}</span>
+          <span class="t">{eventLabel(e.t)}{#if e.n != null}&nbsp;<b>{e.n}</b>{/if}{#if e.plants?.length}<span class="x2">{' · '}{#each e.plants as pid, i (pid)}{#if i}, {/if}{@const pl = collection.accession(pid)}{#if pl}<a class="mono" href="/plants/{accNo(pl)}">{accNo(pl)}</a>{:else}a plant since removed{/if}{/each}</span>{/if}{#if e.cause}<span class="x2">{' · '}{e.cause}</span>{/if}{#if e.note}<span class="x2">{' · '}{e.note}</span>{/if}</span>
           {#if e.t === 'potup'}<span class="x small muted">kept: the plants exist</span>{:else if e.t === 'germinate' && !canDropCount(e.id)}<span class="x small muted" title="Without this count the batch would show fewer up than were potted and lost">kept: the potted plants rest on it</span>{:else if confirmEvent === e.id}<button class="rm confirm" type="button" onclick={() => { collection.remove('event', e.id); confirmEvent = null; }}>Remove?</button>{:else}<button class="rm" type="button" title="Remove this entry" aria-label="Remove this entry" onclick={() => { confirmEvent = e.id; void focusNext('.rm.confirm'); }}>×</button>{/if}
         </div>
       {/each}

@@ -5,6 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import { apply, isHeld, dueAt, hlcWall, type Change, type State } from '$core/log';
 import { hlcEncode, hlcDecode, MAX_AHEAD_MS, Clock, nowMs, trustServerTime, clockOffsetMs, TRUST_SERVER_PAST_MS, _resetClockOffset } from '$core/hlc';
+import * as hlcModule from '$core/hlc';
 import { afterEach } from 'vitest';
 
 const NOW = 1_800_000_000_000;
@@ -63,7 +64,8 @@ describe('the clock holds are judged by follows the server past half a minute of
   it('a device years ahead stamps by the server\'s time once two readings agree, and its holds are judged by it', () => {
     const local = NOW + 6 * 365 * 86_400_000; // the phone says 2031
     expect(trustServerTime(NOW, local)).toBe(0); // a correction of days or more waits for a second reading (round fifty-one, 1)
-    expect(trustServerTime(NOW + 1_000, local + 1_000)).toBe(NOW - local);
+    expect(trustServerTime(NOW + 1_000, local + 1_000)).toBe(0); // a second after the first is the same run, not a second reading (round fifty-two, 1)
+    expect(trustServerTime(NOW + 61_000, local + 61_000)).toBe(NOW - local);
     expect(nowMs() + (local - Date.now())).toBeCloseTo(NOW, -3); // nowMs is the real clock plus the offset: the real clock stands in for `local` here
     const clock = new Clock('me'); // the default `now` is the corrected one
     expect(hlcDecode(clock.tick()).wall).toBeLessThan(Date.now() + MAX_AHEAD_MS);
@@ -89,19 +91,39 @@ describe('the clock holds are judged by follows the server past half a minute of
     // one reading of a 3-day disagreement (a captive portal's Date) moves nothing; two that agree do
     expect(trustServerTime(NOW, NOW - 3 * 86_400_000)).toBe(0);
     expect(trustServerTime(NOW, NOW - 10 * 86_400_000)).toBe(0); // a different lone reading replaces the pending one
-    expect(trustServerTime(NOW + 5_000, NOW + 5_000 - 10 * 86_400_000)).toBe(10 * 86_400_000);
-    expect(store.get('cultifolio.clockOffsetMs')).toBe(String(10 * 86_400_000));
+    expect(store.get('cultifolio.clockPending')).toContain('"delta":864000000'); // and waits in storage, so one sync per page load still gets there (round fifty-two, 1)
+    expect(trustServerTime(NOW + 5_000, NOW + 5_000 - 10 * 86_400_000)).toBe(0); // five seconds on: the same run
+    expect(trustServerTime(NOW + 65_000, NOW + 65_000 - 10 * 86_400_000)).toBe(10 * 86_400_000);
+    expect(JSON.parse(store.get('cultifolio.clockOffsetMs')!).offset).toBe(10 * 86_400_000);
     _resetClockOffset();
     expect(store.has('cultifolio.clockOffsetMs')).toBe(false);
     } finally {
       if (had) Object.defineProperty(globalThis, 'localStorage', had); else delete (globalThis as { localStorage?: unknown }).localStorage;
     }
   });
+  it('round fifty-two, 1: a corrected clock that had ticked a year ahead restarts from the corrected time, and Stop syncing clears the correction', () => {
+    const real = Date.now();
+    let now = real + 365 * 86_400_000;
+    const clock = new Clock('me', () => now);
+    const ahead = hlcDecode(clock.tick()).wall;
+    expect(ahead).toBeGreaterThan(real + 300 * 86_400_000);
+    now = real; // corrected
+    const next = hlcDecode(clock.tick()).wall;
+    expect(next).toBeLessThanOrEqual(real + 1); // not a year ahead any more (the second reviewer's finding 3)
+    // a step back under the window stays monotonic
+    now = real - 60_000;
+    expect(hlcDecode(clock.tick()).wall).toBeGreaterThanOrEqual(next);
+    trustServerTime(NOW, NOW - 31_000);
+    expect(clockOffsetMs()).toBe(31_000);
+    const { clearClockOffset } = hlcModule;
+    clearClockOffset();
+    expect(clockOffsetMs()).toBe(0);
+  });
   it('round fifty-one, 1: event dates come from the corrected clock, not the device\'s', async () => {
     const { localDate } = await import('$core/dates');
     const before = localDate();
     trustServerTime(NOW - 400 * 86_400_000, NOW); // the server says the device is 400 days fast
-    trustServerTime(NOW - 400 * 86_400_000 + 2_000, NOW + 2_000); // and says so again
+    trustServerTime(NOW - 400 * 86_400_000 + 90_000, NOW + 90_000); // and says so again, a run later
     expect(localDate()).not.toBe(before);
     expect(localDate()).toBe(localDate(new Date(nowMs())));
   });

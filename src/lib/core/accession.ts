@@ -1,3 +1,4 @@
+import { nowMs } from './hlc';
 /**
  * Accession numbering is a vault setting. The default is the year-prefixed
  * scheme (2026-0001); an organisation may set its own prefix and width, and
@@ -14,7 +15,7 @@ export interface NumberingScheme {
 
 export const DEFAULT_SCHEME: NumberingScheme = { mode: 'year', width: 4 };
 
-export function nextAccession(existing: Iterable<string>, scheme: NumberingScheme = DEFAULT_SCHEME, year = new Date().getFullYear()): string {
+export function nextAccession(existing: Iterable<string>, scheme: NumberingScheme = DEFAULT_SCHEME, year = new Date(nowMs()).getFullYear()): string { // the corrected clock's year: a phone set to 2031 minted 2031-0001, for good (round fifty-two, 1)
   const prefix = scheme.mode === 'year' ? String(year) : (scheme.prefix ?? 'ACC');
   const re = new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-(\\d+)$`);
   let n = 0;

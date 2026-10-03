@@ -12,12 +12,14 @@ import type { Box } from '$core/geo';
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); // the title lands in an attribute too (round twenty-nine, 10)
 
+/** A tenth of a degree is under a pixel at any size these maps are drawn: unrounded coordinates were a third of the origin view's markup (round fifty-two, 5). */
+const r1 = (n: number) => Math.round(n * 10) / 10;
 function boxRects(boxes: Box[], cls: string): string {
   return boxes
     .map((b) => {
-      if (b.w <= b.e) return `<rect class="${cls}" x="${b.w}" y="${-b.n}" width="${b.e - b.w}" height="${b.n - b.s}"/>`;
+      if (b.w <= b.e) return `<rect class="${cls}" x="${r1(b.w)}" y="${r1(-b.n)}" width="${r1(b.e - b.w)}" height="${r1(b.n - b.s)}"/>`;
       // antimeridian: two rects
-      return `<rect class="${cls}" x="${b.w}" y="${-b.n}" width="${180 - b.w}" height="${b.n - b.s}"/><rect class="${cls}" x="-180" y="${-b.n}" width="${b.e + 180}" height="${b.n - b.s}"/>`;
+      return `<rect class="${cls}" x="${r1(b.w)}" y="${r1(-b.n)}" width="${r1(180 - b.w)}" height="${r1(b.n - b.s)}"/><rect class="${cls}" x="-180" y="${r1(-b.n)}" width="${r1(b.e + 180)}" height="${r1(b.n - b.s)}"/>`;
     })
     .join('');
 }

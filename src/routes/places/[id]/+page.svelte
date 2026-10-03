@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Parked from '$lib/ui/Parked.svelte';
   import { units } from '$lib/ui/units.svelte';
   import { getForecast, forecastRefusal } from '$lib/weather/client';
   import { localDate, daysBetween } from '$core/dates';
@@ -7,7 +8,7 @@
   import { plural } from '$core/words';
   import { page } from '$app/state';
   import { accNo, sowNo } from '$lib/db/types';
-  import { goto } from '$app/navigation';
+  import { goto, beforeNavigate } from '$app/navigation';
   import { onMount } from 'svelte';
   import { collection, DUE_DAYS } from '$lib/db/collection.svelte';
   import WaitingRecord from '$lib/ui/WaitingRecord.svelte';
@@ -57,7 +58,19 @@
   function startEdit() {
     if (!loc) return;
     f = { name: loc.name, kind: loc.type ?? '', parent: path.length > 1 ? path[path.length - 2].id : null, indoor: loc.indoor == null ? '' : loc.indoor ? 'yes' : 'no', floorC: loc.floorC == null ? '' : (units.current === 'us' ? +cToF(loc.floorC).toFixed(1) : +loc.floorC.toFixed(1)).toString(), floorHeld: loc.floorHeld ? 'held' : 'bottoms', ppfd: loc.ppfd?.toString() ?? '', lightHours: loc.lightHours?.toString() ?? '', lat: loc.lat?.toString() ?? '', lon: loc.lon?.toString() ?? '', altM: loc.altM?.toString() ?? '', notes: loc.notes ?? '' };
+    fOpen = { ...f };
     editing = true;
+  }
+  /** The form as it opened: only what changed in it is written (round fifty-two, 4). */
+  let fOpen: Record<string, unknown> = {};
+  const formDirty = () => editing || movingIn || auditing;
+  // A half-done form is not lost to a tab-bar tap or a reload without asking (round fifty-two, 4; the Add form has had this since round forty-nine).
+  beforeNavigate((nav) => {
+    if (!formDirty() || nav.type === 'leave' || nav.willUnload) return;
+    if (!confirm('Leave this page? What you typed here will be lost.')) nav.cancel();
+  });
+  function guardUnload(e: BeforeUnloadEvent) {
+    if (formDirty()) e.preventDefault();
   }
   const num = (s: string) => (s.trim() === '' || Number.isNaN(Number(s)) ? null : Number(s));
   let altMsg = $state('');
@@ -70,7 +83,13 @@
     // The place's fields and its new parent are one commit: a page closed between the two left a place edited but not moved (round fifty-one, 3).
     const moving = (f.parent ?? null) !== (loc?.parentId ?? null) || collection.needsHome(id);
     if (moving) collection.checkMove(id, f.parent ?? null);
-    await collection.put('location', id, { ...{ name: f.name.trim() || loc?.name, type: f.kind || null, indoor: f.indoor === '' ? null : f.indoor === 'yes', floorC: (() => { const v = num(f.floorC); return v == null ? null : units.current === 'us' ? +fToC(v).toFixed(2) : v; })(), floorHeld: num(f.floorC) == null ? null : f.floorHeld === 'held' ? true : loc?.floorHeld ? false : (loc?.floorHeld ?? null), ppfd: num(f.ppfd), lightHours: num(f.lightHours), lat: num(f.lat), lon: num(f.lon), altM: num(f.altM), notes: f.notes.trim() || null }, ...(moving ? { parentId: f.parent ?? null } : {}) });
+    const all: Record<string, unknown> = { name: f.name.trim() || loc?.name, type: f.kind || null, indoor: f.indoor === '' ? null : f.indoor === 'yes', floorC: (() => { const v = num(f.floorC); return v == null ? null : units.current === 'us' ? +fToC(v).toFixed(2) : v; })(), floorHeld: num(f.floorC) == null ? null : f.floorHeld === 'held' ? true : loc?.floorHeld ? false : (loc?.floorHeld ?? null), ppfd: num(f.ppfd), lightHours: num(f.lightHours), lat: num(f.lat), lon: num(f.lon), altM: num(f.altM), notes: f.notes.trim() || null };
+    const touched = new Set(Object.keys(f).filter((k) => (f as Record<string, unknown>)[k] !== fOpen[k]));
+    const byForm: Record<string, string[]> = { name: ['name'], kind: ['type'], indoor: ['indoor'], floorC: ['floorC', 'floorHeld'], floorHeld: ['floorHeld', 'floorC'], ppfd: ['ppfd'], lightHours: ['lightHours'], lat: ['lat'], lon: ['lon'], altM: ['altM'], notes: ['notes'] };
+    const write = new Set<string>();
+    for (const k of touched) for (const fld of byForm[k] ?? []) write.add(fld);
+    const fields = Object.fromEntries(Object.entries(all).filter(([k]) => write.has(k)));
+    await collection.put('location', id, { ...fields, ...(moving ? { parentId: f.parent ?? null } : {}) });
     editing = false;
   }
   function useMyLocation() {
@@ -80,6 +99,7 @@
   /* ---- water / feed the whole place ---- */
   let busy = $state('');
   async function waterAll(t: 'water' | 'feed') {
+    if (busy) return; // a second tap before the first commits wrote every line twice (round fifty-two, 3)
     busy = t;
     // A place-wide line is not an observation of each plant, so it never counts as one being seen (round twenty-four, 3).
     const ids = await collection.addEventsIds(deep.map((a) => ({ acc: a.id, d: today(), t, note: `whole ${loc?.type ?? 'place'}: ${loc?.name ?? ''}`, auto: true })));
@@ -133,7 +153,11 @@
     auditing = false;
     confirmCancel = false;
   }
+  let auditBusy = false;
   async function finishAudit() {
+    if (auditBusy) return;
+    auditBusy = true;
+    try {
     const seen = deep.filter((a) => present[a.id]);
     const missed = deep.filter((a) => !present[a.id]);
     // Both outcomes are logged: a plant not found at an audit carries that on its own timeline, and the row says so on every screen size (round twenty-three, 5).
@@ -142,6 +166,9 @@
     const missing = missed.length;
     auditResult = `Audit recorded: ${seen.length} present${missing ? `, ${missing} not seen: ${missed.map(accNo).join(', ')}` : ''}.`;
     auditing = false;
+    } finally {
+      auditBusy = false;
+    }
   }
   const daysSince = (d: string | null) => (d ? daysBetween(d) : null);
 
@@ -198,6 +225,7 @@
 </script>
 
 <svelte:head><title>{loc?.name ?? 'Location'} — Cultifolio</title></svelte:head>
+<svelte:window onbeforeunload={guardUnload} />
 
 {#if !collection.ready}
   <p class="muted">Opening your collection…</p>
@@ -221,6 +249,7 @@
     </div>
   </div>
 
+  <Parked kind="location" id={id} />
   {#if collection.needsHome(id)}
     <p class="small muted">This place needs a home: two devices moved places into each other while offline, so it was set free at the top level. <button type="button" class="linkish" onclick={startEdit}>Move it</button> where it belongs.</p>
   {/if}
@@ -335,7 +364,7 @@
             {#if lastAudit || ds != null}<span class="dot statedot {missed ? 'wake' : ds == null ? '' : ds > 90 ? 'wake' : 'grow'}" role="img" aria-label={ds == null ? 'never audited' : ds > 90 ? `not seen for ${ds} days` : `seen ${ds} days ago`} title={ds == null ? 'never audited' : ds > 90 ? `not seen for ${ds} days` : `seen ${ds} days ago`}></span>{:else}<span class="dot statedot" aria-hidden="true"></span>{/if}
             <span><span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} /></span><span class="fam">{a.locationId !== id ? collection.location(a.locationId!)?.name ?? '' : ''}</span></span>
             <span class="fig" class:due={missed || (ds != null && ds > 90)}>{missed ? `not seen at the audit of ${missedAt}` : ds == null ? (lastAudit ? 'never audited' : '') : ds > 90 ? `not seen for ${ds} days` : ds === 0 ? 'seen today' : ds === 1 ? 'seen yesterday' : `seen ${ds} d ago`}</span>
-            {#if missed || (ds != null && ds > 90) || (ds == null && lastAudit)}<span class="fam due phoneonly">{missed ? `not seen at the audit of ${missedAt}` : ds == null ? 'never audited' : `not seen for ${ds} days`}</span>{/if}
+            {#if missed || (ds != null && ds > 90) || (ds == null && lastAudit)}<span class="fam due phoneonly">{missed ? `not seen at the audit of ${missedAt}` : ds == null ? 'never audited' : `not seen for ${ds} days`}</span>{:else if ds != null && ds <= 1}<span class="fam phoneonly">{ds === 0 ? 'seen today' : 'seen yesterday'}</span>{/if}
           </a>
         {/if}
       {/each}
@@ -373,7 +402,7 @@
   .quickbar.words .btn:disabled { color: var(--ink3); }
   .muted { color: var(--ink3); }
   .movein { margin-top: 12px; }
-  .movein .body { padding: 10px 14px 14px; }
+  .movein .body { padding: 10px 14px 14px; font-family: var(--ui); font-size: 14px; white-space: normal; } /* a form, not a note: not the notes' serif (round fifty-two, 6) */
   .movein .searchbar { width: 100%; margin-bottom: 6px; }
   .moverows { max-height: 50vh; overflow: auto; }
   .movein .actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; }

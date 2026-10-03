@@ -36,6 +36,7 @@ export type Row = {
   sub: string;
   count: number;
   withClimate: number;
+  notChecked?: number;
   thumb?: string;
   alt?: string;
   map?: string;
@@ -138,6 +139,8 @@ function build(index: IndexEntry[], by: By, chip: Chip): Catalogue {
       sub,
       count: sorted.length,
       withClimate: sorted.filter((c) => c.climate === 'ok').length,
+      // A refusal or a pending build is not an absence: counted apart from the species with no habitat climate (round fifty-two, 6).
+      notChecked: sorted.filter((c) => c.climate === 'refused' || c.climate === 'pending').length,
       thumb: by === 'origin' ? undefined : hero?.thumb,
       alt: hero?.name,
       map: by === 'origin' ? groupMap(sorted) : undefined,

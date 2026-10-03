@@ -1,6 +1,6 @@
 import { json, error } from '@sveltejs/kit';
-import { getIndexWithCorpus } from '$lib/server/dossiers';
-import { bucketOf, BUCKET } from '$core/bucket';
+import { getIndexWithCorpus, entriesByBucket } from '$lib/server/dossiers';
+import { BUCKET } from '$core/bucket';
 import type { RequestHandler } from './$types';
 
 /**
@@ -22,5 +22,6 @@ export const GET: RequestHandler = async ({ url, platform, fetch }) => {
   // worker included, keeps the old entries under the new id until the next deploy (round sixteen, 12).
   const asked = (url.searchParams.get('c') ?? '').replace(/[^A-Za-z0-9._-]/g, '').slice(0, 40);
   const current = asked === corpus;
-  return json(idx.filter((e) => want.has(bucketOf(e.slug))), { headers: { 'cache-control': current ? 'public, max-age=86400' : 'no-store' } });
+  const byBucket = entriesByBucket(idx); // hashed once per index (round fifty-two, 5)
+  return json([...want].flatMap((b) => byBucket.get(b) ?? []), { headers: { 'cache-control': current ? 'public, max-age=86400' : 'no-store' } });
 };

@@ -432,7 +432,7 @@
 {#snippet plantsFound()}
   {#if plantHits.length}
     <div class="plantsfound" role="status" data-sveltekit-preload-data="off">
-      {#each plantHits as a (a.id)}<a class="azrow accrow" href="/plants/{accNo(a)}"><span class="im"></span><span><span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}‘{a.cultivar}’{/if}</span><span class="fam">your plant{a.locationId ? ` · ${collection.locationName(a.locationId)}` : ''}</span></span><span class="fig">open →</span></a>{/each}
+      {#each plantHits.slice(0, 60) as a (a.id)}<a class="azrow accrow" href="/plants/{accNo(a)}"><span class="im"></span><span><span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}‘{a.cultivar}’{/if}</span><span class="fam">your plant{a.locationId ? ` · ${collection.locationName(a.locationId)}` : ''}</span></span><span class="fig">open →</span></a>{/each}
     </div>
   {/if}
 {/snippet}
@@ -473,10 +473,10 @@
 {#snippet hit(c: Tile)}
   <!-- A match as a row, not a tile: five or six fit between the pinned box and a phone's keyboard, and update as the letters go in (round fifty, 2). -->
   <a class="azrow hitrow" href="/species/{c.slug}">
-    <span class="im">{#if c.thumb}<img src={photoAt(c.thumb, 'square')} width="40" height="40" alt="" loading="lazy" onerror={(e) => ((e.currentTarget as HTMLImageElement).style.display = 'none')} />{:else}<span class="ini">{c.name[0] ?? ''}</span>{/if}</span>
+    <span class="im">{#if c.thumb}<img src={photoAt(c.thumb, 'square')} width="40" height="40" alt="" loading="lazy" onerror={(e) => { const im = e.currentTarget as HTMLImageElement; const ini = document.createElement('span'); ini.className = 'ini'; ini.textContent = c.name[0] ?? ''; im.replaceWith(ini); }} />{:else}<span class="ini">{c.name[0] ?? ''}</span>{/if}</span>
     <span>
       <span class="nm"><SpeciesName name={c.name} /></span>
-      <span class="fam">{[c.common, c.family, c.climate === 'ok' ? 'climate known' : c.climate === 'pending' ? 'climate pending' : c.climate ? 'no habitat climate' : ''].filter(Boolean).join(' · ')}</span>
+      <span class="fam">{[c.common, c.family, c.climate === 'ok' ? 'climate known' : c.climate === 'pending' ? 'climate pending' : c.climate === 'refused' ? 'climate not checked' : c.climate ? 'no habitat climate' : ''].filter(Boolean).join(' · ')}</span>
     </span>
     <span class="fig">›</span>
   </a>
@@ -510,14 +510,16 @@
   </div>
   </div>
 
-  {#if !q.trim()}<Today />{/if}
+  <!-- Hidden while a search is typed, not unmounted: it was built again on every cleared box (round fifty-two, 5). -->
+  <div hidden={!!q.trim()}><Today /></div>
 
   {#if q.trim()}
     {@render plantsFound()}
     {#if ownHits.length}
       <p class="seccount" style="margin: 8px 0" role="status">{fmtN(ownHits.length)} of your species {ownHits.length === 1 ? 'matches' : 'match'}{plantHits.length ? '' : ' · Enter opens the first'}</p>
       <div class="rows hits" data-sveltekit-preload-data="off">
-        {#each ownHits as c (c.slug)}{@render hit(c)}{/each}
+        {#each ownHits.slice(0, 60) as c (c.slug)}{@render hit(c)}{/each}
+        {#if ownHits.length > 60}<p class="seccount">{ownHits.length - 60} more: type more of the name.</p>{/if}
       </div>
     {:else if !plantHits.length}
       <div class="emptybox"><p class="muted">None of your plants or species matches.</p></div>
@@ -631,7 +633,7 @@
           <div class="gtx">
             <span class="gname" class:sci={data.by === 'genus'}>{r.label}</span>
             {#if r.sub}<span class="d">{r.sub}</span>{/if}
-            <span class="st">{r.count} species · {r.withClimate} with climate</span>
+            <span class="st">{r.count} species · {r.withClimate} with climate{#if r.notChecked}{' · '}{r.notChecked} not checked{/if}</span>
           </div>
           <span class="chev" aria-hidden="true">{r.id === data.open ? '–' : '+'}</span>
         </a>

@@ -280,7 +280,7 @@
     <div class="acts">
       <a class="btn pri" href="/plants/new?species={encodeURIComponent(d.name.scientific)}&key={d.key}">Add one to my plants</a>
       {#if mine.length}
-        <span class="vern mine">{#each mine.slice(0, 3) as a, i}{#if i}, {/if}<a class="accno" href="/plants/{accNo(a)}" title={a.status !== 'growing' ? a.status : 'yours'}>{accNo(a)}</a>{/each}{#if mine.length > 3} +{mine.length - 3}{/if}</span>
+        <span class="vern mine">{#each mine.slice(0, 3) as a (a.id)}<a class="accno" href="/plants/{accNo(a)}" title={a.status !== 'growing' ? a.status : 'yours'}>{accNo(a)}</a>{/each}{#if mine.length > 3}<span class="more">+{mine.length - 3}</span>{/if}</span>
       {/if}
     </div>
     <div class="acts acts2">
@@ -535,7 +535,7 @@
 
   </div>
   <!-- The facts that led the page until round fifty, and the sentence about derivation: here, where someone checking the page looks. -->
-  <h2 class="sec" id="s-facts">Where this page came from</h2>
+  <h2 class="sec" id="s-facts">The record</h2>
   <div class="facts">
     <div class="fact"><div class="lab">Family</div><div class="v">{d.name.family ?? 'not stated by the backbone'}</div></div>
     <div class="fact"><div class="lab">Described by</div><div class="v">{d.name.authorship ?? 'authorship not stated by the backbone'}</div></div>
@@ -565,6 +565,7 @@
   .idcard .acts { margin-top: 12px; }
   .idcard .acts .mine { margin: 0; display: inline-flex; gap: 6px; align-items: center; }
   .idcard .acts2 { margin-top: 0; gap: 0 14px; }
+  .idcard .mine { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; } /* chips with a gap, no separators to strand (round fifty-two, 6) */
   .idcard .acts2 :global(.btn) { background: none; border: 0; box-shadow: none; padding: 6px 0; min-height: 40px; color: var(--accent); font-weight: 600; font-size: 13.5px; }
   .idcard .acts2 :global(.btn:hover) { text-decoration: underline; }
   .placeline { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 10px 0 0; padding: 11px 14px; background: color-mix(in srgb, var(--accent) 9%, var(--card)); border-left: 3px solid var(--accent); border-radius: var(--r); color: var(--ink); font-size: 13.5px; text-decoration: none; }
@@ -572,7 +573,8 @@
   .placeline .chev { color: var(--accent); font-weight: 700; }
   .notecard.plain > summary .one { font-size: 11.5px; }
   .notecard.plain .foot { font-size: 12px; }
-  @media (max-width: 640px) { .glance .card .sub { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; } .glance .card:focus .sub, .glance .card:hover .sub { -webkit-line-clamp: unset; line-clamp: unset; } }
+  /* The source line wraps: clamped to two lines it ended in "…" before the source's name, on the one screen where a stranger decides (round fifty-two, 6). */
+  @media (max-width: 640px) { .glance .card .sub { font-size: 11.5px; line-height: 1.35; } }
   .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0; margin: 16px 0 0; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); overflow: hidden; }
   .fact { padding: 12px 16px; border-right: 1px solid var(--rule); min-width: 0; }
   .fact:last-child { border-right: 0; }

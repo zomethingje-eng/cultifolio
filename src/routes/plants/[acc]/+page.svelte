@@ -7,7 +7,7 @@
   import { plural } from '$core/words';
   import { page } from '$app/state';
   import { accNo, sowNo } from '$lib/db/types';
-  import { goto } from '$app/navigation';
+  import { goto, beforeNavigate } from '$app/navigation';
   import { onMount } from 'svelte';
   import { prefs } from '$lib/ui/prefs.svelte';
   import { collection, DUE_DAYS } from '$lib/db/collection.svelte';
@@ -28,6 +28,7 @@
   import Lightbox from '$lib/ui/Lightbox.svelte';
   import { focusNext } from '$lib/ui/focus';
   import RefPhotoOffer from '$lib/ui/RefPhotoOffer.svelte';
+  import Parked from '$lib/ui/Parked.svelte';
   import NotChecked from '$lib/ui/NotChecked.svelte';
   onMount(() => { site.load(); collection.load(); });
   /** The URL carries the number people know (or an identity, from a printed code); everything below works on the record's identity. */
@@ -215,6 +216,10 @@
   /** Water is one tap: a watering today, with an Undo for a few seconds; a watering with a date or a note goes through Log (round forty-nine, 3). */
   let wateringNow = $state(false);
   async function waterNow() {
+    if (wateringNow) return;
+    // A watering already recorded today is not recorded again: two taps are one watering, as the grower means them (round fifty-two, 3).
+    const already = events.find((e) => e.t === 'water' && e.d === localDate());
+    if (already) { toast.show('Already recorded as watered today.'); return; }
     wateringNow = true;
     try {
       const ev = await collection.addEvent({ acc: id, d: localDate(), t: 'water' });
@@ -263,15 +268,27 @@
     edDateMsg = ''; // a refusal belongs to the edit that was refused, not to the next one opened (round twenty-seven, R2-2)
     edKey = a.taxonKey ?? null;
     f = { taxonName: a.taxonName, cultivar: a.cultivar ?? '', nameKind: a.nameKind && !['species', 'cultivar', 'hybrid'].includes(a.nameKind) ? a.nameKind : kindOf(a), parentage: a.parentage ?? '', nameAsReceived: a.nameAsReceived ?? '', fieldNumber: a.fieldNumber ?? '', provenance: a.provenance ?? 'unknown', acquired: a.acquired ?? '', sourceFrom: a.sourceFrom ?? '', sourceForm: a.sourceForm ?? '', price: a.price ?? '', locationId: a.locationId ?? null };
+    fOpen = { ...f };
     editing = true;
     void focusNext('#ed-name'); // the first field, so a keyboard user who chose Edit from the menu lands in the form (round twenty, 11)
   }
+  /** The form as it opened: only the fields the grower changed in it are written, so a form open while another tab or a sync changed the record does not write the old values back over the new (round fifty-two, 4). */
+  let fOpen = {} as typeof f;
   let edDateMsg = $state('');
+  const formDirty = () => editing || (editingNotes && notesDraft.trim() !== (notesBase ?? '').trim()) || (editingMy && myNotesDraft.trim() !== myNotesOpen.trim());
+  // A half-done form is not lost to a tab-bar tap or a reload without asking (round fifty-two, 4; the Add form has had this since round forty-nine).
+  beforeNavigate((nav) => {
+    if (!formDirty() || nav.type === 'leave' || nav.willUnload) return;
+    if (!confirm('Leave this page? What you typed here will be lost.')) nav.cancel();
+  });
+  function guardUnload(e: BeforeUnloadEvent) {
+    if (formDirty()) e.preventDefault();
+  }
   async function saveEdit() {
     if (!a) return;
     // A date after today is a typo, and the number a plant carries is minted for its acquisition year (round twenty-six, 3).
     // Only a date this edit typed is judged: a plant whose stored date is already in the future (an older file) can still have its price or place edited, and the date corrected when the grower gets to it (round twenty-eight, 0).
-    edDateMsg = f.acquired && f.acquired !== (a.acquired ?? '') && f.acquired > localDate() ? `${f.acquired} is in the future.` : '';
+    edDateMsg = f.acquired && f.acquired !== (a.acquired ?? '') && f.acquired > localDate() ? `${f.acquired} is in the future.` : f.acquired && f.acquired !== (a.acquired ?? '') && f.acquired < '1900-01-01' ? `${f.acquired} is before 1900.` : '';
     if (edDateMsg) { document.getElementById('ed-date')?.focus(); return; }
     const moved = (f.locationId ?? null) !== (a.locationId ?? null);
     // The name as the add form files it: a hybrid is filed under its genus (or nothogenus) with the cross as parentage and
@@ -304,7 +321,15 @@
     const acq = events.find((e) => e.t === 'acquire');
     const newDate = f.acquired || null, newNote = f.sourceFrom.trim() ? `from ${f.sourceFrom.trim()}` : null;
     const also = acq && newDate && (acq.d !== newDate || (acq.note ?? null) !== newNote) ? [{ kind: 'event' as const, id: acq.id, fields: { d: newDate, note: newNote } }] : [];
-    await collection.putWith('accession', id, { taxonName, taxonKey, cultivar: f.cultivar.trim() || null, nameKind: nameKindOut, parentage, nameAsReceived: f.nameAsReceived.trim() || (oldFull !== newFull && !a.nameAsReceived ? oldFull : null), fieldNumber: f.fieldNumber.trim() || null, provenance: provenanceOut, acquired: f.acquired || null, sourceFrom: f.sourceFrom.trim() || null, sourceForm: f.sourceForm.trim() || null, price: f.price.trim() || null, locationId: f.locationId ?? null, location: f.locationId ? null : a.location ?? null }, lines, also);
+    const all: Record<string, unknown> = { taxonName, taxonKey, cultivar: f.cultivar.trim() || null, nameKind: nameKindOut, parentage, nameAsReceived: f.nameAsReceived.trim() || (oldFull !== newFull && !a.nameAsReceived ? oldFull : null), fieldNumber: f.fieldNumber.trim() || null, provenance: provenanceOut, acquired: f.acquired || null, sourceFrom: f.sourceFrom.trim() || null, sourceForm: f.sourceForm.trim() || null, price: f.price.trim() || null, locationId: f.locationId ?? null, location: f.locationId ? null : a.location ?? null };
+    // Only what this form changed (round fifty-two, 4): the name and what the name decides, the place and the text it replaces, and each other field on its own.
+    const touched = new Set((Object.keys(f) as Array<keyof typeof f>).filter((k) => f[k] !== fOpen[k]));
+    const write = new Set<string>();
+    if (touched.has('taxonName') || touched.has('nameKind') || touched.has('parentage') || touched.has('cultivar') || touched.has('nameAsReceived')) for (const k of ['taxonName', 'taxonKey', 'nameKind', 'parentage', 'nameAsReceived', 'cultivar']) write.add(k);
+    if (touched.has('locationId')) { write.add('locationId'); write.add('location'); }
+    for (const k of ['fieldNumber', 'provenance', 'acquired', 'sourceFrom', 'sourceForm', 'price']) if (touched.has(k as keyof typeof f)) write.add(k);
+    const fields = Object.fromEntries(Object.entries(all).filter(([k]) => write.has(k)));
+    await collection.putWith('accession', id, fields, lines, also);
     editing = false;
   }
 
@@ -341,9 +366,15 @@
     await collection.putWith('accession', id, { notes: next, notesBase: notesBaseStamp }, replaced ? [{ acc: id, d: localDate(), t: 'note', note: `Notes replaced by this edit; before it they read: ${current}`, auto: true }] : []);
     editingNotes = false;
   }
+  /** The species notes as the editor opened: a text that changed meanwhile (another tab, a sync) is not lost silently, as plant notes are not (round fifty-two, 4). */
+  let myNotesOpen = '';
   async function saveMyNotes() {
     if (!a) return;
-    await collection.put('taxon', speciesSlug(a.taxonName), { name: speciesOf(a.taxonName), gbifKey: a.taxonKey ?? null, myNotes: myNotesDraft.trim() || null });
+    const slug = speciesSlug(a.taxonName);
+    const current = collection.taxon(slug)?.myNotes ?? '';
+    const next = myNotesDraft.trim() || null;
+    const replaced = current && current !== myNotesOpen && current !== next;
+    await collection.putWith('taxon', slug, { name: speciesOf(a.taxonName), gbifKey: a.taxonKey ?? null, myNotes: next }, replaced ? [{ acc: id, d: localDate(), t: 'note', note: `Species notes replaced by this edit; before it they read: ${current}`, auto: true }] : []);
     editingMy = false;
   }
   async function remove() {
@@ -363,7 +394,7 @@
 </script>
 
 <svelte:head><title>{a ? `${accNo(a)} ${a.taxonName}` : param} — Cultifolio</title></svelte:head>
-<svelte:window onkeydown={(e) => { if (e.key === 'Escape' && cardMenu) closeCardMenu(true); }} onclick={(e) => { if (cardMenu && !(e.target as Element).closest('.cardmenu')) closeCardMenu(); }} />
+<svelte:window onbeforeunload={guardUnload} onkeydown={(e) => { if (e.key === 'Escape' && cardMenu) closeCardMenu(true); }} onclick={(e) => { if (cardMenu && !(e.target as Element).closest('.cardmenu')) closeCardMenu(); }} />
 
 {#if collection.lastWriteError}
   <div class="notice err" role="alert" id="write-error">This change was not saved: {collection.lastWriteError}. Free space or <a href="/backup">back up now</a>.</div>
@@ -511,6 +542,7 @@
     </form>
   {/if}
 
+  <Parked kind="accession" id={id} />
   {#if setup.length}
     <div class="cult setup">
       <div class="sum">Set it up <span class="hint">what makes this page useful</span></div>
@@ -599,9 +631,9 @@
     {#if editingMy}
       <div class="fields"><textarea id="taxon-notes" rows="4" bind:value={myNotesDraft}></textarea><div class="actions"><button class="btn" onclick={() => (editingMy = false)}>Cancel</button><button class="btn pri" onclick={saveMyNotes}>Save</button></div></div>
     {:else if taxon?.myNotes}
-      <div class="body">{taxon.myNotes}</div><div class="foot"><button class="linkish" onclick={() => { myNotesDraft = taxon?.myNotes ?? ''; editingMy = true; }}>Edit</button></div>
+      <div class="body">{taxon.myNotes}</div><div class="foot"><button class="linkish" onclick={() => { myNotesDraft = taxon?.myNotes ?? ''; myNotesOpen = myNotesDraft; editingMy = true; }}>Edit</button></div>
     {:else}
-      <div class="none">Nothing yet. <button class="linkish" onclick={() => { myNotesDraft = ''; editingMy = true; }}>Write cultivation notes</button></div>
+      <div class="none">Nothing yet. <button class="linkish" onclick={() => { myNotesDraft = ''; myNotesOpen = ''; editingMy = true; }}>Write cultivation notes</button></div>
     {/if}
   </div>
 

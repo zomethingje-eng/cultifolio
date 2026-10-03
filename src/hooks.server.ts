@@ -1,7 +1,7 @@
 import { redirect, type Handle, type RequestEvent } from '@sveltejs/kit';
 import { unitsFor } from '$lib/server/units';
 import { building, version } from '$app/environment';
-import { getIndex } from '$lib/server/dossiers';
+import { getIndex, getCorpusId } from '$lib/server/dossiers';
 import { catalogueOf, byOf, chipOf } from '$lib/server/catalogue';
 
 /**
@@ -90,7 +90,9 @@ export const handle: Handle = async ({ event, resolve }) => {
     const hemi = held.hemi ? event.cookies.get('cultifolio.hemi') : undefined;
     const q = await held.query(event);
     if (q !== null) {
-      key = new Request(`https://cache.cultifolio/page?v=${encodeURIComponent(version)}&p=${encodeURIComponent(event.url.pathname)}&q=${encodeURIComponent(q)}&u=${unitsFor(event.cookies, event.request)}&h=${hemi === 'n' || hemi === 's' ? hemi : ''}`);
+      // And the corpus: a page held across an upload showed the old corpus for its minute (round fifty-two, 5). The id is in memory once the index is loaded, which the home query loads anyway.
+      const corpus = await getCorpusId(event.platform, event.fetch).catch(() => '');
+      key = new Request(`https://cache.cultifolio/page?v=${encodeURIComponent(version)}&c=${encodeURIComponent(corpus)}&p=${encodeURIComponent(event.url.pathname)}&q=${encodeURIComponent(q)}&u=${unitsFor(event.cookies, event.request)}&h=${hemi === 'n' || hemi === 's' ? hemi : ''}`);
       // A cache that fails to answer is a page rendered, not a 500 (round forty-nine, 2).
       const hit = await cache.match(key).catch(() => undefined);
       if (hit) {
@@ -107,6 +109,9 @@ export const handle: Handle = async ({ event, resolve }) => {
   // A response taken from the edge cache (the names route returns its hit as it is) has immutable headers in Workers, and
   // setting one throws, which SvelteKit turned into a 500 on every repeated lookup (round seventeen, 1). A copy is mutable.
   const r = policy(new Response(res.body, res));
+  // The sync answers carry the server's clock: the device's clock correction reads it, and a dev server sends none, so
+  // the correction could not be tested end to end before (round fifty-two, 1). The edge sets it anyway; this is the same clock.
+  if (event.url.pathname.startsWith('/api/sync/') && !r.headers.has('date')) r.headers.set('date', new Date().toUTCString());
   if (cache && key && r.status === 200 && (r.headers.get('content-type') ?? '').startsWith('text/html') && !r.headers.has('set-cookie')) {
     // Stored under the Worker's own key with a public lifetime, which the cache needs to keep it; the reader's copy keeps its private header.
     const copy = new Response(r.clone().body, r);

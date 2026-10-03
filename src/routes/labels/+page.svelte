@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { SvelteSet } from 'svelte/reactivity';
   import NotChecked from '$lib/ui/NotChecked.svelte';
   import { units } from '$lib/ui/units.svelte';
   import PageHead from '$lib/ui/PageHead.svelte';
@@ -104,7 +105,7 @@
     else n.add(id);
     chosen = n;
   };
-  const pickAll = (on: boolean) => (chosen = on ? new Set([...chosen, ...filtered.map((a) => a.id)]) : new Set([...chosen].filter((id) => !filtered.some((a) => a.id === id))));
+  const pickAll = (on: boolean) => { const shown = new Set(filtered.map((a) => a.id)); chosen = on ? new Set([...chosen, ...shown]) : new Set([...chosen].filter((id) => !shown.has(id))); }; // a set, not a scan per id (round fifty-two, 5)
 
   /** A plant's species sheet, by hash bucket: the labels page never names or keys the species it prints. Five Astrophytum labels are one lookup in one cached bucket. */
   async function dossierFor(a: Item): Promise<SpeciesSheet | null | 'unreachable'> {
@@ -115,11 +116,14 @@
   const unchecked = $derived(picked.filter((a) => care[a.id] === null));
   /** Plants whose species' climate was refused when the reference was built: printed as "climate not checked", counted on the page (round fifteen, 5). */
   const refused = $derived(picked.filter((a) => care[a.id] === 'climate not checked'));
+  /** And those whose climate is still to be built: said apart from a refusal (round fifty-two, 6). */
+  const stillPending = $derived(picked.filter((a) => care[a.id] === 'climate pending'));
   /** Plants whose species has a climate but whose daily extremes source refused: the care line prints without the habitat night rather than with a warmer, different figure (round seventeen, 7). */
-  let nightOff = $state(new Set<string>());
+  // Reactive sets mutated in place: a copy of the set per answer was quadratic over a thousand plants (round fifty-two, 5).
+  const nightOff = new SvelteSet<string>();
   const nightOffCount = $derived(picked.filter((a) => nightOff.has(a.id)).length);
   /** Plants whose sheet has been asked for and not yet answered: its own set, since an answer can be an empty line (a species with no climate) and must count as answered (round fourteen, 3). */
-  let asking = $state<Set<string>>(new Set());
+  const asking = new SvelteSet<string>();
   const pending = $derived(withCare && picked.some((a) => asking.has(a.id)));
   function retryCare() {
     const again: Record<string, string | null> = { ...care };
@@ -129,7 +133,8 @@
   // QR codes and care lines are made once per plant, lazily.
   $effect(() => {
     // Every bucket the picked plants need, asked for in one request; the per-plant lookups below then find their bucket cached.
-    if (withCare) void sheetsFor(picked.filter((a) => care[a.id] === undefined && kindOf(a.rec) !== 'hybrid').map((a) => speciesSlug(a.taxonName)));
+    // Asked once per plant, not once per effect run: every answer re-ran the effect, which asked for every slug again (round fifty-two, 5).
+    if (withCare) { const slugs = picked.filter((a) => care[a.id] === undefined && !asking.has(a.id) && kindOf(a.rec) !== 'hybrid').map((a) => speciesSlug(a.taxonName)); if (slugs.length) void sheetsFor(slugs); }
     // The codes are made in one batch and assigned once: one assignment per code copied the whole map each time, which
     // with fifteen hundred plants was thirty seconds with the page frozen (round fifty-one, 5).
     const needQr = withQr ? picked.filter((a) => !qrs[a.id] && !qrInflight.has(a.id)) : [];
@@ -143,15 +148,15 @@
     }
     for (const a of picked) {
       if (withCare && care[a.id] === undefined && !asking.has(a.id) && kindOf(a.rec) !== 'hybrid') {
-        asking = new Set([...asking, a.id]);
-        const done = () => { const n = new Set(asking); n.delete(a.id); asking = n; };
+        asking.add(a.id);
+        const done = () => { asking.delete(a.id); };
         dossierFor(a).then(async (d) => {
           done();
           if (d === 'unreachable') { care[a.id] = null; return; } // not "no data": not reached
           const readerLat = site.current?.lat ?? collection.locations.map((l) => l.lat).find((x): x is number => x != null) ?? null;
           const line = careLine({ scientific: a.taxonName, climateStatus: d?.climate.status, family: d?.name.family, months: d?.climate.status === 'ok' ? d.climate.months : null, extremes: d?.climate.status === 'ok' ? (d.climate.extremes ?? null) : null, extremesStatus: d?.climate.status === 'ok' ? d.climate.extremesStatus : null, lat: d?.habitatLat ?? null, units: units.current }, { readerLat });
           care[a.id] = line; // one key, not a copy of the map per answer (round fifty-one, 5)
-          if (d && d.climate.status === 'ok' && !d.climate.extremes) nightOff = new Set([...nightOff, a.id]); // the night is left off this label; counted below (round seventeen, 7)
+          if (d && d.climate.status === 'ok' && !d.climate.extremes) nightOff.add(a.id); // the night is left off this label; counted below (round seventeen, 7)
         }).catch(() => { done(); care[a.id] = null; });
       }
     }
@@ -192,6 +197,9 @@
         <span class="grow"></span>
         <button id="lb-print" class="btn pri" onclick={() => window.print()} disabled={!picked.length || pending}>{pending ? 'Reading the reference…' : `Print ${picked.length} ${picked.length === 1 ? 'label' : 'labels'}`}</button>
       </div>
+      {#if withCare && stillPending.length}
+        <p class="small muted" role="status">{stillPending.length === 1 ? 'One care line' : `${stillPending.length} care lines`} say "climate pending": the reference has not built that species' climate yet.</p>
+      {/if}
       {#if withCare && refused.length}
         <p class="small muted" role="status">{refused.length === 1 ? 'One care line' : `${refused.length} care lines`} <NotChecked inline why="The climate source did not answer when the species page was built." />: the preview marks {refused.length === 1 ? 'it' : 'them'}; the printed labels leave {refused.length === 1 ? 'it' : 'them'} blank.</p>
       {/if}
@@ -246,7 +254,7 @@
               <div class="no">{a.no}{#if a.fieldNumber} <span class="fn">{a.fieldNumber}</span>{/if}</div>
               <div class="sci"><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}<span class="cv">‘{a.cultivar}’</span>{/if}{#if kindOf(a.rec) === 'hybrid' && a.parentage}{' '}<span class="cv">({a.parentage})</span>{/if}</div>
               {#if a.batch && batchLine(a)}<div class="src">{batchLine(a)}</div>{/if}
-              {#if withCare && care[a.id]}<div class="care" class:unchecked={care[a.id] === 'climate not checked'}>{care[a.id]}</div>{:else if withCare && care[a.id] === null}<div class="care unchecked">care line not checked: the reference was not reached</div>{/if}
+              {#if withCare && care[a.id]}<div class="care" class:unchecked={care[a.id] === 'climate not checked' || care[a.id] === 'climate pending'}>{care[a.id]}</div>{:else if withCare && care[a.id] === null}<div class="care unchecked">care line not checked: the reference was not reached</div>{/if}
               {#if withSource && sourceLine(a)}<div class="src">{sourceLine(a)}</div>{/if}
             </div>
           {/if}

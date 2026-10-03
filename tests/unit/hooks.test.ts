@@ -73,7 +73,7 @@ describe('the species page cache (round forty-three, 3)', () => {
     expect(a.headers.get('cache-control')).toBe('private, max-age=60'); // the reader's copy keeps its private header
     expect(await a.text()).toBe('<p>render 1</p>');
     await Promise.all(w.waited);
-    expect([...w.store.keys()]).toEqual([`https://cache.cultifolio/page?v=${encodeURIComponent(version)}&p=%2Fspecies%2Fcopiapoa-cinerea&q=&u=metric&h=`]);
+    expect([...w.store.keys()]).toEqual([`https://cache.cultifolio/page?v=${encodeURIComponent(version)}&c=fixture&p=%2Fspecies%2Fcopiapoa-cinerea&q=&u=metric&h=`]);
     expect(w.store.values().next().value?.headers.get('cache-control')).toBe('public, max-age=60'); // the stored copy, under the Worker's own key
     const b = await handle({ event: w.event('/species/copiapoa-cinerea'), resolve: () => w.page() } as never);
     expect(b.headers.get('x-cultifolio-page')).toBe('held');

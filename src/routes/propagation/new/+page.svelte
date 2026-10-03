@@ -3,7 +3,7 @@
   import PageHead from '$lib/ui/PageHead.svelte';
   import { localDate } from '$core/dates';
   import { temp, tempUnit, cToF, bottomHeat as heatCheck, numberOrNull } from '$core/units';
-  import { goto } from '$app/navigation';
+  import { goto, beforeNavigate } from '$app/navigation';
   import { accNo, sowNo } from '$lib/db/types';
   import { page } from '$app/state';
   import { onMount } from 'svelte';
@@ -43,6 +43,17 @@
   let locationId = $state<string | null>(null);
   let notes = $state('');
   let busy = $state(false);
+  let saved = $state(false);
+  const formDirty = () => !saved && !busy && !!(name.trim() || count != null || sourceFrom.trim() || notes.trim());
+  // A half-done form is not lost to a tab-bar tap or a reload without asking (round fifty-two, 4; the Add form has had this since round forty-nine).
+  beforeNavigate((nav) => {
+    if (!formDirty() || nav.type === 'leave' || nav.willUnload) return;
+    if (!confirm('Leave this page? What you typed here will be lost.')) nav.cancel();
+  });
+  function guardUnload(e: BeforeUnloadEvent) {
+    if (formDirty()) e.preventDefault();
+  }
+
 
   const m = $derived(PROP_METHODS.find((x) => x.k === method) ?? PROP_METHODS[0]);
   const parent = $derived(parentAcc ? collection.accession(parentAcc) : undefined);
@@ -101,7 +112,7 @@
     }
     // A batch is numbered by its year and counts its days from its date, so a date in the future would number it into
     // next year and count backwards; a cutting cannot be taken before its parent arrived.
-    dateMsg = !sown ? 'Give the batch a date.' : sown > localDate() ? `${sown} is in the future.` : m.veg && parent?.acquired && sown < parent.acquired ? `${sown} is before ${accNo(parent)} arrived on ${parent.acquired}.` : '';
+    dateMsg = !sown ? 'Give the batch a date.' : sown > localDate() ? `${sown} is in the future.` : sown < '1900-01-01' ? `${sown} is before 1900; the batch number would be minted for that year.` : m.veg && parent?.acquired && sown < parent.acquired ? `${sown} is before ${accNo(parent)} arrived on ${parent.acquired}.` : '';
     if (dateMsg) {
       document.getElementById('s-date')?.focus();
       return;
@@ -143,6 +154,7 @@
         notes: notes.trim() || null
       });
       try { if (locationId) localStorage.setItem('cultifolio.lastSowLocation', locationId); } catch { /* fine */ }
+      saved = true;
       goto(`/propagation/${sowNo(rec)}`);
     } catch {
       /* lastWriteError is shown above the form; the form stays open (round fifteen, 9) */
@@ -153,6 +165,7 @@
 </script>
 
 <svelte:head><title>New batch — Cultifolio</title></svelte:head>
+<svelte:window onbeforeunload={guardUnload} />
 
 {#if collection.lastWriteError}
   <div class="notice err" role="alert" id="write-error">This change was not saved: {collection.lastWriteError}. Free space or <a href="/backup">back up now</a>.</div>

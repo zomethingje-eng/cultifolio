@@ -92,6 +92,7 @@
   /** One tap waters every plant on the dry line, dated today, as a place's "Water all" does; one tap takes exactly those lines back. */
   let watering = $state(false);
   async function waterDry() {
+    if (watering) return; // one tap, one set of lines (round fifty-two, 3)
     watering = true;
     try {
       const ids = await collection.addEventsIds(dry.map((a) => ({ acc: a.id, d: localDate(), t: 'water' as const, note: 'from Today: every plant on the not-watered line', auto: true })));
