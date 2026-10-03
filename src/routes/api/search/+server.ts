@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { getCorpus, searchFor } from '$lib/server/dossiers';
-import { search, shardOf } from '$core/search';
+import { getCorpus, searchFor, searchWhole, hasProducts } from '$lib/server/dossiers';
+import { search, shardOf, hasExact } from '$core/search';
 import { limited } from '$lib/server/sync';
 
 /**
@@ -35,7 +35,13 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   const { id: corpus } = await getCorpus(platform, fetch);
   // The build's shard for the query's first character, else the whole index prepared with the index (round fifty-two, 5; round fifty-three, 2).
   const p = await searchFor(platform, fetch, shardOf(q));
+  let hits = search(p, q, n);
+  // A shard holds every exact hit, not every near one: a slip in the first letter ("hile" for Chile) found nothing, or
+  // a few names beginning with the slipped letter, where the whole index found the five hundred (round fifty-four, 3;
+  // the second reviewer's finding 19). When the shard's exact pass finds nothing, the query is tried over the whole,
+  // prepared for this request and let go; a miss is rare enough that the cost stays off the ordinary path.
+  if (!hasExact(p, q) && (await hasProducts(platform, fetch))) hits = search(await searchWhole(platform, fetch), q, n);
   const asked = (url.searchParams.get('c') ?? '').replace(/[^A-Za-z0-9._-]/g, '').slice(0, 40);
   const current = asked === corpus;
-  return json(search(p, q, n), { headers: { 'cache-control': current ? 'public, max-age=86400' : 'no-store' } });
+  return json(hits, { headers: { 'cache-control': current ? 'public, max-age=86400' : 'no-store' } });
 };

@@ -46,6 +46,7 @@
   // A plant recorded this spring is not "without a photograph in twelve months" yet: the line counts records older than
   // six months, so a new grower's first weeks are not a reproach (round forty-nine, 3).
   const halfYearAgo = (() => { const d = new Date(today); d.setMonth(d.getMonth() - 6); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
+  // Counted from the acquisition date on purpose (round forty-nine, 3; kept in round fifty-four against the second reviewer's finding 25): a plant the grower says they have had since 2015 and never photographed is the plant this line is for; a plant acquired last month is not.
   const unphotographed = $derived(growing.filter((a) => (a.acquired ?? a.importedOn ?? localDate()) <= halfYearAgo && !collection.photos(a.id).some((p) => p.d >= yearAgo)));
   // The two facts the plants list and the place pages already flag, said once here: not watered for three weeks (by the
   // log, from the day the record was made when nothing is logged), and missed at the last audit or not seen for ninety
@@ -100,12 +101,14 @@
   const frostLine = $derived(frost.line); // the sentence names its level itself ("Frost forecast: …"), so the level is not said twice (round twenty-five, 16)
   // A plant with no watering recorded is not a plant not watered for three weeks: it is a plant whose waterings were never
   // written down, counted from the day its record was made. The two are said apart (round fifty-three, 3; the second reviewer's condition).
-  const unknown = $derived(dry.filter((a) => !collection.lastWatered(a.id)));
-  const overdue = $derived(dry.length - unknown.length);
+  const ahead = $derived(dry.filter((a) => collection.wateringAhead(a.id))); // a watering dated after today: neither recorded nor missing, said on its own (round fifty-four, 4)
+  const unknown = $derived(dry.filter((a) => !collection.lastWatered(a.id) && !collection.wateringAhead(a.id)));
+  const overdue = $derived(dry.length - unknown.length - ahead.length);
   const dryText = $derived.by(() => {
     const parts: string[] = [];
     if (overdue) parts.push(`${overdue} of ${growing.length} plants not watered for three weeks or more`);
     if (unknown.length) parts.push(`${unknown.length}${overdue ? '' : ` of ${growing.length}`} with no watering recorded yet, ${unknown.length === 1 ? 'its record' : 'their records'} three weeks old or more`);
+    if (ahead.length) parts.push(`${ahead.length} with a watering dated ahead of today`);
     return parts.join(', and ') + (resting.length ? `; ${resting.length === dry.length ? (dry.length === 1 ? 'it is' : 'all of them are') : `${resting.length} of them ${resting.length === 1 ? 'is' : 'are'}`} in the habitat's dry season by the species sheet` : '') + '.';
   });
   type Line = { href: string; tone: string; text: string; water?: boolean; keeping?: boolean };

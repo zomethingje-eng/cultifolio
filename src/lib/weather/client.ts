@@ -41,7 +41,19 @@ function writeCache(k: string, body: unknown) {
 }
 
 /** The forecast for a point in the reader's units: from the session's cache when fresh, else from /api/forecast. */
+/** Requests in flight by cache key: two readers of one site in the same moment (the watch and the Today tab) share one request (round fifty-four, 4). */
+const inFlight = new Map<string, Promise<ForecastAnswer<unknown>>>();
 export async function getForecast<T = unknown>(lat: number, lon: number, units: Units, altM?: number | null): Promise<ForecastAnswer<T>> {
+  const la = lat.toFixed(2), lo = lon.toFixed(2), alt = altM != null ? String(Math.round(altM / 10) * 10) : null;
+  const k = `${la},${lo},${alt ?? ''},${units}`;
+  let p = inFlight.get(k);
+  if (!p) {
+    p = fetchForecast(lat, lon, units, altM).finally(() => { if (inFlight.get(k) === p) inFlight.delete(k); });
+    inFlight.set(k, p);
+  }
+  return p as Promise<ForecastAnswer<T>>;
+}
+async function fetchForecast<T = unknown>(lat: number, lon: number, units: Units, altM?: number | null): Promise<ForecastAnswer<T>> {
   // Rounded here, before anything leaves the device: a hundredth of a degree (about a kilometre) and ten metres, which is
   // all a forecast can use. The server rounds again for the weather services; this is so the server itself never sees
   // more (round sixteen, 11).

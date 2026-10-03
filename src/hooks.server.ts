@@ -1,8 +1,8 @@
 import { redirect, type Handle, type RequestEvent } from '@sveltejs/kit';
 import { unitsFor } from '$lib/server/units';
 import { building, version } from '$app/environment';
-import { getIndex, getCorpusId } from '$lib/server/dossiers';
-import { catalogueOf, byOf, chipOf } from '$lib/server/catalogue';
+import { getCorpusId } from '$lib/server/dossiers';
+import { catalogueRows, byOf, chipOf } from '$lib/server/catalogue';
 
 /**
  * A species page is public content rendered in the reader's units and hemisphere, which is why its own header is
@@ -43,7 +43,7 @@ async function homeQuery(event: RequestEvent): Promise<string> {
   const open = p.get('open') ?? '';
   const wantsRows = /^[A-Z]$/.test(from) || (Number.isInteger(at) && at > 0) || /^[a-z0-9-]{1,80}$/.test(open);
   if (wantsRows) {
-    const cat = catalogueOf(await getIndex(event.platform, event.fetch), by, chip);
+    const { cat } = await catalogueRows(event.platform, event.fetch, by, chip); // the build's file under a manifest, not the in-memory catalogue the products retired (round fifty-four, 3)
     if (/^[A-Z]$/.test(from) && cat.letterAt[from] != null) parts.push(`from=${from}`);
     if (Number.isInteger(at) && at > 0 && at < cat.rows.length) parts.push(`at=${at}`);
     if (open && cat.rows.some((r) => r.id === open)) parts.push(`open=${open}`);

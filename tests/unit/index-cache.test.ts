@@ -15,7 +15,7 @@ function r2(initial: { etag: string; body: unknown }) {
     state,
     // A bucket with no manifest (round fifty-three, 2): the manifest is asked for first and is not there, which is not a read of the index.
     get: async (k: string) => { if (k.endsWith('manifest.json')) return null; state.gets++; return { text: async () => JSON.stringify(state.body), json: async () => state.body, etag: state.etag }; },
-    head: async () => { state.heads++; return { etag: state.etag }; }
+    head: async (k: string) => { if (k.endsWith('manifest.json')) return null; state.heads++; return { etag: state.etag }; } // the look for a manifest each minute is not a head of the index (round fifty-four, 3)
   };
 }
 const platformWith = (store: ReturnType<typeof r2>) => ({ env: { STORE: store } }) as unknown as App.Platform;
@@ -56,7 +56,7 @@ describe('the index cache (round forty-three, 1)', () => {
 
   it('a store without head answers (an object gone) falls back to a read', async () => {
     const store = r2({ etag: '"aaa"', body: rows(3) });
-    (store as { head: unknown }).head = async () => { store.state.heads++; return null; };
+    (store as { head: unknown }).head = async (k: string) => { if (k.endsWith('manifest.json')) return null; store.state.heads++; return null; };
     const p = platformWith(store);
     await getIndex(p, noStatic);
     vi.advanceTimersByTime(61_000);

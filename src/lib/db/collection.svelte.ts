@@ -20,7 +20,8 @@ export const FOLLOW_HELD_MS = 86_400_000;
 import { tag36 } from '$core/tag';
 import { apply, diff, readChanges, isComplete, isHeld, REQUIRED_FIELDS, KINDS, FOLD_RULES, incomplete as incompleteRecords, key as recKey, type Change, type Kind, type Record_, type State, type Hold, hlcWall, revivedByImport } from '$core/log';
 import { nextAccession, DEFAULT_SCHEME, type NumberingScheme } from '$core/accession';
-import { allChanges, appendChanges, appendChangesClaiming, onOtherTabWrite, deviceId, requestPersistence, getMeta, setMeta, putPhotoBlobs, getPhotoBlobs, deletePhotoBlobs, holdVault, readFold, writeFold, foldGen, lastArrival, arrivalsAfter, changeKeys, changesByKeys, type FoldSnapshot, type NumberKind } from './vault';
+import { allChanges, appendChanges, appendChangesClaiming, onOtherTabWrite, deviceId, requestPersistence, getMeta, setMeta, putPhotoBlobs, getPhotoBlobs, deletePhotoBlobs, holdVault, readFold, writeFold, dropFold, foldGen, lastArrival, arrivalsAfter, changesByKeys, changesOfRecord, type FoldSnapshot, type NumberKind, type VaultNotice } from './vault';
+import { version as buildVersion } from '$app/environment';
 import type { Accession, PlantEvent, Taxon, Location, Sowing, Provenance, Photo } from './types';
 import { PROP_METHODS, accNo, sowNo, NUMBERING_SETTING } from './types';
 import { slugify } from '$core/names';
@@ -122,6 +123,8 @@ class Collection {
   async markParked(changes: Change[]): Promise<void> {
     for (const c of changes) this.notePark(c);
     await setMeta('parked', [...this.parkedStamps]);
+    // The parked set is an input to the fold: a snapshot built without these stamps parked is wrong if any of them was folded into it (round fifty-four, 2; the first reviewer's finding 6).
+    await dropFold().catch(() => {});
   }
   private async saveParked(): Promise<void> {
     await setMeta('parked', [...this.parkedStamps]);
@@ -157,6 +160,17 @@ class Collection {
         // The fold: from the snapshot of the last one and the changes that arrived since, or, without a snapshot this
         // build can use, from the whole log (round fifty-three, 1). Either way a change stamped far ahead of this clock
         // is held, not applied (round five, 4); one two days past it is parked (round fifty-two, 1).
+        // The other tabs' notices are listened for before anything is read: a replace announced during the load must not
+        // be missed by the tab that is loading (round fifty-four, 2). A notice that lands before `ready` is acted on after.
+        let heard: VaultNotice | null = null;
+        onOtherTabWrite((what) => {
+          if (!this.ready) { if (what === 'replaced' || what === 'refold' || !heard) heard = what; return; }
+          // Another tab replaced the whole collection from a file: this tab's fold is of a log that no longer exists, and a
+          // note saved here would be diffed against records the new log does not have. The page reloads onto the new one.
+          if (what === 'replaced') { if (typeof location !== 'undefined') location.reload(); return; }
+          if (what === 'refold') { void this.rebuild().catch(() => {}); return; }
+          if (what === 'written') void this.catchUp().catch(() => {});
+        });
         const changes = await this.foldFromVault();
         const scheme = await getMeta<NumberingScheme>('scheme');
         if (isScheme(scheme)) this.metaScheme = scheme;
@@ -168,7 +182,11 @@ class Collection {
         this.ready = true;
         // Plants an earlier build's import brought back nameless (a tombstone, then its `importedOn`) are removed again,
         // once: the removal is a change like any other, so it syncs, and after it nothing matches again (round sixteen, 5).
-        const revived = revivedByImport(changes);
+        // The repair judges a record's whole history: over the tail of a snapshot load it saw a tombstone and an
+        // `importedOn` and not the real edit folded before them, and removed a plant the grower had revived, and the
+        // removal synced (round fifty-four, 2; the second reviewer's finding 5). A record the tail touches with an
+        // `importedOn` is read whole from the vault; a whole-log load has every change already.
+        const revived = this.loaded.from === 'snapshot' ? await this.revivedAmong(changes) : revivedByImport(changes);
         if (revived.length) await this.commit(revived.map((r) => ({ t: this.tick(), kind: r.kind, id: r.id, field: '_deleted', value: true })), 'local').catch(() => {});
         // The oldest shape gave a plant or a batch its number as its id and no `acc`/`no` field; readers have carried both
         // shapes since. A load writes the number as a field, once, as an ordinary change that syncs, so every record is
@@ -184,7 +202,9 @@ class Collection {
         const batchesSetAside = !!syncMeta?.quarantined?.length;
         // A record whose log holds a number change, held or null, is left alone: the fold's own stamp map says which
         // (a load from the snapshot has not read every change, so the changes themselves are not scanned; round fifty-three, 1).
-        const numbered = (k: string, field: string) => this.seen.has(k + '\0' + field) || this.seen.has(k + '\0held\0' + field);
+        // And a parked number change, which never reaches the stamp map: the previous build read the changes themselves
+        // and left such a record alone; this one wrote a second number over it (round fifty-four, 2; both reviewers).
+        const numbered = (k: string, field: string) => this.seen.has(k + '\0' + field) || this.seen.has(k + '\0held\0' + field) || (this.parkedByRecord.get(k) ?? []).some((c) => c.field === field);
         for (const r of this.state.values()) {
           const k = recKey(r.kind, r.id);
           if (r._deleted || !isComplete(r)) continue;
@@ -194,13 +214,9 @@ class Collection {
           if (r.kind === 'sowing' && r.no == null && !numbered(k, 'no')) oneShape.push({ t: hlcBefore(first, this.writer), kind: 'sowing', id: r.id, field: 'no', value: r.id });
         }
         if (oneShape.length && !batchesSetAside) await this.commit(oneShape, 'local').catch(() => {});
-        onOtherTabWrite((what) => {
-          // Another tab replaced the whole collection from a file: this tab's fold is of a log that no longer exists, and a
-          // note saved here would be diffed against records the new log does not have. The page reloads onto the new one.
-          if (what === 'replaced') { if (typeof location !== 'undefined') location.reload(); return; }
-          if (what === 'refold') { void this.rebuild().catch(() => {}); return; }
-          if (what === 'written') void this.catchUp().catch(() => {});
-        });
+        if (heard === 'replaced') { if (typeof location !== 'undefined') location.reload(); }
+        else if (heard === 'refold') void this.rebuild().catch(() => {});
+        else if (heard === 'written') void this.catchUp().catch(() => {});
         this.persisted = await requestPersistence();
       })();
     return this.loading;
@@ -262,6 +278,8 @@ class Collection {
     const seq = await lastArrival();
     const changes = await allChanges();
     this.foldAll(changes);
+    await this.flushParked();
+    await this.readParked();
     this.loaded = { from: 'log', changes: changes.length };
     this.lastSeq = seq;
     await this.readLedger();
@@ -273,14 +291,26 @@ class Collection {
    * in the vault and brought up to date from the changes that arrived after
    * it, in arrival order (round fifty-three, 1; the reviewers' finding 25).
    * The snapshot is wrong, and the log folded again, when: the fold's rules
-   * are not this build's; it is another device's; the clock correction has
-   * changed since (every hold was judged by the old clock); the log was
-   * replaced, or a stored change displaced (the vault drops it in that very
-   * transaction, and refuses a snapshot that began before). A held change
-   * that came due since is found from the snapshot's own stamp map and folded
-   * with the tail. The snapshot is written after a load and after a rebuild,
-   * off the page's path, against the counter it was read at.
+   * or the build are not this one's; it is another device's; the clock
+   * correction has changed since (every hold was judged by the old clock);
+   * the log was replaced, or a stored change displaced, or a stamp parked
+   * (the vault drops it in that very transaction, and refuses a snapshot that
+   * began before, and a load that finds the counter moved under it folds the
+   * log instead; round fifty-four, 2). What the snapshot did not fold is
+   * carried as an inventory, every stamp, not one per field: the held changes
+   * are re-judged on each load and folded as they come due, and the parked
+   * ones are read back so their Apply stands (round fifty-four, 2; both
+   * reviewers). The snapshot is written after a load and after a rebuild, off
+   * the page's path, against the counter it was read at.
    */
+  /** Every stamp the fold holds (stamped too far ahead, not parked): re-judged at each load, folded when due. */
+  private heldStamps = new Set<string>();
+  private parkedDirty = false;
+  private async flushParked(): Promise<void> {
+    if (!this.parkedDirty) return;
+    this.parkedDirty = false;
+    await this.saveParked();
+  }
   private clearFold(): void {
     this.state.clear();
     for (const m of Object.values(this.kinds)) m.clear();
@@ -289,26 +319,29 @@ class Collection {
     this.parentHist = new Map();
     this.born = new Map();
     this.parkedByRecord = new Map();
+    this.heldStamps = new Set();
+  }
+  /** Fold `changes` onto the state that is: what comes back held goes in the inventory; what was held and is applied leaves it. */
+  private applyHere(changes: Change[]): void {
+    const parkedBefore = this.parkedStamps.size;
+    const held = apply(this.state, changes, this.seen, this.hold());
+    if (this.parkedStamps.size !== parkedBefore) this.parkedDirty = true; // written by the load or the commit that folded, and awaited there: a save let go of was a lost park (round fifty-four, 2)
+    for (const c of changes) this.heldStamps.delete(c.t);
+    for (const c of held) this.heldStamps.add(c.t);
+    for (const c of changes) { this.applied.add(c.t); this.clock?.observe(c.t); }
+    this.noteParents(changes);
   }
   /** The whole log, folded from nothing. */
   private foldAll(changes: Change[]): void {
     this.clearFold();
-    const parkedBefore = this.parkedStamps.size;
-    apply(this.state, changes, this.seen, this.hold());
-    if (this.parkedStamps.size !== parkedBefore) void this.saveParked();
+    this.applyHere(changes);
     for (const r of this.state.values()) this.kinds[r.kind].set(r.id, r);
-    for (const c of changes) { this.applied.add(c.t); this.clock?.observe(c.t); }
-    this.noteParents(changes);
     this.indexAll();
   }
   /** A few changes folded onto the fold that is: the records they touch are re-set as copies, so the reactive maps notice. */
   private foldSome(changes: Change[]): void {
     if (!changes.length) return;
-    const parkedBefore = this.parkedStamps.size;
-    apply(this.state, changes, this.seen, this.hold());
-    if (this.parkedStamps.size !== parkedBefore) void this.saveParked();
-    for (const c of changes) { this.applied.add(c.t); this.clock?.observe(c.t); }
-    this.noteParents(changes);
+    this.applyHere(changes);
     this.touched(changes);
   }
   /** After apply() mutated records in place: a copy of each touched record goes into both maps, so the reactive maps notice; the indexes follow. */
@@ -323,47 +356,86 @@ class Collection {
     }
     this.reindex(keys);
   }
+  /** The held stamps now due (not parked, not already folded past), to be fetched and folded. */
+  private dueNow(): string[] {
+    const hold = this.hold();
+    const out: string[] = [];
+    for (const t of this.heldStamps) if (!isHeld(t, hold) && !this.parkedStamps.has(t)) out.push(t);
+    return out;
+  }
   /** The fold at load: from the snapshot and what arrived after it, or from the whole log. Returns the changes read, for the passes that look at them. */
   private async foldFromVault(): Promise<Change[]> {
     const gen = await foldGen();
     const seq = await lastArrival(); // before anything is read: a change stored after this number is folded again next time, which is harmless; one stored before it is in what is read
     const had = await readFold().catch(() => undefined);
     const f = had?.fold;
-    const usable = !!f && f.rules === FOLD_RULES && f.device === this.deviceId && f.offset === clockOffsetMs() && had.gen === gen && Array.isArray(f.records) && Array.isArray(f.seen);
+    const usable = !!f && f.rules === FOLD_RULES && f.build === buildVersion && f.device === this.deviceId && f.offset === clockOffsetMs() && had.gen === gen && Array.isArray(f.records) && Array.isArray(f.seen) && Array.isArray(f.born) && Array.isArray(f.parents) && Array.isArray(f.held);
     if (f && usable) {
-      this.clearFold();
-      for (const r of f.records as Record_[]) { this.state.set(recKey(r.kind, r.id), r); this.kinds[r.kind].set(r.id, r); }
-      for (let i = 0; i + 1 < f.seen.length; i += 2) this.seen.set(f.seen[i], f.seen[i + 1]);
-      for (let i = 0; i + 1 < f.born.length; i += 2) this.born.set(f.born[i], f.born[i + 1]);
-      for (const [id, hist] of f.parents) this.parentHist.set(id, new Map(hist));
-      if (f.last) this.clock?.observe(f.last);
-      this.applied = new Set(await changeKeys());
-      // Held changes that came due since the snapshot: the stamp map names them, and the field's own stamp says whether
-      // the fold has taken them already (a held key is never removed). Parked stamps are not due; they are parked.
-      const hold = this.hold();
-      const due: string[] = [];
-      for (const [k, t] of this.seen) {
-        const i = k.indexOf('\0held\0');
-        if (i < 0 || isHeld(t, hold) || this.parkedStamps.has(t)) continue;
-        const cur = this.seen.get(k.slice(0, i) + '\0' + k.slice(i + 6));
-        if (cur === undefined || hlcCompare(cur, t) < 0) due.push(t);
+      try {
+        const got = await this.fromFold(f, gen);
+        if (got) return got;
+      } catch (e) {
+        console.warn('the fold snapshot could not be read; folding the log', e); // a damaged snapshot is a slower load, never a lost collection
       }
-      const tail = await arrivalsAfter(f.seq);
-      const changes = [...(due.length ? await changesByKeys(due) : []), ...tail.changes];
-      this.indexAll();
-      this.foldSome(changes);
-      this.loaded = { from: 'snapshot', changes: tail.changes.length, snapshot: f.changes };
-      this.lastSeq = tail.seq;
-      // A tail that has grown long is folded into a fresh snapshot, so the next load reads little again.
-      if (tail.changes.length >= FOLD_REFRESH) this.foldWrite = this.saveFold(seq, gen);
-      return changes;
     }
     const changes = await allChanges();
     this.foldAll(changes);
+    await this.flushParked();
+    await this.readParked();
     this.loaded = { from: 'log', changes: changes.length };
     this.lastSeq = seq;
     this.foldWrite = this.saveFold(seq, gen);
     return changes;
+  }
+  /** The snapshot restored and brought up to date; null when the log changed under it (the counter moved), in which case nothing of it is kept. */
+  private async fromFold(f: FoldSnapshot, gen: number): Promise<Change[] | null> {
+    this.clearFold();
+    for (const r of f.records as Record_[]) {
+      if (!(r.kind in this.kinds)) continue; // a kind this build does not know: left to the whole-log fold of the build that does
+      this.state.set(recKey(r.kind, r.id), r);
+      this.kinds[r.kind].set(r.id, r);
+    }
+    for (let i = 0; i + 1 < f.seen.length; i += 2) this.seen.set(f.seen[i], f.seen[i + 1]);
+    for (let i = 0; i + 1 < f.born.length; i += 2) this.born.set(f.born[i], f.born[i + 1]);
+    for (const [id, hist] of f.parents) this.parentHist.set(id, new Map(hist));
+    for (const t of f.held) this.heldStamps.add(t);
+    if (f.last) this.clock?.observe(f.last);
+    // The tail, with the counter as it is in the same transaction: a replace or a displaced change since the counter was
+    // read means the rows after `seq` are another log's, and the snapshot is dropped on the floor (round fifty-four, 2).
+    const tail = await arrivalsAfter(f.seq);
+    if (tail.gen !== gen) { this.clearFold(); return null; }
+    const due = this.dueNow();
+    const changes = [...(due.length ? await changesByKeys(due) : []), ...tail.changes];
+    this.indexAll();
+    this.foldSome(changes);
+    await this.flushParked();
+    await this.readParked();
+    this.loaded = { from: 'snapshot', changes: tail.changes.length, snapshot: f.changes };
+    this.lastSeq = tail.seq;
+    // A tail that has grown long is folded into a fresh snapshot, so the next load reads little again.
+    if (tail.changes.length >= FOLD_REFRESH) this.foldWrite = this.saveFold(f.seq, gen);
+    return changes;
+  }
+  /** The parked changes, read back by their stamps so each record's Apply stands after any load (round fifty-four, 2): few, and never in the snapshot's records. */
+  private async readParked(): Promise<void> {
+    const want = [...this.parkedStamps].filter((t) => !this.parkedDone.has(t));
+    if (!want.length) return;
+    for (const c of await changesByKeys(want)) this.notePark(c);
+  }
+  /**
+   * Records an old import brought back from the dead, judged on their whole history: for the records the tail touches
+   * with an `importedOn`, every change of the record is read from the vault, since the tail alone showed a tombstone
+   * and the import stamp without the real edit folded before them (round fifty-four, 2).
+   */
+  private async revivedAmong(tail: Change[]): Promise<Array<{ kind: Kind; id: string }>> {
+    const keys = new Map<string, { kind: Kind; id: string }>();
+    for (const c of tail) if (c.field === 'importedOn' || c.field === '_deleted') keys.set(recKey(c.kind, c.id), { kind: c.kind, id: c.id });
+    const out: Array<{ kind: Kind; id: string }> = [];
+    for (const r of keys.values()) {
+      const all = await changesOfRecord(r.kind, r.id);
+      out.push(...revivedByImport(all));
+    }
+    return out;
   }
   /** The last snapshot write, for the sync page's account and the tests; resolves false when the vault refused it or there was nothing to write. */
   private foldWrite: Promise<boolean> | null = null;
@@ -381,13 +453,17 @@ class Collection {
       const parents: FoldSnapshot['parents'] = [...this.parentHist].map(([id, m]) => [id, [...m]]);
       let last = '';
       for (const v of this.seen.values()) if (hlcCompare(v, last) > 0) last = v;
-      return await writeFold({ rules: FOLD_RULES, device: this.deviceId, offset: clockOffsetMs(), seq, records, seen, born, parents, last, changes: this.applied.size }, gen);
+      return await writeFold({ rules: FOLD_RULES, build: buildVersion, device: this.deviceId, offset: clockOffsetMs(), seq, records, seen, born, parents, held: [...this.heldStamps], last, changes: this.applied.size }, gen);
     } catch {
       return false; // a snapshot that could not be written is a slower load next time, nothing more
     }
   }
 
-  /** Another tab of this browser wrote: the changes that arrived after the last this tab folded, in arrival order, so its list and its next number are current. */
+  /**
+   * Another tab of this browser wrote: the changes that arrived after the last this tab folded, in arrival order, so its
+   * list and its next number are current. This tab's own writes move the frontier as they are stored (round fifty-four, 2),
+   * so no set of every stamp in the log is needed to tell them apart.
+   */
   private lastSeq = 0;
   private async catchUp(): Promise<void> {
     if (!this.ready) return;
@@ -395,7 +471,7 @@ class Collection {
     const got = await arrivalsAfter(this.lastSeq);
     await this.readLedger();
     if (gen !== this.foldGen) return; // a rebuild landed meanwhile: it read the same log and more; what was read here would put a displaced change back
-    this.lastSeq = got.seq;
+    this.lastSeq = Math.max(this.lastSeq, got.seq);
     const changes = got.changes.filter((c) => !this.applied.has(c.t));
     if (!changes.length) return;
     this.foldSome(changes);
@@ -1000,6 +1076,13 @@ class Collection {
     const today = localDate();
     return this.events(acc).find((e) => e.t === 'water' && e.d <= today)?.d ?? null;
   }
+  /** A watering dated after today (a line typed ahead, a v2 import's date): not the last watering, and not "none recorded" either; said on its own (round fifty-four, 4). The earliest such date. */
+  wateringAhead(acc: string): string | null {
+    const today = localDate();
+    let out: string | null = null;
+    for (const e of this.events(acc)) if (e.t === 'water' && e.d > today && (!out || e.d < out)) out = e.d;
+    return out;
+  }
   careDays(a: Accession): number {
     const w = this.lastWatered(a.id);
     return daysBetween(w ?? this.madeOn('accession', a.id) ?? a.acquired ?? localDate());
@@ -1049,8 +1132,9 @@ class Collection {
   }
 
   /** Records here that lack a field their kind cannot be shown without: made by a batch this build could not read, touched by a later one (round thirty-three, 1). */
+  private incompleteN = $derived.by(() => { let n = 0; for (const m of Object.values(this.kinds)) for (const r of m.values()) if (!r._deleted && !isComplete(r)) n++; return n; });
   get incomplete(): number {
-    return incompleteRecords(this.state).length;
+    return this.incompleteN; // derived, not a scan of every record on every render (round fifty-four, 2; the second reviewer's finding 27)
   }
 
   /* ---- writes ---- */
@@ -1078,6 +1162,7 @@ class Collection {
       // higher) is not shown here either, so the screen and the disk agree without a reload (round sixteen, 4).
       const stored = await appendChanges(changes, source === 'server', source === 'local', requireKey);
       changes = stored.kept;
+      if (stored.seq > this.lastSeq) this.lastSeq = stored.seq;
       // A photograph's removal seen from anywhere (here, a pull, a file) is noted at once, whatever the record folds to:
       // the server may drop the bytes on a peer's say-so, and a later revival (an Undo, an edit made offline elsewhere)
       // then needs the pixels sent again from whoever kept them. The engine checks each noted photograph against the
@@ -1100,6 +1185,7 @@ class Collection {
     this.lastWriteError = null;
     if (!changes.length) return;
     this.foldSome(changes);
+    await this.flushParked();
     if (source !== 'server') for (const fn of this.listeners) fn(changes);
   }
 

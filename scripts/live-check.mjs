@@ -18,11 +18,25 @@ const ua = 'cultifolio-live-check (deploy)';
 let n = 0;
 const skip = new Set((process.env.LIVE_CHECK_SKIP ?? '').split(',').map((s) => s.trim()).filter(Boolean));
 
+// Every request gives up after twenty seconds (round fifty-four, 5): a half-open connection hung the check for good, and the retry loops below are bounded only if each request is.
 async function get(path, init = {}) {
-  const r = await fetch(origin + path, { redirect: 'manual', ...init, headers: { 'user-agent': ua, ...(init.headers ?? {}) } });
+  const r = await fetch(origin + path, { redirect: 'manual', signal: AbortSignal.timeout(20_000), ...init, headers: { 'user-agent': ua, ...(init.headers ?? {}) } });
   const text = await r.text();
   return { status: r.status, h: (k) => r.headers.get(k) ?? '', text };
 }
+// The build this check is for: the hashed entry chunk of the output on disk, when the check runs beside a build (npm run
+// deploy does); a page naming another build is the previous Worker still answering, and two pages agreeing is not proof
+// the deploy took (round fifty-four, 5; the second reviewer's finding 20).
+import { readdirSync, existsSync } from 'node:fs';
+const expectedBuild = (() => {
+  try {
+    const dir = '.svelte-kit/output/client/_app/immutable/entry';
+    if (!existsSync(dir)) return '';
+    const f = readdirSync(dir).find((x) => /^start\.[A-Za-z0-9_-]+\.js$/.test(x));
+    return f ? f.slice(6, -3) : '';
+  } catch { return ''; }
+})();
+if (expectedBuild) console.log(`  expecting build ${expectedBuild} (from the output on disk)`);
 function fail(what, r) {
   console.error(`\nlive-check FAILED: ${what}`);
   if (r) console.error(`  status ${r.status}; cache-control "${r.h('cache-control')}"; cf-cache-status "${r.h('cf-cache-status')}"; ${r.text.slice(0, 200).replace(/\s+/g, ' ')}`);
@@ -124,10 +138,13 @@ for (const path of ['/about/how', `/species/${species}`, '/offline', '/api/corpu
   for (let tries = 0; ; tries++) {
     a = await get(path, { headers: { accept: 'text/html' } });
     b = await get(path, { headers: { accept: 'text/html' } });
-    if (a.text === b.text || buildOf(a) === buildOf(b) || tries >= 6) break;
-    console.log(`  note  ${path}: two builds answering (${buildOf(a)} and ${buildOf(b)}): the deploy is still rolling out; asking again in five seconds`);
+    const agree = a.text === b.text || buildOf(a) === buildOf(b);
+    const expected = !expectedBuild || (buildOf(a) === expectedBuild && buildOf(b) === expectedBuild);
+    if ((agree && expected) || tries >= 12) break;
+    console.log(`  note  ${path}: ${agree ? `build ${buildOf(a)} answering, expecting ${expectedBuild}` : `two builds answering (${buildOf(a)} and ${buildOf(b)})`}: the deploy is still rolling out; asking again in five seconds`);
     await new Promise((r) => setTimeout(r, 5000));
   }
+  if (expectedBuild && buildOf(b) !== expectedBuild) fail(`${path}: the page names build ${buildOf(b) || '?'}, not the build just deployed (${expectedBuild}); the deploy did not take, or a minute was not enough for the rollover`, b);
   if (!['rendered', 'held'].includes(a.h('x-cultifolio-page'))) fail(`${path}: the first request says neither rendered nor held (x-cultifolio-page "${a.h('x-cultifolio-page')}")`, a);
   if (b.h('x-cultifolio-page') !== 'held') fail(`${path}: the second request was not answered from the Worker's cache (x-cultifolio-page "${b.h('x-cultifolio-page')}")`, b);
   if (!/^private, max-age=60$/.test(b.h('cache-control'))) fail(`${path}: a held page must stay private to the browser`, b);

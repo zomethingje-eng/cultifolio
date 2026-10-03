@@ -23,8 +23,10 @@ vi.mock('$lib/db/vault', () => {
   m.readFold = async () => undefined;
   m.writeFold = async () => false;
   m.foldGen = async () => 0;
+  m.dropFold = async () => {};
+  if (!m.changesOfRecord) m.changesOfRecord = async (kind: string, id: string) => (await m.allChanges()).filter((c: Change) => c.kind === kind && c.id === id);
   m.lastArrival = async () => 0;
-  m.arrivalsAfter = async () => ({ changes: [...mem.changes], seq: 0 });
+  m.arrivalsAfter = async () => ({ changes: [...mem.changes], seq: 0, gen: 0 });
   m.changeKeys = async () => mem.changes.map((c) => c.t);
   if (!m.changesByKeys) m.changesByKeys = async (ts: string[]) => mem.changes.filter((c) => ts.includes(c.t));
   m.announceSyncForgotten = () => {};

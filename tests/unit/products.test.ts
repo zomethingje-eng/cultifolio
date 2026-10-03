@@ -3,7 +3,7 @@
  * Worker answers from them when a manifest names them and from the index when none does, that the bucket count
  * scales with the corpus and is announced, and that a search over a shard finds what a search over the whole does.
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { buildProducts } from '$dossier/products';
 import { isManifest, shardsOf, contentHash, manifestPath, productPath, type Manifest } from '$dossier/manifest';
 import { bucketsFor, bucketOf, isBucket, bucketWidth, bucketNames, BUCKETS } from '$core/bucket';
@@ -183,5 +183,53 @@ describe('the Worker and the manifest', () => {
     for (const e of (await ok.json()) as IndexEntry[]) expect(bucketOf(e.slug, 64)).toBe('3f');
     await expect(call(entriesGET as never, `/api/entries?b=40&c=${manifest.id}`, platform)).rejects.toMatchObject({ status: 400 });
     await expect(call(sheetsGET as never, `/api/sheets?b=040&c=${manifest.id}`, platform)).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('round fifty-four: the id names every product, so a sheet changed by a dossier is a new id; a manifest whose index is not there is not adopted and the corpus held before stands', async () => {
+    const idx = index(40);
+    const text = JSON.stringify(idx, null, 1);
+    const a = buildProducts(idx, text, () => new Map(), '2026-01-01T00:00:00Z');
+    const b = buildProducts(idx, text, (count) => new Map([[bucketOf(idx[0].slug, count), [{ slug: idx[0].slug, key: 1 } as never]]]), '2026-01-01T00:00:00Z');
+    expect(b.manifest.files['index.json']).toBe(a.manifest.files['index.json']);
+    expect(b.manifest.id).not.toBe(a.manifest.id);
+    // an isolate holding corpus A (no manifest) sees a manifest for B land before B's index: it keeps A, under A's id
+    const objects: Record<string, unknown> = { 's/v2/index.json': idx };
+    const store = { get: async (k: string) => (k in objects ? { json: async () => objects[k], text: async () => JSON.stringify(objects[k]), etag: `"${contentHash(JSON.stringify(objects[k])).slice(0, 8)}"` } : null), head: async (k: string) => (k in objects ? { etag: `"${contentHash(JSON.stringify(objects[k])).slice(0, 8)}"` } : null) };
+    const platform = platformWith(store as never);
+    const before = await getCorpus(platform, noStatic);
+    expect(before.products).toBe(false);
+    objects[manifestPath()] = b.manifest; // the manifest first, the files not yet
+    _forgetIndex();
+    const during = await getCorpus(platform, noStatic);
+    expect(during.id).not.toBe(b.manifest.id); // never B's id over A's index
+    expect(during.products).toBe(false);
+    for (const [name, body] of b.files) objects[productPath(b.manifest.id, name)] = JSON.parse(body);
+    _forgetIndex();
+    const after = await getCorpus(platform, noStatic);
+    expect(after).toEqual({ id: b.manifest.id, buckets: 32, products: true });
+    // an isolate still holding A with no manifest looks for one each minute: it finds B
+    _forgetIndex();
+    delete objects[manifestPath()];
+    expect((await getCorpus(platform, noStatic)).products).toBe(false);
+    objects[manifestPath()] = b.manifest;
+    vi.useFakeTimers(); vi.setSystemTime(Date.now() + 61_000);
+    try { expect((await getCorpus(platform, noStatic)).id).toBe(b.manifest.id); } finally { vi.useRealTimers(); }
+  });
+  it('round fifty-four: a bucket asked for under another count is a 409, and a shard that finds nothing exactly is tried over the whole', async () => {
+    const idx = index(60);
+    const { manifest, store } = bucketFor(idx);
+    const platform = platformWith(store);
+    const nine = await call(entriesGET as never, `/api/entries?b=00&n=64&c=${manifest.id}`, platform);
+    expect(nine.status).toBe(409);
+    expect(await nine.json()).toMatchObject({ buckets: 32, id: manifest.id });
+    expect(nine.headers.get('cache-control')).toBe('no-store');
+    expect((await call(sheetsGET as never, `/api/sheets?b=00&n=64&c=${manifest.id}`, platform)).status).toBe(409);
+    expect((await call(entriesGET as never, `/api/entries?b=00&n=32&c=${manifest.id}`, platform)).status).toBe(200);
+    // "hile" for Chile: shard h holds no exact hit, and the whole index has thirty
+    const r = await call(searchGET as never, `/api/search?q=hile&c=${manifest.id}`, platform);
+    const hits = (await r.json()) as IndexEntry[];
+    expect(hits.length).toBe(idx.filter((e) => e.origin?.[0] === 'Chile North').length);
+    // and a query with no words at all is nothing, with nothing prepared
+    expect(await (await call(searchGET as never, `/api/search?q=%E6%A4%8D%E7%89%A9&c=${manifest.id}`, platform)).json()).toEqual([]);
   });
 });

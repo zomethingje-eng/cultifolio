@@ -105,6 +105,17 @@ export function shardOf(q: string): string | null {
   return qs[0]?.[0] ?? null;
 }
 
+/** Whether the exact pass alone finds anything for `q` in `prepared`: a sharded search that finds nothing exactly asks the whole index before it trusts its near pass (round fifty-four, 3). */
+export function hasExact<T extends Searchable>(prepared: Prepared<T>[], q: string): boolean {
+  const all = words(q);
+  const qs = all.filter((w, i) => !(RANK_MARKERS.has(w) && i < all.length - 1));
+  if (!qs.length) return false;
+  const exact = (x: string, w: string) => w.startsWith(x);
+  for (const p of prepared) if (rank(p, qs, exact) != null) return true;
+  if (qs.length > 1 && RANK_MARKERS.has(qs[qs.length - 1])) for (const p of prepared) if (rank(p, qs.slice(0, -1), exact) != null) return true;
+  return false;
+}
+
 /** The matches for `q`, best first. Empty query: nothing (the caller shows its own default). */
 export function search<T extends Searchable>(prepared: Prepared<T>[], q: string, limit = Infinity): T[] {
   // "var." on a label is not a search word either (round thirty-five, R2-3), but only once another word follows it: "f"

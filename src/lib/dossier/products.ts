@@ -21,7 +21,6 @@ export interface Products {
 }
 
 export function buildProducts(index: IndexEntry[], indexText: string, sheetsOf: (count: number) => Map<string, Sheet[]>, built = new Date().toISOString()): Products {
-  const id = contentHash(indexText).slice(0, 16);
   const files = new Map<string, string>();
   const hashes: Record<string, string> = {};
   const put = (name: string, body: string) => { files.set(name, body); hashes[name] = contentHash(body); };
@@ -35,6 +34,9 @@ export function buildProducts(index: IndexEntry[], indexText: string, sheetsOf: 
   const shards = shardSearch(prepare(index));
   for (const [c, list] of [...shards].sort(([a], [b]) => a.localeCompare(b))) put(`search/${c}.json`, JSON.stringify(list));
   for (const by of BYS) for (const chip of CHIPS) put(catalogueFile(by, chip), JSON.stringify(rowsOnly(catalogueOf(index, by, chip))));
+  // The id names everything in the directory, not the index alone: a dossier change that leaves its index entry as it was
+  // still changes its sheet, and a sheet rewritten under an unchanged id sat in every cache for a day (round fifty-four, 3; both reviewers).
+  const id = contentHash([...files.keys()].sort().map((n) => `${n}=${hashes[n]}`).join('\n')).slice(0, 16);
   const manifest: Manifest = { v: DOSSIER_V, id, built, species: index.length, buckets, search: [...shards.keys()].sort(), files: hashes };
   return { manifest, files };
 }

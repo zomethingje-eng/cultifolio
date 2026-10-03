@@ -570,8 +570,8 @@ test('labels: pick plants, choose a sheet, print at true size with a code that o
   // the care line arrives from the dossier for the species with climate
   await expect(page.locator('.page .label .care', { hasText: 'cooler six months Nov–Apr · hab. night 6.5 °C · sky 30–65 DLI' })).toHaveCount(1); // the same rules and the same month formatter as the sheet
   // and it was asked for by hash bucket only: no key, no slug, no species name left the browser (round ten, 1)
-  expect(asked.filter((u) => u.startsWith('/api/sheets')).sort()).toEqual(['/api/sheets?b=03&c=fixture', '/api/sheets?b=1c&c=fixture']); // one request a bucket (its edge-cache key), with the corpus id
-  for (const u of asked) { expect(u).not.toMatch(/dossier|index|copiapoa|welwitschia|5384013/); expect(u).toMatch(/^\/api\/(corpus|(sheets|entries)\?b=([01][0-9a-f],?)+&c=fixture)$/); }
+  expect(asked.filter((u) => u.startsWith('/api/sheets')).sort()).toEqual(['/api/sheets?b=03&c=fixture&n=32', '/api/sheets?b=1c&c=fixture&n=32']); // one request a bucket (its edge-cache key), with the corpus id and the count hashed by (round fifty-four, 3)
+  for (const u of asked) { expect(u).not.toMatch(/dossier|index|copiapoa|welwitschia|5384013/); expect(u).toMatch(/^\/api\/(corpus|(sheets|entries)\?b=([01][0-9a-f],?)+&c=fixture&n=32)$/); }
   // the page size follows the sheet
   await page.selectOption('#lb-sheet', 'L7160');
   await expect(page.locator('.page').first()).toHaveCSS('width', /793|794/); // 210 mm
@@ -1688,7 +1688,7 @@ test('a grower\'s home says what needs them: sowings in the tray and plants with
   await expect(page.locator('.today .line', { hasText: '1 of 1 plants not watered for three weeks or more' })).toBeVisible(); // watered once, 21 days ago: overdue, not "no watering recorded" (round fifty-three, 3)
   await page.locator('.today .line', { hasText: 'not watered' }).click();
   await expect(page).toHaveURL(/\/today#water$/);
-  await expect(page.locator('#water .stop .row.warn a')).toHaveCount(1);
+  await expect(page.locator('#water .stop .row.warn a, #water .stop .row.resting a')).toHaveCount(1); // a Copiapoa in October is in its habitat's dry season by the sheet: its own row (round fifty-four, 4)
   await expect(page.locator('#water .stop h3')).toContainText('No place');
   await page.goto('/plants?show=due');
   await expect(page.locator('.accrow')).toHaveCount(1);
@@ -2971,7 +2971,7 @@ test('round fifty-three: the Today tab lists what needs you by place, "no wateri
   await page.getByRole('button', { name: 'Add', exact: true }).click();
   await expect(page.locator('.tree .row', { hasText: 'Bench' })).toBeVisible();
   for (let i = 0; i < 2; i++) {
-    await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+    await page.goto('/plants/new?species=Refusia%20testii&key=999');
     const opt = await page.locator('#f-loc option', { hasText: 'Bench' }).getAttribute('value');
     await page.selectOption('#f-loc', opt!);
     await addPlant(page);
@@ -2982,7 +2982,7 @@ test('round fifty-three: the Today tab lists what needs you by place, "no wateri
   await expect(page.locator('.tlrow', { hasText: 'Watered' }).first()).toBeVisible();
   // nothing is due yet: the Today tab says so
   await page.goto('/today');
-  await expect(page.locator('#nothing')).toContainText('Nothing needs you today');
+  await expect(page.locator('#nothing')).toContainText('Nothing needs you today by these checks');
   // twenty-five days on: the never-watered plant's record is old enough to count, apart from the plant watered twenty-five days ago
   await page.evaluate(() => localStorage.setItem('__shift', String(25 * 86_400_000))); // read by the clock on the next load
   await page.goto('/today');
@@ -2990,16 +2990,16 @@ test('round fifty-three: the Today tab lists what needs you by place, "no wateri
   await expect(stop).toHaveCount(1);
   await expect(stop.locator('.row.warn').first()).toContainText('Not watered for three weeks or more');
   await expect(stop.locator('.row.warn').first()).toContainText(second);
-  await expect(stop.locator('.row.warn').first()).toContainText('(25 d)');
+  await expect(stop.locator('.row.warn').first()).toContainText('25 d');
   await expect(stop.locator('.row.unknown')).toContainText('No watering recorded');
-  await expect(stop.locator('.row.unknown')).toContainText('(record 25 d old)');
+  await expect(stop.locator('.row.unknown')).toContainText('no record · 25 d');
   await expect(stop.locator('.row.unknown')).not.toContainText(second);
   // the front page's line says the two apart
   await page.goto('/');
   await expect(page.locator('.today .line', { hasText: '1 of 2 plants not watered for three weeks or more, and 1 with no watering recorded yet' })).toBeVisible();
   // the frost in the forecast: on the front page as a line, on the Today tab as the card, and under the top bar on every other tab, going to the Today tab
   await expect(page.locator('.today .line', { hasText: 'Frost forecast: -2.0 °C' })).toBeVisible();
-  await expect(page.locator('#frostbar')).toContainText('Frost forecast: -2.0 °C');
+  await expect(page.locator('#frostbar')).toHaveCount(0); // the front page has the line; the bar is for the other tabs (round fifty-four, 4)
   await page.goto('/plants');
   await expect(page.locator('#frostbar')).toContainText('Frost forecast');
   await page.locator('#frostbar').click();
@@ -3007,12 +3007,13 @@ test('round fifty-three: the Today tab lists what needs you by place, "no wateri
   await expect(page.locator('#frostbar')).toHaveCount(0); // not on the tab that shows it in full
   await expect(page.locator('#frost .risk')).toContainText('Frost forecast: -2.0 °C');
   await expect(page.locator('#frost tr.frost')).toHaveCount(1);
-  // Water here: one line per plant on the stop, dated today (the shifted today), with Undo
+  // Water here: one line per plant on the stop, dated today (the shifted today); the stop stays where it was, marked, with its own Undo (round fifty-four, 4)
   await page.locator('#water .stop', { hasText: 'Bench' }).getByRole('button', { name: 'Water 2 here' }).click();
   await expect(page.locator('.toast')).toContainText('Watered 2 plants at Bench');
-  await expect(page.locator('#nothing')).toContainText('Nothing needs you today');
-  await page.locator('.toast').getByRole('button', { name: 'Undo' }).click();
-  await expect(page.locator('#water .stop', { hasText: 'Bench' })).toHaveCount(1);
+  await expect(page.locator('#water .stop', { hasText: 'Bench' }).locator('.done')).toContainText('Watered 2');
+  await expect(page.locator('#nothing')).toHaveCount(0);
+  await page.locator('#water .stop', { hasText: 'Bench' }).locator('.done').getByRole('button', { name: 'Undo' }).click();
+  await expect(page.locator('#water .stop', { hasText: 'Bench' }).getByRole('button', { name: 'Water 2 here' })).toBeVisible();
   // the old address
   await page.goto('/frost');
   await expect(page).toHaveURL(/\/today$/);
@@ -3020,7 +3021,7 @@ test('round fifty-three: the Today tab lists what needs you by place, "no wateri
 });
 
 test('round fifty-four: the selected segment of "Your species / All" stays readable while hovered, as a phone leaves it after a tap (1)', async ({ page }) => {
-  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await addPlant(page);
+  await page.goto('/plants/new?species=Refusia%20testii&key=999'); await addPlant(page);
   await page.goto('/');
   const all = page.locator('.viewseg button', { hasText: 'All' });
   await all.click();
@@ -3030,4 +3031,59 @@ test('round fifty-four: the selected segment of "Your species / All" stays reada
   const [color, bg] = await on.evaluate((el) => { const s = getComputedStyle(el); return [s.color, s.backgroundColor]; });
   expect(color).not.toBe(bg);
   expect(color).toBe(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()).then((v) => v.startsWith('#') ? `rgb(${parseInt(v.slice(1, 3), 16)}, ${parseInt(v.slice(3, 5), 16)}, ${parseInt(v.slice(5, 7), 16)})` : v));
+});
+
+test('round fifty-four: a Today page left open overnight dates the morning\'s watering today; a site set in Settings is watched without a reload; a watering dated ahead has its own row (4)', async ({ browser }) => {
+  const C = await browser.newContext({ serviceWorkers: 'block' });
+  await C.addInitScript(() => { const real = Date.now; const OD = Date; let shift = 0; try { shift = Number(localStorage.getItem('__shift') ?? 0); } catch { /* none */ } (globalThis as { __shift?: number }).__shift = shift; globalThis.Date = class extends OD { constructor(...args: unknown[]) { if (args.length === 0) super(real() + ((globalThis as { __shift?: number }).__shift ?? 0)); else super(...(args as [number])); } static now() { return real() + ((globalThis as { __shift?: number }).__shift ?? 0); } } as DateConstructor; });
+  const page = await C.newPage();
+  const frosty = { lat: 40.38, lon: -80.05, forecast: { source: 'met.no', fetched: '2026-11-01T00:00:00Z', days: [{ date: '2026-11-02', tmin: -2, tmax: 9, precipMm: 0, steps: 24 }], hoursCovered: 48, offsetH: -5, firstFrost: '2026-11-02' }, alerts: [], alertsStatus: 'none', risk: { level: 'frost', text: 'Frost forecast: -2.0 °C around 05:00 Monday solar time (2026-11-02, MET Norway).' }, attribution: ['Forecast data from MET Norway (CC BY 4.0)'] };
+  let asked = 0;
+  await page.route(/\/api\/forecast/, (r) => { asked++; void r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(frosty) }); });
+  // two plants, no site yet: no bar anywhere
+  for (let i = 0; i < 2; i++) { await page.goto('/plants/new?species=Refusia%20testii&key=999'); await addPlant(page); }
+  const second = page.url().split('/').pop()!;
+  await page.goto('/plants');
+  await expect(page.locator('#frostbar')).toHaveCount(0);
+  // the site set in Settings: the watch reads it on the next navigation, no reload (round fifty-four, 4; the second reviewer's finding 2)
+  await page.goto('/settings');
+  await page.fill('input[placeholder="40.43"]', '40.38');
+  await page.fill('input[placeholder="-80.01"]', '-80.05');
+  await page.getByRole('button', { name: 'Save', exact: true }).first().click();
+  await expect(page.getByText('Saved on this device.')).toBeVisible();
+  await page.locator('.topseg a', { hasText: 'My plants' }).click();
+  await expect(page.locator('#frostbar')).toContainText('Frost forecast');
+  // a cold Today asks once for the forecast, not twice (round fifty-four, 4; both reviewers)
+  asked = 0;
+  await page.evaluate(() => sessionStorage.clear());
+  await page.goto('/today');
+  await expect(page.locator('#frost .risk')).toContainText('Frost forecast');
+  await page.waitForTimeout(500);
+  expect(asked).toBe(1);
+  // twenty-five days on, the page is opened and left open across midnight: a watering after midnight is dated the new day
+  await page.evaluate(() => localStorage.setItem('__shift', String(25 * 86_400_000)));
+  await page.goto('/today');
+  const stop = page.locator('#water .stop', { hasText: 'No place' });
+  await expect(stop).toHaveCount(1);
+  await page.evaluate(() => { (globalThis as { __shift?: number }).__shift = 26 * 86_400_000; }); // past midnight, by the clock; the day store notices within a minute, the tap reads it then
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await stop.getByRole('button', { name: /^Water 2 here$/ }).click();
+  await expect(stop.locator('.done')).toContainText('Watered 2');
+  const d = new Date(Date.now() + 26 * 86_400_000);
+  const expectDay = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  await page.goto(`/plants/${second}`);
+  await expect(page.locator('.tlrow', { hasText: 'Watered' }).first()).toContainText(expectDay);
+  // a watering dated ahead of today is its own row on Today, not "no watering recorded": watered under a clock fifty days on, read under one twelve hours behind it (a phone whose day turned early; the line is twelve hours ahead, within the hold)
+  await page.evaluate(() => localStorage.setItem('__shift', String(50 * 86_400_000)));
+  await page.goto(`/plants/${second}`);
+  await page.getByRole('button', { name: 'Water', exact: true }).click();
+  await expect(page.locator('.tlrow', { hasText: 'Watered' }).first()).toBeVisible();
+  const aheadDay = await page.evaluate(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; });
+  // the clock set back to just before that day began: the line's date is ahead by a day, its stamp by a few hours, within the hold
+  const back = await page.evaluate(() => new Date().getHours() + 1);
+  await page.evaluate((h) => localStorage.setItem('__shift', String(50 * 86_400_000 - h * 3_600_000)), back);
+  await page.goto('/today');
+  await expect(page.locator('#water .stop .row.ahead')).toContainText(aheadDay);
+  await expect(page.locator('#water .stop .row.unknown')).toHaveCount(0);
+  await C.close();
 });

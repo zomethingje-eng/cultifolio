@@ -108,24 +108,37 @@ async function loadIndexNow(platform: Platform, fetch: Fetch): Promise<Loaded> {
     const watched = cached?.manifest ? mPath : iPath;
     if (cached?.etag && typeof store.head === 'function') {
       // The minute is up: the object's etag says whether the copy held is still the bucket's. A head answers from
-      // metadata alone; the four megabytes are read again only after an upload (round forty-three, 1).
+      // metadata alone; the four megabytes are read again only after an upload (round forty-three, 1). An isolate that
+      // holds no manifest also looks for one each minute, since the first manifest ever uploaded changes nothing it watched (round fifty-four, 3).
       const h = await store.head(watched);
-      if (h?.etag === cached.etag) {
+      const mh = cached.manifest ? null : await store.head(mPath).catch(() => null);
+      if (h?.etag === cached.etag && !mh) {
         cached.at = Date.now();
         return cached;
       }
     }
+    const previous = cached;
     if (cached?.fromStore) cached = null; // an upload: the old generation goes before the new is parsed (round fifty-two, 5)
     const mObj = await store.get(mPath);
+    let mEtag: string | null = null;
     if (mObj) {
       const m = (await mObj.json().catch(() => null)) as unknown;
-      if (isManifest(m)) { manifest = m; etag = mObj.etag || null; }
+      if (isManifest(m)) { manifest = m; mEtag = mObj.etag || null; }
     }
-    const obj = manifest ? ((await store.get(productPath(manifest.id, 'index.json'))) ?? (await store.get(iPath))) : await store.get(iPath);
+    // A manifest is adopted only with the index it names: one whose index is not there yet (an upload that landed the
+    // manifest first) is not a corpus, and the top-level index must never be served under its id, where every cache
+    // would keep it for a day (round fifty-four, 3; both reviewers). The corpus held before stays until the files are there.
+    let obj = manifest ? await store.get(productPath(manifest.id, 'index.json')) : null;
+    if (manifest && !obj) {
+      console.warn(`manifest ${manifest.id} names an index the bucket does not hold yet; the corpus held before stands`);
+      if (previous?.fromStore) { previous.at = Date.now(); cached = previous; return previous; }
+      manifest = null;
+    }
+    if (!obj) obj = await store.get(iPath);
     if (obj) {
       const text = await obj.text();
       idx = JSON.parse(text) as IndexEntry[];
-      if (manifest) corpus = manifest.id;
+      if (manifest) { corpus = manifest.id; etag = mEtag; }
       else {
         etag = obj.etag || null;
         corpus = (obj.etag || fnv(text)).replace(/[^A-Za-z0-9._-]/g, '').slice(0, 16);
@@ -174,7 +187,7 @@ export async function product<T>(platform: Platform, fetch: Fetch, name: string)
   const c = await loadIndex(platform, fetch);
   const m = c.manifest;
   if (!m) return null;
-  if (!(name in m.files)) return null;
+  if (!(name in (m.files ?? {}))) return null;
   const k = `${m.id}/${name}`;
   let p = products.get(k);
   if (!p) {
@@ -191,7 +204,8 @@ export async function product<T>(platform: Platform, fetch: Fetch, name: string)
     if (products.size > PRODUCTS_HELD) products.delete(products.keys().next().value!);
   }
   const v = (await p) as T | null;
-  if (v === null) products.delete(k);
+  // A file the manifest names and the bucket lacks is remembered as lacking for a minute, not asked for on every request (round fifty-four, 3).
+  if (v === null) { const miss = Promise.resolve(null); products.set(k, miss); setTimeout(() => { if (products.get(k) === miss) products.delete(k); }, 60_000); }
   return v;
 }
 
@@ -297,10 +311,21 @@ export async function entriesIn(platform: Platform, fetch: Fetch, bucket: string
 /** The prepared search entries a query is answered from: the build's shard for its first character, else the whole index prepared here. */
 export async function searchFor(platform: Platform, fetch: Fetch, shard: string | null): Promise<Prepared<IndexEntry>[]> {
   const c = await loadIndex(platform, fetch);
-  if (c.manifest && shard) {
+  if (c.manifest) {
+    if (!shard) return []; // a query with no word the tokeniser keeps: nothing matches, and nothing is prepared for it (round fifty-four, 3)
     if (!c.manifest.search.includes(shard)) return []; // no word in the corpus begins so: nothing matches, and no read
     const file = await product<Prepared<IndexEntry>[]>(platform, fetch, `search/${shard}.json`);
     if (file) return file;
+    return prepare(c.idx); // a shard the bucket lacks: prepared for this request and let go, not held per isolate
   }
   return searchIndex(c.idx);
+}
+/** Whether the build's products are what answers: the search route decides from it whether a miss should be tried over the whole (round fifty-four, 3). */
+export async function hasProducts(platform: Platform, fetch: Fetch): Promise<boolean> {
+  return !!(await loadIndex(platform, fetch)).manifest;
+}
+/** The whole index prepared for one request, under a manifest: for the near pass a shard cannot answer; not kept (round fifty-four, 3). */
+export async function searchWhole(platform: Platform, fetch: Fetch): Promise<Prepared<IndexEntry>[]> {
+  const c = await loadIndex(platform, fetch);
+  return c.manifest ? prepare(c.idx) : searchIndex(c.idx);
 }

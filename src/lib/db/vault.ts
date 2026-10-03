@@ -214,8 +214,10 @@ export async function openStaging(): Promise<StagedReplacement> {
  * after the backup was taken stays given.
  */
 async function replaceFromStaging(live: IDBPDatabase<VaultDB>): Promise<void> {
-  const meta = live.transaction('meta', 'readwrite');
-  await Promise.all([live.clear('changes'), live.clear('photos'), live.clear('outbox'), live.clear('order'), dropFoldIn(meta).then(() => meta.done)]);
+  // One transaction for the wipe and the drop of the snapshot: a load between two of them could lay the new log over the old fold (round fifty-four, 2).
+  const tx = live.transaction(['changes', 'photos', 'outbox', 'order', 'meta'], 'readwrite');
+  await Promise.all([tx.objectStore('changes').clear(), tx.objectStore('photos').clear(), tx.objectStore('outbox').clear(), tx.objectStore('order').clear(), dropFoldIn(tx)]);
+  await tx.done;
   await copyStagingIn(live);
 }
 
@@ -303,6 +305,8 @@ async function issuedIn(tx: Tx, kind: NumberKind): Promise<Set<string>> {
 export interface Stored {
   kept: Change[];
   replaced: Change[];
+  /** The last arrival number this write took, 0 when it took none: a tab's own writes move its catch-up frontier past them (round fifty-four, 2). */
+  seq: number;
 }
 export class StoppedError extends Error {
   constructor() {
@@ -374,14 +378,16 @@ async function storeIn(tx: Tx, changes: Change[], fromServer: boolean, extra: Pa
     if (k && typeof c.value === 'string') (carried[k] ??= new Set()).add(c.value);
   }
   const order = tx.objectStore('order');
-  const puts: Promise<unknown>[] = [...kept.map((c) => (strict ? ch.add(c) : ch.put(c))), ...(fromServer ? [] : kept.map((c) => ob.put({ t: c.t }))), ...arrived.map((c) => order.add({ t: c.t }))];
+  const rows = arrived.map((c) => order.add({ t: c.t }));
+  const puts: Promise<unknown>[] = [...kept.map((c) => (strict ? ch.add(c) : ch.put(c))), ...(fromServer ? [] : kept.map((c) => ob.put({ t: c.t }))), ...rows];
   for (const k of Object.keys(carried) as NumberKind[]) {
     const set = await issuedIn(tx, k);
     for (const n of carried[k]!) set.add(n);
     puts.push(meta.put([...set], ISSUED(k)));
   }
   await Promise.all([...puts, tx.done]);
-  return { kept, replaced };
+  const last = rows.length ? Number(await rows[rows.length - 1]) : 0;
+  return { kept, replaced, seq: last };
 }
 const sameChange = (a: Change, b: Change) => a.kind === b.kind && a.id === b.id && a.field === b.field && JSON.stringify(a.value ?? null) === JSON.stringify(b.value ?? null);
 /** A total order on a change's content, for two under one stamp: the same on every device, whatever order they met them in. */
@@ -389,7 +395,7 @@ const rank = (c: Change) => `${c.kind}\0${c.id}\0${c.field}\0${JSON.stringify(c.
 
 /** Append changes; unless they came from the server (`fromServer`), they also go in the outbox to be pushed. One transaction, so the two stores cannot disagree. */
 export async function appendChanges(changes: Change[], fromServer = false, strict = false, requireKey?: string): Promise<Stored> {
-  if (!changes.length) return { kept: [], replaced: [] };
+  if (!changes.length) return { kept: [], replaced: [], seq: 0 };
   const out = await writing(async () => {
     const db = await openVault();
     return storeIn(db.transaction(STORES, 'readwrite'), changes, fromServer, {}, strict, requireKey);
@@ -562,8 +568,9 @@ export async function photoBlobIds(): Promise<string[]> {
 export async function wipeVault(): Promise<void> {
   await writing(async () => {
     const db = await openVault();
-    const meta = db.transaction('meta', 'readwrite');
-    await Promise.all([db.clear('changes'), db.clear('photos'), db.clear('outbox'), db.clear('order'), dropFoldIn(meta).then(() => meta.done)]);
+    const tx = db.transaction(['changes', 'photos', 'outbox', 'order', 'meta'], 'readwrite');
+    await Promise.all([tx.objectStore('changes').clear(), tx.objectStore('photos').clear(), tx.objectStore('outbox').clear(), tx.objectStore('order').clear(), dropFoldIn(tx)]);
+    await tx.done;
   });
 }
 
@@ -577,8 +584,9 @@ export async function wipeVault(): Promise<void> {
  * began before the log was replaced or a stored change displaced.
  */
 export interface FoldSnapshot {
-  /** The fold rules the snapshot was built under; one the collection does not recognise is not read. */
+  /** The fold rules the snapshot was built under, and the build: one the collection does not recognise is not read. A deploy costs one whole fold, and removes a class of mistake (round fifty-four, 2). */
   rules: number;
+  build: string;
   device: string;
   /** The clock correction in force when it was built: another one re-judges every hold, so the snapshot is wrong. */
   offset: number;
@@ -588,6 +596,8 @@ export interface FoldSnapshot {
   seen: string[];
   born: string[];
   parents: Array<[string, Array<[string, string | null]>]>;
+  /** Every stamp the fold held when it was taken: re-judged at each load, folded as they come due (round fifty-four, 2). */
+  held: string[];
   /** The latest stamp folded, for the clock. */
   last: string;
   /** How many changes were folded, for the page's own account of the load. */
@@ -630,15 +640,26 @@ export async function lastArrival(): Promise<number> {
   const cur = await db.transaction('order').store.openKeyCursor(null, 'prev');
   return cur ? Number(cur.key) : 0;
 }
-/** The changes that arrived after `seq`, in arrival order, and the number of the last of them (`seq` when there are none). A row whose change has since left the log (a replace) is skipped. */
-export async function arrivalsAfter(seq: number): Promise<{ changes: Change[]; seq: number }> {
+/**
+ * The changes that arrived after `seq`, in arrival order, the number of the last of them (`seq` when there are none),
+ * and the fold counter as it is in the same transaction: a caller that read the counter before compares the two, since
+ * a replace between the reads would have numbered the new log's rows after the old snapshot's number (round fifty-four, 2).
+ * A row whose change has since left the log is skipped.
+ */
+export async function arrivalsAfter(seq: number): Promise<{ changes: Change[]; seq: number; gen: number }> {
   const db = await openVault();
-  const tx = db.transaction(['order', 'changes']);
+  const tx = db.transaction(['order', 'changes', 'meta']);
+  const gen = Number((await tx.objectStore('meta').get(FOLD_GEN)) ?? 0);
   const rows = await tx.objectStore('order').getAll(IDBKeyRange.lowerBound(seq, true));
   const keys = await tx.objectStore('order').getAllKeys(IDBKeyRange.lowerBound(seq, true));
   const ch = tx.objectStore('changes');
   const got = await Promise.all(rows.map((r) => ch.get(r.t)));
-  return { changes: got.filter((c): c is Change => !!c).map(mendChange), seq: keys.length ? Number(keys[keys.length - 1]) : seq };
+  return { changes: got.filter((c): c is Change => !!c).map(mendChange), seq: keys.length ? Number(keys[keys.length - 1]) : seq, gen };
+}
+/** Every change of one record, whatever its stamp: the repairs that judge a record's whole history read it here, not from the tail (round fifty-four, 2). */
+export async function changesOfRecord(kind: Change['kind'], id: string): Promise<Change[]> {
+  const db = await openVault();
+  return (await db.getAllFromIndex('changes', 'byRecord', [kind, id])).map(mendChange);
 }
 /** Every stamp in the log, and nothing else: what a load from the snapshot needs of the log itself. */
 export async function changeKeys(): Promise<string[]> {

@@ -34,7 +34,7 @@ vi.mock('$lib/db/vault', () => {
   appendChanges: async (cs: Change[]) => {
     if (mem.fail) throw new Error(mem.fail);
     for (const c of cs) mem.changes.set(c.t, c);
-    return { kept: cs, replaced: [] };
+    return { kept: cs, replaced: [], seq: 0 };
   },
   getMeta: async (k: string) => mem.meta.get(k),
   setMeta: async (k: string, v: unknown) => void mem.meta.set(k, v),
@@ -48,8 +48,10 @@ vi.mock('$lib/db/vault', () => {
   m.readFold = async () => undefined;
   m.writeFold = async () => false;
   m.foldGen = async () => 0;
+  m.dropFold = async () => {};
+  if (!m.changesOfRecord) m.changesOfRecord = async (kind: string, id: string) => (await m.allChanges()).filter((c: Change) => c.kind === kind && c.id === id);
   m.lastArrival = async () => 0;
-  m.arrivalsAfter = async () => ({ changes: [...mem.changes.values()], seq: 0 });
+  m.arrivalsAfter = async () => ({ changes: [...mem.changes.values()], seq: 0, gen: 0 });
   m.changeKeys = async () => [...mem.changes.keys()];
   if (!m.changesByKeys) m.changesByKeys = async (ts: string[]) => ts.map((t) => mem.changes.get(t)).filter(Boolean);
   m.holdVault = async (work: () => Promise<unknown>) => work();

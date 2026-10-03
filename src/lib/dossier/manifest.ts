@@ -63,5 +63,5 @@ export function shardSearch<T extends Searchable>(prepared: Prepared<T>[]): Map<
 
 export const isManifest = (x: unknown): x is Manifest => {
   const m = x as Manifest;
-  return !!m && typeof m === 'object' && typeof m.id === 'string' && /^[A-Za-z0-9._-]{4,40}$/.test(m.id) && typeof m.buckets === 'number' && m.buckets >= 1 && Array.isArray(m.search) && m.v === DOSSIER_V;
+  return !!m && typeof m === 'object' && typeof m.id === 'string' && /^[A-Za-z0-9._-]{4,40}$/.test(m.id) && typeof m.buckets === 'number' && m.buckets >= 1 && Array.isArray(m.search) && !!m.files && typeof m.files === 'object' && typeof m.files['index.json'] === 'string' && m.v === DOSSIER_V;
 };

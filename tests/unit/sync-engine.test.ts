@@ -43,7 +43,7 @@ vi.mock('$lib/db/vault', () => {
       mem.changes.set(c.t, c);
       if (!fromServer) mem.outbox.add(c.t);
     }
-    return { kept: cs, replaced: [] };
+    return { kept: cs, replaced: [], seq: 0 };
   },
   outboxKeys: async () => [...mem.outbox],
   outboxAck: async (ts: string[], key?: string) => {
@@ -86,8 +86,10 @@ vi.mock('$lib/db/vault', () => {
   m.readFold = async () => undefined;
   m.writeFold = async () => false;
   m.foldGen = async () => 0;
+  m.dropFold = async () => {};
+  if (!m.changesOfRecord) m.changesOfRecord = async (kind: string, id: string) => (await m.allChanges()).filter((c: Change) => c.kind === kind && c.id === id);
   m.lastArrival = async () => 0;
-  m.arrivalsAfter = async () => ({ changes: [...mem.changes.values()], seq: 0 });
+  m.arrivalsAfter = async () => ({ changes: [...mem.changes.values()], seq: 0, gen: 0 });
   m.changeKeys = async () => [...mem.changes.keys()];
   if (!m.changesByKeys) m.changesByKeys = async (ts: string[]) => ts.map((t) => mem.changes.get(t)).filter(Boolean);
   m.announceSyncForgotten = () => {};

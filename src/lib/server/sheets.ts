@@ -21,9 +21,10 @@ export async function sheetsIn(platform: Platform, fetch: Fetch, bucket: string,
   const hit = cache.get(ck);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.sheets;
   // The build's file under the corpus id first (round fifty-three, 2), then the bucket file beside the index as the builds before wrote it.
-  let out: Sheet[] | null = (await product<Sheet[]>(platform, fetch, `sheets/${bucket}.json`)) ?? (await sheetsFile(platform, fetch, bucket));
+  // Under a manifest the bucket file beside the index is another corpus's, laid out for thirty-two buckets: never served as this one's (round fifty-four, 3).
+  const { buckets, products } = await getCorpus(platform, fetch);
+  let out: Sheet[] | null = (await product<Sheet[]>(platform, fetch, `sheets/${bucket}.json`)) ?? (products ? null : await sheetsFile(platform, fetch, bucket));
   if (!out) {
-    const { buckets } = await getCorpus(platform, fetch);
     const entries = (await getIndex(platform, fetch)).filter((e) => bucketOf(e.slug, buckets) === bucket);
     out = [];
     const width = 16;

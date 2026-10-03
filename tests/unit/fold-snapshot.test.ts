@@ -123,8 +123,8 @@ describe('the fold snapshot', () => {
     // the write that was built against gen0 is refused
     const f = (await b.vault.readFold()) ?? undefined;
     expect(f).toBeUndefined();
-    expect(await b.vault.writeFold({ rules: 1, device: DEV, offset: 0, seq: 0, records: [], seen: [], born: [], parents: [], last: '', changes: 0 }, gen0)).toBe(false);
-    expect(await b.vault.writeFold({ rules: 1, device: DEV, offset: 0, seq: 0, records: [], seen: [], born: [], parents: [], last: '', changes: 0 }, gen0 + 1)).toBe(true);
+    expect(await b.vault.writeFold({ rules: 1, build: '', device: DEV, offset: 0, seq: 0, records: [], seen: [], born: [], parents: [], held: [], last: '', changes: 0 }, gen0)).toBe(false);
+    expect(await b.vault.writeFold({ rules: 1, build: '', device: DEV, offset: 0, seq: 0, records: [], seen: [], born: [], parents: [], held: [], last: '', changes: 0 }, gen0 + 1)).toBe(true);
     expect(await b.vault.readFold()).toBeDefined();
     // a replace from a staged file
     const st = await b.vault.openStaging();
@@ -182,5 +182,101 @@ describe('the fold snapshot', () => {
     // and again: nothing new is nothing folded
     await (a.store.collection as unknown as { catchUp(): Promise<void> }).catchUp();
     expect(a.store.collection.accessions).toHaveLength(2);
+  });
+
+  it('round fifty-four: of two held changes to one field, the earlier comes due and is folded while the later stays held', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const base = 1_800_000_000_000;
+    vi.setSystemTime(base);
+    const { vault } = await boot();
+    await vault.appendChanges([...plant(1, base - 1000), { t: stamp(base + 1_200_000), kind: 'accession', id: 'p1', field: 'taxonName', value: 'twenty minutes ahead' }, { t: stamp(base + 2_400_000), kind: 'accession', id: 'p1', field: 'taxonName', value: 'forty minutes ahead' }], true);
+    let b = await boot();
+    await b.store.collection.load();
+    expect(await b.store.collection.snapshotWritten).toBe(true);
+    expect((await b.vault.readFold())!.fold.held).toHaveLength(2);
+    vi.setSystemTime(base + 1_200_000 + MAX_AHEAD_MS + 1000);
+    b = await boot();
+    await b.store.collection.load();
+    expect(b.store.collection.loaded.from).toBe('snapshot');
+    expect(b.store.collection.accession('p1')?.taxonName).toBe('twenty minutes ahead');
+    const ref = await boot();
+    await ref.vault.dropFold();
+    await ref.store.collection.load();
+    expect(ref.store.collection.accession('p1')?.taxonName).toBe('twenty minutes ahead');
+  });
+
+  it('round fifty-four: a parked change keeps its Apply after a snapshot load, and the one-shape pass leaves a record whose number change is parked alone', async () => {
+    const base = Date.now() - 86_400_000;
+    const { vault } = await boot();
+    // a legacy-shaped plant (its number is its id, no `acc`), whose only `acc` change is from a clock three years ahead
+    await vault.appendChanges([{ t: stamp(base, 0), kind: 'accession', id: '2024-0001', field: 'taxonName', value: 'Legacy' }, { t: stamp(base, 1), kind: 'accession', id: '2024-0001', field: 'status', value: 'growing' }, { t: stamp(base + 3 * 365 * 86_400_000), kind: 'accession', id: '2024-0001', field: 'acc', value: '2024-9999' }], true);
+    let b = await boot();
+    await b.store.collection.load();
+    expect(b.store.collection.parkedFor('accession', '2024-0001')).toHaveLength(1);
+    expect((await b.vault.allChanges()).filter((c) => c.field === 'acc')).toHaveLength(1); // no second number written
+    expect(await b.store.collection.snapshotWritten).toBe(true);
+    b = await boot();
+    await b.store.collection.load();
+    expect(b.store.collection.loaded.from).toBe('snapshot');
+    expect(b.store.collection.parkedFor('accession', '2024-0001')).toHaveLength(1);
+    expect(b.store.collection.parkedRecords).toBe(1);
+    expect((await b.vault.allChanges()).filter((c) => c.field === 'acc')).toHaveLength(1);
+  });
+
+  it('round fifty-four: a stamp parked after the snapshot drops it, and a snapshot of another build is not read', async () => {
+    const base = Date.now() - 86_400_000;
+    const { vault } = await boot();
+    await vault.appendChanges([...plant(1, base)], true);
+    let b = await boot();
+    await b.store.collection.load();
+    expect(await b.store.collection.snapshotWritten).toBe(true);
+    await b.store.collection.markParked([{ t: stamp(base, 0), kind: 'accession', id: 'p1', field: 'taxonName', value: 'Species 1' }]);
+    expect(await b.vault.readFold()).toBeUndefined();
+    b = await boot();
+    await b.store.collection.load();
+    expect(b.store.collection.loaded.from).toBe('log');
+    await b.store.collection.snapshotWritten;
+    const good = (await b.vault.readFold())!;
+    await b.vault.writeFold({ ...good.fold, build: 'another-build' }, good.gen);
+    b = await boot();
+    await b.store.collection.load();
+    expect(b.store.collection.loaded.from).toBe('log');
+  });
+
+  it('round fifty-four: the revival repair judges a record whole, so a tombstone and an import stamp arriving after a real edit do not remove the plant, and an import stamp arriving after a removal in the snapshot does', async () => {
+    const base = Date.now() - 10 * 86_400_000;
+    const { vault } = await boot();
+    // p1: made, removed, then revived by a real edit (T3), all folded into the snapshot save the removal and the import, which arrive later
+    await vault.appendChanges([...plant(1, base), { t: stamp(base + 3000), kind: 'accession', id: 'p1', field: 'notes', value: 'revived for real' }, ...plant(2, base + 50), { t: stamp(base + 100), kind: 'accession', id: 'p2', field: '_deleted', value: true }], true);
+    let b = await boot();
+    await b.store.collection.load();
+    expect(await b.store.collection.snapshotWritten).toBe(true);
+    expect(b.store.collection.accession('p1')).toBeDefined();
+    expect(b.store.collection.accession('p2')).toBeUndefined();
+    // the old backup's changes arrive: p1's tombstone at T1 and importedOn at T2 (both before T3); p2's importedOn after its removal
+    await b.vault.appendChanges([{ t: stamp(base + 1000), kind: 'accession', id: 'p1', field: '_deleted', value: true }, { t: stamp(base + 2000), kind: 'accession', id: 'p1', field: 'importedOn', value: '2024-01-01' }, { t: stamp(base + 200), kind: 'accession', id: 'p2', field: 'importedOn', value: '2024-01-01' }], true);
+    b = await boot();
+    await b.store.collection.load();
+    expect(b.store.collection.loaded.from).toBe('snapshot');
+    expect(b.store.collection.accession('p1')?.notes).toBe('revived for real'); // not removed again: the tail alone would have said so
+    expect(b.store.collection.accession('p2')).toBeUndefined(); // the legacy revival, removed again
+    expect((await b.vault.allChanges()).filter((c) => c.id === 'p1' && c.field === '_deleted')).toHaveLength(1);
+  });
+
+  it('round fifty-four: the arrival rows read with the counter say when a replace landed between the counter and the tail', async () => {
+    const base = Date.now() - 86_400_000;
+    const { vault } = await boot();
+    await vault.appendChanges([...plant(1, base)], true);
+    const b = await boot();
+    await b.store.collection.load();
+    await b.store.collection.snapshotWritten;
+    const gen0 = await b.vault.foldGen();
+    const f = (await b.vault.readFold())!.fold;
+    const st = await b.vault.openStaging();
+    await st.appendChanges([...plant(2, base)]);
+    await st.promote();
+    const tail = await b.vault.arrivalsAfter(f.seq);
+    expect(tail.changes.map((c) => c.id)).toEqual(['p2', 'p2', 'p2']); // numbered after the old snapshot's rows: the numbers alone would not have told
+    expect(tail.gen).not.toBe(gen0);
   });
 });

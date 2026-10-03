@@ -57,6 +57,7 @@
   // How many pages this session has moved through inside the app: the back control goes to the previous one when there is one.
   let hops = 0;
   afterNavigate((nav) => {
+    if (browser) void frost.check();
     menuOpen = false;
     if (nav.from && nav.type !== 'popstate') hops++;
     else if (nav.type === 'popstate' && hops > 0) hops--;
@@ -126,8 +127,11 @@
     }
     onVaultNotice((t) => (vaultNote = t));
     await collection.load();
-    // The frost watch for every tab (round fifty-three, 3): read once per page life, shown under the top bar when the nights turn.
+    // The frost watch for every tab (round fifty-three, 3): read once, and again on every navigation and every return to
+    // the tab when the site changed or the answer is older than half an hour, so a page left open overnight shows the
+    // frost that appeared (round fifty-four, 4).
     void frost.check();
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') void frost.check(); });
     await sync.init();
     if (sync.configured) sync.schedule(1500);
   });
@@ -182,7 +186,7 @@
 {/if}
 {#if vaultNote}<p class="vaultnote">{vaultNote}</p>{/if}
 <!-- The frost watch, reachable from every tab (round fifty-three, 3): the risk at the site, as the Today tab says it, on every page but that one. A refusal is said on the front page and the Today tab, not on every page. -->
-{#if frost.line?.tone === 'bad' && !page.url.pathname.startsWith('/today')}<a class="frostbar" href="/today#frost" id="frostbar">{frost.line.text} <span class="go">Today ›</span></a>{/if}
+{#if frost.line?.tone === 'bad' && !page.url.pathname.startsWith('/today') && page.url.pathname !== '/'}<a class="frostbar" href="/today#frost" id="frostbar">{frost.line.text} <span class="go">Today ›</span></a>{/if}
 
 <a class="skip" href="#main">Skip to content</a>
 <!-- On the pages about your own plants, links are not preloaded on hover: a preload of a species page sends that species' name to the

@@ -24,14 +24,14 @@ describe('two changes under one stamp', () => {
     const b = ch(0, 'v2-2024-0001-e7', 'acc', '2024-0002');
     // device one met a then b
     expect((await appendChanges([a], true)).kept).toEqual([a]);
-    expect(await appendChanges([b], true)).toEqual({ kept: [b], replaced: [a] }); // b ranks higher (its id sorts later): it replaces a on disk and is reported as kept
+    expect(await appendChanges([b], true)).toMatchObject({ kept: [b], replaced: [a] }); // b ranks higher (its id sorts later): it replaces a on disk and is reported as kept
     const one = await allChanges();
     expect(one).toEqual([b]);
     // the other order (a second pair, under the next stamp): the higher-ranking one is kept again
     const c = ch(1, 'v2-2024-0003-e0', 'acc', '2024-0003');
     const d = ch(1, 'v2-2024-0003-e7', 'acc', '2024-0004');
     expect((await appendChanges([d], true)).kept).toEqual([d]);
-    expect(await appendChanges([c], true)).toEqual({ kept: [], replaced: [] }); // c ranks lower: declined, and the caller is told nothing was kept
+    expect(await appendChanges([c], true)).toMatchObject({ kept: [], replaced: [] }); // c ranks lower: declined, and the caller is told nothing was kept
     const two = await allChanges();
     expect(two).toEqual([b, d]); // the same log whichever order a device met each pair in
     const issued = (await getMeta<string[]>('issued:accession')) ?? [];

@@ -5,7 +5,7 @@
  */
 import { site } from './site.svelte';
 import { units } from './units.svelte';
-import { getForecast, forecastRefusal } from '$lib/weather/client';
+import { getForecast, forecastRefusal, FORECAST_TTL_MS } from '$lib/weather/client';
 
 export type Risk = { level: string; text: string };
 
@@ -18,11 +18,18 @@ class FrostWatch {
   /** True once a site was asked about, whatever the answer. */
   checked = $state(false);
   private p: Promise<void> | null = null;
-  /** Read the forecast for the site, once per page life; `again` asks afresh (a site just set). */
+  /** The site and units the answer held is for, and when it was read: a site set since, or an answer older than the forecast's half hour, is read again (round fifty-four, 4; the second reviewer's finding 2). */
+  private readFor = '';
+  private readAt = 0;
+  /** Read the forecast for the site: once, then again when the site changed, the answer is stale, or `again` asks. Cheap to call on every navigation and on every return to the tab. */
   check(again = false): Promise<void> {
-    if (this.p && !again) return this.p;
+    site.load();
+    const key = site.current ? `${site.current.lat},${site.current.lon},${units.current}` : '';
+    const stale = !this.p || key !== this.readFor || Date.now() - this.readAt >= FORECAST_TTL_MS;
+    if (this.p && !again && !stale) return this.p;
+    this.readFor = key;
+    this.readAt = Date.now();
     this.p = (async () => {
-      site.load();
       const s = site.current;
       this.hasSite = !!s;
       if (!s) { this.risk = null; this.unchecked = null; this.checked = false; return; }

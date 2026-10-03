@@ -16,6 +16,11 @@ export const GET: RequestHandler = async ({ url, platform, fetch }) => {
   if (!buckets.length) error(400, 'b required: hex buckets, comma separated');
   // The count and the id they belong to come from one load, never two that could straddle the cache's minute (round seventeen, 10).
   const { id: corpus, buckets: count } = await getCorpus(platform, fetch);
+  // The count the device hashed by, when it says: a name of two hex digits is valid under thirty-two buckets and under
+  // sixty-four, and a device on the old count took half a bucket's species for the reference lacking them (round fifty-four, 3;
+  // both reviewers). A count that is not the one served is a 409, never an answer, and the device re-reads /api/corpus.
+  const n = url.searchParams.get('n');
+  if (n !== null && Number(n) !== count) return json({ error: 'bucket count', buckets: count, id: corpus }, { status: 409, headers: { 'cache-control': 'no-store' } });
   if (buckets.length > 4 || buckets.some((b) => !isBucket(b, count))) error(400, `buckets are ${bucketWidth(count)} hex digits, 0 to ${(count - 1).toString(16)}, at most 4 per request`);
   // As the sheets route does (round thirteen, 4): an answer is cacheable only when asked for under the corpus now served.
   // An isolate still holding the old index answers a request under the new id with `no-store`, so no cache, the service

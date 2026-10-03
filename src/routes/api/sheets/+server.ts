@@ -26,6 +26,11 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   // under another id (a device that has not asked /api/corpus since a refresh) is answered without caching (round thirteen, 4).
   const asked = (url.searchParams.get('c') ?? '').replace(/[^A-Za-z0-9._-]/g, '').slice(0, 40);
   const { id: corpus, buckets: count } = await getCorpus(platform, fetch);
+  // The count the device hashed by, when it says: a name of two hex digits is valid under thirty-two buckets and under
+  // sixty-four, and a device on the old count took half a bucket's species for the reference lacking them (round fifty-four, 3;
+  // both reviewers). A count that is not the one served is a 409, never an answer, and the device re-reads /api/corpus.
+  const n = url.searchParams.get('n');
+  if (n !== null && Number(n) !== count) return json({ error: 'bucket count', buckets: count, id: corpus }, { status: 409, headers: { 'cache-control': 'no-store' } });
   if (buckets.length > MAX_PER_REQUEST || buckets.some((b) => !isBucket(b, count))) error(400, `buckets are ${bucketWidth(count)} hex digits, 0 to ${(count - 1).toString(16)}, at most ${MAX_PER_REQUEST} per request`);
   const current = asked === corpus;
   const edge = platform?.caches?.default;
