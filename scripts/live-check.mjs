@@ -93,7 +93,13 @@ if (!species) {
   if (!species) fail('/sitemap-1.xml names no species page', sm);
 }
 for (const path of ['/about/how', `/species/${species}`, '/offline', '/api/corpus']) {
-  const r = await get(path, { headers: { accept: 'text/html,*/*' } });
+  let r = await get(path, { headers: { accept: 'text/html,*/*' } });
+  // The corpus route from the previous Worker, in the minute after a deploy when both answer (round fifty-three, 4): asked again, a few times, before it is judged.
+  for (let tries = 0; path === '/api/corpus' && r.status === 200 && !/"buckets":/.test(r.text) && tries < 6; tries++) {
+    console.log(`  note  ${path}: answered by a Worker without a bucket count; the deploy is still rolling out; asking again in five seconds`);
+    await new Promise((res) => setTimeout(res, 5000));
+    r = await get(path, { headers: { accept: 'text/html,*/*' } });
+  }
   if (r.status !== 200) fail(`${path}`, r);
   headersOn(r, path);
   if (path.startsWith('/species/') && !r.text.includes(path.slice(9).replace(/-/g, ' ').replace(/^./, (c) => c.toUpperCase()))) fail(`${path} does not name the species`, r);
