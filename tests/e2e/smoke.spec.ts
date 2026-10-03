@@ -3018,3 +3018,16 @@ test('round fifty-three: the Today tab lists what needs you by place, "no wateri
   await expect(page).toHaveURL(/\/today$/);
   await C.close();
 });
+
+test('round fifty-four: the selected segment of "Your species / All" stays readable while hovered, as a phone leaves it after a tap (1)', async ({ page }) => {
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await addPlant(page);
+  await page.goto('/');
+  const all = page.locator('.viewseg button', { hasText: 'All' });
+  await all.click();
+  const on = page.locator('.viewseg button.on');
+  await expect(on).toContainText('All');
+  await on.hover();
+  const [color, bg] = await on.evaluate((el) => { const s = getComputedStyle(el); return [s.color, s.backgroundColor]; });
+  expect(color).not.toBe(bg);
+  expect(color).toBe(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()).then((v) => v.startsWith('#') ? `rgb(${parseInt(v.slice(1, 3), 16)}, ${parseInt(v.slice(3, 5), 16)}, ${parseInt(v.slice(5, 7), 16)})` : v));
+});

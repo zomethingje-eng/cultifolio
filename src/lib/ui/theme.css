@@ -226,7 +226,8 @@ nav.tabs a.on { background: var(--ink); color: var(--bg); }
 .seg > a, .seg > button { border: 0; background: none; padding: 7px 13px; cursor: pointer; color: var(--ink2); font: inherit; font-size: 12px; font-weight: 600; border-right: 1px solid var(--rule); white-space: nowrap; }
 .seg > :last-child { border-right: 0; }
 .seg > a:hover, .seg > button:hover { color: var(--ink); text-decoration: none; }
-.seg > .on { background: var(--ink); color: var(--bg); }
+/* The selected segment keeps its colours under :hover too: a phone keeps the tapped button hovered after the tap, and the hover rule above (more specific) painted its text ink on an ink ground (round fifty-four, 1). */
+.seg > .on, .seg > .on:hover { background: var(--ink); color: var(--bg); }
 .topseg { margin: 6px 0 2px; }
 .chiprow { display: flex; gap: 7px; flex-wrap: wrap; margin: 2px 0 8px; align-items: center; }
 .chipbtn { border: 1px solid var(--rule); background: var(--card); border-radius: 999px; padding: 7px 13px; font: inherit; font-size: 12px; font-weight: 600; color: var(--ink2); cursor: pointer; box-shadow: var(--sh); white-space: nowrap; }
