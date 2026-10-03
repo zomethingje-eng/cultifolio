@@ -57,17 +57,6 @@
 {#if !collection.ready}
   <p class="muted">Opening your collection…</p>
 {:else}
-  {#if collection.legacyLocations.length}
-    <div class="cult legacy">
-      <div class="sum">Places written as text on your plants</div>
-      <p class="faint small">Turn each into a real place; its plants move there.</p>
-      <ul>
-        {#each collection.legacyLocations as l}
-          <li><span>{l.text}</span> <span class="faint">{l.n} plant{l.n === 1 ? '' : 's'}</span> <button class="btn small" onclick={() => collection.convertLegacyLocation(l.text)}>Make it a place</button></li>
-        {/each}
-      </ul>
-    </div>
-  {/if}
   {#if !rows.length}
     <div class="emptybox"><h2 class="q" style="font-size: 22px">No places yet</h2><p class="muted">Start with the room or greenhouse, then the shelves or benches inside it.</p></div>
   {:else}
@@ -87,11 +76,6 @@
 <style>
   .form { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 8px; padding: 12px 15px; margin: 12px 0 16px; }
   .form input, .form select { font: inherit; font-size: 14px; padding: 8px 11px; border: 1px solid var(--rule); border-radius: 9px; background: var(--card); color: var(--ink); }
-  .legacy { padding-bottom: 10px; }
-  .legacy .small { padding: 8px 17px 0; }
-  .legacy ul { list-style: none; padding: 6px 17px 0; margin: 0; display: grid; gap: 0.4rem; }
-  .legacy li { display: flex; gap: 0.8rem; align-items: center; }
-  .legacy li span:first-child { font-weight: 500; }
   .tree { display: grid; gap: 0.35rem; margin-top: 0.8rem; }
   .row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 0.8rem; align-items: center; padding: 0.55rem 0.9rem; padding-left: calc(0.9rem + var(--d) * 1.4rem); color: inherit; min-height: 44px; }
   .row:hover { text-decoration: none; box-shadow: var(--sh2); color: inherit; }

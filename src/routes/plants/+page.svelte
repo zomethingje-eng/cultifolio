@@ -76,14 +76,14 @@
     return words.every((w) => hay.includes(w));
   };
   const hayOf = (a: (typeof collection.accessions)[number]) => {
-    return fold(`${a.taxonName} ${a.cultivar ?? ''} ${a.parentage ?? ''} ${a.nameAsReceived ?? ''} ${accNo(a)} ${a.fieldNumber ?? ''} ${a.locationId ? collection.locationName(a.locationId) : (a.location ?? '')} ${a.notes ?? ''} ${a.sourceFrom ?? ''}`);
+    return fold(`${a.taxonName} ${a.cultivar ?? ''} ${a.parentage ?? ''} ${a.nameAsReceived ?? ''} ${accNo(a)} ${a.fieldNumber ?? ''} ${a.locationId ? collection.locationName(a.locationId) : ''} ${a.notes ?? ''} ${a.sourceFrom ?? ''}`);
   };
   const byName = (a: (typeof collection.accessions)[number], b: (typeof collection.accessions)[number]) => a.taxonName.localeCompare(b.taxonName) || (a.cultivar ?? '').localeCompare(b.cultivar ?? '') || accNo(a).localeCompare(accNo(b));
   const sorters: Record<Sort, (a: (typeof collection.accessions)[number], b: (typeof collection.accessions)[number]) => number> = {
     number: () => 0, // the collection's order: newest number first
     name: byName,
     watered: (a, b) => care(b) - care(a) || byName(a, b), // longest since watered first
-    place: (a, b) => { const pa = a.locationId ? collection.locationName(a.locationId) : (a.location ?? ''), pb = b.locationId ? collection.locationName(b.locationId) : (b.location ?? ''); return (pa === '' ? 1 : 0) - (pb === '' ? 1 : 0) || pa.localeCompare(pb) || byName(a, b); } // unplaced plants last, not first (round twenty-six, 8)
+    place: (a, b) => { const pa = a.locationId ? collection.locationName(a.locationId) : '', pb = b.locationId ? collection.locationName(b.locationId) : ''; return (pa === '' ? 1 : 0) - (pb === '' ? 1 : 0) || pa.localeCompare(pb) || byName(a, b); } // unplaced plants last, not first (round twenty-six, 8)
   };
   const yearAgo = localDateYearAgo();
   const noPhoto = (id: string) => !collection.photos(id).some((p) => p.d >= yearAgo);
@@ -171,7 +171,7 @@
 {:else if !collection.accessions.length}
   <div class="emptybox">
     <h2 class="q" style="font-size: 22px">Nothing here yet</h2>
-    <p class="muted">Your plants are recorded on this device and nowhere else until you choose to sync. <a href="/plants/new">Add the first plant</a>, or <a href="/backup">restore a backup or import from the v2 Herbarium app</a>.</p>
+    <p class="muted">Your plants are recorded on this device and nowhere else until you choose to sync. <a href="/plants/new">Add the first plant</a>, or <a href="/backup">restore a backup</a>.</p>
   </div>
 {:else if !list.length}
   <div class="emptybox"><p class="muted">No plants match.</p></div>
@@ -190,7 +190,7 @@
           <span class="im" class:own={!!own}>{#if own}<PhotoImg id={own.id} alt="" loading="lazy" />{:else if th}<img src={th} alt="" loading="lazy" onerror={(e) => ((e.currentTarget as HTMLImageElement).style.display = 'none')} />{:else}<span>–</span>{/if}</span>
           <span>
             <span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}‘{a.cultivar}’{/if}</span>
-            <span class="fam">{#if kindOf(a) !== 'species'}<span class="pill c">{kindOf(a)}</span>{/if}{#if a.fieldNumber}<span class="fnchip">{a.fieldNumber}</span>{/if}{#if a.locationId}<span>{collection.locationName(a.locationId)}</span>{:else if a.location}<span>{a.location}</span>{/if}{#if a.status !== 'growing'}<span class="pill">{a.status}</span>{/if}</span>
+            <span class="fam">{#if kindOf(a) !== 'species'}<span class="pill c">{kindOf(a)}</span>{/if}{#if a.fieldNumber}<span class="fnchip">{a.fieldNumber}</span>{/if}{#if a.locationId}<span>{collection.locationName(a.locationId)}</span>{/if}{#if a.status !== 'growing'}<span class="pill">{a.status}</span>{/if}</span>
           </span>
           <span class="fig" class:due={a.status === 'growing' && collection.careDays(a) >= DUE_DAYS && !collection.wateringAhead(a.id)}>{w == null ? collection.wateringWords(a) : w === 0 ? 'watered today' : `watered ${w} d ago`}</span>
         </a>

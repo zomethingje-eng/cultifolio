@@ -42,8 +42,7 @@ export const Manifest = v.object({
     photoBytes: v.number()
   }),
   /** Photo records whose pixels were not on the exporting device; their records are in changes.json, their pixels are nowhere in the file. */
-  photosMissing: v.optional(v.array(v.string())),
-  scheme: v.optional(v.unknown())
+  photosMissing: v.optional(v.array(v.string()))
 });
 export type Manifest = v.InferOutput<typeof Manifest>;
 
@@ -55,14 +54,6 @@ export const ChangeRow = v.object({
   id: v.string(),
   field: v.string(),
   value: v.unknown()
-});
-
-/** The older, changes-only JSON export (before photos). Still accepted. */
-export const LegacyChanges = v.object({
-  format: v.literal('cultifolio-changes'),
-  v: v.number(),
-  exported: v.optional(v.string()),
-  changes: v.array(ChangeRow)
 });
 
 export const photoPath = (id: string) => `photos/${id}.jpg`;

@@ -4,7 +4,7 @@
  * changes through the same door local edits use.
  */
 import { openDB, deleteDB, type IDBPDatabase, type DBSchema, type IDBPTransaction } from 'idb';
-import { mendChange, type Change } from '$core/log';
+import type { Change } from '$core/log';
 
 /** The pixels for one photo record; metadata is in the change log. */
 export interface PhotoBlobs {
@@ -271,9 +271,7 @@ export async function storageErrorText(err: unknown): Promise<string | null> {
 
 export async function allChanges(): Promise<Change[]> {
   const db = await openVault();
-  // Mended as they are read: a value an older build wrote with the wrong type (a numeric price from a v2 file) is put
-  // right for the fold, for a backup and for a push alike, so it stops travelling (round twenty-nine, 2).
-  return (await db.getAll('changes')).map(mendChange);
+  return db.getAll('changes');
 }
 
 /* ---- numbers, issued once ----
@@ -328,8 +326,7 @@ async function storeIn(tx: Tx, changes: Change[], fromServer: boolean, extra: Pa
       throw new StoppedError();
     }
   }
-  // Two changes under one stamp should not exist; when they do (an importer's shared counter before round fifteen, or two
-  // devices naming the same v2 event differently before round sixteen), the store keeps one of them, and the same one on
+  // Two changes under one stamp should not exist; when they do (a stamp minted twice by a bug, a file edited by hand), the store keeps one of them, and the same one on
   // every device: not whichever arrived first but the one that ranks higher by content, so devices that met the two in
   // either order converge (round fifteen, 3; round sixteen, 4). Within one batch the same rule applies first, so the last
   // put never silently wins (round seventeen, 3). Only what is kept goes into the outbox, onto the ledger and back to the
@@ -502,7 +499,7 @@ export async function changesByKeys(ts: string[]): Promise<Change[]> {
   const db = await openVault();
   const tx = db.transaction('changes');
   const out = await Promise.all(ts.map((t) => tx.store.get(t)));
-  return out.filter((c): c is Change => !!c).map(mendChange); // mended on the way out too, so an older value stops travelling (round thirty, 5)
+  return out.filter((c): c is Change => !!c);
 }
 
 export async function getMeta<T>(k: string): Promise<T | undefined> {
@@ -589,7 +586,7 @@ export async function wipeVault(): Promise<void> {
  * began before the log was replaced or a stored change displaced.
  */
 export interface FoldSnapshot {
-  /** The fold rules the snapshot was built under, and the build: one the collection does not recognise is not read. A deploy costs one whole fold, and removes a class of mistake (round fifty-four, 2). */
+  /** The fold rules the snapshot was built under: another number is not read (round fifty-four, 2). Since round fifty-seven the build is kept for the record only, so a deploy that leaves the rules as they were costs no whole fold; a test fails when the fold's source changes and the number does not. */
   rules: number;
   build: string;
   device: string;
@@ -619,15 +616,16 @@ export async function readFold(): Promise<{ fold: FoldSnapshot; gen: number } | 
 export async function foldGen(): Promise<number> {
   return Number((await getMeta<number>(FOLD_GEN)) ?? 0);
 }
-/** Write the snapshot, unless the log changed under it since `gen` was read, or the snapshot stored is a newer build's; false then, and nothing is written. */
+/** Write the snapshot, unless the log changed under it since `gen` was read, or the snapshot stored was folded under newer rules; false then, and nothing is written. */
 export async function writeFold(fold: FoldSnapshot, gen: number): Promise<boolean> {
   return writing(async () => {
     const tx = (await openVault()).transaction('meta', 'readwrite');
     const now = Number((await tx.store.get(FOLD_GEN)) ?? 0);
     const had = (await tx.store.get(FOLD)) as FoldSnapshot | undefined;
-    // An old build's shell, still open after a deploy, must not overwrite the new build's snapshot, nor the new the old's
-    // back and forth: a build's id is its build time, and the newer one keeps the snapshot (round fifty-five, 2; the first reviewer's finding 14).
-    const newer = !!had?.build && /^\d+$/.test(had.build) && /^\d+$/.test(fold.build) && Number(had.build) > Number(fold.build);
+    // An old build's shell, still open after a deploy, must not overwrite a snapshot folded under newer rules, nor the new
+    // the old's back and forth: the newer rules keep the snapshot (round fifty-five, 2; since round fifty-seven by the
+    // rules, not the build, since the snapshot is keyed to the rules).
+    const newer = typeof had?.rules === 'number' && had.rules > fold.rules;
     if (now !== gen || newer) {
       await tx.done;
       return false;
@@ -677,12 +675,7 @@ export async function arrivalsAfter(seq: number): Promise<{ changes: Change[]; s
   const keys = await tx.objectStore('order').getAllKeys(IDBKeyRange.lowerBound(seq, true));
   const ch = tx.objectStore('changes');
   const got = await Promise.all(rows.map((r) => ch.get(r.t)));
-  return { changes: got.filter((c): c is Change => !!c).map(mendChange), seq: keys.length ? Number(keys[keys.length - 1]) : seq, gen };
-}
-/** Every change of one record, whatever its stamp: the repairs that judge a record's whole history read it here, not from the tail (round fifty-four, 2). */
-export async function changesOfRecord(kind: Change['kind'], id: string): Promise<Change[]> {
-  const db = await openVault();
-  return (await db.getAllFromIndex('changes', 'byRecord', [kind, id])).map(mendChange);
+  return { changes: got.filter((c): c is Change => !!c), seq: keys.length ? Number(keys[keys.length - 1]) : seq, gen };
 }
 /** Every stamp in the log, and nothing else: what a load from the snapshot needs of the log itself. */
 export async function changeKeys(): Promise<string[]> {

@@ -9,7 +9,6 @@ import type { Change } from '$core/log';
 import { hlcEncode, hlcDecode } from '$core/hlc';
 import { localDate } from '$core/dates';
 import { accNo, NUMBERING_SETTING } from '$lib/db/types';
-import { importV2 } from '$lib/import/v2';
 
 type Mem = {
   changes: Map<string, Change>;
@@ -50,7 +49,6 @@ vi.mock('$lib/db/vault', () => {
   m.foldGen = async () => 0;
   m.dropFold = async () => {};
   m.parkStamps = async (st: string[]) => { const had = (mem.meta.get('parked') as string[] | undefined) ?? []; const out = [...new Set([...had, ...st])]; mem.meta.set('parked', out); return out; };
-  if (!m.changesOfRecord) m.changesOfRecord = async (kind: string, id: string) => (await m.allChanges()).filter((c: Change) => c.kind === kind && c.id === id);
   m.lastArrival = async () => 0;
   m.arrivalsAfter = async () => ({ changes: [...mem.changes.values()], seq: 0, gen: 0 });
   m.changeKeys = async () => [...mem.changes.keys()];
@@ -127,7 +125,7 @@ describe('every write goes to the vault before memory (finding 6)', () => {
 });
 
 describe('the numbering scheme is a synced setting (finding 32)', () => {
-  it('setScheme writes a setting record; a device that only has the old meta value still reads it; the record wins over meta', async () => {
+  it('setScheme writes a setting record; a device with no record is on the default, whatever its meta holds; the record arrives by sync and takes over', async () => {
     const { collection, mem: vault } = await fresh('testdevice');
     expect(collection.scheme).toEqual({ mode: 'year', width: 4 });
     await collection.setScheme({ mode: 'prefix', prefix: 'GH', width: 3 });
@@ -135,11 +133,11 @@ describe('the numbering scheme is a synced setting (finding 32)', () => {
     expect(rec?.field).toBe('scheme');
     expect(rec?.value).toEqual({ mode: 'prefix', prefix: 'GH', width: 3 });
     expect(collection.nextAccessionNumber()).toBe('GH-001');
-    // An old device: meta only, no setting record in its log.
+    // A device with no setting record in its log is on the default; a meta value is not read (round fifty-seven).
     await fresh('olddevice000');
     mem.meta.set('scheme', { mode: 'prefix', prefix: 'OLD', width: 2 });
     const c3 = await reload();
-    expect(c3.scheme).toEqual({ mode: 'prefix', prefix: 'OLD', width: 2 });
+    expect(c3.scheme).toEqual({ mode: 'year', width: 4 });
     // The setting record arrives by sync and takes over.
     await c3.ingest([remote(Date.now() - 1000, 0, 'phone0000000', 'setting', NUMBERING_SETTING, 'scheme', { mode: 'prefix', prefix: 'NEW', width: 3 })], 'server');
     expect(c3.scheme).toEqual({ mode: 'prefix', prefix: 'NEW', width: 3 });
@@ -256,59 +254,21 @@ describe('location tree loops (finding 35)', () => {
   });
 });
 
-describe('follow() on a removed taxon (finding 36)', () => {
-  it('following clears the removed flag, so the species is listed and the button agrees with the list', async () => {
+describe('follow() (finding 36)', () => {
+  it('following keeps the species notes, lists the species, and unfollowing takes it off the list', async () => {
     const { collection } = await fresh('testdevice');
-    await collection.put('taxon', 'aloe-polyphylla', {
-      name: 'Aloe polyphylla',
-      removed: true,
-      myNotes: 'wanted'
-    });
+    await collection.put('taxon', 'aloe-polyphylla', { name: 'Aloe polyphylla', myNotes: 'wanted' });
     await collection.follow('aloe-polyphylla', 'Aloe polyphylla', 123, true);
     const t = collection.taxon('aloe-polyphylla');
     expect(t?.followed).toBe(true);
-    expect(t?.removed ?? null).toBeNull();
     expect(t?.myNotes).toBe('wanted');
-    expect(collection.mySpecies.get('aloe-polyphylla')).toMatchObject({
-      followed: true,
-      grown: 0
-    });
+    expect(collection.mySpecies.get('aloe-polyphylla')).toMatchObject({ followed: true, grown: 0 });
     expect(collection.taxa.some((x) => x.id === 'aloe-polyphylla')).toBe(true);
     await collection.follow('aloe-polyphylla', 'Aloe polyphylla', 123, false);
     expect(collection.mySpecies.has('aloe-polyphylla')).toBe(false);
   });
 });
 
-describe('importing the same v2 file twice (finding 5)', () => {
-  it('changes nothing: records already in the log are skipped, so edits made since the first import stand', async () => {
-    const { collection } = await fresh('testdevice');
-    const v2 = {
-      collection: {
-        accessions: {
-          'A-1': {
-            acc: 'A-1',
-            nameAsReceived: 'Copiapoa cinerea',
-            notes: 'v2 notes',
-            status: 'growing'
-          }
-        }
-      }
-    };
-    const exists = (kind: Change['kind'], id: string) => collection.exists(kind, id);
-    const first = importV2(v2, { now: Date.now() - 30 * 86_400_000, exists });
-    expect(first.report.alreadyHere).toBe(0);
-    await collection.ingest(first.changes);
-    expect(collection.accession('A-1')?.notes).toBe('v2 notes');
-    const twoWeeksAgo = Date.now() - 14 * 86_400_000;
-    await collection.ingest([remote(twoWeeksAgo, 0, 'testdevice', 'accession', 'A-1', 'notes', 'repotted, new mix'), remote(twoWeeksAgo, 1, 'testdevice', 'accession', 'A-1', 'status', 'dead')], 'server');
-    const again = importV2(v2, { now: Date.now(), exists });
-    expect(again.changes).toHaveLength(0);
-    expect(again.report.alreadyHere).toBe(1);
-    await collection.ingest(again.changes);
-    expect(collection.accession('A-1')?.notes).toBe('repotted, new mix');
-    expect(collection.accession('A-1')?.status).toBe('dead');
-  });
-});
 
 describe('a clock that was fast (round eight, 4)', () => {
   it('an edit after the correction wins its field by a stamp just past the old one, while other fields and other records are stamped at real time', async () => {
@@ -381,33 +341,6 @@ describe('round nine', () => {
     } finally {
       vi.useRealTimers();
     }
-  });
-  it('a record that arrived in a file counts from the day it arrived, whatever its changes are stamped (round nine, 3)', async () => {
-    const { collection } = await fresh('testdevice');
-    const old = Date.now() - 500 * 86_400_000;
-    await collection.ingest([remote(old, 0, 'v2import', 'accession', 'A-1', 'acc', 'A-1'), remote(old, 1, 'v2import', 'accession', 'A-1', 'taxonName', 'Lithops'), remote(old, 2, 'v2import', 'accession', 'A-1', 'status', 'growing')]);
-    expect(collection.madeOn('accession', 'A-1')).toBe(localDate());
-    const again = (await reload()) as typeof collection;
-    expect(again.madeOn('accession', 'A-1')).toBe(localDate()); // kept across a reload
-  });
-});
-
-describe('round ten', () => {
-  it('the import day is a field on the record, so a second device that receives the log counts from the same day (round ten, 3)', async () => {
-    const { collection, mem: first } = await fresh('testdevice');
-    const old = Date.now() - 500 * 86_400_000;
-    await collection.ingest([remote(old, 0, 'v2import', 'accession', 'A-1', 'acc', 'A-1'), remote(old, 1, 'v2import', 'accession', 'A-1', 'taxonName', 'Lithops'), remote(old, 2, 'v2import', 'accession', 'A-1', 'status', 'growing')]);
-    const imported = [...first.changes.values()].filter((c) => c.field === 'importedOn');
-    expect(imported).toHaveLength(1);
-    expect(imported[0].value).toBe(localDate());
-    expect(collection.accession('A-1')?.importedOn).toBe(localDate());
-    // Another device receives the whole log from the server, a month later by its own clock: same day.
-    const { collection: other } = await fresh('otherdevice0');
-    await other.ingest([...first.changes.values()], 'server');
-    expect(other.madeOn('accession', 'A-1')).toBe(localDate());
-    // A record that already carries the day is not stamped again by a later file.
-    await collection.ingest([remote(old, 2, 'v2import', 'accession', 'A-1', 'notes', 'again')]);
-    expect([...first.changes.values()].filter((c) => c.field === 'importedOn')).toHaveLength(1);
   });
 });
 
@@ -519,18 +452,6 @@ describe('round thirteen', () => {
 });
 
 describe('round fifteen', () => {
-  it('a plant removed in v2 stays removed after the import, and after a reload (round fifteen, 1)', async () => {
-    const { collection } = await fresh('testdevice');
-    const v2 = { collection: { accessions: { 'A-1': { acc: 'A-1', nameAsReceived: 'Aloe x', status: 'growing' } }, tombs: { 'a:A-2': 1_700_000_000_000 } } };
-    const { changes } = importV2(v2, { now: Date.now() });
-    await collection.ingest(changes);
-    expect(collection.accession('A-1')).toBeDefined();
-    expect(collection.accession('A-2')).toBeUndefined(); // not brought back to life by the import day
-    expect(collection.accessions.map((a) => a.id)).toEqual(['A-1']);
-    const again = (await reload()) as typeof collection;
-    expect(again.accession('A-2')).toBeUndefined();
-    expect(again.accession('A-1')?.importedOn).toBe(localDate());
-  });
   it('a duplicate is renumbered into the year of the number it held, not its acquisition year (round fifteen, 14)', async () => {
     const x = await fresh('devicex00000');
     const mine = await x.collection.addAccession({ taxonName: 'Copiapoa', acc: '2026-0007', acquired: '2019-05-01' });
@@ -545,33 +466,6 @@ describe('round fifteen', () => {
 });
 
 describe('round sixteen', () => {
-  it('a plant an earlier build\'s import brought back (a tombstone, then only its importedOn) is removed again on load, once, and stays removed (round sixteen, 5)', async () => {
-    const { collection } = await fresh('testdevice');
-    const wall = 1_700_000_000_000;
-    const put = (c: Change) => mem.changes.set(c.t, c);
-    // what a round-fourteen import left in the log: the plant, its removal, then the import day stamped after it
-    put(remote(wall, 0, 'aaaaaaaaaaaa', 'accession', 'A-2', 'taxonName', 'Aloe x'));
-    put(remote(wall, 1, 'aaaaaaaaaaaa', 'accession', 'A-2', '_deleted', true));
-    put(remote(wall + 5000, 0, 'testdevice00', 'accession', 'A-2', 'importedOn', '2026-09-20'));
-    // and a plant removed and then edited on purpose, which is a real revival and stays
-    put(remote(wall, 0, 'bbbbbbbbbbbb', 'accession', 'B-1', 'taxonName', 'Lithops'));
-    put(remote(wall, 2, 'bbbbbbbbbbbb', 'accession', 'B-1', 'status', 'growing'));
-    put(remote(wall, 1, 'bbbbbbbbbbbb', 'accession', 'B-1', '_deleted', true));
-    put(remote(wall + 5000, 0, 'bbbbbbbbbbbb', 'accession', 'B-1', 'notes', 'back'));
-    const before = mem.changes.size;
-    const again = (await reload()) as typeof collection;
-    expect(again.accession('A-2')).toBeUndefined();
-    expect(again.accession('B-1')?.notes).toBe('back');
-    // Nothing written: since round fifty-five an `importedOn` is not an edit in the fold, so A-2 folds as removed on every
-    // load and every device without a change to sync (FOLD_RULES 2); and since round fifty-six B-1, a record of the oldest
-    // shape, is read with its id as its number rather than given it as a change at load.
-    expect(mem.changes.size).toBe(before);
-    expect(accNo(again.accession('B-1')!)).toBe('B-1');
-    const third = (await reload()) as typeof collection;
-    expect(third.accession('A-2')).toBeUndefined();
-    expect(mem.changes.size).toBe(before);
-    void collection;
-  });
   it('several plants at once are one commit: a refused write stores none of them and issues no number; a good one stores all, consecutively (round sixteen, 14)', async () => {
     const { collection } = await fresh('testdevice');
     mem.fail = 'QuotaExceededError: the disk is full';

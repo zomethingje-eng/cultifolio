@@ -55,9 +55,10 @@ let corpusResolved: CorpusInfo | null = null;
 export const corpusId = () => corpusInfo().then((c) => c.id);
 const remembered = (): CorpusInfo => {
   try {
-    const raw = localStorage.getItem(CORPUS_KEY) ?? '';
-    if (raw.startsWith('{')) { const j = JSON.parse(raw) as CorpusInfo; return { id: j.id ?? '', buckets: Number.isInteger(j.buckets) && j.buckets >= 1 ? j.buckets : BUCKETS }; }
-    return { id: raw, buckets: BUCKETS }; // the id alone, as builds before this round kept it
+    const raw = localStorage.getItem(CORPUS_KEY);
+    if (!raw) return { id: '', buckets: BUCKETS };
+    const j = JSON.parse(raw) as CorpusInfo;
+    return { id: typeof j.id === 'string' ? j.id : '', buckets: Number.isInteger(j.buckets) && j.buckets >= 1 ? j.buckets : BUCKETS };
   } catch { return { id: '', buckets: BUCKETS }; }
 };
 /** The corpus id on a request that is not a bucket (a search, a window of rows): `n` there is the request's own limit, and no count is named (the first reviewer's finding 24). */

@@ -44,8 +44,7 @@ function readStored(): void {
     if (typeof localStorage === 'undefined') return;
     const raw = localStorage.getItem(OFFSET_KEY);
     if (raw) {
-      // Older builds kept the bare number; this one keeps when it was last confirmed.
-      const v = raw.startsWith('{') ? (JSON.parse(raw) as Stored) : { offset: Number(raw), confirmedAt: Date.now() };
+      const v = JSON.parse(raw) as Stored;
       if (Number.isFinite(v.offset) && Date.now() - (v.confirmedAt || 0) < TRUST_EXPIRES_MS) { offsetMs = v.offset; confirmedAt = v.confirmedAt || Date.now(); }
       else localStorage.removeItem(OFFSET_KEY);
     }

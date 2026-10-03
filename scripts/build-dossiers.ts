@@ -60,7 +60,7 @@ import { genusOf, slugify, canonicalSynonym } from '../src/lib/core/names';
 import { makeFetcher, fixtureFetcher } from '../src/lib/dossier/fetch';
 import { dossierPath, DOSSIER_V, parseDossier, unchain } from '../src/lib/dossier/schema';
 import { sheetOf, type Sheet } from '../src/lib/dossier/sheet';
-import { bucketOf, BUCKETS, bucketNames } from '../src/lib/core/bucket';
+import { bucketOf } from '../src/lib/core/bucket';
 import { buildProducts } from '../src/lib/dossier/products';
 import { productPath, isFileHash, type Manifest } from '../src/lib/dossier/manifest';
 import { welwitschia, copiapoa, refused } from '../fixtures/upstream';
@@ -489,13 +489,6 @@ function sheetBuckets(index: IndexEntry[], idxDir: string, count: number): { buc
   }
   return { buckets, n };
 }
-/** The 32 sheet-bucket files beside the index, as every build before round fifty-three wrote them: a Worker that finds no manifest reads these. */
-function writeSheetBuckets(index: IndexEntry[], idxDir: string): void {
-  const { buckets, n } = sheetBuckets(index, idxDir, BUCKETS);
-  mkdirSync(`${idxDir}/sheets`, { recursive: true });
-  for (const b of bucketNames(BUCKETS)) writeFileSync(`${idxDir}/sheets/${b}.json`, JSON.stringify(buckets.get(b) ?? []));
-  console.log(`  sheets: ${n} species into ${BUCKETS} bucket files → ${idxDir}/sheets/`);
-}
 
 /**
  * The build's products, each under the hash of its content, and the manifest that names them (round fifty-three, 2;
@@ -543,7 +536,6 @@ function writeIndexFromDisk(): void {
   const indexText = JSON.stringify(index, null, 1);
   writeFileSync(`${idxDir}/index.json`, indexText);
   console.log(`  index: ${index.length} species`);
-  writeSheetBuckets(index, idxDir);
   writeProducts(index, idxDir, indexText, (count) => sheetBuckets(index, idxDir, count).buckets);
   // A dossier under a synonym is a page the backbone would not put its records under: a rebuild follows it to
   // the accepted species. A doubtful name has nothing to follow to (the backbone holds it as doubtful, with no

@@ -51,13 +51,13 @@ describe('export → wipe → import', () => {
     await collection.put('taxon', 'copiapoa-cinerea', { name: 'Copiapoa cinerea', gbifKey: 7, myNotes: 'keep dry in winter' });
     const p = await collection.addPhoto({ acc: a.id, d: '2026-04-02', w: 10, h: 10, bytes: 13, blob: new Blob([jpeg(10)]), thumb: new Blob([jpeg(3)]) });
     const before = { changes: mem.changes.size, photos: mem.photos.size };
-    const { bytes: zip } = await buildBackup({ changes: [...mem.changes.values()], scheme: collection.scheme, readPhoto: async (id) => (mem.photos.has(id) ? { id, full: jpeg(10), thumb: jpeg(3) } : null) });
+    const { bytes: zip } = await buildBackup({ changes: [...mem.changes.values()], readPhoto: async (id) => (mem.photos.has(id) ? { id, full: jpeg(10), thumb: jpeg(3) } : null) });
     // Wipe (a private window) and read the file back.
     mem.changes.clear();
     mem.photos.clear();
     mem.outbox.clear();
     const file = await readBackup(zip);
-    expect(file.manifest?.scheme).toEqual({ mode: 'prefix', prefix: 'GH', width: 3 });
+    expect(file.changes.some((c) => c.kind === 'setting' && c.field === 'scheme')).toBe(true);
     expect(file.photoIds).toEqual([p.id]);
     const merge = previewMerge([], file.changes);
     expect(merge.fresh).toHaveLength(before.changes);

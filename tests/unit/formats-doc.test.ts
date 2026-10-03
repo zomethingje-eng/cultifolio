@@ -7,11 +7,11 @@
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { deriveKeys, sealJson, seal, newVaultKey, batchFingerprint, packPhoto } from '$lib/sync/crypto';
+import { deriveKeys, sealJson, seal, open, newVaultKey, batchFingerprint, packPhoto } from '$lib/sync/crypto';
 import { MAX_NEW_VAULTS_PER_DAY, MAX_IP_BYTES_PER_DAY, MAX_BYTES, RATE } from '$lib/server/sync';
 import { MAX_AHEAD_MS, hlcEncode } from '$core/hlc';
 import { B32, parseVaultKey } from '$lib/sync/crypto';
-import { Manifest, LegacyChanges, photoPath, thumbPath, backupName, EXT } from '$lib/backup/format';
+import { Manifest, photoPath, thumbPath, backupName, EXT } from '$lib/backup/format';
 import { PUSH_HEADERS, batchName, listAfter, BATCH_NAME, logBatch, STATUS } from '$lib/sync/limits';
 import { buildBackup } from '$lib/backup/backup';
 import { unzipSync } from 'fflate';
@@ -89,7 +89,6 @@ const doc = {
   aad: says(/associated data the UTF-8 bytes of (\S+), where kind is (\w+) or (\w+)/),
   aadBatch: says(/A log batch's data likewise carries its name on the server \((\S+), the name without/),
   aadPhoto: says(/a photo's data also carries its id \((\S+)\)/)[1],
-  aadOldPhoto: says(/builds before that binding carry (\S+) alone/)[1],
   hourDigits: Number(says(/the hour \(in ms, padded to (\d+) digits\)/)[1]),
   fpDigits: says(/the first (\w+) hex digits of HMAC-SHA-256, under the vault's naming key, of exactly the bytes JavaScript's JSON\.stringify\(changes\) gives/)[1],
   limits: says(/One address \(an IPv4 address, or an IPv6 \/64\) is bounded: (\d+) new vaults and (\d+) GB stored per day, (\d+) requests per ten minutes to open, list and push and ([\d,]+) to fetch or store/),
@@ -99,7 +98,7 @@ const doc = {
   idBytes: says(/take the (first|last) (\d+) bytes of the digest and map each byte b to ALPHABET\[b mod (\d+)\]/),
   excluded: says(/an alphabet without ([A-Z0-9, ]+?) or ([A-Z0-9]), in six groups of five/),
   ikm: says(/the UTF-8 bytes of that 30-character string, (not a decoding) of it/),
-  photoOrder: says(/a reader should try the (named|plain) form first/),
+  bindingOnly: says(/(A blob opens under its own binding and no other)\./)[1],
   endian: says(/A photo decrypts to a 4-byte (big|little)-endian length, the full JPEG, then the thumbnail/),
   tag: Number(says(/\(a (\d+)-bit tag, appended as WebCrypto does\)/)[1]),
   nameHour: says(/the hour \(in ms, padded to 13 digits\) of the batch's (first|last) change/)[1],
@@ -117,7 +116,7 @@ const doc = {
   storedAt: says(/stored at (vault\/<id>\/log\/<hour>-0000-<device>-<fingerprint>\.bin)/)[1],
   photoAt: says(/at (vault\/<vaultId>\/photo\/<photoId>\.bin)/)[1],
   endpoints: says(/The endpoints: POST (\/api\/sync\/vault) \{ id, token, create \}; GET (\/api\/sync\/log)\?vault=&since=<ms>.*?POST (\/api\/sync\/log)\?vault= with headers (X-Batch), (X-Batch-Plain), (X-Device); GET (\/api\/sync\/log)\/<hour>-0000-<device>-<fingerprint>\?vault=.*?(PUT\|GET\|HEAD\|DELETE) (\/api\/sync\/photo)\/<id>\?vault=/),
-  manifestKeys: says(/manifest\.json \{ (format): "cultifolio-backup", (v): 1, (exported): [^,]*, (device), (app), (counts): \{ ([a-zA-Z, ]+) \}, (photosMissing): [^\]]*\], (scheme) \}/),
+  manifestKeys: says(/manifest\.json \{ (format): "cultifolio-backup", (v): 1, (exported): [^,]*, (device), (app), (counts): \{ ([a-zA-Z, ]+) \}, (photosMissing): [^\]]*\] \}/),
   tooBig: says(/A body larger than the limit is (\d+)/)[1],
   rateLimited: says(/past any of these the answer is (\d+) with Retry-After/)[1],
   ceilings: says(/past either the answer to a creation is (\d+) with a sentence/)[1],
@@ -129,7 +128,7 @@ const doc = {
   eventTypes: says(/t \(([a-z, ]+)\), and as the type needs/)[1].split(/,\s*/),
   backupFile: says(/(cultifolio-YYYY-MM-DD\.cultifolio\.zip), an ordinary zip/)[1],
   backupPaths: says(/(photos\/<id>\.jpg) full-size JPEG, long edge (\d+) px (photos\/<id>\.t\.jpg) (\d+) px thumbnail (plants\.csv) one row per plant[^)]*\) (batches\.csv) one row per propagation batch[^)]*\) (events\.csv) one row per timeline entry[^)]*\) (device\.json) the exporting device's settings \{ (site): \{ lat, lon, name\? \} \(as entered, not rounded\), (units), (labels), (prefs) \}/),
-  legacy: says(/older changes-only JSON export \(\{ "format": "(cultifolio-changes)", "v": (\d), "changes": \[\.\.\.\] \}\)/),
+  zipOnly: says(/(Only the zip is read)\./)[1],
   listReply: says(/returns \{ batches: \[\{ (key), (at) \}\], (more), (next)\?: \{ at, key \} \}; the next page is &(after)=<at>:<key>/),
   bearer: says(/All but creation take (Authorization): (Bearer) <token>/),
   fullBody: says(/is 507 with \{ error: "(vault full)", (bytes), (limit) \}/),
@@ -201,7 +200,7 @@ describe('/about/formats is enough to decrypt a vault, and says what the code do
     const messy = `${doc.clean[1]}${key.toLowerCase().replace(/-/g, ' ')}\n`;
     expect((await fromTheDoc(messy)).id).toBe((await deriveKeys(key)).id);
   });
-  it('opens a photograph by the named binding, and one from before the binding by the plain one, as the page says to', async () => {
+  it('opens a photograph by its named binding, and nothing sealed without it, as the page says (round fifty-seven)', async () => {
     const key = newVaultKey();
     const app = await deriveKeys(key);
     const d = await fromTheDoc(key);
@@ -209,15 +208,14 @@ describe('/about/formats is enough to decrypt a vault, and says what the code do
     const full = new Uint8Array(3000).fill(1), thumb = new Uint8Array(300).fill(2);
     const packed = packPhoto(full, thumb);
     const named = await seal(app, 'photo', packed, 'p1');
-    const plain = await seal(app, 'photo', packed); // an older build's photograph
-    const forms = doc.photoOrder[1] === 'named' ? [fill(doc.aadPhoto, d, 'photo', 'p1'), fill(doc.aadOldPhoto, d, 'photo')] : [fill(doc.aadOldPhoto, d, 'photo'), fill(doc.aadPhoto, d, 'photo', 'p1')];
-    const got = await openFromTheDoc(d, forms[0], named); // the first form the page names must open a current photograph
+    const got = await openFromTheDoc(d, fill(doc.aadPhoto, d, 'photo', 'p1'), named);
     expect(got.length).toBe(packed.length);
     const len = new DataView(got.buffer, got.byteOffset).getUint32(0, doc.endian[1] === 'little');
     expect(len).toBe(full.length); // read the way the page says, the length is the JPEG's
     expect(doc.tag).toBe(128);
-    await expect(openFromTheDoc(d, fill(doc.aadPhoto, d, 'photo', 'p1'), plain)).rejects.toThrow();
-    expect((await openFromTheDoc(d, fill(doc.aadOldPhoto, d, 'photo'), plain)).length).toBe(packed.length);
+    expect(doc.bindingOnly).toBeTruthy();
+    const plain = await seal(app, 'photo', packed);
+    await expect(open(app, 'photo', plain, 'p1')).rejects.toThrow(); // the app opens nothing sealed without its binding, as the page says
     // "its full JPEG plus its thumbnail plus 17 bytes and the 16-byte tag"
     expect(Number(doc.photoSize[1])).toBe(THUMB_EDGE);
     expect(named.length).toBe(full.length + thumb.length + Number(doc.photoSize[2]) + Number(doc.photoSize[3]));
@@ -320,7 +318,7 @@ describe('/about/formats is enough to decrypt a vault, and says what the code do
     // the manifest keys the page lists are the schema's, and the counts it lists are the summary's
     const m = doc.manifestKeys;
     const schemaKeys = Object.keys(Manifest.entries);
-    expect([m[1], m[2], m[3], m[4], m[5], m[6], m[8], m[9]].sort()).toEqual(schemaKeys.sort()); // both ways: a key added to the schema must be on the page
+    expect([m[1], m[2], m[3], m[4], m[5], m[6], m[8]].sort()).toEqual(schemaKeys.sort()); // both ways: a key added to the schema must be on the page
     expect(m[7].split(/,\s*/).sort()).toEqual(['accessions', 'changes', 'events', 'locations', 'photoBytes', 'photos', 'sowings', 'taxa']);
     // the record kinds, the reserved names and the event types the page lists are the code's, no more and no fewer
     expect([...doc.kinds].sort()).toEqual([...KINDS].sort());
@@ -342,8 +340,6 @@ describe('/about/formats is enough to decrypt a vault, and says what the code do
     // the object keys the page names are the ones the Worker stores under
     expect(batchKey('V', '1789520000000-0000-abcdefabcdef-ffffffffffff')).toBe(doc.storedAt.replace('<id>', 'V').replace('<hour>-0000-<device>-<fingerprint>', '1789520000000-0000-abcdefabcdef-ffffffffffff'));
     expect(photoKey('V', 'p1234567')).toBe(doc.photoAt.replace('<vaultId>', 'V').replace('<photoId>', 'p1234567'));
-    expect(LegacyChanges.entries.format.literal).toBe(doc.legacy[1]);
-    expect(Number(doc.legacy[2])).toBe(1);
     // the key alphabet the page describes by exclusion is the code's
     const excluded = [...doc.excluded[1].split(/,\s*/), doc.excluded[2]];
     const alphabet = [...'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'].filter((c) => !excluded.includes(c)).join('');

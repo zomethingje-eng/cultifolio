@@ -6,9 +6,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { GET } from '../../src/routes/api/sheets/+server';
 import { GET as corpusGET } from '../../src/routes/api/corpus/+server';
+import { GET as entriesGET } from '../../src/routes/api/entries/+server';
 import { resetRateLimits, RATE } from '$lib/server/sync';
 import { bucketOf } from '$core/bucket';
-import { sheetsPath } from '$lib/server/sheets';
 
 type Cache = { match: (r: Request) => Promise<Response | undefined>; put: (r: Request, res: Response) => Promise<void> };
 function memCache(): Cache & { store: Map<string, Response>; puts: string[] } {
@@ -23,10 +23,11 @@ function r2(files: Record<string, unknown>) {
 }
 const noStatic = (async () => new Response('', { status: 404 })) as typeof fetch;
 function call(q: string, o: { cache?: Cache; store?: ReturnType<typeof r2>; ip?: string } = {}) {
-  const url = new URL(`http://x/api/sheets?${q}`);
+  const url = new URL(`http://x/api/sheets?${q}${/(^|&)n=/.test(q) ? '' : '&n=32'}`); // every request names the count it hashed by (round fifty-seven)
   const platform = { env: { QUEUE: kv(), STORE: o.store }, caches: o.cache ? { default: o.cache } : undefined, context: { waitUntil: (p: Promise<unknown>) => void p } } as unknown as App.Platform;
   return GET({ url, platform, fetch: noStatic, getClientAddress: () => o.ip ?? '1.2.3.4' } as never);
 }
+const ask = (q: string) => entriesGET({ url: new URL(`http://x/api/entries?${q}`), platform: { env: { QUEUE: kv() } } as unknown as App.Platform, fetch: noStatic } as never);
 beforeEach(() => resetRateLimits());
 
 describe('/api/sheets', () => {
@@ -61,12 +62,9 @@ describe('/api/sheets', () => {
     expect(none.headers.get('cache-control')).toBe('no-store');
     expect(cache.puts).toEqual([]);
   });
-  it('serves the bucket file the corpus build wrote when the store has one: one read, nothing derived', async () => {
-    const b = '07';
-    const file = [{ key: 1, slug: 'x-y', name: { scientific: 'X y' }, centroid: null, habitatLat: null, climate: { status: 'none' } }];
-    const store = r2({ [sheetsPath(b)]: file, 's/v2/index.json': [] });
-    const r = await call(`b=${b}`, { store });
-    expect(await r.json()).toEqual(file);
+  it('a request that names no bucket count is refused (round fifty-seven)', async () => {
+    await expect(call('b=07&n=')).rejects.toMatchObject({ status: 400 });
+    await expect(ask('b=07')).rejects.toMatchObject({ status: 400 });
   });
   it('each derived bucket counts against the sheets rate bucket; a cached one does not (round thirteen, 12)', async () => {
     const cache = memCache();
@@ -96,18 +94,16 @@ describe('/api/corpus', () => {
   });
 });
 
-import { GET as entriesGET } from '../../src/routes/api/entries/+server';
 describe('/api/entries', () => {
-  const ask = (q: string) => entriesGET({ url: new URL(`http://x/api/entries?${q}`), platform: { env: { QUEUE: kv() } } as unknown as App.Platform, fetch: noStatic } as never);
   it('is cacheable under the corpus now served, and no-store under any other id, so no cache keeps old entries under a new id (round sixteen, 12)', async () => {
     const b = bucketOf('copiapoa-cinerea');
-    const current = await ask(`b=${b}&c=fixture`);
+    const current = await ask(`b=${b}&n=32&c=fixture`);
     expect(current.headers.get('cache-control')).toBe('public, max-age=86400');
     expect(((await current.json()) as Array<{ slug: string }>).some((e) => e.slug === 'copiapoa-cinerea')).toBe(true);
-    const stale = await ask(`b=${b}&c=old-etag`);
+    const stale = await ask(`b=${b}&n=32&c=old-etag`);
     expect(stale.headers.get('cache-control')).toBe('no-store');
     expect(((await stale.json()) as Array<{ slug: string }>).some((e) => e.slug === 'copiapoa-cinerea')).toBe(true); // still answered
-    const none = await ask(`b=${b}`);
+    const none = await ask(`b=${b}&n=32`);
     expect(none.headers.get('cache-control')).toBe('no-store');
   });
 });

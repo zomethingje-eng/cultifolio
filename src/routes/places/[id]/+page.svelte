@@ -297,7 +297,7 @@
         <input class="searchbar" type="search" placeholder="Filter by number, name or place…" bind:value={moveQ} aria-label="Filter plants to move" />
         <div class="rows moverows">
           {#each moveShown.slice(0, 200) as a (a.id)}
-            <label class="azrow accrow row"><input type="checkbox" bind:checked={moveChosen[a.id]} /><span><span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} /></span><span class="fam">{a.locationId ? collection.locationName(a.locationId) : a.location ?? 'no place'}</span></span></label>
+            <label class="azrow accrow row"><input type="checkbox" bind:checked={moveChosen[a.id]} /><span><span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} /></span><span class="fam">{a.locationId ? collection.locationName(a.locationId) : 'no place'}</span></span></label>
           {/each}
           {#if moveShown.length > 200}<p class="small muted">{moveShown.length - 200} more: filter to find them.</p>{/if}
           {#if !moveShown.length}<p class="small muted">No plant matches.</p>{/if}

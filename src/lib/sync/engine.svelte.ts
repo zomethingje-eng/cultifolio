@@ -55,7 +55,7 @@ interface SyncMeta {
    * Batches that could not be opened or validated, by name, with why, and the build that failed to read them. Also in
    * `have`, so they never block the cursor; a new build drops them from both and reads them again (round twelve, 2).
    */
-  quarantined?: Array<{ key: string; error: string; at: string; build?: string; /** what the key names; an entry without it from before round fifteen is told by its error text */ kind?: 'batch' | 'photo' }>;
+  quarantined?: Array<{ key: string; error: string; at: string; build?: string; /** what the key names */ kind?: 'batch' | 'photo' }>;
   /** Things the server refused to take from this device, by name, with why. They stay in the outbox; the rest of a sync goes on. */
   refused?: Array<{ key: string; error: string; at: string }>;
   /** HLCs of stored changes the fold is holding back because they are stamped too far ahead of this device's clock. */
@@ -582,7 +582,7 @@ class Sync {
       return (await this.pushBatch(m, batch.slice(0, mid))) + (await this.pushBatch(m, batch.slice(mid)));
     }
     const headers: Record<string, string> = { ...this.h(m), [PUSH_HEADERS.batch]: key, [PUSH_HEADERS.plain]: plain };
-    if (collection.device) headers[PUSH_HEADERS.device] = collection.device;
+    headers[PUSH_HEADERS.device] = collection.device || 'dev'; // the name's own device part
     const r = await fetch(`${this.base}/api/sync/log?vault=${this.k(m).id}`, { method: 'POST', headers, body: body as BodyInit });
     if (r.ok) {
       // Acknowledged out of the outbox only while the stored sync record still carries this run's key, checked in the ack's
@@ -772,7 +772,7 @@ class Sync {
     // fifteen, 6: every deploy is a new build, and one photo entry ended every run on the device with a failed fetch).
     // A failure to re-read one key does not end the run: the entry stands, the failure is noted, and the number repair
     // and the photo pull still happen; only a 429 stops the run, since that is the server asking for time.
-    const isPhoto = (q: { kind?: string; error: string }) => q.kind === 'photo' || (!q.kind && q.error.startsWith('photo:'));
+    const isPhoto = (q: { kind?: string }) => q.kind === 'photo';
     for (const q of (m.quarantined ?? []).filter((q) => q.build !== BUILD && !isPhoto(q))) {
       this.step(m, 'Reading a batch set aside by an earlier build…');
       let ok: boolean;
@@ -895,8 +895,8 @@ class Sync {
       if (r.status === 429) this.limited(r);
       if (this.meta !== m) throw stopped();
       if (r.status === 403) {
-        // Stored before proofs were kept, or under another vault's proof: the bytes stay, counted, and the sync page says so once (round fifty-one, 2).
-        this.note(m, 'refused', id, 'photo: the server kept the bytes of a removed photograph, since its upload left no removal proof (uploaded by an older build)');
+        // Under another vault's proof: the bytes stay, counted, and the sync page says so once (round fifty-one, 2).
+        this.note(m, 'refused', id, 'photo: the server kept the bytes of a removed photograph, since the removal proof did not match the one its upload left');
       } else if (!r.ok && r.status !== 404) {
         // A failed removal is a note, not a failed run: the pull succeeded, and the bytes are asked for again next run (round fifty-one, 2).
         this.lastError = `photo ${id} removal: ${r.status} (tried again next time)`;

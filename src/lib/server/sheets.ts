@@ -3,27 +3,21 @@ import { bucketOf } from '$core/bucket';
 
 export { sheetOf, type Sheet, type SheetMonth, type SheetClimate } from '$dossier/sheet';
 import { sheetOf, type Sheet } from '$dossier/sheet';
-import { DOSSIER_V } from '$dossier/schema';
 
 const CACHE_MS = 10 * 60_000;
 const cache = new Map<string, { at: number; sheets: Sheet[] }>();
 
-/** Where the corpus build writes a bucket's sheets (`npm run dossier -- --index`), beside index.json. */
-export const sheetsPath = (bucket: string) => `s/v${DOSSIER_V}/sheets/${bucket}.json`;
-
 /**
- * Every sheet in a bucket. First the file the corpus build wrote for it (one object read, R2 then the static corpus),
- * else derived here from the dossiers (a few hundred reads, sixteen at a time; the fixture corpus and a corpus uploaded
- * before the files existed). Kept ten minutes in this isolate; the route puts it in the edge cache (round twelve, 8).
+ * Every sheet in a bucket. The build's file named by the manifest (one object read), else derived here from the
+ * dossiers (a few hundred reads, sixteen at a time; the fixture corpus, which has no manifest). Kept ten minutes in
+ * this isolate; the route puts it in the edge cache (round twelve, 8).
  */
 export async function sheetsIn(platform: Platform, fetch: Fetch, bucket: string, corpus = ''): Promise<Sheet[]> {
   const ck = `${corpus}:${bucket}`; // keyed by corpus as well as bucket, so an isolate that outlives a refresh does not serve the old one (round thirteen, 4)
   const hit = cache.get(ck);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.sheets;
-  // The build's file under the corpus id first (round fifty-three, 2), then the bucket file beside the index as the builds before wrote it.
-  // Under a manifest the bucket file beside the index is another corpus's, laid out for thirty-two buckets: never served as this one's (round fifty-four, 3).
-  const { buckets, products } = await getCorpus(platform, fetch);
-  let out: Sheet[] | null = (await product<Sheet[]>(platform, fetch, `sheets/${bucket}.json`)) ?? (products ? null : await sheetsFile(platform, fetch, bucket));
+  const { buckets } = await getCorpus(platform, fetch);
+  let out: Sheet[] | null = await product<Sheet[]>(platform, fetch, `sheets/${bucket}.json`);
   if (!out) {
     const entries = (await getIndex(platform, fetch)).filter((e) => bucketOf(e.slug, buckets) === bucket);
     out = [];
@@ -39,17 +33,3 @@ export async function sheetsIn(platform: Platform, fetch: Fetch, bucket: string,
   return out;
 }
 
-async function sheetsFile(platform: Platform, fetch: Fetch, bucket: string): Promise<Sheet[] | null> {
-  const store = platform?.env?.STORE;
-  if (store) {
-    const obj = await store.get(sheetsPath(bucket));
-    if (obj) return (await obj.json()) as Sheet[];
-  }
-  try {
-    const r = await fetch(`/${sheetsPath(bucket)}`);
-    if (r.ok && (r.headers.get('content-type') ?? '').includes('json')) return (await r.json()) as Sheet[];
-  } catch {
-    /* no static file: derived below */
-  }
-  return null;
-}

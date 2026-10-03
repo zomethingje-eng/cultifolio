@@ -101,17 +101,14 @@ export async function seal(k: VaultKeys, kind: string, plain: Uint8Array, name?:
 
 const aad = (k: VaultKeys, kind: string, name?: string) => enc.encode(name ? `${k.id}|${kind}|${name}` : `${k.id}|${kind}`);
 
-/** Photos sealed before ids were bound, and batches sealed before names were (round thirty-eight, R1-7), open under the unnamed data; both are tried. */
+/** Opens under the binding it was sealed with and no other: a photo under its id, a batch under its name (round thirty-eight, R1-7; since round fifty-seven the unbound form is not tried). */
 export async function open(k: VaultKeys, kind: string, blob: Uint8Array, name?: string): Promise<Uint8Array> {
   if (blob.length < 14 || blob[0] !== V) throw new Error('not a sealed blob this version understands');
-  for (const ad of name ? [aad(k, kind, name), aad(k, kind)] : [aad(k, kind)]) {
-    try {
-      return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: blob.subarray(1, 13) as BufferSource, additionalData: ad }, k.enc, blob.subarray(13) as BufferSource));
-    } catch {
-      /* try the next binding */
-    }
+  try {
+    return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: blob.subarray(1, 13) as BufferSource, additionalData: aad(k, kind, name) }, k.enc, blob.subarray(13) as BufferSource));
+  } catch {
+    throw new Error('could not decrypt: wrong vault key, or the data was altered');
   }
-  throw new Error('could not decrypt: wrong vault key, or the data was altered');
 }
 
 export const sha256hex = async (b: Uint8Array) => hex(new Uint8Array(await crypto.subtle.digest('SHA-256', b as BufferSource)));

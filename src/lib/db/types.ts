@@ -35,7 +35,6 @@ export interface Accession {
   fieldNumber?: string | null;
   provenance?: Provenance | null;
   status: AccStatus;
-  location?: string | null; // free text (legacy); superseded by locationId when set
   locationId?: string | null; // a Location record id
   acquired?: string | null; // YYYY-MM-DD
   sourceFrom?: string | null;
@@ -48,8 +47,6 @@ export interface Accession {
   sowingId?: string | null;
   /** The photo shown as this plant's face; the newest photo when unset. */
   cover?: string | null;
-  /** The local day this record arrived in a file on some device (YYYY-MM-DD). Set once by the importer; day counters start here for a record whose id carries no time. */
-  importedOn?: string | null;
 }
 
 /**
@@ -99,7 +96,6 @@ export interface Taxon {
   name: string;
   gbifKey?: number | null;
   myNotes?: string | null;
-  removed?: boolean | null;
   /** On the grower's species list without a plant of it yet: wanted, or worth knowing more about. */
   followed?: boolean | null;
 }
@@ -173,8 +169,6 @@ export interface Sowing {
   notes?: string | null;
   /** As on a plant: the stamp of the notes the latest edit was based on. */
   notesBase?: string | null;
-  /** The local day this record arrived in a file on some device (YYYY-MM-DD). Set once by the importer; day counters start here for a record whose id carries no time. */
-  importedOn?: string | null;
 }
 
 export const PROP_METHODS: Array<{ k: PropMethod; label: string; unit: string; veg: boolean }> = [

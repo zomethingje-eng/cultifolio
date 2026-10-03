@@ -154,12 +154,12 @@ describe('the Worker and the manifest', () => {
     });
     const platform = platformWith(store);
     expect((await getCorpus(platform, noStatic)).id).toBe(manifest.id);
-    const e = await call(entriesGET as never, `/api/entries?b=${b}&c=${manifest.id}`, platform);
+    const e = await call(entriesGET as never, `/api/entries?b=${b}&n=32&c=${manifest.id}`, platform);
     expect((await e.json() as IndexEntry[]).map((x) => x.key)).toEqual([999_999]);
     expect(e.headers.get('cache-control')).toBe('public, max-age=86400');
     // the bucket whose file was dropped is hashed from the index
     const inOne = idx.filter((x) => bucketOf(x.slug, 32) === '01').map((x) => x.key);
-    expect(((await (await call(entriesGET as never, `/api/entries?b=01&c=${manifest.id}`, platform)).json()) as IndexEntry[]).map((x) => x.key)).toEqual(inOne);
+    expect(((await (await call(entriesGET as never, `/api/entries?b=01&n=32&c=${manifest.id}`, platform)).json()) as IndexEntry[]).map((x) => x.key)).toEqual(inOne);
     // the posting for "cop" names the first Aloe only, and the ranking judges it: no Copiapoa is found, so the postings answered
     const s = await call(searchGET as never, `/api/search?q=cop&c=${manifest.id}`, platform);
     expect(await s.json()).toEqual([]);
@@ -172,7 +172,7 @@ describe('the Worker and the manifest', () => {
     // a catalogue file the manifest does not name is derived from the index
     const fam = await call(rowsGET as never, `/api/rows?by=family&chip=all&c=${manifest.id}`, platform);
     expect(((await fam.json()) as { rows: Array<{ id: string }> }).rows.map((r) => r.id).sort()).toEqual(['asphodelaceae', 'cactaceae']);
-    const sh = await call(sheetsGET as never, `/api/sheets?b=00&c=${manifest.id}`, platform);
+    const sh = await call(sheetsGET as never, `/api/sheets?b=00&n=32&c=${manifest.id}`, platform);
     expect(((await sh.json()) as Array<{ slug: string }>).map((x) => x.slug)).toEqual(['spy-species']);
   });
   it('a corpus past ten thousand species is served in sixty-four buckets, and a bucket name from the old count is refused', async () => {

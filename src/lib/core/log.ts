@@ -31,11 +31,13 @@ export type State = Map<string, Record_>; // key = `${kind}:${id}`
 export const key = (kind: Kind, id: string) => `${kind}:${id}`;
 
 /**
- * The version of the fold's rules: `apply`, the hold, the park, the required fields, what `mendChange` mends. A snapshot
- * of the folded state built under another number is not read; the log is folded again (round fifty-three, 1). Bump it
- * with any change to those rules, since a snapshot is a fold this build never ran.
+ * The version of the fold's rules: `apply`, the hold, the park, the required fields. A snapshot of the folded state
+ * built under another number is not read; the log is folded again (round fifty-three, 1). Bump it with any change to
+ * those rules, since a snapshot is a fold this build never ran; a test holds a hash of the fold's source and fails when
+ * the source changes and this number does not (round fifty-seven). 3: an `importedOn` is an edit like any other, since
+ * no build writes one.
  */
-export const FOLD_RULES = 2;
+export const FOLD_RULES = 3;
 
 /** Field names the record itself owns, plus the fold's own bookkeeping names; a change may never set them. */
 export const RESERVED_FIELDS = new Set(['id', 'kind', '_t', '_deleted=', '*']);
@@ -90,53 +92,14 @@ export const FIELD_ENUMS: Partial<Record<Kind, Record<string, readonly string[]>
   location: { type: ['room', 'shelf', 'bench', 'tray', 'windowsill', 'greenhouse', 'coldframe', 'garden', 'outdoor', 'other'] }
 };
 export const FIELD_TYPES: Record<Kind, Record<string, ValueType>> = {
-  accession: { ...strings('acc', 'taxonName', 'nameAsReceived', 'cultivar', 'nameKind', 'parentage', 'fieldNumber', 'provenance', 'status', 'location', 'locationId', 'acquired', 'sourceFrom', 'sourceRef', 'sourceForm', 'price', 'notes', 'notesBase', 'sowingId', 'cover', 'importedOn'), taxonKey: 'number' },
-  sowing: { ...strings('no', 'taxonName', 'cultivar', 'nameKind', 'parentage', 'method', 'parentAcc', 'sown', 'sourceFrom', 'sourceRef', 'fieldNumber', 'provenance', 'medium', 'container', 'treatment', 'locationId', 'status', 'notes', 'notesBase', 'importedOn'), taxonKey: 'number', count: 'number', bottomHeatC: 'number', covered: 'boolean' },
+  accession: { ...strings('acc', 'taxonName', 'nameAsReceived', 'cultivar', 'nameKind', 'parentage', 'fieldNumber', 'provenance', 'status', 'locationId', 'acquired', 'sourceFrom', 'sourceRef', 'sourceForm', 'price', 'notes', 'notesBase', 'sowingId', 'cover'), taxonKey: 'number' },
+  sowing: { ...strings('no', 'taxonName', 'cultivar', 'nameKind', 'parentage', 'method', 'parentAcc', 'sown', 'sourceFrom', 'sourceRef', 'fieldNumber', 'provenance', 'medium', 'container', 'treatment', 'locationId', 'status', 'notes', 'notesBase'), taxonKey: 'number', count: 'number', bottomHeatC: 'number', covered: 'boolean' },
   location: { ...strings('name', 'parentId', 'type', 'notes'), indoor: 'boolean', floorC: 'number', floorHeld: 'boolean', ppfd: 'number', lightHours: 'number', lat: 'number', lon: 'number', altM: 'number', sort: 'number' },
   event: { ...strings('acc', 'd', 't', 'note', 'cause', 'used'), followUp: 'number', n: 'number', measures: 'object', auto: 'boolean', plants: 'array' },
   photo: { ...strings('acc', 'sowing', 'd', 'dFrom', 'caption', 'sha'), w: 'number', h: 'number', bytes: 'number' },
-  taxon: { ...strings('name', 'myNotes'), gbifKey: 'number', removed: 'boolean', followed: 'boolean' },
+  taxon: { ...strings('name', 'myNotes'), gbifKey: 'number', followed: 'boolean' },
   setting: { scheme: 'object' }
 };
-
-/**
- * A change as an older build may have written it, put right where that is safe: a finite number in a field that takes
- * text (a v2 file's price of 12, written through before round twenty-eight) becomes its text. Nothing else is changed;
- * the same object comes back when there is nothing to mend (round twenty-nine, 2).
- */
-/**
- * The v2 importer's method words before round twenty-eight: it wrote a label lower-cased with one trailing "s" cut
- * (`label.toLowerCase().replace(/s$/, '')`), so "Offsets / pups" was stored as "offsets / pup", which is the one
- * spelling the hand-written list of round thirty-three missed (round thirty-five, R1-1). The table is made by that
- * rule over the labels the v2 app had, and the labels themselves, so the test checks what was written.
- */
-const V2_METHOD_LABELS: Array<[string, string]> = [['Seeds', 'seed'], ['Seed', 'seed'], ['Cuttings', 'cutting'], ['Stem cuttings', 'cutting'], ['Offsets / pups', 'offset'], ['Offsets', 'offset'], ['Leaf cuttings', 'leaf'], ['Division', 'division'], ['Divisions', 'division'], ['Bulbils / bulblets', 'bulbil'], ['Bulbils', 'bulbil'], ['Grafts', 'graft']];
-export const OLD_METHODS: Record<string, string> = Object.fromEntries(V2_METHOD_LABELS.flatMap(([label, k]) => [[label.toLowerCase(), k], [label.toLowerCase().replace(/s$/, ''), k]]));
-/** The provenance text the v2 importer passed through, by the app's word: only these, exactly. */
-const OLD_PROVENANCE: Record<string, string> = { 'wild collected': 'wild', 'wild-collected': 'wild', 'habitat collected': 'wild', 'habitat-collected': 'wild', 'ex habitat': 'f1', 'raised from wild-collected seed': 'f1', 'seed-grown from wild-collected seed': 'f1', cultivated: 'fn', 'nursery grown': 'fn', 'nursery-grown': 'fn', vegetative: 'veg', 'vegetatively propagated': 'veg', 'not known': 'unknown', '?': 'unknown' };
-
-export function mendChange(c: Change): Change {
-  const want = Object.hasOwn(FIELD_TYPES[c.kind] ?? {}, c.field) ? FIELD_TYPES[c.kind][c.field] : undefined;
-  if (want === 'string' && typeof c.value === 'number' && Number.isFinite(c.value)) return { ...c, value: String(c.value) };
-  // And the other way: a count written as "3" by an old build folds as 3, rather than setting its batch aside on every
-  // device for good, since no later build would read a string there either (round thirty-three, 1).
-  if (want === 'number' && typeof c.value === 'string' && /^-?\d+(\.\d+)?$/.test(c.value.trim())) return { ...c, value: Number(c.value) };
-  // Words the v2 importer wrote before round twenty-eight: a method as the label lower-cased with its last "s" cut
-  // ("leaf cutting", "stem cutting"), a provenance as the file's own text ("Wild collected"). Those exact spellings are
-  // mended to the words the app uses wherever the log is read, so old batches keep their method on every device (round
-  // thirty, 1). Nothing else is touched: a word this build does not know ("tissue culture", "f2") folds as it is and
-  // is shown by its word, so a newer build's word survives a pass through an older one (round thirty-three, 2); a guess
-  // at a claim about wild origin was worse than the word itself.
-  if (c.kind === 'sowing' && c.field === 'method' && typeof c.value === 'string' && !FIELD_ENUMS.sowing!.method.includes(c.value)) {
-    const m = OLD_METHODS[c.value.trim().toLowerCase()];
-    return m ? { ...c, value: m } : c;
-  }
-  if ((c.kind === 'sowing' || c.kind === 'accession') && c.field === 'provenance' && typeof c.value === 'string' && !FIELD_ENUMS.accession!.provenance.includes(c.value)) {
-    const m = OLD_PROVENANCE[c.value.trim().toLowerCase()];
-    return m ? { ...c, value: m } : c;
-  }
-  return c;
-}
 
 /**
  * The fields without which a record of the kind cannot be shown at all: a plant with no name, an event with no plant
@@ -157,7 +120,7 @@ export const REQUIRED_FIELDS: Record<Kind, readonly string[]> = {
 };
 
 /**
- * Changes from outside (a file, a pull), mended where they can be and refused one at a time where they cannot: a
+ * Changes from outside (a file, a pull), refused one at a time where they cannot be read: a
  * change whose value is of a type its field never takes is left out and named, and the rest are folded, so one stray
  * value in a backup or a batch no longer refuses the whole of it (round twenty-nine, 2). A list that is not a list is
  * still refused whole.
@@ -168,7 +131,7 @@ export function readChanges(rows: unknown): { changes: Change[]; dropped: string
   const dropped: string[] = [];
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
-    const c = r && typeof r === 'object' && typeof (r as Change).kind === 'string' && typeof (r as Change).field === 'string' ? mendChange(r as Change) : r;
+    const c = r;
     // Structure is still refused whole (a bad stamp, an unknown kind, a reserved name: the list is damaged or from
     // somewhere else); only a value that cannot be read is left out on its own. What that leaves of a record is the
     // fold's to judge: a record without the fields its kind needs is not live until a build that reads them arrives,
@@ -280,12 +243,8 @@ export function apply(state: State, changes: Iterable<Change>, seen?: Map<string
     if (c.field === '_deleted') latest.set(k + ' _deleted=', c.value ? '1' : '0');
     else {
       rec[c.field] = c.value;
-      // The day a record came in a file is not an edit: a removal followed only by an import stamp stays a removal. This was a
-      // repair written to the log at each load, which a snapshot load could not judge the same way (round fifty-five, 2; FOLD_RULES 2).
-      if (c.field !== 'importedOn') {
-        const e = latest.get(k + ' *');
-        if (!e || hlcCompare(c.t, e) > 0) latest.set(k + ' *', c.t); // the latest edit to any ordinary field
-      }
+      const e = latest.get(k + ' *');
+      if (!e || hlcCompare(c.t, e) > 0) latest.set(k + ' *', c.t); // the latest edit to any ordinary field
     }
     if (hlcCompare(c.t, rec._t) > 0) rec._t = c.t;
     // Visibility is a function of two maxima, so it comes out the same whatever order the changes
@@ -297,36 +256,6 @@ export function apply(state: State, changes: Iterable<Change>, seen?: Map<string
   return held;
 }
 
-/**
- * Records a round-ten-to-fourteen import brought back from the dead: a removal whose only later changes are the
- * `importedOn` stamp those builds put on every imported record, tombstones included. An edit after a removal undoes it,
- * so the record folds as live, with no name. These are the records a one-time repair removes again (round sixteen, 5).
- * A record edited in any other way after its removal is a real revival and is left alone.
- */
-export function revivedByImport(changes: Iterable<Change>): Array<{ kind: Change['kind']; id: string }> {
-  const seen = new Map<string, Change[]>();
-  for (const c of changes) {
-    const k = key(c.kind, c.id);
-    let l = seen.get(k);
-    if (!l) seen.set(k, (l = []));
-    l.push(c);
-  }
-  const out: Array<{ kind: Change['kind']; id: string }> = [];
-  for (const [, list] of seen) {
-    list.sort((a, b) => hlcCompare(a.t, b.t));
-    let removedAt: string | null = null;
-    let onlyImportedOn = true;
-    for (const c of list) {
-      if (c.field === '_deleted') {
-        removedAt = c.value ? c.t : null;
-        onlyImportedOn = true;
-      } else if (removedAt && c.field !== 'importedOn') onlyImportedOn = false;
-    }
-    const last = list[list.length - 1];
-    if (removedAt && onlyImportedOn && last.field === 'importedOn') out.push({ kind: last.kind, id: last.id });
-  }
-  return out;
-}
 
 export function materialise(changes: Iterable<Change>): { state: State; seen: Map<string, string> } {
   const state: State = new Map();

@@ -41,7 +41,6 @@ describe('backup round trip', () => {
     const seen: string[] = [];
     const { bytes, photosMissing } = await buildBackup({
       changes: log,
-      scheme: { mode: 'year', width: 4 },
       device: 'dev1',
       readPhoto: async (id) => {
         seen.push(id);
@@ -55,7 +54,6 @@ describe('backup round trip', () => {
     expect(r.manifest?.format).toBe('cultifolio-backup');
     expect(r.manifest?.counts).toMatchObject({ changes: 22, accessions: 1, events: 1, locations: 2, photos: 1, taxa: 1, photoBytes: 22 });
     expect(r.manifest?.photosMissing).toBeUndefined();
-    expect(r.manifest?.scheme).toEqual({ mode: 'year', width: 4 });
     expect(r.changes).toEqual(log);
     expect(r.photoIds).toEqual(['p1']);
     expect(marker(r.readPhoto('p1')!.full)).toBe('FULL-JPEG');
@@ -96,14 +94,12 @@ describe('backup round trip', () => {
     expect(r.manifest?.photosMissing).toEqual(['p1']);
     expect(photosWithoutPixels(r)).toEqual(['p1']); // and a restore can say so once, from the file itself
   });
-  it('reads the older changes-only JSON export', async () => {
+  it('a JSON file is not a backup: only the zip is read (round fifty-seven)', async () => {
     const json = new TextEncoder().encode(JSON.stringify({ format: 'cultifolio-changes', v: 1, changes: log }));
-    const r = await readBackup(json);
-    expect(r.manifest).toBeNull();
-    expect(r.changes).toHaveLength(22);
+    await expect(readBackup(json)).rejects.toThrow(/not a Cultifolio backup/);
   });
   it('refuses things that are not backups, with a reason', async () => {
-    await expect(readBackup(px('hello'))).rejects.toThrow(/neither/);
+    await expect(readBackup(px('hello'))).rejects.toThrow(/not a Cultifolio backup/);
     await expect(readBackup(px('{"a":1}'))).rejects.toThrow(/not a Cultifolio backup/);
     const { bytes } = await buildBackup({ changes: log, readPhoto: async () => null });
     const truncated = bytes.subarray(0, 40);
@@ -224,13 +220,13 @@ describe('batches.csv', () => {
   });
 });
 
-describe('old data in a backup is mended, not refused (round twenty-nine, 2)', () => {
-  it('a numeric price becomes its text; a value of a type its field never takes is left out and named; the rest is read', async () => {
+describe('a value of the wrong type in a backup is left out, not the file (round twenty-nine, 2)', () => {
+  it('a value of a type its field never takes is left out and named; the rest is read', async () => {
     const rows = [...log, c(30, 'accession', '2026-0001', 'price', 12), c(31, 'accession', '2026-0001', 'notes', { a: 1 })];
-    const r = await readBackup(new TextEncoder().encode(JSON.stringify({ format: 'cultifolio-changes', v: 1, changes: rows })));
-    expect(r.changes).toHaveLength(rows.length - 1);
-    expect(r.changes.find((x) => x.field === 'price')?.value).toBe('12');
-    expect(r.unreadable).toEqual(['change 24: notes of a accession must be a string, not {"a":1}']);
+    const { bytes } = await buildBackup({ changes: rows as Change[], readPhoto: async () => null });
+    const r = await readBackup(bytes);
+    expect(r.changes).toHaveLength(rows.length - 2);
+    expect(r.unreadable).toEqual(['change 23: price of a accession must be a string, not 12', 'change 24: notes of a accession must be a string, not {"a":1}']);
   });
 });
 
@@ -322,9 +318,8 @@ describe('a backup is checked before anything is stored', () => {
   const jpeg = (n: number) => new Uint8Array([0xff, 0xd8, 0xff, 0xe0, ...new Array(n).fill(0)]);
   it('a change whose timestamp is not an HLC is refused with its position', async () => {
     const bad = [...log, { t: '~', kind: 'accession', id: '2026-0001', field: 'notes', value: 'wins forever' }];
-    await expect(readBackup(px(JSON.stringify({ format: 'cultifolio-changes', v: 1, changes: bad })))).rejects.toThrow(/Change 23 .*bad timestamp/);
     const { bytes } = await buildBackup({ changes: bad as Change[], readPhoto: async () => null });
-    await expect(readBackup(bytes)).rejects.toThrow(/Change 23/);
+    await expect(readBackup(bytes)).rejects.toThrow(/Change 23 .*bad timestamp/);
   });
   it('photo entries must be JPEGs under the sync limit, with sane names', async () => {
     expect(photoBytesError(jpeg(10), jpeg(2))).toBeNull();

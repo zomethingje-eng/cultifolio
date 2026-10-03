@@ -25,7 +25,6 @@ vi.mock('$lib/db/vault', () => {
   m.foldGen = async () => 0;
   m.dropFold = async () => {};
   m.parkStamps = async (st: string[]) => { const had = (mem.meta.get('parked') as string[] | undefined) ?? []; const out = [...new Set([...had, ...st])]; mem.meta.set('parked', out); return out; };
-  if (!m.changesOfRecord) m.changesOfRecord = async (kind: string, id: string) => (await m.allChanges()).filter((c: Change) => c.kind === kind && c.id === id);
   m.lastArrival = async () => 0;
   m.arrivalsAfter = async () => ({ changes: [...mem.changes], seq: 0, gen: 0 });
   m.changeKeys = async () => mem.changes.map((c) => c.t);

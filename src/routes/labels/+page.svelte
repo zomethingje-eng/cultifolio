@@ -20,9 +20,9 @@
    * What a label is printed for: a plant, or a propagation batch (round forty-one, R10). A seed sower labels trays
    * first; the batch label carries the number, the name, the date sown and the count, and its code opens the batch.
    */
-  type Item = { id: string; batch: boolean; no: string; taxonName: string; cultivar: string | null; fieldNumber: string | null; parentage: string | null; taxonKey: number | null; locationId: string | null; location: string | null; sourceFrom: string | null; when: string | null; count: number | null; method: string | null; rec: Accession | Sowing };
-  const ofPlant = (a: Accession): Item => ({ id: a.id, batch: false, no: accNo(a), taxonName: a.taxonName, cultivar: a.cultivar ?? null, fieldNumber: a.fieldNumber ?? null, parentage: a.parentage ?? null, taxonKey: a.taxonKey ?? null, locationId: a.locationId ?? null, location: a.location ?? null, sourceFrom: a.sourceFrom ?? null, when: a.acquired ?? null, count: null, method: null, rec: a });
-  const ofBatch = (s: Sowing): Item => ({ id: s.id, batch: true, no: sowNo(s), taxonName: s.taxonName, cultivar: s.cultivar ?? null, fieldNumber: s.fieldNumber ?? null, parentage: s.parentage ?? null, taxonKey: s.taxonKey ?? null, locationId: s.locationId ?? null, location: null, sourceFrom: s.sourceFrom ?? null, when: s.sown ?? null, count: s.count ?? null, method: s.method ?? null, rec: s });
+  type Item = { id: string; batch: boolean; no: string; taxonName: string; cultivar: string | null; fieldNumber: string | null; parentage: string | null; taxonKey: number | null; locationId: string | null; sourceFrom: string | null; when: string | null; count: number | null; method: string | null; rec: Accession | Sowing };
+  const ofPlant = (a: Accession): Item => ({ id: a.id, batch: false, no: accNo(a), taxonName: a.taxonName, cultivar: a.cultivar ?? null, fieldNumber: a.fieldNumber ?? null, parentage: a.parentage ?? null, taxonKey: a.taxonKey ?? null, locationId: a.locationId ?? null, sourceFrom: a.sourceFrom ?? null, when: a.acquired ?? null, count: null, method: null, rec: a });
+  const ofBatch = (s: Sowing): Item => ({ id: s.id, batch: true, no: sowNo(s), taxonName: s.taxonName, cultivar: s.cultivar ?? null, fieldNumber: s.fieldNumber ?? null, parentage: s.parentage ?? null, taxonKey: s.taxonKey ?? null, locationId: s.locationId ?? null, sourceFrom: s.sourceFrom ?? null, when: s.sown ?? null, count: s.count ?? null, method: s.method ?? null, rec: s });
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import { sheetForName, sheetsFor, type Sheet as SpeciesSheet } from '$lib/ui/index.svelte';
   import { slugify, speciesSlug, speciesOf } from '$core/names';
@@ -95,7 +95,7 @@
 
   const all = $derived<Item[]>([...collection.accessions.filter((a) => a.status === 'growing' || chosen.has(a.id)).map(ofPlant), ...collection.sowings.filter((b) => b.status === 'active' || chosen.has(b.id)).map(ofBatch)]);
   // The filter reads the place and the source too, and matches every word, as the plants list does: "Windowsill" and "Mesa" find their plants (round twenty-six, 15).
-  const filtered = $derived.by(() => { const words = q.toLowerCase().split(/\s+/).filter(Boolean); return all.filter((a) => { const hay = `${a.no} ${a.taxonName} ${a.cultivar ?? ''} ${a.fieldNumber ?? ''} ${a.locationId ? collection.locationName(a.locationId) : (a.location ?? '')} ${a.sourceFrom ?? ''}`.toLowerCase(); return words.every((w) => hay.includes(w)); }); });
+  const filtered = $derived.by(() => { const words = q.toLowerCase().split(/\s+/).filter(Boolean); return all.filter((a) => { const hay = `${a.no} ${a.taxonName} ${a.cultivar ?? ''} ${a.fieldNumber ?? ''} ${a.locationId ? collection.locationName(a.locationId) : ''} ${a.sourceFrom ?? ''}`.toLowerCase(); return words.every((w) => hay.includes(w)); }); });
   const picked = $derived(all.filter((a) => chosen.has(a.id)));
   const plantsShown = $derived(filtered.filter((x) => !x.batch));
   const batchesShown = $derived(filtered.filter((x) => x.batch));

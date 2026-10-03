@@ -11,7 +11,6 @@ import type { Change } from '$core/log';
 import { hlcEncode, hlcDecode, MAX_AHEAD_MS } from '$core/hlc';
 import { accNo, NUMBERING_SETTING } from '$lib/db/types';
 import { mySpeciesOf } from '$lib/db/species-list';
-import { importV2 } from '$lib/import/v2';
 
 const mem: { changes: Change[]; meta: Map<string, unknown> } = { changes: [], meta: new Map() };
 vi.mock('$lib/db/vault', () => ({

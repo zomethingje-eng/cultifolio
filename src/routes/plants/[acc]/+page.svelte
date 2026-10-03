@@ -321,7 +321,7 @@
     const acq = events.find((e) => e.t === 'acquire');
     const newDate = f.acquired || null, newNote = f.sourceFrom.trim() ? `from ${f.sourceFrom.trim()}` : null;
     const also = acq && newDate && (acq.d !== newDate || (acq.note ?? null) !== newNote) ? [{ kind: 'event' as const, id: acq.id, fields: { d: newDate, note: newNote } }] : [];
-    const all: Record<string, unknown> = { taxonName, taxonKey, cultivar: f.cultivar.trim() || null, nameKind: nameKindOut, parentage, nameAsReceived: f.nameAsReceived.trim() || (oldFull !== newFull && !a.nameAsReceived ? oldFull : null), fieldNumber: f.fieldNumber.trim() || null, provenance: provenanceOut, acquired: f.acquired || null, sourceFrom: f.sourceFrom.trim() || null, sourceForm: f.sourceForm.trim() || null, price: f.price.trim() || null, locationId: f.locationId ?? null, location: f.locationId ? null : a.location ?? null };
+    const all: Record<string, unknown> = { taxonName, taxonKey, cultivar: f.cultivar.trim() || null, nameKind: nameKindOut, parentage, nameAsReceived: f.nameAsReceived.trim() || (oldFull !== newFull && !a.nameAsReceived ? oldFull : null), fieldNumber: f.fieldNumber.trim() || null, provenance: provenanceOut, acquired: f.acquired || null, sourceFrom: f.sourceFrom.trim() || null, sourceForm: f.sourceForm.trim() || null, price: f.price.trim() || null, locationId: f.locationId ?? null };
     // Only what this form changed (round fifty-two, 4): the name and what the name decides, the place and the text it replaces, and each other field on its own.
     const touched = new Set((Object.keys(f) as Array<keyof typeof f>).filter((k) => f[k] !== fOpen[k]));
     const write = new Set<string>();
@@ -461,7 +461,7 @@
         {#if a.fieldNumber}<span class="fnchip">{a.fieldNumber}</span> · {/if}
         {#if a.provenance === 'unknown' && !a.sourceFrom && !a.fieldNumber}Added {fmtDate(a.acquired)}{:else}{provLabel(a.provenance)}{#if a.acquired}{' · '}{a.sourceForm ?? 'acquired'}{a.sourceFrom ? ` from ${a.sourceFrom}` : ''}{' '}{fmtDate(a.acquired)}{/if}{/if}
         {#if a.sowingId}{' · '}raised from <a class="mono" href="/propagation/{a.sowingId}">{sowing ? sowNo(sowing) : a.sowingId}</a>{#if sowing && sowing.parentAcc} (from <a class="mono" href="/plants/{sowing.parentAcc}">{collection.accession(sowing.parentAcc) ? accNo(collection.accession(sowing.parentAcc)!) : sowing.parentAcc}</a>){/if}{/if}
-        {#if a.locationId && collection.placeOf(a.locationId)}{' · '}at <a class="place" href="/places/{collection.placeOf(a.locationId)}">{collection.locationName(a.locationId)}</a>{:else if a.locationId}{' · '}<span class="place">its place was removed; no place now</span>{:else if a.location}{' · '}at <span class="place">{a.location}</span>{/if}
+        {#if a.locationId && collection.placeOf(a.locationId)}{' · '}at <a class="place" href="/places/{collection.placeOf(a.locationId)}">{collection.locationName(a.locationId)}</a>{:else if a.locationId}{' · '}<span class="place">its place was removed; no place now</span>{/if}
         {#if !a.taxonKey && kind !== 'hybrid' && ref !== 'ok' && ref !== 'loading'}{' · '}<NotChecked inline what="Name" why="The name was kept as typed: it matched no reference name, or the name service did not answer when the plant was added. Edit the plant and pick the name from the list to check it." />{/if}
       </p>
       {#if kind === 'hybrid'}

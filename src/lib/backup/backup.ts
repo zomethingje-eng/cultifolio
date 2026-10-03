@@ -8,7 +8,7 @@ import * as v from 'valibot';
 import { materialise, live, known, readChanges, isComplete, type Change, type Record_ } from '$core/log';
 import { kindOf, accNo, sowNo, EVENT_LABEL, MEASURES, type Accession, type Photo, type Sowing, type PlantEvent } from '$lib/db/types';
 import { MAX_PHOTO_BYTES, SEAL_OVERHEAD } from '$lib/sync/limits';
-import { BACKUP_FORMAT, BACKUP_V, Manifest, ChangeRow, LegacyChanges, photoPath, thumbPath } from './format';
+import { BACKUP_FORMAT, BACKUP_V, Manifest, ChangeRow, photoPath, thumbPath } from './format';
 
 /** Why a photo's bytes cannot be stored, or null: both files must be JPEGs (the app only ever writes JPEGs) and small enough to sync. */
 export function photoBytesError(full: Uint8Array, thumb: Uint8Array): string | null {
@@ -19,7 +19,7 @@ export function photoBytesError(full: Uint8Array, thumb: Uint8Array): string | n
 }
 
 /**
- * Every row the fold can take, mended where an older build wrote a number for text; a row it cannot take is left out
+ * Every row the fold can take; a row it cannot take is left out
  * and named in `unreadable` rather than refusing the file (round twenty-nine, 2). A file with no readable change at all
  * is refused, since there is nothing to restore.
  */
@@ -50,7 +50,6 @@ export interface DeviceSettings {
 }
 export interface BuildOpts {
   changes: Change[];
-  scheme?: unknown;
   device?: string;
   app?: string;
   settings?: DeviceSettings;
@@ -121,8 +120,7 @@ export async function buildBackup(o: BuildOpts): Promise<BuiltBackup> {
     exported: new Date().toISOString(),
     device: o.device,
     counts: { changes: s.changes, accessions: s.accessions, events: s.events, locations: s.locations, sowings: s.sowings, taxa: s.taxa, photos: photos.length - photosMissing.length, photoBytes },
-    ...(photosMissing.length ? { photosMissing } : {}),
-    scheme: o.scheme
+    ...(photosMissing.length ? { photosMissing } : {})
   };
   entry('manifest.json', strToU8(JSON.stringify(manifest, null, 1)), true);
   entry('changes.json', strToU8(JSON.stringify(o.changes)), true);
@@ -146,7 +144,7 @@ export async function buildBackup(o: BuildOpts): Promise<BuiltBackup> {
 }
 
 export interface ReadBackup {
-  manifest: Manifest | null; // null for the legacy changes-only JSON
+  manifest: Manifest;
   changes: Change[];
   /** Rows of `changes.json` that could not be read and were left out, each named ("change 15: price of a accession must be a string, not [1]"). */
   unreadable: string[];
@@ -174,17 +172,9 @@ export const MAX_CHANGES_BYTES = 192 * 1024 * 1024;
 /** The manifest and the device settings: a few kilobytes each; anything declaring more is not one of ours. */
 export const MAX_SMALL_ENTRY_BYTES = 4 * 1024 * 1024;
 
-/** Parse a backup from bytes: a zip, or the older JSON. Throws a readable error for anything else. */
+/** Parse a backup from bytes: the zip a backup is. Throws a readable error for anything else. */
 export async function readBackup(bytes: Uint8Array): Promise<ReadBackup> {
-  // JSON starts with '{' after optional whitespace; a zip starts with PK.
-  const head = strFromU8(bytes.subarray(0, 64)).trimStart();
-  if (head.startsWith('{')) {
-    const json = JSON.parse(strFromU8(bytes));
-    const r = v.safeParse(LegacyChanges, json);
-    if (!r.success) throw new Error('That JSON is not a Cultifolio backup.');
-    return { manifest: null, ...checkRows(r.output.changes), settings: null, photoIds: [], readPhoto: () => null };
-  }
-  if (!(bytes[0] === 0x50 && bytes[1] === 0x4b)) throw new Error('That file is neither a Cultifolio backup zip nor a JSON export.');
+  if (!(bytes[0] === 0x50 && bytes[1] === 0x4b)) throw new Error('That file is not a Cultifolio backup (a .cultifolio.zip).');
   // Synchronous for the same reason as the writer: the asynchronous reader inflates entries over 512 kB in a blob: worker
   // the CSP refuses. Only the entries a backup has are inflated, each within a size a backup entry can have: a zip made
   // to inflate to gigabytes is refused at its table of contents, not after the page has frozen on it (round twenty-nine, 10).
@@ -333,7 +323,7 @@ export function plantsCsv(accs: Array<Accession & Record_>, state: Map<string, R
   const head = ['number', 'species', 'cultivar', 'kind', 'parentage', 'name as received', 'field number', 'provenance', 'status', 'location', 'acquired', 'from', 'lot or reference', 'form', 'price', 'sowing', 'notes'];
   const rows = [...accs]
     .sort((a, b) => accNo(a).localeCompare(accNo(b)))
-    .map((a) => [accNo(a), a.taxonName, a.cultivar, kindOf(a), a.parentage, a.nameAsReceived, a.fieldNumber, a.provenance, a.status, a.locationId ? loc(a.locationId) : a.location, a.acquired, a.sourceFrom, a.sourceRef, a.sourceForm, a.price, a.sowingId ? sowNo((state.get(`sowing:${a.sowingId}`) as unknown as Sowing | undefined) ?? { id: a.sowingId }) : null, a.notes].map(csvCell).join(','));
+    .map((a) => [accNo(a), a.taxonName, a.cultivar, kindOf(a), a.parentage, a.nameAsReceived, a.fieldNumber, a.provenance, a.status, a.locationId ? loc(a.locationId) : null, a.acquired, a.sourceFrom, a.sourceRef, a.sourceForm, a.price, a.sowingId ? sowNo((state.get(`sowing:${a.sowingId}`) as unknown as Sowing | undefined) ?? { id: a.sowingId }) : null, a.notes].map(csvCell).join(','));
   return csvSheet(head, rows);
 }
 

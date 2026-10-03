@@ -435,7 +435,7 @@ describe('the rate limit', () => {
 });
 
 describe('a name stands for one content', () => {
-  it('storeOnce: stored, then same, then different; an old object without a recorded hash is compared by bytes', async () => {
+  it('storeOnce: stored, then same, then different', async () => {
     const r2 = fakeR2();
     const m = meta();
     expect(await storeOnce(r2 as never, 'v', m, 'vault/v/log/a.bin', new Uint8Array([1, 2]))).toBe('stored');
@@ -443,9 +443,6 @@ describe('a name stands for one content', () => {
     expect(await storeOnce(r2 as never, 'v', m, 'vault/v/log/a.bin', new Uint8Array([1, 3]))).toBe('different');
     expect(r2.objs.get('vault/v/log/a.bin')!.body).toEqual(new Uint8Array([1, 2]));
     expect(m.bytes).toBe(2);
-    r2.objs.set('vault/v/log/old.bin', { body: new Uint8Array([7]), uploaded: 1 });
-    expect(await storeOnce(r2 as never, 'v', m, 'vault/v/log/old.bin', new Uint8Array([7]))).toBe('same');
-    expect(await storeOnce(r2 as never, 'v', m, 'vault/v/log/old.bin', new Uint8Array([8]))).toBe('different');
   });
   it('a re-seal of the same batch (same plaintext hash, same device) is "same"; a different device, a different plaintext, or a batch stored without the hash is "different"', async () => {
     const r2 = fakeR2();
@@ -465,17 +462,17 @@ describe('a name stands for one content', () => {
     expect(await storeOnce(r2 as never, 'v', m, 'vault/v/log/b.bin', new Uint8Array([6]), { plain, device: 'dev1' })).toBe('different');
     expect(await storeOnce(r2 as never, 'v', m, 'vault/v/log/b.bin', new Uint8Array([5]), { plain, device: 'dev1' })).toBe('same');
   });
-  it('the push headers: absent is fine, malformed is 400', () => {
+  it('the push headers: both required, malformed is 400 (round fifty-seven)', () => {
     const req = (h: Record<string, string>) => new Request('http://x/', { headers: h });
-    expect(batchMeta(req({}))).toEqual({ plain: undefined, device: undefined });
+    expect(() => batchMeta(req({}))).toThrow();
+    expect(() => batchMeta(req({ 'x-batch-plain': 'f'.repeat(64) }))).toThrow();
     expect(batchMeta(req({ 'x-batch-plain': 'f'.repeat(64), 'x-device': 'abc123' }))).toEqual({ plain: 'f'.repeat(64), device: 'abc123' });
     expect(() => batchMeta(req({ 'x-batch-plain': 'zz' }))).toThrow();
     expect(() => batchMeta(req({ 'x-device': 'Not-A-Device' }))).toThrow();
   });
-  it('batch names: an HLC, with or without a 12-hex content hash; the counter may be four to six digits', () => {
-    expect(batchKey('v', '1700000000000-0000-dev')).toBe('vault/v/log/1700000000000-0000-dev.bin');
-    expect(batchKey('v', '1700000000000-0f0000-dev-0123456789ab')).toMatch(/dev-0123456789ab\.bin$/);
-    for (const bad of ['1700000000000-000-dev', '1700000000000-0000-dev-0123', '1700000000000-0000-dev-0123456789abc', '../x', '1700000000000-0000-Dev']) expect(() => batchKey('v', bad)).toThrow();
+  it('batch names: the hour, the fixed counter, the device and a 12-hex fingerprint, as batchName makes them; nothing older (round fifty-seven)', () => {
+    expect(batchKey('v', '1700000000000-0000-dev-0123456789ab')).toBe('vault/v/log/1700000000000-0000-dev-0123456789ab.bin');
+    for (const bad of ['1700000000000-0000-dev', '1700000000000-0f0000-dev-0123456789ab', '1700000000000-0001-dev-0123456789ab', '1700000000000-000-dev', '1700000000000-0000-dev-0123', '1700000000000-0000-dev-0123456789abc', '../x', '1700000000000-0000-Dev']) expect(() => batchKey('v', bad)).toThrow();
   });
   it('readBody refuses an oversize body from its declared length, and an empty one', async () => {
     const req = (len: string | null, body: Uint8Array) => new Request('http://x/', { method: 'POST', headers: len ? { 'content-length': len } : {}, body: body as BodyInit });

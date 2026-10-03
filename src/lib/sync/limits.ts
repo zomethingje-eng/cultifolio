@@ -18,8 +18,8 @@ export const PHOTO_DROP_HEADER = 'x-photo-drop';
  * the pushing device's id and twelve hex digits of the keyed fingerprint of the content.
  */
 export const batchName = (lastWall: number, device: string, fingerprint: string) => `${String(Math.floor(lastWall / 3600_000) * 3600_000).padStart(13, '0')}-0000-${device || 'dev'}-${fingerprint.slice(0, 12)}`;
-/** What a batch name must look like to be stored: the HLC-shaped hour and counter, the device, and the optional twelve-digit fingerprint (older names carry a full HLC and no fingerprint). The Worker refuses anything else. */
-export const BATCH_NAME = /^\d{13}-[0-9a-f]{4,6}-[a-z0-9]{1,16}(-[0-9a-f]{12})?$/;
+/** What a batch name must look like to be stored, as `batchName` makes it: the hour, the fixed counter, the device and the twelve-digit fingerprint. The Worker refuses anything else. */
+export const BATCH_NAME = /^\d{13}-0000-[a-z0-9]{1,16}-[0-9a-f]{12}$/;
 /** The plaintext a log batch seals: the format version, the pushing device and its changes. */
 export const logBatch = <C>(device: string, changes: C[]) => ({ v: 1, device, changes });
 /** The status each refusal answers with, named once so the formats page's figures are read from here (round twenty-six, 12). */

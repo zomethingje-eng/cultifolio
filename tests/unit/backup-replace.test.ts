@@ -70,10 +70,9 @@ const jpg = (s: string) => new Uint8Array([0xff, 0xd8, 0xff, 0xe0, ...new TextEn
 
 const fileLog: Change[] = [c(1, 'accession', 'r1', 'taxonName', 'Copiapoa cinerea'), c(2, 'accession', 'r1', 'status', 'growing'), c(3, 'photo', 'p1', 'acc', 'r1'), c(4, 'photo', 'p1', 'd', '2026-09-02'), c(5, 'photo', 'p2', 'acc', 'r1'), c(6, 'photo', 'p2', 'd', '2026-09-03'), ...(['p1', 'p2'] as const).flatMap((id, i) => [c(7 + i * 3, 'photo', id, 'w', 1), c(8 + i * 3, 'photo', id, 'h', 1), c(9 + i * 3, 'photo', id, 'bytes', 3)])];
 
-async function fileWith(changes: Change[], photos: string[], scheme?: unknown): Promise<ReadBackup> {
+async function fileWith(changes: Change[], photos: string[]): Promise<ReadBackup> {
   const { bytes } = await buildBackup({
     changes,
-    scheme,
     readPhoto: async (id) => (photos.includes(id) ? { id, full: jpg('F' + id), thumb: jpg('T' + id) } : null)
   });
   return readBackup(bytes);
@@ -157,34 +156,9 @@ describe('replace through a staged copy', () => {
     await expect(replaceThroughStaging(file, model(live).open)).rejects.toThrow(/cannot be read by this version.*Merge instead.*this device is unchanged/);
     expect(live.changes.size).toBe(before);
   });
-  it('a file from before the scheme was synced carries its manifest scheme in as the setting record, stamped after everything in the file', async () => {
-    const file = await fileWith(fileLog, [], {
-      mode: 'prefix',
-      prefix: 'GH',
-      width: 3
-    });
-    const changes = replacementChanges(file);
-    expect(changes).toHaveLength(13);
-    const s = changes[12];
-    expect(s).toMatchObject({
-      kind: 'setting',
-      id: NUMBERING_SETTING,
-      field: 'scheme',
-      value: { mode: 'prefix', prefix: 'GH', width: 3 }
-    });
-    expect(s.t > fileLog[5].t).toBe(true);
-    // A file whose log already has the setting is left alone.
-    const withSetting = await fileWith(
-      [
-        ...fileLog,
-        c(7, 'setting', NUMBERING_SETTING, 'scheme', {
-          mode: 'year',
-          width: 4
-        })
-      ],
-      [],
-      { mode: 'prefix', prefix: 'GH', width: 3 }
-    );
-    expect(replacementChanges(withSetting)).toHaveLength(13);
+  it('the replacement is the file\'s log and nothing else; a numbering setting in it travels as any change does (round fifty-seven)', async () => {
+    const withSetting = await fileWith([...fileLog, c(30, 'setting', NUMBERING_SETTING, 'scheme', { mode: 'prefix', prefix: 'GH', width: 3 })], []);
+    expect(replacementChanges(withSetting)).toEqual(withSetting.changes);
   });
+
 });

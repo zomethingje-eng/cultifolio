@@ -1,4 +1,4 @@
-import { json } from '@sveltejs/kit';
+import { json, error } from '@sveltejs/kit';
 import { STATUS } from '$lib/sync/limits';
 import type { RequestHandler } from './$types';
 import { store, vaultId, authed, photoKey, storeOnce, deleteCounted, readBody, VaultFull, DayQuota, MAX_PHOTO_BYTES, limited, quotaOf, dropProof } from '$lib/server/sync';
@@ -27,7 +27,8 @@ export const PUT: RequestHandler = async ({ request, url, params, platform, getC
   const meta = await authed(r2, id, request);
   const key = photoKey(id, params.id);
   const body = await readBody(request, MAX_PHOTO_BYTES, 'a photo');
-  const drop = dropProof(request) ?? undefined; // kept with the object; its DELETE must repeat it (round fifty-one, 2)
+  const drop = dropProof(request); // kept with the object; its DELETE must repeat it (round fifty-one, 2)
+  if (!drop) error(400, 'x-photo-drop is required: a photograph is stored with the proof its removal will repeat');
   let r: Awaited<ReturnType<typeof storeOnce>>;
   try {
     r = await storeOnce(r2, id, meta, key, body, { drop }, quotaOf(platform, getClientAddress));
@@ -51,7 +52,7 @@ export const HEAD: RequestHandler = async ({ request, url, params, platform, get
 /**
  * Remove a photograph's ciphertext once its record is removed: the bytes come off the vault's count (round forty-nine, 1).
  * Idempotent: nothing there is 404, which the device takes as done. The request carries the proof the upload left
- * (a keyed fingerprint only a key-holder can make); without it, or for an object stored before proofs were kept, 403:
+ * (a keyed fingerprint only a key-holder can make); without it, 403:
  * the bearer token alone can add to a vault, never destroy in it (round fifty-one, 2).
  */
 export const DELETE: RequestHandler = async ({ request, url, params, platform, getClientAddress }) => {

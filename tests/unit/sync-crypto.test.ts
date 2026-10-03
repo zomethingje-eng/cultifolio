@@ -34,12 +34,12 @@ describe('sealing', () => {
     expect(blob[0]).toBe(1);
     expect(await openJson(a, 'log', blob)).toEqual({ changes: [{ t: '1', kind: 'accession', id: '2026-0001', field: 'notes', value: 'sulks' }] });
     await expect(openJson(b, 'log', blob)).rejects.toThrow(/wrong vault key/);
-    // A batch sealed under its name opens under that name and no other; one sealed before names were bound still opens under any (round thirty-eight, R1-7).
+    // A batch sealed under its name opens under that name and no other, and one sealed without a name opens under none (round thirty-eight, R1-7; round fifty-seven).
     const named = await sealJson(a, 'log', { v: 1 }, '1700000000000-0000-dev-0123456789ab');
     expect(await openJson(a, 'log', named, '1700000000000-0000-dev-0123456789ab')).toEqual({ v: 1 });
     await expect(openJson(a, 'log', named, '1700000000000-0001-dev-0123456789ab')).rejects.toThrow(/wrong vault key|altered/);
     await expect(openJson(a, 'log', named)).rejects.toThrow(/wrong vault key|altered/);
-    expect(await openJson(a, 'log', blob, 'any-name')).toEqual({ changes: [{ t: '1', kind: 'accession', id: '2026-0001', field: 'notes', value: 'sulks' }] });
+    await expect(openJson(a, 'log', blob, 'any-name')).rejects.toThrow(/wrong vault key|altered/);
     await expect(openJson(a, 'photo', blob)).rejects.toThrow(/wrong vault key/);
     const tampered = new Uint8Array(blob);
     tampered[tampered.length - 1] ^= 1;
@@ -58,7 +58,7 @@ describe('sealing', () => {
 });
 
 describe('photos are bound to their id', () => {
-  it('a photo sealed under one id does not open under another; one sealed without an id (older) still opens', async () => {
+  it('a photo sealed under one id does not open under another, nor one sealed without an id under any (round fifty-seven)', async () => {
     const k = await deriveKeys(newVaultKey());
     const px = new TextEncoder().encode('pixels');
     const named = await seal(k, 'photo', px, 'pone');
@@ -66,6 +66,6 @@ describe('photos are bound to their id', () => {
     await expect(open(k, 'photo', named, 'ptwo')).rejects.toThrow(/could not decrypt/);
     await expect(open(k, 'photo', named)).rejects.toThrow(/could not decrypt/);
     const unnamed = await seal(k, 'photo', px);
-    expect(new TextDecoder().decode(await open(k, 'photo', unnamed, 'pone'))).toBe('pixels');
+    await expect(open(k, 'photo', unnamed, 'pone')).rejects.toThrow(/could not decrypt/);
   });
 });

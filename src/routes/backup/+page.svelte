@@ -5,7 +5,6 @@
   import { getMeta, setMeta, photoBlobIds, storageErrorText } from '$lib/db/vault';
   import { prepareBackup, downloadBackup, openBackup, restoreBackup, type Opened, type PreparedBackup } from '$lib/backup/io';
   import { sync } from '$lib/sync/engine.svelte';
-  import { importV2, type ImportReport } from '$lib/import/v2';
   import { setCrumb } from '$lib/ui/crumb.svelte';
 
   let lastBackup = $state<string | null>(null);
@@ -53,7 +52,6 @@
   /* ---- restore ---- */
   let opened = $state.raw<Opened | null>(null);
   let openErr = $state('');
-  let v2 = $state.raw<{ changes: ReturnType<typeof importV2>['changes']; report: ImportReport } | null>(null);
   let busy = $state<string | null>(null);
   let done = $state<string | null>(null);
   let confirmReplace = $state(false);
@@ -65,24 +63,13 @@
     input.value = '';
     if (!f) return;
     opened = null;
-    v2 = null;
     openErr = '';
     done = null;
     confirmReplace = false;
     fileName = f.name;
     busy = 'Reading…';
     try {
-      try {
-        opened = await openBackup(f);
-      } catch (err) {
-        // Not ours? Perhaps a v2 Herbarium backup, which is plain JSON with accessions.
-        if (f.name.endsWith('.json')) {
-          const json = JSON.parse(await f.text());
-          const r = importV2(json, { exists: (kind, id) => collection.ready && collection.exists(kind, id) });
-          if (!r.changes.length) throw err;
-          v2 = r;
-        } else throw err;
-      }
+      opened = await openBackup(f);
     } catch (err) {
       openErr = err instanceof Error ? err.message : String(err);
     } finally {
@@ -101,25 +88,10 @@
       done = `Merged: ${opened ? `${addedWords(opened.merge)} added, ${opened.merge.changed} updated, ` : ''}${r.changes} ${r.changes === 1 ? 'change' : 'changes'} and ${r.photos} ${r.photos === 1 ? 'photo' : 'photos'} taken in.`;
       if (r.photosMissing) done += ` ${r.photosMissing} ${r.photosMissing === 1 ? 'photo record has' : 'photo records have'} no photograph: the file did not hold the pixels and neither does this device. The ${r.photosMissing === 1 ? 'record is' : 'records are'} kept.`;
       if (r.settingsRestored.length) done += ` This device had no ${r.settingsRestored.length > 1 ? r.settingsRestored.slice(0, -1).join(', ') + ' or ' + r.settingsRestored.at(-1) : r.settingsRestored[0]} of its own, so the file's ${r.settingsRestored.length === 1 ? 'was' : 'were'} applied.`;
-      if (r.schemeRestored) done += ` Numbering now follows the file: ${r.schemeRestored.mode === 'prefix' ? `${r.schemeRestored.prefix}-${'0'.repeat(r.schemeRestored.width)}` : `year-${'0'.repeat(r.schemeRestored.width)}`}.`;
       opened = null;
       photoCount = (await photoBlobIds()).length;
     } catch (err) {
       openErr = (await storageErrorText(err)) ?? (err instanceof Error && err.message ? err.message : String(err)); // a full device is named as such (round twenty-nine, 4)
-    } finally {
-      busy = null;
-    }
-  }
-  async function doV2() {
-    if (!v2) return;
-    busy = 'Importing…';
-    try {
-      await collection.ingest(v2.changes);
-      const r = v2.report;
-      done = `Imported ${r.accessions} plants, ${r.events} timeline entries, ${r.taxa} species notes${r.locations ? `, ${r.locations} places` : ''}${r.sowings ? `, ${r.sowings} propagation batch${r.sowings === 1 ? '' : 'es'}` : ''}.${r.alreadyHere ? ` ${r.alreadyHere} ${r.alreadyHere === 1 ? 'record was' : 'records were'} already on this device and left as ${r.alreadyHere === 1 ? 'it is' : 'they are'}.` : ''}${r.skipped.length ? ` Skipped: ${r.skipped.join('; ')}.` : ''}`;
-      v2 = null;
-    } catch (err) {
-      openErr = err instanceof Error ? err.message : String(err);
     } finally {
       busy = null;
     }
@@ -175,9 +147,9 @@
 <div class="secrule"><h2>Restore</h2><div class="line"></div></div>
 <div class="cult">
   <div class="body">
-    <p>Choose a Cultifolio backup (<span class="mono">.cultifolio.zip</span>, or the older <span class="mono">.json</span> export), or a backup from the v2 Herbarium app (Settings → Backup there). Nothing changes until you confirm below.</p>
+    <p>Choose a Cultifolio backup (<span class="mono">.cultifolio.zip</span>). Nothing changes until you confirm below.</p>
     <div class="row">
-      <label class="btn"><input id="bk-file" type="file" accept=".zip,.json,application/zip,application/json" onchange={onFile} disabled={!!busy} />{busy ?? 'Choose a file'}</label>
+      <label class="btn"><input id="bk-file" type="file" accept=".zip,application/zip" onchange={onFile} disabled={!!busy} />{busy ?? 'Choose a file'}</label>
       {#if fileName && !busy}<span class="mono faint">{fileName}</span>{/if}
     </div>
     {#if openErr}<p class="bad">{openErr}</p>{/if}
@@ -211,17 +183,6 @@
     </div>
   {/if}
 
-  {#if v2}
-    <div class="preview">
-      <div class="factgrid">
-        <div><b>A v2 Herbarium backup</b>{v2.report.accessions} plants, {v2.report.events} timeline entries, {v2.report.taxa} species notes{#if v2.report.locations}, {v2.report.locations} places{/if}{#if v2.report.sowings}, {v2.report.sowings} propagation batches{/if}.{#if v2.report.alreadyHere} {v2.report.alreadyHere} {v2.report.alreadyHere === 1 ? 'record is' : 'records are'} already on this device and will be left as {v2.report.alreadyHere === 1 ? 'it is' : 'they are'}.{/if} Your numbers are kept. Nothing in the old app is changed.</div>
-      </div>
-      <div class="row acts">
-        <button id="bk-v2" class="btn pri" onclick={doV2} disabled={!!busy}>Import</button>
-        <button class="btn" onclick={() => (v2 = null)} disabled={!!busy}>Cancel</button>
-      </div>
-    </div>
-  {/if}
 </div>
 
 <style>

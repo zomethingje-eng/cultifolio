@@ -47,7 +47,7 @@
   // six months, so a new grower's first weeks are not a reproach (round forty-nine, 3).
   const halfYearAgo = (() => { const d = new Date(today); d.setMonth(d.getMonth() - 6); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
   // Counted from the acquisition date on purpose (round forty-nine, 3; kept in round fifty-four against the second reviewer's finding 25): a plant the grower says they have had since 2015 and never photographed is the plant this line is for; a plant acquired last month is not.
-  const unphotographed = $derived(growing.filter((a) => (a.acquired ?? a.importedOn ?? localDate()) <= halfYearAgo && !collection.photos(a.id).some((p) => p.d >= yearAgo)));
+  const unphotographed = $derived(growing.filter((a) => (a.acquired ?? collection.madeOn('accession', a.id) ?? localDate()) <= halfYearAgo && !collection.photos(a.id).some((p) => p.d >= yearAgo)));
   // The two facts the plants list and the place pages already flag, said once here: not watered for three weeks (by the
   // log, from the day the record was made when nothing is logged), and missed at the last audit or not seen for ninety
   // days. Facts from the log, not a schedule (round twenty-four, 11).

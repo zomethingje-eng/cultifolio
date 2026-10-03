@@ -88,7 +88,6 @@ vi.mock('$lib/db/vault', () => {
   m.foldGen = async () => 0;
   m.dropFold = async () => {};
   m.parkStamps = async (st: string[]) => { const had = (mem.meta.get('parked') as string[] | undefined) ?? []; const out = [...new Set([...had, ...st])]; mem.meta.set('parked', out); return out; };
-  if (!m.changesOfRecord) m.changesOfRecord = async (kind: string, id: string) => (await m.allChanges()).filter((c: Change) => c.kind === kind && c.id === id);
   m.lastArrival = async () => 0;
   m.arrivalsAfter = async () => ({ changes: [...mem.changes.values()], seq: 0, gen: 0 });
   m.changeKeys = async () => [...mem.changes.keys()];
@@ -176,7 +175,10 @@ async function boot(m: Mem, r2: ReturnType<typeof fakeR2>) {
 
 const KEY = newVaultKey();
 const logKeys = (r2: ReturnType<typeof fakeR2>) => [...r2.objs.keys()].filter((k) => k.includes('/log/'));
-const post = (keys: Awaited<ReturnType<typeof deriveKeys>>, name: string, body: Uint8Array, extra: Record<string, string> = {}) => fetch(`/api/sync/log?vault=${keys.id}`, { method: 'POST', headers: { authorization: `Bearer ${keys.token}`, 'x-batch': name, ...extra }, body: body as BodyInit });
+/** A raw push, with the headers every push carries (round fifty-seven): a fingerprint (a fixed one unless given) and the name's device. */
+const post = (keys: Awaited<ReturnType<typeof deriveKeys>>, name: string, body: Uint8Array, extra: Record<string, string> = {}) => fetch(`/api/sync/log?vault=${keys.id}`, { method: 'POST', headers: { authorization: `Bearer ${keys.token}`, 'x-batch': name, 'x-batch-plain': 'e'.repeat(64), 'x-device': name.split('-')[2] || 'dev', ...extra }, body: body as BodyInit });
+/** A batch as a device writes one: sealed under its name, and named by the hour, the device and a fingerprint. */
+const pushAs = async (keys: Awaited<ReturnType<typeof deriveKeys>>, hour: string, device: string, fp: string, payload: unknown) => { const name = `${hour}-0000-${device}-${fp}`; return post(keys, name, await sealJson(keys, 'log', payload, name)); };
 const metaOf = async (r2: ReturnType<typeof fakeR2>) => JSON.parse(new TextDecoder().decode(r2.objs.get(`vault/${(await deriveKeys(KEY)).id}/meta.json`)!.body)) as { bytes: number };
 /** Make the vault (nearly) full on the server, as photos from another device would. */
 async function fillVault(r2: ReturnType<typeof fakeR2>, bytes = MAX_BYTES - 10) {
@@ -275,10 +277,6 @@ describe('batches are named by content and acked only when the server holds thos
     expect((await post(keys, name, new Uint8Array([1, 2, 3]), { 'x-batch-plain': plain, 'x-device': 'cccccccccccc' })).status).toBe(409);
     expect(await (await post(keys, name, new Uint8Array([1, 2, 3]), { 'x-batch-plain': plain, 'x-device': 'bbbbbbbbbbbb' })).json()).toEqual({ stored: false, reason: 'already there' });
     expect(r2.objs.get(logKeys(r2)[0])!.body).toBe(bytes); // untouched
-    // A batch written before hashes were kept (no metadata) is compared by its bytes.
-    r2.objs.set(`vault/${keys.id}/log/1700000000000-0000-old.bin`, { body: new Uint8Array([9, 9]), uploaded: 5 });
-    expect((await post(keys, '1700000000000-0000-old', new Uint8Array([9, 9]))).status).toBe(200);
-    expect((await post(keys, '1700000000000-0000-old', new Uint8Array([9, 8]))).status).toBe(409);
     // The outbox re-filled and pushed again: a fresh seal (new IV, new bytes) under the SAME name; the server keeps the first and the changes are acked.
     const n = logKeys(r2).length;
     const before = (await metaOf(r2)).bytes;
@@ -321,6 +319,10 @@ describe('batches are named by content and acked only when the server holds thos
     expect((await post(keys, '../x', new Uint8Array(3))).status).toBe(400);
     expect((await post(keys, '1700000000000-0000-dev-0123456789ab', new Uint8Array(3))).status).toBe(200);
     expect((await post(keys, '1700000000000-0000-dev-0123456789abc', new Uint8Array(3))).status).toBe(400);
+    // the names of earlier builds (a full HLC, no fingerprint) and a push without its headers are refused (round fifty-seven)
+    expect((await post(keys, '1700000000000-0000-dev', new Uint8Array(3))).status).toBe(400);
+    expect((await post(keys, '1700000000000-0001-dev-0123456789ab', new Uint8Array(3))).status).toBe(400);
+    expect((await fetch(`/api/sync/log?vault=${keys.id}`, { method: 'POST', headers: { ...h, 'x-batch': '1700000000000-0000-dev-0123456789ac' }, body: new Uint8Array(3) as BodyInit })).status).toBe(400);
     expect((await fetch(`/api/sync/log?vault=${keys.id}`, { headers: { authorization: `Bearer ${'0'.repeat(64)}` } })).status).toBe(403);
     expect((await fetch(`/api/sync/log?vault=${keys.id}`)).status).toBe(401);
     expect((await fetch(`/api/sync/vault`, { method: 'POST', body: JSON.stringify({ id: keys.id, token: '1'.repeat(64), create: true }) })).status).toBe(403);
@@ -335,7 +337,7 @@ describe('batches are named by content and acked only when the server holds thos
     expect((await fetch(`/api/sync/vault`, { method: 'POST', body: 'null' })).status).toBe(400); // a body that is not an object is still a plain 400
     expect((await fetch(`/api/sync/vault`, { method: 'POST' })).status).toBe(400); // and no body at all
     // An oversize body is refused from its declared length.
-    const big = await fetch(`/api/sync/log?vault=${keys.id}`, { method: 'POST', headers: { ...h, 'x-batch': '1700000000000-0000-dev', 'content-length': String(17 * 1024 * 1024) }, body: new Uint8Array(3) as BodyInit });
+    const big = await fetch(`/api/sync/log?vault=${keys.id}`, { method: 'POST', headers: { ...h, 'x-batch': '1700000000000-0000-dev-0123456789ad', 'x-batch-plain': 'e'.repeat(64), 'x-device': 'dev', 'content-length': String(17 * 1024 * 1024) }, body: new Uint8Array(3) as BodyInit });
     expect(big.status).toBe(413);
   });
 });
@@ -520,8 +522,9 @@ describe('the pull cursor', () => {
     const wall = 1700000000000;
     for (let i = 0; i < 501; i++) {
       const t = `${wall + i}-0000-bbbbbbbbbbbb`;
-      const body = await sealJson(keys, 'log', { v: 1, device: 'bbbbbbbbbbbb', changes: [{ t, kind: 'accession', id: 'r' + i, field: 'taxonName', value: 'Plant ' + i }, { t: `${wall + i}-0001-bbbbbbbbbbbb`, kind: 'accession', id: 'r' + i, field: 'status', value: 'growing' }] });
-      expect((await post(keys, `${t}-0123456789ab`, body)).status).toBe(200);
+      const name = `${t}-0123456789ab`;
+      const body = await sealJson(keys, 'log', { v: 1, device: 'bbbbbbbbbbbb', changes: [{ t, kind: 'accession', id: 'r' + i, field: 'taxonName', value: 'Plant ' + i }, { t: `${wall + i}-0001-bbbbbbbbbbbb`, kind: 'accession', id: 'r' + i, field: 'status', value: 'growing' }] }, name);
+      expect((await post(keys, name, body)).status).toBe(200);
     }
     const oneSecond = Date.now() - 1000;
     for (const k of logKeys(r2)) r2.objs.get(k)!.uploaded = oneSecond; // one arrival time for all of them
@@ -611,10 +614,10 @@ describe('a batch that cannot be read is set aside, not a wall', () => {
     await B.collection.addAccession({ taxonName: 'Lithops', acc: 'B-1' });
     await B.sync.setup(KEY, 'create');
     const keys = await deriveKeys(KEY);
-    expect((await post(keys, '1700000000000-0000-evil', crypto.getRandomValues(new Uint8Array(64)))).ok).toBe(true);
+    expect((await post(keys, '1700000000000-0000-evil-000000000000', crypto.getRandomValues(new Uint8Array(64)))).ok).toBe(true);
     const p = await B.collection.addAccession({ taxonName: 'Conophytum', acc: 'B-2' });
     await B.sync.run();
-    expect(B.sync.quarantined.map((q) => q.key)).toEqual(['1700000000000-0000-evil']);
+    expect(B.sync.quarantined.map((q) => q.key)).toEqual(['1700000000000-0000-evil-000000000000']);
     const D = await boot(newMem('dddddddddddd'), r2);
     await D.sync.setup(KEY, 'join');
     expect(D.collection.accession(p.id)).toBeDefined();
@@ -666,7 +669,7 @@ describe('a batch that cannot be read is set aside, not a wall', () => {
     const B = await boot(newMem('bbbbbbbbbbbb'), r2);
     await B.sync.setup(KEY, 'create');
     const keys = await deriveKeys(KEY);
-    expect((await post(keys, '1700000000000-0000-evil', crypto.getRandomValues(new Uint8Array(64)))).ok).toBe(true);
+    expect((await post(keys, '1700000000000-0000-evil-000000000000', crypto.getRandomValues(new Uint8Array(64)))).ok).toBe(true);
     await B.sync.run();
     expect(B.sync.quarantined).toHaveLength(1);
     // Another build opens the same vault: the entry is dropped from the quarantine and the batch fetched again (still garbage here, so it is set aside again, by this build).
@@ -675,7 +678,7 @@ describe('a batch that cannot be read is set aside, not a wall', () => {
     q[0].build = 'older-build';
     const B2 = await reboot(m, r2);
     await B2.sync.run();
-    expect(B2.calls.filter((c) => c.includes('/api/sync/log/1700000000000-0000-evil'))).toHaveLength(1);
+    expect(B2.calls.filter((c) => c.includes('/api/sync/log/1700000000000-0000-evil-000000000000'))).toHaveLength(1);
     expect(B2.sync.quarantined).toHaveLength(1);
     expect((m.meta.get('sync') as { quarantined: Array<{ build?: string }> }).quarantined[0].build).not.toBe('older-build');
   });
@@ -742,8 +745,8 @@ describe('a batch that cannot be read is set aside, not a wall', () => {
     const D = await boot(newMem('dddddddddddd'), r2);
     await D.sync.setup(KEY, 'join');
     const m = mem;
-    const meta = m.meta.get('sync') as { quarantined?: Array<{ key: string; error: string; at: string; build?: string }> };
-    meta.quarantined = [{ key: 'p1790000000000-0000-aaaaaaaaaaaa', error: 'photo: pixels do not match the record', at: new Date().toISOString(), build: 'older-build' }];
+    const meta = m.meta.get('sync') as { quarantined?: Array<{ key: string; error: string; at: string; build?: string; kind?: string }> };
+    meta.quarantined = [{ key: 'p1790000000000-0000-aaaaaaaaaaaa', error: 'photo: pixels do not match the record', at: new Date().toISOString(), build: 'older-build', kind: 'photo' }];
     m.meta.set('sync', meta);
     const D2 = await reboot(m, r2);
     await D2.sync.run(); // a new build: the entry is from another build, and is a photograph, not a batch
@@ -1003,14 +1006,14 @@ describe('a batch that cannot be read is set aside, not a wall', () => {
       { t: '1700000000000-0000-x', kind: 'accession', id: 'r1', field: 'taxonName', value: 'Sneaky' },
       { t: '1700000000000-0001-x', kind: 'accession', id: 'r1', field: 'id', value: 'r2' }
     ];
-    await post(keys, '1700000000000-0001-x', await sealJson(keys, 'log', { v: 1, device: 'x', changes }));
+    await pushAs(keys, '1700000000000', 'x', '000000000001', { v: 1, device: 'x', changes });
     const D = await boot(newMem('dddddddddddd'), r2);
     await D.sync.setup(KEY, 'join');
     expect(D.sync.quarantined[0]?.error).toMatch(/reserved/);
     expect(D.collection.accession('r1')).toBeUndefined();
     expect(mem.changes.size).toBe(0);
   });
-  it('a batch with one value of a type its field never takes is set aside whole, so a later build can read it; a word this build does not know folds as it is; an older importer\'s words are mended (round thirty, 1)', async () => {
+  it('a batch with one value of a type its field never takes is set aside whole, so a later build can read it; a word this build does not know folds as it is (round thirty, 1)', async () => {
     const r2 = fakeR2();
     const B = await boot(newMem('bbbbbbbbbbbb'), r2);
     await B.sync.setup(KEY, 'create');
@@ -1020,25 +1023,25 @@ describe('a batch that cannot be read is set aside, not a wall', () => {
       { t: '1700000000000-0001-x', kind: 'accession', id: 'r1', field: 'status', value: 'growing' },
       { t: '1700000000000-0002-x', kind: 'accession', id: 'r1', field: 'notes', value: { a: 1 } }
     ];
-    await post(keys, '1700000000000-0002-x', await sealJson(keys, 'log', { v: 1, device: 'x', changes: bad }));
+    await pushAs(keys, '1700000000000', 'x', '000000000002', { v: 1, device: 'x', changes: bad });
     const good = [
       { t: '1700000000010-0000-x', kind: 'accession', id: 'r2', field: 'taxonName', value: 'Lithops' },
       { t: '1700000000010-0001-x', kind: 'accession', id: 'r2', field: 'status', value: 'sold' }, // a status a newer build wrote
       { t: '1700000000010-0002-x', kind: 'sowing', id: 's1', field: 'taxonName', value: 'Haworthia' },
-      { t: '1700000000010-0003-x', kind: 'sowing', id: 's1', field: 'method', value: 'leaf cutting' }, // as the v2 importer wrote it before round twenty-eight
-      { t: '1700000000010-0004-x', kind: 'sowing', id: 's1', field: 'provenance', value: 'Wild collected' },
+      { t: '1700000000010-0003-x', kind: 'sowing', id: 's1', field: 'method', value: 'tissue culture' }, // a method a newer build wrote
+      { t: '1700000000010-0004-x', kind: 'sowing', id: 's1', field: 'provenance', value: 'wild' },
       { t: '1700000000010-0005-x', kind: 'sowing', id: 's1', field: 'sown', value: '2026-01-01' },
       { t: '1700000000010-0006-x', kind: 'sowing', id: 's1', field: 'count', value: 3 },
       { t: '1700000000010-0007-x', kind: 'sowing', id: 's1', field: 'status', value: 'active' }
     ];
-    await post(keys, '1700000000010-0007-x', await sealJson(keys, 'log', { v: 1, device: 'x', changes: good }));
+    await pushAs(keys, '1700000000000', 'x', '000000000007', { v: 1, device: 'x', changes: good });
     const D = await boot(newMem('dddddddddddd'), r2);
     await D.sync.setup(KEY, 'join');
     expect(D.sync.quarantined).toHaveLength(1);
     expect(D.sync.quarantined[0]?.error).toMatch(/notes of a accession must be a string/);
     expect(D.collection.accession('r1')).toBeUndefined(); // nothing of the set-aside batch, not even its good changes
     expect(D.collection.accession('r2')?.status).toBe('sold');
-    expect(D.collection.sowing('s1')?.method).toBe('leaf');
+    expect(D.collection.sowing('s1')?.method).toBe('tissue culture');
     expect(D.collection.sowing('s1')?.provenance).toBe('wild');
   });
 });

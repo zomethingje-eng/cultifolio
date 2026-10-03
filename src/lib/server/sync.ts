@@ -8,8 +8,7 @@
  *                                    change (13 digits of ms), <device> the pushing device, <fp> the first 12 hex of
  *                                    the keyed fingerprint (HMAC-SHA-256 under the vault's naming key) of the changes
  *                                    as JSON, so a re-seal of the same batch has the same name and the server holds
- *                                    nothing it could test a guess against; batches from earlier builds are named by
- *                                    the last change's full HLC and an unkeyed SHA-256, and the oldest have no hash part
+ *                                    nothing it could test a guess against
  *   vault/<id>/photo/<photoId>.bin one sealed photo (full + thumb)
  *
  * And in KV (the QUEUE binding), small counters that R2 cannot keep quickly:
@@ -50,7 +49,7 @@ export interface VaultMeta {
 }
 
 const ID = /^[A-HJKMNP-TV-Z2-9]{26}$/;
-/** An HLC-shaped name, optionally followed by the keyed fingerprint newer clients add (`BATCH_NAME`, shared with the engine). Two batches that differ in content differ in name. */
+/** The batch name (`BATCH_NAME`, shared with the engine): the hour, the device and the keyed fingerprint. Two batches that differ in content differ in name. */
 const BATCH = BATCH_NAME;
 const PHOTO = /^p[a-z0-9]{6,32}$/;
 const TOKEN = /^[0-9a-f]{64}$/;
@@ -64,7 +63,7 @@ export async function deleteCounted(r2: R2Bucket, id: string, meta: VaultMeta, k
   const existing = await r2.head(key);
   if (!existing) return false;
   // The token alone could add; it must not be able to destroy. The object carries the proof its upload left, and only a
-  // key-holder can repeat it. An object stored before proofs were kept cannot be deleted (round fifty-one, 2).
+  // key-holder can repeat it (round fifty-one, 2).
   const kept = existing.customMetadata?.drop;
   if (!kept || !proof || kept !== proof) return 'noproof';
   await r2.delete(key);
@@ -156,7 +155,7 @@ export async function ensureVault(r2: R2Bucket, id: string, token: string, open:
 }
 
 export const batchKey = (id: string, name: string) => {
-  if (!BATCH.test(name)) error(400, 'batch key must be an HLC with an optional fingerprint');
+  if (!BATCH.test(name)) error(400, 'batch key must be <hour>-0000-<device>-<fingerprint>');
   return `vault/${id}/log/${name}.bin`;
 };
 export const photoKey = (id: string, photoId: string) => {
@@ -283,9 +282,9 @@ export class DayQuota extends Error {
   }
 }
 
-/** Metadata a batch is stored with; `plain` and `device` only when the pushing client sent them. */
+/** Metadata a batch is stored with (`plain`, `device`), or a photograph (`drop`). */
 export interface BatchMeta {
-  /** The keyed fingerprint (HMAC-SHA-256 under the vault's naming key) of the changes as JSON, 64 hex digits; older clients sent an unkeyed SHA-256, which the server cannot tell apart and need not. */
+  /** The keyed fingerprint (HMAC-SHA-256 under the vault's naming key) of the changes as JSON, 64 hex digits. */
   plain?: string;
   /** The device that pushed it. */
   device?: string;
@@ -413,21 +412,14 @@ export const resetMetaFlush = () => lastMetaFlush.clear();
  * full plaintext hash, of which the name carries only twelve digits); the
  * first copy is kept. 'different' when it holds something else: the caller
  * answers 409 and nothing is overwritten, so a name can never quietly stand
- * for two contents. A batch stored without a plaintext hash (an older client)
- * is compared by bytes only.
+ * for two contents.
  */
 export async function storeOnce(r2: R2Bucket, id: string, meta: VaultMeta, key: string, body: Uint8Array, extra: BatchMeta = {}, quota?: Quota): Promise<'stored' | 'same' | 'different'> {
   const sha = await sha256hex(body);
   const existing = await r2.head(key);
   if (existing) {
     const md: Partial<Record<string, string>> = existing.customMetadata ?? {};
-    let had: string | undefined = md.sha;
-    if (!had) {
-      // Written before hashes were kept: compare the bytes themselves.
-      const o = await r2.get(key);
-      had = o ? await sha256hex(new Uint8Array(await o.arrayBuffer())) : undefined;
-    }
-    if (had === sha) return 'same';
+    if (md.sha === sha) return 'same';
     if (extra.plain && extra.device && md.plain === extra.plain && md.device === extra.device) return 'same';
     return 'different';
   }
@@ -437,13 +429,13 @@ export async function storeOnce(r2: R2Bucket, id: string, meta: VaultMeta, key: 
 
 const PLAIN = /^[0-9a-f]{64}$/;
 const DEVICE = /^[a-z0-9]{1,16}$/;
-/** The optional push headers: X-Batch-Plain (the keyed fingerprint of the changes as JSON, 64 hex digits) and X-Device. Absent is fine (older clients); malformed is 400. */
+/** The push headers: X-Batch-Plain (the keyed fingerprint of the changes as JSON, 64 hex digits) and X-Device. Both required; absent or malformed is 400. */
 export function batchMeta(request: Request): BatchMeta {
   const plain = request.headers.get(PUSH_HEADERS.plain);
   const device = request.headers.get(PUSH_HEADERS.device);
-  if (plain != null && !PLAIN.test(plain)) error(400, 'x-batch-plain must be 64 hex digits');
-  if (device != null && !DEVICE.test(device)) error(400, 'x-device must be a device id');
-  return { plain: plain ?? undefined, device: device ?? undefined };
+  if (plain == null || !PLAIN.test(plain)) error(400, 'x-batch-plain must be 64 hex digits');
+  if (device == null || !DEVICE.test(device)) error(400, 'x-device must be a device id');
+  return { plain, device };
 }
 /** The photograph's removal proof from its header, or null; malformed is 400. */
 export function dropProof(request: Request): string | null {

@@ -5,9 +5,7 @@
  * over the store it is given, so the order can be tested without IndexedDB.
  */
 import type { Change } from '$core/log';
-import { hlcCompare } from '$core/hlc';
 import type { StagedReplacement, PhotoBlobs } from '$lib/db/vault';
-import { NUMBERING_SETTING } from '$lib/db/types';
 import { photosWithoutPixels, type ReadBackup } from './backup';
 
 export interface ReplaceOpts {
@@ -16,20 +14,9 @@ export interface ReplaceOpts {
   onProgress?: (done: number, total: number) => void;
 }
 
-const isScheme = (s: unknown): boolean => !!s && typeof s === 'object' && ((s as { mode?: unknown }).mode === 'year' || (s as { mode?: unknown }).mode === 'prefix') && typeof (s as { width?: unknown }).width === 'number';
-
-/** The file's changes, plus the setting record for a manifest-only numbering scheme (a file from before the scheme was synced), stamped after everything in the file. */
+/** The file's changes: the replacement is exactly the file's log. */
 export function replacementChanges(file: ReadBackup): Change[] {
-  const changes = [...file.changes];
-  const fileScheme = file.manifest?.scheme;
-  // The default scheme needs no record: a device with no setting record is on the default already, and a file that is
-  // exactly its collection should restore to exactly its log.
-  const isDefault = isScheme(fileScheme) && (fileScheme as { mode: string; width: number }).mode === 'year' && (fileScheme as { width: number }).width === 4;
-  if (isScheme(fileScheme) && !isDefault && !changes.some((c) => c.kind === 'setting' && c.id === NUMBERING_SETTING)) {
-    const last = changes.reduce((m, c) => (hlcCompare(c.t, m) > 0 ? c.t : m), '0000000000000-0000-a');
-    changes.push({ t: `${last.slice(0, 13)}-ffff-zzscheme`, kind: 'setting', id: NUMBERING_SETTING, field: 'scheme', value: fileScheme });
-  }
-  return changes;
+  return [...file.changes];
 }
 
 export interface ReplaceResult {

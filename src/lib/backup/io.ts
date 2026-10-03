@@ -1,9 +1,8 @@
 /** Browser wiring for backups: the vault in, a download out, and a file back in. */
 import { collection } from '$lib/db/collection.svelte';
 import { getPhotoBlobs, putPhotoBlobs, deletePhotoBlobs, photoBlobIds, getMeta, openStaging } from '$lib/db/vault';
-import { NUMBERING_SETTING, accNo, sowNo } from '$lib/db/types';
+import { accNo, sowNo } from '$lib/db/types';
 import { sync } from '$lib/sync/engine.svelte';
-import { DEFAULT_SCHEME, type NumberingScheme } from '$core/accession';
 import { buildBackup, readBackup, previewMerge, summarise, photosWithoutPixels, type ReadBackup } from './backup';
 import { replaceThroughStaging } from './replace';
 import { backupName } from './format';
@@ -22,7 +21,6 @@ export async function prepareBackup(onProgress?: (done: number, total: number) =
   const changes = await collection.exportChanges();
   const built = await buildBackup({
     changes,
-    scheme: collection.scheme,
     device: await getMeta<string>('device'),
     app: 'cultifolio 3',
     settings: readDeviceSettings(),
@@ -83,20 +81,14 @@ export interface RestoreReport {
   photos: number;
   /** Photo records restored without pixels, because neither the file nor this device holds them. Said once, here; the record is kept. */
   photosMissing: number;
-  /** The numbering scheme was taken from the file because this device was on the default. */
-  schemeRestored: NumberingScheme | null;
   /** Device settings taken from the file because this device had none: 'site', 'units', 'label settings', 'preferences'. */
   settingsRestored: string[];
 }
 
-const sameScheme = (a: NumberingScheme, b: NumberingScheme) => a.mode === b.mode && a.width === b.width && (a.prefix ?? null) === (b.prefix ?? null);
-const isScheme = (s: unknown): s is NumberingScheme => !!s && typeof s === 'object' && ((s as NumberingScheme).mode === 'year' || (s as NumberingScheme).mode === 'prefix') && typeof (s as NumberingScheme).width === 'number';
 
 /**
  * Merge: add what the file has that this device lacks; nothing here is lost.
- * A file from before the scheme was a synced setting carries it in the
- * manifest only; when this device is still on the default scheme, the file's
- * is taken.
+ * The numbering scheme is a setting record in the log, so it merges like any other.
  *
  * Replace: the device ends up exactly the file. The replacement is written
  * in full to a staging database first (see vault.ts); only when every change
@@ -139,18 +131,11 @@ export async function restoreBackup(o: Opened, mode: 'merge' | 'replace', onProg
   // not merely waiting: a photograph a set-aside batch has yet to complete keeps its pixels for the day it does
   // (round thirty-five, R1-3).
   for (const id of written) if (collection.photoRemoved(id)) { await deletePhotoBlobs(id).catch(() => {}); photos--; }
-  let schemeRestored: NumberingScheme | null = null;
-  const fileScheme = o.file.manifest?.scheme;
-  const fileHasSetting = o.file.changes.some((c) => c.kind === 'setting' && c.id === NUMBERING_SETTING);
-  if (!fileHasSetting && isScheme(fileScheme) && sameScheme(collection.scheme, DEFAULT_SCHEME) && !sameScheme(fileScheme, DEFAULT_SCHEME)) {
-    await collection.setScheme(fileScheme);
-    schemeRestored = fileScheme;
-  }
-  return { changes: changes.length, photos, photosMissing: o.missingPixels.length, schemeRestored, settingsRestored: applyDeviceSettings(o.file.settings) };
+  return { changes: changes.length, photos, photosMissing: o.missingPixels.length, settingsRestored: applyDeviceSettings(o.file.settings) };
 }
 
 /** The replace path: stage, verify, turn sync off, switch (see replace.ts and vault.ts). */
 async function replaceFromBackup(o: Opened, onProgress?: (done: number, total: number) => void): Promise<RestoreReport> {
   const r = await replaceThroughStaging(o.file, openStaging, { onProgress, beforeSwitch: async () => { if (sync.configured) await sync.forget('replaced'); else await sync.markReplaced(); } });
-  return { ...r, schemeRestored: null, settingsRestored: applyDeviceSettings(o.file.settings) };
+  return { ...r, settingsRestored: applyDeviceSettings(o.file.settings) };
 }

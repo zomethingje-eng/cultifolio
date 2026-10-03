@@ -9,6 +9,7 @@ import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { hlcEncode, MAX_AHEAD_MS } from '$core/hlc';
 import { FOLD_REFRESH } from '$lib/db/collection.svelte';
+import { FOLD_RULES } from '$core/log';
 import type { Change } from '$core/log';
 
 type Store = typeof import('$lib/db/collection.svelte');
@@ -124,8 +125,8 @@ describe('the fold snapshot', () => {
     // the write that was built against gen0 is refused
     const f = (await b.vault.readFold()) ?? undefined;
     expect(f).toBeUndefined();
-    expect(await b.vault.writeFold({ rules: 1, build: '', device: DEV, offset: 0, seq: 0, records: [], seen: [], born: [], parents: [], held: [], last: '', changes: 0 }, gen0)).toBe(false);
-    expect(await b.vault.writeFold({ rules: 1, build: '', device: DEV, offset: 0, seq: 0, records: [], seen: [], born: [], parents: [], held: [], last: '', changes: 0 }, gen0 + 1)).toBe(true);
+    expect(await b.vault.writeFold({ rules: FOLD_RULES, build: '', device: DEV, offset: 0, seq: 0, records: [], seen: [], born: [], parents: [], held: [], last: '', changes: 0 }, gen0)).toBe(false);
+    expect(await b.vault.writeFold({ rules: FOLD_RULES, build: '', device: DEV, offset: 0, seq: 0, records: [], seen: [], born: [], parents: [], held: [], last: '', changes: 0 }, gen0 + 1)).toBe(true);
     expect(await b.vault.readFold()).toBeDefined();
     // a replace from a staged file
     const st = await b.vault.openStaging();
@@ -148,11 +149,12 @@ describe('the fold snapshot', () => {
     await b.store.collection.load();
     expect(await b.store.collection.snapshotWritten).toBe(true);
     const good = (await b.vault.readFold())!;
-    await b.vault.writeFold({ ...good.fold, rules: good.fold.rules + 1 }, good.gen);
+    await b.vault.dropFold(); // an older rules number's snapshot does not overwrite a newer one, so the old one is put in its place
+    expect(await b.vault.writeFold({ ...good.fold, rules: good.fold.rules - 1 }, await b.vault.foldGen())).toBe(true);
     b = await boot();
     await b.store.collection.load();
     expect(b.store.collection.loaded.from).toBe('log');
-    expect(await b.store.collection.snapshotWritten).toBe(true); // written afresh under this build's rules
+    expect(await b.store.collection.snapshotWritten).toBe(true); // written afresh under this build's rules (a newer rules number's snapshot would be left alone: round fifty-five's test)
     await b.vault.writeFold({ ...(await b.vault.readFold())!.fold, device: 'cccccccccccc' }, await b.vault.foldGen());
     b = await boot();
     await b.store.collection.load();
@@ -224,7 +226,7 @@ describe('the fold snapshot', () => {
     expect((await b.vault.allChanges()).filter((c) => c.field === 'acc')).toHaveLength(1);
   });
 
-  it('round fifty-four: a stamp parked after the snapshot drops it, and a snapshot of another build is not read', async () => {
+  it('round fifty-four: a stamp parked after the snapshot drops it; a snapshot of another build under the same rules is read (round fifty-seven), one under other rules is not', async () => {
     const base = Date.now() - 86_400_000;
     const { vault } = await boot();
     await vault.appendChanges([...plant(1, base)], true);
@@ -244,27 +246,15 @@ describe('the fold snapshot', () => {
     await b.vault.writeFold({ ...good.fold, build: 'another-build' }, good.gen);
     b = await boot();
     await b.store.collection.load();
-    expect(b.store.collection.loaded.from).toBe('log');
-  });
-
-  it('round fifty-four: the revival repair judges a record whole, so a tombstone and an import stamp arriving after a real edit do not remove the plant, and an import stamp arriving after a removal in the snapshot does', async () => {
-    const base = Date.now() - 10 * 86_400_000;
-    const { vault } = await boot();
-    // p1: made, removed, then revived by a real edit (T3), all folded into the snapshot save the removal and the import, which arrive later
-    await vault.appendChanges([...plant(1, base), { t: stamp(base + 3000), kind: 'accession', id: 'p1', field: 'notes', value: 'revived for real' }, ...plant(2, base + 50), { t: stamp(base + 100), kind: 'accession', id: 'p2', field: '_deleted', value: true }], true);
-    let b = await boot();
-    await b.store.collection.load();
-    expect(await b.store.collection.snapshotWritten).toBe(true);
-    expect(b.store.collection.accession('p1')).toBeDefined();
-    expect(b.store.collection.accession('p2')).toBeUndefined();
-    // the old backup's changes arrive: p1's tombstone at T1 and importedOn at T2 (both before T3); p2's importedOn after its removal
-    await b.vault.appendChanges([{ t: stamp(base + 1000), kind: 'accession', id: 'p1', field: '_deleted', value: true }, { t: stamp(base + 2000), kind: 'accession', id: 'p1', field: 'importedOn', value: '2024-01-01' }, { t: stamp(base + 200), kind: 'accession', id: 'p2', field: 'importedOn', value: '2024-01-01' }], true);
+    expect(b.store.collection.loaded.from).toBe('snapshot'); // a deploy that leaves the rules as they were costs no whole fold
+    expect(b.store.collection.parkedFor('accession', 'p1')).toHaveLength(1);
+    const again = (await b.vault.readFold())!;
+    await b.vault.dropFold();
+    const gen = await b.vault.foldGen();
+    await b.vault.writeFold({ ...again.fold, rules: again.fold.rules - 1 }, gen);
     b = await boot();
     await b.store.collection.load();
-    expect(b.store.collection.loaded.from).toBe('snapshot');
-    expect(b.store.collection.accession('p1')?.notes).toBe('revived for real'); // not removed again: the tail alone would have said so
-    expect(b.store.collection.accession('p2')).toBeUndefined(); // the legacy revival, removed again
-    expect((await b.vault.allChanges()).filter((c) => c.id === 'p1' && c.field === '_deleted')).toHaveLength(1);
+    expect(b.store.collection.loaded.from).toBe('log');
   });
 
   it('round fifty-four: the arrival rows read with the counter say when a replace landed between the counter and the tail', async () => {
@@ -350,24 +340,15 @@ describe('the fold snapshot', () => {
     expect((await b.vault.allChanges()).filter((c) => c.field === 'acc')).toHaveLength(1);
   });
 
-  it('round fifty-five: an older build does not overwrite a newer build\'s snapshot', async () => {
+  it('round fifty-five: an older shell does not overwrite a snapshot folded under newer rules (by the rules since round fifty-seven)', async () => {
     const { vault } = await boot();
-    const base = { rules: 2, device: DEV, offset: 0, seq: 0, records: [], seen: [], born: [], parents: [], held: [], last: '', changes: 0 };
+    const base = { device: DEV, offset: 0, seq: 0, records: [], seen: [], born: [], parents: [], held: [], last: '', changes: 0, build: 'x' };
     const gen = await vault.foldGen();
-    expect(await vault.writeFold({ ...base, build: '2000' }, gen)).toBe(true);
-    expect(await vault.writeFold({ ...base, build: '1000' }, gen)).toBe(false);
-    expect((await vault.readFold())!.fold.build).toBe('2000');
-    expect(await vault.writeFold({ ...base, build: '3000' }, gen)).toBe(true);
+    expect(await vault.writeFold({ ...base, rules: 3 }, gen)).toBe(true);
+    expect(await vault.writeFold({ ...base, rules: 2 }, gen)).toBe(false);
+    expect((await vault.readFold())!.fold.rules).toBe(3);
+    expect(await vault.writeFold({ ...base, rules: 3, build: 'y' }, gen)).toBe(true);
+    expect(await vault.writeFold({ ...base, rules: 4 }, gen)).toBe(true);
   });
 
-  it('round fifty-five: an import stamp after a removal is not an edit, in the fold itself; nothing is written', async () => {
-    const base = Date.now() - 86_400_000;
-    const { vault } = await boot();
-    await vault.appendChanges([...plant(1, base), { t: stamp(base + 100), kind: 'accession', id: 'p1', field: '_deleted', value: true }, { t: stamp(base + 200), kind: 'accession', id: 'p1', field: 'importedOn', value: '2024-01-01' }], true);
-    const before = (await vault.allChanges()).length;
-    const b = await boot();
-    await b.store.collection.load();
-    expect(b.store.collection.accession('p1')).toBeUndefined();
-    expect((await b.vault.allChanges()).length).toBe(before);
-  });
 });

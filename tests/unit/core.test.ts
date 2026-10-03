@@ -340,16 +340,13 @@ describe('a removal under a repeated stamp (round thirteen, 8)', () => {
   });
 });
 
-describe('round twenty-nine: old data is mended, not refused', () => {
+describe('round twenty-nine: a value of the wrong type is left out, not the list', () => {
   const ok = { t: '1700000000000-0000-x', kind: 'accession', id: 'r1', field: 'price', value: 12 };
-  it('a finite number in a text field becomes its text; anything else of the wrong type is left out and named; the rest is kept', async () => {
-    const { readChanges, mendChange } = await import('$core/log');
-    expect(mendChange(ok as Change)).toEqual({ ...ok, value: '12' });
-    const keyed = { ...ok, field: 'taxonKey' } as Change;
-    expect(mendChange(keyed)).toBe(keyed); // a number where a number belongs: the same object back
+  it('a value of the wrong type is left out and named; the rest is kept (since round fifty-seven nothing is mended: a number in a text field is the wrong type too)', async () => {
+    const { readChanges } = await import('$core/log');
     const r = readChanges([ok, { ...ok, field: 'notes', value: { a: 1 } }, { ...ok, field: 'taxonKey', value: 'x' }, { ...ok, field: 'notes', value: 'fine' }]);
-    expect(r.changes.map((c) => c.value)).toEqual(['12', 'fine']);
-    expect(r.dropped).toEqual(['change 1: notes of a accession must be a string, not {"a":1}', 'change 2: taxonKey of a accession must be a number, not "x"']);
+    expect(r.changes.map((c) => c.value)).toEqual(['fine']);
+    expect(r.dropped).toEqual(['change 0: price of a accession must be a string, not 12', 'change 1: notes of a accession must be a string, not {"a":1}', 'change 2: taxonKey of a accession must be a number, not "x"']);
     expect(() => readChanges(null)).toThrow(/not a list/);
     expect(() => readChanges([ok, { ...ok, t: '~' }])).toThrow(/change 1: bad timestamp/); // structure still refuses the list whole
     expect(() => readChanges([{ ...ok, field: '*' }])).toThrow(/reserved/);
@@ -366,14 +363,12 @@ describe('round twenty-nine: old data is mended, not refused', () => {
       { t: t(4), kind: 'accession', id: 'r2', field: 'status', value: 'growing' },
       { t: t(5), kind: 'sowing', id: 's1', field: 'count', value: '3' }
     ]);
-    expect(r.changes.map((c) => `${c.id}.${c.field}`)).toEqual(['r1.acc', 'r1.status', 'r2.taxonName', 'r2.notes', 'r2.status', 's1.count']);
-    expect(r.changes[3].value).toBe('7.5');
-    expect(r.changes[5].value).toBe(3); // a number written as text folds as the number (round thirty-three, 1)
-    expect(r.dropped).toEqual(['change 1: taxonName of a accession must be a string, not {"bad":true}']);
+    expect(r.changes.map((c) => `${c.id}.${c.field}`)).toEqual(['r1.acc', 'r1.status', 'r2.taxonName', 'r2.status']); // nothing is mended since round fifty-seven: a number in a text field and a count as text are left out
+    expect(r.dropped).toEqual(['change 1: taxonName of a accession must be a string, not {"bad":true}', 'change 4: notes of a accession must be a string, not 7.5', 'change 6: count of a sowing must be a number, not "3"']);
     // r1 is in the fold but not live: it waits, counted, for a build that reads its name
     const { state } = materialise(r.changes);
     expect(live(state, 'accession').map((a) => a.id)).toEqual(['r2']);
-    expect(incomplete(state).map((x) => `${x.kind}:${x.id}`)).toEqual(['accession:r1', 'sowing:s1']);
+    expect(incomplete(state).map((x) => `${x.kind}:${x.id}`)).toEqual(['accession:r1']);
     // a later readable name makes it whole, whichever list it arrives in (round twenty-two's reviewer: a corrected name was lost with the bad one)
     const { state: s2 } = materialise([...r.changes, { t: t(6), kind: 'accession', id: 'r1', field: 'taxonName', value: 'Aloe vera' }]);
     expect(live(s2, 'accession').map((a) => a.id).sort()).toEqual(['r1', 'r2']);
@@ -416,25 +411,11 @@ describe('round twenty-nine: old data is mended, not refused', () => {
     const s = readChanges([{ t: '1700000000000-0000-x', kind: 'sowing', id: 's1', field: 'taxonName', value: 'Aloe' }, { t: '1700000000001-0000-x', kind: 'sowing', id: 's1', field: 'method', value: 'seed' }, { t: '1700000000002-0000-x', kind: 'sowing', id: 's1', field: 'sown', value: '2026-03-01' }, { t: '1700000000003-0000-x', kind: 'sowing', id: 's1', field: 'status', value: 'active' }, { t: '1700000000004-0000-x', kind: 'sowing', id: 's1', field: 'count', value: { bad: true } }]);
     expect(live(materialise(s.changes).state, 'sowing')).toHaveLength(0);
   });
-  it('a word this build does not know is kept, and an older importer\'s words are mended (round thirty, 1)', async () => {
-    const { readChanges, mendChange } = await import('$core/log');
+  it('a word this build does not know is kept (round thirty, 1)', async () => {
+    const { readChanges } = await import('$core/log');
     const c = (field: string, value: unknown, kind = 'sowing') => ({ t: '1700000000000-0000-x', kind, id: 's1', field, value }) as Change;
     expect(readChanges([c('status', 'banana', 'accession')]).changes[0].value).toBe('banana');
-    expect(mendChange(c('method', 'leaf cutting')).value).toBe('leaf');
-    expect(mendChange(c('method', 'stem cutting')).value).toBe('cutting');
-    expect(mendChange(c('method', 'Offsets / pups')).value).toBe('offset');
-    expect(mendChange(c('method', 'offsets / pup')).value).toBe('offset'); // what the old importer wrote: the label lower-cased with one trailing s cut (round thirty-five, R1-1)
-    expect(mendChange(c('method', 'bulbils / bulblet')).value).toBe('bulbil');
-    expect(mendChange(c('method', 'leaf')).value).toBe('leaf');
-    expect(mendChange(c('provenance', 'Wild collected')).value).toBe('wild');
-    expect(mendChange(c('provenance', 'ex habitat')).value).toBe('f1');
-    expect(mendChange(c('provenance', 'garden centre')).value).toBe('garden centre'); // not one of the old importer's words: kept as it is (round thirty-three, 2)
-    expect(mendChange(c('method', 'tissue culture')).value).toBe('tissue culture');
-    expect(mendChange(c('method', 'seedling graft')).value).toBe('seedling graft');
-    expect(mendChange(c('provenance', 'seed-grown from wild-collected seed')).value).toBe('f1');
-    expect(mendChange(c('provenance', 'not wild collected')).value).toBe('not wild collected');
-    expect(mendChange(c('provenance', 'F2')).value).toBe('F2');
-    expect(mendChange(c('provenance', 'f1', 'accession')).value).toBe('f1');
+    expect(readChanges([c('method', 'tissue culture')]).changes[0].value).toBe('tissue culture');
   });
   it('a field named after Object.prototype is refused, whatever its value (round twenty-nine, 10)', async () => {
     const { validateChanges } = await import('$core/log');

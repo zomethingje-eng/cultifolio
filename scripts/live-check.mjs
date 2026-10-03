@@ -179,7 +179,9 @@ for (const path of ['/about/how', `/species/${species}`, '/offline', '/api/corpu
 
 // The reference under a stale corpus id is answered but not stored anywhere (round sixteen, 12).
 {
-  const path = '/api/entries?b=00&c=stale-id-from-a-live-check';
+  // the bucket count the corpus announces, as every device sends it (a request without one is refused: round fifty-seven)
+  const n = (await get('/api/corpus').then((x) => JSON.parse(x.text)).catch(() => ({})))?.buckets ?? 32;
+  const path = `/api/entries?b=00&n=${n}&c=stale-id-from-a-live-check`;
   const r = await get(path);
   if (r.status !== 200) fail(path, r);
   if (!/no-store/.test(r.h('cache-control'))) fail(`${path} under a stale corpus id is cacheable: "${r.h('cache-control')}"`, r);

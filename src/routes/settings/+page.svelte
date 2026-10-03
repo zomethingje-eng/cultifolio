@@ -204,7 +204,7 @@
   <div class="body">
     <p class="small" style="margin: 0 0 10px">Your collection lives in this browser and nowhere else{#if sync.configured}, and in an encrypted vault only your key opens{/if}. Nothing on this site is stored about you beyond short-lived rate counters by address and, with sync on, your encrypted vault, whose sizes and timing the server can see and whose contents it cannot (<a href="/about/formats#sync">what the server can see</a>); there are no accounts and no analytics.</p>
     <div class="row">
-      <a class="btn" href="/backup">Back up, restore or import from v2</a>
+      <a class="btn" href="/backup">Back up or restore</a>
       <a class="btn" href="/sync">Sync between devices</a>
       <a class="btn" href="/about/formats">The file formats</a>
       <a class="btn" href="/about/how#privacy">What the site knows about you</a>

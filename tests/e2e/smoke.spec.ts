@@ -1,3 +1,4 @@
+import { zipSync, strToU8 } from 'fflate';
 import { test, expect } from '@playwright/test';
 
 /** The plant page's id card keeps one primary action; Edit, Label and Propagate are behind "More" (improvements, 7). */
@@ -2347,10 +2348,13 @@ test('round twenty-eight: a backup of four hundred plants with long notes is wri
     c('accession', id, 'notes', `${i}: ${note}`);
     c('accession', id, 'acc', `2025-${String(i).padStart(4, '0')}`);
   }
-  const json = JSON.stringify({ format: 'cultifolio-changes', v: 1, changes });
+  const json = JSON.stringify(changes);
   expect(json.length).toBeGreaterThan(524_288);
+  // a backup zip as the app writes one: the manifest and the log (since round fifty-seven only the zip is read)
+  const manifest = { format: 'cultifolio-backup', v: 1, exported: new Date().toISOString(), counts: { changes: changes.length, accessions: 400, events: 0, locations: 0, sowings: 0, taxa: 0, photos: 0, photoBytes: 0 } };
+  const seed = Buffer.from(zipSync({ 'manifest.json': strToU8(JSON.stringify(manifest)), 'changes.json': strToU8(json) }));
   await page.goto('/backup');
-  await page.locator('#bk-file').setInputFiles({ name: 'seed.json', mimeType: 'application/json', buffer: Buffer.from(json) });
+  await page.locator('#bk-file').setInputFiles({ name: 'seed.cultifolio.zip', mimeType: 'application/zip', buffer: seed });
   await expect(page.locator('.preview')).toContainText('400 plants');
   await page.click('#bk-merge');
   await expect(page.locator('#bk-done')).toContainText('400 plants');

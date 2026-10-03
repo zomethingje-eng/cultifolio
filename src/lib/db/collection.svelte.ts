@@ -18,13 +18,12 @@ import { Clock, hlcDecode, hlcEncode, hlcCompare, hlcAfter, nowMs, clockOffsetMs
 /** How far ahead of the corrected clock a held stamp may be for a local edit to its field to be stamped just past it (round fifty-one, 1). */
 export const FOLLOW_HELD_MS = 86_400_000;
 import { tag36 } from '$core/tag';
-import { apply, diff, readChanges, isComplete, isHeld, REQUIRED_FIELDS, KINDS, FOLD_RULES, incomplete as incompleteRecords, key as recKey, type Change, type Kind, type Record_, type State, type Hold, hlcWall } from '$core/log';
+import { apply, diff, readChanges, isComplete, isHeld, REQUIRED_FIELDS, KINDS, FOLD_RULES, key as recKey, type Change, type Kind, type Record_, type State, type Hold, hlcWall } from '$core/log';
 import { nextAccession, DEFAULT_SCHEME, type NumberingScheme } from '$core/accession';
 import { allChanges, appendChanges, appendChangesClaiming, onOtherTabWrite, deviceId, requestPersistence, getMeta, setMeta, putPhotoBlobs, getPhotoBlobs, deletePhotoBlobs, holdVault, readFold, writeFold, parkStamps, foldGen, lastArrival, arrivalsAfter, changesByKeys, type FoldSnapshot, type NumberKind, type VaultNotice } from './vault';
 import { version as buildVersion } from '$app/environment';
 import type { Accession, PlantEvent, Taxon, Location, Sowing, Provenance, Photo } from './types';
 import { PROP_METHODS, accNo, sowNo, NUMBERING_SETTING } from './types';
-import { slugify } from '$core/names';
 import { mySpeciesOf, type MySpecies } from './species-list';
 
 export { NUMBERING_SETTING };
@@ -42,7 +41,6 @@ class Collection {
   /** The last vault write that failed, as a sentence, or null once a write has succeeded again. Pages show it; the edit it describes was not stored and is not shown. */
   lastWriteError = $state<string | null>(null);
   /** The scheme this device kept in `meta` before the scheme was a synced setting; read only when the log has no setting record. */
-  private metaScheme = $state<NumberingScheme | null>(null);
   private state: State = new SvelteMap<string, Record_>();
   /**
    * The same records by kind, so a list of plants is built from the plants and not from a scan of every record, and a
@@ -177,16 +175,12 @@ class Collection {
           if (what === 'written') void this.catchUp().catch(() => {});
         });
         const changes = await this.foldFromVault();
-        const scheme = await getMeta<NumberingScheme>('scheme');
-        if (isScheme(scheme)) this.metaScheme = scheme;
         await this.readLedger();
         // No reading of the log writes to it (round fifty-six, 3). Two records under one number are repaired where the log is
         // written anyway: after a merge (an import, a pull), when a removed plant comes back, and when the grower asks on the
         // record's page, which says the number is shared until then. A load used to write the repair (round thirty-eight,
         // R2-1); the page that answered to the first of the two for good now says so and offers the repair.
         this.ready = true;
-        // Plants an earlier build's import brought back nameless (a tombstone, then its `importedOn`) fold as removed: an
-        // `importedOn` is not an edit (FOLD_RULES 2, round fifty-five). The removals earlier builds wrote stay in the log, harmlessly.
         void changes;
         // A plant or batch of the oldest shape has its number as its id and no `acc`/`no` field; `accNo`/`sowNo` read either,
         // which they must for files in flight. A load wrote the number as a field (round forty-one, R4); a reading of the log
@@ -201,13 +195,12 @@ class Collection {
 
   /**
    * The accession numbering scheme: a synced setting record (so every device
-   * mints and repairs numbers the same way), else what this device kept in
-   * `meta` before the setting existed, else the default.
+   * mints and repairs numbers the same way), else the default.
    */
   get scheme(): NumberingScheme {
     const r = this.state.get(recKey('setting', NUMBERING_SETTING));
     const s = r && !r._deleted ? r.scheme : null;
-    return isScheme(s) ? s : (this.metaScheme ?? DEFAULT_SCHEME);
+    return isScheme(s) ? s : DEFAULT_SCHEME;
   }
 
   /** Whether the log holds a record with this identity, live or deleted. */
@@ -269,7 +262,9 @@ class Collection {
    * in the vault and brought up to date from the changes that arrived after
    * it, in arrival order (round fifty-three, 1; the reviewers' finding 25).
    * The snapshot is wrong, and the log folded again, when: the fold's rules
-   * or the build are not this one's; it is another device's; the clock
+   * are not this one's (a deploy that leaves them as they were keeps the
+   * snapshot; a test holds the fold's source to the rules number, round
+   * fifty-seven); it is another device's; the clock
    * correction has changed since (every hold was judged by the old clock);
    * the log was replaced, or a stored change displaced, or a stamp parked
    * (the vault drops it in that very transaction, and refuses a snapshot that
@@ -351,7 +346,7 @@ class Collection {
     const seq = await lastArrival(); // before anything is read: a change stored after this number is folded again next time, which is harmless; one stored before it is in what is read
     const had = await readFold().catch(() => undefined);
     const f = had?.fold;
-    const usable = !!f && f.rules === FOLD_RULES && f.build === buildVersion && f.device === this.deviceId && f.offset === clockOffsetMs() && had.gen === gen && Array.isArray(f.records) && Array.isArray(f.seen) && Array.isArray(f.born) && Array.isArray(f.parents) && Array.isArray(f.held);
+    const usable = !!f && f.rules === FOLD_RULES && f.device === this.deviceId && f.offset === clockOffsetMs() && had.gen === gen && Array.isArray(f.records) && Array.isArray(f.seen) && Array.isArray(f.born) && Array.isArray(f.parents) && Array.isArray(f.held);
     if (f && usable) {
       try {
         const got = await this.fromFold(f, gen);
@@ -529,7 +524,7 @@ class Collection {
   events(acc: string): PlantEvent[] {
     return this.eventsByAcc.get(acc) ?? [];
   }
-  private taxaLive = $derived.by(() => this.live<Taxon>('taxon').filter((t) => !t.removed));
+  private taxaLive = $derived.by(() => this.live<Taxon>('taxon'));
   get taxa(): Taxon[] {
     return this.taxaLive;
   }
@@ -539,8 +534,7 @@ class Collection {
   }
   /** Keep a species on your list without a plant of it (or stop). Diffed like any other write, so sync carries it unchanged. */
   async follow(slug: string, name: string, gbifKey: number | null | undefined, on: boolean): Promise<void> {
-    // A taxon record a v2 overlay marked removed is brought back by following it; otherwise it would be followed and listed nowhere.
-    await this.put('taxon', slug, { name, gbifKey: gbifKey ?? null, followed: on || null, ...(on ? { removed: null } : {}) });
+    await this.put('taxon', slug, { name, gbifKey: gbifKey ?? null, followed: on || null });
   }
   /** Your species: every kind you grow or follow, by slug. */
   get mySpecies(): Map<string, MySpecies> {
@@ -632,13 +626,11 @@ class Collection {
     return { parent: null, loop: false };
   }
   /** Remember every parentId a place has been given, so a cut loop can fall back to the previous one. Same on every device: it is read from the log, not from arrival order. */
-  /** The earliest stamp seen for each record: the day it was made on this device or imported, whatever its id looks like (a v2 import keeps its v2 ids). */
+  /** The earliest stamp seen for each record: the day it was made, for an id that does not carry it. */
   private born = new Map<string, string>();
-  /** The local day a record was made or imported: the import day written on the record when it came in a file (a v2 import stamps its changes with the v2 edit times, years back), else the day in its id, else its first change. */
+  /** The local day a record was made: the day in its id, else its first change. */
   madeOn(kind: Kind, id: string): string | null {
     const k = recKey(kind, id);
-    const imp = this.state.get(k)?.importedOn;
-    if (typeof imp === 'string') return imp;
     const fromId = madeOn(id);
     if (fromId) return fromId;
     const t = this.born.get(k);
@@ -754,12 +746,6 @@ class Collection {
     const ids = new Set(deep ? this.subtree(id) : [id]);
     return this.accessions.filter((a) => a.status === 'growing' && a.locationId && ids.has(this.placeOf(a.locationId) ?? ''));
   }
-  /** Free-text locations still on plants, with counts, for one-click conversion. */
-  get legacyLocations(): Array<{ text: string; n: number }> {
-    const m = new Map<string, number>();
-    for (const a of this.accessions) if (!a.locationId && a.location) m.set(a.location, (m.get(a.location) ?? 0) + 1);
-    return [...m.entries()].map(([text, n]) => ({ text, n })).sort((a, b) => b.n - a.n);
-  }
   /** A new place. Its identity is minted, never derived from the name: two shelves called "Shelf 1" in different rooms are two places. */
   async addLocation(l: Omit<Location, 'id'> & { id?: string }): Promise<Location> {
     if (l.parentId && !this.location(l.parentId)) throw new Error('That parent place does not exist.');
@@ -767,14 +753,6 @@ class Collection {
     const rec: Location = { ...l, id };
     await this.put('location', id, rec as unknown as Record<string, unknown>);
     return rec;
-  }
-  /** Turn a free-text location into a node and move every plant that used the text. */
-  async convertLegacyLocation(text: string, parentId: string | null = null): Promise<Location> {
-    const loc = await this.addLocation({ name: text, parentId, type: 'shelf' });
-    const changes: Change[] = [];
-    for (const a of this.accessions) if (!a.locationId && a.location === text) changes.push({ t: this.tick(), kind: 'accession', id: a.id, field: 'locationId', value: loc.id });
-    await this.commit(changes);
-    return loc;
   }
   /** Removing a node moves its plants, sowings and children up to its parent as shown (never the raw `parentId`, which in a cut loop points back into it); nothing is orphaned. */
   async removeLocation(id: string): Promise<{ plants: number; batches: number; places: number; to: string | null }> {
@@ -1051,7 +1029,7 @@ class Collection {
     const today = localDate();
     return this.events(acc).find((e) => e.t === 'water' && e.d <= today)?.d ?? null;
   }
-  /** A watering dated after today (a line typed ahead, a v2 import's date): not the last watering, and not "none recorded" either; said on its own (round fifty-four, 4). The earliest such date. */
+  /** A watering dated after today (a line typed ahead): not the last watering, and not "none recorded" either; said on its own (round fifty-four, 4). The earliest such date. */
   wateringAhead(acc: string): string | null {
     const today = localDate();
     let out: string | null = null;
@@ -1135,7 +1113,7 @@ class Collection {
 
   /**
    * `source`: 'local' (an edit here; listeners are told, sync will push),
-   * 'import' (a backup or v2 file: not an edit, but the server has never seen
+   * 'import' (a backup file: not an edit, but the server has never seen
    * it, so it is pushed too), 'server' (came down through sync: already there).
    */
   private async commit(changes: Change[], source: 'local' | 'import' | 'server' = 'local', requireKey?: string): Promise<void> {
@@ -1385,13 +1363,13 @@ class Collection {
    */
   async movePlantsUndoable(ids: string[], locationId: string | null): Promise<{ n: number; undo: () => Promise<void> }> {
     const changes: Change[] = [];
-    const back: Array<{ id: string; locationId: string | null; location: string | null }> = [];
+    const back: Array<{ id: string; locationId: string | null }> = [];
     const lines: string[] = [];
     for (const id of ids) {
       const cur = this.state.get(recKey('accession', id));
       if (!cur || cur._deleted || (cur.locationId ?? null) === locationId) continue;
-      back.push({ id, locationId: (cur.locationId as string | null) ?? null, location: (cur.location as string | null) ?? null });
-      changes.push(...diff('accession', id, { locationId, location: locationId ? null : (cur.location ?? null) }, cur, this.tick));
+      back.push({ id, locationId: (cur.locationId as string | null) ?? null });
+      changes.push(...diff('accession', id, { locationId }, cur, this.tick));
       if (locationId) {
         const eid = this.eventId();
         lines.push(eid);
@@ -1404,7 +1382,7 @@ class Collection {
       for (const b of back) {
         const cur = this.state.get(recKey('accession', b.id));
         if (!cur || cur._deleted || (cur.locationId ?? null) !== locationId) continue; // moved on since: left there
-        cs.push(...diff('accession', b.id, { locationId: b.locationId, location: b.location }, cur, this.tick));
+        cs.push(...diff('accession', b.id, { locationId: b.locationId }, cur, this.tick));
       }
       for (const eid of lines) if (this.state.get(recKey('event', eid))?._deleted !== true) cs.push({ t: this.tick(), kind: 'event', id: eid, field: '_deleted', value: true });
       if (cs.length) await this.commit(cs);
@@ -1435,11 +1413,9 @@ class Collection {
     await this.commit(ids.map((id) => ({ t: this.tick(), kind: 'event' as const, id, field: '_deleted', value: true })));
   }
 
-  /** The numbering scheme, as a synced setting record; `meta` is written too for a build of this device that still reads it there. */
+  /** The numbering scheme, as a synced setting record. */
   async setScheme(s: NumberingScheme): Promise<void> {
     await this.put('setting', NUMBERING_SETTING, { scheme: s });
-    this.metaScheme = s;
-    await setMeta('scheme', s);
   }
 
   /**
@@ -1453,8 +1429,8 @@ class Collection {
    * ingest.
    */
   async ingest(incoming: Change[], source: 'import' | 'server' = 'import', opts: { repair?: boolean; requireKey?: string } = {}): Promise<void> {
-    // Mended where an older build wrote a number for text; a change of a type its field never takes is left out and
-    // said, and the rest are folded, rather than the file or the batch refused whole (round twenty-nine, 2).
+    // A change of a type its field never takes is left out and said, and the rest are folded, rather than the file or the
+    // batch refused whole (round twenty-nine, 2).
     const { changes, dropped } = readChanges(incoming);
     if (dropped.length) console.warn(`${dropped.length} change${dropped.length === 1 ? '' : 's'} left out of this ${source === 'server' ? 'batch' : 'file'}:`, dropped.slice(0, 5));
     if (!changes.length) return;
@@ -1475,23 +1451,6 @@ class Collection {
         lines.push(...diff('event', eid, { id: eid, acc: o.id, d: today, t: 'note', note: `Notes replaced by an edit made ${o.how}; here they read: ${o.old}`, auto: true } as unknown as Record<string, unknown>, undefined, this.tick));
       }
       if (lines.length) await this.commit(lines, 'local').catch(() => undefined);
-    }
-    if (source === 'import') {
-      // Records new to this device today count from today, whatever their changes are stamped: a collection kept in v2 since
-      // 2019 is not "not seen for 2,400 days" on the day it arrives. The day goes on the record as a field, so it syncs and
-      // every device counts the same way (round ten, 3).
-      const today = localDate();
-      const stamp: Change[] = [];
-      const seenRec = new Set<string>();
-      for (const c of changes) {
-        if (c.kind !== 'accession' && c.kind !== 'sowing') continue;
-        const k = recKey(c.kind, c.id);
-        if (seenRec.has(k) || madeOn(c.id)) continue;
-        seenRec.add(k);
-        const r = this.state.get(k);
-        if (r && !r._deleted && !r.importedOn) stamp.push({ t: this.tick(), kind: c.kind, id: c.id, field: 'importedOn', value: today }); // never a removed record: an edit after a removal undoes it (round fifteen, 1)
-      }
-      if (stamp.length) await this.commit(stamp, 'local');
     }
     if (opts.repair !== false) await this.repairNumbers();
   }

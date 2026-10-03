@@ -24,7 +24,6 @@ vi.mock('$lib/db/vault', () => {
   m.foldGen = async () => 0;
   m.dropFold = async () => {};
   m.parkStamps = async (st: string[]) => { const had = (mem.meta.get('parked') as string[] | undefined) ?? []; const out = [...new Set([...had, ...st])]; mem.meta.set('parked', out); return out; };
-  if (!m.changesOfRecord) m.changesOfRecord = async (kind: string, id: string) => (await m.allChanges()).filter((c: Change) => c.kind === kind && c.id === id);
   m.lastArrival = async () => 0;
   m.arrivalsAfter = async () => ({ changes: [...mem.changes], seq: 0, gen: 0 });
   m.changeKeys = async () => mem.changes.map((c) => c.t);
@@ -48,8 +47,8 @@ describe('mySpeciesOf', () => {
     expect([...m.keys()]).toEqual(['copiapoa-cinerea']);
     expect(m.get('copiapoa-cinerea')).toMatchObject({ name: 'Copiapoa cinerea', grown: 2, followed: false });
   });
-  it('lists a followed species without a plant, and drops one whose taxon record was removed', () => {
-    const m = mySpeciesOf([], [taxon('ariocarpus-retusus', 'Ariocarpus retusus', { gbifKey: 5, followed: true }), taxon('lithops-aucampiae', 'Lithops aucampiae', { followed: true, removed: true }), taxon('haworthia-truncata', 'Haworthia truncata', { followed: null })]);
+  it('lists a followed species without a plant, and not one no longer followed', () => {
+    const m = mySpeciesOf([], [taxon('ariocarpus-retusus', 'Ariocarpus retusus', { gbifKey: 5, followed: true }), taxon('haworthia-truncata', 'Haworthia truncata', { followed: null })]);
     expect([...m.keys()]).toEqual(['ariocarpus-retusus']);
     expect(m.get('ariocarpus-retusus')).toEqual({ slug: 'ariocarpus-retusus', name: 'Ariocarpus retusus', gbifKey: 5, grown: 0, followed: true });
   });
