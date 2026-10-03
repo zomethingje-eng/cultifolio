@@ -1,7 +1,7 @@
 import { getIndex } from '$lib/server/dossiers';
 import { genusOf } from '$core/names';
 import { unitsFor } from '$lib/server/units';
-import { catalogueOf, byOf, chipOf, type Item } from '$lib/server/catalogue';
+import { catalogueRows, catalogueItems, rowItems, byOf, chipOf, type Item } from '$lib/server/catalogue';
 import type { PageServerLoad } from './$types';
 
 /** Rows in the first window: a phone shows about ten; the rest come from /api/rows as the reader nears the end (round forty-seven, 1). */
@@ -31,8 +31,12 @@ export const load: PageServerLoad = async ({ platform, fetch, setHeaders, url, c
   const chip = chipOf(url.searchParams.get('chip'));
   // Short and never stale: HTML names the build's hashed chunks, and a stale page after a deploy would import chunks that are gone.
   setHeaders({ 'cache-control': 'private, max-age=60', vary: 'accept-language, cookie' }); // private: the page is rendered in the reader's units, so no shared cache may hand one reader's page to another
-  const cat = catalogueOf(index, by, chip);
-  const { rows, list } = cat;
+  // The rows: the build's file under the corpus id, else derived from the index and kept (round fifty-three, 2). The one
+  // opened row's species come from the index either way.
+  const { cat } = await catalogueRows(platform, fetch, by, chip);
+  const { rows } = cat;
+  const list = catalogueItems(index);
+  const itemsOf = (id: string) => rowItems(index, by, chip, id);
   const openIndex = open ? rows.findIndex((r) => r.id === open) : -1;
   // `?from=L`: the server-rendered window starts at that letter, so a reader without JavaScript (and a crawler) can follow
   // the letter index; `?at=N` is "More" without JavaScript. With JavaScript the index jumps in place.
@@ -49,7 +53,7 @@ export const load: PageServerLoad = async ({ platform, fetch, setHeaders, url, c
   // The window: sixty rows from the start, or up to thirty past an opened row that lies beyond them, so a `?open=` link
   // lands on its row. Only the opened row carries its species.
   const end = Math.max(start + _WINDOW, openIndex >= 0 ? openIndex + 30 : 0);
-  const window = rows.slice(start, end).map((r) => (r.id === open ? { ...r, items: cat.itemsOf(r.id) } : { ...r, items: undefined as Item[] | undefined }));
+  const window = rows.slice(start, end).map((r) => (r.id === open ? { ...r, items: itemsOf(r.id) } : { ...r, items: undefined as Item[] | undefined }));
   // What a stranger sees first: twelve photographed species with a derived climate, one from each of the largest
   // genera, chosen by rule (the most-recorded species of the genus) and rotated by the day so the strip is not editorial.
   const pool = featuredPool(index, list);

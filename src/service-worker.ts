@@ -26,7 +26,7 @@ const CORPUS_CACHE = 'cultifolio-corpus';
 /** Which corpus ids this worker has pruned the corpus cache down to: the first answer under an id drops every entry under another, once per worker life, so a restarted worker prunes too (round fifty-two, 5). */
 const prunedTo = new Set<string>();
 /** Collection pages render on the device from the vault; their HTML is a shell that is the same for everyone. */
-const SHELLS = ['/plants', '/plants/new', '/places', '/propagation', '/propagation/new', '/labels', '/backup', '/sync', '/frost', '/settings', '/offline'];
+const SHELLS = ['/plants', '/plants/new', '/places', '/propagation', '/propagation/new', '/labels', '/backup', '/sync', '/today', '/settings', '/offline'];
 const BUILD = new Set(build);
 const FILES = new Set(files);
 /**

@@ -1,8 +1,7 @@
 <script lang="ts">
-  import { units } from '$lib/ui/units.svelte';
   import { localDateYearAgo, daysBetween } from '$core/dates';
   import { site } from '$lib/ui/site.svelte';
-  import { tempUnit, rainUnit, tempN, rainN } from '$core/units';
+
   /**
    * What needs you, on the front page of a grower's collection: the frost watch when a site is remembered and the
    * forecast turns, sowings still in the tray, plants not photographed in a year. Each line is a link, and a line
@@ -11,7 +10,7 @@
   import { collection } from '$lib/db/collection.svelte';
   import { accNo, sowNo, PROP_METHODS, kindOf } from '$lib/db/types';
   import { onMount } from 'svelte';
-  import { getForecast, forecastRefusal } from '$lib/weather/client';
+  import { frost } from '$lib/ui/frost.svelte';
   import { sheetsFor, type Sheet } from '$lib/ui/index.svelte';
   import { growingYear, forReader } from '$core/sheet';
   import { speciesSlug } from '$core/names';
@@ -20,24 +19,11 @@
   import { getMeta } from '$lib/db/vault';
   import { sync } from '$lib/sync/engine.svelte';
   import { prefs } from '$lib/ui/prefs.svelte';
-  type Risk = { level: string; text: string };
-  let frost = $state<{ risk: Risk } | { unchecked: string } | null>(null);
-  let hasSite = $state(false);
-  async function readForecast() {
-    const s = site.current;
-    if (!s) return;
-    hasSite = true;
-    try {
-      const r = await getForecast<{ risk: Risk }>(s.lat, s.lon, units.current);
-      frost = r.ok ? { risk: r.body.risk } : { unchecked: forecastRefusal(r.status, 'Frost') };
-    } catch {
-      frost = { unchecked: forecastRefusal(null, 'Frost') };
-    }
-  }
-  onMount(async () => {
-    site.load();
-    await readForecast();
-  });
+  /** Where the lines are shown: the front page carries them all; the Today tab shows the frost and the watering in full above, so those two lines are left to it (round fifty-three, 3). */
+  let { where = 'home' }: { where?: 'home' | 'today' } = $props();
+  const hasSite = $derived(frost.hasSite);
+  const readForecast = () => frost.check(true);
+  onMount(() => { void frost.check(); });
   /** The site from the device's own location, in one tap from the line that asks for it, as Settings offers (round forty-nine, 3; U4). Rounded to three decimals, as Settings rounds. */
   let locating = $state(false);
   let locateMsg = $state('');
@@ -111,12 +97,22 @@
     return { text: `Kept on this device: ${backup}, ${synced}${waiting}.`, tone: stale && !sync.configured ? 'warn' : 'muted' };
   });
   const unseen = $derived(growing.filter((a) => { if (collection.missedAt(a.id)) return true; const s = collection.lastSeen(a.id); return s != null && daysBetween(s) > 90; }));
-  const frostLine = $derived(frost && 'unchecked' in frost ? { tone: 'warn', text: frost.unchecked } : frost && frost.risk.level !== 'none' ? { tone: 'bad', text: frost.risk.text } : null); // the sentence names its level itself ("Frost forecast: …"), so the level is not said twice (round twenty-five, 16)
+  const frostLine = $derived(frost.line); // the sentence names its level itself ("Frost forecast: …"), so the level is not said twice (round twenty-five, 16)
+  // A plant with no watering recorded is not a plant not watered for three weeks: it is a plant whose waterings were never
+  // written down, counted from the day its record was made. The two are said apart (round fifty-three, 3; the second reviewer's condition).
+  const unknown = $derived(dry.filter((a) => !collection.lastWatered(a.id)));
+  const overdue = $derived(dry.length - unknown.length);
+  const dryText = $derived.by(() => {
+    const parts: string[] = [];
+    if (overdue) parts.push(`${overdue} of ${growing.length} plants not watered for three weeks or more`);
+    if (unknown.length) parts.push(`${unknown.length}${overdue ? '' : ` of ${growing.length}`} with no watering recorded yet, ${unknown.length === 1 ? 'its record' : 'their records'} three weeks old or more`);
+    return parts.join(', and ') + (resting.length ? `; ${resting.length === dry.length ? (dry.length === 1 ? 'it is' : 'all of them are') : `${resting.length} of them ${resting.length === 1 ? 'is' : 'are'}`} in the habitat's dry season by the species sheet` : '') + '.';
+  });
   type Line = { href: string; tone: string; text: string; water?: boolean; keeping?: boolean };
   const lines = $derived(
     ([
-      frostLine ? { href: '/frost', tone: frostLine.tone, text: frostLine.text } : null,
-      dry.length ? { href: '/plants?show=due', tone: 'warn', text: `${dry.length} of ${growing.length} plants not watered, or not recorded as watered, for three weeks or more${resting.length ? `; ${resting.length === dry.length ? (dry.length === 1 ? 'it is' : 'all of them are') : `${resting.length} of them ${resting.length === 1 ? 'is' : 'are'}`} in the habitat's dry season by the species sheet` : ''}.`, water: true } : null,
+      frostLine && where === 'home' ? { href: '/today#frost', tone: frostLine.tone, text: frostLine.text } : null,
+      dry.length && where === 'home' ? { href: '/today#water', tone: 'warn', text: dryText, water: true } : null,
       unseen.length ? { href: '/places', tone: 'warn', text: `${unseen.length} plant${unseen.length === 1 ? '' : 's'} missed at the last audit or not seen for ninety days${unseen.length <= 3 ? ': ' + unseen.map(accNo).join(', ') : ''}.` } : null,
       sowings.length ? { href: '/propagation', tone: 'ok', text: `${sowings.length} propagation batch${sowings.length === 1 ? '' : 'es'} in the tray, the oldest ${sowNo(sowings[0])} (${sowings[0].taxonName}) ${PROP_METHODS.find((x) => x.k === sowings[0].method)?.veg ? 'started' : 'sown'} ${sowings[0].sown}.` } : null,
       unphotographed.length && growing.length ? { href: '/plants?show=nophoto', tone: 'muted', text: `${unphotographed.length} of ${growing.length} plants without a photograph in the last twelve months${unphotographed.length <= 3 ? ': ' + unphotographed.map(accNo).join(', ') : ''}.` } : null,
@@ -136,9 +132,9 @@
         <a class="line {l.tone}" href={l.href}>{l.text}</a>
       {/if}
     {/each}
-    {#if !hasSite}<span class="small muted">Frost watch needs a site: <button class="linkish" type="button" onclick={locate} disabled={locating}>{locating ? 'Locating…' : 'use my location'}</button> or <a href="/settings#site">set one in Settings</a>.{#if locateMsg} {locateMsg}{/if}</span>{/if}
+    {#if !hasSite && where === 'home'}<span class="small muted">Frost watch needs a site: <button class="linkish" type="button" onclick={locate} disabled={locating}>{locating ? 'Locating…' : 'use my location'}</button> or <a href="/settings#site">set one in Settings</a>.{#if locateMsg} {locateMsg}{/if}</span>{/if}
   </div>
-{:else if collection.ready && !hasSite && growing.length}
+{:else if collection.ready && !hasSite && growing.length && where === 'home'}
   <p class="small muted todaynote">Frost watch needs a site: <button class="linkish" type="button" onclick={locate} disabled={locating}>{locating ? 'Locating…' : 'use my location'}</button> or <a href="/settings#site">set one in Settings</a>, and the forecast shows here when it turns.{#if locateMsg} {locateMsg}{/if}</p>
 {/if}
 

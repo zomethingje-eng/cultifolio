@@ -98,6 +98,7 @@ for (const path of ['/about/how', `/species/${species}`, '/offline', '/api/corpu
   headersOn(r, path);
   if (path.startsWith('/species/') && !r.text.includes(path.slice(9).replace(/-/g, ' ').replace(/^./, (c) => c.toUpperCase()))) fail(`${path} does not name the species`, r);
   if (path === '/api/corpus' && !/"id":"[A-Za-z0-9._-]{4,}"/.test(r.text)) fail(`${path} carries no corpus id`, r);
+  if (path === '/api/corpus' && !/"buckets":(32|64|128|256|512|1024|2048|4096)\b/.test(r.text)) fail(`${path} announces no bucket count: the deployed Worker is older than round fifty-three`, r);
   // A deploy with no corpus in R2 falls back to the four fixture species and answers every check above; that is the most broken deploy there is, so it fails here unless a local run says the fixture is expected (round twenty-six, 9).
   if (path === '/api/corpus' && /"id":"fixture"/.test(r.text) && !process.env.LIVE_CHECK_FIXTURE_OK) fail(`${path} says the corpus is the fixture: R2 holds no index.json, or the Worker cannot read it (set LIVE_CHECK_FIXTURE_OK=1 only for a local wrangler dev)`, r);
   ok(`${path}: 200 with both headers`);
@@ -109,12 +110,22 @@ for (const path of ['/about/how', `/species/${species}`, '/offline', '/api/corpu
 // way it says which, and the second is held.
 {
   const path = `/species/${species}?${fresh}`;
-  const a = await get(path, { headers: { accept: 'text/html' } });
-  const b = await get(path, { headers: { accept: 'text/html' } });
+  // The build a page came from: the hashed entry chunk it names. Right after a deploy two builds answer for a minute
+  // or so, and a rendered page of the new one beside a held page of the old one is not a fault but the rollover; the
+  // pair is asked for again a few seconds later, until one build answers both (round fifty-three, 4).
+  const buildOf = (r) => /\/_app\/immutable\/entry\/start\.([A-Za-z0-9_-]+)\.js/.exec(r.text)?.[1] ?? '';
+  let a, b;
+  for (let tries = 0; ; tries++) {
+    a = await get(path, { headers: { accept: 'text/html' } });
+    b = await get(path, { headers: { accept: 'text/html' } });
+    if (a.text === b.text || buildOf(a) === buildOf(b) || tries >= 6) break;
+    console.log(`  note  ${path}: two builds answering (${buildOf(a)} and ${buildOf(b)}): the deploy is still rolling out; asking again in five seconds`);
+    await new Promise((r) => setTimeout(r, 5000));
+  }
   if (!['rendered', 'held'].includes(a.h('x-cultifolio-page'))) fail(`${path}: the first request says neither rendered nor held (x-cultifolio-page "${a.h('x-cultifolio-page')}")`, a);
   if (b.h('x-cultifolio-page') !== 'held') fail(`${path}: the second request was not answered from the Worker's cache (x-cultifolio-page "${b.h('x-cultifolio-page')}")`, b);
   if (!/^private, max-age=60$/.test(b.h('cache-control'))) fail(`${path}: a held page must stay private to the browser`, b);
-  if (b.text !== a.text) fail(`${path}: the held page differs from the rendered one`, b);
+  if (b.text !== a.text) fail(`${path}: the held page differs from the rendered one (builds ${buildOf(a) || '?'} and ${buildOf(b) || '?'})`, b);
   // a client-side navigation's data request under the same URL must get JSON, never the held HTML (round forty-six, 3)
   const d = await get(`/species/${species}/__data.json?x-sveltekit-invalidated=01`, { headers: { accept: '*/*' } });
   if (d.status !== 200 || !d.h('content-type').startsWith('application/json') || d.h('x-cultifolio-page')) fail(`/species/${species}/__data.json: the data request was not answered with JSON (status ${d.status}, type "${d.h('content-type')}", x-cultifolio-page "${d.h('x-cultifolio-page')}")`, d);

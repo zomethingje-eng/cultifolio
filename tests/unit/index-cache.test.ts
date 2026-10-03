@@ -13,7 +13,8 @@ function r2(initial: { etag: string; body: unknown }) {
   const state = { etag: initial.etag, body: initial.body, gets: 0, heads: 0 };
   return {
     state,
-    get: async () => { state.gets++; return { text: async () => JSON.stringify(state.body), json: async () => state.body, etag: state.etag }; },
+    // A bucket with no manifest (round fifty-three, 2): the manifest is asked for first and is not there, which is not a read of the index.
+    get: async (k: string) => { if (k.endsWith('manifest.json')) return null; state.gets++; return { text: async () => JSON.stringify(state.body), json: async () => state.body, etag: state.etag }; },
     head: async () => { state.heads++; return { etag: state.etag }; }
   };
 }

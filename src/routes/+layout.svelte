@@ -14,6 +14,7 @@
   import { sync } from '$lib/sync/engine.svelte';
   import { today } from '$lib/ui/day.svelte';
   import { collection } from '$lib/db/collection.svelte';
+  import { frost } from '$lib/ui/frost.svelte';
   import { onVaultNotice } from '$lib/db/vault';
   import { afterNavigate, beforeNavigate } from '$app/navigation';
   import { browser } from '$app/environment';
@@ -38,7 +39,7 @@
     { href: '/plants', label: 'My plants' },
     { href: '/places', label: 'Places' },
     { href: '/propagation', label: 'Propagation' },
-    { href: '/frost', label: 'Frost' },
+    { href: '/today', label: 'Today' },
     null,
     { href: '/compare', label: 'Compare species' },
     { href: '/labels', label: 'Labels' },
@@ -52,7 +53,7 @@
   ];
   let mainEl = $state<HTMLElement | null>(null);
   /** The routes about the grower's own collection: what they link to says what is grown. */
-  const privateRoute = $derived(/^\/(plants|propagation|places|labels|backup|sync|settings|frost)(\/|$)/.test(page.url.pathname));
+  const privateRoute = $derived(/^\/(plants|propagation|places|labels|backup|sync|settings|today|frost)(\/|$)/.test(page.url.pathname));
   // How many pages this session has moved through inside the app: the back control goes to the previous one when there is one.
   let hops = 0;
   afterNavigate((nav) => {
@@ -125,6 +126,8 @@
     }
     onVaultNotice((t) => (vaultNote = t));
     await collection.load();
+    // The frost watch for every tab (round fifty-three, 3): read once per page life, shown under the top bar when the nights turn.
+    void frost.check();
     await sync.init();
     if (sync.configured) sync.schedule(1500);
   });
@@ -133,7 +136,7 @@
     { href: '/plants', label: 'Plants', on: (p: string) => p.startsWith('/plants') },
     { href: '/places', label: 'Places', on: (p: string) => p.startsWith('/places') },
     { href: '/propagation', label: 'Propagation', on: (p: string) => p.startsWith('/propagation') },
-    { href: '/frost', label: 'Frost', on: (p: string) => p.startsWith('/frost') }
+    { href: '/today', label: 'Today', on: (p: string) => p.startsWith('/today') || p.startsWith('/frost') }
   ];
   // The crumb: what a detail page set, else the section this path belongs to.
   const parts = $derived(crumb.parts.length ? crumb.parts : [{ label: places.find((p) => p.on(page.url.pathname))?.label === 'Plants' ? 'My plants' : (places.find((p) => p.on(page.url.pathname))?.label ?? 'Cultifolio') }]);
@@ -178,6 +181,8 @@
   </nav>
 {/if}
 {#if vaultNote}<p class="vaultnote">{vaultNote}</p>{/if}
+<!-- The frost watch, reachable from every tab (round fifty-three, 3): the risk at the site, as the Today tab says it, on every page but that one. A refusal is said on the front page and the Today tab, not on every page. -->
+{#if frost.line?.tone === 'bad' && !page.url.pathname.startsWith('/today')}<a class="frostbar" href="/today#frost" id="frostbar">{frost.line.text} <span class="go">Today ›</span></a>{/if}
 
 <a class="skip" href="#main">Skip to content</a>
 <!-- On the pages about your own plants, links are not preloaded on hover: a preload of a species page sends that species' name to the
@@ -202,7 +207,7 @@
         {:else if pl.label === 'Plants'}<path d="M6 21h12M9 21V10a3 3 0 0 1 6 0v11M12 10V4M9 6c0 0 3-2 3-2s3 2 3 2" />
         {:else if pl.label === 'Places'}<path d="M3 10h18M3 15h18M6 10v11M18 10v11M6 15v-5M18 15v-5" />
         {:else if pl.label === 'Propagation'}<path d="M4 19h16M6 19c0-6 3-9 6-9s6 3 6 9M12 10V4M9 7l3-3 3 3" />
-        {:else}<path d="M12 3v18M4 7.5l16 9M20 7.5l-16 9M12 3l-2.5 2.5M12 3l2.5 2.5M12 21l-2.5-2.5M12 21l2.5-2.5M4 7.5l.9 3.4M4 7.5l3.4-.9M20 16.5l-.9-3.4M20 16.5l-3.4.9M20 7.5l-.9 3.4M20 7.5l-3.4-.9M4 16.5l.9-3.4M4 16.5l3.4.9" />{/if}
+        {:else}<circle cx="12" cy="12" r="4" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1" />{/if}
       </svg>
       <span>{pl.label === 'Plants' ? 'My plants' : pl.label}</span>
     </a>
@@ -212,6 +217,9 @@
 <style>
   .iconbtn.sync { color: var(--ink3); }
   .vaultnote { margin: 0; padding: 8px 16px; background: var(--bad); color: #fff; font-size: 14px; }
+  .frostbar { display: block; padding: 7px 16px; background: var(--bad-soft); color: var(--ink); font-size: 13px; line-height: 1.4; border-bottom: 1px solid var(--rule); text-decoration: none; }
+  .frostbar:hover { text-decoration: underline; }
+  .frostbar .go { white-space: nowrap; color: var(--bad); font-weight: 600; margin-left: 4px; }
   .iconbtn.sync.on { color: var(--accent); }
   .iconbtn.sync.busy { animation: spin 1.2s linear infinite; }
   .iconbtn.sync.err { color: var(--bad); }

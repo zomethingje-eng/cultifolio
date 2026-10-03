@@ -151,7 +151,7 @@
       {#if site.current}<button class="linkish" type="button" onclick={clearSite}>Clear</button>{/if}
     </div>
     {#if siteMsg}<p class="small muted" role="status" style="margin: 8px 0 0">{siteMsg}</p>{/if}
-    {#if site.current}<p class="small muted" style="margin: 8px 0 0">Set: {site.current.name ? site.current.name + ', ' : ''}{site.current.lat}, {site.current.lon} · <a href="/frost">frost watch</a>.</p>{/if}
+    {#if site.current}<p class="small muted" style="margin: 8px 0 0">Set: {site.current.name ? site.current.name + ', ' : ''}{site.current.lat}, {site.current.lon} · <a href="/today#frost">frost watch</a>.</p>{/if}
   </div>
 </div>
 

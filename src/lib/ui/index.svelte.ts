@@ -1,6 +1,6 @@
 /** The reference as the client pages read it: a few species by hash bucket, a search by the server, a sheet by bucket. */
 import type { IndexEntry } from '$lib/server/dossiers';
-import { bucketOf } from '$core/bucket';
+import { bucketOf, BUCKETS } from '$core/bucket';
 import { speciesOf, speciesSlug } from '$core/names';
 // The whole index is no longer fetched by any page (round thirty-nine): a species is asked for by hash bucket
 // (`entriesFor`), and a search is answered by the server (`searchCatalogue`).
@@ -19,20 +19,34 @@ const bucketCache = new Map<string, Promise<IndexEntry[] | null>>();
  * holds. A corpus refresh is an upload, not a deploy; the id is what turns the caches over (round twelve, 7).
  */
 const CORPUS_KEY = 'cultifolio.corpus';
-let corpusP: Promise<string> | null = null;
-export function corpusId(): Promise<string> {
+export type CorpusInfo = { id: string; buckets: number };
+let corpusP: Promise<CorpusInfo> | null = null;
+/**
+ * The corpus id and the number of buckets its species are split into (round fifty-three, 2): a device hashes a slug
+ * by the count the server announced, never by a count compiled in, so a corpus that grew past thirty-two buckets is
+ * asked for by the right one. The pair is remembered together, since a bucket name is only meaningful under its corpus.
+ */
+export function corpusInfo(): Promise<CorpusInfo> {
   if (!corpusP)
     corpusP = fetch('/api/corpus', { cache: 'no-store', signal: AbortSignal.timeout(10_000) })
-      .then((r) => (r.ok ? (r.json() as Promise<{ id: string }>) : null))
+      .then((r) => (r.ok ? (r.json() as Promise<{ id: string; buckets?: number }>) : null))
       .then((j) => {
         const id = j?.id ?? '';
-        if (id) { try { localStorage.setItem(CORPUS_KEY, id); } catch { /* private mode */ } }
-        return id || remembered();
+        const buckets = Number.isInteger(j?.buckets) && j!.buckets! >= 1 ? j!.buckets! : BUCKETS;
+        if (id) { try { localStorage.setItem(CORPUS_KEY, JSON.stringify({ id, buckets })); } catch { /* private mode */ } }
+        return id ? { id, buckets } : remembered();
       })
       .catch(() => remembered());
   return corpusP;
 }
-const remembered = () => { try { return localStorage.getItem(CORPUS_KEY) ?? ''; } catch { return ''; } };
+export const corpusId = () => corpusInfo().then((c) => c.id);
+const remembered = (): CorpusInfo => {
+  try {
+    const raw = localStorage.getItem(CORPUS_KEY) ?? '';
+    if (raw.startsWith('{')) { const j = JSON.parse(raw) as CorpusInfo; return { id: j.id ?? '', buckets: Number.isInteger(j.buckets) && j.buckets >= 1 ? j.buckets : BUCKETS }; }
+    return { id: raw, buckets: BUCKETS }; // the id alone, as builds before this round kept it
+  } catch { return { id: '', buckets: BUCKETS }; }
+};
 const withCorpus = async (url: string) => { const c = await corpusId(); return c ? `${url}&c=${encodeURIComponent(c)}` : url; };
 /** A reference request gives up after ten seconds: a half-open connection (greenhouse Wi-Fi, a captive portal) otherwise hangs a page for minutes, where "not reached" is the answer it should give (round fourteen, 4). */
 const timed = (url: string) => fetch(url, { signal: AbortSignal.timeout(10_000) });
@@ -41,12 +55,13 @@ export async function entriesFor(slugs: Iterable<string>): Promise<Map<string, I
   const out = new Map<string, IndexEntry>();
   if (!list.length) return out;
   const want = new Set(list);
-  const buckets = [...new Set(list.map(bucketOf))].sort();
+  const count = (await corpusInfo()).buckets;
+  const buckets = [...new Set(list.map((s) => bucketOf(s, count)))].sort();
   const missing = buckets.filter((b) => !bucketCache.has(b));
   for (let i = 0; i < missing.length; i += 4) {
     const chunk = missing.slice(i, i + 4); // four a request: each bucket is its own edge-cache entry, and a request names few enough that the URLs repeat
     const p = withCorpus(`/api/entries?b=${chunk.join(',')}`).then(timed).then((r) => (r.ok ? (r.json() as Promise<IndexEntry[]>) : null)).catch(() => null);
-    for (const b of chunk) bucketCache.set(b, p.then((all) => (all ? all.filter((e) => bucketOf(e.slug) === b) : null)));
+    for (const b of chunk) bucketCache.set(b, p.then((all) => (all ? all.filter((e) => bucketOf(e.slug, count) === b) : null)));
   }
   for (const b of buckets) {
     const entries = await bucketCache.get(b)!;
@@ -106,7 +121,8 @@ export async function sheetsFor(slugs: Iterable<string>): Promise<Map<string, Sh
   const out = new Map<string, Sheet>();
   if (!list.length) return out;
   const want = new Set(list);
-  const buckets = [...new Set(list.map(bucketOf))].sort();
+  const count = (await corpusInfo()).buckets;
+  const buckets = [...new Set(list.map((s) => bucketOf(s, count)))].sort();
   const missing = buckets.filter((b) => !sheetBucketCache.has(b));
   // One bucket a request: the URL is then the edge cache's own key for that bucket, and the worker's, so it repeats
   // across devices and visits; the requests run in parallel.

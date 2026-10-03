@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { getIndexWithCorpus, searchIndex } from '$lib/server/dossiers';
-import { search } from '$core/search';
+import { getCorpus, searchFor } from '$lib/server/dossiers';
+import { search, shardOf } from '$core/search';
 import { limited } from '$lib/server/sync';
 
 /**
@@ -32,8 +32,9 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   const stop = await limited(platform, getClientAddress, 'search');
   if (stop) return stop;
   const n = Math.min(_MAX_HITS, Math.max(1, Number(url.searchParams.get('n')) || DEFAULT_HITS));
-  const { idx, corpus } = await getIndexWithCorpus(platform, fetch);
-  const p = searchIndex(idx); // built with the index, not here (round fifty-two, 5)
+  const { id: corpus } = await getCorpus(platform, fetch);
+  // The build's shard for the query's first character, else the whole index prepared with the index (round fifty-two, 5; round fifty-three, 2).
+  const p = await searchFor(platform, fetch, shardOf(q));
   const asked = (url.searchParams.get('c') ?? '').replace(/[^A-Za-z0-9._-]/g, '').slice(0, 40);
   const current = asked === corpus;
   return json(search(p, q, n), { headers: { 'cache-control': current ? 'public, max-age=86400' : 'no-store' } });

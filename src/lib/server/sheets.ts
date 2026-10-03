@@ -1,4 +1,4 @@
-import { getIndex, getDossier, type Platform, type Fetch } from './dossiers';
+import { getIndex, getDossier, getCorpus, product, type Platform, type Fetch } from './dossiers';
 import { bucketOf } from '$core/bucket';
 
 export { sheetOf, type Sheet, type SheetMonth, type SheetClimate } from '$dossier/sheet';
@@ -20,9 +20,11 @@ export async function sheetsIn(platform: Platform, fetch: Fetch, bucket: string,
   const ck = `${corpus}:${bucket}`; // keyed by corpus as well as bucket, so an isolate that outlives a refresh does not serve the old one (round thirteen, 4)
   const hit = cache.get(ck);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.sheets;
-  let out: Sheet[] | null = await sheetsFile(platform, fetch, bucket);
+  // The build's file under the corpus id first (round fifty-three, 2), then the bucket file beside the index as the builds before wrote it.
+  let out: Sheet[] | null = (await product<Sheet[]>(platform, fetch, `sheets/${bucket}.json`)) ?? (await sheetsFile(platform, fetch, bucket));
   if (!out) {
-    const entries = (await getIndex(platform, fetch)).filter((e) => bucketOf(e.slug) === bucket);
+    const { buckets } = await getCorpus(platform, fetch);
+    const entries = (await getIndex(platform, fetch)).filter((e) => bucketOf(e.slug, buckets) === bucket);
     out = [];
     const width = 16;
     for (let i = 0; i < entries.length; i += width) {

@@ -324,7 +324,7 @@
     {:else if !forecast}<p class="muted">Fetching the forecast…</p>
     {:else}
       <div class="notice {effectiveRisk?.level === 'none' ? 'ok' : effectiveRisk?.level === 'cold' ? '' : 'err'}"><b>{effectiveRisk?.level === 'none' ? (alertsUnchecked ? 'Forecast clear.' : 'All clear.') : effectiveRisk?.level === 'cold' ? 'Cold night coming.' : effectiveRisk?.level === 'floor' ? 'Below the floor.' : effectiveRisk?.level === 'warning' ? 'Warning in force.' : 'Frost forecast.'}</b> {effectiveRisk?.text}{#if alertsUnchecked} Alerts not checked: the National Weather Service did not answer, and this is not a statement that no alert is in force.{/if}</div>
-      <p class="small muted">{forecast.attribution.join(' · ')}. <a href="/frost">Full forecast</a>.</p>
+      <p class="small muted">{forecast.attribution.join(' · ')}. <a href="/today#frost">Full forecast</a>.</p>
     {/if}
   {:else if cond.indoor !== true && !(cond.floorC == null && dli == null && !lastWater && !lastAudit)}
     <p class="small muted" style="margin-top: 10px"><button type="button" class="linkish" onclick={startEdit}>Add coordinates</button> to this place (or a parent) to watch the forecast for frost.</p>

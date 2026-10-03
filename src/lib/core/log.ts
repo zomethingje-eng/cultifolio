@@ -30,6 +30,13 @@ export type State = Map<string, Record_>; // key = `${kind}:${id}`
 
 export const key = (kind: Kind, id: string) => `${kind}:${id}`;
 
+/**
+ * The version of the fold's rules: `apply`, the hold, the park, the required fields, what `mendChange` mends. A snapshot
+ * of the folded state built under another number is not read; the log is folded again (round fifty-three, 1). Bump it
+ * with any change to those rules, since a snapshot is a fold this build never ran.
+ */
+export const FOLD_RULES = 1;
+
 /** Field names the record itself owns, plus the fold's own bookkeeping names; a change may never set them. */
 export const RESERVED_FIELDS = new Set(['id', 'kind', '_t', '_deleted=', '*']);
 

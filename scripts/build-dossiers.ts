@@ -60,7 +60,10 @@ import { genusOf, slugify, canonicalSynonym } from '../src/lib/core/names';
 import { makeFetcher, fixtureFetcher } from '../src/lib/dossier/fetch';
 import { dossierPath, DOSSIER_V, parseDossier, unchain } from '../src/lib/dossier/schema';
 import { sheetOf, type Sheet } from '../src/lib/dossier/sheet';
-import { bucketOf, BUCKETS } from '../src/lib/core/bucket';
+import { bucketOf, BUCKETS, bucketNames } from '../src/lib/core/bucket';
+import { buildProducts } from '../src/lib/dossier/products';
+import type { Manifest } from '../src/lib/dossier/manifest';
+import { dirname } from 'node:path';
 import { welwitschia, copiapoa, refused } from '../fixtures/upstream';
 import { makeClimateProvider, type PowerCache } from '../src/lib/climate/provider';
 import { fileGridSource } from './file-grid';
@@ -469,29 +472,55 @@ async function fillGbifPhotos(): Promise<void> {
 }
 
 /**
- * The 32 sheet-bucket files the Worker serves for plant pages and labels (`/api/sheets?b=`), one object read a bucket
- * instead of a few hundred: every species in the index, its sheet (src/lib/dossier/sheet.ts) filed under the hash bucket
- * of its slug. Uploaded with the corpus (`rclone copy` takes the whole s/v2 tree). Round twelve, 8.
+ * The sheets of every species in the index (src/lib/dossier/sheet.ts), filed under the hash bucket of its slug for the
+ * count given: one object read a bucket instead of a few hundred (`/api/sheets?b=`; round twelve, 8).
  */
-function writeSheetBuckets(index: IndexEntry[], idxDir: string): void {
+function sheetBuckets(index: IndexEntry[], idxDir: string, count: number): { buckets: Map<string, Sheet[]>; n: number } {
   const buckets = new Map<string, Sheet[]>();
   let n = 0;
   for (const e of index) {
     try {
       const d = parseDossier(JSON.parse(readFileSync(`${idxDir}/${e.key}.json`, 'utf8')));
-      const b = bucketOf(e.slug);
-      buckets.set(b, [...(buckets.get(b) ?? []), { ...sheetOf(d, e.thumb), slug: e.slug }]); // filed under the index slug, and carrying it: a suffixed homonym's sheet must not answer to the plain name (round sixteen, 8)
+      const b = bucketOf(e.slug, count);
+      (buckets.get(b) ?? buckets.set(b, []).get(b)!).push({ ...sheetOf(d, e.thumb), slug: e.slug }); // filed under the index slug, and carrying it: a suffixed homonym's sheet must not answer to the plain name (round sixteen, 8)
       n++;
     } catch {
       /* a dossier that does not parse is not served as a sheet either; the Worker derives what it can */
     }
   }
+  return { buckets, n };
+}
+/** The 32 sheet-bucket files beside the index, as every build before round fifty-three wrote them: a Worker that finds no manifest reads these. */
+function writeSheetBuckets(index: IndexEntry[], idxDir: string): void {
+  const { buckets, n } = sheetBuckets(index, idxDir, BUCKETS);
   mkdirSync(`${idxDir}/sheets`, { recursive: true });
-  for (let i = 0; i < BUCKETS; i++) {
-    const b = i.toString(16).padStart(2, '0');
-    writeFileSync(`${idxDir}/sheets/${b}.json`, JSON.stringify(buckets.get(b) ?? []));
-  }
+  for (const b of bucketNames(BUCKETS)) writeFileSync(`${idxDir}/sheets/${b}.json`, JSON.stringify(buckets.get(b) ?? []));
   console.log(`  sheets: ${n} species into ${BUCKETS} bucket files → ${idxDir}/sheets/`);
+}
+
+/**
+ * The build's products under a directory named by the corpus id, and the manifest that names it (round fifty-three, 2;
+ * src/lib/dossier/products.ts builds them). The directory is immutable: a changed index is a new id and a new
+ * directory, and the manifest is written last, so an upload that lands in any order never names a corpus whose files
+ * are not all there. A file whose hash the previous manifest already holds is left as it is, so the copy up (which goes
+ * by size and time) carries only what changed.
+ */
+function writeProducts(index: IndexEntry[], idxDir: string, indexText: string, sheetsOf: (count: number) => Map<string, Sheet[]>): Manifest {
+  let prev: Manifest | null = null;
+  try { prev = JSON.parse(readFileSync(`${idxDir}/manifest.json`, 'utf8')) as Manifest; } catch { /* the first build with a manifest */ }
+  const { manifest, files } = buildProducts(index, indexText, sheetsOf);
+  const dir = `${idxDir}/b/${manifest.id}`;
+  let written = 0, kept = 0;
+  for (const [name, body] of files) {
+    const path = `${dir}/${name}`;
+    if (prev?.id === manifest.id && prev.files?.[name] === manifest.files[name] && existsSync(path)) { kept++; continue; }
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, body);
+    written++;
+  }
+  if (prev?.id !== manifest.id || JSON.stringify(prev.files) !== JSON.stringify(manifest.files) || prev.buckets !== manifest.buckets) writeFileSync(`${idxDir}/manifest.json`, JSON.stringify(manifest, null, 1));
+  console.log(`  corpus ${manifest.id}: ${index.length} species in ${manifest.buckets} buckets, ${manifest.search.length} search shards → ${dir}/ (${written} files written, ${kept} unchanged); manifest.json names it${prev && prev.id !== manifest.id ? `; the old directory b/${prev.id} can go once the upload is through` : ''}`);
+  return manifest;
 }
 
 /** The index is derived from the files; after a fill the thumbnails have changed, so it is written again. */
@@ -499,9 +528,11 @@ function writeIndexFromDisk(): void {
   const index = uniqueSlugs(scanDossiers().sort((a, b) => a.name.localeCompare(b.name)));
   const idxDir = `${outDir}/s/v${DOSSIER_V}`;
   mkdirSync(idxDir, { recursive: true });
-  writeFileSync(`${idxDir}/index.json`, JSON.stringify(index, null, 1));
+  const indexText = JSON.stringify(index, null, 1);
+  writeFileSync(`${idxDir}/index.json`, indexText);
   console.log(`  index: ${index.length} species`);
   writeSheetBuckets(index, idxDir);
+  writeProducts(index, idxDir, indexText, (count) => sheetBuckets(index, idxDir, count).buckets);
   // A dossier under a synonym is a page the backbone would not put its records under: a rebuild follows it to
   // the accepted species. A doubtful name has nothing to follow to (the backbone holds it as doubtful, with no
   // accepted name in its place), so the page stays under it and says so; listed for information, not for rebuilding.
@@ -754,7 +785,7 @@ async function main() {
   mkdirSync(idxDir, { recursive: true });
   writeFileSync(`${idxDir}/index.json`, JSON.stringify(index, null, 1));
   writeFileSync(`${idxDir}/report.txt`, report.join('\n'));
-  console.log(`\n${built} built, ${keptN} kept of ${jobs.length}; index now ${index.length} species → ${idxDir}/ (index.json and report.txt alongside)`);
+  console.log(`\n${built} built, ${keptN} kept of ${jobs.length}; index now ${index.length} species → ${idxDir}/ (index.json and report.txt alongside; run --index for the sheets, the products and the manifest before the copy up)`);
   if (bulkStats) console.log(`bulk: ${bulkStats.wcvp} distributions, ${bulkStats.occ} occurrence sets and ${bulkStats.media} photograph sets from the files, ${bulkStats.through} requests to the APIs`);
 }
 

@@ -44,6 +44,14 @@ vi.mock('$lib/db/vault', () => {
   // The claiming write of the real vault, over the same in-memory log: `build` sees the numbers the caller knows.
   m.appendChangesClaiming = async (_k: string, known: Set<string>, build: (s: Set<string>) => { changes: Change[]; result: unknown }) => { const b = build(new Set(known)); await m.appendChanges(b.changes); return b.result; };
   m.onOtherTabWrite = () => () => {};
+  // No snapshot in memory: every load folds the whole log, as a first load does (the snapshot is tested on the real vault in fold-snapshot.test.ts).
+  m.readFold = async () => undefined;
+  m.writeFold = async () => false;
+  m.foldGen = async () => 0;
+  m.lastArrival = async () => 0;
+  m.arrivalsAfter = async () => ({ changes: [...mem.changes.values()], seq: 0 });
+  m.changeKeys = async () => [...mem.changes.keys()];
+  if (!m.changesByKeys) m.changesByKeys = async (ts: string[]) => ts.map((t) => mem.changes.get(t)).filter(Boolean);
   m.holdVault = async (work: () => Promise<unknown>) => work();
   m.putPhotoBlobs = async (p: { id: string }) => void mem.photos.set(p.id, p);
   m.getPhotoBlobs = async (id: string) => mem.photos.get(id);

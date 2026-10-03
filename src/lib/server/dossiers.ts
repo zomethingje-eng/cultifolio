@@ -6,26 +6,13 @@
  */
 import { genusOf } from '$core/names';
 import { prepare, type Prepared } from '$core/search';
-import { bucketOf } from '$core/bucket';
+import { bucketOf, BUCKETS } from '$core/bucket';
 import { parseDossier, dossierPath, genusPath, GenusRecord, DOSSIER_V, type Dossier } from '$dossier/schema';
+import { manifestPath, productPath, isManifest, type Manifest } from '$dossier/manifest';
 import * as v from 'valibot';
 
-export interface IndexEntry {
-  key: number;
-  slug: string;
-  name: string;
-  family?: string;
-  common?: string;
-  origin?: string[];
-  thumb?: string;
-  photos: number;
-  open: number;
-  climate: string;
-  /** The six species whose habitat climate is nearest (src/lib/core/near.ts), written at index time. */
-  near?: number[];
-  /** Older names for the species, as binomials, written at index time (round thirty-one, 3). */
-  syn?: string[];
-}
+export type { IndexEntry } from '$dossier/index-entry';
+import type { IndexEntry } from '$dossier/index-entry';
 
 export type Fetch = typeof fetch;
 
@@ -57,7 +44,7 @@ const merge = (a: IndexEntry[], b: IndexEntry[]) => {
  * with. Before this the minute lapsed into a full re-read, four megabytes fetched and parsed, on the first request of
  * nearly every minute of a quiet site, which was most of a species page's time to first byte (round forty-three, 1).
  */
-type Loaded = { at: number; idx: IndexEntry[]; bySlug: Map<string, number>; corpus: string; etag: string | null; fromStore: boolean };
+type Loaded = { at: number; idx: IndexEntry[]; bySlug: Map<string, number>; corpus: string; etag: string | null; fromStore: boolean; manifest: Manifest | null; buckets: number };
 let cached: Loaded | null = null;
 /** One load at a time: after an upload, concurrent requests each parsed their own copy of the index (round fifty-one, 6). */
 let loading: Promise<Loaded> | null = null;
@@ -110,25 +97,39 @@ async function loadIndexNow(platform: Platform, fetch: Fetch): Promise<Loaded> {
   let idx: IndexEntry[] = [];
   let corpus = '';
   let etag: string | null = null;
+  let manifest: Manifest | null = null;
   const store = platform?.env?.STORE;
   if (store) {
-    const path = `s/v${DOSSIER_V}/index.json`;
+    // The manifest first (round fifty-three, 2): it names the corpus and the directory its products and its index are
+    // under, all immutable; the etag that says whether anything changed is the manifest's own. A bucket with no manifest
+    // (a corpus uploaded before this round) is read as before, with the index object's etag as the id.
+    const mPath = manifestPath();
+    const iPath = `s/v${DOSSIER_V}/index.json`;
+    const watched = cached?.manifest ? mPath : iPath;
     if (cached?.etag && typeof store.head === 'function') {
       // The minute is up: the object's etag says whether the copy held is still the bucket's. A head answers from
       // metadata alone; the four megabytes are read again only after an upload (round forty-three, 1).
-      const h = await store.head(path);
+      const h = await store.head(watched);
       if (h?.etag === cached.etag) {
         cached.at = Date.now();
         return cached;
       }
     }
     if (cached?.fromStore) cached = null; // an upload: the old generation goes before the new is parsed (round fifty-two, 5)
-    const obj = await store.get(path);
+    const mObj = await store.get(mPath);
+    if (mObj) {
+      const m = (await mObj.json().catch(() => null)) as unknown;
+      if (isManifest(m)) { manifest = m; etag = mObj.etag || null; }
+    }
+    const obj = manifest ? ((await store.get(productPath(manifest.id, 'index.json'))) ?? (await store.get(iPath))) : await store.get(iPath);
     if (obj) {
       const text = await obj.text();
       idx = JSON.parse(text) as IndexEntry[];
-      etag = obj.etag || null;
-      corpus = (obj.etag || fnv(text)).replace(/[^A-Za-z0-9._-]/g, '').slice(0, 16);
+      if (manifest) corpus = manifest.id;
+      else {
+        etag = obj.etag || null;
+        corpus = (obj.etag || fnv(text)).replace(/[^A-Za-z0-9._-]/g, '').slice(0, 16);
+      }
     }
   }
   const fromStore = idx.length > 0;
@@ -136,14 +137,62 @@ async function loadIndexNow(platform: Platform, fetch: Fetch): Promise<Loaded> {
   if (stat) {
     idx = merge(idx, stat);
     corpus = corpus || fnv(JSON.stringify(stat));
+    if (!fromStore) {
+      const m = await staticJson<unknown>(fetch, manifestPath());
+      if (isManifest(m)) { manifest = m; corpus = m.id; }
+    }
   }
   // Fixtures only fill in when nothing real exists, so a real corpus never shows synthetic species.
   const out = idx.length ? idx : fixtureIndex;
-  cached = { at: Date.now(), idx: out, bySlug: new Map(out.map((e) => [e.slug, e.key])), corpus: idx.length ? corpus : 'fixture', etag, fromStore };
-  // The search's structure and the bucket map are built with the index, not inside the first request that needs them (round fifty-two, 5).
-  preparedSearch.set(out, prepare(out));
+  if (!idx.length) manifest = null;
+  cached = { at: Date.now(), idx: out, bySlug: new Map(out.map((e) => [e.slug, e.key])), corpus: idx.length ? corpus : 'fixture', etag, fromStore, manifest, buckets: manifest?.buckets ?? BUCKETS };
+  products.clear();
+  // The search's structure and the bucket map are built with the index, not inside the first request that needs them
+  // (round fifty-two, 5), unless the build wrote them: then they are read per shard and per bucket, and the index is
+  // the one thing held whole (round fifty-three, 2).
+  if (!manifest) preparedSearch.set(out, prepare(out));
   indexMaps(out);
   return cached;
+}
+
+/** The corpus id, the bucket count and whether the build's products are there, from one load. */
+export async function getCorpus(platform: Platform, fetch: Fetch): Promise<{ id: string; buckets: number; products: boolean }> {
+  const c = await loadIndex(platform, fetch);
+  return { id: c.corpus, buckets: c.buckets, products: !!c.manifest };
+}
+
+/* ---- the build's products ----
+ * Read by name under the current corpus id, from the bucket (then the static
+ * corpus), and kept a few at a time per isolate: the directory is immutable,
+ * so a product once read is right until the manifest names another id, and
+ * the map is cleared with the index. Null when the manifest names no such
+ * product, or it cannot be read: the caller derives from the index then.
+ */
+const products = new Map<string, Promise<unknown>>();
+const PRODUCTS_HELD = 24;
+export async function product<T>(platform: Platform, fetch: Fetch, name: string): Promise<T | null> {
+  const c = await loadIndex(platform, fetch);
+  const m = c.manifest;
+  if (!m) return null;
+  if (!(name in m.files)) return null;
+  const k = `${m.id}/${name}`;
+  let p = products.get(k);
+  if (!p) {
+    p = (async () => {
+      const path = productPath(m.id, name);
+      const store = platform?.env?.STORE;
+      if (store) {
+        const obj = await store.get(path);
+        if (obj) return obj.json();
+      }
+      return c.fromStore ? null : staticJson<unknown>(fetch, path);
+    })().catch(() => null);
+    products.set(k, p);
+    if (products.size > PRODUCTS_HELD) products.delete(products.keys().next().value!);
+  }
+  const v = (await p) as T | null;
+  if (v === null) products.delete(k);
+  return v;
 }
 
 export async function getDossier(platform: Platform, fetch: Fetch, key: number): Promise<Dossier | null> {
@@ -229,12 +278,29 @@ export function searchIndex(index: IndexEntry[]): Prepared<IndexEntry>[] {
 }
 /** The entries of each bucket, hashed once per index rather than every slug per request (round fifty-two, 5). */
 const bucketed = new WeakMap<IndexEntry[], Map<string, IndexEntry[]>>();
-export function entriesByBucket(index: IndexEntry[]): Map<string, IndexEntry[]> {
+export function entriesByBucket(index: IndexEntry[], buckets = cached?.buckets ?? BUCKETS): Map<string, IndexEntry[]> {
   let m = bucketed.get(index);
   if (!m) {
     m = new Map();
-    for (const e of index) { const b = bucketOf(e.slug); const xs = m.get(b); if (xs) xs.push(e); else m.set(b, [e]); }
+    for (const e of index) { const b = bucketOf(e.slug, buckets); const xs = m.get(b); if (xs) xs.push(e); else m.set(b, [e]); }
     bucketed.set(index, m);
   }
   return m;
+}
+/** A bucket's entries: the build's file under the corpus id, else hashed from the index here. */
+export async function entriesIn(platform: Platform, fetch: Fetch, bucket: string): Promise<IndexEntry[]> {
+  const file = await product<IndexEntry[]>(platform, fetch, `entries/${bucket}.json`);
+  if (file) return file;
+  const c = await loadIndex(platform, fetch);
+  return entriesByBucket(c.idx, c.buckets).get(bucket) ?? [];
+}
+/** The prepared search entries a query is answered from: the build's shard for its first character, else the whole index prepared here. */
+export async function searchFor(platform: Platform, fetch: Fetch, shard: string | null): Promise<Prepared<IndexEntry>[]> {
+  const c = await loadIndex(platform, fetch);
+  if (c.manifest && shard) {
+    if (!c.manifest.search.includes(shard)) return []; // no word in the corpus begins so: nothing matches, and no read
+    const file = await product<Prepared<IndexEntry>[]>(platform, fetch, `search/${shard}.json`);
+    if (file) return file;
+  }
+  return searchIndex(c.idx);
 }

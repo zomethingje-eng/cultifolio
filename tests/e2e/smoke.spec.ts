@@ -61,7 +61,7 @@ test('the menu behind the mark reaches every place from any page', async ({ page
   await page.getByRole('button', { name: 'Menu' }).click();
   const menu = page.locator('#menu');
   await expect(menu).toBeVisible();
-  for (const l of ['Species', 'My plants', 'Places', 'Propagation', 'Frost', 'Compare species', 'Labels', 'Backup', 'Sync', 'How it is made', 'Formats', 'Source']) await expect(menu.getByRole('link', { name: l, exact: true })).toBeVisible();
+  for (const l of ['Species', 'My plants', 'Places', 'Propagation', 'Today', 'Compare species', 'Labels', 'Backup', 'Sync', 'How it is made', 'Formats', 'Source']) await expect(menu.getByRole('link', { name: l, exact: true })).toBeVisible();
   await expect(menu.locator('a.on')).toHaveText('Species');
   await page.keyboard.press('Escape');
   await expect(menu).toHaveCount(0);
@@ -1058,7 +1058,7 @@ test('every control has a name, headings do not jump, images have alt text, mute
   await page.getByRole('button', { name: 'Add', exact: true }).click();
   await expect(page.locator('.tree .row', { hasText: 'Bench A' })).toBeVisible(); // the write is on screen before the page is left (round twenty-seven, R2-1)
   const findings: string[] = [];
-  for (const r of ['/', '/plants', '/plants/new', '/places', '/propagation', '/propagation/new', '/labels', '/backup', '/sync', '/frost', '/offline', '/about/how', '/species/copiapoa-cinerea', '/species/refusia-testii', `/plants/${acc}`]) {
+  for (const r of ['/', '/plants', '/plants/new', '/places', '/propagation', '/propagation/new', '/labels', '/backup', '/sync', '/today', '/offline', '/about/how', '/species/copiapoa-cinerea', '/species/refusia-testii', `/plants/${acc}`]) {
     await page.goto(r);
     await expect(page.locator('h1')).toBeVisible();
     if (r === '/places') await page.getByRole('button', { name: 'New place' }).click();
@@ -1320,21 +1320,23 @@ test('a sowing without a count is refused with a sentence; a blank never becomes
 // passes through page.route, so this test runs without one: it is about the pages' wording, not the shell.
 test.describe('without the service worker', () => {
 test.use({ serviceWorkers: 'block' });
-test('a forecast source that does not answer is "not checked" in a plain notice on the bench and on /frost, never a status code', async ({ page }) => {
+test('a forecast source that does not answer is "not checked" in a plain notice on the bench and on the Today tab, never a status code', async ({ page }) => {
   await page.route(/\/api\/forecast/, (r) => r.fulfill({ status: 502, contentType: 'application/json', body: JSON.stringify({ error: 'forecast source did not answer' }) }));
-  // the site is set once, in Settings; the frost page reads it
+  // the site is set once, in Settings; the Today tab reads it (the old /frost address goes there; round fifty-three, 3)
   await page.goto('/frost');
-  await expect(page.locator('.emptybox')).toContainText('No site set');
+  await expect(page).toHaveURL(/\/today$/);
+  await expect(page.locator('#frost .emptybox')).toContainText('No site set');
   await page.goto('/settings');
   await page.fill('input[placeholder="40.43"]', '40.38');
   await page.fill('input[placeholder="-80.01"]', '-80.05');
   await page.getByRole('button', { name: 'Save', exact: true }).first().click();
   await expect(page.getByText('Saved on this device.')).toBeVisible();
-  await page.goto('/frost');
+  await page.goto('/today');
   await expect(page.getByText('Your site: 40.38, -80.05')).toBeVisible();
-  await expect(page.locator('.notice')).toHaveText('Forecast not checked: the forecast source did not answer.');
-  await expect(page.locator('.notice')).not.toHaveClass(/err/);
+  await expect(page.locator('#frost .notice')).toHaveText('Forecast not checked: the forecast source did not answer.');
+  await expect(page.locator('#frost .notice')).not.toHaveClass(/err/);
   await expect(page.locator('.bad')).toHaveCount(0);
+  await expect(page.locator('#frostbar')).toHaveCount(0); // a refusal is not a frost: nothing under the top bar
   // an outdoor place with coordinates watches the forecast on its own page
   await page.goto('/places');
   await page.getByRole('button', { name: 'New place' }).click();
@@ -1683,9 +1685,12 @@ test('a grower\'s home says what needs them: sowings in the tray and plants with
   await expect(page.locator('.accrow .fig', { hasText: 'watered 21 d ago' })).toBeVisible();
   await expect(page.locator('.chipbtn', { hasText: 'Not watered 21+ days' }).locator('.n')).toHaveText('1');
   await page.goto('/');
-  await expect(page.locator('.today .line', { hasText: '1 of 1 plants not watered, or not recorded as watered, for three weeks' })).toBeVisible();
+  await expect(page.locator('.today .line', { hasText: '1 of 1 plants not watered for three weeks or more' })).toBeVisible(); // watered once, 21 days ago: overdue, not "no watering recorded" (round fifty-three, 3)
   await page.locator('.today .line', { hasText: 'not watered' }).click();
-  await expect(page).toHaveURL(/\/plants\?show=due$/);
+  await expect(page).toHaveURL(/\/today#water$/);
+  await expect(page.locator('#water .stop .row.warn a')).toHaveCount(1);
+  await expect(page.locator('#water .stop h3')).toContainText('No place');
+  await page.goto('/plants?show=due');
   await expect(page.locator('.accrow')).toHaveCount(1);
   // a future-dated line is refused with a sentence and never becomes the last watering (round twenty-five, 1)
   await page.locator('.accrow').first().click();
@@ -1795,7 +1800,7 @@ test('the species page reads in reference order: the facts and the figures, then
 
 test('a visitor sees all five places from the start, and the menu has them too', async ({ page }) => {
   await page.goto('/');
-  await expect(page.locator('.topseg a')).toHaveText(['Species', 'My plants', 'Places', 'Propagation', 'Frost']);
+  await expect(page.locator('.topseg a')).toHaveText(['Species', 'My plants', 'Places', 'Propagation', 'Today']);
   // a click that lands before hydration opens nothing: poll the button's own state rather than the first click
   await expect.poll(async () => { await page.getByRole('button', { name: 'Menu' }).click(); return page.getByRole('button', { name: 'Menu' }).getAttribute('aria-expanded'); }).toBe('true');
   await expect(page.locator('#menu').getByRole('link', { name: 'Places', exact: true })).toBeVisible();
@@ -1810,7 +1815,7 @@ test('a visitor sees all five places from the start, and the menu has them too',
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   await page.goto('/plants');
-  await expect(page.locator('.topseg a')).toHaveText(['Species', 'My plants', 'Places', 'Propagation', 'Frost']);
+  await expect(page.locator('.topseg a')).toHaveText(['Species', 'My plants', 'Places', 'Propagation', 'Today']);
 });
 
 test('the collection\'s pages need nothing from the server to open: a plant page loads offline, whatever the units', async ({ browser, baseURL }) => {
@@ -2946,4 +2951,70 @@ test('round fifty-two: a device a year ahead is corrected by the server\'s clock
   await expect(a.locator('.parked')).toHaveCount(0);
   await expect(a.locator('body')).toContainText('from 2031');
   await Promise.all([A.close(), P.close(), Q.close()]);
+});
+
+test('round fifty-three: the Today tab lists what needs you by place, "no watering recorded" apart from "not watered", Water here writes dated lines with Undo, a frost in the forecast is a bar on every tab, and /frost goes there (3)', async ({ browser }) => {
+  // One context whose clock can be moved: the plant's record must be three weeks old for "no watering recorded" to count.
+  // Without the service worker, so the forecast mock below is what answers (a worker would fetch the real route).
+  const C = await browser.newContext({ serviceWorkers: 'block' });
+  await C.addInitScript(() => { const real = Date.now; const OD = Date; let shift = 0; try { shift = Number(localStorage.getItem('__shift') ?? 0); } catch { /* none */ } (globalThis as { __shift?: number }).__shift = shift; globalThis.Date = class extends OD { constructor(...args: unknown[]) { if (args.length === 0) super(real() + ((globalThis as { __shift?: number }).__shift ?? 0)); else super(...(args as [number])); } static now() { return real() + ((globalThis as { __shift?: number }).__shift ?? 0); } } as DateConstructor; });
+  const page = await C.newPage();
+  const frosty = { lat: 40.38, lon: -80.05, forecast: { source: 'met.no', fetched: '2026-11-01T00:00:00Z', days: [{ date: '2026-11-02', tmin: -2, tmax: 9, precipMm: 0, steps: 24 }, { date: '2026-11-03', tmin: 4, tmax: 12, precipMm: 0, steps: 24 }], hoursCovered: 48, offsetH: -5, firstFrost: '2026-11-02' }, alerts: [], alertsStatus: 'none', risk: { level: 'frost', text: 'Frost forecast: -2.0 °C around 05:00 Monday solar time (2026-11-02, MET Norway).' }, attribution: ['Forecast data from MET Norway (CC BY 4.0)'] };
+  await page.route(/\/api\/forecast/, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(frosty) }));
+  // a site, as Settings keeps it; a place and two plants in it
+  await page.goto('/places');
+  await page.evaluate(() => localStorage.setItem('cultifolio.frost.site', JSON.stringify({ lat: 40.38, lon: -80.05, name: 'Mt Lebanon' })));
+  await page.goto('/places');
+  await page.getByRole('button', { name: 'New place' }).click();
+  await page.fill('#loc-name', 'Bench');
+  await page.selectOption('#loc-kind', 'bench');
+  await page.getByRole('button', { name: 'Add', exact: true }).click();
+  await expect(page.locator('.tree .row', { hasText: 'Bench' })).toBeVisible();
+  for (let i = 0; i < 2; i++) {
+    await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+    const opt = await page.locator('#f-loc option', { hasText: 'Bench' }).getAttribute('value');
+    await page.selectOption('#f-loc', opt!);
+    await addPlant(page);
+  }
+  const second = page.url().split('/').pop()!;
+  // the second plant watered today; the first never
+  await page.getByRole('button', { name: 'Water', exact: true }).click();
+  await expect(page.locator('.tlrow', { hasText: 'Watered' }).first()).toBeVisible();
+  // nothing is due yet: the Today tab says so
+  await page.goto('/today');
+  await expect(page.locator('#nothing')).toContainText('Nothing needs you today');
+  // twenty-five days on: the never-watered plant's record is old enough to count, apart from the plant watered twenty-five days ago
+  await page.evaluate(() => localStorage.setItem('__shift', String(25 * 86_400_000))); // read by the clock on the next load
+  await page.goto('/today');
+  const stop = page.locator('#water .stop', { hasText: 'Bench' });
+  await expect(stop).toHaveCount(1);
+  await expect(stop.locator('.row.warn').first()).toContainText('Not watered for three weeks or more');
+  await expect(stop.locator('.row.warn').first()).toContainText(second);
+  await expect(stop.locator('.row.warn').first()).toContainText('(25 d)');
+  await expect(stop.locator('.row.unknown')).toContainText('No watering recorded');
+  await expect(stop.locator('.row.unknown')).toContainText('(record 25 d old)');
+  await expect(stop.locator('.row.unknown')).not.toContainText(second);
+  // the front page's line says the two apart
+  await page.goto('/');
+  await expect(page.locator('.today .line', { hasText: '1 of 2 plants not watered for three weeks or more, and 1 with no watering recorded yet' })).toBeVisible();
+  // the frost in the forecast: on the front page as a line, on the Today tab as the card, and under the top bar on every other tab, going to the Today tab
+  await expect(page.locator('.today .line', { hasText: 'Frost forecast: -2.0 °C' })).toBeVisible();
+  await expect(page.locator('#frostbar')).toContainText('Frost forecast: -2.0 °C');
+  await page.goto('/plants');
+  await expect(page.locator('#frostbar')).toContainText('Frost forecast');
+  await page.locator('#frostbar').click();
+  await expect(page).toHaveURL(/\/today#frost$/);
+  await expect(page.locator('#frostbar')).toHaveCount(0); // not on the tab that shows it in full
+  await expect(page.locator('#frost .risk')).toContainText('Frost forecast: -2.0 °C');
+  await expect(page.locator('#frost tr.frost')).toHaveCount(1);
+  // Water here: one line per plant on the stop, dated today (the shifted today), with Undo
+  await page.locator('#water .stop', { hasText: 'Bench' }).getByRole('button', { name: 'Water 2 here' }).click();
+  await expect(page.locator('.toast')).toContainText('Watered 2 plants at Bench');
+  await expect(page.locator('#nothing')).toContainText('Nothing needs you today');
+  await page.locator('.toast').getByRole('button', { name: 'Undo' }).click();
+  await expect(page.locator('#water .stop', { hasText: 'Bench' })).toHaveCount(1);
+  // the old address
+  await page.goto('/frost');
+  await expect(page).toHaveURL(/\/today$/);
+  await C.close();
 });

@@ -19,12 +19,21 @@ interface VaultDB extends DBSchema {
   photos: { key: string; value: PhotoBlobs };
   /** HLCs of changes the server has not acknowledged: every local edit, import and restore lands here; a pull does not. */
   outbox: { key: string; value: { t: string } };
+  /**
+   * The order changes reached this vault in: one row per change stored (new, or displacing another under its stamp),
+   * numbered by the store. The fold snapshot is taken up to a number and brought up to date from the rows after it,
+   * which is the one order that is right: a pull brings stamps older than any already folded (round fifty-three, 1).
+   */
+  order: { key: number; value: { t: string } };
 }
 
 const DB_NAME = 'cultifolio';
 /** Where a replacement (restore from backup, "replace" mode) is written in full before the live vault is touched. */
 const STAGING_NAME = 'cultifolio-staging';
-const DB_V = 2;
+const DB_V = 3;
+/** The meta key the fold snapshot is kept under, and the counter that says it is stale. */
+const FOLD = 'fold';
+const FOLD_GEN = 'foldGen';
 /** Set in the live vault's meta from the moment the live log is wiped until the staged replacement has been copied in; on open, a set flag resumes the copy. */
 const STAGING_PENDING = 'staging-pending';
 
@@ -91,6 +100,7 @@ function upgrade(db: IDBPDatabase<VaultDB>, oldV: number) {
     db.createObjectStore('photos', { keyPath: 'id' });
   }
   if (oldV < 2) db.createObjectStore('outbox', { keyPath: 't' });
+  if (oldV < 3) db.createObjectStore('order', { autoIncrement: true });
 }
 
 export function openVault(): Promise<IDBPDatabase<VaultDB>> {
@@ -204,8 +214,17 @@ export async function openStaging(): Promise<StagedReplacement> {
  * after the backup was taken stays given.
  */
 async function replaceFromStaging(live: IDBPDatabase<VaultDB>): Promise<void> {
-  await Promise.all([live.clear('changes'), live.clear('photos'), live.clear('outbox')]);
+  const meta = live.transaction('meta', 'readwrite');
+  await Promise.all([live.clear('changes'), live.clear('photos'), live.clear('outbox'), live.clear('order'), dropFoldIn(meta).then(() => meta.done)]);
   await copyStagingIn(live);
+}
+
+/** The fold snapshot goes, and the counter moves, inside `tx`: a snapshot of a log that no longer exists is never read, and one being written of that log is refused (round fifty-three, 1). */
+type MetaStore = { get(k: string): Promise<unknown>; put(v: unknown, k: string): Promise<unknown>; delete(k: string): Promise<void> };
+async function dropFoldIn(tx: { objectStore(name: 'meta'): MetaStore }): Promise<void> {
+  const meta = tx.objectStore('meta');
+  const gen = Number((await meta.get(FOLD_GEN)) ?? 0) + 1;
+  await Promise.all([meta.delete(FOLD), meta.put(gen, FOLD_GEN)]);
 }
 
 /** Copy every change (into the log and the outbox: the server has not seen a restored log) and every photograph from the staging database into the live one, clear the flag, delete the staging database. Re-runnable. */
@@ -215,7 +234,7 @@ async function copyStagingIn(live: IDBPDatabase<VaultDB>): Promise<void> {
     const changes = await stage.getAll('changes');
     if (changes.length) {
       // Through storeIn, so the numbers a restored collection carries go on the ledger like any other write (round twelve, 6).
-      await storeIn(live.transaction(['changes', 'outbox', 'meta'], 'readwrite'), changes, false);
+      await storeIn(live.transaction(['changes', 'outbox', 'meta', 'order'], 'readwrite'), changes, false);
     }
     // Photographs one at a time: a transaction holding every blob of a large collection would be one large allocation.
     for (const id of await stage.getAllKeys('photos')) {
@@ -268,7 +287,8 @@ export async function allChanges(): Promise<Change[]> {
 const ISSUED = (kind: NumberKind) => `issued:${kind}`;
 export type NumberKind = 'accession' | 'sowing';
 const numberField = (c: Change): NumberKind | null => (c.kind === 'accession' && c.field === 'acc' ? 'accession' : c.kind === 'sowing' && c.field === 'no' ? 'sowing' : null);
-type Tx = IDBPTransaction<VaultDB, ('changes' | 'outbox' | 'meta')[], 'readwrite'>;
+type Tx = IDBPTransaction<VaultDB, ('changes' | 'outbox' | 'meta' | 'order')[], 'readwrite'>;
+const STORES: ('changes' | 'outbox' | 'meta' | 'order')[] = ['changes', 'outbox', 'meta', 'order'];
 
 async function issuedIn(tx: Tx, kind: NumberKind): Promise<Set<string>> {
   const v = (await tx.objectStore('meta').get(ISSUED(kind))) as unknown;
@@ -315,6 +335,8 @@ async function storeIn(tx: Tx, changes: Change[], fromServer: boolean, extra: Pa
   }
   const kept: Change[] = [];
   const replaced: Change[] = [];
+  /** The changes that are new to the store, or displace another: these get a row in the order of arrival; a re-send of what is held does not. */
+  const arrived: Change[] = [];
   // A large batch (a restore, a merge) read the store once per change to find collisions, in sequence: a hundred thousand
   // reads, ten seconds. The keys in the batch's range come in one read, and only a stamp among them is read in full (round fifty-one, 5).
   let existing: Set<string> | null = null;
@@ -336,17 +358,23 @@ async function storeIn(tx: Tx, changes: Change[], fromServer: boolean, extra: Pa
         console.warn(`change ${c.t} is already stored with other content; this one ranks higher and replaces it`);
         replaced.push(had);
         kept.push(c);
+        arrived.push(c);
       } else console.warn(`change ${c.t} is already stored with other content; the stored one stands`);
       continue;
     }
     kept.push(c);
+    if (!had) arrived.push(c);
   }
+  // A displaced change has no inverse in a fold built on top of it: the snapshot of the fold goes with it, in this same
+  // transaction, and the counter moves so a snapshot being written of the old fold is refused (round fifty-three, 1).
+  if (replaced.length) await dropFoldIn(tx);
   const carried: Partial<Record<NumberKind, Set<string>>> = { ...extra };
   for (const c of kept) {
     const k = numberField(c);
     if (k && typeof c.value === 'string') (carried[k] ??= new Set()).add(c.value);
   }
-  const puts: Promise<unknown>[] = [...kept.map((c) => (strict ? ch.add(c) : ch.put(c))), ...(fromServer ? [] : kept.map((c) => ob.put({ t: c.t })))];
+  const order = tx.objectStore('order');
+  const puts: Promise<unknown>[] = [...kept.map((c) => (strict ? ch.add(c) : ch.put(c))), ...(fromServer ? [] : kept.map((c) => ob.put({ t: c.t }))), ...arrived.map((c) => order.add({ t: c.t }))];
   for (const k of Object.keys(carried) as NumberKind[]) {
     const set = await issuedIn(tx, k);
     for (const n of carried[k]!) set.add(n);
@@ -364,7 +392,7 @@ export async function appendChanges(changes: Change[], fromServer = false, stric
   if (!changes.length) return { kept: [], replaced: [] };
   const out = await writing(async () => {
     const db = await openVault();
-    return storeIn(db.transaction(['changes', 'outbox', 'meta'], 'readwrite'), changes, fromServer, {}, strict, requireKey);
+    return storeIn(db.transaction(STORES, 'readwrite'), changes, fromServer, {}, strict, requireKey);
   });
   announce(out.replaced.length ? 'refold' : 'written');
   return out;
@@ -381,7 +409,7 @@ export async function appendChanges(changes: Change[], fromServer = false, stric
 export async function appendChangesClaiming<T>(kind: NumberKind, known: Set<string>, build: (issued: Set<string>) => { changes: Change[]; result: T }): Promise<T> {
   const out = await writing(async () => {
     const db = await openVault();
-    const tx = db.transaction(['changes', 'outbox', 'meta'], 'readwrite');
+    const tx = db.transaction(STORES, 'readwrite');
     let built: { changes: Change[]; result: T };
     try {
       const issued = await issuedIn(tx, kind);
@@ -534,6 +562,86 @@ export async function photoBlobIds(): Promise<string[]> {
 export async function wipeVault(): Promise<void> {
   await writing(async () => {
     const db = await openVault();
-    await Promise.all([db.clear('changes'), db.clear('photos'), db.clear('outbox')]);
+    const meta = db.transaction('meta', 'readwrite');
+    await Promise.all([db.clear('changes'), db.clear('photos'), db.clear('outbox'), db.clear('order'), dropFoldIn(meta).then(() => meta.done)]);
   });
+}
+
+/* ---- the fold snapshot ----
+ * The folded state, as the collection last built it from the whole log, kept
+ * in meta with the arrival number it was taken at: a load reads it and the
+ * rows of `order` after that number, rather than every change in the log
+ * (six seconds at four hundred thousand changes; round fifty-three, 1). The
+ * collection decides what goes in it and when it is wrong; the vault keeps
+ * it, drops it with the log it describes, and refuses a write of one that
+ * began before the log was replaced or a stored change displaced.
+ */
+export interface FoldSnapshot {
+  /** The fold rules the snapshot was built under; one the collection does not recognise is not read. */
+  rules: number;
+  device: string;
+  /** The clock correction in force when it was built: another one re-judges every hold, so the snapshot is wrong. */
+  offset: number;
+  /** The last arrival number it covers. */
+  seq: number;
+  records: unknown[];
+  seen: string[];
+  born: string[];
+  parents: Array<[string, Array<[string, string | null]>]>;
+  /** The latest stamp folded, for the clock. */
+  last: string;
+  /** How many changes were folded, for the page's own account of the load. */
+  changes: number;
+}
+export async function readFold(): Promise<{ fold: FoldSnapshot; gen: number } | undefined> {
+  const db = await openVault();
+  const tx = db.transaction('meta');
+  const [fold, gen] = await Promise.all([tx.store.get(FOLD), tx.store.get(FOLD_GEN)]);
+  if (!fold || typeof fold !== 'object') return undefined;
+  return { fold: fold as FoldSnapshot, gen: Number(gen ?? 0) };
+}
+/** The counter that moves whenever the log is replaced or a stored change displaced; a snapshot is written only against the value it was read at. */
+export async function foldGen(): Promise<number> {
+  return Number((await getMeta<number>(FOLD_GEN)) ?? 0);
+}
+/** Write the snapshot, unless the log changed under it since `gen` was read; false then, and nothing is written. */
+export async function writeFold(fold: FoldSnapshot, gen: number): Promise<boolean> {
+  return writing(async () => {
+    const tx = (await openVault()).transaction('meta', 'readwrite');
+    const now = Number((await tx.store.get(FOLD_GEN)) ?? 0);
+    if (now !== gen) {
+      await tx.done;
+      return false;
+    }
+    await Promise.all([tx.store.put(fold, FOLD), tx.done]);
+    return true;
+  });
+}
+export async function dropFold(): Promise<void> {
+  await writing(async () => {
+    const tx = (await openVault()).transaction('meta', 'readwrite');
+    await dropFoldIn(tx);
+    await tx.done;
+  });
+}
+/** The last arrival number in the vault, 0 when nothing has arrived since the order was kept. */
+export async function lastArrival(): Promise<number> {
+  const db = await openVault();
+  const cur = await db.transaction('order').store.openKeyCursor(null, 'prev');
+  return cur ? Number(cur.key) : 0;
+}
+/** The changes that arrived after `seq`, in arrival order, and the number of the last of them (`seq` when there are none). A row whose change has since left the log (a replace) is skipped. */
+export async function arrivalsAfter(seq: number): Promise<{ changes: Change[]; seq: number }> {
+  const db = await openVault();
+  const tx = db.transaction(['order', 'changes']);
+  const rows = await tx.objectStore('order').getAll(IDBKeyRange.lowerBound(seq, true));
+  const keys = await tx.objectStore('order').getAllKeys(IDBKeyRange.lowerBound(seq, true));
+  const ch = tx.objectStore('changes');
+  const got = await Promise.all(rows.map((r) => ch.get(r.t)));
+  return { changes: got.filter((c): c is Change => !!c).map(mendChange), seq: keys.length ? Number(keys[keys.length - 1]) : seq };
+}
+/** Every stamp in the log, and nothing else: what a load from the snapshot needs of the log itself. */
+export async function changeKeys(): Promise<string[]> {
+  const db = await openVault();
+  return db.getAllKeys('changes');
 }

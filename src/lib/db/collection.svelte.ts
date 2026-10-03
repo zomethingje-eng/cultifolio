@@ -10,15 +10,17 @@ import { today as day } from '$lib/ui/day.svelte';
 
 /** Three weeks: the Due chip's "21+ days" and Today's "three weeks or more" both mean this many days, inclusive (round twenty-five, 2). */
 export const DUE_DAYS = 21;
+/** A load that folded this many changes on top of the snapshot writes a fresh one, so the next load reads little again (round fifty-three, 1). */
+export const FOLD_REFRESH = 1000;
 const yearOf = (d?: string | null): number | undefined => (d && /^\d{4}-/.test(d) ? Number(d.slice(0, 4)) : undefined);
-import { Clock, hlcDecode, hlcEncode, hlcCompare, hlcAfter, hlcBefore, nowMs } from '$core/hlc';
+import { Clock, hlcDecode, hlcEncode, hlcCompare, hlcAfter, hlcBefore, nowMs, clockOffsetMs } from '$core/hlc';
 
 /** How far ahead of the corrected clock a held stamp may be for a local edit to its field to be stamped just past it (round fifty-one, 1). */
 export const FOLLOW_HELD_MS = 86_400_000;
 import { tag36 } from '$core/tag';
-import { apply, diff, readChanges, isComplete, REQUIRED_FIELDS, incomplete as incompleteRecords, key as recKey, type Change, type Kind, type Record_, type State, type Hold, hlcWall, revivedByImport } from '$core/log';
+import { apply, diff, readChanges, isComplete, isHeld, REQUIRED_FIELDS, KINDS, FOLD_RULES, incomplete as incompleteRecords, key as recKey, type Change, type Kind, type Record_, type State, type Hold, hlcWall, revivedByImport } from '$core/log';
 import { nextAccession, DEFAULT_SCHEME, type NumberingScheme } from '$core/accession';
-import { allChanges, appendChanges, appendChangesClaiming, onOtherTabWrite, deviceId, requestPersistence, getMeta, setMeta, putPhotoBlobs, getPhotoBlobs, deletePhotoBlobs, holdVault, type NumberKind } from './vault';
+import { allChanges, appendChanges, appendChangesClaiming, onOtherTabWrite, deviceId, requestPersistence, getMeta, setMeta, putPhotoBlobs, getPhotoBlobs, deletePhotoBlobs, holdVault, readFold, writeFold, foldGen, lastArrival, arrivalsAfter, changeKeys, changesByKeys, type FoldSnapshot, type NumberKind } from './vault';
 import type { Accession, PlantEvent, Taxon, Location, Sowing, Provenance, Photo } from './types';
 import { PROP_METHODS, accNo, sowNo, NUMBERING_SETTING } from './types';
 import { slugify } from '$core/names';
@@ -30,6 +32,7 @@ const isScheme = (s: unknown): s is NumberingScheme => !!s && typeof s === 'obje
 
 /** A short, deterministic tag for a string: two 32-bit FNV-1a hashes in base 36 (up to 14 characters, [a-z0-9]). */
 
+const byDay = (a: { d: string; id: string }, b: { d: string; id: string }) => b.d.localeCompare(a.d) || b.id.localeCompare(a.id);
 const numberField = (c: Change): NumberKind | null => (c.kind === 'accession' && c.field === 'acc' ? 'accession' : c.kind === 'sowing' && c.field === 'no' ? 'sowing' : null);
 
 class Collection {
@@ -40,7 +43,15 @@ class Collection {
   /** The scheme this device kept in `meta` before the scheme was a synced setting; read only when the log has no setting record. */
   private metaScheme = $state<NumberingScheme | null>(null);
   private state: State = new SvelteMap<string, Record_>();
+  /**
+   * The same records by kind, so a list of plants is built from the plants and not from a scan of every record, and a
+   * watering written does not rebuild the plant list: a derived that reads one kind's map re-runs only when that kind
+   * changes (round fifty-three, 1; the first reviewer's finding 26). `state` stays the map a page reads one record from.
+   */
+  private kinds: Record<Kind, SvelteMap<string, Record_>> = Object.fromEntries(KINDS.map((k) => [k, new SvelteMap<string, Record_>()])) as Record<Kind, SvelteMap<string, Record_>>;
   private seen = new Map<string, string>();
+  /** What the last load read: the snapshot's records and the changes folded after it, or the whole log. For the sync page and the tests. */
+  loaded = $state<{ from: 'log' | 'snapshot'; changes: number; snapshot?: number }>({ from: 'log', changes: 0 });
   private clock: Clock | null = null;
   private loading: Promise<void> | null = null;
   /** Every `parentId` a place has had, by HLC, so a loop can be cut back to where the place was before the move. */
@@ -140,16 +151,13 @@ class Collection {
         // characters on top of the twelve-character device, within the HLC's sixteen; the device alone still names this
         // machine to sync and to the hold rule (which matches the writer by that prefix).
         this.clock = new Clock(dev + Array.from(crypto.getRandomValues(new Uint8Array(4)), (b) => (b % 36).toString(36)).join(''));
-        const changes = await allChanges();
         this.parkedStamps = new Set((await getMeta<string[]>('parked')) ?? []);
         this.photosUnverified = new Set((await getMeta<string[]>('photosUnverified')) ?? []);
         this.parkedDone = new Set((await getMeta<string[]>('parkedDone')) ?? []);
-        const parkedBefore = this.parkedStamps.size;
-        apply(this.state, changes, this.seen, this.hold()); // a change stamped far ahead of this clock is held, not applied (round five, 4); one a day past it is parked (round fifty-two, 1)
-        if (this.parkedStamps.size !== parkedBefore) await this.saveParked();
-        for (const c of changes) this.applied.add(c.t);
-        this.noteParents(changes);
-        for (const c of changes) this.clock.observe(c.t);
+        // The fold: from the snapshot of the last one and the changes that arrived since, or, without a snapshot this
+        // build can use, from the whole log (round fifty-three, 1). Either way a change stamped far ahead of this clock
+        // is held, not applied (round five, 4); one two days past it is parked (round fifty-two, 1).
+        const changes = await this.foldFromVault();
         const scheme = await getMeta<NumberingScheme>('scheme');
         if (isScheme(scheme)) this.metaScheme = scheme;
         await this.readLedger();
@@ -174,21 +182,16 @@ class Collection {
         // this build can see would still outrank it (round fifty-two, 4; the first reviewer's finding 11). The pass runs again at a later load.
         const syncMeta = await getMeta<{ quarantined?: unknown[] }>('sync');
         const batchesSetAside = !!syncMeta?.quarantined?.length;
-        const numbered = new Set<string>();
-        const oldest = new Map<string, string>();
-        for (const c of changes) {
-          const k = recKey(c.kind, c.id);
-          if ((c.kind === 'accession' && c.field === 'acc') || (c.kind === 'sowing' && c.field === 'no')) numbered.add(k);
-          const o = oldest.get(k);
-          if (o === undefined || hlcCompare(c.t, o) < 0) oldest.set(k, c.t);
-        }
+        // A record whose log holds a number change, held or null, is left alone: the fold's own stamp map says which
+        // (a load from the snapshot has not read every change, so the changes themselves are not scanned; round fifty-three, 1).
+        const numbered = (k: string, field: string) => this.seen.has(k + '\0' + field) || this.seen.has(k + '\0held\0' + field);
         for (const r of this.state.values()) {
           const k = recKey(r.kind, r.id);
-          if (r._deleted || !isComplete(r) || numbered.has(k)) continue;
-          const first = oldest.get(k);
+          if (r._deleted || !isComplete(r)) continue;
+          const first = this.born.get(k);
           if (!first) continue;
-          if (r.kind === 'accession' && r.acc == null) oneShape.push({ t: hlcBefore(first, this.writer), kind: 'accession', id: r.id, field: 'acc', value: r.id });
-          if (r.kind === 'sowing' && r.no == null) oneShape.push({ t: hlcBefore(first, this.writer), kind: 'sowing', id: r.id, field: 'no', value: r.id });
+          if (r.kind === 'accession' && r.acc == null && !numbered(k, 'acc')) oneShape.push({ t: hlcBefore(first, this.writer), kind: 'accession', id: r.id, field: 'acc', value: r.id });
+          if (r.kind === 'sowing' && r.no == null && !numbered(k, 'no')) oneShape.push({ t: hlcBefore(first, this.writer), kind: 'sowing', id: r.id, field: 'no', value: r.id });
         }
         if (oneShape.length && !batchesSetAside) await this.commit(oneShape, 'local').catch(() => {});
         onOtherTabWrite((what) => {
@@ -255,34 +258,147 @@ class Collection {
   private foldGen = 0;
   async rebuild(): Promise<void> {
     this.foldGen++;
+    const gen = await foldGen();
+    const seq = await lastArrival();
     const changes = await allChanges();
+    this.foldAll(changes);
+    this.loaded = { from: 'log', changes: changes.length };
+    this.lastSeq = seq;
+    await this.readLedger();
+    this.foldWrite = this.saveFold(seq, gen);
+  }
+
+  /* ---- the fold and its snapshot ----
+   * The fold is from the whole log once; after that it is kept as a snapshot
+   * in the vault and brought up to date from the changes that arrived after
+   * it, in arrival order (round fifty-three, 1; the reviewers' finding 25).
+   * The snapshot is wrong, and the log folded again, when: the fold's rules
+   * are not this build's; it is another device's; the clock correction has
+   * changed since (every hold was judged by the old clock); the log was
+   * replaced, or a stored change displaced (the vault drops it in that very
+   * transaction, and refuses a snapshot that began before). A held change
+   * that came due since is found from the snapshot's own stamp map and folded
+   * with the tail. The snapshot is written after a load and after a rebuild,
+   * off the page's path, against the counter it was read at.
+   */
+  private clearFold(): void {
     this.state.clear();
+    for (const m of Object.values(this.kinds)) m.clear();
     this.seen = new Map();
     this.applied = new Set();
     this.parentHist = new Map();
+    this.born = new Map();
     this.parkedByRecord = new Map();
+  }
+  /** The whole log, folded from nothing. */
+  private foldAll(changes: Change[]): void {
+    this.clearFold();
     const parkedBefore = this.parkedStamps.size;
     apply(this.state, changes, this.seen, this.hold());
-    if (this.parkedStamps.size !== parkedBefore) await this.saveParked();
+    if (this.parkedStamps.size !== parkedBefore) void this.saveParked();
+    for (const r of this.state.values()) this.kinds[r.kind].set(r.id, r);
     for (const c of changes) { this.applied.add(c.t); this.clock?.observe(c.t); }
     this.noteParents(changes);
-    await this.readLedger();
+    this.indexAll();
+  }
+  /** A few changes folded onto the fold that is: the records they touch are re-set as copies, so the reactive maps notice. */
+  private foldSome(changes: Change[]): void {
+    if (!changes.length) return;
+    const parkedBefore = this.parkedStamps.size;
+    apply(this.state, changes, this.seen, this.hold());
+    if (this.parkedStamps.size !== parkedBefore) void this.saveParked();
+    for (const c of changes) { this.applied.add(c.t); this.clock?.observe(c.t); }
+    this.noteParents(changes);
+    this.touched(changes);
+  }
+  /** After apply() mutated records in place: a copy of each touched record goes into both maps, so the reactive maps notice; the indexes follow. */
+  private touched(changes: Change[]): void {
+    const keys = new Set(changes.map((c) => recKey(c.kind, c.id)));
+    for (const k of keys) {
+      const r = this.state.get(k);
+      if (!r) continue;
+      const copy = { ...r };
+      this.state.set(k, copy);
+      this.kinds[r.kind].set(r.id, copy);
+    }
+    this.reindex(keys);
+  }
+  /** The fold at load: from the snapshot and what arrived after it, or from the whole log. Returns the changes read, for the passes that look at them. */
+  private async foldFromVault(): Promise<Change[]> {
+    const gen = await foldGen();
+    const seq = await lastArrival(); // before anything is read: a change stored after this number is folded again next time, which is harmless; one stored before it is in what is read
+    const had = await readFold().catch(() => undefined);
+    const f = had?.fold;
+    const usable = !!f && f.rules === FOLD_RULES && f.device === this.deviceId && f.offset === clockOffsetMs() && had.gen === gen && Array.isArray(f.records) && Array.isArray(f.seen);
+    if (f && usable) {
+      this.clearFold();
+      for (const r of f.records as Record_[]) { this.state.set(recKey(r.kind, r.id), r); this.kinds[r.kind].set(r.id, r); }
+      for (let i = 0; i + 1 < f.seen.length; i += 2) this.seen.set(f.seen[i], f.seen[i + 1]);
+      for (let i = 0; i + 1 < f.born.length; i += 2) this.born.set(f.born[i], f.born[i + 1]);
+      for (const [id, hist] of f.parents) this.parentHist.set(id, new Map(hist));
+      if (f.last) this.clock?.observe(f.last);
+      this.applied = new Set(await changeKeys());
+      // Held changes that came due since the snapshot: the stamp map names them, and the field's own stamp says whether
+      // the fold has taken them already (a held key is never removed). Parked stamps are not due; they are parked.
+      const hold = this.hold();
+      const due: string[] = [];
+      for (const [k, t] of this.seen) {
+        const i = k.indexOf('\0held\0');
+        if (i < 0 || isHeld(t, hold) || this.parkedStamps.has(t)) continue;
+        const cur = this.seen.get(k.slice(0, i) + '\0' + k.slice(i + 6));
+        if (cur === undefined || hlcCompare(cur, t) < 0) due.push(t);
+      }
+      const tail = await arrivalsAfter(f.seq);
+      const changes = [...(due.length ? await changesByKeys(due) : []), ...tail.changes];
+      this.indexAll();
+      this.foldSome(changes);
+      this.loaded = { from: 'snapshot', changes: tail.changes.length, snapshot: f.changes };
+      this.lastSeq = tail.seq;
+      // A tail that has grown long is folded into a fresh snapshot, so the next load reads little again.
+      if (tail.changes.length >= FOLD_REFRESH) this.foldWrite = this.saveFold(seq, gen);
+      return changes;
+    }
+    const changes = await allChanges();
+    this.foldAll(changes);
+    this.loaded = { from: 'log', changes: changes.length };
+    this.lastSeq = seq;
+    this.foldWrite = this.saveFold(seq, gen);
+    return changes;
+  }
+  /** The last snapshot write, for the sync page's account and the tests; resolves false when the vault refused it or there was nothing to write. */
+  private foldWrite: Promise<boolean> | null = null;
+  get snapshotWritten(): Promise<boolean> {
+    return this.foldWrite ?? Promise.resolve(false);
+  }
+  /** Write the fold as it is to the vault, against the arrival number and the counter read before it was built; refused by the vault if the log changed under it. */
+  private async saveFold(seq: number, gen: number): Promise<boolean> {
+    try {
+      const records = [...this.state.values()];
+      const seen: string[] = [];
+      for (const [k, v] of this.seen) seen.push(k, v);
+      const born: string[] = [];
+      for (const [k, v] of this.born) born.push(k, v);
+      const parents: FoldSnapshot['parents'] = [...this.parentHist].map(([id, m]) => [id, [...m]]);
+      let last = '';
+      for (const v of this.seen.values()) if (hlcCompare(v, last) > 0) last = v;
+      return await writeFold({ rules: FOLD_RULES, device: this.deviceId, offset: clockOffsetMs(), seq, records, seen, born, parents, last, changes: this.applied.size }, gen);
+    } catch {
+      return false; // a snapshot that could not be written is a slower load next time, nothing more
+    }
   }
 
+  /** Another tab of this browser wrote: the changes that arrived after the last this tab folded, in arrival order, so its list and its next number are current. */
+  private lastSeq = 0;
   private async catchUp(): Promise<void> {
     if (!this.ready) return;
     const gen = this.foldGen;
-    const changes = (await allChanges()).filter((c) => !this.applied.has(c.t));
+    const got = await arrivalsAfter(this.lastSeq);
     await this.readLedger();
     if (gen !== this.foldGen) return; // a rebuild landed meanwhile: it read the same log and more; what was read here would put a displaced change back
+    this.lastSeq = got.seq;
+    const changes = got.changes.filter((c) => !this.applied.has(c.t));
     if (!changes.length) return;
-    for (const c of changes) { this.clock?.observe(c.t); this.applied.add(c.t); }
-    apply(this.state, changes, this.seen, this.hold());
-    this.noteParents(changes);
-    for (const k of new Set(changes.map((c) => recKey(c.kind, c.id)))) {
-      const r = this.state.get(k);
-      if (r) this.state.set(k, { ...r });
-    }
+    this.foldSome(changes);
   }
   isNumberTaken(no: string): boolean {
     return this.takenNumbers('accession').has(no.trim());
@@ -316,18 +432,48 @@ class Collection {
    * asks for each plant's last watering several times a keystroke, and a
    * scan of every record each time is seconds on a phone.
    */
-  private eventsByAcc = $derived.by(() => {
-    const out = new Map<string, PlantEvent[]>();
-    for (const e of this.live<PlantEvent>('event')) (out.get(e.acc) ?? out.set(e.acc, []).get(e.acc)!).push(e);
-    for (const list of out.values()) list.sort((a, b) => b.d.localeCompare(a.d) || b.id.localeCompare(a.id));
-    return out;
-  });
-  private photosByAcc = $derived.by(() => {
-    const out = new Map<string, Photo[]>();
-    for (const p of this.live<Photo>('photo')) { const k = p.acc ?? ''; (out.get(k) ?? out.set(k, []).get(k)!).push(p); }
-    for (const list of out.values()) list.sort((a, b) => b.d.localeCompare(a.d) || b.id.localeCompare(a.id));
-    return out;
-  });
+  // Kept up to date per record touched rather than rebuilt from every event on every write (round fifty-three, 1): a
+  // watering re-sorts one plant's lines, not a hundred thousand. The map is replaced (a shallow copy) so a derived that
+  // reads it re-runs; the lists of plants not touched are shared with the map before.
+  private eventsByAcc = $state.raw(new Map<string, PlantEvent[]>());
+  private photosByAcc = $state.raw(new Map<string, Photo[]>());
+  /** Which plant each event's and photo's record was filed under, so an edit that moves it is taken out of the old list. */
+  private filedUnder = new Map<string, string>();
+  private indexAll(): void {
+    const ev = new Map<string, PlantEvent[]>();
+    for (const e of this.live<PlantEvent>('event')) (ev.get(e.acc) ?? ev.set(e.acc, []).get(e.acc)!).push(e);
+    for (const list of ev.values()) list.sort(byDay);
+    const ph = new Map<string, Photo[]>();
+    for (const p of this.live<Photo>('photo')) { const k = p.acc ?? ''; (ph.get(k) ?? ph.set(k, []).get(k)!).push(p); }
+    for (const list of ph.values()) list.sort(byDay);
+    this.filedUnder = new Map();
+    for (const [acc, list] of ev) for (const e of list) this.filedUnder.set(recKey('event', e.id), acc);
+    for (const [acc, list] of ph) for (const p of list) this.filedUnder.set(recKey('photo', p.id), acc);
+    this.eventsByAcc = ev;
+    this.photosByAcc = ph;
+  }
+  private reindex(keys: Set<string>): void {
+    let ev: Map<string, PlantEvent[]> | null = null, ph: Map<string, Photo[]> | null = null;
+    for (const k of keys) {
+      const r = this.state.get(k);
+      if (!r || (r.kind !== 'event' && r.kind !== 'photo')) continue;
+      const map = r.kind === 'event' ? (ev ??= new Map(this.eventsByAcc)) : (ph ??= new Map(this.photosByAcc));
+      const was = this.filedUnder.get(k);
+      if (was !== undefined) {
+        const list = (map.get(was) ?? []).filter((x) => x.id !== r.id);
+        if (list.length) map.set(was, list as never); else map.delete(was);
+        this.filedUnder.delete(k);
+      }
+      if (r._deleted || !isComplete(r)) continue;
+      const acc = r.kind === 'event' ? String(r.acc) : String(r.acc ?? '');
+      const list = [...(map.get(acc) ?? []), r as never];
+      list.sort(byDay);
+      map.set(acc, list as never);
+      this.filedUnder.set(k, acc);
+    }
+    if (ev) this.eventsByAcc = ev;
+    if (ph) this.photosByAcc = ph;
+  }
   /** A plant's (or batch's) events, newest first. */
   events(acc: string): PlantEvent[] {
     return this.eventsByAcc.get(acc) ?? [];
@@ -898,7 +1044,7 @@ class Collection {
 
   private live<T>(kind: Kind): T[] {
     const out: T[] = [];
-    for (const r of this.state.values()) if (r.kind === kind && !r._deleted && isComplete(r)) out.push(r as unknown as T);
+    for (const r of this.kinds[kind].values()) if (!r._deleted && isComplete(r)) out.push(r as unknown as T);
     return out;
   }
 
@@ -953,14 +1099,7 @@ class Collection {
     }
     this.lastWriteError = null;
     if (!changes.length) return;
-    for (const c of changes) this.applied.add(c.t);
-    apply(this.state, changes, this.seen, this.hold());
-    this.noteParents(changes);
-    // apply() mutates records in place; re-set a copy so the reactive map notices.
-    for (const k of new Set(changes.map((c) => recKey(c.kind, c.id)))) {
-      const r = this.state.get(k);
-      if (r) this.state.set(k, { ...r });
-    }
+    this.foldSome(changes);
     if (source !== 'server') for (const fn of this.listeners) fn(changes);
   }
 
@@ -1132,13 +1271,8 @@ class Collection {
       throw e;
     }
     this.lastWriteError = null;
-    for (const c of made) { const k = numberField(c); if (k && typeof c.value === 'string') this.ledger[k].add(c.value); this.applied.add(c.t); }
-    apply(this.state, made, this.seen, this.hold());
-    this.noteParents(made);
-    for (const k of new Set(made.map((c) => recKey(c.kind, c.id)))) {
-      const r = this.state.get(k);
-      if (r) this.state.set(k, { ...r });
-    }
+    for (const c of made) { const k = numberField(c); if (k && typeof c.value === 'string') this.ledger[k].add(c.value); }
+    this.foldSome(made);
     for (const fn of this.listeners) fn(made);
     return out;
   }
