@@ -5,7 +5,8 @@
  * corpus compiled into the build (so tests work with nothing else present).
  */
 import { genusOf } from '$core/names';
-import { prepare, type Prepared } from '$core/search';
+import { prepare, search, hasExact, type Prepared } from '$core/search';
+import { queryPlan, candidates, postingFileOf } from '$core/postings';
 import { bucketOf, BUCKETS } from '$core/bucket';
 import { parseDossier, dossierPath, genusPath, GenusRecord, DOSSIER_V, type Dossier } from '$dossier/schema';
 import { manifestPath, productPath, isManifest, type Manifest } from '$dossier/manifest';
@@ -129,7 +130,7 @@ async function loadIndexNow(platform: Platform, fetch: Fetch): Promise<Loaded> {
     // A manifest is adopted only with the index it names: one whose index is not there yet (an upload that landed the
     // manifest first) is not a corpus, and the top-level index must never be served under its id, where every cache
     // would keep it for a day (round fifty-four, 3; both reviewers). The corpus held before stays until the files are there.
-    let obj = manifest ? await store.get(productPath(manifest.id, 'index.json')) : null;
+    let obj = manifest ? await store.get(productPath(manifest.files['index.json'])) : null;
     if (manifest && !obj) {
       console.warn(`manifest ${manifest.id} names an index the bucket does not hold yet; the corpus held before stands`);
       if (previous?.fromStore) { previous.at = Date.now(); cached = previous; return previous; }
@@ -176,18 +177,16 @@ export async function getCorpus(platform: Platform, fetch: Fetch): Promise<{ id:
 }
 
 /* ---- the build's products ----
- * Read by name under the current corpus id, from the bucket (then the static
- * corpus), and kept a few at a time per isolate: the directory is immutable,
- * so a product once read is right until the manifest names another id, and
- * the map is cleared with the index. Null when the manifest names no such
- * product, or it cannot be read: the caller derives from the index then.
+ * Read by name through the manifest, which gives each its content hash and so its path (round fifty-six, 2), from the
+ * bucket (then the static corpus), and kept a few at a time per isolate: a file under a hash never changes, so a product
+ * once read is right for as long as any manifest names it; the map is cleared with the index all the same. Null when
+ * the manifest names no such product, or it cannot be read: the caller derives from the index then.
  */
 /**
  * Each entry: the promise, its size in characters once read, and for a file the bucket lacked, the moment it may be asked
  * for again. The miss's minute runs from the miss, not from the last request that met it: a busy product renewed its
  * miss for ever and an upload was never seen (round fifty-five, 4; the second reviewer's finding 5). A read that threw
- * (R2 did not answer) is not remembered at all. The cache is bounded by size as well as count: one search shard can be
- * tens of megabytes at fifty thousand species (the first reviewer's finding 21).
+ * (R2 did not answer) is not remembered at all. The cache is bounded by size as well as count (the first reviewer's finding 21).
  */
 type Held = { p: Promise<unknown>; size: number; retryAt?: number };
 const products = new Map<string, Held>();
@@ -198,14 +197,15 @@ export async function product<T>(platform: Platform, fetch: Fetch, name: string)
   const c = await loadIndex(platform, fetch);
   const m = c.manifest;
   if (!m) return null;
-  if (!(name in (m.files ?? {}))) return null;
-  const k = `${m.id}/${name}`;
+  const hash = m.files[name];
+  if (!hash) return null;
+  const k = hash;
   let h = products.get(k);
   if (h?.retryAt !== undefined && Date.now() >= h.retryAt) { products.delete(k); h = undefined; }
   if (!h) {
     const held: Held = { p: Promise.resolve(null), size: 0 };
     held.p = (async () => {
-      const path = productPath(m.id, name);
+      const path = productPath(hash);
       const store = platform?.env?.STORE;
       let text: string | null = null;
       if (store) {
@@ -341,23 +341,42 @@ export async function entriesIn(platform: Platform, fetch: Fetch, bucket: string
   const c = await loadIndex(platform, fetch);
   return entriesByBucket(c.idx, c.buckets).get(bucket) ?? [];
 }
-/** The prepared search entries a query is answered from: the build's shard for its first character, else the whole index prepared here. */
-export async function searchFor(platform: Platform, fetch: Fetch, shard: string | null): Promise<Prepared<IndexEntry>[]> {
+/**
+ * The answer to a search (round fifty-six, 1). Without a manifest, the whole index prepared with the index and held.
+ * Under a manifest, the build's postings name the entries the query can match ($core/postings): the exact pass ranks
+ * the entries under every word's exact key, prepared for this request; when it finds nothing, the near pass ranks the
+ * entries under the near keys of the query's long words. The answer is the whole index's answer: every exact hit is
+ * under the exact keys and every near hit under the near keys, and the ranking is the search's own (tested against the
+ * whole on the real corpus). A posting file the bucket lacks leaves the whole index prepared for the request, under
+ * the rate the caller gives (`mayWhole`), and a refusal there is a refusal, not "nothing matches".
+ */
+export async function searchAnswer(platform: Platform, fetch: Fetch, q: string, n: number, mayWhole: () => Promise<Response | null>): Promise<{ hits: IndexEntry[]; corpus: string } | { stop: Response }> {
   const c = await loadIndex(platform, fetch);
-  if (c.manifest) {
-    if (!shard) return []; // a query with no word the tokeniser keeps: nothing matches, and nothing is prepared for it (round fifty-four, 3)
-    if (!c.manifest.search.includes(shard)) return []; // no word in the corpus begins so: nothing matches, and no read
-    const file = await product<Prepared<IndexEntry>[]>(platform, fetch, `search/${shard}.json`);
-    if (file) return file;
-    return prepare(c.idx); // a shard the bucket lacks: prepared for this request and let go, not held per isolate
-  }
-  return searchIndex(c.idx);
+  const corpus = c.corpus; // the id the answer is from, from the same load (round seventeen, 10)
+  const m = c.manifest;
+  if (!m) return { hits: search(searchIndex(c.idx), q, n), corpus };
+  const plan = queryPlan(q);
+  if (!plan.exact.length) return { hits: [], corpus }; // no word the tokeniser keeps: nothing matches, and nothing is read
+  const files = new Map<string, Record<string, number[]> | null>();
+  const read = async (keys: string[][]) => {
+    const want = [...new Set(keys.flat().map((k) => postingFileOf(k, m.postings)))].filter((f) => !files.has(f));
+    await Promise.all(want.map(async (f) => files.set(f, await product<Record<string, number[]>>(platform, fetch, `postings/${f}.json`))));
+    return keys.flat().every((k) => !!files.get(postingFileOf(k, m.postings)));
+  };
+  const posting = (k: string) => { const f = files.get(postingFileOf(k, m.postings)); return f && Object.hasOwn(f, k) ? f[k] : undefined; };
+  const entries = (ix: number[]) => { const out: IndexEntry[] = []; for (const i of ix) { const e = c.idx[i]; if (e) out.push(e); } return out; };
+  const whole = async () => {
+    const stop = await mayWhole();
+    return stop ? { stop } : { hits: search(await searchWhole(platform, fetch), q, n), corpus };
+  };
+  if (!(await read(plan.exact))) return whole();
+  const pe = prepare(entries(candidates(plan.exact, posting)));
+  if (hasExact(pe, q)) return { hits: search(pe, q, n), corpus };
+  if (!plan.near) return { hits: [], corpus };
+  if (!(await read(plan.near))) return whole();
+  return { hits: search(prepare(entries(candidates(plan.near, posting))), q, n), corpus };
 }
-/** Whether the build's products are what answers: the search route decides from it whether a miss should be tried over the whole (round fifty-four, 3). */
-export async function hasProducts(platform: Platform, fetch: Fetch): Promise<boolean> {
-  return !!(await loadIndex(platform, fetch)).manifest;
-}
-/** The whole index prepared for one request, under a manifest: for the near pass a shard cannot answer; not kept (round fifty-four, 3). */
+/** The whole index prepared for one request, under a manifest, when a posting file is missing; not kept (round fifty-four, 3). */
 /** One whole-index preparation in flight per index at a time: concurrent misses share it, and it is let go when the last of them is answered (round fifty-five, 4; both reviewers). */
 let wholeInFlight: { idx: IndexEntry[]; p: Promise<Prepared<IndexEntry>[]>; users: number } | null = null;
 export async function searchWhole(platform: Platform, fetch: Fetch): Promise<Prepared<IndexEntry>[]> {

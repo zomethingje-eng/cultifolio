@@ -261,12 +261,33 @@
     editing = false;
   }
   const pct = (r: number | null) => (r == null ? '–' : `${Math.round(r * 100)}%`);
+  /** Two records under one number, not yet repaired: a reading of the log does not write to it, so the grower asks (round fifty-six, 3). */
+  const sharedWith = $derived(s && collection.ready ? collection.sharesNumber('sowing', s.id) : []);
+  let renumbering = $state(false);
+  async function renumberShared() {
+    if (!s || renumbering) return;
+    const id = s.id, before = sowNo(s);
+    renumbering = true;
+    try {
+      await collection.repairNumbers();
+      const now = collection.sowing(id);
+      if (now && sowNo(now) !== before) {
+        toast.show(`This batch is now ${sowNo(now)}; a note on it says why.`);
+        if (param !== id) await goto(`/propagation/${encodeURIComponent(id)}`, { replaceState: true });
+      } else toast.show(`${before} stays with this batch, created first; the other was given the next free number.`);
+    } finally {
+      renumbering = false;
+    }
+  }
 </script>
 
 <svelte:head><title>{s ? `${sowNo(s)} ${s.taxonName}` : param} — Cultifolio</title></svelte:head>
 
 {#if collection.lastWriteError}
   <div class="notice err" role="alert" id="write-error">This change was not saved: {collection.lastWriteError}. Free space or <a href="/backup">back up now</a>.</div>
+{/if}
+{#if s && sharedWith.length}
+  <div class="notice" id="shared-number">Another batch has the number {sowNo(s)} too: two devices gave it out while offline, or a file was merged in. The one created later is given the next free number, with a note saying so, when you renumber here, or at the next sync or import. <button class="btn" onclick={renumberShared} disabled={renumbering}>Renumber now</button></div>
 {/if}
 {#if !collection.ready}
   <p class="muted">Opening your collection…</p>

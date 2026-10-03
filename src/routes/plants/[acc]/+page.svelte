@@ -391,6 +391,24 @@
     await collection.restore('accession', r.id);
     toast.show(`${param} restored.`);
   }
+  /** Two records under one number, not yet repaired: a reading of the log does not write to it, so the grower asks (round fifty-six, 3). */
+  const sharedWith = $derived(a && collection.ready ? collection.sharesNumber('accession', a.id) : []);
+  let renumbering = $state(false);
+  async function renumberShared() {
+    if (!a || renumbering) return;
+    const id = a.id, before = accNo(a);
+    renumbering = true;
+    try {
+      await collection.repairNumbers();
+      const now = collection.accession(id);
+      if (now && accNo(now) !== before) {
+        toast.show(`This plant is now ${accNo(now)}; a note on it says why.`);
+        if (param !== id) await goto(`/plants/${encodeURIComponent(id)}`, { replaceState: true });
+      } else toast.show(`${before} stays with this plant, created first; the other was given the next free number.`);
+    } finally {
+      renumbering = false;
+    }
+  }
 </script>
 
 <svelte:head><title>{a ? `${accNo(a)} ${a.taxonName}` : param} — Cultifolio</title></svelte:head>
@@ -398,6 +416,9 @@
 
 {#if collection.lastWriteError}
   <div class="notice err" role="alert" id="write-error">This change was not saved: {collection.lastWriteError}. Free space or <a href="/backup">back up now</a>.</div>
+{/if}
+{#if a && sharedWith.length}
+  <div class="notice" id="shared-number">Another plant has the number {accNo(a)} too: two devices gave it out while offline, or a file was merged in. The one created later is given the next free number, with a note saying so, when you renumber here, or at the next sync or import. <button class="btn" onclick={renumberShared} disabled={renumbering}>Renumber now</button></div>
 {/if}
 {#if !collection.ready}
   <!-- The page's shape before the vault opens: the card without a picture, which is what most plants' pages are; one with a photograph grows a hero above it when the record arrives. -->

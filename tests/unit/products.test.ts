@@ -5,12 +5,13 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { buildProducts } from '$dossier/products';
-import { isManifest, shardsOf, contentHash, manifestPath, productPath, type Manifest } from '$dossier/manifest';
+import { isManifest, contentHash, manifestPath, productPath, type Manifest } from '$dossier/manifest';
+import { entryWords, wordKeys, postingFileOf } from '$core/postings';
 import { bucketsFor, bucketOf, isBucket, bucketWidth, bucketNames, BUCKETS } from '$core/bucket';
-import { prepare, search, shardOf } from '$core/search';
+import { prepare, search } from '$core/search';
 import { catalogueOf, rowsOnly } from '$dossier/catalogue';
 import type { IndexEntry } from '$dossier/index-entry';
-import { _forgetIndex, getCorpus, product, entriesIn, searchFor } from '$lib/server/dossiers';
+import { _forgetIndex, getCorpus, product, entriesIn } from '$lib/server/dossiers';
 import { GET as corpusGET } from '../../src/routes/api/corpus/+server';
 import { GET as entriesGET } from '../../src/routes/api/entries/+server';
 import { GET as searchGET } from '../../src/routes/api/search/+server';
@@ -34,15 +35,15 @@ function r2(files: Record<string, unknown>) {
   return { get: async (k: string) => (k in files ? { json: async () => files[k], text: async () => JSON.stringify(files[k]), etag: etag(k) } : null), head: async (k: string) => (k in files ? { etag: etag(k) } : null) };
 }
 const platformWith = (store: ReturnType<typeof r2>) => ({ env: { STORE: store, QUEUE: kv() }, context: { waitUntil: (p: Promise<unknown>) => void p } }) as unknown as App.Platform;
-/** The bucket as the build writes it: index.json at the top, the products under b/<id>/, the manifest naming it. */
+/** The bucket as the build writes it: index.json at the top, each product under its hash, the manifest naming them. */
 function bucketFor(idx: IndexEntry[], opts: { manifest?: boolean; drop?: string[]; tamper?: Record<string, unknown> } = {}) {
   const text = JSON.stringify(idx, null, 1);
   const { manifest, files } = buildProducts(idx, text, () => new Map());
   const objects: Record<string, unknown> = { 's/v2/index.json': idx };
   if (opts.manifest !== false) {
     objects[manifestPath()] = manifest;
-    for (const [name, body] of files) if (!opts.drop?.includes(name)) objects[productPath(manifest.id, name)] = JSON.parse(body);
-    for (const [name, v] of Object.entries(opts.tamper ?? {})) objects[productPath(manifest.id, name)] = v;
+    for (const [name, body] of files) if (!opts.drop?.includes(name)) objects[productPath(manifest.files[name])] = JSON.parse(body);
+    for (const [name, v] of Object.entries(opts.tamper ?? {})) objects[productPath(manifest.files[name])] = v;
   }
   return { manifest, store: r2(objects) };
 }
@@ -87,30 +88,31 @@ describe('the products', () => {
     const entries = bucketNames(32).flatMap((bk) => JSON.parse(a.files.get(`entries/${bk}.json`)!) as IndexEntry[]);
     expect(entries.map((e) => e.key).sort((x, y) => x - y)).toEqual(idx.map((e) => e.key));
     for (const bk of bucketNames(32)) for (const e of JSON.parse(a.files.get(`entries/${bk}.json`)!) as IndexEntry[]) expect(bucketOf(e.slug, 32)).toBe(bk);
-    // every entry is in each shard of its words' first letters, and in no other
-    const prepared = prepare(idx);
-    for (const p of prepared) {
-      for (const c of shardsOf(p)) expect((JSON.parse(a.files.get(`search/${c}.json`)!) as Array<{ item: IndexEntry }>).some((x) => x.item.key === p.item.key)).toBe(true);
-    }
-    expect(a.manifest.search).toContain('o'); // from the synonyms ("Oldname")
-    expect(a.manifest.search).toContain('s'); // from the common name
-    expect(a.manifest.search).not.toContain('z');
+    // every entry is posted under every key of every word it is searched by, older names and common names included, and each posting file is there, empty or not
+    expect(a.manifest.postings).toBe(64);
+    const posting = (k: string) => (JSON.parse(a.files.get(`postings/${postingFileOf(k, 64)}.json`)!) as Record<string, number[]>)[k] ?? [];
+    idx.forEach((e, i) => { for (const w of entryWords(e)) for (const k of wordKeys(w)) expect(posting(k)).toContain(i); });
+    expect(posting('old')).toContain(0); // from the synonyms ("Oldname")
+    expect(posting('sil')).toContain(0); // from the common name
+    expect(posting('zzz')).toEqual([]);
+    expect([...a.files.keys()].filter((n) => n.startsWith('postings/')).length).toBe(64);
+    // each product's hash is the md5 of its body: its name in the bucket
+    for (const [name, body] of a.files) expect(a.manifest.files[name]).toMatch(/^[0-9a-f]{32}$/), expect(productPath(a.manifest.files[name])).toBe(`s/v2/p/${a.manifest.files[name]}.json`), void body;
     expect(JSON.parse(a.files.get('catalogue/genus-all.json')!)).toEqual(JSON.parse(JSON.stringify(rowsOnly(catalogueOf(idx, 'genus', 'all')))));
     expect(a.files.has('catalogue/origin-noclimate.json')).toBe(true);
     expect(JSON.parse(a.files.get('index.json')!)).toEqual(idx);
     // a different index is a different id
     expect(buildProducts(index(201), JSON.stringify(index(201), null, 1), () => new Map()).manifest.id).not.toBe(a.manifest.id);
   });
-  it('a search over the query\'s shard finds what a search over the whole finds, for exact matches, any word order, common names, origins and older names', () => {
+  it('round fifty-six: a search over the postings\' candidates answers what a search over the whole answers, exact and near, any word order, common names, origins, older names and rank markers', async () => {
     const idx = index(300);
-    const { files } = buildProducts(idx, JSON.stringify(idx), () => new Map());
+    const { manifest, store } = bucketFor(idx);
+    const platform = platformWith(store);
     const whole = prepare(idx);
-    const shard = (q: string) => JSON.parse(files.get(`search/${shardOf(q)}.json`) ?? '[]') as typeof whole;
-    for (const q of ['cop', 'copiapoa sp1', 'sp12 lithops', 'silver cactus', 'chile', 'oldname sp5', 'asphodelaceae', 'haworthia pumila var', 'Conophitum']) {
-      expect(search(shard(q), q).map((x) => x.key)).toEqual(search(whole, q).map((x) => x.key));
+    for (const q of ['c', 'co', 'cop', 'copiapoa sp1', 'sp12 lithops', 'silver cactus', 'chile', 'hile', 'chlie', 'oldname sp5', 'oldnmae', 'asphodelaceae', 'aphodelaceae', 'haworthia pumila var', 'haworthia var', 'var aloe', 'Conophitum', 'onophytum', 'xconophytum', 'zzz', 'aloe subsp', 'f', 'ab']) {
+      const r = await call(searchGET as never, `/api/search?q=${encodeURIComponent(q)}&n=100&c=${manifest.id}`, platform);
+      expect({ q, keys: ((await r.json()) as IndexEntry[]).map((x) => x.key) }).toEqual({ q, keys: search(whole, q, 100).map((x) => x.key) });
     }
-    expect(shardOf('var aloe')).toBe('a'); // a rank marker another word follows is not the first word
-    expect(shardOf('')).toBeNull();
   });
 });
 
@@ -135,23 +137,22 @@ describe('the Worker and the manifest', () => {
     expect(await product(platform, noStatic, 'entries/00.json')).toBeNull();
     const b = bucketOf(idx[0].slug);
     expect((await entriesIn(platform, noStatic, b)).map((e) => e.key)).toContain(idx[0].key);
-    expect((await searchFor(platform, noStatic, 'c')).length).toBe(50); // the whole index prepared
+    expect(((await (await call(searchGET as never, '/api/search?q=c&n=100', platform)).json()) as IndexEntry[]).length).toBe(50); // the whole index prepared
   });
   it('answers entries, search, rows and sheets from the product files when the manifest names them, and from the index when a file is missing', async () => {
     const idx = index(50);
-    // tampered products say which path answered: an entries bucket with one extra species, a shard with a marker, a catalogue with one row
+    // tampered products say which path answered: an entries bucket with one extra species, a posting file that
+    // points "cop" at the first Aloe instead of the Copiapoas, a catalogue with one row
     const spy = { ...idx[0], key: 999_999, slug: 'spy-species', name: 'Spy species' };
     const b = bucketOf('spy-species', 32);
+    const pf = `postings/${postingFileOf('cop', 64)}.json`;
+    const built = buildProducts(idx, JSON.stringify(idx, null, 1), () => new Map());
+    const tamperedPostings = { ...(JSON.parse(built.files.get(pf)!) as Record<string, number[]>), cop: [0] };
     const { manifest, store } = bucketFor(idx, {
-      tamper: { [`entries/${b}.json`]: [spy], 'search/z.json': [{ item: spy, nameWords: ['zzz'], otherWords: [], synWords: [], sortKey: 'zzz' }], 'catalogue/genus-all.json': { rows: [{ id: 'spy', label: 'Spy', sub: '', count: 1, withClimate: 0, letter: 'S' }], letters: ['S'], letterAt: { S: 0 }, total: 1, withClimate: 0 }, 'sheets/00.json': [{ slug: 'spy-species', key: 999_999 }] },
+      tamper: { [`entries/${b}.json`]: [spy], [pf]: tamperedPostings, 'catalogue/genus-all.json': { rows: [{ id: 'spy', label: 'Spy', sub: '', count: 1, withClimate: 0, letter: 'S' }], letters: ['S'], letterAt: { S: 0 }, total: 1, withClimate: 0 }, 'sheets/00.json': [{ slug: 'spy-species', key: 999_999 }] },
       drop: ['entries/01.json']
     });
-    // the manifest must name the shard for it to be read; write it as the build would have
-    const m2: Manifest = { ...manifest, search: [...manifest.search, 'z'], files: { ...manifest.files, 'search/z.json': 'x' } };
-    const files = { [manifestPath()]: m2, 's/v2/index.json': idx } as Record<string, unknown>;
-    const store2 = { get: async (k: string) => (k === manifestPath() ? { json: async () => m2, text: async () => JSON.stringify(m2), etag: '"m2"' } : store.get(k)), head: async (k: string) => (k === manifestPath() ? { etag: '"m2"' } : store.head(k)) };
-    void files;
-    const platform = platformWith(store2 as never);
+    const platform = platformWith(store);
     expect((await getCorpus(platform, noStatic)).id).toBe(manifest.id);
     const e = await call(entriesGET as never, `/api/entries?b=${b}&c=${manifest.id}`, platform);
     expect((await e.json() as IndexEntry[]).map((x) => x.key)).toEqual([999_999]);
@@ -159,9 +160,11 @@ describe('the Worker and the manifest', () => {
     // the bucket whose file was dropped is hashed from the index
     const inOne = idx.filter((x) => bucketOf(x.slug, 32) === '01').map((x) => x.key);
     expect(((await (await call(entriesGET as never, `/api/entries?b=01&c=${manifest.id}`, platform)).json()) as IndexEntry[]).map((x) => x.key)).toEqual(inOne);
-    const s = await call(searchGET as never, `/api/search?q=zzz&c=${manifest.id}`, platform);
-    expect((await s.json() as IndexEntry[]).map((x) => x.key)).toEqual([999_999]);
-    // a first letter no word in the corpus begins: nothing, and no file is asked for
+    // the posting for "cop" names the first Aloe only, and the ranking judges it: no Copiapoa is found, so the postings answered
+    const s = await call(searchGET as never, `/api/search?q=cop&c=${manifest.id}`, platform);
+    expect(await s.json()).toEqual([]);
+    expect(((await (await call(searchGET as never, `/api/search?q=aloe&c=${manifest.id}`, platform)).json()) as IndexEntry[]).length).toBe(5);
+    // a key no word in the corpus has: nothing
     const none = await call(searchGET as never, `/api/search?q=qqq&c=${manifest.id}`, platform);
     expect(await none.json()).toEqual([]);
     const rows = await call(rowsGET as never, `/api/rows?by=genus&chip=all&c=${manifest.id}`, platform);
@@ -203,7 +206,7 @@ describe('the Worker and the manifest', () => {
     const during = await getCorpus(platform, noStatic);
     expect(during.id).not.toBe(b.manifest.id); // never B's id over A's index
     expect(during.products).toBe(false);
-    for (const [name, body] of b.files) objects[productPath(b.manifest.id, name)] = JSON.parse(body);
+    for (const [name, body] of b.files) objects[productPath(b.manifest.files[name])] = JSON.parse(body);
     _forgetIndex();
     const after = await getCorpus(platform, noStatic);
     expect(after).toEqual({ id: b.manifest.id, buckets: 32, products: true });
@@ -215,7 +218,7 @@ describe('the Worker and the manifest', () => {
     vi.useFakeTimers(); vi.setSystemTime(Date.now() + 61_000);
     try { expect((await getCorpus(platform, noStatic)).id).toBe(b.manifest.id); } finally { vi.useRealTimers(); }
   });
-  it('round fifty-four: a bucket asked for under another count is a 409, and a shard that finds nothing exactly is tried over the whole', async () => {
+  it('round fifty-four: a bucket asked for under another count is a 409, and a query that finds nothing exactly is answered by the near pass over the whole', async () => {
     const idx = index(60);
     const { manifest, store } = bucketFor(idx);
     const platform = platformWith(store);
@@ -225,7 +228,7 @@ describe('the Worker and the manifest', () => {
     expect(nine.headers.get('cache-control')).toBe('no-store');
     expect((await call(sheetsGET as never, `/api/sheets?b=00&n=64&c=${manifest.id}`, platform)).status).toBe(409);
     expect((await call(entriesGET as never, `/api/entries?b=00&n=32&c=${manifest.id}`, platform)).status).toBe(200);
-    // "hile" for Chile: shard h holds no exact hit, and the whole index has thirty
+    // "hile" for Chile: no exact hit anywhere, and the whole index has thirty near ones
     const r = await call(searchGET as never, `/api/search?q=hile&c=${manifest.id}`, platform);
     const hits = (await r.json()) as IndexEntry[];
     expect(hits.length).toBe(idx.filter((e) => e.origin?.[0] === 'Chile North').length);
@@ -235,32 +238,33 @@ describe('the Worker and the manifest', () => {
 
   it('round fifty-five: a missing product is asked for again a minute after the miss, however busy, and a read that threw is not remembered', async () => {
     const idx = index(40);
-    const { manifest, store } = bucketFor(idx, { drop: ['search/a.json'] });
+    const { manifest, store } = bucketFor(idx, { drop: ['entries/0a.json'] });
+    const path = productPath(manifest.files['entries/0a.json']);
     let gets = 0, fail = false;
     const objects = new Map<string, unknown>();
-    const counting = { get: async (k: string) => { if (k.endsWith('search/a.json')) { gets++; if (fail) throw new Error('R2 did not answer'); const v = objects.get(k); return v ? { json: async () => v, text: async () => JSON.stringify(v), etag: '"x"' } : null; } return store.get(k); }, head: store.head };
+    const counting = { get: async (k: string) => { if (k === path) { gets++; if (fail) throw new Error('R2 did not answer'); const v = objects.get(k); return v ? { json: async () => v, text: async () => JSON.stringify(v), etag: '"x"' } : null; } return store.get(k); }, head: store.head };
     const platform = platformWith(counting as never);
     vi.useFakeTimers(); vi.setSystemTime(1_800_000_000_000);
     try {
-      expect(await product(platform, noStatic, 'search/a.json')).toBeNull();
+      expect(await product(platform, noStatic, 'entries/0a.json')).toBeNull();
       const built = buildProducts(idx, JSON.stringify(idx, null, 1), () => new Map());
-      objects.set(productPath(manifest.id, 'search/a.json'), JSON.parse(built.files.get('search/a.json')!));
-      for (let t = 0; t < 3; t++) { vi.setSystemTime(1_800_000_000_000 + 15_000 * (t + 1)); const v = await product(platform, noStatic, "search/a.json"); expect({ t, gets, v: v === null }).toEqual({ t, gets: 1, v: true }); }
+      objects.set(path, JSON.parse(built.files.get('entries/0a.json')!));
+      for (let t = 0; t < 3; t++) { vi.setSystemTime(1_800_000_000_000 + 15_000 * (t + 1)); const v = await product(platform, noStatic, 'entries/0a.json'); expect({ t, gets, v: v === null }).toEqual({ t, gets: 1, v: true }); }
       expect(gets).toBe(1); // busy, and still the one read
       vi.setSystemTime(1_800_000_000_000 + 61_000);
-      expect(await product(platform, noStatic, 'search/a.json')).not.toBeNull(); // the minute is from the miss
+      expect(await product(platform, noStatic, 'entries/0a.json')).not.toBeNull(); // the minute is from the miss
       expect(gets).toBe(2);
     } finally { vi.useRealTimers(); }
     // a read that throws is asked again at the next request
     _forgetIndex();
     fail = true;
     const before = gets;
-    expect(await product(platform, noStatic, 'search/a.json')).toBeNull();
+    expect(await product(platform, noStatic, 'entries/0a.json')).toBeNull();
     fail = false;
-    await product(platform, noStatic, 'search/a.json');
+    await product(platform, noStatic, 'entries/0a.json');
     expect(gets).toBe(before + 2);
   });
-  it('round fifty-five: a query with no word, or a short first word the shards lack, prepares nothing; a longer one is tried over the whole under its own rate', async () => {
+  it('round fifty-five: a query with no word, or one no key matches, prepares nothing whole', async () => {
     const idx = index(60);
     const { manifest, store } = bucketFor(idx);
     const platform = platformWith(store);
@@ -269,5 +273,24 @@ describe('the Worker and the manifest', () => {
     for (const q of ['%E6%A4%8D%E7%89%A9', 'zzz', 'ab']) expect(await (await call(searchGET as never, `/api/search?q=${q}&c=${manifest.id}`, platform)).json()).toEqual([]);
     expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
+  });
+  it('round fifty-six: a posting file the bucket lacks leaves the whole index prepared, under its own rate, and past the rate the answer is a refusal, not "nothing matches"', async () => {
+    const idx = index(60);
+    const { manifest, store } = bucketFor(idx, { drop: [`postings/${postingFileOf('cop', 64)}.json`] });
+    const platform = platformWith(store);
+    const r = await call(searchGET as never, `/api/search?q=cop&c=${manifest.id}`, platform);
+    expect(((await r.json()) as IndexEntry[]).length).toBe(6);
+    let last: Response | null = null;
+    for (let i = 0; i < 70; i++) { last = await call(searchGET as never, `/api/search?q=cop&c=${manifest.id}`, platform); if (last.status !== 200) break; }
+    expect(last!.status).toBe(429);
+    expect(last!.headers.get('retry-after')).toBeTruthy();
+  });
+  it('round fifty-six: the manifest names files by hash, and a manifest of the directory layout, or a hash that is not hex, is not a manifest', () => {
+    const idx = index(20);
+    const { manifest } = buildProducts(idx, JSON.stringify(idx), () => new Map());
+    expect(isManifest(manifest)).toBe(true);
+    expect(isManifest({ ...manifest, postings: undefined, search: ['a'] })).toBe(false);
+    expect(isManifest({ ...manifest, files: { ...manifest.files, 'index.json': '../../vault/x' } })).toBe(false);
+    expect(isManifest({ ...manifest, files: { ...manifest.files, 'entries/00.json': 'b/abc/entries/00.json' } })).toBe(false);
   });
 });

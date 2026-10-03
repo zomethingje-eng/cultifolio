@@ -93,19 +93,7 @@ function rank(p: Prepared<unknown>, qs: string[], match: (q: string, w: string) 
   return inName ? 2 : 3;
 }
 
-/**
- * The shard a query is answered from: the first character of its first word (a rank marker that another word follows
- * is not a word, as `search` has it). Every hit must have a word beginning with that character, so the shard holds every
- * hit of the exact pass; the near pass keeps the first letter too (a slip in the first letter of the first word is the
- * one near miss a sharded search does not find; round fifty-three, 2). Null for a query with no words.
- */
-export function shardOf(q: string): string | null {
-  const all = words(q);
-  const qs = all.filter((w, i) => !(RANK_MARKERS.has(w) && i < all.length - 1));
-  return qs[0]?.[0] ?? null;
-}
-
-/** Whether the exact pass alone finds anything for `q` in `prepared`: a sharded search that finds nothing exactly asks the whole index before it trusts its near pass (round fifty-four, 3). */
+/** Whether the exact pass alone finds anything for `q` in `prepared`: a search over the exact candidates that finds nothing exactly asks the near candidates before it trusts a near pass (round fifty-six, 1). */
 export function hasExact<T extends Searchable>(prepared: Prepared<T>[], q: string): boolean {
   const all = words(q);
   const qs = all.filter((w, i) => !(RANK_MARKERS.has(w) && i < all.length - 1));

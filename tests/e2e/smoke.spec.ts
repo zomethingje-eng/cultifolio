@@ -3132,3 +3132,36 @@ test('round fifty-five: a watered stop keeps its height and the next stop does n
   await expect(a.getByRole('button', { name: 'Water 3 here' })).toBeVisible();
   await C.close();
 });
+
+test('round fifty-six: two plants under one number are not renumbered by opening the collection; the later one says so and is renumbered when asked', async ({ page }) => {
+  await page.goto('/plants');
+  await expect(page.locator('main')).toBeVisible();
+  // two whole plants under one number, as a merge whose repair failed to store would leave them, put straight into the vault
+  const wall = Date.now() - 3_600_000;
+  await page.evaluate(async (wall) => {
+    const db = await new Promise<IDBDatabase>((res) => { const r = indexedDB.open('cultifolio'); r.onsuccess = () => res(r.result); });
+    const t = (n: number) => `${wall + n}-0000-abcdefabcdef0000`;
+    const rows = [['r-dup-a', 'acc', '2026-0042'], ['r-dup-a', 'taxonName', 'Copiapoa cinerea'], ['r-dup-a', 'status', 'growing'], ['r-dup-b', 'acc', '2026-0042'], ['r-dup-b', 'taxonName', 'Welwitschia mirabilis'], ['r-dup-b', 'status', 'growing']];
+    const tx = db.transaction(['changes', 'meta'], 'readwrite');
+    rows.forEach(([id, field, value], i) => tx.objectStore('changes').put({ t: t(i), kind: 'accession', id, field, value }));
+    tx.objectStore('meta').delete('fold');
+    await new Promise<void>((res) => { tx.oncomplete = () => res(); });
+  }, wall);
+  // what the log holds about the two plants
+  const ofTwo = () => page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((res) => { const r = indexedDB.open('cultifolio'); r.onsuccess = () => res(r.result); });
+    const all = await new Promise<Array<{ kind: string; id: string; field: string }>>((res) => { const r = db.transaction('changes').objectStore('changes').getAll(); r.onsuccess = () => res(r.result); });
+    // the plant page sets a key the reference corrects (taxonKey), as it always has; that is the page, not the load
+    return all.filter((c) => (c.kind === 'event' || c.id.startsWith('r-dup-')) && c.field !== 'taxonKey').map((c) => `${c.kind} ${c.id} ${c.field}`).sort();
+  });
+  const before = await ofTwo();
+  await page.goto('/plants/r-dup-b');
+  await expect(page.locator('#shared-number')).toContainText('2026-0042');
+  expect(await ofTwo()).toEqual(before); // opening the collection wrote nothing about them
+  await page.locator('#shared-number').getByRole('button', { name: 'Renumber now' }).click();
+  await expect(page.locator('#shared-number')).toHaveCount(0);
+  await expect(page.locator('.accno').first()).toContainText('2026-0043');
+  await page.goto('/plants/r-dup-a');
+  await expect(page.locator('.accno').first()).toContainText('2026-0042');
+  await expect(page.locator('#shared-number')).toHaveCount(0);
+});

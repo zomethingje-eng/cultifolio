@@ -13,7 +13,7 @@ export const DUE_DAYS = 21;
 /** A load that folded this many changes on top of the snapshot writes a fresh one, so the next load reads little again (round fifty-three, 1). */
 export const FOLD_REFRESH = 1000;
 const yearOf = (d?: string | null): number | undefined => (d && /^\d{4}-/.test(d) ? Number(d.slice(0, 4)) : undefined);
-import { Clock, hlcDecode, hlcEncode, hlcCompare, hlcAfter, hlcBefore, nowMs, clockOffsetMs } from '$core/hlc';
+import { Clock, hlcDecode, hlcEncode, hlcCompare, hlcAfter, nowMs, clockOffsetMs } from '$core/hlc';
 
 /** How far ahead of the corrected clock a held stamp may be for a local edit to its field to be stamped just past it (round fifty-one, 1). */
 export const FOLLOW_HELD_MS = 86_400_000;
@@ -180,47 +180,17 @@ class Collection {
         const scheme = await getMeta<NumberingScheme>('scheme');
         if (isScheme(scheme)) this.metaScheme = scheme;
         await this.readLedger();
-        // Two records under one number from before the ledger, or from a merge whose repair failed to store, were carried
-        // across every reload: a merge and a pull repair duplicates, a load did not, and the plant's page answered to the
-        // first of the two for good (round thirty-eight, R2-1). The same deterministic repair runs here, before the pages read.
-        await this.repairNumbers();
+        // No reading of the log writes to it (round fifty-six, 3). Two records under one number are repaired where the log is
+        // written anyway: after a merge (an import, a pull), when a removed plant comes back, and when the grower asks on the
+        // record's page, which says the number is shared until then. A load used to write the repair (round thirty-eight,
+        // R2-1); the page that answered to the first of the two for good now says so and offers the repair.
         this.ready = true;
-        // Plants an earlier build's import brought back nameless (a tombstone, then its `importedOn`) are removed again,
-        // once: the removal is a change like any other, so it syncs, and after it nothing matches again (round sixteen, 5).
-        // The repair judges a record's whole history: over the tail of a snapshot load it saw a tombstone and an
-        // `importedOn` and not the real edit folded before them, and removed a plant the grower had revived, and the
-        // removal synced (round fifty-four, 2; the second reviewer's finding 5). A record the tail touches with an
-        // `importedOn` is read whole from the vault; a whole-log load has every change already.
-        // Since round fifty-five this is a rule of the fold, not a repair written at load: an `importedOn` is not an edit, so
-        // a removal followed only by one stays a removal on every device and every path, and no reading of the log writes
-        // to it (FOLD_RULES 2; the first reviewer's finding 10). The removals written by earlier builds stay in the log, harmlessly.
+        // Plants an earlier build's import brought back nameless (a tombstone, then its `importedOn`) fold as removed: an
+        // `importedOn` is not an edit (FOLD_RULES 2, round fifty-five). The removals earlier builds wrote stay in the log, harmlessly.
         void changes;
-        // The oldest shape gave a plant or a batch its number as its id and no `acc`/`no` field; readers have carried both
-        // shapes since. A load writes the number as a field, once, as an ordinary change that syncs, so every record is
-        // one shape and the dual paths can go (round forty-one, R4). `accNo`/`sowNo` keep reading either, for files in flight.
-        // The written number is a machine's reading of the record, so it must never beat a person's: it is stamped just
-        // below the record's oldest change, where any edit to the number, by anyone, before or after, outranks it; a record
-        // whose log holds a number change already (held, or a `null` the fold shows as missing) is left alone, and so is an
-        // incomplete one, which a later build may yet give its shape (round forty-nine, 1; round thirty-five, R1-1).
-        const oneShape: Change[] = [];
-        // Nor while a batch is set aside unread: it may hold the record's number, and a written number stamped below what
-        // this build can see would still outrank it (round fifty-two, 4; the first reviewer's finding 11). The pass runs again at a later load.
-        const syncMeta = await getMeta<{ quarantined?: unknown[] }>('sync');
-        const batchesSetAside = !!syncMeta?.quarantined?.length;
-        // A record whose log holds a number change, held or null, is left alone: the fold's own stamp map says which
-        // (a load from the snapshot has not read every change, so the changes themselves are not scanned; round fifty-three, 1).
-        // And a parked number change, which never reaches the stamp map: the previous build read the changes themselves
-        // and left such a record alone; this one wrote a second number over it (round fifty-four, 2; both reviewers).
-        const numbered = (k: string, field: string) => this.seen.has(k + '\0' + field) || this.seen.has(k + '\0held\0' + field) || (this.parkedByRecord.get(k) ?? []).some((c) => c.field === field);
-        for (const r of this.state.values()) {
-          const k = recKey(r.kind, r.id);
-          if (r._deleted || !isComplete(r)) continue;
-          const first = this.born.get(k);
-          if (!first) continue;
-          if (r.kind === 'accession' && r.acc == null && !numbered(k, 'acc')) oneShape.push({ t: hlcBefore(first, this.writer), kind: 'accession', id: r.id, field: 'acc', value: r.id });
-          if (r.kind === 'sowing' && r.no == null && !numbered(k, 'no')) oneShape.push({ t: hlcBefore(first, this.writer), kind: 'sowing', id: r.id, field: 'no', value: r.id });
-        }
-        if (oneShape.length && !batchesSetAside) await this.commit(oneShape, 'local').catch(() => {});
+        // A plant or batch of the oldest shape has its number as its id and no `acc`/`no` field; `accNo`/`sowNo` read either,
+        // which they must for files in flight. A load wrote the number as a field (round forty-one, R4); a reading of the log
+        // does not write to it (round fifty-six, 3), and the reading rule is the one every page already used.
         if (heard === 'replaced') { if (typeof location !== 'undefined') location.reload(); }
         else if (heard === 'refold') void this.rebuild().catch(() => {});
         else if (heard === 'written') void this.catchUp().catch(() => {});
@@ -259,7 +229,7 @@ class Collection {
   accession(idOrNo: string): Accession | undefined {
     const r = this.state.get(recKey('accession', idOrNo));
     if (r && !r._deleted && isComplete(r)) return r as unknown as Accession;
-    return this.live<Accession>('accession').find((a) => a.acc === idOrNo);
+    return this.live<Accession>('accession').find((a) => accNo(a) === idOrNo);
   }
   /** The vault's ledger of every number ever written on this device, read at load and after another tab writes: a replace from an older backup does not bring those numbers back into play. */
   private ledger: Record<NumberKind, Set<string>> = { accession: new Set(), sowing: new Set() };
@@ -500,7 +470,7 @@ class Collection {
   }
   /** A removed plant, by its number: its record stays in the log, and it can be brought back (round twenty-six, 4). */
   removedAccession(no: string): Accession | undefined {
-    for (const r of this.state.values()) if (r.kind === 'accession' && r._deleted && (r as unknown as Accession).acc === no.trim()) return r as unknown as Accession;
+    for (const r of this.state.values()) if (r.kind === 'accession' && r._deleted && accNo(r as unknown as Accession) === no.trim()) return r as unknown as Accession;
     return undefined;
   }
   /** An identity for a new record: unique per change on every device (wall time, counter, device tag), never shown. */
@@ -841,7 +811,7 @@ class Collection {
   sowing(idOrNo: string): Sowing | undefined {
     const r = this.state.get(recKey('sowing', idOrNo));
     if (r && !r._deleted && isComplete(r)) return r as unknown as Sowing;
-    return this.live<Sowing>('sowing').find((x) => x.no === idOrNo);
+    return this.live<Sowing>('sowing').find((x) => sowNo(x) === idOrNo);
   }
   /** Plants that were potted up from a sowing. */
   raisedFrom(sowingId: string): Accession[] {
@@ -1552,6 +1522,25 @@ class Collection {
       if (!out.has(k)) out.set(k, { kind: c.kind, id: c.id, old, how: 'on another device' });
     }
     return [...out.values()];
+  }
+  /**
+   * Records sharing a number, by kind and number: a duplicate the merge's repair has not written yet (a write that failed,
+   * or numbers from before the ledger). Read only; the record's page says so and offers the repair (round fifty-six, 3).
+   */
+  private sharedNumbers = $derived.by(() => {
+    const out = new Map<string, string[]>();
+    const add = (kind: string, no: string, id: string) => { const k = kind + '\0' + no; const xs = out.get(k); if (xs) xs.push(id); else out.set(k, [id]); };
+    for (const a of this.accessionsSorted) add('accession', accNo(a), a.id);
+    for (const s of this.sowingsSorted) add('sowing', sowNo(s), s.id);
+    for (const [k, ids] of out) if (ids.length < 2) out.delete(k);
+    return out;
+  });
+  /** The other live records with this record's number. */
+  sharesNumber(kind: 'accession' | 'sowing', id: string): string[] {
+    const r = kind === 'accession' ? this.accession(id) : this.sowing(id);
+    if (!r) return [];
+    const no = kind === 'accession' ? accNo(r as Accession) : sowNo(r as Sowing);
+    return (this.sharedNumbers.get(kind + '\0' + no) ?? []).filter((x) => x !== r.id);
   }
   /** The duplicate-number repair, once over the whole log: a pull calls it after its last batch, not after each (round twelve, 3). */
   async repairNumbers(): Promise<void> {

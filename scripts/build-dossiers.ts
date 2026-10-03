@@ -62,8 +62,7 @@ import { dossierPath, DOSSIER_V, parseDossier, unchain } from '../src/lib/dossie
 import { sheetOf, type Sheet } from '../src/lib/dossier/sheet';
 import { bucketOf, BUCKETS, bucketNames } from '../src/lib/core/bucket';
 import { buildProducts } from '../src/lib/dossier/products';
-import type { Manifest } from '../src/lib/dossier/manifest';
-import { dirname } from 'node:path';
+import { productPath, isFileHash, type Manifest } from '../src/lib/dossier/manifest';
 import { welwitschia, copiapoa, refused } from '../fixtures/upstream';
 import { makeClimateProvider, type PowerCache } from '../src/lib/climate/provider';
 import { fileGridSource } from './file-grid';
@@ -499,27 +498,40 @@ function writeSheetBuckets(index: IndexEntry[], idxDir: string): void {
 }
 
 /**
- * The build's products under a directory named by the corpus id, and the manifest that names it (round fifty-three, 2;
- * src/lib/dossier/products.ts builds them). The directory is immutable: a changed index is a new id and a new
- * directory, and the manifest is written last, so an upload that lands in any order never names a corpus whose files
- * are not all there. A file whose hash the previous manifest already holds is left as it is, so the copy up (which goes
- * by size and time) carries only what changed.
+ * The build's products, each under the hash of its content, and the manifest that names them (round fifty-three, 2;
+ * round fifty-six, 2; src/lib/dossier/products.ts builds them). A file already on disk under its hash is the same file
+ * and is not written again, so the copy up (which goes by size and time) carries only what changed. The manifest is
+ * written last, so an upload that lands in any order never names a corpus whose files are not all there. The manifest
+ * before it is kept as manifest.prev.json, and the files neither names are deleted from `p/` here: the bucket keeps the
+ * previous corpus's files until the next refresh (DEPLOY.md says how the bucket is pruned), and a device or an edge
+ * that read the previous manifest a minute ago still finds them.
  */
 function writeProducts(index: IndexEntry[], idxDir: string, indexText: string, sheetsOf: (count: number) => Map<string, Sheet[]>): Manifest {
   let prev: Manifest | null = null;
   try { prev = JSON.parse(readFileSync(`${idxDir}/manifest.json`, 'utf8')) as Manifest; } catch { /* the first build with a manifest */ }
+  if (prev && (typeof prev.files !== 'object' || !Object.values(prev.files).every(isFileHash))) prev = null; // a manifest of round fifty-three's layout names directories, not files
   const { manifest, files } = buildProducts(index, indexText, sheetsOf);
-  const dir = `${idxDir}/b/${manifest.id}`;
+  const dir = `${idxDir}/p`;
+  mkdirSync(dir, { recursive: true });
   let written = 0, kept = 0;
   for (const [name, body] of files) {
-    const path = `${dir}/${name}`;
-    if (prev?.id === manifest.id && prev.files?.[name] === manifest.files[name] && existsSync(path)) { kept++; continue; }
-    mkdirSync(dirname(path), { recursive: true });
+    const path = `${idxDir}/${productPath(manifest.files[name]).slice(`s/v${DOSSIER_V}/`.length)}`;
+    if (existsSync(path)) { kept++; continue; }
     writeFileSync(path, body);
     written++;
   }
-  if (prev?.id !== manifest.id || JSON.stringify(prev.files) !== JSON.stringify(manifest.files) || prev.buckets !== manifest.buckets) writeFileSync(`${idxDir}/manifest.json`, JSON.stringify(manifest, null, 1));
-  console.log(`  corpus ${manifest.id}: ${index.length} species in ${manifest.buckets} buckets, ${manifest.search.length} search shards → ${dir}/ (${written} files written, ${kept} unchanged); manifest.json names it${prev && prev.id !== manifest.id ? `; the old directory b/${prev.id} can go once the upload is through` : ''}`);
+  const changed = prev?.id !== manifest.id || prev.buckets !== manifest.buckets || prev.postings !== manifest.postings;
+  if (changed) {
+    if (prev) writeFileSync(`${idxDir}/manifest.prev.json`, JSON.stringify(prev, null, 1));
+    writeFileSync(`${idxDir}/manifest.json`, JSON.stringify(manifest, null, 1));
+  }
+  // what neither the manifest nor the one before it names
+  let before: string[] = [];
+  try { before = Object.values((JSON.parse(readFileSync(`${idxDir}/manifest.prev.json`, 'utf8')) as Manifest).files ?? {}); } catch { /* no corpus before this one */ }
+  const keep = new Set([...Object.values(manifest.files), ...before].map((h) => `${h}.json`));
+  let gone = 0;
+  for (const f of readdirSync(dir)) if (/^[0-9a-f]{16,64}\.json$/.test(f) && !keep.has(f)) { unlinkSync(`${dir}/${f}`); gone++; }
+  console.log(`  corpus ${manifest.id}: ${index.length} species in ${manifest.buckets} buckets, ${manifest.postings} posting files → ${dir}/ (${written} files written, ${kept} already on disk under their hash, ${gone} of older corpora deleted)${changed ? '; manifest.json names it' : '; unchanged'}`);
   return manifest;
 }
 

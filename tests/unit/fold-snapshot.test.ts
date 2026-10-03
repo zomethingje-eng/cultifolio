@@ -206,7 +206,7 @@ describe('the fold snapshot', () => {
     expect(ref.store.collection.accession('p1')?.taxonName).toBe('twenty minutes ahead');
   });
 
-  it('round fifty-four: a parked change keeps its Apply after a snapshot load, and the one-shape pass leaves a record whose number change is parked alone', async () => {
+  it('round fifty-four: a parked change keeps its Apply after a snapshot load, and no number is written over a parked one (since round fifty-six none is written at load at all)', async () => {
     const base = Date.now() - 86_400_000;
     const { vault } = await boot();
     // a legacy-shaped plant (its number is its id, no `acc`), whose only `acc` change is from a clock three years ahead
@@ -335,7 +335,7 @@ describe('the fold snapshot', () => {
     expect(b.store.collection.locations.map((l) => l.name)).toEqual(['Bench']);
   });
 
-  it('round fifty-five: a dismissed parked number still keeps the one-shape pass off the record, on a snapshot load as on a whole one', async () => {
+  it('round fifty-five: a dismissed parked number gets no second number written, on a snapshot load as on a whole one', async () => {
     const base = Date.now() - 86_400_000;
     const { vault } = await boot();
     await vault.appendChanges([{ t: stamp(base, 0), kind: 'accession', id: '2024-0001', field: 'taxonName', value: 'Legacy' }, { t: stamp(base, 1), kind: 'accession', id: '2024-0001', field: 'status', value: 'growing' }, { t: stamp(base + 3 * 365 * 86_400_000), kind: 'accession', id: '2024-0001', field: 'acc', value: '2024-9999' }], true);

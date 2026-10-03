@@ -1,22 +1,23 @@
 /**
  * The corpus manifest and the products the build writes beside the dossiers (round fifty-three, 2). The Worker used to
  * derive everything it served from the index in memory: the search's prepared structure, the entries of each bucket,
- * nine catalogues of rows. At nine thousand species that is tens of megabytes an isolate; at fifty thousand it is past
- * the isolate. The build derives them once, on the PC, under a directory named by the corpus id, and the manifest says
- * which id is current. Everything under `b/<id>/` is immutable: a refresh writes a new directory and then a new
- * manifest, so no cache ever holds a file of one corpus under the id of another, whatever order an upload lands in.
+ * nine catalogues of rows. The build derives them once, on the PC, and the manifest says which are current.
  *
- *   s/v2/manifest.json                 { v, id, built, species, buckets, search, files }
- *   s/v2/b/<id>/index.json             the index, as the Worker reads it under this id
- *   s/v2/b/<id>/entries/<bucket>.json  the index entries of a bucket (/api/entries)
- *   s/v2/b/<id>/sheets/<bucket>.json   the sheets of a bucket (/api/sheets)
- *   s/v2/b/<id>/search/<c>.json        the prepared search entries with a word beginning with c (/api/search)
- *   s/v2/b/<id>/catalogue/<by>-<chip>.json  a catalogue's rows (/, /api/rows)
+ * Every product is stored under the hash of its content (round fifty-six, 2): `s/v2/p/<hash>.json`, immutable, so no
+ * cache ever holds one file's body under another's name, and a refresh uploads only the files whose content changed
+ * (round fifty-three's directory per corpus id carried every file again, 36 MB at nine thousand species, for a change
+ * to one sheet). The manifest maps each product's name to its hash:
  *
- * A Worker that finds no manifest (a corpus uploaded before this round, the fixture corpus) derives as it did.
+ *   s/v2/manifest.json                 { v, id, built, species, buckets, postings, files: { name: hash } }
+ *   index.json                         the index, as the Worker reads it under this id
+ *   entries/<bucket>.json              the index entries of a bucket (/api/entries)
+ *   sheets/<bucket>.json               the sheets of a bucket (/api/sheets)
+ *   postings/<file>.json               the search's postings: which entries each short key can match (/api/search; $core/postings)
+ *   catalogue/<by>-<chip>.json         a catalogue's rows (/, /api/rows)
+ *
+ * A Worker that finds no manifest (a corpus uploaded before the manifest, the fixture corpus) derives as it did.
  */
 import { DOSSIER_V } from './schema';
-import type { Prepared, Searchable } from '$core/search';
 
 export interface Manifest {
   v: number;
@@ -25,16 +26,19 @@ export interface Manifest {
   built: string;
   species: number;
   buckets: number;
-  /** The search shards present (first characters), so a shard the corpus has no words for is known absent without a read. */
-  search: string[];
-  /** Every product file under `b/<id>/`, relative to it, with a hash of its content: the next build rewrites only what changed. */
+  /** How many files the search's postings are split into ($core/postings). */
+  postings: number;
+  /** Every product by its name, with the hash of its content, which is also where it is stored. */
   files: Record<string, string>;
 }
 
 export const manifestPath = () => `s/v${DOSSIER_V}/manifest.json`;
-export const productPath = (id: string, name: string) => `s/v${DOSSIER_V}/b/${id}/${name}`;
+/** Where a product is stored: under the hash of its content. */
+export const productPath = (hash: string) => `s/v${DOSSIER_V}/p/${hash}.json`;
+/** A product file's hash as the manifest may name it: hex, so it can be nothing but a file name. */
+export const isFileHash = (h: unknown): h is string => typeof h === 'string' && /^[0-9a-f]{16,64}$/.test(h);
 
-/** FNV-1a, 64 bits as two 32-bit halves, hex: the corpus id and the file hashes. Not a security hash; a name. */
+/** FNV-1a, 64 bits as two 32-bit halves, hex: the corpus id. Not a security hash; a name. A product file is named by its md5 (products.ts). */
 export function contentHash(text: string): string {
   let a = 0x811c9dc5, b = 0x01000193 ^ 0x5bd1e995;
   for (let i = 0; i < text.length; i++) {
@@ -45,23 +49,7 @@ export function contentHash(text: string): string {
   return a.toString(16).padStart(8, '0') + b.toString(16).padStart(8, '0');
 }
 
-/** The first characters of a prepared entry's words: the shards it belongs in. */
-export function shardsOf<T extends Searchable>(p: Prepared<T>): Set<string> {
-  const out = new Set<string>();
-  for (const w of p.nameWords) if (w) out.add(w[0]);
-  for (const w of p.otherWords) if (w) out.add(w[0]);
-  for (const g of p.synWords) for (const w of g) if (w) out.add(w[0]);
-  return out;
-}
-
-/** The prepared entries split into shards by first character: an entry is in every shard one of its words begins. */
-export function shardSearch<T extends Searchable>(prepared: Prepared<T>[]): Map<string, Prepared<T>[]> {
-  const out = new Map<string, Prepared<T>[]>();
-  for (const p of prepared) for (const c of shardsOf(p)) (out.get(c) ?? out.set(c, []).get(c)!).push(p);
-  return out;
-}
-
 export const isManifest = (x: unknown): x is Manifest => {
   const m = x as Manifest;
-  return !!m && typeof m === 'object' && typeof m.id === 'string' && /^[A-Za-z0-9._-]{4,40}$/.test(m.id) && typeof m.buckets === 'number' && m.buckets >= 1 && Array.isArray(m.search) && !!m.files && typeof m.files === 'object' && typeof m.files['index.json'] === 'string' && m.v === DOSSIER_V;
+  return !!m && typeof m === 'object' && typeof m.id === 'string' && /^[A-Za-z0-9._-]{4,40}$/.test(m.id) && typeof m.buckets === 'number' && m.buckets >= 1 && typeof m.postings === 'number' && m.postings >= 1 && !!m.files && typeof m.files === 'object' && Object.values(m.files).every(isFileHash) && isFileHash(m.files['index.json']) && m.v === DOSSIER_V;
 };

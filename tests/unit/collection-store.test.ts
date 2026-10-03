@@ -562,14 +562,14 @@ describe('round sixteen', () => {
     const again = (await reload()) as typeof collection;
     expect(again.accession('A-2')).toBeUndefined();
     expect(again.accession('B-1')?.notes).toBe('back');
-    // No removal written: since round fifty-five an `importedOn` is not an edit in the fold, so A-2 folds as removed on every
-    // load and every device without a change to sync (FOLD_RULES 2). B-1, a record of the oldest shape, is given its number
-    // as a change of its own on the same load (round forty-one, R4), once.
-    expect(mem.changes.size).toBe(before + 1);
-    expect(again.accession('B-1')?.acc).toBe('B-1');
+    // Nothing written: since round fifty-five an `importedOn` is not an edit in the fold, so A-2 folds as removed on every
+    // load and every device without a change to sync (FOLD_RULES 2); and since round fifty-six B-1, a record of the oldest
+    // shape, is read with its id as its number rather than given it as a change at load.
+    expect(mem.changes.size).toBe(before);
+    expect(accNo(again.accession('B-1')!)).toBe('B-1');
     const third = (await reload()) as typeof collection;
     expect(third.accession('A-2')).toBeUndefined();
-    expect(mem.changes.size).toBe(before + 1); // once
+    expect(mem.changes.size).toBe(before);
     void collection;
   });
   it('several plants at once are one commit: a refused write stores none of them and issues no number; a good one stores all, consecutively (round sixteen, 14)', async () => {

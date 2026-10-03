@@ -8,6 +8,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { appendChanges, allChanges, outboxKeys, outboxAck, getMeta, setMeta, setMetaIfKey, wipeVault } from '$lib/db/vault';
 import { hlcEncode, hlcDecode, hlcCompare, MAX_AHEAD_MS } from '$core/hlc';
 import type { Change } from '$core/log';
+import { accNo, sowNo } from '$lib/db/types';
 
 const t = (count: number) => hlcEncode({ wall: 1_700_000_000_000, count, device: 'aaaaaaaaaaaa' });
 const ch = (count: number, id: string, field: string, value: unknown): Change => ({ t: t(count), kind: 'accession', id, field, value });
@@ -100,65 +101,53 @@ describe('a displaced change leaves the screen (round seventeen, 3)', () => {
   });
 });
 
-describe('a duplicate number already in the log is repaired at load (round thirty-eight, R2-1)', () => {
-  it('two whole plants under one number: the later-created one is renumbered before the collection is ready, with the note', async () => {
+describe('a duplicate number already in the log is not written at load; the record says so, and the repair is asked for (round fifty-six, 3)', () => {
+  it('two whole plants under one number: the load writes nothing, both are listed and reachable, the later one knows it shares its number, and the repair renumbers it with the note', async () => {
     await appendChanges([
       ch(10, 'a1', 'acc', '2026-0013'), ch(11, 'a1', 'taxonName', 'Welwitschia mirabilis'), ch(12, 'a1', 'status', 'growing'),
       ch(13, 'a2', 'acc', '2026-0013'), ch(14, 'a2', 'taxonName', 'Welwitschia mirabilis'), ch(15, 'a2', 'status', 'growing')
     ], true);
-    vi.resetModules(); // a fresh store, as a new tab has: its load must do the repair by itself
+    const before = (await allChanges()).length;
+    vi.resetModules(); // a fresh store, as a new tab has
     const { collection } = await import('$lib/db/collection.svelte');
     await collection.load();
-    const nos = collection.accessions.map((r) => r.acc).sort();
-    expect(nos).toEqual(['2026-0013', '2026-0014']);
+    expect((await allChanges()).length).toBe(before); // a reading of the log does not write to it
+    expect(collection.accessions.map((r) => r.id).sort()).toEqual(['a1', 'a2']);
+    expect(collection.sharesNumber('accession', 'a2')).toEqual(['a1']);
+    expect(collection.sharesNumber('accession', 'a1')).toEqual(['a2']);
+    await collection.repairNumbers(); // what the page's button does
+    expect(collection.accessions.map((r) => accNo(r)).sort()).toEqual(['2026-0013', '2026-0014']);
     expect(collection.accession('2026-0014')?.id).toBe('a2');
+    expect(collection.sharesNumber('accession', 'a2')).toEqual([]);
     expect((await allChanges()).some((c) => c.kind === 'event' && c.field === 'note' && /Renumbered from 2026-0013 to 2026-0014/.test(String(c.value)))).toBe(true);
   });
 });
 
-describe('the oldest record shape is given its number as a field at load (round forty-one, R4)', () => {
-  it('a plant whose number is its id gets an `acc` change, once; a batch likewise gets `no`; a record that has one is untouched', async () => {
+describe('the oldest record shape is read with its id as its number, and nothing is written at load (round fifty-six, 3; round forty-one, R4)', () => {
+  it('a plant whose number is its id is found by it, a batch likewise, and the log is as it was', async () => {
     await appendChanges([
       ch(20, '2019-0003', 'taxonName', 'Haworthia attenuata'), ch(21, '2019-0003', 'status', 'growing'),
       ch(22, 'r7', 'acc', '2026-0007'), ch(23, 'r7', 'taxonName', 'Lithops'), ch(24, 'r7', 'status', 'growing'),
       { t: t(25), kind: 'sowing', id: 'S2024-002', field: 'taxonName', value: 'Aloe' }, { t: t(26), kind: 'sowing', id: 'S2024-002', field: 'method', value: 'seed' }, { t: t(27), kind: 'sowing', id: 'S2024-002', field: 'sown', value: '2024-03-01' }, { t: t(28), kind: 'sowing', id: 'S2024-002', field: 'count', value: 3 }, { t: t(29), kind: 'sowing', id: 'S2024-002', field: 'status', value: 'active' }
     ], true);
+    const before = (await allChanges()).length;
     vi.resetModules();
     const { collection } = await import('$lib/db/collection.svelte');
     await collection.load();
-    const all = await allChanges();
-    expect(all.filter((c) => c.kind === 'accession' && c.id === '2019-0003' && c.field === 'acc').map((c) => c.value)).toEqual(['2019-0003']);
-    expect(all.filter((c) => c.kind === 'accession' && c.id === 'r7' && c.field === 'acc')).toHaveLength(1); // the one it had
-    expect(all.filter((c) => c.kind === 'sowing' && c.id === 'S2024-002' && c.field === 'no').map((c) => c.value)).toEqual(['S2024-002']);
-    expect(collection.accession('2019-0003')?.acc).toBe('2019-0003');
-  });
-});
-
-describe('the written number never beats a person\'s, and is not written where it might (round forty-nine, 1; round thirty-five, R1-1)', () => {
-  it('the `acc` change is stamped below the record\'s oldest change, so a number edit made anywhere, at any time, outranks it', async () => {
-    await appendChanges([ch(20, '2019-0003', 'taxonName', 'Haworthia attenuata'), ch(21, '2019-0003', 'status', 'growing')], true);
-    vi.resetModules();
-    const { collection } = await import('$lib/db/collection.svelte');
-    await collection.load();
-    const written = (await allChanges()).find((c) => c.id === '2019-0003' && c.field === 'acc')!;
-    expect(written).toBeTruthy();
-    expect(hlcCompare(written.t, t(20))).toBeLessThan(0);
-    // The other device renumbered the plant while offline, before this load ran; its change arrives later and still wins.
-    await collection.ingest([ch(19, '2019-0003', 'acc', '2019-0001')], 'server', { repair: false });
+    expect((await allChanges()).length).toBe(before);
+    expect(accNo(collection.accession('2019-0003')!)).toBe('2019-0003');
+    expect(collection.accession('2026-0007')?.id).toBe('r7');
+    expect(sowNo(collection.sowing('S2024-002')!)).toBe('S2024-002');
+    // a number edit arriving later is the plant's number, from any device
+    await collection.ingest([ch(30, '2019-0003', 'acc', '2019-0001')], 'server', { repair: false });
     expect(collection.accession('2019-0001')?.id).toBe('2019-0003');
   });
-  it('a record whose log already holds a number change (one the fold is holding, stamped far ahead) is left alone, as is an incomplete record', async () => {
-    const ahead = hlcEncode({ wall: Date.now() + MAX_AHEAD_MS + 3_600_000, count: 0, device: 'bbbbbbbbbbbb' });
-    await appendChanges([
-      ch(20, '2019-0003', 'taxonName', 'Haworthia attenuata'), ch(21, '2019-0003', 'status', 'growing'), { t: ahead, kind: 'accession', id: '2019-0003', field: 'acc', value: '2019-0009' },
-      ch(30, '2019-0004', 'taxonName', 'Lithops') // no status: not whole, so not a plant this build may shape
-    ], true);
+  it('a removed plant of the oldest shape is found by its number to be restored', async () => {
+    await appendChanges([ch(20, '2019-0004', 'taxonName', 'Lithops'), ch(21, '2019-0004', 'status', 'growing'), ch(22, '2019-0004', '_deleted', true)], true);
     vi.resetModules();
     const { collection } = await import('$lib/db/collection.svelte');
     await collection.load();
-    const all = await allChanges();
-    expect(all.filter((c) => c.id === '2019-0003' && c.field === 'acc').map((c) => c.t)).toEqual([ahead]);
-    expect(all.filter((c) => c.id === '2019-0004' && c.field === 'acc')).toHaveLength(0);
+    expect(collection.removedAccession('2019-0004')?.id).toBe('2019-0004');
   });
 });
 
