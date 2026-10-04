@@ -135,6 +135,31 @@ function fakeR2() {
 let kv = new Map<string, string>();
 
 /** A fresh collection + engine (module singletons) for one "device", and the real route handlers behind global fetch. */
+/**
+ * One lock manager per simulated browser (per vault store), as `navigator.locks` is per browser: the devices in this
+ * file share one process, and Node from 24 on has a `navigator.locks` of its own, which would make every device one
+ * browser and every run after a deliberately stalled one find the lock taken (round fifty-eight, after the deploy run).
+ * Only what the engine asks for: `ifAvailable`, exclusive.
+ */
+const browserLocks = new WeakMap<Mem, LockManager>();
+function locksOf(m: Mem): LockManager {
+  let l = browserLocks.get(m);
+  if (!l) {
+    const held = new Set<string>();
+    l = {
+      request: async (name: string, opts: LockOptions, cb: (lock: Lock | null) => Promise<unknown>) => {
+        if (!opts?.ifAvailable) throw new Error('the engine only asks ifAvailable');
+        if (held.has(name)) return cb(null);
+        held.add(name);
+        try { return await cb({ name, mode: 'exclusive' } as Lock); } finally { held.delete(name); }
+      },
+      query: async () => ({ held: [...held].map((name) => ({ name, mode: 'exclusive' as const })), pending: [] })
+    } as unknown as LockManager;
+    browserLocks.set(m, l);
+  }
+  return l;
+}
+
 async function boot(m: Mem, r2: ReturnType<typeof fakeR2>) {
   mem = m;
   vi.resetModules();
@@ -172,6 +197,8 @@ async function boot(m: Mem, r2: ReturnType<typeof fakeR2>) {
   }) as typeof fetch;
   const { collection } = await import('$lib/db/collection.svelte');
   const { sync } = await import('$lib/sync/engine.svelte');
+  sync.locks = locksOf(m);
+  booted.push(sync);
   await collection.load();
   return { collection, sync, calls };
 }
@@ -200,7 +227,20 @@ async function reboot(m: Mem, r2: ReturnType<typeof fakeR2>) {
   return X;
 }
 
-afterEach(() => vi.useRealTimers());
+/**
+ * Every engine a test booted, retired when the test ends: a run an edit scheduled (2.5 s on a real timer) would otherwise
+ * fire during a later test, against that test's store and server, since the stand-ins read whichever device is in play,
+ * and under the one key every test shares it would take that device's sync record as its own (round fifty-eight).
+ */
+const booted: Array<{ configured: boolean }> = [];
+afterEach(() => {
+  vi.useRealTimers();
+  for (const s of booted.splice(0)) {
+    const t = (s as unknown as { timer: ReturnType<typeof setTimeout> | null }).timer;
+    if (t) clearTimeout(t);
+    s.configured = false;
+  }
+});
 
 /**
  * Whether the collection's own fold passes the hold to apply() (the call-site
@@ -373,7 +413,8 @@ describe('the pull cursor is judged against the server clock, not the device clo
 describe('the pull cursor never runs ahead of the device clock (round thirty-eight, R1-5)', () => {
   it('a listing that dates a batch a day ahead moves the cursor only to now plus the slack, says so, and later batches still arrive', async () => {
     const r2 = fakeR2();
-    const B = await boot(newMem('bbbbbbbbbbbb'), r2);
+    const memB = newMem('bbbbbbbbbbbb');
+    const B = await boot(memB, r2);
     await B.collection.addAccession({ taxonName: 'Copiapoa cinerea', acc: 'B-1' });
     await B.sync.setup(KEY, 'create');
     // The server's clock (or whoever shapes the listing) dates the one batch a day ahead.
@@ -386,9 +427,12 @@ describe('the pull cursor never runs ahead of the device clock (round thirty-eig
     expect(D.collection.accessions.map((a) => a.acc)).toEqual(['B-1']); // the batch itself still folded
     expect(D.sync.clockAhead).toMatch(/ahead of its own clock/);
     expect(D.sync.refused).toEqual([]); // not a refusal of anything from this device
-    // A batch dated normally afterwards is not behind a cursor parked a day ahead.
+    // A batch dated normally afterwards is not behind a cursor parked a day ahead. The vault stand-in reads the device
+    // last booted, so each device's store is put back in play before it acts (a run reads its sync record from there).
+    mem = memB;
     await B.collection.addAccession({ taxonName: 'Lithops', acc: 'B-2' });
     await B.sync.run();
+    mem = memD;
     await D.sync.run();
     expect(D.collection.accessions.map((a) => a.acc).sort()).toEqual(['B-1', 'B-2']);
   });
@@ -1523,7 +1567,8 @@ describe('round fifty-two, 1: a change from a clock years ahead is parked, not h
     // A's own edit is stamped now and shows at once on a third, correct device.
     await A.collection.put('accession', plant.id, { notes: 'no: leave it until spring' });
     await A.sync.run();
-    const C = await boot(newMem('cccccccccccc'), r2);
+    const memC = newMem('cccccccccccc');
+    const C = await boot(memC, r2);
     await C.sync.setup(KEY, 'join');
     expect(C.collection.accession(plant.id)?.notes).toBe('no: leave it until spring');
     expect(C.collection.parkedRecords).toBe(1);
@@ -1541,6 +1586,7 @@ describe('round fifty-two, 1: a change from a clock years ahead is parked, not h
     await P.sync.run();
     vi.setSystemTime(real + 120_000); // A and C are correct devices: the fake clock is theirs again
     serverClock = real + 120_000;
+    mem = memA; // each device's own store in play before it acts
     await A.sync.run();
     expect(A.collection.accession(plant.id)?.notes).toBe('P, corrected');
     // Apply on A takes the parked values as an edit made now; the parked stamps stay parked everywhere.
@@ -1548,6 +1594,7 @@ describe('round fifty-two, 1: a change from a clock years ahead is parked, not h
     expect(A.collection.accession(plant.id)?.notes).toBe('from 2031');
     expect(A.collection.parkedFor('accession', plant.id)).toHaveLength(0);
     await A.sync.run();
+    mem = memC;
     await C.sync.run();
     expect(C.collection.accession(plant.id)?.notes).toBe('from 2031');
     expect(C.sync.held).toBe(0);
@@ -1681,8 +1728,78 @@ describe('a sync run that receives nothing writes nothing (round fifty-eight; th
       { t: hlcEncode({ wall: now + 5000, count: 2, device: 'bbbbbbbbbbbbq2q2' }), kind: 'accession', id: 'r9', field: 'acc', value: '2026-0007' }
     ], 'import', { repair: false });
     await B.sync.run();
+    mem = memA; // A's own store in play again before it acts
     await A.sync.run();
     expect(A.collection.accessions.filter((x) => accNo(x) === '2026-0007').map((x) => x.id)).toEqual(['r1']); // made first, keeps it
     expect(A.collection.sharesNumber('accession', 'r1')).toEqual([]);
+  });
+});
+
+describe('one run at a time per vault in a browser (round fifty-eight; the lock, after the deploy run)', () => {
+  /** Hold the first push of the vault named, until released; count every request made meanwhile. */
+  function stallPush() {
+    const real = globalThis.fetch;
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    let stalled = 0;
+    const counter = { n: 0 };
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      counter.n++;
+      if (init?.method === 'POST' && /\/api\/sync\/log\?/.test(String(input)) && stalled++ === 0) await gate;
+      return real(input, init);
+    }) as typeof fetch;
+    return { release: () => release(), counter, restore: () => (globalThis.fetch = real) };
+  }
+
+  it('a second tab of the same browser leaves the run to the tab already running it, then runs once that one ends', async () => {
+    const r2 = fakeR2();
+    const memA = newMem('aaaaaaaaaaaa');
+    const tab1 = await boot(memA, r2);
+    await tab1.sync.setup(KEY, 'create');
+    const tab2 = await reboot(memA, r2); // the same browser's store and locks, a second page
+    await tab1.collection.addAccession({ taxonName: 'Lithops', acc: 'A-1' });
+    const s = stallPush();
+    try {
+      const first = tab1.sync.run();
+      await new Promise((r) => setTimeout(r, 50));
+      expect(tab1.sync.busy).not.toBeNull();
+      const before = s.counter.n, runs = tab2.sync.runs;
+      await tab2.sync.run();
+      expect(s.counter.n).toBe(before); // asked the server nothing
+      expect(tab2.sync.runs).toBe(runs); // and did not count a run
+      s.release();
+      await first;
+      await tab2.sync.run();
+      expect(tab2.sync.runs).toBe(runs + 1);
+      expect(tab2.sync.lastError).toBeNull();
+    } finally {
+      s.restore();
+    }
+  });
+
+  it('a run of a vault this tab has left does not keep the new vault\'s first run from starting', async () => {
+    const r2 = fakeR2();
+    const memA = newMem('aaaaaaaaaaaa');
+    const A = await boot(memA, r2);
+    await A.sync.setup(KEY, 'create');
+    await A.collection.addAccession({ taxonName: 'Lithops', acc: 'A-1' });
+    const s = stallPush();
+    try {
+      const old = A.sync.run().catch((e: Error) => e);
+      await new Promise((r) => setTimeout(r, 50));
+      expect(A.sync.busy).not.toBeNull();
+      await A.sync.forget();
+      const KEY2 = newVaultKey();
+      const runs = A.sync.runs;
+      await A.sync.setup(KEY2, 'create'); // its first run, while the old vault's still holds that vault's lock
+      expect(A.sync.runs).toBe(runs + 1);
+      expect(A.sync.lastError).toBeNull();
+      const id2 = (await deriveKeys(KEY2)).id;
+      expect([...r2.objs.keys()].some((k) => k.startsWith(`vault/${id2}/log/`))).toBe(true); // the new vault received the plant
+      s.release();
+      await old;
+    } finally {
+      s.restore();
+    }
   });
 });

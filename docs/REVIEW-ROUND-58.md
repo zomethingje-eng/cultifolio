@@ -90,6 +90,16 @@ rclone copy static\s\v2\manifest.json r2:cultifolio/s/v2 --s3-no-check-bucket -P
 npm run live-check
 ```
 
+## After the first deploy run
+
+The deploy's unit suite failed on the author's machine with 22 failures, all in the sync engine's file, and passed in the build sandbox. The sandbox ran Node 22, which has no `navigator.locks`, so the new one-run-per-browser lock was never taken there; Node 24 has one. Three things came out of it.
+
+The lock had one name for every vault, so a run of a vault the tab had left (after "Stop syncing" and a new key) could still hold it and the new vault's first run would be skipped without a word. It is now named by the vault. A test stalls the old vault's push, joins a new vault in the same tab and expects its first run to land; with the old name it fails.
+
+The engine holds the lock manager as a field, and the test harness gives each simulated browser its own, so two tabs of one device share a lock and two devices do not, on any Node. A second test shows a tab leaving the run to the tab already running it, then running once that one ends.
+
+The harness let a run scheduled by an edit (2.5 s on a real timer) fire during a later test, against that test's store; under the key every test shares, and now that a run reads its sync record from the store, it took the later device's record as its own. Every engine a test boots is retired when the test ends, and three tests that acted as one device after booting another now put that device's store back in play first, as the rest of the file already did. The file passed fourteen runs in a row on Node 22 and 24 after the change.
+
 ## Counts
 
-Type check clean on 595 files; 498 unit tests on 52 files; 100 end-to-end tests; the local live check passes 10 of 10; the build is clean.
+Type check clean on 595 files; 500 unit tests on 52 files, on Node 22 and on Node 24; 100 end-to-end tests; the local live check passes 10 of 10; the build is clean.

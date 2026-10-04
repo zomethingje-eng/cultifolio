@@ -138,6 +138,11 @@ class Sync {
   vaultFull = $state<{ bytes: number; limit: number } | null>(null);
   vaultId = $state('');
   keys: VaultKeys | null = null;
+  /**
+   * The browser's lock manager, which keeps two tabs from running one vault's sync at once (round fifty-eight). A field,
+   * not read from `navigator` at each run, so a test's simulated devices can each hold their own, as separate browsers do.
+   */
+  locks: LockManager | undefined = typeof navigator !== 'undefined' ? (navigator as Navigator & { locks?: LockManager }).locks : undefined;
   private meta: SyncMeta | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private unhook: (() => void) | null = null;
@@ -426,9 +431,11 @@ class Sync {
    */
   async run(): Promise<void> {
     if (!this.configured || !this.keys || !this.meta || this.busy) return;
-    const locks = typeof navigator !== 'undefined' ? (navigator as Navigator & { locks?: LockManager }).locks : undefined;
+    const locks = this.locks;
     if (!locks) return this.runNow();
-    await locks.request('cultifolio-sync', { ifAvailable: true }, async (lock) => {
+    // Named by the vault: a run of a vault this tab has since left (after "Stop syncing" and a new key) can still be
+    // finishing, and must not keep the new vault's first run from starting (round fifty-eight, after the deploy run).
+    await locks.request(`cultifolio-sync:${this.keys.id}`, { ifAvailable: true }, async (lock) => {
       if (!lock) return;
       const m = this.meta;
       const stored = m ? await getMeta<SyncMeta>(META) : undefined;
