@@ -34,6 +34,15 @@ async function syncRun(p: import('@playwright/test').Page) {
   await expect(status).toContainText('Synced');
 }
 
+/**
+ * The first request of a run is the server's first render, which on a Windows machine took past the 30 s a test has and
+ * failed whichever test came first (round fifty-nine). One request here, with its own allowance, takes that cost.
+ */
+test.beforeAll(async ({ request }) => {
+  test.setTimeout(120_000);
+  await request.get('/', { timeout: 110_000 });
+});
+
 test('front page renders server-side with the fixture corpus: closed genus rows, one open by URL, no JavaScript needed', async ({ browser }) => {
   const ctx = await browser.newContext({ javaScriptEnabled: false });
   const page = await ctx.newPage();
@@ -2322,6 +2331,8 @@ test('round twenty-eight: a batch edit saves its medium and container, keeps the
   await page.fill('#se-medium', 'perlite');
   await page.fill('#se-container', '9 cm square');
   await page.getByRole('button', { name: 'Save' }).click();
+  // The form closes when the write has landed; a reload before then cancels it (round fifty-nine: failed twice on a Windows run).
+  await expect(page.locator('#se-method')).toHaveCount(0);
   await page.reload();
   await expect(page.locator('.cards .card', { hasText: 'Struck' }).first()).toBeVisible();
   await expect(page.locator('.idcard .vern').first()).not.toContainText('KK 1462'); // hidden for cuttings, not gone
@@ -2988,6 +2999,7 @@ test('round fifty-two: a device a year ahead is corrected by the server\'s clock
   const Q = await shifted(5 * 365 * 86_400_000); const q = await Q.newPage();
   await join(q);
   await q.goto(`/plants/${acc}`); await q.getByRole('button', { name: 'Add a note' }).click(); await q.locator('textarea').first().fill('from 2031'); await q.getByRole('button', { name: 'Save' }).first().click();
+  await expect(q.locator('textarea')).toHaveCount(0); // the note is stored before the page is left (round fifty-nine: a navigation cancelled it on a Windows run)
   await syncNow(q); await syncNow(a);
   await a.goto(`/plants/${acc}`);
   await expect(a.locator('.parked')).toContainText('from a device whose clock was wrong');
@@ -3266,6 +3278,7 @@ test('round fifty-eight: a place\'s watering rhythm decides what is due, its dry
   const month = await page.evaluate(() => new Date().getMonth());
   await page.locator('.months .mo input').nth(month).check();
   await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.locator('.months')).toHaveCount(0); // saved: the form closed, so leaving cannot cancel the write
   await page.goto('/today');
   await expect(stop.locator('.row.resting', { hasText: 'Kept dry this month' })).toContainText('2 plants');
   await expect(stop.getByRole('button', { name: /^Water/ })).toHaveCount(0);
