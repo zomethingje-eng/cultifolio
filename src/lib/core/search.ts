@@ -82,6 +82,7 @@ function rank(p: Prepared<unknown>, qs: string[], match: (q: string, w: string) 
     const o = !n && p.otherWords.some((w) => match(q, w));
     if (n) inName++;
     else if (o) inOther++;
+    else if (!p.synWords.some((g) => g.some((w) => match(q, w)))) return null; // no word of the entry can take q: no older name can either, so stop here (round fifty-eight)
     else fromSyn.push(q);
     if (n && match(q, p.nameWords[0])) genus = true;
   }
@@ -96,7 +97,7 @@ function rank(p: Prepared<unknown>, qs: string[], match: (q: string, w: string) 
 /** Whether the exact pass alone finds anything for `q` in `prepared`: a search over the exact candidates that finds nothing exactly asks the near candidates before it trusts a near pass (round fifty-six, 1). */
 export function hasExact<T extends Searchable>(prepared: Prepared<T>[], q: string): boolean {
   const all = words(q);
-  const qs = all.filter((w, i) => !(RANK_MARKERS.has(w) && i < all.length - 1));
+  const qs = [...new Set(all.filter((w, i) => !(RANK_MARKERS.has(w) && i < all.length - 1)))]; // a repeated word ranks as one (round fifty-eight)
   if (!qs.length) return false;
   const exact = (x: string, w: string) => w.startsWith(x);
   for (const p of prepared) if (rank(p, qs, exact) != null) return true;
@@ -111,7 +112,7 @@ export function search<T extends Searchable>(prepared: Prepared<T>[], q: string,
   // A trailing marker is tried as a word first, and dropped when nothing starts with it ("haworthia pumila var" still
   // finds the name the words before it find).
   const all = words(q);
-  const qs = all.filter((w, i) => !(RANK_MARKERS.has(w) && i < all.length - 1));
+  const qs = [...new Set(all.filter((w, i) => !(RANK_MARKERS.has(w) && i < all.length - 1)))]; // a repeated word ranks as one (round fifty-eight)
   if (!qs.length) return [];
   const exact = (x: string, w: string) => w.startsWith(x);
   let hits = collect(prepared, qs, exact);

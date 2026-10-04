@@ -53,6 +53,8 @@ export interface BuildOpts {
   device?: string;
   app?: string;
   settings?: DeviceSettings;
+  /** The stamps of changes this device has parked; those in `changes` go in the manifest (round fifty-eight). */
+  parked?: Iterable<string>;
   /** Called once per live photo record; return null when the pixels are missing (the record still travels, and the manifest names it under `photosMissing`). */
   readPhoto: (id: string) => Promise<PhotoBytes | null>;
   onProgress?: (done: number, total: number) => void;
@@ -113,6 +115,8 @@ export async function buildBackup(o: BuildOpts): Promise<BuiltBackup> {
     } else photosMissing.push(p.id);
     o.onProgress?.(++done, photos.length);
   }
+  const inLog = new Set(o.changes.map((c) => c.t));
+  const parked = [...new Set(o.parked ?? [])].filter((t) => inLog.has(t)).sort();
   const manifest: Manifest = {
     format: BACKUP_FORMAT,
     v: BACKUP_V,
@@ -120,7 +124,8 @@ export async function buildBackup(o: BuildOpts): Promise<BuiltBackup> {
     exported: new Date().toISOString(),
     device: o.device,
     counts: { changes: s.changes, accessions: s.accessions, events: s.events, locations: s.locations, sowings: s.sowings, taxa: s.taxa, photos: photos.length - photosMissing.length, photoBytes },
-    ...(photosMissing.length ? { photosMissing } : {})
+    ...(photosMissing.length ? { photosMissing } : {}),
+    ...(parked.length ? { parked } : {})
   };
   entry('manifest.json', strToU8(JSON.stringify(manifest, null, 1)), true);
   entry('changes.json', strToU8(JSON.stringify(o.changes)), true);
@@ -172,6 +177,9 @@ export const MAX_CHANGES_BYTES = 192 * 1024 * 1024;
 /** The manifest and the device settings: a few kilobytes each; anything declaring more is not one of ours. */
 export const MAX_SMALL_ENTRY_BYTES = 4 * 1024 * 1024;
 
+/** What a damaged or foreign zip is called, in place of fflate's "invalid zip data" (round fifty-eight; the grower review). */
+export const UNREADABLE_ZIP = 'That file is not a readable zip: it may be damaged or not a Cultifolio backup. Nothing on this device was changed.';
+
 /** Parse a backup from bytes: the zip a backup is. Throws a readable error for anything else. */
 export async function readBackup(bytes: Uint8Array): Promise<ReadBackup> {
   if (!(bytes[0] === 0x50 && bytes[1] === 0x4b)) throw new Error('That file is not a Cultifolio backup (a .cultifolio.zip).');
@@ -190,28 +198,36 @@ export async function readBackup(bytes: Uint8Array): Promise<ReadBackup> {
   // (round thirty-five, R1-6, R2-4).
   let declared = 0;
   const seen = new Set<string>();
-  const files = unzipSync(bytes, {
-    filter: (f) => {
-      if (!KNOWN_ENTRY.test(f.name) || f.originalSize > MAX_ENTRY_BYTES) return false;
-      // Every writer has stored the photographs as they are (JPEGs do not compress), so a deflated photograph entry is not
-      // ours, and inflating one is the one cost the declared size does not bound: a 205 kB stream declared as 300 bytes
-      // inflated 200 MB before it was cut to the declared size (round thirty-eight, R1-11).
-      if (f.name.startsWith('photos/') && f.compression !== 0) throw new Error(`That zip compresses ${f.name}; a Cultifolio backup stores its photographs as they are.`);
-      if (seen.has(f.name)) throw new Error(`That zip names ${f.name} twice; it is not a Cultifolio backup.`);
-      seen.add(f.name);
-      if (f.name === 'plants.csv' || f.name === 'batches.csv' || f.name === 'events.csv') return false;
-      if (f.name === 'changes.json') return f.originalSize <= MAX_CHANGES_BYTES;
-      if (f.name === 'manifest.json' || f.name === 'device.json') return f.originalSize <= MAX_SMALL_ENTRY_BYTES;
-      // A stored entry is copied by its compressed size, whatever it declares as its original: a table of contents whose
-      // entries all point at one stored block and each declare a byte of content passed the sum and cost a copy of the
-      // block apiece (round thirty-seven, R1-5). The larger of the two counts, and a stored entry whose two sizes differ
-      // is not one a writer makes.
-      if (f.compression === 0 && f.size !== f.originalSize) throw new Error(`That zip stores ${f.name} with two different sizes; it is not a Cultifolio backup.`);
-      declared += Math.max(f.size, f.originalSize);
-      if (declared > bytes.length * 1.1 + 64 * 1048576) throw new Error('That zip declares far more content than a backup of its size can hold; it is not a Cultifolio backup.');
-      return true;
-    }
-  });
+  let files: ReturnType<typeof unzipSync>;
+  try {
+    files = unzipSync(bytes, {
+      filter: (f) => {
+        if (!KNOWN_ENTRY.test(f.name) || f.originalSize > MAX_ENTRY_BYTES) return false;
+        // Every writer has stored the photographs as they are (JPEGs do not compress), so a deflated photograph entry is not
+        // ours, and inflating one is the one cost the declared size does not bound: a 205 kB stream declared as 300 bytes
+        // inflated 200 MB before it was cut to the declared size (round thirty-eight, R1-11).
+        if (f.name.startsWith('photos/') && f.compression !== 0) throw new Error(`That zip compresses ${f.name}; a Cultifolio backup stores its photographs as they are.`);
+        if (seen.has(f.name)) throw new Error(`That zip names ${f.name} twice; it is not a Cultifolio backup.`);
+        seen.add(f.name);
+        if (f.name === 'plants.csv' || f.name === 'batches.csv' || f.name === 'events.csv') return false;
+        if (f.name === 'changes.json') return f.originalSize <= MAX_CHANGES_BYTES;
+        if (f.name === 'manifest.json' || f.name === 'device.json') return f.originalSize <= MAX_SMALL_ENTRY_BYTES;
+        // A stored entry is copied by its compressed size, whatever it declares as its original: a table of contents whose
+        // entries all point at one stored block and each declare a byte of content passed the sum and cost a copy of the
+        // block apiece (round thirty-seven, R1-5). The larger of the two counts, and a stored entry whose two sizes differ
+        // is not one a writer makes.
+        if (f.compression === 0 && f.size !== f.originalSize) throw new Error(`That zip stores ${f.name} with two different sizes; it is not a Cultifolio backup.`);
+        declared += Math.max(f.size, f.originalSize);
+        if (declared > bytes.length * 1.1 + 64 * 1048576) throw new Error('That zip declares far more content than a backup of its size can hold; it is not a Cultifolio backup.');
+        return true;
+      }
+    });
+  } catch (e) {
+    // fflate's own failures ("invalid zip data", "unexpected EOF") carry a numeric code; the refusals above are ours and
+    // already say what is wrong. The file is only read here, so nothing on the device has changed (round fifty-eight; the grower review).
+    if (e && typeof (e as { code?: unknown }).code === 'number') throw new Error(UNREADABLE_ZIP);
+    throw e;
+  }
   if (!files['manifest.json'] || !files['changes.json']) throw new Error('That zip has no manifest.json and changes.json; it is not a Cultifolio backup.');
   const m = v.safeParse(Manifest, JSON.parse(strFromU8(files['manifest.json'])));
   if (!m.success) throw new Error('The backup manifest is not in a shape this version understands.');
@@ -343,7 +359,7 @@ export function eventsCsv(events: Array<PlantEvent & Record_>, state: Map<string
       const sow = acc ? undefined : (state.get(`sowing:${e.acc}`) as unknown as (Sowing & Record_) | undefined);
       const no = acc ? accNo(acc) : sow ? sowNo(sow) : e.acc;
       const name = acc?.taxonName ?? sow?.taxonName ?? null;
-      const measures = e.measures && typeof e.measures === 'object' ? Object.entries(e.measures).map(([k, v]) => { const m = MEASURES.find((x) => x.k === k); return `${(m?.label ?? k).toLowerCase()} ${v}${m?.unit ? ` ${m.unit}` : ''}`; }).join('; ') : null;
+      const measures = e.measures && typeof e.measures === 'object' ? Object.entries(e.measures).map(([k, v]) => { const m = MEASURES.find((x) => x.k === k) ?? (k === 'pot' ? { label: 'Pot size', unit: 'mm' } : undefined); /* a repot's pot, in mm (round fifty-eight) */ return `${(m?.label ?? k).toLowerCase()} ${v}${m?.unit ? ` ${m.unit}` : ''}`; }).join('; ') : null;
       const removed = (acc ?? sow)?._deleted ? 'yes' : null;
       return [e.d, no, name, EVENT_LABEL[e.t as keyof typeof EVENT_LABEL] ?? e.t, e.note, e.n, e.cause, e.used, measures, e.auto ? 'yes' : null, removed].map(csvCell).join(',');
     });

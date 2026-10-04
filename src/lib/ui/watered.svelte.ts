@@ -3,7 +3,7 @@
  * its own Undo when the grower goes to another tab and comes back (round fifty-five, 5; the first reviewer's finding 6).
  * Let go after ten minutes, so a stop watered an hour ago is not still shown as a stop.
  */
-export type WateredPlant = { id: string; no: string };
+export type WateredPlant = { id: string; no: string; /** The plant's name, so the done row names what was watered (round fifty-eight). */ name?: string };
 export type Watered = { ids: string[]; plants: WateredPlant[]; at: number; /** The stop's height when it was watered: kept as its least height, so the stop below does not move. */ height: number };
 const HOLD_MS = 10 * 60_000;
 

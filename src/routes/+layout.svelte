@@ -59,6 +59,9 @@
   afterNavigate((nav) => {
     if (browser) void frost.check();
     menuOpen = false;
+    // A new page starts with the tab bar in view (round fifty-eight; the grower review).
+    tabAway = false;
+    if (browser) lastY = scrollY;
     if (nav.from && nav.type !== 'popstate') hops++;
     else if (nav.type === 'popstate' && hops > 0) hops--;
     // A new page: focus its content, not the top bar again (a same-page hash jump keeps the browser's own focus handling).
@@ -102,6 +105,37 @@
     // The new build takes over at a page boundary: a full load of the destination, never a reload of a page being worked on.
     if (reloadOnNext && nav.to && nav.type !== 'leave') { nav.cancel(); location.href = nav.to.url.href; }
   });
+  // The phone's tab bar steps out of the way while the reader scrolls down a page and comes back on the way up or at the
+  // page's end: a species page with two compared had 212 of 844 px fixed. Never while a text field has focus (the bar is
+  // where the keyboard's owner expects it), never with reduced motion, never with the menu open (round fifty-eight; the grower review).
+  let tabAway = $state(false);
+  let lastY = 0;
+  const SCROLL_STEP = 8;
+  /** A field that takes typing: a checkbox or a button is not one. */
+  const typing = (el: Element | null) =>
+    !!el && ((el instanceof HTMLInputElement && !/^(checkbox|radio|button|submit|reset|range|color|file|image)$/.test(el.type)) || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement || (el instanceof HTMLElement && el.isContentEditable));
+  function onScroll() {
+    const y = Math.max(0, scrollY);
+    const dy = y - lastY;
+    // The top and the end of the page show it whatever the step: the last few pixels of a scroll are often under the threshold.
+    if (y <= 56 || innerHeight + y >= document.documentElement.scrollHeight - 2) { tabAway = false; lastY = y; return; }
+    if (Math.abs(dy) < SCROLL_STEP) return;
+    lastY = y;
+    const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    tabAway = dy > 0 && !still && !menuOpen && !typing(document.activeElement);
+  }
+  $effect(() => {
+    addEventListener('scroll', onScroll, { passive: true });
+    const show = (e: FocusEvent) => { if (typing(e.target as Element)) tabAway = false; };
+    addEventListener('focusin', show);
+    return () => { removeEventListener('scroll', onScroll); removeEventListener('focusin', show); };
+  });
+  // What the "+" adds is what the section is about: a place on Places, a batch on Propagation, a plant everywhere else (round fifty-eight; the grower review).
+  const adds = $derived(
+    page.url.pathname.startsWith('/places') ? { href: '/places#add', path: '', label: 'Add a place' }
+    : page.url.pathname.startsWith('/propagation') ? { href: '/propagation/new', path: '/propagation/new', label: 'Start a propagation batch' }
+    : { href: '/plants/new', path: '/plants/new', label: 'Add a plant' }
+  );
   // Sync wakes with the app when a vault key is on this device; it does nothing otherwise.
   onMount(async () => {
     today.start();
@@ -157,23 +191,32 @@
 
 <svelte:window onkeydown={(e) => { if (e.key === 'Escape' && menuOpen) closeMenu(); }} />
 
-<div id="topbar">
-  <button class="iconbtn brand" type="button" bind:this={menuBtn} aria-label="Menu" aria-haspopup="true" aria-expanded={menuOpen} aria-controls="menu" onclick={() => (menuOpen = !menuOpen)}>✳</button>
+<!-- The first thing focusable in the document, ahead of the top bar's eight or so stops; it sat after the bar and the
+     menu, where a keyboard reached it last (round fifty-eight; the accessibility review). -->
+<a class="skip" href="#main">Skip to content</a>
+
+<!-- The top bar is the page's banner; the crumb is a breadcrumb trail, an ordered list in its own nav (round fifty-eight; the accessibility review). -->
+<header id="topbar">
+  <!-- A disclosure of links, not an ARIA menu: expanded and controls say all of it, and "has a popup" promised menu keys it never had (round fifty-eight; the accessibility review). -->
+  <button class="iconbtn brand" type="button" bind:this={menuBtn} aria-label="Menu" aria-expanded={menuOpen} aria-controls="menu" onclick={() => (menuOpen = !menuOpen)}>✳</button>
   {#if back}<a class="iconbtn" href={back} aria-label="Back" onclick={(e) => { if (hops > 0) { e.preventDefault(); history.back(); } }}>‹</a>{/if}
-  <div class="crumb">
-    {#each parts as c, i}
-      {#if i}<span class="sep">›</span>{/if}
-      {#if c.href && i < parts.length - 1}<a href={c.href}>{c.label}</a>{:else}<span class:last={i === parts.length - 1 && parts.length > 1}>{c.label}</span>{/if}
-    {/each}
-  </div>
-  <!-- The five places, from every page, in the bar that is always there; the phone has them in the tab bar instead. -->
+  <nav class="crumb" aria-label="Breadcrumb">
+    <ol>
+      {#each parts as c, i}
+        <li>{#if i}<span class="sep" aria-hidden="true">›</span>{/if}{#if c.href && i < parts.length - 1}<a href={c.href}>{c.label}</a>{:else}<span class:last={i === parts.length - 1 && parts.length > 1} aria-current={i === parts.length - 1 ? 'page' : undefined}>{c.label}</span>{/if}</li>
+      {/each}
+    </ol>
+  </nav>
+  <!-- The five places, from every page, in the bar that is always there; the phone has them in the tab bar instead. The
+       current one says so to a screen reader, not only in colour (round fifty-eight; the accessibility review). -->
   <nav class="seg topseg" aria-label="Main">
-    {#each places as pl}<a href={pl.href} class:on={pl.on(page.url.pathname)}>{pl.label === 'Plants' ? 'My plants' : pl.label}</a>{/each}
+    {#each places as pl}<a href={pl.href} class:on={pl.on(page.url.pathname)} aria-current={pl.on(page.url.pathname) ? 'page' : undefined}>{pl.label === 'Plants' ? 'My plants' : pl.label}</a>{/each}
   </nav>
   <a class="iconbtn sync" href="/sync" title={sync.configured ? (sync.busy ?? (sync.offline ? (sync.unreached === 'server' ? 'Sync: the server did not answer; changes are kept here' : 'Sync: offline; changes are kept here') : sync.lastError ? 'Sync: ' + sync.lastError : sync.runs ? 'Synced' : 'Sync: not checked yet')) : 'Sync'} aria-label="Sync" class:on={sync.configured} class:busy={!!sync.busy} class:err={!!sync.lastError}>⟳</a>
-  <!-- Not on the add page itself: pressed there it threw the half-filled form away for an empty one (round forty-nine, 3). -->
-  {#if page.url.pathname !== '/plants/new'}<a class="iconbtn" href="/plants/new" title="Add a plant" aria-label="Add a plant">+</a>{/if}
-</div>
+  <!-- Not on the add page itself: pressed there it threw the half-filled form away for an empty one (round forty-nine, 3).
+       It adds what the section is about, and says which (round fifty-eight; the grower review). -->
+  {#if page.url.pathname !== adds.path}<a class="iconbtn" href={adds.href} title={adds.label} aria-label={adds.label}>+</a>{/if}
+</header>
 {#if menuOpen}
   <div class="scrim" onclick={closeMenu} aria-hidden="true"></div>
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -188,7 +231,6 @@
 <!-- The frost watch, reachable from every tab (round fifty-three, 3): the risk at the site, as the Today tab says it, on every page but that one. A refusal is said on the front page and the Today tab, not on every page. -->
 {#if frost.line?.tone === 'bad' && !page.url.pathname.startsWith('/today') && page.url.pathname !== '/'}<a class="frostbar" href="/today#frost" id="frostbar">{frost.line.text} <span class="go">Today ›</span></a>{/if}
 
-<a class="skip" href="#main">Skip to content</a>
 <!-- On the pages about your own plants, links are not preloaded on hover: a preload of a species page sends that species' name to the
      server before any click, which the bucket lookups exist to avoid; a tap or click is a visit the grower chose (round thirteen, 2). -->
 <main class="wrap" id="main" tabindex="-1" bind:this={mainEl} data-sveltekit-preload-data={privateRoute ? 'off' : 'hover'}>
@@ -197,15 +239,18 @@
   {@render children()}
 </main>
 
-<CompareBar />
+<CompareBar low={tabAway} />
 
+<!-- Three lines, about the reader: the sources, every one, then what is kept, then the links (round fifty-eight; it was eight lines on a phone, about the server, and its list left four sources out). -->
 <footer class="credits">
-  <p>Taxonomy: GBIF Backbone (CC BY). Distributions: WCVP, RBG Kew (CC BY 4.0). Climate: CHELSA V2.1 (CC0), NASA POWER. Photographs carry their own licence and credit. Summaries: Wikipedia (CC BY-SA 4.0). Coastlines: Natural Earth. Nothing on this site is stored about you beyond short-lived rate counters and, with sync on, your encrypted vault, whose sizes and timing the server can see and whose contents it cannot; your collection lives on your device{#if sync.configured}, and in an encrypted vault only your key opens{/if}. <a href="/about/how">How it is made</a> · <a href="/about/formats">Formats</a> · <a href="https://github.com/zomethingje-eng/cultifolio">Source</a>.</p>
+  <p>Sources: GBIF Backbone, WCVP (RBG Kew), CHELSA, NASA POWER, ETOPO, Natural Earth, iNaturalist, Wikimedia Commons, Wikipedia, OpenAlex; each figure and photograph names its own, with its licence.</p>
+  <p>No account, no analytics. Your collection stays on this device{#if sync.configured}, and in a vault only your key opens{/if}.</p>
+  <p><a href="/about/how">How it is made</a> · <a href="/about/how#privacy">Privacy</a> · <a href="/about/formats">Formats</a> · <a href="https://github.com/zomethingje-eng/cultifolio">Source</a></p>
 </footer>
 
-<nav id="tabbar" aria-label="Tabs">
+<nav id="tabbar" aria-label="Tabs" class:away={tabAway} onfocusin={() => (tabAway = false)}>
   {#each places as pl}
-    <a href={pl.href} class:on={pl.on(page.url.pathname)}>
+    <a href={pl.href} class:on={pl.on(page.url.pathname)} aria-current={pl.on(page.url.pathname) ? 'page' : undefined}><!-- aria-current: round fifty-eight; the accessibility review -->
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         {#if pl.label === 'Species'}<path d="M12 3v18M5 8c4 0 7 2 7 6M19 8c-4 0-7 2-7 6M7 15c3 0 5 1.5 5 4M17 15c-3 0-5 1.5-5 4" />
         {:else if pl.label === 'Plants'}<path d="M6 21h12M9 21V10a3 3 0 0 1 6 0v11M12 10V4M9 6c0 0 3-2 3-2s3 2 3 2" />
@@ -220,8 +265,8 @@
 
 <style>
   .iconbtn.sync { color: var(--ink3); }
-  .vaultnote { margin: 0; padding: 8px 16px; background: var(--bad); color: #fff; font-size: 14px; }
-  .frostbar { display: block; padding: 7px 16px; background: var(--bad-soft); color: var(--ink); font-size: 13px; line-height: 1.4; border-bottom: 1px solid var(--rule); text-decoration: none; }
+  .vaultnote { margin: 0; padding: 8px 16px; background: var(--bad); color: #fff; font-size: var(--fs-md); }
+  .frostbar { display: block; padding: 7px 16px; background: var(--bad-soft); color: var(--ink); font-size: var(--fs-md); line-height: 1.4; border-bottom: 1px solid var(--rule); text-decoration: none; }
   .frostbar:hover { text-decoration: underline; }
   .frostbar .go { white-space: nowrap; color: var(--bad); font-weight: 600; margin-left: 4px; }
   .iconbtn.sync.on { color: var(--accent); }
@@ -230,43 +275,53 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   /* Opaque, not a blur: a sticky bar that lets headings ghost through reads as two lines of text. */
   #topbar { position: sticky; top: 0; z-index: 60; background: var(--bg); border-bottom: 1px solid var(--rule); display: flex; align-items: center; gap: 8px; padding: 2px 16px; margin-inline: calc(-1 * max(16px, env(safe-area-inset-left))) calc(-1 * max(16px, env(safe-area-inset-right))); min-height: 44px; }
-  .crumb { font-size: 11px; line-height: 40px; letter-spacing: 0.11em; text-transform: uppercase; color: var(--ink3); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
+  .crumb { font-size: var(--fs-xs); line-height: 40px; letter-spacing: 0.11em; text-transform: uppercase; color: var(--ink3); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
   /* A finger's hit area (40 px) around an 11 px word: the line box, not the glyph, is the target. */
   .crumb a { color: var(--ink3); display: inline-block; padding: 0 2px; }
   .crumb a:hover { color: var(--ink); text-decoration: none; }
   .crumb .sep { opacity: 0.45; margin: 0 5px; }
+  /* The trail as a list that reads as the one line it was (round fifty-eight; the accessibility review). */
+  .crumb ol { display: inline; margin: 0; padding: 0; list-style: none; }
+  .crumb li { display: inline; }
+  .crumb li a { text-decoration: none; } /* not the prose link's underline, which the theme gives every link in a list item (round fifty-eight; the accessibility review) */
   .crumb .last { color: var(--ink); }
   #topbar .topseg { margin: 0 6px; flex: none; }
-  #topbar .topseg > a { padding: 5px 12px; font-size: 12.5px; }
+  #topbar .topseg > a { padding: 5px 12px; font-size: var(--fs-md); }
   @media (max-width: 700px) { #topbar .topseg { display: none; } }
-  .iconbtn { border: 1px solid transparent; background: none; color: var(--ink2); font: inherit; font-size: 15px; font-weight: 600; padding: 4px 8px; border-radius: 8px; line-height: 1.2; min-width: 40px; min-height: 40px; display: inline-flex; align-items: center; justify-content: center; text-align: center; }
+  .iconbtn { border: 1px solid transparent; background: none; color: var(--ink2); font: inherit; font-size: var(--fs-base); font-weight: 600; padding: 4px 8px; border-radius: var(--r); line-height: 1.2; min-width: 40px; min-height: 40px; display: inline-flex; align-items: center; justify-content: center; text-align: center; }
   .iconbtn:hover { background: var(--sunk); color: var(--ink); text-decoration: none; }
   .iconbtn.brand { color: var(--accent); cursor: pointer; }
   .iconbtn.brand[aria-expanded='true'] { background: var(--sunk); }
   .scrim { position: fixed; inset: 0; z-index: 55; background: rgba(0, 0, 0, 0.18); }
-  #menu { position: fixed; z-index: 65; top: 48px; left: max(12px, env(safe-area-inset-left)); width: 240px; background: var(--card); border: 1px solid var(--rule); border-radius: 12px; box-shadow: var(--sh2); padding: 6px; display: flex; flex-direction: column; }
-  #menu a { display: block; padding: 10px 12px; border-radius: 8px; color: var(--ink); font-weight: 600; font-size: 14px; min-height: 40px; }
+  #menu { position: fixed; z-index: 65; top: 48px; left: max(12px, env(safe-area-inset-left)); width: 240px; background: var(--card); border: 1px solid var(--rule); border-radius: var(--r-lg); box-shadow: var(--sh2); padding: 6px; display: flex; flex-direction: column; }
+  #menu a { display: block; padding: 10px 12px; border-radius: var(--r); color: var(--ink); font-weight: 600; font-size: var(--fs-md); min-height: 40px; }
   #menu a:hover { background: var(--sunk); text-decoration: none; }
   #menu a.on { color: var(--accent); }
   #menu .menuhead { display: none; align-items: center; justify-content: space-between; padding: 0 4px 4px 12px; }
   #menu hr { border: 0; border-top: 1px solid var(--rule); margin: 6px 4px; }
   @media (max-width: 700px) { #menu { top: 0; left: 0; bottom: 0; width: min(78vw, 300px); border-radius: 0 14px 14px 0; padding-top: max(8px, env(safe-area-inset-top)); overflow-y: auto; } #menu .menuhead { display: flex; } }
   main { padding-block: 0 3rem; max-width: 980px; }
-  footer.credits { border-top: 1px solid var(--rule); margin: 44px auto 0; padding: 18px 0 40px; max-width: 980px; font-size: 11.5px; line-height: 1.75; color: var(--ink3); }
+  footer.credits { border-top: 1px solid var(--rule); margin: 44px auto 0; padding: 18px 0 40px; max-width: 980px; font-size: var(--fs-sm); line-height: 1.75; color: var(--ink3); }
   @media (max-width: 700px) { footer.credits { padding-bottom: calc(56px + 2rem + env(safe-area-inset-bottom)); } }
   main:focus { outline: none; }
-  .skip { position: absolute; left: 16px; top: -40px; z-index: 90; background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-weight: 600; font-size: 13px; }
+  .skip { position: absolute; left: 16px; top: -40px; z-index: 90; background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: var(--r); font-weight: 600; font-size: var(--fs-md); }
   .skip:focus { top: 8px; outline: 2px solid var(--accent); }
-  footer.credits p { margin: 0; }
+  footer.credits p { margin: 0 0 4px; }
   footer.credits a { display: inline-block; padding: 11px 2px; margin: -11px 0; }
   #tabbar { display: none; }
   @media (max-width: 700px) {
     main { padding-bottom: calc(56px + 2rem + env(safe-area-inset-bottom)); }
     #tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 70; display: grid; grid-template-columns: repeat(5, 1fr); background: color-mix(in srgb, var(--card) 94%, transparent); backdrop-filter: blur(10px); border-top: 1px solid var(--rule); padding-bottom: env(safe-area-inset-bottom); }
-    #tabbar a { color: var(--ink2); font-size: 11.5px; font-weight: 600; letter-spacing: 0.02em; min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
+    #tabbar a { color: var(--ink2); font-size: var(--fs-sm); font-weight: 600; letter-spacing: 0.02em; min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
     #tabbar a:hover { text-decoration: none; }
     #tabbar a.on { color: var(--accent); }
+    /* Out of the way while scrolling down, by its own height and the safe area under it (round fifty-eight; the grower review). */
+    #tabbar { transition: transform 0.22s ease; }
+    #tabbar.away { transform: translateY(100%); }
+    /* Room at the end of the page for the compare pill above the tab bar (round fifty-eight; the grower review). */
+    :global(body:has(.cmppill)) footer.credits { padding-bottom: calc(56px + 2rem + 56px + env(safe-area-inset-bottom)); }
   }
+  @media (prefers-reduced-motion: reduce) { #tabbar { transition: none; } #tabbar.away { transform: none; } }
   /* Under 480 px tall the bottom bar would take a sixth of the screen: the places stay one tap away in the menu. */
   @media (max-height: 480px) { #tabbar { display: none !important; } footer.credits { padding-bottom: 0 !important; } }
 </style>

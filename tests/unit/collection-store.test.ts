@@ -53,6 +53,8 @@ vi.mock('$lib/db/vault', () => {
   m.arrivalsAfter = async () => ({ changes: [...mem.changes.values()], seq: 0, gen: 0 });
   m.changeKeys = async () => [...mem.changes.keys()];
   if (!m.changesByKeys) m.changesByKeys = async (ts: string[]) => ts.map((t) => mem.changes.get(t)).filter(Boolean);
+  if (!m.updateMeta) m.updateMeta = async (k: string, fn: (had: unknown) => unknown) => { const next = fn(mem.meta.get(k)); mem.meta.set(k, next); return next; };
+  if (!m.changesOf) m.changesOf = async (kind: string, id: string) => ([...mem.changes.values()] as Change[]).filter((c) => c.kind === kind && c.id === id);
   m.holdVault = async (work: () => Promise<unknown>) => work();
   m.putPhotoBlobs = async (p: { id: string }) => void mem.photos.set(p.id, p);
   m.getPhotoBlobs = async (id: string) => mem.photos.get(id);

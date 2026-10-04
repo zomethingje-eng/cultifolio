@@ -179,22 +179,22 @@ export async function sheetsFor(slugs: Iterable<string>, again = false): Promise
  * called with the species' key only for a name at species rank whose stored key is missing or belongs to something
  * else; a subspecies keeps the key the picker gave it, since its species' key would disagree with its name.
  */
-export async function sheetForName(name: string, key: number | null | undefined, repair?: (key: number) => void): Promise<Sheet | 'none' | null> {
+export async function sheetForName(name: string, key: number | null | undefined): Promise<Sheet | 'none' | null> {
   const slug = speciesSlug(name);
   const m = await sheetsFor([slug]);
   if (m === null) return null;
   const s = m.get(slug);
   // A homonym's sheet is filed under `<slug>-<key>`. When the plain slug answers with another key than the plant's, that
-  // is looked for before the plant's key is "repaired" to the other species' (round seventeen, 6): one more bucket
-  // request only in that case, so the ordinary plant still asks for one bucket.
+  // is looked for first (round seventeen, 6): one more bucket request only in that case, so the ordinary plant still
+  // asks for one bucket. Nothing is written either way: a reading of the reference does not write to the log, and a key
+  // that differs is said on the plant's page with a button to take the reference's (round fifty-eight; rule 5).
   if (s && key && s.key !== key) {
     const suffixed = `${slug}-${key}`;
     const m2 = await sheetsFor([suffixed]);
-    if (m2 === null) return null; // not reached: not "the other species", and no repair of the key on a failed request (round eighteen, 6)
+    if (m2 === null) return null; // not reached: not "the other species"
     const s2 = m2.get(suffixed);
     if (s2) return s2;
   }
   if (!s) return 'none';
-  if (speciesOf(name) === name && key !== s.key) repair?.(s.key);
   return s;
 }

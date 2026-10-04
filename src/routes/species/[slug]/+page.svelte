@@ -6,6 +6,7 @@
   import Photos from '$lib/ui/Photos.svelte';
   import PhotoImg from '$lib/ui/PhotoImg.svelte';
   import Lightbox from '$lib/ui/Lightbox.svelte';
+  import { photoLabel } from '$lib/ui/photo-label';
   import Provenance from '$lib/ui/Provenance.svelte';
   import Climograph from '$lib/ui/Climograph.svelte';
   import FollowButton from '$lib/ui/FollowButton.svelte';
@@ -15,7 +16,6 @@
   import { photoAt, srcsetOf, photoHosts } from '$dossier/photo-size';
   import { heroOf } from '$dossier/dedupe';
   import { firstSentences } from '$core/text';
-  import { frostWording } from '$core/extremes';
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import { generatedNote } from '$core/note';
   import { cultivationSheet, CARD_ORDER } from '$core/sheet';
@@ -50,16 +50,17 @@
   );
   // A range of more than a few regions stacks a dozen lines deep in one narrow cell of the fact grid beside a blank row; the cell, and the marker's beside it, take the whole row instead.
   const longRange = $derived(d.distribution.native.length > 4);
+  // The glossary's plain words in what the reader sees: "species page", not "dossier"; "across the range", not "envelope" (round fifty-eight; the accessibility review).
   const evidence = $derived.by(() => {
     const o = d.occurrences;
     const up = d.upstream['gbif.occurrences']?.status;
-    if (up === 'refused' || up === 'error') return { tone: 'warn', text: 'The occurrence source did not answer when this dossier was built. Nothing here is derived from records, and this is not a statement that none exist.' };
+    if (up === 'refused' || up === 'error') return { tone: 'warn', text: 'The occurrence source did not answer when this species page was built. Nothing here is derived from records, and this is not a statement that none exist.' };
     // A refused range is said before anything is read as an absence of one (round seventeen, 5).
     const rangeUp = d.upstream['wcvp.distribution']?.status;
     if (o.rangeTested === false && (rangeUp === 'refused' || rangeUp === 'error')) {
       // The range source did not answer: no marker and no envelope are made, and the records were tested against nothing (round eighteen, 9).
       const all = o.nOpenInRange + o.nRestrictedInRange;
-      return { tone: 'warn', text: `The range source did not answer when this dossier was built, so none of the ${all} georeferenced record${all === 1 ? '' : 's'} was tested against a native range, and no map marker or climate envelope is derived without one. ${o.nOpenInRange ? `The map shows the ${o.nOpenInRange} openly licensed one${o.nOpenInRange === 1 ? '' : 's'}, garden and roadside records included.` : 'None carries a licence permitting republication, so the map shows no points.'} This is not a statement that they are in range.` };
+      return { tone: 'warn', text: `The range source did not answer when this species page was built, so none of the ${all} georeferenced record${all === 1 ? '' : 's'} was tested against a native range, and no map marker or climate across the range is derived without one. ${o.nOpenInRange ? `The map shows the ${o.nOpenInRange} openly licensed one${o.nOpenInRange === 1 ? '' : 's'}, garden and roadside records included.` : 'None carries a licence permitting republication, so the map shows no points.'} This is not a statement that they are in range.` };
     }
     if (d.distribution.verified === false || (!d.distribution.native.length && d.distribution.reported?.length)) {
       const all = o.nOpenInRange + o.nRestrictedInRange;
@@ -68,7 +69,7 @@
     if (!o.nOpenInRange && !o.nRestrictedInRange) return { tone: 'muted', text: 'No georeferenced records inside the stated native range.' };
     const all = o.nOpenInRange + o.nRestrictedInRange;
     const where = o.rangeTested === false ? 'not tested against the range (stated at country level only)' : 'inside the native range';
-    if (o.rangeTested === false) return { tone: 'muted', text: `${all} georeferenced record${all === 1 ? '' : 's'}, ${where}; no map marker or climate envelope is derived without a range to test them against. ${o.nOpenInRange ? `The map shows the ${o.nOpenInRange} openly licensed one${o.nOpenInRange === 1 ? '' : 's'}.` : 'None carries a licence permitting republication, so the map shows no points.'}` };
+    if (o.rangeTested === false) return { tone: 'muted', text: `${all} georeferenced record${all === 1 ? '' : 's'}, ${where}; no map marker or climate across the range is derived without a range to test them against. ${o.nOpenInRange ? `The map shows the ${o.nOpenInRange} openly licensed one${o.nOpenInRange === 1 ? '' : 's'}.` : 'None carries a licence permitting republication, so the map shows no points.'}` };
     const climateOk = d.climate.status === 'ok';
     // The marker rests on every in-range record; the envelope only on those placed well enough (within 10 km) to read a
     // grid cell at, and among those only on the ones in the land cells it reads (`climate.records`, since round
@@ -76,15 +77,15 @@
     const climRecs = d.climate.status === 'ok' ? d.climate.records : all;
     const placed = all - (o.nVague ?? 0);
     let t = climateOk && climRecs < all
-      ? `The map marker rests on all ${all} georeferenced records ${where}; the climate envelope on the ${climRecs} of them${climRecs < placed ? ` in the land cells it reads, of ${placed}` : ''} placed to within 10 km`
-      : `The map marker${climateOk ? ' and the climate envelope' : ''} rest${climateOk ? '' : 's'} on all ${all} georeferenced record${all === 1 ? '' : 's'} ${where}`;
+      ? `The map marker rests on all ${all} georeferenced records ${where}; the climate across the range on the ${climRecs} of them${climRecs < placed ? ` in the land cells it reads, of ${placed}` : ''} placed to within 10 km`
+      : `The map marker${climateOk ? ' and the climate across the range' : ''} rest${climateOk ? '' : 's'} on all ${all} georeferenced record${all === 1 ? '' : 's'} ${where}`;
     if (!o.nOpenInRange) t += `; none carries a licence permitting republication, so the map shows no points.`;
     else if (o.nRestrictedInRange) t += `; the map shows only the ${o.nOpenInRange} openly licensed one${o.nOpenInRange === 1 ? '' : 's'}` + (o.restrictedShiftKm != null && o.restrictedShiftKm >= 1 ? `, which alone would put the marker ${o.restrictedShiftKm} km away` : o.restrictedShiftKm != null ? ', which alone would put the marker in the same place' : '') + '.';
     else t += ', all openly licensed and shown on the map.';
     if (o.nOutsideRange) t += ` ${o.nOutsideRange} record${o.nOutsideRange === 1 ? '' : 's'} outside the range (gardens, roadsides, misidentifications) ignored.`;
     if (o.thin) t += ` Under a dozen records: treat the map${climateOk ? ' and the climate' : ''} as indicative.`;
     else if (climateOk && climRecs < 12) t += ` Under a dozen records behind the climate: treat it as indicative.`;
-    if (!climateOk) t += d.climate.status === 'pending' ? ' No climate envelope yet: the habitat climate is pending.' : d.climate.status === 'refused' ? ' No climate envelope: the climate source did not answer.' : ' No climate envelope is derived for this species.';
+    if (!climateOk) t += d.climate.status === 'pending' ? ' No climate across the range yet: the habitat climate is pending.' : d.climate.status === 'refused' ? ' No climate across the range: the climate source did not answer.' : ' No climate across the range is derived for this species.';
     return { tone: 'ok', text: t };
   });
   $effect(() => {
@@ -131,6 +132,8 @@
   const mine = $derived(collection.ready ? collection.accessions.filter((a) => speciesSlug(a.taxonName) === d.slug || (a.taxonKey != null && a.taxonKey === d.key)) : []);
   const growing = $derived(mine.filter((a) => a.status === 'growing'));
   /** Your own photographs of this species, across every plant of it you own. */
+  /** Up to six photographs other than the one at the top, for the strip under the card. */
+  const stripPhotos = $derived(d.photos.filter((p) => p !== hero && p.thumb).slice(0, 6));
   const myPhotos = $derived(mine.flatMap((a) => collection.photos(a.id).map((p) => ({ ...p, plant: a }))).sort((x, y) => y.d.localeCompare(x.d)));
   let lightbox = $state<number | null>(null);
   let heroFailed = $state(false);
@@ -192,7 +195,12 @@
     const places = collection.locations;
     if (!places.length) return null;
     const withFloor = places.map((l) => ({ l, c: collection.conditions(l.id) })).find((x) => x.c.floorC != null);
-    if (!withFloor) return { text: `Your ${places[0].name} has no floor set. Set one to see how it compares with this habitat's cold floor.`, href: `/places/${places[0].id}`, under: false };
+    // Which place to name: the one this species grows in here, else the grower's first place, and said as such (round fifty-eight: it named whichever place came first).
+    if (!withFloor) {
+      const grown = mine.find((a) => a.status === 'growing' && a.locationId);
+      const p = (grown && places.find((l) => l.id === grown.locationId)) ?? null;
+      return p ? { text: `Your ${p.name}, where you grow it, has no floor set. Set one to see how it compares with this habitat's cold floor.`, href: `/places/${p.id}`, under: false } : { text: `None of your places has a floor set. Set one to see how it compares with this habitat's cold floor.`, href: '/places', under: false };
+    }
     const diff = withFloor.c.floorC! - floorC;
     const by = Math.abs(diff) < 0.3 ? 'about the same as' : `${temp(Math.abs(diff), u, 1).replace(/^-/, '')} ${diff < 0 ? 'under' : 'over'}`;
     return { text: `Your ${withFloor.l.name}: ${withFloor.c.floorHeld ? 'held at' : 'floor'} ${temp(withFloor.c.floorC!, u, 1)}, ${by} this habitat's cold floor of ${temp(floorC, u, 1)}.`, href: `/places/${withFloor.l.id}`, under: diff < -0.3 };
@@ -223,7 +231,7 @@
 {/snippet}
 
 <svelte:head>
-  <title>{d.name.scientific} — Cultifolio</title>
+  <title>{d.name.scientific} · Cultifolio</title>
   <meta name="description" content={desc} />
   <meta property="og:title" content={d.name.scientific} />
   <meta property="og:description" content={desc} />
@@ -292,15 +300,36 @@
   </div>
   </div>
 
+  {#if stripPhotos.length}
+    <!-- A few of the photographs under the name card, on a phone too: the grid was three and a half thousand pixels down (round fifty-eight; the first-impression review). Each opens its credit and licence in the Photographs section. -->
+    <a class="thumbstrip" href="#{myPhotos.length ? 's-photos-open' : 's-photos'}" aria-label="Photographs of {d.name.scientific}, with their credits">
+      {#each stripPhotos as p (p.src + p.id)}<img src={p.thumb} alt="" title={p.attribution} loading="lazy" width="72" height="72" onerror={(e) => (e.currentTarget as HTMLImageElement).remove()} />{/each}
+      <span class="more">{d.photos.length} photograph{d.photos.length === 1 ? '' : 's'} ›</span>
+    </a>
+  {/if}
+  <!-- The section menu under the card, where a phone reader still is (round fifty-eight); it stays pinned as the page scrolls. -->
+  <nav class="tabs" aria-label="Sections">
+    <a href="#s-cultivation" class:on={active === 's-cultivation'}>Cultivation</a>
+    <a href="#s-climate" class:on={active === 's-climate'}>Climate</a>
+    <a href="#s-habitat" class:on={active === 's-habitat'}>Habitat</a>
+    {#if d.photos.length > 1}<a href="#s-photos" class:on={active === 's-photos' || active === 's-photos-open'}>Photographs</a>{/if}
+    {#if papers.length || refused('openalex')}<a href="#s-research" class:on={active === 's-research'}>Papers</a>{/if}
+    {#if data.siblings.length || data.near.length}<a href="#s-related" class:on={active === 's-related'}>Related</a>{/if}
+    <a href="#s-registers" class:on={active === 's-registers'}>Registers</a>
+  </nav>
+
   {#if glance || note}
     <h2 class="sec visually-hidden" id="s-glance">At a glance</h2>
     <section class="glance" aria-label="At a glance">
       {#if glance}
         <div class="cards">
-          <button class="card unitbtn" type="button" title="Switch to {u === 'us' ? 'Celsius and millimetres' : 'Fahrenheit and inches'}" onclick={() => units.toggle()}><div class="lab">{sheet.floor?.raised || glance.ex ? 'Cold floor' : 'Coldest mean night'}</div>{#if sheet.floor?.raised}<div class="val">{tempN(sheet.floor.floor, u)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">the archetype table's minimum for {sheet.floor.group}, above the habitat's {glance.ex ? `1st-percentile night ${temp(glance.ex.minP01, u, 1)} (NASA POWER)` : `coldest mean night ${temp(glance.cold.v, u, 1)} (CHELSA)`}</div>{:else if glance.ex}<div class="val">{tempN(glance.ex.minP01, u, 1)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">1st-percentile night at the typical site over {glance.ex.years} years; lowest there {temp(glance.ex.minAbs, u, 1)}, {frostWording(glance.ex)} (NASA POWER); coldest mean night across the range {temp(glance.cold.v, u, 1)}, {glance.cold.mo} (CHELSA)</div>{:else}<div class="val">{tempN(glance.cold.v, u, 1)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">{glance.cold.mo}, mean night (CHELSA), not a floor: a month's mean night is warmer than the nights a floor is read from; {d.climate.status === 'ok' && d.climate.extremesStatus === 'refused' ? 'extremes not checked: NASA POWER did not answer when this page was built' : d.climate.status === 'ok' && d.climate.extremesStatus === 'skipped' ? 'extremes not asked for when this page was built' : d.climate.status === 'ok' && d.climate.extremesStatus === 'sea' && d.climate.extremesSea ? `the daily extremes were read at a weather cell that is mostly sea, where the 1st-percentile night was ${temp(d.climate.extremesSea.minP01, u, 1)} and the lowest ${temp(d.climate.extremesSea.minAbs, u, 1)}, and are set aside (below)` : 'no extremes series for this cell'}</div>{/if}<span class="swap">tap for {u === 'us' ? '°C' : '°F'}</span></button>
-          <div class="card"><div class="lab">Warmest month</div><div class="val">{tempN(glance.hot.v, u)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">{glance.hot.mo}, mean day; nights {temp(glance.hot.night, u)} (CHELSA)</div></div>
-          <div class="card"><div class="lab">Rain</div><div class="val">{rainN(glance.rain, u)}<span class="u"> {rainUnit(u)}/yr</span></div><div class="gauge"><i class="c" style="width:{Math.min(100, glance.rain / 12)}%"></i></div><div class="sub">{glance.wetMonths === 0 ? `no month over 25 mm (1 in)` : `${glance.wetMonths} month${glance.wetMonths === 1 ? '' : 's'} over 25 mm (1 in)`} · peak {glance.wet.mo} {rain(glance.wet.v, u)} (CHELSA)</div></div>
-          {#if glance.dli}<div class="card"><div class="lab">Light</div><div class="val">{glance.dli.lo.toFixed(0)}–{glance.dli.hi.toFixed(0)}<span class="u"> DLI</span></div><div class="gauge"><i class="w" style="width:{Math.min(100, glance.dli.hi / 0.7)}%"></i></div><div class="sub">mol/m²/day, winter to summer, open sky (CHELSA shortwave)</div></div>{/if}
+          <!-- A card again, not a button: as a button its name was the whole card read out, two hundred characters. The switch
+               is its own small button, named in words; and the sea cell's extremes are "not used", not "set aside" (round
+               fifty-eight; the accessibility review). -->
+          <div class="card unitcard"><button class="unitbtn" type="button" aria-label={u === 'us' ? 'Show temperatures in Celsius and millimetres' : 'Show temperatures in Fahrenheit and inches'} title={u === 'us' ? 'Show in °C and mm' : 'Show in °F and inches'} onclick={() => units.toggle()}>{u === 'us' ? '°C' : '°F'}</button><div class="lab">{sheet.floor?.raised || glance.ex ? 'Cold floor' : 'Coldest mean night'}</div>{#if sheet.floor?.raised}<div class="val">{tempN(sheet.floor.floor, u)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">minimum for {sheet.floor.group}, archetype table</div>{:else if glance.ex}<div class="val">{tempN(glance.ex.minP01, u, 1)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">1 night in 100 is colder · NASA POWER</div>{:else}<div class="val">{tempN(glance.cold.v, u, 1)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">{glance.cold.mo} mean night, not a floor · {d.climate.status === 'ok' && d.climate.extremesStatus === 'refused' ? 'extremes not checked' : d.climate.status === 'ok' && d.climate.extremesStatus === 'skipped' ? 'extremes not asked for' : d.climate.status === 'ok' && d.climate.extremesStatus === 'sea' ? 'extremes not used (sea cell)' : 'no extremes series'} · CHELSA</div>{/if}</div>
+          <div class="card"><div class="lab">Warmest month</div><div class="val">{tempN(glance.hot.v, u)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">{glance.hot.mo} mean day · CHELSA</div></div>
+          <div class="card"><div class="lab">Rain</div><div class="val">{rainN(glance.rain, u)}<span class="u"> {rainUnit(u)}/yr</span></div><div class="gauge"><i class="c" style="width:{Math.min(100, glance.rain / 12)}%"></i></div><div class="sub">{glance.wetMonths === 0 ? 'no month over 25 mm (1 in)' : `${glance.wetMonths} month${glance.wetMonths === 1 ? '' : 's'} over 25 mm (1 in)`} · CHELSA</div></div>
+          {#if glance.dli}<div class="card"><div class="lab">Light</div><div class="val">{glance.dli.lo.toFixed(0)}–{glance.dli.hi.toFixed(0)}<span class="u"> DLI</span></div><div class="gauge"><i class="w" style="width:{Math.min(100, glance.dli.hi / 0.7)}%"></i></div><div class="sub"><a href="/about/how#glossary">DLI</a>, open sky · CHELSA</div></div>{/if}
         </div>
         {#if d.climate.status === 'ok' && d.climate.records < 12}<p class="small muted thinline">Under a dozen records behind these figures ({d.climate.records}): treat them as indicative. <a href="#s-habitat">The records.</a></p>{/if}
       {/if}
@@ -309,7 +338,8 @@
         <!-- The paragraph itself, with one grey line under it saying what it is; the heading row and the fold are gone (round fifty, 3). -->
         <details class="cult acc notecard plain" id="gen-note" open>
           <summary><span class="t">In short</span><span class="one">by rule, from the cards · not written by a person</span><span class="pm" aria-hidden="true"><span class="pmw">open</span></span></summary>
-          <div class="body">{note.text}</div><div class="foot">Each sentence is a card's one-line form ({note.from.map((c) => (c === 'Temperature' || c === 'Humidity' ? 'Warmth and air' : c)).filter((c, i, a) => a.indexOf(c) === i).join(', ')}). {#if note.hab}Months for {readerLat != null && readerLat < 0 ? 'the southern' : 'the northern'} hemisphere{readerLat == null ? ' (set your site in ' : site.current || !site.loaded ? ', from your site' : ', from your places'}{#if readerLat == null}<a href="/settings#site">Settings</a> to change this){/if}, the habitat's own alongside.{/if} <a href="#s-cultivation">The cards</a> · <a href="#s-climate">the figures</a>.</div>
+          <!-- Line by line, the fact first in plain words and the rule and source in grey after it (round fifty-eight; the first-impression review). -->
+          <ul class="body notelist">{#each note.items as it, i (i)}<li>{it.lead}{#if it.rule} <span class="rule">{it.rule}</span>{/if}</li>{/each}</ul><div class="foot">Each line is a card's one-line form ({note.from.map((c) => (c === 'Temperature' || c === 'Humidity' ? 'Warmth and air' : c === 'Its year' ? 'Seasons' : c)).filter((c, i, a) => a.indexOf(c) === i).join(', ')}). <a href="/about/how#glossary">DLI, cold floor and the other terms</a>. {#if note.hab}Months for {readerLat != null && readerLat < 0 ? 'the southern' : 'the northern'} hemisphere{readerLat == null ? ' (set your site in ' : site.current || !site.loaded ? ', from your site' : ', from your places'}{#if readerLat == null}<a href="/settings#site">Settings</a> to change this){/if}, the habitat's own alongside.{/if} <a href="#s-cultivation">The cards</a> · <a href="#s-climate">the figures</a>.</div>
         </details>
       {/if}
       {#if placeLine}
@@ -338,15 +368,6 @@
     <div class="notice"><b>Not checked.</b> Wikipedia did not answer for the genus when this was built. Not a statement that it has no article.</div>
   {/if}
 
-  <nav class="tabs" aria-label="Sections">
-    <a href="#s-cultivation" class:on={active === 's-cultivation'}>Cultivation</a>
-    <a href="#s-climate" class:on={active === 's-climate'}>Climate</a>
-    <a href="#s-habitat" class:on={active === 's-habitat'}>Habitat</a>
-    {#if d.photos.length > 1}<a href="#s-photos" class:on={active === 's-photos' || active === 's-photos-open'}>Photographs</a>{/if}
-    {#if papers.length || refused('openalex')}<a href="#s-research" class:on={active === 's-research'}>Papers</a>{/if}
-    {#if data.siblings.length || data.near.length}<a href="#s-related" class:on={active === 's-related'}>Related</a>{/if}
-    <a href="#s-registers" class:on={active === 's-registers'}>Registers</a>
-  </nav>
 
   {#if d.upstream['gbif.accepted']?.detail}
     <p class="small muted">This page was reached by a name the GBIF Backbone holds as a synonym: {d.upstream['gbif.accepted'].detail}.</p>
@@ -388,7 +409,7 @@
           <details class="why">
             <summary>How this is read</summary>
             <div class="whybody">
-              <p class="hintline">{c.rows.some((r) => r.hab) ? (c.title === 'Its year' ? 'This species’ habitat figures, and what two fixed rules read from them.' : c.title === 'Light' ? 'This species’ habitat light, with its source.' : c.title === 'Warmth and air' ? 'This species’ habitat warmth and air, with their source.' : 'This species’ habitat figures, with their source.') : 'The archetype table’s figure; no habitat figure for this species.'}</p>
+              <p class="hintline">{c.rows.some((r) => r.hab) ? (c.title === 'Seasons' ? 'This species’ habitat figures, and what two fixed rules read from them.' : c.title === 'Light' ? 'This species’ habitat light, with its source.' : c.title === 'Warmth and air' ? 'This species’ habitat warmth and air, with their source.' : 'This species’ habitat figures, with their source.') : 'The archetype table’s figure; no habitat figure for this species.'}</p>
               {#each c.rows as r}<p class="whyline">{#if c.rows.length > 1}<b>{r.k}.</b> {/if}{r.why}</p>{/each}
             </div>
           </details>
@@ -401,15 +422,17 @@
     {#if sheetCards.length}<p class="small muted">The figures the cards read from are in <a href="#s-climate">Climate</a> below, and where they came from in <a href="#s-habitat">Natural habitat</a>.</p>{/if}
   </div>
 
-  <!-- Below the cultivation sheet, the long sections are laid out as the reader reaches them (`content-visibility`): the
-       opening text no longer waits for the whole document's style and layout (round forty, R2-6). Anchors and find-in-page still work. -->
+  <!-- The long sections below the sheet: laid out with the page, since `content-visibility` with a 480 px placeholder made
+       the page report twice its height and the scrollbar jump as it shrank (round fifty-eight; it came in round forty, R2-6). -->
   <div class="deep">
   <h2 class="sec" id="s-climate">Climate across the habitat</h2>
   {#if d.climate.status === 'ok'}
-    <Climograph climate={{ months: d.climate.months, p10: d.climate.p10, p90: d.climate.p90, cells: d.climate.cells, extremes: d.climate.extremes ?? null }} />
+    <Climograph name={d.name.scientific} climate={{ months: d.climate.months, p10: d.climate.p10, p90: d.climate.p90, cells: d.climate.cells, extremes: d.climate.extremes ?? null }} /><!-- named: round fifty-eight; the accessibility review -->
     <details class="figures">
       <summary>Figures by month</summary>
-    <div class="scroll-x">
+    <!-- Reachable and scrollable by keyboard, and named (round fifty-eight; the accessibility review). -->
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+    <div class="scroll-x" tabindex="0" role="region" aria-label="Habitat climate by month">
       <table class="wx">
         <thead><tr><th></th>{#each months as m}<th>{m}</th>{/each}</tr></thead>
         <tbody>
@@ -433,12 +456,13 @@
     {#if d.climate.extremesSea && d.climate.landFraction != null}
       <p class="notice small" id="seacell">The daily extremes were read at a NASA POWER cell that is {Math.round(d.climate.landFraction * 100)}% land: neither it nor the next candidates whose coldest night is within 2 °C of the median across cells sit in a POWER cell that is mostly land, so those nights are the sea's beside the plants, and they are not shown as the cold floor; nor is the coldest mean night above a floor, since a month's mean of its lows is warmer than its coldest nights, and a sea-moderated cell is warmer at night than the land beside it. No cold floor is read for this species. What that cell gave over {d.climate.extremesSea.years} years: absolute minimum {temp(d.climate.extremesSea.minAbs, u, 1)}, 1st-percentile night {temp(d.climate.extremesSea.minP01, u, 1)}, 99th-percentile day {temp(d.climate.extremesSea.maxP99, u, 1)}.</p>
     {/if}
+    <!-- "a typical spot in the range" and "across the range", the glossary's words (round fifty-eight; the accessibility review). -->
     <details class="why">
       <summary>Where these figures come from</summary>
       <div class="whybody">
-      Each figure is the median across the {d.climate.cells} grid cells {#if d.climate.seaCells}on land that hold in-range records ({d.climate.records} records in those cells; {d.climate.seaCells} more {d.climate.seaCells === 1 ? 'cell holds' : 'cells hold'} records but no land by the elevation layer, so those records sit at sea and the {d.climate.seaCells === 1 ? 'cell is' : 'cells are'} left out){:else}holding the {d.climate.records} in-range records{/if}, with the 10th–90th percentile span across those cells after the slash where it differs. A dash is a month one or more of those cells has no figure for in the grid (a variable CHELSA does not carry there), so no median is taken rather than one over fewer cells. Extremes and elevation were read at the typical cell {d.climate.cell} ({d.climate.at.lat}, {d.climate.at.lon}).
+      Each figure is the median across the {d.climate.cells} grid cells {#if d.climate.seaCells}on land that hold in-range records ({d.climate.records} records in those cells; {d.climate.seaCells} more {d.climate.seaCells === 1 ? 'cell holds' : 'cells hold'} records but no land by the elevation layer, so those records sit at sea and the {d.climate.seaCells === 1 ? 'cell is' : 'cells are'} left out){:else}holding the {d.climate.records} in-range records{/if}, with the 10th–90th percentile span across those cells after the slash where it differs. A dash is a month one or more of those cells has no figure for in the grid (a variable CHELSA does not carry there), so no median is taken rather than one over fewer cells. Extremes and elevation were read at a typical spot in the range, cell {d.climate.cell} ({d.climate.at.lat}, {d.climate.at.lon}).
       {#if d.climate.extremes}Over {d.climate.extremes.years} years there: absolute minimum {temp(d.climate.extremes.minAbs, u, 1)}, 1st-percentile night {temp(d.climate.extremes.minP01, u, 1)}, 99th-percentile day {temp(d.climate.extremes.maxP99, u, 1)}.{/if}{#if u === 'us'}{' '}Shown in Fahrenheit and inches; the sources measure in °C and mm.{/if}
-      Normals: {d.climate.src.normals}. Envelope: {d.climate.src.envelope}.{#if d.climate.src.extremes}{' '}Extremes: {d.climate.src.extremes}.{/if}{#if d.climate.src.elevation}{' '}Elevation: {d.climate.src.elevation}.{/if}
+      Normals: {d.climate.src.normals}. Across the range: {d.climate.src.envelope}.{#if d.climate.src.extremes}{' '}Extremes: {d.climate.src.extremes}.{/if}{#if d.climate.src.elevation}{' '}Elevation: {d.climate.src.elevation}.{/if}
       </div>
     </details>
   {:else if d.climate.status === 'pending'}
@@ -472,10 +496,11 @@
 
   {#if myPhotos.length}
     <h2 class="sec" id="s-photos">Your photographs</h2>
+    <!-- Each named by the plant, the day and the caption; the image inside is then decorative (round fifty-eight; the accessibility review). -->
     <div class="myph">
       {#each myPhotos.slice(0, 12) as ph, i (ph.id)}
-        <button class="ph" type="button" onclick={() => (lightbox = i)} title="{accNo(ph.plant)} · {ph.d}">
-          <PhotoImg id={ph.id} alt="{d.name.scientific}, {accNo(ph.plant)}" loading="lazy" />
+        <button class="ph" type="button" onclick={() => (lightbox = i)} title="{accNo(ph.plant)} · {ph.d}" aria-label={photoLabel(ph)}>
+          <PhotoImg id={ph.id} alt="" loading="lazy" />
           <span class="pd">{accNo(ph.plant)}</span>
         </button>
       {/each}
@@ -549,48 +574,49 @@
 <style>
   /* A placeholder height only: the shorthand gave the unrendered sections a 480px width too, which on a phone narrower
      than that was a horizontal scroll until they rendered (round forty-nine, 2; round twenty-seven, 4). */
-  .deep > :global(*) { content-visibility: auto; contain-intrinsic-width: none; contain-intrinsic-height: auto 480px; }
   .thinline { margin: 6px 0 0; }
   /* One centred run of text: the sentence and its link were two flex columns, the link's words stacked, so the placeholder's
      text is one span and the flex box centres that (round fifty, 3). */
   .myph { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-top: 10px; }
-  .myph .ph { position: relative; display: block; padding: 0; border: 0; background: var(--sunk); border-radius: 9px; overflow: hidden; aspect-ratio: 1; cursor: zoom-in; box-shadow: var(--sh); }
+  .myph .ph { position: relative; display: block; padding: 0; border: 0; background: var(--sunk); border-radius: var(--r); overflow: hidden; aspect-ratio: 1; cursor: zoom-in; box-shadow: var(--sh); }
   .myph .ph :global(img) { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .myph .pd { position: absolute; left: 7px; bottom: 6px; font-family: var(--mono); font-size: 10px; color: #fff; background: rgba(8, 20, 16, 0.6); padding: 2px 6px; border-radius: 5px; }
+  .myph .pd { position: absolute; left: 7px; bottom: 6px; font-family: var(--mono); font-size: var(--fs-xs); color: #fff; background: rgba(8, 20, 16, 0.6); padding: 2px 6px; border-radius: var(--r-sm); }
   .species { max-width: 980px; }
   .hero { margin-top: 14px; }
   .glance { margin-top: 12px; }
   .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-  .idcard .meta { margin-top: 3px; font-size: 12.5px; color: var(--ink3); }
+  .idcard .meta { margin-top: 3px; font-size: var(--fs-md); color: var(--ink3); }
   .idcard .acts { margin-top: 12px; }
   .idcard .acts .mine { margin: 0; display: inline-flex; gap: 6px; align-items: center; }
   .idcard .acts2 { margin-top: 0; gap: 0 14px; }
   .idcard .mine { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; } /* chips with a gap, no separators to strand (round fifty-two, 6) */
-  .idcard .acts2 :global(.btn) { background: none; border: 0; box-shadow: none; padding: 6px 0; min-height: 40px; color: var(--accent); font-weight: 600; font-size: 13.5px; }
+  .idcard .acts2 :global(.btn) { background: none; border: 0; box-shadow: none; padding: 6px 0; min-height: 40px; color: var(--accent); font-weight: 600; font-size: var(--fs-md); }
   .idcard .acts2 :global(.btn:hover) { text-decoration: underline; }
-  .placeline { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 10px 0 0; padding: 11px 14px; background: color-mix(in srgb, var(--accent) 9%, var(--card)); border-left: 3px solid var(--accent); border-radius: var(--r); color: var(--ink); font-size: 13.5px; text-decoration: none; }
+  .placeline { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 10px 0 0; padding: 11px 14px; background: color-mix(in srgb, var(--accent) 9%, var(--card)); border-left: 3px solid var(--accent); border-radius: var(--r); color: var(--ink); font-size: var(--fs-md); text-decoration: none; }
   .placeline.warn { border-left-color: var(--bad); background: color-mix(in srgb, var(--bad) 8%, var(--card)); }
   .placeline .chev { color: var(--accent); font-weight: 700; }
-  .notecard.plain > summary .one { font-size: 11.5px; }
-  .notecard.plain .foot { font-size: 12px; }
+  .notecard.plain > summary .one { font-size: var(--fs-sm); }
+  .notecard.plain .foot { font-size: var(--fs-sm); }
   /* The source line wraps: clamped to two lines it ended in "…" before the source's name, on the one screen where a stranger decides (round fifty-two, 6). */
-  @media (max-width: 640px) { .glance .card .sub { font-size: 11.5px; line-height: 1.35; } }
+  @media (max-width: 640px) { .glance .card .sub { font-size: var(--fs-sm); line-height: 1.35; } }
   .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0; margin: 16px 0 0; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); overflow: hidden; }
   .fact { padding: 12px 16px; border-right: 1px solid var(--rule); min-width: 0; }
   .fact:last-child { border-right: 0; }
-  .fact .lab { font-size: 10.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink3); font-weight: 700; }
-  .fact .v { font-size: 14.5px; margin-top: 4px; overflow-wrap: anywhere; }
+  .fact .lab { font-size: var(--fs-xs); letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink3); font-weight: 700; }
+  .fact .v { font-size: var(--fs-base); margin-top: 4px; overflow-wrap: anywhere; }
   @media (max-width: 640px) { .fact { border-right: 0; border-bottom: 1px solid var(--rule); } .fact:last-child { border-bottom: 0; } }
-  .unitbtn { text-align: left; border: 0; font: inherit; color: inherit; cursor: pointer; position: relative; }
-  .unitbtn:hover { box-shadow: var(--sh2); }
-  .unitbtn .swap { position: absolute; top: 12px; right: 14px; font-family: var(--mono); font-size: 10px; color: var(--accent); }
-  .relhead { margin: 12px 0 6px; font-size: 14px; }
+  /* The cold-floor card and its unit switch, a small button in the corner where the "tap for" hint was (round fifty-eight; the accessibility review). */
+  .unitcard { position: relative; }
+  .unitbtn { position: absolute; top: 6px; right: 8px; min-width: var(--tap); min-height: var(--tap); padding: 0 8px; border: 1px solid var(--field-edge); border-radius: 999px; background: var(--card); color: var(--accent); font-family: var(--mono); font-size: var(--fs-sm); font-weight: 600; cursor: pointer; }
+  .unitbtn:hover { border-color: var(--accent); }
+  .unitcard .lab { padding-right: calc(var(--tap) + 6px); } /* the label clears the switch (round fifty-eight; the accessibility review) */
+  .relhead { margin: 12px 0 6px; font-size: var(--fs-md); }
   .relstrip { display: grid; grid-auto-flow: column; grid-auto-columns: 132px; gap: 10px; overflow-x: auto; padding: 2px 2px 10px; scroll-snap-type: x proximity; }
   .reltile { display: block; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); overflow: hidden; color: inherit; scroll-snap-align: start; }
   .reltile:hover { text-decoration: none; color: inherit; box-shadow: var(--sh2); }
   .reltile img, .reltile .noim { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; background: var(--sunk); }
-  .reltile .rn { display: block; padding: 7px 9px 0; font-family: var(--serif); font-style: italic; font-size: 13.5px; line-height: 1.25; font-weight: 600; }
-  .reltile .rf { display: block; padding: 3px 9px 9px; font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink3); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .reltile .rn { display: block; padding: 7px 9px 0; font-family: var(--serif); font-style: italic; font-size: var(--fs-md); line-height: 1.25; font-weight: 600; }
+  .reltile .rf { display: block; padding: 3px 9px 9px; font-size: var(--fs-xs); letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink3); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .reltile.more { display: flex; align-items: center; justify-content: center; font-weight: 600; color: var(--accent); }
   .glance .cards { margin: 0 0 12px; }
   .glance .foot a { color: var(--accent); }
@@ -606,27 +632,27 @@
   .factgrid .wide { grid-column: 1 / -1; }
   .sheet { white-space: normal; }
   .mine { margin-top: 8px; white-space: normal; overflow-wrap: anywhere; line-height: 1.9; } /* six numbers on a phone wrap rather than widen the page (round seventeen, 11) */
-  .sumbody .more { font-family: var(--ui); font-size: 13px; white-space: nowrap; }
+  .sumbody .more { font-family: var(--ui); font-size: var(--fs-md); white-space: nowrap; }
   .notesline { margin: 2px 0 12px; }
   .figures { margin: 10px 0 0; }
-  .figures summary { cursor: pointer; font-size: 12.5px; color: var(--ink2); font-weight: 600; padding: 6px 0; }
+  .figures summary { cursor: pointer; font-size: var(--fs-md); color: var(--ink2); font-weight: 600; padding: 6px 0; }
   .figures summary:hover { color: var(--accent); }
   .figures table.wx { margin-top: 6px; }
   .mine .accno { margin-right: 2px; }
   .fields { display: grid; gap: 8px; padding: 13px 17px 15px; }
-  .fields textarea { width: 100%; font: inherit; font-size: 15px; font-family: var(--serif); line-height: 1.55; padding: 9px 12px; border: 1px solid var(--rule); border-radius: 9px; background: var(--card); color: var(--ink); min-height: 96px; }
+  .fields textarea { width: 100%; font: inherit; font-size: 0.9375rem; font-family: var(--serif); line-height: 1.55; padding: 9px 12px; border: 1px solid var(--rule); border-radius: var(--r); background: var(--card); color: var(--ink); min-height: 96px; }
   .end { display: flex; justify-content: flex-end; gap: 8px; }
   .linkish { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font: inherit; }
   .acc { margin: 8px 0 0; }
   .acc > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 150px minmax(0, 1fr) 24px; gap: 14px; align-items: center; padding: 13px 17px; font-family: var(--ui); }
   .acc > summary::-webkit-details-marker { display: none; }
-  .acc > summary .t { font-weight: 700; font-size: 15px; color: var(--ink); }
-  .acc > summary .one { font-size: 13.5px; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .acc > summary .t { font-weight: 700; font-size: var(--fs-base); color: var(--ink); }
+  .acc > summary .one { font-size: var(--fs-md); color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .acc[open] > summary .one { white-space: normal; }
   .acc > summary .pm { display: inline-flex; align-items: center; gap: 4px; justify-content: flex-end; }
-  .acc > summary .pm::after { content: '+'; font-family: var(--mono); font-size: 18px; color: var(--ink3); }
+  .acc > summary .pm::after { content: '+'; font-family: var(--mono); font-size: var(--fs-xl); color: var(--ink3); }
   .acc[open] > summary .pm::after { content: '–'; }
-  .acc > summary .pmw { display: none; font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink3); font-weight: 700; }
+  .acc > summary .pmw { display: none; font-size: var(--fs-xs); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink3); font-weight: 700; }
   .acc[open] > summary .pmw { display: none; }
   .derived { margin: 10px 0 0; }
   .acc > summary:hover .t { color: var(--accent); }
@@ -634,13 +660,20 @@
   .acc .body { border-top: 1px solid var(--rule); }
   .hintline { margin: 0 0 10px; font-family: var(--ui); }
   @media (max-width: 640px) { .acc > summary { grid-template-columns: minmax(0, 1fr) 64px; } .acc > summary .one { grid-column: 1; } .acc > summary .pm { grid-column: 2; grid-row: 1; } .acc:not([open]) > summary .pmw { display: inline; } }
-  .sheet .rowk { font-size: 11px; letter-spacing: 0.11em; text-transform: uppercase; color: var(--accent); font-weight: 700; margin: 14px 0 4px; font-family: var(--ui); }
+  .sheet .rowk { font-size: var(--fs-xs); letter-spacing: 0.11em; text-transform: uppercase; color: var(--accent); font-weight: 700; margin: 14px 0 4px; font-family: var(--ui); }
   .sheet .rowk:first-child { margin-top: 0; }
   .sheet p { margin: 0 0 6px; }
   .sheet details.why { margin-top: 10px; }
   .sheet .whyline, .sheet .hintline { margin: 0 0 6px; font-family: var(--ui); }
   .sheet .whyline b { color: var(--ink2); }
   .notecard .body { white-space: normal; }
+  .thumbstrip { display: flex; align-items: center; gap: 6px; margin: 10px 0 0; overflow-x: auto; text-decoration: none; color: var(--ink2); scrollbar-width: none; }
+  .thumbstrip img { width: 72px; height: 72px; object-fit: cover; border-radius: var(--r); flex: none; background: var(--sunk); }
+  .thumbstrip .more { flex: none; font-size: var(--fs-md); padding: 0 6px; }
+  .notelist { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .notelist li { line-height: 1.5; }
+  .notelist .rule { color: var(--ink3); font-size: var(--fs-sm); white-space: nowrap; }
+  .notelist .rule::before { content: '· '; }
   .archwhy { margin: 0 0 10px; }
   .names { margin: 0 0 8px; }
 

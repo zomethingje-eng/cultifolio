@@ -1,8 +1,23 @@
 <script lang="ts">
   import { climograph, type ClimoInput } from '$climate/climograph';
   import { units } from '$lib/ui/units.svelte';
-  import { tempUnit, rainUnit, dryLabel } from '$core/units';
-  let { climate, id = 'climograph' }: { climate: ClimoInput; id?: string } = $props();
+  import { tempUnit, rainUnit, dryLabel, temp, rain } from '$core/units';
+  /** `name`: the species, for the figure's title (round fifty-eight; the accessibility review). */
+  let { climate, id = 'climograph', name }: { climate: ClimoInput; id?: string; name?: string } = $props();
+  const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  /**
+   * The figure in one sentence, for the description a screen reader gives with the title: the warmest month's mean day,
+   * the coldest month's mean night and the year's rain, from the figures drawn; the longer account follows it (round
+   * fifty-eight; the accessibility review).
+   */
+  const summary = $derived.by(() => {
+    const m = climate.months;
+    if (!m.length) return '';
+    const hot = m.reduce((b, x, i) => (x.tmax > m[b].tmax ? i : b), 0);
+    const cold = m.reduce((b, x, i) => (x.tmin < m[b].tmin ? i : b), 0);
+    const year = m.reduce((a, x) => a + x.precipMm, 0);
+    return `Warmest month ${MONTHS[hot]}, mean day ${temp(m[hot].tmax, units.current)}; coldest month ${MONTHS[cold]}, mean night ${temp(m[cold].tmin, units.current)}; ${rain(year, units.current)} of rain a year.`;
+  });
   // Drawn at the width it is shown at, so labels keep their size on a phone instead of shrinking with the viewBox.
   let shown = $state(0);
   const g = $derived(climograph(climate, shown >= 340 ? Math.min(shown - 20, 960) : 720, units.current));
@@ -11,9 +26,11 @@
 </script>
 
 <figure class="climo" bind:clientWidth={shown}>
-  <svg viewBox="0 0 {g.width} {g.height}" role="img" aria-labelledby="{id}-t" aria-describedby="{id}-d" preserveAspectRatio="xMidYMid meet">
-    <title id="{id}-t">Habitat climate through the year</title>
-    <desc id="{id}-d">{g.alt}</desc>
+  <!-- The title names the species, and the description is one sentence of the figures with the longer account after it
+       (round fifty-eight; the accessibility review). -->
+  <svg viewBox="0 0 {g.width} {g.height}" role="img" aria-labelledby="{id}-t" aria-describedby="{id}-d {id}-more" preserveAspectRatio="xMidYMid meet">
+    <title id="{id}-t">{name ? `Habitat climate of ${name} through the year` : 'Habitat climate through the year'}</title>
+    <desc id="{id}-d">{summary}</desc>
 
     <!-- temperature panel -->
     <rect class="quarter" x={g.temp.coldQuarter.x} y={g.temp.top} width={g.temp.coldQuarter.w} height={g.temp.height} />
@@ -64,13 +81,14 @@
       <text class="month" x={g.monthX[i]} y={g.height - 6}>{m}</text>
     {/each}
   </svg>
+  <p hidden id="{id}-more">{g.alt}</p>
   <figcaption>
     <span class="key"><i class="sw day"></i>day</span>
     <span class="key"><i class="sw night"></i>night</span>
     <span class="key"><i class="sw bar"></i>rain</span>
     {#if g.hasBand}<span class="key"><i class="sw band"></i>10th–90th percentile across {climate.cells} habitat cells</span>{:else if climate.cells > 1}<span class="key muted">{climate.cells} habitat cells, no spread beyond rounding</span>{:else}<span class="key muted">one habitat cell, so no spread is drawn</span>{/if}
     <span class="key"><i class="sw quarter"></i>cold quarter: the three months around the coldest night</span>
-    {#if climate.extremes}<span class="key"><i class="sw ext"></i>extremes over {climate.extremes.years} years at the typical cell, marked at the edge: undated</span>{/if}
+    {#if climate.extremes}<span class="key"><i class="sw ext"></i>extremes over {climate.extremes.years} years at a typical spot in the range, marked at the edge: undated</span>{/if}
     {#if g.strip}{#if g.strip.dli}<span class="key"><i class="sw dli"></i>DLI, mol/m²/day</span>{/if}{#if g.strip.rh}<span class="key"><i class="sw rh"></i>RH %</span>{/if}<span class="key muted">each on its own scale</span>{/if}
   </figcaption>
 </figure>
@@ -80,11 +98,11 @@
   svg { width: 100%; height: auto; display: block; font-family: var(--ui); }
   .grid { stroke: var(--rule); stroke-width: 1; }
   .axis { stroke: var(--rule2); stroke-width: 1; }
-  .tick { fill: var(--ink3); font-size: 10px; text-anchor: end; font-family: var(--mono); }
-  .month { fill: var(--ink2); font-size: 10.5px; text-anchor: middle; letter-spacing: 0.04em; }
-  .panel { fill: var(--ink3); text-anchor: start; font-size: 9.5px; letter-spacing: 0.09em; text-transform: uppercase; font-weight: 700; }
+  .tick { fill: var(--ink3); font-size: 0.625rem; text-anchor: end; font-family: var(--mono); }
+  .month { fill: var(--ink2); font-size: var(--fs-xs); text-anchor: middle; letter-spacing: 0.04em; }
+  .panel { fill: var(--ink3); text-anchor: start; font-size: var(--fs-xs); letter-spacing: 0.09em; text-transform: uppercase; font-weight: 700; }
   .zero { stroke: var(--bad); stroke-width: 1; stroke-dasharray: 4 3; opacity: 0.75; }
-  .zerolab { fill: var(--bad); font-size: 9.5px; text-anchor: end; letter-spacing: 0.06em; text-transform: uppercase; }
+  .zerolab { fill: var(--bad); font-size: var(--fs-xs); text-anchor: end; letter-spacing: 0.06em; text-transform: uppercase; }
   .line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
   .line.day { stroke: var(--warm); }
   .line.night { stroke: var(--cool); }
@@ -94,17 +112,17 @@
   .bar { fill: var(--cool); opacity: 0.55; }
   .whisker { stroke: var(--cool); stroke-width: 1.2; }
   .ext { stroke: var(--ink); stroke-width: 1.4; }
-  .extlab { fill: var(--ink2); font-size: 10px; }
+  .extlab { fill: var(--ink2); font-size: 0.625rem; }
   .quarter { fill: var(--ink); opacity: 0.045; }
-  .quarterlab { fill: var(--ink3); font-size: 9.5px; letter-spacing: 0.06em; text-transform: uppercase; }
-  .drylab { fill: var(--ink3); font-size: 11px; text-anchor: middle; font-style: italic; }
+  .quarterlab { fill: var(--ink3); font-size: var(--fs-xs); letter-spacing: 0.06em; text-transform: uppercase; }
+  .drylab { fill: var(--ink3); font-size: var(--fs-xs); text-anchor: middle; font-style: italic; }
   .spark { fill: none; stroke-width: 1.6; stroke-linejoin: round; }
   .spark.dli { stroke: var(--accent); }
   .spark.rh { stroke: var(--ink3); stroke-dasharray: 3 3; }
-  .sparklab { font-size: 9.5px; text-anchor: end; font-family: var(--mono); }
+  .sparklab { font-size: var(--fs-xs); text-anchor: end; font-family: var(--mono); }
   .sparklab.dli { fill: var(--accent); }
   .sparklab.rh { fill: var(--ink3); }
-  figcaption { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 8px 6px 2px; font-size: 12px; color: var(--ink2); }
+  figcaption { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 8px 6px 2px; font-size: var(--fs-sm); color: var(--ink2); }
   .key { display: inline-flex; align-items: center; gap: 6px; }
   .key.muted { color: var(--ink3); }
   .sw { display: inline-block; width: 14px; height: 3px; border-radius: 2px; }
@@ -116,5 +134,5 @@
   .sw.quarter { background: var(--ink); opacity: 0.1; height: 9px; }
   .sw.dli { background: var(--accent); height: 2px; }
   .sw.rh { background: repeating-linear-gradient(90deg, var(--ink3) 0 3px, transparent 3px 6px); height: 2px; }
-  @media (max-width: 640px) { .climo { padding: 8px 4px 6px; } figcaption { font-size: 11.5px; gap: 4px 12px; } }
+  @media (max-width: 640px) { .climo { padding: 8px 4px 6px; } figcaption { font-size: var(--fs-sm); gap: 4px 12px; } }
 </style>

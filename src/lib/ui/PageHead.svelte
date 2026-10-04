@@ -6,10 +6,11 @@
    * are one tap away from a plant or a bench too, not only from a list page. A detail page has its own head (the id card).
    */
   /** `compact`: on a phone the head is one line, the title with the count beside it; the kicker and the sentence are for wider screens, where there is room (round fifty, 1). A list page's first screen is for its list. */
-  let { title, sub, subline, count, places = true, kick = 'Cultifolio', compact = false, children }: { title: string; sub?: string; subline?: import('svelte').Snippet; count?: string; places?: boolean; kick?: string; compact?: boolean; children?: import('svelte').Snippet } = $props();
+  /** `keepSub`: the sentence stays on a phone too, for a page whose sentence is what a stranger needs (the front page to a visitor; round fifty-eight). */
+  let { title, sub, subline, count, places = true, kick = 'Cultifolio', compact = false, keepSub = false, children }: { title: string; sub?: string; subline?: import('svelte').Snippet; count?: string; places?: boolean; kick?: string; compact?: boolean; keepSub?: boolean; children?: import('svelte').Snippet } = $props();
 </script>
 
-<header class="phead" class:compact>
+<header class="phead" class:compact class:keepsub={keepSub}>
   <div class="kick">{kick}</div>
   <div class="titlerow">
     <h1 class="q">{title}</h1>
@@ -31,16 +32,17 @@
   @media (max-width: 700px) {
     .phead { margin-top: 16px; } .titlerow { margin-top: 2px; }
     .phead.compact { margin: 12px 0 10px; }
-    .phead.compact .kick, .phead.compact :global(.secsub), .phead.compact .fullcount { display: none; }
+    .phead.compact .kick, .phead.compact:not(.keepsub) :global(.secsub), .phead.compact .fullcount { display: none; }
+    .phead.compact.keepsub :global(.secsub) { font-size: var(--fs-md); line-height: 1.5; }
     .phead.compact .titlerow { align-items: baseline; justify-content: flex-start; flex-wrap: nowrap; }
-    .phead.compact .titlerow h1 { font-size: 26px; }
-    .phead.compact .inlinecount { display: inline; font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    .phead.compact .titlerow h1 { font-size: 1.625rem; }
+    .phead.compact .inlinecount { display: inline; font-size: var(--fs-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
     .phead.compact .acts { margin-left: auto; flex: none; }
     .phead.compact .titlerow h1 { white-space: nowrap; }
     /* With an action beside the title there is no room for the count on the line: it goes under, small (round fifty, 4). */
     .phead.compact .titlerow:has(.acts > :global(:not(.wideonly))) .inlinecount { display: none; }
     .phead.compact:has(.titlerow .acts > :global(:not(.wideonly))) .fullcount { display: block; margin-top: 2px; }
     .phead.compact .acts > :global(.wideonly) { display: none; } /* an action the phone has elsewhere, such as the + in the top bar */
-    .phead.compact .acts :global(.btn) { padding: 7px 13px; font-size: 13px; min-height: 36px; }
+    .phead.compact .acts :global(.btn) { padding: 7px 13px; font-size: var(--fs-md); min-height: var(--tap); } /* the tap token, not 36 px (round fifty-eight) */
   }
 </style>

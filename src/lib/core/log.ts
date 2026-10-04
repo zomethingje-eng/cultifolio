@@ -76,7 +76,8 @@ export function changeError(c: unknown, shapeOnly = false): string | null {
  * (round twenty-eight, 0). A field this build does not know passes, so a newer build's records still sync to an older one.
  */
 type ValueType = 'string' | 'number' | 'boolean' | 'object' | 'array';
-const valueIs = (v: unknown, t: ValueType) => (t === 'object' ? typeof v === 'object' && !Array.isArray(v) : t === 'array' ? Array.isArray(v) : typeof v === t);
+// A number is a finite one: JSON carries no Infinity or NaN, so a form's "1e999" stored here reached the other devices as null (round fifty-eight).
+const valueIs = (v: unknown, t: ValueType) => (t === 'object' ? typeof v === 'object' && !Array.isArray(v) : t === 'array' ? Array.isArray(v) : t === 'number' ? typeof v === 'number' && Number.isFinite(v) : typeof v === t);
 const strings = (...f: string[]): Record<string, ValueType> => Object.fromEntries(f.map((x) => [x, 'string']));
 /**
  * The words a few fields hold in this build (the type unions in db/types.ts, kept in step by a test). They guard the
@@ -92,9 +93,9 @@ export const FIELD_ENUMS: Partial<Record<Kind, Record<string, readonly string[]>
   location: { type: ['room', 'shelf', 'bench', 'tray', 'windowsill', 'greenhouse', 'coldframe', 'garden', 'outdoor', 'other'] }
 };
 export const FIELD_TYPES: Record<Kind, Record<string, ValueType>> = {
-  accession: { ...strings('acc', 'taxonName', 'nameAsReceived', 'cultivar', 'nameKind', 'parentage', 'fieldNumber', 'provenance', 'status', 'locationId', 'acquired', 'sourceFrom', 'sourceRef', 'sourceForm', 'price', 'notes', 'notesBase', 'sowingId', 'cover'), taxonKey: 'number' },
+  accession: { ...strings('acc', 'taxonName', 'nameAsReceived', 'cultivar', 'nameKind', 'parentage', 'fieldNumber', 'provenance', 'status', 'locationId', 'acquired', 'sourceFrom', 'sourceRef', 'sourceForm', 'price', 'notes', 'notesBase', 'sowingId', 'cover'), taxonKey: 'number', waterDays: 'number' },
   sowing: { ...strings('no', 'taxonName', 'cultivar', 'nameKind', 'parentage', 'method', 'parentAcc', 'sown', 'sourceFrom', 'sourceRef', 'fieldNumber', 'provenance', 'medium', 'container', 'treatment', 'locationId', 'status', 'notes', 'notesBase'), taxonKey: 'number', count: 'number', bottomHeatC: 'number', covered: 'boolean' },
-  location: { ...strings('name', 'parentId', 'type', 'notes'), indoor: 'boolean', floorC: 'number', floorHeld: 'boolean', ppfd: 'number', lightHours: 'number', lat: 'number', lon: 'number', altM: 'number', sort: 'number' },
+  location: { ...strings('name', 'parentId', 'type', 'notes'), indoor: 'boolean', floorC: 'number', floorHeld: 'boolean', ppfd: 'number', lightHours: 'number', lat: 'number', lon: 'number', altM: 'number', sort: 'number', waterDays: 'number', dryMonths: 'array' },
   event: { ...strings('acc', 'd', 't', 'note', 'cause', 'used'), followUp: 'number', n: 'number', measures: 'object', auto: 'boolean', plants: 'array' },
   photo: { ...strings('acc', 'sowing', 'd', 'dFrom', 'caption', 'sha'), w: 'number', h: 'number', bytes: 'number' },
   taxon: { ...strings('name', 'myNotes'), gbifKey: 'number', followed: 'boolean' },

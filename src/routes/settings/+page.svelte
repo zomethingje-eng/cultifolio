@@ -12,11 +12,13 @@
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import { units } from '$lib/ui/units.svelte';
   import { site } from '$lib/ui/site.svelte';
+  import { frost } from '$lib/ui/frost.svelte';
   import { theme } from '$lib/ui/theme.svelte';
   import { collection } from '$lib/db/collection.svelte';
   import { sync } from '$lib/sync/engine.svelte';
   import { nextAccession, type NumberingScheme } from '$core/accession';
   import { temp, rain } from '$core/units';
+  import ToggleGroup from '$lib/ui/ToggleGroup.svelte';
 
   $effect(() => {
     setCrumb([{ label: 'Settings' }]);
@@ -52,10 +54,13 @@
       return;
     }
     site.set({ lat: +la.toFixed(4), lon: +lo.toFixed(4), name: siteName.trim() || undefined });
+    // The watch reads the new site now: the old site's nights are not this site's, and are not shown meanwhile (round fifty-eight).
+    void frost.check(true);
     siteMsg = 'Saved on this device.';
   }
   function clearSite() {
     site.set(null);
+    void frost.check(true);
     lat = lon = siteName = '';
     siteMsg = 'Cleared.';
   }
@@ -118,30 +123,43 @@
   }
 </script>
 
-<svelte:head><title>Settings — Cultifolio</title></svelte:head>
+<svelte:head><title>Settings · Cultifolio</title></svelte:head>
 
 <PageHead title="Settings" places={false} sub="Units, appearance and your site stay on this device; numbering is a setting of your vault and syncs." />
 
+<!-- One heading per subject, one option per line with its hint under it; the Today option has its own heading, not the
+     photographs' (round fifty-eight; the grower review). -->
 <h2 class="sec" id="units">Units</h2>
 <div class="cult">
   <div class="body">
-    <div class="seg" role="group" aria-label="Units">
-      <button type="button" class:on={units.current === 'metric'} aria-pressed={units.current === 'metric'} onclick={() => units.set('metric')}>°C and mm</button>
-      <button type="button" class:on={units.current === 'us'} aria-pressed={units.current === 'us'} onclick={() => units.set('us')}>°F and inches</button>
+    <div class="opt">
+      <p class="optlab" id="units-temp">Temperature and rain</p>
+      <!-- The one toggle group, named by the line above it (round fifty-eight; the accessibility review). -->
+      <ToggleGroup labelledby="units-temp" options={[{ value: 'metric', label: '°C and mm' }, { value: 'us', label: '°F and inches' }]} value={units.current} onchange={(v) => units.set(v)} />
+      <p class="hint">A cold floor reads {temp(6.5, units.current, 1)}, a year's rain {rain(72, units.current)}; the sources stay in what they measured. The °C / °F button on a species page's cold floor switches this too.</p><!-- the switch is its own button now (round fifty-eight; the accessibility review) -->
     </div>
-    <p class="small muted" style="margin: 10px 0 0">A cold floor reads {temp(6.5, units.current, 1)}, a year's rain {rain(72, units.current)}; the sources stay in what they measured. Tapping a temperature on a species page switches this too.</p>
+    <!-- Lengths on their own switch, following the temperature until the grower chooses (round fifty-eight; the grower review). -->
+    <div class="opt">
+      <p class="optlab" id="units-len">Lengths (measurements, pot sizes)</p>
+      <!-- Following is a third value of the choice, not a state beside it (round fifty-eight; the accessibility review). -->
+      <ToggleGroup labelledby="units-len" options={[{ value: 'mm', label: 'Millimetres' }, { value: 'in', label: 'Inches' }, { value: 'follow', label: 'Follow temperature' }]} value={prefs.current.lengthUnits ?? 'follow'} onchange={(v) => prefs.set({ lengthUnits: v === 'follow' ? null : v })} />
+      <p class="hint">{prefs.lengthUnitsFollow ? `Following the temperature: lengths are in ${prefs.lengthUnits === 'in' ? 'inches' : 'millimetres'} now, inches with °F and millimetres with °C.` : `Lengths are in ${prefs.lengthUnits === 'in' ? 'inches' : 'millimetres'} whatever the temperature units.`}</p>
+    </div>
   </div>
 </div>
 
+<!-- Reachable at /settings#site from the first-visit setup; h2.sec carries the scroll margin for the sticky top bar (round fifty-eight; the grower review). -->
 <h2 class="sec" id="site">Your site</h2>
 <div class="cult">
   <div class="body">
     <p class="small" style="margin: 0 0 10px">Where you grow: the frost watch reads its forecast here, and the months in the notes follow its hemisphere.{#if !site.current && benches.length} Until it is set, the first place with coordinates decides the hemisphere for the months; the frost watch here and on the front page needs the site itself, and a place with coordinates is watched on its own page regardless.{/if}</p>
+    <!-- Placeholders that read as examples, muted, not as figures already set (round fifty-eight; the grower review). -->
     <div class="fields">
-      <label><span>Name</span><input type="text" bind:value={siteName} placeholder="home, the greenhouse" /></label>
-      <label><span>Latitude</span><input type="text" inputmode="decimal" bind:value={lat} placeholder="40.43" /></label>
-      <label><span>Longitude</span><input type="text" inputmode="decimal" bind:value={lon} placeholder="-80.01" /></label>
+      <label><span>Name</span><input type="text" bind:value={siteName} placeholder="e.g. home, the greenhouse" /></label>
+      <label><span>Latitude (decimal degrees)</span><input id="site-lat" type="text" inputmode="decimal" bind:value={lat} placeholder="e.g. 51.5" /></label>
+      <label><span>Longitude (decimal degrees)</span><input id="site-lon" type="text" inputmode="decimal" bind:value={lon} placeholder="e.g. -0.12" /></label>
     </div>
+    <p class="hint">North and east are positive, south and west negative.</p>
     <div class="row">
       <button class="btn pri" type="button" onclick={saveSite}>Save</button>
       <button class="btn" type="button" onclick={locate} disabled={locating}>{locating ? 'Locating…' : 'Use my location'}</button>
@@ -158,20 +176,28 @@
 <h2 class="sec" id="appearance">Appearance</h2>
 <div class="cult">
   <div class="body">
-    <div class="seg" role="group" aria-label="Appearance">
-      {#each [['system', 'Follow the system'], ['light', 'Light'], ['dark', 'Dark']] as const as [t, label] (t)}
-        <button type="button" class:on={theme.current === t} aria-pressed={theme.current === t} onclick={() => theme.set(t)}>{label}</button>
-      {/each}
+    <!-- round fifty-eight; the accessibility review: the one toggle group -->
+    <ToggleGroup label="Appearance" options={[{ value: 'system', label: 'Follow the system' }, { value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }]} value={theme.current} onchange={(t) => theme.set(t)} />
+  </div>
+</div>
+
+<h2 class="sec" id="today">Today</h2>
+<div class="cult">
+  <div class="body">
+    <div class="opt">
+      <label class="check"><input id="pref-keeping" type="checkbox" aria-describedby="pref-keeping-hint" checked={!prefs.current.hideKeeping} onchange={(e) => prefs.set({ hideKeeping: !e.currentTarget.checked })} /><span>Show where the collection stands</span></label>
+      <p class="hint indent" id="pref-keeping-hint">A line on Today with the last backup, the last sync, and records waiting.</p>
     </div>
   </div>
 </div>
 
-<h2 class="sec" id="privacy">Reference photographs on your own pages</h2>
+<h2 class="sec" id="privacy">Photographs</h2>
 <div class="cult">
   <div class="body">
-    <label class="check"><input id="pref-refphotos" type="checkbox" checked={prefs.current.referencePhotos} onchange={(e) => prefs.set({ referencePhotos: e.currentTarget.checked })} /> Show the reference's photograph of the species on my plants, my batches and my tiles when a plant has no photograph of its own.</label>
-    <label class="check"><input id="pref-keeping" type="checkbox" checked={!prefs.current.hideKeeping} onchange={(e) => prefs.set({ hideKeeping: !e.currentTarget.checked })} /> Show on Today where the collection stands: the last backup, sync, and records waiting.</label>
-    <p class="small muted" style="margin: 6px 0 0">Off, your own pages ask no outside host for anything. On, the photograph comes straight from iNaturalist or the GBIF image cache, so that host sees this address ask for that species' picture; Cultifolio's server is not involved and learns nothing. Species pages you open are unaffected either way.</p>
+    <div class="opt">
+      <label class="check"><input id="pref-refphotos" type="checkbox" aria-describedby="pref-refphotos-hint" checked={prefs.current.referencePhotos} onchange={(e) => prefs.set({ referencePhotos: e.currentTarget.checked })} /><span>Show the reference photograph on my own pages</span></label>
+      <p class="hint indent" id="pref-refphotos-hint">The species' photograph on my plants, my batches and my tiles when a plant has no photograph of its own. Off, your own pages ask no outside host for anything. On, the photograph comes straight from iNaturalist, Wikimedia Commons or the GBIF image cache, so that host sees this address ask for that species' picture; Cultifolio's server is not involved and learns nothing. Species pages you open are unaffected either way.</p>
+    </div>
   </div>
 </div>
 
@@ -179,11 +205,8 @@
 <div class="cult">
   <div class="body">
     <p class="small" style="margin: 0 0 10px">How new plants are numbered; a number is never reused, and numbers already given are kept. With the year scheme the year is the plant's acquisition year (a plant acquired on 31 December and filed on 2 January is a 2026 plant), and a batch's is the year it was started.</p>
-    <div class="seg" role="group" aria-label="Numbering scheme">
-      <!-- Year needs nothing typed, so the tap is the save; Prefix waits for its letters and Save (round forty-nine, 3). -->
-      <button type="button" class:on={mode === 'year'} aria-pressed={mode === 'year'} onclick={() => { mode = 'year'; if (collection.ready) void saveScheme(); }}>Year: 2026-0001</button>
-      <button type="button" class:on={mode === 'prefix'} aria-pressed={mode === 'prefix'} onclick={() => (mode = 'prefix')}>Prefix: ABC-0001</button>
-    </div>
+    <!-- Year needs nothing typed, so the tap is the save; Prefix waits for its letters and Save (round forty-nine, 3). The one toggle group (round fifty-eight; the accessibility review). -->
+    <ToggleGroup label="Numbering scheme" options={[{ value: 'year', label: 'Year: 2026-0001' }, { value: 'prefix', label: 'Prefix: ABC-0001' }]} bind:value={mode} onchange={(v) => { if (v === 'year' && collection.ready) void saveScheme(); }} />
     <div class="fields" style="margin-top: 10px">
       {#if mode === 'prefix'}<label><span>Prefix</span><input type="text" bind:value={prefix} placeholder="your initials or the collection's" maxlength="8" /></label>{/if}
       <label><span>Digits</span><input type="number" min="2" max="6" step="1" inputmode="numeric" bind:value={width} /></label>
@@ -215,11 +238,19 @@
 <style>
   .cult .body { padding: 14px 17px 15px; font-family: var(--ui); }
   .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
-  .fields label, .inline { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--ink2); }
+  .fields label, .inline { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-sm); color: var(--ink2); }
   .inline { flex-direction: row; align-items: center; gap: 6px; }
-  .fields input, .inline select { font: inherit; font-size: 14px; padding: 8px 10px; border: 1px solid var(--rule); border-radius: 8px; background: var(--card); color: var(--ink); }
+  .fields input, .inline select { font: inherit; font-size: var(--fs-md); padding: 8px 10px; min-height: 44px; box-sizing: border-box; border: 1px solid var(--rule); border-radius: var(--r); background: var(--card); color: var(--ink); }
   .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
-  .seg > button { min-height: 40px; }
-  .linkish { background: none; border: 0; padding: 0 4px; font: inherit; font-size: 13px; color: var(--ink3); cursor: pointer; text-decoration: underline; }
+  .body :global(.seg > button) { min-height: 44px; } /* reaches into the toggle group's own markup (round fifty-eight; the accessibility review) */
+  /* One option per line, its name above and its hint under it (round fifty-eight; the grower review). */
+  .opt + .opt { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--rule); }
+  .optlab { margin: 0 0 8px; font-size: var(--fs-md); font-weight: 600; color: var(--ink); }
+  .hint { margin: 6px 0 0; font-size: var(--fs-md); line-height: 1.5; color: var(--ink3); }
+  .hint.indent { padding-left: 32px; }
+  .check { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: var(--fs-md); font-weight: 600; color: var(--ink); cursor: pointer; }
+  .check input { width: 20px; height: 20px; margin: 0 2px; flex: none; accent-color: var(--accent); }
+  .fields input::placeholder { color: var(--ink3); opacity: 0.8; font-style: italic; }
+  .linkish { background: none; border: 0; padding: 0 4px; font: inherit; font-size: var(--fs-md); color: var(--ink3); cursor: pointer; text-decoration: underline; }
   .muted { color: var(--ink3); }
 </style>

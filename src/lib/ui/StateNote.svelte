@@ -15,9 +15,9 @@
 
 <style>
   .statenote { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin: 10px 0; color: var(--ink2); }
-  .word { font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink); background: var(--sunk); padding: 3px 9px; border-radius: 999px; }
+  .word { font-family: var(--mono); font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink); background: var(--sunk); padding: 3px 9px; border-radius: 999px; }
   .why { display: inline; }
-  .why summary { display: inline; cursor: pointer; color: var(--accent); text-decoration: underline; font-size: 13px; list-style: none; }
+  .why summary { display: inline; cursor: pointer; color: var(--accent); text-decoration: underline; font-size: var(--fs-md); list-style: none; }
   .why summary::-webkit-details-marker { display: none; }
   .why[open] summary { margin-right: 6px; }
   .text { line-height: 1.5; }

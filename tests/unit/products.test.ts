@@ -11,7 +11,7 @@ import { bucketsFor, bucketOf, isBucket, bucketWidth, bucketNames, BUCKETS } fro
 import { prepare, search } from '$core/search';
 import { catalogueOf, rowsOnly } from '$dossier/catalogue';
 import type { IndexEntry } from '$dossier/index-entry';
-import { _forgetIndex, getCorpus, product, entriesIn } from '$lib/server/dossiers';
+import { _forgetIndex, getCorpus, corpusNow, product, entriesIn } from '$lib/server/dossiers';
 import { GET as corpusGET } from '../../src/routes/api/corpus/+server';
 import { GET as entriesGET } from '../../src/routes/api/entries/+server';
 import { GET as searchGET } from '../../src/routes/api/search/+server';
@@ -123,7 +123,7 @@ describe('the Worker and the manifest', () => {
     const platform = platformWith(store);
     expect(await getCorpus(platform, noStatic)).toEqual({ id: manifest.id, buckets: 32, products: true });
     const r = await call(corpusGET as never, '/api/corpus', platform);
-    expect(await r.json()).toEqual({ id: manifest.id, buckets: 32 });
+    expect(await r.json()).toEqual({ id: manifest.id, buckets: 32, manifest: true });
     expect(r.headers.get('cache-control')).toBe('no-store');
   });
   it('without a manifest the index object\'s etag is the id, the count is thirty-two, and everything is derived from the index', async () => {
@@ -134,9 +134,9 @@ describe('the Worker and the manifest', () => {
     expect(c.products).toBe(false);
     expect(c.buckets).toBe(32);
     expect(c.id).not.toBe('fixture');
-    expect(await product(platform, noStatic, 'entries/00.json')).toBeNull();
+    expect(await product(await corpusNow(platform, noStatic), platform, noStatic, 'entries/00.json')).toBeNull();
     const b = bucketOf(idx[0].slug);
-    expect((await entriesIn(platform, noStatic, b)).map((e) => e.key)).toContain(idx[0].key);
+    expect((await entriesIn(await corpusNow(platform, noStatic), platform, noStatic, b)).map((e) => e.key)).toContain(idx[0].key);
     expect(((await (await call(searchGET as never, '/api/search?q=c&n=100', platform)).json()) as IndexEntry[]).length).toBe(50); // the whole index prepared
   });
   it('answers entries, search, rows and sheets from the product files when the manifest names them, and from the index when a file is missing', async () => {
@@ -180,7 +180,7 @@ describe('the Worker and the manifest', () => {
     const { manifest, store } = bucketFor(idx);
     const platform = platformWith(store);
     expect(manifest.buckets).toBe(64);
-    expect(await (await call(corpusGET as never, '/api/corpus', platform)).json()).toEqual({ id: manifest.id, buckets: 64 });
+    expect(await (await call(corpusGET as never, '/api/corpus', platform)).json()).toEqual({ id: manifest.id, buckets: 64, manifest: true });
     const ok = await call(entriesGET as never, `/api/entries?b=3f&n=64&c=${manifest.id}`, platform);
     expect(ok.status).toBe(200);
     for (const e of (await ok.json()) as IndexEntry[]) expect(bucketOf(e.slug, 64)).toBe('3f');
@@ -246,22 +246,22 @@ describe('the Worker and the manifest', () => {
     const platform = platformWith(counting as never);
     vi.useFakeTimers(); vi.setSystemTime(1_800_000_000_000);
     try {
-      expect(await product(platform, noStatic, 'entries/0a.json')).toBeNull();
+      expect(await product(await corpusNow(platform, noStatic), platform, noStatic, 'entries/0a.json')).toBeNull();
       const built = buildProducts(idx, JSON.stringify(idx, null, 1), () => new Map());
       objects.set(path, JSON.parse(built.files.get('entries/0a.json')!));
-      for (let t = 0; t < 3; t++) { vi.setSystemTime(1_800_000_000_000 + 15_000 * (t + 1)); const v = await product(platform, noStatic, 'entries/0a.json'); expect({ t, gets, v: v === null }).toEqual({ t, gets: 1, v: true }); }
+      for (let t = 0; t < 3; t++) { vi.setSystemTime(1_800_000_000_000 + 15_000 * (t + 1)); const v = await product(await corpusNow(platform, noStatic), platform, noStatic, 'entries/0a.json'); expect({ t, gets, v: v === null }).toEqual({ t, gets: 1, v: true }); }
       expect(gets).toBe(1); // busy, and still the one read
       vi.setSystemTime(1_800_000_000_000 + 61_000);
-      expect(await product(platform, noStatic, 'entries/0a.json')).not.toBeNull(); // the minute is from the miss
+      expect(await product(await corpusNow(platform, noStatic), platform, noStatic, 'entries/0a.json')).not.toBeNull(); // the minute is from the miss
       expect(gets).toBe(2);
     } finally { vi.useRealTimers(); }
     // a read that throws is asked again at the next request
     _forgetIndex();
     fail = true;
     const before = gets;
-    expect(await product(platform, noStatic, 'entries/0a.json')).toBeNull();
+    expect(await product(await corpusNow(platform, noStatic), platform, noStatic, 'entries/0a.json')).toBeNull();
     fail = false;
-    await product(platform, noStatic, 'entries/0a.json');
+    await product(await corpusNow(platform, noStatic), platform, noStatic, 'entries/0a.json');
     expect(gets).toBe(before + 2);
   });
   it('round fifty-five: a query with no word, or one no key matches, prepares nothing whole', async () => {

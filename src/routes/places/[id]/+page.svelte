@@ -10,14 +10,16 @@
   import { accNo, sowNo } from '$lib/db/types';
   import { goto, beforeNavigate } from '$app/navigation';
   import { onMount } from 'svelte';
-  import { collection, DUE_DAYS } from '$lib/db/collection.svelte';
+  import { collection } from '$lib/db/collection.svelte';
   import WaitingRecord from '$lib/ui/WaitingRecord.svelte';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
   import { LOCATION_KINDS, type LocationKind } from '$lib/db/types';
   import type { Forecast, Alert } from '$lib/weather/forecast';
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import { focusNext } from '$lib/ui/focus';
+  import { site } from '$lib/ui/site.svelte';
   onMount(async () => {
+    site.load(); // the frost watch falls back to the grower's site (round fifty-eight; the grower review)
     await collection.load();
     // /places/<id>?edit=1 from a plant page that found a figure missing here.
     if (page.url.searchParams.get('edit') === '1') startEdit();
@@ -41,15 +43,15 @@
   // The most recent watering of any plant here, and the longest wait among them, so "0 d ago" cannot stand for a place where two plants are at 35 d (round twenty-four, 12).
   const watering = $derived.by(() => { const ds = deep.map((a) => collection.lastWatered(a.id)); const dated = ds.filter((d): d is string => !!d).sort(); return { newest: dated.length ? dated[dated.length - 1] : null, oldest: dated.length ? dated[0] : null, never: ds.length - dated.length }; });
   const lastWater = $derived(watering.newest);
-  const dueHere = $derived(deep.filter((a) => collection.careDays(a) >= DUE_DAYS).length); // the same figure Today and the list count (round twenty-six, 6)
+  const dueHere = $derived(deep.filter((a) => collection.isDue(a)).length); // the same figure Today and the list count (round twenty-six, 6), by each plant's rhythm (round fifty-eight)
   const lastAudit = $derived.by(() => { const ds = deep.map((a) => collection.events(a.id).find((e) => e.t === 'audit')?.d).filter((d): d is string => !!d).sort(); return ds.length ? ds[ds.length - 1] : null; });
-  // The same set Today counts: missed at the last audit, or seen and not for ninety days; a plant never audited is not "unseen" (round twenty-five, 14).
-  const unseen = $derived(deep.filter((a) => { if (collection.missedAt(a.id)) return true; const d = daysSince(collection.lastSeen(a.id)); return d != null && d > 90; }).length);
+  // The same set Today counts, by the collection's one reading: missed at the last audit, or not seen for ninety days in a place that has been audited (round twenty-five, 14; round fifty-eight).
+  const unseen = $derived(deep.filter((a) => collection.unseenWhy(a.id)).length);
   const missedNow = $derived(deep.filter((a) => collection.missedAt(a.id)).length);
 
   /* ---- edit conditions ---- */
   let editing = $state(false);
-  let f = $state<{ name: string; kind: LocationKind | string; parent: string | null; indoor: '' | 'yes' | 'no'; floorC: string; floorHeld: 'held' | 'bottoms'; ppfd: string; lightHours: string; lat: string; lon: string; altM: string; notes: string }>({ name: '', kind: '', parent: null, indoor: '', floorC: '', floorHeld: 'bottoms', ppfd: '', lightHours: '', lat: '', lon: '', altM: '', notes: '' });
+  let f = $state<{ name: string; kind: LocationKind | string; parent: string | null; indoor: '' | 'yes' | 'no'; floorC: string; floorHeld: 'held' | 'bottoms'; ppfd: string; lightHours: string; lat: string; lon: string; altM: string; waterDays: string; dryMonths: number[] | null; notes: string }>({ name: '', kind: '', parent: null, indoor: '', floorC: '', floorHeld: 'bottoms', ppfd: '', lightHours: '', lat: '', lon: '', altM: '', waterDays: '', dryMonths: null, notes: '' });
   /** Places this one could sit inside: everything but itself and what is under it. */
   const homes = $derived.by(() => {
     const under = new Set(collection.subtree(id));
@@ -57,8 +59,8 @@
   });
   function startEdit() {
     if (!loc) return;
-    f = { name: loc.name, kind: loc.type ?? '', parent: path.length > 1 ? path[path.length - 2].id : null, indoor: loc.indoor == null ? '' : loc.indoor ? 'yes' : 'no', floorC: loc.floorC == null ? '' : (units.current === 'us' ? +cToF(loc.floorC).toFixed(1) : +loc.floorC.toFixed(1)).toString(), floorHeld: loc.floorHeld ? 'held' : 'bottoms', ppfd: loc.ppfd?.toString() ?? '', lightHours: loc.lightHours?.toString() ?? '', lat: loc.lat?.toString() ?? '', lon: loc.lon?.toString() ?? '', altM: loc.altM?.toString() ?? '', notes: loc.notes ?? '' };
-    fOpen = { ...f };
+    f = { name: loc.name, kind: loc.type ?? '', parent: path.length > 1 ? path[path.length - 2].id : null, indoor: loc.indoor == null ? '' : loc.indoor ? 'yes' : 'no', floorC: loc.floorC == null ? '' : (units.current === 'us' ? +cToF(loc.floorC).toFixed(1) : +loc.floorC.toFixed(1)).toString(), floorHeld: loc.floorHeld ? 'held' : 'bottoms', ppfd: loc.ppfd?.toString() ?? '', lightHours: loc.lightHours?.toString() ?? '', lat: loc.lat?.toString() ?? '', lon: loc.lon?.toString() ?? '', altM: loc.altM == null ? '' : (units.current === 'us' ? Math.round(loc.altM / FT) : loc.altM).toString(), waterDays: loc.waterDays?.toString() ?? '', dryMonths: loc.dryMonths ? [...loc.dryMonths] : null, notes: loc.notes ?? '' };
+    fOpen = { ...f, dryMonths: f.dryMonths ? f.dryMonths.join(',') : null };
     editing = true;
   }
   /** The form as it opened: only what changed in it is written (round fifty-two, 4). */
@@ -73,19 +75,30 @@
     if (formDirty()) e.preventDefault();
   }
   const num = (s: string) => (s.trim() === '' || Number.isNaN(Number(s)) ? null : Number(s));
+  // Altitude in the reader's units: feet where the temperatures are Fahrenheit, stored in metres whatever the display (round fifty-eight; the grower review).
+  const FT = 0.3048;
+  const altFt = $derived(units.current === 'us');
+  const altShown = (m: number) => (altFt ? `${Math.round(m / FT)} ft` : `${m} m`);
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  /** What the place above says, for the form's placeholders: the rhythm and the dry months this place inherits when it sets none. */
+  const parentCond = $derived(loc?.parentId && collection.location(loc.parentId) ? collection.conditions(loc.parentId) : null);
+  const inheritedDays = $derived(parentCond?.waterDays ?? null);
+  const inheritedDry = $derived(parentCond?.dryMonths ?? null);
   let altMsg = $state('');
   async function save() {
     // An altitude the forecast source cannot take is refused here, with the likely reason, rather than on every frost check afterwards.
-    const alt = num(f.altM);
-    altMsg = alt != null && (alt < -500 || alt > 9000) ? `${f.altM} is outside −500 to 9000 m${alt > 9000 && alt < 30000 ? `; in feet that would be ${Math.round(alt * 0.3048)} m` : ''}.` : '';
+    const typedAlt = num(f.altM);
+    const alt = typedAlt == null ? null : altFt ? Math.round(typedAlt * FT * 10) / 10 : typedAlt; // metres, as stored (round fifty-eight; the grower review)
+    altMsg = alt == null || (alt >= -500 && alt <= 9000) ? '' : altFt ? `${f.altM} is outside −1640 to 29527 ft.` : `${f.altM} is outside −500 to 9000 m${alt > 9000 && alt < 30000 ? `; in feet that would be ${Math.round(alt * FT)} m` : ''}.`;
     if (altMsg) { document.getElementById('e-alt')?.focus(); return; }
     // "Bottoms out" is the unset reading too: a place that never said is not given `floorHeld: false` by an unrelated edit (round forty-nine, 2; round thirty-five, R1-6).
     // The place's fields and its new parent are one commit: a page closed between the two left a place edited but not moved (round fifty-one, 3).
     const moving = (f.parent ?? null) !== (loc?.parentId ?? null) || collection.needsHome(id);
     if (moving) collection.checkMove(id, f.parent ?? null);
-    const all: Record<string, unknown> = { name: f.name.trim() || loc?.name, type: f.kind || null, indoor: f.indoor === '' ? null : f.indoor === 'yes', floorC: (() => { const v = num(f.floorC); return v == null ? null : units.current === 'us' ? +fToC(v).toFixed(2) : v; })(), floorHeld: num(f.floorC) == null ? null : f.floorHeld === 'held' ? true : loc?.floorHeld ? false : (loc?.floorHeld ?? null), ppfd: num(f.ppfd), lightHours: num(f.lightHours), lat: num(f.lat), lon: num(f.lon), altM: num(f.altM), notes: f.notes.trim() || null };
-    const touched = new Set(Object.keys(f).filter((k) => (f as Record<string, unknown>)[k] !== fOpen[k]));
-    const byForm: Record<string, string[]> = { name: ['name'], kind: ['type'], indoor: ['indoor'], floorC: ['floorC', 'floorHeld'], floorHeld: ['floorHeld', 'floorC'], ppfd: ['ppfd'], lightHours: ['lightHours'], lat: ['lat'], lon: ['lon'], altM: ['altM'], notes: ['notes'] };
+    const all: Record<string, unknown> = { name: f.name.trim() || loc?.name, type: f.kind || null, indoor: f.indoor === '' ? null : f.indoor === 'yes', floorC: (() => { const v = num(f.floorC); return v == null ? null : units.current === 'us' ? +fToC(v).toFixed(2) : v; })(), floorHeld: num(f.floorC) == null ? null : f.floorHeld === 'held' ? true : loc?.floorHeld ? false : (loc?.floorHeld ?? null), ppfd: num(f.ppfd), lightHours: num(f.lightHours), lat: num(f.lat), lon: num(f.lon), altM: alt, waterDays: (() => { const v = num(f.waterDays); return v != null && v >= 1 && v <= 365 ? Math.round(v) : null; })(), dryMonths: f.dryMonths ? [...f.dryMonths].sort((x, y) => x - y) : null, notes: f.notes.trim() || null };
+    const asOpened = { ...f, dryMonths: f.dryMonths ? f.dryMonths.join(',') : null };
+    const touched = new Set(Object.keys(asOpened).filter((k) => (asOpened as Record<string, unknown>)[k] !== fOpen[k]));
+    const byForm: Record<string, string[]> = { name: ['name'], kind: ['type'], indoor: ['indoor'], floorC: ['floorC', 'floorHeld'], floorHeld: ['floorHeld', 'floorC'], ppfd: ['ppfd'], lightHours: ['lightHours'], lat: ['lat'], lon: ['lon'], altM: ['altM'], waterDays: ['waterDays'], dryMonths: ['dryMonths'], notes: ['notes'] };
     const write = new Set<string>();
     for (const k of touched) for (const fld of byForm[k] ?? []) write.add(fld);
     const fields = Object.fromEntries(Object.entries(all).filter(([k]) => write.has(k)));
@@ -93,7 +106,7 @@
     editing = false;
   }
   function useMyLocation() {
-    navigator.geolocation?.getCurrentPosition((p) => { f.lat = p.coords.latitude.toFixed(4); f.lon = p.coords.longitude.toFixed(4); if (p.coords.altitude != null) f.altM = Math.round(p.coords.altitude).toString(); });
+    navigator.geolocation?.getCurrentPosition((p) => { f.lat = p.coords.latitude.toFixed(4); f.lon = p.coords.longitude.toFixed(4); if (p.coords.altitude != null) f.altM = Math.round(altFt ? p.coords.altitude / FT : p.coords.altitude).toString(); }); // the device gives metres; the box is in the reader's units (round fifty-eight)
   }
 
   /* ---- water / feed the whole place ---- */
@@ -102,7 +115,7 @@
     if (busy) return; // a second tap before the first commits wrote every line twice (round fifty-two, 3)
     busy = t;
     // A place-wide line is not an observation of each plant, so it never counts as one being seen (round twenty-four, 3).
-    const ids = await collection.addEventsIds(deep.map((a) => ({ acc: a.id, d: today(), t, note: `whole ${loc?.type ?? 'place'}: ${loc?.name ?? ''}`, auto: true })));
+    const ids = await collection.addEventsIds(deep.map((a) => ({ acc: a.id, d: today(), t, note: `whole ${loc?.type ?? 'place'}: ${loc?.name ?? ''}` }))); // the grower's own action: a sighting, not an `auto` line (round fifty-eight)
     busy = '';
     const n = ids.length;
     // One tap wrote n lines; one tap takes exactly those back (round twenty-six, 5).
@@ -117,7 +130,8 @@
   const movable = $derived(collection.accessions.filter((a) => a.status === 'growing' && !deep.some((d) => d.id === a.id)));
   const moveShown = $derived.by(() => { const n = moveQ.trim().toLowerCase(); return n ? movable.filter((a) => accNo(a).toLowerCase().includes(n) || a.taxonName.toLowerCase().includes(n) || (a.locationId ? collection.locationName(a.locationId).toLowerCase().includes(n) : false)) : movable; });
   const moveN = $derived(Object.values(moveChosen).filter(Boolean).length);
-  function startMove() { movingIn = true; moveQ = ''; moveChosen = {}; }
+  // The button that opened the list is disabled while it is open, so focus goes to the list's filter, not to the page body (round fifty-eight; the accessibility review).
+  function startMove() { movingIn = true; moveQ = ''; moveChosen = {}; void focusNext('#move-filter'); }
   let movingBusy = $state(false);
   async function finishMove() {
     if (movingBusy) return; // a second tap while the first commits wrote the move twice (round fifty-one, 4)
@@ -141,17 +155,28 @@
     auditing = true;
     auditResult = '';
     confirmCancel = false;
+    // The Audit button is disabled while the audit runs, which drops its focus to the page body: focus goes to the first
+    // plant's box instead (round fifty-eight; the accessibility review).
+    void focusNext('.auditrows input[type="checkbox"]');
   }
+  /** Back to the button that started the audit, once it is enabled again (round fifty-eight; the accessibility review). */
+  const backToAudit = () => void focusNext('#audit-start');
   const tickedN = $derived(Object.values(present).filter(Boolean).length);
   /** Tick every plant, then untick the one or two missing: a bench of forty where all but one are there was forty taps (round forty-nine, 3). */
-  const tickAll = (v: boolean) => { present = Object.fromEntries(deep.map((a) => [a.id, v])); };
+  // Each of the two disables itself when pressed, so focus goes to the other (round fifty-eight; the accessibility review).
+  const tickAll = (v: boolean) => { present = Object.fromEntries(deep.map((a) => [a.id, v])); void focusNext(v ? '#audit-clear' : '#audit-all'); };
   /** Cancel with ticks made asks once; the result stays under the list, where the finger is, until the next audit. */
   let confirmCancel = $state(false);
   let auditResult = $state('');
   function cancelAudit() {
-    if (tickedN && !confirmCancel) { confirmCancel = true; return; }
+    if (tickedN && !confirmCancel) { confirmCancel = true; void focusNext('#audit-cancel-yes'); return; } // the question that replaced the button (round fifty-eight; the accessibility review)
     auditing = false;
     confirmCancel = false;
+    backToAudit();
+  }
+  function keepAuditing() {
+    confirmCancel = false;
+    void focusNext('#audit-cancel'); // round fifty-eight; the accessibility review
   }
   let auditBusy = false;
   async function finishAudit() {
@@ -166,6 +191,7 @@
     const missing = missed.length;
     auditResult = `Audit recorded: ${seen.length} present${missing ? `, ${missing} not seen: ${missed.map(accNo).join(', ')}` : ''}.`;
     auditing = false;
+    backToAudit();
     } finally {
       auditBusy = false;
     }
@@ -177,14 +203,21 @@
   /** The forecast, with the conditions it was asked for: an answer is shown only while those are still the place's (round thirteen, B1). */
   let got = $state<{ key: string; answer: ForecastAnswer } | null>(null);
   let forecastErr = $state('');
-  const watchable = $derived(cond.lat != null && cond.lon != null && cond.indoor !== true);
-  const condKey = $derived(watchable ? `${cond.lat},${cond.lon},${cond.altM ?? ''},${units.current}` : '');
+  // An outdoor or unheated place with no coordinates of its own or above it is watched at the grower's site, and says so;
+  // `conditions` is not changed: the site is this device's setting, not the place's (round fifty-eight; the grower review).
+  const ownCoords = $derived(cond.lat != null && cond.lon != null);
+  const bySite = $derived(!ownCoords && cond.indoor !== true && !!site.current);
+  const fLat = $derived(ownCoords ? cond.lat : bySite ? (site.current?.lat ?? null) : null);
+  const fLon = $derived(ownCoords ? cond.lon : bySite ? (site.current?.lon ?? null) : null);
+  const fAlt = $derived(ownCoords ? cond.altM : null); // the site carries no altitude; the place's would be another spot's
+  const watchable = $derived(fLat != null && fLon != null && cond.indoor !== true);
+  const condKey = $derived(watchable ? `${fLat},${fLon},${fAlt ?? ''},${units.current}` : '');
   const forecast = $derived(got && got.key === condKey ? got.answer : null);
   $effect(() => {
     if (!condKey || (got && got.key === condKey)) return;
     const key = condKey; // what this request is for; a place edited before it answers makes the answer stale, and a stale answer is dropped
     forecastErr = '';
-    getForecast<ForecastAnswer>(cond.lat!, cond.lon!, units.current, cond.altM)
+    getForecast<ForecastAnswer>(fLat!, fLon!, units.current, fAlt)
       .then((r) => { if (key !== condKey) return; if (!r.ok) { forecastErr = forecastRefusal(r.status); return; } got = { key, answer: r.body }; })
       // Whatever went wrong, the page says the check did not happen, never a status code, and never that the nights are clear; our own refusals are said as ours.
       .catch(() => { if (key === condKey) forecastErr = forecastRefusal(null); });
@@ -224,7 +257,7 @@
   }
 </script>
 
-<svelte:head><title>{loc?.name ?? 'Location'} — Cultifolio</title></svelte:head>
+<svelte:head><title>{loc?.name ?? 'Location'} · Cultifolio</title></svelte:head>
 <svelte:window onbeforeunload={guardUnload} />
 
 {#if !collection.ready}
@@ -256,7 +289,8 @@
   {#if editing}
     <form class="cult form" onsubmit={(e) => { e.preventDefault(); save(); }}>
       <label><span>Name</span><input id="e-name" type="text" bind:value={f.name} /></label>
-      <label><span>Kind</span><select id="e-kind" bind:value={f.kind}><option value="">—</option>{#if f.kind && !LOCATION_KINDS.some((k) => k.k === f.kind)}<option value={f.kind}>{f.kind} (a kind this build does not know)</option>{/if}{#each LOCATION_KINDS as k}<option value={k.k}>{k.label}</option>{/each}</select></label>
+      <!-- "this version of the app", not "this build": the glossary's plain words (round fifty-eight; the accessibility review). -->
+      <label><span>Kind</span><select id="e-kind" bind:value={f.kind}><option value="">Not stated</option><!-- words, not a dash (round fifty-eight) -->{#if f.kind && !LOCATION_KINDS.some((k) => k.k === f.kind)}<option value={f.kind}>{f.kind} (a kind this version of the app does not know)</option>{/if}{#each LOCATION_KINDS as k}<option value={k.k}>{k.label}</option>{/each}</select></label>
       <label><span>Inside</span><select id="e-parent" bind:value={f.parent}><option value={null}>Top level</option>{#each homes as h}<option value={h.id}>{h.name}</option>{/each}</select></label>
       <label><span>Indoors?</span><select id="e-indoor" bind:value={f.indoor}><option value="">Inherit</option><option value="yes">Yes</option><option value="no">No</option></select></label>
       <label><span>Temperature floor {tempUnit(units.current)}</span><input id="e-floor" type="text" inputmode="decimal" bind:value={f.floorC} placeholder="the coldest it gets" /></label>
@@ -266,7 +300,13 @@
       <label><span>Light hours/day</span><input id="e-hours" type="text" inputmode="decimal" bind:value={f.lightHours} /></label>
       <label><span>Latitude</span><input id="e-lat" type="text" inputmode="decimal" bind:value={f.lat} /></label>
       <label><span>Longitude</span><input id="e-lon" type="text" inputmode="decimal" bind:value={f.lon} /></label>
-      <label><span>Altitude m</span><input id="e-alt" type="text" inputmode="decimal" bind:value={f.altM} oninput={() => (altMsg = '')} aria-invalid={!!altMsg} aria-describedby={altMsg ? 'e-alt-bad' : undefined} />{#if altMsg}<span class="bad small" id="e-alt-bad">{altMsg}</span>{/if}</label>
+      <label><span>Altitude {altFt ? 'ft' : 'm'}</span><input id="e-alt" type="text" inputmode="decimal" bind:value={f.altM} oninput={() => (altMsg = '')} aria-invalid={!!altMsg} aria-describedby={altMsg ? 'e-alt-bad' : undefined} />{#if altMsg}<span class="bad small" id="e-alt-bad">{altMsg}</span>{/if}</label>
+      <!-- The grower's own watering rhythm, inherited by the places inside (round fifty-eight; the grower review): what "due" means here, and the months kept dry on purpose. -->
+      <label><span>Water about every</span><span class="unitfield"><input id="e-waterdays" type="text" inputmode="numeric" bind:value={f.waterDays} placeholder={inheritedDays ? `${inheritedDays} (inherited)` : '21 (the default)'} /> days</span></label>
+      <fieldset class="wide months"><legend>Kept dry in {f.dryMonths === null ? `(${inheritedDry?.length ? 'inherited: ' + inheritedDry.map((m) => MONTHS[m - 1]).join(', ') : 'none set'})` : ''}</legend>
+        {#each MONTHS as m, i (i)}<label class="mo"><input type="checkbox" checked={(f.dryMonths ?? inheritedDry ?? []).includes(i + 1)} onchange={(e) => { const on = (e.currentTarget as HTMLInputElement).checked; const base = f.dryMonths ?? [...(inheritedDry ?? [])]; f.dryMonths = on ? [...new Set([...base, i + 1])] : base.filter((x) => x !== i + 1); }} />{m}</label>{/each}
+        {#if f.dryMonths !== null}<button type="button" class="linkish small" onclick={() => (f.dryMonths = null)}>Inherit again</button>{/if}
+      </fieldset>
       <label class="wide"><span>Notes</span><textarea id="e-notes" rows="2" bind:value={f.notes}></textarea></label>
       <div class="actions wide"><button class="btn" type="button" onclick={useMyLocation}>Use my location</button><span class="grow"></span><button class="btn" type="button" onclick={() => (editing = false)}>Cancel</button><button class="btn pri" type="submit">Save</button></div>
     </form>
@@ -277,7 +317,7 @@
     {#if deep.length}
       <button class="btn pri" onclick={() => waterAll('water')} disabled={!!busy}>Water all {deep.length}</button>
       <button class="btn" onclick={() => waterAll('feed')} disabled={!!busy}>Feed all</button>
-      <button class="btn" onclick={startAudit} disabled={auditing}>Audit</button>
+      <button class="btn" id="audit-start" onclick={startAudit} disabled={auditing}>Audit</button>
     {:else}
       <a class="btn pri" href="/plants/new?loc={id}">Add a plant here</a>
     {/if}
@@ -294,7 +334,7 @@
     <div class="cult movein">
       <div class="sum">Move plants here <span class="hint">tick the plants, then Move; each gets a move line on its timeline</span></div>
       <div class="body">
-        <input class="searchbar" type="search" placeholder="Filter by number, name or place…" bind:value={moveQ} aria-label="Filter plants to move" />
+        <input class="searchbar" id="move-filter" type="search" placeholder="Filter by number, name or place…" bind:value={moveQ} aria-label="Filter plants to move" />
         <div class="rows moverows">
           {#each moveShown.slice(0, 200) as a (a.id)}
             <label class="azrow accrow row"><input type="checkbox" bind:checked={moveChosen[a.id]} /><span><span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} /></span><span class="fam">{a.locationId ? collection.locationName(a.locationId) : 'no place'}</span></span></label>
@@ -320,6 +360,7 @@
 
   {#if watchable}
     <div class="secrule"><h2>Frost watch</h2><div class="line"></div></div>
+    {#if bySite}<p class="small muted" id="frost-site">Forecast for your site, set in <a href="/settings#site">Settings</a>; <button type="button" class="linkish" onclick={startEdit}>give this place coordinates</button> to watch it on its own.</p>{/if}
     {#if forecastErr}<div class="notice">{forecastErr}</div>
     {:else if !forecast}<p class="muted">Fetching the forecast…</p>
     {:else}
@@ -327,12 +368,13 @@
       <p class="small muted">{forecast.attribution.join(' · ')}. <a href="/today#frost">Full forecast</a>.</p>
     {/if}
   {:else if cond.indoor !== true && !(cond.floorC == null && dli == null && !lastWater && !lastAudit)}
-    <p class="small muted" style="margin-top: 10px"><button type="button" class="linkish" onclick={startEdit}>Add coordinates</button> to this place (or a parent) to watch the forecast for frost.</p>
+    <p class="small muted" style="margin-top: 10px"><button type="button" class="linkish" onclick={startEdit}>Add coordinates</button> to this place (or a parent), or set your site in <a href="/settings#site">Settings</a>, to watch the forecast for frost.</p>
   {/if}
 
-  {#if cond.lat != null || loc.notes}
+  {#if cond.lat != null || loc.notes || cond.waterDays || cond.dryMonths?.length}
     <div class="factgrid">
-      {#if cond.lat != null}<div><b>Coordinates</b>{cond.lat}, {cond.lon}{cond.altM != null ? ` · ${cond.altM} m` : ''}{#if cond.from.lat && cond.from.lat !== loc.name}<span class="small muted"> · from {cond.from.lat}</span>{/if}</div>{/if}
+      {#if cond.waterDays || cond.dryMonths?.length}<div><b>Watering</b>{cond.waterDays ? `about every ${cond.waterDays} days` : 'every 21 days (the default)'}{cond.dryMonths?.length ? `; kept dry in ${cond.dryMonths.map((m) => MONTHS[m - 1]).join(', ')}` : ''}{#if (cond.from.waterDays && cond.from.waterDays !== loc.name) || (cond.from.dryMonths && cond.from.dryMonths !== loc.name)}<span class="small muted"> · from {cond.from.waterDays ?? cond.from.dryMonths}</span>{/if}</div>{/if}
+      {#if cond.lat != null}<div><b>Coordinates</b>{cond.lat}, {cond.lon}{cond.altM != null ? ` · ${altShown(cond.altM)}` : ''}{#if cond.from.lat && cond.from.lat !== loc.name}<span class="small muted"> · from {cond.from.lat}</span>{/if}</div>{/if}
       {#if loc.notes}<div class="wide"><b>Notes</b><span style="white-space: pre-wrap">{loc.notes}</span></div>{/if}
     </div>
   {/if}
@@ -341,7 +383,9 @@
     <div class="secrule"><h2>Inside</h2><div class="line"></div><span class="n">{kids.length}</span></div>
     <div class="rows">
       {#each kids as k}
-        <a class="azrow" href="/places/{k.id}"><span class="im">{(LOCATION_KINDS.find((x) => x.k === k.type)?.label ?? 'Place').slice(0, 5)}</span><span><span class="nm" style="font-style: normal">{k.name}</span><span class="fam">{LOCATION_KINDS.find((x) => x.k === k.type)?.label ?? 'Place'}</span></span><span class="fig">{plural(collection.plantsAt(k.id).length, 'plant')}</span></a>
+        {@const kl = LOCATION_KINDS.find((x) => x.k === k.type)?.label ?? 'Place'}
+        <!-- The tile is decoration, and a hidden comma keeps the name and the kind apart: a reader heard "Bench 1BENCH" (round fifty-eight; the grower review). -->
+        <a class="azrow inside" href="/places/{k.id}"><span class="im" aria-hidden="true">{kl.slice(0, 5)}</span><span><span class="nm" style="font-style: normal">{k.name}</span><span class="fam"><span class="sr">, </span>{kl}</span></span><span class="fig"><span class="sr">, </span>{plural(collection.plantsAt(k.id).length, 'plant')}</span></a>
       {/each}
     </div>
   {/if}
@@ -350,7 +394,7 @@
   {#if !deep.length}
     <div class="cult"><div class="none">Nothing here yet. <a href="/plants/new?loc={id}">Add a plant here</a>, <a href="/propagation/new?loc={id}">start a batch here</a>, or move plants in with the button above.</div></div>
   {:else}
-    <div class="rows">
+    <div class="rows" class:auditrows={auditing}>
       {#each deep as a (a.id)}
         {@const seen = collection.lastSeen(a.id)}
         {@const ds = daysSince(seen)}
@@ -371,10 +415,10 @@
     </div>
     {#if auditing}
       <p class="actions auditacts" style="margin-top: 10px">
-        <button class="btn" type="button" onclick={() => tickAll(true)} disabled={tickedN === deep.length}>Tick all</button>
-        <button class="btn" type="button" onclick={() => tickAll(false)} disabled={!tickedN}>Clear</button>
+        <button class="btn" id="audit-all" type="button" onclick={() => tickAll(true)} disabled={tickedN === deep.length}>Tick all</button>
+        <button class="btn" id="audit-clear" type="button" onclick={() => tickAll(false)} disabled={!tickedN}>Clear</button>
         <span class="small muted">{tickedN} of {deep.length} ticked</span>
-        {#if confirmCancel}<span class="small">Drop the {tickedN} tick{tickedN === 1 ? '' : 's'}?</span><button class="btn" type="button" onclick={cancelAudit}>Yes, cancel</button><button class="btn" type="button" onclick={() => (confirmCancel = false)}>Keep going</button>{:else}<button class="btn" type="button" onclick={cancelAudit}>Cancel</button>{/if}
+        {#if confirmCancel}<span class="small">Drop the {tickedN} tick{tickedN === 1 ? '' : 's'}?</span><button class="btn" id="audit-cancel-yes" type="button" onclick={cancelAudit}>Yes, cancel</button><button class="btn" type="button" onclick={keepAuditing}>Keep going</button>{:else}<button class="btn" id="audit-cancel" type="button" onclick={cancelAudit}>Cancel</button>{/if}
         <button class="btn pri" onclick={finishAudit}>Finish audit</button>
       </p>
     {:else if auditResult}
@@ -393,7 +437,7 @@
 {/if}
 
 <style>
-  .dangerrow { margin: 46px 0 10px; display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; font-size: 12.5px; color: var(--ink3); }
+  .dangerrow { margin: 46px 0 10px; display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; font-size: var(--fs-md); color: var(--ink3); }
   .linkish { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-decoration: underline; }
   .idcard.flat { margin-top: 14px; }
   .quickbar.words { margin-top: -6px; gap: 2px 14px; }
@@ -402,7 +446,7 @@
   .quickbar.words .btn:disabled { color: var(--ink3); }
   .muted { color: var(--ink3); }
   .movein { margin-top: 12px; }
-  .movein .body { padding: 10px 14px 14px; font-family: var(--ui); font-size: 14px; white-space: normal; } /* a form, not a note: not the notes' serif (round fifty-two, 6) */
+  .movein .body { padding: 10px 14px 14px; font-family: var(--ui); font-size: var(--fs-md); white-space: normal; } /* a form, not a note: not the notes' serif (round fifty-two, 6) */
   .movein .searchbar { width: 100%; margin-bottom: 6px; }
   .moverows { max-height: 50vh; overflow: auto; }
   .movein .actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
@@ -410,8 +454,8 @@
   .auditresult { color: var(--accent); font-weight: 600; margin: 10px 0 0; }
   .form { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 12px; padding: 14px 17px; margin-top: 16px; }
   .form label { display: grid; gap: 4px; }
-  .form label > span { font-size: 10.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink3); font-weight: 700; }
-  .form input, .form select, .form textarea { width: 100%; font: inherit; font-size: 14px; padding: 8px 11px; border: 1px solid var(--rule); border-radius: 9px; background: var(--card); color: var(--ink); }
+  .form label > span { font-size: var(--fs-xs); letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink3); font-weight: 700; }
+  .form input, .form select, .form textarea { width: 100%; font: inherit; font-size: 0.875rem; padding: 8px 11px; border: 1px solid var(--rule); border-radius: var(--r); background: var(--card); color: var(--ink); }
   .wide { grid-column: 1 / -1; }
   .actions { display: flex; gap: 8px; margin: 0; }
   .grow { flex: 1; }
@@ -420,7 +464,15 @@
   .row .dot { margin: 0 auto; }
   .row input[type='checkbox'] { width: 18px; height: 18px; margin: 0 auto; }
   .accrow .nm .accno { font-style: normal; vertical-align: 2px; }
+  /* Rows of two lines, about 56px; a name wraps between words, never inside one ("Astrophytu m"): the theme's anywhere is for the catalogue's tiles (round fifty-eight; the grower review). */
+  .rows .azrow { min-height: 56px; }
+  .rows .azrow .nm { overflow-wrap: break-word; word-break: normal; }
   .azrow.accrow .fam.phoneonly { display: none; } /* outranks the theme's .azrow.accrow .fam { display: flex }, which printed the status twice at desktop width (round twenty-five, 13) */
-  .fam.due { color: var(--warm); }
+  .fam.due { color: var(--warm-ink); }
   @media (max-width: 640px) { .form { grid-template-columns: 1fr 1fr; } .idcard.flat { margin-top: 10px; } .azrow .fig { display: none; } .azrow.accrow .fam.phoneonly { display: flex; } }
+  .unitfield { display: flex; align-items: center; gap: 6px; }
+  .unitfield input { width: 6em; }
+  .months { border: 0; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 4px 10px; }
+  .months legend { font-size: var(--fs-sm); font-weight: 600; color: var(--ink2); padding: 0; margin-bottom: 4px; }
+  .mo { display: inline-flex; align-items: center; gap: 4px; min-height: 36px; font-size: var(--fs-md); }
 </style>

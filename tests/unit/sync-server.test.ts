@@ -167,7 +167,8 @@ describe('vault creation is bounded per address, per day for everyone, and in al
     expect(ok).toBe(MAX_NEW_VAULTS_PER_DAY);
     expect(await allowCreation(kv as never, '1.2.3.4')).toBe('address');
     expect(await allowCreation(kv as never, '5.6.7.8')).toBe('ok');
-    expect(kv.m.get('vaults:all')).toBe(String(MAX_NEW_VAULTS_PER_DAY + 1));
+    // the ceiling in all counts vaults that hold something, taken at a vault's first object, not at its creation (round fifty-eight)
+    expect(kv.m.has('vaults:all')).toBe(false);
     // the KV fallback's address and day keys expire at a fixed moment, the midnight ending the next day, not by a TTL each write renews (round twenty-five, 8)
     const today = new Date().toISOString().slice(0, 10);
     const ends = Date.parse(today + 'T00:00:00Z') / 1000 + 2 * 86400;
@@ -183,8 +184,9 @@ describe('vault creation is bounded per address, per day for everyone, and in al
     expect(await allowCreation(kv as never, '10.0.0.9', T0, { perDay: 12, max: 100 })).toBe('day');
     // the next day the day counter is fresh, and the ceiling in all is what stops it
     expect(await allowCreation(kv as never, '10.0.0.9', T0 + 86_400_000, { perDay: 12, max: 100 })).toBe('ok');
+    expect(await allowCreation(kv as never, '10.0.1.1', T0 + 86_400_000, { perDay: 12, max: 13 })).toBe('ok'); // thirteen made, none holding anything
+    kv.m.set('vaults:all', '13'); // thirteen that hold something
     expect(await allowCreation(kv as never, '10.0.1.1', T0 + 86_400_000, { perDay: 12, max: 13 })).toBe('total');
-    expect(kv.m.get('vaults:all')).toBe('13');
     expect(creationCeilings({ SYNC_VAULTS_PER_DAY: '300', SYNC_VAULTS_MAX: 'lots' })).toEqual({ perDay: 300, max: undefined });
     expect(creationCeilings({ SYNC_VAULTS_PER_DAY: 300, SYNC_VAULTS_MAX: 5000 })).toEqual({ perDay: 300, max: 5000 }); // a JSON number in wrangler.jsonc counts too
     expect(creationCeilings(undefined)).toEqual({ perDay: undefined, max: undefined });
@@ -203,7 +205,7 @@ describe('vault creation is bounded per address, per day for everyone, and in al
     expect(await allowCreation(kv as never, '9.9.9.9')).toBe('unavailable');
     kv.fail = false;
     const realPut = kv.put.bind(kv);
-    kv.put = async (k: string, v: string) => { if (k === 'vaults:all') throw new Error('kv: too many writes'); return realPut(k, v); };
+    kv.put = async (k: string, v: string, o?: unknown) => { if (k.startsWith('vaults:all:')) throw new Error('kv: too many writes'); return realPut(k, v, o as never); };
     expect(await allowCreation(kv as never, '9.9.9.9')).toBe('ok');
     expect(warn).toHaveBeenCalledTimes(2);
     warn.mockRestore();

@@ -21,7 +21,8 @@
  * word's postings (an entry must match every word), so "cop cin" ranks the few entries under both keys.
  */
 const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-const words = (s: string) => fold(s).split(/[^a-z0-9]+/).filter(Boolean);
+/** A text's words as the postings read them: folded, split on anything but a letter or digit. */
+export const words = (s: string) => fold(s).split(/[^a-z0-9]+/).filter(Boolean);
 
 /** The keys an entry's word is posted under. */
 export function wordKeys(w: string): string[] {
@@ -50,6 +51,8 @@ export function entryWords(e: Wordy): string[] {
 
 /** How many posting files a corpus of `n` species is split into: sixty-four up to about ten thousand, doubling past that, as the buckets do. */
 export const postingFilesFor = (n: number) => { let f = 64; while (f < 4096 && n > f * 160) f *= 2; return f; };
+/** Every posting file's name, for a corpus split into `files`. */
+export const postingFileNames = (files: number) => Array.from({ length: files }, (_, i) => fileName(i, files));
 const fileName = (i: number, files: number) => i.toString(16).padStart(Math.max(2, (files - 1).toString(16).length), '0');
 /** The posting file a key is in. */
 export function postingFileOf(key: string, files: number): string {
@@ -84,7 +87,7 @@ export function queryWords(q: string): string[] {
   const all = words(q);
   const qs = all.filter((w, i) => !(RANK_MARKERS.has(w) && i < all.length - 1));
   const slice = qs.length > 1 && RANK_MARKERS.has(qs[qs.length - 1]) ? qs.slice(0, -1) : qs;
-  return slice;
+  return [...new Set(slice)];
 }
 /**
  * What a query needs read: for the exact pass, one key per word; for the near pass, the near keys of each word of four
@@ -97,7 +100,7 @@ export function queryPlan(q: string): { exact: string[][]; near: string[][] | nu
   const ws = queryWords(q);
   if (!ws.length) return { exact: [], near: null };
   const exact = ws.map((w) => [exactKey(w)]);
-  const all = words(q).filter((w, i, a) => !(RANK_MARKERS.has(w) && i < a.length - 1));
+  const all = [...new Set(words(q).filter((w, i, a) => !(RANK_MARKERS.has(w) && i < a.length - 1)))];
   const anyLong = all.some((w) => w.length >= 4);
   if (!anyLong) return { exact, near: null };
   const longInSlice = ws.some((w) => w.length >= 4);

@@ -15,7 +15,7 @@
   const missing = $derived(waiting.missing.map((f) => WORD[f] ?? f));
   const them = $derived(missing.length === 1 ? 'it' : 'them');
   /** Set aside on Sync: a batch from a newer build may hold the real value, and a default written now would be newer than it and win on every device (round thirty-eight, R1-1). */
-  const setAside = $derived(sync.quarantined.some((q: { kind?: string; error: string }) => !(q.kind === 'photo' || (!q.kind && q.error.startsWith('photo:'))))); // a set-aside photograph holds no field
+  const setAside = $derived(sync.quarantined.some((q) => q.kind !== 'photo')); // a set-aside photograph holds no field; every entry carries its kind since round fifty-seven
   const offerStatus = $derived(kind === 'accession' && missing.length === 1 && waiting.missing[0] === 'status' && !setAside);
   async function markGrowing() {
     await collection.put('accession', waiting.id, { status: 'growing' });
@@ -23,7 +23,8 @@
   }
 </script>
 
-<StateNote word="Waiting" id="waiting-notice">{label}'s record is on this device but not whole: it has no {missing.join(' and no ')}. {#if setAside}A batch set aside on <a href="/sync">Sync</a> (from a newer build) may hold {them}; this build will read it when it can.{:else}A change from a newer build may still bring {them}, or the file it came from never had {them}.{/if} Until then the {what} is not listed. <a href="/about/how#glossary">Glossary</a>.</StateNote>
+<!-- What "set aside" meant, and "this version of the app", not "this build" (round fifty-eight; the accessibility review). -->
+<StateNote word="Waiting" id="waiting-notice">{label}'s record is on this device but not whole: it has no {missing.join(' and no ')}. {#if setAside}A batch from a newer version of the app, which could not be read here (see <a href="/sync">Sync</a>), may hold {them}; this version of the app will read it when it can.{:else}A change from a newer version of the app may still bring {them}, or the file it came from never had {them}.{/if} Until then the {what} is not listed. <a href="/about/how#glossary">Glossary</a>.</StateNote>
 {#if offerStatus}
   <p><button class="btn pri" onclick={markGrowing}>Mark it as growing</button></p>
 {/if}

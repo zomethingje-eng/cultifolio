@@ -226,26 +226,27 @@
     onfocus={() => value && (open = true)}
     onblur={onBlur}
   />
-  {#if taxonKey}<span class="pill ok">GBIF {taxonKey}</span>{:else if resolved === 'no'}<span class="pill warn">not in the backbone — kept as typed</span>{:else if resolved === 'unreached'}<span class="pill warn">name service not reached — kept as typed</span>{/if}
+  {#if taxonKey}<span class="pill ok">GBIF {taxonKey}</span>{:else if resolved === 'no'}<span class="pill warn">not in the backbone, kept as typed</span>{:else if resolved === 'unreached'}<span class="pill warn">name service not reached, kept as typed</span>{/if}
   {#if kind === 'hybrid'}<span class="pill">hybrid{parentage ? '' : ', parentage not stated'}</span>{:else if kind === 'cultivar'}<span class="pill">cultivar</span>{/if}
   {#if nameServiceDown}<p class="hint svc" role="status">The name service did not answer, so only the reference's own species are offered; a name typed in full is kept as typed and checked later.</p>{/if}
   {#if nearest}<p class="hint" role="status">Not a reference name. Did you mean <button type="button" class="linkish" onclick={() => pick(nearest)}><SpeciesName name={nearest.name} /></button>? Otherwise Add keeps exactly what you typed.</p>
   {:else if armed}<p class="hint" id="{listId}-hint" role="status">Pick a name from the list, or press Add to keep exactly what you typed.</p>{/if}
   <ul class="menu card" role="listbox" id={listId} aria-label="Suggested names" hidden={!menuOpen}>
     {#each suggestions as s, i (s.key)}
-      <li role="option" id={optionId(i)} aria-selected={i === hi} class:hi={i === hi} tabindex="-1" onmousedown={(e) => e.preventDefault()} onclick={() => pick(s)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(s); } }} onmousemove={() => (hi = i)}><SpeciesName name={s.name} /> <span class="faint">{s.family ?? ''}{s.rank === 'GENUS' ? ' · genus' : s.rank === 'SUBSPECIES' ? ' · subspecies' : s.rank === 'VARIETY' ? ' · variety' : s.rank === 'FORM' ? ' · form' : ''}{s.far ? ' · similar spelling, another genus' : s.local ? ' · has a dossier' : ''}</span></li>
+      <!-- "has a species page", not "has a dossier": the glossary's plain words (round fifty-eight; the accessibility review). -->
+      <li role="option" id={optionId(i)} aria-selected={i === hi} class:hi={i === hi} tabindex="-1" onmousedown={(e) => e.preventDefault()} onclick={() => pick(s)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(s); } }} onmousemove={() => (hi = i)}><SpeciesName name={s.name} /> <span class="faint">{s.family ?? ''}{s.rank === 'GENUS' ? ' · genus' : s.rank === 'SUBSPECIES' ? ' · subspecies' : s.rank === 'VARIETY' ? ' · variety' : s.rank === 'FORM' ? ' · form' : ''}{s.far ? ' · similar spelling, another genus' : s.local ? ' · has a species page' : ''}</span></li>
     {/each}
   </ul>
 </div>
 
 <style>
   .picker { position: relative; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
-  input { flex: 1; min-width: 14rem; padding: 0.5em 0.8em; border: 1px solid var(--rule2); border-radius: 8px; background: var(--card); }
-  .hint { flex-basis: 100%; margin: 0; font-size: 12.5px; color: var(--ink2); }
+  input { flex: 1; min-width: 14rem; padding: 0.5em 0.8em; border: 1px solid var(--rule2); border-radius: var(--r); background: var(--card); }
+  .hint { flex-basis: 100%; margin: 0; font-size: var(--fs-md); color: var(--ink2); }
   .hint.svc { color: var(--ink3); }
   .linkish { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-decoration: underline; }
   .menu { position: absolute; top: 100%; left: 0; right: 0; z-index: 5; list-style: none; margin: 0.3rem 0 0; padding: 0.3rem; box-shadow: var(--sh2); max-height: 18rem; overflow: auto; }
   .menu[hidden] { display: none; }
-  .menu li { display: block; width: 100%; text-align: left; padding: 0.45em 0.6em; border-radius: 6px; cursor: pointer; }
+  .menu li { display: block; width: 100%; text-align: left; padding: 0.45em 0.6em; border-radius: var(--r-sm); cursor: pointer; }
   .menu li:hover, .menu li.hi { background: var(--sunk); }
 </style>

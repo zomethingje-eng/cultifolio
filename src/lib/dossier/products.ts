@@ -11,7 +11,8 @@ import type { Sheet } from './sheet';
 import { DOSSIER_V } from './schema';
 import { bucketOf, bucketsFor, bucketNames } from '$core/bucket';
 import { buildPostings, postingFilesFor } from '$core/postings';
-import { contentHash, type Manifest } from './manifest';
+import { prepare, search } from '$core/search';
+import { contentHash, SHORT_HITS, type Manifest } from './manifest';
 import { md5 } from './md5';
 import { catalogueOf, rowsOnly, catalogueFile, BYS, CHIPS } from './catalogue';
 
@@ -33,7 +34,16 @@ export function buildProducts(index: IndexEntry[], indexText: string, sheetsOf: 
   const sheets = sheetsOf(buckets);
   for (const b of bucketNames(buckets)) put(`sheets/${b}.json`, JSON.stringify(sheets.get(b) ?? []));
   const postings = postingFilesFor(index.length);
-  for (const [f, body] of buildPostings(index, postings)) put(`postings/${f}.json`, JSON.stringify(body));
+  const posted = buildPostings(index, postings);
+  for (const [f, body] of posted) put(`postings/${f}.json`, JSON.stringify(body));
+  // The first keystrokes' answers (round fifty-eight): every key of one or two characters that begins a word, with the
+  // whole index's best hundred for it as positions in the index. A one-letter query matches most of the index; ranking
+  // it per request cost what the whole index costs (the first reviewer's finding 13).
+  const whole = prepare(index);
+  const place = new Map(index.map((e, i) => [e, i]));
+  const short: Record<string, number[]> = {};
+  for (const body of posted.values()) for (const k of Object.keys(body)) if (k.length <= 2 && !Object.hasOwn(short, k)) short[k] = search(whole, k, SHORT_HITS).map((e) => place.get(e)!).filter((i) => i !== undefined);
+  put('short.json', JSON.stringify(Object.fromEntries(Object.entries(short).sort(([a], [b]) => (a < b ? -1 : 1)))));
   for (const by of BYS) for (const chip of CHIPS) put(catalogueFile(by, chip), JSON.stringify(rowsOnly(catalogueOf(index, by, chip))));
   // The id names everything in the directory, not the index alone: a dossier change that leaves its index entry as it was
   // still changes its sheet, and a sheet rewritten under an unchanged id sat in every cache for a day (round fifty-four, 3; both reviewers).

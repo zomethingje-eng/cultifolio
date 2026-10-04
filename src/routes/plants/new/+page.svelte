@@ -39,7 +39,7 @@
     }
     // A ?loc= naming a bench since removed falls back to the last-used one rather than dropping both (round eighteen, 18).
     const want = loc && collection.location(loc) ? loc : last;
-    if (want && collection.location(want) && locationId == null) locationId = want;
+    if (want && collection.location(want) && locationId == null) { locationId = want; if (want === last && !(loc && collection.location(loc))) lastUsedLoc = want; }
     // The key in the link is not trusted on its own: a copied, edited or stale link can pair a name with another species'
     // key. For a name at species rank the reference's own key for that name is the one kept (round eleven, 2). The answer
     // is taken only if the name is still the one asked about: the form is live during the wait, and a grower who has
@@ -71,6 +71,8 @@
   let price = $state('');
   let sourceForm = $state('plant');
   let locationId = $state<string | null>(null);
+  /** The place the form filled from the last one used, said under the field (round fifty-eight; the grower review). */
+  let lastUsedLoc = $state<string | null>(null);
   let notes = $state('');
   let count = $state<number | null>(1); // null once cleared
   /** Whole plants only, one to two hundred: 2.5 is two, a cleared box is one, and a number is never minted for a fraction (round thirteen, 10). */
@@ -149,16 +151,19 @@
         notes: notes.trim() || null
       });
       const firstId = accNo(recs[0]);
+      // Several new pots want labels next: the toast opens the labels page with these plants picked, by identity as the plant page's Label does (round fifty-eight; the grower review).
+      const labelsFor = { label: 'Labels', run: () => { void goto('/labels?acc=' + recs.map((r) => r.id).join(',')); } };
       try { if (locationId) localStorage.setItem('cultifolio.lastLocation', locationId); } catch { /* fine */ }
       if (addAnother) {
         addAnother = false;
-        toast.show(wanted > 1 ? `${wanted} plants added` : `${firstId} added`, 8000, { label: wanted > 1 ? 'See them' : `Open ${firstId}`, run: () => { void goto(wanted > 1 ? '/plants' : `/plants/${firstId}`); } });
+        toast.show(wanted > 1 ? `${wanted} plants added` : `${firstId} added`, 8000, wanted > 1 ? labelsFor : { label: `Open ${firstId}`, run: () => { void goto(`/plants/${firstId}`); } });
         name = ''; taxonKey = null; cultivar = null; kind = 'species'; parentage = null; nameAsReceived = ''; fieldNumber = ''; notes = ''; price = ''; count = 1; useOwnNumber = false; ownNumber = ''; nameArmed = false;
         setTimeout(() => document.querySelector<HTMLElement>('.picker input')?.focus(), 0);
         return;
       }
       saved = true;
-      toast.show(wanted > 1 ? `${wanted} plants added` : `${firstId} added`);
+      if (wanted > 1) toast.show(`${wanted} plants added`, 8000, labelsFor);
+      else toast.show(`${firstId} added`);
       goto(wanted > 1 ? '/plants' : `/plants/${firstId}`);
     } catch {
       /* the store has recorded why in lastWriteError, which the notice above the form shows; the form stays open with what
@@ -169,7 +174,7 @@
   }
 </script>
 
-<svelte:head><title>Add plant — Cultifolio</title></svelte:head>
+<svelte:head><title>Add plant · Cultifolio</title></svelte:head>
 <svelte:window onbeforeunload={guardUnload} />
 
 {#if collection.lastWriteError}
@@ -190,7 +195,7 @@
   {/if}
 
   <div class="two">
-    <div class="field"><span>Place</span><LocationPicker bind:value={locationId} id="f-loc" label="Place" /></div>
+    <div class="field"><span>Place</span><LocationPicker bind:value={locationId} id="f-loc" label="Place" lastUsed={lastUsedLoc} /></div>
     <label class="field"><span>Acquired</span><input id="f-date" type="date" bind:value={acquired} oninput={() => (dateMsg = '')} aria-invalid={!!dateMsg} aria-describedby={dateMsg ? 'f-date-bad' : undefined} />{#if dateMsg}<span class="bad small" id="f-date-bad">{dateMsg}</span>{/if}</label>
   </div>
 
@@ -234,15 +239,17 @@
 
   <details class="own">
     <summary class="faint">Use my own number</summary>
-    <div class="ownrow"><input id="f-own" type="checkbox" bind:checked={useOwnNumber} aria-label="Use my own number" /> <input id="f-own-no" type="text" bind:value={ownNumber} placeholder="e.g. 2019-0147" aria-label="Your accession number" disabled={!useOwnNumber} aria-invalid={ownTaken} aria-describedby={ownTaken ? 'f-own-taken' : undefined} /></div>
+    <!-- Both with visible names: the box's placeholder was its only one, and "accession" is the trade's word, not the app's (round fifty-eight; the accessibility review). -->
+    <div class="ownrow"><label class="ownchk"><input id="f-own" type="checkbox" bind:checked={useOwnNumber} /> Use my own number</label> <label class="ownno"><span class="eyebrow">Your plant number</span><input id="f-own-no" type="text" bind:value={ownNumber} placeholder="e.g. 2019-0147" disabled={!useOwnNumber} aria-invalid={ownTaken} aria-describedby={ownTaken ? 'f-own-taken' : undefined} /></label></div>
     {#if ownTaken}<p class="bad small" id="f-own-taken" role="alert">{ownNumber.trim()} is already used by <a href="/plants/{collection.accession(ownNumber.trim())?.id}">{collection.accession(ownNumber.trim())?.taxonName ?? 'a plant no longer growing'}</a>. A number is never reused; pick another.</p>{/if}
   </details>
   </div>
 
   <!-- Pinned on a phone, so Add is under the thumb however long the form; "Add as typed" is the second press for a name the reference does not know (round forty-nine, 3). -->
   <!-- Add is first in the markup, so Enter (the phone's Go) is Add, not "Save and add another"; the order on screen is set by CSS (round fifty-one, 4). -->
+  <!-- The second press keeps the count in its words: "Add as typed" read as one plant when ten were asked for, and growers set the count back to one (round fifty-eight; the grower review). -->
   <div class="actions sticky">
-    <button class="btn pri add" type="submit" onclick={() => (addAnother = false)} disabled={!name.trim() || busy || checking || ownTaken} aria-live="polite">{checking ? 'Checking the name…' : busy ? 'Adding…' : nameArmed ? 'Add as typed' : `Add${countN > 1 ? ` ${countN} plants` : ''}`}</button>
+    <button class="btn pri add" type="submit" onclick={() => (addAnother = false)} disabled={!name.trim() || busy || checking || ownTaken} aria-live="polite">{checking ? 'Checking the name…' : busy ? 'Adding…' : nameArmed ? `Add${countN > 1 ? ` ${countN}` : ''} as typed` : `Add${countN > 1 ? ` ${countN} plants` : ''}`}</button>
     <a class="btn cancel" href="/plants">Cancel</a>
     <button class="btn another" type="submit" onclick={() => (addAnother = true)} disabled={!name.trim() || busy || checking || ownTaken} title="Add this plant and keep the form open for the next, with the place, date, source and provenance kept">Save and add another</button>
   </div>
@@ -252,20 +259,24 @@
   .form { max-width: 720px; }
   .sheet { padding: 6px 17px 14px; margin-top: 12px; }
   .field { margin: 12px 0; display: block; }
-  .field > span:first-child { display: block; font-size: 10.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink3); font-weight: 700; margin-bottom: 5px; }
+  .field > span:first-child { display: block; font-size: var(--fs-xs); letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink3); font-weight: 700; margin-bottom: 5px; }
   .field > span:first-child .faint { text-transform: none; letter-spacing: 0; font-weight: 400; }
-  .field input[type='text'], .field input[type='date'], .field input[type='number'], .field select, .field textarea { width: 100%; font: inherit; font-size: 14px; padding: 9px 12px; border: 1px solid var(--rule); border-radius: 9px; background: var(--card); color: var(--ink); }
+  .field input[type='text'], .field input[type='date'], .field input[type='number'], .field select, .field textarea { width: 100%; font: inherit; font-size: 0.875rem; padding: 9px 12px; border: 1px solid var(--rule); border-radius: var(--r); background: var(--card); color: var(--ink); }
   .field input:focus, .field select:focus, .field textarea:focus { outline: 0; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-  .field .small { display: block; margin-top: 4px; font-size: 12px; }
+  .field .small { display: block; margin-top: 4px; font-size: var(--fs-sm); }
   .two { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; align-items: start; }
   .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
   .moredetails { margin-top: 8px; }
-  .moredetails > summary { cursor: pointer; font-size: 13px; padding: 8px 0; }
+  .moredetails > summary { cursor: pointer; font-size: var(--fs-md); padding: 8px 0; }
   .actions.sticky .cancel { order: 1; } .actions.sticky .another { order: 2; } .actions.sticky .add { order: 3; }
+  @media (max-width: 640px) { .actions.sticky .btn { min-height: 44px; } } /* the pinned bar is the thumb's target: 44px, as the grower review asks of every tap (round fifty-eight; the grower review) */
   @media (max-width: 700px) { .actions.sticky { position: sticky; bottom: calc(56px + env(safe-area-inset-bottom)); background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(8px); padding: 10px 0; margin: 8px 0 0; z-index: 5; } }
   .own { margin-top: 8px; }
-  .own summary { cursor: pointer; font-size: 13px; }
-  .ownrow { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
-  .ownrow input[type='text'] { flex: 1; font: inherit; font-size: 14px; padding: 8px 11px; border: 1px solid var(--rule); border-radius: 9px; background: var(--card); color: var(--ink); }
+  .own summary { cursor: pointer; font-size: var(--fs-md); }
+  .ownrow { display: flex; align-items: flex-end; gap: 8px 14px; margin-top: 8px; flex-wrap: wrap; }
+  /* The box and its words, and the number with its small name over it (round fifty-eight; the accessibility review). */
+  .ownchk { display: inline-flex; align-items: center; gap: 8px; min-height: var(--tap); font-size: var(--fs-md); }
+  .ownno { display: grid; gap: 3px; flex: 1 1 200px; }
+  .ownrow input[type='text'] { width: 100%; font: inherit; font-size: var(--fs-md); padding: 8px 11px; border: 1px solid var(--rule); border-radius: var(--r); background: var(--card); color: var(--ink); }
   @media (max-width: 520px) { .two { grid-template-columns: 1fr; } }
 </style>

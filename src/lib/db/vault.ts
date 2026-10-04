@@ -151,6 +151,8 @@ export function openVault(): Promise<IDBPDatabase<VaultDB>> {
 export interface StagedReplacement {
   putPhoto(p: PhotoBlobs): Promise<void>;
   appendChanges(changes: Change[]): Promise<void>;
+  /** The stamps the replacement holds parked, which replace the device's own (round fifty-eight). */
+  setParked(stamps: string[]): Promise<void>;
   /** How many changes and photographs the staging database holds, to check against what was meant to go in. */
   counts(): Promise<{ changes: number; photos: number }>;
   /** Throw the staged replacement away; the live vault is untouched. */
@@ -181,6 +183,9 @@ export async function openStaging(): Promise<StagedReplacement> {
         const tx = need().transaction('changes', 'readwrite');
         await Promise.all([...changes.map((c) => tx.store.put(c)), tx.done]);
       });
+    },
+    async setParked(stamps) {
+      await writing(() => need().put('meta', [...stamps], 'parked'));
     },
     async counts() {
       const d = need();
@@ -238,6 +243,8 @@ async function copyStagingIn(live: IDBPDatabase<VaultDB>): Promise<void> {
       // Through storeIn, so the numbers a restored collection carries go on the ledger like any other write (round twelve, 6).
       await storeIn(live.transaction(['changes', 'outbox', 'meta', 'order'], 'readwrite'), changes, false);
     }
+    // The parked set is the file's: the device's own named changes the wiped log no longer has (round fifty-eight).
+    await live.put('meta', ((await stage.get('meta', 'parked')) as string[] | undefined) ?? [], 'parked');
     // Photographs one at a time: a transaction holding every blob of a large collection would be one large allocation.
     for (const id of await stage.getAllKeys('photos')) {
       const p = await stage.get('photos', id);
@@ -502,6 +509,11 @@ export async function changesByKeys(ts: string[]): Promise<Change[]> {
   return out.filter((c): c is Change => !!c);
 }
 
+/** Every stored change of one record, by the record index: for a reading of its history, such as notes replaced unseen (round fifty-eight). */
+export async function changesOf(kind: string, id: string): Promise<Change[]> {
+  return (await openVault()).getAllFromIndex('changes', 'byRecord', [kind, id] as never) as Promise<Change[]>;
+}
+
 export async function getMeta<T>(k: string): Promise<T | undefined> {
   const db = await openVault();
   return (await db.get('meta', k)) as T | undefined;
@@ -509,6 +521,20 @@ export async function getMeta<T>(k: string): Promise<T | undefined> {
 
 export async function setMeta(k: string, v: unknown): Promise<void> {
   await writing(async () => (await openVault()).put('meta', v, k));
+}
+
+/**
+ * Change a meta record from what is stored, read and written in one transaction: two tabs that each wrote their own copy
+ * of a set (the photographs to check, the parked changes dealt with) wrote over each other's additions (round fifty-eight;
+ * the client review).
+ */
+export async function updateMeta<T>(k: string, fn: (had: T | undefined) => T): Promise<T> {
+  return writing(async () => {
+    const tx = (await openVault()).transaction('meta', 'readwrite');
+    const next = fn((await tx.store.get(k)) as T | undefined);
+    await Promise.all([tx.store.put(next, k), tx.done]);
+    return next;
+  });
 }
 
 /**
@@ -604,7 +630,11 @@ export interface FoldSnapshot {
   last: string;
   /** How many changes were folded, for the page's own account of the load. */
   changes: number;
+  /** When it was written (ms): a snapshot under newer rules that no shell has written for an hour is a rolled-back build's, and may be replaced (round fifty-eight). */
+  savedAt?: number;
 }
+/** How long a snapshot under newer rules is kept from an older build: past the overlap of two shells in a deploy, not for good. */
+export const NEWER_FOLD_KEPT_MS = 60 * 60_000;
 export async function readFold(): Promise<{ fold: FoldSnapshot; gen: number } | undefined> {
   const db = await openVault();
   const tx = db.transaction('meta');
@@ -625,12 +655,15 @@ export async function writeFold(fold: FoldSnapshot, gen: number): Promise<boolea
     // An old build's shell, still open after a deploy, must not overwrite a snapshot folded under newer rules, nor the new
     // the old's back and forth: the newer rules keep the snapshot (round fifty-five, 2; since round fifty-seven by the
     // rules, not the build, since the snapshot is keyed to the rules).
-    const newer = typeof had?.rules === 'number' && had.rules > fold.rules;
+    // But not for good: after a rollback the newer rules are gone, and a snapshot no build can read locked every load into
+    // folding the whole log until the next deploy (round fifty-eight; the client review). One that no newer shell has
+    // written for an hour is replaced.
+    const newer = typeof had?.rules === 'number' && had.rules > fold.rules && Date.now() - (typeof had.savedAt === 'number' ? had.savedAt : 0) < NEWER_FOLD_KEPT_MS;
     if (now !== gen || newer) {
       await tx.done;
       return false;
     }
-    await Promise.all([tx.store.put(fold, FOLD), tx.done]);
+    await Promise.all([tx.store.put({ ...fold, savedAt: Date.now() }, FOLD), tx.done]);
     return true;
   });
 }

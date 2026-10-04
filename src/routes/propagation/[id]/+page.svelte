@@ -1,5 +1,6 @@
 <script lang="ts">
   import Parked from '$lib/ui/Parked.svelte';
+  import ReplacedNotes from '$lib/ui/ReplacedNotes.svelte';
   import { units } from '$lib/ui/units.svelte';
   import { localDate } from '$core/dates';
   import { temp, tempUnit, cToF, bottomHeat as heatCheck, numberOrNull } from '$core/units';
@@ -21,6 +22,8 @@
   import PhotoImg from '$lib/ui/PhotoImg.svelte';
   import PhotoAdd from '$lib/ui/PhotoAdd.svelte';
   import Lightbox from '$lib/ui/Lightbox.svelte';
+  import { photoLabel } from '$lib/ui/photo-label';
+  import ToggleGroup from '$lib/ui/ToggleGroup.svelte';
   import { focusNext } from '$lib/ui/focus';
   import { toast } from '$lib/ui/toast.svelte';
   import { today as day } from '$lib/ui/day.svelte';
@@ -94,11 +97,32 @@
   let gnote = $state('');
   let gmsg = $state('');
   let countBusy = false;
+  /**
+   * Growers count what is in the pot, while the log keeps the total up so far. In "In the pot now" the figure typed is
+   * what is there on the count's date, and the total is that plus what had been potted up and lost by then; the sum is
+   * shown before saving, and the total is what is checked and recorded (round fifty-eight; the grower review).
+   * The choice is remembered on this device only, as a convenience; nothing about it goes in the log.
+   */
+  let gmode = $state<'total' | 'now'>('total');
+  onMount(() => { try { if (localStorage.getItem('cultifolio.countMode') === 'now') gmode = 'now'; } catch { /* fine */ } });
+  function setCountMode(v: 'total' | 'now') {
+    gmode = v;
+    gmsg = '';
+    try { localStorage.setItem('cultifolio.countMode', v); } catch { /* fine */ }
+  }
+  /** Potted up and lost on or before a day: the same reading of the log as inPotOn, so a count dated back is summed against that day's figures, not today's. */
+  const outBy = (d: string) => { const ev = collection.events(id).filter((e) => e.d <= d); const sum = (t: string) => ev.filter((e) => e.t === t).reduce((n, e) => n + (e.n ?? 0), 0); return { potted: sum('potup'), lost: sum('loss') }; };
+  const gNow = $derived(gn == null || gn === '' || !Number.isFinite(Number(gn)) || Number(gn) < 0 ? null : Math.floor(Number(gn)));
+  const gOut = $derived(gmode === 'now' && s ? outBy(gd || today()) : { potted: 0, lost: 0 });
+  /** What the count records: the figure as typed, or in the pot plus potted up plus lost. */
+  const gTotal = $derived(gNow == null ? null : gmode === 'now' ? gNow + gOut.potted + gOut.lost : gNow);
   async function count(e: SubmitEvent) {
     e.preventDefault();
-    if (countBusy || !s || gn == null || gn === '' || gn < 0) return;
-    const n = Number(gn);
-    gmsg = dateProblem(gd, 'count') ?? (n > s.count ? `${n} is more than the ${s.count} that went in; edit the batch if the count was wrong.` : n < st.germinated ? `${n} is fewer than the ${st.germinated} already counted; the count is the total ${upWord} so far, so record losses instead.` : '');
+    if (countBusy || !s || gn == null || gn === '' || gn < 0 || gTotal == null) return;
+    const n = gTotal; // whole seedlings: 2.5 is 2, as on the Add form (round fifty-eight; the grower review)
+    // The same checks on the total in either mode; in "In the pot now" the sentence shows the sum it judged.
+    const said = gmode === 'now' ? `${gNow} in the pot, ${gOut.potted} potted up and ${gOut.lost} lost make ${n} ${upWord},` : `${n} is`;
+    gmsg = dateProblem(gd, 'count') ?? (n > s.count ? `${said} more than the ${s.count} that went in; edit the batch if the count was wrong.` : n < st.germinated ? (gmode === 'now' ? `${said} fewer than the ${st.germinated} already counted; record what died or went missing as losses first.` : `${n} is fewer than the ${st.germinated} already counted; the count is the total ${upWord} so far, so record losses instead.`) : '');
     if (gmsg) return;
     countBusy = true;
     try {
@@ -106,7 +130,7 @@
     } finally {
       countBusy = false;
     }
-    toast.show(`Recorded: ${n} ${upWord} so far.`);
+    toast.show(gmode === 'now' ? `Recorded: ${n} ${upWord} so far (${gNow} in the pot).` : `Recorded: ${n} ${upWord} so far.`);
     gn = ''; gnote = '';
   }
   /* loss */
@@ -137,6 +161,7 @@
   let ploc = $state<string | null>(null);
   let pnote = $state('');
   let potted = $state<string[]>([]);
+  let pottedIds = $state<string[]>([]);
   let pmsg = $state('');
   let pottingBusy = $state(false);
   async function potUp(e: SubmitEvent) {
@@ -150,6 +175,7 @@
     try {
       const made = await collection.potUp(id, n, { date: pd, locationId: ploc, note: pnote.trim() || null });
       potted = made.map((a) => accNo(a));
+      pottedIds = made.map((a) => a.id); // the labels link carries identities, as the plant page's Label does (round fifty-eight; the grower review)
       // No toast: the notice under the cards says the same, with the numbers as links (round fifty-one, 5).
       potting = false;
       pnote = '';
@@ -264,30 +290,38 @@
   /** Two records under one number, not yet repaired: a reading of the log does not write to it, so the grower asks (round fifty-six, 3). */
   const sharedWith = $derived(s && collection.ready ? collection.sharesNumber('sowing', s.id) : []);
   let renumbering = $state(false);
+  /** Which of the records under the number the repair renumbers: said before the button, and the button does that and nothing else (round fifty-eight). */
+  const plan = $derived(s && sharedWith.length ? collection.numberPlan('sowing', s.id) : null);
+  const othersNamed = $derived((plan ? [plan.keeper, ...plan.renumbered].filter((x) => x !== s?.id) : []).map((x) => collection.sowing(x)?.taxonName ?? 'another batch'));
   async function renumberShared() {
     if (!s || renumbering) return;
     const id = s.id, before = sowNo(s);
     renumbering = true;
     try {
-      await collection.repairNumbers();
+      const ok = await collection.repairNumbers({ kind: 'sowing', no: before });
+      if (!ok || collection.sharesNumber('sowing', id).length) {
+        toast.show(`The number is still shared: ${collection.lastWriteError ?? 'the repair was not saved'}. Nothing else changed.`);
+        return;
+      }
       const now = collection.sowing(id);
       if (now && sowNo(now) !== before) {
         toast.show(`This batch is now ${sowNo(now)}; a note on it says why.`);
         if (param !== id) await goto(`/propagation/${encodeURIComponent(id)}`, { replaceState: true });
-      } else toast.show(`${before} stays with this batch, created first; the other was given the next free number.`);
+      } else toast.show(`${before} stays with this batch, made first; the other was given the next free number.`);
     } finally {
       renumbering = false;
     }
   }
+
 </script>
 
-<svelte:head><title>{s ? `${sowNo(s)} ${s.taxonName}` : param} — Cultifolio</title></svelte:head>
+<svelte:head><title>{s ? `${sowNo(s)} ${s.taxonName}` : param} · Cultifolio</title></svelte:head>
 
 {#if collection.lastWriteError}
   <div class="notice err" role="alert" id="write-error">This change was not saved: {collection.lastWriteError}. Free space or <a href="/backup">back up now</a>.</div>
 {/if}
 {#if s && sharedWith.length}
-  <div class="notice" id="shared-number">Another batch has the number {sowNo(s)} too: two devices gave it out while offline, or a file was merged in. The one created later is given the next free number, with a note saying so, when you renumber here, or at the next sync or import. <button class="btn" onclick={renumberShared} disabled={renumbering}>Renumber now</button></div>
+  <div class="notice" id="shared-number">{#if plan?.keeper === s.id}{othersNamed.length === 1 ? `Another batch, ${othersNamed[0]},` : `${othersNamed.length} other batchs`} {othersNamed.length === 1 ? 'has' : 'have'} the number {sowNo(s)} too: two devices gave it out while offline, or a file was merged in. This batch was made first and keeps it; renumbering gives {othersNamed.length === 1 ? 'the other' : 'the others'} the next free number, with a note saying so.{:else}This batch shares the number {sowNo(s)} with {othersNamed.join(', ')}, made before it: two devices gave it out while offline, or a file was merged in. Renumbering gives this batch the next free number, with a note saying so.{/if} <button class="btn" onclick={renumberShared} disabled={renumbering}>Renumber now</button></div>
 {/if}
 {#if !collection.ready}
   <p class="muted">Opening your collection…</p>
@@ -305,7 +339,7 @@
       <p class="vern">
         {s.count} {m.unit} on {s.sown}
         {#if parent} from <a class="mono" href="/plants/{accNo(parent)}">{accNo(parent)}</a>{:else if s.sourceFrom} from {s.sourceFrom}{/if}{#if !m.veg && s.fieldNumber}{' · '}<span class="fnchip">{s.fieldNumber}</span>{/if}{#if !m.veg && s.sourceRef}{' · lot '}{s.sourceRef}{/if}
-        {#if !m.veg}{' · '}{s.provenance === 'wild' ? 'wild-collected seed' : s.provenance === 'f1' ? 'seed from ex-habitat plants' : s.provenance === 'fn' ? 'seed from cultivated plants' : 'seed provenance not stated'}{/if}
+        {#if !m.veg}{' · '}{s.provenance === 'wild' ? 'wild-collected seed' : s.provenance === 'f1' ? 'seed from F1 plants in cultivation' : s.provenance === 'fn' ? 'seed from cultivated plants' : 'seed provenance not stated'}{/if}
       </p>
       <div class="pills">
         <span class="pill {s.status === 'active' ? 'a' : s.status === 'failed' ? 'b' : ''}">{s.status === 'active' ? 'in progress' : s.status}</span>
@@ -336,14 +370,15 @@
     <form class="cult editform" onsubmit={(e) => { e.preventDefault(); saveEdit(); }}>
       <label><span>Species</span><input id="se-name" type="text" bind:value={f.taxonName} /></label>
       <label><span>Cultivar</span><input id="se-cv" type="text" bind:value={f.cultivar} /></label>
-      <label><span>Method</span><select id="se-method" bind:value={f.method} onchange={() => { const k = PROP_METHODS.find((x) => x.k === f.method); if (k && f.provenance === 'veg' && !k.veg) f.provenance = 'unknown'; }}>{#if !PROP_METHODS.some((x) => x.k === f.method)}<option value={f.method}>{f.method} (a method this build does not know)</option>{/if}{#each PROP_METHODS as pm}<option value={pm.k}>{pm.label}</option>{/each}</select></label>
+      <!-- "this version of the app", not "this build", here and under Seed provenance (round fifty-eight; the accessibility review). -->
+      <label><span>Method</span><select id="se-method" bind:value={f.method} onchange={() => { const k = PROP_METHODS.find((x) => x.k === f.method); if (k && f.provenance === 'veg' && !k.veg) f.provenance = 'unknown'; }}>{#if !PROP_METHODS.some((x) => x.k === f.method)}<option value={f.method}>{f.method} (a method this version of the app does not know)</option>{/if}{#each PROP_METHODS as pm}<option value={pm.k}>{pm.label}</option>{/each}</select></label>
       <label><span>Date</span><input id="se-date" type="date" bind:value={f.sown} /></label>
       <label><span>Started</span><input id="se-count" type="number" min="1" bind:value={f.count} /></label>
       {#if !(PROP_METHODS.find((x) => x.k === f.method) ?? m).veg}
         <label><span>Seed from</span><input id="se-from" type="text" bind:value={f.sourceFrom} /></label>
         <label><span>Field number</span><input id="se-fn" type="text" bind:value={f.fieldNumber} placeholder="e.g. KK 1462" /></label>
         <label><span>Lot</span><input id="se-ref" type="text" bind:value={f.sourceRef} placeholder="the seller's lot code" /></label>
-        <label><span>Seed provenance</span><select id="se-prov" bind:value={f.provenance}>{#if !['unknown', 'wild', 'f1', 'fn', 'veg'].includes(f.provenance)}<option value={f.provenance}>{f.provenance} (a word this build does not know)</option>{/if}<option value="unknown">Not stated</option><option value="wild">Wild-collected</option><option value="f1">Ex-habitat plants</option><option value="fn">Cultivated plants</option></select></label>
+        <label><span>Seed provenance</span><select id="se-prov" bind:value={f.provenance}>{#if !['unknown', 'wild', 'f1', 'fn', 'veg'].includes(f.provenance)}<option value={f.provenance}>{f.provenance} (a word this version of the app does not know)</option>{/if}<option value="unknown">Not stated</option><option value="wild">Wild-collected seed (plants raised will be F1)</option><option value="f1">Seed from F1 plants in cultivation (plants raised will be Fn)</option><option value="fn">Seed from cultivated plants (Fn)</option></select></label>
       {/if}
       <label><span>Medium</span><input id="se-medium" type="text" bind:value={f.medium} /></label>
       <label><span>Container</span><input id="se-container" type="text" bind:value={f.container} /></label>
@@ -370,7 +405,8 @@
     <div class="notice err" id="overdrawn">{st.potted + st.lost} potted or lost against {st.germinated} counted up: {st.overdrawn} more than the pot held. Two devices may have potted the same seedlings while apart, or a count was missed; correct the count, or remove the line that is wrong.</div>
   {/if}
   {#if potted.length}
-    <div class="notice ok">Potted up {potted.length}: {#each potted as p, i}{#if i}{', '}{/if}<a class="mono" href="/plants/{p}">{p}</a>{/each}.</div>
+    <!-- New pots want labels: the notice opens the labels page with just these plants picked (round fifty-eight; the grower review). -->
+    <div class="notice ok potnotice">Potted up {potted.length}: {#each potted as p, i}{#if i}{', '}{/if}<a class="mono" href="/plants/{p}">{p}</a>{/each}.{#if pottedIds.length}{' '}<a class="btn" id="potted-labels" href="/labels?acc={pottedIds.join(',')}">Print {pottedIds.length} {pottedIds.length === 1 ? 'label' : 'labels'}</a>{/if}</div>
   {/if}
 
   {#if s.status !== 'active'}
@@ -378,10 +414,14 @@
   {:else}
   <div class="acts3">
     <form class="cult act" onsubmit={count}>
-      <div class="sum">{m.veg ? 'Count what has struck' : 'Count seedlings'} <span class="hint">the total {upWord} so far</span></div>
+      <div class="sum">{m.veg ? 'Count what has struck' : 'Count seedlings'} <span class="hint">{gmode === 'now' ? 'what is in the pot now' : `the total ${upWord} so far`}</span></div>
       <div class="fields">
-        <div class="row"><input id="g-date" type="date" aria-label="Date counted" bind:value={gd} /><input id="g-n" type="number" min="0" placeholder="{upWord} so far" aria-label="{m.veg ? 'Struck' : 'Up'} so far" bind:value={gn} /></div>
-        <input id="g-note" type="text" placeholder="note (optional)" aria-label="Note" bind:value={gnote} />
+        <!-- What the figure means, chosen by the grower; the log still records the total (round fifty-eight; the grower review). The one toggle group (round fifty-eight; the accessibility review). -->
+        <ToggleGroup label="What the figure counts" options={[{ value: 'total', label: `Total ${upWord} so far`, id: 'g-mode-total' }, { value: 'now', label: 'In the pot now', id: 'g-mode-now' }]} value={gmode} onchange={setCountMode} />
+        <!-- Each field with a visible name: three date boxes stood side by side on this page with nothing to tell them apart but a placeholder or nothing (round fifty-eight; the accessibility review). -->
+        <div class="row"><label class="fl"><span class="eyebrow">Date counted</span><input id="g-date" type="date" bind:value={gd} /></label><label class="fl"><span class="eyebrow">{gmode === 'now' ? 'In the pot now' : `${m.veg ? 'Struck' : 'Up'} so far`}</span><input id="g-n" type="number" min="0" step="1" aria-describedby={gmode === 'now' && gTotal != null ? 'g-sum' : undefined} bind:value={gn} /></label></div>
+        {#if gmode === 'now' && gTotal != null}<p class="small muted gsum" id="g-sum" role="status">Records {gTotal} {upWord} so far: {gNow} in the pot, {gOut.potted} potted up, {gOut.lost} lost{gd && gd !== today() ? ` by ${gd}` : ''}.</p>{/if}
+        <label class="fl"><span class="eyebrow">Note (optional)</span><input id="g-note" type="text" bind:value={gnote} /></label>
         {#if gmsg}<p class="refuse" role="alert">{gmsg}</p>{/if}
         <div class="end"><button class="btn pri" type="submit" disabled={gn == null || gn === ''}>Record count</button></div>
       </div>
@@ -389,8 +429,9 @@
     <form class="cult act" onsubmit={loss}>
       <div class="sum">Record losses <span class="hint">damping off, drying out, eaten, rot</span></div>
       <div class="fields">
-        <div class="row"><input id="l-date" type="date" aria-label="Date of loss" bind:value={ld} /><input id="l-n" type="number" min="1" placeholder="how many" aria-label="How many lost" bind:value={ln} /></div>
-        <input id="l-cause" type="text" placeholder="cause" aria-label="Cause" bind:value={lcause} />
+        <!-- round fifty-eight; the accessibility review: visible names, as above -->
+        <div class="row"><label class="fl"><span class="eyebrow">Date of loss</span><input id="l-date" type="date" bind:value={ld} /></label><label class="fl"><span class="eyebrow">How many lost</span><input id="l-n" type="number" min="1" bind:value={ln} /></label></div>
+        <label class="fl"><span class="eyebrow">Cause (optional)</span><input id="l-cause" type="text" bind:value={lcause} /></label>
         {#if lmsg}<p class="refuse" role="alert">{lmsg}</p>{/if}
         <div class="end"><button class="btn" type="submit" disabled={ln == null || ln === ''}>Record loss</button></div>
       </div>
@@ -399,9 +440,10 @@
       <div class="sum">Pot up <span class="hint">each plant gets its own number</span></div>
       {#if potting}
         <form onsubmit={potUp} class="fields">
-          <div class="row"><input id="p-date" type="date" aria-label="Date potted up" bind:value={pd} /><input id="p-n" type="number" min="1" aria-label="How many to pot up" bind:value={pn} /></div>
+          <!-- round fifty-eight; the accessibility review: visible names, as above -->
+          <div class="row"><label class="fl"><span class="eyebrow">Date potted up</span><input id="p-date" type="date" bind:value={pd} /></label><label class="fl"><span class="eyebrow">How many to pot up</span><input id="p-n" type="number" min="1" bind:value={pn} /></label></div>
           <LocationPicker bind:value={ploc} id="p-loc" label="Where they go" />
-          <input id="p-note" type="text" placeholder="note (optional)" aria-label="Note" bind:value={pnote} />
+          <label class="fl"><span class="eyebrow">Note (optional)</span><input id="p-note" type="text" bind:value={pnote} /></label>
           {#if pmsg}<p class="refuse" role="alert">{pmsg}</p>{/if}
           <div class="end"><button class="btn" type="button" onclick={() => (potting = false)}>Cancel</button><button class="btn pri" type="submit" disabled={pottingBusy}>Pot up {Math.floor(numberOrNull(pn) ?? 0) || ''}</button></div>
         </form>
@@ -427,7 +469,8 @@
   {#if photos.length}
     <div class="phgrid">
       {#each photos as ph, i (ph.id)}
-        <button class="ph" type="button" onclick={() => (lightbox = i)} title={ph.caption ?? ph.d}><PhotoImg id={ph.id} alt={ph.caption ?? ph.d} loading="lazy" /><span class="pd">{ph.d}</span></button>
+        <!-- Named by the batch, the day and the caption; the image inside is then decorative (round fifty-eight; the accessibility review). -->
+        <button class="ph" type="button" onclick={() => (lightbox = i)} title={ph.caption ?? ph.d} aria-label={photoLabel(ph)}><PhotoImg id={ph.id} alt="" loading="lazy" /><span class="pd">{ph.d}</span></button>
       {/each}
     </div>
   {/if}
@@ -435,7 +478,8 @@
 
   <div class="secrule"><h2>Log</h2><div class="line"></div><span class="n">{plural(events.length, 'entry', 'entries')}</span></div>
   <form class="noteform" onsubmit={note}>
-    <input id="n-date" type="date" aria-label="Date of the note" bind:value={nd} /><input id="n-text" type="text" placeholder="Add a note to the log" aria-label="Note" bind:value={ntext} /><button class="btn" type="submit" disabled={!ntext.trim()}>Add</button>
+    <!-- round fifty-eight; the accessibility review: visible names, as above -->
+    <label class="fl"><span class="eyebrow">Date of the note</span><input id="n-date" type="date" bind:value={nd} /></label><label class="fl"><span class="eyebrow">Note</span><input id="n-text" type="text" placeholder="Add a note to the log" bind:value={ntext} /></label><button class="btn" type="submit" disabled={!ntext.trim()}>Add</button>
   </form>
   {#if nmsg}<p class="refuse" role="alert">{nmsg}</p>{/if}
   {#if !events.length}
@@ -459,6 +503,7 @@
     <div><b>Pre-treatment</b>{s.treatment ?? 'none'}</div>
     <div><b>Warmth and cover</b>{s.bottomHeatC != null ? `bottom heat ${temp(s.bottomHeatC, units.current, 1)}` : 'no bottom heat'}{s.covered ? ' · covered' : ''}</div>
     {#if s.notes}<div class="wide"><b>Notes</b><span style="white-space: pre-wrap">{s.notes}</span></div>{/if}
+    <div class="wide"><ReplacedNotes kind="sowing" id={s.id} /></div>
   </div>
 
   {#if !raised.length}
@@ -475,31 +520,43 @@
   .muted { color: var(--ink3); }
   .editform { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 12px; padding: 14px 17px; margin-top: 16px; }
   .editform label { display: grid; gap: 4px; }
-  .editform label > span, .editform .lbl { font-size: 10.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink3); font-weight: 700; }
-  .editform label.row { display: flex; align-items: center; gap: 8px; align-self: end; font-size: 13px; }
-  .editform input, .editform select, .editform textarea, .fields input { width: 100%; font: inherit; font-size: 14px; padding: 8px 11px; border: 1px solid var(--rule); border-radius: 9px; background: var(--card); color: var(--ink); }
+  .editform label > span, .editform .lbl { font-size: 0.6562rem; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink3); font-weight: 700; }
+  .editform label.row { display: flex; align-items: center; gap: 8px; align-self: end; font-size: var(--fs-md); }
+  .editform input, .editform select, .editform textarea, .fields input { width: 100%; font: inherit; font-size: 0.875rem; padding: 8px 11px; border: 1px solid var(--rule); border-radius: var(--r); background: var(--card); color: var(--ink); }
   .wide { grid-column: 1 / -1; }
   .actions, .end { display: flex; justify-content: flex-end; gap: 8px; margin: 0; }
   .addrow { padding: 12px 17px; margin-top: 12px; }
   .im :global(img) { width: 100%; height: 100%; object-fit: cover; }
   .phgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-top: 12px; }
-  .phgrid .ph { position: relative; display: block; padding: 0; border: 0; background: var(--sunk); border-radius: 10px; overflow: hidden; aspect-ratio: 1; cursor: zoom-in; box-shadow: var(--sh); }
+  .phgrid .ph { position: relative; display: block; padding: 0; border: 0; background: var(--sunk); border-radius: var(--r); overflow: hidden; aspect-ratio: 1; cursor: zoom-in; box-shadow: var(--sh); }
   .phgrid .ph :global(img) { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .phgrid .pd { position: absolute; left: 8px; bottom: 7px; font-family: var(--mono); font-size: 10.5px; color: #fff; background: rgba(8, 20, 16, 0.6); padding: 2px 6px; border-radius: 5px; }
+  .phgrid .pd { position: absolute; left: 8px; bottom: 7px; font-family: var(--mono); font-size: var(--fs-xs); color: #fff; background: rgba(8, 20, 16, 0.6); padding: 2px 6px; border-radius: var(--r-sm); }
   .acts3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 16px 0; }
   .act { margin: 0; display: flex; flex-direction: column; }
   .fields { display: grid; gap: 8px; padding: 13px 17px 15px; }
   .fields .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .noteform { display: grid; grid-template-columns: 10rem 1fr auto; gap: 8px; margin-bottom: 10px; }
-  .noteform input { font: inherit; font-size: 14px; padding: 8px 11px; border: 1px solid var(--rule); border-radius: 9px; background: var(--card); color: var(--ink); }
-  .tlrow .x2 { font-weight: 400; color: var(--ink2); font-size: 12.5px; }
+  .noteform input { font: inherit; font-size: var(--fs-md); padding: 8px 11px; border: 1px solid var(--rule); border-radius: var(--r); background: var(--card); color: var(--ink); }
+  .tlrow .x2 { font-weight: 400; color: var(--ink2); font-size: var(--fs-md); }
   .factgrid .wide { grid-column: 1 / -1; }
   .accrow .nm .accno { font-style: normal; vertical-align: 2px; }
-  .refuse { margin: 6px 0 0; font-size: 12.5px; color: var(--bad); }
-  .rm { border: 0; background: none; color: var(--ink3); font: inherit; cursor: pointer; min-width: 32px; min-height: 32px; border-radius: 6px; }
+  .refuse { margin: 6px 0 0; font-size: var(--fs-md); color: var(--bad); }
+  /* The count's two meanings, side by side; and the sum it will record, under the figure (round fifty-eight; the grower review). */
+  /* :global, since the switch is the toggle group's own markup (round fifty-eight; the accessibility review). */
+  .fields :global(.seg) { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--rule); border-radius: var(--r); overflow: hidden; }
+  .fields :global(.seg button) { font: inherit; font-size: var(--fs-md); font-weight: 600; padding: 7px 8px; border: 0; background: var(--card); color: var(--ink2); cursor: pointer; min-height: 36px; }
+  .fields :global(.seg button + button) { border-left: 1px solid var(--rule); }
+  .fields :global(.seg button.on) { background: var(--accent-soft); color: var(--accent); }
+  /* A field with its small name over it (round fifty-eight; the accessibility review). */
+  .fl { display: grid; gap: 3px; min-width: 0; }
+  .noteform { align-items: end; }
+  .gsum { margin: 0; }
+  .potnotice .btn { margin-left: 6px; vertical-align: middle; }
+  @media (max-width: 640px) { .fields :global(.seg button), .potnotice .btn { min-height: 44px; } }
+  .rm { border: 0; background: none; color: var(--ink3); font: inherit; cursor: pointer; min-width: 32px; min-height: 32px; border-radius: var(--r-sm); }
   .rm:hover { color: var(--bad); background: var(--sunk); }
-  .rm.confirm { color: var(--bad); font-size: 12.5px; font-weight: 600; }
-  .dangerrow { margin: 46px 0 10px; padding: 0; display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; font-size: 12.5px; color: var(--ink3); }
+  .rm.confirm { color: var(--bad); font-size: var(--fs-md); font-weight: 600; }
+  .dangerrow { margin: 46px 0 10px; padding: 0; display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; font-size: var(--fs-md); color: var(--ink3); }
   a.pill { color: inherit; }
   @media (max-width: 720px) { .acts3 { grid-template-columns: 1fr; } .editform { grid-template-columns: 1fr 1fr; } .noteform { grid-template-columns: 1fr; } .hero { margin-top: 0; } }
 </style>

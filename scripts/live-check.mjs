@@ -239,6 +239,17 @@ if (!skip.has('thumbs') && !process.env.LIVE_CHECK_FIXTURE_OK) {
   if (!hits[0].name.toLowerCase().startsWith(name)) fail(`/api/search?q=${name}: the first hit is ${hits[0].name}, not the genus asked for`, r);
   if (!/max-age=86400/.test(r.h('cache-control') ?? '')) fail(`/api/search under the current corpus id should be cacheable for a day (cache-control: ${r.h('cache-control')})`, r);
   ok(`search: ${hits.length} hits for ${name}, first ${hits[0].name}, cacheable`);
+  // The real site serves the build's products under a manifest (round fifty-six); a Worker that fell back to the index
+  // alone answers correctly and slowly, so it is a failure here, not a pass (round fifty-eight). And a first keystroke
+  // answers from the build's short answers: one letter must find the most-recorded species it begins.
+  if (!process.env.LIVE_CHECK_FIXTURE_OK) {
+    const corpus = JSON.parse(c.text);
+    if (corpus.manifest !== true) fail('/api/corpus says no manifest is served: the bucket holds no manifest.json the Worker accepts (docs/DEPLOY.md section 5)', c);
+    const one = await get(`/api/search?q=h&c=${encodeURIComponent(id)}`);
+    const oneHits = one.status === 200 ? JSON.parse(one.text) : [];
+    if (!Array.isArray(oneHits) || oneHits.length < 20) fail(`/api/search?q=h answered ${oneHits.length} hits`, one);
+    ok(`manifest served; a one-letter search answers ${oneHits.length} hits`);
+  }
   // The catalogue's rows past the page's window come from the API (round forty-seven, 1): the second window, cacheable.
   const rows = await get(`/api/rows?by=genus&chip=all&at=1&n=2&c=${encodeURIComponent(id)}`);
   if (rows.status !== 200) fail('/api/rows', rows);

@@ -26,9 +26,10 @@ export const PUT: RequestHandler = async ({ request, url, params, platform, getC
   const id = vaultId(url.searchParams.get('vault'));
   const meta = await authed(r2, id, request);
   const key = photoKey(id, params.id);
-  const body = await readBody(request, MAX_PHOTO_BYTES, 'a photo');
+  // The proof is judged before the body is read: a request without it was read whole first (round fifty-eight).
   const drop = dropProof(request); // kept with the object; its DELETE must repeat it (round fifty-one, 2)
   if (!drop) error(400, 'x-photo-drop is required: a photograph is stored with the proof its removal will repeat');
+  const body = await readBody(request, MAX_PHOTO_BYTES, 'a photo');
   let r: Awaited<ReturnType<typeof storeOnce>>;
   try {
     r = await storeOnce(r2, id, meta, key, body, { drop }, quotaOf(platform, getClientAddress));

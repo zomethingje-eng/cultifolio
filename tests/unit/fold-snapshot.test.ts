@@ -283,8 +283,8 @@ describe('the fold snapshot', () => {
     // another tab (here: the vault directly) stores a plant; before A hears of it, A writes its own
     await a.vault.appendChanges([...plant(2, base + 1000)], true);
     await a.store.collection.put('accession', 'p1', { notes: 'mine' });
-    await new Promise((r) => setTimeout(r, 30)); // the catch-up the gap asked for
-    expect(a.store.collection.accessions.map((x) => x.id).sort()).toEqual(['p1', 'p2']);
+    // the catch-up the gap asked for, waited on until it lands rather than for a fixed 30 ms (round fifty-eight)
+    await vi.waitFor(() => expect(a.store.collection.accessions.map((x) => x.id).sort()).toEqual(['p1', 'p2']), { timeout: 2000, interval: 5 });
     expect(a.store.collection.accession('p1')?.notes).toBe('mine');
   });
 

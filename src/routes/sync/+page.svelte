@@ -77,7 +77,7 @@
   async function join() {
     const k = parseVaultKey(typed);
     if (!k) {
-      err = 'That is not a vault key: six groups of five letters and digits.';
+      err = 'That is not a sync key: six groups of five letters and digits.'; // "sync key", the glossary's word (round fifty-eight; the accessibility review)
       return;
     }
     busy = true;
@@ -148,23 +148,24 @@
   const when = (ms: number) => new Date(ms).toLocaleString();
 </script>
 
-<svelte:head><title>Sync — Cultifolio</title></svelte:head>
+<svelte:head><title>Sync · Cultifolio</title></svelte:head>
 
 <PageHead title="Sync" kick="My plants" places={false} sub="The same collection on your phone and your computer, encrypted with a key only you hold." />
 
 {#if sync.configured}
   <div class="secrule"><h2>This device</h2><div class="line"></div><span class="n">vault {sync.vaultId.slice(0, 6)}…</span></div>
   <div class="cards">
-    <div class="card" data-runs={sync.runs}><div class="lab">Status</div><div class="val" style="font-family: var(--ui); font-size: 17px; font-weight: 700">{sync.busy ?? (sync.offline ? (sync.unreached === 'server' ? 'Server not reached' : 'Offline') : sync.lastError ? 'Not synced' : sync.vaultFull ? 'Vault full' : sync.runs ? 'Synced' : 'Not checked yet')}</div><div class="sub">{sync.busy ? '' : sync.offline ? (sync.pending ? `${sync.pending} field ${sync.pending === 1 ? 'change' : 'changes'} kept here, sent ${sync.unreached === 'server' ? 'when the server answers again' : 'when you are back online'}` : `nothing waiting; it will check ${sync.unreached === 'server' ? 'again in a minute' : 'when you are back online'}`) : sync.lastError ? sync.lastError : sync.runs ? (sync.lastSync ? `everything on the server ${ago(sync.lastSync)} is here` : 'not yet') : (sync.lastSync ? `last synced ${ago(sync.lastSync)}; checking now` : 'checking now')}</div></div>
+    <div class="card" data-runs={sync.runs}><div class="lab">Status</div><div class="val" style="font-family: var(--ui); font-size: var(--fs-lg); font-weight: 700">{sync.busy ?? (sync.offline ? (sync.unreached === 'server' ? 'Server not reached' : 'Offline') : sync.lastError ? 'Not synced' : sync.vaultFull ? 'Vault full' : sync.runs ? 'Synced' : 'Not checked yet')}</div><div class="sub">{sync.busy ? '' : sync.offline ? (sync.pending ? `${sync.pending} field ${sync.pending === 1 ? 'change' : 'changes'} kept here, sent ${sync.unreached === 'server' ? 'when the server answers again' : 'when you are back online'}` : `nothing waiting; it will check ${sync.unreached === 'server' ? 'again in a minute' : 'when you are back online'}`) : sync.lastError ? sync.lastError : sync.runs ? (sync.lastSync ? `everything on the server ${ago(sync.lastSync)} is here` : 'not yet') : (sync.lastSync ? `last synced ${ago(sync.lastSync)}; checking now` : 'checking now')}</div></div>
     <div class="card"><div class="lab">Waiting to send</div><div class="val">{sync.pending}</div><div class="sub">field {sync.pending === 1 ? 'change' : 'changes'} made here and not yet up (a note is one; a new plant is several)</div></div>
     {#if sync.clockAhead}<p class="small muted" id="clock-ahead">{sync.clockAhead}</p>{/if}
     {#if sync.quarantined.length || sync.refused.length || collection.incomplete}
-      <div class="card"><div class="lab">Set aside</div><div class="val">{sync.quarantined.length + sync.refused.length || collection.incomplete}</div><div class="sub">{#if sync.quarantined.length}{sync.quarantined.length} {sync.quarantined.length === 1 ? 'batch' : 'batches'} on the server could not be read here{/if}{#if sync.quarantined.length && sync.refused.length}; {/if}{#if sync.refused.length}the server refused {sync.refused.length} {sync.refused.length === 1 ? 'item' : 'items'} from this device{/if}{#if sync.quarantined.length || sync.refused.length}. Syncing carries on around them.{/if}{#if collection.incomplete} {collection.incomplete} {collection.incomplete === 1 ? 'record waits' : 'records wait'} for changes this build cannot read yet, and {collection.incomplete === 1 ? 'is' : 'are'} not shown until it can.{/if}</div></div>
+      <!-- What "set aside" meant, said plainly; and "this version of the app", not "this build" (round fifty-eight; the accessibility review). -->
+      <div class="card"><div class="lab">Could not be read here</div><div class="val">{[sync.quarantined.length + sync.refused.length ? String(sync.quarantined.length + sync.refused.length) : '', collection.incomplete ? `${collection.incomplete} waiting` : ''].filter(Boolean).join(' · ')}</div><div class="sub">{#if sync.quarantined.length}{sync.quarantined.length} {sync.quarantined.length === 1 ? 'batch' : 'batches'} on the server could not be read here{/if}{#if sync.quarantined.length && sync.refused.length}; {/if}{#if sync.refused.length}the server refused {sync.refused.length} {sync.refused.length === 1 ? 'item' : 'items'} from this device{/if}{#if sync.quarantined.length || sync.refused.length}. Syncing carries on around them.{/if}{#if collection.incomplete} {collection.incomplete} {collection.incomplete === 1 ? 'record waits' : 'records wait'} for changes this version of the app cannot read yet, and {collection.incomplete === 1 ? 'is' : 'are'} not shown until it can.{/if}</div></div>
     {/if}
-    <div class="card"><div class="lab">Encryption</div><div class="val" style="font-family: var(--ui); font-size: 17px; font-weight: 700">AES-256-GCM</div><div class="sub">key never leaves your devices</div></div>
+    <div class="card"><div class="lab">Encryption</div><div class="val" style="font-family: var(--ui); font-size: var(--fs-lg); font-weight: 700">AES-256-GCM</div><div class="sub">key never leaves your devices</div></div>
   </div>
   {#if sync.vaultFull}
-    <p class="notice bad" id="vault-full">Your vault is full ({mb(sync.vaultFull.bytes)} of {mb(sync.vaultFull.limit)} MB). Removing photographs here does not free it: nothing on the server is ever rewritten or deleted. Back up, then set up a new vault for the collection to carry on syncing. Changes made here are kept on this device and sent once there is room; receiving carries on.</p>
+    <p class="notice bad" id="vault-full">Your vault is full ({mb(sync.vaultFull.bytes)} of {mb(sync.vaultFull.limit)} MB). Removing photographs frees only their own bytes, once the removal is ten minutes old; the batches of changes stay for good, since the log is the collection. Back up, then set up a new vault for the collection to carry on syncing. Changes made here are kept on this device and sent once there is room; receiving carries on.</p>
   {/if}
   {#if sync.clockWarning}
     <p class="notice warn" id="clock-warning">{sync.clockWarning}</p>
@@ -190,7 +191,8 @@
 
   {#if showKey}
     <div class="cult pair" id="pairing">
-      <div class="sum">Your vault key <span class="hint">scan it, or type it, on the other device</span></div>
+      <!-- "sync key" throughout, the glossary's word (round fifty-eight; the accessibility review). -->
+      <div class="sum">Your sync key <span class="hint">scan it, or type it, on the other device</span></div>
       <div class="body">
         <div class="pairrow">
           <div class="qr">{@html qr}</div>
@@ -206,8 +208,9 @@
 
   <div class="secrule"><h2>How it works</h2><div class="line"></div></div>
   <div class="cult"><div class="body prose">
-    <p>Every change you make (a watering, a note, a photograph) is sealed on this device with a key derived from your vault key, then sent as a batch. Other devices with the same key pull the batches and merge them by the same rule a backup uses: for each field, the latest change wins, wherever it was made. Nothing on the server is ever rewritten or deleted, so a sync interrupted halfway simply resumes. "Synced" is a statement about a moment: everything the server held at that time is on this device. A change another device sends later is not here until the next sync, which runs when a change is made here, when the app comes back to the front, when the connection returns, every few minutes while the app is open, and on demand.</p>
-    <p id="fold">This page's copy of the collection was read {collection.loaded.from === 'snapshot' ? `from the snapshot the last load left (${collection.loaded.snapshot ?? 0} changes folded then) and the ${collection.loaded.changes} ${collection.loaded.changes === 1 ? 'change' : 'changes'} that arrived after it` : `by folding the whole log, ${collection.loaded.changes} ${collection.loaded.changes === 1 ? 'change' : 'changes'}; a snapshot is kept for the next load`}. The log itself is what is kept and sent; the snapshot is a reading of it, dropped whenever the log is replaced or the rules change.</p>
+    <!-- "sync key", and the reading of the log said as reading, not folding (round fifty-eight; the accessibility review). -->
+    <p>Every change you make (a watering, a note, a photograph) is sealed on this device with a key derived from your sync key, then sent as a batch. Other devices with the same key pull the batches and merge them by the same rule a backup uses: for each field, the latest change wins, wherever it was made. A batch on the server is never rewritten or deleted, so a sync interrupted halfway simply resumes; a photograph's sealed bytes are deleted once its removal is ten minutes old, by a request only a holder of the key can make. "Synced" is a statement about a moment: everything the server held at that time is on this device. A change another device sends later is not here until the next sync, which runs when a change is made here, when the app comes back to the front, when the connection returns, every few minutes while the app is open, and on demand.</p>
+    <details class="tech"><summary>How this page read the collection</summary><p id="fold">This page's copy of the collection was read {collection.loaded.from === 'snapshot' ? `from the snapshot the last load left (${collection.loaded.snapshot ?? 0} changes read then) and the ${collection.loaded.changes} ${collection.loaded.changes === 1 ? 'change' : 'changes'} that arrived after it` : `by reading the whole log, ${collection.loaded.changes} ${collection.loaded.changes === 1 ? 'change' : 'changes'}; a snapshot is kept for the next load`}. The log itself is what is kept and sent; the snapshot is a reading of it, dropped whenever the log is replaced or the rules change.</p></details>
     <p>What the server can see: a vault id, a token that proves you hold the key, and sealed blobs. From their names and sizes it can tell how many devices share the vault, when each of them syncs, roughly how many changes were made and when, and how many photographs there are and how large each is. It cannot read a plant's name, a note, a place or a date, and it cannot recover a lost key. Your local copy and your backups are unaffected by anything that happens to the vault.</p>
   </div></div>
 
@@ -221,7 +224,7 @@
   </div>
 {:else if mode === 'create'}
   <div class="cult pair">
-    <div class="sum">Your new vault key <span class="hint">shown once here; keep it somewhere safe</span></div>
+    <div class="sum">Your new sync key <span class="hint">shown once here; keep it somewhere safe</span></div><!-- "sync key": round fifty-eight; the accessibility review -->
     <div class="body">
       <div class="pairrow">
         <div class="qr">{@html qr}</div>
@@ -247,14 +250,15 @@
   </div>
 {:else if mode === 'join'}
   <div class="cult pair">
-    <div class="sum">Enter your vault key <span class="hint">from your other device: Sync → Add another device</span></div>
+    <div class="sum">Enter your sync key <span class="hint">from your other device: Sync → Add another device</span></div><!-- "sync key": round fifty-eight; the accessibility review -->
     <div class="body">
       {#if scanning}
         <!-- svelte-ignore a11y_media_has_caption -->
         <video bind:this={video} class="scan" playsinline muted></video>
         <div class="actions"><button class="btn" onclick={stopScan}>Stop scanning</button></div>
       {:else}
-        <input id="sync-key" class="keyin mono" type="text" bind:value={typed} placeholder="XXXXX-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX" aria-label="Vault key" aria-invalid={!!err} aria-describedby={err ? 'sync-err' : undefined} autocomplete="off" spellcheck="false" />
+        <!-- A visible name over the box: the placeholder's pattern was its only one (round fifty-eight; the accessibility review). -->
+        <label class="keylab"><span class="eyebrow">Sync key</span><input id="sync-key" class="keyin mono" type="text" bind:value={typed} placeholder="XXXXX-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX" aria-invalid={!!err} aria-describedby={err ? 'sync-err' : undefined} autocomplete="off" spellcheck="false" /></label>
         {#if err}<p class="bad" id="sync-err" role="alert">{err}</p>{/if}
         {#if scanErr}<p class="bad">{scanErr}</p>{/if}
         <div class="actions">
@@ -296,37 +300,40 @@
 {/if}
 
 <style>
+  .tech { margin: 8px 0 12px; font-size: var(--fs-md); color: var(--ink2); }
+  .tech summary { cursor: pointer; min-height: 36px; display: flex; align-items: center; }
   .parkedlist { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
   .parkedlist li { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
   .parkedlist .linkish { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); text-decoration: underline; cursor: pointer; }
   .typeback { display: grid; gap: 4px; margin-top: 12px; max-width: 320px; }
-  .typeback span { font-size: 12px; color: var(--ink2); }
+  .typeback span { font-size: var(--fs-sm); color: var(--ink2); }
   .typeback input { font-family: var(--mono); letter-spacing: 0.12em; text-transform: uppercase; }
   /* "Print this card": the key card alone on paper, the QR code and the key, nothing else of the page (round forty-one, R9). */
   @media print {
     :global(#topbar), :global(#tabbar), :global(footer.credits), :global(.phead), .pair .row, .pair .typeback, .pair .actions { display: none !important; }
     .pair { box-shadow: none; border: 1px solid #000; }
-    .keytext { font-size: 18px; }
+    .keytext { font-size: var(--fs-xl); }
   }
   .cult { margin-top: 12px; }
   .cult .body { padding: 14px 17px; font-family: var(--ui); }
-  .prose p { margin: 0 0 10px; font-size: 14px; line-height: 1.55; color: var(--ink2); }
+  .prose p { margin: 0 0 10px; font-size: var(--fs-md); line-height: 1.55; color: var(--ink2); }
   .prose p:last-child { margin-bottom: 0; }
   .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 10px; }
   .actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 14px; }
   .pairrow { display: grid; grid-template-columns: 180px 1fr; gap: 18px; align-items: start; }
-  .qr { width: 180px; height: 180px; background: #fff; border-radius: 10px; padding: 8px; box-shadow: var(--sh); }
+  .qr { width: 180px; height: 180px; background: #fff; border-radius: var(--r); padding: 8px; box-shadow: var(--sh); }
   .qr :global(svg) { width: 100%; height: 100%; display: block; }
-  .keytext { font-size: 17px; letter-spacing: 0.06em; padding: 10px 12px; background: var(--sunk); border-radius: 8px; margin-bottom: 10px; user-select: all; }
+  .keytext { font-size: var(--fs-lg); letter-spacing: 0.06em; padding: 10px 12px; background: var(--sunk); border-radius: var(--r); margin-bottom: 10px; user-select: all; }
   .keytext .kg { white-space: nowrap; display: inline-block; }
   .typeback { margin-top: 0; margin-bottom: 12px; }
-  .keyin { width: 100%; font-size: 16px; letter-spacing: 0.06em; padding: 10px 12px; border: 1px solid var(--rule); border-radius: 9px; background: var(--card); color: var(--ink); text-transform: uppercase; }
-  .scan { width: 100%; max-height: 60vh; border-radius: 10px; background: #000; }
-  .bad { color: var(--bad); font-size: 13.5px; margin: 8px 0 0; }
-  .notice { margin: 12px 0 0; padding: 10px 14px; border: 1px solid var(--rule); border-radius: 9px; font-family: var(--ui); font-size: 13.5px; line-height: 1.5; color: var(--ink2); }
+  .keylab { display: grid; gap: 4px; } /* round fifty-eight; the accessibility review */
+  .keyin { width: 100%; font-size: var(--fs-lg); letter-spacing: 0.06em; padding: 10px 12px; border: 1px solid var(--rule); border-radius: var(--r); background: var(--card); color: var(--ink); text-transform: uppercase; }
+  .scan { width: 100%; max-height: 60vh; border-radius: var(--r); background: #000; }
+  .bad { color: var(--bad); font-size: var(--fs-md); margin: 8px 0 0; }
+  .notice { margin: 12px 0 0; padding: 10px 14px; border: 1px solid var(--rule); border-radius: var(--r); font-family: var(--ui); font-size: var(--fs-md); line-height: 1.5; color: var(--ink2); }
   .notice.bad { border-color: var(--bad); color: var(--bad); }
   .notice.warn { border-color: var(--rule2); color: var(--ink); }
-  .small { font-size: 12.5px; line-height: 1.5; }
-  .dangerrow { margin: 40px 0 10px; padding: 15px 17px; border: 1px dashed var(--rule2); border-radius: var(--r); display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; font-size: 13.5px; }
+  .small { font-size: var(--fs-md); line-height: 1.5; }
+  .dangerrow { margin: 40px 0 10px; padding: 15px 17px; border: 1px dashed var(--rule2); border-radius: var(--r); display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; font-size: var(--fs-md); }
   @media (max-width: 640px) { .pairrow { grid-template-columns: 1fr; } .qr { margin: 0 auto; } }
 </style>

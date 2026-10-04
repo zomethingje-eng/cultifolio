@@ -22,8 +22,8 @@ export const GET: RequestHandler = async ({ request, url, platform, getClientAdd
 
 /**
  * Push one sealed batch. Header X-Batch: its name (the hour of the last change, the device, the fingerprint). Body: the sealed bytes.
- * Optional X-Batch-Plain (the keyed fingerprint of the changes as JSON) and X-Device let a re-seal of the same
- * batch from the same device be answered 200 as already there. 200 only when the server now holds
+ * X-Batch-Plain (the keyed fingerprint of the changes as JSON) and X-Device are required (round fifty-seven), and let a
+ * re-seal of the same batch from the same device be answered 200 as already there. 200 only when the server now holds
  * that batch under that name; 409 when the name holds something else; 507 when the vault is full;
  * 429 with Retry-After when the address has used its day's bytes or the rate limit.
  */

@@ -59,7 +59,7 @@ async function hkdf(root: CryptoKey, info: string, bits: number): Promise<ArrayB
 
 export async function deriveKeys(vaultKey: string): Promise<VaultKeys> {
   const key = parseVaultKey(vaultKey);
-  if (!key) throw new Error('That is not a vault key: expected six groups of five letters and digits.');
+  if (!key) throw new Error('That is not a sync key: expected six groups of five letters and digits.');
   // The key is already 147 bits of randomness, so a stretching KDF adds nothing; HKDF splits it into purposes.
   const root = await crypto.subtle.importKey('raw', enc.encode(key.replace(/-/g, '')), 'HKDF', false, ['deriveBits', 'deriveKey']);
   const encKey = await crypto.subtle.deriveKey({ name: 'HKDF', hash: 'SHA-256', salt: enc.encode('cultifolio-vault-v1'), info: enc.encode('enc') }, root, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
@@ -107,7 +107,7 @@ export async function open(k: VaultKeys, kind: string, blob: Uint8Array, name?: 
   try {
     return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: blob.subarray(1, 13) as BufferSource, additionalData: aad(k, kind, name) }, k.enc, blob.subarray(13) as BufferSource));
   } catch {
-    throw new Error('could not decrypt: wrong vault key, or the data was altered');
+    throw new Error('could not decrypt: wrong sync key, or the data was altered');
   }
 }
 

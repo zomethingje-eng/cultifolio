@@ -422,3 +422,11 @@ describe('round twenty-nine: a value of the wrong type is left out, not the list
     for (const field of ['__proto__', 'constructor', 'toString', 'hasOwnProperty']) expect(() => validateChanges([{ ...ok, field, value: null }])).toThrow(/not a field name/);
   });
 });
+
+describe('care groups (round fifty-eight)', () => {
+  it('Welwitschia is not called a cactus or succulent: its family has no group, and the sheet says none', async () => {
+    const { archFor } = await import('$core/arch');
+    expect(archFor('Welwitschia mirabilis', 'Welwitschiaceae')).toBeNull();
+    expect(archFor('Copiapoa cinerea', 'Cactaceae')?.arch.key).toBe('arid');
+  });
+});

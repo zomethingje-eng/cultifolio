@@ -11,7 +11,7 @@
    * opens the plant's page on this site.
    */
   import { onMount } from 'svelte';
-  import { accNo } from '$lib/db/types';
+  import { accNo, PROP_METHODS } from '$lib/db/types';
   import { page } from '$app/state';
   import QRCode from 'qrcode';
   import { collection } from '$lib/db/collection.svelte';
@@ -49,6 +49,8 @@
   let withSource = $state(false);
   let q = $state('');
   let chosen = $state<Set<string>>(new Set());
+  /** What the link picked (?acc=, ?batch=, ?loc=): listed first, so ten plants just potted up are not scattered through three hundred (round fifty-eight; the grower review). */
+  let arrived = $state<Set<string>>(new Set());
   let qrs = $state<Record<string, string>>({});
   const qrInflight = new Set<string>();
   let care = $state<Record<string, string | null>>({}); // '' while asked, null when the reference was not reached
@@ -62,6 +64,7 @@
     if (acc) chosen = new Set(acc.split(',').map((x) => collection.accession(x)?.id).filter((x): x is string => !!x)); // numbers or ids in the URL; identities inside
     else if (batch) chosen = new Set(batch.split(',').map((x) => collection.sowing(x)?.id).filter((x): x is string => !!x)); // a tray's label from the batch page (round forty-one, R10)
     else if (loc) chosen = new Set(collection.plantsAt(loc, true).map((a) => a.id));
+    if (acc || batch || loc) arrived = new Set(chosen);
     else {
       // From the menu: every growing plant is picked when they fit a sheet or two; past that nothing is, since a tap
       // on Print was three hundred labels, and "Pick all shown" is one tap (round forty-nine, 3).
@@ -97,8 +100,12 @@
   // The filter reads the place and the source too, and matches every word, as the plants list does: "Windowsill" and "Mesa" find their plants (round twenty-six, 15).
   const filtered = $derived.by(() => { const words = q.toLowerCase().split(/\s+/).filter(Boolean); return all.filter((a) => { const hay = `${a.no} ${a.taxonName} ${a.cultivar ?? ''} ${a.fieldNumber ?? ''} ${a.locationId ? collection.locationName(a.locationId) : ''} ${a.sourceFrom ?? ''}`.toLowerCase(); return words.every((w) => hay.includes(w)); }); });
   const picked = $derived(all.filter((a) => chosen.has(a.id)));
-  const plantsShown = $derived(filtered.filter((x) => !x.batch));
-  const batchesShown = $derived(filtered.filter((x) => x.batch));
+  // A stable split, not a re-sort: within each part the list keeps its own order (round fifty-eight; the grower review).
+  const arrivedFirst = (xs: Item[]) => (arrived.size ? [...xs.filter((x) => arrived.has(x.id)), ...xs.filter((x) => !arrived.has(x.id))] : xs);
+  const plantsShown = $derived(arrivedFirst(filtered.filter((x) => !x.batch)));
+  const batchesShown = $derived(arrivedFirst(filtered.filter((x) => x.batch)));
+  /** No plant on file at all, said as such rather than as an empty picker; a filter that matches nothing is a different sentence (round fifty-eight; the grower review). */
+  const noPlants = $derived(collection.ready && !collection.accessions.length);
   const toggle = (id: string) => {
     const n = new Set(chosen);
     if (n.has(id)) n.delete(id);
@@ -109,7 +116,7 @@
 
   /** A plant's species sheet, by hash bucket: the labels page never names or keys the species it prints. Five Astrophytum labels are one lookup in one cached bucket. */
   async function dossierFor(a: Item): Promise<SpeciesSheet | null | 'unreachable'> {
-    const d = await sheetForName(a.taxonName, a.taxonKey, (k) => { if (a.taxonKey !== k) collection.put(a.batch ? 'sowing' : 'accession', a.id, { taxonKey: k }); });
+    const d = await sheetForName(a.taxonName, a.taxonKey); // read, never written back: printing a label is not an edit (round fifty-eight)
     return d === null ? 'unreachable' : d === 'none' ? null : d;
   }
   /** Care lines that could not be made because the reference was not reached: said on the sheet and on the page, never printed as if the species had no data (round thirteen, 6). */
@@ -137,7 +144,8 @@
     if (withCare) { const slugs = picked.filter((a) => care[a.id] === undefined && !asking.has(a.id) && kindOf(a.rec) !== 'hybrid').map((a) => speciesSlug(a.taxonName)); if (slugs.length) void sheetsFor(slugs); }
     // The codes are made in one batch and assigned once: one assignment per code copied the whole map each time, which
     // with fifteen hundred plants was thirty seconds with the page frozen (round fifty-one, 5).
-    const needQr = withQr ? picked.filter((a) => !qrs[a.id] && !qrInflight.has(a.id)) : [];
+    // A stock with no room for a code makes none (round fifty-eight; the grower review).
+    const needQr = withQr && sheet.qr ? picked.filter((a) => !qrs[a.id] && !qrInflight.has(a.id)) : [];
     if (needQr.length) {
       for (const a of needQr) qrInflight.add(a.id);
       void Promise.all(needQr.map((a) => QRCode.toString(`${location.origin}/${a.batch ? 'propagation' : 'plants'}/${a.id}`, { type: 'svg', errorCorrectionLevel: 'M', margin: 0 }).then((svg) => [a.id, svg] as const, () => [a.id, ''] as const))).then((pairs) => {
@@ -174,12 +182,17 @@
   const pages = $derived(Array.from({ length: Math.max(1, Math.ceil(cells.length / perPage)) }, (_, p) => cells.slice(p * perPage, (p + 1) * perPage)));
   const sourceLine = (a: Item) => [a.sourceFrom, a.when].filter(Boolean).join(' · ');
   /** A batch's own line: the date sown, the count, the method. */
-  const batchLine = (a: Item) => [a.when ? `sown ${a.when}` : null, a.count != null ? `${a.count} ${a.method === 'seed' || !a.method ? (a.count === 1 ? 'seed' : 'seeds') : a.method}` : null].filter(Boolean).join(' · ');
+  // The method's own unit and verb: "12 cuttings, started", not "sown … 12 cutting" (round fifty-eight).
+  const batchLine = (a: Item) => {
+    const m = PROP_METHODS.find((x) => x.k === (a.method ?? 'seed')) ?? PROP_METHODS[0];
+    const unit = a.count === 1 ? (m.unit === 'leaves' ? 'leaf' : m.unit.replace(/s$/, '')) : m.unit;
+    return [a.when ? `${m.veg ? 'started' : 'sown'} ${a.when}` : null, a.count != null ? `${a.count} ${unit}` : null].filter(Boolean).join(' · ');
+  };
   const tiny = $derived(sheet.h < 16);
 </script>
 
 <svelte:head>
-  <title>Labels — Cultifolio</title>
+  <title>Labels · Cultifolio</title>
   {@html `<style>@page { size: ${sheet.page[0]}mm ${sheet.page[1]}mm; margin: 0; }</style>`}
 </svelte:head>
 
@@ -191,7 +204,8 @@
       <div class="row">
         <label class="field"><span>Sheet</span><select id="lb-sheet" bind:value={sheetK}>{#each SHEETS as s}<option value={s.k}>{s.label}</option>{/each}</select></label>
         <label class="field"><span>Skip used cells</span><input id="lb-skip" type="number" min="0" max={perPage - 1} bind:value={skip} onchange={() => (skip = skipN)} /></label>
-        <label class="check"><input type="checkbox" bind:checked={withQr} disabled={!sheet.qr} /> QR code{#if !sheet.qr} <span class="faint">(too small)</span>{/if}</label>
+        <!-- A stock that cannot carry a code shows the box empty, not ticked and greyed: a ticked box read as "the code will print" on 5167. The choice is kept for the next sheet that can (round fifty-eight; the grower review). -->
+        <label class="check"><input id="lb-qr" type="checkbox" checked={withQr && sheet.qr} onchange={(e) => (withQr = e.currentTarget.checked)} disabled={!sheet.qr} aria-describedby={sheet.qr ? undefined : 'lb-qr-why'} /> QR code{#if !sheet.qr} <span class="faint small" id="lb-qr-why">(not on this stock: at {sheet.h} mm tall the label has no room for a code)</span>{/if}</label>
         <label class="check"><input type="checkbox" bind:checked={withCare} /> Care line</label>
         <label class="check"><input type="checkbox" bind:checked={withSource} /> Source and date</label>
         <span class="grow"></span>
@@ -204,7 +218,8 @@
         <p class="small muted" role="status">{refused.length === 1 ? 'One care line' : `${refused.length} care lines`} <NotChecked inline why="The climate source did not answer when the species page was built." />: the preview marks {refused.length === 1 ? 'it' : 'them'}; the printed labels leave {refused.length === 1 ? 'it' : 'them'} blank.</p>
       {/if}
       {#if withCare && nightOffCount}
-        <p class="small muted" role="status">{nightOffCount === 1 ? 'One label prints' : `${nightOffCount} labels print`} no habitat night: the species has no daily extremes series on file (none read, the source did not answer or was not asked, or it was read at a weather cell that is mostly sea and set aside); the mean night is a different, warmer figure, so it is left off rather than printed in its place.</p>
+        <!-- "so not used", not "set aside": what it means (round fifty-eight; the accessibility review). -->
+        <p class="small muted" role="status">{nightOffCount === 1 ? 'One label prints' : `${nightOffCount} labels print`} no habitat night: the species has no daily extremes series on file (none read, the source did not answer or was not asked, or it was read at a weather cell that is mostly sea and so not used); the mean night is a different, warmer figure, so it is left off rather than printed in its place.</p>
       {/if}
       {#if withCare && unchecked.length}
         <div class="notice" id="lb-unchecked" role="status">{unchecked.length === 1 ? 'One care line' : `${unchecked.length} care lines`} <NotChecked inline why="The species reference could not be reached from here." />: the preview marks {unchecked.length === 1 ? 'it' : 'them'}; the printed labels leave {unchecked.length === 1 ? 'it' : 'them'} blank. <button type="button" class="linkish" onclick={retryCare}>Try again</button> before printing.</div>
@@ -212,7 +227,11 @@
     </div>
   </div>
 
-  <div class="secrule"><h2>Plants</h2><div class="line"></div><span class="n">{picked.filter((x) => !x.batch).length} of {all.filter((x) => !x.batch).length} picked</span></div>
+  <div class="secrule"><h2>Plants</h2><div class="line"></div>{#if !noPlants}<span class="n">{picked.filter((x) => !x.batch).length} of {all.filter((x) => !x.batch).length} picked</span>{/if}</div>
+  {#if noPlants}
+    <!-- Nothing on file is said, with the way to fix it, not shown as an empty filter and an empty list (round fifty-eight; the grower review). -->
+    <div class="cult picklist" id="lb-noplants"><p class="none">No plants yet. <a href="/plants/new">Add a plant</a> and its label can be printed here.</p></div>
+  {:else}
   <div class="toolrow" style="position: static">
     <input id="lb-q" class="searchbar" type="search" placeholder="Filter by name, number, field number…" aria-label="Filter plants" bind:value={q} />
     <button class="chipbtn" onclick={() => pickAll(true)}>Pick all shown</button>
@@ -222,9 +241,11 @@
     {#each plantsShown as a (a.id)}
       <label class="pick"><input type="checkbox" checked={chosen.has(a.id)} onchange={() => toggle(a.id)} /><span class="accno">{a.no}</span><span class="nm"><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}‘{a.cultivar}’{/if}</span>{#if a.fieldNumber}<span class="fnchip">{a.fieldNumber}</span>{/if}{#if a.locationId}<span class="faint">{collection.locationName(a.locationId)}</span>{/if}</label>
     {:else}
-      <div class="none">No plants match.</div>
+      <!-- An empty filter is not "no match": with nothing typed, the plants on file are all past growing (round fifty-eight; the grower review). -->
+      <div class="none">{q.trim() ? 'No plants match.' : 'No plant is growing; labels are made for growing plants and open batches.'}</div>
     {/each}
   </div>
+  {/if}
 
   {#if batchesShown.length || collection.sowings.some((b) => b.status === 'active')}
     <div class="secrule"><h2>Batches</h2><div class="line"></div><span class="n">{picked.filter((x) => x.batch).length} of {all.filter((x) => x.batch).length} picked</span></div>
@@ -241,7 +262,9 @@
   <p class="small muted previewnote">The sheet is shown at its true size, {sheet.page[0]} mm wide; on a narrow screen it scrolls sideways.</p>
 </div>
 
-<div class="sheets" style="--pw: {sheet.page[0]}mm; --ph: {sheet.page[1]}mm; --lw: {sheet.w}mm; --lh: {sheet.h}mm; --left: {sheet.left}mm; --top: {sheet.top}mm; --gx: {sheet.gapX}mm; --gy: {sheet.gapY}mm; --cols: {sheet.cols}">
+<!-- The preview scrolls sideways on a narrow screen: reachable and scrollable by keyboard, and named (round fifty-eight; the accessibility review). -->
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+<div class="sheets" tabindex="0" role="region" aria-label="Label sheets as they will print" style="--pw: {sheet.page[0]}mm; --ph: {sheet.page[1]}mm; --lw: {sheet.w}mm; --lh: {sheet.h}mm; --left: {sheet.left}mm; --top: {sheet.top}mm; --gx: {sheet.gapX}mm; --gy: {sheet.gapY}mm; --cols: {sheet.cols}">
   {#each pages as cellsOnPage, pi}
     <div class="page" class:tiny>
       {#each cellsOnPage as a, i}
@@ -269,18 +292,20 @@
   .picklist { font-family: var(--ui); }
   .row { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 16px; }
   .field { display: grid; gap: 4px; }
-  .field > span { font-size: 10.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink3); font-weight: 700; }
-  .field select, .field input { font: inherit; font-size: 13.5px; padding: 7px 10px; border: 1px solid var(--rule); border-radius: 8px; background: var(--card); color: var(--ink); }
+  .field > span { font-size: var(--fs-xs); letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink3); font-weight: 700; }
+  .field select, .field input { font: inherit; font-size: var(--fs-md); padding: 7px 10px; border: 1px solid var(--rule); border-radius: var(--r); background: var(--card); color: var(--ink); }
   .field input { width: 5em; }
-  .check { display: flex; align-items: center; gap: 6px; font-size: 13.5px; padding-bottom: 8px; }
+  .check { display: flex; align-items: center; gap: 6px; font-size: var(--fs-md); padding-bottom: 8px; }
   .grow { flex: 1; }
   .faint { color: var(--ink3); }
   .picklist { max-height: 320px; overflow: auto; padding: 4px 8px; }
-  .pick { display: flex; align-items: center; gap: 10px; padding: 7px 9px; border-radius: 7px; cursor: pointer; font-size: 14px; }
+  .pick { display: flex; align-items: center; gap: 10px; padding: 7px 9px; border-radius: var(--r-sm); cursor: pointer; font-size: var(--fs-md); }
   .pick:hover { background: var(--sunk); }
-  .pick .nm { font-family: var(--serif); font-size: 15px; }
-  .pick .faint { margin-left: auto; font-size: 12px; }
-  .none { padding: 14px; color: var(--ink3); font-style: italic; }
+  .pick .nm { font-family: var(--serif); font-size: var(--fs-base); }
+  .pick .faint { margin-left: auto; font-size: var(--fs-sm); }
+  .none { padding: 14px; margin: 0; color: var(--ink3); font-style: italic; }
+  /* A row to tick and the option boxes are a thumb's tap on a phone: 44px (round fifty-eight; the grower review). */
+  @media (max-width: 640px) { .pick, .check { min-height: 44px; } .check { padding-bottom: 0; } .toolrow .chipbtn { min-height: 44px; } }
 
   /* The sheet, at true size on screen and on paper. */
   .sheets { margin: 12px 0 40px; display: grid; gap: 16px; overflow-x: auto; }

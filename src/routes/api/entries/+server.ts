@@ -1,5 +1,6 @@
 import { json, error } from '@sveltejs/kit';
-import { getCorpus, entriesIn } from '$lib/server/dossiers';
+import { corpusNow, entriesIn } from '$lib/server/dossiers';
+import { limited } from '$lib/server/sync';
 import { isBucket, bucketWidth } from '$core/bucket';
 import type { RequestHandler } from './$types';
 
@@ -11,11 +12,15 @@ import type { RequestHandler } from './$types';
  * `?c=<corpus>` from the client makes a corpus refresh a new URL for every cache (round twelve, 7). The answer is
  * cacheable and kept by the service worker, so it also works in the greenhouse.
  */
-export const GET: RequestHandler = async ({ url, platform, fetch }) => {
+export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddress }) => {
+  // An answer the edge holds never reaches here; a miss is counted (round fifty-eight).
+  const stop = await limited(platform, getClientAddress, 'reference');
+  if (stop) return stop;
   const buckets = (url.searchParams.get('b') ?? '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
   if (!buckets.length) error(400, 'b required: hex buckets, comma separated');
   // The count and the id they belong to come from one load, never two that could straddle the cache's minute (round seventeen, 10).
-  const { id: corpus, buckets: count } = await getCorpus(platform, fetch);
+  const c = await corpusNow(platform, fetch);
+  const { corpus, buckets: count } = c;
   // The count the device hashed by, when it says: a name of two hex digits is valid under thirty-two buckets and under
   // sixty-four, and a device on the old count took half a bucket's species for the reference lacking them (round fifty-four, 3;
   // both reviewers). A count that is not the one served is a 409, never an answer, and the device re-reads /api/corpus.
@@ -30,6 +35,6 @@ export const GET: RequestHandler = async ({ url, platform, fetch }) => {
   const asked = (url.searchParams.get('c') ?? '').replace(/[^A-Za-z0-9._-]/g, '').slice(0, 40);
   const current = asked === corpus;
   const out: unknown[] = [];
-  for (const b of [...new Set(buckets)]) out.push(...(await entriesIn(platform, fetch, b)));
+  for (const b of [...new Set(buckets)]) out.push(...(await entriesIn(c, platform, fetch, b)));
   return json(out, { headers: { 'cache-control': current ? 'public, max-age=86400' : 'no-store' } });
 };

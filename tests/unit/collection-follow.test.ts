@@ -28,6 +28,8 @@ vi.mock('$lib/db/vault', () => {
   m.arrivalsAfter = async () => ({ changes: [...mem.changes], seq: 0, gen: 0 });
   m.changeKeys = async () => mem.changes.map((c) => c.t);
   if (!m.changesByKeys) m.changesByKeys = async (ts: string[]) => mem.changes.filter((c) => ts.includes(c.t));
+  if (!m.updateMeta) m.updateMeta = async (k: string, fn: (had: unknown) => unknown) => { const next = fn(mem.meta.get(k)); mem.meta.set(k, next); return next; };
+  if (!m.changesOf) m.changesOf = async (kind: string, id: string) => (mem.changes as Change[]).filter((c) => c.kind === kind && c.id === id);
   m.announceSyncForgotten = () => {};
   return m;
 });

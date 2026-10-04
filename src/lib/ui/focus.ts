@@ -9,3 +9,8 @@ export async function focusNext(selector: string): Promise<void> {
   await tick();
   (document.querySelector(selector) as HTMLElement | null)?.focus();
 }
+
+/** The scroll behaviour the reader asked for: smooth, unless reduced motion is preferred (round fifty-eight; the accessibility review). */
+export function motion(): ScrollBehavior {
+  return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+}

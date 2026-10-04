@@ -70,8 +70,8 @@
 {/if}
 
 <style>
-  .install { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 14px 0 0; padding: 10px 14px; background: var(--card); border: 1px solid var(--rule); border-radius: 12px; box-shadow: var(--sh); font-size: 13.5px; }
-  .install img { border-radius: 9px; flex: none; }
+  .install { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 14px 0 0; padding: 10px 14px; background: var(--card); border: 1px solid var(--rule); border-radius: var(--r-lg); box-shadow: var(--sh); font-size: var(--fs-md); }
+  .install img { border-radius: var(--r); flex: none; }
   .tx { flex: 1 1 240px; min-width: 0; line-height: 1.45; }
   .tx b { display: block; }
   .tx span { color: var(--ink2); }

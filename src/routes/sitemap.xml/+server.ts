@@ -1,4 +1,5 @@
 import { getIndex } from '$lib/server/dossiers';
+import { limited } from '$lib/server/sync';
 import { sitemapUrls, sitemapIndex } from '$lib/server/sitemap';
 import type { RequestHandler } from './$types';
 
@@ -7,5 +8,8 @@ import type { RequestHandler } from './$types';
  * the front page would otherwise reach most species only through sibling links. One index of chunk files since round
  * forty (the protocol's 50,000-address cap per file); cached for a day, since the index changes only when the corpus is refilled.
  */
-export const GET: RequestHandler = async ({ platform, fetch }) =>
-  new Response(sitemapIndex(sitemapUrls(await getIndex(platform, fetch))), { headers: { 'content-type': 'application/xml; charset=utf-8', 'cache-control': 'public, max-age=86400' } });
+export const GET: RequestHandler = async ({ platform, fetch, getClientAddress }) => {
+  const stop = await limited(platform, getClientAddress, 'reference'); // a miss of the edge, counted (round fifty-eight)
+  if (stop) return stop;
+  return new Response(sitemapIndex(sitemapUrls(await getIndex(platform, fetch))), { headers: { 'content-type': 'application/xml; charset=utf-8', 'cache-control': 'public, max-age=86400' } });
+};

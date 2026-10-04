@@ -9,6 +9,7 @@
   import { entriesFor, searchCatalogue, catalogueRows, type Found } from '$lib/ui/index.svelte';
   import { fillBefore } from '$lib/ui/fill';
   import PageHead from '$lib/ui/PageHead.svelte';
+  import ToggleGroup from '$lib/ui/ToggleGroup.svelte';
   import { collection } from '$lib/db/collection.svelte';
   import { onMount, tick } from 'svelte';
   import { prefs } from '$lib/ui/prefs.svelte';
@@ -380,6 +381,9 @@
   // A visitor: no plants on this device (until the collection has opened, the server's catalogue stands as the visitor's page).
   const visitor = $derived(!collection.ready || (!hasMine && !collection.accessions.length));
   const openRow = $derived(data.rows.find((r) => r.id === data.open));
+  /** Species per page of an opened row (the server's HOME_ITEMS). */
+  const ITEMS = 240;
+  const partHref = (id: string, part: number) => `?by=${data.by}${chip !== 'all' ? `&chip=${chip}` : ''}&open=${id}${part > 0 ? `&part=${part}` : ''}`;
   const rowHref = (id: string) => `?by=${data.by}${chip !== 'all' ? `&chip=${chip}` : ''}${id === data.open ? '' : `&open=${id}`}`;
   /* ---- your species ---- */
   // A tile's data: a catalogue entry, or, until the index is here, the name alone. `missing`: the index is here and has no such species.
@@ -412,13 +416,21 @@
 <svelte:head>
   {#if openRow}
     <!-- A genus (or family, or origin) opened by its address is its own page to a crawler: its own title, description and canonical, not the home page's 1,321 times over (round thirty-one, 5). -->
-    <title>{openRow.label} — {openRow.count} species — Cultifolio</title>
+    <title>{openRow.label}, {openRow.count} species · Cultifolio</title>
     <meta name="description" content="{openRow.label}: {openRow.count} species in the reference, each with its native range, habitat climate and sources." />
     <link rel="canonical" href="https://cultifolio.com/?by={data.by}&open={data.open}" />
   {:else}
-    <title>Cultifolio — a record of a living collection</title>
-    <meta name="description" content="A species reference that shows its sources, and a collection record that stays on your device." />
+    <title>Cultifolio: cactus, succulent and bulb reference, and a private plant record</title>
+    <meta name="description" content="A reference for people who grow cacti, succulents and bulbs: {fmtN(data.total)} species with native range, habitat climate and cold nights from public data, every figure sourced. Your own plant records stay on your device." />
     <link rel="canonical" href="https://cultifolio.com/" />
+    <meta property="og:title" content="Cultifolio: cactus, succulent and bulb reference, and a private plant record" />
+    <meta property="og:description" content="{fmtN(data.total)} species with native range and habitat climate from public data, every figure sourced. Your own plant records stay on your device; no account." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://cultifolio.com/" />
+    <meta property="og:image" content="https://cultifolio.com/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
   {/if}
   {#if visitor && data.featured.length}
     <!-- A visitor's largest first-screen paint is a featured tile on a third party's host: the first is preloaded from the head and the
@@ -502,10 +514,8 @@
     {#if searchMode}
       <button class="btn small cancelsearch" type="button" onclick={cancelSearch}>Cancel</button>
     {:else}
-      <nav class="seg viewseg" aria-label="Which species">
-        <button type="button" class="on" aria-current="true">Your species</button>
-        <button type="button" onclick={startBrowsing}>All {fmtN(data.total)}</button>
-      </nav>
+      <!-- A switch of view on this page, not a move to another address: the one toggle group, not a nav of buttons marked current (round fifty-eight; the accessibility review). -->
+      <ToggleGroup class="viewseg" label="Which species" options={[{ value: 'mine', label: 'Your species' }, { value: 'all', label: `All ${fmtN(data.total)}` }]} value="mine" onchange={(v) => { if (v === 'all') startBrowsing(); }} />
     {/if}
   </div>
   </div>
@@ -554,14 +564,16 @@
 {:else}
   <!-- While a search is typed on a phone the head steps aside with the strip and the chips: the box is the page then (round fifty, 2). -->
   <div class="headwrap" class:searching={searchMode}>
-  <PageHead title="Species" compact sub={visitor ? 'A reference to the plants people grow, every figure with its source; your own plants stay on this device.' : undefined} count="{fmtN(data.total)} species · {fmtN(data.withClimate)} with habitat climate{ownedN ? ` · ${ownedN} you grow` : ''}">
+  <!-- To a visitor the head says what this is, at every width: the name and one sentence, the plants it is for and what it
+       does not ask (round fifty-eight; the first-impression review). To a grower it is the catalogue's head, as before. -->
+  <PageHead title={visitor ? 'Cultifolio' : 'Species'} kick={visitor ? 'Species reference' : 'Cultifolio'} compact keepSub={visitor} sub={visitor ? `A reference for people who grow cacti, succulents and bulbs: ${fmtN(data.total)} species, each with its native range, habitat climate and cold nights worked out from public data, every figure with its source. Keep your own plants here too; they stay on your device, with no account. Free and open source.` : undefined} count="{fmtN(data.total)} species · {fmtN(data.withClimate)} with habitat climate{ownedN ? ` · ${ownedN} you grow` : ''}">
     {#if !visitor}<a class="btn pri headadd" href="/plants/new">Add a plant</a>{/if}
   </PageHead>
   </div>
 
   <!-- The way in, in one line (round twenty-eight, 13; one line since round fifty, 1: the first screen is for the search, a glimpse of the photographs and the first rows). -->
   {#if (!collection.ready || (!hasMine && !collection.accessions.length)) && !welcomeHidden && !searchMode}
-    <p class="welcome" id="welcome"><span><b>New here?</b> <a href="/plants/new">Add a plant</a> · <a href="/backup">bring in a collection</a></span><button class="linkish dismiss" type="button" onclick={dismissWelcome} aria-label="Not now" title="Not now">×</button></p>
+    <p class="welcome" id="welcome"><span><b>Grow some of these?</b> <a href="/plants/new">Add your first plant</a>; it stays on this device. Or <a href="/backup">restore a backup</a>.</span><button class="linkish dismiss" type="button" onclick={dismissWelcome} aria-label="Not now" title="Not now">×</button></p>
   {:else if collection.ready && !hasMine && !collection.accessions.length && !searchMode}
     <!-- "Not now" hides the welcome for good; the way in stays, in one line, or a visitor who comes back has to find /plants/new by the tab bar (round forty-one, R9). -->
     <p class="welcome quiet" id="welcome-after"><a href="/plants/new">Keep a record of your plants</a> on this device; nothing leaves it.</p>
@@ -570,18 +582,17 @@
   <div class="stickyhead">
   <div class="toolrow" bind:this={toolrowEl}>
     {#if hasMine && !searchMode}
-      <nav class="seg viewseg" aria-label="Which species">
-        <button type="button" onclick={stopBrowsing}>Your species</button>
-        <button type="button" class="on" aria-current="true">All {fmtN(data.total)}</button>
-      </nav>
+      <!-- round fifty-eight; the accessibility review: the same toggle group as on the grower's view -->
+      <ToggleGroup class="viewseg" label="Which species" options={[{ value: 'mine', label: 'Your species' }, { value: 'all', label: `All ${fmtN(data.total)}` }]} value="all" onchange={(v) => { if (v === 'mine') stopBrowsing(); }} />
     {/if}
     <input class="searchbar" type="search" placeholder="Search the catalogue by name, genus, family or origin…" bind:value={q} onkeydown={openTop} onfocus={pinSearch} aria-label="Search the whole species catalogue" />
     {#if searchMode}
       <!-- Typing is a mode on a phone: the box pinned under the top bar, the strip, the grouping, the chips and the letters out of the way, the matches as rows under it, and Cancel to put the page back (round fifty, 2). -->
       <button class="btn small cancelsearch" type="button" onclick={cancelSearch}>Cancel</button>
     {:else}
+      <!-- Links between addresses: the current one is the page (round fifty-eight; the accessibility review). -->
       <nav class="seg" aria-label="Group by">
-        {#each ['genus', 'origin', 'family'] as const as b (b)}<a href="?by={b}{chip !== 'all' ? `&chip=${chip}` : ''}" class:on={data.by === b} aria-current={data.by === b ? 'true' : undefined}>{byLabel[b]}</a>{/each}
+        {#each ['genus', 'origin', 'family'] as const as b (b)}<a href="?by={b}{chip !== 'all' ? `&chip=${chip}` : ''}" class:on={data.by === b} aria-current={data.by === b ? 'page' : undefined}>{byLabel[b]}</a>{/each}
       </nav>
       <!-- The chips and the letter index scroll away under the pinned search row; this brings them back (round forty-eight, 1) -->
       {#if data.letters.length > 1}<button class="btn small azbtn" type="button" onclick={showLetters} aria-label="Show the letter index">A–Z</button>{/if}
@@ -596,10 +607,11 @@
 
   {#if !searchMode}
   <div class="filters" bind:this={filtersEl}>
+  <!-- Links between addresses, so the current one is the page, not "true" (round fifty-eight; the accessibility review). -->
   <div class="chiprow">
-    <a class="chipbtn" class:on={chip === 'all'} aria-current={chip === 'all' ? 'true' : undefined} href="?by={data.by}" data-sveltekit-noscroll>All<span class="n">{fmtN(data.total)}</span></a>
-    <a class="chipbtn" class:on={chip === 'climate'} aria-current={chip === 'climate' ? 'true' : undefined} href="?by={data.by}&chip=climate" data-sveltekit-noscroll>Climate known<span class="n">{fmtN(data.withClimate)}</span></a>
-    <a class="chipbtn" class:on={chip === 'noclimate'} aria-current={chip === 'noclimate' ? 'true' : undefined} href="?by={data.by}&chip=noclimate" data-sveltekit-noscroll>Without climate<span class="n">{fmtN(data.total - data.withClimate)}</span></a>
+    <a class="chipbtn" class:on={chip === 'all'} aria-current={chip === 'all' ? 'page' : undefined} href="?by={data.by}" data-sveltekit-noscroll>All<span class="n">{fmtN(data.total)}</span></a>
+    <a class="chipbtn" class:on={chip === 'climate'} aria-current={chip === 'climate' ? 'page' : undefined} href="?by={data.by}&chip=climate" data-sveltekit-noscroll>Climate known<span class="n">{fmtN(data.withClimate)}</span></a>
+    <a class="chipbtn" class:on={chip === 'noclimate'} aria-current={chip === 'noclimate' ? 'page' : undefined} href="?by={data.by}&chip=noclimate" data-sveltekit-noscroll>Without climate<span class="n">{fmtN(data.total - data.withClimate)}</span></a>
   </div>
   {#if data.letters.length > 1}
     <nav class="letters" aria-label="Jump to a letter" bind:this={lettersEl}>
@@ -616,7 +628,8 @@
     {:else if searching && !found.length}
       <p class="seccount" style="margin-top: 14px">Searching…</p>
     {:else if !shownFound.length}
-      <div class="emptybox"><p class="muted">Nothing matches{chip !== 'all' && found.length ? ` with the chip on (${fmtN(found.length)} without it)` : ''}.</p></div>
+      <!-- A way forward, not a dead end: what the reference is, and the record that works without it (round fifty-eight). -->
+      <div class="emptybox"><p class="muted">Nothing in the reference matches “{q.trim()}”{chip !== 'all' && found.length ? ` with the chip on (${fmtN(found.length)} without it)` : ''}. It holds a fixed list of {fmtN(data.total)} species (<a href="/about/how#list">which ones</a>), so a plant you grow may not be on it: you can still <a href="/plants/new?species={encodeURIComponent(q.trim())}">add it as a plant</a>; its record works without a species page.</p></div>
     {:else}
       <p class="seccount" style="margin: 8px 0" role="status">{fmtN(shownFound.length)} {shownFound.length === 1 ? 'match' : 'matches'} of {fmtN(data.total)}{chip !== 'all' && shownFound.length !== found.length ? ` (${fmtN(found.length - shownFound.length)} more without the chip)` : ''} · Enter opens the first</p>
       <div class="rows hits">
@@ -641,6 +654,14 @@
           <div class="hgrid opened">
             {#each r.items as c (c.slug)}{@render tile(c)}{/each}
           </div>
+          {#if (r.itemsCount ?? 0) > r.items.length}
+            {@const at = r.itemsAt ?? 0}
+            <nav class="parts" aria-label="More of {r.label}">
+              <span>{fmtN(at + 1)} to {fmtN(at + r.items.length)} of {fmtN(r.itemsCount ?? 0)}</span>
+              {#if at > 0}<a class="btn small" href={partHref(r.id, at - ITEMS)} data-sveltekit-noscroll>Previous {ITEMS}</a>{/if}
+              {#if at + r.items.length < (r.itemsCount ?? 0)}<a class="btn small" href={partHref(r.id, at + ITEMS)} data-sveltekit-noscroll>Next {Math.min(ITEMS, (r.itemsCount ?? 0) - at - r.items.length)}</a>{/if}
+            </nav>
+          {/if}
         {/if}
       {/each}
       {#if end < data.rowCount}<div class="more" bind:this={sentinel}><a class="btn small" href="?by={data.by}{chip !== 'all' ? `&chip=${chip}` : ''}&at={end}" onclick={async (e) => { e.preventDefault(); if (!(await growOnce())) location.href = (e.currentTarget as HTMLAnchorElement).href; }}>More of the {fmtN(data.rowCount)} {data.by === 'genus' ? 'genera' : data.by === 'family' ? 'families' : 'regions'}</a></div>{/if}
@@ -652,19 +673,20 @@
 <style>
   .plantsfound { margin: 12px 0 4px; }
   .plantsfound .accrow .nm .accno { font-style: normal; vertical-align: 2px; }
-  .welcome { margin: 10px 0 0; font-size: 13.5px; color: var(--ink2); line-height: 1.6; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-  .welcome .dismiss { font-size: 20px; line-height: 1; padding: 4px 8px; min-height: 0; text-decoration: none; }
+  .welcome { margin: 10px 0 0; font-size: var(--fs-md); color: var(--ink2); line-height: 1.6; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .welcome .dismiss { font-size: var(--fs-xl); line-height: 1; padding: 4px 8px; min-height: 0; text-decoration: none; }
   /* the grower's main switch: yours or everything; it leads the tool row on both views */
-  .viewseg { order: -1; }
+  /* :global, since the switch is the toggle group's own markup (round fifty-eight; the accessibility review). */
+  .toolrow :global(.viewseg) { order: -1; }
   @media (max-width: 700px) { .headadd { display: none; } }
   @media (max-width: 640px) { .headwrap.searching { display: none; } } /* the + in the top bar is the phone's add button */
-  .viewseg > button { font-weight: 700; }
-  @media (max-width: 700px) { .viewseg { flex-basis: 100%; } .viewseg > button { flex: 1; text-align: center; } }
+  .toolrow :global(.viewseg > button) { font-weight: 700; }
+  @media (max-width: 700px) { .toolrow :global(.viewseg) { flex-basis: 100%; } .toolrow :global(.viewseg > button) { flex: 1; text-align: center; } }
   .welcome a { font-weight: 600; }
-  .welcome.quiet { color: var(--ink3); font-size: 13px; }
+  .welcome.quiet { color: var(--ink3); font-size: var(--fs-md); }
   /* dismissed on this device: hidden before first paint, by the flag app.html sets, until the state catches up at mount */
   :global(html[data-welcomed]) .welcome:not(.quiet) { display: none; }
-  .linkish { background: none; border: 0; padding: 0 4px; font: inherit; font-size: 13px; color: var(--accent); cursor: pointer; text-decoration: underline; }
+  .linkish { background: none; border: 0; padding: 0 4px; font: inherit; font-size: var(--fs-md); color: var(--accent); cursor: pointer; text-decoration: underline; }
   .welcome .linkish { color: var(--ink3); margin-left: 4px; }
   /* the featured strip: one row, scrolls sideways on a phone, six-up on a desktop */
   .featured { margin: 12px 0 2px; }
@@ -677,14 +699,14 @@
   .ftile:hover { transform: translateY(-2px); box-shadow: var(--sh2); text-decoration: none; color: inherit; }
   .ftile img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; background: var(--sunk); }
   .ftile .fph { width: 100%; aspect-ratio: 1; }
-  .ftile .fnm { display: block; padding: 6px 9px 0; font-family: var(--serif); font-style: italic; font-size: 13px; font-weight: 600; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ftile .fcom { display: block; padding: 1px 9px 8px; font-size: 11px; color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ftile .fnm { display: block; padding: 6px 9px 0; font-family: var(--serif); font-style: italic; font-size: var(--fs-md); font-weight: 600; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ftile .fcom { display: block; padding: 1px 9px 8px; font-size: var(--fs-xs); color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ftile .fnm:last-child { padding-bottom: 8px; }
-  @media (min-width: 701px) { .ftile .fnm { padding: 8px 11px 0; font-size: 14px; white-space: normal; } .ftile .fcom { padding: 2px 11px 10px; font-size: 11.5px; } .ftile:first-child { grid-column: auto; } .ftile:first-child img, .ftile:first-child .fph { aspect-ratio: 1; } }
+  @media (min-width: 701px) { .ftile .fnm { padding: 8px 11px 0; font-size: var(--fs-md); white-space: normal; } .ftile .fcom { padding: 2px 11px 10px; font-size: var(--fs-sm); } .ftile:first-child { grid-column: auto; } .ftile:first-child img, .ftile:first-child .fph { aspect-ratio: 1; } }
   @media (min-width: 701px) { .strip { grid-auto-columns: minmax(0, 1fr); grid-template-columns: repeat(6, minmax(0, 1fr)); grid-auto-flow: row; overflow: visible; } .ftile:nth-child(n + 7) { display: none; } }
   @media (min-width: 1000px) { .strip { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
   .muted { color: var(--ink3); }
-  .grouptitle { font-size: 20px; margin: 22px 0 8px; }
+  .grouptitle { font-size: var(--fs-xl); margin: 22px 0 8px; }
   .skeleton { margin-top: 22px; }
   .sk { background: var(--sunk); border-radius: var(--r); }
   .sk.head { height: 34px; width: 40%; max-width: 220px; margin-bottom: 12px; }
@@ -705,35 +727,36 @@
   .filters .chiprow .chipbtn { flex: none; }
   /* A match as a row: a 40px thumbnail or the initial, the name, the family and whether its climate is known. */
   .hitrow .im { background: var(--sunk); }
-  .hitrow .im .ini { font-family: var(--serif); font-style: italic; font-size: 18px; color: var(--ink3); }
+  .hitrow .im .ini { font-family: var(--serif); font-style: italic; font-size: var(--fs-xl); color: var(--ink3); }
   .hitrow .nm, .hitrow .fam { display: block; }
-  .hitrow .fam { font-size: 12px; text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--ink2); }
-  .hitrow .fig { font-size: 16px; }
+  .hitrow .fam { font-size: var(--fs-sm); text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--ink2); }
+  .hitrow .fig { font-size: var(--fs-lg); }
   .hits { margin-top: 4px; }
   /* The grower's tiles three across on a phone, two was a screen per four plants (round fifty, 1). */
   @media (max-width: 640px) { .hgrid.mine { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; } }
   .offer { margin: -4px 0 10px; }
   .letters { display: flex; flex-wrap: wrap; gap: 2px; margin: 0 0 2px; }
-  .letters a { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--ink2); min-width: 30px; min-height: 30px; display: inline-flex; align-items: center; justify-content: center; border-radius: 7px; }
+  .parts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 10px 0 16px; font-size: var(--fs-md); color: var(--ink2); }
+  .letters a { font-family: var(--mono); font-size: var(--fs-sm); font-weight: 600; color: var(--ink2); min-width: 30px; min-height: 30px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--r-sm); }
   .letters a:hover { background: var(--sunk); text-decoration: none; color: var(--ink); }
-  .letter { font-family: var(--mono); font-size: 12px; letter-spacing: 0.12em; color: var(--ink3); margin: 22px 0 6px; scroll-margin-top: 210px; }
+  .letter { font-family: var(--mono); font-size: var(--fs-sm); letter-spacing: 0.12em; color: var(--ink3); margin: 22px 0 6px; scroll-margin-top: 210px; }
   @media (max-width: 640px) { .letter { scroll-margin-top: 150px; } } /* the `#l-X` hash without JavaScript: under the pinned search row, not the desktop's whole head */
   .rows { display: flex; flex-direction: column; gap: 6px; }
   .more { display: flex; justify-content: center; padding: 18px 0 6px; } /* a button for a reader without the observer (or without JavaScript, where it does nothing) */
   .grow { display: grid; grid-template-columns: 56px minmax(0, 1fr) 28px; gap: 14px; align-items: center; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); padding: 8px 12px 8px 8px; color: inherit; text-decoration: none; min-height: 56px; scroll-margin-top: 210px; }
   .grow:hover { text-decoration: none; color: inherit; box-shadow: var(--sh2); }
   .grow.open { outline: 2px solid var(--accent); background: color-mix(in srgb, var(--accent-soft) 45%, var(--card)); }
-  .grow .gthumb.mono, .grow .gthumb:empty { display: flex; align-items: center; justify-content: center; font-family: var(--serif); font-style: italic; font-size: 22px; color: var(--ink3); }
-  .grow .gthumb { width: 56px; height: 56px; border-radius: 8px; overflow: hidden; background: var(--sunk); }
+  .grow .gthumb.mono, .grow .gthumb:empty { display: flex; align-items: center; justify-content: center; font-family: var(--serif); font-style: italic; font-size: var(--fs-2xl); color: var(--ink3); }
+  .grow .gthumb { width: 56px; height: 56px; border-radius: var(--r); overflow: hidden; background: var(--sunk); }
   .grow .gthumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .grow .gmap { width: 56px; aspect-ratio: 2 / 1; border-radius: 6px; overflow: hidden; background: var(--map-sea); }
+  .grow .gmap { width: 56px; aspect-ratio: 2 / 1; border-radius: var(--r-sm); overflow: hidden; background: var(--map-sea); }
   .grow .gmap :global(.map) { border-radius: 0; aspect-ratio: 2 / 1; }
   .grow .gtx { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; min-width: 0; }
-  .grow .gname { font-family: var(--ui); font-weight: 700; font-size: 15px; color: var(--ink); }
-  .grow .gname.sci { font-family: var(--serif); font-style: italic; font-size: 17px; }
-  .grow .d { font-size: 12.5px; color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
-  .grow .st { font-family: var(--mono); font-size: 11.5px; color: var(--ink3); flex-basis: 100%; }
-  .grow .chev { font-family: var(--mono); font-size: 18px; color: var(--ink3); text-align: center; }
+  .grow .gname { font-family: var(--ui); font-weight: 700; font-size: var(--fs-base); color: var(--ink); }
+  .grow .gname.sci { font-family: var(--serif); font-style: italic; font-size: var(--fs-lg); }
+  .grow .d { font-size: var(--fs-md); color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+  .grow .st { font-family: var(--mono); font-size: var(--fs-sm); color: var(--ink3); flex-basis: 100%; }
+  .grow .chev { font-family: var(--mono); font-size: var(--fs-xl); color: var(--ink3); text-align: center; }
   .hgrid.opened { margin: 8px 0 18px; animation: fold 0.2s ease-out; transform-origin: top; }
   @keyframes fold { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
   @media (max-width: 700px) { .grow { grid-template-columns: 48px minmax(0, 1fr) 24px; gap: 10px; } .grow .gthumb { width: 48px; height: 48px; } .grow .gmap { width: 48px; } }

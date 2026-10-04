@@ -16,6 +16,7 @@
   import { speciesSlug } from '$core/names';
   import { localDate } from '$core/dates';
   import { toast } from '$lib/ui/toast.svelte';
+  import { wateredHere } from '$lib/ui/watered.svelte';
   import { getMeta } from '$lib/db/vault';
   import { sync } from '$lib/sync/engine.svelte';
   import { prefs } from '$lib/ui/prefs.svelte';
@@ -78,16 +79,42 @@
       return !forReader(year, lat).includes(month);
     });
   });
-  /** One tap waters every plant on the dry line, dated today, as a place's "Water all" does; one tap takes exactly those lines back. */
+  /**
+   * One tap waters every plant on the dry line, dated today, as a place's "Water all" does. The line stays where it was,
+   * saying what was done, with its own Undo in the line: the toast's Undo sat where the next tap landed, and the line
+   * that vanished moved the page under the finger (round fifty-eight; as the Today tab's stops do since round fifty-five).
+   */
   let watering = $state(false);
-  async function waterDry() {
+  let undoing = $state(false);
+  const HOME = 'home';
+  const done = $derived(wateredHere.get(HOME));
+  let lineHeight = 0;
+  async function waterDry(e: MouseEvent) {
     if (watering) return; // one tap, one set of lines (round fifty-two, 3)
     watering = true;
     try {
-      const ids = await collection.addEventsIds(toWater.map((a) => ({ acc: a.id, d: localDate(), t: 'water' as const, note: 'from Today: every plant on the not-watered line', auto: true })));
-      toast.show(`Watered ${ids.length} plant${ids.length === 1 ? '' : 's'}.`, 8000, { label: 'Undo', run: () => { void collection.removeEvents(ids).then(() => toast.show(`Undone: the ${ids.length} watering line${ids.length === 1 ? '' : 's'} removed.`)); } });
+      lineHeight = (e.currentTarget as HTMLElement).closest('.line')?.getBoundingClientRect().height ?? 0;
+      const plants = [...toWater];
+      const ids = await collection.addEventsIds(plants.map((a) => ({ acc: a.id, d: localDate(), t: 'water' as const, note: 'from Today: every plant on the not-watered line' })));
+      wateredHere.add(HOME, ids, plants.map((a) => ({ id: a.id, no: accNo(a), name: a.taxonName })), lineHeight);
+      toast.show(`Watered ${ids.length}.`);
     } finally {
       watering = false;
+    }
+  }
+  /** The line's Undo: the entry is let go only once the lines are gone, so a failed Undo can be tried again. */
+  async function undoDry() {
+    const w = wateredHere.get(HOME);
+    if (!w || undoing) return;
+    undoing = true;
+    try {
+      await collection.removeEvents(w.ids);
+      wateredHere.take(HOME);
+      toast.show(`Undone: ${w.ids.length} watering line${w.ids.length === 1 ? '' : 's'} removed.`);
+    } catch (err) {
+      toast.show(`Not undone: ${err instanceof Error ? err.message : String(err)}. Try again.`);
+    } finally {
+      undoing = false;
     }
   }
   /** Where the collection stands outside this device: a backup's age, sync's state, and what is waiting (round forty-nine, 3; round twenty-seven). Said once, as a fact, not a nag: hidden once the grower has asked to. */
@@ -99,7 +126,7 @@
     const stale = !lastBackup || daysBetween(lastBackup.slice(0, 10)) > 30;
     return { text: `Kept on this device: ${backup}, ${synced}${waiting}.`, tone: stale && !sync.configured ? 'warn' : 'muted' };
   });
-  const unseen = $derived(growing.filter((a) => { if (collection.missedAt(a.id)) return true; const s = collection.lastSeen(a.id); return s != null && daysBetween(s) > 90; }));
+  const unseen = $derived(growing.filter((a) => collection.unseenWhy(a.id)));
   const frostLine = $derived(frost.line); // the sentence names its level itself ("Frost forecast: …"), so the level is not said twice (round twenty-five, 16)
   // A plant with no watering recorded is not a plant not watered for three weeks: it is a plant whose waterings were never
   // written down, counted from the day its record was made. The two are said apart (round fifty-three, 3; the second reviewer's condition).
@@ -110,15 +137,15 @@
   const toWater = $derived(dry.filter((a) => !resting.includes(a)));
   const dryText = $derived.by(() => {
     const parts: string[] = [];
-    if (overdue) parts.push(`${overdue} of ${growing.length} plants not watered for three weeks or more`);
-    if (unknown.length) parts.push(`${unknown.length}${overdue ? '' : ` of ${growing.length}`} with no watering recorded yet, ${unknown.length === 1 ? 'its record' : 'their records'} three weeks old or more`);
+    if (overdue) parts.push(`${overdue} of ${growing.length} plants past their watering rhythm`);
+    if (unknown.length) parts.push(`${unknown.length}${overdue ? '' : ` of ${growing.length}`} with no watering recorded yet, ${unknown.length === 1 ? 'its record' : 'their records'} as old as the rhythm or more`);
     return parts.join(', and ') + (resting.length ? `; ${resting.length === dry.length ? (dry.length === 1 ? 'it is' : 'all of them are') : `${resting.length} of them ${resting.length === 1 ? 'is' : 'are'}`} in the habitat's dry season by the species sheet` : '') + '.';
   });
   type Line = { href: string; tone: string; text: string; water?: boolean; keeping?: boolean };
   const lines = $derived(
     ([
       frostLine && where === 'home' ? { href: '/today#frost', tone: frostLine.tone, text: frostLine.text } : null,
-      dry.length && where === 'home' ? { href: '/today#water', tone: 'warn', text: dryText, water: true } : null,
+      (dry.length || done) && where === 'home' ? { href: '/today#water', tone: 'warn', text: dry.length ? dryText : '', water: true } : null,
       unseen.length ? { href: '/places', tone: 'warn', text: `${unseen.length} plant${unseen.length === 1 ? '' : 's'} missed at the last audit or not seen for ninety days${unseen.length <= 3 ? ': ' + unseen.map(accNo).join(', ') : ''}.` } : null,
       sowings.length ? { href: '/propagation', tone: 'ok', text: `${sowings.length} propagation batch${sowings.length === 1 ? '' : 'es'} in the tray, the oldest ${sowNo(sowings[0])} (${sowings[0].taxonName}) ${PROP_METHODS.find((x) => x.k === sowings[0].method)?.veg ? 'started' : 'sown'} ${sowings[0].sown}.` } : null,
       unphotographed.length && growing.length ? { href: '/plants?show=nophoto', tone: 'muted', text: `${unphotographed.length} of ${growing.length} plants without a photograph in the last twelve months${unphotographed.length <= 3 ? ': ' + unphotographed.map(accNo).join(', ') : ''}.` } : null,
@@ -131,7 +158,13 @@
   <div class="today" aria-label="Today" data-sveltekit-preload-data="off">
     {#each lines as l (l.href)}
       {#if l.water}
-        <div class="line {l.tone} withact"><a href={l.href}>{l.text}</a>{#if toWater.length}<button class="btn small" type="button" onclick={waterDry} disabled={watering || !sheetsSettled} title="One watering line on each, dated today, leaving the plants in their habitat's rest; Undo takes them back">Water these {toWater.length}</button>{/if}</div>
+        <div class="line {l.tone} withact" class:doneline={!!done} style:min-height={done?.height ? `${done.height}px` : undefined}>
+          {#if done}
+            <span class="donetext">Watered {done.ids.length} just now{#if l.text}; still: <a href={l.href}>{l.text}</a>{/if}</span><button class="btn small" type="button" onclick={undoDry} disabled={undoing}>Undo</button>
+          {:else}
+            <a href={l.href}>{l.text}</a>{#if toWater.length}<button class="btn small" type="button" onclick={waterDry} disabled={watering || !sheetsSettled} title="One watering line on each, dated today, leaving the plants in their habitat's rest; Undo takes them back">Water these {toWater.length}</button>{/if}
+          {/if}
+        </div>
       {:else if l.keeping}
         <div class="line {l.tone} withact"><a href={l.href}>{l.text}</a><button class="btn small" type="button" onclick={() => (prefs.hideKeeping = true)} title="Hide this line; Settings brings it back">Hide</button></div>
       {:else}
@@ -146,7 +179,7 @@
 
 <style>
   .today { display: flex; flex-direction: column; margin: 12px 0 4px; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); overflow: hidden; }
-  .line { display: block; padding: 10px 14px; font-size: 13.5px; color: var(--ink); border-left: 3px solid var(--rule); border-top: 1px solid var(--rule); }
+  .line { display: block; padding: 10px 14px; font-size: var(--fs-md); color: var(--ink); border-left: 3px solid var(--rule); border-top: 1px solid var(--rule); }
   .line:first-child { border-top: 0; }
   .withact { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .withact a { color: inherit; flex: 1; min-width: 0; }
@@ -157,14 +190,17 @@
   .line.bad { border-left-color: var(--bad); }
   .line.warn { border-left-color: var(--warn, #b8692a); }
   .line.ok { border-left-color: var(--accent); }
+  .line.doneline { border-left-color: var(--accent); }
+  .donetext { flex: 1; min-width: 0; }
+  .donetext a { color: inherit; text-decoration: underline; }
   .muted { color: var(--ink3); }
   .todaynote { margin: 8px 0 0; }
   .linkish { background: none; border: 0; padding: 0; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; }
   /* Tighter on a phone: the lines are a glance before the grower's own plants, not the page (round fifty, 4). */
   @media (max-width: 640px) {
     .today { margin: 8px 0 2px; }
-    .line { padding: 8px 12px; font-size: 13px; line-height: 1.4; }
-    .today > .small { padding: 6px 12px; font-size: 12px; }
-    .withact .btn { min-height: 32px; padding: 4px 10px; font-size: 12.5px; }
+    .line { padding: 8px 12px; font-size: var(--fs-md); line-height: 1.4; }
+    .today > .small { padding: 6px 12px; font-size: var(--fs-sm); }
+    .withact .btn { min-height: 32px; padding: 4px 10px; font-size: var(--fs-md); }
   }
 </style>

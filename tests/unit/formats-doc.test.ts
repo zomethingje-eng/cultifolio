@@ -116,7 +116,7 @@ const doc = {
   storedAt: says(/stored at (vault\/<id>\/log\/<hour>-0000-<device>-<fingerprint>\.bin)/)[1],
   photoAt: says(/at (vault\/<vaultId>\/photo\/<photoId>\.bin)/)[1],
   endpoints: says(/The endpoints: POST (\/api\/sync\/vault) \{ id, token, create \}; GET (\/api\/sync\/log)\?vault=&since=<ms>.*?POST (\/api\/sync\/log)\?vault= with headers (X-Batch), (X-Batch-Plain), (X-Device); GET (\/api\/sync\/log)\/<hour>-0000-<device>-<fingerprint>\?vault=.*?(PUT\|GET\|HEAD\|DELETE) (\/api\/sync\/photo)\/<id>\?vault=/),
-  manifestKeys: says(/manifest\.json \{ (format): "cultifolio-backup", (v): 1, (exported): [^,]*, (device), (app), (counts): \{ ([a-zA-Z, ]+) \}, (photosMissing): [^\]]*\] \}/),
+  manifestKeys: says(/manifest\.json \{ (format): "cultifolio-backup", (v): 1, (exported): [^,]*, (device), (app), (counts): \{ ([a-zA-Z, ]+) \}, (photosMissing): [^\]]*\], (parked): [^\]]*\] \}/),
   tooBig: says(/A body larger than the limit is (\d+)/)[1],
   rateLimited: says(/past any of these the answer is (\d+) with Retry-After/)[1],
   ceilings: says(/past either the answer to a creation is (\d+) with a sentence/)[1],
@@ -318,7 +318,7 @@ describe('/about/formats is enough to decrypt a vault, and says what the code do
     // the manifest keys the page lists are the schema's, and the counts it lists are the summary's
     const m = doc.manifestKeys;
     const schemaKeys = Object.keys(Manifest.entries);
-    expect([m[1], m[2], m[3], m[4], m[5], m[6], m[8]].sort()).toEqual(schemaKeys.sort()); // both ways: a key added to the schema must be on the page
+    expect([m[1], m[2], m[3], m[4], m[5], m[6], m[8], m[9]].sort()).toEqual(schemaKeys.sort()); // both ways: a key added to the schema must be on the page
     expect(m[7].split(/,\s*/).sort()).toEqual(['accessions', 'changes', 'events', 'locations', 'photoBytes', 'photos', 'sowings', 'taxa']);
     // the record kinds, the reserved names and the event types the page lists are the code's, no more and no fewer
     expect([...doc.kinds].sort()).toEqual([...KINDS].sort());

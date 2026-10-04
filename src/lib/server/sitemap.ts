@@ -10,8 +10,14 @@ export const SITEMAP_CHUNK = 40_000;
 const BASE = 'https://cultifolio.com';
 const esc = (s: string) => s.replace(/&/g, '&amp;');
 
-/** Every address, in a stable order: the fixed pages, the species, then the genus rows. */
+/** Every address, in a stable order: the fixed pages, the species, then the genus rows. Once per index (round fifty-eight). */
+const made = new WeakMap<IndexEntry[], string[]>();
 export function sitemapUrls(index: IndexEntry[]): string[] {
+  let urls = made.get(index);
+  if (!urls) made.set(index, (urls = urlsOf(index)));
+  return urls;
+}
+function urlsOf(index: IndexEntry[]): string[] {
   const genera = [...new Set(index.map((e) => genusOf(e.name)))].sort();
   return ['/', '/about/how', '/about/formats', ...index.map((e) => `/species/${e.slug}`), ...genera.map((g) => `/?by=genus&open=${slugify(g)}`)];
 }

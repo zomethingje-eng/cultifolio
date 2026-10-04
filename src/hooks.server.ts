@@ -2,7 +2,7 @@ import { redirect, type Handle, type RequestEvent } from '@sveltejs/kit';
 import { unitsFor } from '$lib/server/units';
 import { building, version } from '$app/environment';
 import { getCorpusId } from '$lib/server/dossiers';
-import { catalogueRows, byOf, chipOf } from '$lib/server/catalogue';
+import { catalogueRows, homeWindow, byOf, chipOf } from '$lib/server/catalogue';
 
 /**
  * A species page is public content rendered in the reader's units and hemisphere, which is why its own header is
@@ -44,12 +44,17 @@ async function homeQuery(event: RequestEvent): Promise<string> {
   const wantsRows = /^[A-Z]$/.test(from) || (Number.isInteger(at) && at > 0) || /^[a-z0-9-]{1,80}$/.test(open);
   if (wantsRows) {
     const { cat } = await catalogueRows(event.platform, event.fetch, by, chip); // the build's file under a manifest, not the in-memory catalogue the products retired (round fifty-four, 3)
-    if (/^[A-Z]$/.test(from) && cat.letterAt[from] != null) parts.push(`from=${from}`);
-    if (Number.isInteger(at) && at > 0 && at < cat.rows.length) parts.push(`at=${at}`);
-    if (open && cat.rows.some((r) => r.id === open)) parts.push(`open=${open}`);
+    const w = homeWindow(cat, p); // the page's own reading (round fifty-eight)
+    if (w.fromValid && !w.atValid) parts.push(`from=${from}`);
+    if (w.atValid) parts.push(`at=${at}`);
+    if (w.open) parts.push(`open=${w.open}`);
+    if (w.part) parts.push(`part=${w.part}`);
   }
   return parts.join('&');
 }
+
+/** A path as the page reads it: `/species/%63opiapoa-cinerea` is the page `/species/copiapoa-cinerea` renders, and minted its own copy (round fifty-eight). */
+const pathKey = (p: string) => { try { return decodeURIComponent(p); } catch { return p; } };
 
 /** The two sections renamed before the launch: a bookmark or an installed app's cached shell still says the old path. */
 const MOVED: Array<[RegExp, string]> = [
@@ -65,8 +70,23 @@ const MOVED: Array<[RegExp, string]> = [
  * X-Frame-Options mirrors the CSP's `frame-ancestors 'none'` for the older readers that only know the header. The
  * prerendered pages are served as static files and get theirs from static/_headers.
  */
+/**
+ * A write to the sync routes from another site is refused, whatever its content type: Kit's own origin check covers
+ * form bodies only, and a no-cors POST with a Blob body (no content type) passed it and created a vault (round
+ * fifty-eight; the server review). The device's own requests are same-origin; a browser names another site in `Origin`
+ * or `Sec-Fetch-Site`, and a client that sends neither (a script, curl) can make any request it likes anyway.
+ */
+export function _foreignWrite(request: Request, url: URL): boolean {
+  if (!url.pathname.startsWith('/api/sync/') || request.method === 'GET' || request.method === 'HEAD') return false;
+  const site = request.headers.get('sec-fetch-site');
+  if (site && site !== 'same-origin' && site !== 'none') return true;
+  const origin = request.headers.get('origin');
+  return !!origin && origin !== url.origin;
+}
+
 export const handle: Handle = async ({ event, resolve }) => {
   for (const [from, to] of MOVED) if (from.test(event.url.pathname)) redirect(301, event.url.pathname.replace(from, to) + event.url.search);
+  if (_foreignWrite(event.request, event.url)) return new Response('a write from another site', { status: 403, headers: { 'cache-control': 'no-store', 'referrer-policy': 'no-referrer' } });
   const policy = (r: Response) => {
     r.headers.set('referrer-policy', 'no-referrer');
     if (!r.headers.has('x-frame-options')) r.headers.set('x-frame-options', 'DENY');
@@ -92,7 +112,7 @@ export const handle: Handle = async ({ event, resolve }) => {
     if (q !== null) {
       // And the corpus: a page held across an upload showed the old corpus for its minute (round fifty-two, 5). The id is in memory once the index is loaded, which the home query loads anyway.
       const corpus = await getCorpusId(event.platform, event.fetch).catch(() => '');
-      key = new Request(`https://cache.cultifolio/page?v=${encodeURIComponent(version)}&c=${encodeURIComponent(corpus)}&p=${encodeURIComponent(event.url.pathname)}&q=${encodeURIComponent(q)}&u=${unitsFor(event.cookies, event.request)}&h=${hemi === 'n' || hemi === 's' ? hemi : ''}`);
+      key = new Request(`https://cache.cultifolio/page?v=${encodeURIComponent(version)}&c=${encodeURIComponent(corpus)}&p=${encodeURIComponent(pathKey(event.url.pathname))}&q=${encodeURIComponent(q)}&u=${unitsFor(event.cookies, event.request)}&h=${hemi === 'n' || hemi === 's' ? hemi : ''}`);
       // A cache that fails to answer is a page rendered, not a 500 (round forty-nine, 2).
       const hit = await cache.match(key).catch(() => undefined);
       if (hit) {

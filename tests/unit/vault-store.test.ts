@@ -115,7 +115,10 @@ describe('a duplicate number already in the log is not written at load; the reco
     expect(collection.accessions.map((r) => r.id).sort()).toEqual(['a1', 'a2']);
     expect(collection.sharesNumber('accession', 'a2')).toEqual(['a1']);
     expect(collection.sharesNumber('accession', 'a1')).toEqual(['a2']);
-    await collection.repairNumbers(); // what the page's button does
+    expect(collection.numberPlan('accession', 'a2')).toEqual({ keeper: 'a1', renumbered: ['a2'] }); // what the notice says
+    await collection.repairNumbers(); // a repair with nothing merged since is no repair: nothing is written (round fifty-eight)
+    expect((await allChanges()).length).toBe(before);
+    expect(await collection.repairNumbers({ kind: 'accession', no: '2026-0013' })).toBe(true); // what the page's button does
     expect(collection.accessions.map((r) => accNo(r)).sort()).toEqual(['2026-0013', '2026-0014']);
     expect(collection.accession('2026-0014')?.id).toBe('a2');
     expect(collection.sharesNumber('accession', 'a2')).toEqual([]);

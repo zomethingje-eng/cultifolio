@@ -1,6 +1,6 @@
 import { json, error } from '@sveltejs/kit';
 import { sheetsIn } from '$lib/server/sheets';
-import { getCorpus } from '$lib/server/dossiers';
+import { corpusNow } from '$lib/server/dossiers';
 import { limited } from '$lib/server/sync';
 import { isBucket, bucketWidth } from '$core/bucket';
 import type { RequestHandler } from './$types';
@@ -25,7 +25,8 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   // only under the current id, so a bucket from the previous corpus can never be stored under the new one; a request
   // under another id (a device that has not asked /api/corpus since a refresh) is answered without caching (round thirteen, 4).
   const asked = (url.searchParams.get('c') ?? '').replace(/[^A-Za-z0-9._-]/g, '').slice(0, 40);
-  const { id: corpus, buckets: count } = await getCorpus(platform, fetch);
+  const c = await corpusNow(platform, fetch);
+  const { corpus, buckets: count } = c;
   // The count the device hashed by, when it says: a name of two hex digits is valid under thirty-two buckets and under
   // sixty-four, and a device on the old count took half a bucket's species for the reference lacking them (round fifty-four, 3;
   // both reviewers). A count that is not the one served is a 409, never an answer, and the device re-reads /api/corpus.
@@ -48,7 +49,7 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
     // Charged per bucket derived, not per request (round thirteen, 12).
     const stop = await limited(platform, getClientAddress, 'sheets');
     if (stop) return stop;
-    const sheets = await sheetsIn(platform, fetch, b, corpus);
+    const sheets = await sheetsIn(c, platform, fetch, b);
     out.push(sheets);
     if (edge && current) {
       const body = JSON.stringify(sheets);

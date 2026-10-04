@@ -4,7 +4,7 @@ declare global {
     interface Error {
       message: string;
       /** A species address the reference does not hold: the name as read from the address, what the reference holds of its genus, and whether the genus is one the list takes whole (round forty-one, R15). */
-      species?: { name: string; genus: string; inGenus: number; wholeGenus: boolean; accepted?: string };
+      species?: { name: string; genus: string; inGenus: number; wholeGenus: boolean; accepted?: string; /** The reference's nearest names, by its own search (round fifty-eight). */ suggest?: Array<{ slug: string; name: string }> };
     }
     interface Platform {
       env: {

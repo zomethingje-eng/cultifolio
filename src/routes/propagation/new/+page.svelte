@@ -13,7 +13,7 @@
   import LocationPicker from '$lib/ui/LocationPicker.svelte';
   import { parseName, slugify, type NameKind, speciesSlug, speciesOf } from '$core/names';
   import { sheetForName } from '$lib/ui/index.svelte';
-  import { PROP_METHODS, kindOf, type PropMethod, type Provenance } from '$lib/db/types';
+  import { PROP_METHODS, kindOf, type Accession, type PropMethod, type Provenance } from '$lib/db/types';
   import { setCrumb } from '$lib/ui/crumb.svelte';
 
   let name = $state('');
@@ -41,6 +41,8 @@
   let bottomHeat = $state<string | number | null>(''); // Svelte binds a cleared number input to null
   let covered = $state(false);
   let locationId = $state<string | null>(null);
+  /** The place the form filled from the last one used, said under the field (round fifty-eight; the grower review). */
+  let lastUsedLoc = $state<string | null>(null);
   let notes = $state('');
   let busy = $state(false);
   let saved = $state(false);
@@ -53,10 +55,35 @@
   function guardUnload(e: BeforeUnloadEvent) {
     if (formDirty()) e.preventDefault();
   }
+  // The action bar is pinned on a phone, as on the Add form; the toast sits above it, not on it (round fifty-eight; the grower review).
+  $effect(() => { document.body.classList.add('stickyacts'); return () => document.body.classList.remove('stickyacts'); });
 
 
   const m = $derived(PROP_METHODS.find((x) => x.k === method) ?? PROP_METHODS[0]);
   const parent = $derived(parentAcc ? collection.accession(parentAcc) : undefined);
+  /**
+   * The parent list, by number from the first, narrowed by what is typed above it (number, name or cultivar, every word):
+   * at thirty-odd plants a flat list of numbers could not be found in. The plant already chosen stays in the list
+   * whatever is typed, so a filter never quietly changes the choice (round fifty-eight; the grower review).
+   */
+  let parentQ = $state('');
+  const growing = $derived(collection.accessions.filter((a) => a.status === 'growing' || a.id === parentAcc).slice().sort((a, b) => accNo(a).localeCompare(accNo(b), undefined, { numeric: true })));
+  const parentWords = $derived(parentQ.toLowerCase().split(/\s+/).filter(Boolean));
+  const parentMatch = (a: Accession) => parentWords.every((w) => `${accNo(a)} ${a.taxonName} ${a.cultivar ?? ''}`.toLowerCase().includes(w));
+  const parentMatches = $derived(growing.filter(parentMatch));
+  const parentOptions = $derived(parentWords.length ? growing.filter((a) => a.id === parentAcc || parentMatch(a)) : growing);
+  /** Picking a parent takes its name, as the hint under the list says: the batch was filed under whatever was in the species box (round fifty-eight; the grower review). */
+  function takeParent() {
+    const a = parentAcc ? collection.accession(parentAcc) : undefined;
+    if (!a) return;
+    name = a.taxonName;
+    taxonKey = a.taxonKey ?? null;
+    cultivar = a.cultivar ?? null;
+    kind = kindOf(a);
+    parentage = a.parentage ?? null;
+  }
+  /** Why Start batch cannot be pressed, in words, next to it: a greyed button said nothing (round fifty-eight; the grower review). A missing count is not one of these: it is refused with a sentence on the press. */
+  const startBlocked = $derived(busy ? 'Saving the batch…' : !name.trim() ? 'Name the species first.' : '');
   const nextNo = $derived(collection.ready ? collection.nextSowingNumber(Number(sown.slice(0, 4)) || undefined) : '…');
 
   $effect(() => {
@@ -85,7 +112,7 @@
     } catch {
       /* fine */
     }
-    if (want && collection.location(want)) locationId = want;
+    if (want && collection.location(want)) { locationId = want; if (!loc) lastUsedLoc = want; }
     // /propagation/new?parent=2026-0004 → a vegetative batch from that plant, species prefilled.
     const p = page.url.searchParams.get('parent');
     if (p && collection.accession(p)) {
@@ -164,7 +191,7 @@
   }
 </script>
 
-<svelte:head><title>New batch — Cultifolio</title></svelte:head>
+<svelte:head><title>New batch · Cultifolio</title></svelte:head>
 <svelte:window onbeforeunload={guardUnload} />
 
 {#if collection.lastWriteError}
@@ -181,13 +208,17 @@
   </label>
 
   {#if m.veg}
-    <label class="field"><span>From which plant</span>
-      <select id="s-parent" bind:value={parentAcc}>
+    <div class="field"><label for="s-parent">From which plant</label>
+      {#if growing.length > 1}
+        <input id="s-parent-q" class="pfilter" type="search" bind:value={parentQ} placeholder="Filter by number or name" aria-label="Filter the plants by number or name" aria-controls="s-parent" autocomplete="off" />
+        {#if parentWords.length}<span class="faint small" role="status">{parentMatches.length === 0 ? 'No plant matches; clear the filter to see them all.' : `${parentMatches.length} of ${growing.length} shown.`}</span>{/if}
+      {/if}
+      <select id="s-parent" bind:value={parentAcc} onchange={takeParent}>
         <option value={null}>Not one of my plants</option>
-        {#each collection.accessions.filter((a) => a.status === 'growing') as a}<option value={a.id}>{accNo(a)} · {a.taxonName}{a.cultivar ? ` ‘${a.cultivar}’` : ''}</option>{/each}
+        {#each parentOptions as a (a.id)}<option value={a.id}>{accNo(a)} · {a.taxonName}{a.cultivar ? ` ‘${a.cultivar}’` : ''}</option>{/each}
       </select>
       {#if parent}<span class="faint small">The species is taken from the parent; its field number and cultivar carry to every plant raised.</span>{/if}
-    </label>
+    </div>
   {/if}
 
   <label class="field"><span>Species</span><SpeciesPicker bind:value={name} bind:taxonKey bind:cultivar bind:kind bind:parentage />
@@ -227,13 +258,15 @@
   </div>
   <label class="check"><input id="s-covered" type="checkbox" bind:checked={covered} /> Covered (bag, lid, propagator)</label>
 
-  <div class="field"><span>Where</span><LocationPicker bind:value={locationId} id="s-loc" label="Where" /></div>
+  <div class="field"><span>Where</span><LocationPicker bind:value={locationId} id="s-loc" label="Where" lastUsed={lastUsedLoc} /></div>
   <label class="field"><span>Notes</span><textarea id="s-notes" rows="3" bind:value={notes}></textarea></label>
   </div>
 
-  <div class="actions">
+  <!-- Pinned on a phone above the tab bar, as on the Add form, so Start batch is under the thumb however long the form; a greyed button says why next to it (round fifty-eight; the grower review). -->
+  <div class="actions sticky">
+    {#if startBlocked}<span class="why small" id="s-start-why" role="status">{startBlocked}</span>{/if}
     <a class="btn" href="/propagation">Cancel</a>
-    <button class="btn pri" type="submit" disabled={!name.trim() || busy}>Start batch</button>
+    <button class="btn pri" type="submit" disabled={!name.trim() || busy} aria-describedby={startBlocked ? 's-start-why' : undefined}>Start batch</button>
   </div>
 </form>
 
@@ -241,13 +274,20 @@
   .form { max-width: 720px; }
   .sheet { padding: 6px 17px 14px; margin-top: 12px; }
   .field { margin: 12px 0; display: block; }
-  .field > span:first-child { display: block; font-size: 10.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink3); font-weight: 700; margin-bottom: 5px; }
-  .field input[type='text'], .field input[type='date'], .field input[type='number'], .field select, .field textarea { width: 100%; font: inherit; font-size: 14px; padding: 9px 12px; border: 1px solid var(--rule); border-radius: 9px; background: var(--card); color: var(--ink); }
+  .field > span:first-child, .field > label:first-child { display: block; font-size: var(--fs-xs); letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink3); font-weight: 700; margin-bottom: 5px; }
+  .field input[type='text'], .field input[type='date'], .field input[type='number'], .field select, .field textarea { width: 100%; font: inherit; font-size: 0.875rem; padding: 9px 12px; border: 1px solid var(--rule); border-radius: var(--r); background: var(--card); color: var(--ink); }
   .field input:focus, .field select:focus, .field textarea:focus { outline: 0; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-  .field .small { display: block; margin-top: 4px; font-size: 12px; }
+  .field .small { display: block; margin-top: 4px; font-size: var(--fs-sm); }
   .bad { color: var(--bad); }
   .two { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; align-items: start; }
-  .check { display: flex; align-items: center; gap: 8px; font-size: 14px; margin: 12px 0; }
-  .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+  .check { display: flex; align-items: center; gap: 8px; font-size: var(--fs-md); margin: 12px 0; }
+  .actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+  .actions .why { color: var(--ink2); margin-right: auto; }
+  /* The filter sits on the list it narrows; the list follows it (round fifty-eight; the grower review). */
+  .pfilter { width: 100%; font: inherit; font-size: var(--fs-md); padding: 9px 12px; border: 1px solid var(--rule); border-radius: var(--r); background: var(--card); color: var(--ink); margin-bottom: 6px; }
+  .pfilter + .small { margin: -2px 0 6px; }
+  /* The Add form's pinned bar, copied: the toast lifts above it through body.stickyacts (round fifty-eight; the grower review). */
+  @media (max-width: 700px) { .actions.sticky { position: sticky; bottom: calc(56px + env(safe-area-inset-bottom)); background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(8px); padding: 10px 0; margin: 8px 0 0; z-index: 5; } }
+  @media (max-width: 640px) { .actions .btn, .pfilter, .field select { min-height: 44px; } }
   @media (max-width: 520px) { .two { grid-template-columns: 1fr; } }
 </style>

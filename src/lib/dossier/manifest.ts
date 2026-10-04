@@ -18,6 +18,9 @@
  * A Worker that finds no manifest (a corpus uploaded before the manifest, the fixture corpus) derives as it did.
  */
 import { DOSSIER_V } from './schema';
+import { bucketsFor, bucketNames } from '$core/bucket';
+import { postingFilesFor, postingFileNames } from '$core/postings';
+import { BYS, CHIPS, catalogueFile } from './catalogue';
 
 export interface Manifest {
   v: number;
@@ -49,7 +52,23 @@ export function contentHash(text: string): string {
   return a.toString(16).padStart(8, '0') + b.toString(16).padStart(8, '0');
 }
 
+/**
+ * Whether `x` is a manifest this build can serve from: the shape, integer counts that are the ones the build chooses for
+ * the number of species, and a hash for every product the routes read (round fifty-eight; the first reviewer's finding
+ * 15: a manifest naming only an index, or a bucket count of 7, was adopted). `short.json` is optional: a manifest from
+ * before round fifty-eight has none, and the search reads the postings then.
+ */
 export const isManifest = (x: unknown): x is Manifest => {
   const m = x as Manifest;
-  return !!m && typeof m === 'object' && typeof m.id === 'string' && /^[A-Za-z0-9._-]{4,40}$/.test(m.id) && typeof m.buckets === 'number' && m.buckets >= 1 && typeof m.postings === 'number' && m.postings >= 1 && !!m.files && typeof m.files === 'object' && Object.values(m.files).every(isFileHash) && isFileHash(m.files['index.json']) && m.v === DOSSIER_V;
+  if (!m || typeof m !== 'object' || m.v !== DOSSIER_V) return false;
+  if (typeof m.id !== 'string' || !/^[A-Za-z0-9._-]{4,40}$/.test(m.id)) return false;
+  if (!Number.isInteger(m.species) || m.species < 1) return false;
+  if (!Number.isInteger(m.buckets) || m.buckets !== bucketsFor(m.species)) return false;
+  if (!Number.isInteger(m.postings) || m.postings !== postingFilesFor(m.species)) return false;
+  if (!m.files || typeof m.files !== 'object' || !Object.values(m.files).every(isFileHash)) return false;
+  const need = ['index.json', ...bucketNames(m.buckets).flatMap((b) => [`entries/${b}.json`, `sheets/${b}.json`]), ...postingFileNames(m.postings).map((f) => `postings/${f}.json`), ...BYS.flatMap((by) => CHIPS.map((chip) => catalogueFile(by, chip)))];
+  return need.every((name) => Object.hasOwn(m.files, name));
 };
+
+/** How many of the whole index's hits `short.json` keeps for each key of one or two letters: the search route's most. */
+export const SHORT_HITS = 100;

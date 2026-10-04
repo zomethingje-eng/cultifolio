@@ -35,7 +35,7 @@ test('front page renders server-side with the fixture corpus: closed genus rows,
   const page = await ctx.newPage();
   const res = await page.goto('/');
   expect(res?.status()).toBe(200);
-  await expect(page.locator('h1')).toContainText('Species');
+  await expect(page.locator('h1')).toContainText('Cultifolio'); // a visitor's head names the site and says what it is (round fifty-eight)
   await expect(page.locator('.grow')).toHaveCount(3); // Copiapoa, Refusia, Welwitschia: rows, not tiles
   await expect(page.locator('a.tile')).toHaveCount(0);
   await expect(page.locator('.seg[aria-label="Group by"] .on')).toHaveText('Genus');
@@ -131,9 +131,17 @@ test('unknown species is a 404 with a way forward: what the reference holds of t
   await expect(page.locator('.err')).toContainText('The reference has no Nonsensia: it is built from a fixed list of names');
   await expect(page.locator('.err a', { hasText: 'POWO' })).toHaveAttribute('href', /powo\.science\.kew\.org.*Nonsensia%20fakeii/);
   await expect(page.locator('.err a', { hasText: 'add it as a plant' })).toHaveAttribute('href', '/plants/new?species=Nonsensia%20fakeii');
-  // A genus the reference holds and takes whole: the count, and that the name is one Kew does not accept under it.
+  // A genus the reference holds and takes whole: the count, and that the name as written is not on the list (round fifty-eight: never "Kew does not accept", which no source said).
   await page.goto('/species/copiapoa-fakeii');
-  await expect(page.locator('.err')).toContainText('The reference has 2 Copiapoa species, and takes the genus whole');
+  await expect(page.locator('.err')).toContainText('The reference has 2 Copiapoa species, taking the genus whole');
+  await expect(page.locator('.err')).not.toContainText('does not accept');
+  // A slip in the name offers the species it nearly is; an address in capitals is the species; a genus alone is its row (round fifty-eight).
+  await page.goto('/species/copiapoa-cinera');
+  await expect(page.locator('.err a', { hasText: 'Copiapoa cinerea' })).toHaveAttribute('href', '/species/copiapoa-cinerea');
+  await page.goto('/species/Copiapoa-cinerea');
+  await expect(page).toHaveURL(/\/species\/copiapoa-cinerea$/);
+  await page.goto('/species/copiapoa');
+  await expect(page).toHaveURL(/\/\?by=genus&open=copiapoa$/);
 });
 
 test('add a plant, record an event, survive a reload', async ({ page }) => {
@@ -293,7 +301,8 @@ test('the path species → my plants → bench is prefilled at every step and lo
   await expect(page.locator('.idcard .mine a.accno')).toHaveCount(1); // the "Yours" line is the ownership mark; no pill repeats it
   await page.locator('a.accno', { hasText: acc }).click();
   await expect(page).toHaveURL(new RegExp(`/plants/${acc}$`));
-  // habitat versus here: the missing bench figure hands off to the bench edit form
+  // habitat versus here: the missing bench figure hands off to the bench edit form; the comparison sits folded under the log since round fifty-eight
+  await page.locator('#habitat > summary').click();
   await expect(page.locator('.hvh')).toBeVisible();
   await page.getByRole('link', { name: 'Set its floor' }).click();
   await expect(page).toHaveURL(/\/places\/.+\?edit=1$/);
@@ -303,10 +312,11 @@ test('the path species → my plants → bench is prefilled at every step and lo
   await expect(page.locator('#e-floor')).toHaveCount(0); // the save has landed once the form has closed; a hard navigation before that reads the old floor
   // back on the plant, the comparison shows both figures and no verdict: the judgement is the grower's
   await page.goto(`/plants/${acc}`);
+  await page.locator('#habitat > summary').click();
   await expect(page.locator('.hvh')).toContainText('this place is set to bottom out at 2.0 °C');
   // the habitat figure is the median with its 10th–90th span across the envelope cells, and the quantity is named
-  await expect(page.locator('.hvh')).toContainText(/coldest month's mean night at the habitat \d+(\.\d)? °C in \w+ \(median year; across the 40 envelope cells \d+ to \d+; CHELSA\); 1st-percentile night over 40 years at the typical cell 6\.5 °C \(NASA POWER\)/);
-  await expect(page.locator('.hvh')).toContainText(/open sky over the habitat \d+–\d+ mol\/m²\/day across the year \(median year; across the 40 envelope cells \d+ to \d+; CHELSA\)/);
+  await expect(page.locator('.hvh')).toContainText(/coldest month's mean night at the habitat \d+(\.\d)? °C in \w+ \(median year; across the range, 40 grid cells, \d+ to \d+; CHELSA\); 1st-percentile night over 40 years at a typical spot in the range 6\.5 °C \(NASA POWER\)/);
+  await expect(page.locator('.hvh')).toContainText(/open sky over the habitat \d+–\d+ mol\/m²\/day across the year \(median year; across the range, 40 grid cells, \d+ to \d+; CHELSA\)/);
   await expect(page.locator('.hvh .pill')).toHaveCount(0);
   await page.locator('.hvh + details.why summary').click(); // the caveat sits one tap away, not beside the figures
   await expect(page.locator('.hvh + details.why')).toContainText('A comparison, not a verdict');
@@ -583,12 +593,13 @@ test('the species page condenses its cultivation sheet into a note by rule', asy
   await page.goto('/species/copiapoa-cinerea');
   await expect(page.locator('#gen-note')).toContainText('by rule, from the cards');
   await expect(page.locator('#gen-note')).toHaveAttribute('open', ''); // open at rest: the paragraph a grower reads first (round forty-nine, 3)
-  await expect(page.locator('#gen-note .body')).toContainText("Rain rule: no rainy season to read (72 mm a year); the temperature rule's cooler six months are November to April in the northern hemisphere.");
+  // fact first in plain words, the rule and the source in grey after it (round fifty-eight)
+  await expect(page.locator('#gen-note .body li').filter({ hasText: 'Almost rainless (72 mm a year), no wet season; the cooler half of the year is November to April' })).toContainText('rain and temperature rules, CHELSA');
   await expect(page.locator('#gen-note .body')).not.toContainText(/fog/);
-  await expect(page.locator('#gen-note .body')).toContainText('Cold floor 6.5 °C (1st-percentile habitat night, NASA POWER).');
-  await expect(page.locator('#gen-note .foot')).toContainText('Its year, Rain, Light, Warmth and air');
+  await expect(page.locator('#gen-note .body li').filter({ hasText: 'Cold nights reach 6.5 °C' })).toContainText('NASA POWER, 40 years');
+  await expect(page.locator('#gen-note .foot')).toContainText('Seasons, Rain, Light, Warmth and air');
   // the note's floor is the card's floor, the same figure with the same quantity named
-  await expect(page.locator('.cult', { hasText: /^Warmth and air/ }).first().locator('.body')).toContainText('Cold floor: 6.5 °C, which is the 1st-percentile night over 40 years at the typical cell (NASA POWER).');
+  await expect(page.locator('.cult', { hasText: /^Warmth and air/ }).first().locator('.body')).toContainText('Cold floor: 6.5 °C, which is the 1st-percentile night over 40 years at a typical spot in the range (NASA POWER).');
   // nothing on the sheet says what the plant does, wants or tolerates, or what to do to it
   const sheet = (await page.locator('.note-slot').textContent())!;
   expect(sheet).not.toMatch(/\b(rests?|wants?|tolerat\w*|will|water it|feed|repot|misting|kills?|fatal|scorch\w*|bleach\w*|keep it|give it|wakes?|grows in the open)\b/i);
@@ -599,7 +610,7 @@ test('first run: the front page explains itself once, and stops once there is a 
   const html = await (await page.request.get('/')).text();
   expect(html).toContain('id="welcome"');
   await page.goto('/');
-  await expect(page.locator('#welcome')).toContainText('New here');
+  await expect(page.locator('#welcome')).toContainText('Grow some of these');
   await page.getByRole('button', { name: 'Not now' }).click();
   await expect(page.locator('#welcome')).toHaveCount(0);
   await page.reload();
@@ -612,7 +623,7 @@ test('first run: the front page explains itself once, and stops once there is a 
   await page.evaluate(() => localStorage.removeItem('cultifolio.welcomed'));
   await page.reload();
   await expect(page.locator('#welcome')).toBeVisible();
-  await page.locator('#welcome a', { hasText: 'Add a plant' }).click();
+  await page.locator('#welcome a', { hasText: 'Add your first plant' }).click();
   await page.fill('#species-name', 'Copiapoa cinerea');
   await page.locator('#species-name').blur();
   await page.getByRole('button', { name: /^Add/ }).click();
@@ -943,7 +954,7 @@ test('the about pages are served without JavaScript and say what the app refuses
   await p.goto('/about');
   await expect(p).toHaveURL(/\/about\/how$/);
   await expect(p.locator('h2#marker')).toHaveText('The map marker');
-  await expect(p.locator('h2#climate')).toHaveText('The climate envelope');
+  await expect(p.locator('h2#climate')).toHaveText('The climate across the range');
   await expect(p.locator('article')).toContainText('inaturalist-open-data.s3.amazonaws.com');
   await expect(p.locator('article')).toContainText('A refusal is not an absence');
   await p.goto('/about/formats');
@@ -1020,7 +1031,7 @@ test('the species page carries the envelope: median with its span, the cells it 
   await expect(page.locator('table.wx tbody tr').nth(2).locator('td').nth(1)).toHaveText('4'); // rain: no spread in the fixture, so the median alone
   await page.locator('details.why', { hasText: 'Where these figures come from' }).locator('summary').click(); // the provenance is one tap from the chart
   await expect(page.getByText('Each figure is the median across the 40 grid cells holding the 352 in-range records, with the 10th–90th percentile span')).toBeVisible();
-  await expect(page.getByText(/Extremes and elevation were read at the typical cell fixture \(-25\.261, -70\.589\)/)).toBeVisible();
+  await expect(page.getByText(/Extremes and elevation were read at a typical spot in the range, cell fixture \(-25\.261, -70\.589\)/)).toBeVisible();
   await expect(page.locator('.mapcap').first()).toContainText('the marker is where the records are densest and decides nothing: the climate was read across every in-range record\'s cell, not at the marker');
   await expect(page.locator('details.why', { hasText: 'How the map marker was placed' })).toBeVisible();
   await expect(page.locator('.factgrid b', { hasText: /^Map marker$/ })).toBeVisible();
@@ -1029,6 +1040,7 @@ test('the species page carries the envelope: median with its span, the cells it 
   await page.getByRole('link', { name: 'Add one to my plants' }).click();
   await page.getByRole('button', { name: /^Add/ }).click();
   const t = page.locator('.card', { hasText: 'Habitat rain season' });
+  await page.locator('#habitat > summary').click(); // folded under the log since round fifty-eight
   await expect(t).toContainText('No rainy season to read');
   await expect(t).toContainText("72 mm a year; the temperature rule's cooler six months May–Oct (S), shifted to the north (no site set): Nov–Apr (CHELSA).");
   await expect(t.getByRole('link', { name: 'The sheet' })).toBeVisible();
@@ -1328,8 +1340,8 @@ test('a forecast source that does not answer is "not checked" in a plain notice 
   await expect(page).toHaveURL(/\/today$/);
   await expect(page.locator('#frost .emptybox')).toContainText('No site set');
   await page.goto('/settings');
-  await page.fill('input[placeholder="40.43"]', '40.38');
-  await page.fill('input[placeholder="-80.01"]', '-80.05');
+  await page.fill('#site-lat', '40.38');
+  await page.fill('#site-lon', '-80.05');
   await page.getByRole('button', { name: 'Save', exact: true }).first().click();
   await expect(page.getByText('Saved on this device.')).toBeVisible();
   await page.goto('/today');
@@ -1611,7 +1623,7 @@ test('the species page answers in the first screen and relates the species by ge
   await page.goto('/species/copiapoa-cinerea');
   const glance = page.locator('.glance');
   await expect(glance.locator('.card', { hasText: 'Cold floor' })).toContainText('6.5');
-  await expect(glance.locator('#gen-note')).toContainText('Cold floor 6.5 °C'); // the card and the note agree: one figure, one rule
+  await expect(glance.locator('#gen-note')).toContainText('Cold nights reach 6.5 °C'); // the card and the note agree: one figure, one rule
   await expect(glance.locator('.card', { hasText: 'Rain' })).toContainText('72');
   // related: the nearest habitat climate from the index, with the rule beside it
   await expect(page.locator('#s-related')).toBeVisible();
@@ -1668,13 +1680,15 @@ test('a grower\'s home says what needs them: sowings in the tray and plants with
   await expect(today).toContainText('Frost watch needs a site');
   await today.locator('.line', { hasText: 'without a photograph' }).click();
   await expect(page).toHaveURL(/\/plants\?show=nophoto$/);
-  await expect(page.locator('.chipbtn.on')).toContainText('No photo in 12 months');
+  // one plant: the list is the plant, with no chips until there are two to tell apart (round fifty-eight)
+  await expect(page.locator('.accrow')).toHaveCount(1);
+  await expect(page.locator('.chipbtn')).toHaveCount(0);
   // a plant last watered a month ago, by its log: Today says so, in the words of the plants list's Due chip (round twenty-four, 11)
   await expect(today).toHaveCount(0);
   await page.locator('.accrow').first().click();
   await page.locator('.quickbar .btn', { hasText: /^Log$/ }).click(); // a dated watering goes through Log; Water is one tap for today (round forty-nine, 3)
   await page.selectOption('#ev-type', 'water');
-  // exactly twenty-one days: the boundary the chip's "21+" and Today's "three weeks or more" both include (round twenty-five, 2)
+  // exactly twenty-one days: the default watering rhythm's boundary, which the list and Today both include (round twenty-five, 2; round fifty-eight)
   const d = new Date(); d.setDate(d.getDate() - 21);
   const threeWeeks = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   await page.fill('#ev-date', threeWeeks);
@@ -1684,10 +1698,10 @@ test('a grower\'s home says what needs them: sowings in the tray and plants with
   // a fresh load, from the vault, on both surfaces: the row, the chip and Today read the one figure
   await page.goto('/plants');
   await expect(page.locator('.accrow .fig', { hasText: 'watered 21 d ago' })).toBeVisible();
-  await expect(page.locator('.chipbtn', { hasText: 'Not watered 21+ days' }).locator('.n')).toHaveText('1');
+  await expect(page.locator('.accrow .fig.due')).toHaveCount(1);
   await page.goto('/');
-  await expect(page.locator('.today .line', { hasText: '1 of 1 plants not watered for three weeks or more' })).toBeVisible(); // watered once, 21 days ago: overdue, not "no watering recorded" (round fifty-three, 3)
-  await page.locator('.today .line', { hasText: 'not watered' }).click();
+  await expect(page.locator('.today .line', { hasText: '1 of 1 plants past their watering rhythm' })).toBeVisible(); // watered once, 21 days ago: overdue, not "no watering recorded" (round fifty-three, 3)
+  await page.locator('.today .line', { hasText: 'past their watering rhythm' }).click();
   await expect(page).toHaveURL(/\/today#water$/);
   await expect(page.locator('#water .stop .row.warn a, #water .stop .row.resting a')).toHaveCount(1); // a Copiapoa in October is in its habitat's dry season by the sheet: its own row (round fifty-four, 4)
   await expect(page.locator('#water .stop h3')).toContainText('No place');
@@ -1734,7 +1748,7 @@ test('settings: units switch every figure and sentence, survive a reload through
   const glance = page.locator('.glance');
   await expect(glance.locator('.card', { hasText: 'Cold floor' })).toContainText('43.7');
   await expect(glance.locator('.card', { hasText: 'Cold floor' })).toContainText('°F');
-  await expect(glance.locator('#gen-note')).toContainText('Cold floor 43.7 °F');
+  await expect(glance.locator('#gen-note')).toContainText('Cold nights reach 43.7 °F');
   await expect(glance.locator('#gen-note')).not.toContainText('°C');
   await expect(glance.locator('.card', { hasText: 'Rain' })).toContainText('2.8');
   await expect(page.locator('.climo .panel').first()).toHaveText('°F · day and night');
@@ -1959,7 +1973,7 @@ test('two tabs adding at once get two numbers, and each tab sees the other\'s pl
   expect(page.url()).not.toBe(other.url()); // the vault, not the tab, hands out numbers
   await page.goto('/plants');
   await expect(page.locator('.accrow')).toHaveCount(2); // the other tab's plant is here without a reload of the vault
-  await expect(page.locator('.seccount').first()).toContainText('2 numbers given');
+  await expect(page.locator('.seccount').first()).toContainText('2 plant numbers');
   await other.close();
 });
 
@@ -2018,7 +2032,7 @@ test('the one search box finds a plant by its number, and the cold floor is one 
   await page.locator('.searchbar').press('Enter');
   await expect(page).toHaveURL(/\/plants\/2026-0001$/);
   await page.goto('/species/copiapoa-cinerea');
-  const glance = page.locator('.card.unitbtn', { hasText: 'Cold floor' });
+  const glance = page.locator('.card.unitcard', { hasText: 'Cold floor' });
   await expect(glance).toContainText('6.5');
   await expect(page.locator('.cult', { hasText: /^Warmth and air/ }).first().locator('.body')).toContainText('Cold floor: 6.5 °C');
 });
@@ -2236,6 +2250,9 @@ test('round twenty-three: a name the reference does not hold is added on the sec
   await page.fill('#acc-notes', 'looks etiolated on the porch');
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.locator('.cult .body', { hasText: 'looks etiolated' })).toBeVisible();
+  // a second plant: the sort menu shows from two plants on (round fifty-eight)
+  await page.goto('/plants/new?species=Welwitschia%20mirabilis&key=5411106');
+  await addPlant(page);
   await page.goto('/plants');
   await page.fill('#plants-q', 'etiolated porch');
   await expect(page.locator('.accrow')).toHaveCount(1);
@@ -2468,7 +2485,7 @@ test('round thirty-four: a genus address opens the catalogue for a grower with p
   await addPlant(page);
   // the front page is the grower's own species now
   await page.goto('/');
-  await expect(page.getByRole('button', { name: 'Your species' })).toHaveAttribute('aria-current', 'true');
+  await expect(page.getByRole('button', { name: 'Your species' })).toHaveAttribute('aria-pressed', 'true');
   // but the genus page's own address (the sitemap's, a shared link's) shows the genus
   await page.goto('/?by=genus&open=copiapoa');
   await expect(page).toHaveTitle(/^Copiapoa/);
@@ -2520,7 +2537,7 @@ test('round forty: on "Your species" the search box stays on the device; the cat
   const searches: string[] = [];
   page.on('request', (r) => { if (r.url().includes('/api/search')) searches.push(r.url()); });
   await page.goto('/');
-  await expect(page.getByRole('button', { name: 'Your species' })).toHaveAttribute('aria-current', 'true');
+  await expect(page.getByRole('button', { name: 'Your species' })).toHaveAttribute('aria-pressed', 'true');
   // A number, a field number, a name: found on the device, and nothing goes to the server or the URL (R2-1).
   await page.fill('.searchbar', '2026-0001');
   await expect(page.locator('.plantsfound .accrow')).toHaveCount(1);
@@ -2550,7 +2567,7 @@ test('round forty: on "Your species" the search box stays on the device; the cat
   await page.locator('.chipbtn', { hasText: 'Without climate' }).click();
   await expect(page.locator('.chipbtn.on')).toContainText('Without climate');
   await page.fill('.searchbar', 'copiapoa');
-  await expect(page.locator('.emptybox')).toContainText('Nothing matches with the chip on (2 without it)');
+  await expect(page.locator('.emptybox')).toContainText('with the chip on (2 without it)');
   await page.fill('.searchbar', 'welwit');
   await expect(page.locator('.hitrow')).toHaveCount(1);
   // The grouping links keep the chip.
@@ -2593,22 +2610,18 @@ test('round forty-one: a batch gets a label from its own page, with the sowing l
   await expect(page.locator('.sheets .label', { hasText: no }).locator('.src').first()).toContainText('20 seeds');
 });
 
-test('round forty-one: a plant with no place, no photograph and no site offers "Set your site", and the step goes once a site is set (own)', async ({ page }) => {
+test('round forty-one, as round fifty-eight has it: the site is a first-visit step on the empty plants list, not a step on every plant; a plant with no place offers "Give it a place"', async ({ page }) => {
+  await page.goto('/plants');
+  const steps = page.locator('.firststeps');
+  await expect(steps.locator('a', { hasText: 'Your location for the frost watch' })).toHaveAttribute('href', '/settings#site');
+  await expect(page.locator('#plants-sort')).toHaveCount(0); // no sort menu over nothing
   await page.goto('/plants/new');
   await page.fill('#species-name', 'Copiapoa cinerea');
   await page.locator('#species-name').blur();
   await addPlant(page);
   const setup = page.locator('.setup');
-  await expect(setup.locator('.setuprow', { hasText: 'Set your site' })).toBeVisible();
-  await setup.locator('.setuprow', { hasText: 'Set your site' }).click();
-  await expect(page).toHaveURL(/\/settings#site$/);
-  await page.getByLabel('Latitude').fill('-25.5');
-  await page.getByLabel('Longitude').fill('-70.3');
-  await page.getByLabel('Latitude').locator('xpath=ancestor::div[contains(@class,"cult")]').getByRole('button', { name: 'Save' }).click();
-  await expect(page.getByRole('button', { name: 'Clear' })).toBeVisible();
-  await page.goto('/plants/2026-0001');
-  await expect(setup.locator('.setuprow', { hasText: 'Set your site' })).toHaveCount(0);
   await expect(setup.locator('.setuprow', { hasText: 'Give it a place' })).toBeVisible();
+  await expect(setup.locator('.setuprow', { hasText: 'Set your site' })).toHaveCount(0);
 });
 
 test('round forty-two: the species photograph is preloaded from the head, one size by surface, in a box that is laid out before it lands (1)', async ({ page }) => {
@@ -2992,7 +3005,7 @@ test('round fifty-three: the Today tab lists what needs you by place, "no wateri
   await page.goto('/today');
   const stop = page.locator('#water .stop', { hasText: 'Bench' });
   await expect(stop).toHaveCount(1);
-  await expect(stop.locator('.row.warn').first()).toContainText('Not watered for three weeks or more');
+  await expect(stop.locator('.row.warn').first()).toContainText('Past the watering rhythm');
   await expect(stop.locator('.row.warn').first()).toContainText(second);
   await expect(stop.locator('.row.warn').first()).toContainText('25 d');
   await expect(stop.locator('.row.unknown')).toContainText('No watering recorded');
@@ -3000,7 +3013,7 @@ test('round fifty-three: the Today tab lists what needs you by place, "no wateri
   await expect(stop.locator('.row.unknown')).not.toContainText(second);
   // the front page's line says the two apart
   await page.goto('/');
-  await expect(page.locator('.today .line', { hasText: '1 of 2 plants not watered for three weeks or more, and 1 with no watering recorded yet' })).toBeVisible();
+  await expect(page.locator('.today .line', { hasText: '1 of 2 plants past their watering rhythm, and 1 with no watering recorded yet' })).toBeVisible();
   // the frost in the forecast: on the front page as a line, on the Today tab as the card, and under the top bar on every other tab, going to the Today tab
   await expect(page.locator('.today .line', { hasText: 'Frost forecast: -2.0 °C' })).toBeVisible();
   await expect(page.locator('#frostbar')).toHaveCount(0); // the front page has the line; the bar is for the other tabs (round fifty-four, 4)
@@ -3013,12 +3026,15 @@ test('round fifty-three: the Today tab lists what needs you by place, "no wateri
   await expect(page.locator('#frost tr.frost')).toHaveCount(1);
   // Water here: one line per plant on the stop, dated today (the shifted today); the stop stays where it was, marked, with its own Undo (round fifty-four, 4)
   await page.locator('#water .stop', { hasText: 'Bench' }).getByRole('button', { name: 'Water 2 here' }).click();
-  await expect(page.locator('.toast')).toContainText('Watered 2 plants at Bench; Undo is on the stop');
+  await expect(page.locator('.toast')).toContainText('Watered 2.'); // short: the stop says what and offers Undo (round fifty-eight)
   await expect(page.locator('#water .stop', { hasText: 'Bench' }).locator('.row.done')).toContainText('Watered just now');
   await expect(page.locator('#water .stop', { hasText: 'Bench' }).locator('.row.done a')).toHaveCount(2); // the watered plants stay on the stop, so it keeps its height (round fifty-five, 5)
   await expect(page.locator('.toast').getByRole('button', { name: 'Undo' })).toHaveCount(0); // the toast has no Undo of its own: it sits where the next stop's button was
   await expect(page.locator('#nothing')).toHaveCount(0);
-  await page.locator('#water .stop', { hasText: 'Bench' }).getByRole('button', { name: 'Undo' }).click();
+  // the header's button is a mark now, not an Undo: a second tap where Water was does nothing (round fifty-eight)
+  await expect(page.locator('#water .stop', { hasText: 'Bench' }).locator('.head .donemark')).toContainText('Watered');
+  await expect(page.locator('#water .stop', { hasText: 'Bench' }).locator('.head').getByRole('button')).toHaveCount(0);
+  await page.locator('#water .stop', { hasText: 'Bench' }).locator('.row.done').getByRole('button', { name: 'Undo' }).click();
   await expect(page.locator('#water .stop', { hasText: 'Bench' }).getByRole('button', { name: 'Water 2 here' })).toBeVisible();
   // the old address
   await page.goto('/frost');
@@ -3053,8 +3069,8 @@ test('round fifty-four: a Today page left open overnight dates the morning\'s wa
   await expect(page.locator('#frostbar')).toHaveCount(0);
   // the site set in Settings: the watch reads it on the next navigation, no reload (round fifty-four, 4; the second reviewer's finding 2)
   await page.goto('/settings');
-  await page.fill('input[placeholder="40.43"]', '40.38');
-  await page.fill('input[placeholder="-80.01"]', '-80.05');
+  await page.fill('#site-lat', '40.38');
+  await page.fill('#site-lon', '-80.05');
   await page.getByRole('button', { name: 'Save', exact: true }).first().click();
   await expect(page.getByText('Saved on this device.')).toBeVisible();
   await page.locator('.topseg a', { hasText: 'My plants' }).click();
@@ -3128,7 +3144,8 @@ test('round fifty-five: a watered stop keeps its height and the next stop does n
   const box = await b.getByRole('button', { name: 'Water 2 here' }).boundingBox();
   const hit = await page.evaluate(([x, y]) => { const el = document.elementFromPoint(x, y); return el?.closest('button')?.textContent?.trim() ?? el?.tagName; }, [box!.x + box!.width / 2, box!.y + box!.height / 2]);
   expect(hit).toBe('Water 2 here');
-  // to My plants and back: the mark and its Undo are still there
+  // to My plants and back: the mark and its Undo are still there (scrolled up first: the tab bar steps aside on a scroll down, round fifty-eight)
+  await page.mouse.wheel(0, -200);
   await page.locator('#tabbar a', { hasText: 'My plants' }).click();
   await page.locator('#tabbar a', { hasText: 'Today' }).click();
   await expect(a.locator('.row.done')).toContainText('Watered just now');
@@ -3155,12 +3172,13 @@ test('round fifty-six: two plants under one number are not renumbered by opening
   const ofTwo = () => page.evaluate(async () => {
     const db = await new Promise<IDBDatabase>((res) => { const r = indexedDB.open('cultifolio'); r.onsuccess = () => res(r.result); });
     const all = await new Promise<Array<{ kind: string; id: string; field: string }>>((res) => { const r = db.transaction('changes').objectStore('changes').getAll(); r.onsuccess = () => res(r.result); });
-    // the plant page sets a key the reference corrects (taxonKey), as it always has; that is the page, not the load
-    return all.filter((c) => (c.kind === 'event' || c.id.startsWith('r-dup-')) && c.field !== 'taxonKey').map((c) => `${c.kind} ${c.id} ${c.field}`).sort();
+    // nothing at all: since round fifty-eight the plant page does not write the reference's key either
+    return all.filter((c) => c.kind === 'event' || c.id.startsWith('r-dup-')).map((c) => `${c.kind} ${c.id} ${c.field}`).sort();
   });
   const before = await ofTwo();
   await page.goto('/plants/r-dup-b');
   await expect(page.locator('#shared-number')).toContainText('2026-0042');
+  await expect(page.locator('#shared-number')).toContainText('Renumbering gives this plant the next free number'); // the notice names the plant the button renumbers (round fifty-eight)
   expect(await ofTwo()).toEqual(before); // opening the collection wrote nothing about them
   await page.locator('#shared-number').getByRole('button', { name: 'Renumber now' }).click();
   await expect(page.locator('#shared-number')).toHaveCount(0);
@@ -3168,4 +3186,47 @@ test('round fifty-six: two plants under one number are not renumbered by opening
   await page.goto('/plants/r-dup-a');
   await expect(page.locator('.accno').first()).toContainText('2026-0042');
   await expect(page.locator('#shared-number')).toHaveCount(0);
+});
+
+test('round fifty-eight: a place\'s watering rhythm decides what is due, its dry months are one quiet line, and a stop waters only the plants left ticked', async ({ browser }) => {
+  const C = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 844 }, hasTouch: true });
+  await C.addInitScript(() => { const real = Date.now; const OD = Date; let shift = 0; try { shift = Number(localStorage.getItem('__shift') ?? 0); } catch { /* none */ } (globalThis as { __shift?: number }).__shift = shift; globalThis.Date = class extends OD { constructor(...args: unknown[]) { if (args.length === 0) super(real() + ((globalThis as { __shift?: number }).__shift ?? 0)); else super(...(args as [number])); } static now() { return real() + ((globalThis as { __shift?: number }).__shift ?? 0); } } as DateConstructor; });
+  const page = await C.newPage();
+  await page.goto('/places');
+  await page.getByRole('button', { name: 'New place' }).click();
+  await page.fill('#loc-name', 'Weekly bench');
+  await page.selectOption('#loc-kind', 'bench');
+  await page.getByRole('button', { name: 'Add', exact: true }).click();
+  await page.locator('.tree a.row', { hasText: 'Weekly bench' }).click();
+  await expect(page).toHaveURL(/\/places\/.+/);
+  const place = page.url();
+  await page.goto(place + '?edit=1');
+  await page.fill('#e-waterdays', '7');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.locator('.factgrid')).toContainText('about every 7 days');
+  for (let i = 0; i < 2; i++) {
+    await page.goto('/plants/new?species=Refusia%20testii&key=999');
+    const opt = await page.locator('#f-loc option', { hasText: 'Weekly bench' }).getAttribute('value');
+    await page.selectOption('#f-loc', opt!);
+    await addPlant(page);
+  }
+  // eight days on: past the bench's seven, though far short of the default twenty-one
+  await page.evaluate(() => localStorage.setItem('__shift', String(8 * 86_400_000)));
+  await page.goto('/today');
+  const stop = page.locator('#water .stop', { hasText: 'Weekly bench' });
+  await expect(stop.getByRole('button', { name: 'Water 2 here' })).toBeEnabled();
+  await expect(stop.locator('.chip.tick')).toHaveCount(2);
+  await expect(stop.locator('.chip.tick').first()).toContainText('Refusia testii'); // named, not a number alone
+  await stop.locator('.chip.tick input').first().uncheck();
+  await stop.getByRole('button', { name: 'Water 1 of 2 here' }).click();
+  await expect(stop.locator('.row.done .chip')).toHaveCount(1);
+  // the month kept dry: the plants here are not due, and the stop says so in one line
+  await page.goto(place + '?edit=1');
+  const month = await page.evaluate(() => new Date().getMonth());
+  await page.locator('.months .mo input').nth(month).check();
+  await page.getByRole('button', { name: 'Save' }).click();
+  await page.goto('/today');
+  await expect(stop.locator('.row.resting', { hasText: 'Kept dry this month' })).toContainText('2 plants');
+  await expect(stop.getByRole('button', { name: /^Water/ })).toHaveCount(0);
+  await C.close();
 });

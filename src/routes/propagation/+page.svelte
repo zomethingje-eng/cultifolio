@@ -3,6 +3,7 @@
   import { onMount } from 'svelte';
   import { accNo, sowNo } from '$lib/db/types';
   import PageHead from '$lib/ui/PageHead.svelte';
+  import ToggleGroup from '$lib/ui/ToggleGroup.svelte';
   import { collection } from '$lib/db/collection.svelte';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
   import { PROP_METHODS } from '$lib/db/types';
@@ -22,11 +23,13 @@
   });
   // Nothing in progress but batches on file: open on All rather than on an empty list.
   $effect(() => { if (collection.ready && collection.sowings.length && !collection.sowings.some((s) => s.status === 'active')) show = 'all'; });
-  const rows = $derived(collection.sowings.filter((s) => show === 'all' || s.status === 'active').map((s) => ({ s, st: collection.sowingStats(s.id), m: PROP_METHODS.find((m) => m.k === s.method) ?? { k: s.method, label: s.method, unit: 'units', veg: false } })));  // a method this build does not know (a newer build's) is shown by its word, not as seed (round thirty, 1)
+  // `counted`: whether any count is on the log, so a card says "not counted yet" rather than "0 up" for a pot nobody has looked at (round fifty-eight; the grower review).
+  const rows = $derived(collection.sowings.filter((s) => show === 'all' || s.status === 'active').map((s) => ({ s, st: collection.sowingStats(s.id), counted: collection.events(s.id).some((e) => e.t === 'germinate'), m: PROP_METHODS.find((m) => m.k === s.method) ?? { k: s.method, label: s.method, unit: 'units', veg: false } })));  // a method this build does not know (a newer build's) is shown by its word, not as seed (round thirty, 1)
+  const parentNo = (id: string) => { const a = collection.accession(id); return a ? accNo(a) : id; };
   const pct = (r: number | null) => (r == null ? '–' : `${Math.round(r * 100)}%`);
 </script>
 
-<svelte:head><title>Propagation — Cultifolio</title></svelte:head>
+<svelte:head><title>Propagation · Cultifolio</title></svelte:head>
 
 <PageHead compact title="Propagation" sub="Seed, cuttings, offsets and divisions, a batch each, counted up; each potted survivor gets its own number." count="{collection.sowings.filter((s) => s.status === 'active').length} in progress · {plural(collection.sowings.length, 'batch', 'batches')}">
   <a class="btn pri" href="/propagation/new">New batch</a>
@@ -35,14 +38,25 @@
 {#if !collection.ready}
   <p class="muted">Opening your collection…</p>
 {:else}
-  <div class="chiprow">
-    <button class="chipbtn" class:on={show === 'active'} aria-pressed={show === 'active'} onclick={() => (show = 'active')}>In progress<span class="n">{collection.sowings.filter((s) => s.status === 'active').length}</span></button>
-    <button class="chipbtn" class:on={show === 'all'} aria-pressed={show === 'all'} onclick={() => (show = 'all')}>All<span class="n">{collection.sowings.length}</span></button>
-  </div>
+  <!-- The one toggle group, as chips, with a name for the group (round fifty-eight; the accessibility review). -->
+  <ToggleGroup chips label="Which batches" bind:value={show} options={[{ value: 'active', label: 'In progress', n: collection.sowings.filter((s) => s.status === 'active').length }, { value: 'all', label: 'All', n: collection.sowings.length }]} />
   {#if !rows.length}
     <div class="emptybox"><p class="muted">{show === 'active' ? 'Nothing in progress.' : 'No batches yet.'} <a href="/propagation/new">Start one.</a></p></div>
   {:else}
-    <div class="scroll-x cue" class:end={atEnd} bind:this={scroller} onscroll={measure}>
+    <!-- Under 640px the table was cut off at Date: a phone gets one card per batch with the same figures, the table stays above it. Two renderings, one hidden per width by CSS (round fifty-eight; the grower review). -->
+    <ul class="bcards" aria-label="Batches">
+      {#each rows as { s, st, m, counted } (s.id)}
+        <li><a class="bcard" href="/propagation/{sowNo(s)}">
+          <span class="top"><span class="accno">{sowNo(s)}</span><span class="pill {s.status === 'active' ? 'ok' : s.status === 'failed' ? 'bad' : ''}">{s.status === 'active' ? 'in progress' : s.status}</span></span>
+          <span class="nm"><SpeciesName name={s.taxonName} />{#if s.cultivar} ‘{s.cultivar}’{/if}</span>
+          <span class="meta">{m.label}{#if s.parentAcc} from <span class="mono">{parentNo(s.parentAcc)}</span>{/if} · {m.veg ? 'started' : 'sown'} {s.sown} · day {st.days}</span>
+          <span class="figs">{s.count} {m.unit} · {#if counted}{st.germinated} {m.veg ? 'struck' : 'up'} ({pct(st.rate)}){:else}not counted yet{/if} · {st.potted} potted · {st.lost} lost</span>
+        </a></li>
+      {/each}
+    </ul>
+    <!-- A region that scrolls sideways is reachable by keyboard and named, so arrow keys can scroll it (round fifty-eight; the accessibility review). -->
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+    <div class="scroll-x cue wide" class:end={atEnd} bind:this={scroller} onscroll={measure} tabindex="0" role="region" aria-label="Batches as a table">
       <table class="wx">
         <thead><tr><th>Batch</th><th>Species</th><th>Method</th><th>Date</th><th>Days</th><th>Started</th><th>Up</th><th>Rate</th><th>Potted</th><th>Status</th></tr></thead>
         <tbody>
@@ -69,4 +83,12 @@
 <style>
   table.wx td.left { text-align: left; font-family: var(--ui); font-weight: 400; }
   .muted { color: var(--ink3); }
+  .bcards { display: none; list-style: none; margin: 14px 0; padding: 0; gap: 10px; }
+  .bcard { display: grid; gap: 4px; min-height: 44px; padding: 12px 15px; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); color: var(--ink); text-decoration: none; }
+  .bcard:hover { text-decoration: none; }
+  .bcard .top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .bcard .nm { font-family: var(--serif); font-size: var(--fs-lg); line-height: 1.3; } /* SpeciesName sets the italics: the rank word and a cultivar stay roman */
+  .bcard .meta, .bcard .figs { font-size: var(--fs-md); color: var(--ink2); line-height: 1.5; }
+  .bcard .figs { font-family: var(--mono); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+  @media (max-width: 640px) { .bcards { display: grid; } .wide { display: none; } }
 </style>

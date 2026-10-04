@@ -3,14 +3,14 @@
   import { toast } from '$lib/ui/toast.svelte';
   import { site } from '$lib/ui/site.svelte';
   import { localDate, daysBetween } from '$core/dates';
-  import { temp, tempN, rain, deltaT, numberOrNull, length, lengthN, lengthUnit, lengthToMm } from '$core/units';
+  import { temp, tempN, rain, deltaT, numberOrNull, fixed, mmToIn, inToMm } from '$core/units';
   import { plural } from '$core/words';
   import { page } from '$app/state';
   import { accNo, sowNo } from '$lib/db/types';
   import { goto, beforeNavigate } from '$app/navigation';
   import { onMount } from 'svelte';
   import { prefs } from '$lib/ui/prefs.svelte';
-  import { collection, DUE_DAYS } from '$lib/db/collection.svelte';
+  import { collection } from '$lib/db/collection.svelte';
   import WaitingRecord from '$lib/ui/WaitingRecord.svelte';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
   import LocationPicker from '$lib/ui/LocationPicker.svelte';
@@ -19,6 +19,7 @@
   import SpeciesPicker from '$lib/ui/SpeciesPicker.svelte';
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import { entriesFor, sheetForName } from '$lib/ui/index.svelte';
+  import ReplacedNotes from '$lib/ui/ReplacedNotes.svelte';
   import type { Sheet } from '$lib/ui/index.svelte';
   import { cultivationSheet, runs, forReader } from '$core/sheet';
   import { EVENT_LABEL, MEASURES, PROP_METHODS, kindOf, type EventType, type Photo } from '$lib/db/types';
@@ -26,7 +27,8 @@
   import PhotoImg from '$lib/ui/PhotoImg.svelte';
   import PhotoAdd from '$lib/ui/PhotoAdd.svelte';
   import Lightbox from '$lib/ui/Lightbox.svelte';
-  import { focusNext } from '$lib/ui/focus';
+  import { photoLabel } from '$lib/ui/photo-label';
+  import { focusNext, motion } from '$lib/ui/focus';
   import RefPhotoOffer from '$lib/ui/RefPhotoOffer.svelte';
   import Parked from '$lib/ui/Parked.svelte';
   import NotChecked from '$lib/ui/NotChecked.svelte';
@@ -51,10 +53,19 @@
   const timeline = $derived(
     [...events.map((e) => ({ k: 'e' as const, d: e.d, id: e.id, e })), ...photos.map((ph) => ({ k: 'p' as const, d: ph.d, id: ph.id, ph }))].sort((a, b) => b.d.localeCompare(a.d) || b.id.localeCompare(a.id))
   );
-  // A long log is shown fifteen lines at a time, so the notes below it stay within reach on a phone (round twenty-five, 12).
-  const LOG_FIRST = 15;
+  // The log shows its latest five lines, the rest one tap away: on a phone the photographs and the habitat follow it (round fifty-eight; the grower review).
+  const LOG_FIRST = 5;
   let allLog = $state(false);
-  const shownTimeline = $derived(allLog || timeline.length <= LOG_FIRST + 3 ? timeline : timeline.slice(0, LOG_FIRST));
+  const shownTimeline = $derived(allLog || timeline.length <= LOG_FIRST ? timeline : timeline.slice(0, LOG_FIRST));
+  /* ---- lengths ---- */
+  // Lengths follow the grower's length units, not the temperature setting; stored in millimetres always, inches shown to one decimal (round fifty-eight; the grower review).
+  const lu = $derived(prefs.lengthUnits);
+  const lenN = (mm: number) => (lu === 'in' ? fixed(mmToIn(mm), 1) : fixed(mm, mm === Math.round(mm) ? 0 : 1));
+  const len = (mm: number) => `${lenN(mm)} ${lu}`;
+  const toMm = (typed: number) => (lu === 'in' ? Math.round(inToMm(typed) * 10) / 10 : typed);
+  /** A repot's pot size rides in `measures` as `pot`, in millimetres; it is not a size of the plant, so it is not in the measure form (round fifty-eight). */
+  const POT = { k: 'pot', label: 'Pot', unit: 'mm' };
+  const measureOf = (k: string) => MEASURES.find((x) => x.k === k) ?? (k === POT.k ? POT : undefined);
   const taxon = $derived(a ? collection.taxon(speciesSlug(a.taxonName)) : undefined);
   const sowing = $derived(a?.sowingId ? collection.sowing(a.sowingId) : undefined);
   let dossier = $state<Sheet | null>(null);
@@ -81,9 +92,12 @@
     const seq = ++asked;
     dossier = null; ref = 'loading';
     (async () => {
-      // A wrong key would have put another species' habitat under this plant, so the sheet is found by the name, and the key is set right only for a name at species rank.
-      const d = await sheetForName(name, key, (k) => { if (a && a.taxonName === name && a.taxonKey !== k) collection.put('accession', a.id, { taxonKey: k }); });
+      // A wrong key would have put another species' habitat under this plant, so the sheet is found by the name. The key
+      // the reference gives is kept here, not written: a page that opens does not write to the log (round fifty-eight;
+      // rule 5), and a key that differs is said below with a button to take it.
+      const d = await sheetForName(name, key);
       if (seq !== asked) return;
+      refKey = d && d !== 'none' && typeof d.key === 'number' ? d.key : null;
       dossier = d === 'none' ? null : d;
       ref = d === 'none' ? 'none' : d ? 'ok' : 'unreachable';
     })();
@@ -117,19 +131,21 @@
   const r0 = (x: number) => x.toFixed(0);
   // Side by side, no verdict: a regional radiation figure and a climate percentile are facts about the
   // places the species is recorded, not measured tolerances of this plant. The comparison is shown; the judgement is the grower's.
+  // The glossary's plain words in what the grower reads: "across the range", "a typical spot in the range", and what
+  // "set aside" meant (round fifty-eight; the accessibility review).
   const lightCompare = $derived.by(() => {
     if (!habitat?.dli) return null;
     const d = habitat.dli;
-    const sky = `open sky over the habitat ${r0(d.lo)}–${r0(d.hi)} mol/m²/day across the year (median year${d.lo10 != null && d.hi90 != null ? `; across the ${habitat.cells} envelope cells ${r0(d.lo10)} to ${r0(d.hi90)}` : ''}; CHELSA)`;
+    const sky = `open sky over the habitat ${r0(d.lo)}–${r0(d.hi)} mol/m²/day across the year (median year${d.lo10 != null && d.hi90 != null ? `; across the range, ${habitat.cells} grid cells, ${r0(d.lo10)} to ${r0(d.hi90)}` : ''}; CHELSA)`;
     if (hereDli == null) return { here: null, text: `${sky}; no light figure for this place` };
     return { here: hereDli, text: `${r0(hereDli)} mol/m²/day here, from this place's settings; ${sky}` };
   });
   const coldCompare = $derived.by(() => {
     if (!habitat) return null;
     const n = habitat.night;
-    const night = `coldest month's mean night at the habitat ${temp(n.v, u, 1)} in ${MONTHS[n.mo - 1]} (median year; across the ${habitat.cells} envelope cells ${tempN(n.lo, u)} to ${tempN(n.hi, u)}; CHELSA)`;
+    const night = `coldest month's mean night at the habitat ${temp(n.v, u, 1)} in ${MONTHS[n.mo - 1]} (median year; across the range, ${habitat.cells} grid cells, ${tempN(n.lo, u)} to ${tempN(n.hi, u)}; CHELSA)`;
     // With no extremes, say why, as the species page and compare do: a refusal or a skip is not an absence (round eighteen, 8).
-    const p01 = habitat.ex ? `; 1st-percentile night over ${habitat.ex.years} years at the typical cell ${temp(habitat.ex.minP01, u, 1)} (NASA POWER)` : habitat.exStatus === 'refused' ? '; the daily extremes were not checked (NASA POWER did not answer when the species page was built)' : habitat.exStatus === 'skipped' ? '; the daily extremes were not asked for when the species page was built' : habitat.exStatus === 'sea' ? '; the daily extremes were read at a weather cell that is mostly sea and are set aside, so no floor is read (the species page says what that cell gave)' : '';
+    const p01 = habitat.ex ? `; 1st-percentile night over ${habitat.ex.years} years at a typical spot in the range ${temp(habitat.ex.minP01, u, 1)} (NASA POWER)` : habitat.exStatus === 'refused' ? '; the daily extremes were not checked (NASA POWER did not answer when the species page was built)' : habitat.exStatus === 'skipped' ? '; the daily extremes were not asked for when the species page was built' : habitat.exStatus === 'sea' ? '; the daily extremes were read at a weather cell that is mostly sea and are not used, so no floor is read (the species page says what that cell gave)' : '';
     if (cond?.floorC == null) return { here: null, text: `${night}${p01}; no floor set for this place` };
     return { here: cond.floorC, text: `this place is ${cond.floorHeld ? 'held at' : 'set to bottom out at'} ${temp(cond.floorC, u, 1)}; ${night}${p01}` };
   });
@@ -197,16 +213,14 @@
   /** Whether the first screen has a picture: the grower's own, or the reference's where it is shown. Without one there is no hero; a tile beside the name stands in (improvements, 4). */
   const hasHero = $derived(!!cover || (!!speciesThumb && !thumbFailed));
   const fmtDate = (d: string | null | undefined) => (d ? new Date(d + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '');
-  // What a new plant's page is missing: a place, a photograph, a first measurement, a site. Each line goes when it is done; the card goes when one line is left.
+  // What a new plant's page is missing: a place, a photograph, a first measurement. Each line goes when it is done; the card goes when one line is left.
   const setup = $derived.by(() => {
     if (!a || a.status !== 'growing') return [];
     const rows: { k: string; n: string; t: string; w: string; go: () => void }[] = [];
     if (!collection.placeOf(a.locationId)) rows.push({ k: 'place', n: '1', t: 'Give it a place', w: 'the greenhouse, bench, shelf or windowsill it lives on; conditions and the frost watch follow', go: () => { moveTo = null; moving = true; } });
-    if (!photos.length) rows.push({ k: 'photo', n: '2', t: 'Add a photograph', w: 'the page and the labels use it', go: () => { adding = true; setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0); } });
+    if (!photos.length) rows.push({ k: 'photo', n: '2', t: 'Add a photograph', w: 'the page and the labels use it', go: () => { adding = true; setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: motion(), block: 'center' }), 0); } });
     if (!lastMeasure) rows.push({ k: 'measure', n: '3', t: 'Measure it', w: 'growth is read from the first measurement on', go: () => { moreActs = true; quick('measure'); } });
-    // The site is what the hemisphere, the day length and the frost watch are read from when the place has no coordinates of its
-    // own; without it every seasonal sentence on this page is shifted to the north and says so (round forty-one, own).
-    if (!site.current && cond?.lat == null) rows.push({ k: 'site', n: '4', t: 'Set your site', w: 'seasons, day length and the frost watch are read from where you grow', go: () => goto('/settings#site') });
+    // The site is not a step on a plant: it is set once, in Settings, and the habitat block says so in one line while it is not (round fifty-eight; the grower review).
     return rows.length >= 2 ? rows : [];
   });
   const provLabel = (p: string | null | undefined) => (p === 'wild' ? 'wild-collected' : p === 'f1' ? 'F1, raised from wild-collected seed' : p === 'fn' ? 'cultivated seed (Fn)' : p === 'veg' ? 'vegetative' : 'provenance not stated');
@@ -235,7 +249,7 @@
     ed = localDate(); // today as of opening the form, not as of loading the page (round twenty-four, 2)
     logOpen = true;
     // The first thing to fill: a measurement's first figure, a treatment's product, else the note.
-    setTimeout(() => (document.querySelector<HTMLElement>(t === 'measure' ? '.measures input' : t === 'treat' || t === 'feed' ? '#ev-used' : '#ev-note') ?? document.getElementById('ev-note'))?.focus(), 0);
+    setTimeout(() => (document.querySelector<HTMLElement>(t === 'measure' ? '.measures input' : t === 'treat' || t === 'feed' ? '#ev-used' : t === 'repot' ? '#ev-pot' : '#ev-note') ?? document.getElementById('ev-note'))?.focus(), 0);
   }
   /** After a record or a cancel, focus returns to the verb bar and the log line is announced, so a keyboard user is not dropped on the page body. */
   function closeLog(recorded?: string) {
@@ -251,6 +265,9 @@
   let eused = $state('');
   let ecause = $state('');
   let measures = $state<Record<string, string | number | null>>({});
+  // A repot's pot size and medium, both optional, beside its free-text note (round fifty-eight; the grower review).
+  let epot = $state<string | number | null>('');
+  let emedium = $state('');
   let editingNotes = $state(false);
   let notesDraft = $state('');
   let notesBase = ''; // the text the editor opened on: a text that changed underneath it (another tab, a pull) is logged before it is written over (round twenty-four, 1)
@@ -262,19 +279,23 @@
   let editing = $state(false);
   /** The species' key while editing: kept when the name is untouched, cleared by typing, set again by picking a suggestion. */
   let edKey = $state<number | null>(null);
-  let f = $state({ taxonName: '', cultivar: '', nameKind: 'species' as string, parentage: '', nameAsReceived: '', fieldNumber: '', provenance: 'unknown' as string, acquired: '', sourceFrom: '', sourceForm: '', price: '', locationId: null as string | null });
+  let f = $state({ taxonName: '', cultivar: '', nameKind: 'species' as string, parentage: '', nameAsReceived: '', fieldNumber: '', provenance: 'unknown' as string, acquired: '', sourceFrom: '', sourceForm: '', price: '', waterDays: '', locationId: null as string | null });
   function startEdit() {
     if (!a) return;
     edDateMsg = ''; // a refusal belongs to the edit that was refused, not to the next one opened (round twenty-seven, R2-2)
     edKey = a.taxonKey ?? null;
-    f = { taxonName: a.taxonName, cultivar: a.cultivar ?? '', nameKind: a.nameKind && !['species', 'cultivar', 'hybrid'].includes(a.nameKind) ? a.nameKind : kindOf(a), parentage: a.parentage ?? '', nameAsReceived: a.nameAsReceived ?? '', fieldNumber: a.fieldNumber ?? '', provenance: a.provenance ?? 'unknown', acquired: a.acquired ?? '', sourceFrom: a.sourceFrom ?? '', sourceForm: a.sourceForm ?? '', price: a.price ?? '', locationId: a.locationId ?? null };
+    f = { taxonName: a.taxonName, cultivar: a.cultivar ?? '', nameKind: a.nameKind && !['species', 'cultivar', 'hybrid'].includes(a.nameKind) ? a.nameKind : kindOf(a), parentage: a.parentage ?? '', nameAsReceived: a.nameAsReceived ?? '', fieldNumber: a.fieldNumber ?? '', provenance: a.provenance ?? 'unknown', acquired: a.acquired ?? '', sourceFrom: a.sourceFrom ?? '', sourceForm: a.sourceForm ?? '', price: a.price ?? '', waterDays: a.waterDays != null ? String(a.waterDays) : '', locationId: a.locationId ?? null };
     fOpen = { ...f };
+    edWaterMsg = '';
     editing = true;
     void focusNext('#ed-name'); // the first field, so a keyboard user who chose Edit from the menu lands in the form (round twenty, 11)
   }
   /** The form as it opened: only the fields the grower changed in it are written, so a form open while another tab or a sync changed the record does not write the old values back over the new (round fifty-two, 4). */
   let fOpen = {} as typeof f;
   let edDateMsg = $state('');
+  let edWaterMsg = $state('');
+  /** The rhythm this plant follows when it sets none: its place's, inherited down the tree, else 21 days (round fifty-eight; the grower review). */
+  const inheritedRhythm = $derived(a ? collection.rhythm({ ...a, waterDays: null }) : 21);
   const formDirty = () => editing || (editingNotes && notesDraft.trim() !== (notesBase ?? '').trim()) || (editingMy && myNotesDraft.trim() !== myNotesOpen.trim());
   // A half-done form is not lost to a tab-bar tap or a reload without asking (round fifty-two, 4; the Add form has had this since round forty-nine).
   beforeNavigate((nav) => {
@@ -290,6 +311,10 @@
     // Only a date this edit typed is judged: a plant whose stored date is already in the future (an older file) can still have its price or place edited, and the date corrected when the grower gets to it (round twenty-eight, 0).
     edDateMsg = f.acquired && f.acquired !== (a.acquired ?? '') && f.acquired > localDate() ? `${f.acquired} is in the future.` : f.acquired && f.acquired !== (a.acquired ?? '') && f.acquired < '1900-01-01' ? `${f.acquired} is before 1900.` : '';
     if (edDateMsg) { document.getElementById('ed-date')?.focus(); return; }
+    // The plant's own watering rhythm: blank follows its place; a figure is whole days, 1 to 365, as the place form takes it (round fifty-eight; the grower review).
+    const wd = f.waterDays.trim() === '' ? null : Number(f.waterDays);
+    edWaterMsg = wd != null && (Number.isNaN(wd) || wd < 1 || wd > 365) ? `${f.waterDays.trim()} is not a number of days from 1 to 365; leave it blank to follow its place.` : '';
+    if (edWaterMsg) { document.getElementById('ed-waterdays')?.focus(); return; }
     const moved = (f.locationId ?? null) !== (a.locationId ?? null);
     // The name as the add form files it: a hybrid is filed under its genus (or nothogenus) with the cross as parentage and
     // no species key, since it has no habitat of its own; an edit into a hybrid must not keep the species' name, key and
@@ -321,13 +346,13 @@
     const acq = events.find((e) => e.t === 'acquire');
     const newDate = f.acquired || null, newNote = f.sourceFrom.trim() ? `from ${f.sourceFrom.trim()}` : null;
     const also = acq && newDate && (acq.d !== newDate || (acq.note ?? null) !== newNote) ? [{ kind: 'event' as const, id: acq.id, fields: { d: newDate, note: newNote } }] : [];
-    const all: Record<string, unknown> = { taxonName, taxonKey, cultivar: f.cultivar.trim() || null, nameKind: nameKindOut, parentage, nameAsReceived: f.nameAsReceived.trim() || (oldFull !== newFull && !a.nameAsReceived ? oldFull : null), fieldNumber: f.fieldNumber.trim() || null, provenance: provenanceOut, acquired: f.acquired || null, sourceFrom: f.sourceFrom.trim() || null, sourceForm: f.sourceForm.trim() || null, price: f.price.trim() || null, locationId: f.locationId ?? null };
-    // Only what this form changed (round fifty-two, 4): the name and what the name decides, the place and the text it replaces, and each other field on its own.
+    const all: Record<string, unknown> = { taxonName, taxonKey, cultivar: f.cultivar.trim() || null, nameKind: nameKindOut, parentage, nameAsReceived: f.nameAsReceived.trim() || (oldFull !== newFull && !a.nameAsReceived ? oldFull : null), fieldNumber: f.fieldNumber.trim() || null, provenance: provenanceOut, acquired: f.acquired || null, sourceFrom: f.sourceFrom.trim() || null, sourceForm: f.sourceForm.trim() || null, price: f.price.trim() || null, waterDays: wd == null ? null : Math.round(wd), locationId: f.locationId ?? null };
+    // Only what this form changed (round fifty-two, 4): the name and what the name decides, the place, and each other field on its own.
     const touched = new Set((Object.keys(f) as Array<keyof typeof f>).filter((k) => f[k] !== fOpen[k]));
     const write = new Set<string>();
     if (touched.has('taxonName') || touched.has('nameKind') || touched.has('parentage') || touched.has('cultivar') || touched.has('nameAsReceived')) for (const k of ['taxonName', 'taxonKey', 'nameKind', 'parentage', 'nameAsReceived', 'cultivar']) write.add(k);
-    if (touched.has('locationId')) { write.add('locationId'); write.add('location'); }
-    for (const k of ['fieldNumber', 'provenance', 'acquired', 'sourceFrom', 'sourceForm', 'price']) if (touched.has(k as keyof typeof f)) write.add(k);
+    if (touched.has('locationId')) write.add('locationId');
+    for (const k of ['fieldNumber', 'provenance', 'acquired', 'sourceFrom', 'sourceForm', 'price', 'waterDays']) if (touched.has(k as keyof typeof f)) write.add(k);
     const fields = Object.fromEntries(Object.entries(all).filter(([k]) => write.has(k)));
     await collection.putWith('accession', id, fields, lines, also);
     editing = false;
@@ -339,10 +364,15 @@
     // A date after today is a typo (2027 for 2026), and it would stand as the last watering for a year (round twenty-five, 1); refused with a sentence, as the batch page does.
     evmsg = !ed ? 'Give the entry a date.' : ed > localDate() ? `${ed} is in the future.` : '';
     if (evmsg) { document.getElementById('ev-date')?.focus(); throw new Error(evmsg); }
+    const potN = et === 'repot' ? numberOrNull(epot) : null;
+    if (potN != null && potN <= 0) { evmsg = `A pot of ${potN} ${lu} is no pot; leave the size blank if it was not measured.`; document.getElementById('ev-pot')?.focus(); throw new Error(evmsg); }
     const m: Record<string, number> = {};
-    // A length is typed in the reader's units and stored in millimetres (round forty, R2-2); heads and leaves are counts.
-    for (const [k, v] of Object.entries(measures)) { const n = numberOrNull(v); if (n != null) m[k] = MEASURES.find((x) => x.k === k)?.unit === 'mm' ? lengthToMm(n, u) : n; } // a cleared box is no measurement, not 0
-    const ev = { acc: id, d: ed, t: et, note: enote.trim() || null, used: et === 'treat' || et === 'feed' ? eused.trim() || null : null, cause: et === 'death' ? ecause.trim() || null : null, measures: Object.keys(m).length ? m : null, followUp: et === 'treat' ? 10 : null };
+    // A length is typed in the grower's length units and stored in millimetres (round forty, R2-2; round fifty-eight); heads and leaves are counts.
+    for (const [k, v] of Object.entries(measures)) { const n = numberOrNull(v); if (n != null) m[k] = MEASURES.find((x) => x.k === k)?.unit === 'mm' ? toMm(n) : n; } // a cleared box is no measurement, not 0
+    if (potN != null) m[POT.k] = toMm(potN); // the pot, in millimetres, beside the plant's own measures (round fifty-eight; the grower review)
+    // The medium is words, so it goes in the note, ahead of whatever else was written (round fifty-eight; the grower review).
+    const note = [et === 'repot' && emedium.trim() ? `Medium: ${emedium.trim()}` : '', enote.trim()].filter(Boolean).join('; ');
+    const ev = { acc: id, d: ed, t: et, note: note || null, used: et === 'treat' || et === 'feed' ? eused.trim() || null : null, cause: et === 'death' ? ecause.trim() || null : null, measures: Object.keys(m).length ? m : null, followUp: et === 'treat' ? 10 : null };
     // A death is its line and the plant's status in one commit: closed between the two, the page left a dead plant marked growing (round forty-nine, 1).
     if (et === 'death') await collection.addEventWith(ev, 'accession', id, { status: 'dead' });
     else await collection.addEvent(ev);
@@ -350,6 +380,14 @@
     eused = '';
     ecause = '';
     measures = {};
+    epot = '';
+    emedium = '';
+  }
+  /** A log line removed is one tap from coming back: the record never left the log (round fifty-eight; the grower review). */
+  async function removeEntry(eid: string) {
+    confirmEvent = null;
+    await collection.remove('event', eid);
+    toast.show('Entry removed.', 8000, { label: 'Undo', run: () => { void collection.restore('event', eid).then(() => toast.show('Entry restored.')); } });
   }
   async function setStatus(s: 'growing' | 'archived' | 'dead') {
     // A status change is a line in the log too, so the timeline says when the plant was archived or grown again; a death is recorded through "Died…", with its date and cause (round twenty-two, 16). Status and line are one commit (round forty-nine, 1).
@@ -358,12 +396,10 @@
     void focusNext('#status-toggle'); // the button that replaced the one just pressed
   }
   async function saveNotes() {
-    const current = a?.notes ?? '';
     const next = notesDraft.trim() || null;
-    const currentStamp = collection.notesStamp('accession', id);
-    // A text that arrived under the open editor from this device's other tab is logged here; one from another device is that device's to log, when it sees this edit's base (round twenty-five, 2). The notes and the line are one commit (round fifty-one, 3).
-    const replaced = current && current !== notesBase && current !== next && collection.isOwnStamp(currentStamp);
-    await collection.putWith('accession', id, { notes: next, notesBase: notesBaseStamp }, replaced ? [{ acc: id, d: localDate(), t: 'note', note: `Notes replaced by this edit; before it they read: ${current}`, auto: true }] : []);
+    // The edit carries the stamp of the text it was opened on: a text that arrived under the open editor (another tab, a
+    // pull) is then read from the log as replaced unseen, on every device, and nothing more is written (round fifty-eight).
+    await collection.put('accession', id, { notes: next, notesBase: notesBaseStamp });
     editingNotes = false;
   }
   /** The species notes as the editor opened: a text that changed meanwhile (another tab, a sync) is not lost silently, as plant notes are not (round fifty-two, 4). */
@@ -391,34 +427,54 @@
     await collection.restore('accession', r.id);
     toast.show(`${param} restored.`);
   }
+  /** The key the reference files this plant's species under, when it answered. */
+  let refKey = $state<number | null>(null);
+  /** The plant records another key for a name at species rank: the grower may take the reference's. */
+  const keyDiffers = $derived(!!a && refKey != null && a.taxonKey != null && a.taxonKey !== refKey && speciesOf(a.taxonName) === a.taxonName);
+  async function useReferenceKey() {
+    if (!a || refKey == null) return;
+    await collection.put('accession', a.id, { taxonKey: refKey });
+    toast.show(`This plant now records GBIF key ${refKey}.`);
+  }
   /** Two records under one number, not yet repaired: a reading of the log does not write to it, so the grower asks (round fifty-six, 3). */
   const sharedWith = $derived(a && collection.ready ? collection.sharesNumber('accession', a.id) : []);
   let renumbering = $state(false);
+  /** Which of the records under the number the repair renumbers: said before the button, and the button does that and nothing else (round fifty-eight). */
+  const plan = $derived(a && sharedWith.length ? collection.numberPlan('accession', a.id) : null);
+  const othersNamed = $derived((plan ? [plan.keeper, ...plan.renumbered].filter((x) => x !== a?.id) : []).map((x) => collection.accession(x)?.taxonName ?? 'another plant'));
   async function renumberShared() {
     if (!a || renumbering) return;
     const id = a.id, before = accNo(a);
     renumbering = true;
     try {
-      await collection.repairNumbers();
+      const ok = await collection.repairNumbers({ kind: 'accession', no: before });
+      if (!ok || collection.sharesNumber('accession', id).length) {
+        toast.show(`The number is still shared: ${collection.lastWriteError ?? 'the repair was not saved'}. Nothing else changed.`);
+        return;
+      }
       const now = collection.accession(id);
       if (now && accNo(now) !== before) {
         toast.show(`This plant is now ${accNo(now)}; a note on it says why.`);
         if (param !== id) await goto(`/plants/${encodeURIComponent(id)}`, { replaceState: true });
-      } else toast.show(`${before} stays with this plant, created first; the other was given the next free number.`);
+      } else toast.show(`${before} stays with this plant, made first; the other was given the next free number.`);
     } finally {
       renumbering = false;
     }
   }
+
 </script>
 
-<svelte:head><title>{a ? `${accNo(a)} ${a.taxonName}` : param} — Cultifolio</title></svelte:head>
+<svelte:head><title>{a ? `${accNo(a)} ${a.taxonName}` : param} · Cultifolio</title></svelte:head>
 <svelte:window onbeforeunload={guardUnload} onkeydown={(e) => { if (e.key === 'Escape' && cardMenu) closeCardMenu(true); }} onclick={(e) => { if (cardMenu && !(e.target as Element).closest('.cardmenu')) closeCardMenu(); }} />
 
 {#if collection.lastWriteError}
   <div class="notice err" role="alert" id="write-error">This change was not saved: {collection.lastWriteError}. Free space or <a href="/backup">back up now</a>.</div>
 {/if}
+{#if a && keyDiffers}
+  <div class="notice" id="key-differs">The reference files {a.taxonName} under GBIF key {refKey}; this plant records key {a.taxonKey}, which the reference does not hold under that name. The species shown here is the reference's. <button class="btn" onclick={useReferenceKey}>Use the reference's key</button></div>
+{/if}
 {#if a && sharedWith.length}
-  <div class="notice" id="shared-number">Another plant has the number {accNo(a)} too: two devices gave it out while offline, or a file was merged in. The one created later is given the next free number, with a note saying so, when you renumber here, or at the next sync or import. <button class="btn" onclick={renumberShared} disabled={renumbering}>Renumber now</button></div>
+  <div class="notice" id="shared-number">{#if plan?.keeper === a.id}{othersNamed.length === 1 ? `Another plant, ${othersNamed[0]},` : `${othersNamed.length} other plants`} {othersNamed.length === 1 ? 'has' : 'have'} the number {accNo(a)} too: two devices gave it out while offline, or a file was merged in. This plant was made first and keeps it; renumbering gives {othersNamed.length === 1 ? 'the other' : 'the others'} the next free number, with a note saying so.{:else}This plant shares the number {accNo(a)} with {othersNamed.join(', ')}, made before it: two devices gave it out while offline, or a file was merged in. Renumbering gives this plant the next free number, with a note saying so.{/if} <button class="btn" onclick={renumberShared} disabled={renumbering}>Renumber now</button></div>
 {/if}
 {#if !collection.ready}
   <!-- The page's shape before the vault opens: the card without a picture, which is what most plants' pages are; one with a photograph grows a hero above it when the record arrives. -->
@@ -440,12 +496,13 @@
 {:else}
   {#if cover}
     <div class="hero own">
-      <button class="heroimg" type="button" onclick={() => openPhoto(cover)} aria-label="Open photograph">{#key cover.id}<PhotoImg id={cover.id} size="full" alt="{a.taxonName}, {cover.d}" />{/key}</button>
+      <!-- The button is named by what the photograph shows, and its image is then not read twice (round fifty-eight; the accessibility review). -->
+      <button class="heroimg" type="button" onclick={() => openPhoto(cover)} aria-label="Open photograph: {photoLabel(cover)}">{#key cover.id}<PhotoImg id={cover.id} size="full" alt="" />{/key}</button>
       <span class="cred">{cover.caption ? cover.caption + ' · ' : ''}{cover.d}{photos.length > 1 ? ` · ${plural(photos.length, 'photo')}` : ''}</span>
     </div>
   {:else if speciesThumb && !thumbFailed}
     <div class="hero">
-      <img src={speciesThumb} alt={a.taxonName} class="spthumb" onerror={() => (thumbFailed = true)} /><button class="cred" type="button" onclick={() => { adding = true; setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0); }}>species photograph · add your own</button>
+      <img src={speciesThumb} alt={a.taxonName} class="spthumb" onerror={() => (thumbFailed = true)} /><button class="cred" type="button" onclick={() => { adding = true; setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: motion(), block: 'center' }), 0); }}>species photograph · add your own</button>
     </div>
   {/if}
   <div class="idcard" class:flat={!hasHero}>
@@ -469,10 +526,10 @@
       {/if}
       {#if !hasHero && speciesThumb && thumbFailed}<p class="vern muted">The reference's photograph did not load.</p>{/if}
       {#if !hasHero && dossier?.thumb && !prefs.referencePhotos}<RefPhotoOffer link what="the reference’s photograph of this species" />{/if}
-      {#if a.status !== 'growing' || careDays >= DUE_DAYS}
+      {#if a.status !== 'growing' || collection.isDue(a)}
         <div class="pills">
           {#if a.status !== 'growing'}<span class="pill {a.status === 'dead' ? 'b' : ''}">{a.status}</span>{/if}
-          {#if careDays >= DUE_DAYS && a.status === 'growing' && !collection.wateringAhead(id)}<span class="pill w">{sinceWater == null ? `no watering recorded in ${careDays} d` : `not watered for ${sinceWater} d`}</span>{/if}
+          {#if collection.isDue(a)}<span class="pill w">{sinceWater == null ? `no watering recorded in ${careDays} d` : `not watered for ${sinceWater} d`}</span>{/if}
         </div>
       {/if}
     </div>
@@ -496,28 +553,31 @@
     <form class="cult editform" onsubmit={(e) => { e.preventDefault(); saveEdit(); }}>
       <label><span>Species</span><SpeciesPicker bind:value={f.taxonName} bind:taxonKey={edKey} id="ed-name" /></label>
       <label><span>Cultivar</span><input id="ed-cv" type="text" bind:value={f.cultivar} /></label>
-      <label><span>What it is</span><select id="ed-kind" bind:value={f.nameKind}>{#if !['species', 'cultivar', 'hybrid'].includes(f.nameKind)}<option value={f.nameKind}>{f.nameKind} (a kind this build does not know)</option>{/if}<option value="species">A species</option><option value="cultivar">A cultivar of that species</option><option value="hybrid">A hybrid (filed under the genus)</option></select></label>
+      <!-- "this version of the app", not "this build", here and under Provenance (round fifty-eight; the accessibility review). -->
+      <label><span>What it is</span><select id="ed-kind" bind:value={f.nameKind}>{#if !['species', 'cultivar', 'hybrid'].includes(f.nameKind)}<option value={f.nameKind}>{f.nameKind} (a kind this version of the app does not know)</option>{/if}<option value="species">A species</option><option value="cultivar">A cultivar of that species</option><option value="hybrid">A hybrid (filed under the genus)</option></select></label>
       {#if f.nameKind === 'hybrid'}<label><span>Parentage</span><input id="ed-parentage" type="text" bind:value={f.parentage} placeholder="Seed parent × pollen parent" /></label>{/if}
       <label><span>Name as received</span><input id="ed-recv" type="text" bind:value={f.nameAsReceived} /></label>
       <label><span>Field number</span><input id="ed-fn" type="text" bind:value={f.fieldNumber} /></label>
-      <label><span>Provenance</span><select id="ed-prov" bind:value={f.provenance}>{#if !['unknown', 'wild', 'f1', 'fn', 'veg'].includes(f.provenance)}<option value={f.provenance}>{f.provenance} (a word this build does not know)</option>{/if}<option value="unknown">Not stated</option><option value="wild">Wild-collected</option><option value="f1">F1: raised from wild-collected seed</option><option value="fn">Cultivated seed (Fn)</option><option value="veg">Vegetative</option></select></label>
+      <label><span>Provenance</span><select id="ed-prov" bind:value={f.provenance}>{#if !['unknown', 'wild', 'f1', 'fn', 'veg'].includes(f.provenance)}<option value={f.provenance}>{f.provenance} (a word this version of the app does not know)</option>{/if}<option value="unknown">Not stated</option><option value="wild">Wild-collected</option><option value="f1">F1: raised from wild-collected seed</option><option value="fn">Cultivated seed (Fn)</option><option value="veg">Vegetative</option></select></label>
       <label><span>Acquired</span><input id="ed-date" type="date" bind:value={f.acquired} oninput={() => (edDateMsg = '')} aria-invalid={!!edDateMsg} aria-describedby={edDateMsg ? 'ed-date-bad' : undefined} />{#if edDateMsg}<span class="bad small" id="ed-date-bad">{edDateMsg}</span>{/if}</label>
       <label><span>From</span><input id="ed-from" type="text" bind:value={f.sourceFrom} /></label>
       <label><span>Form</span><input id="ed-form" type="text" bind:value={f.sourceForm} placeholder="plant, seedling, seed, cutting" /></label>
       <label><span>Price</span><input id="ed-price" type="text" bind:value={f.price} /></label>
+      <!-- The plant's own watering rhythm, over its place's: blank follows the place, and the placeholder says what that is (round fifty-eight; the grower review). -->
+      <label><span>Water about every</span><span class="unitfield"><input id="ed-waterdays" type="text" inputmode="numeric" bind:value={f.waterDays} placeholder="{inheritedRhythm} ({cond?.waterDays ? 'its place' : 'the default'})" oninput={() => (edWaterMsg = '')} aria-invalid={!!edWaterMsg} aria-describedby={edWaterMsg ? 'ed-water-bad' : undefined} /> days</span>{#if edWaterMsg}<span class="bad small" id="ed-water-bad">{edWaterMsg}</span>{/if}</label>
       <div class="wide"><span class="lbl">Place</span><LocationPicker bind:value={f.locationId} id="ed-loc" label="Place" /></div>
-      <div class="actions wide"><button class="btn" type="button" onclick={() => { editing = false; edDateMsg = ''; }}>Cancel</button><button class="btn pri" type="submit">Save</button></div>
+      <div class="actions wide"><button class="btn" type="button" onclick={() => { editing = false; edDateMsg = ''; edWaterMsg = ''; }}>Cancel</button><button class="btn pri" type="submit">Save</button></div>
     </form>
   {/if}
 
   <!-- The four verbs a grower uses most, then the rest on request: a new plant's page is not the tracker's whole vocabulary. A plant that is dead or archived is not watered first: Log leads and Water waits behind More (round twenty-three, 19). -->
   <div class="quickbar">
     {#if a.status === 'growing'}<button class="btn pri" onclick={waterNow} disabled={wateringNow}>Water</button>{/if}
-    {#if hasHero}<button class="btn" onclick={() => { adding = !adding; if (adding) setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0); }}>Photo</button>{/if}
+    {#if hasHero}<button class="btn" onclick={() => { adding = !adding; if (adding) setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: motion(), block: 'center' }), 0); }}>Photo</button>{/if}
     <button class="btn" class:pri={a.status !== 'growing'} onclick={() => quick('note')}>Log</button>
-    <button class="btn" onclick={() => { moveTo = a.locationId ?? null; moving = !moving; }}>Move</button>
+    {#if a.status !== 'dead'}<button class="btn" onclick={() => { moveTo = a.locationId ?? null; moving = !moving; }}>Move</button>{/if}<!-- a dead plant is not moved, nor watered (round fifty-eight; the grower review) -->
     {#if moreActs}
-      {#if a.status !== 'growing'}<button class="btn" onclick={() => quick('water')}>Water</button>{/if}
+      {#if a.status === 'archived'}<button class="btn" onclick={() => quick('water')}>Water</button>{/if}
       <button class="btn" id="verb-feed" onclick={() => quick('feed')}>Feed</button>
       <button class="btn" onclick={() => quick('repot')}>Repot</button>
       <button class="btn" onclick={() => quick('measure')}>Measure</button>
@@ -529,7 +589,7 @@
     {/if}
   </div>
 
-  {#if moving}
+  {#if moving && a.status !== 'dead'}
     <div class="cult evform">
       <div class="sum">Move to <span class="hint">records a move on the timeline</span></div>
       <div class="fields"><LocationPicker bind:value={moveTo} id="mv-loc" label="Move to" /><div class="actions"><button class="btn" type="button" onclick={() => (moving = false)}>Cancel</button><button class="btn pri" type="button" onclick={doMove}>Move</button></div></div>
@@ -541,23 +601,31 @@
     <form class="cult evform" onsubmit={async (e) => { e.preventDefault(); const label = EVENT_LABEL[et]; try { await addEvent(e); } catch { return; } closeLog(recordedText(label)); }} onkeydown={(e) => { if (e.key === 'Escape') { e.preventDefault(); closeLog(); } }}>
       <div class="sum">Record: {EVENT_LABEL[et]} <span class="hint">goes on the timeline below</span></div>
       <div class="fields">
+        <!-- Each field with a visible name: the placeholders were the only ones, and went as soon as a word was typed (round fifty-eight; the accessibility review). -->
         <div class="row">
-          <select id="ev-type" bind:value={et} aria-label="What to record">
+          <label class="fl"><span class="eyebrow">What to record</span><select id="ev-type" bind:value={et}>
             {#each Object.entries(EVENT_LABEL).filter(([k]) => !['audit', 'germinate', 'potup', 'loss', 'propagate', 'acquire'].includes(k)) as [k, label]}<option value={k}>{label}</option>{/each}
-          </select>
-          <input id="ev-date" type="date" aria-label="Date" bind:value={ed} oninput={() => (evmsg = '')} aria-invalid={!!evmsg} aria-describedby={evmsg ? 'ev-bad' : undefined} />
+          </select></label>
+          <label class="fl"><span class="eyebrow">Date</span><input id="ev-date" type="date" bind:value={ed} oninput={() => (evmsg = '')} aria-invalid={!!evmsg} aria-describedby={evmsg ? 'ev-bad' : undefined} /></label>
         </div>
         {#if evmsg}<p class="refuse" role="alert" id="ev-bad">{evmsg}</p>{/if}
-        {#if et === 'treat' || et === 'feed'}<input id="ev-used" type="text" aria-label="What was used" bind:value={eused} placeholder={et === 'treat' ? 'Product and rate, e.g. Safari 20SG drench' : 'Feed, e.g. Grow More 17-8-22 ¼ tsp/gal'} />{/if}
-        {#if et === 'death'}<input id="ev-cause" type="text" aria-label="Cause" bind:value={ecause} placeholder="Cause, if known" />{/if}
+        {#if et === 'treat' || et === 'feed'}<label class="fl"><span class="eyebrow">{et === 'treat' ? 'Product and rate' : 'Feed and rate'}</span><input id="ev-used" type="text" bind:value={eused} placeholder={et === 'treat' ? 'e.g. Safari 20SG drench' : 'e.g. Grow More 17-8-22 ¼ tsp/gal'} /></label>{/if}
+        {#if et === 'death'}<label class="fl"><span class="eyebrow">Cause, if known</span><input id="ev-cause" type="text" bind:value={ecause} /></label>{/if}
         {#if et === 'measure'}
           <div class="measures">
-            {#each MEASURES as m}
-              <label><span class="lab">{m.label}{m.unit ? ` (${lengthUnit(u)})` : ''}</span><input type="number" step="any" bind:value={measures[m.k]} /></label>
+            {#each MEASURES.filter((x) => x.k !== POT.k) as m}
+              <label><span class="lab">{m.label}{m.unit ? ` (${lu})` : ''}</span><input type="number" step="any" inputmode="decimal" bind:value={measures[m.k]} /></label>
             {/each}
           </div>
         {/if}
-        <input id="ev-note" type="text" aria-label="Note" bind:value={enote} placeholder="Note (optional)" />
+        {#if et === 'repot'}
+          <!-- Both optional: the pot in the grower's length units, stored in millimetres; the medium into the note (round fifty-eight; the grower review). -->
+          <div class="row repot">
+            <label><span class="lab">Pot size ({lu})</span><input id="ev-pot" type="number" step="any" min="0" inputmode="decimal" bind:value={epot} placeholder={lu === 'in' ? 'e.g. 3.5' : 'e.g. 90'} oninput={() => (evmsg = '')} /></label>
+            <label><span class="lab">Medium</span><input id="ev-medium" type="text" bind:value={emedium} placeholder="e.g. pumice and loam, 2:1" /></label>
+          </div>
+        {/if}
+        <label class="fl"><span class="eyebrow">Note (optional)</span><input id="ev-note" type="text" bind:value={enote} /></label>
         <div class="actions"><button class="btn" type="button" onclick={() => closeLog()}>Cancel</button><button class="btn pri" type="submit">Record</button></div>
       </div>
     </form>
@@ -574,39 +642,13 @@
     </div>
   {/if}
 
+  <!-- The plant's own figures under the actions; then the log, the photographs, and the habitat comparison folded at the foot: on a phone the climate cards stood between the verbs and the log (round fifty-eight; the grower review). -->
+  {#if (a.status === 'growing' || (a.status !== 'dead' && collection.lastWatered(id))) || events.some((e) => e.t === 'audit') || lastMeasure}
   <div class="cards">
-    {#if a.status === 'growing' || collection.lastWatered(id)}<div class="card"><div class="lab">Since watered</div><div class="val">{sinceWater ?? '–'}{#if sinceWater != null}<span class="u"> d</span>{/if}</div><div class="sub">{sinceWater == null && collection.wateringAhead(id) ? `watering dated ${collection.wateringAhead(id)}, ahead of today` : sinceWater == null ? `no watering recorded${careDays === 0 ? ' yet; added today' : ` in the ${careDays} ${careDays === 1 ? 'day' : 'days'} since it was added`}` : `last ${collection.lastWatered(id)}`}</div></div>{/if}
+    {#if a.status === 'growing' || (a.status !== 'dead' && collection.lastWatered(id))}<div class="card"><div class="lab">Since watered</div><div class="val">{sinceWater ?? '–'}{#if sinceWater != null}<span class="u"> d</span>{/if}</div><div class="sub">{sinceWater == null && collection.wateringAhead(id) ? `watering dated ${collection.wateringAhead(id)}, ahead of today` : sinceWater == null ? `no watering recorded${careDays === 0 ? ' yet; added today' : ` in the ${careDays} ${careDays === 1 ? 'day' : 'days'} since it was added`}` : `last ${collection.lastWatered(id)}`}</div></div>{/if}
     {#if events.some((e) => e.t === 'audit')}<div class="card"><div class="lab">Last seen</div><div class="val">{seen == null ? '–' : seen}<span class="u">{seen == null ? '' : ' d'}</span></div><div class="sub">{#if collection.missedAt(id)}not seen at the audit of <span class="date">{collection.missedAt(id)}</span>; {/if}last logged <span class="date">{collection.lastSeen(id)}</span></div></div>{/if}
-    {#if lastMeasure}<div class="card"><div class="lab">{sizeKey ? (MEASURES.find((m) => m.k === sizeKey)?.label ?? 'Size') : 'Size'}</div><div class="val">{sizeKey && lastMeasure ? (MEASURES.find((m) => m.k === sizeKey)?.unit ? lengthN(lastMeasure.measures![sizeKey], u) : lastMeasure.measures![sizeKey]) : '–'}<span class="u">{sizeKey && MEASURES.find((m) => m.k === sizeKey)?.unit ? ' ' + lengthUnit(u) : ''}</span></div>{#if growth != null}<div class="gauge"><i style="width: {Math.min(100, Math.max(8, (growth / Math.max(1, lastMeasure!.measures![sizeKey!])) * 100))}%"></i></div>{/if}<div class="sub">{growth != null ? `${growth >= 0 ? '+' : ''}${MEASURES.find((m) => m.k === sizeKey)?.unit ? lengthN(growth, u) : growth} since ${firstMeasure!.d}` : `measured ${lastMeasure.d}`}</div></div>{/if}
-    <div class="card"><div class="lab">Habitat rain season</div><div class="val" style="font-family: var(--ui); font-size: 17px; font-weight: 700">{#if !season && dossier?.climate.status === 'refused'}<NotChecked what="Climate" why="A source did not answer when the species page was built{dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}." />{:else}{season ? season.label : dossier?.climate.status === 'pending' ? 'Climate pending' : dossier ? 'No habitat climate' : ref === 'unreachable' ? 'Reference not reached' : ref === 'none' ? (kind === 'hybrid' ? 'A hybrid' : 'No species page') : '…'}{/if}</div><div class="sub">{#if season}{season.note} <a href="/species/{speciesHref}#s-cultivation">The sheet</a>.{:else if dossier?.climate.status === 'refused'}No season is read from an answer that was not given.{:else if dossier?.climate.status === 'pending'}The habitat climate for this species has not been derived yet.{:else if dossier}Nothing to read a season from{dossier.climate.status === 'none' && dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}.{:else if ref === 'unreachable'}The species reference could not be reached from here; nothing is known either way.{:else if ref === 'none'}{kind === 'hybrid' ? (parentLinks.some((p) => p.slug) ? 'No habitat of its own; its parents have species pages.' : 'No habitat of its own.') : 'Not in the reference.'}{:else}reading the species dossier{/if}</div></div>
+    {#if lastMeasure}<div class="card"><div class="lab">{sizeKey ? (MEASURES.find((m) => m.k === sizeKey)?.label ?? 'Size') : 'Size'}</div><div class="val">{sizeKey && lastMeasure ? (MEASURES.find((m) => m.k === sizeKey)?.unit ? lenN(lastMeasure.measures![sizeKey]) : lastMeasure.measures![sizeKey]) : '–'}<span class="u">{sizeKey && MEASURES.find((m) => m.k === sizeKey)?.unit ? ' ' + lu : ''}</span></div>{#if growth != null}<div class="gauge"><i style="width: {Math.min(100, Math.max(8, (growth / Math.max(1, lastMeasure!.measures![sizeKey!])) * 100))}%"></i></div>{/if}<div class="sub">{growth != null ? `${growth >= 0 ? '+' : ''}${MEASURES.find((m) => m.k === sizeKey)?.unit ? len(growth) : growth} since ${firstMeasure!.d}` : `measured ${lastMeasure.d}`}</div></div>{/if}
   </div>
-
-  {#if habitat && a.locationId}
-    <div class="secrule"><h2>Habitat versus here</h2><div class="line"></div><span class="n">{collection.locationName(a.locationId)}</span></div>
-    <div class="factgrid hvh">
-      {#if lightCompare}<div><b>Light</b>{lightCompare.text}.{#if lightCompare.here == null}{#if a.locationId}{' '}<a class="tap" href="/places/{a.locationId}?edit=1">Set its light</a>.{:else}{' '}<button type="button" class="linkish tap" onclick={() => (moving = true)}>Give it a place</button> first.{/if}{/if}</div>{/if}
-      {#if coldCompare}<div><b>Cold</b>{coldCompare.text}.{#if coldCompare.here == null}{#if a.locationId}{' '}<a class="tap" href="/places/{a.locationId}?edit=1">Set its floor</a>.{:else}{' '}<button type="button" class="linkish tap" onclick={() => (moving = true)}>Give it a place</button> first.{/if}{/if}</div>{/if}
-    </div>
-    <details class="why">
-      <summary>What this compares</summary>
-      <div class="whybody">A comparison, not a verdict: the habitat figures are what the sky and the weather do where the species is recorded (CHELSA across every envelope cell, NASA POWER at the typical cell), not measured tolerances of this plant. This place's figures are its own settings, inherited from the places above it where set. <a class="tap" href="/species/{speciesHref}#s-cultivation">The full cultivation sheet</a>.</div>
-    </details>
-  {/if}
-
-  <div class="secrule" id="photos"><h2>Photographs</h2><div class="line"></div><span class="n">{photos.length ? `${photos.length}` : ''}</span></div>
-  {#if adding || !photos.length}
-    <div class="cult addrow"><PhotoAdd acc={id} id="acc-photo" onstart={() => (adding = true)} onadded={() => (adding = true)} /></div>
-  {/if}
-  {#if photos.length}
-    <div class="phgrid">
-      {#each photos as ph, i (ph.id)}
-        <button class="ph" type="button" class:cov={cover?.id === ph.id} onclick={() => (lightbox = i)} title={ph.caption ?? ph.d}>
-          <PhotoImg id={ph.id} alt={ph.caption ?? ph.d} loading="lazy" />
-          <span class="pd">{ph.d}</span>
-          {#if cover?.id === ph.id}<span class="tag">cover</span>{/if}
-        </button>
-      {/each}
-    </div>
   {/if}
 
   <div class="secrule"><h2>Log</h2><div class="line"></div><span class="n">{plural(timeline.length, 'entry', 'entries')}</span></div>
@@ -619,8 +661,8 @@
           {@const e = row.e}
           <div class="tlrow" class:auto={!!e.auto} title={e.auto ? 'Written by the app or by a place-wide action, not an observation of this plant' : undefined}>
             <span class="d">{e.d}</span>
-            <span class="t">{e.t === 'audit' && e.note === 'not seen' ? 'Not seen at audit' : (EVENT_LABEL[e.t] ?? e.t)}{#if e.used}<span class="x2">{' · '}{e.used}</span>{/if}{#if e.cause}<span class="x2">{' · '}{e.cause}</span>{/if}{#if e.measures}<span class="x2">{' · '}{Object.entries(e.measures).map(([k, v]) => { const m = MEASURES.find((x) => x.k === k); return `${m?.label ?? k} ${m?.unit ? length(v, u) : v}`; }).join(', ')}</span>{/if}{#if e.note && !(e.t === 'audit' && e.note === 'not seen')}<span class="x2">{' · '}{e.note}</span>{/if}</span>
-            {#if confirmEvent === e.id}<button class="rm confirm" type="button" onclick={() => { collection.remove('event', e.id); confirmEvent = null; }}>Remove?</button>{:else}<button class="rm" type="button" title="Remove this entry" aria-label="Remove this entry" onclick={() => { confirmEvent = e.id; void focusNext('.rm.confirm'); }}>×</button>{/if}
+            <span class="t">{e.t === 'audit' && e.note === 'not seen' ? 'Not seen at audit' : (EVENT_LABEL[e.t] ?? e.t)}{#if e.used}<span class="x2">{' · '}{e.used}</span>{/if}{#if e.cause}<span class="x2">{' · '}{e.cause}</span>{/if}{#if e.measures}<span class="x2">{' · '}{Object.entries(e.measures).map(([k, v]) => { const m = measureOf(k); return `${m?.label ?? k} ${m?.unit ? len(v) : v}`; }).join(', ')}</span>{/if}{#if e.note && !(e.t === 'audit' && e.note === 'not seen')}<span class="x2">{' · '}{e.note}</span>{/if}</span>
+            {#if confirmEvent === e.id}<button class="rm confirm" type="button" onclick={() => removeEntry(e.id)}>Remove?</button>{:else}<button class="rm" type="button" title="Remove this entry" aria-label="Remove this entry" onclick={() => { confirmEvent = e.id; void focusNext('.rm.confirm'); }}>×</button>{/if}
           </div>
         {:else}
           {@const ph = row.ph}
@@ -632,10 +674,46 @@
         {/if}
       {/each}
       {#if shownTimeline.length < timeline.length}
-        <div class="tlrow tlmore"><span class="d"></span><span class="t"><button type="button" class="linkish" onclick={() => (allLog = true)}>Show all {timeline.length} entries</button> <span class="x2">· the latest {shownTimeline.length} are above</span></span></div>
+        <div class="tlrow tlmore"><span class="d"></span><span class="t"><button type="button" class="linkish" onclick={() => (allLog = true)}>All {timeline.length} entries</button> <span class="x2">· the latest {shownTimeline.length} are above</span></span></div>
       {/if}
     </div>
   {/if}
+
+  <div class="secrule" id="photos"><h2>Photographs</h2><div class="line"></div><span class="n">{photos.length ? `${photos.length}` : ''}</span></div>
+  {#if adding || !photos.length}
+    <div class="cult addrow"><PhotoAdd acc={id} id="acc-photo" onstart={() => (adding = true)} onadded={() => (adding = true)} /></div>
+  {/if}
+  {#if photos.length}
+    <!-- Each thumbnail is named by the plant, the day and the caption, the cover said too; the image inside is then decorative (round fifty-eight; the accessibility review). -->
+    <div class="phgrid">
+      {#each photos as ph, i (ph.id)}
+        <button class="ph" type="button" class:cov={cover?.id === ph.id} onclick={() => (lightbox = i)} title={ph.caption ?? ph.d} aria-label="{photoLabel(ph)}{cover?.id === ph.id ? ' (the cover)' : ''}">
+          <PhotoImg id={ph.id} alt="" loading="lazy" />
+          <span class="pd">{ph.d}</span>
+          {#if cover?.id === ph.id}<span class="tag">cover</span>{/if}
+        </button>
+      {/each}
+    </div>
+  {/if}
+
+  <details class="hab" id="habitat">
+    <summary class="secrule"><h2>Habitat vs this place</h2><div class="line"></div><span class="n">{a.locationId && collection.placeOf(a.locationId) ? collection.locationName(a.locationId) : ''}</span></summary>
+    <div class="cards">
+      <div class="card"><div class="lab">Habitat rain season</div><div class="val" style="font-family: var(--ui); font-size: var(--fs-lg); font-weight: 700">{#if !season && dossier?.climate.status === 'refused'}<NotChecked what="Climate" why="A source did not answer when the species page was built{dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}." />{:else}{season ? season.label : dossier?.climate.status === 'pending' ? 'Climate pending' : dossier ? 'No habitat climate' : ref === 'unreachable' ? 'Reference not reached' : ref === 'none' ? (kind === 'hybrid' ? 'A hybrid' : 'No species page') : '…'}{/if}</div><div class="sub">{#if season}{season.note} <a href="/species/{speciesHref}#s-cultivation">The sheet</a>.{:else if dossier?.climate.status === 'refused'}No season is read from an answer that was not given.{:else if dossier?.climate.status === 'pending'}The habitat climate for this species has not been derived yet.{:else if dossier}Nothing to read a season from{dossier.climate.status === 'none' && dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}.{:else if ref === 'unreachable'}The species reference could not be reached from here; nothing is known either way.{:else if ref === 'none'}{kind === 'hybrid' ? (parentLinks.some((p) => p.slug) ? 'No habitat of its own; its parents have species pages.' : 'No habitat of its own.') : 'Not in the reference.'}{:else}reading the species page{/if}</div></div>
+    </div>
+    {#if habitat && a.locationId}
+    <div class="factgrid hvh">
+      {#if lightCompare}<div><b>Light</b>{lightCompare.text}.{#if lightCompare.here == null}{#if a.locationId}{' '}<a class="tap" href="/places/{a.locationId}?edit=1">Set its light</a>.{:else}{' '}<button type="button" class="linkish tap" onclick={() => (moving = true)}>Give it a place</button> first.{/if}{/if}</div>{/if}
+      {#if coldCompare}<div><b>Cold</b>{coldCompare.text}.{#if coldCompare.here == null}{#if a.locationId}{' '}<a class="tap" href="/places/{a.locationId}?edit=1">Set its floor</a>.{:else}{' '}<button type="button" class="linkish tap" onclick={() => (moving = true)}>Give it a place</button> first.{/if}{/if}</div>{/if}
+    </div>
+    <!-- "across the range" and "a typical spot in the range", the glossary's words (round fifty-eight; the accessibility review). -->
+    <details class="why">
+      <summary>What this compares</summary>
+      <div class="whybody">A comparison, not a verdict: the habitat figures are what the sky and the weather do where the species is recorded (CHELSA across the range, NASA POWER at a typical spot in the range), not measured tolerances of this plant. This place's figures are its own settings, inherited from the places above it where set. <a class="tap" href="/species/{speciesHref}#s-cultivation">The full cultivation sheet</a>.</div>
+    </details>
+    {/if}
+    {#if !site.current && cond?.lat == null}<p class="small muted siteline">No site is set: set it once in <a href="/settings#site">Settings</a> and the seasons here are read from where you grow.</p>{/if}
+  </details>
 
   <div class="secrule"><h2>Notes on this plant</h2><div class="line"></div></div>
   <div class="cult">
@@ -646,6 +724,7 @@
     {:else}
       <div class="none">Nothing yet. <button class="linkish" onclick={() => { notesDraft = ''; notesBase = ''; notesBaseStamp = collection.notesStamp('accession', id); editingNotes = true; }}>Add a note</button></div>
     {/if}
+    <ReplacedNotes kind="accession" id={a.id} />
   </div>
   <div class="cult">
     <div class="sum">My notes on <i>{a.taxonName}</i> <span class="hint">shared by every plant of this species you own; shown on the species page</span></div>
@@ -699,13 +778,13 @@
   /* Without a picture the card does not overlap a hero that is not there. */
   .idcard.flat { margin-top: 14px; }
   .idcard.flat .who { flex-basis: 260px; }
-  .vern .kind { font-family: var(--ui); font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--cool); }
+  .vern .kind { font-family: var(--ui); font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--cool); }
   .vern .place { font-weight: 600; color: var(--ink); }
   .idcard .pills:empty { display: none; }
   .cardmenu { position: relative; }
   .cardmenu .dots { font-weight: 700; letter-spacing: 0.1em; padding-left: 12px; padding-right: 12px; }
-  .cardmenu .menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; min-width: 160px; background: var(--card); border-radius: 10px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18); padding: 6px; display: flex; flex-direction: column; }
-  .cardmenu .menu > * { display: block; text-align: left; font: inherit; font-family: var(--ui); font-size: 14px; padding: 9px 12px; border: 0; background: none; color: var(--ink); border-radius: 7px; cursor: pointer; text-decoration: none; }
+  .cardmenu .menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; min-width: 160px; background: var(--card); border-radius: var(--r); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18); padding: 6px; display: flex; flex-direction: column; }
+  .cardmenu .menu > * { display: block; text-align: left; font: inherit; font-family: var(--ui); font-size: var(--fs-md); padding: 9px 12px; border: 0; background: none; color: var(--ink); border-radius: var(--r-sm); cursor: pointer; text-decoration: none; }
   .cardmenu .menu > *:hover, .cardmenu .menu > *:focus-visible { background: var(--sunk); outline: none; }
   /* A fixed height for the species photograph and its stand-ins: the box is the same size before the image, with it, and without it, so the page below does not move. */
   .hero:not(.own) { min-height: 260px; }
@@ -714,7 +793,7 @@
   .skel { min-height: calc(100vh - 150px); }
   .skelbox { background: var(--sunk); border-radius: var(--r); min-height: 260px; }
   .skelname { visibility: hidden; } /* holds the name's line, which wraps under the number on a phone, so the card does not grow when the record arrives (round twenty-one, 14) */
-  .skeltile { width: var(--tile, 96px); height: var(--tile, 96px); min-height: 0; flex: 0 0 var(--tile, 96px); border-radius: 12px; }
+  .skeltile { width: var(--tile, 96px); height: var(--tile, 96px); min-height: 0; flex: 0 0 var(--tile, 96px); border-radius: var(--r-lg); }
   .skelbtn { min-width: 64px; visibility: hidden; }
   .skelverbs { min-height: 52px; margin-top: 14px; }
   .parentage { margin-top: 2px; }
@@ -723,58 +802,74 @@
   .hero.own .cred { top: 10px; bottom: auto; }
   .heroimg { display: block; width: 100%; padding: 0; border: 0; background: transparent; cursor: zoom-in; }
   .heroimg :global(img) { width: 100%; height: 430px; object-fit: cover; display: block; } /* a fixed height: the box is the same before the pixels arrive from the vault */
-  button.cred { border: 0; cursor: pointer; font: inherit; font-size: 10.5px; }
+  button.cred { border: 0; cursor: pointer; font: inherit; font-size: var(--fs-xs); }
   .addrow { padding: 14px 17px; margin-top: 12px; }
   .phgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-top: 12px; }
-  .phgrid .ph { position: relative; display: block; padding: 0; border: 0; background: var(--sunk); border-radius: 10px; overflow: hidden; aspect-ratio: 1; cursor: zoom-in; box-shadow: var(--sh); }
+  .phgrid .ph { position: relative; display: block; padding: 0; border: 0; background: var(--sunk); border-radius: var(--r); overflow: hidden; aspect-ratio: 1; cursor: zoom-in; box-shadow: var(--sh); }
   .phgrid .ph :global(img) { width: 100%; height: 100%; object-fit: cover; display: block; }
   .phgrid .ph.cov { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .phgrid .pd { position: absolute; left: 8px; bottom: 7px; font-family: var(--mono); font-size: 10.5px; color: #fff; background: rgba(8, 20, 16, 0.6); padding: 2px 6px; border-radius: 5px; }
-  .phgrid .tag { position: absolute; right: 8px; top: 7px; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 700; color: var(--on-accent); background: var(--accent); padding: 2px 7px; border-radius: 5px; }
+  .phgrid .pd { position: absolute; left: 8px; bottom: 7px; font-family: var(--mono); font-size: var(--fs-xs); color: #fff; background: rgba(8, 20, 16, 0.6); padding: 2px 6px; border-radius: var(--r-sm); }
+  .phgrid .tag { position: absolute; right: 8px; top: 7px; font-size: var(--fs-xs); letter-spacing: 0.06em; text-transform: uppercase; font-weight: 700; color: var(--on-accent); background: var(--accent); padding: 2px 7px; border-radius: var(--r-sm); }
   .tlphoto { width: 100%; text-align: left; background: transparent; border: 0; border-top: 1px solid var(--rule); font: inherit; color: inherit; cursor: pointer; align-items: center; }
   .tlphoto:first-child { border-top: 0; }
-  .tlphoto .thumb { display: inline-block; width: 44px; height: 44px; border-radius: 7px; overflow: hidden; vertical-align: middle; margin-right: 10px; background: var(--sunk); }
+  .tlphoto .thumb { display: inline-block; width: 44px; height: 44px; border-radius: var(--r-sm); overflow: hidden; vertical-align: middle; margin-right: 10px; background: var(--sunk); }
   .tlphoto .thumb :global(img) { width: 100%; height: 100%; object-fit: cover; display: block; }
   .tlphoto:hover .t { color: var(--accent); }
   .hvh { grid-template-columns: 1fr 1fr; }
   .linkish { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-decoration: underline; }
-  .refuse { margin: 6px 0 0; font-size: 12.5px; color: var(--bad); }
+  .refuse { margin: 6px 0 0; font-size: var(--fs-md); color: var(--bad); }
   @media (max-width: 520px) { .hvh { grid-template-columns: 1fr; } }
   .muted { color: var(--ink3); }
   .editform, .evform { margin-top: 16px; }
   .editform { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 12px; padding: 14px 17px; }
   .editform label { display: grid; gap: 4px; }
-  .editform label > span, .editform .lbl { font-size: 10.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink3); font-weight: 700; }
-  .editform input, .editform select, .fields input, .fields select, .fields textarea { width: 100%; font: inherit; font-size: 14px; padding: 8px 11px; border: 1px solid var(--rule); border-radius: 9px; background: var(--card); color: var(--ink); }
+  .editform label > span, .editform .lbl { font-size: 0.6562rem; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink3); font-weight: 700; }
+  .editform input, .editform select, .fields input, .fields select, .fields textarea { width: 100%; font: inherit; font-size: 0.875rem; padding: 8px 11px; border: 1px solid var(--rule); border-radius: var(--r); background: var(--card); color: var(--ink); }
   .wide { grid-column: 1 / -1; }
   .fields { display: grid; gap: 8px; padding: 13px 17px 15px; }
   .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .measures { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
   .measures label { display: grid; gap: 3px; }
-  .measures .lab { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink3); font-weight: 700; }
+  .measures .lab, .repot .lab { font-size: var(--fs-xs); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink3); font-weight: 700; }
+  .repot label { display: grid; gap: 3px; } /* a repot's pot and medium (round fifty-eight; the grower review) */
+  .fl { display: grid; gap: 3px; min-width: 0; } /* a field with its small name over it (round fifty-eight; the accessibility review) */
+  /* The rhythm box and its word, not set as a label (round fifty-eight; the grower review). */
+  .editform label > span.unitfield { display: flex; align-items: center; gap: 6px; font-size: var(--fs-md); letter-spacing: 0; text-transform: none; color: var(--ink2); font-weight: 400; }
+  .editform .unitfield input { width: 6em; }
+  /* The habitat block is folded at the foot, one tap to open, its summary a 44px target (round fifty-eight; the grower review). */
+  .hab { margin-top: var(--section-gap, 28px); }
+  .hab > summary.secrule { display: flex; align-items: center; gap: 10px; min-height: 44px; margin: 0; cursor: pointer; list-style: none; }
+  .hab > summary::-webkit-details-marker { display: none; }
+  .hab > summary::before { content: '›'; display: inline-block; transition: transform 0.15s; color: var(--accent); font-size: var(--fs-lg); font-weight: 700; }
+  .hab[open] > summary::before { transform: rotate(90deg); }
+  .hab > summary h2 { color: var(--accent); }
+  .hab > summary .n { margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .hab .cards { margin-top: 6px; }
+  .siteline { margin: 10px 0 0; font-size: var(--fs-md); }
+  .tlmore .linkish { display: inline-flex; align-items: center; min-height: 44px; }
   .actions { display: flex; justify-content: flex-end; gap: 8px; margin: 0; }
-  .tlrow .x2 { font-weight: 400; color: var(--ink2); font-size: 12.5px; }
+  .tlrow .x2 { font-weight: 400; color: var(--ink2); font-size: var(--fs-md); }
   /* The × is small; its hit area is not. Negative margins keep the row's height. */
-  .rm { border: 0; background: transparent; color: var(--ink3); cursor: pointer; font-size: 16px; line-height: 1; padding: 0 4px; min-width: 40px; min-height: 40px; margin: -12px -8px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; }
+  .rm { border: 0; background: transparent; color: var(--ink3); cursor: pointer; font-size: var(--fs-lg); line-height: 1; padding: 0 4px; min-width: 40px; min-height: 40px; margin: -12px -8px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--r); }
   .rm:hover { color: var(--bad); }
-  .rm.confirm { font-size: 12px; color: var(--bad); font-weight: 600; }
+  .rm.confirm { font-size: var(--fs-sm); color: var(--bad); font-weight: 600; }
   a.tlrow { color: inherit; }
   .tlrow.auto .t { color: var(--ink3); font-weight: 400; } /* a line the app wrote, or a place-wide action made, is set quieter than the grower's own (round twenty-five, 12) */
   a.tlrow:hover { text-decoration: none; }
   a.tlrow:hover .t { color: var(--accent); }
-  .linkish { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font: inherit; font-size: 13px; }
-  .dangerrow { margin: 46px 0 10px; padding: 0; display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; font-size: 12.5px; color: var(--ink3); }
+  .linkish { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font: inherit; font-size: var(--fs-md); }
+  .dangerrow { margin: 46px 0 10px; padding: 0; display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; font-size: var(--fs-md); color: var(--ink3); }
   .setup { margin-top: 14px; }
   .setup .setupbody { display: grid; }
   .setuprow { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; gap: 12px; align-items: center; text-align: left; padding: 12px 17px; border: 0; border-top: 1px solid var(--rule); background: none; font: inherit; color: inherit; cursor: pointer; min-height: 48px; width: 100%; }
   .setuprow:first-child { border-top: 0; }
   .setuprow:hover { background: var(--sunk); }
-  .setuprow .n { font-family: var(--mono); font-size: 12px; color: var(--ink3); }
-  .setuprow .t { font-weight: 600; font-size: 14px; color: var(--accent); }
-  .setuprow .w { font-size: 12px; color: var(--ink3); }
+  .setuprow .n { font-family: var(--mono); font-size: var(--fs-sm); color: var(--ink3); }
+  .setuprow .t { font-weight: 600; font-size: var(--fs-md); color: var(--accent); }
+  .setuprow .w { font-size: var(--fs-sm); color: var(--ink3); }
   .setuprow.next { padding-top: 14px; padding-bottom: 14px; }
-  .setuprow.next .t { font-size: 15.5px; }
-  .setuprow.later .t { font-weight: 500; color: var(--ink2); font-size: 13.5px; }
+  .setuprow.next .t { font-size: var(--fs-base); }
+  .setuprow.later .t { font-weight: 500; color: var(--ink2); font-size: var(--fs-md); }
   .setuprow.later { padding-top: 9px; padding-bottom: 9px; }
   .quickbar .more { color: var(--ink2); }
   .confirmrow { display: inline-flex; gap: 6px; }
@@ -786,9 +881,9 @@
     .setup .setupbody::-webkit-scrollbar { display: none; }
     .setuprow, .setuprow.next, .setuprow.later { display: inline-flex; width: auto; flex: none; gap: 6px; align-items: center; min-height: 36px; padding: 6px 12px; border: 1px solid var(--rule); border-radius: 999px; background: var(--card); white-space: nowrap; }
     .setuprow.next { border-color: var(--accent); }
-    .setuprow .n { font-size: 11px; }
-    .setuprow .t, .setuprow.next .t, .setuprow.later .t { font-size: 13px; }
+    .setuprow .n { font-size: var(--fs-xs); }
+    .setuprow .t, .setuprow.next .t, .setuprow.later .t { font-size: var(--fs-md); }
     .setuprow .w { display: none; }
   }
-  @media (max-width: 640px) { .editform { grid-template-columns: 1fr 1fr; } .hero { margin-top: 0; } .hero.own { min-height: 260px; } .heroimg :global(img) { height: 260px; } .idcard.flat { margin-top: 10px; display: grid; grid-template-columns: 80px minmax(0, 1fr); --tile: 80px; } .idcard.flat .acts { grid-column: 1 / -1; } .idcard.flat .who { flex-basis: auto; } .idcard.flat h1.sci { font-size: 23px; } .idcard.flat .accno.lead { display: table; margin: 0 0 4px; vertical-align: baseline; } }
+  @media (max-width: 640px) { .editform { grid-template-columns: 1fr 1fr; } .hero { margin-top: 0; } .hero.own { min-height: 260px; } .heroimg :global(img) { height: 260px; } .idcard.flat { margin-top: 10px; display: grid; grid-template-columns: 80px minmax(0, 1fr); --tile: 80px; } .idcard.flat .acts { grid-column: 1 / -1; } .idcard.flat .who { flex-basis: auto; } .idcard.flat h1.sci { font-size: var(--fs-2xl); } .idcard.flat .accno.lead { display: table; margin: 0 0 4px; vertical-align: baseline; } }
 </style>

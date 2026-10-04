@@ -18,6 +18,14 @@ describe('the generated note', () => {
     expect(n.from).toEqual(['Its year', 'Rain', 'Light', 'Temperature']);
     expect(n.hab).toBe(true);
     expect(n.text.length).toBeLessThan(700);
+    // line by line in a grower's words, one hemisphere per line, the rule apart (round fifty-eight)
+    expect(n.items).toEqual([
+      { lead: 'A cactus or succulent, by its genus.', rule: 'archetype table' },
+      { lead: 'Wet winters: the rain comes November to February (May to August at the habitat), read as a winter growing season.', rule: 'rain rule, CHELSA' },
+      { lead: '194 mm of rain a year, 4 months almost dry (under 5 mm).', rule: 'CHELSA' },
+      { lead: 'Open-sky light of 20 to 58 DLI across the year.', rule: 'CHELSA shortwave' },
+      { lead: 'Cold nights reach 4.1 °C: one night in a hundred is colder.', rule: 'NASA POWER, 44 years' }
+    ]);
   });
   it('a southern reader gets habitat months unshifted, and the hemisphere is named', () => {
     const n = generatedNote({ scientific: 'Tylecodon pearsonii', family: 'Crassulaceae', months: namaqua, lat: -30 }, { readerLat: -34 })!;

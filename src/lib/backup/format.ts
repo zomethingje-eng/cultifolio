@@ -8,6 +8,8 @@
  *   plants.csv           the plants as a spreadsheet, for people, not for import
  *   device.json          the exporting device's settings { site, units, labels, prefs }, applied on restore only where the device has none
  *
+ * The manifest also lists the stamps of the changes the exporting device had parked (`parked`), so a restore parks them too.
+ *
  * The change log is the truth; a backup restored on any device merges by the
  * same rule sync uses (per field, latest HLC wins), so restoring an old backup
  * over a newer collection loses nothing, and restoring the same file twice
@@ -42,13 +44,14 @@ export const Manifest = v.object({
     photoBytes: v.number()
   }),
   /** Photo records whose pixels were not on the exporting device; their records are in changes.json, their pixels are nowhere in the file. */
-  photosMissing: v.optional(v.array(v.string()))
+  photosMissing: v.optional(v.array(v.string())),
+  /** Stamps of changes the exporting device had parked (a broken clock's, never folded on their own): parked on restore too, or a restore folded them (round fifty-eight). */
+  parked: v.optional(v.array(v.string()))
 });
 export type Manifest = v.InferOutput<typeof Manifest>;
 
 export const ChangeRow = v.object({
   t: v.string(),
-  m: v.optional(v.string()),
   kind: v.picklist(KINDS), // the one list of record kinds, shared with the log's validation
 
   id: v.string(),

@@ -1,5 +1,5 @@
 import { error, redirect } from '@sveltejs/kit';
-import { getDossier, resolveSlug, getIndex, getGenus, indexMaps } from '$lib/server/dossiers';
+import { getDossier, resolveSlug, getIndex, getGenus, indexMaps, searchAnswer } from '$lib/server/dossiers';
 import { synonymOf, synonymInIndex, nameFromSlug } from '$lib/server/synonyms';
 import generaList from '../../../../scripts/specialist-genera.txt?raw';
 /** The genera the species list takes whole (the file the derivation reads), for the 404 to say so. */
@@ -11,8 +11,16 @@ import { unitsFor } from '$lib/server/units';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders, cookies, request, url, getClientAddress }) => {
+  // An address in capitals is the same species: `/species/Copiapoa-cinerea` said Kew did not accept the name (round
+  // fifty-eight). Moved for good, since the lowercase address is the only one the reference has.
+  if (params.slug !== params.slug.toLowerCase()) redirect(301, `/species/${params.slug.toLowerCase()}${url.search}`);
   const key = await resolveSlug(platform, fetch, params.slug);
   if (!key) {
+    // A genus alone is its row in the catalogue, opened (round fifty-eight): `/species/copiapoa` was a dead end.
+    if (/^[a-z]+$/.test(params.slug)) {
+      const g = params.slug[0].toUpperCase() + params.slug.slice(1);
+      if (indexMaps(await getIndex(platform, fetch)).byGenus.get(g)?.length) redirect(302, `/?by=genus&open=${slugify(g)}`);
+    }
     // An old name: the index's own synonym lists first (no request), then the backbone is asked whether it is a synonym,
     // and the page moves to the accepted species when the reference holds it, saying so; otherwise the 404 says what the
     // name is now (round thirty, R2-8; round thirty-two, 2). The move is temporary (a 302, cached for the day the
@@ -36,7 +44,11 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
     const asked = nameFromSlug(params.slug);
     const genus = asked.split(' ')[0] ?? '';
     const index = await getIndex(platform, fetch);
-    const species = genus ? { name: asked, genus, inGenus: indexMaps(index).byGenus.get(genus)?.length ?? 0, wholeGenus: WHOLE_GENERA.has(genus), ...(syn ? { accepted: syn.acceptedName } : {}) } : undefined;
+    // And the reference's own nearest names, by the catalogue's search (the slips it forgives), so a misspelt address
+    // offers the page it meant (round fifty-eight). Only from the postings: a miss of them is no suggestion, never a whole-index pass.
+    const found = asked ? await searchAnswer(platform, fetch, asked, 3, async () => new Response(null, { status: 429 })).catch(() => null) : null;
+    const suggest = found && 'hits' in found ? found.hits.filter((e) => e.slug !== params.slug).map((e) => ({ slug: e.slug, name: e.name })) : [];
+    const species = genus ? { name: asked, genus, inGenus: indexMaps(index).byGenus.get(genus)?.length ?? 0, wholeGenus: WHOLE_GENERA.has(genus), ...(syn ? { accepted: syn.acceptedName } : {}), suggest } : undefined;
     if (syn) error(404, { message: `${syn.matched} is ${syn.acceptedName} in the GBIF backbone, and that species is not in the reference`, species });
     error(404, { message: `No dossier for “${params.slug}”`, species });
   }

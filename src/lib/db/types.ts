@@ -47,6 +47,8 @@ export interface Accession {
   sowingId?: string | null;
   /** The photo shown as this plant's face; the newest photo when unset. */
   cover?: string | null;
+  /** This plant's own watering rhythm, in days, over its place's (round fifty-eight); null follows the place. */
+  waterDays?: number | null;
 }
 
 /**
@@ -215,6 +217,10 @@ export interface Location {
   lat?: number | null;
   lon?: number | null;
   altM?: number | null;
+  /** Water about every this many days (round fifty-eight): what "due" means for plants here; inherited when null, 21 when nothing sets it. */
+  waterDays?: number | null;
+  /** Months (1 to 12) the plants here are kept dry on purpose: not due then. Inherited when null; an empty list sets none. */
+  dryMonths?: number[] | null;
   notes?: string | null;
   sort?: number | null;
 }

@@ -8,7 +8,8 @@
   import { prefs } from '$lib/ui/prefs.svelte';
   import { toast } from '$lib/ui/toast.svelte';
   let { compact = false, center = false, link = false, what = 'the reference’s photographs of your species', buckets = false }: { compact?: boolean; center?: boolean; link?: boolean; what?: string; buckets?: boolean } = $props();
-  const why = $derived(`They come straight from the image host (iNaturalist or the GBIF image cache), which then sees which species you grow. ${buckets ? 'This site is asked for the hash buckets of your species, as the plant pages ask; nothing more.' : 'Nothing is sent to Cultifolio.'}`);
+  // "hash groups", not "hash buckets": the glossary's plain words (round fifty-eight; the accessibility review).
+  const why = $derived(`They come straight from the image host (iNaturalist, Wikimedia Commons or the GBIF image cache), which then sees which species you grow. ${buckets ? 'This site is asked for the hash groups your species fall in, a few hundred species each, as the plant pages ask; nothing more.' : 'Nothing is sent to Cultifolio.'}`);
   function on() {
     prefs.set({ referencePhotos: true });
     toast.show('Reference photographs on. Off again in Settings.');
@@ -29,11 +30,11 @@
 {/if}
 
 <style>
-  .rpo { font-family: var(--ui); font-size: 12.5px; color: var(--ink3); display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
-  .go { border: 0; background: none; padding: 4px 0; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--accent); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; white-space: nowrap; min-height: 24px; }
+  .rpo { font-family: var(--ui); font-size: var(--fs-md); color: var(--ink3); display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+  .go { border: 0; background: none; padding: 4px 0; font: inherit; font-size: var(--fs-md); font-weight: 600; color: var(--accent); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; white-space: nowrap; min-height: 24px; }
   .go:hover { color: var(--ink); }
   .rpo .why { max-width: 56ch; line-height: 1.4; }
-  .rpo.compact { font-size: 12px; }
+  .rpo.compact { font-size: var(--fs-sm); }
   .rpo.compact .why { max-width: none; }
   .rpo.center { flex-direction: column; align-items: center; gap: 4px; text-align: center; font-family: var(--ui); }
   .rpo.center .why { max-width: 48ch; }

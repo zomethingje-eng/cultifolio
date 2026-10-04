@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { STATUS } from '$lib/sync/limits';
 import type { RequestHandler } from './$types';
-import { store, vaultId, vaultIdFor, ensureVault, authed, readMeta, recount, vaultBytes, allowCreation, refundCreation, creationCeilings, clientIp, limited, readBody } from '$lib/server/sync';
+import { store, vaultId, vaultIdFor, ensureVault, authed, readMeta, recount, vaultBytes, allowCreation, refundCreation, creationCeilings, clientIp, limited, readBody, quotaOf } from '$lib/server/sync';
 
 /** The most a creation body may be: its three fields are under two hundred bytes. */
 const MAX_VAULT_BODY = 1024;
@@ -15,6 +15,9 @@ export const POST: RequestHandler = async ({ request, platform, getClientAddress
   const r2 = store(platform);
   const stop = await limited(platform, getClientAddress, 'sync');
   if (stop) return stop;
+  // JSON only: a body of another type is what a page on another site can send without asking first (round fifty-eight;
+  // the server review). The hook refuses a write that names another site; this refuses one that names none.
+  if (!/^application\/json\s*(;|$)/i.test(request.headers.get('content-type') ?? '')) return json({ error: 'the body must be application/json' }, { status: 415, headers: { 'cache-control': 'no-store' } });
   // A body that is valid JSON but not an object (`null`, a number) is treated like no body: a 400 below, never a 500 (round sixteen, 16).
   // Read through the capped reader, not `request.json()`: this is the one route with no token to check first, and it read
   // whatever a stranger streamed, up to the platform's limit, before judging it (round thirty-eight, R1-4). A creation body is a
@@ -59,7 +62,7 @@ export const POST: RequestHandler = async ({ request, platform, getClientAddress
   if (!existing && !created) await refundCreation(platform?.env?.COUNTERS, clientIp(getClientAddress), now);
   // A (re)join is the moment the slow, authoritative listing puts the live counter right.
   const kv = platform?.env?.QUEUE;
-  const bytes = created ? 0 : kv ? await vaultBytes(r2, kv, id, meta, Date.now(), true) : await recount(r2, id, meta);
+  const bytes = created ? 0 : kv ? await vaultBytes(r2, kv, id, meta, Date.now(), true, quotaOf(platform, getClientAddress)) : await recount(r2, id, meta);
   return json({ created, entitlement: meta.entitlement, bytes });
 };
 
@@ -71,6 +74,6 @@ export const GET: RequestHandler = async ({ request, url, platform, getClientAdd
   const id = vaultId(url.searchParams.get('vault'));
   const meta = await authed(r2, id, request);
   const kv = platform?.env?.QUEUE;
-  const bytes = kv ? await vaultBytes(r2, kv, id, meta) : meta.bytes;
+  const bytes = kv ? await vaultBytes(r2, kv, id, meta, Date.now(), false, quotaOf(platform, getClientAddress)) : meta.bytes;
   return json({ entitlement: meta.entitlement, bytes, created: meta.created });
 };

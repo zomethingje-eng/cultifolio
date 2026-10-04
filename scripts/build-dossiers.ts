@@ -62,7 +62,7 @@ import { dossierPath, DOSSIER_V, parseDossier, unchain } from '../src/lib/dossie
 import { sheetOf, type Sheet } from '../src/lib/dossier/sheet';
 import { bucketOf } from '../src/lib/core/bucket';
 import { buildProducts } from '../src/lib/dossier/products';
-import { productPath, isFileHash, type Manifest } from '../src/lib/dossier/manifest';
+import { productPath, isFileHash, isManifest, type Manifest } from '../src/lib/dossier/manifest';
 import { welwitschia, copiapoa, refused } from '../fixtures/upstream';
 import { makeClimateProvider, type PowerCache } from '../src/lib/climate/provider';
 import { fileGridSource } from './file-grid';
@@ -528,6 +528,31 @@ function writeProducts(index: IndexEntry[], idxDir: string, indexText: string, s
   return manifest;
 }
 
+/**
+ * `--keep-list <live manifest>`: the product files the bucket must keep, as rclone filter lines, from the manifest the
+ * bucket serves now (`rclone cat r2:cultifolio/s/v2/manifest.json > live-manifest.json`), never from this checkout's
+ * build history: a prune from a second checkout, or after two refreshes in a day, deleted files the live manifest named
+ * (round fifty-eight; the first review). DEPLOY.md section 5 pairs it with `rclone delete --min-age 24h`, so nothing
+ * uploaded in the last day goes either, whatever manifest names it.
+ */
+function keepList(): void {
+  const at = args.indexOf('--keep-list');
+  const file = args[at + 1];
+  if (!file || file.startsWith('--') || !existsSync(file)) {
+    console.error('usage: npm run dossier -- --keep-list <the live manifest, from rclone cat>');
+    process.exit(2);
+  }
+  let live: unknown;
+  try { live = JSON.parse(readFileSync(file, 'utf8').replace(/^\uFEFF/, '')); } catch { live = null; }
+  if (!isManifest(live)) {
+    console.error(`${file} is not a manifest the Worker would accept: nothing is listed, and nothing should be deleted`);
+    process.exit(2);
+  }
+  const keep = [...new Set(Object.values(live.files))].sort().map((h) => `/${h}.json`);
+  writeFileSync('keep.txt', keep.join('\n') + '\n');
+  console.log(`  keep.txt: the ${keep.length} files manifest ${live.id} names (${live.species} species); pass it to rclone delete as --exclude-from`);
+}
+
 /** The index is derived from the files; after a fill the thumbnails have changed, so it is written again. */
 function writeIndexFromDisk(): void {
   const index = uniqueSlugs(scanDossiers().sort((a, b) => a.name.localeCompare(b.name)));
@@ -554,6 +579,7 @@ async function main() {
   if (args.includes('--prune-followed')) return pruneFollowed();
   if (args.includes('--prune-uncredited')) return pruneUncredited();
   if (args.includes('--index')) return writeIndexFromDisk();
+  if (args.includes('--keep-list')) return keepList();
   if (fill === 'openalex') return fillLiterature();
   if (fill === 'inat') return fillPhotos();
   if (fill === 'gbif') return fillGbifPhotos();

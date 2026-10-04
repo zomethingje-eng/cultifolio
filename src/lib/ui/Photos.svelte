@@ -46,24 +46,24 @@
 {:else}
   <div class="empty card">
     <p class="k">No openly licensed photograph yet</p>
-    <p class="muted">Photographs shown here must be CC0, CC BY or CC BY-SA so they can be shown to everyone. If you grow this plant, add your own photo to your record and offer it to the gallery.</p>
+    <p class="muted">Photographs shown here must be CC0, CC BY or CC BY-SA so they can be shown to everyone. A photograph you add to your own plant stays on your device and in your sync; it is never shown here.</p>
   </div>
 {/if}
 
 <style>
   /* A thumbnail the host did not serve: a word in its square, not the browser's broken-image icon (round fifty-two, 6). */
-  .ph .nope { display: none; position: absolute; inset: 0; align-items: center; justify-content: center; font-family: var(--mono); font-size: 10px; color: var(--ink3); text-align: center; padding: 4px; }
+  .ph .nope { display: none; position: absolute; inset: 0; align-items: center; justify-content: center; font-family: var(--mono); font-size: var(--fs-xs); color: var(--ink3); text-align: center; padding: 4px; }
   .ph:global(.failed) img { visibility: hidden; }
   .ph:global(.failed) .nope { display: flex; }
   .hero { margin: 0 0 0.6rem; overflow: hidden; }
   .hero img { width: 100%; max-height: 440px; object-fit: cover; }
   .hero figcaption { padding: 0.45rem 0.8rem; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 9px; margin-top: 12px; }
-  .ph { position: relative; display: block; border-radius: 8px; overflow: hidden; background: var(--sunk); }
+  .ph { position: relative; display: block; border-radius: var(--r); overflow: hidden; background: var(--sunk); }
   .ph img { width: 100%; aspect-ratio: 1; object-fit: cover; }
-  .ph .tag { position: absolute; left: 0.35rem; bottom: 0.35rem; font-family: var(--mono); font-size: 10px; padding: 0.1em 0.45em; border-radius: 999px; background: rgba(0, 0, 0, 0.55); color: #fff; }
-  .credits { font-size: 12px; margin: 0.45rem 0 0; line-height: 1.4; }
+  .ph .tag { position: absolute; left: 0.35rem; bottom: 0.35rem; font-family: var(--mono); font-size: var(--fs-xs); padding: 0.1em 0.45em; border-radius: 999px; background: rgba(0, 0, 0, 0.55); color: #fff; }
+  .credits { font-size: var(--fs-sm); margin: 0.45rem 0 0; line-height: 1.4; }
   .linkish { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font-size: inherit; }
   .empty { padding: 1rem 1.2rem; }
-  .small { font-size: 13px; }
+  .small { font-size: var(--fs-md); }
 </style>

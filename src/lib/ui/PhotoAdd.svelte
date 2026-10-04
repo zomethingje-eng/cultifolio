@@ -63,10 +63,10 @@
   label.btn { position: relative; cursor: pointer; }
   label.btn:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
   label.btn:has(input:disabled) { opacity: 0.6; cursor: wait; }
-  .ok { color: var(--accent); font-weight: 600; font-size: 13px; }
-  .err { color: var(--bad, #b3261e); font-size: 13px; }
+  .ok { color: var(--accent); font-weight: 600; font-size: var(--fs-md); }
+  .err { color: var(--bad, #b3261e); font-size: var(--fs-md); }
   .small { flex-basis: 100%; }
-  .tile { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; width: var(--tile, 96px); height: var(--tile, 96px); flex: 0 0 var(--tile, 96px); border-radius: 12px; border: 1.5px dashed var(--line); background: var(--sunk); color: var(--ink3); font-family: var(--ui); font-size: 11.5px; font-weight: 600; cursor: pointer; text-align: center; }
+  .tile { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; width: var(--tile, 96px); height: var(--tile, 96px); flex: 0 0 var(--tile, 96px); border-radius: var(--r-lg); border: 1.5px dashed var(--line); background: var(--sunk); color: var(--ink3); font-family: var(--ui); font-size: var(--fs-sm); font-weight: 600; cursor: pointer; text-align: center; }
   .tile input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
   .tile:hover { color: var(--accent); border-color: var(--accent); }
   .tile:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }

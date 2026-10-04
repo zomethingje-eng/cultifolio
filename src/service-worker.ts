@@ -151,14 +151,16 @@ self.addEventListener('fetch', (e) => {
       // asks the server nothing more about them, online or off, and a corpus refresh (an upload, no deploy) is a new URL (round twelve, 7).
       if (url.pathname.startsWith('/api/dossier/') || url.pathname.startsWith('/api/entries') || url.pathname.startsWith('/api/sheets')) {
         const corpusCache = await caches.open(CORPUS_CACHE);
-        const hit = (await corpusCache.match(request)) ?? (await cache.match(request));
+        const hit = url.searchParams.get('c') ? ((await corpusCache.match(request)) ?? (await cache.match(request))) : undefined;
         if (hit) return hit;
         try {
           const r = await fetch(request);
           // A `no-store` answer is the server declining to vouch for it (a sheet or entries bucket asked for under a corpus id
           // that is not the current one): kept out of here too, or a device would hold it until the next deploy (round sixteen, 12).
-          if (r.ok && r.type === 'basic' && !/no-store/.test(r.headers.get('cache-control') ?? '')) {
-            const c = url.searchParams.get('c') ?? '';
+          // And only an answer asked for under a corpus id: one without (a dossier fetched by its bare address) was kept
+          // under no id, never pruned, and served for good after a refresh (round fifty-eight).
+          const c = url.searchParams.get('c') ?? '';
+          if (c && r.ok && r.type === 'basic' && !/no-store/.test(r.headers.get('cache-control') ?? '')) {
             e.waitUntil((async () => {
               // The first answer under a corpus id in this worker's life drops the answers under any other: they are a different URL and would never be asked for again.
               if (c && !prunedTo.has(c)) { prunedTo.add(c); for (const k of await corpusCache.keys()) if (new URL(k.url).searchParams.get('c') !== c) await corpusCache.delete(k); }

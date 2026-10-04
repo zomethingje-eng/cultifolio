@@ -36,7 +36,7 @@
  * what records mention that we lack.
  */
 import { collection } from '$lib/db/collection.svelte';
-import { StoppedError, getMeta, setMeta, setMetaIfKey, getPhotoBlobs, putPhotoBlobs, deletePhotoBlobs, photoBlobIds, outboxKeys, outboxAck, outboxFill, outboxClear, changesByKeys, allChanges, appendChanges, onOtherTabWrite, announceSyncForgotten } from '$lib/db/vault';
+import { StoppedError, getMeta, setMeta, setMetaIfKey, getPhotoBlobs, putPhotoBlobs, deletePhotoBlobs, photoBlobIds, outboxKeys, outboxAck, outboxFill, outboxClear, changesByKeys, appendChanges, onOtherTabWrite, announceSyncForgotten } from '$lib/db/vault';
 import { deriveKeys, sealJson, openJson, seal, open, packPhoto, unpackPhoto, parseVaultKey, batchFingerprint, dropProof, sha256hex, type VaultKeys } from './crypto';
 import { MAX_BATCH_BYTES, MAX_PHOTO_BYTES, SEAL_OVERHEAD, OVERLAP_MS, CURSOR_SLACK_MS, PUSH_HEADERS, PHOTO_DROP_HEADER, batchName, listAfter, logBatch } from './limits';
 import { readChanges, isHeld, isParked, dueAt, hlcWall, type Change } from '$core/log';
@@ -124,7 +124,7 @@ class Sync {
   runs = $state(0);
   pending = $state(0);
   /** Batches on the server this device could not read; the sync page says so. */
-  quarantined = $state<Array<{ key: string; error: string; at: string }>>([]);
+  quarantined = $state<Array<{ key: string; error: string; at: string; kind?: 'batch' | 'photo' }>>([]);
   /** What the server refused from this device. */
   refused = $state<Array<{ key: string; error: string; at: string }>>([]);
   /** A listing dated past this clock plus the slack: said on the sync page, not kept (round thirty-eight, R1-5). */
@@ -142,25 +142,26 @@ class Sync {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private unhook: (() => void) | null = null;
   private listening = false;
+  private clockHooked = false;
   private base = '';
 
   /** Read the stored key, if any, and start listening for local changes. Safe to call more than once. */
   async init(base = ''): Promise<void> {
     this.base = base;
     if (this.meta) return;
-    // Another tab's correction (a `storage` event) re-judges this tab's holds too (round fifty-two, 1).
-    onClockOffsetChange(() => { void collection.rebuild().then(() => this.scanClock()).catch(() => {}); });
+    // Another tab's correction (a `storage` event) re-judges this tab's holds too (round fifty-two, 1). Once per engine:
+    // each init before a vault was set up (the layout, then the sync page) added another (round fifty-eight).
+    if (!this.clockHooked) {
+      this.clockHooked = true;
+      onClockOffsetChange(() => { void collection.rebuild().then(() => this.scanClock()).catch(() => {}); });
+    }
     this.wasIn = (await getMeta<{ vaultId: string; at: string; why: 'stopped' | 'replaced' }>(WAS)) ?? null;
-    const m = await getMeta<SyncMeta & { own?: string[]; cursor?: string; firstPushDone?: boolean }>(META);
-    if (m?.key) {
-      // Meta written by the HLC-cursor engine: carry the key, start the arrival cursor from zero (a re-list is idempotent).
-      if (!Array.isArray(m.have)) {
-        this.meta = { key: m.key, since: 0, have: m.own ?? [], photosPushed: m.photosPushed ?? [], lastSync: m.lastSync ?? null };
-        if (m.firstPushDone === false) await outboxFill();
-        await setMeta(META, this.meta);
-      } else this.meta = m;
+    const m = await getMeta<SyncMeta>(META);
+    if (m?.key && !this.meta) {
+      // The record as this build writes it (round fifty-seven: the conversion from the HLC-cursor engine's is gone).
+      this.meta = { ...m, have: Array.isArray(m.have) ? m.have : [], photosPushed: Array.isArray(m.photosPushed) ? m.photosPushed : [] };
       this.keys = await deriveKeys(m.key);
-      this.keysOf.set(this.meta!, this.keys); // the meta this engine holds, which the conversion branch just replaced (round eighteen, 12)
+      this.keysOf.set(this.meta, this.keys); // the meta this engine holds (round eighteen, 12)
       this.vaultId = this.keys.id;
       this.lastSync = m.lastSync;
       this.quarantined = this.meta.quarantined ?? [];
@@ -216,7 +217,7 @@ class Sync {
   /** First device: make (or adopt) a vault with this key, then push everything and pull. */
   async setup(vaultKey: string, mode: 'create' | 'join' = 'create'): Promise<void> {
     const key = parseVaultKey(vaultKey);
-    if (!key) throw new Error('That is not a vault key.');
+    if (!key) throw new Error('That is not a sync key.'); // the glossary's word, as the sync page says it (round fifty-eight; the accessibility review)
     const keys = await deriveKeys(key);
     const r = await fetch(`${this.base}/api/sync/vault`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: keys.id, token: keys.token, create: mode === 'create' }) });
     if (!r.ok) {
@@ -351,27 +352,20 @@ class Sync {
   }
 
   /**
-   * Once, from the whole log: which stored changes the fold is holding (a
-   * peer's, stamped too far ahead) and whether this device's own last stamp is
-   * ahead of its clock (the clock jumped back; its next edits will still be
-   * stamped ahead, and will win over later ones elsewhere until real time
-   * catches up).
+   * Which stored changes the fold is holding (a peer's, stamped too far ahead) and whether this device's own last stamp is
+   * ahead of its clock (the clock jumped back; its next edits will still be stamped ahead, and will win over later ones
+   * elsewhere until real time catches up). Read from the fold, which holds both since round fifty-eight; it read the
+   * whole log on every open of a synced device, which undid what the snapshot saves (the client review).
    */
   private async scanClock(): Promise<void> {
     if (!this.meta) return;
     await collection.load();
-    const all = await allChanges();
     const hold = this.hold();
     const held = new Set(this.meta.held ?? []);
-    let ownLast = '';
-    for (const c of all) {
-      if (isParked(c.t, hold)) continue; // parked is neither held nor a sign the clock jumped back: it is a stamp from when the clock was wrong (round fifty-two, 1)
-      if (isHeld(c.t, hold)) held.add(c.t);
-      else if (hold.except && ownStamp(c.t, hold.except) && hlcCompare(c.t, ownLast) > 0) ownLast = c.t;
-    }
+    for (const t of collection.heldList()) if (!isParked(t, hold) && isHeld(t, hold)) held.add(t);
     this.meta.held = [...held];
     this.setHeld();
-    this.warnClock(ownLast);
+    this.warnClock(collection.ownLatest());
   }
 
   /** Changes this device just wrote or imported: a restore can carry a peer's ahead-stamped changes; its own stamps show whether its clock is behind. */
@@ -380,12 +374,13 @@ class Sync {
     const hold = this.hold();
     let ownLast = '';
     let added = false;
+    const followed = collection.heldWalls(); // an edit stamped just past a held change is not this clock running ahead (round fifty-eight)
     for (const c of changes) {
       if (isParked(c.t, hold)) continue;
       if (isHeld(c.t, hold)) {
         if (!this.meta.held?.includes(c.t)) (this.meta.held ??= []).push(c.t);
         added = true;
-      } else if (hold.except && ownStamp(c.t, hold.except) && hlcCompare(c.t, ownLast) > 0) ownLast = c.t;
+      } else if (hold.except && ownStamp(c.t, hold.except) && !followed.has(hlcWall(c.t)) && hlcCompare(c.t, ownLast) > 0) ownLast = c.t;
     }
     if (added) this.setHeld();
     this.warnClock(ownLast);
@@ -400,7 +395,7 @@ class Sync {
       // time while this device syncs, and the warning says so, since the device's own clock is what the grower sees (round forty-nine, 1).
       const off = clockOffsetMs();
       this.clockWarning = `This device's clock is ${spanWords(Math.abs(off))} ${off > 0 ? 'behind' : 'ahead of'} the server's; changes made here are stamped by the server's time until it is set right.`;
-    }
+    } else this.clockWarning = null; // neither holds now: a warning from an earlier reading is not left standing (round fifty-eight)
   }
 
   private setHeld(): void {
@@ -416,13 +411,33 @@ class Sync {
     const due = m.held.filter((t) => !isHeld(t, hold));
     if (!due.length) return;
     const changes = await changesByKeys(due);
-    if (changes.length) await collection.ingest(changes, 'server');
+    // No repair here: the numbers they touch wait for the end of the pull, which repairs once over everything folded (round fifty-eight).
+    if (changes.length) await collection.ingest(changes, 'server', { repair: false });
     m.held = m.held.filter((t) => !due.includes(t));
     this.setHeld();
     await this.save(m);
   }
 
+  /**
+   * One run at a time across this device's tabs (a Web Lock): two tabs each ran on its own copy of the sync record and
+   * wrote it back over the other's cursor and lists (round fifty-eight; the client review). A tab that finds a run in
+   * another tab leaves it to that one, which pushes and pulls for the whole device; the run that takes the lock starts
+   * from the record as stored, not the copy this tab read when it opened.
+   */
   async run(): Promise<void> {
+    if (!this.configured || !this.keys || !this.meta || this.busy) return;
+    const locks = typeof navigator !== 'undefined' ? (navigator as Navigator & { locks?: LockManager }).locks : undefined;
+    if (!locks) return this.runNow();
+    await locks.request('cultifolio-sync', { ifAvailable: true }, async (lock) => {
+      if (!lock) return;
+      const m = this.meta;
+      const stored = m ? await getMeta<SyncMeta>(META) : undefined;
+      if (m && stored && stored.key === m.key && this.meta === m) Object.assign(m, stored);
+      await this.runNow();
+    });
+  }
+
+  private async runNow(): Promise<void> {
     if (!this.configured || !this.keys || !this.meta || this.busy) return;
     // The generation this run belongs to: "Stop syncing" or a new vault during the run makes it stale, and a stale run
     // leaves the status, the busy flag and the run count to the vault that replaced it (round sixteen, 2).
@@ -450,6 +465,7 @@ class Sync {
       // noted by the pull are checked and sent in the same run, not the next (round fifty-two, 2).
       if (collection.unverifiedPhotos().length && !this.vaultFull) await this.push(m);
       m.lastSync = new Date().toISOString();
+      this.warnClock(collection.ownLatest()); // judged again after what the run folded
       this.offline = false;
       this.unreached = null;
       await this.save(m); // refuses, and throws, if this run is stale: the sync time below is then never shown for a vault this device has left (round twenty-one, 4)
@@ -657,13 +673,12 @@ class Sync {
     let changes: Change[] | null = null;
     const keys = this.k(m); // outside the try: a stale run stops here, and is never read as bad ciphertext (round eighteen, 4)
     try {
-      const batch = await openJson<{ v: number; device: string; changes: unknown }>(keys, 'log', bytes, key); // a batch sealed before names were bound opens under the unnamed data
+      const batch = await openJson<{ v: number; device: string; changes: unknown }>(keys, 'log', bytes, key); // opened under its own name only (round fifty-seven)
       if (!batch || typeof batch !== 'object' || batch.v !== 1) throw new Error('not a batch this version understands');
       const read = readChanges(batch.changes);
       // A batch with anything in it this build cannot read is set aside whole, under its name, for a later build to
       // read again: folding the rest and moving the cursor past it would lose the change on this device for good
-      // (round thirty, 1). Values are mended first (a number for text, an older importer's words), so only a value of
-      // a type its field never takes gets here.
+      // (round thirty, 1). Nothing is mended (round fifty-seven): a value of a type its field never takes gets here.
       if (read.dropped.length) throw new Error(read.dropped[0]);
       changes = read.changes;
     } catch (e) {
@@ -684,14 +699,17 @@ class Sync {
       await collection.markParked(parked);
       changes = changes.filter((c) => !isParked(c.t, hold));
     }
+    // Every change goes through the collection's own ingest, those stamped too far ahead of this clock too: the fold holds
+    // them as it does at load (into the log, not into the state, until the clock reaches them), and lists them as held, so
+    // the grower's next edit to that field is stamped past one within a day. Appended here on their own, as before round
+    // fifty-eight, they never reached the fold's held list, and that edit lost when they came due (the client review's
+    // finding 8). The engine keeps its own list of them, to fold each as it comes due.
     const ahead = changes.filter((c) => isHeld(c.t, hold));
+    if (changes.length) await collection.ingest(changes, 'server', { repair: false, requireKey: m.key });
     if (ahead.length) {
-      // Stamped too far ahead of this clock: into the log, not into the fold, until the clock reaches them.
-      await appendChanges(ahead, true, false, m.key);
       for (const c of ahead) if (!m.held?.includes(c.t)) (m.held ??= []).push(c.t);
       this.setHeld();
     }
-    if (ahead.length < changes.length) await collection.ingest(ahead.length ? changes.filter((c) => !isHeld(c.t, hold)) : changes, 'server', { repair: false, requireKey: m.key });
     return true;
   }
 
@@ -774,7 +792,7 @@ class Sync {
     // and the photo pull still happen; only a 429 stops the run, since that is the server asking for time.
     const isPhoto = (q: { kind?: string }) => q.kind === 'photo';
     for (const q of (m.quarantined ?? []).filter((q) => q.build !== BUILD && !isPhoto(q))) {
-      this.step(m, 'Reading a batch set aside by an earlier build…');
+      this.step(m, 'Reading again a batch an earlier version of the app could not read…'); // said plainly, not "set aside" by a "build" (round fifty-eight; the accessibility review)
       let ok: boolean;
       try {
         ok = await this.takeBatch(m, q.key, m.haveAt?.[q.key]);
@@ -795,7 +813,8 @@ class Sync {
       this.quarantined = [...(m.quarantined ?? [])];
       await this.save(m);
     }
-    // Duplicate numbers are repaired once, over the whole pull, so every device repairs from the same complete log (round twelve, 3).
+    // Duplicate numbers are repaired once, over the whole pull, so every device repairs from the same complete log (round
+    // twelve, 3); and only the numbers what folded touched, so a run that folded nothing writes nothing (round fifty-eight).
     await collection.repairNumbers();
     // Photos that records mention and we lack.
     const have = new Set(await photoBlobIds());

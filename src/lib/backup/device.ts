@@ -30,7 +30,7 @@ export function readDeviceSettings(): DeviceSettings {
   } catch {
     /* none */
   }
-  if (prefs.stored) out.prefs = { referencePhotos: prefs.current.referencePhotos }; // only a preference this device has actually set
+  if (prefs.stored) out.prefs = { referencePhotos: prefs.current.referencePhotos, ...(prefs.current.lengthUnits ? { lengthUnits: prefs.current.lengthUnits } : {}) }; // only a preference this device has actually set; the length units since round fifty-eight
   return out;
 }
 
@@ -89,9 +89,9 @@ export function applyDeviceSettings(d: DeviceSettings | null): string[] {
   } catch {
     /* none */
   }
-  const p = d.prefs as { referencePhotos?: unknown } | undefined;
+  const p = d.prefs as { referencePhotos?: unknown; lengthUnits?: unknown } | undefined;
   if (p && typeof p.referencePhotos === 'boolean' && !prefs.stored) {
-    prefs.set({ referencePhotos: p.referencePhotos });
+    prefs.set({ referencePhotos: p.referencePhotos, ...(p.lengthUnits === 'mm' || p.lengthUnits === 'in' ? { lengthUnits: p.lengthUnits } : {}) });
     applied.push('preferences');
   }
   return applied;

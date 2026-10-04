@@ -58,7 +58,7 @@ export interface Climograph {
     nightBand: string;
     zeroY: number | null;
     /**
-     * POWER extremes at the typical cell, as heights only: the record minimum and the 99th-percentile day carry no
+     * POWER extremes at a typical spot in the range, as heights only: the record minimum and the 99th-percentile day carry no
      * date, so they are drawn as marks at the right edge of the panel, never under a month.
      */
     minAbs: { y: number; label: string } | null;
@@ -183,7 +183,7 @@ export function climograph(c: ClimoInput, width = 720, units: Units = METRIC): C
       : `Mean day from ${temp(c.months[dayLo].tmax, units)} in ${MONTHS[dayLo]} to ${temp(c.months[warmest].tmax, units)} in ${MONTHS[warmest]}; mean night from ${temp(c.months[coldest].tmin, units)} in ${MONTHS[coldest]} to ${temp(c.months[nightHi].tmin, units)} in ${MONTHS[nightHi]}. The cold quarter, ${MONTHS[q0]} to ${MONTHS[(coldest + 1) % 12]}, is the three months around the coldest night. `) +
     (dry ? `${dryLabel(units)[0].toUpperCase()}${dryLabel(units).slice(1)} of rain.` : `${rainF(rainYear, units)} of rain a year, most in ${MONTHS[c.months.reduce((b, m, i) => (m.precipMm > c.months[b].precipMm ? i : b), 0)]}.`) +
     (hasBand ? ` The bands show the 10th to 90th percentile across ${c.cells} habitat cells.` : c.cells > 1 ? ` The ${c.cells} habitat cells agree to within rounding.` : '') +
-    (c.extremes ? ` Over ${c.extremes.years} years at the typical cell the absolute minimum was ${temp(c.extremes.minAbs, units, 1)} and the 99th-percentile day ${temp(c.extremes.maxP99, units, 1)}; neither is dated to a month.` : '') +
+    (c.extremes ? ` Over ${c.extremes.years} years at a typical spot in the range the absolute minimum was ${temp(c.extremes.minAbs, units, 1)} and the 99th-percentile day ${temp(c.extremes.maxP99, units, 1)}; neither is dated to a month.` : '') +
     (strip ? ` Beneath: ${has('dli') ? 'daily light integral' : ''}${has('dli') && has('rh') ? ' and ' : ''}${has('rh') ? 'relative humidity' : ''} through the year, each on its own scale.` : '');
 
   return {

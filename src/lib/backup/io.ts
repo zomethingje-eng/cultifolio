@@ -24,6 +24,7 @@ export async function prepareBackup(onProgress?: (done: number, total: number) =
     device: await getMeta<string>('device'),
     app: 'cultifolio 3',
     settings: readDeviceSettings(),
+    parked: collection.parkedStamps,
     onProgress,
     readPhoto: async (id) => {
       const b = await getPhotoBlobs(id);
@@ -119,6 +120,10 @@ export async function restoreBackup(o: Opened, mode: 'merge' | 'replace', onProg
       photos++;
       onProgress?.(i + 1, ids.length);
     }
+    // What the exporting device had parked is parked here too, before it can be folded (round fifty-eight).
+    const parked = new Set(o.file.manifest.parked ?? []);
+    const toPark = changes.filter((c) => parked.has(c.t));
+    if (toPark.length) await collection.markParked(toPark);
     await collection.ingest(changes);
   } catch (e) {
     // Only the pixels whose records did not land: the ingest is not one write (the changes, then the import-day stamps),

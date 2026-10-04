@@ -120,7 +120,7 @@
   };
 </script>
 
-<svelte:head><title>Backup — Cultifolio</title></svelte:head>
+<svelte:head><title>Backup · Cultifolio</title></svelte:head>
 
 <PageHead title="Backup" kick="My plants" places={false} sub="One file holds every record, every change and every photograph, and this device's settings (site, units, label choices), which a restore applies on a device that has none." count={collection.ready ? `${collection.accessions.length} plants · ${photoCount ?? '…'} photos` : undefined} />
 
@@ -189,20 +189,20 @@
   .linkish { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); text-decoration: underline; cursor: pointer; }
   .cult { margin-top: 12px; }
   .cult .body { padding: 14px 17px; font-family: var(--ui); }
-  .cult .body p { margin: 0 0 12px; color: var(--ink2); font-size: 14px; line-height: 1.5; }
+  .cult .body p { margin: 0 0 12px; color: var(--ink2); font-size: var(--fs-md); line-height: 1.5; }
   .row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
   .row input[type='file'] { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
   label.btn { position: relative; cursor: pointer; }
   label.btn:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .ok { color: var(--accent); font-size: 13.5px; }
-  .bad { color: var(--bad); font-size: 13.5px; }
+  .ok { color: var(--accent); font-size: var(--fs-md); }
+  .bad { color: var(--bad); font-size: var(--fs-md); }
   .faint { color: var(--ink3); }
   .warn { margin-top: 14px; border-left: 3px solid var(--warm); }
-  .warn .body { padding: 12px 16px; font-size: 14px; color: var(--ink2); font-family: var(--ui); }
+  .warn .body { padding: 12px 16px; font-size: var(--fs-md); color: var(--ink2); font-family: var(--ui); }
   .preview { border-top: 1px solid var(--rule); padding: 0 17px 14px; }
   .preview .factgrid { margin: 14px 0 12px; box-shadow: none; border: 1px solid var(--rule); grid-template-columns: 1fr 1fr; }
-  .preview .factgrid > div { font-size: 13.5px; font-family: var(--ui); }
+  .preview .factgrid > div { font-size: var(--fs-md); font-family: var(--ui); }
   .acts { gap: 8px; }
-  code { font-family: var(--mono); font-size: 12.5px; background: var(--sunk); padding: 1px 5px; border-radius: 4px; }
+  code { font-family: var(--mono); font-size: var(--fs-md); background: var(--sunk); padding: 1px 5px; border-radius: 4px; }
   @media (max-width: 640px) { .preview .factgrid { grid-template-columns: 1fr; } }
 </style>

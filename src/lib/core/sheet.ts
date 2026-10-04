@@ -8,7 +8,7 @@
  *
  * Inputs: the dossier's median year at the habitat (CHELSA, across the
  * envelope cells), optionally its 10th and 90th percentile years, the
- * extremes (NASA POWER at the typical cell), and the care archetype, which
+ * extremes (NASA POWER at a typical spot in the range), and the care archetype, which
  * supplies one figure: a conventional group minimum for the cold floor.
  */
 import { frostWording } from './extremes';
@@ -41,7 +41,7 @@ export interface SheetInput {
   annualP10?: number | null;
   annualP90?: number | null;
   family?: string | null;
-  /** The median year across the envelope cells. */
+  /** The median year across the grid cells of the range. */
   months?: Month[] | null;
   /** The 10th and 90th percentile years, when the dossier carries them: the range the species is recorded in. */
   p10?: Pick<Month, 'tmin' | 'dli'>[] | null;
@@ -71,6 +71,12 @@ export interface Row {
    * cards do not. Absent when the row is not worth a sentence in a summary.
    */
   short?: string;
+  /**
+   * The same sentence in a grower's words, fact first, and the rule and source it rests on apart, for the page to set in
+   * grey after it (round fifty-eight; the first-impression review). Written by the same rule at the same moment as `s`
+   * and `short`; a reading of the figures, never advice.
+   */
+  plain?: { lead: string; rule: string };
 }
 
 export interface Year {
@@ -199,7 +205,7 @@ const RAIN = (mm: number) => rain(mm, U);
 
 /** What the cold floor is: the quantity, the figure, and any raising by the archetype table, all in one sentence. */
 /** The floor a page shows, with its provenance: `habitat` is the measured night (null when none is on file), `floor` the figure the rule settles on, `raised` true when the archetype table's minimum was higher and took over. `hab` remains true whenever a habitat figure exists. */
-export interface ColdFloor { floor: number; habitat: number | null; raised: boolean; group: string | null; s: string; short: string; hab: boolean }
+export interface ColdFloor { floor: number; habitat: number | null; raised: boolean; group: string | null; s: string; short: string; hab: boolean; plain: { lead: string; rule: string } }
 export function coldFloor(m: Month[] | null, ex: Extremes | null, guess: ArchGuess | null, units: Units = U, exStatus?: SheetInput['extremesStatus']): ColdFloor | null {
   U = units;
   const minC = guess?.arch.minC ?? null;
@@ -208,7 +214,7 @@ export function coldFloor(m: Month[] | null, ex: Extremes | null, guess: ArchGue
   let quantityShort = '';
   if (ex) {
     floor = ex.minP01;
-    quantity = `the 1st-percentile night over ${ex.years} years at the typical cell (NASA POWER)`;
+    quantity = `the 1st-percentile night over ${ex.years} years at a typical spot in the range (NASA POWER)`;
     quantityShort = '1st-percentile habitat night, NASA POWER';
   } else if (m) {
     const i = m.reduce((b, x, j) => (x.tmin < m[b].tmin ? j : b), 0);
@@ -218,23 +224,23 @@ export function coldFloor(m: Month[] | null, ex: Extremes | null, guess: ArchGue
   }
   if (floor == null && minC == null) return null;
   if (floor == null) {
-    return { floor: minC!, habitat: null, raised: false, group: aLabel(guess!.arch.lab), s: `Cold floor: ${T(minC!)}, the archetype table's conventional minimum for ${aLabel(guess!.arch.lab)} (grouped by ${guess!.why}); no habitat figure is on file for this species.`, short: `Cold floor ${T(minC!)} (conventional for ${aLabel(guess!.arch.lab)}, archetype table).`, hab: false };
+    return { floor: minC!, habitat: null, raised: false, group: aLabel(guess!.arch.lab), s: `Cold floor: ${T(minC!)}, the archetype table's conventional minimum for ${aLabel(guess!.arch.lab)} (grouped by ${guess!.why}); no habitat figure is on file for this species.`, short: `Cold floor ${T(minC!)} (conventional for ${aLabel(guess!.arch.lab)}, archetype table).`, hab: false, plain: { lead: `Cold floor ${T(minC!)}, the conventional minimum for ${aLabel(guess!.arch.lab)}; no habitat figure on file.`, rule: 'archetype table' } };
   }
   if (minC != null && minC > floor) {
     // "habitat night" only for a night reading; a month's mean is named as the mean (round thirty-eight, R1 wording).
-    return { floor: minC, habitat: floor, raised: true, group: aLabel(guess!.arch.lab), s: `Cold floor: ${T(minC)}. The habitat figure, ${quantity}, is ${T1(floor)}; the archetype table's conventional minimum for ${aLabel(guess!.arch.lab)} (grouped by ${guess!.why}) is ${T(minC)}, which is higher, and the floor rule takes the higher.`, short: `Cold floor ${T(minC)} (archetype minimum for ${aLabel(guess!.arch.lab)}, above the ${T1(floor)} habitat ${ex ? 'night' : 'coldest mean night'}).`, hab: true };
+    return { floor: minC, habitat: floor, raised: true, group: aLabel(guess!.arch.lab), s: `Cold floor: ${T(minC)}. The habitat figure, ${quantity}, is ${T1(floor)}; the archetype table's conventional minimum for ${aLabel(guess!.arch.lab)} (grouped by ${guess!.why}) is ${T(minC)}, which is higher, and the floor rule takes the higher.`, short: `Cold floor ${T(minC)} (archetype minimum for ${aLabel(guess!.arch.lab)}, above the ${T1(floor)} habitat ${ex ? 'night' : 'coldest mean night'}).`, hab: true, plain: { lead: `Cold floor ${T(minC)}, the conventional minimum for ${aLabel(guess!.arch.lab)}; the habitat's ${ex ? 'cold nights reach' : 'coldest mean night is'} ${T1(floor)}.`, rule: `archetype table; ${ex ? 'NASA POWER' : 'CHELSA'}` } };
   }
   // A month's mean night is not a floor: it is the mean of a month's lows, above the nights a floor is read from. Headed
   // "Cold floor" over a sea notice that printed a colder figure, it told a grower the coast was safer than it is (round
   // thirty-seven, R1-2). It is named as what it is wherever it stands in.
-  if (!ex) return { floor, habitat: floor, raised: false, group: minC != null ? aLabel(guess!.arch.lab) : null, s: `Cold floor: none read. The nearest figure is ${T1(floor)}, ${quantity}; a month's mean night is warmer than the nights a floor is read from${minC != null ? `, and the archetype table's minimum for ${aLabel(guess!.arch.lab)}, ${T(minC)}, is lower still` : ''}.`, short: `Coldest mean night ${T1(floor)} (${quantityShort}).`, hab: true };
-  return { floor, habitat: floor, raised: false, group: minC != null ? aLabel(guess!.arch.lab) : null, s: `Cold floor: ${T1(floor)}, which is ${quantity}${minC != null ? `; the archetype table's minimum for ${aLabel(guess!.arch.lab)}, ${T(minC)}, is lower and does not raise it` : ''}.`, short: `Cold floor ${T1(floor)} (${quantityShort}).`, hab: true };
+  if (!ex) return { floor, habitat: floor, raised: false, group: minC != null ? aLabel(guess!.arch.lab) : null, s: `Cold floor: none read. The nearest figure is ${T1(floor)}, ${quantity}; a month's mean night is warmer than the nights a floor is read from${minC != null ? `, and the archetype table's minimum for ${aLabel(guess!.arch.lab)}, ${T(minC)}, is lower still` : ''}.`, short: `Coldest mean night ${T1(floor)} (${quantityShort}).`, hab: true, plain: { lead: `Coldest month's mean night ${T1(floor)}; no cold floor could be read.`, rule: 'CHELSA' } };
+  return { floor, habitat: floor, raised: false, group: minC != null ? aLabel(guess!.arch.lab) : null, s: `Cold floor: ${T1(floor)}, which is ${quantity}${minC != null ? `; the archetype table's minimum for ${aLabel(guess!.arch.lab)}, ${T(minC)}, is lower and does not raise it` : ''}.`, short: `Cold floor ${T1(floor)} (${quantityShort}).`, hab: true, plain: { lead: `Cold nights reach ${T1(floor)}: one night in a hundred is colder.`, rule: `NASA POWER, ${ex.years} years` } };
 }
 
 export function cultivationSheet(input: SheetInput): { rows: Row[]; arch: ArchGuess | null; year: Year | null; floor: ColdFloor | null } {
   U = input.units ?? METRIC;
   const rows: Row[] = [];
-  const add = (card: string, k: string, s: string, why: string, hab = false, short?: string) => rows.push({ card, k, s, why, hab, short });
+  const add = (card: string, k: string, s: string, why: string, hab = false, short?: string, plain?: Row['plain']) => rows.push({ card, k, s, why, hab, short, plain });
   const guess = archFor(input.scientific, input.family);
   let floorOut: ColdFloor | null = null;
   const m = input.months && input.months.length === 12 ? input.months : null;
@@ -243,7 +249,7 @@ export function cultivationSheet(input: SheetInput): { rows: Row[]; arch: ArchGu
   const ex = input.extremes ?? null;
   const year = m ? growingYear(m, input.lat) : null;
   const dlis = m ? m.map((x) => x.dli).filter((x): x is number => x != null) : [];
-  const ENV = 'median year across the envelope cells, CHELSA';
+  const ENV = 'median year across the grid cells of the range, CHELSA';
 
   /* ---- its year ---- */
   if (m && year) {
@@ -261,31 +267,40 @@ export function cultivationSheet(input: SheetInput): { rows: Row[]; arch: ArchGu
     const forYou = year.shiftable ? `${reader} in the ${readerSide} hemisphere` : `${at} at the habitat (not shifted)`;
     let s: string;
     let short: string;
+    let lead: string;
+    // The reader's months first, the habitat's once in brackets: one hemisphere per sentence (round fifty-eight).
+    const yours = year.shiftable ? `${reader}${reader !== at ? ` (${at} at the habitat)` : ''}` : `${at} (the habitat's months, not shifted)`;
     if (year.none) {
       s = `Rain at the habitat is ${RAIN(year.annualMm)} a year (${ENV}). Under ${ruleRain(120, U)} the rain rule reads no rainy season, and the growing-season rule infers nothing from it. The temperature curve moves ${DT(year.rangeT)} between the warmest and coldest month and the coolest six months are within a degree of the warmest six, so the temperature rule names no cooler half either.`;
       short = `Rain rule: no rainy season to read (${RAIN(year.annualMm)} a year); the temperature curve is flat (${DT(year.rangeT)} of range), so no cooler half is named.`;
+      lead = `Almost rainless (${RAIN(year.annualMm)} a year) and even in temperature: no season to read.`;
     } else if (year.fog) {
       s = `Rain at the habitat is ${RAIN(year.annualMm)} a year (${ENV}). Under ${ruleRain(120, U)} the rain rule reads no rainy season, and the growing-season rule infers nothing from it. The temperature rule reads the cooler six months as ${at}. ${hemi}`;
       short = `Rain rule: no rainy season to read (${RAIN(year.annualMm)} a year); the temperature rule's cooler six months are ${forYou}.`;
+      lead = `Almost rainless (${RAIN(year.annualMm)} a year), no wet season; the cooler half of the year is ${yours}.`;
     } else if (year.spread) {
       s = `The rain rule reads no season: 70% of the year's rain (${RAIN(year.wetMm)} of ${RAIN(year.annualMm)}) takes ${year.growMonths.length} months, ${at}. Mean temperature moves ${DT(year.rangeT)} between the warmest and coldest month. ${hemi}`;
       short = `Rain rule: no season, 70% of the rain takes ${year.growMonths.length} months (${forYou}).`;
+      lead = `Rain through the year, no wet season: ${RAIN(year.annualMm)} a year.`;
     } else if (year.flat) {
       s = `The rain rule reads a sharp season: 70% of the year's rain (${RAIN(year.wetMm)} of ${RAIN(year.annualMm)}) falls in ${at}. The temperature curve is flat, ${DT(year.rangeT)} between the warmest and coldest month, so the growing-season rule does not infer a growing season from it. ${hemi}`;
       short = `Rain rule: a sharp rainy season, ${forYou}; the temperature curve is flat (${DT(year.rangeT)} of range), so no growing season is inferred.`;
+      lead = `A sharp rainy season, ${yours}, in a year of even temperature.`;
     } else if (year.grow === 'even') {
       s = `The rain rule reads a rainy season with no name: 70% of the year's rain (${RAIN(year.wetMm)} of ${RAIN(year.annualMm)}) falls in ${at}, whose mean temperature, ${T1(year.wetT)}, is within ${U === 'us' ? 'a degree Fahrenheit (half a degree Celsius)' : 'half a degree'} of the year's, ${T1(year.meanT)}, so it is neither the cooler nor the warmer part of the year. ${hemi}`;
       short = `Rain rule: a rainy season, ${forYou}, at the year's mean temperature, so called neither winter nor summer.`;
+      lead = `A rainy season, ${yours}, neither the cool nor the warm half of the year.`;
     } else {
       s = `The rain rule reads a ${year.grow} growing season: 70% of the year's rain (${RAIN(year.wetMm)} of ${RAIN(year.annualMm)}) falls in ${at}, ${year.grow === 'winter' ? 'cooler' : 'warmer'} than the year (wet-season mean ${T1(year.wetT)} against a yearly mean of ${T1(year.meanT)}). ${hemi}`;
       short = `Rain rule: a ${year.grow} growing season, ${forYou}${year.shiftable ? ` (${at} at the habitat, ${home})` : ''}.`;
+      lead = `Wet ${year.grow === 'winter' ? 'winters' : 'summers'}: the rain comes ${yours}, read as a ${year.grow} growing season.`;
     }
-    add('Its year', 'Its year', s, `Read from the median year of CHELSA monthly rainfall and mean temperature across the envelope cells: the rain rule takes the smallest set of months carrying 70% of the rain and calls it winter when its mean is more than ${U === 'us' ? 'a degree Fahrenheit (0.5 °C)' : 'half a degree'} below the year's, summer when more than that above, and neither in between; the temperature rule, used only under ${ruleRain(120, U)}, names the cooler six months when they are at least ${U === 'us' ? '1.8 °F (1 °C)' : 'a degree'} cooler than the other six. Months are shifted for the other hemisphere only where the temperature curve gives a season to reverse. A reading of the curves, not an observation of the plant.`, true, short);
+    add('Seasons', 'Its year', s, `Read from the median year of CHELSA monthly rainfall and mean temperature across the grid cells of the range: the rain rule takes the smallest set of months carrying 70% of the rain and calls it winter when its mean is more than ${U === 'us' ? 'a degree Fahrenheit (0.5 °C)' : 'half a degree'} below the year's, summer when more than that above, and neither in between; the temperature rule, used only under ${ruleRain(120, U)}, names the cooler six months when they are at least ${U === 'us' ? '1.8 °F (1 °C)' : 'a degree'} cooler than the other six. Months are shifted for the other hemisphere only where the temperature curve gives a season to reverse. A reading of the curves, not an observation of the plant.`, true, short, { lead, rule: year.fog || year.none ? 'rain and temperature rules, CHELSA' : 'rain rule, CHELSA' });
 
     /* ---- rain ---- */
     const dry = m.filter((x) => x.precipMm < 5).length;
     const wetSpanText = year.fog ? '' : `, ${RAIN(year.wetMm)} of it ${at}`;
-    add('Rain', 'Rain', `${RAIN(year.annualMm)} a year at the habitat${wetSpanText}. Wettest month ${mon(year.wettest)} at ${RAIN(m[year.wettest - 1].precipMm)}, driest ${mon(year.driest)} at ${RAIN(m[year.driest - 1].precipMm)}${dry ? `; ${dry} month${dry === 1 ? '' : 's'} under ${ruleRain(5, U)}` : ''}${input.annualP10 != null && input.annualP90 != null && Math.round(input.annualP10) !== Math.round(input.annualP90) ? `. Across the envelope cells the year's total runs ${RAIN(input.annualP10)} to ${RAIN(input.annualP90)} (10th to 90th percentile of each cell's own year)` : ''} (${ENV}; habitat calendar, ${home} hemisphere).`, `CHELSA monthly precipitation, ${ENV.replace(', CHELSA', '')}. The rain that falls where the species is recorded; nothing about how the plant takes water.`, true, `Habitat rain ${RAIN(year.annualMm)} a year, wettest ${mon(year.wettest)} at ${RAIN(m[year.wettest - 1].precipMm)}, driest ${mon(year.driest)} at ${RAIN(m[year.driest - 1].precipMm)} (habitat calendar, ${home} hemisphere).`);
+    add('Rain', 'Rain', `${RAIN(year.annualMm)} a year at the habitat${wetSpanText}. Wettest month ${mon(year.wettest)} at ${RAIN(m[year.wettest - 1].precipMm)}, driest ${mon(year.driest)} at ${RAIN(m[year.driest - 1].precipMm)}${dry ? `; ${dry} month${dry === 1 ? '' : 's'} under ${ruleRain(5, U)}` : ''}${input.annualP10 != null && input.annualP90 != null && Math.round(input.annualP10) !== Math.round(input.annualP90) ? `. Across the grid cells of the range the year's total runs ${RAIN(input.annualP10)} to ${RAIN(input.annualP90)} (10th to 90th percentile of each cell's own year)` : ''} (${ENV}; habitat calendar, ${home} hemisphere).`, `CHELSA monthly precipitation, ${ENV.replace(', CHELSA', '')}. The rain that falls where the species is recorded; nothing about how the plant takes water.`, true, `Habitat rain ${RAIN(year.annualMm)} a year, wettest ${mon(year.wettest)} at ${RAIN(m[year.wettest - 1].precipMm)}, driest ${mon(year.driest)} at ${RAIN(m[year.driest - 1].precipMm)} (habitat calendar, ${home} hemisphere).`, { lead: `${RAIN(year.annualMm)} of rain a year${dry ? `, ${dry === 12 ? 'every month' : `${dry} month${dry === 1 ? '' : 's'}`} almost dry (under ${ruleRain(5, U)})` : ''}.`, rule: 'CHELSA' });
   }
 
   /* ---- light ---- */
@@ -296,7 +311,7 @@ export function cultivationSheet(input: SheetInput): { rows: Row[]; arch: ArchGu
     const rlo = lo10.length ? Math.round(Math.min(...lo10)) : lo, rhi = hi90.length ? Math.round(Math.max(...hi90)) : hi;
     // The cells' spread, stated as what it is: the lowest 10th-percentile month to the highest 90th-percentile month. Omitted when it adds nothing.
     const range = lo10.length && hi90.length && (rlo !== lo || rhi !== hi) ? `; the lowest 10th-percentile month across the cells is ${rlo}, the highest 90th-percentile month ${rhi}` : '';
-    add('Light', 'Light', `Open sky over the habitat: ${lo} to ${hi} mol/m²/day across the year (daily light integral, ${ENV}${range}).`, 'CHELSA shortwave radiation at each envelope cell, a daily-mean flux taken to a daily total and converted at 2.07 mol of PAR per MJ. The sky over the habitat, measured; what reaches a plant under a rock, a shrub or a shade cloth is not.', true, `Open sky over the habitat: ${lo} to ${hi} mol/m²/day.`);
+    add('Light', 'Light', `Open sky over the habitat: ${lo} to ${hi} mol/m²/day across the year (daily light integral, ${ENV}${range}).`, 'CHELSA shortwave radiation at each envelope cell, a daily-mean flux taken to a daily total and converted at 2.07 mol of PAR per MJ. The sky over the habitat, measured; what reaches a plant under a rock, a shrub or a shade cloth is not.', true, `Open sky over the habitat: ${lo} to ${hi} mol/m²/day.`, { lead: `Open-sky light of ${lo} to ${hi} DLI across the year.`, rule: 'CHELSA shortwave' });
   }
 
   /* ---- warmth ---- */
@@ -306,23 +321,23 @@ export function cultivationSheet(input: SheetInput): { rows: Row[]; arch: ArchGu
     const bits: string[] = [];
     if (ex) {
       const frost = frostWording(ex);
-      bits.push(`Coldest: the 1st-percentile night over ${ex.years} years at the typical cell is ${T1(ex.minP01)}, the absolute minimum ${T1(ex.minAbs)}, ${frost} (NASA POWER daily minima). Warmest: the 99th-percentile day is ${T1(ex.maxP99)}.`);
+      bits.push(`Coldest: the 1st-percentile night over ${ex.years} years at a typical spot in the range is ${T1(ex.minP01)}, the absolute minimum ${T1(ex.minAbs)}, ${frost} (NASA POWER daily minima). Warmest: the 99th-percentile day is ${T1(ex.maxP99)}.`);
     }
-    const spread10 = p10 && p90 ? ` (across the envelope cells ${T1(p10[coldI].tmin)} to ${T1(p90[coldI].tmin)})` : '';
+    const spread10 = p10 && p90 ? ` (across the grid cells of the range ${T1(p10[coldI].tmin)} to ${T1(p90[coldI].tmin)})` : '';
     bits.push(`Monthly means: coldest night ${T1(m[coldI].tmin)} in ${mon(coldI + 1)}${spread10}, warmest day ${T1(m[hotI].tmax)} in ${mon(hotI + 1)} (${ENV}).`);
     floorOut = coldFloor(m, ex, guess, U, input.extremesStatus);
     const floor = floorOut;
     if (floor) bits.push(floor.s);
-    add('Warmth and air', 'Temperature', bits.join(' '), `${ex ? `NASA POWER daily minima and maxima 1981–2024 at the typical cell${ex.lapseAppliedM ? ', lapse-corrected to its elevation' : ', without lapse correction'}; ` : ''}CHELSA monthly means, ${ENV}. ${ex || floor?.raised ? `The cold floor is the figure named in its sentence${guess?.arch.minC != null ? `, and the archetype table's group minimum where that is higher` : ''}.` : 'No cold floor is read without a daily extremes series; the mean night named in its sentence is not one.'} Not a measured survival limit for any plant in a pot.`, true, floor?.short);
+    add('Warmth and air', 'Temperature', bits.join(' '), `${ex ? `NASA POWER daily minima and maxima 1981–2024 at a typical spot in the range${ex.lapseAppliedM ? ', lapse-corrected to its elevation' : ', without lapse correction'}; ` : ''}CHELSA monthly means, ${ENV}. ${ex || floor?.raised ? `The cold floor is the figure named in its sentence${guess?.arch.minC != null ? `, and the archetype table's group minimum where that is higher` : ''}.` : 'No cold floor is read without a daily extremes series; the mean night named in its sentence is not one.'} Not a measured survival limit for any plant in a pot.`, true, floor?.short, floor?.plain);
     const rhs = m.map((x) => x.rh).filter((x): x is number => x != null);
     if (rhs.length) add('Warmth and air', 'Humidity', `Relative humidity at the habitat: ${Math.round(Math.min(...rhs)) === Math.round(Math.max(...rhs)) ? `${Math.round(Math.min(...rhs))}% all year` : `${Math.round(Math.min(...rhs))} to ${Math.round(Math.max(...rhs))}% across the year`} (monthly means, ${ENV}). A figure about the air, saying nothing about how the plant takes water.`, `CHELSA relative humidity, ${ENV.replace(', CHELSA', '')}.`, true);
   } else {
     floorOut = coldFloor(null, ex, guess);
     const floor = floorOut;
-    if (floor) add('Warmth and air', 'Temperature', floor.s, `The archetype table's conventional minimum for the group; no habitat figure is on file for this species.`, false, floor.short);
+    if (floor) add('Warmth and air', 'Temperature', floor.s, `The archetype table's conventional minimum for the group; no habitat figure is on file for this species.`, false, floor.short, floor.plain);
   }
 
   return { rows, arch: guess, year, floor: floorOut };
 }
 
-export const CARD_ORDER = ['Its year', 'Rain', 'Light', 'Warmth and air'];
+export const CARD_ORDER = ['Seasons', 'Rain', 'Light', 'Warmth and air'];

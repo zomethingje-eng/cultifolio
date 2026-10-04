@@ -19,7 +19,7 @@ npm test                             # unit tests (vitest)
 npm run e2e                          # Playwright, against the preview server
 ```
 
-Out of the box the app serves a three-species fixture corpus (`fixtures/dossiers/`), enough to run everything and to test with no network. A real corpus is built on your own machine from a names list:
+Out of the box the app serves a four-species fixture corpus (`fixtures/dossiers/`), enough to run everything and to test with no network. A real corpus is built on your own machine from a names list:
 
 ```
 npm run dossier -- names.txt --grid climate

@@ -20,6 +20,8 @@ export const span3 = (ms: number[]) => runs(ms, 'short');
 
 export interface Condensed {
   text: string;
+  /** The same, line by line in a grower's words: the fact, then the rule and source it rests on (round fifty-eight). */
+  items: Array<{ lead: string; rule: string }>;
   /** Rows the sentences came from, by key, in order. */
   from: string[];
   /** True when at least one sentence rests on this species' own habitat figures. */
@@ -41,14 +43,18 @@ export function generatedNote(input: SheetInput, o: NoteOpts = {}): Condensed | 
   const picked = rows.filter((r) => r.short).sort((a, b) => (order.indexOf(a.k) === -1 ? 99 : order.indexOf(a.k)) - (order.indexOf(b.k) === -1 ? 99 : order.indexOf(b.k)));
   const s: string[] = [];
   const from: string[] = [];
+  const items: Array<{ lead: string; rule: string }> = [];
   // Without a habitat climate the sentence says which kind of without: pending, not checked, or none derivable. Three different facts.
   const why = input.climateStatus === 'pending' ? 'the habitat climate is pending' : input.climateStatus === 'refused' ? 'the habitat climate was not checked (a source did not answer)' : 'no habitat climate could be derived for this species';
   if (arch) s.push(`Grouped as ${aLabel(arch.arch.lab)} by ${arch.why} (archetype table)${year ? '.' : `; ${why}.`}`);
+  if (arch) items.push({ lead: `${aLabel(arch.arch.lab)[0].toUpperCase()}${aLabel(arch.arch.lab).slice(1)}, by its ${arch.tier}.${year ? '' : ` ${why[0].toUpperCase()}${why.slice(1)}.`}`, rule: 'archetype table' });
+  else if (!year) items.push({ lead: `${why[0].toUpperCase()}${why.slice(1)}.`, rule: 'the dossier' });
   for (const r of picked) {
     s.push(r.short!);
     from.push(r.k);
+    items.push(r.plain ?? { lead: r.short!, rule: '' });
   }
-  return { text: s.join(' '), from, hab: rows.some((r) => r.hab) };
+  return { text: s.join(' '), items, from, hab: rows.some((r) => r.hab) };
 }
 
 /** One line for a label: the rain rule's season in the reader's hemisphere, the cold floor, the open-sky light. Empty when nothing is known. */

@@ -12,16 +12,17 @@ import type { Units } from '$core/units';
 export const FORECAST_TTL_MS = 30 * 60_000;
 const KEY = 'cultifolio.forecast';
 
-export type ForecastAnswer<T> = { ok: true; body: T } | { ok: false; status: number };
+/** `at`: when the answer was read from the server (ms), which a cached one is older than the moment it is asked for. */
+export type ForecastAnswer<T> = { ok: true; body: T; at: number } | { ok: false; status: number };
 
 type Entry = { at: number; body: unknown };
 
-function readCache(k: string): unknown | undefined {
+function readCache(k: string): Entry | undefined {
   if (!browser) return undefined;
   try {
     const all = JSON.parse(sessionStorage.getItem(KEY) ?? '{}') as Record<string, Entry>;
     const e = all[k];
-    return e && Date.now() - e.at < FORECAST_TTL_MS ? e.body : undefined;
+    return e && Date.now() - e.at < FORECAST_TTL_MS ? e : undefined;
   } catch {
     return undefined;
   }
@@ -60,12 +61,15 @@ async function fetchForecast<T = unknown>(lat: number, lon: number, units: Units
   const la = lat.toFixed(2), lo = lon.toFixed(2), alt = altM != null ? String(Math.round(altM / 10) * 10) : null;
   const k = `${la},${lo},${alt ?? ''},${units}`;
   const hit = readCache(k);
-  if (hit !== undefined) return { ok: true, body: clockTime(hit) as T };
-  const r = await fetch(`/api/forecast?lat=${la}&lon=${lo}${alt != null ? `&alt=${alt}` : ''}&units=${units}`);
+  if (hit !== undefined) return { ok: true, body: clockTime(hit.body) as T, at: hit.at };
+  // Ten seconds, then the check did not happen, which is said: a request that hung held the watch's one read for good
+  // and the line under the top bar said nothing (round fifty-eight; the client review).
+  const signal = typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal ? AbortSignal.timeout(10_000) : undefined;
+  const r = await fetch(`/api/forecast?lat=${la}&lon=${lo}${alt != null ? `&alt=${alt}` : ''}&units=${units}`, { signal });
   if (!r.ok) return { ok: false, status: r.status };
   const body = (await r.json()) as T;
   writeCache(k, body);
-  return { ok: true, body: clockTime(body) as T };
+  return { ok: true, body: clockTime(body) as T, at: Date.now() };
 }
 
 /* ---------- Clock time for the frost line ---------- */

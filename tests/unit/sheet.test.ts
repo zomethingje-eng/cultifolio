@@ -104,10 +104,10 @@ describe('the sheet', () => {
     expect(year.s).toContain("Months are the habitat's, southern hemisphere; shifted six months for a northern-hemisphere collection: November to February.");
     expect(year.hab).toBe(true);
     const light = rows.find((r) => r.k === 'Light')!;
-    expect(light.s).toBe('Open sky over the habitat: 20 to 58 mol/m²/day across the year (daily light integral, median year across the envelope cells, CHELSA).');
+    expect(light.s).toBe('Open sky over the habitat: 20 to 58 mol/m²/day across the year (daily light integral, median year across the grid cells of the range, CHELSA).');
     const temp = rows.find((r) => r.k === 'Temperature')!;
-    expect(temp.s).toContain('the 1st-percentile night over 44 years at the typical cell is 4.1 °C');
-    expect(temp.s).toContain('Cold floor: 4.1 °C, which is the 1st-percentile night over 44 years at the typical cell (NASA POWER).');
+    expect(temp.s).toContain('the 1st-percentile night over 44 years at a typical spot in the range is 4.1 °C');
+    expect(temp.s).toContain('Cold floor: 4.1 °C, which is the 1st-percentile night over 44 years at a typical spot in the range (NASA POWER).');
     // Without the extremes, the month's mean night stands in and is named as what it is, never headed as a floor: a mean of
     // lows is warmer than the nights a floor is read from (round thirty-seven, R1-2).
     for (const extremesStatus of ['sea', 'none', 'refused'] as const) {
@@ -125,11 +125,11 @@ describe('the sheet', () => {
     const p90 = namaqua.map((m) => ({ ...m, tmin: m.tmin + 2, dli: (m.dli ?? 0) + 5, precipMm: m.precipMm + 3 }));
     const { rows } = cultivationSheet({ scientific: 'Tylecodon pearsonii', family: 'Crassulaceae', months: namaqua, p10, p90, lat: -30, annualP10: 170, annualP90: 240 });
     expect(rows.find((r) => r.k === 'Light')!.s).toContain('the lowest 10th-percentile month across the cells is 15, the highest 90th-percentile month 63');
-    expect(rows.find((r) => r.k === 'Temperature')!.s).toContain('coldest night 6.0 °C in July (across the envelope cells 4.0 °C to 8.0 °C)');
+    expect(rows.find((r) => r.k === 'Temperature')!.s).toContain('coldest night 6.0 °C in July (across the grid cells of the range 4.0 °C to 8.0 °C)');
     // The annual range is the percentiles of per-cell years, carried in, never a sum of monthly percentiles.
-    expect(rows.find((r) => r.k === 'Rain')!.s).toContain("Across the envelope cells the year's total runs 170 mm to 240 mm (10th to 90th percentile of each cell's own year)");
+    expect(rows.find((r) => r.k === 'Rain')!.s).toContain("Across the grid cells of the range the year's total runs 170 mm to 240 mm (10th to 90th percentile of each cell's own year)");
     const noAnnual = cultivationSheet({ scientific: 'Tylecodon pearsonii', family: 'Crassulaceae', months: namaqua, p10, p90, lat: -30 });
-    expect(noAnnual.rows.find((r) => r.k === 'Rain')!.s).not.toContain('Across the envelope cells');
+    expect(noAnnual.rows.find((r) => r.k === 'Rain')!.s).not.toContain('Across the grid cells of the range');
   });
   it('the cold floor names its quantity, and a raising by the archetype table is in the same sentence', () => {
     const ex = { minAbs: 1.2, minP01: 4.1, maxP99: 38, frostDaysPerYear: 0, years: 44 };
@@ -137,7 +137,7 @@ describe('the sheet', () => {
     const fl = coldFloor(namaqua, ex, archFor('Monstera deliciosa', 'Araceae'))!;
     expect(fl.floor).toBe(12);
     expect(fl).toMatchObject({ habitat: 4.1, raised: true, group: 'a tropical foliage plant' });
-    expect(fl.s).toBe("Cold floor: 12 °C. The habitat figure, the 1st-percentile night over 44 years at the typical cell (NASA POWER), is 4.1 °C; the archetype table's conventional minimum for a tropical foliage plant (grouped by the genus Monstera, which is reliably one kind of plant) is 12 °C, which is higher, and the floor rule takes the higher.");
+    expect(fl.s).toBe("Cold floor: 12 °C. The habitat figure, the 1st-percentile night over 44 years at a typical spot in the range (NASA POWER), is 4.1 °C; the archetype table's conventional minimum for a tropical foliage plant (grouped by the genus Monstera, which is reliably one kind of plant) is 12 °C, which is higher, and the floor rule takes the higher.");
     // Without extremes the quantity is the coldest month's mean night, named as such.
     const fl2 = coldFloor(namaqua, null, archFor('Tylecodon pearsonii', 'Crassulaceae'))!;
     expect(fl2.floor).toBe(6);

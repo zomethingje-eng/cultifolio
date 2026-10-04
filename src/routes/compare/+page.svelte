@@ -16,6 +16,7 @@
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import { compare } from '$lib/ui/compare.svelte';
   import { onMount } from 'svelte';
+  import { searchCatalogue } from '$lib/ui/index.svelte';
   import { units } from '$lib/ui/units.svelte';
   import { temp, rain } from '$core/units';
   let { data } = $props();
@@ -57,15 +58,61 @@
     return () => setCrumb([]);
   });
   onMount(() => { compare.load(); site.load(); collection.load(); });
+
+  /* ---- what differs, by a fixed rule, said on the page (round fifty-eight; the first-impression review) ---- */
+  const coldOf = (c: (typeof cols)[number]) => (c.floor?.raised ? c.floor.floor : c.ex ? c.ex.minP01 : c.cold?.v ?? null);
+  const spread = (xs: Array<number | null>) => { const v = xs.filter((x): x is number => x != null); return v.length > 1 ? Math.max(...v) - Math.min(...v) : 0; };
+  const differs = $derived({
+    cold: spread(cols.map(coldOf)) > 2,
+    hot: spread(cols.map((c) => c.hot?.v ?? null)) > 2,
+    rain: (() => { const v = cols.map((c) => c.rain).filter((x): x is number => x != null); return v.length > 1 && Math.max(...v) > 1.25 * Math.min(...v) + 10; })(),
+    light: spread(cols.map((c) => c.dli?.hi ?? null)) > 5
+  });
+
+  /* ---- the overlaid year: every column's mean day and mean night on one chart, so a phone sees them together ---- */
+  const W = 340, H = 150, PADL = 30, PADB = 18;
+  const COLOURS = ['var(--accent)', 'var(--warm)', 'var(--ink2)'];
+  const overlay = $derived.by(() => {
+    const ok = cols.filter((c) => c.d.climate.status === 'ok');
+    if (ok.length < 2) return null;
+    const series = ok.map((c) => (c.d.climate.status === 'ok' ? c.d.climate.months : []));
+    const all = series.flatMap((m) => m.flatMap((x) => [x.tmax, x.tmin]));
+    const lo = Math.floor(Math.min(...all) / 5) * 5, hi = Math.ceil(Math.max(...all) / 5) * 5;
+    const x = (i: number) => PADL + (i * (W - PADL - 6)) / 11;
+    const y = (t: number) => 6 + ((hi - t) * (H - PADB - 6)) / Math.max(1, hi - lo);
+    const line = (m: Array<{ tmax: number; tmin: number }>, f: 'tmax' | 'tmin') => m.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${y(v[f]).toFixed(1)}`).join('');
+    const ticks = Array.from({ length: Math.floor((hi - lo) / 5) + 1 }, (_, i) => lo + i * 5);
+    return { lines: ok.map((c, i) => ({ c, colour: COLOURS[i], day: line(series[i], 'tmax'), night: line(series[i], 'tmin') })), ticks, y, x };
+  });
+  /* ---- a picker on the page itself: the tray was the only way to choose ---- */
+  let pq = $state('');
+  let found = $state<Array<{ slug: string; name: string }>>([]);
+  let seq = 0;
+  $effect(() => {
+    const text = pq.trim();
+    const n = ++seq;
+    if (text.length < 2) { found = []; return; }
+    const t = setTimeout(() => { void searchCatalogue(text, 6).then((r) => { if (n === seq && Array.isArray(r)) found = r.map((e) => ({ slug: e.slug, name: e.name })); }); }, 200);
+    return () => clearTimeout(t);
+  });
+  const withSlug = (slug: string) => `/compare?s=${[...new Set([...cols.map((c) => c.d.slug), slug])].slice(-3).join(',')}`;
+  const without = (slug: string) => `/compare?s=${cols.map((c) => c.d.slug).filter((x) => x !== slug).join(',')}`;
 </script>
 
 <svelte:head>
-  <title>Compare {cols.map((c) => c.d.name.scientific).join(' · ')} — Cultifolio</title>
+  <title>Compare {cols.map((c) => c.d.name.scientific).join(' · ')} · Cultifolio</title>
   <meta name="robots" content="noindex" />
 </svelte:head>
 
 <PageHead title="Side by side" places={false} sub="The pages' own figures next to each other, each with its source; no verdict is drawn." />
 {#if data.missing.length}<p class="notice">Not in the reference: {data.missing.join(', ')}.</p>{/if}
+<div class="picker">
+  <label for="cmp-q">{cols.length >= 3 ? 'Swap in a species' : 'Add a species'}</label>
+  <input id="cmp-q" type="search" bind:value={pq} placeholder="A name or a genus" autocomplete="off" />
+  {#if found.length}
+    <ul class="found">{#each found as f (f.slug)}<li><a href={withSlug(f.slug)} data-sveltekit-noscroll onclick={() => { pq = ''; }}><i>{f.name}</i></a>{#if cols.length >= 3}<span class="muted small"> replaces <i>{cols[0].d.name.scientific}</i></span>{/if}</li>{/each}</ul>
+  {/if}
+</div>
 {#if !cols.length}
   <div class="emptybox">
     <p>Pick species with the <b>Compare</b> button on their pages, up to three; the tray at the foot of the page brings you here.</p>
@@ -74,42 +121,57 @@
 {/if}
 
 {#if cols.length}
-  {#if cols.length > 1}<p class="small muted swipehint">{cols.length} species side by side; on a narrow screen the table swipes sideways.</p>{/if}
-  <div class="cmp" style="--n: {cols.length}">
+  {#if cols.length > 2}<p class="small muted swipehint">{cols.length} species side by side; on a narrow screen the table swipes sideways for the third.</p>{/if}
+  <!-- It scrolls sideways on a phone: reachable and scrollable by keyboard, and named (round fifty-eight; the accessibility review). -->
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+  <div class="cmp" style="--n: {cols.length}" tabindex="0" role="region" aria-label="Species side by side">
     <div class="row head">
       {#each cols as c (c.d.key)}
         <div class="cell">
           {#if c.hero}<img src={c.hero.thumb ?? c.hero.url} alt="" loading="lazy" />{/if}
           <a class="nm" href="/species/{c.d.slug}"><SpeciesName name={c.d.name.scientific} /></a>
           <div class="fam">{c.d.name.family ?? ''}{c.d.distribution.native.length ? ' · ' + c.d.distribution.native.slice(0, 2).map((r) => r.name).join(', ') : ''}</div>
-          {#if c.d.climate.status === 'refused'}<div class="small muted"><NotChecked what="Climate" why="A source did not answer when the species page was built." /></div>{:else if !c.ok}<div class="small muted">{climateWord(c.d)}</div>{/if}
+          {#if cols.length > 1}<a class="drop small" href={without(c.d.slug)} data-sveltekit-noscroll aria-label="Take {c.d.name.scientific} out of the comparison">Remove</a>{/if}
+          {#if c.d.climate.status === 'refused'}<div class="small muted hnote"><NotChecked what="Climate" why="A source did not answer when the species page was built." /></div>{:else if !c.ok}<div class="small muted hnote">{climateWord(c.d)}</div>{/if}
         </div>
       {/each}
     </div>
 
+    <!-- "not used", not "set aside": what it means (round fifty-eight; the accessibility review). -->
     <div class="rowlab">Coldest night (a floor where one is read)</div>
-    <div class="row">
-      {#each cols as c (c.d.key)}<div class="cell fig">{#if c.floor?.raised}<b>{temp(c.floor.floor, u)}</b><span>archetype minimum for {c.floor.group}, above the habitat's {c.ex ? `1st-percentile night ${temp(c.ex.minP01, u, 1)} (NASA POWER)` : `coldest mean night ${temp(c.cold!.v, u, 1)} (CHELSA)`}</span>{:else if c.ex}<b>{temp(c.ex.minP01, u, 1)}</b><span>1st-percentile night over {c.ex.years} yrs; lowest {temp(c.ex.minAbs, u, 1)}, {frostWording(c.ex)} (NASA POWER)</span>{:else if c.cold}<b>{temp(c.cold.v, u, 1)}</b><span>{c.cold.mo}, mean night (CHELSA), not a floor; {c.d.climate.status === 'ok' && c.d.climate.extremesStatus === 'refused' ? 'extremes not checked' : c.d.climate.status === 'ok' && c.d.climate.extremesStatus === 'skipped' ? 'extremes not asked for' : c.d.climate.status === 'ok' && c.d.climate.extremesStatus === 'sea' ? 'extremes read at a sea cell, set aside' : 'no extremes series'}</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
+    <div class="row" class:differs={differs.cold}>
+      {#each cols as c (c.d.key)}<div class="cell fig">{#if c.floor?.raised}<b>{temp(c.floor.floor, u)}</b><span>archetype minimum for {c.floor.group}, above the habitat's {c.ex ? `1st-percentile night ${temp(c.ex.minP01, u, 1)} (NASA POWER)` : `coldest mean night ${temp(c.cold!.v, u, 1)} (CHELSA)`}</span>{:else if c.ex}<b>{temp(c.ex.minP01, u, 1)}</b><span>1st-percentile night over {c.ex.years} yrs; lowest {temp(c.ex.minAbs, u, 1)}, {frostWording(c.ex)} (NASA POWER)</span>{:else if c.cold}<b>{temp(c.cold.v, u, 1)}</b><span>{c.cold.mo}, mean night (CHELSA), not a floor; {c.d.climate.status === 'ok' && c.d.climate.extremesStatus === 'refused' ? 'extremes not checked' : c.d.climate.status === 'ok' && c.d.climate.extremesStatus === 'skipped' ? 'extremes not asked for' : c.d.climate.status === 'ok' && c.d.climate.extremesStatus === 'sea' ? 'extremes read at a sea cell, not used' : 'no extremes series'}</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
     </div>
     <div class="rowlab">Warmest month</div>
-    <div class="row">
+    <div class="row" class:differs={differs.hot}>
       {#each cols as c (c.d.key)}<div class="cell fig">{#if c.hot}<b>{temp(c.hot.v, u)}</b><span>{c.hot.mo}, mean day (CHELSA)</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
     </div>
     <div class="rowlab">Rain</div>
-    <div class="row">
+    <div class="row" class:differs={differs.rain}>
       {#each cols as c (c.d.key)}<div class="cell fig">{#if c.rain != null && c.wet}<b>{rain(c.rain, u)}/yr</b><span>{c.wet.n === 0 ? `no month over 25 mm (1 in)` : `${c.wet.n} month${c.wet.n === 1 ? '' : 's'} over 25 mm (1 in)`} · peak {c.wet.mo} (CHELSA)</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
     </div>
     <div class="rowlab">Light</div>
-    <div class="row">
+    <div class="row" class:differs={differs.light}>
       {#each cols as c (c.d.key)}<div class="cell fig">{#if c.dli}<b>{c.dli.lo.toFixed(0)}–{c.dli.hi.toFixed(0)} DLI</b><span>mol/m²/day, winter to summer (CHELSA shortwave)</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
     </div>
 
+    {#if overlay}
+      <div class="rowlab">The year, overlaid</div>
+      <figure class="overlay">
+        <svg viewBox="0 0 {W} {H}" role="img" aria-labelledby="ov-t"><title id="ov-t">Mean day and mean night by month, each species in its own colour, habitat months</title>
+          {#each overlay.ticks as t (t)}<line x1={PADL} x2={W - 4} y1={overlay.y(t)} y2={overlay.y(t)} class="grid" /><text x={PADL - 4} y={overlay.y(t) + 3} class="tick" text-anchor="end">{temp(t, u, 0).replace(/ ?°[CF]$/, '°')}</text>{/each}
+          {#each ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'] as m, i (i)}<text x={overlay.x(i)} y={H - 4} class="tick" text-anchor="middle">{m}</text>{/each}
+          {#each overlay.lines as l (l.c.d.key)}<path d={l.day} fill="none" stroke={l.colour} stroke-width="2" /><path d={l.night} fill="none" stroke={l.colour} stroke-width="2" stroke-dasharray="4 3" />{/each}
+        </svg>
+        <figcaption class="small muted">{#each overlay.lines as l, i (l.c.d.key)}{i ? ' · ' : ''}<span class="sw" style:background={l.colour}></span><i>{l.c.d.name.scientific}</i>{/each}. Solid: mean day; dashed: mean night (CHELSA, the habitat's own months).</figcaption>
+      </figure>
+    {/if}
     <div class="rowlab">The year</div>
     <div class="row yearrow">
       {#each cols as c (c.d.key)}
         <div class="cell">
           {#if c.ok && c.d.climate.status === 'ok'}
-            <Climograph climate={{ months: c.d.climate.months, p10: c.d.climate.p10, p90: c.d.climate.p90, cells: c.d.climate.cells, extremes: c.d.climate.extremes ?? null }} id="climo-{c.d.key}" />
+            <Climograph name={c.d.name.scientific} climate={{ months: c.d.climate.months, p10: c.d.climate.p10, p90: c.d.climate.p90, cells: c.d.climate.cells, extremes: c.d.climate.extremes ?? null }} id="climo-{c.d.key}" /><!-- named: round fifty-eight; the accessibility review -->
           {:else}
             <div class="none small muted">{climateWord(c.d)}.</div>
           {/if}
@@ -128,36 +190,49 @@
       </div>
     {/each}
   </div>
-  <p class="small muted" style="margin-top: 14px">Each figure is the species page's own, with the same source; the sheet lines are the cards' one-line forms. Open a column's page for the spans, the cells and the evidence.</p>
+  <p class="small muted" style="margin-top: 14px">Each figure is the species page's own, with the same source; the sheet lines are the cards' one-line forms. A shaded row is one whose figures differ by more than 2 °C (3.6 °F), by more than a quarter of the rain, or by more than 5 DLI: a fixed rule, not a verdict. Open a column's page for the spans, the cells and the evidence.</p>
 {/if}
 
 <style>
   .cmp { display: grid; gap: 0; margin-top: 14px; }
   .swipehint { margin: 10px 0 0; display: none; }
   .row { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 12px; }
-  .rowlab { font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink3); font-weight: 700; margin: 18px 0 6px; font-family: var(--ui); }
+  .rowlab { font-size: var(--fs-xs); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink3); font-weight: 700; margin: 18px 0 6px; font-family: var(--ui); }
   .cell { background: var(--card); border-radius: var(--r); box-shadow: var(--sh); padding: 12px 14px; min-width: 0; }
   .head .cell { padding: 0 0 12px; overflow: hidden; }
   .head img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; background: var(--sunk); }
-  .head .nm { display: block; padding: 10px 14px 0; font-family: var(--serif); font-style: italic; font-size: 19px; font-weight: 600; color: var(--ink); }
-  .head .fam { padding: 3px 14px 0; font-size: 12px; color: var(--ink2); }
-  .fig b { display: block; font-family: var(--mono); font-size: 22px; font-weight: 500; letter-spacing: -0.02em; }
-  .fig span { display: block; font-size: 12px; color: var(--ink2); line-height: 1.45; margin-top: 3px; }
-  .sheet p { margin: 0 0 6px; font-size: 13.5px; line-height: 1.5; }
+  .head .nm { display: block; padding: 10px 14px 0; font-family: var(--serif); font-style: italic; font-size: var(--fs-xl); font-weight: 600; color: var(--ink); }
+  .head .fam { padding: 3px 14px 0; font-size: var(--fs-sm); color: var(--ink2); }
+  .head .hnote { padding: 6px 14px 0; }
+  .fig b { display: block; font-family: var(--mono); font-size: var(--fs-2xl); font-weight: 500; letter-spacing: -0.02em; }
+  .fig span { display: block; font-size: var(--fs-sm); color: var(--ink2); line-height: 1.45; margin-top: 3px; }
+  .sheet p { margin: 0 0 6px; font-size: var(--fs-md); line-height: 1.5; }
   .sheet p:last-child { margin: 0; }
   .muted { color: var(--ink3); }
   .cell :global(.climo) { margin: 0; padding: 0; box-shadow: none; }
   .notice { margin: 10px 0 0; }
+  .row.differs .cell { background: color-mix(in srgb, var(--warm) 10%, var(--card)); }
+  .drop { display: inline-block; margin: 6px 14px 0; color: var(--ink3); min-height: 32px; }
+  .picker { position: relative; margin: 12px 0 0; display: grid; gap: 4px; max-width: 28rem; }
+  .picker label { font-size: var(--fs-sm); font-weight: 600; color: var(--ink2); }
+  .picker input { min-height: 44px; }
+  .found { list-style: none; margin: 0; padding: 4px 0; background: var(--card); border-radius: var(--r); box-shadow: var(--sh2); }
+  .found a { display: block; padding: 10px 14px; min-height: 44px; }
+  .overlay { margin: 0; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); padding: 10px 12px; }
+  .overlay svg { width: 100%; height: auto; display: block; }
+  .overlay .grid { stroke: var(--rule); stroke-width: 1; }
+  .overlay .tick { font-size: 0.5625rem; fill: var(--ink3); font-family: var(--mono); }
+  .overlay .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
   @media (max-width: 700px) {
     /* One scroller for the whole table, not one per row: a thumb drags the columns and every row follows, and the row labels stay put. */
     .cmp { overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 4px; margin-right: -16px; padding-right: 16px; }
-    .row { grid-template-columns: repeat(var(--n), minmax(220px, 1fr)); }
+    .row { grid-template-columns: repeat(var(--n), minmax(calc(50% - 6px), 1fr)); } /* two to a phone's width: a second column cut off at its edge was the commonest view (round fifty-eight) */
     .row .cell { scroll-snap-align: start; }
     .rowlab { position: sticky; left: 0; width: max-content; background: var(--bg); padding: 0 8px 0 2px; }
     .swipehint { display: block; }
-    /* a climograph at 220 px is unreadable; on a phone the year's row points at each page's chart instead */
+    /* a climograph at half a phone is unreadable; the overlaid chart above carries the year there, and the row points at each page's own */
     .yearrow :global(.climo) { display: none; }
-    .yearrow .cell:has(:global(.climo))::after { content: 'The chart is on the species page.'; font-size: 12.5px; color: var(--ink3); }
-    .head .nm { font-size: 16px; }
+    .yearrow .cell:has(:global(.climo))::after { content: 'The full chart is on the species page.'; font-size: var(--fs-md); color: var(--ink3); }
+    .head .nm { font-size: var(--fs-lg); }
   }
 </style>

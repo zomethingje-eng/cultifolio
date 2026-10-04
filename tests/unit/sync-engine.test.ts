@@ -10,6 +10,7 @@ import type { Change } from '$core/log';
 import { hlcEncode, MAX_AHEAD_MS } from '$core/hlc';
 import { batchFingerprint, deriveKeys, newVaultKey, sealJson, sha256hex } from '$lib/sync/crypto';
 import { MAX_BYTES } from '$lib/server/sync';
+import { accNo } from '$lib/db/types';
 
 /* ------------------------------------------------------------------ fakes */
 
@@ -92,6 +93,8 @@ vi.mock('$lib/db/vault', () => {
   m.arrivalsAfter = async () => ({ changes: [...mem.changes.values()], seq: 0, gen: 0 });
   m.changeKeys = async () => [...mem.changes.keys()];
   if (!m.changesByKeys) m.changesByKeys = async (ts: string[]) => ts.map((t) => mem.changes.get(t)).filter(Boolean);
+  if (!m.updateMeta) m.updateMeta = async (k: string, fn: (had: unknown) => unknown) => { const next = fn(mem.meta.get(k)); mem.meta.set(k, next); return next; };
+  if (!m.changesOf) m.changesOf = async (kind: string, id: string) => ([...mem.changes.values()] as Change[]).filter((c) => c.kind === kind && c.id === id);
   m.announceSyncForgotten = () => {};
   return m;
 });
@@ -325,17 +328,20 @@ describe('batches are named by content and acked only when the server holds thos
     expect((await fetch(`/api/sync/log?vault=${keys.id}`, { method: 'POST', headers: { ...h, 'x-batch': '1700000000000-0000-dev-0123456789ac' }, body: new Uint8Array(3) as BodyInit })).status).toBe(400);
     expect((await fetch(`/api/sync/log?vault=${keys.id}`, { headers: { authorization: `Bearer ${'0'.repeat(64)}` } })).status).toBe(403);
     expect((await fetch(`/api/sync/log?vault=${keys.id}`)).status).toBe(401);
-    expect((await fetch(`/api/sync/vault`, { method: 'POST', body: JSON.stringify({ id: keys.id, token: '1'.repeat(64), create: true }) })).status).toBe(403);
+    expect((await fetch(`/api/sync/vault`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: keys.id, token: '1'.repeat(64), create: true }) })).status).toBe(403);
     expect([...r2.objs.keys()].every((k) => k.startsWith(`vault/${keys.id}/`))).toBe(true);
     // The creation route, which has no token to check first, stops reading a body at a kilobyte rather than buffering what a
     // stranger streams (round thirty-eight, R1-4): a chunked body that would carry megabytes is a 413 after a few chunks.
     let pulled = 0;
     const endless = new ReadableStream<Uint8Array>({ pull(c) { pulled++; if (pulled > 64) throw new Error('read past the cap'); c.enqueue(new Uint8Array(512).fill(0x20)); } });
-    const flood = await fetch(`/api/sync/vault`, { method: 'POST', body: endless, duplex: 'half' } as RequestInit);
+    const flood = await fetch(`/api/sync/vault`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: endless, duplex: 'half' } as RequestInit);
     expect(flood.status).toBe(413);
     expect(pulled).toBeLessThanOrEqual(4);
-    expect((await fetch(`/api/sync/vault`, { method: 'POST', body: 'null' })).status).toBe(400); // a body that is not an object is still a plain 400
-    expect((await fetch(`/api/sync/vault`, { method: 'POST' })).status).toBe(400); // and no body at all
+    expect((await fetch(`/api/sync/vault`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: 'null' })).status).toBe(400); // a body that is not an object is still a plain 400
+    expect((await fetch(`/api/sync/vault`, { method: 'POST', headers: { 'content-type': 'application/json' }, })).status).toBe(400); // and no body at all
+    // and a body of another type is refused before it is read: what a page on another site can send without a preflight (round fifty-eight)
+    expect((await fetch(`/api/sync/vault`, { method: 'POST', body: new Blob([JSON.stringify({ id: keys.id, token: keys.token, create: true })]) })).status).toBe(415);
+    expect((await fetch(`/api/sync/vault`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: JSON.stringify({ id: keys.id, token: keys.token, create: true }) })).status).toBe(415);
     // An oversize body is refused from its declared length.
     const big = await fetch(`/api/sync/log?vault=${keys.id}`, { method: 'POST', headers: { ...h, 'x-batch': '1700000000000-0000-dev-0123456789ad', 'x-batch-plain': 'e'.repeat(64), 'x-device': 'dev', 'content-length': String(17 * 1024 * 1024) }, body: new Uint8Array(3) as BodyInit });
     expect(big.status).toBe(413);
@@ -508,7 +514,7 @@ describe('a full vault is said, not split', () => {
     expect(B.sync.vaultFull).not.toBeNull();
     expect(B.sync.refused).toEqual([]);
     expect(r2.objs.has(`vault/${(await deriveKeys(KEY)).id}/photo/${pid}.bin`)).toBe(false);
-    const big = await fetch(`/api/sync/photo/pbig000000001?vault=${(await deriveKeys(KEY)).id}`, { method: 'PUT', headers: { authorization: `Bearer ${(await deriveKeys(KEY)).token}`, 'content-length': String(13 * 1024 * 1024) }, body: new Uint8Array(3) as BodyInit });
+    const big = await fetch(`/api/sync/photo/pbig000000001?vault=${(await deriveKeys(KEY)).id}`, { method: 'PUT', headers: { authorization: `Bearer ${(await deriveKeys(KEY)).token}`, 'x-photo-drop': 'a'.repeat(64), 'content-length': String(13 * 1024 * 1024) }, body: new Uint8Array(3) as BodyInit });
     expect(big.status).toBe(413);
   });
 });
@@ -573,13 +579,16 @@ describe('a peer whose clock is ahead', () => {
     A = await reboot(memA, r2);
     if (collectionHolds) expect(A.collection.accession(plant.id)?.notes).toBe('no: leave it until spring'); // the load() fold skips the held change
     expect(A.sync.held).toBe(2);
-    // When A's clock reaches B's stamp, the held change is folded in and, being the greater HLC, wins.
+    // When A's clock reaches B's stamp, the held change is folded in. A's edit, made while B's was held and within a day of
+    // it, was stamped just past it (the grower saw the field as it was), so A's edit stands: since round fifty-eight the
+    // held change reaches the fold's held list through the pull, and before that A's edit was stamped below it and lost
+    // when it came due (the client review's finding 8).
     vi.setSystemTime(real + 86_400_000);
     await A.sync.run();
     expect(A.sync.held).toBe(0);
     expect(A.sync.heldUntil).toBeNull();
-    expect(A.collection.accession(plant.id)?.notes).toBe('phone says: repot');
-    // B's phone, put right: its own past stamps are never held on itself, and it warns that its clock jumped back.
+    expect(A.collection.accession(plant.id)?.notes).toBe('no: leave it until spring');
+    // B's phone, put right and not yet synced: its own past stamps are never held on itself, and it warns that its clock jumped back.
     vi.setSystemTime(real);
     B = await reboot(memB, r2);
     expect(B.collection.accession(plant.id)?.notes).toBe('phone says: repot');
@@ -1639,5 +1648,41 @@ describe('round fifty-two, 2: a revived photograph is sent again whichever devic
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('a sync run that receives nothing writes nothing (round fifty-eight; the client review\'s finding 9)', () => {
+  it('opening the app with sync on and two plants under one number: neither the load nor a run that folds nothing repairs it; a pull that brings the number does', async () => {
+    const r2 = fakeR2();
+    const memA = newMem('aaaaaaaaaaaa');
+    let A = await boot(memA, r2);
+    await A.sync.setup(KEY, 'create');
+    const now = Date.now() - 60_000;
+    const put = (id: string, wall: number, acc: string) => [
+      { t: hlcEncode({ wall, count: 0, device: 'aaaaaaaaaaaaq1q1' }), kind: 'accession' as const, id, field: 'taxonName', value: 'Lithops' },
+      { t: hlcEncode({ wall, count: 1, device: 'aaaaaaaaaaaaq1q1' }), kind: 'accession' as const, id, field: 'status', value: 'growing' },
+      { t: hlcEncode({ wall, count: 2, device: 'aaaaaaaaaaaaq1q1' }), kind: 'accession' as const, id, field: 'acc', value: acc }
+    ];
+    for (const c of [...put('r1', now, '2026-0007'), ...put('r2', now + 1, '2026-0007')]) memA.changes.set(c.t, c);
+    memA.outbox.clear();
+    A = await reboot(memA, r2);
+    const before = memA.changes.size;
+    expect(A.collection.sharesNumber('accession', 'r2')).toEqual(['r1']);
+    await A.sync.run(); // the focus listener or the five-minute timer
+    expect(memA.changes.size).toBe(before); // rule 5: a run that merged nothing wrote nothing
+    expect(A.collection.sharesNumber('accession', 'r2')).toEqual(['r1']); // the page still offers the repair
+    // another device's plant arrives under the same number: the pull that folds it repairs that number
+    const memB = newMem('bbbbbbbbbbbb');
+    const B = await boot(memB, r2);
+    await B.sync.setup(KEY, 'join');
+    await B.collection.ingest([
+      { t: hlcEncode({ wall: now + 5000, count: 0, device: 'bbbbbbbbbbbbq2q2' }), kind: 'accession', id: 'r9', field: 'taxonName', value: 'Aloe' },
+      { t: hlcEncode({ wall: now + 5000, count: 1, device: 'bbbbbbbbbbbbq2q2' }), kind: 'accession', id: 'r9', field: 'status', value: 'growing' },
+      { t: hlcEncode({ wall: now + 5000, count: 2, device: 'bbbbbbbbbbbbq2q2' }), kind: 'accession', id: 'r9', field: 'acc', value: '2026-0007' }
+    ], 'import', { repair: false });
+    await B.sync.run();
+    await A.sync.run();
+    expect(A.collection.accessions.filter((x) => accNo(x) === '2026-0007').map((x) => x.id)).toEqual(['r1']); // made first, keeps it
+    expect(A.collection.sharesNumber('accession', 'r1')).toEqual([]);
   });
 });

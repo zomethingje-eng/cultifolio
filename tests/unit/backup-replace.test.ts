@@ -39,6 +39,7 @@ function model(live: Store, opts: { failPhotoAt?: number } = {}) {
       async appendChanges(cs) {
         for (const c of cs) staging!.changes.set(c.t, c);
       },
+      async setParked() {},
       async counts() {
         return { changes: staging!.changes.size, photos: staging!.photos.size };
       },

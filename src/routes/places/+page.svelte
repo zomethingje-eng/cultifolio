@@ -6,6 +6,13 @@
   import { LOCATION_KINDS, type LocationKind, type Location } from '$lib/db/types';
   onMount(() => collection.load());
   let adding = $state(false);
+  // The top bar's "+" on this section lands on /places#add: the form opens, and again when the hash is set while here (round fifty-eight).
+  onMount(() => {
+    const open = () => { if (location.hash === '#add') adding = true; };
+    open();
+    window.addEventListener('hashchange', open);
+    return () => window.removeEventListener('hashchange', open);
+  });
   let name = $state('');
   let kind = $state<LocationKind | ''>(''); // chosen, never defaulted: a bench filed as a room says "whole room" on every watering line (round twenty-six, 16)
   let kindMsg = $state('');
@@ -35,7 +42,7 @@
   }
 </script>
 
-<svelte:head><title>Places — Cultifolio</title></svelte:head>
+<svelte:head><title>Places · Cultifolio</title></svelte:head>
 
 <PageHead compact title="Places" sub="Where your plants live: a greenhouse, a bench, a shelf or a windowsill; conditions set on a place apply to everything inside it." count="{rows.length} place{rows.length === 1 ? '' : 's'}{unplaced ? ` · ${unplaced} unplaced` : ''}">
   <button class="btn pri" onclick={() => (adding = !adding)}>New place</button>
@@ -43,14 +50,15 @@
 
 {#if adding}
   <form class="cult form" onsubmit={(e) => { e.preventDefault(); add(); }}>
-    <input id="loc-name" type="text" placeholder="Name" aria-label="Name of the new place" bind:value={name} />
-    <select id="loc-kind" bind:value={kind} aria-label="Kind of place" aria-invalid={!!kindMsg} aria-describedby={kindMsg ? 'loc-kind-bad' : undefined} onchange={() => (kindMsg = '')}><option value="" disabled>Kind of place…</option>{#each LOCATION_KINDS as k}<option value={k.k}>{k.label}</option>{/each}</select>
-    {#if kindMsg}<span class="bad small" id="loc-kind-bad">{kindMsg}</span>{/if}
-    <select id="loc-parent" bind:value={parent} aria-label="Inside which place">
+    <!-- Each field with a visible name over it: a placeholder was the name's only one, and the place above had none (round fifty-eight; the accessibility review). -->
+    <label class="fl"><span class="eyebrow">Name of the new place</span><input id="loc-name" type="text" placeholder="e.g. Greenhouse, Bench 1" bind:value={name} /></label>
+    <label class="fl"><span class="eyebrow">Kind of place</span><select id="loc-kind" bind:value={kind} aria-invalid={!!kindMsg} aria-describedby={kindMsg ? 'loc-kind-bad' : undefined} onchange={() => (kindMsg = '')}><option value="" disabled>Choose…</option>{#each LOCATION_KINDS as k}<option value={k.k}>{k.label}</option>{/each}</select></label>
+    <label class="fl"><span class="eyebrow">Inside which place</span><select id="loc-parent" bind:value={parent}>
       <option value={null}>Top level</option>
-      {#each rows as r}<option value={r.loc.id}>{'  '.repeat(r.depth)}{r.loc.name}</option>{/each}
-    </select>
+      {#each rows as r}<option value={r.loc.id}>{collection.locationName(r.loc.id) || r.loc.name}</option>{/each}<!-- the full path, as the place picker says it (round fifty-eight; the grower review) -->
+    </select></label>
     <button class="btn pri" type="submit" disabled={!name.trim()}>Add</button>
+    {#if kindMsg}<span class="bad small full" id="loc-kind-bad">{kindMsg}</span>{/if}
   </form>
 {/if}
 
@@ -58,14 +66,14 @@
   <p class="muted">Opening your collection…</p>
 {:else}
   {#if !rows.length}
-    <div class="emptybox"><h2 class="q" style="font-size: 22px">No places yet</h2><p class="muted">Start with the room or greenhouse, then the shelves or benches inside it.</p></div>
+    <div class="emptybox"><h2 class="q" style="font-size: var(--fs-2xl)">No places yet</h2><p class="muted">Start with the room or greenhouse, then the shelves or benches inside it.</p></div>
   {:else}
     <div class="tree">
       {#each rows as r (r.loc.id)}
+        <!-- Two lines, the name and then its kind and count: three columns on one line squeezed the name on a phone (round fifty-eight; the grower review). -->
         <a class="row card" href="/places/{r.loc.id}" style="--d:{r.depth}">
           <span class="name">{r.loc.name}{#if collection.needsHome(r.loc.id)} <span class="faint">· needs a home: two devices moved places into each other; move this one where it belongs</span>{/if}</span>
-          <span class="faint kind">{kindLabel(r.loc.type)}</span>
-          <span class="n mono">{r.deepN}{r.deepN !== r.n ? ` (${r.n} here)` : ''}</span>
+          <span class="line2"><span class="sr">, </span>{#if kindLabel(r.loc.type)}<span class="faint kind">{kindLabel(r.loc.type)}</span><span class="faint" aria-hidden="true"> · </span><span class="sr">, </span>{/if}<span class="n mono">{plural(r.deepN, 'plant')}{r.deepN !== r.n ? ` (${r.n} here)` : ''}</span></span>
         </a>
       {/each}
     </div>
@@ -74,14 +82,18 @@
 {/if}
 
 <style>
-  .form { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 8px; padding: 12px 15px; margin: 12px 0 16px; }
-  .form input, .form select { font: inherit; font-size: 14px; padding: 8px 11px; border: 1px solid var(--rule); border-radius: 9px; background: var(--card); color: var(--ink); }
+  .form { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 8px; padding: 12px 15px; margin: 12px 0 16px; align-items: end; }
+  .fl { display: grid; gap: 3px; min-width: 0; } /* a field with its small name over it (round fifty-eight; the accessibility review) */
+  .full { grid-column: 1 / -1; }
+  .form input, .form select { font: inherit; font-size: var(--fs-md); padding: 8px 11px; border: 1px solid var(--rule); border-radius: var(--r); background: var(--card); color: var(--ink); }
   .tree { display: grid; gap: 0.35rem; margin-top: 0.8rem; }
-  .row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 0.8rem; align-items: center; padding: 0.55rem 0.9rem; padding-left: calc(0.9rem + var(--d) * 1.4rem); color: inherit; min-height: 44px; }
+  /* Two lines of about 56px; a long name wraps between words, never inside one (round fifty-eight; the grower review). */
+  .row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; align-content: center; padding: 0.45rem 0.9rem; padding-left: calc(0.9rem + min(var(--d), 4) * 1.4rem); color: inherit; min-height: 56px; }
+  .line2 { display: block; line-height: 1.3; }
   .row:hover { text-decoration: none; box-shadow: var(--sh2); color: inherit; }
-  .name { font-weight: 600; }
-  .kind { font-size: 12.5px; }
-  .n { font-size: 13px; color: var(--ink2); }
-  .small { font-size: 12.5px; }
+  .name { font-weight: 600; overflow-wrap: break-word; word-break: normal; line-height: 1.3; }
+  .kind { font-size: var(--fs-md); }
+  .n { font-size: var(--fs-md); color: var(--ink2); }
+  .small { font-size: var(--fs-md); }
   @media (max-width: 560px) { .form { grid-template-columns: 1fr 1fr; } }
 </style>

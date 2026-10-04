@@ -52,6 +52,8 @@ export async function replaceThroughStaging(file: ReadBackup, open: () => Promis
       opts.onProgress?.(i + 1, ids.length);
     }
     await stage.appendChanges(changes);
+    // The device becomes the file, its parked changes with it (round fifty-eight).
+    await stage.setParked(file.manifest.parked ?? []);
     const n = await stage.counts();
     if (n.changes !== changes.length || n.photos !== photos) throw new Error(`The replacement did not all reach storage (${n.changes} of ${changes.length} changes, ${n.photos} of ${photos} photographs); this device is unchanged.`);
     await opts.beforeSwitch?.();
