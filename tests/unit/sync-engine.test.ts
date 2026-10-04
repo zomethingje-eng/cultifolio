@@ -57,12 +57,15 @@ vi.mock('$lib/db/vault', () => {
   },
   outboxClear: async () => mem.outbox.clear(),
   changesByKeys: async (ts: string[]) => ts.map((t) => mem.changes.get(t)).filter(Boolean),
-  getMeta: async (k: string) => mem.meta.get(k),
-  setMeta: async (k: string, v: unknown) => void mem.meta.set(k, v),
+  // Copies in and out, as IndexedDB gives: handing out the stored object made two tabs share one sync record, so a
+  // run's reload of it did nothing in any test and a held list kept only in memory was never lost (round fifty-nine;
+  // the harness review, 1).
+  getMeta: async (k: string) => structuredClone(mem.meta.get(k)),
+  setMeta: async (k: string, v: unknown) => void mem.meta.set(k, structuredClone(v)),
   setMetaIfKey: async (k: string, v: unknown, key: string) => {
     const had = mem.meta.get(k) as { key?: string } | null | undefined;
     if (!had || had.key !== key) return false;
-    mem.meta.set(k, v);
+    mem.meta.set(k, structuredClone(v));
     return true;
   },
   deviceId: async () => mem.device,
@@ -93,7 +96,7 @@ vi.mock('$lib/db/vault', () => {
   m.arrivalsAfter = async () => ({ changes: [...mem.changes.values()], seq: 0, gen: 0 });
   m.changeKeys = async () => [...mem.changes.keys()];
   if (!m.changesByKeys) m.changesByKeys = async (ts: string[]) => ts.map((t) => mem.changes.get(t)).filter(Boolean);
-  if (!m.updateMeta) m.updateMeta = async (k: string, fn: (had: unknown) => unknown) => { const next = fn(mem.meta.get(k)); mem.meta.set(k, next); return next; };
+  if (!m.updateMeta) m.updateMeta = async (k: string, fn: (had: unknown) => unknown) => { const next = fn(structuredClone(mem.meta.get(k))); mem.meta.set(k, structuredClone(next)); return next; };
   if (!m.changesOf) m.changesOf = async (kind: string, id: string) => ([...mem.changes.values()] as Change[]).filter((c) => c.kind === kind && c.id === id);
   m.announceSyncForgotten = () => {};
   return m;
@@ -133,6 +136,7 @@ function fakeR2() {
 }
 
 let kv = new Map<string, string>();
+const kvOf = new WeakMap<object, Map<string, string>>();
 
 /** A fresh collection + engine (module singletons) for one "device", and the real route handlers behind global fetch. */
 /**
@@ -169,8 +173,12 @@ async function boot(m: Mem, r2: ReturnType<typeof fakeR2>) {
     batch: await import('../../src/routes/api/sync/log/[key]/+server'),
     photo: await import('../../src/routes/api/sync/photo/[id]/+server')
   };
-  // A KV for the counters and the rate limit: without one the Worker refuses every creation (finding 39a).
-  kv = new Map<string, string>();
+  // A KV for the counters and the rate limit: without one the Worker refuses every creation (finding 39a). One per
+  // server (per bucket), kept across a device's reboot as the real one is: a fresh map at each boot forgot the vault's
+  // counters, and a test of what a rebooted device reads from the server read a server that had forgotten (round fifty-nine).
+  for (const s of booted) { const t = (s as unknown as { timer: ReturnType<typeof setTimeout> | null }).timer; if (t) clearTimeout(t); }
+  kv = kvOf.get(r2) ?? new Map<string, string>();
+  kvOf.set(r2, kv);
   const kvm = kv;
   const QUEUE = { get: async (k: string, type?: string) => (type === 'json' ? JSON.parse(kvm.get(k) ?? 'null') : (kvm.get(k) ?? null)), put: async (k: string, v: string) => void kvm.set(k, v) };
   const platform = { env: { STORE: r2, QUEUE, SYNC_OPEN: '1' } } as unknown as App.Platform;
@@ -243,10 +251,8 @@ afterEach(() => {
 });
 
 /**
- * Whether the collection's own fold passes the hold to apply() (the call-site
- * change in collection.svelte.ts that goes with the engine's held changes).
- * The two assertions below that need it are gated on this rather than failed,
- * so they switch on the moment that line lands.
+ * Whether the collection's own fold passes the hold to apply(): asserted below, where it was a gate that would have
+ * switched the two assertions off silently had the call site been lost (round fifty-nine; outside review).
  */
 const collectionHolds = await (async () => {
   const m = newMem('zzzzzzzzzzzz');
@@ -514,6 +520,10 @@ describe('a full vault is said, not split', () => {
     const again = B2.calls.length;
     await B2.sync.run();
     expect(B2.calls.slice(again).filter((c) => c === 'POST /api/sync/log')).toHaveLength(1);
+    // Refused again by the same server, which now remembers its counters across the reboot (round fifty-nine): before, the
+    // rebooted device met a server with a fresh KV, and this run's answer was never looked at.
+    expect(B2.sync.vaultFull).toEqual({ bytes: MAX_BYTES - 10, limit: MAX_BYTES });
+    expect(memB.outbox.size).toBeGreaterThan(0);
     // Room again (photos deleted elsewhere): the push goes through and the state clears.
     await fillVault(r2, 0);
     await B2.sync.run();
@@ -621,7 +631,8 @@ describe('a peer whose clock is ahead', () => {
     expect(A.collection.accession(plant.id)?.notes).toBe('no: leave it until spring');
     await A.sync.run();
     A = await reboot(memA, r2);
-    if (collectionHolds) expect(A.collection.accession(plant.id)?.notes).toBe('no: leave it until spring'); // the load() fold skips the held change
+    expect(collectionHolds).toBe(true);
+    expect(A.collection.accession(plant.id)?.notes).toBe('no: leave it until spring'); // the load() fold skips the held change
     expect(A.sync.held).toBe(2);
     // When A's clock reaches B's stamp, the held change is folded in. A's edit, made while B's was held and within a day of
     // it, was stamped just past it (the grower saw the field as it was), so A's edit stands: since round fifty-eight the
@@ -649,7 +660,7 @@ describe('a peer whose clock is ahead', () => {
     const ahead = hlcEncode({ wall: Date.now() + 3_600_000, count: 0, device: 'cccccccccccc' });
     await A.collection.ingest([{ t: ahead, kind: 'accession', id: plant.id, field: 'notes', value: 'from the future' }], 'import');
     expect(A.sync.held).toBe(1);
-    if (collectionHolds) expect(A.collection.accession(plant.id)?.notes).toBe('one'); // the commit() fold skips it too
+    expect(A.collection.accession(plant.id)?.notes).toBe('one'); // the commit() fold skips it too
     await A.sync.run(); // pushed, since it came in through a restore
     expect(memA.outbox.size).toBe(0);
     vi.useFakeTimers({ toFake: ['Date'] });
@@ -1091,7 +1102,7 @@ describe('a batch that cannot be read is set aside, not a wall', () => {
     const D = await boot(newMem('dddddddddddd'), r2);
     await D.sync.setup(KEY, 'join');
     expect(D.sync.quarantined).toHaveLength(1);
-    expect(D.sync.quarantined[0]?.error).toMatch(/notes of a accession must be a string/);
+    expect(D.sync.quarantined[0]?.error).toMatch(/notes of an accession must be a string/);
     expect(D.collection.accession('r1')).toBeUndefined(); // nothing of the set-aside batch, not even its good changes
     expect(D.collection.accession('r2')?.status).toBe('sold');
     expect(D.collection.sowing('s1')?.method).toBe('tissue culture');
@@ -1160,7 +1171,8 @@ describe('photos', () => {
     // Put back: they arrive, and the sha is checked against the record.
     r2.objs.set(k1, o1);
     r2.objs.set(k2, o2);
-    D.sync['meta']!.quarantined = [];
+    // the set-aside list emptied as a new build's would be, in the store, which is what a run reads (round fifty-nine)
+    (memD.meta.get('sync') as { quarantined?: unknown[] }).quarantined = [];
     await D.sync.run();
     expect(memD.photos.size).toBe(2);
   });
@@ -1403,12 +1415,14 @@ describe('a stale run\'s verdicts never land on the new vault (round eighteen, 4
     let release: () => void = () => {};
     const gate = new Promise<void>((r) => (release = r));
     let held = 0;
+    let arrived: () => void = () => {};
+    const reached = new Promise<void>((r) => (arrived = r));
     globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
-      if (init?.method === 'POST' && /\/api\/sync\/log\?/.test(String(input)) && held++ === 0) await gate;
+      if (init?.method === 'POST' && /\/api\/sync\/log\?/.test(String(input)) && held++ === 0) { arrived(); await gate; }
       return real(input, init);
     }) as typeof fetch;
     const old = A.sync.run().catch((e: Error) => e);
-    await new Promise((r) => setTimeout(r, 50));
+    await reached;
     expect(A.sync.busy).not.toBeNull();
     await A.sync.forget();
     expect(A.sync.busy).toBeNull();
@@ -1698,8 +1712,8 @@ describe('round fifty-two, 2: a revived photograph is sent again whichever devic
   });
 });
 
-describe('a sync run that receives nothing writes nothing (round fifty-eight; the client review\'s finding 9)', () => {
-  it('opening the app with sync on and two plants under one number: neither the load nor a run that folds nothing repairs it; a pull that brings the number does', async () => {
+describe('a sync run writes what arrived and nothing more (round fifty-eight; round fifty-nine)', () => {
+  it('two plants under one number: neither the load, nor a run that folds nothing, nor a pull that brings a third under it repairs the number; the record\'s page offers it', async () => {
     const r2 = fakeR2();
     const memA = newMem('aaaaaaaaaaaa');
     let A = await boot(memA, r2);
@@ -1718,7 +1732,7 @@ describe('a sync run that receives nothing writes nothing (round fifty-eight; th
     await A.sync.run(); // the focus listener or the five-minute timer
     expect(memA.changes.size).toBe(before); // rule 5: a run that merged nothing wrote nothing
     expect(A.collection.sharesNumber('accession', 'r2')).toEqual(['r1']); // the page still offers the repair
-    // another device's plant arrives under the same number: the pull that folds it repairs that number
+    // another device's plant arrives under the same number: the pull folds it and writes nothing of its own (rule 5)
     const memB = newMem('bbbbbbbbbbbb');
     const B = await boot(memB, r2);
     await B.sync.setup(KEY, 'join');
@@ -1726,10 +1740,15 @@ describe('a sync run that receives nothing writes nothing (round fifty-eight; th
       { t: hlcEncode({ wall: now + 5000, count: 0, device: 'bbbbbbbbbbbbq2q2' }), kind: 'accession', id: 'r9', field: 'taxonName', value: 'Aloe' },
       { t: hlcEncode({ wall: now + 5000, count: 1, device: 'bbbbbbbbbbbbq2q2' }), kind: 'accession', id: 'r9', field: 'status', value: 'growing' },
       { t: hlcEncode({ wall: now + 5000, count: 2, device: 'bbbbbbbbbbbbq2q2' }), kind: 'accession', id: 'r9', field: 'acc', value: '2026-0007' }
-    ], 'import', { repair: false });
+    ], 'import');
     await B.sync.run();
     mem = memA; // A's own store in play again before it acts
+    const beforePull = memA.changes.size;
     await A.sync.run();
+    expect(memA.changes.size).toBe(beforePull + 3); // the three changes that arrived, and nothing written here
+    expect(A.collection.sharesNumber('accession', 'r1').sort()).toEqual(['r2', 'r9']);
+    expect(A.collection.numberPlan('accession', 'r9')).toEqual({ keeper: 'r1', renumbered: ['r2', 'r9'] }); // what the page says
+    expect(await A.collection.repairNumbers({ kind: 'accession', no: '2026-0007' })).toBe(true); // the grower asks
     expect(A.collection.accessions.filter((x) => accNo(x) === '2026-0007').map((x) => x.id)).toEqual(['r1']); // made first, keeps it
     expect(A.collection.sharesNumber('accession', 'r1')).toEqual([]);
   });
@@ -1743,12 +1762,15 @@ describe('one run at a time per vault in a browser (round fifty-eight; the lock,
     const gate = new Promise<void>((r) => (release = r));
     let stalled = 0;
     const counter = { n: 0 };
+    // The push's arrival at the gate, awaited instead of a 50 ms sleep that a slow machine could outrun (round fifty-nine).
+    let arrived: () => void = () => {};
+    const reached = new Promise<void>((r) => (arrived = r));
     globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
       counter.n++;
-      if (init?.method === 'POST' && /\/api\/sync\/log\?/.test(String(input)) && stalled++ === 0) await gate;
+      if (init?.method === 'POST' && /\/api\/sync\/log\?/.test(String(input)) && stalled++ === 0) { arrived(); await gate; }
       return real(input, init);
     }) as typeof fetch;
-    return { release: () => release(), counter, restore: () => (globalThis.fetch = real) };
+    return { release: () => release(), counter, reached, restore: () => (globalThis.fetch = real) };
   }
 
   it('a second tab of the same browser leaves the run to the tab already running it, then runs once that one ends', async () => {
@@ -1761,12 +1783,13 @@ describe('one run at a time per vault in a browser (round fifty-eight; the lock,
     const s = stallPush();
     try {
       const first = tab1.sync.run();
-      await new Promise((r) => setTimeout(r, 50));
+      await s.reached;
       expect(tab1.sync.busy).not.toBeNull();
       const before = s.counter.n, runs = tab2.sync.runs;
       await tab2.sync.run();
       expect(s.counter.n).toBe(before); // asked the server nothing
       expect(tab2.sync.runs).toBe(runs); // and did not count a run
+      expect((tab2.sync as unknown as { timer: unknown }).timer).not.toBeNull(); // but tries again shortly: tab 1's run may have read the outbox before an edit here (round fifty-nine)
       s.release();
       await first;
       await tab2.sync.run();
@@ -1786,7 +1809,7 @@ describe('one run at a time per vault in a browser (round fifty-eight; the lock,
     const s = stallPush();
     try {
       const old = A.sync.run().catch((e: Error) => e);
-      await new Promise((r) => setTimeout(r, 50));
+      await s.reached;
       expect(A.sync.busy).not.toBeNull();
       await A.sync.forget();
       const KEY2 = newVaultKey();

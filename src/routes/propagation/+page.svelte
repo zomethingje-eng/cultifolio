@@ -48,8 +48,8 @@
       {#each rows as { s, st, m, counted } (s.id)}
         <li><a class="bcard" href="/propagation/{sowNo(s)}">
           <span class="top"><span class="accno">{sowNo(s)}</span><span class="pill {s.status === 'active' ? 'ok' : s.status === 'failed' ? 'bad' : ''}">{s.status === 'active' ? 'in progress' : s.status}</span></span>
-          <span class="nm"><SpeciesName name={s.taxonName} />{#if s.cultivar} ‘{s.cultivar}’{/if}</span>
-          <span class="meta">{m.label}{#if s.parentAcc} from <span class="mono">{parentNo(s.parentAcc)}</span>{/if} · {m.veg ? 'started' : 'sown'} {s.sown} · day {st.days}</span>
+          <span class="nm"><SpeciesName name={s.taxonName} />{#if s.cultivar}{' '}‘{s.cultivar}’{/if}</span>
+          <span class="meta">{m.label}{#if s.parentAcc}{' '}from <span class="mono">{parentNo(s.parentAcc)}</span>{/if} · {m.veg ? 'started' : 'sown'} {s.sown} · day {st.days}</span>
           <span class="figs">{s.count} {m.unit} · {#if counted}{st.germinated} {m.veg ? 'struck' : 'up'} ({pct(st.rate)}){:else}not counted yet{/if} · {st.potted} potted · {st.lost} lost</span>
         </a></li>
       {/each}
@@ -63,8 +63,8 @@
           {#each rows as { s, st, m }}
             <tr>
               <td><a class="mono" href="/propagation/{sowNo(s)}">{sowNo(s)}</a></td>
-              <td class="left"><SpeciesName name={s.taxonName} />{#if s.cultivar} ‘{s.cultivar}’{/if}</td>
-              <td class="left">{m.label}{#if s.parentAcc} <span class="faint"> from <a class="mono" href="/plants/{s.parentAcc}">{collection.accession(s.parentAcc) ? accNo(collection.accession(s.parentAcc)!) : s.parentAcc}</a></span>{/if}</td>
+              <td class="left"><SpeciesName name={s.taxonName} />{#if s.cultivar}{' '}‘{s.cultivar}’{/if}</td>
+              <td class="left">{m.label}{#if s.parentAcc}{' '}<span class="faint">from <a class="mono" href="/plants/{s.parentAcc}">{collection.accession(s.parentAcc) ? accNo(collection.accession(s.parentAcc)!) : s.parentAcc}</a></span>{/if}</td>
               <td class="left">{s.sown}</td>
               <td>{st.days}</td>
               <td>{s.count}</td>
@@ -82,6 +82,7 @@
 
 <style>
   table.wx td.left { text-align: left; font-family: var(--ui); font-weight: 400; }
+  table.wx a.mono { font-size: inherit; } /* the cell's own size: 0.86em of it was 10.3 px (round fifty-nine) */
   .muted { color: var(--ink3); }
   .bcards { display: none; list-style: none; margin: 14px 0; padding: 0; gap: 10px; }
   .bcard { display: grid; gap: 4px; min-height: 44px; padding: 12px 15px; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); color: var(--ink); text-decoration: none; }

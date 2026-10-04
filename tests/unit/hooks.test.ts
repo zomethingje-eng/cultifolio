@@ -61,7 +61,8 @@ describe('the species page cache (round forty-three, 3)', () => {
       cookies: { get: (k: string) => cookies[k] },
       platform,
       fetch: async () => new Response('', { status: 404 }), // no static index: the fixture corpus (Copiapoa, Refusia, Welwitschia)
-      isDataRequest
+      isDataRequest,
+      locals: {} as App.Locals
     });
     const page = async (status = 200, type = 'text/html', extra: Record<string, string> = {}) => { renders++; return new Response(`<p>render ${renders}</p>`, { status, headers: { 'content-type': type, 'cache-control': 'private, max-age=60', vary: 'accept-language, cookie', ...extra } }); };
     return { store, waited, event, page, platform, renders: () => renders };
@@ -81,6 +82,15 @@ describe('the species page cache (round forty-three, 3)', () => {
     expect(b.headers.get('referrer-policy')).toBe('no-referrer');
     expect(await b.text()).toBe('<p>render 1</p>');
     expect(w.renders()).toBe(1);
+  });
+  it('a species path written with an escaped letter is the page the plain path renders, and shares its copy (round fifty-eight; tested round fifty-nine)', async () => {
+    const w = world();
+    await handle({ event: w.event('/species/copiapoa-cinerea'), resolve: () => w.page() } as never);
+    await Promise.all(w.waited);
+    const b = await handle({ event: w.event('/species/%63opiapoa-cinerea'), resolve: () => w.page() } as never);
+    expect(b.headers.get('x-cultifolio-page')).toBe('held');
+    expect(w.renders()).toBe(1);
+    expect(w.store.size).toBe(1);
   });
   it('a reader in other units, or another hemisphere, or on another address, is rendered for', async () => {
     const w = world();

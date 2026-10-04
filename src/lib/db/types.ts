@@ -98,6 +98,8 @@ export interface Taxon {
   name: string;
   gbifKey?: number | null;
   myNotes?: string | null;
+  /** The stamp of the `myNotes` text the latest edit was made from, as `notesBase` is for a plant's notes (round fifty-nine). */
+  myNotesBase?: string | null;
   /** On the grower's species list without a plant of it yet: wanted, or worth knowing more about. */
   followed?: boolean | null;
 }

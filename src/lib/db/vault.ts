@@ -658,7 +658,10 @@ export async function writeFold(fold: FoldSnapshot, gen: number): Promise<boolea
     // But not for good: after a rollback the newer rules are gone, and a snapshot no build can read locked every load into
     // folding the whole log until the next deploy (round fifty-eight; the client review). One that no newer shell has
     // written for an hour is replaced.
-    const newer = typeof had?.rules === 'number' && had.rules > fold.rules && Date.now() - (typeof had.savedAt === 'number' ? had.savedAt : 0) < NEWER_FOLD_KEPT_MS;
+    // A savedAt in the future (this device's clock went back since) is not a reason to wait: it would hold for as long as
+    // the clock was wrong (round fifty-nine; the round forty-one review, 10).
+    const age = Date.now() - (typeof had?.savedAt === 'number' ? had.savedAt : 0);
+    const newer = typeof had?.rules === 'number' && had.rules > fold.rules && age >= 0 && age < NEWER_FOLD_KEPT_MS;
     if (now !== gen || newer) {
       await tx.done;
       return false;
@@ -666,6 +669,25 @@ export async function writeFold(fold: FoldSnapshot, gen: number): Promise<boolea
     await Promise.all([tx.store.put({ ...fold, savedAt: Date.now() }, FOLD), tx.done]);
     return true;
   });
+}
+/**
+ * A shell under the snapshot's own rules that loaded from it says so, at most every ten minutes: `savedAt` moved only
+ * when a newer shell wrote, which is rare, so an old shell took the snapshot over an hour later while the new one was
+ * still open, and then the new one folded the whole log and took it back (round fifty-nine; the round forty-one review,
+ * 10). Not a write of the log; a refusal or a quota error is ignored.
+ */
+export async function touchFold(rules: number): Promise<void> {
+  try {
+    await writing(async () => {
+      const tx = (await openVault()).transaction('meta', 'readwrite');
+      const had = (await tx.store.get(FOLD)) as FoldSnapshot | undefined;
+      const age = Date.now() - (typeof had?.savedAt === 'number' ? had.savedAt : 0);
+      if (had && had.rules === rules && (age < 0 || age > 10 * 60_000)) await tx.store.put({ ...had, savedAt: Date.now() }, FOLD);
+      await tx.done;
+    });
+  } catch {
+    /* the heartbeat is best-effort */
+  }
 }
 /** Park stamps and drop the snapshot in one transaction: a load between the two would fold a parked change into a snapshot it could then write (round fifty-five, 2; the first reviewer's finding 7). */
 export async function parkStamps(stamps: string[], drop = true): Promise<string[]> {

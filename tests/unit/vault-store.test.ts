@@ -4,8 +4,10 @@
  * (round sixteen, 1).
  */
 import 'fake-indexeddb/auto';
+import { wipeMeta } from './helpers/isolate';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { appendChanges, allChanges, outboxKeys, outboxAck, getMeta, setMeta, setMetaIfKey, wipeVault } from '$lib/db/vault';
+import * as vaultModule from '$lib/db/vault';
 import { hlcEncode, hlcDecode, hlcCompare, MAX_AHEAD_MS } from '$core/hlc';
 import type { Change } from '$core/log';
 import { accNo, sowNo } from '$lib/db/types';
@@ -15,8 +17,7 @@ const ch = (count: number, id: string, field: string, value: unknown): Change =>
 
 beforeEach(async () => {
   await wipeVault().catch(() => {});
-  await setMeta('issued:accession', []);
-  await setMeta('sync', null);
+  await wipeMeta(vaultModule); // every key, not two of them (round fifty-nine)
 });
 
 describe('two changes under one stamp', () => {
@@ -88,9 +89,9 @@ describe('a displaced change leaves the screen (round seventeen, 3)', () => {
     await collection.load();
     const a = ch(0, 'ghost', 'taxonName', 'Aloe');
     const b = ch(0, 'kept', 'taxonName', 'Lithops'); // ranks higher (its id sorts later)
-    await collection.ingest([a, ch(2, 'ghost', 'status', 'growing'), ch(3, 'kept', 'status', 'growing')], 'server', { repair: false });
+    await collection.ingest([a, ch(2, 'ghost', 'status', 'growing'), ch(3, 'kept', 'status', 'growing')], 'server');
     expect(collection.accessions.map((r) => r.id)).toEqual(['ghost']);
-    await collection.ingest([b], 'server', { repair: false });
+    await collection.ingest([b], 'server');
     expect(collection.accessions.map((r) => r.id)).toEqual(['kept']); // the ghost is gone without a reload (its name displaced, it is not whole)
     expect((await allChanges()).filter((c) => c.field === 'taxonName').map((c) => c.id)).toEqual(['kept']);
     const c = ch(1, 'one', 'taxonName', 'Conophytum');
@@ -103,26 +104,47 @@ describe('a displaced change leaves the screen (round seventeen, 3)', () => {
 
 describe('a duplicate number already in the log is not written at load; the record says so, and the repair is asked for (round fifty-six, 3)', () => {
   it('two whole plants under one number: the load writes nothing, both are listed and reachable, the later one knows it shares its number, and the repair renumbers it with the note', async () => {
+    // The plant recorded first has the HIGHER id, so a keeper chosen by id would pick the wrong one (the harness review).
     await appendChanges([
-      ch(10, 'a1', 'acc', '2026-0013'), ch(11, 'a1', 'taxonName', 'Welwitschia mirabilis'), ch(12, 'a1', 'status', 'growing'),
-      ch(13, 'a2', 'acc', '2026-0013'), ch(14, 'a2', 'taxonName', 'Welwitschia mirabilis'), ch(15, 'a2', 'status', 'growing')
+      ch(10, 'zz-first', 'acc', '2026-0013'), ch(11, 'zz-first', 'taxonName', 'Welwitschia mirabilis'), ch(12, 'zz-first', 'status', 'growing'),
+      ch(13, 'aa-second', 'acc', '2026-0013'), ch(14, 'aa-second', 'taxonName', 'Welwitschia mirabilis'), ch(15, 'aa-second', 'status', 'growing')
     ], true);
     const before = (await allChanges()).length;
     vi.resetModules(); // a fresh store, as a new tab has
     const { collection } = await import('$lib/db/collection.svelte');
     await collection.load();
     expect((await allChanges()).length).toBe(before); // a reading of the log does not write to it
-    expect(collection.accessions.map((r) => r.id).sort()).toEqual(['a1', 'a2']);
-    expect(collection.sharesNumber('accession', 'a2')).toEqual(['a1']);
-    expect(collection.sharesNumber('accession', 'a1')).toEqual(['a2']);
-    expect(collection.numberPlan('accession', 'a2')).toEqual({ keeper: 'a1', renumbered: ['a2'] }); // what the notice says
-    await collection.repairNumbers(); // a repair with nothing merged since is no repair: nothing is written (round fifty-eight)
-    expect((await allChanges()).length).toBe(before);
+    expect(collection.accessions.map((r) => r.id).sort()).toEqual(['aa-second', 'zz-first']);
+    expect(collection.sharesNumber('accession', 'aa-second')).toEqual(['zz-first']);
+    expect(collection.numberPlan('accession', 'aa-second')).toEqual({ keeper: 'zz-first', renumbered: ['aa-second'] }); // what the notice says
     expect(await collection.repairNumbers({ kind: 'accession', no: '2026-0013' })).toBe(true); // what the page's button does
-    expect(collection.accessions.map((r) => accNo(r)).sort()).toEqual(['2026-0013', '2026-0014']);
-    expect(collection.accession('2026-0014')?.id).toBe('a2');
-    expect(collection.sharesNumber('accession', 'a2')).toEqual([]);
+    expect(collection.accession('2026-0013')?.id).toBe('zz-first'); // the notice and the repair agree
+    expect(collection.accession('2026-0014')?.id).toBe('aa-second');
+    expect(collection.sharesNumber('accession', 'aa-second')).toEqual([]);
     expect((await allChanges()).some((c) => c.kind === 'event' && c.field === 'note' && /Renumbered from 2026-0013 to 2026-0014/.test(String(c.value)))).toBe(true);
+  });
+  it('a merge that brings a second plant under a number writes only what arrived; the number waits for the grower (round fifty-nine)', async () => {
+    const { collection } = await import('$lib/db/collection.svelte');
+    await collection.load();
+    await collection.ingest([ch(40, 'mine', 'acc', '2026-0020'), ch(41, 'mine', 'taxonName', 'Aloe'), ch(42, 'mine', 'status', 'growing')], 'server');
+    const before = (await allChanges()).length;
+    const peer = [ch(43, 'peer', 'acc', '2026-0020'), ch(44, 'peer', 'taxonName', 'Lithops'), ch(45, 'peer', 'status', 'growing')];
+    await collection.ingest(peer, 'server');
+    expect((await allChanges()).length).toBe(before + peer.length); // the merge wrote what arrived, nothing more
+    expect(collection.sharesNumber('accession', 'peer')).toEqual(['mine']);
+    await collection.ingest(peer, 'import'); // a file merged in: the same
+    expect((await allChanges()).length).toBe(before + peer.length);
+  });
+  it('a removed plant brought back to a number another took meanwhile yields it, and says so (round fifty-nine)', async () => {
+    const { collection } = await import('$lib/db/collection.svelte');
+    await collection.load();
+    await collection.ingest([ch(50, 'old', 'acc', '2026-0050'), ch(51, 'old', 'taxonName', 'Aloe'), ch(52, 'old', 'status', 'growing'), ch(53, 'old', '_deleted', true)], 'server');
+    await collection.ingest([ch(54, 'new', 'acc', '2026-0050'), ch(55, 'new', 'taxonName', 'Lithops'), ch(56, 'new', 'status', 'growing')], 'server');
+    const moved = await collection.restore('accession', 'old');
+    expect(moved).toEqual({ from: '2026-0050', to: '2026-0051' });
+    expect(collection.accession('2026-0050')?.id).toBe('new'); // the live plant keeps its number (and its printed label)
+    expect(collection.accession('2026-0051')?.id).toBe('old');
+    expect(collection.events('old').some((e) => /brought back/.test(e.note ?? ''))).toBe(true);
   });
 });
 
@@ -142,7 +164,7 @@ describe('the oldest record shape is read with its id as its number, and nothing
     expect(collection.accession('2026-0007')?.id).toBe('r7');
     expect(sowNo(collection.sowing('S2024-002')!)).toBe('S2024-002');
     // a number edit arriving later is the plant's number, from any device
-    await collection.ingest([ch(30, '2019-0003', 'acc', '2019-0001')], 'server', { repair: false });
+    await collection.ingest([ch(30, '2019-0003', 'acc', '2019-0001')], 'server');
     expect(collection.accession('2019-0001')?.id).toBe('2019-0003');
   });
   it('a removed plant of the oldest shape is found by its number to be restored', async () => {

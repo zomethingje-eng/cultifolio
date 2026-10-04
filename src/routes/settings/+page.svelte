@@ -142,7 +142,8 @@
     <div class="opt">
       <p class="optlab" id="units-len">Lengths (measurements, pot sizes)</p>
       <!-- Following is a third value of the choice, not a state beside it (round fifty-eight; the accessibility review). -->
-      <ToggleGroup labelledby="units-len" options={[{ value: 'mm', label: 'Millimetres' }, { value: 'in', label: 'Inches' }, { value: 'follow', label: 'Follow temperature' }]} value={prefs.current.lengthUnits ?? 'follow'} onchange={(v) => prefs.set({ lengthUnits: v === 'follow' ? null : v })} />
+      <!-- Three equal parts that may take two lines each: "Follow temperature" was cut at 320 px (round fifty-nine). -->
+      <ToggleGroup class="lenseg" labelledby="units-len" options={[{ value: 'mm', label: 'Millimetres' }, { value: 'in', label: 'Inches' }, { value: 'follow', label: 'Follow °C\u00a0/\u00a0°F' }]} value={prefs.current.lengthUnits ?? 'follow'} onchange={(v) => prefs.set({ lengthUnits: v === 'follow' ? null : v })} />
       <p class="hint">{prefs.lengthUnitsFollow ? `Following the temperature: lengths are in ${prefs.lengthUnits === 'in' ? 'inches' : 'millimetres'} now, inches with °F and millimetres with °C.` : `Lengths are in ${prefs.lengthUnits === 'in' ? 'inches' : 'millimetres'} whatever the temperature units.`}</p>
     </div>
   </div>
@@ -152,7 +153,7 @@
 <h2 class="sec" id="site">Your site</h2>
 <div class="cult">
   <div class="body">
-    <p class="small" style="margin: 0 0 10px">Where you grow: the frost watch reads its forecast here, and the months in the notes follow its hemisphere.{#if !site.current && benches.length} Until it is set, the first place with coordinates decides the hemisphere for the months; the frost watch here and on the front page needs the site itself, and a place with coordinates is watched on its own page regardless.{/if}</p>
+    <p class="small" style="margin: 0 0 10px">Where you grow: the frost watch reads its forecast here, and the months in the notes follow its hemisphere.{#if !site.current && benches.length}{' '}Until it is set, the first place with coordinates decides the hemisphere for the months; the frost watch here and on the front page needs the site itself, and a place with coordinates is watched on its own page regardless.{/if}</p>
     <!-- Placeholders that read as examples, muted, not as figures already set (round fifty-eight; the grower review). -->
     <div class="fields">
       <label><span>Name</span><input type="text" bind:value={siteName} placeholder="e.g. home, the greenhouse" /></label>
@@ -161,7 +162,7 @@
     </div>
     <p class="hint">North and east are positive, south and west negative.</p>
     <div class="row">
-      <button class="btn pri" type="button" onclick={saveSite}>Save</button>
+      <button class="btn pri" type="button" onclick={saveSite}>Save site</button>
       <button class="btn" type="button" onclick={locate} disabled={locating}>{locating ? 'Locating…' : 'Use my location'}</button>
       {#if benches.length}
         <label class="inline"><span>or a place:</span><select onchange={(e) => useBench((e.currentTarget as HTMLSelectElement).value)}><option value="">choose</option>{#each benches as b (b.id)}<option value={b.id}>{b.name}</option>{/each}</select></label>
@@ -212,7 +213,7 @@
       <label><span>Digits</span><input type="number" min="2" max="6" step="1" inputmode="numeric" bind:value={width} /></label>
     </div>
     <div class="row">
-      <button class="btn pri" type="button" onclick={saveScheme} disabled={!collection.ready}>Save</button>
+      <button class="btn pri" type="button" onclick={saveScheme} disabled={!collection.ready}>Save numbering</button>
       {#if preview}<span class="small muted">next plant: <span class="accno">{preview}</span></span>{/if}
     </div>
     {#if numMsg}<p class="small muted" role="status" style="margin: 8px 0 0">{numMsg}</p>{/if}
@@ -240,9 +241,11 @@
   .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
   .fields label, .inline { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-sm); color: var(--ink2); }
   .inline { flex-direction: row; align-items: center; gap: 6px; }
-  .fields input, .inline select { font: inherit; font-size: var(--fs-md); padding: 8px 10px; min-height: 44px; box-sizing: border-box; border: 1px solid var(--rule); border-radius: var(--r); background: var(--card); color: var(--ink); }
+  .fields input, .inline select { font: inherit; font-size: var(--fs-md); padding: 8px 10px; min-height: 44px; box-sizing: border-box; border: 1px solid var(--field-edge); border-radius: var(--r); background: var(--card); color: var(--ink); }
   .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
-  .body :global(.seg > button) { min-height: 44px; } /* reaches into the toggle group's own markup (round fifty-eight; the accessibility review) */
+  .body :global(.seg > button) { min-height: 44px; }
+  .body :global(.seg.lenseg) { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: min(100%, 440px); border-radius: var(--r); }
+  .body :global(.seg.lenseg > button) { white-space: normal; justify-content: center; text-align: center; padding: 6px 8px; line-height: 1.25; } /* reaches into the toggle group's own markup (round fifty-eight; the accessibility review) */
   /* One option per line, its name above and its hint under it (round fifty-eight; the grower review). */
   .opt + .opt { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--rule); }
   .optlab { margin: 0 0 8px; font-size: var(--fs-md); font-weight: 600; color: var(--ink); }

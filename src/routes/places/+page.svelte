@@ -1,17 +1,35 @@
 <script lang="ts">
   import { plural } from '$core/words';
   import { onMount } from 'svelte';
+  import { replaceState } from '$app/navigation';
+  import { page } from '$app/state';
+  import { focusNext } from '$lib/ui/focus';
   import PageHead from '$lib/ui/PageHead.svelte';
   import { collection } from '$lib/db/collection.svelte';
   import { LOCATION_KINDS, type LocationKind, type Location } from '$lib/db/types';
   onMount(() => collection.load());
   let adding = $state(false);
-  // The top bar's "+" on this section lands on /places#add: the form opens, and again when the hash is set while here (round fifty-eight).
+  // The top bar's "+" on this section lands on /places#add: the form opens with its first field focused, and the hash is
+  // taken off the address at once, so a second tap is a change again and opens it again; the tap itself is heard too,
+  // for a browser that does not report a hash it already has (round fifty-eight; round fifty-nine: it worked once).
   onMount(() => {
-    const open = () => { if (location.hash === '#add') adding = true; };
-    open();
-    window.addEventListener('hashchange', open);
-    return () => window.removeEventListener('hashchange', open);
+    const open = () => {
+      adding = true;
+      void focusNext('#loc-name');
+      if (location.hash === '#add') replaceState(location.pathname + location.search, page.state);
+    };
+    const onHash = () => { if (location.hash === '#add') open(); };
+    const onTap = (e: MouseEvent) => {
+      const a = (e.target as Element | null)?.closest?.('a[href="/places#add"]');
+      if (!a || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      e.preventDefault();
+      open();
+    };
+    onHash();
+    window.addEventListener('hashchange', onHash);
+    // In the capture phase, ahead of the router's own link handling, which took the second tap as a hash it already had.
+    window.addEventListener('click', onTap, true);
+    return () => { window.removeEventListener('hashchange', onHash); window.removeEventListener('click', onTap, true); };
   });
   let name = $state('');
   let kind = $state<LocationKind | ''>(''); // chosen, never defaulted: a bench filed as a room says "whole room" on every watering line (round twenty-six, 16)
@@ -72,8 +90,9 @@
       {#each rows as r (r.loc.id)}
         <!-- Two lines, the name and then its kind and count: three columns on one line squeezed the name on a phone (round fifty-eight; the grower review). -->
         <a class="row card" href="/places/{r.loc.id}" style="--d:{r.depth}">
-          <span class="name">{r.loc.name}{#if collection.needsHome(r.loc.id)} <span class="faint">· needs a home: two devices moved places into each other; move this one where it belongs</span>{/if}</span>
-          <span class="line2"><span class="sr">, </span>{#if kindLabel(r.loc.type)}<span class="faint kind">{kindLabel(r.loc.type)}</span><span class="faint" aria-hidden="true"> · </span><span class="sr">, </span>{/if}<span class="n mono">{plural(r.deepN, 'plant')}{r.deepN !== r.n ? ` (${r.n} here)` : ''}</span></span>
+          <span class="name">{r.loc.name}{#if collection.needsHome(r.loc.id)}{' '}<span class="faint">· needs a home: two devices moved places into each other; move this one where it belongs</span>{/if}</span>
+          <!-- The separator is a box with its own margins, not spaces at a span's edge, which the row's layout dropped ("Greenhouse·0 plants"); the comma is for a screen reader (round fifty-nine). -->
+          <span class="line2"><span class="sr">{', '}</span>{#if kindLabel(r.loc.type)}<span class="faint kind">{kindLabel(r.loc.type)}</span><span class="faint dot" aria-hidden="true">·</span><span class="sr">{', '}</span>{/if}<span class="n mono">{plural(r.deepN, 'plant')}{r.deepN !== r.n ? ` (${r.n} here)` : ''}</span></span>
         </a>
       {/each}
     </div>
@@ -85,11 +104,12 @@
   .form { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 8px; padding: 12px 15px; margin: 12px 0 16px; align-items: end; }
   .fl { display: grid; gap: 3px; min-width: 0; } /* a field with its small name over it (round fifty-eight; the accessibility review) */
   .full { grid-column: 1 / -1; }
-  .form input, .form select { font: inherit; font-size: var(--fs-md); padding: 8px 11px; border: 1px solid var(--rule); border-radius: var(--r); background: var(--card); color: var(--ink); }
+  .form input, .form select { font: inherit; font-size: var(--fs-md); padding: 8px 11px; min-height: var(--tap); border: 1px solid var(--field-edge); border-radius: var(--r); background: var(--card); color: var(--ink); }
   .tree { display: grid; gap: 0.35rem; margin-top: 0.8rem; }
   /* Two lines of about 56px; a long name wraps between words, never inside one (round fifty-eight; the grower review). */
   .row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; align-content: center; padding: 0.45rem 0.9rem; padding-left: calc(0.9rem + min(var(--d), 4) * 1.4rem); color: inherit; min-height: 56px; }
-  .line2 { display: block; line-height: 1.3; }
+  .line2 { display: flex; flex-wrap: wrap; align-items: baseline; line-height: 1.3; }
+  .line2 .dot { margin: 0 0.45em; }
   .row:hover { text-decoration: none; box-shadow: var(--sh2); color: inherit; }
   .name { font-weight: 600; overflow-wrap: break-word; word-break: normal; line-height: 1.3; }
   .kind { font-size: var(--fs-md); }

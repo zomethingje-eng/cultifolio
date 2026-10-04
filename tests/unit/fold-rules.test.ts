@@ -30,7 +30,7 @@ function block(file: string, signature: string): string {
   return text.slice(at, end + indent.length + 2);
 }
 
-const RECORDED = { rules: 3, hash: '6227043202392025063dc89e5fb06bd0' };
+const RECORDED = { rules: 4, hash: 'de78b243ee3ae5749ee5586fffa6a8ff' };
 
 describe('the fold rules number (round fifty-seven)', () => {
   it('moves whenever the fold\'s source does', () => {
@@ -39,8 +39,10 @@ describe('the fold rules number (round fifty-seven)', () => {
     const src = [
       whole('src/lib/core/log.ts'),
       whole('src/lib/core/hlc.ts'),
-      ...['private clearFold(', 'private applyHere(', 'private foldAll(', 'private foldSome(', 'private touched(', 'private noteParents(', 'private async foldFromVault(', 'private async fromFold(', 'private async saveFold(', 'private dueNow(', 'private hold(', 'private notePark(', 'async markParked(', 'private async saveParked(', 'private async rereadParked(', 'private async flushParked(', 'private async readParked('].map((sig) => block(col, sig)),
-      ...['async function storeIn(', 'export async function readFold(', 'export async function writeFold(', 'export async function arrivalsAfter('].map((sig) => block(vault, sig)),
+      ...['load(): Promise<void> {', 'async rebuild(', 'private async catchUp(', 'private clearFold(', 'private applyHere(', 'private foldAll(', 'private foldSome(', 'private touched(', 'private noteParents(', 'private async foldFromVault(', 'private async fromFold(', 'private async saveFold(', 'private dueNow(', 'private hold(', 'private notePark(', 'async markParked(', 'private async saveParked(', 'private async rereadParked(', 'private async flushParked(', 'private async readParked('].map((sig) => block(col, sig)),
+      // The whole vault module since round fifty-nine: the reviews changed `changesByKeys`, `lastArrival`, `dropFoldIn`,
+      // `parkStamps` and a constant, each of which shapes what a snapshot holds or replays, and the hash did not move.
+      whole(vault),
       JSON.stringify(REQUIRED_FIELDS),
       JSON.stringify(KINDS)
     ].join('\n');

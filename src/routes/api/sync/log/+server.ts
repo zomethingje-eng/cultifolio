@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { store, vaultId, authed, batchKey, listBatches, parseAfter, storeOnce, readBody, batchMeta, VaultFull, DayQuota, MAX_BATCH_BYTES, limited, quotaOf } from '$lib/server/sync';
+import { store, vaultId, authed, batchKey, listBatches, parseAfter, storeOnce, readBody, batchMeta, VaultFull, DayQuota, VaultsClosed, MAX_BATCH_BYTES, limited, quotaOf } from '$lib/server/sync';
 import { PUSH_HEADERS, STATUS } from '$lib/sync/limits';
 
 /**
@@ -40,7 +40,7 @@ export const POST: RequestHandler = async ({ request, url, platform, getClientAd
   try {
     r = await storeOnce(r2, id, meta, key, body, extra, quotaOf(platform, getClientAddress));
   } catch (e) {
-    if (e instanceof VaultFull || e instanceof DayQuota) return e.response();
+    if (e instanceof VaultFull || e instanceof DayQuota || e instanceof VaultsClosed) return e.response();
     throw e;
   }
   if (r === 'different') return json({ error: 'a different batch already has that name' }, { status: STATUS.differentContent });

@@ -3,6 +3,10 @@ import { test, expect } from '@playwright/test';
 
 /** The plant page's id card keeps one primary action; Edit, Label and Propagate are behind "More" (improvements, 7). */
 /** Click Add on the add-plant form. A name the reference does not hold (the name service is not reachable here) is asked about once, and the second Add keeps it as typed (round twenty-three, 4). */
+/** The page hydrated: before then a value typed into a bound field is dropped, and a click has no handler (round fifty-nine). */
+async function ready(p: import('@playwright/test').Page) {
+  await p.locator('html[data-ready]').waitFor({ state: 'attached' });
+}
 async function addPlant(p: import('@playwright/test').Page) {
   await p.getByRole('button', { name: /^Add/ }).click();
   const asked = p.locator('.picker .hint', { hasText: 'press Add to keep exactly what you typed' });
@@ -340,6 +344,7 @@ test('the path species → my plants → bench is prefilled at every step and lo
 
 test('photos: taken on the device, resized, stored, captioned, made the cover, shown everywhere, survive a reload, removed', async ({ page }) => {
   await page.goto('/settings');
+  await ready(page);
   await page.check('#pref-refphotos'); // the species' photograph on a private page is opt-in (round twelve, A1)
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
   await page.getByRole('button', { name: /^Add/ }).click();
@@ -594,9 +599,9 @@ test('the species page condenses its cultivation sheet into a note by rule', asy
   await expect(page.locator('#gen-note')).toContainText('by rule, from the cards');
   await expect(page.locator('#gen-note')).toHaveAttribute('open', ''); // open at rest: the paragraph a grower reads first (round forty-nine, 3)
   // fact first in plain words, the rule and the source in grey after it (round fifty-eight)
-  await expect(page.locator('#gen-note .body li').filter({ hasText: 'Almost rainless (72 mm a year), no wet season; the cooler half of the year is November to April' })).toContainText('rain and temperature rules, CHELSA');
+  await expect(page.locator('#gen-note .body li').filter({ hasText: 'Under 120 mm of rain a year (72 mm), so no rainy season is read; the cooler six months are November to April' })).toContainText('rain and temperature rules, CHELSA');
   await expect(page.locator('#gen-note .body')).not.toContainText(/fog/);
-  await expect(page.locator('#gen-note .body li').filter({ hasText: 'Cold nights reach 6.5 °C' })).toContainText('NASA POWER, 40 years');
+  await expect(page.locator('#gen-note .body li').filter({ hasText: 'Cold floor 6.5 °C' })).toContainText('NASA POWER, 40 years');
   await expect(page.locator('#gen-note .foot')).toContainText('Seasons, Rain, Light, Warmth and air');
   // the note's floor is the card's floor, the same figure with the same quantity named
   await expect(page.locator('.cult', { hasText: /^Warmth and air/ }).first().locator('.body')).toContainText('Cold floor: 6.5 °C, which is the 1st-percentile night over 40 years at a typical spot in the range (NASA POWER).');
@@ -1171,6 +1176,7 @@ test('long and unicode names: nothing overflows at 360 px, the number chip never
 
 test('removing asks twice; a species photograph that fails to load leaves the name where it can be read', async ({ page }) => {
   await page.goto('/settings');
+  await ready(page);
   await page.check('#pref-refphotos');
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
   await page.getByRole('button', { name: /^Add/ }).click();
@@ -1340,9 +1346,10 @@ test('a forecast source that does not answer is "not checked" in a plain notice 
   await expect(page).toHaveURL(/\/today$/);
   await expect(page.locator('#frost .emptybox')).toContainText('No site set');
   await page.goto('/settings');
+  await ready(page);
   await page.fill('#site-lat', '40.38');
   await page.fill('#site-lon', '-80.05');
-  await page.getByRole('button', { name: 'Save', exact: true }).first().click();
+  await page.getByRole('button', { name: 'Save site', exact: true }).click();
   await expect(page.getByText('Saved on this device.')).toBeVisible();
   await page.goto('/today');
   await expect(page.getByText('Your site: 40.38, -80.05')).toBeVisible();
@@ -1486,6 +1493,7 @@ test('pages about your own plants ask no outside host for anything unless the re
   await expect.poll(() => outside.some((u) => u === '/ -> https://inaturalist-open-data.s3.amazonaws.com/photos/700/medium.jpg'), { timeout: 10000 }).toBe(true); // the tile asked the image host at once (the stub refuses it, so the tile says it did not load)
   await expect(page.locator('a.tile', { hasText: 'Welwitschia' }).first()).toContainText('photograph did not load');
   await page.goto('/settings');
+  await ready(page);
   await expect(page.locator('#pref-refphotos')).toBeChecked();
   await page.goto(`/plants/${acc}`);
   await expect.poll(() => outside.some((u) => u === `/plants/${acc} -> https://inaturalist-open-data.s3.amazonaws.com/photos/700/medium.jpg`), { timeout: 10000 }).toBe(true);
@@ -1623,7 +1631,7 @@ test('the species page answers in the first screen and relates the species by ge
   await page.goto('/species/copiapoa-cinerea');
   const glance = page.locator('.glance');
   await expect(glance.locator('.card', { hasText: 'Cold floor' })).toContainText('6.5');
-  await expect(glance.locator('#gen-note')).toContainText('Cold nights reach 6.5 °C'); // the card and the note agree: one figure, one rule
+  await expect(glance.locator('#gen-note')).toContainText('Cold floor 6.5 °C'); // the card and the note agree: one figure, one rule
   await expect(glance.locator('.card', { hasText: 'Rain' })).toContainText('72');
   // related: the nearest habitat climate from the index, with the rule beside it
   await expect(page.locator('#s-related')).toBeVisible();
@@ -1656,6 +1664,10 @@ test('compare: three species side by side, a refusal named in every empty cell, 
 });
 
 test('the share card is a PNG with the figures and the link drawn in, and is offered only where there is a climate', async ({ page }) => {
+  // Chromium on Windows offers the system share sheet for files, and the card went there instead of to a download the
+  // test waited thirty seconds for (round fifty-nine; the second outside review's Windows run). The download path is
+  // tested with no share; the share path below, with one that records what it was given.
+  await page.addInitScript(() => { Object.defineProperty(navigator, 'share', { value: undefined, configurable: true }); Object.defineProperty(navigator, 'canShare', { value: undefined, configurable: true }); });
   await page.goto('/species/refusia-testii');
   await expect(page.getByRole('button', { name: 'Share card' })).toHaveCount(0);
   await page.goto('/species/copiapoa-cinerea');
@@ -1665,6 +1677,17 @@ test('the share card is a PNG with the figures and the link drawn in, and is off
   const { statSync } = await import('node:fs');
   expect(statSync(path!).size).toBeGreaterThan(20_000);
   await expect(page.getByRole('status')).toContainText('Saved to your downloads');
+  // Where the browser can share a file, the card goes to the share sheet, as a PNG under the same name
+  await page.evaluate(() => {
+    const w = window as unknown as { __shared?: { name: string; type: string; size: number } };
+    Object.defineProperty(navigator, 'canShare', { value: () => true, configurable: true });
+    Object.defineProperty(navigator, 'share', { value: async (d: ShareData) => { const f = d.files![0]; w.__shared = { name: f.name, type: f.type, size: f.size }; }, configurable: true });
+  });
+  await page.getByRole('button', { name: 'Share card' }).click();
+  await expect(page.getByRole('status')).toContainText('Shared.');
+  const shared = await page.evaluate(() => (window as unknown as { __shared?: { name: string; type: string; size: number } }).__shared);
+  expect(shared).toMatchObject({ name: 'copiapoa-cinerea-climate.png', type: 'image/png' });
+  expect(shared!.size).toBeGreaterThan(20_000);
 });
 
 test('a grower\'s home says what needs them: sowings in the tray and plants without a photograph, each a link', async ({ page }) => {
@@ -1748,7 +1771,7 @@ test('settings: units switch every figure and sentence, survive a reload through
   const glance = page.locator('.glance');
   await expect(glance.locator('.card', { hasText: 'Cold floor' })).toContainText('43.7');
   await expect(glance.locator('.card', { hasText: 'Cold floor' })).toContainText('°F');
-  await expect(glance.locator('#gen-note')).toContainText('Cold nights reach 43.7 °F');
+  await expect(glance.locator('#gen-note')).toContainText('Cold floor 43.7 °F');
   await expect(glance.locator('#gen-note')).not.toContainText('°C');
   await expect(glance.locator('.card', { hasText: 'Rain' })).toContainText('2.8');
   await expect(page.locator('.climo .panel').first()).toHaveText('°F · day and night');
@@ -1757,6 +1780,7 @@ test('settings: units switch every figure and sentence, survive a reload through
   expect(html).toContain('43.7');
   expect(html).not.toMatch(/6\.5<span class="u">°C/);
   await page.goto('/settings');
+  await ready(page);
   await expect(page.getByRole('button', { name: '°F and inches' })).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: '°C and mm' }).click();
   await page.goto('/species/copiapoa-cinerea');
@@ -1765,15 +1789,17 @@ test('settings: units switch every figure and sentence, survive a reload through
 
 test('settings: numbering is previewed and saved as the vault setting; appearance is applied at once', async ({ page }) => {
   await page.goto('/settings');
+  await ready(page);
   await page.getByRole('button', { name: /Prefix/ }).click();
   await page.fill('input[placeholder="your initials or the collection\'s"]', 'jf');
   await expect(page.locator('.accno')).toHaveText('JF-0001');
-  await page.getByRole('button', { name: 'Save', exact: true }).nth(1).click();
+  await page.getByRole('button', { name: 'Save numbering', exact: true }).click();
   await expect(page.getByText(/the next plant is JF-0001/)).toBeVisible();
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/JF-0001$/);
   await page.goto('/settings');
+  await ready(page);
   await page.getByRole('button', { name: 'Dark' }).click();
   expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe('dark');
   await page.reload();
@@ -1848,6 +1874,7 @@ test('the collection\'s pages need nothing from the server to open: a plant page
   await expect(page.getByRole('button', { name: 'Water', exact: true })).toBeVisible({ timeout: 15000 });
   // the settings shell was cached in metric; the units came from the cookie, not from the cached HTML or a server the page could not reach
   await page.goto('/settings');
+  await ready(page);
   await expect(page.getByRole('button', { name: '°F and inches' })).toHaveAttribute('aria-pressed', 'true');
   await ctx.close();
 });
@@ -1926,6 +1953,7 @@ test('settings previews the next number from the numbers given, and an edited ac
   await page.goto('/plants/new?species=Copiapoa%20humilis&key=5384999');
   await addPlant(page);
   await page.goto('/settings');
+  await ready(page);
   await expect(page.locator('.accno')).toHaveText(/-0003$/);
   await page.goto('/plants/2026-0001');
   await more(page, 'Edit');
@@ -2119,9 +2147,10 @@ test('no page address goes out as a referrer: the policy is on every document an
 
 test('the hemisphere cookie rides only on species and compare pages, never on sync or the API (round sixteen, 11)', async ({ page }) => {
   await page.goto('/settings');
+  await ready(page);
   await page.getByLabel('Latitude').fill('-33.9');
   await page.getByLabel('Longitude').fill('18.4');
-  await page.locator('#site').locator('..').getByRole('button', { name: 'Save', exact: true }).first().click();
+  await page.locator('#site').locator('..').getByRole('button', { name: 'Save site', exact: true }).click();
   await expect(page.getByText('Saved on this device.')).toBeVisible();
   const on = async (path: string) => { await page.goto(path); return page.evaluate(() => document.cookie); };
   expect(await on('/species/copiapoa-cinerea')).toContain('cultifolio.hemi=s');
@@ -2581,6 +2610,7 @@ test('round forty: a measurement typed in inches is stored in millimetres and re
   await page.getByRole('link', { name: 'Add one to my plants' }).click();
   await addPlant(page);
   await page.goto('/settings');
+  await ready(page);
   await page.getByRole('button', { name: /°F and inches/ }).click();
   await page.goto('/plants/2026-0001');
   await page.locator('.quickbar .more').click();
@@ -2591,6 +2621,7 @@ test('round forty: a measurement typed in inches is stored in millimetres and re
   await expect(page.locator('.card', { hasText: 'Diameter' })).toContainText('2');
   await expect(page.locator('.card', { hasText: 'Diameter' }).locator('.u')).toContainText('in');
   await page.goto('/settings');
+  await ready(page);
   await page.getByRole('button', { name: /°C and mm/ }).click();
   await page.goto('/plants/2026-0001');
   await expect(page.locator('.card', { hasText: 'Diameter' })).toContainText('50.8');
@@ -3069,9 +3100,10 @@ test('round fifty-four: a Today page left open overnight dates the morning\'s wa
   await expect(page.locator('#frostbar')).toHaveCount(0);
   // the site set in Settings: the watch reads it on the next navigation, no reload (round fifty-four, 4; the second reviewer's finding 2)
   await page.goto('/settings');
+  await ready(page);
   await page.fill('#site-lat', '40.38');
   await page.fill('#site-lon', '-80.05');
-  await page.getByRole('button', { name: 'Save', exact: true }).first().click();
+  await page.getByRole('button', { name: 'Save site', exact: true }).click();
   await expect(page.getByText('Saved on this device.')).toBeVisible();
   await page.locator('.topseg a', { hasText: 'My plants' }).click();
   await expect(page.locator('#frostbar')).toContainText('Frost forecast');
@@ -3220,6 +3252,15 @@ test('round fifty-eight: a place\'s watering rhythm decides what is due, its dry
   await stop.locator('.chip.tick input').first().uncheck();
   await stop.getByRole('button', { name: 'Water 1 of 2 here' }).click();
   await expect(stop.locator('.row.done .chip')).toHaveCount(1);
+  // round fifty-nine, 3: with nothing left ticked the head shows the done mark, not a disabled "Water 0 of 1"; the plant left out stays, with its tick
+  await expect(stop.locator('.head .donemark')).toContainText('Watered');
+  await expect(stop.locator('.head').getByRole('button')).toHaveCount(0);
+  await expect(stop.locator('.row.warn .chip.tick, .row.unknown .chip.tick')).toHaveCount(1);
+  // round fifty-nine, 6: an Undo by keyboard leaves focus on the stop, not on the page body
+  await stop.locator('.row.done').getByRole('button', { name: 'Undo' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(stop.locator('.row.done')).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => !!document.activeElement?.closest('.stop'))).toBe(true);
   // the month kept dry: the plants here are not due, and the stop says so in one line
   await page.goto(place + '?edit=1');
   const month = await page.evaluate(() => new Date().getMonth());
@@ -3229,4 +3270,69 @@ test('round fifty-eight: a place\'s watering rhythm decides what is due, its dry
   await expect(stop.locator('.row.resting', { hasText: 'Kept dry this month' })).toContainText('2 plants');
   await expect(stop.getByRole('button', { name: /^Water/ })).toHaveCount(0);
   await C.close();
+});
+
+test('round fifty-nine: the top bar\'s + opens the new-place form on every tap; the place form refuses what it cannot keep, with a sentence, and stays open (8, 9, 10)', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/places');
+  const plus = page.locator('#topbar a[aria-label="Add a place"]');
+  await plus.click();
+  await expect(page.locator('#loc-name')).toBeFocused();
+  await expect(page).not.toHaveURL(/#add/);
+  await page.getByRole('button', { name: 'New place' }).click(); // the head's button closes it
+  await expect(page.locator('#loc-name')).toHaveCount(0);
+  await plus.click(); // a second tap in a row opens it again
+  await expect(page.locator('#loc-name')).toBeFocused();
+  await page.fill('#loc-name', 'Test bench');
+  await page.selectOption('#loc-kind', 'bench');
+  await page.getByRole('button', { name: 'Add', exact: true }).click();
+  await page.locator('.tree a', { hasText: 'Test bench' }).click();
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  await page.fill('#e-waterdays', 'abc');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.locator('#e-msg')).toContainText('not a whole number of days from 1 to 365');
+  await expect(page.locator('#e-waterdays')).toBeFocused();
+  await page.fill('#e-waterdays', '10');
+  await page.fill('#e-lat', '40.4');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.locator('#e-lon-bad')).toContainText('A latitude needs its longitude');
+  await page.fill('#e-lat', '');
+  await page.fill('#e-alt', '300');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.locator('#e-msg')).toHaveCount(0); // saved: the form closed
+  await expect(page.locator('.factgrid')).toContainText('about every 10 days');
+  await expect(page.locator('.factgrid > div', { hasText: 'Altitude' })).toContainText('300 m');
+  await expect(page.getByText('No floor, light, watering or audit recorded here yet')).toHaveCount(0);
+});
+
+test('round fifty-nine: a control reached by the keyboard is never left under a sticky or fixed bar (WCAG 2.4.11), forward or back, at 390', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 640 });
+  /** Tab `n` times (Shift+Tab when `back`), and after each say which focused element is covered at its centre by something that is not it. */
+  const hidden = async (n: number, back: boolean) => {
+    const out: string[] = [];
+    for (let i = 0; i < n; i++) {
+      await page.keyboard.press(back ? 'Shift+Tab' : 'Tab');
+      await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+      const bad = await page.evaluate(() => {
+        const el = document.activeElement as HTMLElement | null;
+        if (!el || el === document.body) return null;
+        const r = [...el.getClientRects()].find((b) => b.width > 0 && b.height > 0);
+        if (!r || r.bottom < 0 || r.top > innerHeight) return null; // off the screen, which is the browser's to scroll
+        const x = Math.min(innerWidth - 1, Math.max(1, r.left + r.width / 2)), y = Math.min(innerHeight - 1, Math.max(1, r.top + r.height / 2));
+        const at = document.elementFromPoint(x, y);
+        return at && (at === el || el.contains(at) || at.contains(el)) ? null : `${el.tagName} "${(el.textContent ?? '').trim().slice(0, 30)}" under ${at?.tagName}.${at?.className}`;
+      });
+      if (bad) out.push(bad);
+    }
+    return out;
+  };
+  await page.goto('/about/how');
+  await ready(page);
+  expect(await hidden(30, false)).toEqual([]);
+  await page.keyboard.press('End');
+  expect(await hidden(30, true)).toEqual([]);
+  await page.goto('/species/copiapoa-cinerea');
+  await ready(page);
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  expect(await hidden(40, true)).toEqual([]);
 });

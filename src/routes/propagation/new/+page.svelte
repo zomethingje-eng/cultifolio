@@ -275,7 +275,7 @@
   .sheet { padding: 6px 17px 14px; margin-top: 12px; }
   .field { margin: 12px 0; display: block; }
   .field > span:first-child, .field > label:first-child { display: block; font-size: var(--fs-xs); letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink3); font-weight: 700; margin-bottom: 5px; }
-  .field input[type='text'], .field input[type='date'], .field input[type='number'], .field select, .field textarea { width: 100%; font: inherit; font-size: 0.875rem; padding: 9px 12px; border: 1px solid var(--rule); border-radius: var(--r); background: var(--card); color: var(--ink); }
+  .field input[type='text'], .field input[type='date'], .field input[type='number'], .field select, .field textarea { width: 100%; font: inherit; font-size: 0.875rem; padding: 9px 12px; border: 1px solid var(--field-edge); border-radius: var(--r); background: var(--card); color: var(--ink); }
   .field input:focus, .field select:focus, .field textarea:focus { outline: 0; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
   .field .small { display: block; margin-top: 4px; font-size: var(--fs-sm); }
   .bad { color: var(--bad); }
@@ -284,7 +284,7 @@
   .actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
   .actions .why { color: var(--ink2); margin-right: auto; }
   /* The filter sits on the list it narrows; the list follows it (round fifty-eight; the grower review). */
-  .pfilter { width: 100%; font: inherit; font-size: var(--fs-md); padding: 9px 12px; border: 1px solid var(--rule); border-radius: var(--r); background: var(--card); color: var(--ink); margin-bottom: 6px; }
+  .pfilter { width: 100%; font: inherit; font-size: var(--fs-md); padding: 9px 12px; border: 1px solid var(--field-edge); border-radius: var(--r); background: var(--card); color: var(--ink); margin-bottom: 6px; }
   .pfilter + .small { margin: -2px 0 6px; }
   /* The Add form's pinned bar, copied: the toast lifts above it through body.stickyacts (round fifty-eight; the grower review). */
   @media (max-width: 700px) { .actions.sticky { position: sticky; bottom: calc(56px + env(safe-area-inset-bottom)); background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(8px); padding: 10px 0; margin: 8px 0 0; z-index: 5; } }

@@ -228,7 +228,7 @@
     await collection.remove('sowing', id);
     goto('/propagation');
     // One tap removed it; the toast on the list puts it back (round forty-nine, 3).
-    toast.show(`${no} removed.`, 8000, { label: 'Undo', run: () => { void collection.restore('sowing', id).then(() => goto(`/propagation/${id}`)); } });
+    toast.show(`${no} removed.`, 8000, { label: 'Undo', run: () => { void collection.restore('sowing', id).then((moved) => { void goto(`/propagation/${id}`); if (moved) toast.show(`Restored as ${moved.to}: ${moved.from} is another batch's now.`); }); } });
   }
 
   /* edit */
@@ -307,7 +307,7 @@
       if (now && sowNo(now) !== before) {
         toast.show(`This batch is now ${sowNo(now)}; a note on it says why.`);
         if (param !== id) await goto(`/propagation/${encodeURIComponent(id)}`, { replaceState: true });
-      } else toast.show(`${before} stays with this batch, made first; the other was given the next free number.`);
+      } else toast.show(`${before} stays with this batch, recorded first; the other was given the next free number.`);
     } finally {
       renumbering = false;
     }
@@ -321,7 +321,7 @@
   <div class="notice err" role="alert" id="write-error">This change was not saved: {collection.lastWriteError}. Free space or <a href="/backup">back up now</a>.</div>
 {/if}
 {#if s && sharedWith.length}
-  <div class="notice" id="shared-number">{#if plan?.keeper === s.id}{othersNamed.length === 1 ? `Another batch, ${othersNamed[0]},` : `${othersNamed.length} other batchs`} {othersNamed.length === 1 ? 'has' : 'have'} the number {sowNo(s)} too: two devices gave it out while offline, or a file was merged in. This batch was made first and keeps it; renumbering gives {othersNamed.length === 1 ? 'the other' : 'the others'} the next free number, with a note saying so.{:else}This batch shares the number {sowNo(s)} with {othersNamed.join(', ')}, made before it: two devices gave it out while offline, or a file was merged in. Renumbering gives this batch the next free number, with a note saying so.{/if} <button class="btn" onclick={renumberShared} disabled={renumbering}>Renumber now</button></div>
+  <div class="notice" id="shared-number">{#if plan?.keeper === s.id}{othersNamed.length === 1 ? `Another batch, ${othersNamed[0]},` : `${othersNamed.length} other batches`} {othersNamed.length === 1 ? 'has' : 'have'} the number {sowNo(s)} too: two devices gave it out while offline, or a file was merged in. This batch was recorded first and keeps it; renumbering gives {othersNamed.length === 1 ? 'the other' : 'the others'} the next free number, with a note saying so.{:else}This batch shares the number {sowNo(s)} with {othersNamed.join(', ')}, recorded before it: two devices gave it out while offline, or a file was merged in. Renumbering gives this batch the next free number, with a note saying so.{/if} <button class="btn" onclick={renumberShared} disabled={renumbering}>Renumber now</button></div>
 {/if}
 {#if !collection.ready}
   <p class="muted">Opening your collection…</p>
@@ -330,7 +330,7 @@
   {#if waiting}<WaitingRecord kind="sowing" label={param} {waiting} />{:else}<p class="muted">No batch with this number on this device.</p>{/if}
 {:else}
   <div class="hero">
-    {#if idx?.thumb && prefs.referencePhotos && !thumbFailed}<img src={idx.thumb} alt={s.taxonName} style="max-height: 220px" onerror={() => (thumbFailed = true)} /><span class="cred">species photograph</span>{:else if idx?.thumb && prefs.referencePhotos}<div class="ph empty" style="height: 120px">No photograph yet.</div>{:else}<div class="ph" style="height: auto; min-height: 120px; flex-direction: column; gap: 10px; padding: 16px">{m.label}{#if idx?.thumb && !prefs.referencePhotos}<RefPhotoOffer center what="the reference’s photograph of this species" />{/if}</div>{/if}
+    {#if idx?.thumb && prefs.referencePhotos && !thumbFailed}<img src={idx.thumb} alt={s.taxonName} style="max-height: 220px" onerror={() => (thumbFailed = true)} /><span class="cred">species photograph</span>{:else if idx?.thumb && prefs.referencePhotos}<div class="ph empty" style="height: 120px">No photograph yet.</div>{:else}<div class="ph" style="height: auto; min-height: 120px; flex-direction: column; gap: 10px; padding: 16px 16px 56px">{m.label}{#if idx?.thumb && !prefs.referencePhotos}<RefPhotoOffer center what="the reference’s photograph of this species" />{/if}</div>{/if}
   </div>
   <div class="idcard">
     <div class="who">
@@ -338,7 +338,7 @@
       {#if kindOf(s) === 'hybrid' && s.parentage}<p class="vern"><SpeciesName name={s.parentage} /></p>{/if}
       <p class="vern">
         {s.count} {m.unit} on {s.sown}
-        {#if parent} from <a class="mono" href="/plants/{accNo(parent)}">{accNo(parent)}</a>{:else if s.sourceFrom} from {s.sourceFrom}{/if}{#if !m.veg && s.fieldNumber}{' · '}<span class="fnchip">{s.fieldNumber}</span>{/if}{#if !m.veg && s.sourceRef}{' · lot '}{s.sourceRef}{/if}
+        {#if parent}{' '}from <a class="mono" href="/plants/{accNo(parent)}">{accNo(parent)}</a>{:else if s.sourceFrom}{' '}from {s.sourceFrom}{/if}{#if !m.veg && s.fieldNumber}{' · '}<span class="fnchip">{s.fieldNumber}</span>{/if}{#if !m.veg && s.sourceRef}{' · lot '}{s.sourceRef}{/if}
         {#if !m.veg}{' · '}{s.provenance === 'wild' ? 'wild-collected seed' : s.provenance === 'f1' ? 'seed from F1 plants in cultivation' : s.provenance === 'fn' ? 'seed from cultivated plants' : 'seed provenance not stated'}{/if}
       </p>
       <div class="pills">
@@ -395,7 +395,7 @@
   <Parked kind="sowing" id={id} />
   <div class="cards">
     <div class="card"><div class="lab">Day</div><div class="val">{st.days}</div><div class="sub">since {s.sown}</div></div>
-    <div class="card"><div class="lab">{m.veg ? 'Struck' : 'Germinated'}</div><div class="val">{st.germinated}<span class="u"> / {s.count}</span></div><div class="gauge"><i style="width: {Math.min(100, (st.rate ?? 0) * 100)}%"></i></div><div class="sub">{pct(st.rate)}{#if st.daysToFirst != null} · first at day {st.daysToFirst}{/if}</div></div>
+    <div class="card"><div class="lab">{m.veg ? 'Struck' : 'Germinated'}</div><div class="val">{st.germinated}<span class="u">{' / '}{s.count}</span></div><div class="gauge"><i style="width: {Math.min(100, (st.rate ?? 0) * 100)}%"></i></div><div class="sub">{pct(st.rate)}{#if st.daysToFirst != null}{' · '}first at day {st.daysToFirst}{/if}</div></div>
     <div class="card"><div class="lab">Potted up</div><div class="val">{st.potted}</div><div class="sub">{raised.length ? `${raised.length} numbered plant${raised.length === 1 ? '' : 's'}` : 'none yet'}</div></div>
     <div class="card"><div class="lab">{m.veg ? 'Struck, not yet potted' : 'Still in the pot'}</div>{#if !events.some((e) => e.t === 'germinate') && !st.potted && !st.lost}<div class="val">–</div><div class="sub">not counted yet</div>{:else}<div class="val">{st.remaining}</div><div class="sub">{st.lost ? `${st.lost} lost` : 'no losses recorded'}</div>{/if}</div>
   </div>
@@ -459,7 +459,7 @@
     <div class="rows">
       {#each raised as a}
         {@const own = collection.cover(a.id)}
-        <a class="azrow accrow" href="/plants/{accNo(a)}"><span class="im">{#if own}<PhotoImg id={own.id} alt="" loading="lazy" />{:else}–{/if}</span><span><span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} /></span><span class="fam">{a.acquired ?? ''}{#if a.locationId} · {collection.locationName(a.locationId)}{/if}</span></span><span class="fig">{a.status}</span></a>
+        <a class="azrow accrow" href="/plants/{accNo(a)}"><span class="im">{#if own}<PhotoImg id={own.id} alt="" loading="lazy" />{:else}–{/if}</span><span><span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} /></span><span class="fam">{a.acquired ?? ''}{#if a.locationId}{' · '}{collection.locationName(a.locationId)}{/if}</span></span><span class="fig">{a.status}</span></a>
       {/each}
     </div>
   {/if}
@@ -489,7 +489,7 @@
       {#each events as e}
         <div class="tlrow">
           <span class="d">{e.d}</span>
-          <span class="t">{eventLabel(e.t)}{#if e.n != null}&nbsp;<b>{e.n}</b>{/if}{#if e.plants?.length}<span class="x2">{' · '}{#each e.plants as pid, i (pid)}{#if i}, {/if}{@const pl = collection.accession(pid)}{#if pl}<a class="mono" href="/plants/{accNo(pl)}">{accNo(pl)}</a>{:else}a plant since removed{/if}{/each}</span>{/if}{#if e.cause}<span class="x2">{' · '}{e.cause}</span>{/if}{#if e.note}<span class="x2">{' · '}{e.note}</span>{/if}</span>
+          <span class="t">{eventLabel(e.t)}{#if e.n != null}&nbsp;<b>{e.n}</b>{/if}{#if e.plants?.length}<span class="x2">{' · '}{#each e.plants as pid, i (pid)}{#if i}{', '}{/if}{@const pl = collection.accession(pid)}{#if pl}<a class="mono" href="/plants/{accNo(pl)}">{accNo(pl)}</a>{:else}a plant since removed{/if}{/each}</span>{/if}{#if e.cause}<span class="x2">{' · '}{e.cause}</span>{/if}{#if e.note}<span class="x2">{' · '}{e.note}</span>{/if}</span>
           {#if e.t === 'potup'}<span class="x small muted">kept: the plants exist</span>{:else if e.t === 'germinate' && !canDropCount(e.id)}<span class="x small muted" title="Without this count the batch would show fewer up than were potted and lost">kept: the potted plants rest on it</span>{:else if confirmEvent === e.id}<button class="rm confirm" type="button" onclick={() => { collection.remove('event', e.id); confirmEvent = null; }}>Remove?</button>{:else}<button class="rm" type="button" title="Remove this entry" aria-label="Remove this entry" onclick={() => { confirmEvent = e.id; void focusNext('.rm.confirm'); }}>×</button>{/if}
         </div>
       {/each}
@@ -520,9 +520,9 @@
   .muted { color: var(--ink3); }
   .editform { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 12px; padding: 14px 17px; margin-top: 16px; }
   .editform label { display: grid; gap: 4px; }
-  .editform label > span, .editform .lbl { font-size: 0.6562rem; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink3); font-weight: 700; }
+  .editform label > span, .editform .lbl { font-size: var(--fs-xs); letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink3); font-weight: 700; }
   .editform label.row { display: flex; align-items: center; gap: 8px; align-self: end; font-size: var(--fs-md); }
-  .editform input, .editform select, .editform textarea, .fields input { width: 100%; font: inherit; font-size: 0.875rem; padding: 8px 11px; border: 1px solid var(--rule); border-radius: var(--r); background: var(--card); color: var(--ink); }
+  .editform input, .editform select, .editform textarea, .fields input { width: 100%; font: inherit; font-size: 0.875rem; padding: 8px 11px; min-height: var(--tap); border: 1px solid var(--field-edge); border-radius: var(--r); background: var(--card); color: var(--ink); }
   .wide { grid-column: 1 / -1; }
   .actions, .end { display: flex; justify-content: flex-end; gap: 8px; margin: 0; }
   .addrow { padding: 12px 17px; margin-top: 12px; }
@@ -536,15 +536,15 @@
   .fields { display: grid; gap: 8px; padding: 13px 17px 15px; }
   .fields .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .noteform { display: grid; grid-template-columns: 10rem 1fr auto; gap: 8px; margin-bottom: 10px; }
-  .noteform input { font: inherit; font-size: var(--fs-md); padding: 8px 11px; border: 1px solid var(--rule); border-radius: var(--r); background: var(--card); color: var(--ink); }
+  .noteform input { width: 100%; min-width: 0; min-height: var(--tap); font: inherit; font-size: var(--fs-md); padding: 8px 11px; border: 1px solid var(--field-edge); border-radius: var(--r); background: var(--card); color: var(--ink); }
   .tlrow .x2 { font-weight: 400; color: var(--ink2); font-size: var(--fs-md); }
   .factgrid .wide { grid-column: 1 / -1; }
   .accrow .nm .accno { font-style: normal; vertical-align: 2px; }
   .refuse { margin: 6px 0 0; font-size: var(--fs-md); color: var(--bad); }
   /* The count's two meanings, side by side; and the sum it will record, under the figure (round fifty-eight; the grower review). */
   /* :global, since the switch is the toggle group's own markup (round fifty-eight; the accessibility review). */
-  .fields :global(.seg) { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--rule); border-radius: var(--r); overflow: hidden; }
-  .fields :global(.seg button) { font: inherit; font-size: var(--fs-md); font-weight: 600; padding: 7px 8px; border: 0; background: var(--card); color: var(--ink2); cursor: pointer; min-height: 36px; }
+  .fields :global(.seg) { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--field-edge); border-radius: var(--r); overflow: hidden; }
+  .fields :global(.seg button) { font: inherit; font-size: var(--fs-md); font-weight: 600; padding: 7px 8px; border: 0; background: var(--card); color: var(--ink2); cursor: pointer; min-height: var(--tap); }
   .fields :global(.seg button + button) { border-left: 1px solid var(--rule); }
   .fields :global(.seg button.on) { background: var(--accent-soft); color: var(--accent); }
   /* A field with its small name over it (round fifty-eight; the accessibility review). */
@@ -553,10 +553,10 @@
   .gsum { margin: 0; }
   .potnotice .btn { margin-left: 6px; vertical-align: middle; }
   @media (max-width: 640px) { .fields :global(.seg button), .potnotice .btn { min-height: 44px; } }
-  .rm { border: 0; background: none; color: var(--ink3); font: inherit; cursor: pointer; min-width: 32px; min-height: 32px; border-radius: var(--r-sm); }
+  .rm { border: 0; background: none; color: var(--ink3); font: inherit; cursor: pointer; min-width: var(--tap); min-height: var(--tap); border-radius: var(--r-sm); }
   .rm:hover { color: var(--bad); background: var(--sunk); }
   .rm.confirm { color: var(--bad); font-size: var(--fs-md); font-weight: 600; }
   .dangerrow { margin: 46px 0 10px; padding: 0; display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; font-size: var(--fs-md); color: var(--ink3); }
   a.pill { color: inherit; }
-  @media (max-width: 720px) { .acts3 { grid-template-columns: 1fr; } .editform { grid-template-columns: 1fr 1fr; } .noteform { grid-template-columns: 1fr; } .hero { margin-top: 0; } }
+  @media (max-width: 720px) { .acts3 { grid-template-columns: 1fr; } .editform { grid-template-columns: 1fr 1fr; } .noteform { grid-template-columns: minmax(0, 1fr); } .hero { margin-top: 0; } }
 </style>

@@ -35,9 +35,10 @@ export const key = (kind: Kind, id: string) => `${kind}:${id}`;
  * built under another number is not read; the log is folded again (round fifty-three, 1). Bump it with any change to
  * those rules, since a snapshot is a fold this build never ran; a test holds a hash of the fold's source and fails when
  * the source changes and this number does not (round fifty-seven). 3: an `importedOn` is an edit like any other, since
- * no build writes one.
+ * no build writes one. 4: without an arrival, a change is parked by the clock only when a server reading has confirmed
+ * that clock; this device's own changes far past an unchecked clock are folded (round fifty-nine).
  */
-export const FOLD_RULES = 3;
+export const FOLD_RULES = 4;
 
 /** Field names the record itself owns, plus the fold's own bookkeeping names; a change may never set them. */
 export const RESERVED_FIELDS = new Set(['id', 'kind', '_t', '_deleted=', '*']);
@@ -63,7 +64,7 @@ export function changeError(c: unknown, shapeOnly = false): string | null {
   if (x.field in Object.prototype) return `"${x.field}" is not a field name a record can carry`; // __proto__, constructor and the rest: a record with one folds with a poisoned prototype (round twenty-nine, 10)
   if (shapeOnly) return null;
   const want = x.field === '_deleted' ? 'boolean' : Object.hasOwn(FIELD_TYPES[x.kind as Kind], x.field) ? FIELD_TYPES[x.kind as Kind][x.field] : undefined;
-  if (want && x.value !== null && !valueIs(x.value, want)) return `${x.field} of a ${x.kind} must be a ${want}, not ${JSON.stringify(x.value)}`;
+  if (want && x.value !== null && !valueIs(x.value, want)) return `${x.field} of ${/^[aeiou]/.test(String(x.kind)) ? 'an' : 'a'} ${x.kind} must be ${want === 'figures' ? 'a set of finite numbers' : want === 'number' ? 'a finite number' : `a ${want}`}, not ${JSON.stringify(x.value)}`;
   // A field the record cannot be shown without takes no null: a plant whose name is set to nothing is not a plant with
   // no name, it is a change no build of this app writes (round thirty-three, 1).
   if (x.value === null && REQUIRED_FIELDS[x.kind as Kind].includes(x.field)) return `${x.field} of a ${x.kind} cannot be null`;
@@ -75,9 +76,11 @@ export function changeError(c: unknown, shapeOnly = false): string | null {
  * another type is refused before the fold, since a batch date stored as a number would throw on the front page for good
  * (round twenty-eight, 0). A field this build does not know passes, so a newer build's records still sync to an older one.
  */
-type ValueType = 'string' | 'number' | 'boolean' | 'object' | 'array';
+type ValueType = 'string' | 'number' | 'boolean' | 'object' | 'array' | 'figures';
 // A number is a finite one: JSON carries no Infinity or NaN, so a form's "1e999" stored here reached the other devices as null (round fifty-eight).
-const valueIs = (v: unknown, t: ValueType) => (t === 'object' ? typeof v === 'object' && !Array.isArray(v) : t === 'array' ? Array.isArray(v) : t === 'number' ? typeof v === 'number' && Number.isFinite(v) : typeof v === t);
+/** A record of figures (an event's `measures`): every value a finite number, so a length of 1e308 inches is refused, not stored as Infinity here and sent as null (round fifty-nine). */
+const figures = (v: unknown) => !!v && typeof v === 'object' && !Array.isArray(v) && Object.values(v as Record<string, unknown>).every((x) => typeof x === 'number' && Number.isFinite(x));
+const valueIs = (v: unknown, t: ValueType) => (t === 'figures' ? figures(v) : t === 'object' ? typeof v === 'object' && !Array.isArray(v) : t === 'array' ? Array.isArray(v) : t === 'number' ? typeof v === 'number' && Number.isFinite(v) : typeof v === t);
 const strings = (...f: string[]): Record<string, ValueType> => Object.fromEntries(f.map((x) => [x, 'string']));
 /**
  * The words a few fields hold in this build (the type unions in db/types.ts, kept in step by a test). They guard the
@@ -96,9 +99,9 @@ export const FIELD_TYPES: Record<Kind, Record<string, ValueType>> = {
   accession: { ...strings('acc', 'taxonName', 'nameAsReceived', 'cultivar', 'nameKind', 'parentage', 'fieldNumber', 'provenance', 'status', 'locationId', 'acquired', 'sourceFrom', 'sourceRef', 'sourceForm', 'price', 'notes', 'notesBase', 'sowingId', 'cover'), taxonKey: 'number', waterDays: 'number' },
   sowing: { ...strings('no', 'taxonName', 'cultivar', 'nameKind', 'parentage', 'method', 'parentAcc', 'sown', 'sourceFrom', 'sourceRef', 'fieldNumber', 'provenance', 'medium', 'container', 'treatment', 'locationId', 'status', 'notes', 'notesBase'), taxonKey: 'number', count: 'number', bottomHeatC: 'number', covered: 'boolean' },
   location: { ...strings('name', 'parentId', 'type', 'notes'), indoor: 'boolean', floorC: 'number', floorHeld: 'boolean', ppfd: 'number', lightHours: 'number', lat: 'number', lon: 'number', altM: 'number', sort: 'number', waterDays: 'number', dryMonths: 'array' },
-  event: { ...strings('acc', 'd', 't', 'note', 'cause', 'used'), followUp: 'number', n: 'number', measures: 'object', auto: 'boolean', plants: 'array' },
+  event: { ...strings('acc', 'd', 't', 'note', 'cause', 'used'), followUp: 'number', n: 'number', measures: 'figures', auto: 'boolean', plants: 'array' },
   photo: { ...strings('acc', 'sowing', 'd', 'dFrom', 'caption', 'sha'), w: 'number', h: 'number', bytes: 'number' },
-  taxon: { ...strings('name', 'myNotes'), gbifKey: 'number', followed: 'boolean' },
+  taxon: { ...strings('name', 'myNotes', 'myNotesBase'), gbifKey: 'number', followed: 'boolean' },
   setting: { scheme: 'object' }
 };
 
@@ -174,6 +177,14 @@ export interface Hold {
   parked?: Set<string>;
   /** Told of each change the fold parks. */
   onParked?: (c: Change) => void;
+  /**
+   * Whether `now` is a clock a server reading has confirmed (round fifty-nine). Without an arrival, a change is parked
+   * by the clock only then: a device whose clock was set back two days judged its own changes against it, parked them,
+   * and stored the verdict, so the grower's plants were gone and stayed gone after the clock was put right (the round
+   * forty-one review, 1). Against an unconfirmed clock this device's own changes are folded, and a peer's far ahead is
+   * held for this load only: nothing is stored, and everything is back once the clock is right.
+   */
+  clockChecked?: boolean;
 }
 /**
  * Past this far ahead of its arrival (or of the clock, for a change made here), a change is parked: kept in the log,
@@ -185,6 +196,7 @@ export const PARK_MS = 2 * 86_400_000;
 /** Whether the fold parks the change: already parked, or stamped more than two days past its arrival (or the clock). This device's own changes are not exempt: once its clock is corrected, what it stamped years ahead is wrong here too. */
 export function isParked(t: string, hold: Hold): boolean {
   if (hold.parked?.has(t)) return true;
+  if (hold.arrival == null && !hold.clockChecked) return false;
   return hlcWall(t) > (hold.arrival ?? hold.now) + PARK_MS;
 }
 

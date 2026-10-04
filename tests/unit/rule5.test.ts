@@ -6,6 +6,7 @@
  * hour; and a backup carries the parked set. Real vault over fake-indexeddb, as fold-snapshot.test.ts does.
  */
 import 'fake-indexeddb/auto';
+import { wipeMeta } from './helpers/isolate';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { hlcEncode } from '$core/hlc';
 import { replacedNotes } from '$core/notes';
@@ -29,12 +30,8 @@ beforeEach(async () => {
   vi.useRealTimers();
   const { vault } = await boot();
   await vault.wipeVault();
+  await wipeMeta(vault); // every key, not the ones a test remembered to reset (round fifty-nine)
   await vault.setMeta('device', DEV);
-  await vault.setMeta('parked', []);
-  await vault.setMeta('parkedDone', []);
-  await vault.setMeta('sync', null);
-  await vault.setMeta('issued:accession', []);
-  await vault.setMeta('issued:sowing', []);
 });
 afterEach(() => vi.useRealTimers());
 
@@ -45,7 +42,7 @@ describe('a held change goes through the collection (the client review\'s findin
     const p = await b.store.collection.addAccession({ taxonName: 'Copiapoa cinerea' } as never);
     const ahead = Date.now() + 10 * 60_000;
     const peer: Change[] = [{ t: hlcEncode({ wall: ahead, count: 0, device: PEER }), kind: 'accession', id: p.id, field: 'sourceFrom', value: 'peer, fast clock' }];
-    await b.store.collection.ingest(peer, 'server', { repair: false }); // what takeBatch does now, held changes and all
+    await b.store.collection.ingest(peer, 'server'); // what takeBatch does now, held changes and all
     expect(b.store.collection.accession(p.id)!.sourceFrom ?? null).toBeNull(); // held: in the log, not in the state
     expect(b.store.collection.heldList()).toEqual([peer[0].t]);
     await b.store.collection.put('accession', p.id, { sourceFrom: 'typed here after the pull' });
@@ -65,15 +62,16 @@ describe('a held change goes through the collection (the client review\'s findin
       { t: hlcEncode({ wall: ahead, count: 0, device: PEER }), kind: 'accession', id: p.id, field: 'notes', value: 'their text' },
       { t: hlcEncode({ wall: ahead, count: 1, device: PEER }), kind: 'accession', id: p.id, field: 'notesBase', value: null }
     ];
-    await b.store.collection.ingest(peer, 'server', { repair: false });
+    await b.store.collection.ingest(peer, 'server');
     vi.setSystemTime(T0 + 11 * 60_000); // due
+    // Taken before the reload, and whole: the load is a reading too, and a count would miss a change replaced in place (round fifty-nine).
+    const before = JSON.stringify(await b.vault.allChanges());
     b = await boot(); // the page reloaded after it came due: the load folds it
     await b.store.collection.load();
     expect(b.store.collection.accession(p.id)!.notes).toBe('their text');
-    const before = (await b.vault.allChanges()).length;
     expect((await b.store.collection.replacedNotes('accession', p.id)).map((r) => r.text)).toEqual(['my text, written here']);
-    await b.store.collection.ingest(peer, 'server', { repair: false }); // the engine's refold, next run
-    expect((await b.vault.allChanges()).length).toBe(before); // rule 5: nothing written by either reading
+    await b.store.collection.ingest(peer, 'server'); // the engine's refold, next run
+    expect(JSON.stringify(await b.vault.allChanges())).toBe(before); // rule 5: nothing written by the load or either reading
   });
 });
 
@@ -83,14 +81,14 @@ describe('what is said on the record pages (the client review\'s finding 10)', (
     await b.store.collection.load();
     await b.vault.setMeta('sync', { key: 'new-vault-key' });
     const c: Change = { t: hlcEncode({ wall: Date.now() - 1000, count: 0, device: PEER }), kind: 'taxon', id: 'lithops-lesliei', field: 'name', value: 'Lithops lesliei' };
-    await expect(b.store.collection.ingest([c], 'server', { repair: false, requireKey: 'old-vault-key' })).rejects.toThrow(/stopped/);
+    await expect(b.store.collection.ingest([c], 'server', { requireKey: 'old-vault-key' })).rejects.toThrow(/stopped/);
     expect(b.store.collection.lastWriteError).toBeNull();
   });
   it('the grower\'s own write is checked as a pull is: a place form\'s "1e999" is refused with the reason, and nothing is stored', async () => {
     const b = await boot();
     await b.store.collection.load();
     const before = (await b.vault.allChanges()).length;
-    await expect(b.store.collection.put('location', 'l-test', { name: 'Bench', floorC: Number('1e999') })).rejects.toThrow(/floorC of a location must be a number/);
+    await expect(b.store.collection.put('location', 'l-test', { name: 'Bench', floorC: Number('1e999') })).rejects.toThrow(/floorC of a location must be a finite number/);
     expect(b.store.collection.lastWriteError).toMatch(/floorC/);
     expect((await b.vault.allChanges()).length).toBe(before);
   });
@@ -130,8 +128,8 @@ describe('notes replaced unseen, the rule (src/lib/core/notes.ts)', () => {
     expect(replacedNotes([n(a, 'notes', 'one'), n(b, 'notes', 'two')])).toEqual([{ text: 'one', was: a, by: b }]);
     expect(replacedNotes([n(a, 'notes', ''), n(b, 'notes', 'two')])).toEqual([]);
     expect(replacedNotes([n(a, 'notes', 'one'), n(b, 'notes', 'one')])).toEqual([]);
-    // a base of another writer, or one past the next notes change, is not this edit's
+    // a base of another writer is not this edit's; its own writer's is, even with another writer's notes stamped between (round fifty-nine)
     expect(replacedNotes([n(a, 'notes', 'one'), n(b, 'notes', 'two'), n(s(2000, 'cccccccccccctab1', 1), 'notesBase', a)])).toEqual([{ text: 'one', was: a, by: b }]);
-    expect(replacedNotes([n(a, 'notes', 'one'), n(b, 'notes', 'two'), n(c, 'notes', 'three'), n(s(3000, 'bbbbbbbbbbbbtab1', 1), 'notesBase', a)]).map((r) => r.text)).toEqual(['one', 'two']);
+    expect(replacedNotes([n(a, 'notes', 'one'), n(b, 'notes', 'two'), n(c, 'notes', 'three'), n(s(3000, 'bbbbbbbbbbbbtab1', 1), 'notesBase', a)]).map((r) => r.text)).toEqual(['two']);
   });
 });

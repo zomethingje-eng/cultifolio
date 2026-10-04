@@ -161,11 +161,13 @@ describe('the numbering scheme is a synced setting (finding 32)', () => {
     expect(theirs.id > mine.id).toBe(true);
     const xLog = [...x.mem.changes.values()],
       yLog = [...y.mem.changes.values()];
-    // Each device pulls the other's log and runs the repair on its own.
+    // Each device pulls the other's log, and the grower asks for the repair on each (round fifty-nine: a merge repairs nothing on its own).
     mem = x.mem;
     await x.collection.ingest(yLog, 'server');
+    await x.collection.repairNumbers({ kind: 'accession', no: '2026-0007' }); // the grower's "Renumber now": a merge repairs nothing on its own (round fifty-nine)
     mem = y.mem;
     await y.collection.ingest(xLog, 'server');
+    await y.collection.repairNumbers({ kind: 'accession', no: '2026-0007' }); // the grower's "Renumber now": a merge repairs nothing on its own (round fifty-nine)
     const sortLog = (m: Mem) => [...m.changes.values()].sort((a, b) => a.t.localeCompare(b.t));
     expect(sortLog(x.mem)).toEqual(sortLog(y.mem)); // byte for byte
     expect(accNo(x.collection.accession(mine.id)!)).toBe('2026-0007');
@@ -174,7 +176,7 @@ describe('the numbering scheme is a synced setting (finding 32)', () => {
     const notes = (c: typeof x.collection) => c.events(theirs.id).filter((e) => e.t === 'note' && /Renumbered/.test(e.note ?? ''));
     expect(notes(x.collection)).toHaveLength(1);
     expect(notes(y.collection)).toHaveLength(1);
-    expect(notes(x.collection)[0].note).toBe('Renumbered from 2026-0007 to 2026-0008: another plant, created earlier, had been given 2026-0007 (on another device, or in a file merged in).');
+    expect(notes(x.collection)[0].note).toBe('Renumbered from 2026-0007 to 2026-0008: another plant, recorded first, had been given 2026-0007 (on another device, or in a file merged in).');
     // Each then receives the other's repair: nothing new, nothing doubled.
     const xAfter = [...x.mem.changes.values()],
       yAfter = [...y.mem.changes.values()];
@@ -298,7 +300,7 @@ describe('a clock that was fast (round eight, 4)', () => {
 });
 
 describe('round fifty-two, 1: a device a year fast, once its clock is right, parks what it stamped then and can apply it afresh', () => {
-  it('the record it added is parked at the next load (not shown), listed with its fields, and Apply writes it again at real time', async () => {
+  it('without a server reading its record stays shown and the clock line says why; once a reading confirms the clock it is parked, listed with its fields, and Apply writes it again at real time (round fifty-nine)', async () => {
     const real = Date.parse('2026-09-25T12:00:00Z');
     vi.useFakeTimers();
     try {
@@ -308,7 +310,16 @@ describe('round fifty-two, 1: a device a year fast, once its clock is right, par
       expect(collection.accession(a.id)?.notes).toBe('first'); // shown while the device believes its clock
       vi.setSystemTime(real); // put right, and the app reloads
       const c2 = (await reload()) as typeof collection;
-      expect(c2.accession(a.id)).toBeUndefined(); // parked: a stamp a year past the clock is a wrong clock's, this device's own included
+      // No server has confirmed this clock: the device's own changes are folded whatever it says, and nothing is parked
+      // (a clock set back would otherwise have hidden the grower's plants for good; the round forty-one review, 1).
+      expect(c2.accession(a.id)?.notes).toBe('first');
+      expect(c2.parkedRecords).toBe(0);
+      expect(c2.clockBehindAt).toBeGreaterThan(real);
+      // A sync reading confirms the clock: the fold is judged again, and the stamps a year past it are parked.
+      const hlc = await import('$core/hlc');
+      hlc.trustServerTime(real, real);
+      await c2.rebuild();
+      expect(c2.accession(a.id)).toBeUndefined(); // parked: a stamp a year past a checked clock is a wrong clock's, this device's own included
       expect(c2.parkedRecords).toBe(1);
       expect(c2.parkedFor('accession', a.id).map((c) => c.field).sort()).toEqual(['acc', 'notes', 'status', 'taxonName']);
       await c2.applyParked('accession', a.id);
@@ -363,9 +374,11 @@ describe('round eleven', () => {
       process.env.TZ = 'Pacific/Honolulu';
       mem = x.mem;
       await x.collection.ingest(yLog, 'server');
+      await x.collection.repairNumbers({ kind: 'accession', no: '2026-0007' }); // the grower's "Renumber now": a merge repairs nothing on its own (round fifty-nine)
       process.env.TZ = 'Pacific/Kiritimati';
       mem = y.mem;
       await y.collection.ingest(xLog, 'server');
+      await y.collection.repairNumbers({ kind: 'accession', no: '2026-0007' }); // the grower's "Renumber now": a merge repairs nothing on its own (round fifty-nine)
       const sortLog = (m: Mem) => [...m.changes.values()].sort((a, b) => a.t.localeCompare(b.t));
       expect(sortLog(x.mem)).toEqual(sortLog(y.mem)); // byte for byte, the note's day included
       const note = x.collection.events(theirs.id).find((e) => /Renumbered/.test(e.note ?? ''))!;
@@ -411,9 +424,11 @@ describe('round twelve', () => {
     // X has everything and repairs: theirs -> 0009. Y receives only X's 0007 (a batch short) and repairs: theirs -> 0008.
     mem = x.mem;
     await x.collection.ingest(yLog, 'server');
+    await x.collection.repairNumbers({ kind: 'accession', no: '2026-0007' }); // the grower's "Renumber now": a merge repairs nothing on its own (round fifty-nine)
     expect(accNo(x.collection.accession(theirs.id)!)).toBe('2026-0009');
     mem = y.mem;
     await y.collection.ingest(xLog.filter((c) => c.id !== other.id), 'server');
+    await y.collection.repairNumbers({ kind: 'accession', no: '2026-0007' }); // the grower's "Renumber now": a merge repairs nothing on its own (round fifty-nine)
     expect(accNo(y.collection.accession(theirs.id)!)).toBe('2026-0008');
     // The two repairs carry different stamps (the number is in the tag), never two values under one stamp.
     const xRepair = [...x.mem.changes.values()].filter((c) => c.field === 'acc' && c.id === theirs.id && c.value !== '2026-0007');
@@ -428,6 +443,16 @@ describe('round twelve', () => {
     mem = y.mem;
     await y.collection.ingest(xAll, 'server');
     const nos = (c: typeof x.collection) => [mine.id, other.id, theirs.id].map((id) => accNo(c.accession(id)!));
+    expect(nos(x.collection)).toEqual(nos(y.collection)); // the same merge everywhere
+    // If the merge left two plants under one number, the page says so and the grower's repair settles it; the other
+    // device receives that repair and agrees (round fifty-nine: a merge writes nothing of its own).
+    const shared = [mine.id, other.id, theirs.id].find((id) => x.collection.sharesNumber('accession', id).length);
+    if (shared) {
+      mem = x.mem;
+      expect(await x.collection.repairNumbers({ kind: 'accession', no: accNo(x.collection.accession(shared)!) })).toBe(true);
+      mem = y.mem;
+      await y.collection.ingest([...x.mem.changes.values()], 'server');
+    }
     expect(nos(x.collection)).toEqual(nos(y.collection));
     expect(new Set(nos(x.collection)).size).toBe(3);
     const sortLog = (m: Mem) => [...m.changes.values()].sort((a, b) => a.t.localeCompare(b.t));
@@ -462,6 +487,7 @@ describe('round fifteen', () => {
     const theirs = await y.collection.addAccession({ taxonName: 'Copiapoa', acc: '2026-0007', acquired: '2019-05-01' });
     mem = x.mem;
     await x.collection.ingest([...y.mem.changes.values()], 'server');
+    await x.collection.repairNumbers({ kind: 'accession', no: '2026-0007' }); // the grower's "Renumber now": a merge repairs nothing on its own (round fifty-nine)
     expect(accNo(x.collection.accession(mine.id)!)).toBe('2026-0007');
     expect(accNo(x.collection.accession(theirs.id)!)).toBe('2026-0008');
   });
@@ -508,7 +534,7 @@ describe('round twenty-eight', () => {
 });
 
 describe('round twenty-nine', () => {
-  it('a plant restored after another device minted its number is renumbered on restore, not left sharing the number (round twenty-nine, 3)', async () => {
+  it('a plant restored after another device minted its number is renumbered on restore, not left sharing it; the one brought back yields (round twenty-nine, 3; round fifty-nine)', async () => {
     const x = await fresh('devicex00000');
     const mine = await x.collection.addAccession({ taxonName: 'Copiapoa', acc: '2026-0007', acquired: '2026-05-01' });
     const y = await fresh('devicey00000');
@@ -518,11 +544,11 @@ describe('round twenty-nine', () => {
     await x.collection.remove('accession', mine.id);
     await x.collection.ingest([...y.mem.changes.values()], 'server'); // nothing to repair: X's plant is removed
     expect(x.collection.accessions.map((a) => accNo(a))).toEqual(['2026-0007']);
-    await x.collection.restore('accession', mine.id); // Undo
+    expect(await x.collection.restore('accession', mine.id)).toEqual({ from: '2026-0007', to: '2026-0008' }); // Undo, and what the page says
     const nos = x.collection.accessions.map((a) => accNo(a)).sort();
     expect(nos).toEqual(['2026-0007', '2026-0008']);
-    expect(accNo(x.collection.accession(mine.id)!)).toBe('2026-0007'); // the earlier identity keeps the number
-    expect(accNo(x.collection.accession(theirs.id)!)).toBe('2026-0008');
+    expect(accNo(x.collection.accession(theirs.id)!)).toBe('2026-0007'); // the live plant keeps its number, label and all
+    expect(accNo(x.collection.accession(mine.id)!)).toBe('2026-0008');
   });
   it('a photograph whose record cannot be written (a full device) leaves no pixels behind; a cover picked after a removal survives the Undo (round thirty, R1-2 and R2-3)', async () => {
     const { collection } = await fresh('testdevice');

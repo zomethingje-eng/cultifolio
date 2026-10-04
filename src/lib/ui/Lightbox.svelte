@@ -21,6 +21,8 @@
     const i = photos.findIndex((x) => x.id === id);
     if (i >= 0 && i !== index) index = i;
   });
+  /** The photograph's own words, with its place in the set when there are several: two photographs of one plant on one day read the same otherwise (round fifty-nine). */
+  const label = $derived(p ? `${photoLabel(p)}${photos.length > 1 ? `, photograph ${index + 1} of ${photos.length}` : ''}` : 'Photograph');
   const isCover = $derived(!!acc && collection.accession(acc)?.cover === p?.id);
   let editing = $state(false);
   let caption = $state('');
@@ -146,7 +148,7 @@
 <svelte:window onkeydown={key} />
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div class="lb" role="dialog" aria-modal="true" aria-label="Photograph" tabindex="-1" bind:this={dialog} ontouchstart={touchStart} ontouchend={touchEnd}>
+<div class="lb" role="dialog" aria-modal="true" aria-label={p ? photoLabel(p) : 'Photograph'} tabindex="-1" bind:this={dialog} ontouchstart={touchStart} ontouchend={touchEnd}>
   <button class="x" type="button" aria-label="Close" data-ctl="close" onclick={onclose}>×</button>
   {#if photos.length > 1}
     <button class="nav prev" type="button" aria-label="Previous photograph" data-ctl="prev" onclick={() => go(-1)}>‹</button>
@@ -154,7 +156,7 @@
   {/if}
   {#if p}
     <!-- The plant, the day and the caption as the image's text: it had the caption or nothing (round fifty-eight; the accessibility review). -->
-    <div class="stage">{#key p.id}<PhotoImg id={p.id} size="full" alt={photoLabel(p)} />{/key}</div>
+    <div class="stage">{#key p.id}<PhotoImg id={p.id} size="full" alt={label} />{/key}</div>
     <div class="bar">
       {#if editing}
         <!-- Each field with a visible name: the caption's placeholder was its only one, the date had none (round fifty-eight; the accessibility review). -->
@@ -169,7 +171,9 @@
           <span class="d">{p.d}</span>
           {#if p.dFrom === 'exif'}<span class="faint">from the camera</span>{/if}
           {#if p.caption}<span class="cap">{p.caption}</span>{/if}
-          <span class="faint">{p.w}×{p.h}{#if photos.length > 1} · {index + 1} of {photos.length}{/if}</span>
+          <span class="faint">{p.w}×{p.h}</span>
+          <!-- Said when the photograph changes, so an arrow key or a swipe is heard as well as seen (round fifty-nine). -->
+          {#if photos.length > 1}<span class="faint" aria-live="polite" aria-atomic="true"><span class="sr">{photoLabel(p)}{', '}</span>{index + 1} of {photos.length}</span>{/if}
         </div>
         <div class="acts">
           <button class="btn small" type="button" data-ctl="edit" onclick={startEdit}>Caption / date</button>
@@ -202,7 +206,7 @@
   .lbf { display: grid; gap: 3px; }
   .lbf.grow { flex: 1 1 220px; }
   .lbf .eyebrow { color: #b6c1bc; }
-  .x, .nav { position: absolute; background: rgba(255, 255, 255, 0.08); color: #fff; border: 0; border-radius: 999px; width: 40px; height: 40px; font-size: 1.625rem; line-height: 1; cursor: pointer; display: grid; place-items: center; }
+  .x, .nav { position: absolute; background: rgba(255, 255, 255, 0.08); color: #fff; border: 0; border-radius: 999px; width: max(40px, var(--tap)); height: max(40px, var(--tap)); font-size: 1.625rem; line-height: 1; cursor: pointer; display: grid; place-items: center; }
   .x:hover, .nav:hover { background: rgba(255, 255, 255, 0.18); }
   .x { top: 10px; right: 12px; }
   .nav { top: 50%; transform: translateY(-50%); }

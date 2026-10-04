@@ -7,8 +7,8 @@
   const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   /**
    * The figure in one sentence, for the description a screen reader gives with the title: the warmest month's mean day,
-   * the coldest month's mean night and the year's rain, from the figures drawn; the longer account follows it (round
-   * fifty-eight; the accessibility review).
+   * the coldest month's mean night and the year's rain, from the figures drawn, and whose figures they are; the longer
+   * account follows it (round fifty-eight; the accessibility review; the source, round fifty-nine).
    */
   const summary = $derived.by(() => {
     const m = climate.months;
@@ -16,7 +16,7 @@
     const hot = m.reduce((b, x, i) => (x.tmax > m[b].tmax ? i : b), 0);
     const cold = m.reduce((b, x, i) => (x.tmin < m[b].tmin ? i : b), 0);
     const year = m.reduce((a, x) => a + x.precipMm, 0);
-    return `Warmest month ${MONTHS[hot]}, mean day ${temp(m[hot].tmax, units.current)}; coldest month ${MONTHS[cold]}, mean night ${temp(m[cold].tmin, units.current)}; ${rain(year, units.current)} of rain a year.`;
+    return `Warmest month ${MONTHS[hot]}, mean day ${temp(m[hot].tmax, units.current)}; coldest month ${MONTHS[cold]}, mean night ${temp(m[cold].tmin, units.current)}; ${rain(year, units.current)} of rain a year. Medians across the range, from CHELSA.`;
   });
   // Drawn at the width it is shown at, so labels keep their size on a phone instead of shrinking with the viewBox.
   let shown = $state(0);
@@ -98,7 +98,8 @@
   svg { width: 100%; height: auto; display: block; font-family: var(--ui); }
   .grid { stroke: var(--rule); stroke-width: 1; }
   .axis { stroke: var(--rule2); stroke-width: 1; }
-  .tick { fill: var(--ink3); font-size: 0.625rem; text-anchor: end; font-family: var(--mono); }
+  /* Nothing under 11 px (round fifty-nine): the ticks and the extremes were 10. */
+  .tick { fill: var(--ink3); font-size: var(--fs-xs); text-anchor: end; font-family: var(--mono); }
   .month { fill: var(--ink2); font-size: var(--fs-xs); text-anchor: middle; letter-spacing: 0.04em; }
   .panel { fill: var(--ink3); text-anchor: start; font-size: var(--fs-xs); letter-spacing: 0.09em; text-transform: uppercase; font-weight: 700; }
   .zero { stroke: var(--bad); stroke-width: 1; stroke-dasharray: 4 3; opacity: 0.75; }
@@ -112,16 +113,17 @@
   .bar { fill: var(--cool); opacity: 0.55; }
   .whisker { stroke: var(--cool); stroke-width: 1.2; }
   .ext { stroke: var(--ink); stroke-width: 1.4; }
-  .extlab { fill: var(--ink2); font-size: 0.625rem; }
+  .extlab { fill: var(--ink2); font-size: var(--fs-xs); paint-order: stroke; stroke: var(--card); stroke-width: 3px; stroke-linejoin: round; }
   .quarter { fill: var(--ink); opacity: 0.045; }
-  .quarterlab { fill: var(--ink3); font-size: var(--fs-xs); letter-spacing: 0.06em; text-transform: uppercase; }
+  /* A halo in the card's colour: the frost line no longer strikes through the label where the two meet (round fifty-nine). */
+  .quarterlab { fill: var(--ink3); font-size: var(--fs-xs); letter-spacing: 0.06em; text-transform: uppercase; paint-order: stroke; stroke: var(--card); stroke-width: 4px; stroke-linejoin: round; }
   .drylab { fill: var(--ink3); font-size: var(--fs-xs); text-anchor: middle; font-style: italic; }
   .spark { fill: none; stroke-width: 1.6; stroke-linejoin: round; }
   .spark.dli { stroke: var(--accent); }
   .spark.rh { stroke: var(--ink3); stroke-dasharray: 3 3; }
   .sparklab { font-size: var(--fs-xs); text-anchor: end; font-family: var(--mono); }
   .sparklab.dli { fill: var(--accent); }
-  .sparklab.rh { fill: var(--ink3); }
+  .sparklab.rh { fill: var(--ink3); text-anchor: start; } /* the attribute alone lost to the rule above, and "RH" was cut off at the left edge (round fifty-nine) */
   figcaption { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 8px 6px 2px; font-size: var(--fs-sm); color: var(--ink2); }
   .key { display: inline-flex; align-items: center; gap: 6px; }
   .key.muted { color: var(--ink3); }

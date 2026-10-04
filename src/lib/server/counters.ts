@@ -18,6 +18,13 @@
  * checked and taken in one step, where KV's read-then-write let two uploads in the same instant each read the same
  * starting figure. A vault's total is put right from an R2 listing once a day and on every vault open, as before.
  *
+ * Round fifty-nine (three reviews): a vault's object also holds what is in flight (`p`), taken with the bytes and released
+ * when the upload lands or fails, so a recount (which cannot list an upload not yet written) adds it back instead of
+ * erasing it, and a day's first uploads count against the day's row, not each against its own listing; a removed
+ * object's bytes are given back once under its key and etag (`g:<token>`, swept with the day keys); and the "vaults"
+ * object records each vault it has counted (`f:<vault id>`), so the ceiling in all counts a vault once and refuses a
+ * new one past it.
+ *
  * Attached to the Worker by scripts/attach-do.mjs after the SvelteKit build (the adapter's worker exports only the app),
  * and bound as COUNTERS in wrangler.jsonc with a `new_sqlite_classes` migration. Without the binding the KV path in
  * `allowCreation` is used, which is bounding, not accounting.
@@ -60,11 +67,19 @@ export class Counters extends DurableObject {
    */
   async take(kind: 'vault' | 'address', n: number, limit: number, day: string, base: number | null = null, now = Date.now()): Promise<{ ok: boolean; before: number } | { recount: true }> {
     if (kind === 'vault') {
-      const row = (await this.ctx.storage.get<{ bytes: number; day: string }>(['v'])).get('v');
-      const before = base ?? (row && row.day === day ? row.bytes : null);
+      const got = await this.ctx.storage.get<unknown>(['v', 'p']);
+      const row = got.get('v') as { bytes: number; day: string } | undefined;
+      const pending = (got.get('p') as number | undefined) ?? 0;
+      // Today's row stands over a caller's listing: the day's first uploads each listed R2 and passed what they found,
+      // and each such base wrote over the takes before it, so ten at once were counted as two (round fifty-nine; two
+      // reviews). A listing is the starting figure only for a day with no row yet, and then with what is still in flight.
+      const today = row && row.day === day;
+      const before = today ? row.bytes : base == null ? null : base + pending;
       if (before == null) return { recount: true };
-      if (before + n > limit) { if (base != null) await this.ctx.storage.put({ v: { bytes: base, day } }); return { ok: false, before }; }
-      await this.ctx.storage.put({ v: { bytes: before + n, day } });
+      if (before + n > limit) { if (!today) await this.ctx.storage.put({ v: { bytes: before, day } }); return { ok: false, before }; }
+      // The reservation is counted in the total at once and also held as pending until the upload lands or fails: a
+      // listing made meanwhile cannot see it, and a recount adds what is pending to what it lists (`setBytes`).
+      await this.ctx.storage.put({ v: { bytes: before + n, day }, p: pending + n });
       return { ok: true, before };
     }
     const k = `d:${day}`;
@@ -74,19 +89,41 @@ export class Counters extends DurableObject {
     if ((await this.ctx.storage.getAlarm()) == null) await this.ctx.storage.setAlarm(nextMidnight(now));
     return { ok: true, before };
   }
-  /** Give `n` bytes back (an upload that did not land, a removal), never below zero; an address's on its day only. */
-  async give(kind: 'vault' | 'address', n: number, day: string): Promise<number> {
+  /**
+   * Give `n` bytes back, never below zero; an address's on its day only. For a vault, `token` names a removed object (its
+   * key and etag): a second give under the same token is nothing, so ten removals of one photograph at once give its
+   * bytes back once, not ten times (round fifty-nine; the server reviews). Tokens are swept after two days.
+   */
+  async give(kind: 'vault' | 'address', n: number, day: string, token: string | null = null): Promise<number> {
     const k = kind === 'vault' ? 'v' : `d:${day}`;
-    const got = (await this.ctx.storage.get<number | { bytes: number; day: string }>([k])).get(k);
-    if (got == null) return 0;
-    if (typeof got === 'number') { const v = Math.max(0, got - n); await this.ctx.storage.put({ [k]: v }); return v; }
-    const v = Math.max(0, got.bytes - n);
-    await this.ctx.storage.put({ [k]: { bytes: v, day: got.day } });
+    const gk = token ? `g:${token}` : null;
+    const got = await this.ctx.storage.get<unknown>([k, ...(gk ? [gk] : [])]);
+    const had = got.get(k) as number | { bytes: number; day: string } | undefined;
+    if (had == null) return 0;
+    if (typeof had === 'number') { const v = Math.max(0, had - n); await this.ctx.storage.put({ [k]: v }); return v; }
+    if (gk && got.get(gk) != null) return had.bytes;
+    const v = Math.max(0, had.bytes - n);
+    await this.ctx.storage.put({ [k]: { bytes: v, day: had.day }, ...(gk ? { [gk]: day } : {}) });
+    if (gk && (await this.ctx.storage.getAlarm()) == null) await this.ctx.storage.setAlarm(nextMidnight(Date.now()));
     return v;
   }
-  /** A vault's total from an R2 listing: the authoritative figure, kept for the day. */
+  /**
+   * An upload taken with `take` has finished: no longer pending. `landed` false gives its bytes back too (the write
+   * failed or the name was taken). Either way only what is still pending is released, so a release cannot run twice.
+   */
+  async release(n: number, landed: boolean): Promise<void> {
+    const got = await this.ctx.storage.get<unknown>(['v', 'p']);
+    const row = got.get('v') as { bytes: number; day: string } | undefined;
+    const pending = (got.get('p') as number | undefined) ?? 0;
+    const m = Math.min(n, pending);
+    const out: Record<string, unknown> = { p: pending - m };
+    if (!landed && row) out.v = { bytes: Math.max(0, row.bytes - m), day: row.day };
+    await this.ctx.storage.put(out);
+  }
+  /** A vault's total from an R2 listing, with what is in flight added (the listing cannot see it), kept for the day. */
   async setBytes(bytes: number, day: string): Promise<void> {
-    await this.ctx.storage.put({ v: { bytes, day } });
+    const pending = (await this.ctx.storage.get<number>(['p'])).get('p') ?? 0;
+    await this.ctx.storage.put({ v: { bytes: bytes + pending, day } });
   }
   /** A vault's total if it was put right today, else null. */
   async bytesToday(day: string): Promise<number | null> {
@@ -101,13 +138,22 @@ export class Counters extends DurableObject {
     const dec = (k: string) => Math.max(0, (got.get(k) ?? 0) - 1);
     await this.ctx.storage.put({ [kIp]: dec(kIp), [kDay]: dec(kDay), ...(kNet ? { [kNet]: dec(kNet) } : {}) });
   }
-  /** A vault's first stored object: it now holds a place under the ceiling in all. `seed` as for `create`, for an object not yet seeded. */
-  async fill(seed: number | null = 0): Promise<number> {
-    const got = (await this.ctx.storage.get<number>(['all'])).get('all');
-    if (got == null && seed == null) return -1;
-    const n = (got ?? seed ?? 0) + 1;
-    await this.ctx.storage.put({ all: n });
-    return n;
+  /**
+   * A vault's first stored object: it takes a place under the ceiling in all, once. The object keeps which vaults it has
+   * counted (`f:<vault>`, one small key each, never swept), so a vault is counted exactly once however many first
+   * uploads race and whatever meta a request read, and a count that failed is tried again by the next upload (round
+   * fifty-nine; two reviews: twenty concurrent first uploads counted one vault twenty times, which could close sync to
+   * everyone). Past `max` the vault is refused, as a creation is. `seed` as for `create`, for an object not yet seeded.
+   */
+  async fill(vault: string, max: number, seed: number | null = 0): Promise<'counted' | 'already' | 'total' | 'unavailable'> {
+    const k = `f:${vault}`;
+    const got = await this.ctx.storage.get<number>([k, 'all']);
+    if (got.get(k) != null) return 'already';
+    if (got.get('all') == null && seed == null) return 'unavailable';
+    const n = got.get('all') ?? seed ?? 0;
+    if (n >= max) return 'total';
+    await this.ctx.storage.put({ all: n + 1, [k]: 1 });
+    return 'counted';
   }
   /** The running totals, for a look from the outside. */
   async totals(day: string): Promise<{ day: number; all: number; addresses: number }> {
@@ -137,6 +183,7 @@ export class Counters extends DurableObject {
     for (const k of (await this.ctx.storage.list({ prefix: 'net:' })).keys()) if (!keep.has(k.slice(k.lastIndexOf(':') + 1))) stale.push(k);
     for (const k of (await this.ctx.storage.list({ prefix: 'day:' })).keys()) if (!keep.has(k.slice(4))) stale.push(k);
     for (const k of (await this.ctx.storage.list({ prefix: 'd:' })).keys()) if (!keep.has(k.slice(2))) stale.push(k);
+    for (const [k, d] of await this.ctx.storage.list<string>({ prefix: 'g:' })) if (!keep.has(d)) stale.push(k);
     for (let i = 0; i < stale.length; i += 128) await this.ctx.storage.delete(stale.slice(i, i + 128));
     return stale;
   }

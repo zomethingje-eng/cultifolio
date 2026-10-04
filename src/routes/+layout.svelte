@@ -24,6 +24,7 @@
   import { units } from '$lib/ui/units.svelte';
   import { prefs } from '$lib/ui/prefs.svelte';
   import { METRIC } from '$core/units';
+  import { keepFocusClear } from '$lib/ui/focus';
   let { children } = $props();
   // Seed before anything renders. A server-rendered page carries the reader's units in its data (from the cookie or the
   // language); a client-rendered page has no server data and the store reads the cookie itself. So the first paint is in
@@ -56,6 +57,8 @@
   const privateRoute = $derived(/^\/(plants|propagation|places|labels|backup|sync|settings|today|frost)(\/|$)/.test(page.url.pathname));
   // How many pages this session has moved through inside the app: the back control goes to the previous one when there is one.
   let hops = 0;
+  /** Whether the session's first page has arrived: its arrival is not a move, and focus stays where the browser starts it, so the first Tab reaches the skip link (round fifty-nine). */
+  let arrived = false;
   afterNavigate((nav) => {
     if (browser) void frost.check();
     menuOpen = false;
@@ -67,7 +70,11 @@
     // A new page: focus its content, not the top bar again (a same-page hash jump keeps the browser's own focus handling).
     // Not on the first load of the session (`from` is null): the browser's own start, the top of the document, is where a
     // screen reader expects to begin, and a page that moves focus on arrival reads as having done something (round twenty-eight, 11).
-    if (!nav.from || nav.to?.url.hash) return;
+    // The first call is that first load whatever `from` says: a private page loaded directly reported a `from` and took
+    // focus to #main, so the first Tab skipped the skip link (round fifty-nine; measured on /plants, /places, /today).
+    const first = !arrived;
+    arrived = true;
+    if (first || nav.type === 'enter' || !nav.from || nav.to?.url.hash) return;
     mainEl?.focus({ preventScroll: true });
   });
   const closeMenu = () => {
@@ -137,6 +144,11 @@
     : { href: '/plants/new', path: '/plants/new', label: 'Add a plant' }
   );
   // Sync wakes with the app when a vault key is on this device; it does nothing otherwise.
+  // Focus moved by keyboard is scrolled clear of the sticky and fixed bars (WCAG 2.4.11; round fifty-nine).
+  onMount(() => keepFocusClear());
+  // Hydrated: the end-to-end tests wait for this before typing into a bound field, since a value typed into the
+  // server's HTML is dropped when the field hydrates and a click before then has no handler (round fifty-nine; a slow Windows run).
+  onMount(() => { document.documentElement.dataset.ready = '1'; });
   onMount(async () => {
     today.start();
     prefs.load(); // whether private pages may fetch the reference's photographs: off until switched on
@@ -186,7 +198,8 @@
   <link rel="preload" as="font" type="font/woff2" href={publicSansLatin} crossorigin="anonymous" />
   <link rel="preload" as="font" type="font/woff2" href={newsreaderLatin} crossorigin="anonymous" />
   {@html `<style>@font-face{font-family:'Newsreader Variable';font-style:italic;font-display:swap;font-weight:200 800;src:url(${newsreaderItalic}) format('woff2-variations');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}</style>`}
-  <title>Cultifolio</title>
+  <!-- No <title> here: every page sets its own, and this one won on the server, so every species page was served as
+       "Cultifolio" to crawlers and link previews (round fifty-nine; the accessibility and words review). -->
 </svelte:head>
 
 <svelte:window onkeydown={(e) => { if (e.key === 'Escape' && menuOpen) closeMenu(); }} />
@@ -196,7 +209,7 @@
 <a class="skip" href="#main">Skip to content</a>
 
 <!-- The top bar is the page's banner; the crumb is a breadcrumb trail, an ordered list in its own nav (round fifty-eight; the accessibility review). -->
-<header id="topbar">
+<header id="topbar" data-cover="top">
   <!-- A disclosure of links, not an ARIA menu: expanded and controls say all of it, and "has a popup" promised menu keys it never had (round fifty-eight; the accessibility review). -->
   <button class="iconbtn brand" type="button" bind:this={menuBtn} aria-label="Menu" aria-expanded={menuOpen} aria-controls="menu" onclick={() => (menuOpen = !menuOpen)}>✳</button>
   {#if back}<a class="iconbtn" href={back} aria-label="Back" onclick={(e) => { if (hops > 0) { e.preventDefault(); history.back(); } }}>‹</a>{/if}
@@ -229,6 +242,8 @@
 {/if}
 {#if vaultNote}<p class="vaultnote">{vaultNote}</p>{/if}
 <!-- The frost watch, reachable from every tab (round fifty-three, 3): the risk at the site, as the Today tab says it, on every page but that one. A refusal is said on the front page and the Today tab, not on every page. -->
+<!-- This device's clock reads earlier than its own last change (round fifty-nine): said, not acted on. Its own changes all show; a peer's dated past the clock waits for it. -->
+{#if collection.clockBehindAt && privateRoute}<p class="clockbar" role="status" id="clockbar">This device's date and time read earlier than its last change, {new Date(collection.clockBehindAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}. Nothing is lost: set the clock right, and changes from other devices dated after it come in then.</p>{/if}
 {#if frost.line?.tone === 'bad' && !page.url.pathname.startsWith('/today') && page.url.pathname !== '/'}<a class="frostbar" href="/today#frost" id="frostbar">{frost.line.text} <span class="go">Today ›</span></a>{/if}
 
 <!-- On the pages about your own plants, links are not preloaded on hover: a preload of a species page sends that species' name to the
@@ -243,12 +258,12 @@
 
 <!-- Three lines, about the reader: the sources, every one, then what is kept, then the links (round fifty-eight; it was eight lines on a phone, about the server, and its list left four sources out). -->
 <footer class="credits">
-  <p>Sources: GBIF Backbone, WCVP (RBG Kew), CHELSA, NASA POWER, ETOPO, Natural Earth, iNaturalist, Wikimedia Commons, Wikipedia, OpenAlex; each figure and photograph names its own, with its licence.</p>
+  <p>Sources: GBIF Backbone, WCVP (RBG Kew), CHELSA, NASA POWER, ETOPO, Natural Earth, iNaturalist, Wikimedia Commons, Wikidata, Wikipedia, OpenAlex; each figure and photograph names its own, with its licence.</p>
   <p>No account, no analytics. Your collection stays on this device{#if sync.configured}, and in a vault only your key opens{/if}.</p>
   <p><a href="/about/how">How it is made</a> · <a href="/about/how#privacy">Privacy</a> · <a href="/about/formats">Formats</a> · <a href="https://github.com/zomethingje-eng/cultifolio">Source</a></p>
 </footer>
 
-<nav id="tabbar" aria-label="Tabs" class:away={tabAway} onfocusin={() => (tabAway = false)}>
+<nav id="tabbar" aria-label="Tabs" class:away={tabAway} data-cover="bottom" data-away={tabAway ? 'true' : undefined} onfocusin={() => (tabAway = false)}>
   {#each places as pl}
     <a href={pl.href} class:on={pl.on(page.url.pathname)} aria-current={pl.on(page.url.pathname) ? 'page' : undefined}><!-- aria-current: round fifty-eight; the accessibility review -->
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -266,6 +281,7 @@
 <style>
   .iconbtn.sync { color: var(--ink3); }
   .vaultnote { margin: 0; padding: 8px 16px; background: var(--bad); color: #fff; font-size: var(--fs-md); }
+  .clockbar { margin: 0; padding: 7px 16px; background: var(--warm-soft); color: var(--warm-ink); font-size: var(--fs-md); line-height: 1.4; border-bottom: 1px solid var(--rule); }
   .frostbar { display: block; padding: 7px 16px; background: var(--bad-soft); color: var(--ink); font-size: var(--fs-md); line-height: 1.4; border-bottom: 1px solid var(--rule); text-decoration: none; }
   .frostbar:hover { text-decoration: underline; }
   .frostbar .go { white-space: nowrap; color: var(--bad); font-weight: 600; margin-left: 4px; }
@@ -275,7 +291,7 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   /* Opaque, not a blur: a sticky bar that lets headings ghost through reads as two lines of text. */
   #topbar { position: sticky; top: 0; z-index: 60; background: var(--bg); border-bottom: 1px solid var(--rule); display: flex; align-items: center; gap: 8px; padding: 2px 16px; margin-inline: calc(-1 * max(16px, env(safe-area-inset-left))) calc(-1 * max(16px, env(safe-area-inset-right))); min-height: 44px; }
-  .crumb { font-size: var(--fs-xs); line-height: 40px; letter-spacing: 0.11em; text-transform: uppercase; color: var(--ink3); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
+  .crumb { font-size: var(--fs-xs); line-height: max(40px, var(--tap)); letter-spacing: 0.11em; text-transform: uppercase; color: var(--ink3); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
   /* A finger's hit area (40 px) around an 11 px word: the line box, not the glyph, is the target. */
   .crumb a { color: var(--ink3); display: inline-block; padding: 0 2px; }
   .crumb a:hover { color: var(--ink); text-decoration: none; }
@@ -288,7 +304,7 @@
   #topbar .topseg { margin: 0 6px; flex: none; }
   #topbar .topseg > a { padding: 5px 12px; font-size: var(--fs-md); }
   @media (max-width: 700px) { #topbar .topseg { display: none; } }
-  .iconbtn { border: 1px solid transparent; background: none; color: var(--ink2); font: inherit; font-size: var(--fs-base); font-weight: 600; padding: 4px 8px; border-radius: var(--r); line-height: 1.2; min-width: 40px; min-height: 40px; display: inline-flex; align-items: center; justify-content: center; text-align: center; }
+  .iconbtn { border: 1px solid transparent; background: none; color: var(--ink2); font: inherit; font-size: var(--fs-base); font-weight: 600; padding: 4px 8px; border-radius: var(--r); line-height: 1.2; min-width: max(40px, var(--tap)); min-height: max(40px, var(--tap)); display: inline-flex; align-items: center; justify-content: center; text-align: center; }
   .iconbtn:hover { background: var(--sunk); color: var(--ink); text-decoration: none; }
   .iconbtn.brand { color: var(--accent); cursor: pointer; }
   .iconbtn.brand[aria-expanded='true'] { background: var(--sunk); }
@@ -304,10 +320,11 @@
   footer.credits { border-top: 1px solid var(--rule); margin: 44px auto 0; padding: 18px 0 40px; max-width: 980px; font-size: var(--fs-sm); line-height: 1.75; color: var(--ink3); }
   @media (max-width: 700px) { footer.credits { padding-bottom: calc(56px + 2rem + env(safe-area-inset-bottom)); } }
   main:focus { outline: none; }
-  .skip { position: absolute; left: 16px; top: -40px; z-index: 90; background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: var(--r); font-weight: 600; font-size: var(--fs-md); }
-  .skip:focus { top: 8px; outline: 2px solid var(--accent); }
+  /* Off the screen by its own height, whatever the text size: `top: -40px` left a strip of it showing at 200% text (round fifty-nine). */
+  .skip { position: absolute; left: 16px; top: 0; z-index: 90; background: var(--ink); color: var(--bg); padding: 8px 14px; min-height: var(--tap); border-radius: var(--r); font-weight: 600; font-size: var(--fs-md); transform: translateY(calc(-100% - 4px)); }
+  .skip:focus { transform: translateY(8px); outline: 2px solid var(--accent); }
   footer.credits p { margin: 0 0 4px; }
-  footer.credits a { display: inline-block; padding: 11px 2px; margin: -11px 0; }
+  footer.credits a { display: inline-block; padding: 12px 2px; margin: -12px 0; }
   #tabbar { display: none; }
   @media (max-width: 700px) {
     main { padding-bottom: calc(56px + 2rem + env(safe-area-inset-bottom)); }

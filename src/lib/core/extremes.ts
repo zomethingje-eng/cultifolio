@@ -88,5 +88,6 @@ export function frostWording(ex: { frostDaysPerYear: number; frostNights?: numbe
   const nights = ex.frostNights ?? Math.round(ex.frostDaysPerYear * ex.years);
   if (nights === 0) return `no frost in ${ex.years} years`;
   if (nights < ex.years) return `${nights} frost night${nights === 1 ? '' : 's'} in ${ex.years} years`;
-  return `about ${Math.round(nights / ex.years)} frost night${Math.round(nights / ex.years) === 1 ? '' : 's'} a year`;
+  // The count and its rate, not "about N a year": a rounding the rule does not make (round fifty-nine; the round forty-one review, 2).
+  return `${nights} frost nights in ${ex.years} years, ${(nights / ex.years).toFixed(1)} a year`;
 }

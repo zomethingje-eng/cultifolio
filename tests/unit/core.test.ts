@@ -122,9 +122,10 @@ describe('change validation', () => {
   it('a known field with a value of the wrong type is refused; null and unknown fields pass (round twenty-eight, 0)', () => {
     const ok = { t: '1700000000000-0000-x', kind: 'sowing', id: 's1', field: 'sown', value: '2026-03-01' };
     expect(() => validateChanges([{ ...ok, value: 20260301 }])).toThrow(/change 0: sown of a sowing must be a string, not 20260301/);
-    expect(() => validateChanges([{ ...ok, field: 'count', value: '12' }])).toThrow(/count of a sowing must be a number/);
+    expect(() => validateChanges([{ ...ok, field: 'count', value: '12' }])).toThrow(/count of a sowing must be a finite number/);
     expect(() => validateChanges([{ ...ok, field: 'covered', value: 'yes' }])).toThrow(/must be a boolean/);
-    expect(() => validateChanges([{ ...ok, kind: 'event', field: 'measures', value: [1, 2] }])).toThrow(/must be a object/);
+    expect(() => validateChanges([{ ...ok, kind: 'event', field: 'measures', value: [1, 2] }])).toThrow(/must be a set of finite numbers/);
+    expect(() => validateChanges([{ ...ok, kind: 'event', field: 'measures', value: { diam: Infinity } }])).toThrow(/must be a set of finite numbers/); // round fifty-nine
     expect(() => validateChanges([{ ...ok, field: '_deleted', value: 'true' }])).toThrow(/_deleted of a sowing must be a boolean/);
     expect(() => validateChanges([{ ...ok, value: null }])).toThrow(/sown of a sowing cannot be null/); // a required field takes no null (round thirty-three, 1)
     expect(validateChanges([{ ...ok, field: 'medium', value: null }, { ...ok, field: 'count', value: 12 }, { ...ok, field: 'aFieldFromNextYear', value: 7 }, { ...ok, field: '_deleted', value: true }])).toHaveLength(4);
@@ -346,7 +347,7 @@ describe('round twenty-nine: a value of the wrong type is left out, not the list
     const { readChanges } = await import('$core/log');
     const r = readChanges([ok, { ...ok, field: 'notes', value: { a: 1 } }, { ...ok, field: 'taxonKey', value: 'x' }, { ...ok, field: 'notes', value: 'fine' }]);
     expect(r.changes.map((c) => c.value)).toEqual(['fine']);
-    expect(r.dropped).toEqual(['change 0: price of a accession must be a string, not 12', 'change 1: notes of a accession must be a string, not {"a":1}', 'change 2: taxonKey of a accession must be a number, not "x"']);
+    expect(r.dropped).toEqual(['change 0: price of an accession must be a string, not 12', 'change 1: notes of an accession must be a string, not {"a":1}', 'change 2: taxonKey of an accession must be a finite number, not "x"']);
     expect(() => readChanges(null)).toThrow(/not a list/);
     expect(() => readChanges([ok, { ...ok, t: '~' }])).toThrow(/change 1: bad timestamp/); // structure still refuses the list whole
     expect(() => readChanges([{ ...ok, field: '*' }])).toThrow(/reserved/);
@@ -364,7 +365,7 @@ describe('round twenty-nine: a value of the wrong type is left out, not the list
       { t: t(5), kind: 'sowing', id: 's1', field: 'count', value: '3' }
     ]);
     expect(r.changes.map((c) => `${c.id}.${c.field}`)).toEqual(['r1.acc', 'r1.status', 'r2.taxonName', 'r2.status']); // nothing is mended since round fifty-seven: a number in a text field and a count as text are left out
-    expect(r.dropped).toEqual(['change 1: taxonName of a accession must be a string, not {"bad":true}', 'change 4: notes of a accession must be a string, not 7.5', 'change 6: count of a sowing must be a number, not "3"']);
+    expect(r.dropped).toEqual(['change 1: taxonName of an accession must be a string, not {"bad":true}', 'change 4: notes of an accession must be a string, not 7.5', 'change 6: count of a sowing must be a finite number, not "3"']);
     // r1 is in the fold but not live: it waits, counted, for a build that reads its name
     const { state } = materialise(r.changes);
     expect(live(state, 'accession').map((a) => a.id)).toEqual(['r2']);

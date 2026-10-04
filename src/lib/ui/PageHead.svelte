@@ -34,9 +34,10 @@
     .phead.compact { margin: 12px 0 10px; }
     .phead.compact .kick, .phead.compact:not(.keepsub) :global(.secsub), .phead.compact .fullcount { display: none; }
     .phead.compact.keepsub :global(.secsub) { font-size: var(--fs-md); line-height: 1.5; }
-    .phead.compact .titlerow { align-items: baseline; justify-content: flex-start; flex-wrap: nowrap; }
+    .phead.compact .titlerow { align-items: baseline; justify-content: flex-start; flex-wrap: wrap; row-gap: 2px; }
     .phead.compact .titlerow h1 { font-size: 1.625rem; }
-    .phead.compact .inlinecount { display: inline; font-size: var(--fs-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    /* The count wraps under the title rather than being cut ("14 growing · 14 plant numb…"; round fifty-nine). */
+    .phead.compact .inlinecount { display: inline; font-size: var(--fs-sm); white-space: normal; min-width: 0; }
     .phead.compact .acts { margin-left: auto; flex: none; }
     .phead.compact .titlerow h1 { white-space: nowrap; }
     /* With an action beside the title there is no room for the count on the line: it goes under, small (round fifty, 4). */

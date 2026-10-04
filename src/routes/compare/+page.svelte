@@ -10,7 +10,6 @@
   import { site } from '$lib/ui/site.svelte';
   import { collection } from '$lib/db/collection.svelte';
   import PageHead from '$lib/ui/PageHead.svelte';
-  import Climograph from '$lib/ui/Climograph.svelte';
   import { cultivationSheet, CARD_ORDER } from '$core/sheet';
   import { frostWording } from '$core/extremes';
   import { setCrumb } from '$lib/ui/crumb.svelte';
@@ -18,7 +17,7 @@
   import { onMount } from 'svelte';
   import { searchCatalogue } from '$lib/ui/index.svelte';
   import { units } from '$lib/ui/units.svelte';
-  import { temp, rain } from '$core/units';
+  import { temp, rain, ruleRain, ruleDeltaT } from '$core/units';
   let { data } = $props();
   const u = $derived(units.current);
   // The grower's hemisphere, from the site or the first place with coordinates: the months follow it, as on the species page.
@@ -61,9 +60,13 @@
 
   /* ---- what differs, by a fixed rule, said on the page (round fifty-eight; the first-impression review) ---- */
   const coldOf = (c: (typeof cols)[number]) => (c.floor?.raised ? c.floor.floor : c.ex ? c.ex.minP01 : c.cold?.v ?? null);
+  // A night is compared only with a night of the same kind: an archetype minimum, a 1st-percentile night and a month's mean
+  // night are different figures, and ranking one against another was a comparison the rule does not make (round fifty-nine).
+  const coldKind = (c: (typeof cols)[number]) => (c.floor?.raised ? 'archetype' : c.ex ? 'night' : c.cold ? 'mean' : null);
+  const coldKinds = $derived(new Set(cols.map(coldKind).filter(Boolean)));
   const spread = (xs: Array<number | null>) => { const v = xs.filter((x): x is number => x != null); return v.length > 1 ? Math.max(...v) - Math.min(...v) : 0; };
   const differs = $derived({
-    cold: spread(cols.map(coldOf)) > 2,
+    cold: coldKinds.size === 1 && spread(cols.map(coldOf)) > 2,
     hot: spread(cols.map((c) => c.hot?.v ?? null)) > 2,
     rain: (() => { const v = cols.map((c) => c.rain).filter((x): x is number => x != null); return v.length > 1 && Math.max(...v) > 1.25 * Math.min(...v) + 10; })(),
     light: spread(cols.map((c) => c.dli?.hi ?? null)) > 5
@@ -108,15 +111,15 @@
 {#if data.missing.length}<p class="notice">Not in the reference: {data.missing.join(', ')}.</p>{/if}
 <div class="picker">
   <label for="cmp-q">{cols.length >= 3 ? 'Swap in a species' : 'Add a species'}</label>
-  <input id="cmp-q" type="search" bind:value={pq} placeholder="A name or a genus" autocomplete="off" />
+  <input id="cmp-q" class="searchbar" type="search" bind:value={pq} placeholder="A name or a genus" autocomplete="off" />
   {#if found.length}
     <ul class="found">{#each found as f (f.slug)}<li><a href={withSlug(f.slug)} data-sveltekit-noscroll onclick={() => { pq = ''; }}><i>{f.name}</i></a>{#if cols.length >= 3}<span class="muted small"> replaces <i>{cols[0].d.name.scientific}</i></span>{/if}</li>{/each}</ul>
   {/if}
 </div>
 {#if !cols.length}
   <div class="emptybox">
-    <p>Pick species with the <b>Compare</b> button on their pages, up to three; the tray at the foot of the page brings you here.</p>
-    {#if compare.picks.length >= 2}<p><a class="btn pri" href={compare.href}>Compare {compare.picks.map((p) => p.name).join(', ')}</a></p>{:else if compare.picks.length === 1}<p class="small muted">In the tray: <i>{compare.picks[0].name}</i>. One more to compare.</p>{/if}
+    <p>Search for one above, or press <b>Compare</b> on a species page, up to three; the tray at the foot of the page brings you here.</p>
+    {#if compare.picks.length >= 2}<p><a class="btn pri wrap" href={compare.href}>Compare these {compare.picks.length}</a> <span class="small muted">{#each compare.picks as p, i (p.slug)}{i ? ', ' : ''}<i>{p.name}</i>{/each}</span></p>{:else if compare.picks.length === 1}<p class="small muted">In the tray: <i>{compare.picks[0].name}</i>. One more to compare.</p>{/if}
   </div>
 {/if}
 
@@ -128,7 +131,7 @@
     <div class="row head">
       {#each cols as c (c.d.key)}
         <div class="cell">
-          {#if c.hero}<img src={c.hero.thumb ?? c.hero.url} alt="" loading="lazy" />{/if}
+          <div class="hero">{#if c.hero}<img src={c.hero.thumb ?? c.hero.url} alt="" loading="lazy" onerror={(e) => ((e.currentTarget as HTMLImageElement).hidden = true)} />{/if}</div>
           <a class="nm" href="/species/{c.d.slug}"><SpeciesName name={c.d.name.scientific} /></a>
           <div class="fam">{c.d.name.family ?? ''}{c.d.distribution.native.length ? ' · ' + c.d.distribution.native.slice(0, 2).map((r) => r.name).join(', ') : ''}</div>
           {#if cols.length > 1}<a class="drop small" href={without(c.d.slug)} data-sveltekit-noscroll aria-label="Take {c.d.name.scientific} out of the comparison">Remove</a>{/if}
@@ -138,21 +141,21 @@
     </div>
 
     <!-- "not used", not "set aside": what it means (round fifty-eight; the accessibility review). -->
-    <div class="rowlab">Coldest night (a floor where one is read)</div>
+    <div class="rowlab">Coldest night (a floor where one is read){#if differs.cold}<span class="dif">differs</span>{:else if coldKinds.size > 1}<span class="kinds">figures of different kinds, not compared</span>{/if}</div>
     <div class="row" class:differs={differs.cold}>
       {#each cols as c (c.d.key)}<div class="cell fig">{#if c.floor?.raised}<b>{temp(c.floor.floor, u)}</b><span>archetype minimum for {c.floor.group}, above the habitat's {c.ex ? `1st-percentile night ${temp(c.ex.minP01, u, 1)} (NASA POWER)` : `coldest mean night ${temp(c.cold!.v, u, 1)} (CHELSA)`}</span>{:else if c.ex}<b>{temp(c.ex.minP01, u, 1)}</b><span>1st-percentile night over {c.ex.years} yrs; lowest {temp(c.ex.minAbs, u, 1)}, {frostWording(c.ex)} (NASA POWER)</span>{:else if c.cold}<b>{temp(c.cold.v, u, 1)}</b><span>{c.cold.mo}, mean night (CHELSA), not a floor; {c.d.climate.status === 'ok' && c.d.climate.extremesStatus === 'refused' ? 'extremes not checked' : c.d.climate.status === 'ok' && c.d.climate.extremesStatus === 'skipped' ? 'extremes not asked for' : c.d.climate.status === 'ok' && c.d.climate.extremesStatus === 'sea' ? 'extremes read at a sea cell, not used' : 'no extremes series'}</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
     </div>
-    <div class="rowlab">Warmest month</div>
+    <div class="rowlab">Warmest month{#if differs.hot}<span class="dif">differs</span>{/if}</div>
     <div class="row" class:differs={differs.hot}>
       {#each cols as c (c.d.key)}<div class="cell fig">{#if c.hot}<b>{temp(c.hot.v, u)}</b><span>{c.hot.mo}, mean day (CHELSA)</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
     </div>
-    <div class="rowlab">Rain</div>
+    <div class="rowlab">Rain{#if differs.rain}<span class="dif">differs</span>{/if}</div>
     <div class="row" class:differs={differs.rain}>
-      {#each cols as c (c.d.key)}<div class="cell fig">{#if c.rain != null && c.wet}<b>{rain(c.rain, u)}/yr</b><span>{c.wet.n === 0 ? `no month over 25 mm (1 in)` : `${c.wet.n} month${c.wet.n === 1 ? '' : 's'} over 25 mm (1 in)`} · peak {c.wet.mo} (CHELSA)</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
+      {#each cols as c (c.d.key)}<div class="cell fig">{#if c.rain != null && c.wet}<b>{rain(c.rain, u)}/yr</b><span>{c.wet.n === 0 ? `no month of ${ruleRain(25, u)} or more` : `${c.wet.n} month${c.wet.n === 1 ? '' : 's'} of ${ruleRain(25, u)} or more`} · wettest {c.wet.mo} (CHELSA)</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
     </div>
-    <div class="rowlab">Light</div>
+    <div class="rowlab">Light{#if differs.light}<span class="dif">differs</span>{/if}</div>
     <div class="row" class:differs={differs.light}>
-      {#each cols as c (c.d.key)}<div class="cell fig">{#if c.dli}<b>{c.dli.lo.toFixed(0)}–{c.dli.hi.toFixed(0)} DLI</b><span>mol/m²/day, winter to summer (CHELSA shortwave)</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
+      {#each cols as c (c.d.key)}<div class="cell fig">{#if c.dli}<b>{c.dli.lo.toFixed(0)}–{c.dli.hi.toFixed(0)} DLI</b><span>mol/m²/day, lowest to highest month (CHELSA shortwave)</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
     </div>
 
     {#if overlay}
@@ -166,12 +169,14 @@
         <figcaption class="small muted">{#each overlay.lines as l, i (l.c.d.key)}{i ? ' · ' : ''}<span class="sw" style:background={l.colour}></span><i>{l.c.d.name.scientific}</i>{/each}. Solid: mean day; dashed: mean night (CHELSA, the habitat's own months).</figcaption>
       </figure>
     {/if}
+    <!-- Each species' own chart is on its page: in a column of this table it was too small to read at any width, labels of
+         four pixels at 1280 (round fifty-nine; the interface review). The overlay above carries the year side by side. -->
     <div class="rowlab">The year</div>
     <div class="row yearrow">
       {#each cols as c (c.d.key)}
         <div class="cell">
           {#if c.ok && c.d.climate.status === 'ok'}
-            <Climograph name={c.d.name.scientific} climate={{ months: c.d.climate.months, p10: c.d.climate.p10, p90: c.d.climate.p90, cells: c.d.climate.cells, extremes: c.d.climate.extremes ?? null }} id="climo-{c.d.key}" /><!-- named: round fifty-eight; the accessibility review -->
+            <a href="/species/{c.d.slug}#s-climate">The full chart, with its bands and extremes, on its page</a>
           {:else}
             <div class="none small muted">{climateWord(c.d)}.</div>
           {/if}
@@ -190,7 +195,7 @@
       </div>
     {/each}
   </div>
-  <p class="small muted" style="margin-top: 14px">Each figure is the species page's own, with the same source; the sheet lines are the cards' one-line forms. A shaded row is one whose figures differ by more than 2 °C (3.6 °F), by more than a quarter of the rain, or by more than 5 DLI: a fixed rule, not a verdict. Open a column's page for the spans, the cells and the evidence.</p>
+  <p class="small muted" style="margin-top: 14px">Each figure is the species page's own, with the same source; the sheet lines are the cards' one-line forms. A row marked "differs" is shaded by a fixed rule, not a verdict: the coldest nights, when they are figures of one kind, or the warmest months' mean days, more than {ruleDeltaT(2, u)} apart; the year's rain, the larger more than a quarter above the smaller and {ruleRain(10, u)} besides; the light, the brightest months more than 5 DLI apart. Open a column's page for the spans, the cells and the evidence.</p>
 {/if}
 
 <style>
@@ -200,7 +205,12 @@
   .rowlab { font-size: var(--fs-xs); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink3); font-weight: 700; margin: 18px 0 6px; font-family: var(--ui); }
   .cell { background: var(--card); border-radius: var(--r); box-shadow: var(--sh); padding: 12px 14px; min-width: 0; }
   .head .cell { padding: 0 0 12px; overflow: hidden; }
-  .head img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; background: var(--sunk); }
+  .head .hero { width: 100%; aspect-ratio: 4 / 3; background: var(--sunk); } /* the box is there whether the photograph is or not, so the names line up */
+  .head img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .rowlab .dif, .rowlab .kinds { margin-left: 8px; letter-spacing: 0.04em; text-transform: none; font-weight: 600; }
+  .rowlab .dif { color: var(--warm-ink); }
+  .rowlab .kinds { color: var(--ink3); font-weight: 500; }
+  .btn.wrap { white-space: normal; height: auto; }
   .head .nm { display: block; padding: 10px 14px 0; font-family: var(--serif); font-style: italic; font-size: var(--fs-xl); font-weight: 600; color: var(--ink); }
   .head .fam { padding: 3px 14px 0; font-size: var(--fs-sm); color: var(--ink2); }
   .head .hnote { padding: 6px 14px 0; }
@@ -213,15 +223,16 @@
   .notice { margin: 10px 0 0; }
   .row.differs .cell { background: color-mix(in srgb, var(--warm) 10%, var(--card)); }
   .drop { display: inline-block; margin: 6px 14px 0; color: var(--ink3); min-height: 32px; }
-  .picker { position: relative; margin: 12px 0 0; display: grid; gap: 4px; max-width: 28rem; }
+  .picker { position: relative; margin: 12px 0 0; display: grid; gap: 4px; max-width: 28rem; min-width: 0; }
+  .picker .searchbar { min-width: 0; width: 100%; }
   .picker label { font-size: var(--fs-sm); font-weight: 600; color: var(--ink2); }
   .picker input { min-height: 44px; }
   .found { list-style: none; margin: 0; padding: 4px 0; background: var(--card); border-radius: var(--r); box-shadow: var(--sh2); }
   .found a { display: block; padding: 10px 14px; min-height: 44px; }
   .overlay { margin: 0; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); padding: 10px 12px; }
-  .overlay svg { width: 100%; height: auto; display: block; }
+  .overlay svg { width: 100%; max-width: 480px; height: auto; display: block; margin: 0 auto; } /* stretched to 960 its labels were 25 px (round fifty-nine) */
   .overlay .grid { stroke: var(--rule); stroke-width: 1; }
-  .overlay .tick { font-size: 0.5625rem; fill: var(--ink3); font-family: var(--mono); }
+  .overlay .tick { font-size: 12px; fill: var(--ink3); font-family: var(--mono); } /* user units: 11 px or more on a phone, where the chart is drawn about 1:1 */
   .overlay .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
   @media (max-width: 700px) {
     /* One scroller for the whole table, not one per row: a thumb drags the columns and every row follows, and the row labels stay put. */
@@ -230,9 +241,6 @@
     .row .cell { scroll-snap-align: start; }
     .rowlab { position: sticky; left: 0; width: max-content; background: var(--bg); padding: 0 8px 0 2px; }
     .swipehint { display: block; }
-    /* a climograph at half a phone is unreadable; the overlaid chart above carries the year there, and the row points at each page's own */
-    .yearrow :global(.climo) { display: none; }
-    .yearrow .cell:has(:global(.climo))::after { content: 'The full chart is on the species page.'; font-size: var(--fs-md); color: var(--ink3); }
     .head .nm { font-size: var(--fs-lg); }
   }
 </style>

@@ -174,17 +174,22 @@ self.addEventListener('fetch', (e) => {
       }
       if (url.pathname.startsWith('/species/') || url.pathname.startsWith('/s/') || url.pathname.startsWith('/about/') || url.pathname === '/' || url.pathname === '/settings') {
         // These pages vary on the units cookie; offline, the copy cached under the other units is the page (it re-reads the units on hydration), so Vary is ignored.
-        // A navigation is held under its path alone: `/?by=origin&chip=climate` and `/species/x?was=y` each minted a copy, and
-        // the query is read again on hydration (round fifty-one, 6).
-        const under = request.mode === 'navigate' ? url.origin + url.pathname : request;
-        const kept = await cache.match(under, { ignoreVary: true, ignoreSearch: request.mode === 'navigate' });
-        const good = (r: Response) => (request.mode === 'navigate' ? cacheableHtml(r) : r.ok && r.type === 'basic');
+        // A navigation is held under its path alone: `/?by=origin&chip=climate` and `/species/x?was=y` each minted a copy
+        // (round fifty-one, 6). Only a navigation without a query is kept, though: the page renders what its query asked
+        // for and does not read it again, so a copy kept from `/?by=origin&open=cape&part=3` answered `/` and every other
+        // query offline (round fifty-nine; the corpus review, 6). One with a query goes to the network, and falls back to
+        // the plain page's copy only when the network fails.
+        const navigate = request.mode === 'navigate';
+        const queried = navigate && url.search !== '';
+        const under = navigate ? url.origin + url.pathname : request;
+        const kept = await cache.match(under, { ignoreVary: true, ignoreSearch: navigate });
+        const good = (r: Response) => (queried ? false : navigate ? cacheableHtml(r) : r.ok && r.type === 'basic');
         // The cache write is a promise of its own, handed to `waitUntil`: a write started with `void` after the response
         // was returned could be cut off with the event, and the copy the next visit found was the old one (round thirty-eight, R2-2).
         const keep = (r: Response) => ({ r, written: good(r) ? cache.put(under, r.clone()).catch(() => {}) : Promise.resolve() });
         try {
           const live = fetch(request).then(keep);
-          if (!kept) {
+          if (!kept || queried) {
             const got = await live;
             e.waitUntil(got.written);
             return got.r;

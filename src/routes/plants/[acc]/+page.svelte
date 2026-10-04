@@ -66,7 +66,8 @@
   /** A repot's pot size rides in `measures` as `pot`, in millimetres; it is not a size of the plant, so it is not in the measure form (round fifty-eight). */
   const POT = { k: 'pot', label: 'Pot', unit: 'mm' };
   const measureOf = (k: string) => MEASURES.find((x) => x.k === k) ?? (k === POT.k ? POT : undefined);
-  const taxon = $derived(a ? collection.taxon(speciesSlug(a.taxonName)) : undefined);
+  const taxonSlug = $derived(a ? speciesSlug(a.taxonName) : '');
+  const taxon = $derived(a ? collection.taxon(taxonSlug) : undefined);
   const sowing = $derived(a?.sowingId ? collection.sowing(a.sowingId) : undefined);
   let dossier = $state<Sheet | null>(null);
   /** The species page's slug: the sheet's own (a homonym's is suffixed) when the sheet is here, else the name's (round eighteen, 6). */
@@ -138,7 +139,8 @@
     const d = habitat.dli;
     const sky = `open sky over the habitat ${r0(d.lo)}–${r0(d.hi)} mol/m²/day across the year (median year${d.lo10 != null && d.hi90 != null ? `; across the range, ${habitat.cells} grid cells, ${r0(d.lo10)} to ${r0(d.hi90)}` : ''}; CHELSA)`;
     if (hereDli == null) return { here: null, text: `${sky}; no light figure for this place` };
-    return { here: hereDli, text: `${r0(hereDli)} mol/m²/day here, from this place's settings; ${sky}` };
+    // Hours not set are taken as 12 and said so: "from this place's settings" claimed a figure the grower never gave (round fifty-nine).
+    return { here: hereDli, text: `${r0(hereDli)} mol/m²/day here, from this place's light${cond?.lightHours == null ? ' and 12 hours assumed (no hours set)' : ` over ${cond.lightHours} hours`}; ${sky}` };
   });
   const coldCompare = $derived.by(() => {
     if (!habitat) return null;
@@ -402,15 +404,17 @@
     await collection.put('accession', id, { notes: next, notesBase: notesBaseStamp });
     editingNotes = false;
   }
-  /** The species notes as the editor opened: a text that changed meanwhile (another tab, a sync) is not lost silently, as plant notes are not (round fifty-two, 4). */
+  /** The species notes as the editor opened, for the unsaved-changes guard. */
   let myNotesOpen = '';
+  let myNotesBaseStamp: string | null = null;
   async function saveMyNotes() {
     if (!a) return;
     const slug = speciesSlug(a.taxonName);
-    const current = collection.taxon(slug)?.myNotes ?? '';
     const next = myNotesDraft.trim() || null;
-    const replaced = current && current !== myNotesOpen && current !== next;
-    await collection.putWith('taxon', slug, { name: speciesOf(a.taxonName), gbifKey: a.taxonKey ?? null, myNotes: next }, replaced ? [{ acc: id, d: localDate(), t: 'note', note: `Species notes replaced by this edit; before it they read: ${current}`, auto: true }] : []);
+    // The edit carries the stamp of the text it was opened on, so a text that changed meanwhile (another device, another
+    // tab) is read from the log as replaced unseen, on every device, and nothing more is written; the species' key is
+    // left to the species page, which has the reference's (round fifty-nine; the round forty-one review, 7).
+    await collection.put('taxon', slug, { name: speciesOf(a.taxonName), myNotes: next, myNotesBase: myNotesBaseStamp });
     editingMy = false;
   }
   async function remove() {
@@ -418,14 +422,17 @@
     await collection.remove('accession', id);
     goto('/plants');
     // The removal is one tap; the way back is one too (round twenty-six, 5). The record never left the log.
-    toast.show(`${no} removed.`, 8000, { label: 'Undo', run: () => { void collection.restore('accession', id).then(() => goto(`/plants/${accNo(collection.accession(id) ?? { id })}`)); } }); // the number it holds after the restore: a repair on restore may have renumbered it (round twenty-nine, 3)
+    toast.show(`${no} removed.`, 8000, { label: 'Undo', run: () => { void collection.restore('accession', id).then((moved) => { void goto(`/plants/${accNo(collection.accession(id) ?? { id })}`); if (moved) toast.show(`Restored as ${moved.to}: ${moved.from} is another plant's now.`); }); } }); // the number it holds after the restore: a plant brought back to a number taken meanwhile yields it (round fifty-nine)
   }
   const waiting = $derived(a ? undefined : collection.waiting('accession', param));
   async function restoreRemoved() {
     const r = collection.removedAccession(param);
     if (!r) return;
-    await collection.restore('accession', r.id);
-    toast.show(`${param} restored.`);
+    const moved = await collection.restore('accession', r.id);
+    if (moved) {
+      await goto(`/plants/${moved.to}`);
+      toast.show(`Restored as ${moved.to}: ${moved.from} is another plant's now.`);
+    } else toast.show(`${param} restored.`);
   }
   /** The key the reference files this plant's species under, when it answered. */
   let refKey = $state<number | null>(null);
@@ -456,7 +463,7 @@
       if (now && accNo(now) !== before) {
         toast.show(`This plant is now ${accNo(now)}; a note on it says why.`);
         if (param !== id) await goto(`/plants/${encodeURIComponent(id)}`, { replaceState: true });
-      } else toast.show(`${before} stays with this plant, made first; the other was given the next free number.`);
+      } else toast.show(`${before} stays with this plant, recorded first; the other was given the next free number.`);
     } finally {
       renumbering = false;
     }
@@ -474,7 +481,7 @@
   <div class="notice" id="key-differs">The reference files {a.taxonName} under GBIF key {refKey}; this plant records key {a.taxonKey}, which the reference does not hold under that name. The species shown here is the reference's. <button class="btn" onclick={useReferenceKey}>Use the reference's key</button></div>
 {/if}
 {#if a && sharedWith.length}
-  <div class="notice" id="shared-number">{#if plan?.keeper === a.id}{othersNamed.length === 1 ? `Another plant, ${othersNamed[0]},` : `${othersNamed.length} other plants`} {othersNamed.length === 1 ? 'has' : 'have'} the number {accNo(a)} too: two devices gave it out while offline, or a file was merged in. This plant was made first and keeps it; renumbering gives {othersNamed.length === 1 ? 'the other' : 'the others'} the next free number, with a note saying so.{:else}This plant shares the number {accNo(a)} with {othersNamed.join(', ')}, made before it: two devices gave it out while offline, or a file was merged in. Renumbering gives this plant the next free number, with a note saying so.{/if} <button class="btn" onclick={renumberShared} disabled={renumbering}>Renumber now</button></div>
+  <div class="notice" id="shared-number">{#if plan?.keeper === a.id}{othersNamed.length === 1 ? `Another plant, ${othersNamed[0]},` : `${othersNamed.length} other plants`} {othersNamed.length === 1 ? 'has' : 'have'} the number {accNo(a)} too: two devices gave it out while offline, or a file was merged in. This plant was recorded first and keeps it; renumbering gives {othersNamed.length === 1 ? 'the other' : 'the others'} the next free number, with a note saying so.{:else}This plant shares the number {accNo(a)} with {othersNamed.join(', ')}, recorded before it: two devices gave it out while offline, or a file was merged in. Renumbering gives this plant the next free number, with a note saying so.{/if} <button class="btn" onclick={renumberShared} disabled={renumbering}>Renumber now</button></div>
 {/if}
 {#if !collection.ready}
   <!-- The page's shape before the vault opens: the card without a picture, which is what most plants' pages are; one with a photograph grows a hero above it when the record arrives. -->
@@ -731,9 +738,10 @@
     {#if editingMy}
       <div class="fields"><textarea id="taxon-notes" rows="4" bind:value={myNotesDraft}></textarea><div class="actions"><button class="btn" onclick={() => (editingMy = false)}>Cancel</button><button class="btn pri" onclick={saveMyNotes}>Save</button></div></div>
     {:else if taxon?.myNotes}
-      <div class="body">{taxon.myNotes}</div><div class="foot"><button class="linkish" onclick={() => { myNotesDraft = taxon?.myNotes ?? ''; myNotesOpen = myNotesDraft; editingMy = true; }}>Edit</button></div>
+      <div class="body">{taxon.myNotes}</div><div class="foot"><button class="linkish" onclick={() => { myNotesDraft = taxon?.myNotes ?? ''; myNotesOpen = myNotesDraft; myNotesBaseStamp = collection.notesStamp('taxon', taxonSlug); editingMy = true; }}>Edit</button></div>
+      <ReplacedNotes kind="taxon" id={taxonSlug} />
     {:else}
-      <div class="none">Nothing yet. <button class="linkish" onclick={() => { myNotesDraft = ''; myNotesOpen = ''; editingMy = true; }}>Write cultivation notes</button></div>
+      <div class="none">Nothing yet. <button class="linkish" onclick={() => { myNotesDraft = ''; myNotesOpen = ''; myNotesBaseStamp = collection.notesStamp('taxon', taxonSlug); editingMy = true; }}>Write cultivation notes</button></div>
     {/if}
   </div>
 
@@ -823,7 +831,7 @@
   .editform, .evform { margin-top: 16px; }
   .editform { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 12px; padding: 14px 17px; }
   .editform label { display: grid; gap: 4px; }
-  .editform label > span, .editform .lbl { font-size: 0.6562rem; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink3); font-weight: 700; }
+  .editform label > span, .editform .lbl { font-size: var(--fs-xs); letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink3); font-weight: 700; }
   .editform input, .editform select, .fields input, .fields select, .fields textarea { width: 100%; font: inherit; font-size: 0.875rem; padding: 8px 11px; border: 1px solid var(--rule); border-radius: var(--r); background: var(--card); color: var(--ink); }
   .wide { grid-column: 1 / -1; }
   .fields { display: grid; gap: 8px; padding: 13px 17px 15px; }

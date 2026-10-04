@@ -156,8 +156,8 @@
 
 {#if collection.ready && collection.accessions.length}
 <div class="toolrow plantstools">
-  <input id="plants-q" class="searchbar" type="search" placeholder="Search name, number, field number, place, notes…" aria-label="Search your plants" bind:value={q} />
-  {#if !few}<select id="plants-sort" class="sortsel" aria-label="Sort" bind:value={sort}><option value="number">Newest number first</option><option value="name">By name</option><option value="watered">Longest since watered</option><option value="place">By place</option></select>{/if}
+  <input id="plants-q" class="searchbar" type="search" placeholder="Search plants…" aria-label="Search your plants" bind:value={q} />
+  {#if !few}<select id="plants-sort" class="sortsel" aria-label="Sort" bind:value={sort}><option value="number">Newest first</option><option value="name">By name</option><option value="watered">Longest unwatered</option><option value="place">By place</option></select>{/if}
   {#if (q.trim() || show !== 'growing') && list.length}<a class="btn small" href="/labels?acc={list.map((a) => a.id).join(',')}" title="Labels for exactly the plants listed here">Labels for these {list.length}</a>{/if}
   <!-- "Due" by each plant's rhythm, which a place or the plant may set: the chip no longer says 21 days for all (round fifty-eight; the grower review). -->
   <!-- The one toggle group, as chips, with a name for the group (round fifty-eight; the accessibility review). -->
@@ -213,9 +213,9 @@
           <span class="txt">
             <span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}‘{a.cultivar}’{/if}</span>
             <!-- On a phone the watering figure leads the second line, so a row is two lines, not three (round fifty-eight; the grower review). -->
-            <span class="fam"><span class="sr">, </span>{#if a.status === 'growing' || collection.lastWatered(a.id)}<span class="figphone" class:due={collection.isDue(a)}>{wtext}</span>{/if}{#if kindOf(a) !== 'species'}<span class="pill c">{kindOf(a)}</span>{/if}{#if a.fieldNumber}<span class="fnchip">{a.fieldNumber}</span>{/if}{#if a.locationId}<span class="where">{collection.locationName(a.locationId)}</span>{/if}{#if a.status !== 'growing'}<span class="pill">{a.status}</span>{/if}</span>
+            <span class="fam"><span class="sr">{', '}</span>{#if a.status === 'growing' || collection.lastWatered(a.id)}<span class="figphone" class:due={collection.isDue(a)}>{wtext}</span>{/if}{#if kindOf(a) !== 'species'}<span class="pill c">{kindOf(a)}</span>{/if}{#if a.fieldNumber}<span class="fnchip">{a.fieldNumber}</span>{/if}{#if a.locationId}<span class="where">{collection.locationName(a.locationId)}</span>{/if}{#if a.status !== 'growing'}<span class="pill">{a.status}</span>{/if}</span>
           </span>
-          <span class="fig" class:due={collection.isDue(a)}><span class="sr">, </span>{wtext}</span>
+          <span class="fig" class:due={collection.isDue(a)}><span class="sr">{', '}</span>{wtext}</span>
         </a>
         <!-- The one thing done to a plant without opening its page: a watering today, with an Undo (round forty-nine, 3). -->
         {#if a.status === 'growing'}<button class="btn small wbtn" type="button" onclick={() => water(a)} disabled={watering === a.id} aria-label="Record {accNo(a)} watered today" title="Record watered today">Water</button>{/if}
@@ -229,13 +229,13 @@
 <style>
   .keepline { margin: -6px 0 10px; }
   .more { display: flex; justify-content: center; padding: 10px 0; }
-  .sortsel { border: 1px solid var(--rule); background: var(--card); border-radius: var(--r); padding: 8px 10px; font: inherit; font-size: var(--fs-md); color: var(--ink); }
+  .sortsel { border: 1px solid var(--field-edge); background: var(--card); border-radius: var(--r); padding: 8px 10px; min-height: var(--tap); font: inherit; font-size: var(--fs-md); color: var(--ink); } /* an edge at 3:1: --rule was 1.17:1 (round fifty-nine) */
   .muted { color: var(--ink3); }
   .notice .linkish { background: none; border: 0; padding: 0; color: var(--ink3); font: inherit; text-decoration: underline; cursor: pointer; }
   .accrow .nm .accno { font-style: normal; vertical-align: 2px; }
   .im.own { box-shadow: inset 0 0 0 2px var(--accent); }
   .accline { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px; }
-  .wbtn { min-height: 40px; }
+  .wbtn { min-height: var(--tap); min-width: var(--tap); } /* the tap token: 44 px under a finger (round fifty-nine) */
   .im :global(img) { width: 100%; height: 100%; object-fit: cover; }
   /* Rows of two lines, about 56px; a name wraps between words, never inside one ("Astrophytu m"): the theme's anywhere is for the catalogue's tiles (round fifty-eight; the grower review). */
   .accrow { min-height: 56px; }

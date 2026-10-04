@@ -62,7 +62,7 @@
 <style>
   .path { margin: 2px 0 0; }
   .picker { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
-  select, input { padding: 0.5em 0.8em; border: 1px solid var(--rule2); border-radius: var(--r); background: var(--card); }
+  select, input { padding: 0.5em 0.8em; min-height: var(--tap); border: 1px solid var(--field-edge); border-radius: var(--r); background: var(--card); } /* an edge at 3:1 (round fifty-nine) */
   .picker > select { flex: 1; min-width: 12rem; }
   .new { width: 100%; padding: 0.7rem; display: grid; gap: 0.5rem; }
   .row { display: flex; justify-content: flex-end; gap: 0.5rem; }

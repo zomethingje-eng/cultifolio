@@ -377,6 +377,8 @@
     return [...owned.keys()].length; // until the entries are here, count what you grow, not what the corpus has of it
   });
   const byLabel = { genus: 'Genus', origin: 'Origin', family: 'Family' } as const;
+  /** A tile's second line: the English name, unless it is only the genus again (Welwitschia's is "Welwitschia"), when the family says more (round fifty-nine; self review). */
+  const commonOr = (c: { name: string; common?: string; family?: string }) => (c.common && c.common.toLowerCase() !== c.name.split(' ')[0].toLowerCase() ? c.common : c.family);
   const fmtN = (n: number) => n.toLocaleString('en-US');
   // A visitor: no plants on this device (until the collection has opened, the server's catalogue stands as the visitor's page).
   const visitor = $derived(!collection.ready || (!hasMine && !collection.accessions.length));
@@ -421,15 +423,16 @@
     <link rel="canonical" href="https://cultifolio.com/?by={data.by}&open={data.open}" />
   {:else}
     <title>Cultifolio: cactus, succulent and bulb reference, and a private plant record</title>
-    <meta name="description" content="A reference for people who grow cacti, succulents and bulbs: {fmtN(data.total)} species with native range, habitat climate and cold nights from public data, every figure sourced. Your own plant records stay on your device." />
+    <meta name="description" content="A reference for people who grow cacti, succulents and bulbs: {fmtN(data.total)} species with native range and, where the sources answered, habitat climate and cold nights, from public data, every figure sourced. Your own plant records stay on your device unless you turn on encrypted sync." />
     <link rel="canonical" href="https://cultifolio.com/" />
     <meta property="og:title" content="Cultifolio: cactus, succulent and bulb reference, and a private plant record" />
-    <meta property="og:description" content="{fmtN(data.total)} species with native range and habitat climate from public data, every figure sourced. Your own plant records stay on your device; no account." />
+    <meta property="og:description" content="{fmtN(data.total)} species with native range and, where the sources answered, habitat climate, from public data, every figure sourced. Your own plant records stay on your device; no account." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://cultifolio.com/" />
     <meta property="og:image" content="https://cultifolio.com/og.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Cultifolio: a cactus, succulent and bulb reference with sourced habitat figures, and a private plant record kept on your device." />
     <meta name="twitter:card" content="summary_large_image" />
   {/if}
   {#if visitor && data.featured.length}
@@ -461,7 +464,7 @@
                A photograph that does not load leaves a placeholder with the name, not a blank card (round forty, own). -->
           {#if failedTiles.has(c.slug)}<div class="fph"><Placeholder name={c.name} family={c.family} caption="photograph did not load" /></div>{:else}<img src={photoAt(c.thumb, 'small')} width="240" height="240" alt="" loading={i < 3 ? 'eager' : 'lazy'} fetchpriority={i < 2 ? 'high' : 'auto'} onerror={() => (failedTiles = new Set([...failedTiles, c.slug]))} />{/if}
           <span class="fnm"><SpeciesName name={c.name} /></span>
-          {#if c.common}<span class="fcom">{c.common}</span>{/if}
+          {#if commonOr(c)}<span class="fcom">{commonOr(c)}</span>{/if}
         </a>
       {/each}
     </div>
@@ -475,7 +478,7 @@
     {#if c.thumb}<div class="im"><img src={c.thumb} alt={c.alt} loading="lazy" onerror={(e) => { const im = e.currentTarget as HTMLImageElement; im.style.display = 'none'; im.parentElement?.classList.add('ph'); im.parentElement && (im.parentElement.textContent = 'photograph did not load'); }} /></div>{:else if c.thumbOff}<div class="im"><Placeholder name={c.name} family={c.family} caption="reference photograph off" title="The reference has a photograph; showing it on your own tiles is off" /></div>{:else if c.climate}<div class="im"><Placeholder name={c.name} family={c.family} caption="no open photograph on file" /></div>{:else if c.missing}<div class="im"><Placeholder name={c.name} family={c.family} caption="not in the reference" /></div>{:else}<div class="im ph">{ownFailed ? 'reference not reached' : 'loading…'}</div>{/if}
     <div class="tx">
       <div class="nm"><SpeciesName name={c.name} /></div>
-      <div class="fam">{c.common ?? c.family ?? ''}</div>
+      <div class="fam">{commonOr(c) ?? ''}</div>
       <!-- the index carries the openly licensed count only; the species page's "in range" total is another figure, so this one is named for what it is (round eighteen, 7) -->
       <div class="fig" title={c.climate ? climateWord(c.climate) : undefined}>{c.climate === 'ok' ? `${c.open ? `${c.open} open record${c.open === 1 ? '' : 's'}` : 'habitat climate'}` : c.climate === 'pending' ? 'climate pending' : c.climate === 'refused' ? 'climate not checked' : c.climate ? 'no habitat climate' : c.missing ? 'not in the reference' : ''}</div>
     </div>
@@ -566,7 +569,9 @@
   <div class="headwrap" class:searching={searchMode}>
   <!-- To a visitor the head says what this is, at every width: the name and one sentence, the plants it is for and what it
        does not ask (round fifty-eight; the first-impression review). To a grower it is the catalogue's head, as before. -->
-  <PageHead title={visitor ? 'Cultifolio' : 'Species'} kick={visitor ? 'Species reference' : 'Cultifolio'} compact keepSub={visitor} sub={visitor ? `A reference for people who grow cacti, succulents and bulbs: ${fmtN(data.total)} species, each with its native range, habitat climate and cold nights worked out from public data, every figure with its source. Keep your own plants here too; they stay on your device, with no account. Free and open source.` : undefined} count="{fmtN(data.total)} species · {fmtN(data.withClimate)} with habitat climate{ownedN ? ` · ${ownedN} you grow` : ''}">
+  <!-- Said as the counts beside it read: native range for every species, habitat climate where the sources answered (round fifty-nine; the first sentence a stranger reads claimed a climate for all). -->
+  {#snippet visitorLine()}A reference for people who grow cacti, succulents and bulbs: {fmtN(data.total)} species with their native range and, where the sources answered, habitat climate and cold nights, worked out from public data, every figure with its source. Keep your own plants here too; they stay on your device, with no account. <a href="https://github.com/zomethingje-eng/cultifolio">Free and open source</a>.{/snippet}
+  <PageHead title={visitor ? 'Cultifolio' : 'Species'} kick={visitor ? 'Species reference' : 'Cultifolio'} compact keepSub={visitor} subline={visitor ? visitorLine : undefined} count="{fmtN(data.total)} species · {fmtN(data.withClimate)} with habitat climate{ownedN ? ` · ${ownedN} you grow` : ''}">
     {#if !visitor}<a class="btn pri headadd" href="/plants/new">Add a plant</a>{/if}
   </PageHead>
   </div>

@@ -11,7 +11,7 @@
   import { site } from '$lib/ui/site.svelte';
   import { frost } from '$lib/ui/frost.svelte';
   import { tempUnit, rainUnit, tempN, rainN } from '$core/units';
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import PageHead from '$lib/ui/PageHead.svelte';
   import Today from '$lib/ui/Today.svelte';
   import { collection, DUE_DAYS } from '$lib/db/collection.svelte';
@@ -69,7 +69,7 @@
   // morning's work yesterday on a page left open overnight (round fifty-four, 4; the first reviewer's finding 2).
   const today = $derived(day.current);
   onMount(() => day.start());
-  type Stop = { key: string; place: Location | null; depth: number; overdue: Accession[]; unknown: Accession[]; ahead: Accession[]; resting: Accession[]; unseen: Accession[]; keptDry: number; n: number; watered: Watered | null };
+  type Stop = { key: string; place: Location | null; depth: number; overdue: Accession[]; unknown: Accession[]; ahead: Accession[]; resting: Accession[]; restRain: Accession[]; restCool: Accession[]; unseen: Accession[]; keptDry: number; n: number; watered: Watered | null };
   /** The species in their habitat's dry season now, by the sheets the front page reads too (round fifty-four, 4; the second reviewer's finding 23). Until the sheets have answered (or failed), the Water buttons wait: a button whose count changes as the sheets arrive moves under a reading eye (round fifty-five, 5). */
   let sheets = $state<Map<string, Sheet> | null>(null);
   let sheetsSettled = $state(false);
@@ -79,14 +79,22 @@
     sheetsSettled = false;
     void sheetsFor(slugs).then((m) => { sheets = m; }).finally(() => { sheetsSettled = true; });
   });
-  const isResting = (a: Accession) => {
-    if (!sheets || kindOf(a) !== 'species') return false;
+  /**
+   * Which rule of the species sheet puts this month outside the plant's growing months, if one does: the rain rule (a
+   * rainy season, and this month is not in it), or, under 120 mm of rain a year, the temperature rule (the cooler six
+   * months, and this month is not among them). The two are worded apart: a fog-belt cactus has no rainy season to be
+   * outside of, and its species page says so (round fifty-nine). Null when the plant is not resting by either.
+   */
+  const restRule = (a: Accession): 'rain' | 'cool' | null => {
+    if (!sheets || kindOf(a) !== 'species') return null;
     const sh = sheets.get(speciesSlug(a.taxonName));
-    if (!sh || sh.climate.status !== 'ok') return false;
+    if (!sh || sh.climate.status !== 'ok') return null;
     const year = growingYear(sh.climate.months, sh.habitatLat);
-    if (!year || year.none || year.grow === 'even') return false;
-    return !forReader(year, site.current?.lat ?? null).includes(Number(today.slice(5, 7)));
+    if (!year || year.none || year.grow === 'even') return null;
+    if (forReader(year, site.current?.lat ?? null).includes(Number(today.slice(5, 7)))) return null;
+    return year.fog ? 'cool' : 'rain';
   };
+  const isResting = (a: Accession) => restRule(a) != null;
   const byNo = (a: Accession, b: Accession) => accNo(a).localeCompare(accNo(b)); // the order of the labels on the bench
   /** The places as a walk through the tree, each with what needs doing there; a place with nothing to do is not a stop, unless it was watered from here just now. Plants with no place come last. */
   const stops = $derived.by(() => {
@@ -113,7 +121,7 @@
       const watered = wateredHere.get(key);
       // Kept dry this month by the place's own rule: one quiet line, not a warning per plant (round fifty-eight).
       const keptDry = here.filter((a) => collection.keptDry(a)).length;
-      if (dry.length || unseen.length || ahead.length || watered || keptDry) out.push({ key, place, depth, overdue, unknown, ahead, resting, unseen, keptDry, n: place ? collection.plantsAt(place.id).filter((a) => a.status === 'growing').length : here.length, watered });
+      if (dry.length || unseen.length || ahead.length || watered || keptDry) out.push({ key, place, depth, overdue, unknown, ahead, resting, restRain: resting.filter((a) => restRule(a) === 'rain'), restCool: resting.filter((a) => restRule(a) === 'cool'), unseen, keptDry, n: place ? collection.plantsAt(place.id).filter((a) => a.status === 'growing').length : here.length, watered });
     };
     const walk = (parent: string | null, depth: number) => {
       for (const l of collection.children(parent)) { stop(l, depth); walk(l.id, depth + 1); }
@@ -124,12 +132,22 @@
   });
   /** Plants that need something, each counted once whatever it needs (round fifty-four, 4); a watering dated ahead is not a need. */
   const todo = $derived(new Set(stops.flatMap((s) => [...s.overdue, ...s.unknown, ...s.resting, ...s.unseen].map((a) => a.id))).size);
+  /** The places with work: a stop listed only for a dry-month rule, a watering dated ahead or a done row is not one (round fifty-nine). */
+  const hasWork = (s: Stop) => !!(s.overdue.length || s.unknown.length || s.resting.length || s.unseen.length);
+  const workPlaces = $derived(stops.filter((s) => s.place && hasWork(s)).length);
+  const workNoPlace = $derived(stops.some((s) => !s.place && hasWork(s)));
+  const across = $derived(workPlaces ? `across ${workPlaces} ${workPlaces === 1 ? 'place' : 'places'}${workNoPlace ? ' and among the plants with no place' : ''}` : workNoPlace ? 'among the plants with no place' : '');
   // Counted to the day store's date, the one the page shows and the taps write, so a page open across midnight says the same day throughout (round fifty-eight).
   const days = (a: Accession) => { const w = collection.lastWatered(a.id); return daysBetween(w ?? collection.madeOn('accession', a.id) ?? a.acquired ?? today, today); };
   /** Plants a grower unticked on a stop: left out of its Water button (round fifty-eight; the grower review). Per page visit. */
   let skipped = $state(new Set<string>());
   const toggleSkip = (id: string) => { const n = new Set(skipped); if (n.has(id)) n.delete(id); else n.add(id); skipped = n; };
   const ticked = (s: Stop) => [...s.overdue, ...s.unknown].filter((a) => !skipped.has(a.id));
+  const tickedOf = (list: Accession[]) => list.filter((a) => !skipped.has(a.id));
+  /** "Water this one", "Water these 3": the button counts what is ticked. */
+  const waterWords = (n: number) => (n === 1 ? 'Water this one' : `Water these ${n}`);
+  /** A day count as words: "today", not "0 d" (round fifty-nine). */
+  const dWords = (n: number) => (n === 0 ? 'today' : `${n} d`);
   let watering = $state<string | null>(null);
   /**
    * One line per plant given, dated today, as a place's "Water all" does. The stop keeps its place and its height: the
@@ -163,6 +181,12 @@
       await collection.removeEvents(w.ids);
       wateredHere.take(key);
       toast.show(`Undone: ${w.ids.length} watering line${w.ids.length === 1 ? '' : 's'} removed.`);
+      // The Undo went with its row: focus goes to the stop's Water button, back for the plants, else to the stop's
+      // heading, never to the page body (round fifty-nine).
+      await tick();
+      const stopEl = document.getElementById(`stop-${key}`);
+      const to = stopEl?.querySelector<HTMLElement>('.head button.water:not(:disabled), button.restwater:not(:disabled), h3 a, h3');
+      to?.focus();
     } catch (err) {
       toast.show(`Not undone: ${err instanceof Error ? err.message : String(err)}. Try again.`);
     } finally {
@@ -187,7 +211,7 @@
   <section id="frost" aria-labelledby="frost-h">
     <div class="secrule"><h2 id="frost-h">Frost watch</h2><div class="line"></div></div>
     {#if site.current}
-      <p class="small">Your site: {site.current.name ? site.current.name + ', ' : ''}{site.current.lat}, {site.current.lon} · <a href="/settings#site">change in Settings</a>.{#if watched.length} Watched places, each with its own forecast on its page: {#each watched as w, i}{i ? ', ' : ''}<a href="/places/{w.id}">{w.name}</a>{/each}.{/if}</p>
+      <p class="small">Your site: {site.current.name ? site.current.name + ', ' : ''}{site.current.lat}, {site.current.lon} · <a href="/settings#site">change in Settings</a>.{#if watched.length}{' '}Watched places, each with its own forecast on its page: {#each watched as w, i}{i ? ', ' : ''}<a href="/places/{w.id}">{w.name}</a>{/each}.{/if}</p>
     {:else if site.loaded}
       <div class="emptybox"><p class="muted" style="margin: 0">No site set. <a href="/settings#site">Set your site in Settings</a> and its forecast appears here, on the front page and under the top bar when it turns{#if watched.length}; the places above are watched on their own pages either way{/if}.</p></div>
     {/if}
@@ -232,15 +256,16 @@
       <!-- What is true: no record meets the checks; not that every plant was watered, which a record three weeks young says nothing about (round fifty-four, 4; the first reviewer's finding 3). -->
       <p class="small muted" id="nothing">Nothing needs you today by these checks: no plant past its watering rhythm ({DUE_DAYS} days unless its place or the plant sets another; a record younger than that is not counted), none missed at an audit or unseen for ninety days.</p>
     {:else}
-      <p class="small muted">{todo} plant{todo === 1 ? '' : 's'} need{todo === 1 ? 's' : ''} something across {stops.length} {stops.length === 1 ? 'place' : 'places'}, in the order the places are kept. A plant with no watering recorded is counted from the day its record was made, and said so.</p>
+      <p class="small muted">{#if todo}{todo} plant{todo === 1 ? '' : 's'} need{todo === 1 ? 's' : ''} something {across}, in the order the places are kept.{:else}Nothing past its rhythm or unseen; the places below have a note for today.{/if} A plant with no watering recorded is counted from the day its record was made, and said so.</p>
       <ol class="stops">
         {#each stops as s (s.key)}
+          {@const n = ticked(s).length}
           <li class="stop" id="stop-{s.key}" style="--depth: {s.depth}{s.watered?.height ? `; min-height: ${s.watered.height}px` : ''}">
             <div class="head">
-              <h3>{#if s.place}<a href="/places/{s.place.id}">{s.place.name}</a>{:else}No place{/if} <span class="muted small">{s.n} growing{s.place && collection.children(s.place.id).length ? ' here and inside' : ''}</span></h3>
+              <h3 tabindex="-1">{#if s.place}<a href="/places/{s.place.id}">{s.place.name}</a>{:else}No place{/if} <span class="muted small">{s.n} growing{s.place && collection.children(s.place.id).length ? ' here and inside' : ''}</span></h3>
               <!-- Water while there is something ticked to water; once watered, a mark that does nothing, in the same place and size, so a second tap on the spot does nothing either (round fifty-eight). -->
-              {#if s.overdue.length || s.unknown.length}
-                {@const n = ticked(s).length}
+              <!-- Watered with nothing left ticked: the done mark, not a disabled "Water 0 of 1"; the plants left unticked stay listed with their ticks for next time (round fifty-nine). -->
+              {#if (s.overdue.length || s.unknown.length) && !(n === 0 && s.watered)}
                 <button class="btn small water" type="button" onclick={() => waterHere(s, ticked(s))} disabled={!!watering || !sheetsSettled || !n} title={sheetsSettled ? 'One watering line on each plant ticked, dated today; Undo on the stop takes them back' : 'Reading the species sheets for the dry season first'}>Water {n === s.overdue.length + s.unknown.length ? n : `${n} of ${s.overdue.length + s.unknown.length}`} here</button>
               {:else if s.watered}
                 <span class="btn small water donemark" aria-hidden="true">Watered ✓</span>
@@ -251,10 +276,10 @@
               <div class="row done"><span class="lab">Watered just now · <button class="linkish" type="button" onclick={() => undoHere(s.key)} disabled={undoing === s.key}>Undo</button></span> {#each s.watered.plants as p (p.id)}<a class="chip" href="/plants/{p.id}"><b>{p.no}</b> {#if p.name}<i>{p.name}</i>{/if} <span class="muted">✓</span></a>{/each}</div>
             {/if}
             {#if s.overdue.length}
-              <div class="row warn"><span class="lab">Past the watering rhythm (21 days unless the place sets one){s.overdue.length + s.unknown.length > 1 ? '; untick any to leave it out' : ''}</span> {#each s.overdue as a (a.id)}{@render chip(a, `${days(a)} d`)}{/each}</div>
+              <div class="row warn"><span class="lab">Past the watering rhythm ({DUE_DAYS} days unless the plant or its place sets another){s.overdue.length + s.unknown.length > 1 ? '; untick any to leave it out' : ''}</span> {#each s.overdue as a (a.id)}{@render chip(a, dWords(days(a)))}{/each}</div>
             {/if}
             {#if s.unknown.length}
-              <div class="row unknown"><span class="lab">No watering recorded</span> {#each s.unknown as a (a.id)}{@render chip(a, `no record · ${days(a)} d`)}{/each}</div>
+              <div class="row unknown"><span class="lab">No watering recorded</span> {#each s.unknown as a (a.id)}{@render chip(a, `no record · ${dWords(days(a))}`)}{/each}</div>
             {/if}
             {#if s.keptDry}
               <p class="row resting"><span class="lab">Kept dry this month by {s.place ? `${collection.conditions(s.place.id).from.dryMonths ?? s.place.name}'s` : 'its place\'s'} rule: {s.keptDry} plant{s.keptDry === 1 ? '' : 's'}, not counted as due</span></p>
@@ -262,9 +287,13 @@
             {#if s.ahead.length}
               <p class="row ahead"><span class="lab">Watering dated ahead of today, so not counted as due</span> {#each s.ahead as a (a.id)}<a class="chip" href="/plants/{a.id}"><b>{accNo(a)}</b> <i>{a.taxonName}</i> <span class="muted">dated {collection.wateringAhead(a.id)}</span></a>{/each}</p>
             {/if}
-            {#if s.resting.length}
-              <p class="row resting"><span class="lab">Not watered, and in the habitat's dry season by the species sheet</span> {#each s.resting as a (a.id)}<a class="chip" href="/plants/{a.id}"><b>{accNo(a)}</b> <i>{a.taxonName}</i> <span class="muted">{days(a)} d</span></a>{/each} <button class="btn small water" type="button" onclick={() => waterHere(s, s.resting)} disabled={!!watering}>Water these too</button></p>
-            {/if}
+            <!-- Worded by the rule that applied, and ticked like the rows above: the button waters what is ticked (round fifty-nine). -->
+            {#each [{ list: s.restRain, lab: "Outside the habitat's rainy season by the species sheet" }, { list: s.restCool, lab: 'Outside the cooler six months the species sheet names' }] as g (g.lab)}
+              {#if g.list.length}
+                {@const k = tickedOf(g.list).length}
+                <div class="row resting"><span class="lab">{g.lab}{g.list.length > 1 ? '; untick any to leave it out' : ''}</span> {#each g.list as a (a.id)}{@render chip(a, dWords(days(a)))}{/each} <button class="btn small water restwater" type="button" onclick={() => waterHere(s, tickedOf(g.list))} disabled={!!watering || !k}>{waterWords(k)}</button></div>
+              {/if}
+            {/each}
             {#if s.unseen.length}
               <p class="row warn"><span class="lab">Missed at the last audit, or not seen for ninety days since this place's audit</span> {#each s.unseen as a (a.id)}<a class="chip" href="/plants/{a.id}"><b>{accNo(a)}</b> <i>{a.taxonName}</i> <span class="muted">{collection.unseenWhy(a.id) === 'missed' ? `missed ${collection.missedAt(a.id)}` : `seen ${collection.lastSeen(a.id)}`}</span></a>{/each}</p>
             {/if}
@@ -281,8 +310,9 @@
 </div>
 
 <style>
-  .page { display: grid; gap: 1.2rem; }
-  section { display: grid; gap: 0.6rem; }
+  /* One column that may shrink to the screen: an auto column took the width of its widest line at 200% text and the page scrolled sideways (round fifty-nine). */
+  .page { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.2rem; }
+  section { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.6rem; }
   .risk { padding: 0.9rem 1.1rem; }
   .risk.frost, .risk.warning { background: var(--bad-soft); }
   .risk.cold { background: var(--warm-soft); }
@@ -290,25 +320,29 @@
   tr.cold td { color: var(--warm-ink); }
   .alerts { padding-left: 1.1rem; }
   .small { font-size: var(--fs-md); }
-  .stops { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .stops { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
   .stop { box-sizing: border-box; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); padding: 10px 14px; margin-left: calc(var(--depth) * 14px); }
-  .stop .head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-  .stop h3 { margin: 0; font-size: var(--fs-base); font-weight: 600; }
+  .stop .head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; } /* the button goes under the name at a large text size rather than off the screen (round fifty-nine) */
+  .stop h3 { min-width: 0; margin: 0; font-size: var(--fs-base); font-weight: 600; }
   .stop h3 .small { font-weight: 400; margin-left: 6px; }
   .stop .btn { flex: none; min-height: 36px; }
   .row { margin: 6px 0 0; font-size: var(--fs-md); line-height: 1.5; border-left: 3px solid var(--rule); padding-left: 10px; }
   .row.warn { border-left-color: var(--warn, #b8692a); }
   .row.unknown { border-left-color: var(--ink3); }
   .row .lab { display: block; font-size: var(--fs-sm); color: var(--ink3); }
-  .row .lab .linkish { min-height: 32px; color: var(--accent); font-weight: 600; }
+  .row .lab .linkish { min-height: var(--tap); color: var(--accent); font-weight: 600; }
   .row.ahead { border-left-color: var(--accent); }
   .row.resting { border-left-color: var(--rule); }
-  .row > a { display: inline-block; padding: 9px 8px 9px 0; min-height: 40px; } /* a tap target, not a line of text (round fifty-four, 4) */
+  .row > a { display: inline-block; padding: 9px 8px 9px 0; min-height: var(--tap); } /* a tap target, not a line of text (round fifty-four, 4) */
   /* Each plant a chip with its number and name (round fifty-eight; the grower review): a number alone said nothing at the bench. */
-  .chip { display: inline-flex; align-items: center; gap: 6px; margin: 4px 6px 0 0; padding: 4px 10px; min-height: 40px; border: 1px solid var(--rule); border-radius: 999px; background: var(--paper, var(--card)); color: var(--ink); text-decoration: none; overflow-wrap: anywhere; }
+  /* The chip's edge at 3:1 like a field's; its parts never break inside themselves ("no record · 8 / d"), the chip wraps whole parts instead (round fifty-nine). */
+  .chip { display: inline-flex; align-items: center; gap: 6px; margin: 4px 6px 0 0; padding: 4px 10px; min-height: var(--tap); max-width: 100%; border: 1px solid var(--field-edge); border-radius: 999px; background: var(--paper, var(--card)); color: var(--ink); text-decoration: none; vertical-align: middle; }
   .chip i { color: var(--ink2); }
+  .chip.tick a { display: inline-flex; flex-wrap: wrap; align-items: center; column-gap: 0.3em; min-width: 0; }
+  .chip b, .chip .muted { white-space: nowrap; }
+  .chip i { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
   .chip.tick { padding-left: 6px; }
-  .chip.tick a { color: inherit; text-decoration: none; }
+  .chip.tick a { color: inherit; text-decoration: none; min-height: var(--tap); }
   .chip.tick input { width: 20px; height: 20px; margin: 0; accent-color: var(--accent); }
   .chip.off { opacity: 0.55; }
   .chip.off b { text-decoration: line-through; }

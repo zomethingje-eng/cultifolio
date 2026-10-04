@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ReplacedNotes from '$lib/ui/ReplacedNotes.svelte';
   import { aLabel } from '$core/arch';
   import NotChecked from '$lib/ui/NotChecked.svelte';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
@@ -13,7 +14,7 @@
   import CompareButton from '$lib/ui/CompareButton.svelte';
   import ShareCard from '$lib/ui/ShareCard.svelte';
   import { isDatasetDoi } from '$dossier/sources/openalex';
-  import { photoAt, srcsetOf, photoHosts } from '$dossier/photo-size';
+  import { photoAt, srcsetOf, photoHosts, shownAt } from '$dossier/photo-size';
   import { heroOf } from '$dossier/dedupe';
   import { firstSentences } from '$core/text';
   import { setCrumb } from '$lib/ui/crumb.svelte';
@@ -25,13 +26,14 @@
   import { onMount } from 'svelte';
   import { units } from '$lib/ui/units.svelte';
   import { site } from '$lib/ui/site.svelte';
-  import { temp, tempN, rain, rainN, tempUnit, rainUnit, cToF, mmToIn, fixed } from '$core/units';
+  import { temp, tempN, deltaT, rain, rainN, ruleRain, tempUnit, rainUnit, cToF, mmToIn, fixed } from '$core/units';
   let { data } = $props();
   let allPapers = $state(false);
   const u = $derived(units.current);
   const d = $derived(data.d);
   const common = $derived(d.name.vernacular.filter((v) => !v.lang || v.lang === 'eng').map((v) => v.name).slice(0, 4));
   const hero = $derived(heroOf(d.photos));
+  const heroSrc = $derived(hero ? shownAt(hero) : undefined);
   // Synonyms as names, not as the backbone's strings: authorship dropped, and a malformed entry ("? glabra Salm-Dyck") left out (round thirty-one, 3).
   const synonyms = $derived([...new Set(d.name.synonyms.map(canonicalSynonym).filter((x): x is string => !!x && x !== d.name.scientific))]);
   const desc = $derived(d.summary?.text.slice(0, 155) ?? `${d.name.scientific}, ${d.name.family ?? ''}: native range, habitat climate, photographs and cultivation notes with sources.`);
@@ -45,7 +47,7 @@
       parentTaxon: d.name.family ? { '@type': 'Taxon', name: d.name.family, taxonRank: 'family' } : undefined,
       identifier: [{ '@type': 'PropertyValue', propertyID: 'GBIF', value: String(d.key) }],
       url: `https://cultifolio.com/species/${d.slug}`,
-      image: hero?.url
+      image: heroSrc
     })
   );
   // A range of more than a few regions stacks a dozen lines deep in one narrow cell of the fact grid beside a blank row; the cell, and the marker's beside it, take the whole row instead.
@@ -82,7 +84,7 @@
     if (!o.nOpenInRange) t += `; none carries a licence permitting republication, so the map shows no points.`;
     else if (o.nRestrictedInRange) t += `; the map shows only the ${o.nOpenInRange} openly licensed one${o.nOpenInRange === 1 ? '' : 's'}` + (o.restrictedShiftKm != null && o.restrictedShiftKm >= 1 ? `, which alone would put the marker ${o.restrictedShiftKm} km away` : o.restrictedShiftKm != null ? ', which alone would put the marker in the same place' : '') + '.';
     else t += ', all openly licensed and shown on the map.';
-    if (o.nOutsideRange) t += ` ${o.nOutsideRange} record${o.nOutsideRange === 1 ? '' : 's'} outside the range (gardens, roadsides, misidentifications) ignored.`;
+    if (o.nOutsideRange) t += ` ${o.nOutsideRange} record${o.nOutsideRange === 1 ? '' : 's'} outside the WCVP native range not used.`; // no rule says why a record lies outside (round fifty-nine)
     if (o.thin) t += ` Under a dozen records: treat the map${climateOk ? ' and the climate' : ''} as indicative.`;
     else if (climateOk && climRecs < 12) t += ` Under a dozen records behind the climate: treat it as indicative.`;
     if (!climateOk) t += d.climate.status === 'pending' ? ' No climate across the range yet: the habitat climate is pending.' : d.climate.status === 'refused' ? ' No climate across the range: the climate source did not answer.' : ' No climate across the range is derived for this species.';
@@ -140,8 +142,10 @@
   const myTaxon = $derived(collection.ready ? collection.taxon(d.slug) : undefined);
   let editingMy = $state(false);
   let myDraft = $state('');
+  let myBase: string | null = null; // the stamp of the text the editor opened on (round fifty-nine)
+  const openMy = (text: string) => { myDraft = text; myBase = collection.notesStamp('taxon', d.slug); editingMy = true; };
   async function saveMy() {
-    await collection.put('taxon', d.slug, { name: d.name.scientific, gbifKey: d.key, myNotes: myDraft.trim() || null });
+    await collection.put('taxon', d.slug, { name: d.name.scientific, gbifKey: d.key, myNotes: myDraft.trim() || null, myNotesBase: myBase });
     editingMy = false;
   }
   // The site once loaded; before that (and on the server) the hemisphere cookie, so a southern grower never sees northern months first.
@@ -199,11 +203,27 @@
     if (!withFloor) {
       const grown = mine.find((a) => a.status === 'growing' && a.locationId);
       const p = (grown && places.find((l) => l.id === grown.locationId)) ?? null;
-      return p ? { text: `Your ${p.name}, where you grow it, has no floor set. Set one to see how it compares with this habitat's cold floor.`, href: `/places/${p.id}`, under: false } : { text: `None of your places has a floor set. Set one to see how it compares with this habitat's cold floor.`, href: '/places', under: false };
+      const whose = sheet.floor?.raised ? "this species' cold floor" : "this habitat's cold floor";
+      return p ? { text: `Your ${p.name}, where you grow it, has no floor set. Set one to see how it compares with ${whose}.`, href: `/places/${p.id}`, under: false } : { text: `None of your places has a floor set. Set one to see how it compares with ${whose}.`, href: '/places', under: false };
     }
     const diff = withFloor.c.floorC! - floorC;
-    const by = Math.abs(diff) < 0.3 ? 'about the same as' : `${temp(Math.abs(diff), u, 1).replace(/^-/, '')} ${diff < 0 ? 'under' : 'over'}`;
-    return { text: `Your ${withFloor.l.name}: ${withFloor.c.floorHeld ? 'held at' : 'floor'} ${temp(withFloor.c.floorC!, u, 1)}, ${by} this habitat's cold floor of ${temp(floorC, u, 1)}.`, href: `/places/${withFloor.l.id}`, under: diff < -0.3 };
+    // A difference in the reader's degrees, never through temp() (which adds 32 for °F: a 2 °C gap read as 35.6 °F), and
+    // the figure itself, not "about the same" (round fifty-nine): the same only when it shows as nothing.
+    const gap = deltaT(Math.abs(diff), u, 1);
+    const by = Number(gap.split(' ')[0]) === 0 ? 'the same as' : `${gap} ${diff < 0 ? 'under' : 'over'}`;
+    // Whose floor it is, and where it comes from: a raised floor is the archetype table's minimum, not the habitat's (round fifty-nine; the accuracy reviews).
+    const ref = sheet.floor?.raised ? `this species' cold floor, ${temp(floorC, u, 1)} (the archetype table's minimum for ${sheet.floor.group})` : `this habitat's cold floor, ${temp(floorC, u, 1)} (one night in a hundred colder, NASA POWER)`;
+    return { text: `Your ${withFloor.l.name}: ${withFloor.c.floorHeld ? 'held at' : 'floor'} ${temp(withFloor.c.floorC!, u, 1)}, ${by} ${ref}.`, href: `/places/${withFloor.l.id}`, under: diff < 0 && Number(gap.split(' ')[0]) !== 0 };
+  });
+  // What the distribution source said when no native region is listed: its own answer, never "did not answer" for an
+  // answer (round fifty-nine; the round forty-one review, 2: an answer listing only introduced or extinct regions, or a
+  // name WCVP holds twice, read as a refusal).
+  const distWords = $derived.by(() => {
+    const st = d.upstream['wcvp.distribution']?.status;
+    if (st === 'none') return 'No published distribution for this name.';
+    if (st === 'refused' || st === 'error' || !st) return 'Not checked: the distribution source did not answer when this page was built.';
+    if (d.distribution.ambiguous) return `WCVP holds more than one name spelt this way (${d.distribution.ambiguous}); no native region is read from it.`;
+    return d.distribution.introduced.length || d.distribution.extinct?.length ? 'WCVP lists no region where it is native; the regions it does list are named here.' : 'WCVP lists no native region for this name.';
   });
   const glance = $derived.by(() => {
     if (d.climate.status !== 'ok') return null;
@@ -235,14 +255,14 @@
   <meta name="description" content={desc} />
   <meta property="og:title" content={d.name.scientific} />
   <meta property="og:description" content={desc} />
-  {#if hero}<meta property="og:image" content={hero.url} />{/if}
+  {#if hero}<meta property="og:image" content={heroSrc} />{/if}
   {#if hero}
     <!-- The photograph is the largest paint on a phone and lives on a third party's host. Preloaded from the head, one size by
          surface (the 500 px file under 640 px, the 1024 px file above), so the handshake and the download start with the
          stylesheet, not when the parser reaches the image (round forty-two, 1). The hosts are preconnected for the rest. -->
-    <link rel="preload" as="image" href={photoAt(hero.url, 'medium')} media="(max-width: 640px)" fetchpriority="high" />
-    <link rel="preload" as="image" href={photoAt(hero.url, 'large')} imagesrcset={srcsetOf(hero.url, ['medium', 'large'])} imagesizes="480px" media="(min-width: 641px)" fetchpriority="high" />
-    {#each photoHosts([hero.url]) as h (h)}<link rel="preconnect" href={h} />{/each}
+    <link rel="preload" as="image" href={photoAt(heroSrc!, 'medium')} media="(max-width: 640px)" fetchpriority="high" />
+    <link rel="preload" as="image" href={photoAt(heroSrc!, 'large')} imagesrcset={srcsetOf(heroSrc!, ['medium', 'large'])} imagesizes="480px" media="(min-width: 641px)" fetchpriority="high" />
+    {#each photoHosts([heroSrc]) as h (h)}<link rel="preconnect" href={h} />{/each}
   {/if}
   <link rel="canonical" href="https://cultifolio.com/species/{d.slug}" />
   <!-- A vernacular name is user-contributed upstream; a "<" in it must not end this script early. -->
@@ -261,7 +281,7 @@
     <div class="hero photo">
       <!-- One size by surface, not by pixel density (round thirty-five, R2-7): under 640 px the 500 px file fills a 150 px band cropped to cover,
            and a phone's density promoted it to the 1024 px one, three times the bytes for a crop that showed a third of it (round forty-two, 1). -->
-      <a href={hero.page ?? hero.url} rel="noopener"><picture><source media="(max-width: 640px)" srcset={photoAt(hero.url, 'medium')} /><img src={photoAt(hero.url, 'large')} srcset={srcsetOf(hero.url, ['medium', 'large'])} sizes="480px" alt="{d.name.scientific}{hero.place ? ', ' + hero.place : ''}" loading="eager" fetchpriority="high" onerror={() => (heroFailed = true)} /></picture></a>
+      <a href={hero.page ?? hero.url} rel="noopener"><picture><source media="(max-width: 640px)" srcset={photoAt(heroSrc!, 'medium')} /><img src={photoAt(heroSrc!, 'large')} srcset={srcsetOf(heroSrc!, ['medium', 'large'])} sizes="480px" alt="{d.name.scientific}{hero.place ? ', ' + hero.place : ''}" loading="eager" fetchpriority="high" onerror={() => (heroFailed = true)} /></picture></a>
       <a class="cred" href={hero.page ?? hero.url} rel="noopener">{hero.attribution}{hero.captive === true ? ' · in cultivation' : hero.captive === false ? ' · observed growing wild' : ''}{hero.observedOn ? ' · ' + hero.observedOn : ''}</a>
     </div>
   {:else}
@@ -328,7 +348,7 @@
                fifty-eight; the accessibility review). -->
           <div class="card unitcard"><button class="unitbtn" type="button" aria-label={u === 'us' ? 'Show temperatures in Celsius and millimetres' : 'Show temperatures in Fahrenheit and inches'} title={u === 'us' ? 'Show in °C and mm' : 'Show in °F and inches'} onclick={() => units.toggle()}>{u === 'us' ? '°C' : '°F'}</button><div class="lab">{sheet.floor?.raised || glance.ex ? 'Cold floor' : 'Coldest mean night'}</div>{#if sheet.floor?.raised}<div class="val">{tempN(sheet.floor.floor, u)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">minimum for {sheet.floor.group}, archetype table</div>{:else if glance.ex}<div class="val">{tempN(glance.ex.minP01, u, 1)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">1 night in 100 is colder · NASA POWER</div>{:else}<div class="val">{tempN(glance.cold.v, u, 1)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">{glance.cold.mo} mean night, not a floor · {d.climate.status === 'ok' && d.climate.extremesStatus === 'refused' ? 'extremes not checked' : d.climate.status === 'ok' && d.climate.extremesStatus === 'skipped' ? 'extremes not asked for' : d.climate.status === 'ok' && d.climate.extremesStatus === 'sea' ? 'extremes not used (sea cell)' : 'no extremes series'} · CHELSA</div>{/if}</div>
           <div class="card"><div class="lab">Warmest month</div><div class="val">{tempN(glance.hot.v, u)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">{glance.hot.mo} mean day · CHELSA</div></div>
-          <div class="card"><div class="lab">Rain</div><div class="val">{rainN(glance.rain, u)}<span class="u"> {rainUnit(u)}/yr</span></div><div class="gauge"><i class="c" style="width:{Math.min(100, glance.rain / 12)}%"></i></div><div class="sub">{glance.wetMonths === 0 ? 'no month over 25 mm (1 in)' : `${glance.wetMonths} month${glance.wetMonths === 1 ? '' : 's'} over 25 mm (1 in)`} · CHELSA</div></div>
+          <div class="card"><div class="lab">Rain</div><div class="val">{rainN(glance.rain, u)}<span class="u"> {rainUnit(u)}/yr</span></div><div class="gauge"><i class="c" style="width:{Math.min(100, glance.rain / 12)}%"></i></div><div class="sub">{glance.wetMonths === 0 ? `no month of ${ruleRain(25, u)} or more` : `${glance.wetMonths} month${glance.wetMonths === 1 ? '' : 's'} of ${ruleRain(25, u)} or more`} · CHELSA</div></div>
           {#if glance.dli}<div class="card"><div class="lab">Light</div><div class="val">{glance.dli.lo.toFixed(0)}–{glance.dli.hi.toFixed(0)}<span class="u"> DLI</span></div><div class="gauge"><i class="w" style="width:{Math.min(100, glance.dli.hi / 0.7)}%"></i></div><div class="sub"><a href="/about/how#glossary">DLI</a>, open sky · CHELSA</div></div>{/if}
         </div>
         {#if d.climate.status === 'ok' && d.climate.records < 12}<p class="small muted thinline">Under a dozen records behind these figures ({d.climate.records}): treat them as indicative. <a href="#s-habitat">The records.</a></p>{/if}
@@ -339,7 +359,7 @@
         <details class="cult acc notecard plain" id="gen-note" open>
           <summary><span class="t">In short</span><span class="one">by rule, from the cards · not written by a person</span><span class="pm" aria-hidden="true"><span class="pmw">open</span></span></summary>
           <!-- Line by line, the fact first in plain words and the rule and source in grey after it (round fifty-eight; the first-impression review). -->
-          <ul class="body notelist">{#each note.items as it, i (i)}<li>{it.lead}{#if it.rule} <span class="rule">{it.rule}</span>{/if}</li>{/each}</ul><div class="foot">Each line is a card's one-line form ({note.from.map((c) => (c === 'Temperature' || c === 'Humidity' ? 'Warmth and air' : c === 'Its year' ? 'Seasons' : c)).filter((c, i, a) => a.indexOf(c) === i).join(', ')}). <a href="/about/how#glossary">DLI, cold floor and the other terms</a>. {#if note.hab}Months for {readerLat != null && readerLat < 0 ? 'the southern' : 'the northern'} hemisphere{readerLat == null ? ' (set your site in ' : site.current || !site.loaded ? ', from your site' : ', from your places'}{#if readerLat == null}<a href="/settings#site">Settings</a> to change this){/if}, the habitat's own alongside.{/if} <a href="#s-cultivation">The cards</a> · <a href="#s-climate">the figures</a>.</div>
+          <ul class="body notelist">{#each note.items as it, i (i)}<li>{it.lead}{#if it.rule}{' '}<span class="rule">{it.rule}</span>{/if}</li>{/each}</ul><div class="foot">Each line restates a figure or a rule from the cards below or the archetype table, its rule and source in grey ({note.from.map((c) => (c === 'Temperature' || c === 'Humidity' ? 'Warmth and air' : c === 'Its year' ? 'Seasons' : c)).filter((c, i, a) => a.indexOf(c) === i).join(', ')}). <a href="/about/how#glossary">DLI, cold floor and the other terms</a>. {#if note.hab}Months for {readerLat != null && readerLat < 0 ? 'the southern' : 'the northern'} hemisphere{readerLat == null ? ' (set your site in ' : site.current || !site.loaded ? ', from your site' : ', from your places'}{#if readerLat == null}<a href="/settings#site">Settings</a> to change this){/if}, the habitat's own alongside.{/if} <a href="#s-cultivation">The cards</a> · <a href="#s-climate">the figures</a>.</div>
         </details>
       {/if}
       {#if placeLine}
@@ -383,10 +403,11 @@
     {:else if myTaxon?.myNotes}
       <div class="cult">
         <div class="sum">Your notes <span class="hint">yours alone, on this device; shown on every plant of this species you own</span></div>
-        <div class="body">{myTaxon.myNotes}</div><div class="foot"><button class="linkish" onclick={() => { myDraft = myTaxon?.myNotes ?? ''; editingMy = true; }}>Edit</button></div>
+        <div class="body">{myTaxon.myNotes}</div><div class="foot"><button class="linkish" onclick={() => openMy(myTaxon?.myNotes ?? '')}>Edit</button></div>
+        <ReplacedNotes kind="taxon" id={d.slug} />
       </div>
     {:else if collection.ready}
-      <p class="small muted notesline">Your notes: none yet. <button class="linkish" onclick={() => { myDraft = ''; editingMy = true; }}>Write what you know</button> · yours alone, on this device.</p>
+      <p class="small muted notesline">Your notes: none yet. <button class="linkish" onclick={() => openMy('')}>Write what you know</button> · yours alone, on this device.</p>
     {/if}
     {#if sheet.arch}
       <details class="why archwhy">
@@ -454,7 +475,7 @@
       <p class="notice small" id="hemispheres">Records on both sides of the equator: the {other} {other === 1 ? 'cell' : 'cells'} at least 10° {hs.used === 'north' ? 'south' : 'north'} of it {other === 1 ? 'has' : 'have'} seasons six months apart and {other === 1 ? 'is' : 'are'} left out, not combined into a year no place has. These figures are across the {d.climate.cells} cells that remain: {remain}.</p>
     {/if}
     {#if d.climate.extremesSea && d.climate.landFraction != null}
-      <p class="notice small" id="seacell">The daily extremes were read at a NASA POWER cell that is {Math.round(d.climate.landFraction * 100)}% land: neither it nor the next candidates whose coldest night is within 2 °C of the median across cells sit in a POWER cell that is mostly land, so those nights are the sea's beside the plants, and they are not shown as the cold floor; nor is the coldest mean night above a floor, since a month's mean of its lows is warmer than its coldest nights, and a sea-moderated cell is warmer at night than the land beside it. No cold floor is read for this species. What that cell gave over {d.climate.extremesSea.years} years: absolute minimum {temp(d.climate.extremesSea.minAbs, u, 1)}, 1st-percentile night {temp(d.climate.extremesSea.minP01, u, 1)}, 99th-percentile day {temp(d.climate.extremesSea.maxP99, u, 1)}.</p>
+      <p class="notice small" id="seacell">The daily extremes were read at a NASA POWER cell that is {Math.round(d.climate.landFraction * 100)}% land: neither it nor the next candidates whose coldest night is within 2 °C of the median across cells sit in a POWER cell that is mostly land, and the rule reads a cold floor only from a cell that is mostly land, so none is read for this species. Nor is the coldest month's mean night taken as one: it is a mean of a month's lows, not its coldest night. What that cell gave over {d.climate.extremesSea.years} years: absolute minimum {temp(d.climate.extremesSea.minAbs, u, 1)}, 1st-percentile night {temp(d.climate.extremesSea.minP01, u, 1)}, 99th-percentile day {temp(d.climate.extremesSea.maxP99, u, 1)}.</p>
     {/if}
     <!-- "a typical spot in the range" and "across the range", the glossary's words (round fifty-eight; the accessibility review). -->
     <details class="why">
@@ -479,7 +500,7 @@
     <div class="mapbox">{@html data.regionSvg}<div class="mapcap">{d.occurrences.nOpenInRange ? (d.occurrences.rangeTested === false ? 'Openly licensed records, not tested against the stated range, framed on where they fall.' : 'Openly licensed records inside the range, framed on where they fall.') : ['refused', 'error'].includes(d.upstream['gbif.occurrences']?.status ?? '') ? 'Records not checked: the occurrence source did not answer when this page was built.' : d.occurrences.rangeTested === false ? 'No openly licensed georeferenced record to show; records were not tested against the stated range.' : 'No openly licensed record to show inside the range.'}</div></div>
   </div>
   <div class="factgrid">
-    <div class:wide={longRange}><b>Native</b>{#if d.distribution.native.length}{d.distribution.native.map((r) => unitName(r.name)).join(', ')}{#if d.distribution.verified === false}<span class="small muted"> · stated native by a national checklist, not by WCVP: unverified</span>{/if}{:else if d.distribution.reported?.length}<span class="muted">Not verified.</span><span class="small muted"> Reported present (native status not stated): {d.distribution.reported.map((r) => r.name).join(', ')}</span>{:else}{d.upstream['wcvp.distribution']?.status === 'none' ? 'No published distribution for this name.' : 'Distribution source did not answer.'}{/if}{#if d.distribution.introduced.length}<span class="small muted"> · introduced: {d.distribution.introduced.map((r) => r.name).join(', ')}</span>{/if}</div>
+    <div class:wide={longRange}><b>Native</b>{#if d.distribution.native.length}{d.distribution.native.map((r) => unitName(r.name)).join(', ')}{#if d.distribution.verified === false}<span class="small muted"> · stated native by a national checklist, not by WCVP: unverified</span>{/if}{:else if d.distribution.reported?.length}<span class="muted">Not verified.</span><span class="small muted"> Reported present (native status not stated): {d.distribution.reported.map((r) => r.name).join(', ')}</span>{:else}{distWords}{/if}{#if d.distribution.introduced.length}<span class="small muted"> · introduced: {d.distribution.introduced.map((r) => r.name).join(', ')}</span>{/if}</div>
     {#if d.centroid}<div class:wide={longRange}><b>Map marker</b>{d.centroid.lat}, {d.centroid.lon}<span class="small muted">{' · '}in the densest population, {d.centroid.n} records ({Math.round(d.centroid.share * 100)}% of those in range)</span></div>{/if}
     {#if d.distribution.extinct?.length}<div><b>Extinct in</b>{d.distribution.extinct.map((r) => r.name).join(', ')}<span class="small muted"> · recorded as extinct by WCVP: history, not habitat; no records are tested against these regions</span></div>{/if}
     {#if d.distribution.kew?.lifeform || d.distribution.kew?.climate}<div class="wide"><b>Kew's description</b>{[d.distribution.kew.lifeform, d.distribution.kew.climate].filter(Boolean).map((t) => `“${t}”`).join(' · ')}<span class="small muted">{' · '}quoted from WCVP, RBG Kew (CC BY 4.0); not derived here</span></div>{/if}
@@ -565,7 +586,7 @@
     <div class="fact"><div class="lab">Family</div><div class="v">{d.name.family ?? 'not stated by the backbone'}</div></div>
     <div class="fact"><div class="lab">Described by</div><div class="v">{d.name.authorship ?? 'authorship not stated by the backbone'}</div></div>
     <div class="fact"><div class="lab">Native to</div><div class="v">{#if d.distribution.native.length}{d.distribution.native.slice(0, 3).map((r) => unitName(r.name)).join(', ')}{d.distribution.native.length > 3 ? ` +${d.distribution.native.length - 3}` : ''}{:else}<span class="muted">not verified</span>{/if}</div></div>
-    <div class="fact"><div class="lab">Wild records</div><div class="v">{#if d.occurrences.nOpenInRange || d.occurrences.nRestrictedInRange}{d.occurrences.nOpenInRange + d.occurrences.nRestrictedInRange} {d.occurrences.rangeTested === false ? 'georeferenced' : 'in range'}<span class="small muted">{' · '}{d.occurrences.nOpenInRange} open{d.occurrences.rangeTested === false ? ' · range not tested' : ''}</span>{:else if ['refused', 'error'].includes(d.upstream['gbif.occurrences']?.status ?? '')}<span class="muted">not checked</span>{:else if d.occurrences.rangeTested === false}<span class="muted">no georeferenced records · range not tested</span>{:else}<span class="muted">none in range</span>{/if}</div></div>
+    <div class="fact"><div class="lab">{d.occurrences.rangeTested === false ? 'Records' : 'Wild records'}</div><div class="v">{#if d.occurrences.nOpenInRange || d.occurrences.nRestrictedInRange}{d.occurrences.nOpenInRange + d.occurrences.nRestrictedInRange} {d.occurrences.rangeTested === false ? 'georeferenced' : 'in range'}<span class="small muted">{' · '}{d.occurrences.nOpenInRange} open{d.occurrences.rangeTested === false ? ' · range not tested' : ''}</span>{:else if ['refused', 'error'].includes(d.upstream['gbif.occurrences']?.status ?? '')}<span class="muted">not checked</span>{:else if d.occurrences.rangeTested === false}<span class="muted">no georeferenced records · range not tested</span>{:else}<span class="muted">none in range</span>{/if}</div></div>
   </div>
   <p class="small muted derived">Every figure here is derived from public data by a stated rule and names its source; nothing is written by a person or a model except the marked, credited quotations. <a href="/about/how">How&nbsp;→</a></p>
   <Provenance dossier={d} />
@@ -590,7 +611,7 @@
   .idcard .acts .mine { margin: 0; display: inline-flex; gap: 6px; align-items: center; }
   .idcard .acts2 { margin-top: 0; gap: 0 14px; }
   .idcard .mine { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; } /* chips with a gap, no separators to strand (round fifty-two, 6) */
-  .idcard .acts2 :global(.btn) { background: none; border: 0; box-shadow: none; padding: 6px 0; min-height: 40px; color: var(--accent); font-weight: 600; font-size: var(--fs-md); }
+  .idcard .acts2 :global(.btn) { background: none; border: 0; box-shadow: none; padding: 6px 0; min-height: var(--tap); color: var(--accent); font-weight: 600; font-size: var(--fs-md); }
   .idcard .acts2 :global(.btn:hover) { text-decoration: underline; }
   .placeline { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 10px 0 0; padding: 11px 14px; background: color-mix(in srgb, var(--accent) 9%, var(--card)); border-left: 3px solid var(--accent); border-radius: var(--r); color: var(--ink); font-size: var(--fs-md); text-decoration: none; }
   .placeline.warn { border-left-color: var(--bad); background: color-mix(in srgb, var(--bad) 8%, var(--card)); }
@@ -670,7 +691,7 @@
   .thumbstrip { display: flex; align-items: center; gap: 6px; margin: 10px 0 0; overflow-x: auto; text-decoration: none; color: var(--ink2); scrollbar-width: none; }
   .thumbstrip img { width: 72px; height: 72px; object-fit: cover; border-radius: var(--r); flex: none; background: var(--sunk); }
   .thumbstrip .more { flex: none; font-size: var(--fs-md); padding: 0 6px; }
-  .notelist { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .notelist { list-style: none; margin: 0; padding: 13px 17px 16px; display: grid; gap: 6px; } /* the card body's own padding: 0 here put the list against the card's edge (round fifty-nine) */
   .notelist li { line-height: 1.5; }
   .notelist .rule { color: var(--ink3); font-size: var(--fs-sm); white-space: nowrap; }
   .notelist .rule::before { content: '· '; }

@@ -41,3 +41,12 @@ export const photoHosts = (urls: Array<string | null | undefined>): string[] => 
   }
   return out;
 };
+
+const COMMONS = /^https:\/\/upload\.wikimedia\.org\//;
+/**
+ * The address a page loads a photograph from: its own when it is on one of the three hosts the about page names
+ * (iNaturalist, Wikimedia Commons, GBIF's image cache), otherwise its thumbnail on GBIF's cache. A photograph that
+ * reached GBIF from another dataset keeps that dataset's address as its original, and the species page fetched its
+ * lead photograph from there: a host nobody was told about (round fifty-nine; outside review).
+ */
+export const shownAt = (p: { url: string; thumb?: string }): string => (INAT.test(p.url) || GBIF.test(p.url) || COMMONS.test(p.url) || !p.thumb ? p.url : p.thumb);

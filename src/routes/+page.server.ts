@@ -21,9 +21,9 @@ function featuredPool(index: object, list: Item[]): Item[] {
   return pool;
 }
 
-export const load: PageServerLoad = async ({ platform, fetch, setHeaders, url, cookies, request }) => {
+export const load: PageServerLoad = async ({ platform, fetch, setHeaders, url, cookies, request, locals }) => {
   // One corpus for the whole page: the rows, the opened row's species and the strip (round fifty-eight).
-  const c = await corpusNow(platform, fetch);
+  const c = locals?.corpus ?? (await corpusNow(platform, fetch)); // the hook's load when it held the page (round fifty-nine)
   const index = c.idx;
   const byParam = url.searchParams.get('by');
   const by = byOf(byParam);

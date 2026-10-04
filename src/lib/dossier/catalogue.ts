@@ -83,9 +83,24 @@ const groupKey = (c: Item, by: By): string => (by === 'genus' ? genusOf(c.name) 
 const shownUnder = (list: Item[], chip: Chip) => (chip === 'climate' ? list.filter((c) => c.climate === 'ok') : chip === 'noclimate' ? list.filter((c) => c.climate !== 'ok') : list);
 /** One row's species, sorted, from the index alone: for the row the front page opens when the rows came from the build's file (round fifty-three, 2). */
 export function rowItems(index: IndexEntry[], by: By, chip: Chip, id: string): Item[] | undefined {
-  const out = shownUnder(catalogueItems(index), chip).filter((c) => slugify(groupKey(c, by)) === id);
-  return out.length ? out.sort((a, b) => a.name.localeCompare(b.name)) : undefined;
+  // Grouped once per index, grouping and chip, then looked up: every opened row slugified the whole index on every
+  // render, 11 to 22 ms at nine thousand species, on a page with no rate limit (round fifty-nine; the corpus review, 5).
+  let byIndex = rowGroups.get(index);
+  if (!byIndex) rowGroups.set(index, (byIndex = new Map()));
+  let groups = byIndex.get(`${by}:${chip}`);
+  if (!groups) {
+    groups = new Map();
+    for (const c of shownUnder(catalogueItems(index), chip)) {
+      const g = slugify(groupKey(c, by));
+      const xs = groups.get(g);
+      if (xs) xs.push(c); else groups.set(g, [c]);
+    }
+    for (const xs of groups.values()) xs.sort((a, b) => a.name.localeCompare(b.name));
+    byIndex.set(`${by}:${chip}`, groups);
+  }
+  return groups.get(id);
 }
+const rowGroups = new WeakMap<IndexEntry[], Map<string, Map<string, Item[]>>>();
 
 /** The rows as items, once per index: nine catalogues (three groupings by three chips) each held their own copy of every row, seventy megabytes at fifty thousand species (round fifty-one, 6). */
 const items = new WeakMap<IndexEntry[], Item[]>();

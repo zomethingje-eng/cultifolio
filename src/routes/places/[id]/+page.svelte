@@ -18,6 +18,7 @@
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import { focusNext } from '$lib/ui/focus';
   import { site } from '$lib/ui/site.svelte';
+  import { prefs } from '$lib/ui/prefs.svelte';
   onMount(async () => {
     site.load(); // the frost watch falls back to the grower's site (round fifty-eight; the grower review)
     await collection.load();
@@ -59,8 +60,10 @@
   });
   function startEdit() {
     if (!loc) return;
-    f = { name: loc.name, kind: loc.type ?? '', parent: path.length > 1 ? path[path.length - 2].id : null, indoor: loc.indoor == null ? '' : loc.indoor ? 'yes' : 'no', floorC: loc.floorC == null ? '' : (units.current === 'us' ? +cToF(loc.floorC).toFixed(1) : +loc.floorC.toFixed(1)).toString(), floorHeld: loc.floorHeld ? 'held' : 'bottoms', ppfd: loc.ppfd?.toString() ?? '', lightHours: loc.lightHours?.toString() ?? '', lat: loc.lat?.toString() ?? '', lon: loc.lon?.toString() ?? '', altM: loc.altM == null ? '' : (units.current === 'us' ? Math.round(loc.altM / FT) : loc.altM).toString(), waterDays: loc.waterDays?.toString() ?? '', dryMonths: loc.dryMonths ? [...loc.dryMonths] : null, notes: loc.notes ?? '' };
+    f = { name: loc.name, kind: loc.type ?? '', parent: path.length > 1 ? path[path.length - 2].id : null, indoor: loc.indoor == null ? '' : loc.indoor ? 'yes' : 'no', floorC: loc.floorC == null ? '' : (units.current === 'us' ? +cToF(loc.floorC).toFixed(1) : +loc.floorC.toFixed(1)).toString(), floorHeld: loc.floorHeld ? 'held' : 'bottoms', ppfd: loc.ppfd?.toString() ?? '', lightHours: loc.lightHours?.toString() ?? '', lat: loc.lat?.toString() ?? '', lon: loc.lon?.toString() ?? '', altM: loc.altM == null ? '' : (altFt ? Math.round(loc.altM / FT) : loc.altM).toString(), waterDays: loc.waterDays?.toString() ?? '', dryMonths: loc.dryMonths ? [...loc.dryMonths] : null, notes: loc.notes ?? '' };
     fOpen = { ...f, dryMonths: f.dryMonths ? f.dryMonths.join(',') : null };
+    bad = {};
+    formMsg = '';
     editing = true;
   }
   /** The form as it opened: only what changed in it is written (round fifty-two, 4). */
@@ -74,37 +77,98 @@
   function guardUnload(e: BeforeUnloadEvent) {
     if (formDirty()) e.preventDefault();
   }
-  const num = (s: string) => (s.trim() === '' || Number.isNaN(Number(s)) ? null : Number(s));
-  // Altitude in the reader's units: feet where the temperatures are Fahrenheit, stored in metres whatever the display (round fifty-eight; the grower review).
+  /** A typed figure: null for an empty box (cleared on purpose, so inherited), NaN for anything that is not a number, which the checks below refuse rather than write as empty (round fifty-nine). */
+  const num = (s: string) => (s.trim() === '' ? null : Number(s.trim().replace(/^\+/, '').replace('−', '-')));
+  // Altitude in the reader's lengths, feet or metres, as Settings' "Lengths" sets them (or as the temperature goes, when
+  // it follows); stored in metres whatever the display (round fifty-eight; round fifty-nine: it followed the temperature).
   const FT = 0.3048;
-  const altFt = $derived(units.current === 'us');
+  const altFt = $derived(prefs.lengthUnits === 'in');
   const altShown = (m: number) => (altFt ? `${Math.round(m / FT)} ft` : `${m} m`);
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   /** What the place above says, for the form's placeholders: the rhythm and the dry months this place inherits when it sets none. */
   const parentCond = $derived(loc?.parentId && collection.location(loc.parentId) ? collection.conditions(loc.parentId) : null);
   const inheritedDays = $derived(parentCond?.waterDays ?? null);
   const inheritedDry = $derived(parentCond?.dryMonths ?? null);
-  let altMsg = $state('');
-  async function save() {
+  /** What the form refused, by field, each a sentence under its field; and the one sentence the form says aloud (round fifty-nine). */
+  let bad = $state<Record<string, string>>({});
+  let formMsg = $state('');
+  let saving = $state(false);
+  const FIELD_IDS: Record<string, string> = { floorC: 'e-floor', ppfd: 'e-ppfd', lightHours: 'e-hours', lat: 'e-lat', lon: 'e-lon', altM: 'e-alt', waterDays: 'e-waterdays' };
+  /** Each figure checked before anything is written: a number, in a range a place can have; a latitude needs its longitude. */
+  function check(): Record<string, string> {
+    const out: Record<string, string> = {};
+    const said = (s: string) => s.trim();
+    const isNum = (v: number | null) => v == null || Number.isFinite(v);
+    const floor = num(f.floorC), us = units.current === 'us';
+    if (!isNum(floor)) out.floorC = `${said(f.floorC)} is not a temperature; type a figure such as ${us ? '41' : '5'}, or leave it blank.`;
+    else if (floor != null && (us ? floor < -58 || floor > 122 : floor < -50 || floor > 50)) out.floorC = `${said(f.floorC)} is outside ${us ? '−58 to 122 °F' : '−50 to 50 °C'}, the range a floor can be.`;
+    const ppfd = num(f.ppfd);
+    if (!isNum(ppfd)) out.ppfd = `${said(f.ppfd)} is not a number; light is in µmol/m²/s, such as 300.`;
+    else if (ppfd != null && (ppfd < 0 || ppfd > 3000)) out.ppfd = `${said(f.ppfd)} is outside 0 to 3000 µmol/m²/s; full sun is about 2000.`;
+    const hours = num(f.lightHours);
+    if (!isNum(hours)) out.lightHours = `${said(f.lightHours)} is not a number of hours.`;
+    else if (hours != null && (hours < 0 || hours > 24)) out.lightHours = `${said(f.lightHours)} is outside 0 to 24 hours a day.`;
+    const lat = num(f.lat), lon = num(f.lon);
+    if (!isNum(lat)) out.lat = `${said(f.lat)} is not a latitude; use decimal degrees, such as 40.4.`;
+    else if (lat != null && (lat < -90 || lat > 90)) out.lat = `${said(f.lat)} is outside −90 to 90; latitude is north (positive) or south (negative) of the equator.`;
+    if (!isNum(lon)) out.lon = `${said(f.lon)} is not a longitude; use decimal degrees, such as -80.0.`;
+    else if (lon != null && (lon < -180 || lon > 180)) out.lon = `${said(f.lon)} is outside −180 to 180; longitude is east (positive) or west (negative).`;
+    if (!out.lat && !out.lon && (lat == null) !== (lon == null)) {
+      if (lat == null) out.lat = 'A longitude needs its latitude: give both, or clear both.';
+      else out.lon = 'A latitude needs its longitude: give both, or clear both.';
+    }
     // An altitude the forecast source cannot take is refused here, with the likely reason, rather than on every frost check afterwards.
     const typedAlt = num(f.altM);
+    if (!isNum(typedAlt)) out.altM = `${said(f.altM)} is not a number of ${altFt ? 'feet' : 'metres'}.`;
+    else if (typedAlt != null) {
+      const alt = altFt ? typedAlt * FT : typedAlt;
+      if (alt < -500 || alt > 9000) out.altM = altFt ? `${said(f.altM)} is outside −1640 to 29527 ft.` : `${said(f.altM)} is outside −500 to 9000 m${alt > 9000 && alt < 30000 ? `; in feet that would be ${Math.round(alt * FT)} m` : ''}.`;
+    }
+    // The plant form's rule and sentence (round fifty-nine): a whole number of days, 1 to 365; an empty box follows the place above.
+    const wd = num(f.waterDays);
+    if (wd != null && (!Number.isInteger(wd) || wd < 1 || wd > 365)) out.waterDays = `${said(f.waterDays)} is not a whole number of days from 1 to 365; leave it blank to follow ${inheritedDays ? 'the place above' : 'the default'}.`;
+    return out;
+  }
+  async function save() {
+    if (saving) return;
+    bad = check();
+    const first = Object.keys(FIELD_IDS).find((k) => bad[k]);
+    if (first) {
+      const n = Object.keys(bad).length;
+      formMsg = `Not saved: ${bad[first]}${n > 1 ? ` And ${n - 1} more under ${n === 2 ? 'its field' : 'their fields'}.` : ''}`;
+      document.getElementById(FIELD_IDS[first])?.focus();
+      return;
+    }
+    formMsg = '';
+    const typedAlt = num(f.altM);
     const alt = typedAlt == null ? null : altFt ? Math.round(typedAlt * FT * 10) / 10 : typedAlt; // metres, as stored (round fifty-eight; the grower review)
-    altMsg = alt == null || (alt >= -500 && alt <= 9000) ? '' : altFt ? `${f.altM} is outside −1640 to 29527 ft.` : `${f.altM} is outside −500 to 9000 m${alt > 9000 && alt < 30000 ? `; in feet that would be ${Math.round(alt * FT)} m` : ''}.`;
-    if (altMsg) { document.getElementById('e-alt')?.focus(); return; }
     // "Bottoms out" is the unset reading too: a place that never said is not given `floorHeld: false` by an unrelated edit (round forty-nine, 2; round thirty-five, R1-6).
     // The place's fields and its new parent are one commit: a page closed between the two left a place edited but not moved (round fifty-one, 3).
     const moving = (f.parent ?? null) !== (loc?.parentId ?? null) || collection.needsHome(id);
-    if (moving) collection.checkMove(id, f.parent ?? null);
-    const all: Record<string, unknown> = { name: f.name.trim() || loc?.name, type: f.kind || null, indoor: f.indoor === '' ? null : f.indoor === 'yes', floorC: (() => { const v = num(f.floorC); return v == null ? null : units.current === 'us' ? +fToC(v).toFixed(2) : v; })(), floorHeld: num(f.floorC) == null ? null : f.floorHeld === 'held' ? true : loc?.floorHeld ? false : (loc?.floorHeld ?? null), ppfd: num(f.ppfd), lightHours: num(f.lightHours), lat: num(f.lat), lon: num(f.lon), altM: alt, waterDays: (() => { const v = num(f.waterDays); return v != null && v >= 1 && v <= 365 ? Math.round(v) : null; })(), dryMonths: f.dryMonths ? [...f.dryMonths].sort((x, y) => x - y) : null, notes: f.notes.trim() || null };
+    const all: Record<string, unknown> = { name: f.name.trim() || loc?.name, type: f.kind || null, indoor: f.indoor === '' ? null : f.indoor === 'yes', floorC: (() => { const v = num(f.floorC); return v == null ? null : units.current === 'us' ? +fToC(v).toFixed(2) : v; })(), floorHeld: num(f.floorC) == null ? null : f.floorHeld === 'held' ? true : loc?.floorHeld ? false : (loc?.floorHeld ?? null), ppfd: num(f.ppfd), lightHours: num(f.lightHours), lat: num(f.lat), lon: num(f.lon), altM: alt, waterDays: num(f.waterDays), dryMonths: f.dryMonths ? [...f.dryMonths].sort((x, y) => x - y) : null, notes: f.notes.trim() || null };
     const asOpened = { ...f, dryMonths: f.dryMonths ? f.dryMonths.join(',') : null };
     const touched = new Set(Object.keys(asOpened).filter((k) => (asOpened as Record<string, unknown>)[k] !== fOpen[k]));
     const byForm: Record<string, string[]> = { name: ['name'], kind: ['type'], indoor: ['indoor'], floorC: ['floorC', 'floorHeld'], floorHeld: ['floorHeld', 'floorC'], ppfd: ['ppfd'], lightHours: ['lightHours'], lat: ['lat'], lon: ['lon'], altM: ['altM'], waterDays: ['waterDays'], dryMonths: ['dryMonths'], notes: ['notes'] };
     const write = new Set<string>();
     for (const k of touched) for (const fld of byForm[k] ?? []) write.add(fld);
+    // A latitude and its longitude go together: one changed writes both, so the place never holds half a pair.
+    if (write.has('lat') || write.has('lon')) { write.add('lat'); write.add('lon'); }
     const fields = Object.fromEntries(Object.entries(all).filter(([k]) => write.has(k)));
-    await collection.put('location', id, { ...fields, ...(moving ? { parentId: f.parent ?? null } : {}) });
-    editing = false;
+    // The write can be refused (storage full, a move into itself): the reason is said in the form, which stays open with
+    // what was typed, so it can be tried again (round fifty-nine).
+    saving = true;
+    try {
+      if (moving) collection.checkMove(id, f.parent ?? null);
+      await collection.put('location', id, { ...fields, ...(moving ? { parentId: f.parent ?? null } : {}) });
+      editing = false;
+    } catch (e) {
+      const why = collection.lastWriteError ?? (e instanceof Error ? e.message : String(e));
+      formMsg = `Not saved: ${why.replace(/\.$/, '')}. What you typed is still here; try again.`;
+    } finally {
+      saving = false;
+    }
   }
+  const clearBad = (...ks: string[]) => { if (ks.some((k) => bad[k])) { const n = { ...bad }; for (const k of ks) delete n[k]; bad = n; } if (formMsg && !Object.keys(bad).length) formMsg = ''; };
   function useMyLocation() {
     navigator.geolocation?.getCurrentPosition((p) => { f.lat = p.coords.latitude.toFixed(4); f.lon = p.coords.longitude.toFixed(4); if (p.coords.altitude != null) f.altM = Math.round(altFt ? p.coords.altitude / FT : p.coords.altitude).toString(); }); // the device gives metres; the box is in the reader's units (round fifty-eight)
   }
@@ -197,6 +261,8 @@
     }
   }
   const daysSince = (d: string | null) => (d ? daysBetween(d) : null);
+  /** Nothing to show in the cards or the facts: no floor, light, watering, audit, rhythm or dry months, here or above (round fifty-nine: the sentence said so over a Watering row). */
+  const nothingRecorded = $derived(cond.floorC == null && dli == null && !lastWater && !lastAudit && !cond.waterDays && !cond.dryMonths?.length);
 
   /* ---- frost watch for outdoor / unheated places with coordinates ---- */
   type ForecastAnswer = { forecast: Forecast; alerts: Alert[]; alertsStatus?: 'ok' | 'none' | 'refused' | 'n/a'; risk: { level: string; text: string }; attribution: string[] };
@@ -257,6 +323,8 @@
   }
 </script>
 
+{#snippet ago(n: number | null)}{#if n == null}–{:else if n === 0}today{:else}{n}<span class="u">{' d ago'}</span>{/if}{/snippet}
+
 <svelte:head><title>{loc?.name ?? 'Location'} · Cultifolio</title></svelte:head>
 <svelte:window onbeforeunload={guardUnload} />
 
@@ -270,12 +338,14 @@
   <div class="idcard flat">
     <div class="who">
       <h1 class="q" style="margin: 0">{loc.name}</h1>
-      <p class="vern">{LOCATION_KINDS.find((k) => k.k === loc.type)?.label ?? 'Place'}{path.length > 1 ? ' inside ' + path.slice(0, -1).map((p) => p.name).join(' › ') : ''} · {plural(deep.length, 'growing plant')}{kids.length ? ` in ${plural(collection.subtree(id).length, 'place')}` : ''}{#if cond.indoor != null} · {cond.indoor ? 'indoors' : 'outdoors'}{/if}</p>
-      {#if cond.floorC != null || dli != null || (watchable && effectiveRisk) || (unseen && deep.length)}
+      <p class="vern">{LOCATION_KINDS.find((k) => k.k === loc.type)?.label ?? 'Place'}{path.length > 1 ? ' inside ' + path.slice(0, -1).map((p) => p.name).join(' › ') : ''} · {plural(deep.length, 'growing plant')}{kids.length ? ` in ${plural(collection.subtree(id).length, 'place')}` : ''}{#if cond.indoor != null}{' · '}{cond.indoor ? 'indoors' : 'outdoors'}{/if}</p>
+      {#if cond.floorC != null || dli != null || (watchable && effectiveRisk) || (unseen && deep.length) || dueHere}
       <div class="pills">
         {#if cond.floorC != null}<span class="pill c">{cond.floorHeld ? 'held at' : 'floor'} {temp(cond.floorC, units.current, 1)}</span>{/if}
         {#if dli != null}<span class="pill w">DLI {dli.toFixed(0)}</span>{/if}
         {#if watchable && effectiveRisk}<span class="pill {effectiveRisk.level === 'none' ? 'a' : effectiveRisk.level === 'cold' ? 'w' : 'b'}">{effectiveRisk.level === 'none' ? (alertsUnchecked ? 'forecast clear; alerts not checked' : 'frost: clear') : effectiveRisk.level === 'cold' ? 'cold night coming' : effectiveRisk.level === 'floor' ? 'reaches the floor' : effectiveRisk.level === 'warning' ? 'weather warning' : 'frost forecast'}</span>{/if}
+        <!-- The due count where it is seen whatever is recorded: it was only in the Last watered card, absent until a first watering (round fifty-nine). -->
+        {#if dueHere}<span class="pill w">{dueHere} due</span>{/if}
         {#if unseen && deep.length}<span class="pill w">{unseen} not seen{missedNow === unseen ? ' at the last audit' : ' in 90 d'}</span>{/if}
       </div>
       {/if}
@@ -293,22 +363,24 @@
       <label><span>Kind</span><select id="e-kind" bind:value={f.kind}><option value="">Not stated</option><!-- words, not a dash (round fifty-eight) -->{#if f.kind && !LOCATION_KINDS.some((k) => k.k === f.kind)}<option value={f.kind}>{f.kind} (a kind this version of the app does not know)</option>{/if}{#each LOCATION_KINDS as k}<option value={k.k}>{k.label}</option>{/each}</select></label>
       <label><span>Inside</span><select id="e-parent" bind:value={f.parent}><option value={null}>Top level</option>{#each homes as h}<option value={h.id}>{h.name}</option>{/each}</select></label>
       <label><span>Indoors?</span><select id="e-indoor" bind:value={f.indoor}><option value="">Inherit</option><option value="yes">Yes</option><option value="no">No</option></select></label>
-      <label><span>Temperature floor {tempUnit(units.current)}</span><input id="e-floor" type="text" inputmode="decimal" bind:value={f.floorC} placeholder="the coldest it gets" /></label>
+      <label><span>Temperature floor {tempUnit(units.current)}</span><input id="e-floor" type="text" inputmode="decimal" bind:value={f.floorC} placeholder="the coldest it gets" oninput={() => clearBad('floorC')} aria-invalid={!!bad.floorC} aria-describedby={bad.floorC ? 'e-floor-bad' : undefined} />{#if bad.floorC}<span class="bad small" id="e-floor-bad">{bad.floorC}</span>{/if}</label>
       <!-- A set-point and a bottoming-out figure read oppositely on a cold night: outside reaching a set-point is the heater's job; reaching a bottoming-out figure is the plants' (round forty, own). -->
       <label><span>That floor is</span><select id="e-floorkind" bind:value={f.floorHeld}><option value="bottoms">what it bottoms out at (unheated)</option><option value="held">held by a heater (its set-point)</option></select></label>
-      <label><span><span style="text-transform: none">µ</span>mol/m²/s of light</span><input id="e-ppfd" type="text" inputmode="decimal" bind:value={f.ppfd} /></label>
-      <label><span>Light hours/day</span><input id="e-hours" type="text" inputmode="decimal" bind:value={f.lightHours} /></label>
-      <label><span>Latitude</span><input id="e-lat" type="text" inputmode="decimal" bind:value={f.lat} /></label>
-      <label><span>Longitude</span><input id="e-lon" type="text" inputmode="decimal" bind:value={f.lon} /></label>
-      <label><span>Altitude {altFt ? 'ft' : 'm'}</span><input id="e-alt" type="text" inputmode="decimal" bind:value={f.altM} oninput={() => (altMsg = '')} aria-invalid={!!altMsg} aria-describedby={altMsg ? 'e-alt-bad' : undefined} />{#if altMsg}<span class="bad small" id="e-alt-bad">{altMsg}</span>{/if}</label>
+      <label><span><span style="text-transform: none">µ</span>mol/m²/s of light</span><input id="e-ppfd" type="text" inputmode="decimal" bind:value={f.ppfd} oninput={() => clearBad('ppfd')} aria-invalid={!!bad.ppfd} aria-describedby={bad.ppfd ? 'e-ppfd-bad' : undefined} />{#if bad.ppfd}<span class="bad small" id="e-ppfd-bad">{bad.ppfd}</span>{/if}</label>
+      <label><span>Light hours/day</span><input id="e-hours" type="text" inputmode="decimal" bind:value={f.lightHours} oninput={() => clearBad('lightHours')} aria-invalid={!!bad.lightHours} aria-describedby={bad.lightHours ? 'e-hours-bad' : undefined} />{#if bad.lightHours}<span class="bad small" id="e-hours-bad">{bad.lightHours}</span>{/if}</label>
+      <label><span>Latitude</span><input id="e-lat" type="text" inputmode="decimal" bind:value={f.lat} oninput={() => clearBad('lat', 'lon')} aria-invalid={!!bad.lat} aria-describedby={bad.lat ? 'e-lat-bad' : undefined} />{#if bad.lat}<span class="bad small" id="e-lat-bad">{bad.lat}</span>{/if}</label>
+      <label><span>Longitude</span><input id="e-lon" type="text" inputmode="decimal" bind:value={f.lon} oninput={() => clearBad('lon', 'lat')} aria-invalid={!!bad.lon} aria-describedby={bad.lon ? 'e-lon-bad' : undefined} />{#if bad.lon}<span class="bad small" id="e-lon-bad">{bad.lon}</span>{/if}</label>
+      <label><span>Altitude {altFt ? 'ft' : 'm'}</span><input id="e-alt" type="text" inputmode="decimal" bind:value={f.altM} oninput={() => clearBad('altM')} aria-invalid={!!bad.altM} aria-describedby={bad.altM ? 'e-alt-bad' : undefined} />{#if bad.altM}<span class="bad small" id="e-alt-bad">{bad.altM}</span>{/if}</label>
       <!-- The grower's own watering rhythm, inherited by the places inside (round fifty-eight; the grower review): what "due" means here, and the months kept dry on purpose. -->
-      <label><span>Water about every</span><span class="unitfield"><input id="e-waterdays" type="text" inputmode="numeric" bind:value={f.waterDays} placeholder={inheritedDays ? `${inheritedDays} (inherited)` : '21 (the default)'} /> days</span></label>
+      <label><span>Water about every</span><span class="unitfield"><input id="e-waterdays" type="text" inputmode="numeric" bind:value={f.waterDays} placeholder={inheritedDays ? `${inheritedDays} (inherited)` : '21 (the default)'} oninput={() => clearBad('waterDays')} aria-invalid={!!bad.waterDays} aria-describedby={bad.waterDays ? 'e-waterdays-bad' : undefined} /> days</span>{#if bad.waterDays}<span class="bad small" id="e-waterdays-bad">{bad.waterDays}</span>{/if}</label>
       <fieldset class="wide months"><legend>Kept dry in {f.dryMonths === null ? `(${inheritedDry?.length ? 'inherited: ' + inheritedDry.map((m) => MONTHS[m - 1]).join(', ') : 'none set'})` : ''}</legend>
         {#each MONTHS as m, i (i)}<label class="mo"><input type="checkbox" checked={(f.dryMonths ?? inheritedDry ?? []).includes(i + 1)} onchange={(e) => { const on = (e.currentTarget as HTMLInputElement).checked; const base = f.dryMonths ?? [...(inheritedDry ?? [])]; f.dryMonths = on ? [...new Set([...base, i + 1])] : base.filter((x) => x !== i + 1); }} />{m}</label>{/each}
         {#if f.dryMonths !== null}<button type="button" class="linkish small" onclick={() => (f.dryMonths = null)}>Inherit again</button>{/if}
       </fieldset>
       <label class="wide"><span>Notes</span><textarea id="e-notes" rows="2" bind:value={f.notes}></textarea></label>
-      <div class="actions wide"><button class="btn" type="button" onclick={useMyLocation}>Use my location</button><span class="grow"></span><button class="btn" type="button" onclick={() => (editing = false)}>Cancel</button><button class="btn pri" type="submit">Save</button></div>
+      <!-- What stopped the save, said aloud: a figure refused, or the write itself refused (round fifty-nine). Always in the page, so a screen reader hears it change. -->
+      <p class="bad small wide formmsg" id="e-msg" role="alert">{formMsg}</p>
+      <div class="actions wide"><button class="btn" type="button" onclick={useMyLocation}>Use my location</button><span class="grow"></span><button class="btn" type="button" onclick={() => { editing = false; bad = {}; formMsg = ''; }}>Cancel</button><button class="btn pri" type="submit" disabled={saving}>Save</button></div>
     </form>
   {/if}
 
@@ -347,15 +419,17 @@
     </div>
   {/if}
 
-  {#if cond.floorC == null && dli == null && !lastWater && !lastAudit}
+  {#if nothingRecorded}
     <p class="empty" style="margin: 14px 0 0">No floor, light, watering or audit recorded here yet. <button class="linkish" type="button" onclick={startEdit}>Set the floor and the light</button>{#if !watchable && cond.indoor !== true}, and coordinates for frost watch{/if}.</p>
   {:else}
+  {#if cond.floorC != null || dli != null || lastWater || lastAudit}
   <div class="cards">
     {#if cond.floorC != null}<div class="card"><div class="lab">{cond.floorHeld ? 'Held at' : 'Floor'}</div><div class="val">{cond.floorC == null ? '–' : tempN(cond.floorC, units.current, 1)}<span class="u">{cond.floorC == null ? '' : ' ' + tempUnit(units.current)}</span></div><div class="sub">{cond.floorC == null ? 'not stated' : cond.from.floorC && cond.from.floorC !== loc.name ? `from ${cond.from.floorC}` : 'set here'}</div></div>{/if}
-    {#if dli != null}<div class="card"><div class="lab">Light</div><div class="val">{dli == null ? '–' : dli.toFixed(0)}<span class="u">{dli == null ? '' : ' DLI'}</span></div><div class="sub">{cond.ppfd == null ? 'not measured' : `${cond.ppfd} µmol × ${cond.lightHours ?? 12} h${cond.from.ppfd && cond.from.ppfd !== loc.name ? ` · from ${cond.from.ppfd}` : ''}`}</div></div>{/if}
-    {#if lastWater}<div class="card"><div class="lab">Last watered</div><div class="val">{lastWater ? daysSince(lastWater) : '–'}<span class="u">{lastWater ? ' d ago' : ''}</span></div><div class="sub">{lastWater ? `the most recently watered plant${watering.oldest === lastWater ? (deep.length > 1 && !watering.never ? ', and every plant here was watered that day' : '') : `; the longest waiting ${daysSince(watering.oldest)} d`}${watering.never ? `; ${watering.never} with no watering recorded` : ''}${dueHere ? `; ${dueHere} due` : ''}` : 'nothing recorded'}</div></div>{/if}
-    {#if lastAudit}<div class="card"><div class="lab">Last audit</div><div class="val">{lastAudit ? daysSince(lastAudit) : '–'}<span class="u">{lastAudit ? ' d ago' : ''}</span></div><div class="sub">{lastAudit ? lastAudit : 'never audited'}{missedNow ? ` · ${missedNow} not seen at it` : ''}{unseen - missedNow > 0 ? ` · ${unseen - missedNow} not seen in 90 d` : ''}</div></div>{/if}
+    {#if dli != null}<div class="card"><div class="lab">Light</div><div class="val">{dli == null ? '–' : dli.toFixed(0)}<span class="u">{dli == null ? '' : ' DLI'}</span></div><div class="sub">{cond.ppfd == null ? 'not measured' : `${cond.ppfd} µmol × ${cond.lightHours ?? 12} h${cond.lightHours == null ? ' (assumed; no hours set)' : ''}${cond.from.ppfd && cond.from.ppfd !== loc.name ? ` · from ${cond.from.ppfd}` : ''}`}</div></div>{/if}
+    {#if lastWater}<div class="card"><div class="lab">Last watered</div><div class="val">{@render ago(daysSince(lastWater))}</div><div class="sub">{lastWater ? `the most recently watered plant${watering.oldest === lastWater ? (deep.length > 1 && !watering.never ? ', and every plant here was watered that day' : '') : `; the longest waiting ${daysSince(watering.oldest)} d`}${watering.never ? `; ${watering.never} with no watering recorded` : ''}${dueHere ? `; ${dueHere} due` : ''}` : 'nothing recorded'}</div></div>{/if}
+    {#if lastAudit}<div class="card"><div class="lab">Last audit</div><div class="val">{@render ago(daysSince(lastAudit))}</div><div class="sub">{lastAudit ? lastAudit : 'never audited'}{missedNow ? ` · ${missedNow} not seen at it` : ''}{unseen - missedNow > 0 ? ` · ${unseen - missedNow} not seen in 90 d` : ''}</div></div>{/if}
   </div>
+  {/if}
   {/if}
 
   {#if watchable}
@@ -364,17 +438,19 @@
     {#if forecastErr}<div class="notice">{forecastErr}</div>
     {:else if !forecast}<p class="muted">Fetching the forecast…</p>
     {:else}
-      <div class="notice {effectiveRisk?.level === 'none' ? 'ok' : effectiveRisk?.level === 'cold' ? '' : 'err'}"><b>{effectiveRisk?.level === 'none' ? (alertsUnchecked ? 'Forecast clear.' : 'All clear.') : effectiveRisk?.level === 'cold' ? 'Cold night coming.' : effectiveRisk?.level === 'floor' ? 'Below the floor.' : effectiveRisk?.level === 'warning' ? 'Warning in force.' : 'Frost forecast.'}</b> {effectiveRisk?.text}{#if alertsUnchecked} Alerts not checked: the National Weather Service did not answer, and this is not a statement that no alert is in force.{/if}</div>
+      <div class="notice {effectiveRisk?.level === 'none' ? 'ok' : effectiveRisk?.level === 'cold' ? '' : 'err'}"><b>{effectiveRisk?.level === 'none' ? (alertsUnchecked ? 'Forecast clear.' : 'All clear.') : effectiveRisk?.level === 'cold' ? 'Cold night coming.' : effectiveRisk?.level === 'floor' ? 'Below the floor.' : effectiveRisk?.level === 'warning' ? 'Warning in force.' : 'Frost forecast.'}</b> {effectiveRisk?.text}{#if alertsUnchecked}{' '}Alerts not checked: the National Weather Service did not answer, and this is not a statement that no alert is in force.{/if}</div>
       <p class="small muted">{forecast.attribution.join(' · ')}. <a href="/today#frost">Full forecast</a>.</p>
     {/if}
-  {:else if cond.indoor !== true && !(cond.floorC == null && dli == null && !lastWater && !lastAudit)}
+  {:else if cond.indoor !== true && !nothingRecorded}
     <p class="small muted" style="margin-top: 10px"><button type="button" class="linkish" onclick={startEdit}>Add coordinates</button> to this place (or a parent), or set your site in <a href="/settings#site">Settings</a>, to watch the forecast for frost.</p>
   {/if}
 
-  {#if cond.lat != null || loc.notes || cond.waterDays || cond.dryMonths?.length}
+  {#if cond.lat != null || cond.altM != null || loc.notes || cond.waterDays || cond.dryMonths?.length}
     <div class="factgrid">
-      {#if cond.waterDays || cond.dryMonths?.length}<div><b>Watering</b>{cond.waterDays ? `about every ${cond.waterDays} days` : 'every 21 days (the default)'}{cond.dryMonths?.length ? `; kept dry in ${cond.dryMonths.map((m) => MONTHS[m - 1]).join(', ')}` : ''}{#if (cond.from.waterDays && cond.from.waterDays !== loc.name) || (cond.from.dryMonths && cond.from.dryMonths !== loc.name)}<span class="small muted"> · from {cond.from.waterDays ?? cond.from.dryMonths}</span>{/if}</div>{/if}
-      {#if cond.lat != null}<div><b>Coordinates</b>{cond.lat}, {cond.lon}{cond.altM != null ? ` · ${altShown(cond.altM)}` : ''}{#if cond.from.lat && cond.from.lat !== loc.name}<span class="small muted"> · from {cond.from.lat}</span>{/if}</div>{/if}
+      {#if cond.waterDays || cond.dryMonths?.length}<div><b>Watering</b>{cond.waterDays ? `about every ${cond.waterDays} days` : 'every 21 days (the default)'}{cond.dryMonths?.length ? `; kept dry in ${cond.dryMonths.map((m) => MONTHS[m - 1]).join(', ')}` : ''}{#if (cond.from.waterDays && cond.from.waterDays !== loc.name) || (cond.from.dryMonths && cond.from.dryMonths !== loc.name)}<span class="small muted">{' · '}from {cond.from.waterDays ?? cond.from.dryMonths}</span>{/if}</div>{/if}
+      {#if cond.lat != null}<div><b>Coordinates</b>{cond.lat}, {cond.lon}{#if cond.from.lat && cond.from.lat !== loc.name}<span class="small muted">{' · '}from {cond.from.lat}</span>{/if}</div>{/if}
+      <!-- Its own row: an altitude saved without coordinates showed nowhere but the edit form (round fifty-nine). -->
+      {#if cond.altM != null}<div><b>Altitude</b>{altShown(cond.altM)}{#if cond.from.altM && cond.from.altM !== loc.name}<span class="small muted">{' · '}from {cond.from.altM}</span>{/if}</div>{/if}
       {#if loc.notes}<div class="wide"><b>Notes</b><span style="white-space: pre-wrap">{loc.notes}</span></div>{/if}
     </div>
   {/if}
@@ -384,8 +460,8 @@
     <div class="rows">
       {#each kids as k}
         {@const kl = LOCATION_KINDS.find((x) => x.k === k.type)?.label ?? 'Place'}
-        <!-- The tile is decoration, and a hidden comma keeps the name and the kind apart: a reader heard "Bench 1BENCH" (round fifty-eight; the grower review). -->
-        <a class="azrow inside" href="/places/{k.id}"><span class="im" aria-hidden="true">{kl.slice(0, 5)}</span><span><span class="nm" style="font-style: normal">{k.name}</span><span class="fam"><span class="sr">, </span>{kl}</span></span><span class="fig"><span class="sr">, </span>{plural(collection.plantsAt(k.id).length, 'plant')}</span></a>
+        <!-- The tile is decoration; the name and the kind on one line with a dot between, a box with its own margins, since the spaces at a tag's edge are dropped ("Bench 1BENCH"; round fifty-eight, round fifty-nine), and a hidden comma for a screen reader. -->
+        <a class="azrow inside" href="/places/{k.id}"><span class="im" aria-hidden="true">{kl.slice(0, 5)}</span><span class="namekind"><span class="nm" style="font-style: normal">{k.name}</span><span class="dot" aria-hidden="true">·</span><span class="sr">{', '}</span><span class="fam">{kl}</span></span><span class="fig"><span class="sr">{', '}</span>{plural(collection.plantsAt(k.id).length, 'plant')}</span></a>
       {/each}
     </div>
   {/if}
@@ -441,7 +517,7 @@
   .linkish { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-decoration: underline; }
   .idcard.flat { margin-top: 14px; }
   .quickbar.words { margin-top: -6px; gap: 2px 14px; }
-  .quickbar.words .btn { background: none; border: 0; box-shadow: none; padding: 6px 0; min-height: 40px; color: var(--accent); font-weight: 600; }
+  .quickbar.words .btn { background: none; border: 0; box-shadow: none; padding: 6px 0; min-height: var(--tap); color: var(--accent); font-weight: 600; }
   .quickbar.words .btn:hover { text-decoration: underline; }
   .quickbar.words .btn:disabled { color: var(--ink3); }
   .muted { color: var(--ink3); }
@@ -455,7 +531,7 @@
   .form { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 12px; padding: 14px 17px; margin-top: 16px; }
   .form label { display: grid; gap: 4px; }
   .form label > span { font-size: var(--fs-xs); letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink3); font-weight: 700; }
-  .form input, .form select, .form textarea { width: 100%; font: inherit; font-size: 0.875rem; padding: 8px 11px; border: 1px solid var(--rule); border-radius: var(--r); background: var(--card); color: var(--ink); }
+  .form input, .form select, .form textarea { width: 100%; font: inherit; font-size: 0.875rem; padding: 8px 11px; min-height: var(--tap); border: 1px solid var(--field-edge); border-radius: var(--r); background: var(--card); color: var(--ink); }
   .wide { grid-column: 1 / -1; }
   .actions { display: flex; gap: 8px; margin: 0; }
   .grow { flex: 1; }
@@ -469,8 +545,14 @@
   .rows .azrow .nm { overflow-wrap: break-word; word-break: normal; }
   .azrow.accrow .fam.phoneonly { display: none; } /* outranks the theme's .azrow.accrow .fam { display: flex }, which printed the status twice at desktop width (round twenty-five, 13) */
   .fam.due { color: var(--warm-ink); }
+  .namekind { display: flex; flex-wrap: wrap; align-items: baseline; min-width: 0; }
+  .namekind .dot { margin: 0 0.45em; color: var(--ink3); }
+  .namekind .fam { margin-top: 0; }
   @media (max-width: 640px) { .form { grid-template-columns: 1fr 1fr; } .idcard.flat { margin-top: 10px; } .azrow .fig { display: none; } .azrow.accrow .fam.phoneonly { display: flex; } }
   .unitfield { display: flex; align-items: center; gap: 6px; }
+  .formmsg { margin: 0; }
+  .formmsg:empty { margin-bottom: -10px; } /* kept in the page for the live region, without its row's gap */
+  .form .bad { color: var(--bad); }
   .unitfield input { width: 6em; }
   .months { border: 0; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 4px 10px; }
   .months legend { font-size: var(--fs-sm); font-weight: 600; color: var(--ink2); padding: 0; margin-bottom: 4px; }

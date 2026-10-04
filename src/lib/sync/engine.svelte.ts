@@ -27,10 +27,12 @@
  *
  * Held changes: a change stamped more than MAX_AHEAD_MS past this device's
  * clock (a peer with a fast clock) is stored but left out of the fold until
- * the clock reaches it. A pull writes such changes straight to the log and
- * ingests only the rest; the collection's own fold skips them on load (see
- * `apply()` in core/log). This engine keeps the list, re-folds what has come
- * due at the start of every run, and the sync page says how many are waiting.
+ * the clock reaches it. Every pulled change goes through the collection's
+ * `ingest`, which stores it, folds what is due and holds the rest as a load
+ * does (round fifty-eight); the hold is applied only once the device's clock
+ * has been checked against the server's (round fifty-nine). This engine keeps
+ * the list, re-folds what has come due at the start of every run, and the
+ * sync page says how many are waiting.
  *
  * Photos: by id, immutable. Push what we have that the server lacks; pull
  * what records mention that we lack.
@@ -40,7 +42,7 @@ import { StoppedError, getMeta, setMeta, setMetaIfKey, getPhotoBlobs, putPhotoBl
 import { deriveKeys, sealJson, openJson, seal, open, packPhoto, unpackPhoto, parseVaultKey, batchFingerprint, dropProof, sha256hex, type VaultKeys } from './crypto';
 import { MAX_BATCH_BYTES, MAX_PHOTO_BYTES, SEAL_OVERHEAD, OVERLAP_MS, CURSOR_SLACK_MS, PUSH_HEADERS, PHOTO_DROP_HEADER, batchName, listAfter, logBatch } from './limits';
 import { readChanges, isHeld, isParked, dueAt, hlcWall, type Change } from '$core/log';
-import { hlcCompare, MAX_AHEAD_MS, nowMs, trustServerTime, clockOffsetMs, clearClockOffset, onClockOffsetChange } from '$core/hlc';
+import { hlcCompare, MAX_AHEAD_MS, nowMs, trustServerTime, clockOffsetMs, clearClockOffset, onClockOffsetChange, clockChecked } from '$core/hlc';
 import { version as BUILD } from '$app/environment';
 
 interface SyncMeta {
@@ -72,10 +74,30 @@ interface SyncMeta {
 
 const META = 'sync';
 /**
+ * A sync request with a time limit (round fifty-nine; two reviews). None had one, so a request that hung kept its run,
+ * and since round fifty-eight its tab's lock, for good, and every other tab skipped its run without a word. A request
+ * past its limit is said as a server that did not answer, as a dropped connection is (a TypeError), not as a refusal.
+ * Photographs and batches get longer, for a slow line.
+ */
+async function syncFetch(url: string, init: RequestInit = {}, ms = 30_000): Promise<Response> {
+  try {
+    return await fetch(url, { ...init, signal: AbortSignal.timeout(ms) });
+  } catch (e) {
+    if (e instanceof DOMException && (e.name === 'TimeoutError' || e.name === 'AbortError')) throw new TypeError(`the server did not answer within ${Math.round(ms / 1000)} seconds`);
+    throw e;
+  }
+}
+/** The record as this build reads it, its lists present even when an older one stored none (round fifty-seven; read the same way at init and in a run's reload, round fifty-nine). */
+const withDefaults = (m: SyncMeta): SyncMeta => ({ ...m, have: Array.isArray(m.have) ? m.have : [], photosPushed: Array.isArray(m.photosPushed) ? m.photosPushed : [] });
+const PHOTO_MS = 180_000;
+const BATCH_MS = 120_000;
+/**
  * Where a batch may be cut: never between a notes change and the `notesBase` that follows it for the same record, since
  * a base that arrives in a later pull would make the edit look blind (round twenty-six, 2). Returns the index to cut
  * before, at most one step back from `at`; a cut that cannot move (a two-change batch) stays where it is.
  */
+/** Each base field and the notes it belongs to: a plant's and a batch's `notes`, a species' `myNotes` (round fifty-nine). */
+const NOTES_OF_BASE: Record<string, string> = { notesBase: 'notes', myNotesBase: 'myNotes' };
 export function cutBefore(list: Change[], at: number): number {
   if (at <= 0 || at >= list.length) return at;
   const writer = (c: Change) => c.t.slice(c.t.lastIndexOf('-') + 1);
@@ -84,15 +106,16 @@ export function cutBefore(list: Change[], at: number): number {
   // and the base need not be the first change after the cut (round twenty-eight, 0; round twenty-nine, 9).
   for (let j = at; j < Math.min(list.length, at + 8); j++) {
     const base = list[j];
-    if (base.field !== 'notesBase') continue;
+    const notesOf = NOTES_OF_BASE[base.field];
+    if (!notesOf) continue;
     for (let i = j - 1; i >= Math.max(0, j - 8); i--) {
       const c = list[i];
       if (c.kind !== base.kind || c.id !== base.id) continue;
-      if (c.field === 'notes' && writer(c) === writer(base)) {
+      if (c.field === notesOf && writer(c) === writer(base)) {
         if (i < at) return i >= 1 ? i : j + 1 < list.length ? j + 1 : at; // a pair that starts the batch is kept whole by cutting after it instead
         break;
       }
-      if (c.field === 'notes' || c.field === 'notesBase') break; // another edit of the same notes: the pair is not this one
+      if (c.field === notesOf || c.field === base.field) break; // another edit of the same notes: the pair is not this one
     }
   }
   return at;
@@ -164,7 +187,7 @@ class Sync {
     const m = await getMeta<SyncMeta>(META);
     if (m?.key && !this.meta) {
       // The record as this build writes it (round fifty-seven: the conversion from the HLC-cursor engine's is gone).
-      this.meta = { ...m, have: Array.isArray(m.have) ? m.have : [], photosPushed: Array.isArray(m.photosPushed) ? m.photosPushed : [] };
+      this.meta = withDefaults(m);
       this.keys = await deriveKeys(m.key);
       this.keysOf.set(this.meta, this.keys); // the meta this engine holds (round eighteen, 12)
       this.vaultId = this.keys.id;
@@ -224,7 +247,7 @@ class Sync {
     const key = parseVaultKey(vaultKey);
     if (!key) throw new Error('That is not a sync key.'); // the glossary's word, as the sync page says it (round fifty-eight; the accessibility review)
     const keys = await deriveKeys(key);
-    const r = await fetch(`${this.base}/api/sync/vault`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: keys.id, token: keys.token, create: mode === 'create' }) });
+    const r = await syncFetch(`${this.base}/api/sync/vault`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: keys.id, token: keys.token, create: mode === 'create' }) });
     if (!r.ok) {
       // The server's own sentence where it gives one ("Sync is not taking new vaults for now…", "too many new vaults from this address today"); the fixed wording for the statuses whose meaning the client knows better.
       // `error` is what the routes answer with; `message` is what SvelteKit's own `error()` answers with (a 402 licence refusal, a 401): both are sentences worth showing (round twenty-three, 11).
@@ -353,7 +376,7 @@ class Sync {
   /* ---- held changes and the clock ---- */
 
   private hold(arrival?: number) {
-    return { now: nowMs(), except: collection.device, arrival, parked: collection.parkedStamps };
+    return { now: nowMs(), except: collection.device, arrival, parked: collection.parkedStamps, clockChecked: clockChecked() };
   }
 
   /**
@@ -368,9 +391,14 @@ class Sync {
     const hold = this.hold();
     const held = new Set(this.meta.held ?? []);
     for (const t of collection.heldList()) if (!isParked(t, hold) && isHeld(t, hold)) held.add(t);
-    this.meta.held = [...held];
+    const m = this.meta;
+    const changed = held.size !== (m.held?.length ?? 0);
+    m.held = [...held];
     this.setHeld();
     this.warnClock(collection.ownLatest());
+    // Saved where it is found: a run reads its record from the store, and a list kept only in memory was lost to that
+    // read, so a held change brought in by a restore never came due (round fifty-nine; the harness review).
+    if (changed) await this.save(m).catch(() => {});
   }
 
   /** Changes this device just wrote or imported: a restore can carry a peer's ahead-stamped changes; its own stamps show whether its clock is behind. */
@@ -387,7 +415,11 @@ class Sync {
         added = true;
       } else if (hold.except && ownStamp(c.t, hold.except) && !followed.has(hlcWall(c.t)) && hlcCompare(c.t, ownLast) > 0) ownLast = c.t;
     }
-    if (added) this.setHeld();
+    if (added) {
+      this.setHeld();
+      const m = this.meta;
+      void this.save(m).catch(() => {}); // kept, as scanClock keeps what it finds (round fifty-nine)
+    }
     this.warnClock(ownLast);
   }
 
@@ -417,7 +449,7 @@ class Sync {
     if (!due.length) return;
     const changes = await changesByKeys(due);
     // No repair here: the numbers they touch wait for the end of the pull, which repairs once over everything folded (round fifty-eight).
-    if (changes.length) await collection.ingest(changes, 'server', { repair: false });
+    if (changes.length) await collection.ingest(changes, 'server');
     m.held = m.held.filter((t) => !due.includes(t));
     this.setHeld();
     await this.save(m);
@@ -436,10 +468,24 @@ class Sync {
     // Named by the vault: a run of a vault this tab has since left (after "Stop syncing" and a new key) can still be
     // finishing, and must not keep the new vault's first run from starting (round fifty-eight, after the deploy run).
     await locks.request(`cultifolio-sync:${this.keys.id}`, { ifAvailable: true }, async (lock) => {
-      if (!lock) return;
+      // Another tab is running this vault's sync. That run may have read the outbox before an edit made here, so this tab
+      // tries again shortly rather than leaving the edit for the next focus or the five-minute tick (round fifty-nine;
+      // two reviews): the edit was pushed by nobody.
+      if (!lock) { this.schedule(5000); return; }
       const m = this.meta;
       const stored = m ? await getMeta<SyncMeta>(META) : undefined;
-      if (m && stored && stored.key === m.key && this.meta === m) Object.assign(m, stored);
+      if (m && stored && stored.key === m.key && this.meta === m) {
+        // The record as stored, whole: a merge kept what another tab had since cleared (a full vault it found room in), and
+        // this page's own copies of it (set aside, refused, full, last sync) are read again with it (round fifty-nine).
+        const fresh = withDefaults(stored);
+        for (const k of Object.keys(m) as Array<keyof SyncMeta>) if (!(k in fresh)) delete m[k];
+        Object.assign(m, fresh);
+        this.quarantined = [...(m.quarantined ?? [])];
+        this.refused = [...(m.refused ?? [])];
+        this.vaultFull = m.vaultFull ? { bytes: m.vaultFull.bytes, limit: m.vaultFull.limit } : null;
+        this.lastSync = m.lastSync;
+        this.setHeld();
+      }
       await this.runNow();
     });
   }
@@ -567,7 +613,7 @@ class Sync {
       }
       const packed = packPhoto(new Uint8Array(await b.blob.arrayBuffer()), new Uint8Array(await b.thumb.arrayBuffer()));
       // The upload leaves the proof its removal must repeat: a token-holder without the key can add, never destroy (round fifty-one, 2).
-      const r = await fetch(`${this.base}/api/sync/photo/${id}?vault=${this.k(m).id}`, { method: 'PUT', headers: { ...this.h(m), [PHOTO_DROP_HEADER]: await dropProof(this.k(m), id) }, body: (await seal(this.k(m), 'photo', packed, id)) as BodyInit });
+      const r = await syncFetch(`${this.base}/api/sync/photo/${id}?vault=${this.k(m).id}`, { method: 'PUT', headers: { ...this.h(m), [PHOTO_DROP_HEADER]: await dropProof(this.k(m), id) }, body: (await seal(this.k(m), 'photo', packed, id)) as BodyInit }, PHOTO_MS);
       const full = await this.fullFrom(r);
       if (full) {
         this.setFull(m, full);
@@ -606,7 +652,7 @@ class Sync {
     }
     const headers: Record<string, string> = { ...this.h(m), [PUSH_HEADERS.batch]: key, [PUSH_HEADERS.plain]: plain };
     headers[PUSH_HEADERS.device] = collection.device || 'dev'; // the name's own device part
-    const r = await fetch(`${this.base}/api/sync/log?vault=${this.k(m).id}`, { method: 'POST', headers, body: body as BodyInit });
+    const r = await syncFetch(`${this.base}/api/sync/log?vault=${this.k(m).id}`, { method: 'POST', headers, body: body as BodyInit }, BATCH_MS);
     if (r.ok) {
       // Acknowledged out of the outbox only while the stored sync record still carries this run's key, checked in the ack's
       // own transaction: a run of a vault this device has since left or replaced must not empty the new vault's outbox of
@@ -639,7 +685,7 @@ class Sync {
   /** A 409 for a photo id: fetch what the server holds under it and compare the pixels. True when it is this very photo (a send whose answer was lost); false when something else sits there, which is the refusal it looks like. */
   private async serverHolds(m: SyncMeta, id: string, packed: Uint8Array): Promise<boolean> {
     try {
-      const r = await fetch(`${this.base}/api/sync/photo/${id}?vault=${this.k(m).id}`, { headers: this.h(m) });
+      const r = await syncFetch(`${this.base}/api/sync/photo/${id}?vault=${this.k(m).id}`, { headers: this.h(m) }, PHOTO_MS);
       if (!r.ok) return false;
       const theirs = await open(this.k(m), 'photo', new Uint8Array(await r.arrayBuffer()), id);
       if (theirs.length !== packed.length) return false;
@@ -673,7 +719,7 @@ class Sync {
    * opened are set aside (by name, so they never block what came after them). True when the batch folded.
    */
   private async takeBatch(m: SyncMeta, key: string, arrival?: number): Promise<boolean> {
-    const res = await fetch(`${this.base}/api/sync/log/${key}?vault=${this.k(m).id}`, { headers: this.h(m) });
+    const res = await syncFetch(`${this.base}/api/sync/log/${key}?vault=${this.k(m).id}`, { headers: this.h(m) }, BATCH_MS);
     if (res.status === 429) this.limited(res);
     if (!res.ok) throw new Error(`batch ${key}: ${res.status}`);
     const bytes = new Uint8Array(await res.arrayBuffer());
@@ -712,7 +758,7 @@ class Sync {
     // fifty-eight, they never reached the fold's held list, and that edit lost when they came due (the client review's
     // finding 8). The engine keeps its own list of them, to fold each as it comes due.
     const ahead = changes.filter((c) => isHeld(c.t, hold));
-    if (changes.length) await collection.ingest(changes, 'server', { repair: false, requireKey: m.key });
+    if (changes.length) await collection.ingest(changes, 'server', { requireKey: m.key });
     if (ahead.length) {
       for (const c of ahead) if (!m.held?.includes(c.t)) (m.held ??= []).push(c.t);
       this.setHeld();
@@ -730,7 +776,7 @@ class Sync {
       this.step(m, 'Checking for changes…');
       // `since` goes with every page so a server that does not know `after` still answers the old way.
       const q = `since=${m.since || ''}` + (after ? `&after=${listAfter(after.at, after.key)}` : '');
-      const r = await fetch(`${this.base}/api/sync/log?vault=${this.k(m).id}&${q}`, { headers: this.h(m) });
+      const r = await syncFetch(`${this.base}/api/sync/log?vault=${this.k(m).id}&${q}`, { headers: this.h(m) });
       if (r.status === 429) this.limited(r);
       if (!r.ok) throw new Error(`pull failed: ${r.status}`);
       const { batches, more, next } = (await r.json()) as { batches: Array<{ key: string; at: number }>; more: boolean; next?: { at: number; key: string } };
@@ -820,9 +866,8 @@ class Sync {
       this.quarantined = [...(m.quarantined ?? [])];
       await this.save(m);
     }
-    // Duplicate numbers are repaired once, over the whole pull, so every device repairs from the same complete log (round
-    // twelve, 3); and only the numbers what folded touched, so a run that folded nothing writes nothing (round fifty-eight).
-    await collection.repairNumbers();
+    // Two records a pull leaves under one number are not repaired here: a pull writes what arrived and nothing more (rule
+    // 5). The record's page says the number is shared and offers "Renumber now" (round fifty-nine; two reviews agreed).
     // Photos that records mention and we lack.
     const have = new Set(await photoBlobIds());
     const missing = collection.knownPhotos().filter((p) => !have.has(p.id));
@@ -832,7 +877,7 @@ class Sync {
       const setAside = m.quarantined?.find((q) => q.key === p.id);
       if (setAside && setAside.build === BUILD) continue; // set aside by this build: not asked for again
       if (setAside) { m.quarantined = m.quarantined!.filter((q) => q.key !== p.id); this.quarantined = [...m.quarantined]; } // another build's: read again; set aside afresh below if still unreadable
-      const r = await fetch(`${this.base}/api/sync/photo/${p.id}?vault=${this.k(m).id}`, { headers: this.h(m) });
+      const r = await syncFetch(`${this.base}/api/sync/photo/${p.id}?vault=${this.k(m).id}`, { headers: this.h(m) }, PHOTO_MS);
       if (r.status === 404) continue; // not uploaded from its device yet
       if (r.status === 429) this.limited(r);
       if (!r.ok) throw new Error(`photo ${p.id}: ${r.status}`);
@@ -876,7 +921,7 @@ class Sync {
         continue;
       }
       if (!have.has(id)) { done.push(id); continue; } // live, no pixels here: another device's to send
-      const r = await fetch(`${this.base}/api/sync/photo/${id}?vault=${this.k(m).id}`, { method: 'HEAD', headers: this.h(m) });
+      const r = await syncFetch(`${this.base}/api/sync/photo/${id}?vault=${this.k(m).id}`, { method: 'HEAD', headers: this.h(m) });
       if (r.status === 429) this.limited(r);
       if (r.status === 404) { m.photosPushed = m.photosPushed.filter((x) => x !== id); m.photosDropped = (m.photosDropped ?? []).filter((x) => x !== id); done.push(id); }
       else if (r.ok) done.push(id);
@@ -917,7 +962,7 @@ class Sync {
     for (const { id, at } of removed) {
       if (have.has(id)) { await deletePhotoBlobs(id).catch(() => {}); collection.forgetPhotoUrls(id); }
       if (dropped.has(id) || nowMs() - at < DROP_AFTER_MS) continue;
-      const r = await fetch(`${this.base}/api/sync/photo/${id}?vault=${this.k(m).id}`, { method: 'DELETE', headers: { ...this.h(m), [PHOTO_DROP_HEADER]: await dropProof(this.k(m), id) } });
+      const r = await syncFetch(`${this.base}/api/sync/photo/${id}?vault=${this.k(m).id}`, { method: 'DELETE', headers: { ...this.h(m), [PHOTO_DROP_HEADER]: await dropProof(this.k(m), id) } });
       if (r.status === 429) this.limited(r);
       if (this.meta !== m) throw stopped();
       if (r.status === 403) {

@@ -27,12 +27,14 @@ describe('an old name at a species address (round thirty, R2-8)', () => {
     expect(asked[0]).toContain('kingdom=Plantae');
     expect(asked[0]).toContain('name=Haworthia%20attenuata');
     const b = await synonymOf(undefined, gbif({ synonym: true, matchType: 'EXACT', canonicalName: 'Cotyledon paniculata', species: 'Tylecodon paniculatus', acceptedUsageKey: 99 }), 'cotyledon-paniculata');
-    expect(b?.slug).toBeNull();
-    expect(b?.acceptedName).toBe('Tylecodon paniculatus');
+    expect(b).toMatchObject({ slug: null, acceptedName: 'Tylecodon paniculatus' });
     expect(await synonymOf(undefined, gbif({ status: 'ACCEPTED', matchType: 'EXACT', usageKey: 5 }), 'aloe-vera')).toBeNull();
     expect(await synonymOf(undefined, gbif({ matchType: 'NONE' }), 'nosuch-plant')).toBeNull();
     expect(await synonymOf(undefined, gbif({ synonym: true, matchType: 'HIGHERRANK', acceptedUsageKey: 2776776, species: 'x' }), 'haworthia-attenuata')).toBeNull(); // a match at a higher rank is not this name
     expect(await synonymOf(undefined, gbif({}), 'haworthia')).toBeNull(); // a bare genus is not asked
+    // A service that does not answer is not a name that is no synonym (round fifty-nine)
+    expect(await synonymOf(undefined, (async () => new Response('busy', { status: 503 })) as unknown as typeof fetch, 'haworthia-attenuata')).toBe('unchecked');
+    expect(await synonymOf(undefined, (async () => { throw new TypeError('offline'); }) as unknown as typeof fetch, 'haworthia-attenuata')).toBe('unchecked');
   });
   it('a name the index lists under a species is answered from the index, with no request (round thirty-two, 2)', async () => {
     const asked: string[] = [];

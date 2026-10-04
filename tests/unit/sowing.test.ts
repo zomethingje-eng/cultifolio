@@ -154,7 +154,7 @@ describe('identity is not the number', () => {
     expect(collection.isNumberTaken('2019-0001')).toBe(true);
     await expect(collection.addAccession({ taxonName: 'Copiapoa cinerea', acc: '2019-0001' })).rejects.toThrow(/already used/);
   });
-  it('two devices that minted the same number offline keep both plants; the later one is renumbered and told', async () => {
+  it('two devices that minted the same number offline keep both plants; the merge says the number is shared, and the grower\'s repair renumbers the later one and tells it', async () => {
     await collection.load();
     const mine = await collection.addAccession({ taxonName: 'Albuca spiralis', acquired: '2026-05-01' });
     const no = accNo(mine);
@@ -170,6 +170,8 @@ describe('identity is not the number', () => {
     ];
     await collection.ingest(theirs, 'server');
     expect(collection.accessions).toHaveLength(before + 1); // nothing merged into nothing
+    expect(collection.sharesNumber('accession', mine.id)).toEqual(['raaaaaaaaa00othr']); // the merge wrote nothing of its own (round fifty-nine)
+    expect(await collection.repairNumbers({ kind: 'accession', no })).toBe(true); // "Renumber now"
     expect(accNo(collection.accession(mine.id)!)).toBe(no); // the earlier creation keeps the number, though its id sorts after the other's
     const renamed = collection.accession('raaaaaaaaa00othr')!;
     expect(accNo(renamed)).not.toBe(no);

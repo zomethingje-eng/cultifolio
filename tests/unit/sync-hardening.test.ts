@@ -5,7 +5,7 @@
  * call another service.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { recount, vaultBytes, storeCounted, storeOnce, fillVault, readBody, limited, resetRateLimits, RATE, NET_RATE_FACTOR, MAX_LIST_PAGES, type VaultMeta, type CountersNs } from '$lib/server/sync';
+import { recount, vaultBytes, storeCounted, storeOnce, admitVault, readBody, limited, resetRateLimits, ensureVault, vaultIdFor, RATE, NET_RATE_FACTOR, MAX_LIST_PAGES, type VaultMeta, type CountersNs } from '$lib/server/sync';
 import { Counters } from '$lib/server/counters';
 import { _foreignWrite } from '../../src/hooks.server';
 
@@ -72,7 +72,19 @@ describe('a write to the sync routes from another site is refused (round fifty-e
     expect(at('/api/sync/vault', 'POST', { origin: 'https://cultifolio.com', 'sec-fetch-site': 'same-origin' })).toBe(false);
     expect(at('/api/sync/vault', 'POST')).toBe(false); // a script names no site, and can send anything anyway
     expect(at('/api/sync/log?vault=x', 'GET', { origin: 'https://evil.example' })).toBe(false); // a read needs the token, which another site does not have
-    expect(at('/api/search', 'POST', { origin: 'https://evil.example' })).toBe(false);
+    // every path, the encoded spelling of a sync route included (round fifty-nine: `/api/%73ync/vault` passed the check)
+    expect(at('/api/%73ync/vault', 'POST', { origin: 'https://evil.example' })).toBe(true);
+    expect(at('/%61pi/sync/vault', 'POST', { 'sec-fetch-site': 'cross-site' })).toBe(true);
+    expect(at('/api/search', 'POST', { origin: 'https://evil.example' })).toBe(true);
+  });
+  it('the hook itself refuses one, before any route runs (round fifty-nine: only the function was tested)', async () => {
+    const { handle } = await import('../../src/hooks.server');
+    let reached = false;
+    const url = new URL('https://cultifolio.com/api/%73ync/vault');
+    const request = new Request(url, { method: 'POST', headers: { origin: 'https://evil.example', 'content-type': 'application/json' }, body: '{}' });
+    const r = await handle({ event: { url, request } as never, resolve: async () => { reached = true; return new Response('made'); } } as never);
+    expect(r.status).toBe(403);
+    expect(reached).toBe(false);
   });
 });
 
@@ -144,7 +156,7 @@ describe('a vault takes its place under the ceiling in all at its first object (
     expect(counters.objects.get('vaults')!.m.get('all')).toBe(1);
     // a vault from before the flag counted itself at its creation, and is not counted again
     const old: VaultMeta = { tokenHash: 'h', created: 'c', entitlement: 'open', bytes: 0 };
-    await fillVault(r2 as never, ID, old, quota);
+    await admitVault(r2 as never, ID, old, quota);
     expect(counters.objects.get('vaults')!.m.get('all')).toBe(1);
   });
   it('without the object, in KV', async () => {
@@ -166,6 +178,25 @@ describe('a body is held once, and never longer than it said (round fifty-eight)
   });
 });
 
+describe('a photograph without its removal proof is refused before its body is read (round fifty-eight; tested round fifty-nine)', () => {
+  it('pulls at most the first chunk of the stream', async () => {
+    const objs = new Map<string, string>();
+    const r2 = { put: async (k: string, b: unknown) => { objs.set(k, typeof b === 'string' ? b : JSON.stringify(b)); return {}; }, get: async (k: string) => (objs.has(k) ? { json: async () => JSON.parse(objs.get(k)!), text: async () => objs.get(k)! } : null), head: async () => null };
+    const token = 'a'.repeat(64);
+    const id = await vaultIdFor(token);
+    await ensureVault(r2 as never, id, token, true);
+    const route = await import('../../src/routes/api/sync/photo/[id]/+server');
+    let pulled = 0;
+    const body = new ReadableStream<Uint8Array>({ pull(c) { pulled++; c.enqueue(new Uint8Array(1024)); if (pulled > 4) c.close(); } });
+    const request = new Request(`http://x/api/sync/photo/pone000000001?vault=${id}`, { method: 'PUT', headers: { authorization: `Bearer ${token}` }, body, duplex: 'half' } as RequestInit);
+    const kv = new Map<string, string>();
+    const QUEUE = { get: async (k: string, type?: string) => (type === 'json' ? JSON.parse(kv.get(k) ?? 'null') : (kv.get(k) ?? null)), put: async (k: string, v: string) => void kv.set(k, v) };
+    const r = await Promise.resolve(route.PUT({ request, url: new URL(request.url), params: { id: 'pone000000001' }, platform: { env: { STORE: r2, QUEUE } }, getClientAddress: () => '1.1.1.1' } as never)).catch((e: { status: number }) => e);
+    expect((r as { status: number }).status).toBe(400);
+    expect(pulled).toBeLessThanOrEqual(1);
+  });
+});
+
 describe('the buckets that call another service count an IPv6 /48 too (round fifty-eight)', () => {
   it('rotating /64s within one /48 meets the network\'s window at four times one address\'s', async () => {
     const limit = RATE.forecast.limit;
@@ -175,7 +206,10 @@ describe('the buckets that call another service count an IPv6 /48 too (round fif
       if (!r) served++;
     }
     expect(served).toBe(limit * NET_RATE_FACTOR);
-    // a bucket that calls no one else is counted by address alone
-    for (let i = 0; i < 50; i++) expect(await limited(undefined, () => `2001:db8:2:${i.toString(16)}::1`, 'search')).toBeNull();
+    // the searches too, since round fifty-nine: each costs this Worker's own time
+    const miss = RATE.searchmiss.limit;
+    let found = 0;
+    for (let i = 0; i < miss * NET_RATE_FACTOR + 10; i++) if (!(await limited(undefined, () => `2001:db8:2:${i.toString(16)}::1`, 'searchmiss'))) found++;
+    expect(found).toBe(miss * NET_RATE_FACTOR);
   });
 });

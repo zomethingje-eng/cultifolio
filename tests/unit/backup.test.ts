@@ -226,7 +226,7 @@ describe('a value of the wrong type in a backup is left out, not the file (round
     const { bytes } = await buildBackup({ changes: rows as Change[], readPhoto: async () => null });
     const r = await readBackup(bytes);
     expect(r.changes).toHaveLength(rows.length - 2);
-    expect(r.unreadable).toEqual(['change 23: price of a accession must be a string, not 12', 'change 24: notes of a accession must be a string, not {"a":1}']);
+    expect(r.unreadable).toEqual(['change 23: price of an accession must be a string, not 12', 'change 24: notes of an accession must be a string, not {"a":1}']);
   });
 });
 
@@ -243,9 +243,9 @@ describe('a zip made to inflate past what a backup can hold is refused at its ta
     // the sheets are never inflated, the manifest has a small cap, and a name seen twice is refused: eight deflated
     // entries alternating the two sheet names at 40 MB each are not touched (round thirty-five, R1-6, R2-4)
     const sheetsBomb: Record<string, Uint8Array> = { 'manifest.json': new TextEncoder().encode('{}'), 'changes.json': new TextEncoder().encode('[]'), 'plants.csv': new Uint8Array(40 * 1024 * 1024), 'batches.csv': new Uint8Array(40 * 1024 * 1024) };
-    const t0 = Date.now();
+    // No clock on it: a three-second bound failed on a slow machine and passed whether or not the sheets were inflated
+    // (eighty megabytes of zeros inflate in a fraction of that); the filter's own test is the name set (round fifty-nine).
     await expect(readBackup(zipSync(sheetsBomb))).rejects.toThrow(/not in a shape/); // the sheets were skipped and the (empty) manifest refused as usual
-    expect(Date.now() - t0).toBeLessThan(3000);
     await expect(readBackup(zipSync({ 'manifest.json': new Uint8Array(5 * 1024 * 1024), 'changes.json': new TextEncoder().encode('[]') }))).rejects.toThrow(/no manifest.json/); // a 5 MB manifest is not inflated: it is not ours
     // (a zip naming an entry twice cannot be made with fflate's writer; the refusal is by the name set in the filter)
   });

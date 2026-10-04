@@ -205,7 +205,7 @@
         <label class="field"><span>Sheet</span><select id="lb-sheet" bind:value={sheetK}>{#each SHEETS as s}<option value={s.k}>{s.label}</option>{/each}</select></label>
         <label class="field"><span>Skip used cells</span><input id="lb-skip" type="number" min="0" max={perPage - 1} bind:value={skip} onchange={() => (skip = skipN)} /></label>
         <!-- A stock that cannot carry a code shows the box empty, not ticked and greyed: a ticked box read as "the code will print" on 5167. The choice is kept for the next sheet that can (round fifty-eight; the grower review). -->
-        <label class="check"><input id="lb-qr" type="checkbox" checked={withQr && sheet.qr} onchange={(e) => (withQr = e.currentTarget.checked)} disabled={!sheet.qr} aria-describedby={sheet.qr ? undefined : 'lb-qr-why'} /> QR code{#if !sheet.qr} <span class="faint small" id="lb-qr-why">(not on this stock: at {sheet.h} mm tall the label has no room for a code)</span>{/if}</label>
+        <label class="check"><input id="lb-qr" type="checkbox" checked={withQr && sheet.qr} onchange={(e) => (withQr = e.currentTarget.checked)} disabled={!sheet.qr} aria-describedby={sheet.qr ? undefined : 'lb-qr-why'} /> QR code{#if !sheet.qr}{' '}<span class="faint small" id="lb-qr-why">(not on this stock: at {sheet.h} mm tall the label has no room for a code)</span>{/if}</label>
         <label class="check"><input type="checkbox" bind:checked={withCare} /> Care line</label>
         <label class="check"><input type="checkbox" bind:checked={withSource} /> Source and date</label>
         <span class="grow"></span>
@@ -274,7 +274,7 @@
           {#if a}
             {#if withQr && sheet.qr && qrs[a.id]}<div class="qr">{@html qrs[a.id]}</div>{/if}
             <div class="txt">
-              <div class="no">{a.no}{#if a.fieldNumber} <span class="fn">{a.fieldNumber}</span>{/if}</div>
+              <div class="no">{a.no}{#if a.fieldNumber}{' '}<span class="fn">{a.fieldNumber}</span>{/if}</div>
               <div class="sci"><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}<span class="cv">‘{a.cultivar}’</span>{/if}{#if kindOf(a.rec) === 'hybrid' && a.parentage}{' '}<span class="cv">({a.parentage})</span>{/if}</div>
               {#if a.batch && batchLine(a)}<div class="src">{batchLine(a)}</div>{/if}
               {#if withCare && care[a.id]}<div class="care" class:unchecked={care[a.id] === 'climate not checked' || care[a.id] === 'climate pending'}>{care[a.id]}</div>{:else if withCare && care[a.id] === null}<div class="care unchecked">care line not checked: the reference was not reached</div>{/if}
@@ -293,7 +293,7 @@
   .row { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 16px; }
   .field { display: grid; gap: 4px; }
   .field > span { font-size: var(--fs-xs); letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink3); font-weight: 700; }
-  .field select, .field input { font: inherit; font-size: var(--fs-md); padding: 7px 10px; border: 1px solid var(--rule); border-radius: var(--r); background: var(--card); color: var(--ink); }
+  .field select, .field input { font: inherit; font-size: var(--fs-md); padding: 7px 10px; min-height: var(--tap); border: 1px solid var(--field-edge); border-radius: var(--r); background: var(--card); color: var(--ink); }
   .field input { width: 5em; }
   .check { display: flex; align-items: center; gap: 6px; font-size: var(--fs-md); padding-bottom: 8px; }
   .grow { flex: 1; }

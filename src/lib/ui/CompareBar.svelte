@@ -11,7 +11,7 @@
 
 {#if compare.picks.length && !onComparePage}
   <!-- Above 700 px: the tray, one line of names and the way to the page. -->
-  <div class="tray" role="region" aria-label="Compare tray">
+  <div class="tray" role="region" aria-label="Compare tray" data-cover="bottom">
     <span class="lab">Compare</span>
     {#each compare.picks as p (p.slug)}
       <span class="pick"><i>{p.name}</i><button type="button" aria-label="Remove {p.name} from compare" onclick={() => compare.remove(p.slug)}>×</button></span>
@@ -21,7 +21,7 @@
   </div>
   <!-- On a phone: a pill at the bottom right, above the tab bar, to the compare page; the × clears. The tray took a third
        of the fixed height on a species page with two compared (round fifty-eight; the grower review). -->
-  <div class="cmppill" class:low role="region" aria-label="Compare">
+  <div class="cmppill" class:low role="region" aria-label="Compare" data-cover="bottom" data-away={low ? 'true' : undefined}>
     <a class="go" href={compare.picks.length >= 2 ? compare.href : '/compare'} aria-label={compare.picks.length >= 2 ? `Compare ${compare.picks.length} species` : `Compare: ${compare.picks[0].name} picked, pick one more`}>Compare {compare.picks.length}{#if compare.picks.length < 2}<span class="more">, pick one more</span>{/if} <span aria-hidden="true">›</span></a>
     <button class="x" type="button" aria-label="Clear the compare tray" onclick={() => compare.clear()}>×</button>
   </div>
@@ -31,10 +31,10 @@
   .tray { position: fixed; right: 16px; bottom: 16px; z-index: 58; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; max-width: calc(100vw - 32px); background: var(--card); border: 1px solid var(--rule); border-radius: var(--r-lg); box-shadow: var(--sh2); padding: 8px 10px; font-size: var(--fs-md); }
   .lab { font-size: var(--fs-xs); letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink3); font-weight: 700; }
   .pick { display: inline-flex; align-items: center; gap: 2px; background: var(--sunk); border-radius: 999px; padding: 2px 4px 2px 10px; font-family: var(--serif); font-size: var(--fs-md); }
-  .pick button { border: 0; background: none; color: var(--ink3); font: inherit; font-size: var(--fs-base); min-width: 32px; min-height: 32px; cursor: pointer; border-radius: 999px; }
+  .pick button { border: 0; background: none; color: var(--ink3); font: inherit; font-size: var(--fs-base); min-width: var(--tap); min-height: var(--tap); cursor: pointer; border-radius: 999px; }
   .pick button:hover { color: var(--bad); background: var(--card); }
   .hint { color: var(--ink3); font-size: var(--fs-sm); }
-  .clear { border: 0; background: none; color: var(--ink3); font: inherit; font-size: var(--fs-sm); text-decoration: underline; cursor: pointer; min-height: 32px; padding: 0 6px; }
+  .clear { border: 0; background: none; color: var(--ink3); font: inherit; font-size: var(--fs-sm); text-decoration: underline; cursor: pointer; min-height: var(--tap); min-width: var(--tap); padding: 0 6px; }
   .cmppill { display: none; }
   @media (max-width: 700px) {
     .tray { display: none; }

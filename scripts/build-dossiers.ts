@@ -548,9 +548,22 @@ function keepList(): void {
     console.error(`${file} is not a manifest the Worker would accept: nothing is listed, and nothing should be deleted`);
     process.exit(2);
   }
-  const keep = [...new Set(Object.values(live.files))].sort().map((h) => `/${h}.json`);
+  // And whatever this checkout's own two manifests name: a corpus built here and uploaded, or about to be, whose files the
+  // live manifest does not name yet (an upload between the copy of the live manifest and the delete), is kept too (round
+  // fifty-nine; three reviews).
+  const named = new Set(Object.values(live.files));
+  const also: string[] = [];
+  for (const local of [`${outDir}/s/v${DOSSIER_V}/manifest.json`, `${outDir}/s/v${DOSSIER_V}/manifest.prev.json`]) {
+    if (!existsSync(local)) continue;
+    let m: unknown;
+    try { m = JSON.parse(readFileSync(local, 'utf8').replace(/^\uFEFF/, '')); } catch { m = null; }
+    if (!isManifest(m)) continue;
+    for (const h of Object.values(m.files)) named.add(h);
+    also.push(m.id);
+  }
+  const keep = [...named].sort().map((h) => `/${h}.json`);
   writeFileSync('keep.txt', keep.join('\n') + '\n');
-  console.log(`  keep.txt: the ${keep.length} files manifest ${live.id} names (${live.species} species); pass it to rclone delete as --exclude-from`);
+  console.log(`  keep.txt: the ${keep.length} files manifest ${live.id} (live, ${live.species} species)${also.length ? ` and this checkout's ${also.join(', ')}` : ''} name; pass it to rclone delete as --exclude-from`);
 }
 
 /** The index is derived from the files; after a fill the thumbnails have changed, so it is written again. */

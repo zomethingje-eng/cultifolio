@@ -31,7 +31,7 @@
 
 <style>
   .rpo { font-family: var(--ui); font-size: var(--fs-md); color: var(--ink3); display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
-  .go { border: 0; background: none; padding: 4px 0; font: inherit; font-size: var(--fs-md); font-weight: 600; color: var(--accent); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; white-space: nowrap; min-height: 24px; }
+  .go { border: 0; background: none; padding: 4px 0; font: inherit; font-size: var(--fs-md); font-weight: 600; color: var(--accent); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; white-space: nowrap; min-height: var(--tap); display: inline-flex; align-items: center; } /* the tap token (round fifty-nine) */
   .go:hover { color: var(--ink); }
   .rpo .why { max-width: 56ch; line-height: 1.4; }
   .rpo.compact { font-size: var(--fs-sm); }

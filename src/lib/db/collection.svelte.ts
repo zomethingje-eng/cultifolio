@@ -13,7 +13,7 @@ export const DUE_DAYS = 21;
 /** A load that folded this many changes on top of the snapshot writes a fresh one, so the next load reads little again (round fifty-three, 1). */
 export const FOLD_REFRESH = 1000;
 const yearOf = (d?: string | null): number | undefined => (d && /^\d{4}-/.test(d) ? Number(d.slice(0, 4)) : undefined);
-import { Clock, hlcDecode, hlcEncode, hlcCompare, hlcAfter, nowMs, clockOffsetMs } from '$core/hlc';
+import { Clock, hlcDecode, hlcEncode, hlcCompare, hlcAfter, nowMs, clockOffsetMs, clockChecked, MAX_AHEAD_MS } from '$core/hlc';
 
 /** How far ahead of the corrected clock a held stamp may be for a local edit to its field to be stamped just past it (round fifty-one, 1). */
 export const FOLLOW_HELD_MS = 86_400_000;
@@ -21,7 +21,7 @@ import { tag36 } from '$core/tag';
 import { replacedNotes as replacedNotesIn, type ReplacedNotes } from '$core/notes';
 import { apply, diff, readChanges, changeError, isComplete, isHeld, REQUIRED_FIELDS, KINDS, FOLD_RULES, key as recKey, type Change, type Kind, type Record_, type State, type Hold, hlcWall } from '$core/log';
 import { nextAccession, DEFAULT_SCHEME, type NumberingScheme } from '$core/accession';
-import { allChanges, appendChanges, appendChangesClaiming, onOtherTabWrite, deviceId, requestPersistence, getMeta, putPhotoBlobs, getPhotoBlobs, deletePhotoBlobs, holdVault, readFold, writeFold, updateMeta, parkStamps, foldGen, lastArrival, arrivalsAfter, changesByKeys, changesOf, type FoldSnapshot, type NumberKind, type VaultNotice } from './vault';
+import { allChanges, appendChanges, appendChangesClaiming, onOtherTabWrite, deviceId, requestPersistence, getMeta, putPhotoBlobs, getPhotoBlobs, deletePhotoBlobs, holdVault, readFold, writeFold, touchFold, updateMeta, parkStamps, foldGen, lastArrival, arrivalsAfter, changesByKeys, changesOf, type FoldSnapshot, type NumberKind, type VaultNotice } from './vault';
 import { version as buildVersion } from '$app/environment';
 import type { Accession, PlantEvent, Taxon, Location, Sowing, Provenance, Photo } from './types';
 import { PROP_METHODS, accNo, sowNo, NUMBERING_SETTING } from './types';
@@ -36,8 +36,24 @@ const isScheme = (s: unknown): s is NumberingScheme => !!s && typeof s === 'obje
 const byDay = (a: { d: string; id: string }, b: { d: string; id: string }) => b.d.localeCompare(a.d) || b.id.localeCompare(a.id);
 const numberField = (c: Change): NumberKind | null => (c.kind === 'accession' && c.field === 'acc' ? 'accession' : c.kind === 'sowing' && c.field === 'no' ? 'sowing' : null);
 
+/** The records whose notes carry a base, and the two field names: a plant's and a batch's notes, a species' own notes. */
+type NotesKind = 'accession' | 'sowing' | 'taxon';
+const NOTES_PAIR: Record<string, [string, string]> = { accession: ['notes', 'notesBase'], sowing: ['notes', 'notesBase'], taxon: ['myNotes', 'myNotesBase'] };
+
 class Collection {
   ready = $state(false);
+  /**
+   * When this device's last change is dated past its clock (the clock was set back): that change's time, for a line
+   * under the top bar; null otherwise (round fifty-nine). Its own changes are all shown whatever the clock says, and a
+   * peer's dated after the clock waits for it, so the line says to set the clock right and that nothing is lost.
+   */
+  clockBehindAt = $state<number | null>(null);
+  /** Read the clock line afresh: after a load, a catch-up or a rebuild. */
+  private checkClock(): void {
+    const t = this.ownLatest();
+    const at = t ? hlcWall(t) : 0;
+    this.clockBehindAt = at > nowMs() + MAX_AHEAD_MS ? at : null;
+  }
   persisted = $state<boolean | null>(null);
   /** The last vault write that failed, as a sentence, or null once a write has succeeded again. Pages show it; the edit it describes was not stored and is not shown. */
   lastWriteError = $state<string | null>(null);
@@ -67,7 +83,7 @@ class Collection {
   /** Stamps the person applied or dismissed here: not listed again. */
   private parkedDone = new Set<string>();
   private hold(arrival?: number): Hold {
-    return { now: nowMs(), except: this.device, arrival, parked: this.parkedStamps, onParked: (c) => this.notePark(c) };
+    return { now: nowMs(), except: this.device, arrival, parked: this.parkedStamps, onParked: (c) => this.notePark(c), clockChecked: clockChecked() };
   }
   private notePark(c: Change): void {
     this.parkedStamps.add(c.t);
@@ -187,6 +203,7 @@ class Collection {
         // record's page, which says the number is shared until then. A load used to write the repair (round thirty-eight,
         // R2-1); the page that answered to the first of the two for good now says so and offers the repair.
         this.ready = true;
+        this.checkClock();
         void changes;
         // A plant or batch of the oldest shape has its number as its id and no `acc`/`no` field; `accNo`/`sowNo` read either,
         // which they must for files in flight. A load wrote the number as a field (round forty-one, R4); a reading of the log
@@ -260,6 +277,7 @@ class Collection {
     this.loaded = { from: 'log', changes: changes.length };
     this.lastSeq = seq;
     await this.readLedger();
+    this.checkClock();
     this.foldWrite = this.saveFold(seq, gen);
   }
 
@@ -401,6 +419,7 @@ class Collection {
     // A tail that has grown long is folded into a fresh snapshot, under the number of the tail it folded: written under the
     // old one, every later load folded the same tail again and rewrote the whole snapshot (round fifty-five, 2; both reviewers).
     if (tail.changes.length >= FOLD_REFRESH) this.foldWrite = this.saveFold(tail.seq, gen, f.changes + tail.changes.length);
+    else void touchFold(FOLD_RULES); // this shell is open and reads these rules: an older one must not take the snapshot over (round fifty-nine)
     return changes;
   }
   /** The parked changes, read back by their stamps so each record's Apply stands after any load (round fifty-four, 2): few, and never in the snapshot's records. */
@@ -451,6 +470,7 @@ class Collection {
     const changes = got.changes.filter((c) => !this.applied.has(c.t));
     if (!changes.length) return;
     this.foldSome(changes);
+    this.checkClock();
   }
   isNumberTaken(no: string): boolean {
     return this.takenNumbers('accession').has(no.trim());
@@ -1281,23 +1301,26 @@ class Collection {
     // an edit made in sight of its text from one made blind to it, and log only the second (round twenty-five, 2). The
     // caller may say the base itself (an editor opened before a pull); otherwise it is the text on screen now.
     let changes = diff(kind, id, fields, current, this.tick);
-    if (kind === 'accession' || kind === 'sowing') {
+    const pair = NOTES_PAIR[kind];
+    if (pair) {
       // The base goes out exactly when the notes do (round twenty-six, 2): a save that re-sends unchanged notes must not
       // record a base, and a real edit must carry one even when it equals the last one `diff` would have dropped. The base
-      // is stamped right after the notes, by the same writer, which is how a reader pairs the two.
-      const notesChange = changes.find((c) => c.field === 'notes');
-      changes = changes.filter((c) => c.field !== 'notesBase');
+      // is stamped right after the notes, by the same writer, which is how a reader pairs the two. A species' own notes
+      // carry one too since round fifty-nine (`myNotesBase`), so its replaced texts are read from the log as a plant's are.
+      const [notesField, baseField] = pair;
+      const notesChange = changes.find((c) => c.field === notesField);
+      changes = changes.filter((c) => c.field !== baseField);
       if (notesChange) {
-        const base = 'notesBase' in fields ? (fields.notesBase as string | null) : this.notesStamp(kind, id);
+        const base = baseField in fields ? (fields[baseField] as string | null) : this.notesStamp(kind as NotesKind, id);
         const at = changes.indexOf(notesChange);
-        changes.splice(at + 1, 0, { t: this.tick(), kind, id, field: 'notesBase', value: base ?? null });
+        changes.splice(at + 1, 0, { t: this.tick(), kind, id, field: baseField, value: base ?? null });
       }
     }
     return changes;
   }
-  /** The stamp of a record's current `notes`, null when none: what an edit to them is based on. */
-  notesStamp(kind: 'accession' | 'sowing', id: string): string | null {
-    return this.seen.get(recKey(kind, id) + '\0notes') ?? null;
+  /** The stamp of a record's current notes (a species' `myNotes`), null when none: what an edit to them is based on. */
+  notesStamp(kind: NotesKind, id: string): string | null {
+    return this.seen.get(recKey(kind, id) + '\0' + NOTES_PAIR[kind][0]) ?? null;
   }
   /** The stamps the fold is holding now: a peer's changes, stamped ahead of this clock, in the log and not yet in the state. */
   heldList(): string[] {
@@ -1323,13 +1346,23 @@ class Collection {
     await this.commit([{ t: this.tick(), kind, id, field: '_deleted', value: true }]);
   }
 
-  async restore(kind: Kind, id: string): Promise<void> {
+  /**
+   * Bring a removed record back. A plant or batch may come back to a number another one took while it was removed (a
+   * peer minted it offline; the repair skips removed records): the one coming back yields, and takes the next free number
+   * with a line on its page saying so, since the one that held the number on, live, may already have its label printed
+   * (round fifty-nine; the round forty-one review, 5). Returns the change of number, if there was one, for the page to say.
+   */
+  async restore(kind: Kind, id: string): Promise<{ from: string; to: string } | null> {
     await this.commit([{ t: this.tick(), kind, id, field: '_deleted', value: false }]);
-    // A plant or batch brought back may share its number with one that arrived while it was removed (another device minted
-    // the same number offline; the repair skips removed records), so the repair runs for its number now (round twenty-nine, 3).
-    // Only that plant's number: the restore is the grower's, and a repair of numbers it did not touch is not (round fifty-eight).
-    const r = kind === 'accession' ? this.accession(id) : kind === 'sowing' ? this.sowing(id) : undefined;
-    if (r && (kind === 'accession' || kind === 'sowing')) await this.repairNumbers({ kind, no: kind === 'accession' ? accNo(r as Accession) : sowNo(r as Sowing) });
+    if ((kind !== 'accession' && kind !== 'sowing') || !this.sharesNumber(kind, id).length) return null;
+    const r = kind === 'accession' ? this.accession(id)! : this.sowing(id)!;
+    const from = kind === 'accession' ? accNo(r as Accession) : sowNo(r as Sowing);
+    const yearIn = /^(\d{4})-/.exec(from)?.[1];
+    const taken = this.takenNumbers(kind);
+    const to = kind === 'accession' ? nextAccession(taken, this.scheme, yearIn ? Number(yearIn) : new Date(nowMs()).getFullYear()) : nextAccession(taken, { mode: 'prefix', prefix: `S${(r as Sowing).sown.slice(0, 4)}`, width: 3 });
+    const what = kind === 'accession' ? 'plant' : 'batch';
+    await this.addEventWith({ acc: id, d: localDate(), t: 'note', note: `Renumbered from ${from} to ${to} when it was brought back: another ${what} had been given ${from} while this one was removed.` }, kind, id, kind === 'accession' ? { acc: to } : { no: to });
+    return { from, to };
   }
 
   /** The next number, for the year of `acquired` when given: a plant acquired on 31 December filed at 00:05 is a 2026 plant, and the form's preview and the number it gets agree (round twenty-five, 4). */
@@ -1501,7 +1534,7 @@ class Collection {
    * applied, `lastWriteError` says so, and the repair runs again on the next
    * ingest.
    */
-  async ingest(incoming: Change[], source: 'import' | 'server' = 'import', opts: { repair?: boolean; requireKey?: string } = {}): Promise<void> {
+  async ingest(incoming: Change[], source: 'import' | 'server' = 'import', opts: { requireKey?: string } = {}): Promise<void> {
     // A change of a type its field never takes is left out and said, and the rest are folded, rather than the file or the
     // batch refused whole (round twenty-nine, 2).
     const { changes, dropped } = readChanges(incoming);
@@ -1510,14 +1543,17 @@ class Collection {
     for (const c of changes) this.clock?.observe(c.t);
     await this.commit(changes, source, opts.requireKey);
     // A text of a plant's or batch's notes that this merge replaced unseen is not written anywhere: it stays in the log,
-    // and the record's page reads it from there (`replacedNotes`; round fifty-eight, rule 5).
-    this.noteRepairDue(changes);
-    if (opts.repair !== false) await this.repairNumbers();
+    // and the record's page reads it from there (`replacedNotes`; round fifty-eight, rule 5). Nor is a number two
+    // records now share repaired here: a merge writes what arrived and nothing more, and the record's page says the
+    // number is shared and offers "Renumber now" (round fifty-nine; the round forty-one and independent reviews).
   }
 
   /** The texts of a plant's or batch's notes an edit replaced without having seen them, read from the log (src/lib/core/notes.ts). */
-  async replacedNotes(kind: 'accession' | 'sowing', id: string): Promise<ReplacedNotes[]> {
-    return replacedNotesIn(await changesOf(kind, id));
+  async replacedNotes(kind: NotesKind, id: string): Promise<ReplacedNotes[]> {
+    // What the fold has not applied (a peer's change held for its clock, or parked) has replaced nothing on screen yet (round fifty-nine).
+    const skip = new Set([...this.heldStamps, ...this.parkedStamps]);
+    const [field, baseField] = NOTES_PAIR[kind];
+    return replacedNotesIn(await changesOf(kind, id), { field, baseField, skip });
   }
   /**
    * Records sharing a number, by kind and number: a duplicate the merge's repair has not written yet (a write that failed,
@@ -1539,31 +1575,14 @@ class Collection {
     return (this.sharedNumbers.get(kind + '\0' + no) ?? []).filter((x) => x !== r.id);
   }
   /**
-   * The numbers a merge may have made shared, waiting for the repair: the numbers of the records whose number or removal
-   * the merged changes touched. A pull folds many batches and repairs once at its end, over what they touched; a sync
-   * run that folded nothing repairs nothing, so a run is never a load-time writer (round fifty-eight; the client
-   * review's finding 9).
+   * The duplicate-number repair for one number: the record page's "Renumber now", the grower's own ask. True when nothing
+   * under that number is shared any more; false when the repair's write was refused (commit() says why in `lastWriteError`).
    */
-  private repairDue = { accession: new Set<string>(), sowing: new Set<string>() };
-  private noteRepairDue(changes: Change[]): void {
-    for (const c of changes) {
-      if ((c.kind !== 'accession' && c.kind !== 'sowing') || (c.field !== 'acc' && c.field !== 'no' && c.field !== '_deleted')) continue;
-      const r = c.kind === 'accession' ? this.accession(c.id) : this.sowing(c.id);
-      if (r) this.repairDue[c.kind].add(c.kind === 'accession' ? accNo(r as Accession) : sowNo(r as Sowing));
-    }
-  }
-  /**
-   * The duplicate-number repair. With `only`, that one number (the record page's "Renumber now", a plant brought back);
-   * without, the numbers merges have touched since the last repair. True when nothing under those numbers is shared any
-   * more; false when the repair's write was refused (commit() says why in `lastWriteError`).
-   */
-  async repairNumbers(only?: { kind: 'accession' | 'sowing'; no: string }): Promise<boolean> {
-    const scope = only ? { accession: new Set<string>(), sowing: new Set<string>() } : this.repairDue;
-    if (only) scope[only.kind].add(only.no);
-    if (!scope.accession.size && !scope.sowing.size) return true;
+  async repairNumbers(only: { kind: 'accession' | 'sowing'; no: string }): Promise<boolean> {
+    const scope = { accession: new Set<string>(), sowing: new Set<string>() };
+    scope[only.kind].add(only.no);
     try {
       await this.resolveDuplicateNumbers(scope);
-      if (!only) this.repairDue = { accession: new Set(), sowing: new Set() };
       return true;
     } catch {
       return false; /* the duplicate stays visible on its record's page, with the button, until a repair lands */
@@ -1586,8 +1605,10 @@ class Collection {
   /**
    * Two devices offline at once can each mint the same next number for
    * different plants. They are different records (different identities), so
-   * nothing is lost; after a merge the one created later is given the next
-   * free number and a note says so. Every device derives the same repair
+   * nothing is lost; when the grower asks ("Renumber now" on the record's
+   * page; a merge no longer repairs on its own, round fifty-nine) the one
+   * recorded later is given the next free number and a note says so. Every
+   * device derives the same repair
    * from the same merged log: the same number (lowest free under the synced
    * scheme), the same note, and the same timestamps (one millisecond after the
    * record's latest change, tagged from the record's identity rather than
@@ -1632,7 +1653,7 @@ class Collection {
           changes.push({ t: stamp(0), kind, id: r.id, field: kind === 'accession' ? 'acc' : 'no', value: fresh });
           const eid = 'e' + wall.toString(36) + '00' + device;
           // The day is taken in UTC, not the reader's zone: two devices in different zones must write the identical note, or the one that arrives second wins by chance.
-          const note = { acc: r.id, d: when.toISOString().slice(0, 10), t: 'note', note: `Renumbered from ${no} to ${fresh}: another ${kind === 'accession' ? 'plant' : 'batch'}, created earlier, had been given ${no} (on another device, or in a file merged in).` };
+          const note = { acc: r.id, d: when.toISOString().slice(0, 10), t: 'note', note: `Renumbered from ${no} to ${fresh}: another ${kind === 'accession' ? 'plant' : 'batch'}, recorded first, had been given ${no} (on another device, or in a file merged in).` };
           let count = 1;
           for (const [field, value] of Object.entries(note)) changes.push({ t: stamp(count++), kind: 'event', id: eid, field, value });
           renumbered++;

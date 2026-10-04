@@ -48,7 +48,8 @@ describe('Counters', () => {
     expect(rs).toEqual(['ok', 'ok', 'ok', 'ok', 'ok', 'address', 'address']);
     // the total counts vaults that hold something: taken at a vault's first object, not at its creation (round fifty-eight)
     expect(storage.m.get('all')).toBe(0);
-    for (let i = 0; i < 5; i++) await c.fill(0);
+    for (let i = 0; i < 5; i++) await c.fill(`vault${i}`, 2000, 0);
+    await c.fill('vault0', 2000, 0); // the same vault again: counted once (round fifty-nine)
     expect(storage.m.get('all')).toBe(5);
     await c.refund('a', '2026-09-25');
     expect(await c.create('a', '2026-09-25', 5, 200, 2000, 0)).toBe('ok');
@@ -79,7 +80,9 @@ describe('Counters', () => {
     expect(storage.m.has('all')).toBe(false);
     expect(await c.create('a', '2026-09-25', 5, 200, 200, 199)).toBe('ok');
     expect(storage.m.get('all')).toBe(199);
-    expect(await c.fill(null)).toBe(200);
+    expect(await c.fill('v1', 200, null)).toBe('counted');
+    expect(storage.m.get('all')).toBe(200);
+    expect(await c.fill('v2', 200, null)).toBe('total'); // past the ceiling a vault's first object is refused (round fifty-nine)
     expect(await c.create('b', '2026-09-25', 5, 200, 200, 199)).toBe('total');
     expect(await c.create('b', '2026-09-25', 5, 200, 200, null)).toBe('total'); // seeded: a later unreadable seed changes nothing
   });

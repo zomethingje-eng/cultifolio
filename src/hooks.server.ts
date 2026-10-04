@@ -1,7 +1,7 @@
 import { redirect, type Handle, type RequestEvent } from '@sveltejs/kit';
 import { unitsFor } from '$lib/server/units';
 import { building, version } from '$app/environment';
-import { getCorpusId } from '$lib/server/dossiers';
+import { corpusNow } from '$lib/server/dossiers';
 import { catalogueRows, homeWindow, byOf, chipOf } from '$lib/server/catalogue';
 
 /**
@@ -43,7 +43,7 @@ async function homeQuery(event: RequestEvent): Promise<string> {
   const open = p.get('open') ?? '';
   const wantsRows = /^[A-Z]$/.test(from) || (Number.isInteger(at) && at > 0) || /^[a-z0-9-]{1,80}$/.test(open);
   if (wantsRows) {
-    const { cat } = await catalogueRows(event.platform, event.fetch, by, chip); // the build's file under a manifest, not the in-memory catalogue the products retired (round fifty-four, 3)
+    const { cat } = await catalogueRows(event.platform, event.fetch, by, chip, event.locals.corpus); // the build's file under a manifest, of the request's own corpus (round fifty-nine)
     const w = homeWindow(cat, p); // the page's own reading (round fifty-eight)
     if (w.fromValid && !w.atValid) parts.push(`from=${from}`);
     if (w.atValid) parts.push(`at=${at}`);
@@ -77,7 +77,10 @@ const MOVED: Array<[RegExp, string]> = [
  * or `Sec-Fetch-Site`, and a client that sends neither (a script, curl) can make any request it likes anyway.
  */
 export function _foreignWrite(request: Request, url: URL): boolean {
-  if (!url.pathname.startsWith('/api/sync/') || request.method === 'GET' || request.method === 'HEAD') return false;
+  // Every path, not the sync routes by name: the name was tested on the raw path while routing decodes it, so
+  // `/api/%73ync/vault` passed the check (round fifty-nine; two reviews). The site has no write another site may make.
+  const method = request?.method ?? 'GET';
+  if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return false;
   const site = request.headers.get('sec-fetch-site');
   if (site && site !== 'same-origin' && site !== 'none') return true;
   const origin = request.headers.get('origin');
@@ -108,10 +111,14 @@ export const handle: Handle = async ({ event, resolve }) => {
     // a tracking tag, a check's timestamp, the search typed into `?q=`) is the same page, so it shares the copy rather
     // than minting one.
     const hemi = held.hemi ? event.cookies.get('cultifolio.hemi') : undefined;
-    const q = await held.query(event);
+    // One load for the whole request: the key's corpus, the home query's rows and the page's own load all read it, where
+    // each loaded on its own and a refresh between them stored one corpus's page under the other's id (round fifty-nine;
+    // three reviews). A load that fails leaves the page to load for itself, unheld.
+    event.locals.corpus = await corpusNow(event.platform, event.fetch).catch(() => undefined);
+    const q = event.locals.corpus ? await held.query(event) : null;
     if (q !== null) {
-      // And the corpus: a page held across an upload showed the old corpus for its minute (round fifty-two, 5). The id is in memory once the index is loaded, which the home query loads anyway.
-      const corpus = await getCorpusId(event.platform, event.fetch).catch(() => '');
+      // And the corpus: a page held across an upload showed the old corpus for its minute (round fifty-two, 5).
+      const corpus = event.locals.corpus!.corpus;
       key = new Request(`https://cache.cultifolio/page?v=${encodeURIComponent(version)}&c=${encodeURIComponent(corpus)}&p=${encodeURIComponent(pathKey(event.url.pathname))}&q=${encodeURIComponent(q)}&u=${unitsFor(event.cookies, event.request)}&h=${hemi === 'n' || hemi === 's' ? hemi : ''}`);
       // A cache that fails to answer is a page rendered, not a 500 (round forty-nine, 2).
       const hit = await cache.match(key).catch(() => undefined);

@@ -9,7 +9,7 @@
    */
   import { collection } from '$lib/db/collection.svelte';
   import { accNo, sowNo, PROP_METHODS, kindOf } from '$lib/db/types';
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { frost } from '$lib/ui/frost.svelte';
   import { sheetsFor, type Sheet } from '$lib/ui/index.svelte';
   import { growingYear, forReader } from '$core/sheet';
@@ -67,18 +67,22 @@
     sheetsSettled = false;
     void sheetsFor(slugs).then((m) => { if (m) sheets = m; }).finally(() => { sheetsSettled = true; });
   });
-  const resting = $derived.by(() => {
-    if (!sheets) return [];
+  /** Each resting plant with the rule that rests it: the rain rule's season, or under 120 mm a year the temperature rule's cooler six months, worded apart as the Today tab words them (round fifty-nine). */
+  const restingBy = $derived.by(() => {
+    const out = new Map<string, 'rain' | 'cool'>();
+    if (!sheets) return out;
     const month = today.getMonth() + 1;
     const lat = site.current?.lat ?? null;
-    return dry.filter((a) => {
-      const sh = sheets!.get(speciesSlug(a.taxonName));
-      if (!sh || sh.climate.status !== 'ok') return false;
+    for (const a of dry) {
+      const sh = sheets.get(speciesSlug(a.taxonName));
+      if (!sh || sh.climate.status !== 'ok') continue;
       const year = growingYear(sh.climate.months, sh.habitatLat);
-      if (!year || year.none || year.grow === 'even') return false;
-      return !forReader(year, lat).includes(month);
-    });
+      if (!year || year.none || year.grow === 'even') continue;
+      if (!forReader(year, lat).includes(month)) out.set(a.id, year.fog ? 'cool' : 'rain');
+    }
+    return out;
   });
+  const resting = $derived(dry.filter((a) => restingBy.has(a.id)));
   /**
    * One tap waters every plant on the dry line, dated today, as a place's "Water all" does. The line stays where it was,
    * saying what was done, with its own Undo in the line: the toast's Undo sat where the next tap landed, and the line
@@ -111,6 +115,9 @@
       await collection.removeEvents(w.ids);
       wateredHere.take(HOME);
       toast.show(`Undone: ${w.ids.length} watering line${w.ids.length === 1 ? '' : 's'} removed.`);
+      // The Undo went with the done line: focus goes to the Water button that is back in its place, else to the line's link (round fifty-nine).
+      await tick();
+      document.querySelector<HTMLElement>('.today .waterbtn:not(:disabled), .today .withact.warn > a')?.focus();
     } catch (err) {
       toast.show(`Not undone: ${err instanceof Error ? err.message : String(err)}. Try again.`);
     } finally {
@@ -139,7 +146,10 @@
     const parts: string[] = [];
     if (overdue) parts.push(`${overdue} of ${growing.length} plants past their watering rhythm`);
     if (unknown.length) parts.push(`${unknown.length}${overdue ? '' : ` of ${growing.length}`} with no watering recorded yet, ${unknown.length === 1 ? 'its record' : 'their records'} as old as the rhythm or more`);
-    return parts.join(', and ') + (resting.length ? `; ${resting.length === dry.length ? (dry.length === 1 ? 'it is' : 'all of them are') : `${resting.length} of them ${resting.length === 1 ? 'is' : 'are'}`} in the habitat's dry season by the species sheet` : '') + '.';
+    // Worded by the rule that applied: a fog-belt habitat has no rainy season to be outside of (round fifty-nine).
+    const rules = new Set(restingBy.values());
+    const where = rules.size === 2 ? 'outside the growing months the species sheet names' : rules.has('cool') ? 'outside the cooler six months the species sheet names' : "outside the habitat's rainy season by the species sheet";
+    return parts.join(', and ') + (resting.length ? `; ${resting.length === dry.length ? (dry.length === 1 ? 'it is' : 'all of them are') : `${resting.length} of them ${resting.length === 1 ? 'is' : 'are'}`} ${where}` : '') + '.';
   });
   type Line = { href: string; tone: string; text: string; water?: boolean; keeping?: boolean };
   const lines = $derived(
@@ -162,7 +172,7 @@
           {#if done}
             <span class="donetext">Watered {done.ids.length} just now{#if l.text}; still: <a href={l.href}>{l.text}</a>{/if}</span><button class="btn small" type="button" onclick={undoDry} disabled={undoing}>Undo</button>
           {:else}
-            <a href={l.href}>{l.text}</a>{#if toWater.length}<button class="btn small" type="button" onclick={waterDry} disabled={watering || !sheetsSettled} title="One watering line on each, dated today, leaving the plants in their habitat's rest; Undo takes them back">Water these {toWater.length}</button>{/if}
+            <a href={l.href}>{l.text}</a>{#if toWater.length}<button class="btn small waterbtn" type="button" onclick={waterDry} disabled={watering || !sheetsSettled} title="One watering line on each, dated today, leaving the plants in their habitat's rest; Undo takes them back">{toWater.length === 1 ? 'Water this one' : `Water these ${toWater.length}`}</button>{/if}
           {/if}
         </div>
       {:else if l.keeping}
@@ -171,10 +181,10 @@
         <a class="line {l.tone}" href={l.href}>{l.text}</a>
       {/if}
     {/each}
-    {#if !hasSite && where === 'home'}<span class="small muted">Frost watch needs a site: <button class="linkish" type="button" onclick={locate} disabled={locating}>{locating ? 'Locating…' : 'use my location'}</button> or <a href="/settings#site">set one in Settings</a>.{#if locateMsg} {locateMsg}{/if}</span>{/if}
+    {#if !hasSite && where === 'home'}<span class="small muted">Frost watch needs a site: <button class="linkish" type="button" onclick={locate} disabled={locating}>{locating ? 'Locating…' : 'use my location'}</button> or <a href="/settings#site">set one in Settings</a>.{#if locateMsg}{' '}{locateMsg}{/if}</span>{/if}
   </div>
 {:else if collection.ready && !hasSite && growing.length && where === 'home'}
-  <p class="small muted todaynote">Frost watch needs a site: <button class="linkish" type="button" onclick={locate} disabled={locating}>{locating ? 'Locating…' : 'use my location'}</button> or <a href="/settings#site">set one in Settings</a>, and the forecast shows here when it turns.{#if locateMsg} {locateMsg}{/if}</p>
+  <p class="small muted todaynote">Frost watch needs a site: <button class="linkish" type="button" onclick={locate} disabled={locating}>{locating ? 'Locating…' : 'use my location'}</button> or <a href="/settings#site">set one in Settings</a>, and the forecast shows here when it turns.{#if locateMsg}{' '}{locateMsg}{/if}</p>
 {/if}
 
 <style>
@@ -182,9 +192,9 @@
   .line { display: block; padding: 10px 14px; font-size: var(--fs-md); color: var(--ink); border-left: 3px solid var(--rule); border-top: 1px solid var(--rule); }
   .line:first-child { border-top: 0; }
   .withact { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-  .withact a { color: inherit; flex: 1; min-width: 0; }
+  .withact a { color: inherit; flex: 1; min-width: 0; min-height: var(--tap); display: flex; align-items: center; }
   .withact a:hover { text-decoration: underline; }
-  .withact .btn { flex: none; min-height: 36px; }
+  .withact .btn { flex: none; min-height: var(--tap); }
   .line:hover { text-decoration: none; background: var(--sunk); }
   .today > .small { padding: 8px 14px; border-top: 1px solid var(--rule); }
   .line.bad { border-left-color: var(--bad); }
@@ -201,6 +211,6 @@
     .today { margin: 8px 0 2px; }
     .line { padding: 8px 12px; font-size: var(--fs-md); line-height: 1.4; }
     .today > .small { padding: 6px 12px; font-size: var(--fs-sm); }
-    .withact .btn { min-height: 32px; padding: 4px 10px; font-size: var(--fs-md); }
+    .withact .btn { min-height: var(--tap); padding: 4px 12px; font-size: var(--fs-md); }
   }
 </style>

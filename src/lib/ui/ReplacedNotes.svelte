@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * Texts of a plant's or a batch's notes that an edit replaced without having seen them: two devices edited the notes
+   * Texts of a plant's, a batch's or a species' notes that an edit replaced without having seen them: two devices edited the notes
    * apart, and last-writer-wins kept one. Read from the log each time the notes change (src/lib/core/notes.ts); nothing
    * is written (round fifty-eight; rule 5). Before this round the device that lost its text wrote a line on the plant's
    * log when a pull or a file replaced it.
@@ -9,7 +9,7 @@
   import { hlcWall } from '$core/log';
   import { localDate } from '$core/dates';
   import type { ReplacedNotes } from '$core/notes';
-  let { kind, id }: { kind: 'accession' | 'sowing'; id: string } = $props();
+  let { kind, id }: { kind: 'accession' | 'sowing' | 'taxon'; id: string } = $props();
   let found = $state<ReplacedNotes[]>([]);
   // Read again when the notes' stamp moves (an edit here, a pull, another tab), and a late answer for an older stamp is dropped.
   const stamp = $derived(collection.ready ? collection.notesStamp(kind, id) : null);

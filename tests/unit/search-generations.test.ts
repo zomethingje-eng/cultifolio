@@ -95,7 +95,9 @@ describe('the postings and the short answers equal the whole index (the server r
     ['wider', 'abcdefghijklmnop'.split(''), 1500]
   ];
   for (const [label, alpha, n] of cases) {
-    it(label, async () => {
+    // Three rounds of seven hundred queries over a corpus of fifteen hundred: seconds here, and past the 20 s default on a
+    // cold Windows run (round fifty-nine; the second outside review).
+    it(label, { timeout: 90_000 }, async () => {
       for (let round = 0; round < 3; round++) {
         _forgetIndex();
         const idx = corpus(alpha, n);

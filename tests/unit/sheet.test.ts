@@ -116,7 +116,7 @@ describe('the sheet', () => {
       expect(sea.floor?.short).toMatch(/^Coldest mean night 6\.0 °C \(coldest month's mean night, CHELSA; no floor read\)\.$/);
       expect(sea.floor?.raised).toBe(false);
     }
-    expect(cultivationSheet({ scientific: 'Tylecodon pearsonii', family: 'Crassulaceae', months: namaqua, lat: -30, extremes: null, extremesStatus: 'sea' }).floor?.s).toContain('read at a weather cell that is mostly sea and are set aside');
+    expect(cultivationSheet({ scientific: 'Tylecodon pearsonii', family: 'Crassulaceae', months: namaqua, lat: -30, extremes: null, extremesStatus: 'sea' }).floor?.s).toContain('read at a weather cell that is mostly sea and are not used');
     expect(rows.every((r) => r.why.length > 20)).toBe(true);
     expect(rows.every((r) => r.hab)).toBe(true);
   });

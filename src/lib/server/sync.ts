@@ -80,7 +80,9 @@ export async function deleteCounted(r2: R2Bucket, id: string, meta: VaultMeta, k
   const objs = byteObjects(quota, id);
   if (objs) {
     const held = await objs.vault.bytesToday(day(now));
-    meta.bytes = held == null ? await vaultBytes(r2, kv, id, meta, now, true, quota) : await objs.vault.give('vault', size, day(now));
+    // Given back once per object, by its key and etag: concurrent removals of one photograph each saw it before the
+    // delete and each gave its bytes back, so the total could be pushed down at will (round fifty-nine; the server reviews).
+    meta.bytes = held == null ? await vaultBytes(r2, kv, id, meta, now, true, quota) : await objs.vault.give('vault', size, day(now), `${key}:${existing.etag}:${existing.uploaded?.getTime?.() ?? ''}`);
     await writeMeta(r2, id, meta).catch(() => {});
     return true;
   }
@@ -159,7 +161,14 @@ export async function ensureVault(r2: R2Bucket, id: string, token: string, open:
   }
   if ((await vaultIdFor(token)) !== id) error(400, 'that vault id does not belong to that token');
   const meta: VaultMeta = { tokenHash: h, created: new Date().toISOString(), entitlement: open ? 'open' : 'none', bytes: 0, filled: false };
-  await writeMeta(r2, id, meta);
+  // Written only if no meta is there, in the same step: two creations of one vault at once both wrote and both answered
+  // "created", so neither was refunded and both stayed in the day's and the address's counts (round fifty-nine).
+  const put = await r2.put(`vault/${id}/meta.json`, JSON.stringify(meta), { httpMetadata: { contentType: 'application/json' }, onlyIf: { etagDoesNotMatch: '*' } });
+  if (put === null) {
+    const now = await readMeta(r2, id);
+    if (!now || now.tokenHash !== h) error(403, 'that token does not open this vault');
+    return { created: false, meta: now };
+  }
   return { created: true, meta };
 }
 
@@ -307,6 +316,8 @@ export interface Quota {
   ip: string;
   /** The counter object, when bound: the byte totals are taken there in one step (round fifty-eight). */
   counters?: CountersNs;
+  /** The ceiling in all, when the deployment sets one (`SYNC_VAULTS_MAX`). */
+  max?: number;
   /** For tests. */
   now?: number;
 }
@@ -351,7 +362,7 @@ function byteObjects(quota: Quota | undefined, id: string) {
   if (!ns) return null;
   const vault = ns.get(ns.idFromName(`bytes:${id}`));
   const address = ns.get(ns.idFromName(`ipbytes:${addressKey(quota!.ip)}`));
-  if (!vault.take || !vault.give || !vault.setBytes || !vault.bytesToday || !address.take || !address.give) return null;
+  if (!vault.take || !vault.give || !vault.release || !vault.setBytes || !vault.bytesToday || !address.take || !address.give) return null;
   return { vault: vault as Required<typeof vault>, address: address as Required<typeof address> };
 }
 
@@ -386,6 +397,7 @@ export async function storeCounted(r2: R2Bucket, id: string, meta: VaultMeta, ke
   // R2 answers null when the condition fails, and the reservation goes back.
   const put = async () => (await r2.put(key, body, { httpMetadata: { contentType: 'application/octet-stream' }, customMetadata, ...(once ? { onlyIf: { etagDoesNotMatch: '*' } } : {}) })) !== null;
 
+  await admitVault(r2, id, meta, quota);
   const kv = quota?.kv;
   if (!kv) {
     if (meta.bytes + body.length > MAX_BYTES) throw new VaultFull(meta.bytes, MAX_BYTES);
@@ -400,7 +412,6 @@ export async function storeCounted(r2: R2Bucket, id: string, meta: VaultMeta, ke
         await writeMeta(r2, id, meta).catch(() => {});
       }
     }
-    if (stored) await fillVault(r2, id, meta, quota);
     return stored;
   }
 
@@ -411,8 +422,15 @@ export async function storeCounted(r2: R2Bucket, id: string, meta: VaultMeta, ke
     // The address's day, then the vault, each checked and taken in one step in its own object.
     const ip = await objs.address.take('address', body.length, MAX_IP_BYTES_PER_DAY, today, null, now);
     if ('recount' in ip || !ip.ok) throw new DayQuota('before' in ip ? ip.before : 0, MAX_IP_BYTES_PER_DAY, untilMidnight(now));
-    let v = await objs.vault.take('vault', body.length, MAX_BYTES, today, null, now);
-    if ('recount' in v) v = await objs.vault.take('vault', body.length, MAX_BYTES, today, await recount(r2, id, meta), now);
+    let v: Awaited<ReturnType<typeof objs.vault.take>>;
+    try {
+      v = await objs.vault.take('vault', body.length, MAX_BYTES, today, null, now);
+      if ('recount' in v) v = await objs.vault.take('vault', body.length, MAX_BYTES, today, await recount(r2, id, meta), now);
+    } catch (e) {
+      // The address's bytes go back whatever stopped the vault's step (a listing that threw): they stayed counted till midnight (round fifty-nine).
+      await objs.address.give('address', body.length, today).catch(() => 0);
+      throw e;
+    }
     if ('recount' in v || !v.ok) {
       await objs.address.give('address', body.length, today).catch(() => 0);
       throw new VaultFull('before' in v ? v.before : 0, MAX_BYTES);
@@ -421,9 +439,10 @@ export async function storeCounted(r2: R2Bucket, id: string, meta: VaultMeta, ke
     try {
       stored = await put();
     } finally {
-      if (!stored) await Promise.all([objs.vault.give('vault', body.length, today), objs.address.give('address', body.length, today)]).catch(() => {});
+      // Landed or not, the reservation is no longer in flight; one that did not land gives its bytes back in both objects.
+      await Promise.all([objs.vault.release(body.length, stored), ...(stored ? [] : [objs.address.give('address', body.length, today)])]).catch(() => {});
     }
-    if (stored) { await flushMeta(r2, id, meta, v.before, v.before + body.length, now); await fillVault(r2, id, meta, quota); }
+    if (stored) await flushMeta(r2, id, meta, v.before, v.before + body.length, now);
     return stored;
   }
   // The address's day. Read before the vault so a used-up address costs no listing.
@@ -447,7 +466,6 @@ export async function storeCounted(r2: R2Bucket, id: string, meta: VaultMeta, ke
   // again at 23:59 would otherwise live nearly three days, past what /about/how says (round twenty-four, 6).
   await kv.put(ipKey, String(ipBytes + body.length), { expiration: endOfNextDay(today) }).catch(() => {});
   await flushMeta(r2, id, meta, before, after, now);
-  await fillVault(r2, id, meta, quota);
   return true;
 }
 /** The meta snapshot, lazily: past a step of `META_FLUSH_BYTES`, or `META_FLUSH_MS` since this isolate last wrote it. */
@@ -516,10 +534,13 @@ export async function readBody(request: Request, max: number, what: string): Pro
   const tooBig = () => error(STATUS.tooBig, `${what} must be at most ${Math.round(max / 1048576)} MB`);
   const declared = Number(request.headers.get('content-length'));
   if (declared > max) tooBig();
-  // With a declared length the bytes are read into one buffer of that size as they arrive, so the body is held once,
-  // not as chunks and then again as their copy (round fifty-eight; the server review). A body longer than it declared is
-  // refused. Without one (chunked), the chunks are gathered and joined, as before.
-  const exact = Number.isInteger(declared) && declared > 0 ? new Uint8Array(declared) : null;
+  // With a declared length the bytes are read into one buffer of that size, so the body is held once, not as chunks
+  // and then again as their copy (round fifty-eight; the server review). A body longer than it declared is refused.
+  // The buffer is made when the first bytes arrive, not when the headers do: a declared 16 MB with nothing sent held
+  // 16 MB, and a few such requests could press a Worker's memory (round fifty-nine; two reviews). Without a declared
+  // length (chunked), the chunks are gathered and joined, as before.
+  const sized = Number.isInteger(declared) && declared > 0;
+  let exact: Uint8Array | null = null;
   const chunks: Uint8Array[] = [];
   let total = 0;
   const reader = request.body?.getReader();
@@ -531,7 +552,8 @@ export async function readBody(request: Request, max: number, what: string): Pro
         await reader.cancel().catch(() => {});
         tooBig();
       }
-      if (exact) {
+      if (sized) {
+        exact ??= new Uint8Array(declared);
         if (total + value.length > exact.length) {
           await reader.cancel().catch(() => {});
           error(400, `${what} is longer than its declared length`);
@@ -616,9 +638,10 @@ export type CountersNs = {
   get(id: DurableObjectId): {
     create(address: string, day: string, perAddress: number, perDay: number, max: number, seed?: number | null, now?: number, net?: string | null): Promise<Creation>;
     refund(address: string, day: string, net?: string | null): Promise<void>;
-    fill?(seed?: number | null): Promise<number>;
+    fill?(vault: string, max: number, seed?: number | null): Promise<'counted' | 'already' | 'total' | 'unavailable'>;
     take?(kind: 'vault' | 'address', n: number, limit: number, day: string, base?: number | null, now?: number): Promise<{ ok: boolean; before: number } | { recount: true }>;
-    give?(kind: 'vault' | 'address', n: number, day: string): Promise<number>;
+    give?(kind: 'vault' | 'address', n: number, day: string, token?: string | null): Promise<number>;
+    release?(n: number, landed: boolean): Promise<void>;
     setBytes?(bytes: number, day: string): Promise<void>;
     bytesToday?(day: string): Promise<number | null>;
   };
@@ -692,29 +715,54 @@ export async function allowCreation(kv: KVNamespace | undefined, ip: string, now
 }
 
 /**
- * A vault's first stored object: it takes its place under the ceiling in all now, not at its creation, so a vault made
- * and never used holds no place there (round fifty-eight; the server review). Marked in the vault's meta so it is taken
- * once. Best-effort, like the other shared counts: a count that does not land leaves the total short by one.
+ * The service has as many vaults as it takes, and this one holds nothing yet: its first object is refused, as a new
+ * creation is (round fifty-nine). Answered 503 with the sentence the sync page shows.
  */
-export async function fillVault(r2: R2Bucket, id: string, meta: VaultMeta, quota?: Quota): Promise<void> {
+export class VaultsClosed extends Error {
+  readonly status = 503;
+  constructor() {
+    super('sync is not taking new vaults');
+  }
+  response(): Response {
+    return new Response(JSON.stringify({ error: 'Sync is not taking new vaults for now, and this vault holds nothing yet. Your collection stays on this device.' }), { status: STATUS.ceilings, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', 'retry-after': '86400' } });
+  }
+}
+
+/**
+ * A vault's first stored object takes its place under the ceiling in all, before it is written (round fifty-eight: not
+ * at creation, so a vault made and never used holds no place). Round fifty-nine (two reviews): the counter object
+ * decides and records it by the vault's id in one step, so twenty first uploads at once, or a request that wrote an old
+ * meta back, count the vault once, not twenty times (enough of them could close sync to everyone); a count that did not
+ * land is tried again by the next upload, since the meta is marked only after it; and past the ceiling the object is
+ * refused (`VaultsClosed`). Without the object, KV bounds it approximately, as creation is bounded there.
+ */
+export async function admitVault(r2: R2Bucket, id: string, meta: VaultMeta, quota?: Quota): Promise<void> {
   if (meta.filled !== false) return;
-  meta.filled = true;
-  await writeMeta(r2, id, meta).catch(() => {});
   const kv = quota?.kv;
   const ns = quota?.counters;
+  const max = quota?.max ?? MAX_VAULTS;
+  let counted = false;
   try {
-    if (ns) {
-      const o = ns.get(ns.idFromName('vaults'));
-      if (o.fill) {
-        let seed: number | null = 0;
-        try { seed = kv ? Number((await kv.get('vaults:all')) ?? 0) : 0; } catch { seed = null; }
-        await o.fill(seed);
-        return;
-      }
-    }
-    if (kv) await kv.put('vaults:all', String(Number((await kv.get('vaults:all')) ?? 0) + 1));
+    const o = ns?.get(ns.idFromName('vaults'));
+    if (o?.fill) {
+      let seed: number | null = 0;
+      try { seed = kv ? Number((await kv.get('vaults:all')) ?? 0) : 0; } catch { seed = null; }
+      const r = await o.fill(id, max, seed);
+      if (r === 'total') throw new VaultsClosed();
+      counted = r === 'counted' || r === 'already';
+    } else if (kv) {
+      const n = Number((await kv.get('vaults:all')) ?? 0);
+      if (n >= max) throw new VaultsClosed();
+      await kv.put('vaults:all', String(n + 1));
+      counted = true;
+    } else counted = true; // no counters at all (a test, a bare dev server): nothing to count against
   } catch (e) {
-    console.warn('sync: a vault\'s first object was not counted under the ceiling in all; the count is short by one', e);
+    if (e instanceof VaultsClosed) throw e;
+    console.warn("sync: a vault's first object was not counted under the ceiling in all; the next upload tries again", e);
+  }
+  if (counted) {
+    meta.filled = true;
+    await writeMeta(r2, id, meta).catch(() => {});
   }
 }
 
@@ -860,7 +908,7 @@ export function networkKey(ip: string): string | null {
  * through and each was a fresh allowance (round fifty-eight; the server review; as vault creation is counted since
  * round thirty-eight, R1-8).
  */
-const UPSTREAM: ReadonlySet<RateBucket> = new Set(['forecast', 'names', 'match']);
+const UPSTREAM: ReadonlySet<RateBucket> = new Set(['forecast', 'names', 'match', 'search', 'searchmiss', 'reference']); // and the buckets that cost this Worker's own time, since round fifty-nine (the corpus reviews)
 export const NET_RATE_FACTOR = 4;
 /** Check the bucket for this request; a 429 Response to return, or null to go on. */
 export async function limited(platform: App.Platform | undefined, getClientAddress: () => string, bucket: RateBucket): Promise<Response | null> {
@@ -876,4 +924,4 @@ export async function limited(platform: App.Platform | undefined, getClientAddre
 }
 
 /** The counters' context for a store, from the request. */
-export const quotaOf = (platform: App.Platform | undefined, getClientAddress: () => string): Quota => ({ kv: platform?.env?.QUEUE, ip: clientIp(getClientAddress), counters: platform?.env?.COUNTERS as unknown as CountersNs | undefined });
+export const quotaOf = (platform: App.Platform | undefined, getClientAddress: () => string): Quota => ({ kv: platform?.env?.QUEUE, ip: clientIp(getClientAddress), counters: platform?.env?.COUNTERS as unknown as CountersNs | undefined, max: creationCeilings(platform?.env as Record<string, unknown> | undefined).max });

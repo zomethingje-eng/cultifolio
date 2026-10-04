@@ -94,10 +94,19 @@ function rank(p: Prepared<unknown>, qs: string[], match: (q: string, w: string) 
   return inName ? 2 : 3;
 }
 
+/**
+ * The words a query is ranked by: a rank marker ("var", "ssp", "f") is not a word unless it is the last, and a repeated
+ * word counts once (round fifty-eight). Exported so the server's short path asks exactly what the ranking asks: "f a"
+ * and "a a" are ranked as "a", and went the long way while "a" took the short one (round fifty-nine; the corpus reviews).
+ */
+export function rankedWords(q: string): string[] {
+  const all = words(q);
+  return [...new Set(all.filter((w, i) => !(RANK_MARKERS.has(w) && i < all.length - 1)))];
+}
+
 /** Whether the exact pass alone finds anything for `q` in `prepared`: a search over the exact candidates that finds nothing exactly asks the near candidates before it trusts a near pass (round fifty-six, 1). */
 export function hasExact<T extends Searchable>(prepared: Prepared<T>[], q: string): boolean {
-  const all = words(q);
-  const qs = [...new Set(all.filter((w, i) => !(RANK_MARKERS.has(w) && i < all.length - 1)))]; // a repeated word ranks as one (round fifty-eight)
+  const qs = rankedWords(q);
   if (!qs.length) return false;
   const exact = (x: string, w: string) => w.startsWith(x);
   for (const p of prepared) if (rank(p, qs, exact) != null) return true;
@@ -111,8 +120,7 @@ export function search<T extends Searchable>(prepared: Prepared<T>[], q: string,
   // on its own is Ferocactus being typed, and "aloe var" is a variegata on its way (round thirty-seven, R1-7).
   // A trailing marker is tried as a word first, and dropped when nothing starts with it ("haworthia pumila var" still
   // finds the name the words before it find).
-  const all = words(q);
-  const qs = [...new Set(all.filter((w, i) => !(RANK_MARKERS.has(w) && i < all.length - 1)))]; // a repeated word ranks as one (round fifty-eight)
+  const qs = rankedWords(q);
   if (!qs.length) return [];
   const exact = (x: string, w: string) => w.startsWith(x);
   let hits = collect(prepared, qs, exact);

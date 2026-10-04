@@ -81,7 +81,7 @@ rclone copy static\s\v2 r2:cultifolio/s/v2 --transfers 32 --checkers 32 --exclud
 rclone copy static\s\v2\manifest.json r2:cultifolio/s/v2 --s3-no-check-bucket -P
 ```
 
-A file already on disk under its hash is not written again, so the copy carries only the files whose content changed: a refresh that touched a few dossiers uploads the index (4 MB at nine thousand species), the entries and sheets buckets those species are in, and the postings (3 MB) and short answers only when a species was added, removed or renamed. The corpus id is a hash of every product's hash, so any change makes a new id. The bucket count is chosen for the corpus's size (32 up to about ten thousand species, doubling past that; `src/lib/core/bucket.ts`) and announced by `/api/corpus` as `buckets`, which every device reads before it hashes. Afterwards `npm run live-check` fails if `/api/corpus` does not say `"manifest":true`.
+A file already on disk under its hash is not written again, so the copy carries only the files whose content changed: a refresh that touched a few dossiers uploads the index (4 MB at nine thousand species), the entries and sheets buckets those species are in, and the postings (3 MB) and short answers whenever a field the search reads changed: a name, a common name, a family, an origin or an older name. The corpus id is a hash of every product's hash, so any change makes a new id. The bucket count is chosen for the corpus's size (32 up to about ten thousand species, doubling past that; `src/lib/core/bucket.ts`) and announced by `/api/corpus` as `buckets`, which every device reads before it hashes. Afterwards `npm run live-check` fails if `/api/corpus` does not say `"manifest":true`.
 
 A schema bump (`DOSSIER_V` in `src/lib/dossier/schema.ts`) changes the prefix to `s/v3/`, needs a rederive (`--offline` is the fast one), an upload to the new prefix, and a deploy; the old prefix can be deleted from the bucket afterwards (`rclone purge r2:cultifolio/s/v2`), never before.
 
@@ -90,11 +90,13 @@ A schema bump (`DOSSIER_V` in `src/lib/dossier/schema.ts`) changes the prefix to
 ```
 rclone copyto r2:cultifolio/s/v2/manifest.json live-manifest.json
 npm run dossier -- --keep-list live-manifest.json
-rclone delete r2:cultifolio/s/v2/p --exclude-from keep.txt --min-age 24h --dry-run
-rclone delete r2:cultifolio/s/v2/p --exclude-from keep.txt --min-age 24h -P
+rclone delete r2:cultifolio/s/v2/p --exclude-from keep.txt --min-age 24h --use-server-modtime --dry-run
+rclone copyto r2:cultifolio/s/v2/manifest.json live-manifest.json
+npm run dossier -- --keep-list live-manifest.json
+rclone delete r2:cultifolio/s/v2/p --exclude-from keep.txt --min-age 24h --use-server-modtime -P
 ```
 
-`--keep-list` refuses a file the Worker would not accept as a manifest, and lists every file the live one names; `--min-age 24h` leaves anything uploaded in the last day, whatever names it. Read the dry run's list before the second `delete`. (`copyto`, not `rclone cat >`: PowerShell 5's redirect writes UTF-16.)
+`--keep-list` refuses a file the Worker would not accept as a manifest, and lists every file the live one names and every file this checkout's own `manifest.json` and `manifest.prev.json` name, so a corpus built here and uploaded since is kept too. The live manifest is read again just before the real delete, so a refresh that landed while you read the dry run is in the list. `--use-server-modtime` makes `--min-age 24h` mean "uploaded more than a day ago": without it rclone reads the age the file had on the PC, and a product built days before its upload counted as old the moment it landed (round fifty-nine; three reviews). Read the dry run's list before the real `delete`, and run the lines in one sitting. (`copyto`, not `rclone cat >`: PowerShell 5's redirect writes UTF-16.)
 
 **Rollback below round fifty-three is not possible on a device that has opened it.** Round fifty-three opens the vault at version 3 (the `order` store); the previous builds open version 2 and get a `VersionError` on a v3 vault. A rollback to an older build, or an older build's shell kept by the service worker, cannot open the collection on such a device until the current build is deployed again. Roll forward. The `order` store grows one row per change stored and is not pruned (about thirty megabytes at four hundred and fifty thousand changes); pruning needs a frontier every open tab agrees on, and is left for the round that needs it.
 

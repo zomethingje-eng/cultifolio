@@ -6,6 +6,7 @@
  * a changed clock correction fold the log again; another tab's writes are caught up by arrival.
  */
 import 'fake-indexeddb/auto';
+import { wipeMeta } from './helpers/isolate';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { hlcEncode, MAX_AHEAD_MS } from '$core/hlc';
 import { FOLD_REFRESH } from '$lib/db/collection.svelte';
@@ -45,9 +46,8 @@ beforeEach(async () => {
   vi.useRealTimers();
   const { vault } = await boot();
   await vault.wipeVault();
+  await wipeMeta(vault); // a clock correction or a held set a test stored went on to the next (round fifty-nine)
   await vault.setMeta('device', DEV);
-  await vault.setMeta('parked', []);
-  await vault.setMeta('sync', null);
 });
 
 describe('the fold snapshot', () => {
@@ -213,6 +213,8 @@ describe('the fold snapshot', () => {
     const { vault } = await boot();
     // a legacy-shaped plant (its number is its id, no `acc`), whose only `acc` change is from a clock three years ahead
     await vault.appendChanges([{ t: stamp(base, 0), kind: 'accession', id: '2024-0001', field: 'taxonName', value: 'Legacy' }, { t: stamp(base, 1), kind: 'accession', id: '2024-0001', field: 'status', value: 'growing' }, { t: stamp(base + 3 * 365 * 86_400_000), kind: 'accession', id: '2024-0001', field: 'acc', value: '2024-9999' }], true);
+    // parked when it arrived, by the server's time, as the engine does (round fifty-nine: a load against an unchecked clock parks nothing)
+    await vault.setMeta('parked', [stamp(base + 3 * 365 * 86_400_000)]);
     let b = await boot();
     await b.store.collection.load();
     expect(b.store.collection.parkedFor('accession', '2024-0001')).toHaveLength(1);
@@ -329,6 +331,7 @@ describe('the fold snapshot', () => {
     const base = Date.now() - 86_400_000;
     const { vault } = await boot();
     await vault.appendChanges([{ t: stamp(base, 0), kind: 'accession', id: '2024-0001', field: 'taxonName', value: 'Legacy' }, { t: stamp(base, 1), kind: 'accession', id: '2024-0001', field: 'status', value: 'growing' }, { t: stamp(base + 3 * 365 * 86_400_000), kind: 'accession', id: '2024-0001', field: 'acc', value: '2024-9999' }], true);
+    await vault.setMeta('parked', [stamp(base + 3 * 365 * 86_400_000)]); // parked on arrival, by the server's time (round fifty-nine)
     let b = await boot();
     await b.store.collection.load();
     await b.store.collection.dismissParked('accession', '2024-0001');

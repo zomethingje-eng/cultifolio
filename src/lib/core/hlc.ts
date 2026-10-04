@@ -45,7 +45,7 @@ function readStored(): void {
     const raw = localStorage.getItem(OFFSET_KEY);
     if (raw) {
       const v = JSON.parse(raw) as Stored;
-      if (Number.isFinite(v.offset) && Date.now() - (v.confirmedAt || 0) < TRUST_EXPIRES_MS) { offsetMs = v.offset; confirmedAt = v.confirmedAt || Date.now(); }
+      if (Number.isFinite(v.offset) && v.confirmedAt && Date.now() - v.confirmedAt < TRUST_EXPIRES_MS) { offsetMs = v.offset; confirmedAt = v.confirmedAt; }
       else localStorage.removeItem(OFFSET_KEY);
     }
     const p = localStorage.getItem(PENDING_KEY);
@@ -57,7 +57,9 @@ function readStored(): void {
 function store(): void {
   try {
     if (typeof localStorage === 'undefined') return;
-    if (offsetMs) localStorage.setItem(OFFSET_KEY, JSON.stringify({ offset: offsetMs, confirmedAt } satisfies Stored));
+    // Kept whenever a reading confirmed the clock, a correction of nothing included: whether the clock in force is a
+    // checked one decides whether a park judged by it is kept (round fifty-nine).
+    if (confirmedAt) localStorage.setItem(OFFSET_KEY, JSON.stringify({ offset: offsetMs, confirmedAt } satisfies Stored));
     else localStorage.removeItem(OFFSET_KEY);
     if (pending) localStorage.setItem(PENDING_KEY, JSON.stringify(pending));
     else localStorage.removeItem(PENDING_KEY);
@@ -108,12 +110,23 @@ export function trustServerTime(serverMs: number, localMs = Date.now()): number 
     } else next = delta;
   }
   pending = null;
+  const wasChecked = clockChecked();
   confirmedAt = localMs;
   const was = offsetMs;
   offsetMs = next;
   store();
-  if (next !== was) for (const l of listeners) l(offsetMs);
+  // A clock confirmed for the first time is told too: what the fold held or folded against an unchecked clock is
+  // judged again, so a change far ahead of a clock now known to be right is parked (round fifty-nine).
+  if (next !== was || !wasChecked) for (const l of listeners) l(offsetMs);
   return offsetMs;
+}
+/**
+ * Whether a server reading has confirmed the clock in force (`nowMs`) within the time a correction is kept: only then
+ * is a change judged by this clock alone stored as parked (round fifty-nine; the round forty-one review, 1). A device
+ * that never syncs has no such reading, and its own clock decides nothing that is kept.
+ */
+export function clockChecked(): boolean {
+  return confirmedAt > 0 && Date.now() - confirmedAt < TRUST_EXPIRES_MS;
 }
 /** The current correction, for the clock warning to say how far off the device is. */
 export const clockOffsetMs = () => offsetMs;

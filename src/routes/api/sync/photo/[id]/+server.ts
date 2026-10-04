@@ -1,7 +1,7 @@
 import { json, error } from '@sveltejs/kit';
 import { STATUS } from '$lib/sync/limits';
 import type { RequestHandler } from './$types';
-import { store, vaultId, authed, photoKey, storeOnce, deleteCounted, readBody, VaultFull, DayQuota, MAX_PHOTO_BYTES, limited, quotaOf, dropProof } from '$lib/server/sync';
+import { store, vaultId, authed, photoKey, storeOnce, deleteCounted, readBody, VaultFull, DayQuota, VaultsClosed, MAX_PHOTO_BYTES, limited, quotaOf, dropProof } from '$lib/server/sync';
 
 export const GET: RequestHandler = async ({ request, url, params, platform, getClientAddress }) => {
   const r2 = store(platform);
@@ -34,7 +34,7 @@ export const PUT: RequestHandler = async ({ request, url, params, platform, getC
   try {
     r = await storeOnce(r2, id, meta, key, body, { drop }, quotaOf(platform, getClientAddress));
   } catch (e) {
-    if (e instanceof VaultFull || e instanceof DayQuota) return e.response();
+    if (e instanceof VaultFull || e instanceof DayQuota || e instanceof VaultsClosed) return e.response();
     throw e;
   }
   if (r === 'different') return json({ error: 'a different photo already has that id' }, { status: STATUS.differentContent });

@@ -5,8 +5,8 @@
  * corpus compiled into the build (so tests work with nothing else present).
  */
 import { genusOf } from '$core/names';
-import { prepare, search, hasExact, type Prepared } from '$core/search';
-import { queryPlan, words, candidates, postingFileOf } from '$core/postings';
+import { prepare, search, hasExact, rankedWords, type Prepared } from '$core/search';
+import { queryPlan, candidates, postingFileOf } from '$core/postings';
 import { bucketOf, BUCKETS } from '$core/bucket';
 import { parseDossier, dossierPath, genusPath, GenusRecord, DOSSIER_V, type Dossier } from '$dossier/schema';
 import { manifestPath, productPath, isManifest, SHORT_HITS, type Manifest } from '$dossier/manifest';
@@ -54,7 +54,7 @@ let loading: Promise<Loaded> | null = null;
 const storeIsCorpus = () => !!cached?.fromStore;
 const CACHE_MS = 60_000;
 /** For tests: forget the parsed index and every product read. */
-export const _forgetIndex = () => { cached = null; products.clear(); };
+export const _forgetIndex = () => { cached = null; products.clear(); rejectedManifest = null; };
 
 async function staticJson<T>(fetch: Fetch, path: string): Promise<T | null> {
   try {
@@ -92,6 +92,8 @@ export async function getCorpusId(platform: Platform, fetch: Fetch): Promise<str
 
 const fnv = (s: string) => { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(16).padStart(8, '0'); };
 
+/** The etag of a manifest this build has refused, so the minute's check does not reload for it again (round fifty-nine). */
+let rejectedManifest: string | null = null;
 async function loadIndex(platform: Platform, fetch: Fetch): Promise<Loaded> {
   if (cached && Date.now() - cached.at < CACHE_MS) return cached;
   if (!loading) loading = loadIndexNow(platform, fetch).finally(() => { loading = null; });
@@ -119,7 +121,10 @@ async function loadIndexNow(platform: Platform, fetch: Fetch): Promise<Loaded> {
       // holds no manifest also looks for one each minute, since the first manifest ever uploaded changes nothing it watched (round fifty-four, 3).
       const h = await store.head(watched);
       const mh = cached.manifest ? null : await store.head(mPath).catch(() => null);
-      if (h?.etag === cached.etag && !mh) {
+      // A manifest this build already refused is not news: the minute passed it on to a full reload, every minute, each
+      // of them parsing the index again (round fifty-nine; the corpus review, 2).
+      const refused = (e: string | undefined) => rejectedManifest !== null && e === rejectedManifest;
+      if ((h?.etag === cached.etag || (cached.manifest && refused(h?.etag))) && (!mh || refused(mh.etag))) {
         cached.at = Date.now();
         return cached;
       }
@@ -130,8 +135,16 @@ async function loadIndexNow(platform: Platform, fetch: Fetch): Promise<Loaded> {
     let mEtag: string | null = null;
     if (mObj) {
       const m = (await mObj.json().catch(() => null)) as unknown;
-      if (isManifest(m)) { manifest = m; mEtag = mObj.etag || null; }
-      else console.warn('s/v2/manifest.json is not a manifest this build reads (no files, another version, or not JSON); the corpus is read without products');
+      if (isManifest(m)) { manifest = m; mEtag = mObj.etag || null; rejectedManifest = null; }
+      else {
+        // Not a manifest this build reads (a Worker deployed before the build that wrote it, a half-written file): the
+        // corpus held before stands, as for a missing index, and this etag is remembered so the next minute does not
+        // read it all again. Before, the load fell through to the top-level index under a new id, which turned every
+        // cache over and served the whole search from memory (round fifty-nine; the corpus review, 2).
+        rejectedManifest = mObj.etag || null;
+        console.warn('s/v2/manifest.json is not a manifest this build reads (no files, another version, or not JSON); the corpus held before stands');
+        if (previous?.fromStore) { previous.at = Date.now(); cached = previous; return previous; }
+      }
     }
     // A manifest is adopted only with the index it names: one whose index is not there yet (an upload that landed the
     // manifest first) is not a corpus, and the top-level index must never be served under its id, where every cache
@@ -147,10 +160,12 @@ async function loadIndexNow(platform: Platform, fetch: Fetch): Promise<Loaded> {
       const text = await obj.text();
       let parsed: unknown = null;
       try { parsed = JSON.parse(text); } catch { /* judged below */ }
-      if (!Array.isArray(parsed)) {
+      if (!Array.isArray(parsed) || (manifest && parsed.length !== manifest.species)) {
         // An index that is not a list (a manifest naming the wrong file, a damaged object) is not a corpus: the one held
-        // before stands, as for a missing index (round fifty-eight; the first reviewer's finding 15).
-        console.warn(`the index ${manifest ? `named by manifest ${manifest.id}` : 'at the top level'} is not a list; the corpus held before stands`);
+        // before stands, as for a missing index (round fifty-eight; the first reviewer's finding 15). Nor is a list of
+        // another length than the manifest's species (an entries file under the index's name; round fifty-nine).
+        console.warn(`the index ${manifest ? `named by manifest ${manifest.id}` : 'at the top level'} is not a list of the manifest's species; the corpus held before stands`);
+        if (manifest) rejectedManifest = mEtag; // refused as a whole: not read again each minute
         if (previous?.fromStore) { previous.at = Date.now(); cached = previous; return previous; }
         parsed = [];
         manifest = null;
@@ -194,7 +209,7 @@ export async function getCorpus(platform: Platform, fetch: Fetch): Promise<{ id:
 /* ---- the build's products ----
  * Read by name through the manifest, which gives each its content hash and so its path (round fifty-six, 2), from the
  * bucket (then the static corpus), and kept a few at a time per isolate: a file under a hash never changes, so a product
- * once read is right for as long as any manifest names it; the map is cleared with the index all the same. Null when
+ * once read is right for as long as any manifest names it, and is kept by its hash across a refresh. Null when
  * the manifest names no such product, or it cannot be read: the caller derives from the index then.
  */
 /**
@@ -294,12 +309,12 @@ export async function getDossier(platform: Platform, fetch: Fetch, key: number):
   return cached?.corpus === 'fixture' ? (fixturesByKey.get(key) ?? null) : null;
 }
 
-export async function resolveSlug(platform: Platform, fetch: Fetch, slug: string): Promise<number | null> {
-  const idx = await getIndex(platform, fetch);
-  const hit = cached?.bySlug.get(slug);
+export async function resolveSlug(platform: Platform, fetch: Fetch, slug: string, held?: Loaded): Promise<number | null> {
+  const c = held ?? (await loadIndex(platform, fetch)); // the request's corpus, and its own slug map (round fifty-nine: it read whichever was current)
+  const hit = c.bySlug.get(slug);
   if (hit != null) return hit;
   // Synthetic species are reachable only while no real corpus exists.
-  if (idx === fixtureIndex) for (const d of fixturesByKey.values()) if (d.slug === slug) return d.key;
+  if (c.idx === fixtureIndex) for (const d of fixturesByKey.values()) if (d.slug === slug) return d.key;
   return null;
 }
 
@@ -377,19 +392,26 @@ export async function entriesIn(c: Loaded, platform: Platform, fetch: Fetch, buc
  * whole index prepared for the request, under the rate the caller gives (`mayWhole`); a refusal there is a refusal,
  * not "nothing matches".
  */
-export async function searchAnswer(platform: Platform, fetch: Fetch, q: string, n: number, mayWhole: () => Promise<Response | null>): Promise<{ hits: IndexEntry[]; corpus: string } | { stop: Response }> {
-  const c = await loadIndex(platform, fetch);
+/** Past this many exact candidates a search is charged as a whole-index one (round fifty-nine). */
+export const WHOLE_LIKE = 2000;
+export async function searchAnswer(platform: Platform, fetch: Fetch, q: string, n: number, mayWhole: () => Promise<Response | null>, held?: Loaded): Promise<{ hits: IndexEntry[]; corpus: string } | { stop: Response }> {
+  const c = held ?? (await loadIndex(platform, fetch));
   const corpus = c.corpus; // the id the answer is from, from the same load (round seventeen, 10)
   const m = c.manifest;
   if (!m) return { hits: search(searchIndex(c.idx), q, n), corpus };
   const plan = queryPlan(q);
   if (!plan.exact.length) return { hits: [], corpus }; // no word the tokeniser keeps: nothing matches, and nothing is read
   const entries = (ix: number[]) => { const out: IndexEntry[] = []; for (const i of ix) { const e = c.idx[i]; if (e) out.push(e); } return out; };
-  // One word and nothing else: a trailing rank marker the plan sets aside still counts in the ranking ("a var").
-  const only = words(q);
+  // One word and nothing else, as the ranking reads the query: a trailing rank marker still counts ("a var" is two), and
+  // a leading one or a repeat does not ("f a" and "a a" are "a"; round fifty-nine).
+  const only = rankedWords(q);
   if (only.length === 1 && only[0].length <= 2 && !plan.near && n <= SHORT_HITS && m.files['short.json']) {
     const short = await product<Record<string, number[]>>(c, platform, fetch, 'short.json');
-    if (short && typeof short === 'object') { const xs = Object.hasOwn(short, only[0]) ? short[only[0]] : []; if (Array.isArray(xs)) return { hits: entries(xs.slice(0, n)), corpus }; }
+    if (short && typeof short === 'object') {
+      const xs = Object.hasOwn(short, only[0]) ? short[only[0]] : [];
+      // Positions in this index, or the file is not this corpus's answers (a hash naming another file): the postings answer (round fifty-nine).
+      if (Array.isArray(xs) && xs.every((i) => Number.isInteger(i) && i >= 0 && i < c.idx.length)) return { hits: entries(xs.slice(0, n)), corpus };
+    }
   }
   const files = new Map<string, Record<string, number[]> | null>();
   const read = async (keys: string[][]) => {
@@ -406,7 +428,11 @@ export async function searchAnswer(platform: Platform, fetch: Fetch, q: string, 
   // The exact pass in a function of its own, so its prepared candidates are garbage before the near pass waits on the
   // bucket: held across that wait they were tens of megabytes a request at fifty thousand species (round fifty-eight;
   // the first reviewer's finding 12).
-  const exactHits = exactPass(entries(candidates(plan.exact, posting)), q, n);
+  // Candidates past this many (two short words, "a e", narrow almost nothing) cost what the whole index costs, so they
+  // are charged as it is (round fifty-nine; the corpus reviews: 127 to 309 ms each under the ordinary search allowance).
+  const cands = candidates(plan.exact, posting);
+  if (cands.length > WHOLE_LIKE) { const stop = await mayWhole(); if (stop) return { stop }; }
+  const exactHits = exactPass(entries(cands), q, n);
   if (exactHits) return { hits: exactHits, corpus };
   if (!plan.near) return { hits: [], corpus };
   if (!(await read(plan.near))) return whole();
