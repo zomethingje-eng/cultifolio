@@ -16,7 +16,7 @@
   import { isDatasetDoi } from '$dossier/sources/openalex';
   import { photoAt, srcsetOf, photoHosts, shownAt } from '$dossier/photo-size';
   import { heroOf } from '$dossier/dedupe';
-  import { firstSentences } from '$core/text';
+  import { firstSentences, clip } from '$core/text';
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import { generatedNote } from '$core/note';
   import { cultivationSheet, CARD_ORDER } from '$core/sheet';
@@ -36,7 +36,9 @@
   const heroSrc = $derived(hero ? shownAt(hero) : undefined);
   // Synonyms as names, not as the backbone's strings: authorship dropped, and a malformed entry ("? glabra Salm-Dyck") left out (round thirty-one, 3).
   const synonyms = $derived([...new Set(d.name.synonyms.map(canonicalSynonym).filter((x): x is string => !!x && x !== d.name.scientific))]);
-  const desc = $derived(d.summary?.text.slice(0, 155) ?? `${d.name.scientific}, ${d.name.family ?? ''}: native range, habitat climate, photographs and cultivation notes with sources.`);
+  // Cut at a word, not mid-word; and with no summary, a line that names only what this page has, as the front page's
+  // sentence was made to (round fifty-nine): "habitat climate" on a page whose sources did not answer was rule 1 broken.
+  const desc = $derived(d.summary?.text ? clip(d.summary.text, 155) : `${d.name.scientific}${d.name.family ? `, ${d.name.family}` : ''}: ${[d.distribution.native.length ? 'native range' : '', d.climate.status === 'ok' ? 'habitat climate and the cultivation it suggests' : '', d.photos.length ? 'photographs' : ''].filter(Boolean).join(', ') || 'what the sources hold'}, each with its source.`);
   const jsonld = $derived(
     JSON.stringify({
       '@context': 'https://schema.org',

@@ -3349,3 +3349,16 @@ test('round fifty-nine: a control reached by the keyboard is never left under a 
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   expect(await hidden(40, true)).toEqual([]);
 });
+
+test('round fifty-nine: a species page\'s description is cut at a word and claims only what the page has', async ({ page }) => {
+  for (const slug of ['copiapoa-cinerea', 'welwitschia-mirabilis', 'refusia-testii']) {
+    await page.goto(`/species/${slug}`);
+    const d = (await page.locator('meta[name="description"]').getAttribute('content'))!;
+    expect(d.length).toBeLessThanOrEqual(155);
+    expect(d).toMatch(/(\S…|[.!?)])$/); // a whole word before the ellipsis, or the text's own end
+    expect(await page.locator('meta[property="og:description"]').getAttribute('content')).toBe(d);
+  }
+  // Refusia's climate was not checked: its line does not offer one
+  await page.goto('/species/refusia-testii');
+  expect(await page.locator('meta[name="description"]').getAttribute('content')).not.toContain('habitat climate');
+});

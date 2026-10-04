@@ -32,7 +32,7 @@ Three reviews of `4598c5f` arrived together: the author's own (`docs/REVIEW-SELF
 4. **Today** [6, 25]. A plant resting under the temperature rule's cooler six months is worded as that rule, apart from the rain rule's dry season; its chips tick like the rest and the button waters what is ticked. The place count counts places with work; a place watered with nothing left ticked shows the done mark; day counts read "today", not "0 d".
 5. **`/about/formats`** [7]: the byte counts are described as the counter object keeps them. **`/about/how`** [8]: the front page and compare load photographs too; the compare search, the forecast's units and the places' coordinates are in the list; `/api/corpus` is named; DLI and the cold floor are in the glossary [16].
 6. **Compare** [27]. The rows that differ say so in words, not shading alone; the footnote states the rules as coded; the overlay keeps 12 px ticks at its 480 px width; the year row links to each species' chart instead of drawing three at 4 px; a photograph that fails leaves an empty box.
-7. **Smaller words** [29, 35]. "No species page for …" on the 404; "Not found" said once; titles read "Name · Cultifolio" on both about pages; the climograph's description names CHELSA; a front-page tile whose English name is only its genus (Welwitschia) shows the family; `og.png` says the plants stay on the device "or sync encrypted".
+7. **Smaller words** [29, 35]. "No species page for …" on the 404; "Not found" said once; titles read "Name · Cultifolio" on both about pages; the climograph's description names CHELSA; a front-page tile whose English name is only its genus (Welwitschia) shows the family; `og.png` says the plants stay on the device "or sync encrypted". After the deploy: a species page's description was the summary cut at 155 characters mid-word ("Friedrich Welwit"), and a page without a summary claimed a habitat climate whether or not its sources had answered; it is now cut at a word with an ellipsis, and the fallback names only what the page has (tests).
 
 ## 4. The interface and accessibility
 
@@ -63,4 +63,4 @@ No corpus refresh: no product file changes shape. The Worker's counter object ta
 
 ## Counts
 
-Type check clean on 604 files; 531 unit tests on 60 files, on Node 22 and on Node 24; 102 end-to-end tests; the local live check passes 10 of 10; the build is clean.
+Type check clean on 605 files; 533 unit tests on 61 files, on Node 22 and on Node 24; 103 end-to-end tests; the local live check passes 10 of 10; the build is clean.
