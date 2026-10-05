@@ -118,14 +118,16 @@ describe('merging a backup into a live collection', () => {
     const { state } = materialise([...newer, ...m.fresh]);
     expect(state.get('accession:2026-0001')?.notes).toBe('moved on');
   });
-  it('round fifty-one, 4: the preview names the plants here that a merge renumbers, and the file\'s that it renumbers', () => {
+  it('round fifty-one, 4 and round sixty: the preview names every plant here and in the file that a merge would leave under one number; nothing is renumbered on its own', () => {
     // Here: 2026-0001 (id "2026-0001", created first). The file: another plant under the same number, created later (a later id), and a third under 2026-0005 created before one here under that number.
     const here = [...log, c(60, 'accession', 'r-late', 'taxonName', 'Lithops'), c(61, 'accession', 'r-late', 'status', 'growing'), c(62, 'accession', 'r-late', 'acc', '2026-0005')];
     const file = [c(140, 'accession', 'zz-later', 'taxonName', 'Aloe'), c(141, 'accession', 'zz-later', 'status', 'growing'), c(142, 'accession', 'zz-later', 'acc', '2026-0001'), c(143, 'accession', 'a-early', 'taxonName', 'Haworthia'), c(144, 'accession', 'a-early', 'status', 'growing'), c(145, 'accession', 'a-early', 'acc', '2026-0005')];
     const m = previewMerge(here, file);
-    expect(m.renumbered).toEqual([
-      { no: '2026-0001', here: false, name: 'Aloe' }, // the file's plant loses to the earlier one here
-      { no: '2026-0005', here: true, name: 'Lithops' } // this device's plant loses to the earlier one in the file
+    expect(m.sharedNumbers).toEqual([
+      { no: '2026-0001', here: true, name: 'Copiapoa cinerea' },
+      { no: '2026-0001', here: false, name: 'Aloe' },
+      { no: '2026-0005', here: true, name: 'Lithops' },
+      { no: '2026-0005', here: false, name: 'Haworthia' }
     ]);
   });
   it('a file with an extra plant adds it and reports it', () => {
@@ -154,8 +156,8 @@ describe('plants.csv', () => {
     const csv = plantsCsv(live<Accession & Record_>(state, 'accession'), state);
     expect(csv.charCodeAt(0)).toBe(0xfeff);
     const lines = csv.slice(1).split('\r\n');
-    expect(lines[0]).toBe('number,species,cultivar,kind,parentage,name as received,field number,provenance,status,location,acquired,from,lot or reference,form,price,sowing,notes');
-    expect(lines[1]).toBe('2026-0001,Copiapoa cinerea,,species,,,,,growing,Greenhouse › Bench 2,,,,,,,"said ""sulks"", then\nflowered"');
+    expect(lines[0]).toBe('number,species,cultivar,kind,parentage,name as received,field number,provenance,status,location,acquired,from,lot or reference,form,price,sowing,notes,id');
+    expect(lines[1]).toBe('2026-0001,Copiapoa cinerea,,species,,,,,growing,Greenhouse › Bench 2,,,,,,,"said ""sulks"", then\nflowered",2026-0001');
   });
   it('a plant under an incomplete or removed place is filed under the nearest whole place above it, as the app shows it (round thirty-seven, R2-1)', () => {
     // L3 has only a parent (its name sits in a batch set aside); L4 is removed. The app walks past both to Bench 2.
@@ -174,7 +176,22 @@ describe('plants.csv', () => {
     const more = [...log, c(30, 'accession', '2026-0001', 'notes', '-5 °C on the sill, =SUM(A1) is not a note'), c(31, 'accession', '2026-0001', 'sourceRef', 'KK 1462'), c(32, 'accession', '2026-0001', 'nameAsReceived', '@handle')];
     const { state } = materialise(more);
     const line = plantsCsv(live<Accession & Record_>(state, 'accession'), state).slice(1).split('\r\n')[1];
-    expect(line).toBe("2026-0001,Copiapoa cinerea,,species,,'@handle,,,growing,Greenhouse › Bench 2,,,KK 1462,,,,'-5 °C on the sill, =SUM(A1) is not a note".replace(",'-5 °C on the sill, =SUM(A1) is not a note", ",\"'-5 °C on the sill, =SUM(A1) is not a note\""));
+    expect(line).toBe("2026-0001,Copiapoa cinerea,,species,,'@handle,,,growing,Greenhouse › Bench 2,,,KK 1462,,,,'-5 °C on the sill, =SUM(A1) is not a note".replace(",'-5 °C on the sill, =SUM(A1) is not a note", ",\"'-5 °C on the sill, =SUM(A1) is not a note\"") + ',2026-0001');
+  });
+});
+
+describe('text that looks like a number (round sixty; the data review\'s 12)', () => {
+  it('a lot "0012", a "1E5" and a "3-12" are written as ="…" so a spreadsheet keeps them as text; real dates are left alone; the import reads them back', async () => {
+    const more = [...log, c(30, 'accession', '2026-0001', 'sourceRef', '0012'), c(31, 'accession', '2026-0001', 'fieldNumber', '1E5'), c(32, 'accession', '2026-0001', 'cultivar', '3-12'), c(33, 'accession', '2026-0001', 'acquired', '2024-05-01')];
+    const { state } = materialise(more);
+    const line = plantsCsv(live<Accession & Record_>(state, 'accession'), state).slice(1).split('\r\n')[1];
+    expect(line).toContain(',"=""3-12""",');
+    expect(line).toContain(',"=""1E5""",');
+    expect(line).toContain(',"=""0012""",');
+    expect(line).toContain(',2024-05-01,');
+    const { cellText } = await import('$lib/import/csv');
+    expect(cellText('="0012"')).toBe('0012');
+    expect(cellText('=SUM(A1)')).toBe('=SUM(A1)'); // anything else is left exactly as typed, never evaluated
   });
 });
 
@@ -187,18 +204,18 @@ describe('events.csv (round forty-nine, 1)', () => {
       c(46, 'event', 'g1', 'acc', 's1'), c(47, 'event', 'g1', 'd', '2026-03-20'), c(48, 'event', 'g1', 't', 'germinate'), c(49, 'event', 'g1', 'n', 9)];
     const { state } = materialise(more);
     const lines = eventsCsv(live<PlantEvent & Record_>(state, 'event'), state).slice(1).split('\r\n');
-    expect(lines[0]).toBe('date,number,species,entry,note,count,cause,used,measurements,by the app,record removed');
+    expect(lines[0]).toBe('date,number,species,entry,note,count,cause,used,measurements,by the app,record removed,record id');
     // a measurement names its unit, as the label does; a key this build does not know is written as it is (round fifty-one, 5)
     expect(lines.slice(1, 5)).toEqual([
-      '2026-03-20,S2026-001,Ariocarpus fissuratus,Germination count,,9,,,,,',
-      '2026-08-01,2026-0001,Copiapoa cinerea,Measured,,,,,height 42 mm; heads 3; width 30,,',
-      '2026-09-01,2026-0001,Copiapoa cinerea,Watered,,,,,,,',
-      '2026-09-03,2026-0001,Copiapoa cinerea,Treated,"mealy, = top",,,neem,,yes,'
+      '2026-03-20,S2026-001,Ariocarpus fissuratus,Germination count,,9,,,,,,s1',
+      '2026-08-01,2026-0001,Copiapoa cinerea,Measured,,,,,height 42 mm; heads 3; width 30,,,2026-0001',
+      '2026-09-01,2026-0001,Copiapoa cinerea,Watered,,,,,,,,2026-0001',
+      '2026-09-03,2026-0001,Copiapoa cinerea,Treated,"mealy, = top",,,neem,,yes,,2026-0001'
     ]);
     // an entry on a removed plant is kept and marked
     const gone = materialise([...more, c(60, 'accession', '2026-0001', '_deleted', true)]).state;
     const goneLines = eventsCsv(live<PlantEvent & Record_>(gone, 'event'), gone).slice(1).split('\r\n');
-    expect(goneLines[3]).toBe('2026-09-01,2026-0001,Copiapoa cinerea,Watered,,,,,,,yes');
+    expect(goneLines[3]).toBe('2026-09-01,2026-0001,Copiapoa cinerea,Watered,,,,,,,yes,2026-0001');
     const { bytes } = await buildBackup({ changes: more, readPhoto: async () => null });
     const r = await readBackup(bytes);
     expect(r.changes.length).toBe(more.length); // the sheet is for people; the file reads as before
@@ -215,8 +232,8 @@ describe('batches.csv', () => {
       c(52, 'event', 'u1', 'acc', 's1'), c(53, 'event', 'u1', 'd', '2026-05-01'), c(54, 'event', 'u1', 't', 'potup'), c(55, 'event', 'u1', 'n', 3)];
     const { state } = materialise(more);
     const lines = batchesCsv(live<Sowing & Record_>(state, 'sowing'), state).slice(1).split('\r\n');
-    expect(lines[0]).toBe('number,species,cultivar,kind,parentage,method,parent plant,date,started,counted,potted,lost,from,lot,field number,provenance,medium,container,pre-treatment,bottom heat C,covered,location,status,notes');
-    expect(lines[1]).toBe('S2026-001,Ariocarpus fissuratus,,species,,seed,,2026-03-01,12,9,3,2,,lot 77,KK 1462,,,,,,,Greenhouse › Bench 2,active,');
+    expect(lines[0]).toBe('number,species,cultivar,kind,parentage,method,parent plant,date,started,counted,potted,lost,from,lot,field number,provenance,medium,container,pre-treatment,bottom heat C,covered,location,status,notes,id');
+    expect(lines[1]).toBe('S2026-001,Ariocarpus fissuratus,,species,,seed,,2026-03-01,12,9,3,2,,lot 77,KK 1462,,,,,,,Greenhouse › Bench 2,active,,s1');
   });
 });
 

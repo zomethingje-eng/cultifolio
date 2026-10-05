@@ -22,13 +22,25 @@ function urlsOf(index: IndexEntry[]): string[] {
   return ['/', '/about/how', '/about/formats', ...index.map((e) => `/species/${e.slug}`), ...genera.map((g) => `/?by=genus&open=${slugify(g)}`)];
 }
 
-export function sitemapIndex(urls: string[]): string {
+/**
+ * A sitemap's `<lastmod>`: the day the corpus was built, from its manifest, so a crawler re-reads the pages after a
+ * refresh and not before (round sixty; the corpus review, 14). The index carries no build date per species, so every
+ * page of a corpus shares its build's; a corpus with no manifest (the fixture) has none to give, and none is written.
+ */
+export function lastmodOf(built: string | null | undefined): string | null {
+  if (!built) return null;
+  const t = Date.parse(built);
+  return Number.isFinite(t) ? new Date(t).toISOString().slice(0, 10) : null;
+}
+const mod = (lastmod: string | null | undefined) => (lastmod ? `<lastmod>${lastmod}</lastmod>` : '');
+
+export function sitemapIndex(urls: string[], lastmod: string | null = null): string {
   const files = Math.max(1, Math.ceil(urls.length / SITEMAP_CHUNK));
-  const entries = Array.from({ length: files }, (_, i) => `  <sitemap><loc>${BASE}/sitemap-${i + 1}.xml</loc></sitemap>`);
+  const entries = Array.from({ length: files }, (_, i) => `  <sitemap><loc>${BASE}/sitemap-${i + 1}.xml</loc>${mod(lastmod)}</sitemap>`);
   return `<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${entries.join('\n')}\n</sitemapindex>\n`;
 }
 
-export function sitemapChunk(urls: string[], n: number): string {
+export function sitemapChunk(urls: string[], n: number, lastmod: string | null = null): string {
   const part = urls.slice((n - 1) * SITEMAP_CHUNK, n * SITEMAP_CHUNK);
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${part.map((u) => `  <url><loc>${esc(BASE + u)}</loc></url>`).join('\n')}\n</urlset>\n`;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${part.map((u) => `  <url><loc>${esc(BASE + u)}</loc>${mod(lastmod)}</url>`).join('\n')}\n</urlset>\n`;
 }

@@ -111,7 +111,7 @@ export type Found = IndexEntry;
  * browser whole. Null when the reference could not be reached (a different fact from "nothing matches"). What is sent
  * is the text in a public catalogue's search box, listed on /about/how; a plant's record never is.
  */
-export async function searchCatalogue(q: string, n = 60): Promise<Found[] | { limited: number } | null> {
+export async function searchCatalogue(q: string, n = 60): Promise<(Found[] & { relaxed?: { query: string } }) | { limited: number } | null> {
   const text = q.trim().slice(0, 80);
   if (!text) return [];
   try {
@@ -119,7 +119,13 @@ export async function searchCatalogue(q: string, n = 60): Promise<Found[] | { li
     if (r.status === 400) return []; // not a search (nothing the index has words in): nothing matches
     if (r.status === 429) return { limited: Math.max(1, Number(r.headers.get('retry-after')) || 60) }; // the address's allowance is spent: a wait, not "not reached" (round forty, R1-3)
     if (!r.ok) return null;
-    return (await r.json()) as Found[];
+    const hits = (await r.json()) as Found[];
+    // Nothing matched as typed and the server searched its first two words instead: the header names them, so the page
+    // can say "Showing results for …" (round sixty).
+    const h = r.headers.get('x-search-relaxed');
+    let relaxed: string | null = null;
+    if (h) { try { relaxed = decodeURIComponent(h).trim() || null; } catch { relaxed = null; } }
+    return relaxed ? Object.assign(hits, { relaxed: { query: relaxed } }) : hits;
   } catch {
     return null;
   }

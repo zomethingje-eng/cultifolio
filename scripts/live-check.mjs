@@ -58,6 +58,10 @@ function ok(what) {
 const headersOn = (r, path) => {
   if (r.h('referrer-policy') !== 'no-referrer') fail(`${path}: Referrer-Policy is "${r.h('referrer-policy')}", not no-referrer (round sixteen, 9)`, r);
   if (r.h('x-frame-options').toUpperCase() !== 'DENY') fail(`${path}: X-Frame-Options is "${r.h('x-frame-options')}", not DENY (round sixteen, 15)`, r);
+  // And round sixty's (the server review, 14): the hook sets them on what the Worker renders, _headers on the files it does not.
+  if (r.h('x-content-type-options') !== 'nosniff') fail(`${path}: X-Content-Type-Options is "${r.h('x-content-type-options')}", not nosniff (round sixty)`, r);
+  if (!/geolocation=\(self\)/.test(r.h('permissions-policy') ?? '') || !/camera=\(self\)/.test(r.h('permissions-policy') ?? '')) fail(`${path}: Permissions-Policy is "${r.h('permissions-policy')}" (round sixty)`, r);
+  if (!/max-age=31536000/.test(r.h('strict-transport-security') ?? '')) fail(`${path}: Strict-Transport-Security is "${r.h('strict-transport-security')}" (round sixty)`, r);
 };
 
 console.log(`live check against ${origin}`);
@@ -163,6 +167,24 @@ for (const path of ['/about/how', `/species/${species}`, '/offline', '/api/corpu
   const d = await get(`/species/${species}/__data.json?x-sveltekit-invalidated=01`, { headers: { accept: '*/*' } });
   if (d.status !== 200 || !d.h('content-type').startsWith('application/json') || d.h('x-cultifolio-page')) fail(`/species/${species}/__data.json: the data request was not answered with JSON (status ${d.status}, type "${d.h('content-type')}", x-cultifolio-page "${d.h('x-cultifolio-page')}")`, d);
   ok(`species page: ${a.h('x-cultifolio-page')} then held, private to the browser`);
+}
+
+// The private pages are sent noindex, from the hook and, for the prerendered /offline, from _headers (round sixty; the
+// corpus review, P3); a species page is not. And a dossier is never kept by a cache (round sixty; B11).
+{
+  for (const path of ['/plants', '/offline']) {
+    const r = await get(path, { headers: { accept: 'text/html' } });
+    if (r.status !== 200) fail(path, r);
+    if (!/noindex/.test(r.h('x-robots-tag') ?? '')) fail(`${path}: X-Robots-Tag is "${r.h('x-robots-tag')}", not noindex (round sixty)`, r);
+  }
+  const s = await get(`/species/${species}`, { headers: { accept: 'text/html' } });
+  if (s.h('x-robots-tag')) fail(`/species/${species}: carries X-Robots-Tag "${s.h('x-robots-tag')}"; a species page is for search engines`, s);
+  const key = /"key":(\d+)/.exec((await get(`/api/search?q=${encodeURIComponent(species.replace(/-/g, ' '))}&n=1`)).text)?.[1];
+  if (key) {
+    const d = await get(`/api/dossier/${key}`);
+    if (d.status !== 200 || !/no-store/.test(d.h('cache-control') ?? '')) fail(`/api/dossier/${key}: status ${d.status}, cache-control "${d.h('cache-control')}"; a dossier is answered no-store (round sixty)`, d);
+  }
+  ok('private pages noindex, species page indexable, dossier no-store');
 }
 
 // No analytics beacon injected at the edge (round eight, 1): checked with an HTML Accept, which is what gets the injection.

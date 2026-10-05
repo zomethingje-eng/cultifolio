@@ -1,7 +1,7 @@
 /**
  * One way to ask for the forecast from the browser, shared by the front page,
  * the frost page and a bench, with one answer kept in session storage for
- * thirty minutes per site and units. The edge caches an hour per cell, but a
+ * thirty minutes per site and units. The Worker's Cache API keeps an hour per cell, but a
  * grower who opens the app ten times in an hour would still make ten calls,
  * and /api/forecast is rate-limited per address; this keeps that to two. A
  * refusal is never kept: the next open asks again.
@@ -137,5 +137,6 @@ export function clockTime<T>(body: T, zone?: string): T {
 export function forecastRefusal(status: number | null, what: 'Forecast' | 'Frost' = 'Forecast'): string {
   if (status === 429) return `${what} not checked: this site asked this device to wait a few minutes before asking again.`;
   if (status === 400) return `${what} not checked: this place's altitude is outside −500 to 9000 m, or its coordinates are not a place; check them.`;
-  return `${what} not checked: the forecast source did not answer.`;
+  // Warmer, and still not an all-clear (round sixty; the grower review's wording table).
+  return `${what} not checked: the forecast could not be reached just now, so this is not an all-clear. It is asked again when this page is next opened.`;
 }

@@ -102,7 +102,7 @@ describe('every write goes to the vault before memory (finding 6)', () => {
     await expect(collection.put('accession', a.id, { notes: 'never stored' })).rejects.toThrow(/full/);
     expect(collection.accession(a.id)?.notes).toBe('kept'); // the page shows what the vault holds, not the edit
     expect(mem.changes.size).toBe(stored);
-    expect(collection.lastWriteError).toMatch(/QuotaExceededError/);
+    expect(collection.lastWriteError).toMatch(/out of space/);
     mem.fail = null;
     await collection.put('accession', a.id, { notes: 'stored now' });
     expect(collection.accession(a.id)?.notes).toBe('stored now');
@@ -299,8 +299,8 @@ describe('a clock that was fast (round eight, 4)', () => {
   });
 });
 
-describe('round fifty-two, 1: a device a year fast, once its clock is right, parks what it stamped then and can apply it afresh', () => {
-  it('without a server reading its record stays shown and the clock line says why; once a reading confirms the clock it is parked, listed with its fields, and Apply writes it again at real time (round fifty-nine)', async () => {
+describe('round fifty-two, 1, and round sixty: a device a year fast, once its clock is right, keeps its own records shown, and the next edit takes the field', () => {
+  it('neither an unchecked nor a confirmed clock parks this device\'s own changes; an edit to a field it stamped a year ahead shows at once, and parks the old stamp only with a confirmed clock', async () => {
     const real = Date.parse('2026-09-25T12:00:00Z');
     vi.useFakeTimers();
     try {
@@ -310,26 +310,69 @@ describe('round fifty-two, 1: a device a year fast, once its clock is right, par
       expect(collection.accession(a.id)?.notes).toBe('first'); // shown while the device believes its clock
       vi.setSystemTime(real); // put right, and the app reloads
       const c2 = (await reload()) as typeof collection;
-      // No server has confirmed this clock: the device's own changes are folded whatever it says, and nothing is parked
-      // (a clock set back would otherwise have hidden the grower's plants for good; the round forty-one review, 1).
+      // Unchecked: folded, nothing parked, and the line says the last change is dated ahead.
       expect(c2.accession(a.id)?.notes).toBe('first');
       expect(c2.parkedRecords).toBe(0);
       expect(c2.clockBehindAt).toBeGreaterThan(real);
-      // A sync reading confirms the clock: the fold is judged again, and the stamps a year past it are parked.
+      // An edit made now takes the field even unchecked: stamped just past the year-ahead stamp (round sixty; an edit
+      // stamped "now" under a year-ahead stamp was stored and never shown).
+      await c2.put('accession', a.id, { notes: 'second' });
+      expect(c2.accession(a.id)?.notes).toBe('second');
+      // A sync reading confirms the clock: this device's own records are still not parked by it (round sixty: a clock set
+      // back looks the same to the device, and parking its own changes hid the grower's plants for good).
       const hlc = await import('$core/hlc');
       hlc.trustServerTime(real, real);
       await c2.rebuild();
-      expect(c2.accession(a.id)).toBeUndefined(); // parked: a stamp a year past a checked clock is a wrong clock's, this device's own included
-      expect(c2.parkedRecords).toBe(1);
-      expect(c2.parkedFor('accession', a.id).map((c) => c.field).sort()).toEqual(['acc', 'notes', 'status', 'taxonName']);
-      await c2.applyParked('accession', a.id);
-      expect(c2.accession(a.id)?.notes).toBe('first');
-      expect(c2.parkedFor('accession', a.id)).toHaveLength(0);
-      const stamps = [...mem.changes.values()].filter((c) => c.id === a.id && c.value === 'first').map((c) => hlcDecode(c.t).wall);
-      expect(Math.min(...stamps)).toBeLessThan(real + 60_000); // the re-write is at real time
+      expect(c2.accession(a.id)?.notes).toBe('second');
+      expect(c2.parkedRecords).toBe(0);
+      expect(c2.clockTrusted).toBe(true);
+      // With the clock confirmed, an edit to a field still carrying a year-ahead stamp of this device's own parks that
+      // stamp, as part of the edit, and is stamped at real time, so it shows everywhere at once.
+      await c2.put('accession', a.id, { status: 'dead' });
+      expect(c2.accession(a.id)?.status).toBe('dead');
+      const dead = [...mem.changes.values()].find((c) => c.id === a.id && c.field === 'status' && c.value === 'dead')!;
+      expect(hlcDecode(dead.t).wall).toBeLessThan(real + 60_000);
       const c3 = (await reload()) as typeof collection;
-      expect(c3.accession(a.id)?.notes).toBe('first');
-      expect(c3.parkedRecords).toBe(0); // dismissed stamps stay dismissed
+      expect(c3.accession(a.id)?.status).toBe('dead');
+      expect(c3.accession(a.id)?.notes).toBe('second');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it('a clock set back after a confirmed reading: the reading no longer confirms it, nothing is parked, and the plants stay (round sixty; three reviews)', async () => {
+    const real = Date.parse('2026-09-25T12:00:00Z');
+    vi.useFakeTimers();
+    try {
+      // The correction is kept in the browser's storage across reloads, as in a browser: a stand-in here, so the reloaded
+      // modules read it back, and the sign of its age is what is tested.
+      const store = new Map<string, string>();
+      const had = (globalThis as { localStorage?: unknown }).localStorage;
+      (globalThis as { localStorage?: unknown }).localStorage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, String(v)), removeItem: (k: string) => void store.delete(k) };
+      vi.setSystemTime(real);
+      const { collection } = await fresh('setback0000a');
+      let hlc = await import('$core/hlc');
+      hlc.trustServerTime(real, real);
+      const a = await collection.addAccession({ taxonName: 'Copiapoa cinerea', acc: 'S-1' });
+      vi.setSystemTime(real + 3_600_000);
+      const b = await collection.addAccession({ taxonName: 'Welwitschia mirabilis', acc: 'S-2' });
+      const c1 = (await reload()) as typeof collection;
+      hlc = await import('$core/hlc');
+      expect(hlc.clockChecked()).toBe(true); // the control: the stored reading confirms the clock across a reload
+      expect(c1.clockTrusted).toBe(true);
+      vi.setSystemTime(real - 3 * 86_400_000); // the grower sets the clock back three days
+      const c2 = (await reload()) as typeof collection;
+      hlc = await import('$core/hlc');
+      expect(hlc.clockChecked()).toBe(false); // a reading dated after the clock confirms nothing
+      expect(c2.accession(a.id)).toBeDefined();
+      expect(c2.accession(b.id)).toBeDefined();
+      expect(c2.parkedRecords).toBe(0);
+      await c2.put('accession', b.id, { notes: 'edited while the clock read early' });
+      expect(c2.accession(b.id)?.notes).toBe('edited while the clock read early');
+      vi.setSystemTime(real + 2 * 3_600_000); // put right again
+      const c3 = (await reload()) as typeof collection;
+      expect(c3.accession(b.id)?.notes).toBe('edited while the clock read early');
+      expect(c3.parkedRecords).toBe(0);
+      (globalThis as { localStorage?: unknown }).localStorage = had;
     } finally {
       vi.useRealTimers();
     }
@@ -499,7 +542,7 @@ describe('round sixteen', () => {
     mem.fail = 'QuotaExceededError: the disk is full';
     await expect(collection.addAccessions(3, { taxonName: 'Lithops' })).rejects.toThrow(/QuotaExceeded/);
     expect(collection.accessions).toEqual([]);
-    expect(collection.lastWriteError).toMatch(/QuotaExceeded/);
+    expect(collection.lastWriteError).toMatch(/out of space/);
     expect(mem.changes.size).toBe(0); // nothing durable either: no first plant of three
     expect(collection.numbersIssued).toBe(0);
     mem.fail = null;
@@ -534,14 +577,15 @@ describe('round twenty-eight', () => {
 });
 
 describe('round twenty-nine', () => {
-  it('a plant restored after another device minted its number is renumbered on restore, not left sharing it; the one brought back yields (round twenty-nine, 3; round fifty-nine)', async () => {
+  it('a plant restored after another device minted its number while it was removed is renumbered on restore, not left sharing it; the one brought back yields (round twenty-nine, 3; round fifty-nine; round sixty: only to a record born after the removal)', async () => {
     const x = await fresh('devicex00000');
     const mine = await x.collection.addAccession({ taxonName: 'Copiapoa', acc: '2026-0007', acquired: '2026-05-01' });
-    const y = await fresh('devicey00000');
-    await new Promise((r) => setTimeout(r, 2));
-    const theirs = await y.collection.addAccession({ taxonName: 'Lithops', acc: '2026-0007', acquired: '2026-05-02' });
-    mem = x.mem;
     await x.collection.remove('accession', mine.id);
+    const xmem = x.mem;
+    await new Promise((r) => setTimeout(r, 5));
+    const y = await fresh('devicey00000');
+    const theirs = await y.collection.addAccession({ taxonName: 'Lithops', acc: '2026-0007', acquired: '2026-05-02' });
+    mem = xmem;
     await x.collection.ingest([...y.mem.changes.values()], 'server'); // nothing to repair: X's plant is removed
     expect(x.collection.accessions.map((a) => accNo(a))).toEqual(['2026-0007']);
     expect(await x.collection.restore('accession', mine.id)).toEqual({ from: '2026-0007', to: '2026-0008' }); // Undo, and what the page says
@@ -621,5 +665,51 @@ describe('what belongs together is written together (round forty-nine, 1)', () =
     await expect(collection.putWith('accession', a.id, { taxonName: 'Aloe ferox' }, [{ acc: a.id, d: localDate(), t: 'note', note: 'Renamed', auto: true }])).rejects.toThrow();
     expect(collection.accession(a.id)?.taxonName).toBe('Aloe vera');
     expect(collection.events(a.id)).toHaveLength(3);
+  });
+});
+
+describe('round sixty: shared numbers, links by id, and what waits', () => {
+  it('a restore yields only to a record born after the removal: a number shared before it is left as it was (the first outside review, 14)', async () => {
+    const y = await fresh('devicey00000');
+    const theirs = await y.collection.addAccession({ taxonName: 'Lithops', acc: '2026-0007', acquired: '2026-05-02' });
+    await new Promise((r) => setTimeout(r, 2));
+    const x = await fresh('devicex00000');
+    const mine = await x.collection.addAccession({ taxonName: 'Copiapoa', acc: '2026-0007', acquired: '2026-05-01' });
+    await x.collection.ingest([...y.mem.changes.values()], 'server'); // both live under one number: the duplicate the grower already had
+    expect(x.collection.withNumber('accession', '2026-0007').map((a) => a.id).sort()).toEqual([mine.id, theirs.id].sort());
+    await x.collection.remove('accession', mine.id);
+    expect(await x.collection.restore('accession', mine.id)).toBeNull(); // nothing renumbered
+    expect(x.collection.withNumber('accession', '2026-0007')).toHaveLength(2);
+    expect(x.collection.events(mine.id).some((e) => /Renumbered/.test(e.note ?? ''))).toBe(false);
+  });
+  it('plantHref links by number while it is the plant\'s alone, by id once another live plant shares it', async () => {
+    const { collection } = await fresh('testdevice');
+    const { plantHref } = await import('$lib/db/links'); // after the reset, so it reads this store
+    const a = await collection.addAccession({ taxonName: 'Copiapoa', acc: '2026-0001' });
+    expect(plantHref(collection.accession(a.id)!)).toBe('/plants/2026-0001');
+    const t = (n: number) => hlcEncode({ wall: Date.now() - 1000 + n, count: 0, device: 'peerpeerpeer' });
+    await collection.ingest([
+      { t: t(0), kind: 'accession', id: 'rpeer', field: 'taxonName', value: 'Lithops' },
+      { t: t(1), kind: 'accession', id: 'rpeer', field: 'status', value: 'growing' },
+      { t: t(2), kind: 'accession', id: 'rpeer', field: 'acc', value: '2026-0001' }
+    ], 'server');
+    expect(plantHref(collection.accession(a.id)!)).toBe(`/plants/${a.id}`);
+    expect(plantHref(collection.accession('rpeer')!)).toBe('/plants/rpeer');
+  });
+  it('heldWaiting counts a peer\'s changes held for an unchecked clock, and falls to nought when they come due', async () => {
+    const { collection } = await fresh('testdevice');
+    const a = await collection.addAccession({ taxonName: 'Copiapoa' });
+    const ahead = hlcEncode({ wall: Date.now() + 3_600_000, count: 0, device: 'peerpeerpeer' });
+    await collection.ingest([{ t: ahead, kind: 'accession', id: a.id, field: 'notes', value: 'from an hour ahead' }], 'import');
+    expect(collection.heldWaiting).toBe(1);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(Date.now() + 3_600_000 + 60_000);
+      const again = await reload();
+      expect(again.heldWaiting).toBe(0);
+      expect(again.accession(a.id)?.notes).toBe('from an hour ahead');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

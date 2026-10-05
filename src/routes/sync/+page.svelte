@@ -12,6 +12,8 @@
   import { sync } from '$lib/sync/engine.svelte';
   import { newVaultKey, parseVaultKey, pairingUrl } from '$lib/sync/crypto';
   import { setCrumb } from '$lib/ui/crumb.svelte';
+  import { syncWords } from '$lib/ui/sync-words';
+  import { heldWords } from '$lib/ui/held-words';
 
   let mode = $state<'idle' | 'create' | 'join'>('idle');
   let freshKey = $state('');
@@ -145,7 +147,14 @@
     return s < 60 ? 'just now' : s < 3600 ? `${Math.floor(s / 60)} min ago` : s < 86400 ? `${Math.floor(s / 3600)} h ago` : `${Math.floor(s / 86400)} d ago`;
   };
   const mb = (n: number) => (n >= 100 * 1048576 ? Math.round(n / 1048576) : Math.round((n / 1048576) * 10) / 10);
-  const when = (ms: number) => new Date(ms).toLocaleString();
+  const when = (ms: number) => new Date(ms).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  /** The engine's last error in a grower's words, its own words kept for the disclosure (round sixty; the words review, 15). */
+  const errWords = $derived(syncWords(sync.lastError));
+  const aheadWords = $derived(syncWords(sync.clockAhead));
+  /** "1 change", "3 changes": what waits to be sent, without "field changes", which said how the log counts, not what the grower did (round sixty; the grower review, 16). */
+  /** A sentence ends with its stop: the server's own words may come without one. */
+  const sentence = (t: string) => (/[.!?]$/.test(t.trim()) ? t.trim() : t.trim() + '.');
+  const changes = (n: number) => `${n.toLocaleString('en-US')} ${n === 1 ? 'change' : 'changes'}`;
 </script>
 
 <svelte:head><title>Sync · Cultifolio</title></svelte:head>
@@ -155,23 +164,31 @@
 {#if sync.configured}
   <div class="secrule"><h2>This device</h2><div class="line"></div><span class="n">vault {sync.vaultId.slice(0, 6)}…</span></div>
   <div class="cards">
-    <div class="card" data-runs={sync.runs}><div class="lab">Status</div><div class="val" style="font-family: var(--ui); font-size: var(--fs-lg); font-weight: 700">{sync.busy ?? (sync.offline ? (sync.unreached === 'server' ? 'Server not reached' : 'Offline') : sync.lastError ? 'Not synced' : sync.vaultFull ? 'Vault full' : sync.runs ? 'Synced' : 'Not checked yet')}</div><div class="sub">{sync.busy ? '' : sync.offline ? (sync.pending ? `${sync.pending} field ${sync.pending === 1 ? 'change' : 'changes'} kept here, sent ${sync.unreached === 'server' ? 'when the server answers again' : 'when you are back online'}` : `nothing waiting; it will check ${sync.unreached === 'server' ? 'again in a minute' : 'when you are back online'}`) : sync.lastError ? sync.lastError : sync.runs ? (sync.lastSync ? `everything on the server ${ago(sync.lastSync)} is here` : 'not yet') : (sync.lastSync ? `last synced ${ago(sync.lastSync)}; checking now` : 'checking now')}</div></div>
-    <div class="card"><div class="lab">Waiting to send</div><div class="val">{sync.pending}</div><div class="sub">field {sync.pending === 1 ? 'change' : 'changes'} made here and not yet up (a note is one; a new plant is several)</div></div>
-    {#if sync.clockAhead}<p class="small muted" id="clock-ahead">{sync.clockAhead}</p>{/if}
+    <div class="card" data-runs={sync.runs}><div class="lab">Status</div><div class="val" style="font-family: var(--ui); font-size: var(--fs-lg); font-weight: 700">{sync.busy ?? (sync.offline ? (sync.unreached === 'server' ? 'Server not reached' : 'Offline') : sync.lastError ? 'Not synced' : sync.vaultFull ? 'Vault full' : sync.runs ? 'Synced' : 'Not checked yet')}</div><div class="sub">{sync.busy ? '' : sync.offline ? (sync.pending ? `${changes(sync.pending)} kept here, sent ${sync.unreached === 'server' ? 'when the server answers again' : 'when you are back online'}` : `nothing waiting; it will check ${sync.unreached === 'server' ? 'again in a minute' : 'when you are back online'}`) : errWords ? errWords.text : sync.runs ? (sync.lastSync ? `everything on the server ${ago(sync.lastSync)} is here` : 'not yet') : (sync.lastSync ? `last synced ${ago(sync.lastSync)}; checking now` : 'checking now')}</div></div>
+    <div class="card"><div class="lab">Waiting to send</div><div class="val">{sync.pending}</div><div class="sub">{sync.pending === 1 ? 'change' : 'changes'} made here and not yet sent (a watering or a note is one; a new plant is a few)</div></div>
+    {#if aheadWords}<p class="small muted" id="clock-ahead">{aheadWords.text}{#if aheadWords.detail}{' '}<details class="tech inline"><summary>Details</summary><span class="mono">{aheadWords.detail}</span></details>{/if}</p>{/if}
     {#if sync.quarantined.length || sync.refused.length || collection.incomplete}
       <!-- What "set aside" meant, said plainly; and "this version of the app", not "this build" (round fifty-eight; the accessibility review). -->
-      <div class="card"><div class="lab">Could not be read here</div><div class="val">{[sync.quarantined.length + sync.refused.length ? String(sync.quarantined.length + sync.refused.length) : '', collection.incomplete ? `${collection.incomplete} waiting` : ''].filter(Boolean).join(' · ')}</div><div class="sub">{#if sync.quarantined.length}{sync.quarantined.length} {sync.quarantined.length === 1 ? 'batch' : 'batches'} on the server could not be read here{/if}{#if sync.quarantined.length && sync.refused.length}; {/if}{#if sync.refused.length}the server refused {sync.refused.length} {sync.refused.length === 1 ? 'item' : 'items'} from this device{/if}{#if sync.quarantined.length || sync.refused.length}. Syncing carries on around them.{/if}{#if collection.incomplete} {collection.incomplete} {collection.incomplete === 1 ? 'record waits' : 'records wait'} for changes this version of the app cannot read yet, and {collection.incomplete === 1 ? 'is' : 'are'} not shown until it can.{/if}</div></div>
+      <div class="card"><div class="lab">Could not be read here</div><div class="val">{[sync.quarantined.length + sync.refused.length ? String(sync.quarantined.length + sync.refused.length) : '', collection.incomplete ? `${collection.incomplete} waiting` : ''].filter(Boolean).join(' · ')}</div><div class="sub">{#if sync.quarantined.length}{sync.quarantined.length} sync {sync.quarantined.length === 1 ? 'bundle' : 'bundles'} on the server could not be read here{/if}{#if sync.quarantined.length && sync.refused.length}; {/if}{#if sync.refused.length}the server refused {sync.refused.length} {sync.refused.length === 1 ? 'item' : 'items'} from this device{/if}{#if sync.quarantined.length || sync.refused.length}. Syncing carries on around them.{/if}{#if collection.incomplete} {collection.incomplete} {collection.incomplete === 1 ? 'record waits' : 'records wait'} for changes this version of the app cannot read yet, and {collection.incomplete === 1 ? 'is' : 'are'} not shown until it can.{/if}</div></div>
     {/if}
     <div class="card"><div class="lab">Encryption</div><div class="val" style="font-family: var(--ui); font-size: var(--fs-lg); font-weight: 700">AES-256-GCM</div><div class="sub">key never leaves your devices</div></div>
   </div>
+  <!-- The engine's own words for what went wrong, one tap away; the card above says it plainly (round sixty; the words review, 15). -->
+  {#if errWords?.detail}<details class="tech" id="sync-error-detail"><summary>What the sync reported</summary><p class="mono small">{errWords.detail}</p></details>{/if}
+  <!-- The server's own sentence when it refuses this vault's uploads, and when this device asks again; receiving carries on (round sixty; three reviews). -->
+  {#if sync.refusal}
+    <p class="notice warn" id="sync-refusal" role="status">{sentence(sync.refusal.text)} This device asks again {when(sync.refusal.until)}. Your changes are kept here meanwhile, and changes from your other devices still come in.</p>
+  {/if}
   {#if sync.vaultFull}
-    <p class="notice bad" id="vault-full">Your vault is full ({mb(sync.vaultFull.bytes)} of {mb(sync.vaultFull.limit)} MB). Removing photographs frees only their own bytes, once the removal is ten minutes old; the batches of changes stay for good, since the log is the collection. Back up, then set up a new vault for the collection to carry on syncing. Changes made here are kept on this device and sent once there is room; receiving carries on.</p>
+    <p class="notice bad" id="vault-full">Your vault is full ({mb(sync.vaultFull.bytes)} of {mb(sync.vaultFull.limit)} MB). Removing photographs frees only their own bytes, once the removal is ten minutes old; the sync bundles of changes stay for good, since the log is the collection. Back up, then set up a new vault for the collection to carry on syncing. Changes made here are kept on this device and sent once there is room; receiving carries on.</p>
   {/if}
   {#if sync.clockWarning}
     <p class="notice warn" id="clock-warning">{sync.clockWarning}</p>
   {/if}
   {#if sync.held}
-    <p class="notice" id="held">{sync.held} {sync.held === 1 ? 'change' : 'changes'} from a device whose clock was ahead {sync.held === 1 ? 'is' : 'are'} held until {sync.heldUntil ? when(sync.heldUntil) : 'this device catches up'}. {sync.held === 1 ? 'It is' : 'They are'} stored here and will show then.</p>
+    <p class="notice" id="held">{sync.held} {sync.held === 1 ? 'change' : 'changes'} from a device whose clock was ahead {sync.held === 1 ? 'is' : 'are'} waiting until {sync.heldUntil ? when(sync.heldUntil) : 'this device catches up'}. {sync.held === 1 ? 'It is' : 'They are'} stored here and will show then.</p>
+  {:else if collection.heldWaiting}
+    <p class="notice" id="held">{heldWords(collection.heldWaiting)} They are stored here; nothing needs doing.</p>
   {/if}
   {#if collection.parkedRecords}
     <!-- A change stamped more than a day past its arrival is a broken clock's: parked, never folded on its own, and offered on its record with Apply (round fifty-two, 1). -->
@@ -209,7 +226,7 @@
   <div class="secrule"><h2>How it works</h2><div class="line"></div></div>
   <div class="cult"><div class="body prose">
     <!-- "sync key", and the reading of the log said as reading, not folding (round fifty-eight; the accessibility review). -->
-    <p>Every change you make (a watering, a note, a photograph) is sealed on this device with a key derived from your sync key, then sent as a batch. Other devices with the same key pull the batches and merge them by the same rule a backup uses: for each field, the latest change wins, wherever it was made. A batch on the server is never rewritten or deleted, so a sync interrupted halfway simply resumes; a photograph's sealed bytes are deleted once its removal is ten minutes old, by a request only a holder of the key can make. "Synced" is a statement about a moment: everything the server held at that time is on this device. A change another device sends later is not here until the next sync, which runs when a change is made here, when the app comes back to the front, when the connection returns, every few minutes while the app is open, and on demand.</p>
+    <p>Every change you make (a watering, a note, a photograph) is sealed on this device with a key derived from your sync key, then sent in a sync bundle. Other devices with the same key fetch the bundles and merge them by the same rule a backup uses: for each field, the latest change wins, wherever it was made. A bundle on the server is never rewritten or deleted, so a sync interrupted halfway simply resumes; a photograph's sealed bytes are deleted once its removal is ten minutes old, by a request only a holder of the key can make. "Synced" is a statement about a moment: everything the server held at that time is on this device. A change another device sends later is not here until the next sync, which runs when a change is made here, when the app comes back to the front, when the connection returns, every few minutes while the app is open, and on demand.</p>
     <details class="tech"><summary>How this page read the collection</summary><p id="fold">This page's copy of the collection was read {collection.loaded.from === 'snapshot' ? `from the snapshot the last load left (${collection.loaded.snapshot ?? 0} changes read then) and the ${collection.loaded.changes} ${collection.loaded.changes === 1 ? 'change' : 'changes'} that arrived after it` : `by reading the whole log, ${collection.loaded.changes} ${collection.loaded.changes === 1 ? 'change' : 'changes'}; a snapshot is kept for the next load`}. The log itself is what is kept and sent; the snapshot is a reading of it, dropped whenever the log is replaced or the rules change.</p></details>
     <p>What the server can see: a vault id, a token that proves you hold the key, and sealed blobs. From their names and sizes it can tell how many devices share the vault, when each of them syncs, roughly how many changes were made and when, and how many photographs there are and how large each is. It cannot read a plant's name, a note, a place or a date, and it cannot recover a lost key. Your local copy and your backups are unaffected by anything that happens to the vault.</p>
   </div></div>
@@ -224,7 +241,7 @@
   </div>
 {:else if mode === 'create'}
   <div class="cult pair">
-    <div class="sum">Your new sync key <span class="hint">shown once here; keep it somewhere safe</span></div><!-- "sync key": round fifty-eight; the accessibility review -->
+    <div class="sum">Your new sync key <span class="hint">save it somewhere safe; while this device syncs you can show it again here, under Add another device</span></div><!-- "sync key": round fifty-eight; the accessibility review -->
     <div class="body">
       <div class="pairrow">
         <div class="qr">{@html qr}</div>
@@ -233,7 +250,8 @@
           <div class="keytext mono" id="vault-key">{#each freshKey.split('-') as g, i (i)}<span class="kg">{g}</span>{#if i < 5}<span class="kd">-</span>{/if}{/each}</div>
           <!-- Typing the last group back is the one check that the key was read and kept, not only glanced at (round forty-one, R9); it sits under the key it asks about (round forty-nine, 3). -->
           <label class="typeback"><span>Type the last five symbols of the key to go on</span><input id="key-typeback" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="5" bind:value={typedBack} /></label>
-          <p class="small muted">This is the only key. It encrypts your collection and it is what a second device needs. There is no account behind it and no way to recover it: if it is lost the vault cannot be opened by anyone, including us; your collection on this device and in backups is unaffected. Put it in a password manager, or print this card and keep it with your seed packets.</p>
+          <!-- The outcome first and warmly; every fact kept (round sixty; the grower review, §3 and 11). -->
+          <p class="small muted">This key is the only way into your vault from a new device. Not even we can open the vault, and there is no account to recover it from, so keep it in your password manager or print this card and keep it with your seed packets. Your collection on this device and in backups never needs it.</p>
           <div class="row">
             <button class="btn" onclick={() => copyKey(freshKey)}>{copied ? 'Copied' : 'Copy key'}</button>
             <button class="btn" type="button" onclick={() => window.print()}>Print this card</button>
@@ -277,7 +295,7 @@
     {:else if sync.wasIn}
       <p>Not syncing. This device was in vault <code>{sync.wasIn.vaultId.slice(0, 6)}…</code> until {ago(sync.wasIn.at)}; its collection is still here. To carry on with your other devices, rejoin with the same key. Setting up a new vault here instead makes a second, separate one, which your other devices would not see.</p>
     {:else}
-      <p>Not syncing. Your collection is on this device only. Set up a vault here if this is your first device, or join with the key from a device that already has one.</p>
+      <p>Not syncing. Your collection stays on this device unless you turn sync on. Set up a vault here if this is your first device, or join with the key from a device that already has one.</p>
     {/if}
     <p class="small muted">What sync does: it moves an encrypted copy of your collection between your devices through this site, which cannot read it. The key is the only way in: there is no account and no recovery, so a lost key means a lost copy (your devices keep theirs, and a backup file needs no key).</p>
     <div class="row">
@@ -298,10 +316,17 @@
     <p>The key is made on this device and never sent anywhere. Everything is encrypted with it before it leaves (AES-256-GCM, WebCrypto). The server stores ciphertext under a vault id and checks a token derived from the key; it holds neither the key nor anything that could rebuild it. There is no account, no email, nothing to reset. Lose the key and the vault is unreadable to everyone, us included; your local copy and your backups are what you keep.</p>
   </div></div>
 {/if}
+<!-- Held changes are said here with sync off too: a restored file's changes dated ahead wait the same way, and the lists link here (round sixty; decision 2). -->
+{#if !sync.configured && collection.heldWaiting}
+  <p class="notice" id="held">{heldWords(collection.heldWaiting)} They came with a backup restored here, or from a device this one synced with before, and are stored on this device; nothing needs doing.</p>
+{/if}
 
 <style>
   .tech { margin: 8px 0 12px; font-size: var(--fs-md); color: var(--ink2); }
-  .tech summary { cursor: pointer; min-height: 36px; display: flex; align-items: center; }
+  .tech summary { cursor: pointer; min-height: var(--tap); display: flex; align-items: center; }
+  .tech.inline { display: inline; }
+  .tech.inline summary { display: inline-flex; }
+  .tech .mono { overflow-wrap: anywhere; }
   .parkedlist { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
   .parkedlist li { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
   .parkedlist .linkish { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); text-decoration: underline; cursor: pointer; }

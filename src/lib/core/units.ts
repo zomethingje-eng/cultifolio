@@ -35,13 +35,16 @@ export function tempN(c: number, u: Units, digits = 0): string {
 export function deltaT(dc: number, u: Units, digits = 1): string {
   return `${(u === 'us' ? dc * 1.8 : dc).toFixed(digits)} ${tempUnit(u)}`;
 }
+/** One formatter for whole millimetres ("1,234"), made once rather than per figure (round sixty). */
+const MM = new Intl.NumberFormat('en-US');
+
 /** Rain, from mm: "72 mm" or "2.8 in"; under an inch two decimals, under 10 mm one. */
 export function rain(mm: number, u: Units): string {
   if (u === 'us') {
     const i = mmToIn(mm);
     return `${i < 1 ? i.toFixed(2) : i.toFixed(1)} in`;
   }
-  return `${mm < 10 && mm !== Math.round(mm) ? mm.toFixed(1) : Math.round(mm).toLocaleString('en-US')} mm`;
+  return `${mm < 10 && mm !== Math.round(mm) ? mm.toFixed(1) : MM.format(Math.round(mm))} mm`;
 }
 /** The number alone: "2.8". */
 export function rainN(mm: number, u: Units): string {

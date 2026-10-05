@@ -455,7 +455,7 @@ describe('a batch that cannot be STORED is not set aside: the run stops and it i
     memD.failAppend = (_cs, fromServer) => fromServer && failed++ === 0; // the first write of server changes fails; the vault is otherwise fine
     const D = await boot(memD, r2);
     await expect(D.sync.setup(KEY, 'join')).rejects.toThrow(/quota/i);
-    expect(D.sync.lastError).toMatch(/quota/i);
+    expect(D.sync.lastError).toMatch(/out of space|quota/i);
     expect(D.sync.quarantined).toEqual([]); // storage is not the batch's fault
     expect(D.collection.accession(plant.id)).toBeUndefined(); // nothing applied that was not stored
     expect(memD.changes.size).toBe(0);
@@ -1498,6 +1498,48 @@ describe('a removed photograph\'s pixels go from every device and from the serve
     await B.sync.run(); // asked once, not every run
     expect(D.calls.filter((c) => c === `DELETE /api/sync/photo/${pid2}`)).toHaveLength(1);
   });
+  it('round sixty: the removal carries its time; a 503 is asked again next run without a word, a 409 (a newer upload) is let be', async () => {
+    const r2 = fakeR2();
+    const memB = newMem('bbbbbbbbbbbb');
+    mem = memB;
+    const B = await boot(memB, r2);
+    const a = await B.collection.addAccession({ taxonName: 'Aloe', acc: 'B-1' });
+    const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3]);
+    const pid = 'pone000000001';
+    const sha = await sha256hex(jpeg);
+    memB.photos.set(pid, { id: pid, blob: new Blob([jpeg]), thumb: new Blob([jpeg]) });
+    // taken twenty minutes ago on another device, and restored here from its file
+    const old = (count: number, field: string, value: unknown) => ({ t: hlcEncode({ wall: Date.now() - 20 * 60_000, count, device: 'cccccccccccc' }), kind: 'photo' as const, id: pid, field, value });
+    await B.collection.ingest([old(0, 'acc', a.id), old(1, 'd', '2026-01-01'), old(2, 'w', 1), old(3, 'h', 1), old(4, 'bytes', 6), old(5, 'sha', sha)], 'import');
+    await B.sync.setup(KEY, 'create');
+    const removedAt = Date.now() - 11 * 60_000;
+    await B.collection.ingest([{ t: hlcEncode({ wall: removedAt, count: 0, device: 'cccccccccccc' }), kind: 'photo', id: pid, field: '_deleted', value: true }], 'import');
+    const real = globalThis.fetch;
+    const seen: Array<string | null> = [];
+    let answer = 503;
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      if (init?.method === 'DELETE' && String(input).includes('/api/sync/photo/')) {
+        seen.push(new Headers(init.headers).get('x-photo-removed-at'));
+        return new Response(JSON.stringify({ error: 'busy' }), { status: answer, headers: { 'retry-after': '5', 'content-type': 'application/json' } });
+      }
+      return real(input, init);
+    }) as typeof fetch;
+    try {
+      await B.sync.run();
+      expect(seen).toEqual([String(removedAt)]);
+      expect(B.sync.lastError).toBeNull();
+      expect((memB.meta.get('sync') as { photosDropped?: string[] }).photosDropped ?? []).not.toContain(pid);
+      answer = 409;
+      await B.sync.run(); // asked again
+      expect(seen).toHaveLength(2);
+      expect(B.sync.lastError).toBeNull();
+      expect((memB.meta.get('sync') as { photosDropped?: string[] }).photosDropped).toContain(pid);
+      await B.sync.run(); // and not again
+      expect(seen).toHaveLength(2);
+    } finally {
+      globalThis.fetch = real;
+    }
+  });
   it('round fifty-one, 2: a photograph brought back after a peer had the server drop its bytes is sent again from the device that kept the pixels, and the removal carries a proof the token alone cannot make', async () => {
     const r2 = fakeR2();
     const memB = newMem('bbbbbbbbbbbb');
@@ -1546,7 +1588,7 @@ describe('a removed photograph\'s pixels go from every device and from the serve
 });
 
 describe('round fifty-two, 1: a change from a clock years ahead is parked, not held, and the device that made it converges once corrected', () => {
-  it('peers park it by its arrival; the fast device, corrected, parks its own and stops stamping ahead; Apply re-writes it at real time everywhere', async () => {
+  it('peers park it by its arrival; the fast device, corrected, keeps its own shown, and its next edit parks the old stamp and is stamped at real time everywhere (round sixty)', async () => {
     // The correction and its pending reading live in localStorage, which this Node lacks: a stand-in, so a reboot keeps them as a browser would.
     const store = new Map<string, string>();
     const had = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
@@ -1586,14 +1628,17 @@ describe('round fifty-two, 1: a change from a clock years ahead is parked, not h
     await C.sync.setup(KEY, 'join');
     expect(C.collection.accession(plant.id)?.notes).toBe('no: leave it until spring');
     expect(C.collection.parkedRecords).toBe(1);
-    // P syncs again a minute later: the second reading corrects it. Its 2031 stamps are parked here too, its view
-    // converges, and its next edit is stamped by real time, not just past its 2031 stamp.
+    // P syncs again a minute later: the second reading corrects it. Its own 2031 stamps are not parked by its clock
+    // (round sixty: a device never parks its own changes by its clock, since a clock set back looks the same); the line
+    // under the top bar says its changes are dated ahead, and its next edit, with the clock confirmed, parks the 2031
+    // stamp as part of the edit and is stamped by real time.
     vi.setSystemTime(real + 5 * 365 * 86_400_000 + 90_000);
     serverClock = real + 90_000;
     P = await reboot(memP, r2);
     await P.sync.run();
-    expect(P.collection.accession(plant.id)?.notes).toBe('no: leave it until spring');
-    expect(P.collection.parkedFor('accession', plant.id).length).toBeGreaterThan(0);
+    expect(P.collection.accession(plant.id)?.notes).toBe('from 2031');
+    expect(P.collection.clockTrusted).toBe(true);
+    expect(P.collection.clockBehindAt).toBeGreaterThan(real + 365 * 86_400_000);
     await P.collection.put('accession', plant.id, { notes: 'P, corrected' });
     const mine = [...memP.changes.values()].find((c) => c.value === 'P, corrected')!;
     expect(hlcWall(mine.t)).toBeLessThan(real + 86_400_000); // real time, not 2031
@@ -1826,3 +1871,119 @@ describe('one run at a time per vault in a browser (round fifty-eight; the lock,
     }
   });
 });
+
+/* Proposed by the round-59 harness review; adopted in round 60. */
+describe('PROPOSED: the engine against an unchecked clock, the lock retry, the reload, and the clock line', () => {
+  it('C03: a restored peer change three days past a clock no server has confirmed is held, not parked, by the engine too', async () => {
+    serverClock = null;
+    const r2 = fakeR2();
+    const memA = newMem('aaaaaaaaaaaa');
+    const A = await boot(memA, r2);
+    const plant = await A.collection.addAccession({ taxonName: 'Lithops', acc: 'A-1', notes: 'one' });
+    await A.sync.setup(KEY, 'create');
+    const ahead = hlcEncode({ wall: Date.now() + 3 * 86_400_000, count: 0, device: 'cccccccccccc' });
+    await A.collection.ingest([{ t: ahead, kind: 'accession', id: plant.id, field: 'notes', value: 'from the future' }], 'import');
+    expect(A.collection.heldList()).toContain(ahead);
+    expect(A.sync.held).toBe(1);
+  });
+  it('C21: a tab that finds the lock taken tries again within five seconds', async () => {
+    const r2 = fakeR2();
+    const memA = newMem('aaaaaaaaaaaa');
+    const tab1 = await boot(memA, r2);
+    await tab1.sync.setup(KEY, 'create');
+    const tab2 = await reboot(memA, r2);
+    await tab1.collection.addAccession({ taxonName: 'Lithops', acc: 'A-1' });
+    const real = globalThis.fetch;
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    let arrived: () => void = () => {};
+    const reached = new Promise<void>((r) => (arrived = r));
+    let stalled = 0;
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      if (init?.method === 'POST' && /\/api\/sync\/log\?/.test(String(input)) && stalled++ === 0) { arrived(); await gate; }
+      return real(input, init);
+    }) as typeof fetch;
+    try {
+      const first = tab1.sync.run();
+      await reached;
+      await tab2.sync.run();
+      const timer = (tab2.sync as unknown as { timer: { _idleTimeout?: number } | null }).timer;
+      expect(timer?._idleTimeout).toBeLessThanOrEqual(5000);
+      release();
+      await first;
+    } finally {
+      globalThis.fetch = real;
+    }
+  });
+  it('C22/C23: a full vault another tab has since cleared is not left standing in this tab by its run', async () => {
+    const r2 = fakeR2();
+    const memB = newMem('bbbbbbbbbbbb');
+    const tab1 = await boot(memB, r2);
+    await tab1.collection.addEvent({ acc: 'r1', d: '2026-01-01', t: 'water' });
+    await tab1.sync.setup(KEY, 'create');
+    await fillVault(r2);
+    await tab1.collection.addEvent({ acc: 'r1', d: '2026-02-01', t: 'feed' });
+    await tab1.sync.run();
+    expect(tab1.sync.vaultFull).not.toBeNull();
+    const tab2 = await reboot(memB, r2); // a second page of the same browser: it reads the full vault from the record
+    expect(tab2.sync.vaultFull).not.toBeNull();
+    await fillVault(r2, 0); // room again
+    const tab1b = await reboot(memB, r2);
+    await tab1b.sync.run(); // the first tab's run clears it
+    expect((memB.meta.get('sync') as { vaultFull?: unknown }).vaultFull).toBeUndefined();
+    await tab2.sync.run(); // nothing of its own to send: only the record it reads says the vault has room
+    expect(tab2.sync.vaultFull).toBeNull();
+  });
+  it('C27: a held change found at open is kept in the record, so a run that reads the record folds it when due', async () => {
+    serverClock = null;
+    const r2 = fakeR2();
+    const memA = newMem('aaaaaaaaaaaa');
+    let A = await boot(memA, r2);
+    const plant = await A.collection.addAccession({ taxonName: 'Lithops', acc: 'A-1', notes: 'one' });
+    await A.sync.setup(KEY, 'create');
+    // another tab stored a peer's change an hour ahead
+    const t = hlcEncode({ wall: Date.now() + 3_600_000, count: 0, device: 'cccccccccccc' });
+    memA.changes.set(t, { t, kind: 'accession', id: plant.id, field: 'notes', value: 'from the future' });
+    A = await reboot(memA, r2);
+    expect(A.sync.held).toBe(1);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.now() + 3_600_000);
+    await A.sync.run();
+    expect(A.collection.accession(plant.id)?.notes).toBe('from the future');
+    expect(A.sync.held).toBe(0);
+  });
+  it('C41: the clock line goes once the clock has caught up with this device\'s own stamps', async () => {
+    serverClock = null;
+    const r2 = fakeR2();
+    const memB = newMem('bbbbbbbbbbbb');
+    const real = Date.now();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(real + 2 * 86_400_000);
+    let B = await boot(memB, r2);
+    await B.sync.setup(KEY, 'create');
+    await B.collection.addAccession({ taxonName: 'Lithops', acc: 'B-1' });
+    vi.setSystemTime(real); // the clock jumped back
+    B = await reboot(memB, r2);
+    expect(B.sync.clockWarning).toMatch(/jumped back/);
+    vi.setSystemTime(real + 2 * 86_400_000 + 60_000); // and caught up
+    await B.sync.run();
+    expect(B.sync.clockWarning).toBeNull();
+  });
+  it('C46: a change stamped three days past its batch\'s arrival is parked by the arrival, on a device whose clock no server has confirmed', async () => {
+    serverClock = null;
+    const r2 = fakeR2();
+    const B = await boot(newMem('bbbbbbbbbbbb'), r2);
+    await B.sync.setup(KEY, 'create');
+    const keys = await deriveKeys(KEY);
+    const wall = Date.now() + 3 * 86_400_000;
+    const t = hlcEncode({ wall, count: 0, device: 'xxxxxxxxxxxx' });
+    const changes = [{ t, kind: 'accession', id: 'r1', field: 'taxonName', value: 'From a broken clock' }];
+    await pushAs(keys, String(Math.floor(wall / 3_600_000) * 3_600_000), 'xxxxxxxxxxxx', '000000000001', { v: 1, device: 'xxxxxxxxxxxx', changes });
+    const D = await boot(newMem('dddddddddddd'), r2);
+    await D.sync.setup(KEY, 'join');
+    expect(D.collection.accession('r1')).toBeUndefined();
+    expect(D.collection.parkedRecords).toBe(1);
+    expect(D.sync.held).toBe(0);
+  });
+});
+

@@ -287,10 +287,10 @@ export function previewMerge(current: Change[], incoming: Change[]) {
       else addedByKind[r.kind] = (addedByKind[r.kind] ?? 0) + 1;
     } else if (b._t !== r._t) changed++;
   }
-  // Numbers the merge would settle: a plant here and a plant in the file under one number. The earlier-created record
-  // keeps it and the other is renumbered after the merge, which the preview did not say; a label printed for a plant
-  // here then pointed at the file's (round fifty-one, 4).
-  const renumbered: Array<{ no: string; here: boolean; name: string }> = [];
+  // Numbers the merge would leave shared: a plant here and a plant in the file under one number. Nothing renumbers on
+  // its own any more (round fifty-nine): both keep the number until the grower presses Renumber on either page, which
+  // the preview says rather than promising a renumbering that does not happen (round sixty; the data review's 7).
+  const sharedNumbers: Array<{ no: string; here: boolean; name: string }> = [];
   for (const kind of ['accession', 'sowing'] as const) {
     const byNo = new Map<string, Array<Record_>>();
     for (const r of after.values()) {
@@ -301,12 +301,11 @@ export function previewMerge(current: Change[], incoming: Change[]) {
     }
     for (const [no, recs] of byNo) {
       if (recs.length < 2) continue;
-      recs.sort((a, b) => a.id.localeCompare(b.id)); // the rule the repair uses: the earliest creation keeps the number
-      for (const r of recs.slice(1)) renumbered.push({ no, here: before.has(`${kind}:${r.id}`), name: String(r.taxonName ?? '') });
+      for (const r of recs) sharedNumbers.push({ no, here: before.has(`${kind}:${r.id}`), name: String(r.taxonName ?? '') });
     }
   }
-  renumbered.sort((a, b) => a.no.localeCompare(b.no));
-  return { fresh, added, changed, unchanged: after.size - added - changed, addedByKind, addedDeleted, addedWaiting, waitingNames, renumbered };
+  sharedNumbers.sort((a, b) => a.no.localeCompare(b.no) || Number(b.here) - Number(a.here));
+  return { fresh, added, changed, unchanged: after.size - added - changed, addedByKind, addedDeleted, addedWaiting, waitingNames, sharedNumbers };
 }
 
 const csvCell = (x: unknown) => {
@@ -316,6 +315,10 @@ const csvCell = (x: unknown) => {
   // formula by a spreadsheet; a note starting "-5 °C" is the real case. A leading apostrophe makes it text, which is
   // what it is (round twenty-six, 14). A number is a number and is written as one: −5 °C of bottom heat stays -5 (round twenty-nine, 10).
   if (typeof x === 'string' && /^\s*[=+\-@\t\r＝＋－＠]/.test(s)) s = "'" + s;
+  // Text a spreadsheet would read as a number or a date and change: a lot "0012" became 12, "1E5" 100000, "3-12" the
+  // 3rd of December (round sixty; the data review's 12). Written as ="0012", which spreadsheets show as the text itself;
+  // the import page reads it back the same way. Real numbers stay numbers.
+  else if (typeof x === 'string' && (/^0\d+$/.test(s) || /^\d+(\.\d+)?[eE][+-]?\d+$/.test(s) || /^\d{1,2}[-/]\d{1,2}$/.test(s) || /^\d{16,}$/.test(s))) s = `="${s}"`;
   return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 };
 
@@ -336,10 +339,12 @@ const csvSheet = (head: string[], rows: string[]) => '\ufeff' + [head.join(','),
 /** The plants as a flat sheet: one row each, the fields a person would want in a spreadsheet. */
 export function plantsCsv(accs: Array<Accession & Record_>, state: Map<string, Record_>): string {
   const loc = (id: string | null | undefined) => locPath(state, id);
-  const head = ['number', 'species', 'cultivar', 'kind', 'parentage', 'name as received', 'field number', 'provenance', 'status', 'location', 'acquired', 'from', 'lot or reference', 'form', 'price', 'sowing', 'notes'];
+  // The record's identity last: two plants under one number (two devices gave it out offline) are two rows that a reader
+  // and an import can tell apart (round sixty; the data review's 12).
+  const head = ['number', 'species', 'cultivar', 'kind', 'parentage', 'name as received', 'field number', 'provenance', 'status', 'location', 'acquired', 'from', 'lot or reference', 'form', 'price', 'sowing', 'notes', 'id'];
   const rows = [...accs]
     .sort((a, b) => accNo(a).localeCompare(accNo(b)))
-    .map((a) => [accNo(a), a.taxonName, a.cultivar, kindOf(a), a.parentage, a.nameAsReceived, a.fieldNumber, a.provenance, a.status, a.locationId ? loc(a.locationId) : null, a.acquired, a.sourceFrom, a.sourceRef, a.sourceForm, a.price, a.sowingId ? sowNo((state.get(`sowing:${a.sowingId}`) as unknown as Sowing | undefined) ?? { id: a.sowingId }) : null, a.notes].map(csvCell).join(','));
+    .map((a) => [accNo(a), a.taxonName, a.cultivar, kindOf(a), a.parentage, a.nameAsReceived, a.fieldNumber, a.provenance, a.status, a.locationId ? loc(a.locationId) : null, a.acquired, a.sourceFrom, a.sourceRef, a.sourceForm, a.price, a.sowingId ? sowNo((state.get(`sowing:${a.sowingId}`) as unknown as Sowing | undefined) ?? { id: a.sowingId }) : null, a.notes, a.id].map(csvCell).join(','));
   return csvSheet(head, rows);
 }
 
@@ -351,7 +356,7 @@ export function plantsCsv(accs: Array<Accession & Record_>, state: Map<string, R
 export function eventsCsv(events: Array<PlantEvent & Record_>, state: Map<string, Record_>): string {
   // Measurements are written as the label and the unit ("height 42 mm"), not the stored key in bare millimetres, which a
   // reader in inches misread; an entry on a removed record says so in its own column (round fifty-one, 5).
-  const head = ['date', 'number', 'species', 'entry', 'note', 'count', 'cause', 'used', 'measurements', 'by the app', 'record removed'];
+  const head = ['date', 'number', 'species', 'entry', 'note', 'count', 'cause', 'used', 'measurements', 'by the app', 'record removed', 'record id'];
   const rows = [...events]
     .sort((a, b) => a.d.localeCompare(b.d) || a.id.localeCompare(b.id))
     .map((e) => {
@@ -361,14 +366,14 @@ export function eventsCsv(events: Array<PlantEvent & Record_>, state: Map<string
       const name = acc?.taxonName ?? sow?.taxonName ?? null;
       const measures = e.measures && typeof e.measures === 'object' ? Object.entries(e.measures).map(([k, v]) => { const m = MEASURES.find((x) => x.k === k) ?? (k === 'pot' ? { label: 'Pot size', unit: 'mm' } : undefined); /* a repot's pot, in mm (round fifty-eight) */ return `${(m?.label ?? k).toLowerCase()} ${v}${m?.unit ? ` ${m.unit}` : ''}`; }).join('; ') : null;
       const removed = (acc ?? sow)?._deleted ? 'yes' : null;
-      return [e.d, no, name, EVENT_LABEL[e.t as keyof typeof EVENT_LABEL] ?? e.t, e.note, e.n, e.cause, e.used, measures, e.auto ? 'yes' : null, removed].map(csvCell).join(',');
+      return [e.d, no, name, EVENT_LABEL[e.t as keyof typeof EVENT_LABEL] ?? e.t, e.note, e.n, e.cause, e.used, measures, e.auto ? 'yes' : null, removed, e.acc].map(csvCell).join(',');
     });
   return csvSheet(head, rows);
 }
 
 /** The propagation batches as a sheet, with the figures the batch page shows: what went in, the latest count, what was potted and lost (round twenty-eight, 9). */
 export function batchesCsv(sowings: Array<Sowing & Record_>, state: Map<string, Record_>): string {
-  const head = ['number', 'species', 'cultivar', 'kind', 'parentage', 'method', 'parent plant', 'date', 'started', 'counted', 'potted', 'lost', 'from', 'lot', 'field number', 'provenance', 'medium', 'container', 'pre-treatment', 'bottom heat C', 'covered', 'location', 'status', 'notes'];
+  const head = ['number', 'species', 'cultivar', 'kind', 'parentage', 'method', 'parent plant', 'date', 'started', 'counted', 'potted', 'lost', 'from', 'lot', 'field number', 'provenance', 'medium', 'container', 'pre-treatment', 'bottom heat C', 'covered', 'location', 'status', 'notes', 'id'];
   const events = new Map<string, Array<{ t: string; n: number }>>();
   for (const r of state.values()) if (r.kind === 'event' && !r._deleted && isComplete(r) && typeof r.acc === 'string') { let l = events.get(r.acc); if (!l) events.set(r.acc, (l = [])); l.push({ t: String(r.t), n: typeof r.n === 'number' ? r.n : 0 }); }
   const rows = [...sowings]
@@ -377,7 +382,7 @@ export function batchesCsv(sowings: Array<Sowing & Record_>, state: Map<string, 
       const ev = events.get(s.id) ?? [];
       const germ = ev.filter((e) => e.t === 'germinate');
       const parent = s.parentAcc ? (state.get(`accession:${s.parentAcc}`) as unknown as Accession | undefined) : undefined;
-      return [sowNo(s), s.taxonName, s.cultivar, kindOf(s), s.parentage, s.method, parent ? accNo(parent) : s.parentAcc, s.sown, s.count, germ.length ? Math.max(...germ.map((e) => e.n)) : null, ev.filter((e) => e.t === 'potup').reduce((n, e) => n + e.n, 0) || null, ev.filter((e) => e.t === 'loss').reduce((n, e) => n + e.n, 0) || null, s.sourceFrom, s.sourceRef, s.fieldNumber, s.provenance, s.medium, s.container, s.treatment, s.bottomHeatC, s.covered ? 'yes' : null, locPath(state, s.locationId), s.status, s.notes].map(csvCell).join(',');
+      return [sowNo(s), s.taxonName, s.cultivar, kindOf(s), s.parentage, s.method, parent ? accNo(parent) : s.parentAcc, s.sown, s.count, germ.length ? Math.max(...germ.map((e) => e.n)) : null, ev.filter((e) => e.t === 'potup').reduce((n, e) => n + e.n, 0) || null, ev.filter((e) => e.t === 'loss').reduce((n, e) => n + e.n, 0) || null, s.sourceFrom, s.sourceRef, s.fieldNumber, s.provenance, s.medium, s.container, s.treatment, s.bottomHeatC, s.covered ? 'yes' : null, locPath(state, s.locationId), s.status, s.notes, s.id].map(csvCell).join(',');
     });
   return csvSheet(head, rows);
 }

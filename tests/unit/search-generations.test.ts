@@ -10,11 +10,20 @@ import { isManifest } from '$dossier/manifest';
 import { homeWindow, catalogueOf, HOME_WINDOW, HOME_ITEMS } from '$lib/server/catalogue';
 import { buildProducts } from '$dossier/products';
 import { manifestPath, productPath } from '$dossier/manifest';
-import { prepare, search } from '$core/search';
+import { prepare, search, relaxedQuery } from '$core/search';
 import { _clean } from '../../src/routes/api/search/+server';
 
+/**
+ * mulberry32 (round sixty; the corpus and harness reviews): the LCG before kept only its high bits by luck, and from
+ * seed 7 gave sixteen zeros running for rnd(2); the "wider" corpus was 356 distinct names of fifteen hundred.
+ */
 let seed = 7;
-const rnd = (n: number) => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed % n; };
+const rnd = (n: number) => {
+  seed = (seed + 0x6d2b79f5) | 0;
+  let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return Math.floor((((t ^ (t >>> 14)) >>> 0) / 4294967296) * n);
+};
 const pick = <T>(xs: T[]) => xs[rnd(xs.length)];
 
 function storeFor(files: Map<string, string>) {
@@ -40,9 +49,11 @@ const never = async () => { throw new Error('whole-index fallback reached'); };
 
 function corpus(alpha: string[], n: number) {
   const word = (min: number, max: number) => Array.from({ length: min + rnd(max - min + 1) }, () => pick(alpha)).join('');
-  const markers = ['var.', 'subsp.', 'f.', 'ssp.', 'var', 'f'];
+  const markers = ['var.', 'subsp.', 'f.', 'ssp.', 'var', 'f', 'v.', 'fo.', 'subspecies', 'cv.'];
   return Array.from({ length: n }, (_, i) => {
-    const parts = [word(1, 6), word(1, 7)];
+    // a hybrid as the reference writes one ("Aloe × nobilis", "× Gasteraloe beguinii"), an infraspecific name, or a plain binomial
+    const h = rnd(12);
+    const parts = h === 0 ? [word(1, 6), '×', word(1, 7)] : h === 1 ? ['×', word(1, 6), word(1, 7)] : [word(1, 6), word(1, 7)];
     if (!rnd(4)) parts.push(pick(markers), word(1, 5));
     const name = parts.join(' ');
     return {
@@ -51,11 +62,21 @@ function corpus(alpha: string[], n: number) {
       name,
       family: rnd(3) ? word(3, 9) : undefined,
       common: rnd(3) ? undefined : `${word(1, 5)}-${word(2, 6)}'s ${word(1, 4)}`,
+      // every English common name since round sixty, not only the first
+      commons: rnd(4) ? undefined : Array.from({ length: 1 + rnd(3) }, () => `${word(1, 5)} ${word(2, 6)}`),
       origin: rnd(2) ? [word(2, 6) + ' ' + word(1, 4)] : [],
       syn: rnd(3) ? undefined : [`${word(2, 5)} ${pick(markers)} ${word(1, 6)}`, `${word(1, 4)} ${word(1, 6)}`],
       open: 0
     };
   });
+}
+/** The whole index's answer as the route gives it: the query as written, else its first two words, saying so (round sixty). */
+function wholeAnswer(whole: ReturnType<typeof prepare>, q: string, n: number): { keys: number[]; relaxed?: string } {
+  const a = search(whole, q, n).map((h) => (h as unknown as { key: number }).key);
+  if (a.length) return { keys: a };
+  const r = relaxedQuery(q);
+  const b = r ? search(whole, r, n).map((h) => (h as unknown as { key: number }).key) : [];
+  return b.length ? { keys: b, relaxed: r! } : { keys: a };
 }
 const slip = (s: string, alpha: string[]) => {
   if (!s.length) return s;
@@ -63,8 +84,8 @@ const slip = (s: string, alpha: string[]) => {
   return k === 0 ? s.slice(0, i) + c + s.slice(i) : k === 1 ? s.slice(0, i) + s.slice(i + 1) : k === 2 ? s.slice(0, i) + c + s.slice(i + 1) : s.slice(0, i) + (s[i + 1] ?? '') + s[i] + s.slice(i + 2);
 };
 function queries(idx: ReturnType<typeof corpus>, alpha: string[], count: number) {
-  const out: string[] = ['f', 'var', 'subsp', 'a var', 'ab subsp', 'subsp var f', 'f f f', 'var x', '1', 'zz9'];
-  const ws = (e: (typeof idx)[number]) => [e.name, e.common ?? '', e.family ?? '', ...(e.origin ?? []), ...(e.syn ?? [])].join(' ').split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  const out: string[] = ['f', 'var', 'subsp', 'a var', 'ab subsp', 'subsp var f', 'f f f', 'var x', '1', 'zz9', 'x', 'x a', 'a x b', 'cv', "a 'b c'", 'a b (C.) D.', 'v', 'fo'];
+  const ws = (e: (typeof idx)[number]) => [e.name, e.common ?? '', ...(e.commons ?? []), e.family ?? '', ...(e.origin ?? []), ...(e.syn ?? [])].join(' ').split(/[^\p{L}\p{N}]+/u).filter(Boolean);
   for (let j = 0; j < count; j++) {
     const e = pick(idx);
     const w = ws(e);
@@ -78,9 +99,14 @@ function queries(idx: ReturnType<typeof corpus>, alpha: string[], count: number)
       else if (how === 2) x = slip(x.slice(0, 1 + rnd(x.length)), alpha);
       else if (how === 3) x = Array.from({ length: 1 + rnd(6) }, () => pick(alpha)).join('');
       q.push(x);
-      if (!rnd(6)) q.push(pick(['var', 'subsp', 'f', 'ssp', 'var.']));
+      if (!rnd(6)) q.push(pick(['var', 'subsp', 'f', 'ssp', 'var.', 'v.', 'fo.', 'subspecies', 'cv.', 'x', '×']));
     }
-    if (!rnd(4)) q.push(pick(['var', 'subsp', 'f', 'ssp']));
+    if (!rnd(4)) q.push(pick(['var', 'subsp', 'f', 'ssp', 'x', 'cv']));
+    // the ways a grower pastes a name: a quoted cultivar, an author citation, the hybrid sign written x
+    const extra = rnd(10);
+    if (extra === 0) q.push(`'${pick(alpha)}${pick(alpha)}'`);
+    else if (extra === 1) q.push(`(${pick(alpha).toUpperCase()}.)`, `${pick(alpha).toUpperCase()}${pick(alpha)}`);
+    else if (extra === 2) q.unshift('x');
     out.push(q.join(pick([' ', '  ', ', ', '/'])));
   }
   return out;
@@ -109,10 +135,11 @@ describe('the postings and the short answers equal the whole index (the server r
           const q = _clean(raw);
           if (!q) continue;
           const lim = pick([1, 3, 60, 100]);
-          const a = await searchAnswer(platform, noStatic, q, lim, never);
+          // A pass past WHOLE_LIKE candidates is charged (allowed here); the answer must still be the whole index's.
+          const a = await searchAnswer(platform, noStatic, q, lim, async () => null);
           if ('stop' in a) throw new Error('stop');
-          const got = a.hits.map((h) => h.key);
-          const want = search(whole, q, lim).map((h) => h.key);
+          const got = { keys: a.hits.map((h) => h.key), ...(a.relaxed ? { relaxed: a.relaxed.query } : {}) };
+          const want = wholeAnswer(whole, q, lim);
           if (JSON.stringify(got) !== JSON.stringify(want)) bad.push({ q, got, want });
         }
         expect(bad.slice(0, 5)).toEqual([]);

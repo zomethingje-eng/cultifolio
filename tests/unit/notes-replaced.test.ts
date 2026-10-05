@@ -37,6 +37,15 @@ describe('notes replaced unseen', () => {
     expect(replacedNotes(log, { skip: new Set([far]) })).toEqual([]); // the fold has not applied it
   });
 
+  it('an edit made from a text this device has parked is followed through that text\'s own base (round sixty; the first outside review, 16)', () => {
+    const N0 = t(1000, 0, 'aaaaaaaaaaaa');
+    const P = t(2000, 0, 'bbbbbbbbbbbb'); // made from N0, parked here
+    const E = t(3000, 0, 'cccccccccccc'); // made on a device that showed P
+    const log = [notes(N0, 'the text on screen'), notes(P, 'parked here'), base(t(2000, 1, 'bbbbbbbbbbbb'), N0), notes(E, 'edited from the parked text'), base(t(3000, 1, 'cccccccccccc'), P)];
+    expect(replacedNotes(log, { skip: new Set([P]) })).toEqual([]); // E was made, through P, from the text on screen
+    expect(replacedNotes(log).map((r) => r.text)).toEqual([]); // and with P applied, each edit was made from the one before
+  });
+
   it('a species\' own notes are read the same way, by their own fields (round fifty-nine)', () => {
     const M0 = t(1000, 0, 'aaaaaaaaaaaa');
     const log = [notes(M0, 'water in spring', 'myNotes'), notes(t(2000, 0, 'bbbbbbbbbbbb'), 'water in autumn', 'myNotes'), base(t(2000, 1, 'bbbbbbbbbbbb'), null, 'myNotesBase')];

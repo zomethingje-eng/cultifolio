@@ -52,6 +52,7 @@ import { execSync } from 'node:child_process';
 import { buildDossier, NETWORK_EXTRAS, photosFromMedia, mergeGbifPhotos, type SkippableSource } from '../src/lib/dossier/build';
 import { mendGbifThumb } from '../src/lib/dossier/md5';
 import { heroOf } from '../src/lib/dossier/dedupe';
+import { englishNames } from '../src/lib/dossier/index-entry';
 import * as gbif from '../src/lib/dossier/sources/gbif';
 import { literature } from '../src/lib/dossier/sources/openalex';
 import * as inat from '../src/lib/dossier/sources/inat';
@@ -114,7 +115,7 @@ function diskPowerCache(dir: string): PowerCache {
   };
 }
 
-type IndexEntry = { key: number; slug: string; name: string; family?: string; common?: string; origin: string[]; thumb?: string; photos: number; open: number; climate: string; near?: number[]; syn?: string[] };
+type IndexEntry = { key: number; slug: string; name: string; family?: string; common?: string; commons?: string[]; origin: string[]; thumb?: string; photos: number; open: number; climate: string; near?: number[]; syn?: string[] };
 type Dossierish = { key: number; slug: string; name: { scientific: string; family?: string; status?: string; vernacular: Array<{ name: string; lang?: string }>; synonyms?: string[] }; distribution: { native: Array<{ name: string }> }; photos: Array<{ id: string; url: string; thumb: string; captive?: boolean }>; occurrences: { nOpenInRange: number; nRestrictedInRange?: number; nOutsideRange?: number }; climate: { status: string; months?: Array<{ tmax: number; tmin: number; precipMm: number }> } };
 function indexEntry(d: Dossierish): IndexEntry & { status?: string } {
   const hero = heroOf(d.photos);
@@ -124,7 +125,7 @@ function indexEntry(d: Dossierish): IndexEntry & { status?: string } {
   const genus = accepted.split(' ')[0];
   const syn = [...new Set((d.name.synonyms ?? []).map(canonicalSynonym).filter((x): x is string => !!x && x !== accepted))].sort((a, b) => Number(a.startsWith(genus + ' ')) - Number(b.startsWith(genus + ' '))).slice(0, 6);
   // The thumbnail in the form GBIF's cache still answers, whatever form the dossier holds (the Worker mends a dossier's as it reads it; the index carries no key to mend by, so it is mended here: round thirty-two, 1).
-  return { status: d.name.status, key: d.key, slug: d.slug, name: d.name.scientific, family: d.name.family, common: d.name.vernacular.find((v) => v.lang === 'eng')?.name, origin: d.distribution.native.map((n) => n.name), thumb: hero ? mendGbifThumb(hero.thumb, hero.id, hero.url) : undefined, photos: d.photos.length, open: d.occurrences.nOpenInRange, climate: d.climate.status, ...(syn.length ? { syn } : {}) };
+  return { status: d.name.status, key: d.key, slug: d.slug, name: d.name.scientific, family: d.name.family, ...englishNames(d.name.vernacular), origin: d.distribution.native.map((n) => n.name), thumb: hero ? mendGbifThumb(hero.thumb, hero.id, hero.url) : undefined, photos: d.photos.length, open: d.occurrences.nOpenInRange, climate: d.climate.status, ...(syn.length ? { syn } : {}) };
 }
 
 /** Every dossier on disk, as index entries. The corpus is the files; the index is derived from them. */

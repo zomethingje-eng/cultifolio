@@ -6,6 +6,8 @@
   import { prepareBackup, downloadBackup, openBackup, restoreBackup, type Opened, type PreparedBackup } from '$lib/backup/io';
   import { sync } from '$lib/sync/engine.svelte';
   import { setCrumb } from '$lib/ui/crumb.svelte';
+  import { heldWords } from '$lib/ui/held-words';
+  import { listWords, plural, some } from '$lib/ui/words';
 
   let lastBackup = $state<string | null>(null);
   let photoCount = $state<number | null>(null);
@@ -80,12 +82,17 @@
     if (!opened) return;
     busy = mode === 'replace' ? 'Replacing…' : 'Merging…';
     try {
+      const heldBefore = collection.heldWaiting;
       const r = await restoreBackup(opened, mode, (d, n) => (busy = `Storing photos ${d} of ${n}…`));
       if (mode === 'replace') {
         location.href = '/plants';
         return;
       }
-      done = `Merged: ${opened ? `${addedWords(opened.merge)} added, ${opened.merge.changed} updated, ` : ''}${r.changes} ${r.changes === 1 ? 'change' : 'changes'} and ${r.photos} ${r.photos === 1 ? 'photo' : 'photos'} taken in.`;
+      // The outcome in the grower's words first; the log's own count of changes after it (round sixty; the grower review, §3).
+      done = `Merged: ${opened && opened.merge.fresh.length ? `${addedWords(opened.merge)} added${opened.merge.changed ? `, ${plural(opened.merge.changed, 'record')} here updated from the file` : ''}` : 'nothing new to add'}. ${plural(r.changes, 'change')} taken in; nothing here was removed.`;
+      // Changes dated ahead of this device's clock are in the log and wait for its date: said, so a list that stays short is not read as a restore that failed (round sixty; decision 2, the data review's 6).
+      const heldNow = collection.heldWaiting - heldBefore;
+      if (heldNow > 0) done += ` ${heldWords(heldNow)}`;
       if (r.photosMissing) done += ` ${r.photosMissing} ${r.photosMissing === 1 ? 'photo record has' : 'photo records have'} no photograph: the file did not hold the pixels and neither does this device. The ${r.photosMissing === 1 ? 'record is' : 'records are'} kept.`;
       if (r.settingsRestored.length) done += ` This device had no ${r.settingsRestored.length > 1 ? r.settingsRestored.slice(0, -1).join(', ') + ' or ' + r.settingsRestored.at(-1) : r.settingsRestored[0]} of its own, so the file's ${r.settingsRestored.length === 1 ? 'was' : 'were'} applied.`;
       opened = null;
@@ -96,22 +103,30 @@
       busy = null;
     }
   }
-  /** "5 plants, 20 timeline entries, 2 places and 1 photo record", in the words the "In the file" line uses; kinds with nothing to add are left out. */
+  /**
+   * "40 plants, 6 places and 1 photo": what a grower recognises, said first. The app's own records (species records, the
+   * numbering scheme), records the file holds as removed, and records waiting for a field go under "What's in the file":
+   * "6 deleted records" read as a restore that deletes (round sixty; the grower review, 16 and §3).
+   */
   const addedWords = (m: Opened['merge']): string => {
     const k = m.addedByKind;
-    const parts = [
-      k.accession ? `${k.accession} plant${k.accession === 1 ? '' : 's'}` : '',
-      k.event ? `${k.event} timeline entr${k.event === 1 ? 'y' : 'ies'}` : '',
-      k.location ? `${k.location} place${k.location === 1 ? '' : 's'}` : '',
-      k.sowing ? `${k.sowing} propagation batch${k.sowing === 1 ? '' : 'es'}` : '',
-      k.photo ? `${k.photo} photo record${k.photo === 1 ? '' : 's'}` : '',
-      k.taxon ? `${k.taxon} species record${k.taxon === 1 ? '' : 's'} (the app's own, one per species grown or followed)` : '',
+    return listWords([some(k.accession, 'plant'), some(k.location, 'place'), some(k.sowing, 'propagation batch', 'propagation batches'), some(k.event, 'timeline entry', 'timeline entries'), some(k.photo, 'photo')]) || 'only the app\'s own records';
+  };
+  /** The rest of what a merge adds, for the disclosure. */
+  const addedDetail = (m: Opened['merge']): string[] => {
+    const k = m.addedByKind;
+    return [
+      k.taxon ? `${plural(k.taxon, 'species record')}: the app's own, one per species grown or followed` : '',
       k.setting ? 'the numbering scheme' : '',
-      m.addedDeleted ? `${m.addedDeleted} deleted record${m.addedDeleted === 1 ? '' : 's'}` : '',
-      m.addedWaiting ? `${m.addedWaiting} record${m.addedWaiting === 1 ? '' : 's'} the file leaves without a field ${m.addedWaiting === 1 ? 'it' : 'they'} cannot be shown without (${m.waitingNames.slice(0, 5).join(', ')}${m.waitingNames.length > 5 ? ` and ${m.waitingNames.length - 5} more` : ''}; not shown until a later file or sync completes ${m.addedWaiting === 1 ? 'it' : 'them'})` : ''
+      m.addedDeleted ? `${plural(m.addedDeleted, 'record')} removed on the other device, which ${m.addedDeleted === 1 ? 'stays' : 'stay'} removed here; nothing on this device is removed` : '',
+      m.addedWaiting ? `${plural(m.addedWaiting, 'record')} the file leaves without a field ${m.addedWaiting === 1 ? 'it' : 'they'} cannot be shown without (${m.waitingNames.slice(0, 5).join(', ')}${m.waitingNames.length > 5 ? ` and ${m.waitingNames.length - 5} more` : ''}); not shown until a later file or sync completes ${m.addedWaiting === 1 ? 'it' : 'them'}` : ''
     ].filter(Boolean);
-    if (!parts.length) return 'no records';
-    return parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+  };
+  /** The numbers a merge would leave on two plants, one line each: "2026-0004: Copiapoa cinerea here and Echeveria from the file". */
+  const sharedLines = (rows: Opened['merge']['sharedNumbers']): string[] => {
+    const by = new Map<string, Array<{ here: boolean; name: string }>>();
+    for (const r of rows) { const xs = by.get(r.no) ?? []; xs.push(r); by.set(r.no, xs); }
+    return [...by].map(([no, xs]) => `${no}: ${listWords(xs.map((x) => `${x.name.trim() || 'a plant'} ${x.here ? 'here' : 'from the file'}`))}`);
   };
   const mb = (n: number) => (n < 1024 * 1024 ? `${Math.round(n / 1024)} kB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
   const ago = (iso: string) => {
@@ -122,10 +137,10 @@
 
 <svelte:head><title>Backup · Cultifolio</title></svelte:head>
 
-<PageHead title="Backup" kick="My plants" places={false} sub="One file holds every record, every change and every photograph, and this device's settings (site, units, label choices), which a restore applies on a device that has none." count={collection.ready ? `${collection.accessions.length} plants · ${photoCount ?? '…'} photos` : undefined} />
+<PageHead title="Backup" kick="My plants" places={false} sub="One file holds every record, every change and every photograph, and this device's settings (site, units, label choices), which a restore applies on a device that has none." count={collection.ready ? `${plural(collection.accessions.length, 'plant')} · ${photoCount == null ? '… photos' : plural(photoCount, 'photo')}` : undefined} />
 
 {#if collection.persisted === false}
-  <div class="cult warn"><div class="body"><b>This browser has not promised to keep your data.</b> Storage for sites you rarely open can be cleared to make room. Take a backup now, and install the app to your home screen, which tells the browser to keep it.</div></div>
+  <div class="cult warn"><div class="body"><!-- The outcome first, warmly; the browser's rule kept (round sixty; the grower review, §3). --><b>Your plants live only in this browser.</b> Take a backup now and install the app to your home screen so they are safe: a browser can clear storage for sites you rarely open, and has not promised to keep this one's.</div></div>
 {/if}
 
 <div class="secrule"><h2>Take a backup</h2><div class="line"></div><span class="n">{lastBackup ? `last ${ago(lastBackup)}` : 'never'}</span></div>
@@ -162,8 +177,21 @@
     <div class="preview">
       <div class="factgrid">
         <div><b>In the file</b>{c.accessions} plant{c.accessions === 1 ? '' : 's'} · {c.events} timeline entr{c.events === 1 ? 'y' : 'ies'} · {c.locations} place{c.locations === 1 ? '' : 's'} · {c.sowings} propagation batch{c.sowings === 1 ? '' : 'es'} · {c.photos} photo{c.photos === 1 ? "" : "s"}{#if c.taxa}{' · '}{c.taxa} species record{c.taxa === 1 ? '' : 's'}{/if}{#if m}<span class="faint">{" · "}taken {m.exported.slice(0, 10)}{m.device ? ` on device ${m.device.slice(0, 6)}` : ''}</span>{/if}</div>
-        <div><b>Merging would</b>{#if opened.merge.fresh.length === 0 && !opened.settings.length}change nothing: everything in the file is already here.{:else if opened.merge.fresh.length === 0}change no records (everything in the file is already here) and apply the file's {opened.settings.join(', ')}, which this device has none of.{:else}add {addedWords(opened.merge)}, update {opened.merge.changed} {opened.merge.changed === 1 ? 'record' : 'records'}, and bring in {opened.newPhotos} {opened.newPhotos === 1 ? 'photograph' : 'photographs'}.{#if opened.settings.length} Apply the file's {opened.settings.join(', ')}, which this device has none of.{/if} Nothing on this device is removed.{#if opened.merge.renumbered.some((r) => r.here)}{@const mine = opened.merge.renumbered.filter((r) => r.here)} <span class="bad">{mine.length} of this device's {mine.length === 1 ? 'plant gets a new number' : 'plants get new numbers'} ({mine.map((r) => `${r.no} ${r.name}`.trim()).join(', ')}): the file holds {mine.length === 1 ? 'an earlier plant under the same number' : 'earlier plants under the same numbers'}, and a label printed for {mine.length === 1 ? 'it' : 'them'} will need reprinting.</span>{/if}{#if opened.merge.renumbered.some((r) => !r.here)} {opened.merge.renumbered.filter((r) => !r.here).length} of the file's plants {opened.merge.renumbered.filter((r) => !r.here).length === 1 ? 'gets a new number' : 'get new numbers'} here, since this device's plants hold {opened.merge.renumbered.filter((r) => !r.here).length === 1 ? 'that number' : 'those numbers'} from earlier.{/if}{/if}{#if opened.missingPixels.length} {opened.missingPixels.length} photo {opened.missingPixels.length === 1 ? 'record in the file has' : 'records in the file have'} no photograph in it or on this device.{/if}{#if opened.file.unreadable.length} {opened.file.unreadable.length} {opened.file.unreadable.length === 1 ? 'change in the file cannot be read and is' : 'changes in the file cannot be read and are'} left out ({opened.file.unreadable[0]}).{/if}</div>
+        <!-- The outcome first, in a grower's words: "40 plants, 6 places and 1 photo will be added. Nothing here is removed."; the rest one tap away (round sixty; the grower review, §3). -->
+        <div id="bk-preview"><b>Merging</b>{#if opened.merge.fresh.length === 0 && !opened.settings.length}Nothing changes: everything in the file is already here.{:else if opened.merge.fresh.length === 0}No records are added (everything in the file is already here); the file's {opened.settings.join(', ')} {opened.settings.length === 1 ? 'is' : 'are'} applied, since this device has none.{:else}{@const what = addedWords(opened.merge)}{what[0].toUpperCase() + what.slice(1)} will be added{#if opened.merge.changed}, and {plural(opened.merge.changed, 'record')} here updated from the file{/if}{#if opened.newPhotos > (opened.merge.addedByKind.photo ?? 0)}, with the pixels of {plural(opened.newPhotos - (opened.merge.addedByKind.photo ?? 0), 'photograph')} already listed here{/if}. Nothing here is removed.{#if opened.settings.length} The file's {opened.settings.join(', ')} {opened.settings.length === 1 ? 'is' : 'are'} applied, since this device has none.{/if}{/if}{#if opened.missingPixels.length} {plural(opened.missingPixels.length, 'photo record')} in the file {opened.missingPixels.length === 1 ? 'has' : 'have'} no photograph in it or on this device.{/if}{#if opened.file.unreadable.length} {plural(opened.file.unreadable.length, 'change')} in the file cannot be read and {opened.file.unreadable.length === 1 ? 'is' : 'are'} left out ({opened.file.unreadable[0]}).{/if}</div>
       </div>
+      {#if opened.merge.sharedNumbers.length}
+        {@const lines = sharedLines(opened.merge.sharedNumbers)}
+        <!-- A merge never renumbers on its own: the number stays on both plants until the grower presses Renumber on one (round sixty; the lead's preview). -->
+        <div class="notice" id="bk-shared">
+          <p>{lines.length === 1 ? 'One number would then be on two plants' : `${lines.length} numbers would then each be on two plants`}:</p>
+          <ul>{#each lines as l (l)}<li>{l}</li>{/each}</ul>
+          <p>Both keep the number until you choose. Each plant's page says so and offers Renumber, which gives one of them the next free number, with a note saying so.</p>
+        </div>
+      {/if}
+      {#if opened.merge.fresh.length && addedDetail(opened.merge).length}
+        <details class="infile"><summary>What's in the file</summary><ul>{#each addedDetail(opened.merge) as d (d)}<li>{d}</li>{/each}</ul></details>
+      {/if}
       <div class="row acts">
         <button id="bk-merge" class="btn pri" onclick={() => doRestore('merge')} disabled={!!busy || (opened.merge.fresh.length === 0 && opened.newPhotos === 0 && opened.settings.length === 0)}>Merge into this device</button>
         {#if confirmReplace}
@@ -203,6 +231,11 @@
   .preview .factgrid { margin: 14px 0 12px; box-shadow: none; border: 1px solid var(--rule); grid-template-columns: 1fr 1fr; }
   .preview .factgrid > div { font-size: var(--fs-md); font-family: var(--ui); }
   .acts { gap: 8px; }
+  .infile { margin: 0 0 12px; font-size: var(--fs-md); color: var(--ink2); }
+  .infile summary { cursor: pointer; min-height: var(--tap); display: flex; align-items: center; }
+  .infile ul, #bk-shared ul { margin: 4px 0 0; padding-left: 20px; }
+  #bk-shared { margin: 0 0 12px; font-size: var(--fs-md); }
+  #bk-shared p { margin: 0 0 4px; }
   code { font-family: var(--mono); font-size: var(--fs-md); background: var(--sunk); padding: 1px 5px; border-radius: 4px; }
   @media (max-width: 640px) { .preview .factgrid { grid-template-columns: 1fr; } }
 </style>

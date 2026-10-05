@@ -27,7 +27,12 @@ interface VaultDB extends DBSchema {
   order: { key: number; value: { t: string } };
 }
 
-const DB_NAME = 'cultifolio';
+/**
+ * The vault's database. A sample collection lives in a database of its own (round sixty; the product review's 3): a
+ * visitor can try Today, a plant page and labels on plants that are not theirs, and leaving the sample deletes it
+ * whole, with nothing written to the grower's own log and nothing synced. `inDemo()` is read once per page life.
+ */
+const DB_NAME = (() => { try { return typeof sessionStorage !== 'undefined' && sessionStorage.getItem('cultifolio.demo') === '1' ? 'cultifolio-demo' : 'cultifolio'; } catch { return 'cultifolio'; } })();
 /** Where a replacement (restore from backup, "replace" mode) is written in full before the live vault is touched. */
 const STAGING_NAME = 'cultifolio-staging';
 const DB_V = 3;
@@ -124,7 +129,7 @@ export function openVault(): Promise<IDBPDatabase<VaultDB>> {
       },
       terminated() {
         dbp = null;
-        notify('The browser closed the vault; reload the page.');
+        notify("The browser closed this page's storage; reload the page.");
       }
     }).then(async (db) => {
       // A replace that was cut off between the wipe and the copy: finish it before anything reads the vault.
@@ -257,24 +262,7 @@ async function copyStagingIn(live: IDBPDatabase<VaultDB>): Promise<void> {
   await deleteDB(STAGING_NAME);
 }
 
-/**
- * A storage failure in words. Chrome's QuotaExceededError carries an empty message, so a page that showed
- * `err.message` said nothing at all when the device was full (round twenty-nine, 4). The figure is what the browser
- * reports as in use, when it reports one.
- */
-export async function storageErrorText(err: unknown): Promise<string | null> {
-  const name = err instanceof Error ? err.name : '';
-  const msg = err instanceof Error ? err.message : String(err ?? '');
-  if (!/quota|QuotaExceeded|NS_ERROR_DOM_QUOTA|out of space|disk is full/i.test(name + ' ' + msg)) return null;
-  let used = '';
-  try {
-    const est = await navigator.storage?.estimate?.();
-    if (est?.usage != null) used = `: ${Math.round(est.usage / 1048576)} MB in use${est.quota ? ` of the ${Math.round(est.quota / 1048576)} MB the browser allows this site` : ''}`;
-  } catch {
-    /* no estimate: the sentence stands without a figure */
-  }
-  return `This device is out of space for the collection${used}. Free some space, or back up and remove what you can spare.`;
-}
+export { storageErrorText } from './storage-error'; // its own module since round sixty, so the collection reads it without the vault (and tests that stand the vault in still get it)
 
 export async function allChanges(): Promise<Change[]> {
   const db = await openVault();
@@ -444,7 +432,8 @@ export async function appendChangesClaiming<T>(kind: NumberKind, known: Set<stri
  * they have not seen; so a plant added in one tab is on the list in the next,
  * and its number is never offered there.
  */
-const CHANNEL = 'cultifolio-vault';
+/** Named by the database, so a sample collection's tab and the grower's own tabs never hear each other (round sixty; agent F). */
+const CHANNEL = `${DB_NAME}-vault`;
 const chan = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(CHANNEL) : null;
 export type VaultNotice = 'written' | 'replaced' | 'refold' | 'sync-forgotten';
 function announce(what: VaultNotice = 'written'): void {
@@ -618,6 +607,8 @@ export interface FoldSnapshot {
   device: string;
   /** The clock correction in force when it was built: another one re-judges every hold, so the snapshot is wrong. */
   offset: number;
+  /** Whether the clock had been confirmed by a sync server when this was folded: the park rule reads it (round sixty). Absent in older snapshots, which are under older rules anyway. */
+  checked?: boolean;
   /** The last arrival number it covers. */
   seq: number;
   records: unknown[];

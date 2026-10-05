@@ -7,28 +7,35 @@
  * Object's are, over a fake R2 whose calls yield at random.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { storeOnce, storeCounted, deleteCounted, readMeta, writeMeta, ensureVault, vaultIdFor, resetRateLimits, resetMetaFlush, VaultsClosed, type CountersNs } from '$lib/server/sync';
+import { storeOnce, storeCounted, deleteCounted, readMeta, writeMeta, ensureVault, vaultIdFor, resetRateLimits, resetMetaFlush, VaultsClosed, VaultUnchecked, type CountersNs } from '$lib/server/sync';
 import { Counters } from '$lib/server/counters';
+import { createHash, randomUUID } from 'node:crypto';
 
 const tick = () => new Promise((r) => setTimeout(r, Math.random() * 3));
+let clock = Date.UTC(2026, 9, 4, 12);
+/**
+ * R2 as it answers (round sixty; the harness review): the etag is the MD5 of the bytes, so the same bytes uploaded again
+ * have the same etag; `uploaded` is each put's own time and `version` each put's own id. Before, every object of one
+ * size shared an etag and every upload one time, so a give-back token of the key alone passed.
+ */
 function fakeR2() {
-  const objs = new Map<string, { body: Uint8Array; size: number; md: Record<string, string> }>();
+  const objs = new Map<string, { body: Uint8Array; size: number; md: Record<string, string>; etag: string; uploaded: Date; version: string }>();
   return {
     objs,
     async put(key: string, body: Uint8Array | string, o?: { customMetadata?: Record<string, string>; onlyIf?: { etagDoesNotMatch?: string } }) {
       await tick();
       if (o?.onlyIf?.etagDoesNotMatch === '*' && objs.has(key)) return null;
       const b = typeof body === 'string' ? new TextEncoder().encode(body) : body;
-      objs.set(key, { body: b, size: b.length, md: o?.customMetadata ?? {} });
+      objs.set(key, { body: b, size: b.length, md: o?.customMetadata ?? {}, etag: createHash('md5').update(b).digest('hex'), uploaded: new Date(clock++), version: randomUUID() });
       return { key };
     },
-    async head(key: string) { await tick(); const o = objs.get(key); return o ? { size: o.size, customMetadata: o.md, etag: String(o.size), uploaded: new Date(1) } : null; },
+    async head(key: string) { await tick(); const o = objs.get(key); return o ? { size: o.size, customMetadata: o.md, etag: o.etag, uploaded: o.uploaded, version: o.version } : null; },
     async get(key: string) { await tick(); const o = objs.get(key); return o ? { json: async () => JSON.parse(new TextDecoder().decode(o.body)) } : null; },
     async delete(key: string) { await tick(); objs.delete(key); },
     async list(o: { prefix: string; limit?: number; cursor?: string }) {
       await tick();
-      const keys = [...objs.keys()].filter((k) => k.startsWith(o.prefix)).sort();
-      return { objects: keys.map((k) => ({ key: k, size: objs.get(k)!.size, uploaded: new Date(1) })), truncated: false };
+      const keys = [...objs.keys()].filter((k) => k.startsWith(o.prefix)).sort().slice(0, o.limit ?? Infinity);
+      return { objects: keys.map((k) => ({ key: k, size: objs.get(k)!.size, uploaded: objs.get(k)!.uploaded })), truncated: false };
     }
   };
 }
@@ -78,14 +85,15 @@ describe('a vault is counted once under the ceiling in all (round fifty-nine)', 
     await storeOnce(r2 as never, ID, (await readMeta(r2 as never, ID))!, photo(2), new Uint8Array(10), PROOF, quota);
     expect(all(counters)).toBe(1);
   });
-  it('a count that did not land is tried again by the next upload', async () => {
+  it('a count that did not land refuses the upload (it is not stored uncounted), and the next upload is counted (round sixty: fails closed)', async () => {
     const r2 = fakeR2(); const counters = countersNs(); const quota = { kv: fakeKV() as never, ip: '1.2.3.4', counters };
     await writeMeta(r2 as never, ID, { tokenHash: 'h', created: 'c', entitlement: 'open', bytes: 0, filled: false });
     const vaults = counters.objects.get('vaults') ?? (counters.get('vaults'), counters.objects.get('vaults')!);
     const real = vaults.c.fill.bind(vaults.c);
     let fail = true;
     (vaults.c as { fill: unknown }).fill = async (...a: Parameters<typeof real>) => { if (fail) { fail = false; throw new Error('the object did not answer'); } return real(...a); };
-    await storeOnce(r2 as never, ID, (await readMeta(r2 as never, ID))!, photo(1), new Uint8Array(10), PROOF, quota);
+    await expect(storeOnce(r2 as never, ID, (await readMeta(r2 as never, ID))!, photo(1), new Uint8Array(10), PROOF, quota)).rejects.toBeInstanceOf(VaultUnchecked);
+    expect(r2bytes(r2)).toBe(0);
     expect(all(counters) ?? 0).toBe(0);
     expect((await readMeta(r2 as never, ID))!.filled).toBe(false); // not marked: the next upload asks again
     await storeOnce(r2 as never, ID, (await readMeta(r2 as never, ID))!, photo(2), new Uint8Array(10), PROOF, quota);
@@ -123,10 +131,11 @@ describe('the byte totals are exact under concurrency (round fifty-nine)', () =>
     const v = counters.get(`bytes:${ID}`);
     const day = '2026-10-04';
     await v.setBytes(90, day);
-    expect(await v.take('vault', 10, 100, day)).toEqual({ ok: true, before: 90 }); // upload A, in flight
+    const a = await v.take('vault', 10, 100, day); // upload A, in flight
+    expect(a).toMatchObject({ ok: true, before: 90 });
     await v.setBytes(90, day); // a forced recount lists only what landed
     expect(await v.take('vault', 10, 100, day)).toEqual({ ok: false, before: 100 }); // B does not fit: A is still counted
-    await v.release(10, true); // A landed
+    await v.release((a as { lease: string }).lease, true); // A landed
     await v.setBytes(100, day); // and the listing now sees it
     expect(await v.bytesToday(day)).toBe(100);
   });
@@ -135,10 +144,11 @@ describe('the byte totals are exact under concurrency (round fifty-nine)', () =>
     const v = counters.get(`bytes:${ID}`);
     const day = '2026-10-04';
     await v.setBytes(0, day);
-    await v.take('vault', 10, 100, day);
-    await v.release(10, false);
-    await v.release(10, false);
-    expect(await v.bytesToday(day)).toBe(0);
+    const a = (await v.take('vault', 10, 100, day)) as { lease: string };
+    await v.take('vault', 10, 100, day); // another, still in flight
+    await v.release(a.lease, false);
+    await v.release(a.lease, false);
+    expect(await v.bytesToday(day)).toBe(10);
   });
 });
 

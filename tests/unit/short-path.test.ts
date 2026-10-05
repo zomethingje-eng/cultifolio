@@ -9,9 +9,16 @@ import { searchAnswer, _forgetIndex, WHOLE_LIKE } from '$lib/server/dossiers';
 import { buildProducts } from '$dossier/products';
 import { manifestPath, productPath } from '$dossier/manifest';
 import { prepare, search } from '$core/search';
+import { buildPostings, postingFilesFor, postingFileOf, candidates, queryPlan } from '$core/postings';
 
+/** mulberry32 (round sixty; the corpus review, 12): the LCG before lost its low bits, and its "random" corpus was narrow. */
 let seed = 11;
-const rnd = (n: number) => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed % n; };
+const rnd = (n: number) => {
+  seed = (seed + 0x6d2b79f5) | 0;
+  let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return Math.floor((((t ^ (t >>> 14)) >>> 0) / 4294967296) * n);
+};
 const pick = <T>(xs: T[]) => xs[rnd(xs.length)];
 const syl = ['a', 'lo', 'e', 'ha', 'wor', 'thi', 'co', 'pi', 'a', 'po', 'li', 'thops', 'ma', 'mil', 'la', 'ri', 'echi', 'no', 'cac', 'tus', 'gas', 'te', 'ria', 'ka', 'lan', 'cho', 'é', 'ö', 'x', 'yu', 'ca', 'agave', 'cras', 'su', 'la', 'f', 'b', 'z'];
 const word = (k: number) => Array.from({ length: k }, () => pick(syl)).join('');
@@ -58,11 +65,17 @@ describe('the short path is the path the first keystrokes take (round fifty-nine
     _forgetIndex();
     const idx = corpus(9000);
     const { platform } = platformFor(idx);
+    // two short words whose candidates are past WHOLE_LIKE in this corpus (which pair depends on the generator)
+    const P = buildPostings(idx);
+    const files = postingFilesFor(idx.length);
+    const count = (q: string) => candidates(queryPlan(q).exact, (k) => P.get(postingFileOf(k, files))?.[k]).length;
+    const q = ['a e', 'a c', 'c a', 'a l', 'a p', 'a m', 'c p', 'l a'].find((x) => count(x) > WHOLE_LIKE);
+    expect(q).toBeTruthy();
     let charged = 0;
-    const a = await searchAnswer(platform, noStatic, 'a e', 60, async () => { charged++; return null; });
+    const a = await searchAnswer(platform, noStatic, q!, 60, async () => { charged++; return null; });
     expect('stop' in a).toBe(false);
     expect(charged).toBe(1);
-    const refused = await searchAnswer(platform, noStatic, 'a e', 60, async () => new Response('slow down', { status: 429 }));
+    const refused = await searchAnswer(platform, noStatic, q!, 60, async () => new Response('slow down', { status: 429 }));
     expect('stop' in refused && refused.stop.status).toBe(429);
     expect(WHOLE_LIKE).toBeGreaterThan(100);
   });

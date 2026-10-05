@@ -63,7 +63,7 @@ export interface Climograph {
      */
     minAbs: { y: number; label: string } | null;
     maxP99: { y: number; label: string } | null;
-    /** The three consecutive months around the coldest night, shaded as the habitat's cold quarter. */
+    /** The three consecutive months around the coldest mean night, shaded as the habitat's cold quarter. */
     coldQuarter: { x: number; w: number; wraps: boolean; x2?: number; w2?: number };
   };
   rain: {
@@ -177,13 +177,18 @@ export function climograph(c: ClimoInput, width = 720, units: Units = METRIC): C
   const dayLo = c.months.reduce((b, m, i) => (m.tmax < c.months[b].tmax ? i : b), 0);
   const nightHi = c.months.reduce((b, m, i) => (m.tmin > c.months[b].tmin ? i : b), 0);
   const flatT = c.months[warmest].tmax - c.months[dayLo].tmax < 1 && c.months[nightHi].tmin - c.months[coldest].tmin < 1;
+  // The wettest month named only when it is one month: on a tie, how many share it (round sixty; words 20).
+  const wetI = c.months.reduce((b, m, i) => (m.precipMm > c.months[b].precipMm ? i : b), 0);
+  const wetAs = rainF(c.months[wetI].precipMm, units);
+  const wetTied = c.months.filter((m) => rainF(m.precipMm, units) === wetAs).length;
+  const wettest = wetTied === 12 ? 'the same in every month' : wetTied > 1 ? `the wettest months (${wetTied} at ${wetAs})` : `the wettest month ${MONTHS[wetI]}`;
   const alt =
     (flatT
       ? `A flat year: mean day about ${temp(c.months[warmest].tmax, units)} and mean night about ${temp(c.months[coldest].tmin, units)} in every month, so the cold quarter is shaded by rounding only. `
-      : `Mean day from ${temp(c.months[dayLo].tmax, units)} in ${MONTHS[dayLo]} to ${temp(c.months[warmest].tmax, units)} in ${MONTHS[warmest]}; mean night from ${temp(c.months[coldest].tmin, units)} in ${MONTHS[coldest]} to ${temp(c.months[nightHi].tmin, units)} in ${MONTHS[nightHi]}. The cold quarter, ${MONTHS[q0]} to ${MONTHS[(coldest + 1) % 12]}, is the three months around the coldest night. `) +
-    (dry ? `${dryLabel(units)[0].toUpperCase()}${dryLabel(units).slice(1)} of rain.` : `${rainF(rainYear, units)} of rain a year, the wettest month ${MONTHS[c.months.reduce((b, m, i) => (m.precipMm > c.months[b].precipMm ? i : b), 0)]}.`) +
+      : `Mean day from ${temp(c.months[dayLo].tmax, units)} in ${MONTHS[dayLo]} to ${temp(c.months[warmest].tmax, units)} in ${MONTHS[warmest]}; mean night from ${temp(c.months[coldest].tmin, units)} in ${MONTHS[coldest]} to ${temp(c.months[nightHi].tmin, units)} in ${MONTHS[nightHi]}. The cold quarter, ${MONTHS[q0]} to ${MONTHS[(coldest + 1) % 12]}, is the three months around the coldest mean night. `) +
+    (dry ? `${dryLabel(units)[0].toUpperCase()}${dryLabel(units).slice(1)} of rain.` : `${rainF(rainYear, units)} of rain a year, ${wettest}.`) +
     (hasBand ? ` The bands show the 10th to 90th percentile across ${c.cells} habitat cells.` : c.cells > 1 ? ` The ${c.cells} habitat cells agree to within rounding.` : '') +
-    (c.extremes ? ` Over ${c.extremes.years} years at a typical spot in the range the absolute minimum was ${temp(c.extremes.minAbs, units, 1)} and the 99th-percentile day ${temp(c.extremes.maxP99, units, 1)}; neither is dated to a month.` : '') +
+    (c.extremes ? ` Over ${c.extremes.years} years at a typical spot in the range (NASA POWER) the absolute minimum was ${temp(c.extremes.minAbs, units, 1)} and the 99th-percentile day ${temp(c.extremes.maxP99, units, 1)}; neither is dated to a month.` : '') +
     (strip ? ` Beneath: ${has('dli') ? 'daily light integral' : ''}${has('dli') && has('rh') ? ' and ' : ''}${has('rh') ? 'relative humidity' : ''} through the year, each on its own scale.` : '');
 
   return {
@@ -202,8 +207,9 @@ export function climograph(c: ClimoInput, width = 720, units: Units = METRIC): C
       dayBand,
       nightBand,
       zeroY: tLo < 0 && tHi > 0 ? r1(ty(0)) : null,
-      minAbs: c.extremes ? { y: r1(ty(c.extremes.minAbs)), label: `${temp(c.extremes.minAbs, units, 1).replace(/ °[CF]$/, '°')} lowest night in ${c.extremes.years} yrs (undated)` } : null,
-      maxP99: c.extremes ? { y: r1(ty(c.extremes.maxP99)), label: `${temp(c.extremes.maxP99, units, 1).replace(/ °[CF]$/, '°')} 99th-percentile day (undated)` } : null,
+      // Each extreme names its source on the chart itself, and "years", not "yrs" (round sixty; the round forty-two review, A9).
+      minAbs: c.extremes ? { y: r1(ty(c.extremes.minAbs)), label: `${temp(c.extremes.minAbs, units, 1).replace(/ °[CF]$/, '°')} lowest night in ${c.extremes.years} years, NASA POWER (undated)` } : null,
+      maxP99: c.extremes ? { y: r1(ty(c.extremes.maxP99)), label: `${temp(c.extremes.maxP99, units, 1).replace(/ °[CF]$/, '°')} 99th-percentile day, NASA POWER (undated)` } : null,
       coldQuarter: { ...coldQuarter, x: r1(coldQuarter.x), w: r1(coldQuarter.w), ...(coldQuarter.x2 != null ? { x2: r1(coldQuarter.x2), w2: r1(coldQuarter.w2!) } : {}) }
     },
     rain: { top: rainTop, height: rainH, ticks: rTicks.map((t) => ({ y: r1(t.y), label: t.label })), bars, dry, max: rMax },

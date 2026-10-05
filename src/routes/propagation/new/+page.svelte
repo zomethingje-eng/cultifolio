@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { batchHref } from '$lib/db/links';
   import { units } from '$lib/ui/units.svelte';
   import PageHead from '$lib/ui/PageHead.svelte';
   import { localDate } from '$core/dates';
@@ -182,7 +183,7 @@
       });
       try { if (locationId) localStorage.setItem('cultifolio.lastSowLocation', locationId); } catch { /* fine */ }
       saved = true;
-      goto(`/propagation/${sowNo(rec)}`);
+      goto(batchHref(rec)); // by identity while another batch shares the number (round sixty)
     } catch {
       /* lastWriteError is shown above the form; the form stays open (round fifteen, 9) */
     } finally {
@@ -276,7 +277,7 @@
   .field { margin: 12px 0; display: block; }
   .field > span:first-child, .field > label:first-child { display: block; font-size: var(--fs-xs); letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink3); font-weight: 700; margin-bottom: 5px; }
   .field input[type='text'], .field input[type='date'], .field input[type='number'], .field select, .field textarea { width: 100%; font: inherit; font-size: 0.875rem; padding: 9px 12px; border: 1px solid var(--field-edge); border-radius: var(--r); background: var(--card); color: var(--ink); }
-  .field input:focus, .field select:focus, .field textarea:focus { outline: 0; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); } /* the theme's outline stays: "outline: 0" left only the caret in forced colours (round sixty; the accessibility review, 4) */
   .field .small { display: block; margin-top: 4px; font-size: var(--fs-sm); }
   .bad { color: var(--bad); }
   .two { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; align-items: start; }

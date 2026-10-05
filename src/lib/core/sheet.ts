@@ -9,12 +9,14 @@
  * Inputs: the dossier's median year at the habitat (CHELSA, across the
  * envelope cells), optionally its 10th and 90th percentile years, the
  * extremes (NASA POWER at a typical spot in the range), and the care archetype, which
- * supplies one figure: a conventional group minimum for the cold floor.
+ * supplies one figure: a convention for growing the group indoors, with no source,
+ * shown apart from the habitat's figures and never changing the cold floor (round
+ * sixty; self-review 3).
  */
 import { frostWording } from './extremes';
 import { MON3 } from './months';
-import { archFor, aLabel, type ArchGuess } from './arch';
-import { temp, deltaT, rain, ruleRain, METRIC, type Units } from './units';
+import { archFor, conventionOf, type ArchGuess } from './arch';
+import { temp, deltaT, rain, ruleRain, ruleDeltaT, METRIC, type Units } from './units';
 
 export interface Month {
   tmax: number;
@@ -84,7 +86,7 @@ export interface Year {
   grow: 'winter' | 'summer' | 'even' | 'cool';
   /** Under 120 mm a year: no rainy season to read. `growMonths` then holds the temperature rule's reading, the cooler half. */
   fog: boolean;
-  /** 70% of the rain takes eight months or more: no season. */
+  /** 70% of the rain takes eight months or more: no short rainy season is read (a long rainy season may still be one). */
   spread: boolean;
   /** The rain has a sharp season but the temperature curve is flat (under 4 °C between the warmest and coldest month): the growing-season rule infers nothing from it. */
   flat: boolean;
@@ -203,38 +205,58 @@ const T1 = (c: number) => temp(c, U, 1);
 const DT = (dc: number) => deltaT(dc, U, 1);
 const RAIN = (mm: number) => rain(mm, U);
 
-/** What the cold floor is: the quantity, the figure, and any raising by the archetype table, all in one sentence. */
-/** The floor a page shows, with its provenance: `habitat` is the measured night (null when none is on file), `floor` the figure the rule settles on, `raised` true when the archetype table's minimum was higher and took over. `hab` remains true whenever a habitat figure exists. */
-export interface ColdFloor { floor: number; habitat: number | null; raised: boolean; group: string | null; s: string; short: string; hab: boolean; plain: { lead: string; rule: string } }
+/**
+ * The cold figure a page leads with, with its provenance. `habitat` is the 1st-percentile night when the daily extremes
+ * are on file (`kind: 'night'`, a cold floor), else the coldest month's mean night from CHELSA (`kind: 'mean'`, named
+ * as what it is and never as a floor), else null. `convention` is the archetype table's figure for the group, which has
+ * no source: it is said apart, as a convention, and never raises or replaces the habitat figure (round sixty;
+ * self-review 3, words 1: "the floor rule takes the higher" put 10 °C over a -3 °C Puya night).
+ */
+export interface ColdFloor {
+  habitat: number | null;
+  kind: 'night' | 'mean' | null;
+  convention: { minC: number; group: string; why: string; text: string } | null;
+  s: string;
+  short: string;
+  hab: boolean;
+  plain: { lead: string; rule: string };
+}
+/** Why there is no daily extremes series, as its own sentence: a refusal is "not checked", never an absence (rule 2). */
+export const extremesWhy = (exStatus?: SheetInput['extremesStatus']): string =>
+  exStatus === 'refused' ? 'The daily extremes were not checked: NASA POWER did not answer when this page was built.' : exStatus === 'skipped' ? 'The daily extremes were not asked for when this page was built.' : exStatus === 'sea' ? 'The daily extremes were read at a weather cell that is mostly sea and are not used.' : 'No daily extremes are on file.';
+const extremesWhyShort = (exStatus?: SheetInput['extremesStatus']): string =>
+  exStatus === 'refused' ? 'the daily extremes were not checked' : exStatus === 'skipped' ? 'the daily extremes were not asked for' : exStatus === 'sea' ? 'the daily extremes fell on a sea cell and are not used' : 'no daily extremes on file';
+const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 export function coldFloor(m: Month[] | null, ex: Extremes | null, guess: ArchGuess | null, units: Units = U, exStatus?: SheetInput['extremesStatus']): ColdFloor | null {
   U = units;
-  const minC = guess?.arch.minC ?? null;
-  let floor: number | null = null;
-  let quantity = '';
-  let quantityShort = '';
+  const conv = guess && guess.arch.minC != null ? { minC: guess.arch.minC, group: guess.arch.many ?? guess.arch.lab.toLowerCase(), why: guess.why, text: conventionOf(guess.arch, T)! } : null;
   if (ex) {
-    floor = ex.minP01;
-    quantity = `the 1st-percentile night over ${ex.years} years at a typical spot in the range (NASA POWER)`;
-    quantityShort = '1st-percentile habitat night, NASA POWER';
-  } else if (m) {
+    const f = ex.minP01;
+    return { habitat: f, kind: 'night', convention: conv, s: `Cold floor: ${T1(f)}, which is the 1st-percentile night over ${ex.years} years at a typical spot in the range (NASA POWER).`, short: `Cold floor ${T1(f)} (1st-percentile habitat night, NASA POWER).`, hab: true, plain: { lead: `Cold floor ${T1(f)}: one night in a hundred at a typical spot in the range is colder.`, rule: `NASA POWER, ${ex.years} years` } };
+  }
+  if (m) {
+    // A month's mean night is not a floor: it is the mean of a month's lows, above the nights a floor is read from. Headed
+    // "Cold floor" over a sea notice that printed a colder figure, it told a grower the coast was safer than it is (round
+    // thirty-seven, R1-2). It is named as what it is wherever it stands in, and why there are no extremes is its own
+    // sentence, so the figure's sentence keeps its verb (round sixty; words 9).
     const i = m.reduce((b, x, j) => (x.tmin < m[b].tmin ? j : b), 0);
-    floor = m[i].tmin;
-    quantity = `the coldest month's mean night, ${mon(i + 1)}, in the median year (CHELSA); ${exStatus === 'refused' ? 'the daily extremes were not checked (NASA POWER did not answer when this page was built)' : exStatus === 'skipped' ? 'the daily extremes were not asked for when this page was built' : exStatus === 'sea' ? 'the daily extremes were read at a weather cell that is mostly sea and are not used' : 'no daily extremes are on file'}`;
-    quantityShort = `coldest month's mean night, CHELSA; no floor read`;
+    const f = m[i].tmin;
+    return { habitat: f, kind: 'mean', convention: conv, s: `Cold floor: none read. The nearest figure is ${T1(f)}, the coldest month's mean night, ${mon(i + 1)}, in the median year (CHELSA); a month's mean night is warmer than the nights a floor is read from. ${extremesWhy(exStatus)}`, short: `Coldest mean night ${T1(f)} (coldest month's mean night, CHELSA; no floor read).`, hab: true, plain: { lead: `Coldest month's mean night ${T1(f)}, not a cold floor: ${extremesWhyShort(exStatus)}.`, rule: 'CHELSA' } };
   }
-  if (floor == null && minC == null) return null;
-  if (floor == null) {
-    return { floor: minC!, habitat: null, raised: false, group: aLabel(guess!.arch.lab), s: `Cold floor: ${T(minC!)}, the archetype table's conventional minimum for ${aLabel(guess!.arch.lab)} (grouped by ${guess!.why}); no habitat figure is on file for this species.`, short: `Cold floor ${T(minC!)} (conventional for ${aLabel(guess!.arch.lab)}, archetype table).`, hab: false, plain: { lead: `Cold floor ${T(minC!)}, the conventional minimum for ${aLabel(guess!.arch.lab)}; no habitat figure on file.`, rule: 'archetype table' } };
-  }
-  if (minC != null && minC > floor) {
-    // "habitat night" only for a night reading; a month's mean is named as the mean (round thirty-eight, R1 wording).
-    return { floor: minC, habitat: floor, raised: true, group: aLabel(guess!.arch.lab), s: `Cold floor: ${T(minC)}. The habitat figure, ${quantity}, is ${T1(floor)}; the archetype table's conventional minimum for ${aLabel(guess!.arch.lab)} (grouped by ${guess!.why}) is ${T(minC)}, which is higher, and the floor rule takes the higher.`, short: `Cold floor ${T(minC)} (archetype minimum for ${aLabel(guess!.arch.lab)}, above the ${T1(floor)} habitat ${ex ? 'night' : 'coldest mean night'}).`, hab: true, plain: { lead: `Cold floor ${T(minC)}, the conventional minimum for ${aLabel(guess!.arch.lab)}; at the habitat ${ex ? `one night in a hundred is colder than ${T1(floor)}` : `the coldest month's mean night is ${T1(floor)}`}.`, rule: `archetype table; ${ex ? 'NASA POWER' : 'CHELSA'}` } };
-  }
-  // A month's mean night is not a floor: it is the mean of a month's lows, above the nights a floor is read from. Headed
-  // "Cold floor" over a sea notice that printed a colder figure, it told a grower the coast was safer than it is (round
-  // thirty-seven, R1-2). It is named as what it is wherever it stands in.
-  if (!ex) return { floor, habitat: floor, raised: false, group: minC != null ? aLabel(guess!.arch.lab) : null, s: `Cold floor: none read. The nearest figure is ${T1(floor)}, ${quantity}; a month's mean night is warmer than the nights a floor is read from${minC != null ? `, and the archetype table's minimum for ${aLabel(guess!.arch.lab)}, ${T(minC)}, is lower still` : ''}.`, short: `Coldest mean night ${T1(floor)} (${quantityShort}).`, hab: true, plain: { lead: `Coldest month's mean night ${T1(floor)}; no cold floor could be read.`, rule: 'CHELSA' } };
-  return { floor, habitat: floor, raised: false, group: minC != null ? aLabel(guess!.arch.lab) : null, s: `Cold floor: ${T1(floor)}, which is ${quantity}${minC != null ? `; the archetype table's minimum for ${aLabel(guess!.arch.lab)}, ${T(minC)}, is lower and does not raise it` : ''}.`, short: `Cold floor ${T1(floor)} (${quantityShort}).`, hab: true, plain: { lead: `Cold floor ${T1(floor)}: one night in a hundred at a typical spot in the range is colder.`, rule: `NASA POWER, ${ex.years} years` } };
+  if (!conv) return null;
+  // No habitat figure at all: the convention alone, said as a convention with no source, and no floor (round sixty).
+  return { habitat: null, kind: null, convention: conv, s: `No habitat figure is on file for this species, so no cold floor is read. Apart from the habitat, ${conv.text} (archetype table, by ${conv.why}).`, short: `No habitat cold figure on file; ${conv.text} (archetype table).`, hab: false, plain: { lead: `No habitat cold figure on file. ${cap(conv.text)}.`, rule: 'archetype table' } };
+}
+
+/**
+ * Months tied for a place: "wettest month March at 40 mm", or "wettest months (3 at 40 mm)" when several share the figure
+ * as printed, and nothing named at all when every month does (round sixty; words 20: "wettest January at 0 mm, driest
+ * January at 0 mm" named one of seven tied months).
+ */
+function extremeMonths(m: Month[], idx: number, fmt: (v: number) => string, word: 'wettest' | 'driest'): string {
+  const v = fmt(m[idx].precipMm);
+  const n = m.filter((x) => fmt(x.precipMm) === v).length;
+  return n > 1 ? `${word} months (${n} at ${v})` : `${word} month ${mon(idx + 1)} at ${v}`;
 }
 
 export function cultivationSheet(input: SheetInput): { rows: Row[]; arch: ArchGuess | null; year: Year | null; floor: ColdFloor | null } {
@@ -260,9 +282,14 @@ export function cultivationSheet(input: SheetInput): { rows: Row[]; arch: ArchGu
     const reader = runs(forReader(year, input.readerLat));
     const readerSide = (input.readerLat ?? 40) < 0 ? 'southern' : 'northern';
     const nearEq = Math.abs(input.lat ?? 40) < 10;
+    // The rule the code applies, said as that rule: under 4 °C of range, or within 10° of the equator, the shift does not
+    // apply. "No thermal season there there" asserted a fact of an 8 °C curve that only its latitude was tested for
+    // (round sixty; words 8).
     const hemi = year.shiftable
       ? `Months are the habitat's, ${home} hemisphere; shifted six months for a ${away}-hemisphere collection: ${shifted}.`
-      : `Months are the habitat's, ${home} hemisphere${nearEq ? ', within 10° of the equator' : ''}; with ${nearEq ? 'no thermal season there' : 'a flat temperature curve'} there is no season to reverse, so they are not shifted for a collection elsewhere.`;
+      : nearEq
+        ? `Months are the habitat's, ${home} hemisphere. The habitat lies within 10° of the equator, where the shift rule does not apply, so they are not shifted for a collection elsewhere.`
+        : `Months are the habitat's, ${home} hemisphere. The temperature curve moves under ${ruleDeltaT(4, U)} between the warmest and coldest month, where the shift rule does not apply, so they are not shifted for a collection elsewhere.`;
     // What the reader-side clause says: the shifted months in their hemisphere, or the habitat's own when no shift applies.
     const forYou = year.shiftable ? `${reader} in the ${readerSide} hemisphere` : `${at} at the habitat (not shifted)`;
     let s: string;
@@ -273,15 +300,16 @@ export function cultivationSheet(input: SheetInput): { rows: Row[]; arch: ArchGu
     if (year.none) {
       s = `Rain at the habitat is ${RAIN(year.annualMm)} a year (${ENV}). Under ${ruleRain(120, U)} the rain rule reads no rainy season, and the growing-season rule infers nothing from it. The temperature curve moves ${DT(year.rangeT)} between the warmest and coldest month and the coolest six months are within a degree of the warmest six, so the temperature rule names no cooler half either.`;
       short = `Rain rule: no rainy season to read (${RAIN(year.annualMm)} a year); the temperature curve is flat (${DT(year.rangeT)} of range), so no cooler half is named.`;
-      lead = `Under ${ruleRain(120, U)} of rain a year (${RAIN(year.annualMm)}) and an even temperature: no season to read.`;
+      lead = `${RAIN(year.annualMm)} of rain a year, under the rule's ${ruleRain(120, U)}, and an even temperature: no season to read.`;
     } else if (year.fog) {
       s = `Rain at the habitat is ${RAIN(year.annualMm)} a year (${ENV}). Under ${ruleRain(120, U)} the rain rule reads no rainy season, and the growing-season rule infers nothing from it. The temperature rule reads the cooler six months as ${at}. ${hemi}`;
       short = `Rain rule: no rainy season to read (${RAIN(year.annualMm)} a year); the temperature rule's cooler six months are ${forYou}.`;
-      lead = `Under ${ruleRain(120, U)} of rain a year (${RAIN(year.annualMm)}), so no rainy season is read; the cooler six months are ${yours}.`;
+      lead = `${RAIN(year.annualMm)} of rain a year, under the rule's ${ruleRain(120, U)}, so no rainy season is read; the cooler six months are ${yours}.`;
     } else if (year.spread) {
-      s = `The rain rule reads no season: 70% of the year's rain (${RAIN(year.wetMm)} of ${RAIN(year.annualMm)}) takes ${year.growMonths.length} months, ${at}. Mean temperature moves ${DT(year.rangeT)} between the warmest and coldest month. ${hemi}`;
-      short = `Rain rule: no season, 70% of the rain takes ${year.growMonths.length} months (${forYou}).`;
-      lead = `No rainy season: 70% of the rain takes ${year.growMonths.length} months; ${RAIN(year.annualMm)} a year.`;
+      // What the rule reads: the rain is spread, so no short rainy season; eight wet months can still be a long one (round sixty; the round forty-two review).
+      s = `The rain rule reads no short rainy season: 70% of the year's rain (${RAIN(year.wetMm)} of ${RAIN(year.annualMm)}) takes ${year.growMonths.length} months, ${at}. Mean temperature moves ${DT(year.rangeT)} between the warmest and coldest month. ${hemi}`;
+      short = `Rain rule: rain spread over ${year.growMonths.length} months, so no short rainy season (${forYou}).`;
+      lead = `Rain spread over ${year.growMonths.length} months: no short rainy season; ${RAIN(year.annualMm)} a year.`;
     } else if (year.flat) {
       s = `The rain rule reads a sharp season: 70% of the year's rain (${RAIN(year.wetMm)} of ${RAIN(year.annualMm)}) falls in ${at}. The temperature curve is flat, ${DT(year.rangeT)} between the warmest and coldest month, so the growing-season rule does not infer a growing season from it. ${hemi}`;
       short = `Rain rule: a sharp rainy season, ${forYou}; the temperature curve is flat (${DT(year.rangeT)} of range), so no growing season is inferred.`;
@@ -292,15 +320,19 @@ export function cultivationSheet(input: SheetInput): { rows: Row[]; arch: ArchGu
       lead = `A rainy season, ${yours}, neither the cool nor the warm half of the year.`;
     } else {
       s = `The rain rule reads a ${year.grow} growing season: 70% of the year's rain (${RAIN(year.wetMm)} of ${RAIN(year.annualMm)}) falls in ${at}, ${year.grow === 'winter' ? 'cooler' : 'warmer'} than the year (wet-season mean ${T1(year.wetT)} against a yearly mean of ${T1(year.meanT)}). ${hemi}`;
-      short = `Rain rule: a ${year.grow} growing season, ${forYou}${year.shiftable ? ` (${at} at the habitat, ${home})` : ''}.`;
+      // The habitat's months once, and only when they differ from the reader's (round sixty; words 7).
+      short = `Rain rule: a ${year.grow} growing season, ${forYou}${year.shiftable && reader !== at ? ` (${at} at the habitat, ${home})` : ''}.`;
       lead = `Wet ${year.grow === 'winter' ? 'winters' : 'summers'}: the rain comes ${yours}, read as a ${year.grow} growing season.`;
     }
-    add('Seasons', 'Its year', s, `Read from the median year of CHELSA monthly rainfall and mean temperature across the grid cells of the range: the rain rule takes the smallest set of months carrying 70% of the rain and calls it winter when its mean is more than ${U === 'us' ? 'a degree Fahrenheit (0.5 °C)' : 'half a degree'} below the year's, summer when more than that above, and neither in between; the temperature rule, used only under ${ruleRain(120, U)}, names the cooler six months when they are at least ${U === 'us' ? '1.8 °F (1 °C)' : 'a degree'} cooler than the other six. Months are shifted for the other hemisphere only where the temperature curve gives a season to reverse. A reading of the curves, not an observation of the plant.`, true, short, { lead, rule: year.fog || year.none ? 'rain and temperature rules, CHELSA' : 'rain rule, CHELSA' });
+    add('Seasons', 'Its year', s, `Read from the median year of CHELSA monthly rainfall and mean temperature across the grid cells of the range: the rain rule takes the smallest set of months carrying 70% of the rain and calls it winter when its mean is more than ${U === 'us' ? 'a degree Fahrenheit (0.5 °C)' : 'half a degree'} below the year's, summer when more than that above, and neither in between; the temperature rule, used only under ${ruleRain(120, U)}, names the cooler six months when they are at least ${U === 'us' ? '1.8 °F (1 °C)' : 'a degree'} cooler than the other six. Months are shifted for the other hemisphere only where the temperature curve moves ${ruleDeltaT(4, U)} or more and the habitat lies 10° or more from the equator. A reading of the curves, not an observation of the plant.`, true, short, { lead, rule: year.fog || year.none ? 'rain and temperature rules, CHELSA' : 'rain rule, CHELSA' });
 
     /* ---- rain ---- */
     const dry = m.filter((x) => x.precipMm < 5).length;
     const wetSpanText = year.fog ? '' : `, ${RAIN(year.wetMm)} of it ${at}`;
-    add('Rain', 'Rain', `${RAIN(year.annualMm)} a year at the habitat${wetSpanText}. Wettest month ${mon(year.wettest)} at ${RAIN(m[year.wettest - 1].precipMm)}, driest ${mon(year.driest)} at ${RAIN(m[year.driest - 1].precipMm)}${dry ? `; ${dry} month${dry === 1 ? '' : 's'} under ${ruleRain(5, U)}` : ''}${input.annualP10 != null && input.annualP90 != null && Math.round(input.annualP10) !== Math.round(input.annualP90) ? `. Across the grid cells of the range the year's total runs ${RAIN(input.annualP10)} to ${RAIN(input.annualP90)} (10th to 90th percentile of each cell's own year)` : ''} (${ENV}; habitat calendar, ${home} hemisphere).`, `CHELSA monthly precipitation, ${ENV.replace(', CHELSA', '')}. The rain that falls where the species is recorded; nothing about how the plant takes water.`, true, `Habitat rain ${RAIN(year.annualMm)} a year, wettest ${mon(year.wettest)} at ${RAIN(m[year.wettest - 1].precipMm)}, driest ${mon(year.driest)} at ${RAIN(m[year.driest - 1].precipMm)} (CHELSA; habitat calendar, ${home} hemisphere).`, { lead: `${RAIN(year.annualMm)} of rain a year${dry ? `, ${dry === 12 ? 'every month' : `${dry} month${dry === 1 ? '' : 's'}`} under ${ruleRain(5, U)}` : ''}.`, rule: 'CHELSA' });
+    const even = m.every((x) => RAIN(x.precipMm) === RAIN(m[0].precipMm));
+    const wd = even ? `The same in every month, ${RAIN(m[0].precipMm)}` : `${cap(extremeMonths(m, year.wettest - 1, RAIN, 'wettest'))}, ${extremeMonths(m, year.driest - 1, RAIN, 'driest')}`;
+    // The source in a sentence of its own: "under 0.20 in (5 mm) (median year …)" was two brackets in a row (round sixty; words 20).
+    add('Rain', 'Rain', `${RAIN(year.annualMm)} a year at the habitat${wetSpanText}. ${wd}${dry ? `; ${dry} month${dry === 1 ? '' : 's'} under ${ruleRain(5, U)}` : ''}.${input.annualP10 != null && input.annualP90 != null && Math.round(input.annualP10) !== Math.round(input.annualP90) ? ` Across the grid cells of the range the year's total runs ${RAIN(input.annualP10)} to ${RAIN(input.annualP90)}, the 10th to 90th percentile of each cell's own year.` : ''} Habitat calendar, ${home} hemisphere; ${ENV}.`, `CHELSA monthly precipitation, ${ENV.replace(', CHELSA', '')}. The rain that falls where the species is recorded; nothing about how the plant takes water.`, true, `Habitat rain ${RAIN(year.annualMm)} a year, ${even ? `the same in every month` : `${extremeMonths(m, year.wettest - 1, RAIN, 'wettest')}, ${extremeMonths(m, year.driest - 1, RAIN, 'driest')}`} (CHELSA; habitat calendar, ${home} hemisphere).`, { lead: `${RAIN(year.annualMm)} of rain a year${dry ? `, ${dry === 12 ? 'every month' : `${dry} month${dry === 1 ? '' : 's'}`} under ${ruleRain(5, U)}` : ''}.`, rule: 'CHELSA' });
   }
 
   /* ---- light ---- */
@@ -328,13 +360,14 @@ export function cultivationSheet(input: SheetInput): { rows: Row[]; arch: ArchGu
     floorOut = coldFloor(m, ex, guess, U, input.extremesStatus);
     const floor = floorOut;
     if (floor) bits.push(floor.s);
-    add('Warmth and air', 'Temperature', bits.join(' '), `${ex ? `NASA POWER daily minima and maxima 1981–2024 at a typical spot in the range${ex.lapseAppliedM ? ', lapse-corrected to its elevation' : ', without lapse correction'}; ` : ''}CHELSA monthly means, ${ENV}. ${ex || floor?.raised ? `The cold floor is the figure named in its sentence${guess?.arch.minC != null ? `, and the archetype table's group minimum where that is higher` : ''}.` : 'No cold floor is read without a daily extremes series; the mean night named in its sentence is not one.'} Not a measured survival limit for any plant in a pot.`, true, floor?.short, floor?.plain);
+    // The series' own length, never a fixed "1981–2024" (round sixty; words 20); the convention is never part of the floor (round sixty).
+    add('Warmth and air', 'Temperature', bits.join(' '), `${ex ? `NASA POWER daily minima and maxima over ${ex.years} years at a typical spot in the range${ex.lapseAppliedM ? ', lapse-corrected to its elevation' : ', without lapse correction'}; ` : ''}CHELSA monthly means, ${ENV.replace(', CHELSA', '')}. ${ex ? 'The cold floor is the 1st-percentile night named in its sentence.' : 'No cold floor is read without a daily extremes series; the mean night named in its sentence is not one.'} Not a measured survival limit for any plant in a pot.`, true, floor?.short, floor?.plain);
     const rhs = m.map((x) => x.rh).filter((x): x is number => x != null);
     if (rhs.length) add('Warmth and air', 'Humidity', `Relative humidity at the habitat: ${Math.round(Math.min(...rhs)) === Math.round(Math.max(...rhs)) ? `${Math.round(Math.min(...rhs))}% all year` : `${Math.round(Math.min(...rhs))} to ${Math.round(Math.max(...rhs))}% across the year`} (monthly means, ${ENV}). A figure about the air, saying nothing about how the plant takes water.`, `CHELSA relative humidity, ${ENV.replace(', CHELSA', '')}.`, true);
   } else {
     floorOut = coldFloor(null, ex, guess);
     const floor = floorOut;
-    if (floor) add('Warmth and air', 'Temperature', floor.s, `The archetype table's conventional minimum for the group; no habitat figure is on file for this species.`, false, floor.short, floor.plain);
+    if (floor) add('Warmth and air', 'Temperature', floor.s, `The archetype table's convention for growing the group indoors, which gives no source; no habitat figure is on file for this species, so no cold floor is read.`, false, floor.short, floor.plain);
   }
 
   return { rows, arch: guess, year, floor: floorOut };

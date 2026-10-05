@@ -28,7 +28,9 @@ const prunedTo = new Set<string>();
 /** Collection pages render on the device from the vault; their HTML is a shell that is the same for everyone. */
 const SHELLS = ['/plants', '/plants/new', '/places', '/propagation', '/propagation/new', '/labels', '/backup', '/sync', '/today', '/settings', '/offline'];
 const BUILD = new Set(build);
-const FILES = new Set(files);
+/** No dot-file is precached or asked for: `.assetsignore` is the platform's list, served as a 404 (round sixty; the product review, 12). svelte.config.js leaves them out too. */
+const dotFile = (p: string) => p.split('/').some((s) => s.startsWith('.'));
+const FILES = new Set(files.filter((f) => !dotFile(f)));
 /**
  * Cached at install: the scripts and styles, the shells, the front page (the start URL), and only the Latin subsets of
  * the three fonts, which is every glyph the pages set in them. The Latin-extended and Vietnamese subsets (84 kB) are
@@ -36,7 +38,7 @@ const FILES = new Set(files);
  * corpus is kept out of `files` by svelte.config.js.
  */
 const isLazyFont = (p: string) => /\.woff2$/.test(p) && !/-latin-(?!ext)/.test(p);
-const PRECACHE = [...build.filter((p) => !isLazyFont(p)), ...files, ...SHELLS, '/'];
+const PRECACHE = [...build.filter((p) => !isLazyFont(p)), ...FILES, ...SHELLS, '/'];
 
 self.addEventListener('install', (e) => {
   // Each file on its own: one shell that answers with a redirect or a 500 must not fail the whole install and leave the

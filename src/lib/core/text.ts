@@ -37,13 +37,17 @@ export function firstSentences(text: string, n: number): { text: string; more: b
 /**
  * A text cut to at most `max` characters at a word boundary, with an ellipsis when anything was cut: a search result or a
  * link preview that ends "named after the Austrian botanist Friedrich Welwit" reads as broken (round fifty-nine, after
- * the deploy). The ellipsis counts toward `max`.
+ * the deploy). The ellipsis counts toward `max`. Round sixty (A29): a cut never splits a character written as two
+ * UTF-16 units (it left half of one), a word that ends exactly where the room does is kept (it was dropped when the
+ * next character was a space), and no full stop is left before the ellipsis.
  */
 export function clip(text: string, max: number): string {
   const t = text.trim().replace(/\s+/g, ' ');
   if (t.length <= max) return t;
-  const room = t.slice(0, max - 1);
+  let room = t.slice(0, max - 1);
+  if (/[\uD800-\uDBFF]$/.test(room)) room = room.slice(0, -1);
+  const whole = /\s/.test(t[room.length] ?? '');
   const space = room.lastIndexOf(' ');
-  const cut = (space > max * 0.6 ? room.slice(0, space) : room).replace(/[\s,;:(–—-]+$/u, '');
+  const cut = (whole ? room : space > max * 0.6 ? room.slice(0, space) : room).replace(/[\s,;:.(–—-]+$/u, '');
   return `${cut}…`;
 }

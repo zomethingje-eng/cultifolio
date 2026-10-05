@@ -30,7 +30,7 @@ function block(file: string, signature: string): string {
   return text.slice(at, end + indent.length + 2);
 }
 
-const RECORDED = { rules: 4, hash: 'de78b243ee3ae5749ee5586fffa6a8ff' };
+const RECORDED = { rules: 5, hash: 'c82fbf4ccaa4f8e2ec14f5bf69e34c91' };
 
 describe('the fold rules number (round fifty-seven)', () => {
   it('moves whenever the fold\'s source does', () => {
@@ -43,6 +43,9 @@ describe('the fold rules number (round fifty-seven)', () => {
       // The whole vault module since round fifty-nine: the reviews changed `changesByKeys`, `lastArrival`, `dropFoldIn`,
       // `parkStamps` and a constant, each of which shapes what a snapshot holds or replays, and the hash did not move.
       whole(vault),
+      // The sync engine's own hold and its batch intake since round sixty: they decide what is parked on arrival, which
+      // shapes every fold after, and a change to either passed the hash and every test (the first outside review, 31).
+      ...['private hold(', 'private async takeBatch('].map((sig) => block('src/lib/sync/engine.svelte.ts', sig)),
       JSON.stringify(REQUIRED_FIELDS),
       JSON.stringify(KINDS)
     ].join('\n');

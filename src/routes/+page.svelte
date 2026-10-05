@@ -1,7 +1,7 @@
 <script lang="ts">
   import Placeholder from '$lib/ui/Placeholder.svelte';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
-  import { goto, replaceState } from '$app/navigation';
+  import { goto, replaceState, afterNavigate } from '$app/navigation';
   import { browser } from '$app/environment';
   import { page } from '$app/state';
   import { accNo } from '$lib/db/types';
@@ -18,7 +18,33 @@
   import type { MySpecies } from '$lib/db/species-list';
   import Today from '$lib/ui/Today.svelte';
   import RefPhotoOffer from '$lib/ui/RefPhotoOffer.svelte';
+  import Glance from '$lib/ui/ref/Glance.svelte';
+  import Climograph from '$lib/ui/Climograph.svelte';
+  import { failedBeforeHydration } from '$lib/ui/ref/failed';
+  import { tileCredit } from '$lib/ui/ref/head';
+  import { plantHref } from '$lib/db/links';
+  import { site } from '$lib/ui/site.svelte';
+  import { units } from '$lib/ui/units.svelte';
+  import { cultivationSheet } from '$core/sheet';
+  import { enterDemo } from '$lib/db/demo';
   let { data } = $props();
+  /**
+   * One featured species' figures, for "This is what every species page shows" under the visitor's heading (round sixty;
+   * visitor 1, the self-review's experience item 1). The server's load sends it (`feature`, the first of the day's strip
+   * with a derived climate); until it does, the block is not drawn.
+   */
+  type Feature = {
+    slug: string;
+    name: string;
+    family?: string | null;
+    lat: number | null;
+    climate: { months: Array<{ tmax: number; tmin: number; tmean: number; precipMm: number; dli?: number; rh?: number }>; p10?: unknown; p90?: unknown; cells: number; records: number; extremes?: { minAbs: number; minP01: number; maxP99: number; years: number; frostDaysPerYear: number; frostNights?: number } | null; extremesStatus?: 'ok' | 'none' | 'refused' | 'skipped' | 'sea' | null };
+  };
+  const feature = $derived((data as typeof data & { feature?: Feature | null }).feature ?? null);
+  /** The reader's hemisphere for the feature's season card: their site, else their first place with coordinates, else north. */
+  const readerLat = $derived(site.current?.lat ?? (collection.ready ? (collection.locations.map((l) => l.lat).find((x): x is number => x != null) ?? null) : null));
+  const featureSheet = $derived(feature ? cultivationSheet({ scientific: feature.name, family: feature.family ?? undefined, months: feature.climate.months, extremes: feature.climate.extremes ?? null, extremesStatus: feature.climate.extremesStatus ?? null, lat: feature.lat, readerLat, units: units.current }) : null);
+  const featureSeason = $derived(featureSheet?.rows.find((r) => r.k === 'Its year') ?? null);
   // The search lives in the URL (?q=) so the back button and a shared link bring it back; the server ignores it.
   let q = $state(browser ? (new URLSearchParams(location.search).get('q') ?? '') : '');
   // Only on the catalogue view: on "Your species" the box searches your own plants and species, and what is typed there
@@ -32,7 +58,7 @@
   /** Enter in the search opens the first match: the way a search box is expected to behave. While a catalogue search is in flight, Enter waits for its answer rather than opening the previous query's first hit (round forty, R1-2). */
   async function openTop(e: KeyboardEvent) {
     if (e.key !== 'Enter') return;
-    if (plantHits.length) { e.preventDefault(); goto(`/plants/${accNo(plantHits[0])}`); return; }
+    if (plantHits.length) { e.preventDefault(); goto(plantHref(plantHits[0])); return; } // by id while the number is shared (round sixty)
     if (yourView) {
       const own = ownHits[0];
       if (own) { e.preventDefault(); goto(`/species/${own.slug}`); }
@@ -99,7 +125,18 @@
     // first window), the rows are the same rows and the row stays where it was tapped.
     if (firstWindow) { firstWindow = false; return; }
     if (data.open && moved) void tick().then(() => placeRow(data.open));
+    // A row opened near the foot of a phone's screen opened below the tab bar, and the only sign was its "+" turning "−":
+    // its tiles are brought into view, the row under the pinned bar (round sixty; visitor 11).
+    else if (data.open) void tick().then(() => revealRow(data.open));
   });
+  /** Bring an opened row's first tiles into view when they would start under the bottom bar or below the fold. */
+  function revealRow(id: string | null) {
+    if (!id) return;
+    const el = document.getElementById(`g-${id}`);
+    if (!el) return;
+    const tabbar = document.getElementById('tabbar')?.getBoundingClientRect().height ?? 0;
+    if (el.getBoundingClientRect().bottom + 120 > window.innerHeight - tabbar) placeRow(id);
+  }
   /** Put the opened row under the pinned bar, padding the list when the page is too short to. */
   function placeRow(id: string) {
     const el = document.getElementById(`g-${id}`);
@@ -238,15 +275,22 @@
     if (!lettersEl) return;
     const bar = document.querySelector<HTMLElement>('.stickyhead .toolrow');
     const under = 44 + (bar?.offsetHeight ?? 0) + 8;
-    const chips = document.querySelector<HTMLElement>('.chiprow') ?? lettersEl;
+    const chips = lettersEl; // the chips are in the toolbar now (round sixty)
     // An instant move, not a smooth one: a smooth scroll upward crosses the sentinel above the rows, the chunk it fetches
     // lands mid-animation, and Safari stops the animation where it is, part of the way (the author's phone, round forty-nine).
     window.scrollTo({ top: chips.getBoundingClientRect().top + window.scrollY - under });
     lettersEl.querySelector<HTMLElement>('a')?.focus({ preventScroll: true });
   }
-  onMount(() => {
-    // A page opened at ?open=<row> (a link, a bookmark, the back button) starts at the row, not at the top of a thousand rows.
+  // A page opened at ?open=<row> (a link or a bookmark) starts at the row, not at the top of a thousand rows. Not on Back:
+  // there the browser's own saved position is the grower's place in the genus, and placing the row over it sent them to the
+  // top of a forty-species genus on every return from a species page (round sixty; visitor 6).
+  afterNavigate((nav) => {
+    if (nav.type === 'popstate') return;
+    if (nav.type === 'enter' && performance.getEntriesByType?.('navigation')?.[0] && (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming).type === 'back_forward') return;
     if (data.open && window.scrollY < 10) placeRow(data.open);
+  });
+  onMount(() => {
+    site.load();
     const fromHash = () => { const m = /^#l-(.+)$/.exec(location.hash); if (m) jumpToLetter(decodeURIComponent(m[1])); };
     fromHash();
     window.addEventListener('hashchange', fromHash);
@@ -317,21 +361,27 @@
   let searchGen = 0;
   let searchTimer: ReturnType<typeof setTimeout> | undefined;
   let pendingSearch: Promise<unknown> | null = null;
+  /** The text the server searched instead, when nothing matched as typed and it retried on the first two words (`relaxed`); said on the page (round sixty). */
+  let relaxedFor = $state<string | null>(null);
+  const relaxedOf = (r: unknown): string | null => { const x = (r as { relaxed?: { query?: unknown } } | null)?.relaxed?.query; return typeof x === 'string' && x.trim() ? x.trim() : null; };
+  /** The hits, whether the answer is the list itself or carries it as `hits` beside `relaxed`. */
+  const hitsOf = (r: unknown): Found[] => (Array.isArray(r) ? (r as Found[]) : Array.isArray((r as { hits?: unknown } | null)?.hits) ? (r as { hits: Found[] }).hits : []);
   $effect(() => {
     const text = q.trim();
     const gen = ++searchGen;
     clearTimeout(searchTimer);
     // The catalogue is searched only on the catalogue view (round forty, R2-1), and never with text that is the collection's (`keepLocal`).
-    if (!text || keepLocal) { found = []; searching = false; searchFailed = null; return; }
+    if (!text || keepLocal) { found = []; searching = false; searchFailed = null; relaxedFor = null; return; }
     searching = true;
     searchTimer = setTimeout(() => {
       pendingSearch = searchCatalogue(text).then((r) => {
         if (gen !== searchGen) return;
         searching = false;
-        if (r === null) { searchFailed = { kind: typeof navigator !== 'undefined' && navigator.onLine === false ? 'offline' : 'unreached' }; found = []; return; }
-        if ('limited' in r) { searchFailed = { kind: 'limited', wait: r.limited }; found = []; return; }
+        if (r === null) { searchFailed = { kind: typeof navigator !== 'undefined' && navigator.onLine === false ? 'offline' : 'unreached' }; found = []; relaxedFor = null; return; }
+        if (!Array.isArray(r) && 'limited' in r) { searchFailed = { kind: 'limited', wait: r.limited }; found = []; relaxedFor = null; return; }
         searchFailed = null;
-        found = r;
+        found = hitsOf(r);
+        relaxedFor = relaxedOf(r);
       });
     }, 150);
   });
@@ -377,12 +427,21 @@
     return [...owned.keys()].length; // until the entries are here, count what you grow, not what the corpus has of it
   });
   const byLabel = { genus: 'Genus', origin: 'Origin', family: 'Family' } as const;
+  /** "1 genus", "3 genera": the row word by count (round sixty; visitor 7: "1 genera"). */
+  const rowWord = (n: number) => (data.by === 'genus' ? (n === 1 ? 'genus' : 'genera') : data.by === 'family' ? (n === 1 ? 'family' : 'families') : n === 1 ? 'region' : 'regions');
+  /** The species under the chip, not the whole catalogue's: each species sits in one row of a grouping (round sixty; visitor 7). */
+  const chipSpecies = $derived(chip === 'climate' ? data.withClimate : chip === 'noclimate' ? data.total - data.withClimate : data.total);
+  /** A row's species whose climate is pending, apart from those whose source did not answer (round sixty; words 10). */
+  const pendingOf = (r: object) => (r as { pending?: number }).pending ?? 0;
   /** A tile's second line: the English name, unless it is only the genus again (Welwitschia's is "Welwitschia"), when the family says more (round fifty-nine; self review). */
   const commonOr = (c: { name: string; common?: string; family?: string }) => (c.common && c.common.toLowerCase() !== c.name.split(' ')[0].toLowerCase() ? c.common : c.family);
   const fmtN = (n: number) => n.toLocaleString('en-US');
+  /** The home page's description: the counts as they read, under 160 characters (round sixty). */
+  const homeDesc = $derived(`Habitat climate for ${fmtN(data.withClimate)} of ${fmtN(data.total)} cactus, succulent and bulb species, every figure sourced. Your plant records stay on your device.`);
   // A visitor: no plants on this device (until the collection has opened, the server's catalogue stands as the visitor's page).
   const visitor = $derived(!collection.ready || (!hasMine && !collection.accessions.length));
   const openRow = $derived(data.rows.find((r) => r.id === data.open));
+  const rowDesc = $derived(openRow ? `${openRow.label}: ${fmtN(openRow.count)} species in the reference, ${fmtN(openRow.withClimate)} with habitat climate where the sources answered; every figure sourced.` : '');
   /** Species per page of an opened row (the server's HOME_ITEMS). */
   const ITEMS = 240;
   const partHref = (id: string, part: number) => `?by=${data.by}${chip !== 'all' ? `&chip=${chip}` : ''}&open=${id}${part > 0 ? `&part=${part}` : ''}`;
@@ -419,14 +478,24 @@
   {#if openRow}
     <!-- A genus (or family, or origin) opened by its address is its own page to a crawler: its own title, description and canonical, not the home page's 1,321 times over (round thirty-one, 5). -->
     <title>{openRow.label}, {openRow.count} species · Cultifolio</title>
-    <meta name="description" content="{openRow.label}: {openRow.count} species in the reference, each with its native range, habitat climate and sources." />
+    <!-- Only what holds for the row: its counts, the climate where the sources answered (round sixty; the self-review's 14, A5). -->
+    <meta name="description" content={rowDesc} />
     <link rel="canonical" href="https://cultifolio.com/?by={data.by}&open={data.open}" />
+    <meta property="og:title" content="{openRow.label}, {openRow.count} species · Cultifolio" />
+    <meta property="og:description" content={rowDesc} />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Cultifolio" />
+    <meta property="og:url" content="https://cultifolio.com/?by={data.by}&open={data.open}" />
+    <meta property="og:image" content={openRow.thumb ? photoAt(openRow.thumb, 'medium') : 'https://cultifolio.com/og.png'} />
+    <meta name="twitter:card" content="summary_large_image" />
   {:else}
     <title>Cultifolio: cactus, succulent and bulb reference, and a private plant record</title>
-    <meta name="description" content="A reference for people who grow cacti, succulents and bulbs: {fmtN(data.total)} species with native range and, where the sources answered, habitat climate and cold nights, from public data, every figure sourced. Your own plant records stay on your device unless you turn on encrypted sync." />
+    <!-- Under 160 characters, so a search result shows it whole (round sixty). -->
+    <meta name="description" content={homeDesc} />
     <link rel="canonical" href="https://cultifolio.com/" />
     <meta property="og:title" content="Cultifolio: cactus, succulent and bulb reference, and a private plant record" />
-    <meta property="og:description" content="{fmtN(data.total)} species with native range and, where the sources answered, habitat climate, from public data, every figure sourced. Your own plant records stay on your device; no account." />
+    <meta property="og:description" content={homeDesc} />
+    <meta property="og:site_name" content="Cultifolio" />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://cultifolio.com/" />
     <meta property="og:image" content="https://cultifolio.com/og.png" />
@@ -447,7 +516,7 @@
 {#snippet plantsFound()}
   {#if plantHits.length}
     <div class="plantsfound" role="status" data-sveltekit-preload-data="off">
-      {#each plantHits.slice(0, 60) as a (a.id)}<a class="azrow accrow" href="/plants/{accNo(a)}"><span class="im"></span><span><span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}‘{a.cultivar}’{/if}</span><span class="fam">your plant{a.locationId ? ` · ${collection.locationName(a.locationId)}` : ''}</span></span><span class="fig">open →</span></a>{/each}
+      {#each plantHits.slice(0, 60) as a (a.id)}<a class="azrow accrow" href={plantHref(a)}><span class="im"></span><span><span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}‘{a.cultivar}’{/if}</span><span class="fam">your plant{a.locationId ? ` · ${collection.locationName(a.locationId)}` : ''}</span></span><span class="fig">open →</span></a>{/each}
     </div>
   {/if}
 {/snippet}
@@ -462,9 +531,11 @@
           <!-- The first phone viewport shows two or three tiles, and whichever is largest is the first-screen paint: the first three
                are fetched at once, the first with priority, the rest of the strip lazily (round thirty-seven, R2-4; round forty, R2-5).
                A photograph that does not load leaves a placeholder with the name, not a blank card (round forty, own). -->
-          {#if failedTiles.has(c.slug)}<div class="fph"><Placeholder name={c.name} family={c.family} caption="photograph did not load" /></div>{:else}<img src={photoAt(c.thumb, 'small')} width="240" height="240" alt="" loading={i < 3 ? 'eager' : 'lazy'} fetchpriority={i < 2 ? 'high' : 'auto'} onerror={() => (failedTiles = new Set([...failedTiles, c.slug]))} />{/if}
+          {#if failedTiles.has(c.slug)}<div class="fph"><Placeholder name={c.name} family={c.family} caption="photograph did not load" /></div>{:else}<img src={photoAt(c.thumb, 'small')} width="240" height="240" alt={c.name} loading={i < 3 ? 'eager' : 'lazy'} fetchpriority={i < 2 ? 'high' : 'auto'} use:failedBeforeHydration={() => (failedTiles = new Set([...failedTiles, c.slug]))} />{/if}
           <span class="fnm"><SpeciesName name={c.name} /></span>
           {#if commonOr(c)}<span class="fcom">{commonOr(c)}</span>{/if}
+          <!-- The photograph's source on the tile, its author and licence on the page it opens (round sixty; rule 1, the round forty-two review G). -->
+          {#if !failedTiles.has(c.slug) && tileCredit(c)}<span class="fcred">{tileCredit(c)}</span>{/if}
         </a>
       {/each}
     </div>
@@ -475,10 +546,11 @@
   {@const own = owned.get(c.slug) ?? (c.key != null ? owned.get(`key:${c.key}`) : undefined)}
   <a class="tile" href="/species/{c.slug}">
     {#if own?.length}<span class="ownchip" title="You grow {own.length === 1 ? own[0] : own.length + ' of these'}" aria-label="You grow {own.length === 1 ? own[0] : own.length + ' of these'}">{own.length === 1 ? own[0] : `× ${own.length}`}</span>{:else if mine.get(c.slug)?.followed}<span class="ownchip following" title="On your list without a plant of it" aria-label="Following: on your list without a plant of it">following</span>{/if}
-    {#if c.thumb}<div class="im"><img src={c.thumb} alt={c.alt} loading="lazy" onerror={(e) => { const im = e.currentTarget as HTMLImageElement; im.style.display = 'none'; im.parentElement?.classList.add('ph'); im.parentElement && (im.parentElement.textContent = 'photograph did not load'); }} /></div>{:else if c.thumbOff}<div class="im"><Placeholder name={c.name} family={c.family} caption="reference photograph off" title="The reference has a photograph; showing it on your own tiles is off" /></div>{:else if c.climate}<div class="im"><Placeholder name={c.name} family={c.family} caption="no open photograph on file" /></div>{:else if c.missing}<div class="im"><Placeholder name={c.name} family={c.family} caption="not in the reference" /></div>{:else}<div class="im ph">{ownFailed ? 'reference not reached' : 'loading…'}</div>{/if}
+    {#if c.thumb}<div class="im"><img src={c.thumb} alt={c.alt} loading="lazy" use:failedBeforeHydration={(im) => { const box = im.parentElement; im.style.display = 'none'; box?.classList.add('ph'); if (box) box.textContent = 'photograph did not load'; }} /></div>{:else if c.thumbOff}<div class="im"><Placeholder name={c.name} family={c.family} caption="reference photograph off" title="The reference has a photograph; showing it on your own tiles is off" /></div>{:else if c.climate}<div class="im"><Placeholder name={c.name} family={c.family} caption="no open photograph on file" /></div>{:else if c.missing}<div class="im"><Placeholder name={c.name} family={c.family} caption="not in the reference" /></div>{:else}<div class="im ph">{ownFailed ? 'reference not reached' : 'loading…'}</div>{/if}
     <div class="tx">
       <div class="nm"><SpeciesName name={c.name} /></div>
       <div class="fam">{commonOr(c) ?? ''}</div>
+      {#if c.thumb && tileCredit(c)}<div class="cred">{tileCredit(c)}</div>{/if}
       <!-- the index carries the openly licensed count only; the species page's "in range" total is another figure, so this one is named for what it is (round eighteen, 7) -->
       <div class="fig" title={c.climate ? climateWord(c.climate) : undefined}>{c.climate === 'ok' ? `${c.open ? `${c.open} open record${c.open === 1 ? '' : 's'}` : 'habitat climate'}` : c.climate === 'pending' ? 'climate pending' : c.climate === 'refused' ? 'climate not checked' : c.climate ? 'no habitat climate' : c.missing ? 'not in the reference' : ''}</div>
     </div>
@@ -488,7 +560,7 @@
 {#snippet hit(c: Tile)}
   <!-- A match as a row, not a tile: five or six fit between the pinned box and a phone's keyboard, and update as the letters go in (round fifty, 2). -->
   <a class="azrow hitrow" href="/species/{c.slug}">
-    <span class="im">{#if c.thumb}<img src={photoAt(c.thumb, 'square')} width="40" height="40" alt="" loading="lazy" onerror={(e) => { const im = e.currentTarget as HTMLImageElement; const ini = document.createElement('span'); ini.className = 'ini'; ini.textContent = c.name[0] ?? ''; im.replaceWith(ini); }} />{:else}<span class="ini">{c.name[0] ?? ''}</span>{/if}</span>
+    <span class="im">{#if c.thumb}<img src={photoAt(c.thumb, 'square')} width="40" height="40" alt="" loading="lazy" use:failedBeforeHydration={(im) => { const ini = document.createElement('span'); ini.className = 'ini'; ini.textContent = c.name[0] ?? ''; im.replaceWith(ini); }} />{:else}<span class="ini">{c.name[0] ?? ''}</span>{/if}</span>
     <span>
       <span class="nm"><SpeciesName name={c.name} /></span>
       <span class="fam">{[c.common, c.family, c.climate === 'ok' ? 'climate known' : c.climate === 'pending' ? 'climate pending' : c.climate === 'refused' ? 'climate not checked' : c.climate ? 'no habitat climate' : ''].filter(Boolean).join(' · ')}</span>
@@ -567,23 +639,50 @@
 {:else}
   <!-- While a search is typed on a phone the head steps aside with the strip and the chips: the box is the page then (round fifty, 2). -->
   <div class="headwrap" class:searching={searchMode}>
-  <!-- To a visitor the head says what this is, at every width: the name and one sentence, the plants it is for and what it
-       does not ask (round fifty-eight; the first-impression review). To a grower it is the catalogue's head, as before. -->
-  <!-- Said as the counts beside it read: native range for every species, habitat climate where the sources answered (round fifty-nine; the first sentence a stranger reads claimed a climate for all). -->
-  {#snippet visitorLine()}A reference for people who grow cacti, succulents and bulbs: {fmtN(data.total)} species with their native range and, where the sources answered, habitat climate and cold nights, worked out from public data, every figure with its source. Keep your own plants here too; they stay on your device, with no account. <a href="https://github.com/zomethingje-eng/cultifolio">Free and open source</a>.{/snippet}
-  <PageHead title={visitor ? 'Cultifolio' : 'Species'} kick={visitor ? 'Species reference' : 'Cultifolio'} compact keepSub={visitor} subline={visitor ? visitorLine : undefined} count="{fmtN(data.total)} species · {fmtN(data.withClimate)} with habitat climate{ownedN ? ` · ${ownedN} you grow` : ''}">
+  <!-- To a visitor the head says what this is in three short lines, not a 62-word sentence that read as a disclaimer, and then
+       shows it: one species' figures and its chart, as its page shows them (round sixty; visitor 1, the self-review's
+       experience item 1). To a grower it is the catalogue's head, as before. -->
+  <PageHead title={visitor ? 'Cultifolio' : 'Species'} kick={visitor ? 'Species reference' : 'Cultifolio'} compact count="{fmtN(data.total)} species · {fmtN(data.withClimate)} with habitat climate{ownedN ? ` · ${ownedN} you grow` : ''}">
     {#if !visitor}<a class="btn pri headadd" href="/plants/new">Add a plant</a>{/if}
   </PageHead>
+  {#if visitor}
+    <ul class="pitch">
+      <li>A reference for growers of cacti, succulents and bulbs: {fmtN(data.total)} species, {fmtN(data.withClimate)} with the climate where they grow wild.</li>
+      <!-- On a phone the feature's figures and chart took 1,300 px and put the search four screens down: there the first
+           screen keeps the search, the photographs and the first rows (round fifty, 1), and the feature is this link (round sixty). -->
+      <li>Every figure names its source. Nothing on a species page is written by a person or by AI.{#if feature}<span class="featureline">{' '}<a href="/species/{feature.slug}">See one: <i>{feature.name}</i>&nbsp;›</a></span>{/if}</li>
+      <li>No sign-up. Your plants stay on your device, or sync encrypted if you choose. <a href="https://github.com/zomethingje-eng/cultifolio">Free and open source</a>.</li>
+    </ul>
+  {/if}
   </div>
+
+  {#if visitor && feature && !searchMode}
+    <!-- The figures are the species page's own, each with its source tag, and the chart its own chart: shown, not described. -->
+    <section class="feature" aria-labelledby="feature-h">
+      <h2 class="featurehead" id="feature-h">This is what every species page shows <span class="fname">· <a href="/species/{feature.slug}"><SpeciesName name={feature.name} /></a></span></h2>
+      <div class="fglance"><Glance months={feature.climate.months} extremes={feature.climate.extremes ?? null} extremesStatus={feature.climate.extremesStatus ?? null} year={featureSheet?.year ?? null} seasonLead={featureSeason?.plain?.lead ?? null} seasonRule={featureSeason?.plain?.rule ?? ''} {readerLat} readerFrom={readerLat == null ? null : site.current ? 'site' : 'places'} chartHref={null} /></div>
+      <Climograph id="feature-climo" name={feature.name} south={featureSheet?.year?.south ?? null} climate={{ months: feature.climate.months, p10: feature.climate.p10 as never, p90: feature.climate.p90 as never, cells: feature.climate.cells, extremes: feature.climate.extremes ?? null }} />
+      <p class="small featurefoot"><a href="/species/{feature.slug}">The whole page for <i>{feature.name}</i></a>: the season, the range and its records, photographs and every source. Chosen by rule from today's strip below.</p>
+    </section>
+  {/if}
 
   <!-- The way in, in one line (round twenty-eight, 13; one line since round fifty, 1: the first screen is for the search, a glimpse of the photographs and the first rows). -->
   {#if (!collection.ready || (!hasMine && !collection.accessions.length)) && !welcomeHidden && !searchMode}
-    <p class="welcome" id="welcome"><span><b>Grow some of these?</b> <a href="/plants/new">Add your first plant</a>; it stays on this device. Or <a href="/backup">restore a backup</a>.</span><button class="linkish dismiss" type="button" onclick={dismissWelcome} aria-label="Not now" title="Not now">×</button></p>
+    <p class="welcome" id="welcome"><span><b>Grow some of these?</b> <a href="/plants/new">Add your first plant</a>; it stays on this device. Or <button class="linkish inl" type="button" id="try-sample-home" onclick={() => enterDemo('/plants')}>try a sample collection</button>, or <a href="/backup">restore a backup</a>.</span><button class="linkish dismiss" type="button" onclick={dismissWelcome} aria-label="Not now" title="Not now">×</button></p>
   {:else if collection.ready && !hasMine && !collection.accessions.length && !searchMode}
     <!-- "Not now" hides the welcome for good; the way in stays, in one line, or a visitor who comes back has to find /plants/new by the tab bar (round forty-one, R9). -->
-    <p class="welcome quiet" id="welcome-after"><a href="/plants/new">Keep a record of your plants</a> on this device; nothing leaves it.</p>
+    <!-- No "nothing leaves it": the about page lists what does (round sixty; words 17). -->
+    <p class="welcome quiet" id="welcome-after"><a href="/plants/new">Keep a record of your plants</a>; it stays on this device unless you turn on sync.</p>
   {/if}
 
+  {#if visitor && data.featured.length && !searchMode}
+    <!-- A stranger sees plants before a list of them: one photographed species from each of the largest genera, by rule,
+         rotated daily; above the one toolbar now, so the search, the grouping and the chips sit together (round sixty; visitor 16). -->
+    {@render featured()}
+  {/if}
+
+  <!-- One toolbar: the search, then Group by, then the chips, then A–Z, the same shape in every grouping and chip
+       (round sixty; visitor 16). The letters scroll away under it; A–Z brings them back. -->
   <div class="stickyhead">
   <div class="toolrow" bind:this={toolrowEl}>
     {#if hasMine && !searchMode}
@@ -595,34 +694,30 @@
       <!-- Typing is a mode on a phone: the box pinned under the top bar, the strip, the grouping, the chips and the letters out of the way, the matches as rows under it, and Cancel to put the page back (round fifty, 2). -->
       <button class="btn small cancelsearch" type="button" onclick={cancelSearch}>Cancel</button>
     {:else}
-      <!-- Links between addresses: the current one is the page (round fifty-eight; the accessibility review). -->
-      <nav class="seg" aria-label="Group by">
-        {#each ['genus', 'origin', 'family'] as const as b (b)}<a href="?by={b}{chip !== 'all' ? `&chip=${chip}` : ''}" class:on={data.by === b} aria-current={data.by === b ? 'page' : undefined}>{byLabel[b]}</a>{/each}
-      </nav>
-      <!-- The chips and the letter index scroll away under the pinned search row; this brings them back (round forty-eight, 1) -->
-      {#if data.letters.length > 1}<button class="btn small azbtn" type="button" onclick={showLetters} aria-label="Show the letter index">A–Z</button>{/if}
+      <div class="tools">
+        <!-- Links between addresses: the current one is the page (round fifty-eight; the accessibility review). -->
+        <nav class="seg" aria-label="Group by">
+          {#each ['genus', 'origin', 'family'] as const as b (b)}<a href="?by={b}{chip !== 'all' ? `&chip=${chip}` : ''}" class:on={data.by === b} aria-current={data.by === b ? 'page' : undefined}>{byLabel[b]}</a>{/each}
+        </nav>
+        <!-- Links between addresses, so the current one is the page, not "true" (round fifty-eight; the accessibility review). -->
+        <nav class="chiprow" aria-label="Filter by climate">
+          <a class="chipbtn" class:on={chip === 'all'} aria-current={chip === 'all' ? 'page' : undefined} href="?by={data.by}" data-sveltekit-noscroll>All<span class="n">{fmtN(data.total)}</span></a>
+          <a class="chipbtn" class:on={chip === 'climate'} aria-current={chip === 'climate' ? 'page' : undefined} href="?by={data.by}&chip=climate" data-sveltekit-noscroll>Climate known<span class="n">{fmtN(data.withClimate)}</span></a>
+          <a class="chipbtn" class:on={chip === 'noclimate'} aria-current={chip === 'noclimate' ? 'page' : undefined} href="?by={data.by}&chip=noclimate" data-sveltekit-noscroll>Without climate<span class="n">{fmtN(data.total - data.withClimate)}</span></a>
+        </nav>
+        <!-- Kept in place with no index to show (regions), so the toolbar does not change shape (round sixty; visitor 16). -->
+        <button class="btn small azbtn" class:noaz={data.letters.length <= 1} type="button" onclick={showLetters} aria-label="Show the letter index" aria-hidden={data.letters.length <= 1 ? 'true' : undefined} tabindex={data.letters.length <= 1 ? -1 : undefined} disabled={data.letters.length <= 1}>A–Z</button>
+      </div>
     {/if}
   </div>
   </div>
+  {#if relaxedFor && searchMode}<p class="seccount relaxed" role="status">Nothing matched “{q.trim()}” as written. Showing results for “{relaxedFor}”.</p>{/if}
 
-  {#if visitor && data.featured.length && !searchMode}
-    <!-- A stranger sees plants before a list of them: one photographed species from each of the largest genera, by rule, rotated daily; under the search since round fifty, as a sampler rather than the page. -->
-    {@render featured()}
-  {/if}
-
-  {#if !searchMode}
+  {#if !searchMode && data.letters.length > 1}
   <div class="filters" bind:this={filtersEl}>
-  <!-- Links between addresses, so the current one is the page, not "true" (round fifty-eight; the accessibility review). -->
-  <div class="chiprow">
-    <a class="chipbtn" class:on={chip === 'all'} aria-current={chip === 'all' ? 'page' : undefined} href="?by={data.by}" data-sveltekit-noscroll>All<span class="n">{fmtN(data.total)}</span></a>
-    <a class="chipbtn" class:on={chip === 'climate'} aria-current={chip === 'climate' ? 'page' : undefined} href="?by={data.by}&chip=climate" data-sveltekit-noscroll>Climate known<span class="n">{fmtN(data.withClimate)}</span></a>
-    <a class="chipbtn" class:on={chip === 'noclimate'} aria-current={chip === 'noclimate' ? 'page' : undefined} href="?by={data.by}&chip=noclimate" data-sveltekit-noscroll>Without climate<span class="n">{fmtN(data.total - data.withClimate)}</span></a>
-  </div>
-  {#if data.letters.length > 1}
     <nav class="letters" aria-label="Jump to a letter" bind:this={lettersEl}>
       {#each data.letters as l (l)}<a href="?by={data.by}{chip !== 'all' ? `&chip=${chip}` : ''}&from={l}#l-{l}" onclick={(e) => { e.preventDefault(); jumpToLetter(l); }}>{l}</a>{/each}
     </nav>
-  {/if}
   </div>
   {/if}
 
@@ -647,11 +742,11 @@
       {#each visibleRows as r, i (r.id)}
         {#if r.letter && (i === 0 || rows[i - 1].letter !== r.letter)}<h2 class="letter" id="l-{r.letter}">{r.letter}</h2>{/if}
         <a class="grow" class:open={r.id === data.open} id="g-{r.id}" href={rowHref(r.id)} data-sveltekit-noscroll aria-expanded={r.id === data.open}>
-          {#if r.map}<div class="gmap">{@html r.map}</div>{:else if r.thumb}<div class="gthumb"><img src={photoAt(r.thumb, 'square')} width="56" height="56" alt="" loading="lazy" onerror={(e) => { const im = e.currentTarget as HTMLImageElement; im.remove(); }} /></div>{:else}<div class="gthumb mono" aria-hidden="true">{r.label[0] ?? ''}</div>{/if}
+          {#if r.map}<div class="gmap">{@html r.map}</div>{:else if r.thumb}<div class="gthumb"><img src={photoAt(r.thumb, 'square')} width="56" height="56" alt="" loading="lazy" use:failedBeforeHydration={(im) => im.remove()} /></div>{:else}<div class="gthumb mono" aria-hidden="true">{r.label[0] ?? ''}</div>{/if}
           <div class="gtx">
             <span class="gname" class:sci={data.by === 'genus'}>{r.label}</span>
             {#if r.sub}<span class="d">{r.sub}</span>{/if}
-            <span class="st">{r.count} species · {r.withClimate} with climate{#if r.notChecked}{' · '}{r.notChecked} not checked{/if}</span>
+            <span class="st">{fmtN(r.count)} species · {fmtN(r.withClimate)} with climate{#if pendingOf(r)}{' · '}{fmtN(pendingOf(r))} pending{/if}{#if r.notChecked}{' · '}{fmtN(r.notChecked)} not checked{/if}</span>
           </div>
           <span class="chev" aria-hidden="true">{r.id === data.open ? '–' : '+'}</span>
         </a>
@@ -669,9 +764,9 @@
           {/if}
         {/if}
       {/each}
-      {#if end < data.rowCount}<div class="more" bind:this={sentinel}><a class="btn small" href="?by={data.by}{chip !== 'all' ? `&chip=${chip}` : ''}&at={end}" onclick={async (e) => { e.preventDefault(); if (!(await growOnce())) location.href = (e.currentTarget as HTMLAnchorElement).href; }}>More of the {fmtN(data.rowCount)} {data.by === 'genus' ? 'genera' : data.by === 'family' ? 'families' : 'regions'}</a></div>{/if}
+      {#if end < data.rowCount}<div class="more" bind:this={sentinel}><a class="btn small" href="?by={data.by}{chip !== 'all' ? `&chip=${chip}` : ''}&at={end}" onclick={async (e) => { e.preventDefault(); if (!(await growOnce())) location.href = (e.currentTarget as HTMLAnchorElement).href; }}>More of the {fmtN(data.rowCount)} {rowWord(data.rowCount)}</a></div>{/if}
     </div>
-    <p class="seccount" style="margin-top: 14px">{fmtN(data.rowCount)} {data.by === 'genus' ? 'genera' : data.by === 'family' ? 'families' : 'regions'} · {fmtN(data.total)} species</p>
+    <p class="seccount" style="margin-top: 14px">{fmtN(data.rowCount)} {rowWord(data.rowCount)} · {fmtN(chipSpecies)} species{chip === 'climate' ? ' with habitat climate' : chip === 'noclimate' ? ' without habitat climate' : ''}</p>
   {/if}
 {/if}
 
@@ -679,7 +774,30 @@
   .plantsfound { margin: 12px 0 4px; }
   .plantsfound .accrow .nm .accno { font-style: normal; vertical-align: 2px; }
   .welcome { margin: 10px 0 0; font-size: var(--fs-md); color: var(--ink2); line-height: 1.6; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-  .welcome .dismiss { font-size: var(--fs-xl); line-height: 1; padding: 4px 8px; min-height: 0; text-decoration: none; }
+  .welcome .dismiss { font-size: var(--fs-xl); line-height: 1; padding: 4px 8px; min-height: var(--tap); min-width: var(--tap); text-decoration: none; } /* 44 px under a finger (round sixty; visitor 17) */
+  /* The visitor's three lines, then the product itself (round sixty; visitor 1). */
+  .pitch { margin: -8px 0 6px; padding-left: 1.1em; font-size: var(--fs-md); color: var(--ink2); line-height: 1.5; display: grid; gap: 2px; max-width: 46rem; }
+  .pitch li::marker { color: var(--accent); }
+  .feature { margin: 14px 0 6px; }
+  .featureline { display: none; }
+  @media (max-width: 899px) { .feature { display: none; } .featureline { display: inline; } }
+  .featurehead { font-size: var(--fs-xs); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink3); font-weight: 700; font-family: var(--ui); margin: 0 0 8px; }
+  .featurehead .fname { text-transform: none; letter-spacing: 0; font-size: var(--fs-md); font-weight: 600; }
+  .feature :global(.climo) { margin-top: 0; }
+  .fglance { min-width: 0; }
+  .featurefoot { margin: 8px 0 0; color: var(--ink2); }
+  @media (min-width: 900px) { .feature { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 18px; align-items: start; } .featurehead, .featurefoot { grid-column: 1 / -1; } }
+  /* The toolbar's controls after the box: one line on a desktop; on a phone one line under the box that scrolls sideways (round sixty; visitor 16). */
+  .tools { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; min-width: 0; flex: 0 1 auto; overflow-x: auto; scrollbar-width: none; }
+  .tools::-webkit-scrollbar { display: none; }
+  .tools .chiprow { flex-wrap: nowrap; margin: 0; gap: 6px; }
+  .tools .chiprow .chipbtn, .tools .seg { flex: none; }
+  @media (max-width: 900px) { .tools { flex-basis: 100%; } }
+  .azbtn.noaz { visibility: hidden; }
+  .relaxed { margin: 8px 0 0; }
+  .ftile .fcred, .tile .cred { display: block; font-size: var(--fs-xs); color: var(--ink3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ftile .fcred { padding: 0 9px 8px; margin-top: -4px; }
+  .tile .cred { margin-top: 2px; }
   /* the grower's main switch: yours or everything; it leads the tool row on both views */
   /* :global, since the switch is the toggle group's own markup (round fifty-eight; the accessibility review). */
   .toolrow :global(.viewseg) { order: -1; }
@@ -688,6 +806,8 @@
   .toolrow :global(.viewseg > button) { font-weight: 700; }
   @media (max-width: 700px) { .toolrow :global(.viewseg) { flex-basis: 100%; } .toolrow :global(.viewseg > button) { flex: 1; text-align: center; } }
   .welcome a { font-weight: 600; }
+  /* A button in the sentence, read and tapped as its links are (round sixty). */
+  .welcome .inl { background: none; border: 0; padding: 0; font: inherit; font-weight: 600; color: var(--accent); cursor: pointer; min-height: 0; display: inline; }
   .welcome.quiet { color: var(--ink3); font-size: var(--fs-md); }
   /* dismissed on this device: hidden before first paint, by the flag app.html sets, until the state catches up at mount */
   :global(html[data-welcomed]) .welcome:not(.quiet) { display: none; }
@@ -728,8 +848,6 @@
   .azbtn { display: inline-flex; margin-left: auto; }
   .cancelsearch { margin-left: auto; }
   .filters { margin: 6px 0 0; }
-  .filters .chiprow { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 4px 0 6px; }
-  .filters .chiprow .chipbtn { flex: none; }
   /* A match as a row: a 40px thumbnail or the initial, the name, the family and whether its climate is known. */
   .hitrow .im { background: var(--sunk); }
   .hitrow .im .ini { font-family: var(--serif); font-style: italic; font-size: var(--fs-xl); color: var(--ink3); }
@@ -742,7 +860,7 @@
   .offer { margin: -4px 0 10px; }
   .letters { display: flex; flex-wrap: wrap; gap: 2px; margin: 0 0 2px; }
   .parts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 10px 0 16px; font-size: var(--fs-md); color: var(--ink2); }
-  .letters a { font-family: var(--mono); font-size: var(--fs-sm); font-weight: 600; color: var(--ink2); min-width: 30px; min-height: 30px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--r-sm); }
+  .letters a { font-family: var(--mono); font-size: var(--fs-sm); font-weight: 600; color: var(--ink2); min-width: var(--tap); min-height: var(--tap); display: inline-flex; align-items: center; justify-content: center; border-radius: var(--r-sm); }
   .letters a:hover { background: var(--sunk); text-decoration: none; color: var(--ink); }
   .letter { font-family: var(--mono); font-size: var(--fs-sm); letter-spacing: 0.12em; color: var(--ink3); margin: 22px 0 6px; scroll-margin-top: 210px; }
   @media (max-width: 640px) { .letter { scroll-margin-top: 150px; } } /* the `#l-X` hash without JavaScript: under the pinned search row, not the desktop's whole head */

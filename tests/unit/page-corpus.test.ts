@@ -3,17 +3,20 @@
  * corpus for the key, the home query loaded it again, and the page a third time, so a refresh landing between them
  * stored corpus B's page under corpus A's id for the cache's minute. Now the hook loads once, into `locals`, and the
  * key, the query and the page all read that. Reproduced as the independent review did: A is current when the hook
- * starts, B is published and the minute passes during the render.
+ * starts, B is published and the minute passes during the render. Round sixty (the harness review, 1): the pages' own
+ * loads are called, not a stand-in that read `locals` itself, so a load that ignores the hook's corpus fails here.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { handle } from '../../src/hooks.server';
 import { _forgetIndex, corpusNow } from '$lib/server/dossiers';
 import { buildProducts } from '$dossier/products';
 import { manifestPath, productPath } from '$dossier/manifest';
+import { dossierPath } from '$dossier/schema';
+import { readFileSync } from 'node:fs';
 
 const mk = (names: string[]) => names.map((name, i) => ({ key: 1000 + i, slug: name.toLowerCase().replace(/ /g, '-'), name, open: 0 }));
-const A = mk(['Aloe vera', 'Copiapoa cinerea', 'Lithops lesliei']);
-const B = mk(['Adenia globosa', 'Aloe vera', 'Copiapoa cinerea', 'Lithops lesliei']);
+const A = mk(['Aloe vera', 'Copiapoa cinerea', 'Lithops lesliei']).map((e) => (e.name === 'Copiapoa cinerea' ? { ...e, key: 5384013 } : e));
+const B = mk(['Adenia globosa', 'Aloe vera', 'Lithops lesliei', 'Welwitschia mirabilis']);
 const noStatic = (async () => new Response('', { status: 404 })) as typeof fetch;
 
 function products(idx: object[]) {
@@ -47,13 +50,40 @@ describe('the page cache stores a page under the corpus it was rendered from (ro
         m.set(manifestPath(), JSON.stringify(b.manifest));
         vi.spyOn(Date, 'now').mockImplementation(() => T0 + 61_000);
         expect((await corpusNow(platform as never, noStatic)).corpus).toBe(b.manifest.id);
-        // the page renders from the corpus the request holds
-        return new Response(`<p>${e.locals.corpus!.corpus} ${e.locals.corpus!.idx.length}</p>`, { headers: { 'content-type': 'text/html' } });
+        // the page's own load renders from the corpus the request holds: A's rows (Aloe), not B's (Adenia)
+        const { load } = await import('../../src/routes/+page.server');
+        const page = (await load({ ...e, setHeaders: () => {} } as never)) as { rows: Array<{ id: string }>; total: number };
+        return new Response(`<p>${page.rows.map((x) => x.id).join(',')} ${page.total}</p>`, { headers: { 'content-type': 'text/html' } });
       }
     } as never);
     await Promise.all(waited);
-    expect(await r.text()).toBe(`<p>${a.manifest.id} ${A.length}</p>`);
+    const html = await r.text();
+    expect(html).toContain('aloe');
+    expect(html).not.toContain('adenia');
+    expect(html).toContain(` ${A.length}<`);
     const [key] = [...kept.keys()];
     expect(new URL(key).searchParams.get('c')).toBe(a.manifest.id);
+  });
+  it('the species page renders from the corpus the hook holds, even when the current one has dropped the species', async () => {
+    _forgetIndex();
+    const a = products(A), b = products(B);
+    const m = new Map<string, string>([...a.blobs, [manifestPath(), JSON.stringify(a.manifest)], [dossierPath(5384013), readFileSync('fixtures/dossiers/s/v2/5384013.json', 'utf8')]]);
+    const tag = (k: string) => { let h = 0; for (const ch of m.get(k)!) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return `"${h.toString(16)}"`; };
+    const store = {
+      get: async (k: string) => (m.has(k) ? { text: async () => m.get(k)!, json: async () => JSON.parse(m.get(k)!), etag: tag(k) } : null),
+      head: async (k: string) => (m.has(k) ? { etag: tag(k) } : null)
+    };
+    const platform = { env: { STORE: store } };
+    const T0 = Date.UTC(2026, 9, 4, 12);
+    vi.spyOn(Date, 'now').mockImplementation(() => T0);
+    const held = await corpusNow(platform as never, noStatic);
+    expect(held.corpus).toBe(a.manifest.id);
+    for (const [k, v] of b.blobs) m.set(k, v);
+    m.set(manifestPath(), JSON.stringify(b.manifest));
+    vi.spyOn(Date, 'now').mockImplementation(() => T0 + 61_000);
+    const { load } = await import('../../src/routes/species/[slug]/+page.server');
+    const url = new URL('https://cultifolio.com/species/copiapoa-cinerea');
+    const page = (await load({ params: { slug: 'copiapoa-cinerea' }, platform, fetch: noStatic, setHeaders: () => {}, cookies: { get: () => undefined }, request: new Request(url), url, getClientAddress: () => '1.2.3.4', locals: { corpus: held } } as never)) as { d: { slug: string } };
+    expect(page.d.slug).toBe('copiapoa-cinerea');
   });
 });

@@ -19,6 +19,11 @@
   import PhotoImg from '$lib/ui/PhotoImg.svelte';
   import RefPhotoOffer from '$lib/ui/RefPhotoOffer.svelte';
   import { site } from '$lib/ui/site.svelte';
+  import { plantHref } from '$lib/db/links';
+  import PlantName from '$lib/ui/PlantName.svelte';
+  import HeldNote from '$lib/ui/HeldNote.svelte';
+  import { placeTail, plantName } from '$lib/ui/plant-label';
+  import { PlantsMenu, PlantsEmpty, SelectMode, PlantsFoot } from '$lib/ui/grow'; // round sixty, agent F: import, the sample, selection, Wanted and spending
   onMount(() => { site.load(); collection.load(); }); // the site, for the empty list's third step (round fifty-eight; the grower review)
   /** The storage warning can be put away for this tab's life only; the browser's promise has not changed, so it comes back on the next visit. */
   let storageNoticeHidden = $state(false);
@@ -55,7 +60,7 @@
   onMount(() => {
     const sp = new URL(location.href).searchParams;
     const want = sp.get('show');
-    if (want === 'due' || want === 'all' || want === 'nophoto') show = want;
+    if (want === 'due' || want === 'all' || want === 'nophoto') show = want; // a link to ?show=nophoto (Today's line) is followed even before the chip shows
     q = sp.get('q') ?? '';
     const s = sp.get('sort');
     if (s === 'name' || s === 'watered' || s === 'place') sort = s;
@@ -90,6 +95,8 @@
   const yearAgo = localDateYearAgo();
   const noPhoto = (id: string) => !collection.photos(id).some((p) => p.d >= yearAgo);
   const noPhotoN = $derived(collection.accessions.filter((a) => a.status === 'growing' && noPhoto(a.id)).length);
+  /** "No photo in 12 months" waits until a growing plant has been here a year: on a collection made today it counted every plant (round sixty; the grower review, 16). */
+  const yearOld = $derived(collection.accessions.some((a) => a.status === 'growing' && (a.acquired ?? collection.madeOn('accession', a.id) ?? localDate()) <= yearAgo));
   let thumbs = $state<Map<string, string>>(new Map());
   // Thumbnails for the species grown here, a small request, not the whole catalogue (round eight, 9).
   // Only when the grower has switched the reference's photographs on for their own pages: the thumbnails are the one thing
@@ -108,7 +115,7 @@
   /** One tap writes one line, dated today; the toast takes exactly that line back (round forty-nine, 3). */
   let watering = $state('');
   async function water(a: Accession) {
-    if (watering) return;
+    if (watering) return; // a second tap while the first saves does nothing; the button stays focused (aria-disabled, round sixty)
     if (collection.lastWatered(a.id) === localDate()) { toast.show(`${accNo(a)} is already recorded as watered today.`); return; } // one watering a day: two taps are one (round fifty-two, 3)
     watering = a.id;
     try {
@@ -118,6 +125,8 @@
       watering = '';
     }
   }
+  /** Two letters for a row with no picture: the genus's and the epithet's (or the cultivar's) first letters. */
+  const initials = (a: Accession) => { const n = plantName(a); const w = n.sci.replace(/^×\s*/, '').split(/\s+/); return ((w[0]?.[0] ?? '') + ((w[1] && w[1] !== '×' ? w[1][0] : n.cultivar?.[0]) ?? '')).toUpperCase(); };
   /** Days since watered per plant, read once per list rather than once per comparison in the sort (round fifty-one, 5). */
   let careMap = new Map<string, number>();
   const care = (a: Accession) => { let d = careMap.get(a.id); if (d === undefined) careMap.set(a.id, (d = collection.careDays(a))); return d; };
@@ -149,9 +158,11 @@
 
 <!-- No count over an empty list: "0 growing · 0 plant numbers" said nothing the steps below do not (round fifty-eight; the grower review). -->
 <!-- "plant numbers", not "numbers given": the glossary's plain words (round fifty-eight; the accessibility review). -->
-<PageHead compact title="My plants" sub="Your plants, each under its own number, kept on this device." count={collection.ready && !collection.accessions.length ? undefined : `${collection.accessions.filter((a) => a.status === 'growing').length} growing · ${collection.numbersIssued} plant number${collection.numbersIssued === 1 ? '' : 's'}`}>
+<!-- "N growing" alone: "31 growing · 41 plant numbers" left the grower wondering why the two differ (round sixty; the grower review, 16). -->
+<PageHead compact title="My plants" sub="Your plants, each under its own number, kept on this device." count={collection.ready && !collection.accessions.length ? undefined : `${collection.accessions.filter((a) => a.status === 'growing').length} growing`}>
   <!-- The + in the top bar is the phone's add button; the head keeps its one line (round fifty, 4). -->
   <a class="btn pri wideonly" href="/plants/new">Add a plant</a>
+  <PlantsMenu />
 </PageHead>
 
 {#if collection.ready && collection.accessions.length}
@@ -164,12 +175,13 @@
   {#if !few}<ToggleGroup chips class="showrow" style="margin: 0" label="Which plants" bind:value={show} options={[
     { value: 'growing', label: 'Growing', n: collection.accessions.filter((a) => a.status === 'growing').length },
     { value: 'due', label: 'Due', n: dueN, title: 'Past its watering rhythm: 21 days unless its place or the plant sets another' },
-    { value: 'nophoto', label: 'No photo in 12 months', n: noPhotoN, title: 'Growing plants with no photograph in the last year' },
+    ...(yearOld || show === 'nophoto' ? [{ value: 'nophoto' as const, label: 'No photo in 12 months', n: noPhotoN, title: 'Growing plants with no photograph in the last year' }] : []),
     { value: 'all', label: 'All', n: collection.accessions.length }
   ]} />{/if}
 </div>
 {/if}
 
+<HeldNote />
 {#if collection.lastWriteError}
   <div class="notice err" role="alert" id="write-error">This change was not saved: {collection.lastWriteError}. Free space or <a href="/backup">back up now</a>.</div>
 {/if}
@@ -179,7 +191,7 @@
   <p class="small muted keepline" id="storage-notice">Kept in this browser only: <a href="/backup">back up</a> or install the app.</p>
 {/if}
 <!-- What "set aside" meant, and "version of the app", not "build" (round fifty-eight; the accessibility review). -->
-{#if collection.incomplete}<StateNote word="{collection.incomplete} waiting" id="incomplete-notice">{collection.incomplete} {collection.incomplete === 1 ? 'record waits' : 'records wait'} for a field this device does not have ({#if sync.quarantined.length}a batch from a newer version of the app, which could not be read here; see <a href="/sync">Sync</a>{:else}a file that never had it, or a batch from a newer version of the app that has not arrived{/if}), and {collection.incomplete === 1 ? 'is' : 'are'} not shown until it comes; a plant's own page, by its number, says which field. <a href="/about/how#glossary">Glossary</a>.</StateNote>{/if}
+{#if collection.incomplete}<StateNote word="{collection.incomplete} waiting" id="incomplete-notice">{collection.incomplete} {collection.incomplete === 1 ? 'record waits' : 'records wait'} for a field this device does not have ({#if sync.quarantined.length}a sync bundle from a newer version of the app, which could not be read here; see <a href="/sync">Sync</a>{:else}a file that never had it, or a sync bundle from a newer version of the app that has not arrived{/if}), and {collection.incomplete === 1 ? 'is' : 'are'} not shown until it comes; a plant's own page, by its number, says which field. <a href="/about/how#glossary">Glossary</a>.</StateNote>{/if}
 
 {#if !collection.ready}
   <p class="muted">Opening your collection…</p>
@@ -194,6 +206,7 @@
     </ol>
     <p class="muted small">Your plants are recorded on this device and nowhere else until you choose to sync. Moving from another device? <a href="/backup">Restore a backup</a>.</p>
   </div>
+  <PlantsEmpty />
 {:else if !list.length}
   <div class="emptybox"><p class="muted">No plants match.</p></div>
 {:else}
@@ -201,6 +214,7 @@
     <!-- One line, the disclosure behind it: the paragraph stood between the chips and the first plant on a phone (round fifty, 4). -->
     <div style="margin: 0 0 8px"><RefPhotoOffer link buckets what="the reference’s photographs for plants without their own" /></div>
   {/if}
+  <SelectMode plants={list} />
   <div class="rows" class:nopic={!anyPic}>
     {#each shown as a (a.id)}
       {@const w = sinceWater(a.id)}
@@ -208,23 +222,27 @@
       {@const own = collection.cover(a.id)}
       {@const wtext = w == null ? collection.wateringWords(a) : w === 0 ? 'watered today' : `watered ${w} d ago`}
       <div class="accline">
-        <a class="azrow accrow" href="/plants/{accNo(a)}">
-          {#if anyPic}<span class="im" class:own={!!own}>{#if own}<PhotoImg id={own.id} alt="" loading="lazy" />{:else if th}<img src={th} alt="" loading="lazy" onerror={(e) => ((e.currentTarget as HTMLImageElement).style.display = 'none')} />{:else}<span>–</span>{/if}</span>{/if}
+        <!-- By its identity while another plant shares its number (round sixty). -->
+        <a class="azrow accrow" href={plantHref(a)}>
+          <!-- No photograph: the name's initials, not a grey dash that read as a missing image thirty times (round sixty; the grower review, 17). -->
+          {#if anyPic}<span class="im" class:own={!!own}>{#if own}<PhotoImg id={own.id} alt="" loading="lazy" />{:else if th}<img src={th} alt="" loading="lazy" onerror={(e) => ((e.currentTarget as HTMLImageElement).style.display = 'none')} />{:else}<span class="ini" aria-hidden="true">{initials(a)}</span>{/if}</span>{/if}
           <span class="txt">
-            <span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}‘{a.cultivar}’{/if}</span>
+            <span class="nm"><span class="accno lead">{accNo(a)}</span>{' '}<PlantName plant={a} /></span>
             <!-- On a phone the watering figure leads the second line, so a row is two lines, not three (round fifty-eight; the grower review). -->
-            <span class="fam"><span class="sr">{', '}</span>{#if a.status === 'growing' || collection.lastWatered(a.id)}<span class="figphone" class:due={collection.isDue(a)}>{wtext}</span>{/if}{#if kindOf(a) !== 'species'}<span class="pill c">{kindOf(a)}</span>{/if}{#if a.fieldNumber}<span class="fnchip">{a.fieldNumber}</span>{/if}{#if a.locationId}<span class="where">{collection.locationName(a.locationId)}</span>{/if}{#if a.status !== 'growing'}<span class="pill">{a.status}</span>{/if}</span>
+            <span class="fam"><span class="sr">{', '}</span>{#if a.status === 'growing' || collection.lastWatered(a.id)}<span class="figphone" class:due={collection.isDue(a)}>{wtext}</span>{/if}{#if kindOf(a) !== 'species'}<span class="pill c">{kindOf(a)}</span>{/if}{#if a.fieldNumber}<span class="fnchip">{a.fieldNumber}</span>{/if}{#if a.locationId}<span class="where" title={collection.locationName(a.locationId)}>{placeTail(collection.locationName(a.locationId))}</span>{/if}{#if a.status !== 'growing'}<span class="pill">{a.status}</span>{/if}</span>
           </span>
           <span class="fig" class:due={collection.isDue(a)}><span class="sr">{', '}</span>{wtext}</span>
         </a>
         <!-- The one thing done to a plant without opening its page: a watering today, with an Undo (round forty-nine, 3). -->
-        {#if a.status === 'growing'}<button class="btn small wbtn" type="button" onclick={() => water(a)} disabled={watering === a.id} aria-label="Record {accNo(a)} watered today" title="Record watered today">Water</button>{/if}
+        <!-- aria-disabled while it saves: a disabled button drops keyboard focus to the page, and the toast's Undo is then 23 Tabs away (round sixty; the accessibility review, 1). -->
+        {#if a.status === 'growing'}<button class="btn small wbtn" type="button" onclick={() => water(a)} aria-disabled={watering === a.id} aria-label="Record {accNo(a)} watered today" title="Record watered today">Water</button>{/if}
       </div>
     {/each}
   </div>
   {#if shown.length < list.length}<div class="more" bind:this={moreEl}><button class="btn small" type="button" onclick={() => (limit += PAGE)}>More ({list.length - shown.length} further down)</button></div>{/if}
   <p class="seccount">{list.length} of {collection.accessions.length} shown</p>
 {/if}
+<PlantsFoot />
 
 <style>
   .keepline { margin: -6px 0 10px; }
@@ -234,12 +252,14 @@
   .notice .linkish { background: none; border: 0; padding: 0; color: var(--ink3); font: inherit; text-decoration: underline; cursor: pointer; }
   .accrow .nm .accno { font-style: normal; vertical-align: 2px; }
   .im.own { box-shadow: inset 0 0 0 2px var(--accent); }
+  .im .ini { font-family: var(--ui); font-size: var(--fs-sm); font-weight: 700; letter-spacing: 0.04em; color: var(--ink3); }
   .accline { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px; }
   .wbtn { min-height: var(--tap); min-width: var(--tap); } /* the tap token: 44 px under a finger (round fifty-nine) */
   .im :global(img) { width: 100%; height: 100%; object-fit: cover; }
   /* Rows of two lines, about 56px; a name wraps between words, never inside one ("Astrophytu m"): the theme's anywhere is for the catalogue's tiles (round fifty-eight; the grower review). */
   .accrow { min-height: 56px; }
   .accrow .nm { overflow-wrap: break-word; word-break: normal; }
+  .accrow .nm :global(i) { overflow-wrap: break-word; }
   .rows.nopic .azrow { grid-template-columns: minmax(0, 1fr) auto; }
   .figphone { display: none; }
   .firststeps .steps { list-style: none; padding: 0; margin: 12px 0 14px; display: grid; gap: 8px; }

@@ -3,7 +3,8 @@
   import NotChecked from '$lib/ui/NotChecked.svelte';
   import { units } from '$lib/ui/units.svelte';
   import PageHead from '$lib/ui/PageHead.svelte';
-  import { site } from '$lib/ui/site.svelte';
+  import { site, readerLat } from '$lib/ui/site.svelte';
+  import { defaultSheet } from '$lib/ui/label-sheet';
   /**
    * Printable labels. Pick plants, pick a sheet, print. The page shows the
    * sheet at true size; @media print hides everything else and sets the page
@@ -29,6 +30,8 @@
   import { numberOrNull } from '$core/units';
   import { careLine } from '$core/note';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
+  import PlantName from '$lib/ui/PlantName.svelte';
+  import { plantQrUrl } from '$lib/ui/grow'; // round sixty, agent F: the species in the code's fragment
 
   /** Sheet geometry in mm. Avery numbers are the common US and A4 stocks; the strip is for cutting by hand. */
   const SHEETS = [
@@ -40,7 +43,9 @@
   ] as const;
   type Sheet = (typeof SHEETS)[number];
 
-  let sheetK = $state<Sheet['k']>('5160');
+  // US Letter stock for the US and Canada, A4 for everyone else, until the grower picks one (it is remembered then): en-GB
+  // opened on Avery 5160 and a first print came out on the wrong paper (round sixty; the grower review, 9).
+  let sheetK = $state<Sheet['k']>(defaultSheet(typeof navigator !== 'undefined' ? navigator.language : undefined));
   const sheet = $derived(SHEETS.find((s) => s.k === sheetK)!);
   let skip = $state<number | null>(0); // cells already used on a part-used sheet; null once cleared (Svelte binds an emptied number input to null)
   /** The skip as a whole number inside the sheet: a cleared box is 0, 2.5 is 2, 99 on a 30-cell sheet is 29 (round thirteen, 10). */
@@ -51,6 +56,8 @@
   let chosen = $state<Set<string>>(new Set());
   /** What the link picked (?acc=, ?batch=, ?loc=): listed first, so ten plants just potted up are not scattered through three hundred (round fifty-eight; the grower review). */
   let arrived = $state<Set<string>>(new Set());
+  /** Numbers in the link that name more than one plant: picked by nobody, said under the head. */
+  let ambiguous = $state<string[]>([]);
   let qrs = $state<Record<string, string>>({});
   const qrInflight = new Set<string>();
   let care = $state<Record<string, string | null>>({}); // '' while asked, null when the reference was not reached
@@ -61,7 +68,19 @@
     const acc = page.url.searchParams.get('acc');
     const batch = page.url.searchParams.get('batch');
     const loc = page.url.searchParams.get('loc');
-    if (acc) chosen = new Set(acc.split(',').map((x) => collection.accession(x)?.id).filter((x): x is string => !!x)); // numbers or ids in the URL; identities inside
+    if (acc) {
+      // Numbers or ids in the URL; identities inside. A number two plants share picks neither, and says so: picking one
+      // by load order printed a label for the wrong plant (round sixty; the self-review's 2).
+      const ids: string[] = [];
+      const shared: string[] = [];
+      for (const x of acc.split(',')) {
+        const hits = collection.withNumber('accession', x);
+        if (hits.length > 1) shared.push(x);
+        else if (hits[0]) ids.push(hits[0].id);
+      }
+      chosen = new Set(ids);
+      ambiguous = shared;
+    }
     else if (batch) chosen = new Set(batch.split(',').map((x) => collection.sowing(x)?.id).filter((x): x is string => !!x)); // a tray's label from the batch page (round forty-one, R10)
     else if (loc) chosen = new Set(collection.plantsAt(loc, true).map((a) => a.id));
     if (acc || batch || loc) arrived = new Set(chosen);
@@ -112,7 +131,8 @@
     else n.add(id);
     chosen = n;
   };
-  const pickAll = (on: boolean) => { const shown = new Set(filtered.map((a) => a.id)); chosen = on ? new Set([...chosen, ...shown]) : new Set([...chosen].filter((id) => !shown.has(id))); }; // a set, not a scan per id (round fifty-two, 5)
+  /** Pick or clear what one section shows under the filter: plants from the plants' row, batches from the batches' own; one button for both picked the seed tray a grower had already labelled (round sixty; the grower review, 10). */
+  const pickAll = (on: boolean, batch = false) => { const shown = new Set((batch ? batchesShown : plantsShown).map((a) => a.id)); chosen = on ? new Set([...chosen, ...shown]) : new Set([...chosen].filter((id) => !shown.has(id))); }; // a set, not a scan per id (round fifty-two, 5)
 
   /** A plant's species sheet, by hash bucket: the labels page never names or keys the species it prints. Five Astrophytum labels are one lookup in one cached bucket. */
   async function dossierFor(a: Item): Promise<SpeciesSheet | null | 'unreachable'> {
@@ -148,7 +168,7 @@
     const needQr = withQr && sheet.qr ? picked.filter((a) => !qrs[a.id] && !qrInflight.has(a.id)) : [];
     if (needQr.length) {
       for (const a of needQr) qrInflight.add(a.id);
-      void Promise.all(needQr.map((a) => QRCode.toString(`${location.origin}/${a.batch ? 'propagation' : 'plants'}/${a.id}`, { type: 'svg', errorCorrectionLevel: 'M', margin: 0 }).then((svg) => [a.id, svg] as const, () => [a.id, ''] as const))).then((pairs) => {
+      void Promise.all(needQr.map((a) => QRCode.toString(a.batch ? `${location.origin}/propagation/${a.id}` : plantQrUrl(location.origin, a.rec as Accession), { type: 'svg', errorCorrectionLevel: 'M', margin: 0 }).then((svg) => [a.id, svg] as const, () => [a.id, ''] as const))).then((pairs) => {
         const next = { ...qrs };
         for (const [id, svg] of pairs) { if (svg) next[id] = svg; qrInflight.delete(id); }
         qrs = next;
@@ -161,8 +181,8 @@
         dossierFor(a).then(async (d) => {
           done();
           if (d === 'unreachable') { care[a.id] = null; return; } // not "no data": not reached
-          const readerLat = site.current?.lat ?? collection.locations.map((l) => l.lat).find((x): x is number => x != null) ?? null;
-          const line = careLine({ scientific: a.taxonName, climateStatus: d?.climate.status, family: d?.name.family, months: d?.climate.status === 'ok' ? d.climate.months : null, extremes: d?.climate.status === 'ok' ? (d.climate.extremes ?? null) : null, extremesStatus: d?.climate.status === 'ok' ? d.climate.extremesStatus : null, lat: d?.habitatLat ?? null, units: units.current }, { readerLat });
+          const lat = readerLat(collection.locations); // the site, else the first place with coordinates: one helper with Today and the plant page (round sixty)
+          const line = careLine({ scientific: a.taxonName, climateStatus: d?.climate.status, family: d?.name.family, months: d?.climate.status === 'ok' ? d.climate.months : null, extremes: d?.climate.status === 'ok' ? (d.climate.extremes ?? null) : null, extremesStatus: d?.climate.status === 'ok' ? d.climate.extremesStatus : null, lat: d?.habitatLat ?? null, units: units.current }, { readerLat: lat });
           care[a.id] = line; // one key, not a copy of the map per answer (round fifty-one, 5)
           if (d && d.climate.status === 'ok' && !d.climate.extremes) nightOff.add(a.id); // the night is left off this label; counted below (round seventeen, 7)
         }).catch(() => { done(); care[a.id] = null; });
@@ -198,6 +218,7 @@
 
 <div class="ui">
   <PageHead title="Labels" kick="My plants" places={false} sub="Pick plants or batches and a sheet, then print at 100%; each label carries the number, the name and a code that opens the record." />
+  {#if ambiguous.length}<p class="notice" id="lb-ambiguous" role="status">{ambiguous.join(', ')} {ambiguous.length === 1 ? 'is the number of more than one plant' : 'are each the number of more than one plant'}, so {ambiguous.length === 1 ? 'it was' : 'they were'} not picked: tick the one you mean below, or renumber one from its page.</p>{/if}
 
   <div class="cult opts">
     <div class="body">
@@ -234,12 +255,12 @@
   {:else}
   <div class="toolrow" style="position: static">
     <input id="lb-q" class="searchbar" type="search" placeholder="Filter by name, number, field number…" aria-label="Filter plants" bind:value={q} />
-    <button class="chipbtn" onclick={() => pickAll(true)}>Pick all shown</button>
+    <button class="chipbtn" id="lb-pick-plants" onclick={() => pickAll(true)}>Pick all shown</button>
     <button class="chipbtn" onclick={() => pickAll(false)}>Clear shown</button>
   </div>
   <div class="cult picklist">
     {#each plantsShown as a (a.id)}
-      <label class="pick"><input type="checkbox" checked={chosen.has(a.id)} onchange={() => toggle(a.id)} /><span class="accno">{a.no}</span><span class="nm"><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}‘{a.cultivar}’{/if}</span>{#if a.fieldNumber}<span class="fnchip">{a.fieldNumber}</span>{/if}{#if a.locationId}<span class="faint">{collection.locationName(a.locationId)}</span>{/if}</label>
+      <label class="pick"><input type="checkbox" checked={chosen.has(a.id)} onchange={() => toggle(a.id)} /><span class="accno">{a.no}</span><span class="nm"><PlantName plant={a.rec} /></span>{#if a.fieldNumber}<span class="fnchip">{a.fieldNumber}</span>{/if}{#if a.locationId}<span class="faint">{collection.locationName(a.locationId)}</span>{/if}</label>
     {:else}
       <!-- An empty filter is not "no match": with nothing typed, the plants on file are all past growing (round fifty-eight; the grower review). -->
       <div class="none">{q.trim() ? 'No plants match.' : 'No plant is growing; labels are made for growing plants and open batches.'}</div>
@@ -249,9 +270,10 @@
 
   {#if batchesShown.length || collection.sowings.some((b) => b.status === 'active')}
     <div class="secrule"><h2>Batches</h2><div class="line"></div><span class="n">{picked.filter((x) => x.batch).length} of {all.filter((x) => x.batch).length} picked</span></div>
+    {#if batchesShown.length}<div class="chiprow batchpick"><button class="chipbtn" id="lb-pick-batches" onclick={() => pickAll(true, true)}>Pick all shown batches</button><button class="chipbtn" onclick={() => pickAll(false, true)}>Clear shown batches</button></div>{/if}
     <div class="cult picklist" id="batch-picks">
       {#each batchesShown as a (a.id)}
-        <label class="pick"><input type="checkbox" checked={chosen.has(a.id)} onchange={() => toggle(a.id)} /><span class="accno">{a.no}</span><span class="nm"><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}‘{a.cultivar}’{/if}</span><span class="faint">{batchLine(a)}</span></label>
+        <label class="pick"><input type="checkbox" checked={chosen.has(a.id)} onchange={() => toggle(a.id)} /><span class="accno">{a.no}</span><span class="nm"><PlantName plant={a.rec} /></span><span class="faint">{batchLine(a)}</span></label>
       {:else}
         <div class="none">No batches match.</div>
       {/each}
@@ -303,6 +325,8 @@
   .pick:hover { background: var(--sunk); }
   .pick .nm { font-family: var(--serif); font-size: var(--fs-base); }
   .pick .faint { margin-left: auto; font-size: var(--fs-sm); }
+  .batchpick { margin: 0 0 8px; }
+  @media (max-width: 640px) { .batchpick .chipbtn { min-height: 44px; } }
   .none { padding: 14px; margin: 0; color: var(--ink3); font-style: italic; }
   /* A row to tick and the option boxes are a thumb's tap on a phone: 44px (round fifty-eight; the grower review). */
   @media (max-width: 640px) { .pick, .check { min-height: 44px; } .check { padding-bottom: 0; } .toolrow .chipbtn { min-height: 44px; } }
@@ -317,6 +341,9 @@
   .qr { flex: none; height: 100%; max-height: 22mm; aspect-ratio: 1; align-self: center; }
   .qr :global(svg) { width: 100%; height: 100%; display: block; }
   .txt { min-width: 0; flex: 1; display: flex; flex-direction: column; justify-content: center; line-height: 1.15; }
+  /* The preview's text is the print's, at true size: 7.5 pt numbers and a 6 pt care line are what the label carries, and
+     the point of the preview is to show what the sheet will hold. The accessibility review counted it as the only text
+     under 11 px; that is kept on purpose, and the same words are on each plant's page at reading size (round sixty). */
   .no { font-family: var(--mono); font-size: 7.5pt; font-weight: 700; letter-spacing: 0.02em; }
   .no .fn { font-weight: 400; color: #333; margin-left: 1mm; }
   /* A name is never cut to "…": it wraps to a second line before anything else gives way. */
@@ -334,6 +361,8 @@
   @media print {
     :global(body) { background: #fff !important; }
     :global(#topbar), :global(#tabbar), :global(footer), .ui { display: none !important; }
+    /* The app around the page is hidden for every printed page by the theme; said again here, where a stray card costs a sheet of labels (round sixty; the self-review's 6). */
+    :global(.install), :global(.frostbar), :global(.clockbar), :global(.vaultnote), :global(.toastregion), :global(.cmppill), :global(.tray) { display: none !important; }
     :global(main.wrap) { max-width: none !important; padding: 0 !important; margin: 0 !important; }
     .sheets { margin: 0; gap: 0; overflow: visible; display: block; }
     .page { box-shadow: none; page-break-after: always; break-after: page; margin: 0; }

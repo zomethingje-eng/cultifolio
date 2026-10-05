@@ -132,6 +132,8 @@ code, .mono { font-family: var(--mono); font-size: 0.86em; }
 .btn.danger { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 35%, transparent); }
 .btn.danger:hover { background: var(--bad-soft); }
 .btn:disabled { opacity: 0.5; cursor: default; }
+/* A button that is saving keeps its focus (aria-disabled, not disabled) and looks it (round sixty; the accessibility review, 1). */
+.btn[aria-disabled='true'], .linkish[aria-disabled='true'] { opacity: 0.5; cursor: progress; }
 .pill { display: inline-block; font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.04em; padding: 4px 11px; border-radius: 999px; background: var(--sunk); color: var(--ink2); white-space: nowrap; line-height: 1.3; }
 .pill.ok { background: var(--accent-soft); color: var(--accent); }
 .pill.warn { background: var(--warm-soft); color: var(--warm-ink); }
@@ -417,3 +419,21 @@ details.why > summary { min-height: var(--tap); }
 .pill.warn, .pill.w { color: var(--warm-ink); }
 /* A region that scrolls sideways can be reached and scrolled by keyboard (they carry tabindex="0" and a label). */
 .scroll-x:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Anchors and Tab land clear of the bars: the top bar's height, and the phone's tab bar at the foot, measured by the
+   layout into --bar-h and --tab-h (round sixty; the visitor review, 5: every anchor on /about/how landed under the bar). */
+html { scroll-padding-top: calc(var(--bar-h, 49px) + 12px); }
+@media (max-width: 700px) { html { scroll-padding-bottom: calc(var(--tab-h, 57px) + 8px); } }
+
+/* Paper gets the page, not the app around it: the install card printed at the top of a label sheet and pushed every
+   label off its cell; the frost and clock bars, the toast and the tray would do the same (round sixty; the self-review's 6). */
+@media print {
+  #topbar, #tabbar, #menu, .scrim, footer.credits, .skip, .install, .frostbar, .clockbar, .vaultnote, .toastregion, .toast, .tray, .cmppill { display: none !important; }
+}
+
+/* Forced colours (Windows high contrast): the chosen chip, segment and tab are a fill in the theme, which forced colours
+   remove, so the pressed state is drawn in the system's own highlight (round sixty; the accessibility review, 4). */
+@media (forced-colors: active) {
+  .chipbtn.on, .seg > .on, nav.tabs a.on, [aria-pressed='true'], a[aria-current='page'] { forced-color-adjust: none; background: Highlight; color: HighlightText; border-color: Highlight; outline: 2px solid CanvasText; outline-offset: 1px; }
+  :focus-visible, input:focus, select:focus, textarea:focus { outline: 2px solid Highlight !important; outline-offset: 2px; }
+}

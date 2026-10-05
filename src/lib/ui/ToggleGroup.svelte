@@ -17,8 +17,9 @@
     onchange,
     chips = false,
     class: cls = '',
-    style
-  }: { options: Option[]; value: T; label?: string; labelledby?: string; onchange?: (v: T) => void; chips?: boolean; class?: string; style?: string } = $props();
+    style,
+    disabled = false
+  }: { options: Option[]; value: T; label?: string; labelledby?: string; onchange?: (v: T) => void; chips?: boolean; class?: string; style?: string; disabled?: boolean } = $props();
   function choose(v: T) {
     value = v;
     onchange?.(v);
@@ -27,6 +28,6 @@
 
 <div class="{chips ? 'chiprow' : 'seg'} {cls}" role="group" aria-label={labelledby ? undefined : label} aria-labelledby={labelledby} {style}>
   {#each options as o (o.value)}
-    <button type="button" class={chips ? 'chipbtn' : undefined} class:on={o.value === value} aria-pressed={o.value === value} id={o.id} title={o.title} onclick={() => choose(o.value)}>{o.label}{#if o.n != null}<span class="n">{o.n}</span>{/if}</button>
+    <button type="button" class={chips ? 'chipbtn' : undefined} class:on={o.value === value} aria-pressed={o.value === value} id={o.id} title={o.title} {disabled} onclick={() => choose(o.value)}>{o.label}{#if o.n != null}<span class="n">{o.n}</span>{/if}</button>
   {/each}
 </div>

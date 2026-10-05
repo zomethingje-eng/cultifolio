@@ -19,6 +19,9 @@
   import { focusNext } from '$lib/ui/focus';
   import { site } from '$lib/ui/site.svelte';
   import { prefs } from '$lib/ui/prefs.svelte';
+  import { plantHref } from '$lib/db/links';
+  import { monthRuns } from '$lib/ui/today-words';
+  import { DUE_DAYS } from '$lib/db/collection.svelte';
   onMount(async () => {
     site.load(); // the frost watch falls back to the grower's site (round fifty-eight; the grower review)
     await collection.load();
@@ -85,6 +88,12 @@
   const altFt = $derived(prefs.lengthUnits === 'in');
   const altShown = (m: number) => (altFt ? `${Math.round(m / FT)} ft` : `${m} m`);
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  /** The place's rules in one line at the top: "Every 10 days · dry Dec to Feb · held at 5 °C" (round sixty; the grower review, §4). Only what is set here or above. */
+  const summary = $derived([
+    cond.waterDays ? `every ${cond.waterDays} days` : null,
+    cond.dryMonths?.length ? `dry ${monthRuns(cond.dryMonths)}` : null,
+    cond.floorC != null ? `${cond.floorHeld ? 'held at' : 'bottoms out at'} ${temp(cond.floorC, units.current, 1)}` : null
+  ].filter((x): x is string => !!x));
   /** What the place above says, for the form's placeholders: the rhythm and the dry months this place inherits when it sets none. */
   const parentCond = $derived(loc?.parentId && collection.location(loc.parentId) ? collection.conditions(loc.parentId) : null);
   const inheritedDays = $derived(parentCond?.waterDays ?? null);
@@ -338,6 +347,7 @@
   <div class="idcard flat">
     <div class="who">
       <h1 class="q" style="margin: 0">{loc.name}</h1>
+      {#if summary.length}<p class="rules" id="place-rules">{summary.join(' · ').replace(/^./, (c) => c.toUpperCase())}</p>{/if}
       <p class="vern">{LOCATION_KINDS.find((k) => k.k === loc.type)?.label ?? 'Place'}{path.length > 1 ? ' inside ' + path.slice(0, -1).map((p) => p.name).join(' › ') : ''} · {plural(deep.length, 'growing plant')}{kids.length ? ` in ${plural(collection.subtree(id).length, 'place')}` : ''}{#if cond.indoor != null}{' · '}{cond.indoor ? 'indoors' : 'outdoors'}{/if}</p>
       {#if cond.floorC != null || dli != null || (watchable && effectiveRisk) || (unseen && deep.length) || dueHere}
       <div class="pills">
@@ -387,8 +397,9 @@
   <!-- What is done to the plants here leads; what is done to the place is a quieter row of words beneath it (round fifty, 4). -->
   <div class="quickbar">
     {#if deep.length}
-      <button class="btn pri" onclick={() => waterAll('water')} disabled={!!busy}>Water all {deep.length}</button>
-      <button class="btn" onclick={() => waterAll('feed')} disabled={!!busy}>Feed all</button>
+      <!-- aria-disabled while it saves, so keyboard focus stays on the button (round sixty; the accessibility review, 1). -->
+      <button class="btn pri" onclick={() => waterAll('water')} aria-disabled={!!busy}>Water all {deep.length}</button>
+      <button class="btn" onclick={() => waterAll('feed')} aria-disabled={!!busy}>Feed all</button>
       <button class="btn" id="audit-start" onclick={startAudit} disabled={auditing}>Audit</button>
     {:else}
       <a class="btn pri" href="/plants/new?loc={id}">Add a plant here</a>
@@ -447,7 +458,7 @@
 
   {#if cond.lat != null || cond.altM != null || loc.notes || cond.waterDays || cond.dryMonths?.length}
     <div class="factgrid">
-      {#if cond.waterDays || cond.dryMonths?.length}<div><b>Watering</b>{cond.waterDays ? `about every ${cond.waterDays} days` : 'every 21 days (the default)'}{cond.dryMonths?.length ? `; kept dry in ${cond.dryMonths.map((m) => MONTHS[m - 1]).join(', ')}` : ''}{#if (cond.from.waterDays && cond.from.waterDays !== loc.name) || (cond.from.dryMonths && cond.from.dryMonths !== loc.name)}<span class="small muted">{' · '}from {cond.from.waterDays ?? cond.from.dryMonths}</span>{/if}</div>{/if}
+      {#if cond.waterDays || cond.dryMonths?.length}<div><b>Watering</b>{cond.waterDays ? `about every ${cond.waterDays} days` : `every ${DUE_DAYS} days (the default)`}{cond.dryMonths?.length ? `; kept dry ${monthRuns(cond.dryMonths)}` : ''}{#if (cond.from.waterDays && cond.from.waterDays !== loc.name) || (cond.from.dryMonths && cond.from.dryMonths !== loc.name)}<span class="small muted">{' · '}from {cond.from.waterDays ?? cond.from.dryMonths}</span>{/if}</div>{/if}
       {#if cond.lat != null}<div><b>Coordinates</b>{cond.lat}, {cond.lon}{#if cond.from.lat && cond.from.lat !== loc.name}<span class="small muted">{' · '}from {cond.from.lat}</span>{/if}</div>{/if}
       <!-- Its own row: an altitude saved without coordinates showed nowhere but the edit form (round fifty-nine). -->
       {#if cond.altM != null}<div><b>Altitude</b>{altShown(cond.altM)}{#if cond.from.altM && cond.from.altM !== loc.name}<span class="small muted">{' · '}from {cond.from.altM}</span>{/if}</div>{/if}
@@ -479,7 +490,7 @@
         {#if auditing}
           <label class="azrow accrow row"><input type="checkbox" bind:checked={present[a.id]} /><span><span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} /></span></span><span class="fig">{a.locationId !== id ? collection.location(a.locationId!)?.name ?? '' : ''}</span></label>
         {:else}
-          <a class="azrow accrow row" href="/plants/{accNo(a)}">
+          <a class="azrow accrow row" href={plantHref(a)}>
             <!-- "Never audited" is said only once this place has had an audit: before the first, every row said it, which read as a reproach on a new grower's first bench (round forty-nine, 3). -->
             {#if lastAudit || ds != null}<span class="dot statedot {missed ? 'wake' : ds == null ? '' : ds > 90 ? 'wake' : 'grow'}" role="img" aria-label={ds == null ? 'never audited' : ds > 90 ? `not seen for ${ds} days` : `seen ${ds} days ago`} title={ds == null ? 'never audited' : ds > 90 ? `not seen for ${ds} days` : `seen ${ds} days ago`}></span>{:else}<span class="dot statedot" aria-hidden="true"></span>{/if}
             <span><span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} /></span><span class="fam">{a.locationId !== id ? collection.location(a.locationId!)?.name ?? '' : ''}</span></span>
@@ -517,7 +528,8 @@
   .linkish { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-decoration: underline; }
   .idcard.flat { margin-top: 14px; }
   .quickbar.words { margin-top: -6px; gap: 2px 14px; }
-  .quickbar.words .btn { background: none; border: 0; box-shadow: none; padding: 6px 0; min-height: var(--tap); color: var(--accent); font-weight: 600; }
+  .quickbar.words .btn { background: none; border: 0; box-shadow: none; padding: 6px 0; min-height: var(--tap); min-width: var(--tap); justify-content: center; color: var(--accent); font-weight: 600; } /* "Edit" was 26 px wide (round sixty; the accessibility review, 6) */
+  .rules { margin: 4px 0 2px; font-size: var(--fs-md); font-weight: 600; color: var(--ink2); }
   .quickbar.words .btn:hover { text-decoration: underline; }
   .quickbar.words .btn:disabled { color: var(--ink3); }
   .muted { color: var(--ink3); }
@@ -554,7 +566,10 @@
   .formmsg:empty { margin-bottom: -10px; } /* kept in the page for the live region, without its row's gap */
   .form .bad { color: var(--bad); }
   .unitfield input { width: 6em; }
-  .months { border: 0; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 4px 10px; }
+  /* Twelve boxes as six by two, each a finger wide; the form one column on a phone, whose two columns cut its own hints (round sixty; the grower review, 13; the accessibility review, 6). */
+  .months { border: 0; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px 8px; }
+  .months legend, .months > .linkish { grid-column: 1 / -1; }
+  @media (max-width: 520px) { .form { grid-template-columns: minmax(0, 1fr) !important; } }
   .months legend { font-size: var(--fs-sm); font-weight: 600; color: var(--ink2); padding: 0; margin-bottom: 4px; }
-  .mo { display: inline-flex; align-items: center; gap: 4px; min-height: 36px; font-size: var(--fs-md); }
+  .mo { display: inline-flex; align-items: center; gap: 4px; min-height: var(--tap); min-width: var(--tap); font-size: var(--fs-md); }
 </style>

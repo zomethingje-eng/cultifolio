@@ -3,7 +3,9 @@
   import { units } from '$lib/ui/units.svelte';
   import { tempUnit, rainUnit, dryLabel, temp, rain } from '$core/units';
   /** `name`: the species, for the figure's title (round fifty-eight; the accessibility review). */
-  let { climate, id = 'climograph', name }: { climate: ClimoInput; id?: string; name?: string } = $props();
+  /** `south`: the habitat's hemisphere, so the chart says whose months it draws (round sixty; visitor 3); unset, it says "habitat months" alone. */
+  let { climate, id = 'climograph', name, south = null }: { climate: ClimoInput; id?: string; name?: string; south?: boolean | null } = $props();
+  const calendar = $derived(`Habitat months${south == null ? '' : `, ${south ? 'southern' : 'northern'} hemisphere`}`);
   const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   /**
    * The figure in one sentence, for the description a screen reader gives with the title: the warmest month's mean day,
@@ -16,7 +18,7 @@
     const hot = m.reduce((b, x, i) => (x.tmax > m[b].tmax ? i : b), 0);
     const cold = m.reduce((b, x, i) => (x.tmin < m[b].tmin ? i : b), 0);
     const year = m.reduce((a, x) => a + x.precipMm, 0);
-    return `Warmest month ${MONTHS[hot]}, mean day ${temp(m[hot].tmax, units.current)}; coldest month ${MONTHS[cold]}, mean night ${temp(m[cold].tmin, units.current)}; ${rain(year, units.current)} of rain a year. Medians across the range, from CHELSA.`;
+    return `Warmest month ${MONTHS[hot]}, mean day ${temp(m[hot].tmax, units.current)}; coldest month ${MONTHS[cold]}, mean night ${temp(m[cold].tmin, units.current)}; ${rain(year, units.current)} of rain a year. Medians across the range, from CHELSA${climate.extremes ? `; the extremes at the edge from NASA POWER` : ''}. ${calendar}.`;
   });
   // Drawn at the width it is shown at, so labels keep their size on a phone instead of shrinking with the viewBox.
   let shown = $state(0);
@@ -26,6 +28,8 @@
 </script>
 
 <figure class="climo" bind:clientWidth={shown}>
+  <!-- Whose calendar: the chart is in the habitat's months, the season card in the reader's (round sixty; visitor 3, words 14). -->
+  <p class="cal">{calendar}</p>
   <!-- The title names the species, and the description is one sentence of the figures with the longer account after it
        (round fifty-eight; the accessibility review). -->
   <svg viewBox="0 0 {g.width} {g.height}" role="img" aria-labelledby="{id}-t" aria-describedby="{id}-d {id}-more" preserveAspectRatio="xMidYMid meet">
@@ -72,7 +76,7 @@
     <!-- light and humidity strip -->
     {#if g.strip}
       {#if g.strip.dli}<path class="spark dli" d={g.strip.dli.path} /><text class="sparklab dli" x={g.left + g.plotW} y={g.strip.top - 2}>DLI {range(g.strip.dli.lo, g.strip.dli.hi)}</text>{/if}
-      {#if g.strip.rh}<path class="spark rh" d={g.strip.rh.path} /><text class="sparklab rh" x={g.left} y={g.strip.top - 2} text-anchor="start">RH {range(g.strip.rh.lo, g.strip.rh.hi)} %</text>{/if}
+      {#if g.strip.rh}<path class="spark rh" d={g.strip.rh.path} /><text class="sparklab rh" x={g.left} y={g.strip.top - 2} text-anchor="start">RH {range(g.strip.rh.lo, g.strip.rh.hi)}%</text>{/if}
       <line class="axis" x1={g.left} x2={g.left + g.plotW} y1={g.strip.top + g.strip.height} y2={g.strip.top + g.strip.height} />
     {/if}
 
@@ -87,14 +91,15 @@
     <span class="key"><i class="sw night"></i>night</span>
     <span class="key"><i class="sw bar"></i>rain</span>
     {#if g.hasBand}<span class="key"><i class="sw band"></i>10th–90th percentile across {climate.cells} habitat cells</span>{:else if climate.cells > 1}<span class="key muted">{climate.cells} habitat cells, no spread beyond rounding</span>{:else}<span class="key muted">one habitat cell, so no spread is drawn</span>{/if}
-    <span class="key"><i class="sw quarter"></i>cold quarter: the three months around the coldest night</span>
-    {#if climate.extremes}<span class="key"><i class="sw ext"></i>extremes over {climate.extremes.years} years at a typical spot in the range, marked at the edge: undated</span>{/if}
+    <span class="key"><i class="sw quarter"></i>cold quarter: the three months around the coldest mean night</span>
+    {#if climate.extremes}<span class="key"><i class="sw ext"></i>extremes over {climate.extremes.years} years at a typical spot in the range, from NASA POWER, marked at the edge: undated</span>{/if}
     {#if g.strip}{#if g.strip.dli}<span class="key"><i class="sw dli"></i>DLI, mol/m²/day</span>{/if}{#if g.strip.rh}<span class="key"><i class="sw rh"></i>RH %</span>{/if}<span class="key muted">each on its own scale</span>{/if}
   </figcaption>
 </figure>
 
 <style>
   .climo { margin: 14px 0 0; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); padding: 12px 10px 8px; }
+  .cal { margin: 0 6px 6px; font-size: var(--fs-xs); letter-spacing: 0.09em; text-transform: uppercase; font-weight: 700; color: var(--ink2); }
   svg { width: 100%; height: auto; display: block; font-family: var(--ui); }
   .grid { stroke: var(--rule); stroke-width: 1; }
   .axis { stroke: var(--rule2); stroke-width: 1; }

@@ -1,6 +1,9 @@
 <script lang="ts">
-  /** "Share card": the species' climate as one picture, drawn here from the page's own figures, shared or saved. */
-  import { climateCardSvg, svgToPng, type CardInput } from '$lib/share/card';
+  /**
+   * "Share card": the species' climate as one picture, drawn here from the page's own figures, shared or saved. The
+   * drawing code is fetched when the button is pressed, not with every species page (round sixty; a11y 14).
+   */
+  import type { CardInput } from '$lib/share/card';
   let { input }: { input: CardInput } = $props();
   let busy = $state(false);
   let said = $state<string | null>(null);
@@ -11,6 +14,7 @@
     busy = true;
     said = null;
     try {
+      const { climateCardSvg, svgToPng } = await import('$lib/share/card');
       const png = await svgToPng(climateCardSvg(input));
       const f = new File([png], file(), { type: 'image/png' });
       const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
@@ -38,7 +42,8 @@
 </script>
 
 <button class="btn" type="button" onclick={go} disabled={busy} title="One picture: the four figures, the year, the sources and the link">{busy ? 'Drawing…' : 'Share card'}</button>
-{#if said}<span class="small muted" role="status">{said}{#if saved} <a href={saved} target="_blank" rel="noopener">Open it</a>.{/if}</span>{/if}
+<!-- The space before "Open it" is its own expression: Svelte trimmed it inside the block, and the line read "….png.Open it" (round sixty; visitor 14). -->
+{#if said}<span class="small muted" role="status">{said}{#if saved}{' '}<a href={saved} target="_blank" rel="noopener">Open it</a>.{/if}</span>{/if}
 
 <style>
   .muted { color: var(--ink3); }

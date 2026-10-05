@@ -2,14 +2,14 @@ import { parseUnits } from '$core/units';
 import { json, error } from '@sveltejs/kit';
 import { metUrl, reduceMet, nwsAlertsUrl, reduceNws, isUS, frostRisk, type MetResponse } from '$lib/weather/forecast';
 import { USER_AGENT } from '$dossier/fetch';
-import { limited } from '$lib/server/sync';
+import { limited, upstreamAllowed } from '$lib/server/sync';
 import type { RequestHandler } from './$types';
 
 /**
  * GET /api/forecast?lat=&lon=[&alt=]
  * MET Norway Locationforecast reduced to daily min/max, plus NWS frost/freeze
  * alerts for US points, plus the frost-risk verdict. The forecast and alerts
- * are cached at the edge for an hour per 0.01° cell so a site polls MET no
+ * are kept in the Worker's cache (the Cache API) for an hour per 0.01° cell so a site polls MET no
  * more than hourly however many devices watch it; the verdict is worded in the
  * reader's units on every request, so the cache never hands a Fahrenheit
  * sentence to a Celsius reader. MET asks for ≤4 decimals and an identifying
@@ -40,11 +40,12 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   const cache = platform?.caches?.default;
   type Cached = { lat: number; lon: number; forecast: ReturnType<typeof reduceMet>; alerts: ReturnType<typeof reduceNws>; alertsStatus: 'ok' | 'none' | 'refused' | 'n/a'; attribution: string[] };
   const withRisk = (c: Cached, cc: string) => json({ ...c, risk: frostRisk(c.forecast, c.alerts, units) }, { headers: { 'cache-control': cc } });
-  const hit = cache ? await cache.match(cacheKey) : undefined;
+  // A cache that fails to answer is a forecast asked for, not a 500 (round sixty; the server review, 12).
+  const hit = cache ? await cache.match(cacheKey).catch(() => undefined) : undefined;
   if (hit) {
     try {
       // The cached body is the raw forecast; the verdict is worded here, in this reader's units, and the browser keeps
-      // the worded answer only for the rest of the hour the edge would.
+      // the worded answer only for the rest of the hour the Worker's cache would.
       const age = Number(hit.headers.get('age')) || 0;
       return withRisk((await hit.json()) as Cached, `public, max-age=${Math.max(60, 3600 - age)}`);
     } catch {
@@ -56,6 +57,9 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   // site shares a cache line, not an allowance. A stream of distinct coordinates is what the limit is for.
   const stop = await limited(platform, getClientAddress, 'forecast');
   if (stop) return stop;
+  // The site's own minute of calls to MET and the NWS, for every address together: past it the page says "not checked",
+  // as it does for a source that did not answer, and the site's User-Agent is never the one MET blocks (round sixty; the server review, 16).
+  if (!(await upstreamAllowed(platform))) return notAnswered();
   const headers = { 'user-agent': USER_AGENT, accept: 'application/json' };
   // Anything short of a well-formed answer from MET (unreachable, a non-2xx, a body that is not JSON or not a forecast) is one
   // plain 502 with no-store: the page says "not checked", and a bad hour is never cached.
@@ -84,6 +88,6 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
     }
   }
   const raw: Cached = { lat: la, lon: lo, forecast, alerts, alertsStatus, attribution: ['Forecast data from MET Norway (CC BY 4.0)', ...(isUS(la, lo) ? ['Alerts: NOAA National Weather Service'] : [])] };
-  if (cache && platform?.context) platform.context.waitUntil(cache.put(cacheKey, json(raw, { headers: { 'cache-control': 'public, max-age=3600' } })));
+  if (cache && platform?.context) platform.context.waitUntil(cache.put(cacheKey, json(raw, { headers: { 'cache-control': 'public, max-age=3600' } })).catch(() => {}));
   return withRisk(raw, 'public, max-age=3600');
 };

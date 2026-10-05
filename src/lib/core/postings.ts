@@ -20,6 +20,8 @@
  * ranking then judges; it never loses one. The candidates for a query are the intersection, over its words, of each
  * word's postings (an entry must match every word), so "cop cin" ranks the few entries under both keys.
  */
+import { RANK_MARKERS, queryTokens } from './search';
+
 const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 /** A text's words as the postings read them: folded, split on anything but a letter or digit. */
 export const words = (s: string) => fold(s).split(/[^a-z0-9]+/).filter(Boolean);
@@ -44,9 +46,9 @@ export function nearKeys(q: string): string[] {
 }
 
 /** Every word of an entry the search reads, as `prepare` splits them (the rank markers in older names included: a superset loses nothing). */
-export interface Wordy { name: string; common?: string; family?: string; origin?: string[]; syn?: string[] }
+export interface Wordy { name: string; common?: string; commons?: string[]; family?: string; origin?: string[]; syn?: string[] }
 export function entryWords(e: Wordy): string[] {
-  return [...words(e.name), ...words(e.common ?? ''), ...words(e.family ?? ''), ...(e.origin ?? []).flatMap(words), ...(e.syn ?? []).flatMap(words)];
+  return [...words(e.name), ...words(e.common ?? ''), ...(e.commons ?? []).flatMap(words), ...words(e.family ?? ''), ...(e.origin ?? []).flatMap(words), ...(e.syn ?? []).flatMap(words)];
 }
 
 /** How many posting files a corpus of `n` species is split into: sixty-four up to about ten thousand, doubling past that, as the buckets do. */
@@ -78,13 +80,12 @@ export function buildPostings(index: Wordy[], files = postingFilesFor(index.leng
   return out;
 }
 
-const RANK_MARKERS = new Set(['var', 'subsp', 'ssp', 'f']);
 /**
  * The query's words the candidates are drawn from, as `search` reads them: a rank marker another word follows is not a
  * word; a trailing one may be dropped by the search, so it does not narrow the candidates unless it is the only word.
  */
 export function queryWords(q: string): string[] {
-  const all = words(q);
+  const all = queryTokens(q); // the query as the search reads it, cleaned of quoted cultivars and citations (round sixty)
   const qs = all.filter((w, i) => !(RANK_MARKERS.has(w) && i < all.length - 1));
   const slice = qs.length > 1 && RANK_MARKERS.has(qs[qs.length - 1]) ? qs.slice(0, -1) : qs;
   return [...new Set(slice)];
@@ -100,7 +101,7 @@ export function queryPlan(q: string): { exact: string[][]; near: string[][] | nu
   const ws = queryWords(q);
   if (!ws.length) return { exact: [], near: null };
   const exact = ws.map((w) => [exactKey(w)]);
-  const all = [...new Set(words(q).filter((w, i, a) => !(RANK_MARKERS.has(w) && i < a.length - 1)))];
+  const all = [...new Set(queryTokens(q).filter((w, i, a) => !(RANK_MARKERS.has(w) && i < a.length - 1)))];
   const anyLong = all.some((w) => w.length >= 4);
   if (!anyLong) return { exact, near: null };
   const longInSlice = ws.some((w) => w.length >= 4);

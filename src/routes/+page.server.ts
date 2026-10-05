@@ -1,4 +1,4 @@
-import { corpusNow } from '$lib/server/dossiers';
+import { corpusNow, getDossier } from '$lib/server/dossiers';
 import { genusOf } from '$core/names';
 import { unitsFor } from '$lib/server/units';
 import { catalogueRows, catalogueItems, rowItems, byOf, chipOf, homeWindow, HOME_ITEMS, type Item } from '$lib/server/catalogue';
@@ -53,9 +53,18 @@ export const load: PageServerLoad = async ({ platform, fetch, setHeaders, url, c
   const pool = featuredPool(index, list);
   const day = Math.floor(Date.now() / 86_400_000);
   const featured = pool.length ? Array.from({ length: Math.min(12, pool.length) }, (_, i) => pool[(day * 12 + i) % pool.length]).map((c) => ({ slug: c.slug, name: c.name, thumb: c.thumb!, common: c.common, family: c.family })) : [];
+  // The first of the day's strip, read whole, for the visitor's "This is what every species page shows" (round sixty;
+  // the self-review's experience item 1). One dossier read under the page's corpus; without a derived climate, or when
+  // the read fails, the page simply does not draw the block.
+  const lead = featured.length ? pool[(day * 12) % pool.length] : null;
+  const fd = lead ? await getDossier(platform, fetch, lead.key, c).catch(() => null) : null;
+  const feature = fd && lead && fd.climate.status === 'ok'
+    ? { slug: lead.slug, name: fd.name.scientific, family: fd.name.family ?? null, lat: fd.centroid?.lat ?? fd.climate.at.lat, climate: { months: fd.climate.months, p10: fd.climate.p10, p90: fd.climate.p90, cells: fd.climate.cells, records: fd.climate.records, extremes: fd.climate.extremes ?? null, extremesStatus: fd.climate.extremesStatus ?? null } }
+    : null;
   return {
     units: unitsFor(cookies, request),
     featured,
+    feature,
     by,
     open: w.open,
     /** The address asked for the catalogue (a grouping, an opened group, a letter): a grower with plants lands on the catalogue, not on their own list (round thirty-four, 1). */

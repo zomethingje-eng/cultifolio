@@ -12,10 +12,20 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Cultifolio" />
   <link rel="apple-touch-icon" href="%sveltekit.assets%/icon-192.png" />
-  <script>try{var t=localStorage.getItem('cultifolio.theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;if(localStorage.getItem('cultifolio.welcomed')==='1')document.documentElement.dataset.welcomed='1'}catch(e){}</script>
+  <script>try{var t=localStorage.getItem('cultifolio.theme'),d=document.documentElement.dataset;if(t==='light'||t==='dark')d.theme=t;if(localStorage.getItem('cultifolio.welcomed')==='1')d.welcomed='1';if(localStorage.getItem('cultifolio.hasMine')==='1')d.grower='1'}catch(e){}</script>
   %sveltekit.head%
 </head>
 <body data-sveltekit-preload-data="hover">
   <div style="display: contents">%sveltekit.body%</div>
+  <!-- A page about your own plants is drawn only on the device, so its HTML had nothing in it and the screen stayed
+       blank until the scripts ran: 4.5 s on a slow phone. This placeholder shows the bar and a line meanwhile, and only
+       on such a page: a page the server drew has its content in the box above, and the rule below keeps the line hidden;
+       so does a browser without :has(). The app removes it once it draws (round sixty; the accessibility review, 7).
+       No script: the page's policy allows only hashed inline scripts, and a style needs none. -->
+  <style>#shell{display:none}body>div:first-child:not(:has(>:not(script)))+#shell{display:block}</style>
+  <div id="shell" style="font-family: var(--ui, system-ui, sans-serif); color: var(--ink, #1b2421)">
+    <div style="display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 2px 16px; margin: 0 -16px; border-bottom: 1px solid var(--rule, #dde3e0); background: var(--bg, #f3f5f4)"><span aria-hidden="true" style="color: var(--accent, #1f6b4f); font-weight: 600; min-width: 44px; text-align: center">✳</span><span style="font-size: 0.6875rem; letter-spacing: 0.11em; text-transform: uppercase; font-weight: 600; color: var(--ink3, #5b6662)">Cultifolio</span></div>
+    <p style="max-width: 980px; margin: 24px auto; color: var(--ink3, #5b6662)">Opening your plants…</p>
+  </div>
 </body>
 </html>

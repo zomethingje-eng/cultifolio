@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { store, vaultId, authed, batchKey, listBatches, parseAfter, storeOnce, readBody, batchMeta, VaultFull, DayQuota, VaultsClosed, MAX_BATCH_BYTES, limited, quotaOf } from '$lib/server/sync';
+import { store, vaultId, authed, batchKey, listBatches, parseAfter, storeOnce, readBody, batchMeta, admitVault, unadmit, refusal, MAX_BATCH_BYTES, limited, quotaOf } from '$lib/server/sync';
 import { PUSH_HEADERS, STATUS } from '$lib/sync/limits';
 
 /**
@@ -35,13 +35,22 @@ export const POST: RequestHandler = async ({ request, url, platform, getClientAd
   const meta = await authed(r2, id, request);
   const key = batchKey(id, request.headers.get(PUSH_HEADERS.batch) ?? '');
   const extra = batchMeta(request);
-  const body = await readBody(request, MAX_BATCH_BYTES, 'a batch');
-  let r: Awaited<ReturnType<typeof storeOnce>>;
+  const quota = quotaOf(platform, getClientAddress);
+  // The vault's place is checked before the body is read: a refused first upload read up to sixteen megabytes first
+  // (round sixty; the self-review, 11; the first outside review, A20). A vault admitted here whose batch then does not
+  // land gives its place back.
+  let admitted = false;
+  let r: Awaited<ReturnType<typeof storeOnce>> | null = null;
   try {
-    r = await storeOnce(r2, id, meta, key, body, extra, quotaOf(platform, getClientAddress));
+    admitted = await admitVault(r2, id, meta, quota);
+    const body = await readBody(request, MAX_BATCH_BYTES, 'a batch');
+    r = await storeOnce(r2, id, meta, key, body, extra, quota);
   } catch (e) {
-    if (e instanceof VaultFull || e instanceof DayQuota || e instanceof VaultsClosed) return e.response();
+    const answer = refusal(e);
+    if (answer) return answer;
     throw e;
+  } finally {
+    if (admitted && r !== 'stored') await unadmit(r2, id, meta, quota);
   }
   if (r === 'different') return json({ error: 'a different batch already has that name' }, { status: STATUS.differentContent });
   return json({ stored: r === 'stored', reason: r === 'same' ? 'already there' : undefined });

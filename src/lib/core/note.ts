@@ -73,7 +73,7 @@ export function careLine(input: SheetInput, o: NoteOpts = {}): string {
     const months = span3(forReader(year, o.readerLat)) + (!year.shiftable && otherSide ? ' (hab.)' : '');
     if (year.none) bits.push('no season to read');
     else if (year.fog) bits.push(`cooler six months ${months}`);
-    else if (year.spread) bits.push('rain spread, no season');
+    else if (year.spread) bits.push('rain spread, no short season');
     else if (year.flat) bits.push(`rain ${months}, flat T`);
     else if (year.grow === 'even') bits.push(`rain ${months}`);
     else bits.push(`${year.grow} rain ${months}`);
@@ -81,7 +81,8 @@ export function careLine(input: SheetInput, o: NoteOpts = {}): string {
   const m = input.months && input.months.length === 12 ? input.months : null;
   const fl = coldFloor(m, input.extremes ?? null, archFor(input.scientific, input.family), input.units ?? METRIC, input.extremesStatus);
   // The habitat night at one decimal, as the page prints it, named as what it is; "floor" alone reads as a thermostat setting.
-  // The habitat night is printed as what it is, and a floor the archetype table raised is printed as the table's, never as a night the habitat had.
+  // The archetype table's convention is printed only for a species with no habitat figure at all, and as the group's, never
+  // as a night the habitat had or a floor it raised (round sixty; self-review 3).
   if (fl) {
     // With the extremes source refused, the habitat figure is the CHELSA mean night, a warmer and different quantity: it is
     // not printed as the night on a label that cannot say so; the labels page counts these (round seventeen, 7).
@@ -90,7 +91,7 @@ export function careLine(input: SheetInput, o: NoteOpts = {}): string {
     // thirty-seven, R1-2; round thirty-eight, R1-2, which found `none` still printing the mean as the night).
     const nightUnchecked = !input.extremes;
     if (fl.habitat != null && !nightUnchecked) bits.push(`hab. night ${temp(fl.habitat, input.units ?? METRIC, 1)}`);
-    if (fl.habitat == null || fl.raised) bits.push(`group min ${temp(fl.floor, input.units ?? METRIC, 0)}`);
+    if (fl.convention && fl.habitat == null) bits.push(`group min ${temp(fl.convention.minC, input.units ?? METRIC, 0)}`);
   }
   const dlis = m ? m.map((x) => x.dli).filter((x): x is number => x != null) : [];
   if (dlis.length) bits.push(`sky ${Math.round(Math.min(...dlis))}–${Math.round(Math.max(...dlis))} DLI`);

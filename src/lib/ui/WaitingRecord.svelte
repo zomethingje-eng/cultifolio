@@ -23,8 +23,8 @@
   }
 </script>
 
-<!-- What "set aside" meant, and "this version of the app", not "this build" (round fifty-eight; the accessibility review). -->
-<StateNote word="Waiting" id="waiting-notice">{label}'s record is on this device but not whole: it has no {missing.join(' and no ')}. {#if setAside}A batch from a newer version of the app, which could not be read here (see <a href="/sync">Sync</a>), may hold {them}; this version of the app will read it when it can.{:else}A change from a newer version of the app may still bring {them}, or the file it came from never had {them}.{/if} Until then the {what} is not listed. <a href="/about/how#glossary">Glossary</a>.</StateNote>
+<!-- What "set aside" meant, and "this version of the app", not "this build" (round fifty-eight; the accessibility review). A "sync bundle", not a "batch", which on these pages is a sowing (round sixty; the words review, 16). -->
+<StateNote word="Waiting" id="waiting-notice">{label}'s record is on this device but not whole: it has no {missing.join(' and no ')}. {#if setAside}A sync bundle from a newer version of the app, which could not be read here (see <a href="/sync">Sync</a>), may hold {them}; this version of the app will read it when it can.{:else}A change from a newer version of the app may still bring {them}, or the file it came from never had {them}.{/if} Until then the {what} is not listed. <a href="/about/how#glossary">Glossary</a>.</StateNote>
 {#if offerStatus}
   <p><button class="btn pri" onclick={markGrowing}>Mark it as growing</button></p>
 {/if}

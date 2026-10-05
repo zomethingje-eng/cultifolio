@@ -1,12 +1,12 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { limited } from '$lib/server/sync';
+import { limited, upstreamAllowed } from '$lib/server/sync';
 
 /**
  * Name suggestions for the species picker, proxied from GBIF's backbone so
  * the browser never talks to a third-party host with what someone typed. The
  * answer is GBIF's own (the same JSON shape as species/suggest, trimmed to the
- * fields the picker reads), cached at the edge for a day: the backbone does
+ * fields the picker reads), kept in the Worker's cache (the Cache API) for a day: the backbone does
  * not change by the hour, and one query serves everyone who types it.
  *
  * What is forwarded is bounded twice. The query must look like a name (letters
@@ -39,10 +39,13 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   // Folded to lower case: GBIF suggest is itself case-insensitive, so one spelling's answer serves the others. If that ever changes, this key must carry the case.
   const cacheKey = new Request(`https://cache.cultifolio/names2?q=${encodeURIComponent(q.toLowerCase())}`); // names2: the day of unfiltered answers cached under the old key is not served after the kingdom filter
   const cache = platform?.caches?.default;
-  const hit = await cache?.match(cacheKey);
+  // A cache that fails to answer is a lookup, not a 500 (round sixty; the server review, 12), as the page cache's is.
+  const hit = await cache?.match(cacheKey).catch(() => undefined);
   if (hit) return new Response(hit.body, hit); // a copy: the cached response's own headers are immutable, and the hook adds two (round seventeen, 1)
   const stop = await limited(platform, getClientAddress, 'names');
   if (stop) return stop;
+  // The site's own minute of calls to other services, for every address together (round sixty; the server review, 16).
+  if (!(await upstreamAllowed(platform))) return bad('backbone not asked: this site has made all the calls to it it may this minute');
   let res: Response;
   try {
     res = await fetch(upstream, { headers: { accept: 'application/json', 'user-agent': 'Cultifolio/3.0 (https://cultifolio.com)' } });
@@ -59,6 +62,6 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   if (!Array.isArray(rows)) return bad('backbone answered with something other than a list');
   const out = (rows as Row[]).map((r) => Object.fromEntries(FIELDS.filter((k) => r && typeof r === 'object' && r[k] != null).map((k) => [k, r[k]])));
   const reply = json(out, { headers: { 'cache-control': 'public, max-age=86400' } });
-  if (cache) platform?.context?.waitUntil?.(cache.put(cacheKey, reply.clone()));
+  if (cache) platform?.context?.waitUntil?.(cache.put(cacheKey, reply.clone()).catch(() => {}));
   return reply;
 };

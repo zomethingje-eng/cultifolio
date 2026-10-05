@@ -437,10 +437,10 @@ test('backup: export a zip, wipe the device, restore it, and the collection is i
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   const acc = page.url().split('/').pop()!;
-  await page.getByRole('button', { name: 'Log', exact: true }).click();
+  await page.getByRole('button', { name: 'Record…', exact: true }).click();
   await page.selectOption('#ev-type', 'water');
   await page.fill('#ev-note', 'first drink');
-  await page.getByRole('button', { name: 'Record' }).click();
+  await page.getByRole('button', { name: 'Record', exact: true }).click();
   const jpeg = await page.screenshot({ type: 'jpeg', quality: 70 });
   await page.locator('#acc-photo-file').setInputFiles({ name: 'p.jpg', mimeType: 'image/jpeg', buffer: jpeg });
   await expect(page.locator('.phgrid .ph')).toHaveCount(1);
@@ -467,14 +467,14 @@ test('backup: export a zip, wipe the device, restore it, and the collection is i
   await expect(page.locator('.secrule .n', { hasText: 'last today' })).toBeVisible();
   // restoring the same file: merging would change nothing
   await page.locator('#bk-file').setInputFiles(path!);
-  await expect(page.locator('.preview')).toContainText('change nothing');
+  await expect(page.locator('#bk-preview')).toContainText('Nothing changes: everything in the file is already here.');
   await expect(page.locator('#bk-merge')).toBeDisabled();
   // the same file on a device that has every record but no site: merging applies the settings alone, and Merge is offered (round twenty-three, 9)
   await page.evaluate(() => localStorage.removeItem('cultifolio.frost.site'));
   await page.reload();
   await page.locator('#bk-file').setInputFiles(path!);
-  await expect(page.locator('.preview')).toContainText('change no records');
-  await expect(page.locator('.preview')).toContainText("apply the file's site");
+  await expect(page.locator('#bk-preview')).toContainText('No records are added');
+  await expect(page.locator('#bk-preview')).toContainText("the file's site");
   await expect(page.locator('#bk-merge')).toBeEnabled();
   await page.click('#bk-merge');
   await expect(page.locator('#bk-done')).toContainText(/site/);
@@ -491,7 +491,7 @@ test('backup: export a zip, wipe the device, restore it, and the collection is i
   await page.goto('/backup');
   await page.locator('#bk-file').setInputFiles(path!);
   await expect(page.locator('.preview')).toContainText('1 plant · 2 timeline entries · 1 place · 0 propagation batches · 1 photo');
-  await expect(page.locator('.preview')).toContainText('bring in 1 photo');
+  await expect(page.locator('#bk-preview')).toContainText('1 plant, 1 place, 2 timeline entries and 1 photo will be added. Nothing here is removed.');
   await page.click('#bk-merge');
   await expect(page.locator('#bk-done')).toContainText('1 photo');
   await expect(page.locator('#bk-done')).toContainText(/This device had no site( or preferences)? of its own, so the file's (was|were) applied/);
@@ -605,17 +605,17 @@ test('labels: pick plants, choose a sheet, print at true size with a code that o
 
 test('the species page condenses its cultivation sheet into a note by rule', async ({ page }) => {
   await page.goto('/species/copiapoa-cinerea');
-  await expect(page.locator('#gen-note')).toContainText('by rule, from the cards');
-  await expect(page.locator('#gen-note')).toHaveAttribute('open', ''); // open at rest: the paragraph a grower reads first (round forty-nine, 3)
-  // fact first in plain words, the rule and the source in grey after it (round fifty-eight)
-  await expect(page.locator('#gen-note .body li').filter({ hasText: 'Under 120 mm of rain a year (72 mm), so no rainy season is read; the cooler six months are November to April' })).toContainText('rain and temperature rules, CHELSA');
-  await expect(page.locator('#gen-note .body')).not.toContainText(/fog/);
-  await expect(page.locator('#gen-note .body li').filter({ hasText: 'Cold floor 6.5 °C' })).toContainText('NASA POWER, 40 years');
-  await expect(page.locator('#gen-note .foot')).toContainText('Seasons, Rain, Light, Warmth and air');
+  // since round sixty the season card in the first screen carries the reading, fact first and its rule and source after
+  const season = page.locator('.glance .card.season');
+  await expect(season).toContainText("72 mm of rain a year, under the rule's 120 mm, so no rainy season is read; the cooler six months are November to April");
+  await expect(season).toContainText('rain and temperature rules, CHELSA');
+  await expect(season).not.toContainText(/fog/);
+  await expect(page.locator('.glance .card.cold')).toContainText('Cold floor: 1 night in 100 is colder');
+  await expect(page.locator('.glance .card.cold')).toContainText('6.5');
   // the note's floor is the card's floor, the same figure with the same quantity named
   await expect(page.locator('.cult', { hasText: /^Warmth and air/ }).first().locator('.body')).toContainText('Cold floor: 6.5 °C, which is the 1st-percentile night over 40 years at a typical spot in the range (NASA POWER).');
   // nothing on the sheet says what the plant does, wants or tolerates, or what to do to it
-  const sheet = (await page.locator('.note-slot').textContent())!;
+  const sheet = (await page.locator('.note-slot').textContent())!.replace('nothing here says what the plant does, wants or tolerates', ''); // the disclaimer itself, in the method (round sixty)
   expect(sheet).not.toMatch(/\b(rests?|wants?|tolerat\w*|will|water it|feed|repot|misting|kills?|fatal|scorch\w*|bleach\w*|keep it|give it|wakes?|grows in the open)\b/i);
 });
 
@@ -669,10 +669,10 @@ test('sync: two devices share one encrypted vault; changes and photos cross both
   await a.getByRole('button', { name: /^Add/ }).click();
   await expect(a).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   const acc = a.url().split('/').pop()!;
-  await a.getByRole('button', { name: 'Log', exact: true }).click();
+  await a.getByRole('button', { name: 'Record…', exact: true }).click();
   await a.selectOption('#ev-type', 'water');
   await a.fill('#ev-note', 'from device A');
-  await a.getByRole('button', { name: 'Record' }).click();
+  await a.getByRole('button', { name: 'Record', exact: true }).click();
   await expect(a.locator('.tlrow', { hasText: 'from device A' })).toBeVisible(); // Record awaits the write; the test waits for the row before moving on (round fourteen, B1)
   const jpeg = await a.screenshot({ type: 'jpeg', quality: 60 });
   await a.locator('#acc-photo-file').setInputFiles({ name: 'a.jpg', mimeType: 'image/jpeg', buffer: jpeg });
@@ -713,7 +713,7 @@ test('sync: two devices share one encrypted vault; changes and photos cross both
   await b.locator('.quickbar .more').click();
   await b.getByRole('button', { name: 'Feed', exact: true }).click();
   await b.fill('#ev-note', 'from device B');
-  await b.getByRole('button', { name: 'Record' }).click();
+  await b.getByRole('button', { name: 'Record', exact: true }).click();
   await expect(b.locator('.tlrow', { hasText: 'from device B' })).toBeVisible();
   await b.goto('/sync');
   await syncRun(b);
@@ -728,10 +728,12 @@ test('sync: two devices share one encrypted vault; changes and photos cross both
   await a.getByRole('button', { name: 'Add a note' }).click();
   await a.fill('#acc-notes', 'A says sulky');
   await a.locator('#acc-notes').locator('..').getByRole('button', { name: 'Save' }).click();
+  await expect(a.locator('#acc-notes')).toHaveCount(0); // the note is stored before the next device moves (round sixty; the harness review, 13)
   await b.goto(`/plants/${acc}`);
   await b.getByRole('button', { name: 'Add a note' }).click();
   await b.fill('#acc-notes', 'B says thriving');
   await b.locator('#acc-notes').locator('..').getByRole('button', { name: 'Save' }).click();
+  await expect(b.locator('#acc-notes')).toHaveCount(0); // stored before the sync page is opened (round sixty; the harness review, 13)
   for (const p of [a, b, a]) {
     await p.goto('/sync');
     await syncRun(p);
@@ -789,16 +791,16 @@ test('sync: an offline edit uploaded late is still discovered, and a backup merg
   await expect.poll(async () => b.evaluate(async () => { for (const n of await caches.keys()) if (await (await caches.open(n)).match('/plants')) return true; return false; }), { timeout: 30000 }).toBe(true);
   await B.setOffline(true);
   await expect(b.getByRole('button', { name: 'Water', exact: true })).toBeVisible({ timeout: 20000 }); // the offline page renders from the vault; under load that takes longer than the default wait
-  await b.getByRole('button', { name: 'Log', exact: true }).click();
+  await b.getByRole('button', { name: 'Record…', exact: true }).click();
   await b.selectOption('#ev-type', 'water');
   await b.fill('#ev-note', 'B, offline, first');
-  await b.getByRole('button', { name: 'Record' }).click();
+  await b.getByRole('button', { name: 'Record', exact: true }).click();
   await expect(b.locator('.tlrow', { hasText: 'B, offline, first' })).toBeVisible();
   await a.goto(`/plants/${acc}`);
   await a.locator('.quickbar .more').click();
   await a.getByRole('button', { name: 'Feed', exact: true }).click();
   await a.fill('#ev-note', 'A, online, second');
-  await a.getByRole('button', { name: 'Record' }).click();
+  await a.getByRole('button', { name: 'Record', exact: true }).click();
   await expect(a.locator('.tlrow', { hasText: 'A, online, second' })).toBeVisible();
   await syncNow(a);
   // B comes back and uploads its older change late. A must still receive it.
@@ -982,7 +984,8 @@ test('the about pages are served without JavaScript and say what the app refuses
 test('a refused source is a distinct state on every surface: species page, front tile, plant tile', async ({ page }) => {
   await page.goto('/species/refusia-testii');
   // photographs: GBIF media refused, so the hero says so rather than "no photograph"
-  await expect(page.locator('.hero .ph')).toContainText('GBIF media did not answer when this page was built. Not a statement that none exist.');
+  await expect(page.locator('h2#s-photos + .notice')).toContainText('GBIF media did not answer when this page was built. Not a statement that none exist.');
+  await expect(page.locator('.hero')).toHaveCount(0); // no grey box where a photograph would be (round sixty)
   // the one mark for a refusal: a dashed "not checked" pill, its reason on tap (improvements, 5)
   const tok = page.locator('.idcard .nc', { hasText: 'Photographs not checked' });
   await expect(tok).toBeVisible();
@@ -1043,11 +1046,13 @@ test('the species page carries the envelope: median with its span, the cells it 
   // every table cell is "median / p10–p90" where the span differs
   await expect(page.locator('table.wx tbody tr').first().locator('td').nth(1)).toHaveText('22 / 20–24');
   await expect(page.locator('table.wx tbody tr').nth(2).locator('td').nth(1)).toHaveText('4'); // rain: no spread in the fixture, so the median alone
-  await page.locator('details.why', { hasText: 'Where these figures come from' }).locator('summary').click(); // the provenance is one tap from the chart
+  await page.locator('#s-climate ~ details.why').first().locator('summary').click(); // the provenance is one tap from the chart
   await expect(page.getByText('Each figure is the median across the 40 grid cells holding the 352 in-range records, with the 10th–90th percentile span')).toBeVisible();
   await expect(page.getByText(/Extremes and elevation were read at a typical spot in the range, cell fixture \(-25\.261, -70\.589\)/)).toBeVisible();
-  await expect(page.locator('.mapcap').first()).toContainText('the marker is where the records are densest and decides nothing: the climate was read across every in-range record\'s cell, not at the marker');
-  await expect(page.locator('details.why', { hasText: 'How the map marker was placed' })).toBeVisible();
+  await expect(page.locator('.mapcap').first()).toContainText('the marker is where the records are densest and decides nothing: the climate was read across the cells of the in-range records placed well enough to read one, not at the marker');
+  const marker = page.locator('#s-habitat ~ details.why', { hasText: 'How this section is made' }).first();
+  await expect(marker).toBeVisible();
+  await expect(marker).toContainText('The map marker: the centre of the tenth-degree cell'); // said once (round sixty)
   await expect(page.locator('.factgrid b', { hasText: /^Map marker$/ })).toBeVisible();
   await expect(page.locator('.factgrid')).not.toContainText('Habitat centre');
   // the plant page's season tile is a figure with its months, hemisphere and shift, and a link to the sheet
@@ -1105,6 +1110,7 @@ test('every control has a name, headings do not jump, images have alt text, mute
   await expect(page).toHaveURL(/\/propagation\/S\d{4}-\d{3}$/);
   await page.fill('#g-n', '3'); // nothing is potted from an uncounted pot
   await page.getByRole('button', { name: 'Record count' }).click();
+  await expect(page.getByText('30%')).toBeVisible(); // the count is stored and shown before the next form (round sixty; the harness review, 13)
   await page.getByRole('button', { name: 'Pot up…' }).click();
   await page.getByRole('button', { name: 'Edit' }).click();
   expect((await a11yScan(page)).unlabeled).toEqual([]);
@@ -1201,7 +1207,7 @@ test('removing asks twice; a species photograph that fails to load leaves the na
   const pos = await page.evaluate(() => ({ card: document.querySelector('.idcard')!.getBoundingClientRect().top, bar: document.querySelector('#topbar')!.getBoundingClientRect().bottom }));
   expect(pos.card).toBeGreaterThanOrEqual(pos.bar);
   await page.goto('/species/copiapoa-cinerea');
-  await expect(page.locator('.hero .ph')).toContainText('The photograph did not load');
+  await expect(page.locator('.hero.failed .ph')).toContainText('photograph did not load');
   // a log entry: × then Remove?; the plant: Remove then Yes
   await page.goto(`/plants/${acc}`);
   await page.getByRole('button', { name: 'Water', exact: true }).click(); // one tap, no form (round forty-nine, 3)
@@ -1253,9 +1259,9 @@ test('the browser talks to no third-party host while a name is typed, and the er
   page.on('request', (r) => { const u = new URL(r.url()); if (u.host !== '127.0.0.1:4173') away.push(r.url()); });
   await page.goto('/plants/new');
   await page.fill('#species-name', 'Copiapoa cin');
-  await page.waitForTimeout(600);
+  await expect(page.locator('.picker [role=option]').first()).toBeVisible(); // the suggestions answered (round sixty; the harness review, 14: a fixed 600 ms)
   await page.locator('#species-name').blur();
-  await page.waitForTimeout(600);
+  await page.waitForTimeout(600); // a negative: no request may follow, and only a pause can show that none did; the pause is short and after the page has gone quiet (round sixty; the harness review, 14)
   expect(away).toEqual([]);
   await page.goto('/species/nonsensia-fakeii');
   await expect(page.locator('.err')).toContainText('The reference has no Nonsensia: it is built from a fixed list of names');
@@ -1311,9 +1317,12 @@ test('the species field is a combobox: arrows and Enter pick a suggestion; Enter
   // a partial name: Enter asks, and nothing is filed under "Welwit"
   await page.goto('/plants/new');
   await input.fill('Welwit');
-  await page.waitForTimeout(400); // the suggestion debounce; a genus fragment resolves to nothing local
+  // The suggestion debounce: a genus fragment matches nothing local, so nothing appears to wait for, and the pause stands
+  // for the debounce. The outcome is now one, not either: with no suggestion there is no nearest name to offer (round
+  // sixty; the harness review, 14: the assertion took both).
+  await page.waitForTimeout(400);
   await input.press('Enter');
-  await expect(page.locator('.picker .hint:not(.svc)')).toContainText(/Pick a name from the list|Did you mean/);
+  await expect(page.locator('.picker .hint:not(.svc)')).toContainText('Pick a name from the list');
   await expect(page).toHaveURL(/\/plants\/new$/);
   await page.goto('/plants');
   await expect(page.locator('.accrow')).toHaveCount(1);
@@ -1353,7 +1362,7 @@ test('a forecast source that does not answer is "not checked" in a plain notice 
   // the site is set once, in Settings; the Today tab reads it (the old /frost address goes there; round fifty-three, 3)
   await page.goto('/frost');
   await expect(page).toHaveURL(/\/today$/);
-  await expect(page.locator('#frost .emptybox')).toContainText('No site set');
+  await expect(page.locator('#frost .froststrip')).toContainText('No site set'); // one line under what needs you, not a box above it (round sixty; the grower review, §4)
   await page.goto('/settings');
   await ready(page);
   await page.fill('#site-lat', '40.38');
@@ -1362,7 +1371,7 @@ test('a forecast source that does not answer is "not checked" in a plain notice 
   await expect(page.getByText('Saved on this device.')).toBeVisible();
   await page.goto('/today');
   await expect(page.getByText('Your site: 40.38, -80.05')).toBeVisible();
-  await expect(page.locator('#frost .notice')).toHaveText('Forecast not checked: the forecast source did not answer.');
+  await expect(page.locator('#frost .notice')).toHaveText('Forecast not checked: the forecast could not be reached just now, so this is not an all-clear. It is asked again when this page is next opened.');
   await expect(page.locator('#frost .notice')).not.toHaveClass(/err/);
   await expect(page.locator('.bad')).toHaveCount(0);
   await expect(page.locator('#frostbar')).toHaveCount(0); // a refusal is not a frost: nothing under the top bar
@@ -1379,7 +1388,7 @@ test('a forecast source that does not answer is "not checked" in a plain notice 
   await page.fill('#e-lon', '-80.05');
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByRole('heading', { name: 'Frost watch' })).toBeVisible();
-  await expect(page.locator('.notice')).toHaveText('Forecast not checked: the forecast source did not answer.');
+  await expect(page.locator('.notice')).toHaveText('Forecast not checked: the forecast could not be reached just now, so this is not an all-clear. It is asked again when this page is next opened.');
   await expect(page.locator('.notice')).not.toHaveClass(/err/);
   await expect(page.getByText(/forecast 50\d/)).toHaveCount(0);
 });
@@ -1444,12 +1453,15 @@ test('a night under the place\'s floor "reaches the floor", not frost, and a flo
     return r.fulfill({ status: 200, contentType: 'application/json', body: body(alerts, status) });
   });
   await page.evaluate(() => sessionStorage.clear()); // the forecast kept in this browser for an hour, so the old point is asked again
+  const oldAnswer = page.waitForResponse((r) => r.url().includes('/api/forecast') && new URL(r.url()).searchParams.get('lat') === '40.38');
   await page.reload();
   await page.getByRole('button', { name: 'Edit' }).click();
   await page.fill('#e-lat', '40.39'); // the new place answers at once; the old one's slow answer must not overwrite it
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.locator('.notice')).toContainText('Warning in force.');
-  await page.waitForTimeout(2000);
+  // The old point's slow answer has landed and the page has drawn after it, rather than a fixed 2 s (round sixty; the harness review, 14).
+  await oldAnswer;
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   await expect(page.locator('.notice')).toContainText('Warning in force.');
   await expect(page.locator('.pill', { hasText: 'weather warning' })).toBeVisible();
 });
@@ -1481,7 +1493,7 @@ test('pages about your own plants ask no outside host for anything unless the re
   await page.goto('/');
   await page.waitForLoadState('networkidle');
   await expect(page.locator('a.tile', { hasText: 'Welwitschia' }).first()).toContainText('reference photograph off'); // the own tile, without its photograph
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(500); // a negative: no request may follow, and only a pause can show that none did; the pause is short and after the page has gone quiet (round sixty; the harness review, 14)
   expect(outside.filter((u) => !u.startsWith('/ ->'))).toEqual([]); // the plant page and the list asked no outside host for anything
   expect(outside.filter((u) => u.includes('700/medium'))).toEqual([]); // and the front page fetched nothing about the plant grown (its rows and strip are the public catalogue)
   // after a search (answered by the server, the index never fetched whole) the own tile still shows no photograph
@@ -1517,12 +1529,12 @@ test('hovering a species link on a page about your own plants sends nothing; the
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   await page.getByRole('link', { name: 'Species page' }).hover();
-  await page.waitForTimeout(700);
+  await page.waitForTimeout(700); // a negative: no request may follow, and only a pause can show that none did; the pause is short and after the page has gone quiet (round sixty; the harness review, 14)
   expect(data.filter((u) => u.includes('/species/'))).toEqual([]);
   await page.goto('/');
   await expect(page.locator('a.tile', { hasText: 'Copiapoa' }).first()).toBeVisible();
   await page.locator('a.tile', { hasText: 'Copiapoa' }).first().hover(); // an own tile
-  await page.waitForTimeout(700);
+  await page.waitForTimeout(700); // a negative: no request may follow, and only a pause can show that none did; the pause is short and after the page has gone quiet (round sixty; the harness review, 14)
   expect(data.filter((u) => u.includes('/species/'))).toEqual([]);
   // the public catalogue still preloads on hover: a visitor's browsing is not the collection
   await page.getByRole('button', { name: /^All / }).click(); // the catalogue
@@ -1640,11 +1652,11 @@ test('the species page answers in the first screen and relates the species by ge
   await page.goto('/species/copiapoa-cinerea');
   const glance = page.locator('.glance');
   await expect(glance.locator('.card', { hasText: 'Cold floor' })).toContainText('6.5');
-  await expect(glance.locator('#gen-note')).toContainText('Cold floor 6.5 °C'); // the card and the note agree: one figure, one rule
-  await expect(glance.locator('.card', { hasText: 'Rain' })).toContainText('72');
+  await expect(glance.locator('.card.cold')).toContainText('Cold floor: 1 night in 100 is colder'); // the figure says what it is (round sixty)
+  await expect(glance.locator('.card:not(.season)', { hasText: 'Rain' })).toContainText('72');
   // related: the nearest habitat climate from the index, with the rule beside it
   await expect(page.locator('#s-related')).toBeVisible();
-  await expect(page.locator('.relhead', { hasText: 'Similar habitat climate' })).toContainText('in calendar order');
+  await expect(page.locator('.relhead', { hasText: 'Similar habitat climate' })).toContainText('nearest by mean day, mean night and rain, month by month');
   await expect(page.locator('.relstrip .reltile .rn', { hasText: 'Copiapoa humilis' })).toHaveCount(2); // the one other Copiapoa, and the nearest climate: both strips
   await expect(page.locator('.relhead', { hasText: 'Other Copiapoa' })).toBeVisible();
   // a species without a derived climate is never "near", whatever the index says
@@ -1685,7 +1697,7 @@ test('the share card is a PNG with the figures and the link drawn in, and is off
   const path = await dl.path();
   const { statSync } = await import('node:fs');
   expect(statSync(path!).size).toBeGreaterThan(20_000);
-  await expect(page.getByRole('status')).toContainText('Saved to your downloads');
+  await expect(page.getByRole('status').filter({ hasText: 'Saved to your downloads' }) /* the toast's live region is always in the page now, empty (round sixty) */).toContainText('Saved to your downloads');
   // Where the browser can share a file, the card goes to the share sheet, as a PNG under the same name
   await page.evaluate(() => {
     const w = window as unknown as { __shared?: { name: string; type: string; size: number } };
@@ -1693,7 +1705,7 @@ test('the share card is a PNG with the figures and the link drawn in, and is off
     Object.defineProperty(navigator, 'share', { value: async (d: ShareData) => { const f = d.files![0]; w.__shared = { name: f.name, type: f.type, size: f.size }; }, configurable: true });
   });
   await page.getByRole('button', { name: 'Share card' }).click();
-  await expect(page.getByRole('status')).toContainText('Shared.');
+  await expect(page.getByRole('status').filter({ hasText: 'Shared.' })).toContainText('Shared.');
   const shared = await page.evaluate(() => (window as unknown as { __shared?: { name: string; type: string; size: number } }).__shared);
   expect(shared).toMatchObject({ name: 'copiapoa-cinerea-climate.png', type: 'image/png' });
   expect(shared!.size).toBeGreaterThan(20_000);
@@ -1718,7 +1730,7 @@ test('a grower\'s home says what needs them: sowings in the tray and plants with
   // a plant last watered a month ago, by its log: Today says so, in the words of the plants list's Due chip (round twenty-four, 11)
   await expect(today).toHaveCount(0);
   await page.locator('.accrow').first().click();
-  await page.locator('.quickbar .btn', { hasText: /^Log$/ }).click(); // a dated watering goes through Log; Water is one tap for today (round forty-nine, 3)
+  await page.locator('.quickbar .btn', { hasText: /^Record…$/ }).click(); // a dated watering goes through Log; Water is one tap for today (round forty-nine, 3)
   await page.selectOption('#ev-type', 'water');
   // exactly twenty-one days: the default watering rhythm's boundary, which the list and Today both include (round twenty-five, 2; round fifty-eight)
   const d = new Date(); d.setDate(d.getDate() - 21);
@@ -1741,7 +1753,7 @@ test('a grower\'s home says what needs them: sowings in the tray and plants with
   await expect(page.locator('.accrow')).toHaveCount(1);
   // a future-dated line is refused with a sentence and never becomes the last watering (round twenty-five, 1)
   await page.locator('.accrow').first().click();
-  await page.locator('.quickbar .btn', { hasText: /^Log$/ }).click();
+  await page.locator('.quickbar .btn', { hasText: /^Record…$/ }).click();
   await page.selectOption('#ev-type', 'water');
   await page.fill('#ev-date', '2099-01-01');
   await page.locator('.evform button[type=submit]').click();
@@ -1776,13 +1788,12 @@ test('settings: units switch every figure and sentence, survive a reload through
   expect(await us.text()).toContain('43.7<span class="u">°F');
   await page.goto('/species/copiapoa-cinerea');
   await expect(page.locator('.glance .card', { hasText: 'Cold floor' })).toContainText('6.5');
-  await page.locator('.glance .unitbtn').click();
+  await page.locator('.glance .useg button', { hasText: '°F' }).click();
   const glance = page.locator('.glance');
   await expect(glance.locator('.card', { hasText: 'Cold floor' })).toContainText('43.7');
   await expect(glance.locator('.card', { hasText: 'Cold floor' })).toContainText('°F');
-  await expect(glance.locator('#gen-note')).toContainText('Cold floor 43.7 °F');
-  await expect(glance.locator('#gen-note')).not.toContainText('°C');
-  await expect(glance.locator('.card', { hasText: 'Rain' })).toContainText('2.8');
+  await expect(glance.locator('.card.season')).not.toContainText('°C');
+  await expect(glance.locator('.card:not(.season)', { hasText: 'Rain' })).toContainText('2.8');
   await expect(page.locator('.climo .panel').first()).toHaveText('°F · day and night');
   // the cookie carries it: a fresh load is Fahrenheit from the server, no flash
   const html = await (await page.request.get('/species/copiapoa-cinerea')).text();
@@ -1831,26 +1842,33 @@ test('the species page reads in reference order: the facts and the figures, then
   // one primary action; the other verbs are a quieter row under it
   await expect(page.locator('.idcard .acts .btn.pri')).toHaveText('Add one to my plants');
   await expect(page.locator('.idcard .acts2 .btn').first()).toHaveText('Sow seed');
-  // the cards: the first open, the rest closed to their one-line form, opened with a click and no JavaScript needed
-  const cards = page.locator('details.acc:not(#gen-note)');
+  // the cards: all closed at rest to their name since round sixty (the first screen's season card says the reading),
+  // opened with a click and no JavaScript needed
+  const cards = page.locator('details.acc');
   await expect(cards).toHaveCount(4);
-  await expect(cards.nth(0)).toHaveAttribute('open', '');
+  await expect(cards.nth(0)).not.toHaveAttribute('open', '');
   await expect(cards.nth(1)).not.toHaveAttribute('open', '');
-  await expect(cards.nth(1).locator('summary .one')).toContainText('Habitat rain 72 mm a year');
+  await expect(cards.nth(1).locator('> summary')).toContainText('Rain');
   await cards.nth(1).locator('> summary').click();
   await expect(cards.nth(1)).toHaveAttribute('open', '');
-  // the method sits behind one disclosure per card, closed at rest
-  await expect(cards.nth(1).locator('details.why')).not.toHaveAttribute('open', '');
-  await cards.nth(1).locator('details.why summary').click();
-  await expect(cards.nth(1).locator('.whyline').first()).toBeVisible();
+  // the method sits behind one disclosure for the section, closed at rest
+  const how = page.locator('details.howmade');
+  await expect(how).toHaveCount(1);
+  await expect(how).not.toHaveAttribute('open', '');
+  await how.locator('summary').click();
+  await expect(how.locator('.whyline').first()).toBeVisible();
   // a genus Wikipedia refused is "not checked", not silence
   await page.goto('/species/refusia-testii');
   await expect(page.locator('#s-genus + .notice')).toContainText('Not checked');
 });
 
-test('a visitor sees all five places from the start, and the menu has them too', async ({ page }) => {
+test('a visitor sees all five places in the top bar and the menu, and a lighter tab bar on a phone until a first plant (round sixty; the visitor review)', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('.topseg a')).toHaveText(['Species', 'My plants', 'Places', 'Propagation', 'Today']);
+  // On a phone a visitor's tabs are the four that show something: Places, Propagation and Today opened empty private pages (round sixty; the visitor review, product 10).
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator('#tabbar a:visible')).toHaveText(['Species', 'Compare', 'My plants', 'About']);
+  await page.setViewportSize({ width: 1280, height: 800 });
   // a click that lands before hydration opens nothing: poll the button's own state rather than the first click
   await expect.poll(async () => { await page.getByRole('button', { name: 'Menu' }).click(); return page.getByRole('button', { name: 'Menu' }).getAttribute('aria-expanded'); }).toBe('true');
   await expect(page.locator('#menu').getByRole('link', { name: 'Places', exact: true })).toBeVisible();
@@ -1866,6 +1884,11 @@ test('a visitor sees all five places from the start, and the menu has them too',
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   await page.goto('/plants');
   await expect(page.locator('.topseg a')).toHaveText(['Species', 'My plants', 'Places', 'Propagation', 'Today']);
+  // a grower's five, from the first plant, and on the next page load too (the hint is read before the first render)
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator('#tabbar a:visible')).toHaveText(['Species', 'My plants', 'Places', 'Propagation', 'Today']);
+  await page.goto('/');
+  await expect(page.locator('#tabbar a:visible')).toHaveText(['Species', 'My plants', 'Places', 'Propagation', 'Today']);
 });
 
 test('the collection\'s pages need nothing from the server to open: a plant page loads offline, whatever the units', async ({ browser, baseURL }) => {
@@ -1947,7 +1970,7 @@ test('the front page offline asks for the catalogue once and offers a retry, nev
   await ctx.route(/\/api\/(index|entries)/, (r) => { calls++; r.abort(); });
   await page.goto('/');
   await expect(page.locator('.tile .im.ph', { hasText: 'reference not reached' })).toBeVisible();
-  await page.waitForTimeout(1500);
+  await page.waitForTimeout(1500); // a negative: no request may follow, and only a pause can show that none did; the pause is short and after the page has gone quiet (round sixty; the harness review, 14)
   expect(calls).toBeLessThanOrEqual(4); // the page's fetch and the worker's, once each: no loop
   await ctx.unroute(/\/api\/(index|entries)/);
   await page.getByRole('button', { name: 'Try again' }).click();
@@ -2010,7 +2033,7 @@ test('two tabs adding at once get two numbers, and each tab sees the other\'s pl
   expect(page.url()).not.toBe(other.url()); // the vault, not the tab, hands out numbers
   await page.goto('/plants');
   await expect(page.locator('.accrow')).toHaveCount(2); // the other tab's plant is here without a reload of the vault
-  await expect(page.locator('.seccount').first()).toContainText('2 plant numbers');
+  await expect(page.locator('.seccount').first()).toHaveText('2 growing'); // "N growing" alone: "plant numbers" beside it left growers asking why the two differ (round sixty; the grower review, 16)
   await other.close();
 });
 
@@ -2069,7 +2092,7 @@ test('the one search box finds a plant by its number, and the cold floor is one 
   await page.locator('.searchbar').press('Enter');
   await expect(page).toHaveURL(/\/plants\/2026-0001$/);
   await page.goto('/species/copiapoa-cinerea');
-  const glance = page.locator('.card.unitcard', { hasText: 'Cold floor' });
+  const glance = page.locator('.glance .card.cold');
   await expect(glance).toContainText('6.5');
   await expect(page.locator('.cult', { hasText: /^Warmth and air/ }).first().locator('.body')).toContainText('Cold floor: 6.5 °C');
 });
@@ -2098,7 +2121,9 @@ test('a species page opened from the catalogue starts at its top, on a short scr
   await page.locator('.grow', { hasText: 'Copiapoa' }).click();
   await page.locator('a.tile').first().click();
   await expect(page).toHaveURL(/\/species\//);
-  await page.waitForTimeout(600);
+  // The page has drawn and gone quiet, so anything that would scroll it has run (round sixty; the harness review, 14: a fixed 600 ms).
+  await page.waitForLoadState('networkidle');
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   expect(await page.evaluate(() => scrollY)).toBe(0);
 });
 
@@ -2190,11 +2215,14 @@ test('a place chosen on the add form while the reference is still answering is k
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   // the reference's answer is slow this time; the grower picks Cold frame before it lands
   await page.context().route(/\/api\/sheets/, async (r) => { await new Promise((res) => setTimeout(res, 1500)); await r.continue(); });
+  const slow = page.waitForResponse(/\/api\/sheets/);
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
   await expect(page.locator('#f-loc')).toHaveValue(ghValue!); // the default, at once
   const cfValue = await page.locator('#f-loc option', { hasText: 'Cold frame' }).getAttribute('value');
   await page.selectOption('#f-loc', cfValue!);
-  await page.waitForTimeout(2200);
+  // The reference's slow answer has landed and the page has drawn after it, rather than a fixed 2.2 s (round sixty; the harness review, 14).
+  await slow;
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   await expect(page.locator('#f-loc')).toHaveValue(cfValue!); // still the grower's choice after the reference answered
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
@@ -2556,7 +2584,7 @@ test('round thirty-seven: the hemisphere notice is one sentence with its spaces,
   const m = /<p class="notice small" id="hemispheres">([^<]*)<\/p>/.exec(html);
   expect(m, 'the notice is rendered').toBeTruthy();
   expect(m![1]).toContain('the 3 cells at least 10° north of it have seasons six months apart');
-  expect(m![1]).toContain('across the 40 cells that remain: the 31 at least 10° south and the 6 within 10° of the equator, where there is no season to reverse.');
+  expect(m![1]).toContain('across the 40 cells that remain: the 31 at least 10° south and the 6 within 10° of the equator, which stay in either way.');
   expect(m![1]).not.toMatch(/southand|northand/);
 });
 
@@ -2583,7 +2611,7 @@ test('round forty: on "Your species" the search box stays on the device; the cat
   await expect(page.locator('.plantsfound .accrow')).toHaveCount(1);
   await page.fill('.searchbar', 'copiapoa');
   await expect(page.locator('.hitrow .nm', { hasText: 'Copiapoa cinerea' })).toBeVisible();
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(500); // a negative: no request may follow, and only a pause can show that none did; the pause is short and after the page has gone quiet (round sixty; the harness review, 14)
   expect(searches).toEqual([]);
   expect(page.url()).not.toContain('q=');
   // The catalogue is one explicit step away, and that step is the one that sends the text.
@@ -2596,7 +2624,7 @@ test('round forty: on "Your species" the search box stays on the device; the cat
   await page.fill('.searchbar', '2026-0001');
   await expect(page.locator('.plantsfound .accrow')).toHaveCount(1);
   await page.fill('.searchbar', '2031-07');
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(500); // a negative: no request may follow, and only a pause can show that none did; the pause is short and after the page has gone quiet (round sixty; the harness review, 14)
   expect(searches.length).toBe(sent);
   expect(page.url()).not.toContain('q=');
   // Punctuation an iPhone types is not a refusal (R1-1).
@@ -2707,15 +2735,11 @@ test('round forty-eight: on a phone the search row stays pinned through the list
   await expect(page.locator('.letters')).toBeVisible();
   const h = await page.evaluate(() => document.documentElement.scrollHeight);
   await page.evaluate((y) => window.scrollTo(0, y), Math.max(500, h - 900));
-  await page.waitForTimeout(200);
-  const bar = await page.locator('.stickyhead .toolrow').boundingBox();
-  expect(Math.round(bar!.y)).toBe(44); // pinned under the top bar, not scrolled away with the chips and the letters
+  // pinned under the top bar, not scrolled away with the chips and the letters; polled, not after a fixed 200 ms (round sixty; the harness review, 14)
+  await expect.poll(async () => Math.round((await page.locator('.stickyhead .toolrow').boundingBox())!.y)).toBe(44);
   await expect(page.locator('.azbtn')).toBeVisible();
   await page.locator('.azbtn').click();
-  await page.waitForTimeout(600);
-  const letters = await page.locator('.letters').boundingBox();
-  expect(letters!.y).toBeGreaterThan(44);
-  expect(letters!.y).toBeLessThan(400);
+  await expect.poll(async () => { const y = (await page.locator('.letters').boundingBox())?.y ?? -1; return y > 44 && y < 400; }).toBe(true);
 });
 
 test('round forty-eight: a window opened partway (a letter, ?at=) fills in the rows before it as the reader scrolls up, and the list is whole (2)', async ({ page }) => {
@@ -2726,7 +2750,7 @@ test('round forty-eight: a window opened partway (a letter, ?at=) fills in the r
   // rows, not while the chips and the letters above them are what is on screen (round forty-nine, 2: a jump to W on the
   // live site filled all the way to A and landed there)
   await expect(page.locator('.rows .grow').first()).toContainText('Welwitschia');
-  await page.waitForTimeout(700);
+  await page.waitForTimeout(700); // a negative: the rows before must not fill in while the chips and letters are on screen, and only a pause can show that they did not; the pause is short and after the page has gone quiet (round sixty; the harness review, 14)
   await expect(page.locator('.rows .grow')).toHaveCount(1);
   await expect(page.locator('.rows .before')).toHaveCount(1);
   // the reader scrolls the rows up under the pinned bar: the fill runs, and the row they were looking at stays where it was
@@ -2736,16 +2760,17 @@ test('round forty-eight: a window opened partway (a letter, ?at=) fills in the r
   await expect(page.locator('.rows .grow').first()).toContainText('Copiapoa');
   await expect(page.locator('.rows .before')).toHaveCount(0); // nothing earlier is left
   await expect(page.locator('.rows h2.letter').first()).toContainText('C');
-  await page.waitForTimeout(200);
-  const after = await page.locator('.rows .grow', { hasText: 'Welwitschia' }).boundingBox();
-  expect(Math.abs(after!.y - before!.y)).toBeLessThan(4);
+  // the row they were looking at settles where it was; polled, not after a fixed 200 ms (round sixty; the harness review, 14)
+  await expect.poll(async () => Math.abs((await page.locator('.rows .grow', { hasText: 'Welwitschia' }).boundingBox())!.y - before!.y)).toBeLessThan(4);
 });
 
 test('round forty-eight: a letter tapped on a phone lands with its heading just under the pinned search row (4)', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   await page.locator('.letters a', { hasText: 'W' }).click();
-  await page.waitForTimeout(300);
+  // landed: the heading is at or below the pinned row's foot; polled, not after a fixed 300 ms (round sixty; the harness review, 14)
+  await expect.poll(async () => { const b = (await page.locator('.stickyhead .toolrow').boundingBox())!; return (await page.locator('#l-W').boundingBox())!.y >= b.y + b.height; }).toBe(true);
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   const bar = await page.locator('.stickyhead .toolrow').boundingBox();
   const h = await page.locator('#l-W').boundingBox();
   expect(h!.y).toBeGreaterThanOrEqual(bar!.y + bar!.height); // not under the row
@@ -2819,7 +2844,9 @@ test('round forty-nine: a letter near the end of the catalogue still lands with 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   await page.locator('.letters a', { hasText: 'W' }).click();
-  await page.waitForTimeout(300);
+  // landed: the heading is at or below the pinned row's foot; polled, not after a fixed 300 ms (round sixty; the harness review, 14)
+  await expect.poll(async () => { const b = (await page.locator('.stickyhead .toolrow').boundingBox())!; return (await page.locator('#l-W').boundingBox())!.y >= b.y + b.height; }).toBe(true);
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   const bar = await page.locator('.stickyhead .toolrow').boundingBox();
   const h = await page.locator('#l-W').boundingBox();
   expect(h!.y).toBeGreaterThanOrEqual(bar!.y + bar!.height);
@@ -2840,12 +2867,13 @@ test('round fifty: on a phone the first screen of the catalogue, My plants and a
   let fs = await firstScreen(page);
   const firstRow = await page.locator('.rows .grow').first().boundingBox();
   expect(firstRow!.y + 24).toBeLessThan(fs.bottom); // the first genus row begins above the tab bar
-  const strip = await page.locator('.strip').boundingBox();
+  const strip = await page.locator('.featured .strip').boundingBox();
   const search = await page.locator('.toolrow .searchbar').boundingBox();
-  expect(strip!.y).toBeGreaterThan(search!.y); // the strip sits under the search, a sampler rather than the page
+  expect(strip!.y).toBeLessThan(search!.y); // since round sixty the strip sits above the one toolbar, so the search, the grouping and the chips sit with the rows they act on (visitor 16)
+  expect(search!.y + search!.height).toBeLessThan(fs.bottom); // and the search is on the first screen
   expect(strip!.height).toBeLessThan(200);
   // the lead tile is double width; the rest are 112px
-  const tiles = page.locator('.strip .ftile');
+  const tiles = page.locator('.featured .strip .ftile');
   const lead = await tiles.first().boundingBox();
   expect(lead!.width).toBeGreaterThan(200);
   if (await tiles.count() > 1) { const second = await tiles.nth(1).boundingBox(); expect(Math.round(second!.width)).toBe(112); }
@@ -2855,6 +2883,7 @@ test('round fifty: on a phone the first screen of the catalogue, My plants and a
   await page.fill('#loc-name', 'Porch');
   await page.selectOption('#loc-kind', 'room');
   await page.getByRole('button', { name: 'Add', exact: true }).click();
+  await expect(page.locator('.tree a', { hasText: 'Porch' })).toBeVisible(); // stored before the page is left (round sixty; the harness review, 13)
   for (const sp of ['Copiapoa%20cinerea&key=5384013', 'Welwitschia%20mirabilis&key=5411106']) {
     await page.goto(`/plants/new?species=${sp}`);
     const v = await page.locator('#f-loc option', { hasText: 'Porch' }).getAttribute('value');
@@ -2864,7 +2893,7 @@ test('round fifty: on a phone the first screen of the catalogue, My plants and a
   // My plants: the head is one line (the + in the top bar adds), the search and the sort share a row, the chips are one row, and both plants are on the first screen
   await page.goto('/plants');
   fs = await firstScreen(page);
-  await expect(page.locator('.phead .acts .btn')).toBeHidden();
+  await expect(page.locator('.phead .acts .btn:not(.dots)')).toBeHidden(); // the "···" menu (import, spreadsheet) is the head's one control since round sixty
   await expect(page.locator('.phead .inlinecount')).toContainText('2 growing');
   const sb = await page.locator('#plants-q').boundingBox();
   const sort = await page.locator('#plants-sort').boundingBox();
@@ -2911,13 +2940,13 @@ test('round fifty: on a phone the first screen of the catalogue, My plants and a
 test('round fifty: typing a search is a mode on a phone: the box pinned, the strip and chips away, the matches as rows, Cancel puts the page back (2)', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
-  await expect(page.locator('.strip')).toBeVisible();
-  await expect(page.locator('.filters .chiprow')).toBeVisible();
+  await expect(page.locator('.featured .strip')).toBeVisible();
+  await expect(page.locator('.toolrow .tools .chiprow')).toBeVisible();
   const box = page.locator('.toolrow .searchbar');
   await box.click();
   await box.fill('Copia');
   await expect(page.locator('.cancelsearch')).toBeVisible();
-  await expect(page.locator('.strip')).toHaveCount(0);
+  await expect(page.locator('.featured .strip')).toHaveCount(0);
   await expect(page.locator('.filters')).toHaveCount(0);
   await expect(page.locator('.toolrow .seg')).toHaveCount(0);
   await expect(page.locator('#welcome')).toHaveCount(0);
@@ -2938,8 +2967,8 @@ test('round fifty: typing a search is a mode on a phone: the box pinned, the str
   await expect(page.locator('.hitrow')).toHaveCount(1);
   await page.locator('.cancelsearch').click();
   await expect(page.locator('.toolrow .searchbar')).toHaveValue('');
-  await expect(page.locator('.strip')).toBeVisible();
-  await expect(page.locator('.filters .chiprow')).toBeVisible();
+  await expect(page.locator('.featured .strip')).toBeVisible();
+  await expect(page.locator('.toolrow .tools .chiprow')).toBeVisible();
   await expect(page.locator('.cancelsearch')).toHaveCount(0);
 });
 
@@ -2981,7 +3010,8 @@ test('round fifty-two: a device a year ahead is corrected by the server\'s clock
   await a.fill('#key-typeback', key.slice(-5).toLowerCase()); await a.click('#sync-create');
   await expect(a.locator('.card', { hasText: 'Status' })).toContainText('Synced');
   const join = async (p: import('@playwright/test').Page) => { await p.goto('/sync'); await p.click('#sync-have-key'); await p.fill('#sync-key', key.toLowerCase()); await p.click('#sync-join'); await expect(p.locator('.card', { hasText: 'Status' })).toContainText('Synced'); };
-  const syncNow = async (p: import('@playwright/test').Page) => { if (!p.url().endsWith('/sync')) await p.goto('/sync'); await p.click('#sync-now'); await expect(p.locator('#sync-now')).toBeEnabled(); await p.waitForTimeout(300); };
+  // The file's syncRun, which waits for that run to finish; the local helper waited for an enabled button, which can be true before the run starts (round sixty; the harness review, 13).
+  const syncNow = async (p: import('@playwright/test').Page) => { if (!p.url().endsWith('/sync')) await p.goto('/sync'); await syncRun(p); };
   // P: a year ahead. The join is one reading; a second run a minute later (by its own clock) corrects it.
   const P = await shifted(365 * 86_400_000); const p = await P.newPage();
   await join(p);
@@ -3042,17 +3072,19 @@ test('round fifty-three: the Today tab lists what needs you by place, "no wateri
   await expect(page.locator('.tlrow', { hasText: 'Watered' }).first()).toBeVisible();
   // nothing is due yet: the Today tab says so
   await page.goto('/today');
-  await expect(page.locator('#nothing')).toContainText('Nothing needs you today by these checks');
+  await expect(page.locator('#nothing')).toContainText('All caught up. Nothing is past its watering rhythm.');
+  await expect(page.locator('#nothing')).toContainText('in 21 days'); // when Today will next speak (round sixty)
+  await expect(page.locator('#how-today')).toContainText('How Today decides'); // the method, one tap away
   // twenty-five days on: the never-watered plant's record is old enough to count, apart from the plant watered twenty-five days ago
   await page.evaluate(() => localStorage.setItem('__shift', String(25 * 86_400_000))); // read by the clock on the next load
   await page.goto('/today');
   const stop = page.locator('#water .stop', { hasText: 'Bench' });
   await expect(stop).toHaveCount(1);
-  await expect(stop.locator('.row.warn').first()).toContainText('Past the watering rhythm');
+  await expect(stop.locator('.row.warn').first()).toContainText('Past its 21-day rhythm (the default)'); // the figure in use, and where it comes from (round sixty; the grower review, 5)
   await expect(stop.locator('.row.warn').first()).toContainText(second);
   await expect(stop.locator('.row.warn').first()).toContainText('25 d');
   await expect(stop.locator('.row.unknown')).toContainText('No watering recorded');
-  await expect(stop.locator('.row.unknown')).toContainText('no record · 25 d');
+  await expect(stop.locator('.row.unknown')).toContainText('added 25 d ago, no watering yet');
   await expect(stop.locator('.row.unknown')).not.toContainText(second);
   // the front page's line says the two apart
   await page.goto('/');
@@ -3124,7 +3156,7 @@ test('round fifty-four: a Today page left open overnight dates the morning\'s wa
   await page.evaluate(() => sessionStorage.clear());
   await page.goto('/today');
   await expect(page.locator('#frost .risk')).toContainText('Frost forecast');
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(500); // a negative: no request may follow, and only a pause can show that none did; the pause is short and after the page has gone quiet (round sixty; the harness review, 14)
   expect(asked).toBe(1);
   // twenty-five days on, the page is opened and left open across midnight: a watering after midnight is dated the new day
   await page.evaluate(() => localStorage.setItem('__shift', String(25 * 86_400_000)));
@@ -3360,5 +3392,365 @@ test('round fifty-nine: a species page\'s description is cut at a word and claim
   }
   // Refusia's climate was not checked: its line does not offer one
   await page.goto('/species/refusia-testii');
-  expect(await page.locator('meta[name="description"]').getAttribute('content')).not.toContain('habitat climate');
+  const desc = (await page.locator('meta[name="description"]').getAttribute('content'))!;
+  expect(desc).toContain('habitat climate not checked'); // said as a check that did not happen (round sixty)
+  expect(desc).not.toMatch(/habitat climate(?! not checked)/);
+});
+
+/* ---------------------------------------------------------------- round sixty: records by identity, held changes, print, focus, larger text */
+
+/** Changes written straight into this device's log, as another device's sync or a merged file would leave them; the fold is dropped so the next load reads them. */
+async function inject(page: import('@playwright/test').Page, rows: Array<[string, string, string, string | number]>, wall: number, writer = 'abcdefabcdef0000') {
+  await page.evaluate(async ({ rows, wall, writer }) => {
+    // The page may not have made its stores yet (a first visit): wait for them rather than writing into nothing, which
+    // failed this test one run in a few (round sixty).
+    let db: IDBDatabase | null = null;
+    for (let i = 0; i < 100 && !db; i++) {
+      // never made here: an open that would create the database is aborted, so the page makes it at its own version
+      const d = await new Promise<IDBDatabase | null>((res) => { const r = indexedDB.open('cultifolio'); r.onupgradeneeded = () => r.transaction!.abort(); r.onsuccess = () => res(r.result); r.onerror = () => res(null); });
+      if (d && d.objectStoreNames.contains('changes') && d.objectStoreNames.contains('meta')) db = d;
+      else { d?.close(); await new Promise((r) => setTimeout(r, 100)); }
+    }
+    if (!db) throw new Error('the collection\'s stores were never made');
+    const tx = db.transaction(['changes', 'meta'], 'readwrite');
+    rows.forEach(([kind, id, field, value], i) => tx.objectStore('changes').put({ t: `${wall + i}-0000-${writer}`, kind, id, field, value }));
+    tx.objectStore('meta').delete('fold');
+    await new Promise<void>((res) => { tx.oncomplete = () => res(); });
+  }, { rows, wall, writer });
+}
+
+test('round sixty: a number two plants share opens a chooser; the list, the notice and the labels link each plant by its identity (decision 3)', async ({ page }) => {
+  await page.goto('/plants');
+  await expect(page.locator('main')).toBeVisible();
+  await inject(page, [['accession', 'r-two-a', 'acc', '2026-0042'], ['accession', 'r-two-a', 'taxonName', 'Copiapoa cinerea'], ['accession', 'r-two-a', 'status', 'growing'], ['accession', 'r-two-b', 'acc', '2026-0042'], ['accession', 'r-two-b', 'taxonName', 'Welwitschia mirabilis'], ['accession', 'r-two-b', 'status', 'growing']], Date.now() - 3_600_000);
+  await page.goto('/plants');
+  // every row by its identity while the number is shared: by number, both rows opened the same plant
+  await expect(page.locator('a.accrow')).toHaveCount(2);
+  await expect(page.locator('a.accrow[href="/plants/r-two-a"]')).toHaveCount(1);
+  await expect(page.locator('a.accrow[href="/plants/r-two-b"]')).toHaveCount(1);
+  await expect(page.locator('a.accrow[href="/plants/2026-0042"]')).toHaveCount(0);
+  // the bare number lists both, by identity, with what tells them apart
+  await page.goto('/plants/2026-0042');
+  const chooser = page.locator('#number-chooser li');
+  await expect(chooser).toHaveCount(2);
+  await expect(page.locator('#number-chooser')).toContainText('Copiapoa cinerea');
+  await expect(page.locator('#number-chooser')).toContainText('Welwitschia mirabilis');
+  await expect(page.getByRole('button', { name: 'Water', exact: true })).toHaveCount(0); // nothing to water until one is chosen
+  await chooser.filter({ hasText: 'Welwitschia' }).locator('a').click();
+  await expect(page).toHaveURL(/\/plants\/r-two-b$/);
+  await expect(page.locator('h1')).toContainText('Welwitschia mirabilis');
+  await expect(page.locator('h1')).toContainText('2026-0042 Welwitschia'); // a space between the number and the name, for a screen reader too (round sixty; the accessibility review, 12)
+  // the shared-number notice links the other plant by its identity
+  await expect(page.locator('#shared-number a[href="/plants/r-two-a"]')).toContainText('Copiapoa cinerea');
+  // a label link by that number picks neither, and says so
+  await page.goto('/labels?acc=2026-0042');
+  await expect(page.locator('#lb-ambiguous')).toContainText('2026-0042');
+  await expect(page.locator('.pick input:checked')).toHaveCount(0);
+});
+
+test('round sixty: changes dated ahead of this device\'s clock are said wherever records are listed, with the way to the details (decision 2)', async ({ page }) => {
+  await page.goto('/plants');
+  await expect(page.locator('main')).toBeVisible();
+  await expect(page.locator('#held-notice')).toHaveCount(0);
+  // a plant from a device whose clock runs a day ahead: in the log, not yet on screen
+  await inject(page, [['accession', 'r-ahead', 'acc', '2026-0077'], ['accession', 'r-ahead', 'taxonName', 'Copiapoa cinerea'], ['accession', 'r-ahead', 'status', 'growing']], Date.now() + 86_400_000);
+  await page.goto('/plants');
+  await expect(page.locator('#held-notice')).toContainText("3 changes from a device whose clock runs ahead are waiting. They appear when this device's date reaches them.");
+  await expect(page.locator('a.accrow')).toHaveCount(0);
+  await page.goto('/today');
+  await expect(page.locator('#held-notice')).toContainText('3 changes from a device whose clock runs ahead are waiting');
+  await page.locator('#held-notice a').click();
+  await expect(page).toHaveURL(/\/sync#held$/);
+  await expect(page.locator('#held')).toContainText('3 changes from a device whose clock runs ahead are waiting'); // said with sync off too
+});
+
+test('round sixty: a printed page carries the page alone: the install card, the clock and frost bars and the toast are hidden on paper (the self-review\'s 6)', async ({ page }) => {
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await addPlant(page);
+  // the second day: the install card shows
+  await page.evaluate(() => { localStorage.setItem('cultifolio.visits', '1'); localStorage.setItem('cultifolio.lastVisit', '2000-01-01'); });
+  await page.goto('/labels');
+  await ready(page);
+  // the browser's offer, once the card is listening for it (the page is drawn on the device, after its scripts)
+  await expect.poll(async () => { await page.evaluate(() => window.dispatchEvent(new Event('beforeinstallprompt'))); return page.locator('.install').count(); }).toBe(1);
+  await expect(page.locator('.page .label').first()).toBeVisible();
+  await page.emulateMedia({ media: 'print' });
+  const shown = await page.evaluate(() => ['.install', '#topbar', '#tabbar', '.toastregion'].map((s) => { const el = document.querySelector(s); return el ? `${s} ${getComputedStyle(el).display}` : `${s} none`; }));
+  expect(shown).toEqual(['.install none', '#topbar none', '#tabbar none', '.toastregion none']);
+  // and the first label sits at the sheet's top, not under a card: the sheet is the first thing on the paper
+  const top = await page.evaluate(() => document.querySelector('.page')!.getBoundingClientRect().top + scrollY);
+  expect(top).toBeLessThan(2);
+  await page.emulateMedia({ media: 'screen' });
+});
+
+test('round sixty: watering by keyboard keeps focus on the button, the toast\'s Undo is the next Tab, and Undo on Today returns focus to the stop\'s Water button (the accessibility review, 1; the outside review\'s A35)', async ({ browser }) => {
+  const C = await browser.newContext({ serviceWorkers: 'block' });
+  await C.addInitScript(() => { const real = Date.now; const OD = Date; let shift = 0; try { shift = Number(localStorage.getItem('__shift') ?? 0); } catch { /* none */ } (globalThis as { __shift?: number }).__shift = shift; globalThis.Date = class extends OD { constructor(...args: unknown[]) { if (args.length === 0) super(real() + ((globalThis as { __shift?: number }).__shift ?? 0)); else super(...(args as [number])); } static now() { return real() + ((globalThis as { __shift?: number }).__shift ?? 0); } } as DateConstructor; });
+  const page = await C.newPage();
+  for (let i = 0; i < 3; i++) { await page.goto('/plants/new?species=Refusia%20testii&key=999'); await addPlant(page); }
+  // the list's Water by keyboard: focus stays on it while it saves and after
+  await page.goto('/plants');
+  const water = page.locator('.accline').first().getByRole('button', { name: /watered today/ });
+  await water.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.toast')).toContainText('watered');
+  await expect(water).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(page.locator('.toast .undo')).toBeFocused(); // the Undo is the next stop, not 23 Shift+Tabs away
+  await page.keyboard.press('Enter');
+  await expect(water).toBeFocused(); // back where the grower was
+  // Today, twenty-two days on: Undo on a stop puts focus on that stop's Water button, not its heading
+  await page.evaluate(() => localStorage.setItem('__shift', String(22 * 86_400_000)));
+  await page.goto('/today');
+  const stop = page.locator('#water .stop', { hasText: 'No place' });
+  const head = stop.locator('.head').getByRole('button', { name: /^Water/ });
+  await expect(head).toBeEnabled();
+  await head.focus();
+  await page.keyboard.press('Enter');
+  await expect(stop.locator('.row.done')).toContainText('Watered just now');
+  await stop.locator('.row.done').getByRole('button', { name: 'Undo' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(stop.locator('.row.done')).toHaveCount(0);
+  await expect(stop.locator('.head button.water')).toBeFocused();
+  await C.close();
+});
+
+test('round sixty: Today with nothing ticked says so, never "Water these 0"; the done mark is said only when nothing ticked is left (the grower review, 4)', async ({ browser }) => {
+  const C = await browser.newContext({ serviceWorkers: 'block' });
+  await C.addInitScript(() => { const real = Date.now; const OD = Date; let shift = 0; try { shift = Number(localStorage.getItem('__shift') ?? 0); } catch { /* none */ } (globalThis as { __shift?: number }).__shift = shift; globalThis.Date = class extends OD { constructor(...args: unknown[]) { if (args.length === 0) super(real() + ((globalThis as { __shift?: number }).__shift ?? 0)); else super(...(args as [number])); } static now() { return real() + ((globalThis as { __shift?: number }).__shift ?? 0); } } as DateConstructor; });
+  const page = await C.newPage();
+  for (let i = 0; i < 2; i++) { await page.goto('/plants/new?species=Refusia%20testii&key=999'); await addPlant(page); }
+  await page.goto('/today');
+  await expect(page.locator('#first-weeks')).toContainText('counted from the day it was added'); // the first weeks say what will show here (the grower review, 6)
+  await page.evaluate(() => localStorage.setItem('__shift', String(22 * 86_400_000)));
+  await page.goto('/today');
+  const stop = page.locator('#water .stop', { hasText: 'No place' });
+  await expect(stop.getByRole('button', { name: 'Water 2 here' })).toBeEnabled();
+  for (const box of await stop.locator('.chip.tick input').all()) await box.uncheck();
+  await expect(stop.locator('.head')).toContainText('None ticked');
+  await expect(stop.locator('.head').getByRole('button')).toHaveCount(0);
+  await expect(stop.locator('.donemark')).toHaveCount(0);
+  // the tick box is a finger's target of its own, apart from the plant link
+  const tick = await stop.locator('.chip.tick .tickbox').first().boundingBox();
+  expect(tick!.height).toBeGreaterThanOrEqual(36);
+  expect(tick!.width).toBeGreaterThanOrEqual(36);
+  await C.close();
+});
+
+test('round sixty: at 320 px with the browser\'s text at 200%, the phone\'s tab bar keeps Today on screen and the private pages do not scroll sideways (the accessibility review, 5)', async ({ baseURL }) => {
+  const { chromium } = await import('@playwright/test');
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  // The browser's own text size, as a reader sets it: a profile preference, not a style the page could tell apart.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cf-text200-'));
+  fs.mkdirSync(path.join(dir, 'Default'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'Default', 'Preferences'), JSON.stringify({ webkit: { webprefs: { default_font_size: 32, default_fixed_font_size: 26 } } }));
+  const ctx = await chromium.launchPersistentContext(dir, { baseURL, locale: 'en-GB', viewport: { width: 320, height: 700 }, serviceWorkers: 'block', ...(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {}) });
+  try {
+    const page = ctx.pages()[0] ?? (await ctx.newPage());
+    await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+    expect(await page.evaluate(() => getComputedStyle(document.documentElement).fontSize)).toBe('32px');
+    await addPlant(page);
+    const plant = new URL(page.url()).pathname;
+    await page.goto('/propagation/new?species=Copiapoa%20cinerea&key=5384013');
+    await page.fill('#s-count', '10');
+    await page.getByRole('button', { name: 'Start batch' }).click();
+    await expect(page).toHaveURL(/\/propagation\/S\d{4}-\d{3}$/);
+    const batch = new URL(page.url()).pathname;
+    const sideways: string[] = [];
+    for (const route of ['/plants', plant, '/today', '/places', '/propagation', batch, '/settings', '/sync', '/backup']) {
+      await page.goto(route);
+      await expect(page.locator('#tabbar')).toBeVisible();
+      await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+      const w = await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]);
+      if (w[0] > w[1]) sideways.push(`${route} ${w[0]}>${w[1]}`);
+      const today = await page.locator('#tabbar a', { hasText: 'Today' }).boundingBox();
+      expect(today, route).not.toBeNull();
+      expect(today!.x + today!.width, route).toBeLessThanOrEqual(321);
+      // and every tab's word inside its own cell, on the screen: at 200% "Today" was pushed past the edge of a bar nobody can scroll
+      const spill = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('#tabbar a')].filter((a) => a.offsetParent).map((a) => { const r = a.getBoundingClientRect(), t = a.querySelector('span')!.getBoundingClientRect(); return t.right > Math.min(r.right, innerWidth) + 1 || t.left < r.left - 1 ? a.textContent!.trim() : ''; }).filter(Boolean));
+      expect(spill, route).toEqual([]);
+    }
+    expect(sideways).toEqual([]);
+  } finally {
+    await ctx.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/* The harness review's proposed tests (docs/review-59/tests/mut--zz-proposed.spec.ts), adopted in round sixty. */
+
+test('round sixty: a numbering choice made before the collection opens is kept, at a 6x CPU throttle (the harness review, 12)', async ({ page }) => {
+  test.setTimeout(120_000);
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Emulation.setCPUThrottlingRate', { rate: 6 });
+  try {
+    await page.goto('/settings', { waitUntil: 'commit' });
+    await page.locator('html[data-ready]').waitFor({ state: 'attached' });
+    // The controls wait for the collection, whose scheme they show (disabled until then), and the stored scheme never
+    // overwrites a field the grower touched: before round sixty a choice made here was reset under the grower.
+    await page.getByRole('button', { name: /Prefix/ }).click({ timeout: 60_000 });
+    await page.fill('input[placeholder="your initials or the collection\'s"]', 'jf', { timeout: 30_000 });
+    await expect(page.locator('.accno')).toHaveText('JF-0001', { timeout: 30_000 });
+    await expect(page.getByRole('button', { name: /Prefix/ })).toHaveAttribute('aria-pressed', 'true');
+  } finally {
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+  }
+});
+
+test('round sixty: with the collection slow to open, the numbering controls wait for it and a choice made then is kept (the harness review, 12)', async ({ page }) => {
+  // The database opens 1.5 s late, as on a slow phone: the stored scheme arrives after the page can be touched.
+  await page.addInitScript(() => {
+    const open = IDBFactory.prototype.open;
+    IDBFactory.prototype.open = function (this: IDBFactory, ...a: Parameters<typeof open>) {
+      const req = open.apply(this, a);
+      const add = req.addEventListener.bind(req);
+      req.addEventListener = ((type: string, fn: EventListenerOrEventListenerObject, ...rest: unknown[]) => add(type, type === 'success' ? (ev: Event) => setTimeout(() => (typeof fn === 'function' ? fn(ev) : fn.handleEvent(ev)), 1500) : fn, ...(rest as []))) as typeof req.addEventListener;
+      return req;
+    } as typeof open;
+  });
+  await page.goto('/settings');
+  await ready(page);
+  await page.getByRole('button', { name: /Prefix/ }).click({ timeout: 15_000 }); // as soon as it can be pressed
+  await page.fill('input[placeholder="your initials or the collection\'s"]', 'jf');
+  await expect(page.locator('.accno')).toHaveText('JF-0001');
+  await expect(page.getByRole('button', { name: /Prefix/ })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('input[placeholder="your initials or the collection\'s"]')).toHaveValue('jf');
+});
+
+test('round sixty: a navigation with a query is not kept as the plain page\'s offline copy (E08)', async ({ browser }) => {
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+  await page.goto('/');
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  await page.goto('/?by=origin');
+  await expect(page.getByRole('link', { name: 'Origin' })).toHaveAttribute('aria-current', 'page');
+  await page.goto('/about/how'); // a page that is kept: once it is in the cache, the navigation before it has been dealt with too
+  const plain = await page.evaluate(async () => {
+    for (let i = 0; i < 100; i++) {
+      for (const k of await caches.keys()) {
+        const c = await caches.open(k);
+        if (await c.match('/about/how', { ignoreVary: true })) {
+          const r = await c.match('/', { ignoreVary: true, ignoreSearch: true });
+          return r ? await r.text() : '';
+        }
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    throw new Error('/about/how was never kept');
+  });
+  expect(plain).not.toContain('href="?by=origin" aria-current="page"');
+  await ctx.close();
+});
+
+test('round sixty: the place form refuses a floor that is not a temperature, and writes nothing (E03)', async ({ page }) => {
+  await page.goto('/places');
+  await page.getByRole('button', { name: 'New place' }).click();
+  await page.fill('#loc-name', 'Floor bench');
+  await page.selectOption('#loc-kind', 'bench');
+  await page.getByRole('button', { name: 'Add', exact: true }).click();
+  await page.locator('.tree a', { hasText: 'Floor bench' }).click();
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  await page.fill('#e-floor', 'abc');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.locator('#e-msg')).toContainText('is not a temperature');
+  await expect(page.locator('#e-floor')).toBeFocused();
+  await page.reload();
+  await expect(page.locator('h1')).toContainText('Floor bench');
+  await expect(page.locator('main')).not.toContainText('abc'); // nothing was written
+});
+
+test('round sixty: a death has an Undo; "Record…", not "Log"; Since watered says today, not 0 d (the grower review, 12 and 16)', async ({ page }) => {
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await addPlant(page);
+  await expect(page.getByRole('button', { name: 'Record…', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Water', exact: true }).click();
+  await expect(page.locator('.card', { hasText: 'Since watered' }).locator('.val')).toHaveText('today');
+  await more(page, 'Died…');
+  await page.fill('#ev-cause', 'rot');
+  await page.locator('.evform button[type=submit]').click();
+  await expect(page.locator('.toast')).toContainText('Death recorded');
+  await expect(page.locator('.tlrow', { hasText: 'rot' })).toBeVisible();
+  await page.locator('.toast .undo').click();
+  await expect(page.locator('.toast')).toContainText('growing again');
+  await expect(page.locator('.tlrow', { hasText: 'rot' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Water', exact: true })).toBeVisible(); // growing: Water leads again
+});
+
+test('round sixty: places are added one after another with the parent and the kind kept, and a plant with no place is given one from the list (the grower review, 14 and 17)', async ({ page }) => {
+  await page.goto('/places');
+  await page.getByRole('button', { name: 'New place' }).click();
+  await page.fill('#loc-name', 'Greenhouse');
+  await page.selectOption('#loc-kind', 'greenhouse');
+  await page.getByRole('button', { name: 'Add', exact: true }).click();
+  await expect(page.locator('.tree a', { hasText: 'Greenhouse' })).toBeVisible();
+  await page.getByRole('button', { name: 'New place' }).click();
+  await page.fill('#loc-name', 'Bench 1');
+  await page.selectOption('#loc-kind', 'bench');
+  await page.selectOption('#loc-parent', { label: 'Greenhouse' });
+  await page.getByRole('button', { name: 'Add another', exact: true }).click();
+  await expect(page.locator('#loc-added')).toContainText('Bench 1 added inside Greenhouse');
+  await expect(page.locator('#loc-name')).toHaveValue('');
+  await expect(page.locator('#loc-name')).toBeFocused();
+  await expect(page.locator('#loc-kind')).toHaveValue('bench'); // kept for the next
+  await page.fill('#loc-name', 'Bench 2');
+  await page.getByRole('button', { name: 'Add another', exact: true }).click();
+  await expect(page.locator('#loc-added')).toContainText('Bench 2 added inside Greenhouse');
+  await expect(page.locator('.tree a', { hasText: 'Bench 2' })).toBeVisible();
+  // a plant with no place: the line offers a place to pick, and the pick moves it with an Undo
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.selectOption('#f-loc', { label: 'No place' });
+  await addPlant(page);
+  await page.goto('/places');
+  await expect(page.locator('#unplaced')).toContainText('1 growing plant has no place.');
+  await page.locator('#unplaced').getByRole('button', { name: 'Give it one' }).click();
+  const opt = await page.locator('#unplaced-list option', { hasText: 'Bench 2' }).getAttribute('value');
+  await page.locator('#unplaced-list select').selectOption(opt!);
+  await expect(page.locator('.toast')).toContainText('moved to Greenhouse › Bench 2');
+  await expect(page.locator('#unplaced')).toHaveCount(0);
+});
+
+test('round sixty: "Save and add another" keeps the last watering, and its toast offers Undo above the pinned buttons, never over them (the grower review, 3 and 6)', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await ready(page);
+  await page.locator('details.moredetails > summary').click();
+  await page.fill('#f-watered', localDay(-3));
+  await page.getByRole('button', { name: 'Save and add another' }).click();
+  await expect(page.locator('.toast')).toContainText('added');
+  await expect(page.locator('.toast').getByRole('button', { name: 'Undo' })).toBeVisible(); // mid-batch, Undo, not Open: Open left the form behind
+  const toastBox = (await page.locator('.toast').boundingBox())!;
+  const another = (await page.getByRole('button', { name: 'Save and add another' }).boundingBox())!;
+  expect(toastBox.y + toastBox.height).toBeLessThanOrEqual(another.y); // above the bar, not over its buttons
+  await expect(page.locator('#f-watered')).toHaveValue(localDay(-3)); // kept for the next plant
+  await page.goto('/plants');
+  await expect(page.locator('.accrow .fig', { hasText: 'watered 3 d ago' })).toHaveCount(1); // Today and the list count from it
+});
+
+test('round sixty: a visitor sees one species\' figures and chart on a desktop, a link to them on a phone, and a search that matched nothing as written says what it searched', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/');
+  await ready(page);
+  const feature = page.locator('section.feature');
+  await expect(feature).toBeVisible();
+  await expect(feature.locator('.featurehead')).toContainText('This is what every species page shows');
+  await expect(feature.locator('.card.cold')).toContainText('Cold floor');
+  await expect(feature.locator('.climo')).toBeVisible();
+  await expect(page.locator('.featureline')).toBeHidden();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(feature).toBeHidden();
+  await expect(page.locator('.featureline a')).toBeVisible();
+  await expect(page.locator('#try-sample-home')).toBeVisible();
+  // a variety the reference files under its species: nothing as written, the species on the retry, and the page says so
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.fill('.toolrow .searchbar', 'Copiapoa cinerea var. nonexista');
+  await expect(page.locator('.relaxed')).toContainText('Showing results for “Copiapoa cinerea”');
+  await expect(page.locator('.hitrow').first()).toContainText('Copiapoa cinerea');
+});
+
+test('round sixty: Today draws "Also today" only when something is under it', async ({ page }) => {
+  await page.goto('/today');
+  await ready(page);
+  await expect(page.locator('#rest-h')).toBeHidden();
 });

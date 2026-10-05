@@ -15,6 +15,7 @@
   import { numberOrNull } from '$core/units';
   import { sheetForName } from '$lib/ui/index.svelte';
   import type { Provenance } from '$lib/db/types';
+  import { plantHref } from '$lib/db/links';
   /** The reference's key for a species-rank name when the reference answers; otherwise the key as given (the plant page repairs it later). */
   async function checkedKey(sp: string | null, k: number): Promise<number> {
     if (!sp || speciesOf(sp) !== sp) return k;
@@ -74,6 +75,9 @@
   /** The place the form filled from the last one used, said under the field (round fifty-eight; the grower review). */
   let lastUsedLoc = $state<string | null>(null);
   let notes = $state('');
+  /** When these plants were last watered, if the grower knows: kept by "Save and add another" with the place and the date, so Today counts from it, not from the day the record was made (round sixty; the grower review, 6). */
+  let lastWatered = $state('');
+  let waterMsg = $state('');
   let count = $state<number | null>(1); // null once cleared
   /** Whole plants only, one to two hundred: 2.5 is two, a cleared box is one, and a number is never minted for a fraction (round thirteen, 10). */
   const countN = $derived(Math.min(200, Math.max(1, Math.floor(numberOrNull(count) ?? 1))));
@@ -91,7 +95,7 @@
   /** "Save and add another" keeps the form open with the place, the date, the source and the provenance; the name and what belongs to the one plant are cleared (round forty-nine, 3). */
   let addAnother = $state(false);
   /** Whether the form has anything typed that leaving would lose; a save clears it before the page moves on. */
-  const dirty = $derived(!!(name.trim() || nameAsReceived.trim() || fieldNumber.trim() || notes.trim() || sourceFrom.trim() || price.trim() || (count ?? 1) !== 1 || provenance !== 'unknown' || acquired !== acquiredDefault));
+  const dirty = $derived(!!(name.trim() || nameAsReceived.trim() || fieldNumber.trim() || notes.trim() || sourceFrom.trim() || price.trim() || (count ?? 1) !== 1 || provenance !== 'unknown' || acquired !== acquiredDefault || !!lastWatered));
   let saved = $state(false);
   beforeNavigate((nav) => {
     // An in-app move away from a half-filled form asks first (a tab-bar tap, the back button); a full unload is asked about below (round forty-nine, 3; round fifty-one, 4).
@@ -103,7 +107,17 @@
     if (dirty && !saved && !busy) e.preventDefault();
   }
   // The toast sits above the pinned action bar on this page, not on it: after "Save and add another" it covered the buttons for eight seconds (round fifty-one, 4).
-  $effect(() => { document.body.classList.add('stickyacts'); return () => document.body.classList.remove('stickyacts'); });
+  // By the bar's measured height, one row of buttons or two: "Add as typed" wrapped the bar to two rows and the toast covered "Save and add another" (round sixty; the grower review, 3).
+  let actsEl = $state<HTMLElement | null>(null);
+  $effect(() => {
+    document.body.classList.add('stickyacts');
+    const el = actsEl;
+    const ro = el ? new ResizeObserver(() => document.body.style.setProperty('--acts-h', `${Math.ceil(el.getBoundingClientRect().height)}px`)) : null;
+    if (el) ro!.observe(el);
+    return () => { ro?.disconnect(); document.body.classList.remove('stickyacts'); document.body.style.removeProperty('--acts-h'); };
+  });
+  /** What the Add button is doing, said in a status line beside it: the button itself was a live region, so every relabel was announced from a button (round sixty; the accessibility review, 12). */
+  const addStatus = $derived(checking ? 'Checking the name against the reference…' : busy ? 'Adding…' : '');
   /** The fields a second plant from the same source shares; the rest are the one plant's. */
   let moreOpen = $state(false);
   async function save(e: SubmitEvent) {
@@ -114,6 +128,10 @@
     // And a year before any living collection (1026 for 2026) would mint 1026-0001 for good, the same way (round fifty-two, 4).
     dateMsg = acquired && acquired > localDate() ? `${acquired} is in the future.` : acquired && acquired < '1900-01-01' ? `${acquired} is before 1900; the number would be minted for that year, for good.` : '';
     if (dateMsg) { document.getElementById('f-date')?.focus(); return; }
+    // Before the acquisition date only when that date was given: the form's default is today, and a grower entering
+    // plants they have had for years knows when they last watered them better than when they bought them.
+    waterMsg = lastWatered && lastWatered > localDate() ? `${lastWatered} is in the future.` : lastWatered && acquired && acquired !== acquiredDefault && lastWatered < acquired ? `${lastWatered} is before the plant was acquired (${acquired}).` : '';
+    if (waterMsg) { moreOpen = true; setTimeout(() => document.getElementById('f-watered')?.focus(), 0); return; }
     checking = true;
     try {
       if (keyCheck) await keyCheck.catch(() => undefined);
@@ -150,13 +168,17 @@
         locationId,
         notes: notes.trim() || null
       });
+      // The last watering, one line per plant, as Water writes it; a second commit, after the plants exist.
+      if (lastWatered) { try { await collection.addEventsIds(recs.map((r) => ({ acc: r.id, d: lastWatered, t: 'water' as const, note: 'as given when the plant was added' }))); } catch { /* the plants stand; lastWriteError says why the line did not */ } }
       const firstId = accNo(recs[0]);
       // Several new pots want labels next: the toast opens the labels page with these plants picked, by identity as the plant page's Label does (round fifty-eight; the grower review).
       const labelsFor = { label: 'Labels', run: () => { void goto('/labels?acc=' + recs.map((r) => r.id).join(',')); } };
       try { if (locationId) localStorage.setItem('cultifolio.lastLocation', locationId); } catch { /* fine */ }
       if (addAnother) {
         addAnother = false;
-        toast.show(wanted > 1 ? `${wanted} plants added` : `${firstId} added`, 8000, wanted > 1 ? labelsFor : { label: `Open ${firstId}`, run: () => { void goto(`/plants/${firstId}`); } });
+        // Mid-batch the toast offers Undo, not Open: a tap on "Open" left the form and its typed plant behind (round sixty; the grower review, 3).
+        const undo = { label: 'Undo', run: () => { void Promise.all(recs.map((r) => collection.remove('accession', r.id))).then(() => toast.show(wanted > 1 ? `Undone: the ${wanted} plants removed; their numbers stay reserved.` : `Undone: ${firstId} removed; its number stays reserved.`)); } };
+        toast.show(wanted > 1 ? `${wanted} plants added` : `${firstId} added`, 8000, undo);
         name = ''; taxonKey = null; cultivar = null; kind = 'species'; parentage = null; nameAsReceived = ''; fieldNumber = ''; notes = ''; price = ''; count = 1; useOwnNumber = false; ownNumber = ''; nameArmed = false;
         setTimeout(() => document.querySelector<HTMLElement>('.picker input')?.focus(), 0);
         return;
@@ -164,7 +186,7 @@
       saved = true;
       if (wanted > 1) toast.show(`${wanted} plants added`, 8000, labelsFor);
       else toast.show(`${firstId} added`);
-      goto(wanted > 1 ? '/plants' : `/plants/${firstId}`);
+      goto(wanted > 1 ? '/plants' : plantHref(recs[0])); // by identity while another plant shares the number (round sixty)
     } catch {
       /* the store has recorded why in lastWriteError, which the notice above the form shows; the form stays open with what
          was typed, and nothing was written: the batch is one commit (round fifteen, 9; round sixteen, 14) */
@@ -188,8 +210,9 @@
   </PageHead>
   <div class="cult sheet">
 
-  <label class="field"><span>Species</span><SpeciesPicker bind:value={name} bind:taxonKey bind:cultivar bind:kind bind:parentage bind:unresolved={nameUnresolved} bind:armed={nameArmed} bind:this={picker} />
-    <span class="faint small">A species, a cultivar (<i>Haworthia truncata</i> 'Lime Green'), or a hybrid: write the cross (<i>Ariocarpus retusus</i> × <i>trigonus</i>), or the genus and the name (<i>Echeveria</i> 'Blue Curls') when the parents are not known.</span></label>
+  <!-- One hint line under the field; the ways to write a cultivar or a cross are one tap away, not a fourth paragraph (round sixty; the grower review, 18). -->
+  <label class="field"><span>Species</span><SpeciesPicker bind:value={name} bind:taxonKey bind:cultivar bind:kind bind:parentage bind:unresolved={nameUnresolved} bind:armed={nameArmed} bind:this={picker} /></label>
+  <details class="namehelp"><summary class="faint">How to write cultivars and hybrids</summary><p class="faint small">A cultivar after its species (<i>Haworthia truncata</i> 'Lime Green'); a hybrid as the cross (<i>Ariocarpus retusus</i> × <i>trigonus</i>), or the genus and the name (<i>Echeveria</i> 'Blue Curls') when the parents are not known.</p></details>
   {#if kind === 'hybrid'}
     <label class="field"><span>Parentage <span class="faint">(if known)</span></span><input id="f-parentage" type="text" bind:value={parentage} placeholder="Seed parent × pollen parent" /><span class="faint small">The plant is filed under the genus; its parents' species pages carry the biology. A hybrid has no habitat of its own, so the climate-derived cultivation rows do not apply to it.</span></label>
   {/if}
@@ -201,7 +224,7 @@
 
   <!-- The short form is the species, the place and the date: what every plant has. The rest is one tap away, and stays open once opened (round forty-nine, 3; U3). -->
   <details class="moredetails" bind:open={moreOpen}>
-  <summary class="faint">More: name as received, field number, provenance, source, price, how many, notes</summary>
+  <summary class="faint">More: name as received, field number, provenance, source, price, last watered, how many, notes</summary>
   <div class="two">
     <label class="field"><span>Name as received <span class="faint">(if different)</span></span><input id="f-received" type="text" bind:value={nameAsReceived} placeholder="e.g. Copiapoa cinerea v. albispina" /></label>
     <label class="field"><span>Field number</span><input id="f-field" type="text" bind:value={fieldNumber} placeholder="e.g. KK 1462" /></label>
@@ -216,7 +239,7 @@
         <option value="fn">Cultivated seed (Fn)</option>
         <option value="veg">Vegetative</option>
       </select>
-      <span class="faint small">A field number alone is not a provenance; say what you know.</span>
+      <span class="faint small">Not sure? Leave it as not stated; a field number is kept either way.</span>
     </label>
     <label class="field"><span>Form</span>
       <select id="f-form" bind:value={sourceForm}>
@@ -231,6 +254,7 @@
   </div>
 
   <div class="two">
+    <label class="field"><span>Last watered <span class="faint">(if you know)</span></span><input id="f-watered" type="date" bind:value={lastWatered} oninput={() => (waterMsg = '')} aria-invalid={!!waterMsg} aria-describedby={waterMsg ? 'f-watered-bad' : 'f-watered-hint'} /><span class="faint small" id="f-watered-hint">Today counts from this day; kept for the next plant.</span>{#if waterMsg}<span class="bad small" id="f-watered-bad">{waterMsg}</span>{/if}</label>
     <label class="field"><span>How many</span><input id="f-count" type="number" min="1" max="200" step="1" bind:value={count} /><span class="faint small">Each gets its own number.{#if numberOrNull(count) != null && numberOrNull(count) !== countN} {countN === 1 ? 'One plant' : `${countN} plants`} will be added.{/if}</span></label>
   </div>
 
@@ -248,8 +272,9 @@
   <!-- Pinned on a phone, so Add is under the thumb however long the form; "Add as typed" is the second press for a name the reference does not know (round forty-nine, 3). -->
   <!-- Add is first in the markup, so Enter (the phone's Go) is Add, not "Save and add another"; the order on screen is set by CSS (round fifty-one, 4). -->
   <!-- The second press keeps the count in its words: "Add as typed" read as one plant when ten were asked for, and growers set the count back to one (round fifty-eight; the grower review). -->
-  <div class="actions sticky">
-    <button class="btn pri add" type="submit" onclick={() => (addAnother = false)} disabled={!name.trim() || busy || checking || ownTaken} aria-live="polite">{checking ? 'Checking the name…' : busy ? 'Adding…' : nameArmed ? `Add${countN > 1 ? ` ${countN}` : ''} as typed` : `Add${countN > 1 ? ` ${countN} plants` : ''}`}</button>
+  <div class="actions sticky" bind:this={actsEl}>
+    <span class="sr" role="status">{addStatus}</span>
+    <button class="btn pri add" type="submit" onclick={() => (addAnother = false)} disabled={!name.trim() || busy || checking || ownTaken}>{checking ? 'Checking the name…' : busy ? 'Adding…' : nameArmed ? `Add${countN > 1 ? ` ${countN}` : ''} as typed` : `Add${countN > 1 ? ` ${countN} plants` : ''}`}</button>
     <a class="btn cancel" href="/plants">Cancel</a>
     <button class="btn another" type="submit" onclick={() => (addAnother = true)} disabled={!name.trim() || busy || checking || ownTaken} title="Add this plant and keep the form open for the next, with the place, date, source and provenance kept">Save and add another</button>
   </div>
@@ -262,11 +287,14 @@
   .field > span:first-child { display: block; font-size: var(--fs-xs); letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink3); font-weight: 700; margin-bottom: 5px; }
   .field > span:first-child .faint { text-transform: none; letter-spacing: 0; font-weight: 400; }
   .field input[type='text'], .field input[type='date'], .field input[type='number'], .field select, .field textarea { width: 100%; font: inherit; font-size: 0.875rem; padding: 9px 12px; border: 1px solid var(--rule); border-radius: var(--r); background: var(--card); color: var(--ink); }
-  .field input:focus, .field select:focus, .field textarea:focus { outline: 0; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); } /* the theme's outline stays: "outline: 0" left only the caret in forced colours (round sixty; the accessibility review, 4) */
   .field .small { display: block; margin-top: 4px; font-size: var(--fs-sm); }
   .two { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; align-items: start; }
   .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
   .moredetails { margin-top: 8px; }
+  .namehelp { margin: -6px 0 6px; }
+  .namehelp > summary { font-size: var(--fs-md); display: flex; align-items: center; }
+  .namehelp p { margin: 2px 0 6px; }
   .moredetails > summary { cursor: pointer; font-size: var(--fs-md); padding: 8px 0; }
   .actions.sticky .cancel { order: 1; } .actions.sticky .another { order: 2; } .actions.sticky .add { order: 3; }
   @media (max-width: 640px) { .actions.sticky .btn { min-height: 44px; } } /* the pinned bar is the thumb's target: 44px, as the grower review asks of every tap (round fifty-eight; the grower review) */

@@ -4,7 +4,7 @@
    * and appearance are this device's; your site is this device's too (the
    * frost watch and the hemisphere of the months read it); numbering is a
    * synced setting of the vault, since two devices must mint the same numbers.
-   * Nothing here is sent anywhere.
+   * Nothing here is sent anywhere, but for the site's coordinates, rounded, when its forecast is asked for.
    */
   import { onMount } from 'svelte';
   import { prefs } from '$lib/ui/prefs.svelte';
@@ -29,11 +29,15 @@
     theme.load();
     prefs.load();
     await collection.load();
+    // The stored scheme fills only the fields the grower has not touched yet: a choice made while the collection opened
+    // was reset under the grower, and the Prefix box removed mid-typing (round sixty; the harness review, 12).
     const s = collection.scheme;
-    mode = s.mode;
-    prefix = s.prefix ?? '';
-    width = String(s.width);
+    if (!touched.mode) mode = s.mode;
+    if (!touched.prefix) prefix = s.prefix ?? '';
+    if (!touched.width) width = String(s.width);
   });
+  /** Which numbering fields the grower has changed by hand since the page opened. */
+  const touched = { mode: false, prefix: false, width: false };
 
   /* ---- your site ---- */
   let lat = $state(''), lon = $state(''), siteName = $state('');
@@ -125,7 +129,7 @@
 
 <svelte:head><title>Settings · Cultifolio</title></svelte:head>
 
-<PageHead title="Settings" places={false} sub="Units, appearance and your site stay on this device; numbering is a setting of your vault and syncs." />
+<PageHead title="Settings" places={false} sub="Units, appearance and your site stay on this device; numbering is part of your collection and syncs with it." />
 
 <!-- One heading per subject, one option per line with its hint under it; the Today option has its own heading, not the
      photographs' (round fifty-eight; the grower review). -->
@@ -197,7 +201,7 @@
   <div class="body">
     <div class="opt">
       <label class="check"><input id="pref-refphotos" type="checkbox" aria-describedby="pref-refphotos-hint" checked={prefs.current.referencePhotos} onchange={(e) => prefs.set({ referencePhotos: e.currentTarget.checked })} /><span>Show the reference photograph on my own pages</span></label>
-      <p class="hint indent" id="pref-refphotos-hint">The species' photograph on my plants, my batches and my tiles when a plant has no photograph of its own. Off, your own pages ask no outside host for anything. On, the photograph comes straight from iNaturalist, Wikimedia Commons or the GBIF image cache, so that host sees this address ask for that species' picture; Cultifolio's server is not involved and learns nothing. Species pages you open are unaffected either way.</p>
+      <p class="hint indent" id="pref-refphotos-hint">The species' photograph on my plants, my batches and my tiles when a plant has no photograph of its own. Off, your own pages ask no outside host for anything. On, the photograph comes straight from iNaturalist, Wikimedia Commons or the GBIF image cache, so that host sees this address ask for that species' picture; Cultifolio's server is asked only for the hash groups your species fall in, as your plant pages already ask, never a species' name. Species pages you open are unaffected either way.</p>
     </div>
   </div>
 </div>
@@ -207,10 +211,11 @@
   <div class="body">
     <p class="small" style="margin: 0 0 10px">How new plants are numbered; a number is never reused, and numbers already given are kept. With the year scheme the year is the plant's acquisition year (a plant acquired on 31 December and filed on 2 January is a 2026 plant), and a batch's is the year it was started.</p>
     <!-- Year needs nothing typed, so the tap is the save; Prefix waits for its letters and Save (round forty-nine, 3). The one toggle group (round fifty-eight; the accessibility review). -->
-    <ToggleGroup label="Numbering scheme" options={[{ value: 'year', label: 'Year: 2026-0001' }, { value: 'prefix', label: 'Prefix: ABC-0001' }]} bind:value={mode} onchange={(v) => { if (v === 'year' && collection.ready) void saveScheme(); }} />
+    <!-- Waits for the collection, whose scheme it shows: a choice made before it opened was overwritten by it (round sixty; the harness review, 12). -->
+    <ToggleGroup label="Numbering scheme" disabled={!collection.ready} options={[{ value: 'year', label: 'Year: 2026-0001' }, { value: 'prefix', label: 'Prefix: ABC-0001' }]} bind:value={mode} onchange={(v) => { touched.mode = true; if (v === 'year' && collection.ready) void saveScheme(); }} />
     <div class="fields" style="margin-top: 10px">
-      {#if mode === 'prefix'}<label><span>Prefix</span><input type="text" bind:value={prefix} placeholder="your initials or the collection's" maxlength="8" /></label>{/if}
-      <label><span>Digits</span><input type="number" min="2" max="6" step="1" inputmode="numeric" bind:value={width} /></label>
+      {#if mode === 'prefix'}<label><span>Prefix</span><input type="text" bind:value={prefix} oninput={() => (touched.prefix = true)} disabled={!collection.ready} placeholder="your initials or the collection's" maxlength="8" /></label>{/if}
+      <label><span>Digits</span><input type="number" min="2" max="6" step="1" inputmode="numeric" bind:value={width} oninput={() => (touched.width = true)} disabled={!collection.ready} /></label>
     </div>
     <div class="row">
       <button class="btn pri" type="button" onclick={saveScheme} disabled={!collection.ready}>Save numbering</button>
@@ -226,7 +231,7 @@
 <h2 class="sec" id="data">Your data</h2>
 <div class="cult">
   <div class="body">
-    <p class="small" style="margin: 0 0 10px">Your collection lives in this browser and nowhere else{#if sync.configured}, and in an encrypted vault only your key opens{/if}. Nothing on this site is stored about you beyond short-lived rate counters by address and, with sync on, your encrypted vault, whose sizes and timing the server can see and whose contents it cannot (<a href="/about/formats#sync">what the server can see</a>); there are no accounts and no analytics.</p>
+    <p class="small" style="margin: 0 0 10px">Your collection stays in this browser unless you turn on sync{#if sync.configured}; it is on, so it is also in an encrypted vault only your key opens{/if}. Nothing on this site is stored about you beyond short-lived rate counters by address and, with sync on, your encrypted vault, whose sizes and timing the server can see and whose contents it cannot (<a href="/about/formats#sync">what the server can see</a>); there are no accounts and no analytics.</p>
     <div class="row">
       <a class="btn" href="/backup">Back up or restore</a>
       <a class="btn" href="/sync">Sync between devices</a>

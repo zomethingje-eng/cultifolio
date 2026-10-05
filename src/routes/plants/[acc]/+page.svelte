@@ -32,11 +32,23 @@
   import RefPhotoOffer from '$lib/ui/RefPhotoOffer.svelte';
   import Parked from '$lib/ui/Parked.svelte';
   import NotChecked from '$lib/ui/NotChecked.svelte';
+  import { plantHref, batchHref } from '$lib/db/links';
+  import PlantName from '$lib/ui/PlantName.svelte';
+  import { plantLabel } from '$lib/ui/plant-label';
+  import { readerLat } from '$lib/ui/site.svelte';
+  import type { Accession } from '$lib/db/types';
+  import { PhotoTimeline, ForeignLabel } from '$lib/ui/grow'; // round sixty, agent F: the photo strip, a stranger's label
   onMount(() => { site.load(); collection.load(); });
   /** The URL carries the number people know (or an identity, from a printed code); everything below works on the record's identity. */
   const u = $derived(units.current);
   const param = $derived(page.params.acc!);
-  const a = $derived(collection.accession(param));
+  /**
+   * Every live plant the address names: one by its identity or its number, or several when two devices gave out the
+   * same number offline. Several are listed to choose from, by identity, rather than one picked by load order, where a
+   * Water would have gone to whichever loaded first (round sixty; the self-review's 2, the outside reviews' A13 and B1).
+   */
+  const choices = $derived(collection.ready ? (collection.withNumber('accession', param) as Accession[]) : []);
+  const a = $derived(choices.length === 1 ? choices[0] : undefined);
   const id = $derived(a?.id ?? param);
   const events = $derived(collection.events(id));
   /* ---- photos ---- */
@@ -157,7 +169,7 @@
     if (!habitat?.year) return null;
     const y = habitat.year;
     // This place's coordinates, else the site set in Settings, else the north with a note: the same order as the species page.
-    const hereLat = cond?.lat ?? site.current?.lat ?? collection.locations.map((l) => l.lat).find((x): x is number => x != null) ?? null; // the place, the site, else the first place with coordinates, as the species page and the labels do (round fifteen, 4)
+    const hereLat = cond?.lat ?? readerLat(collection.locations); // the place, the site, else the first place with coordinates, as the species page, the labels and Today do (round fifteen, 4; round sixty)
     const southHere = (hereLat ?? 40) < 0;
     const here = runs(forReader(y, hereLat ?? 40), 'short');
     const home = `${runs(y.growMonths, 'short')} (${y.south ? 'S' : 'N'})`;
@@ -214,7 +226,8 @@
   }
   /** Whether the first screen has a picture: the grower's own, or the reference's where it is shown. Without one there is no hero; a tile beside the name stands in (improvements, 4). */
   const hasHero = $derived(!!cover || (!!speciesThumb && !thumbFailed));
-  const fmtDate = (d: string | null | undefined) => (d ? new Date(d + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '');
+  // One date style on the page, the log's: the card said "4 Oct 2026" over a log of "2026-10-15" (round sixty; the grower review, 16).
+  const fmtDate = (d: string | null | undefined) => d ?? '';
   // What a new plant's page is missing: a place, a photograph, a first measurement. Each line goes when it is done; the card goes when one line is left.
   const setup = $derived.by(() => {
     if (!a || a.status !== 'growing') return [];
@@ -254,9 +267,12 @@
     setTimeout(() => (document.querySelector<HTMLElement>(t === 'measure' ? '.measures input' : t === 'treat' || t === 'feed' ? '#ev-used' : t === 'repot' ? '#ev-pot' : '#ev-note') ?? document.getElementById('ev-note'))?.focus(), 0);
   }
   /** After a record or a cancel, focus returns to the verb bar and the log line is announced, so a keyboard user is not dropped on the page body. */
+  /** The Undo a recorded death offers (round sixty). */
+  let deathUndo: { label: string; run: () => void } | null = null;
   function closeLog(recorded?: string) {
     logOpen = false;
-    if (recorded) toast.show(recorded);
+    if (recorded) toast.show(recorded, 2400, deathUndo);
+    deathUndo = null;
     setTimeout(() => document.querySelector<HTMLElement>('.quickbar button')?.focus(), 0);
   }
   const propagations = $derived(collection.propagationsOf(id));
@@ -376,8 +392,13 @@
     const note = [et === 'repot' && emedium.trim() ? `Medium: ${emedium.trim()}` : '', enote.trim()].filter(Boolean).join('; ');
     const ev = { acc: id, d: ed, t: et, note: note || null, used: et === 'treat' || et === 'feed' ? eused.trim() || null : null, cause: et === 'death' ? ecause.trim() || null : null, measures: Object.keys(m).length ? m : null, followUp: et === 'treat' ? 10 : null };
     // A death is its line and the plant's status in one commit: closed between the two, the page left a dead plant marked growing (round forty-nine, 1).
-    if (et === 'death') await collection.addEventWith(ev, 'accession', id, { status: 'dead' });
-    else await collection.addEvent(ev);
+    if (et === 'death') {
+      // The death and the status in one commit, and one tap back: the toast's Undo removes the line and gives the plant
+      // the status it had (round sixty; the grower review, 12: three steps to discover before).
+      const was = a?.status ?? 'growing';
+      const line = await collection.addEventWith(ev, 'accession', id, { status: 'dead' });
+      deathUndo = { label: 'Undo', run: () => { void collection.put('accession', id, { status: was }).then(() => collection.removeEvents([line.id])).then(() => toast.show(`Undone: ${was === 'archived' ? 'archived' : 'growing'} again, the death line removed.`)); } };
+    } else await collection.addEvent(ev);
     enote = '';
     eused = '';
     ecause = '';
@@ -422,7 +443,8 @@
     await collection.remove('accession', id);
     goto('/plants');
     // The removal is one tap; the way back is one too (round twenty-six, 5). The record never left the log.
-    toast.show(`${no} removed.`, 8000, { label: 'Undo', run: () => { void collection.restore('accession', id).then((moved) => { void goto(`/plants/${accNo(collection.accession(id) ?? { id })}`); if (moved) toast.show(`Restored as ${moved.to}: ${moved.from} is another plant's now.`); }); } }); // the number it holds after the restore: a plant brought back to a number taken meanwhile yields it (round fifty-nine)
+    // Back by its identity, whatever number it holds after the restore: by number, a plant brought back beside another under the same number opened the other (round sixty).
+    toast.show(`${no} removed.`, 8000, { label: 'Undo', run: () => { void collection.restore('accession', id).then((moved) => { const back = collection.accession(id); void goto(back ? plantHref(back) : `/plants/${encodeURIComponent(id)}`); if (moved) toast.show(`Restored as ${moved.to}: ${moved.from} is another plant's now.`); }); } });
   }
   const waiting = $derived(a ? undefined : collection.waiting('accession', param));
   async function restoreRemoved() {
@@ -430,7 +452,8 @@
     if (!r) return;
     const moved = await collection.restore('accession', r.id);
     if (moved) {
-      await goto(`/plants/${moved.to}`);
+      const back = collection.accession(r.id);
+      await goto(back ? plantHref(back) : `/plants/${encodeURIComponent(r.id)}`);
       toast.show(`Restored as ${moved.to}: ${moved.from} is another plant's now.`);
     } else toast.show(`${param} restored.`);
   }
@@ -448,7 +471,7 @@
   let renumbering = $state(false);
   /** Which of the records under the number the repair renumbers: said before the button, and the button does that and nothing else (round fifty-eight). */
   const plan = $derived(a && sharedWith.length ? collection.numberPlan('accession', a.id) : null);
-  const othersNamed = $derived((plan ? [plan.keeper, ...plan.renumbered].filter((x) => x !== a?.id) : []).map((x) => collection.accession(x)?.taxonName ?? 'another plant'));
+  const othersIds = $derived((plan ? [plan.keeper, ...plan.renumbered].filter((x) => x !== a?.id) : []).map((x) => { const o = collection.accession(x); return { id: x, name: o ? plantLabel(o) : 'another plant' }; }));
   async function renumberShared() {
     if (!a || renumbering) return;
     const id = a.id, before = accNo(a);
@@ -481,7 +504,9 @@
   <div class="notice" id="key-differs">The reference files {a.taxonName} under GBIF key {refKey}; this plant records key {a.taxonKey}, which the reference does not hold under that name. The species shown here is the reference's. <button class="btn" onclick={useReferenceKey}>Use the reference's key</button></div>
 {/if}
 {#if a && sharedWith.length}
-  <div class="notice" id="shared-number">{#if plan?.keeper === a.id}{othersNamed.length === 1 ? `Another plant, ${othersNamed[0]},` : `${othersNamed.length} other plants`} {othersNamed.length === 1 ? 'has' : 'have'} the number {accNo(a)} too: two devices gave it out while offline, or a file was merged in. This plant was recorded first and keeps it; renumbering gives {othersNamed.length === 1 ? 'the other' : 'the others'} the next free number, with a note saying so.{:else}This plant shares the number {accNo(a)} with {othersNamed.join(', ')}, recorded before it: two devices gave it out while offline, or a file was merged in. Renumbering gives this plant the next free number, with a note saying so.{/if} <button class="btn" onclick={renumberShared} disabled={renumbering}>Renumber now</button></div>
+  <!-- The other plant is a link by its identity: by number it opened whichever loaded first (round sixty). -->
+  {#snippet others()}{#each othersIds as o, i (o.id)}{i ? (i === othersIds.length - 1 ? ' and ' : ', ') : ''}<a href="/plants/{encodeURIComponent(o.id)}">{o.name}</a>{/each}{/snippet}
+  <div class="notice" id="shared-number">{#if plan?.keeper === a.id}{#if othersIds.length === 1}Another plant, {@render others()}, has{:else}{othersIds.length} other plants ({@render others()}) have{/if} the number {accNo(a)} too: two devices gave it out while offline, or a file was merged in. This plant was recorded first and keeps it; renumbering gives {othersIds.length === 1 ? 'the other' : 'the others'} the next free number, with a note saying so.{:else}This plant shares the number {accNo(a)} with {@render others()}, recorded before it: two devices gave it out while offline, or a file was merged in. Renumbering gives this plant the next free number, with a note saying so.{/if} <button class="btn" onclick={renumberShared} disabled={renumbering}>Renumber now</button></div>
 {/if}
 {#if !collection.ready}
   <!-- The page's shape before the vault opens: the card without a picture, which is what most plants' pages are; one with a photograph grows a hero above it when the record arrives. -->
@@ -490,6 +515,15 @@
     <div class="idcard flat"><div class="skeltile skelbox"></div><div class="who"><h1 class="sci"><span class="accno big lead">{param}</span><span class="skelname" aria-hidden="true">Species name</span></h1><p class="vern muted">Opening your collection…</p></div><div class="acts"><span class="btn skelbtn">&nbsp;</span><span class="btn skelbtn">&nbsp;</span></div></div>
     <div class="skelverbs"></div>
   </div>
+{:else if choices.length > 1}
+  <!-- Two or more plants under the number the address names: each, by its identity, to choose from (round sixty). -->
+  <h1 class="q" style="margin-top: 24px">{param}</h1>
+  <p class="muted" id="number-chooser-why">{choices.length} plants have the number {param}: two devices gave it out while offline, or a file was merged in. Open the one you mean; its page offers to renumber it.</p>
+  <ul class="chooser" id="number-chooser">
+    {#each choices as c (c.id)}
+      <li><a class="azrow accrow" href="/plants/{encodeURIComponent(c.id)}"><span class="txt"><span class="nm"><span class="accno lead">{accNo(c)}</span>{' '}<PlantName plant={c} /></span><span class="fam">{c.locationId && collection.placeOf(c.locationId) ? collection.locationName(c.locationId) : 'no place'} · added {c.acquired ?? collection.madeOn('accession', c.id) ?? 'on a day not recorded'}{c.status !== 'growing' ? ` · ${c.status}` : ''}</span></span></a></li>
+    {/each}
+  </ul>
 {:else if !a}
   <h1 class="q" style="margin-top: 24px">{param}</h1>
   {#if collection.removedAccession(param)}
@@ -498,6 +532,7 @@
   {:else if waiting}
     <WaitingRecord kind="accession" label={param} {waiting} />
   {:else}
+    <ForeignLabel />
     <p class="muted">{collection.isNumberTaken(param) ? `${param} was given to a plant since removed; the number stays reserved.` : 'No plant with this number on this device.'}</p>
   {/if}
 {:else}
@@ -512,19 +547,20 @@
       <img src={speciesThumb} alt={a.taxonName} class="spthumb" onerror={() => (thumbFailed = true)} /><button class="cred" type="button" onclick={() => { adding = true; setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: motion(), block: 'center' }), 0); }}>species photograph · add your own</button>
     </div>
   {/if}
+  <PhotoTimeline acc={id} />
   <div class="idcard" class:flat={!hasHero}>
     {#if !hasHero}
       <!-- No photograph: a small tile where one would go, beside the name, not a screen-high empty box. The reference's is one line beneath, with what showing it discloses on tap. -->
       <PhotoAdd acc={id} id="hero-photo" tile />
     {/if}
     <div class="who">
-      <h1 class="sci"><span class="accno big lead">{accNo(a)}</span><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}<span style="font-style: normal">‘{a.cultivar}’</span>{/if}</h1>
+      <h1 class="sci"><span class="accno big lead">{accNo(a)}</span>{' '}<SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}<span style="font-style: normal">‘{a.cultivar}’</span>{/if}</h1>
       <p class="vern">
         {#if kind === 'hybrid'}<span class="kind">hybrid</span> · {:else if kind === 'cultivar'}<span class="kind">cultivar</span> · {/if}
         {#if a.nameAsReceived}received as <i>{a.nameAsReceived}</i> · {/if}
         {#if a.fieldNumber}<span class="fnchip">{a.fieldNumber}</span> · {/if}
         {#if a.provenance === 'unknown' && !a.sourceFrom && !a.fieldNumber}Added {fmtDate(a.acquired)}{:else}{provLabel(a.provenance)}{#if a.acquired}{' · '}{a.sourceForm ?? 'acquired'}{a.sourceFrom ? ` from ${a.sourceFrom}` : ''}{' '}{fmtDate(a.acquired)}{/if}{/if}
-        {#if a.sowingId}{' · '}raised from <a class="mono" href="/propagation/{a.sowingId}">{sowing ? sowNo(sowing) : a.sowingId}</a>{#if sowing && sowing.parentAcc} (from <a class="mono" href="/plants/{sowing.parentAcc}">{collection.accession(sowing.parentAcc) ? accNo(collection.accession(sowing.parentAcc)!) : sowing.parentAcc}</a>){/if}{/if}
+        {#if a.sowingId}{' · '}raised from <a class="mono" href={sowing ? batchHref(sowing) : `/propagation/${a.sowingId}`}>{sowing ? sowNo(sowing) : a.sowingId}</a>{#if sowing && sowing.parentAcc}{@const pa = collection.accession(sowing.parentAcc)} (from <a class="mono" href={pa ? plantHref(pa) : `/plants/${sowing.parentAcc}`}>{pa ? accNo(pa) : sowing.parentAcc}</a>){/if}{/if}
         {#if a.locationId && collection.placeOf(a.locationId)}{' · '}at <a class="place" href="/places/{collection.placeOf(a.locationId)}">{collection.locationName(a.locationId)}</a>{:else if a.locationId}{' · '}<span class="place">its place was removed; no place now</span>{/if}
         {#if !a.taxonKey && kind !== 'hybrid' && ref !== 'ok' && ref !== 'loading'}{' · '}<NotChecked inline what="Name" why="The name was kept as typed: it matched no reference name, or the name service did not answer when the plant was added. Edit the plant and pick the name from the list to check it." />{/if}
       </p>
@@ -579,9 +615,11 @@
 
   <!-- The four verbs a grower uses most, then the rest on request: a new plant's page is not the tracker's whole vocabulary. A plant that is dead or archived is not watered first: Log leads and Water waits behind More (round twenty-three, 19). -->
   <div class="quickbar">
-    {#if a.status === 'growing'}<button class="btn pri" onclick={waterNow} disabled={wateringNow}>Water</button>{/if}
+    <!-- aria-disabled, not disabled, while it saves: a disabled button drops keyboard focus to the page (round sixty; the accessibility review, 1). -->
+    {#if a.status === 'growing'}<button class="btn pri" id="water-now" onclick={waterNow} aria-disabled={wateringNow}>Water</button>{/if}
     {#if hasHero}<button class="btn" onclick={() => { adding = !adding; if (adding) setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: motion(), block: 'center' }), 0); }}>Photo</button>{/if}
-    <button class="btn" class:pri={a.status !== 'growing'} onclick={() => quick('note')}>Log</button>
+    <!-- "Record…", not "Log": it records any event, and "Log" read as "show the log" (round sixty; the grower review, 16). -->
+    <button class="btn" class:pri={a.status !== 'growing'} onclick={() => quick('note')}>Record…</button>
     {#if a.status !== 'dead'}<button class="btn" onclick={() => { moveTo = a.locationId ?? null; moving = !moving; }}>Move</button>{/if}<!-- a dead plant is not moved, nor watered (round fifty-eight; the grower review) -->
     {#if moreActs}
       {#if a.status === 'archived'}<button class="btn" onclick={() => quick('water')}>Water</button>{/if}
@@ -652,7 +690,7 @@
   <!-- The plant's own figures under the actions; then the log, the photographs, and the habitat comparison folded at the foot: on a phone the climate cards stood between the verbs and the log (round fifty-eight; the grower review). -->
   {#if (a.status === 'growing' || (a.status !== 'dead' && collection.lastWatered(id))) || events.some((e) => e.t === 'audit') || lastMeasure}
   <div class="cards">
-    {#if a.status === 'growing' || (a.status !== 'dead' && collection.lastWatered(id))}<div class="card"><div class="lab">Since watered</div><div class="val">{sinceWater ?? '–'}{#if sinceWater != null}<span class="u"> d</span>{/if}</div><div class="sub">{sinceWater == null && collection.wateringAhead(id) ? `watering dated ${collection.wateringAhead(id)}, ahead of today` : sinceWater == null ? `no watering recorded${careDays === 0 ? ' yet; added today' : ` in the ${careDays} ${careDays === 1 ? 'day' : 'days'} since it was added`}` : `last ${collection.lastWatered(id)}`}</div></div>{/if}
+    {#if a.status === 'growing' || (a.status !== 'dead' && collection.lastWatered(id))}<div class="card"><div class="lab">Since watered</div><div class="val">{sinceWater === 0 ? 'today' : (sinceWater ?? '–')}{#if sinceWater}<span class="u"> d</span>{/if}</div><div class="sub">{sinceWater == null && collection.wateringAhead(id) ? `watering dated ${collection.wateringAhead(id)}, ahead of today` : sinceWater == null ? `no watering recorded${careDays === 0 ? ' yet; added today' : ` in the ${careDays} ${careDays === 1 ? 'day' : 'days'} since it was added`}` : `last ${collection.lastWatered(id)}`}</div></div>{/if}
     {#if events.some((e) => e.t === 'audit')}<div class="card"><div class="lab">Last seen</div><div class="val">{seen == null ? '–' : seen}<span class="u">{seen == null ? '' : ' d'}</span></div><div class="sub">{#if collection.missedAt(id)}not seen at the audit of <span class="date">{collection.missedAt(id)}</span>; {/if}last logged <span class="date">{collection.lastSeen(id)}</span></div></div>{/if}
     {#if lastMeasure}<div class="card"><div class="lab">{sizeKey ? (MEASURES.find((m) => m.k === sizeKey)?.label ?? 'Size') : 'Size'}</div><div class="val">{sizeKey && lastMeasure ? (MEASURES.find((m) => m.k === sizeKey)?.unit ? lenN(lastMeasure.measures![sizeKey]) : lastMeasure.measures![sizeKey]) : '–'}<span class="u">{sizeKey && MEASURES.find((m) => m.k === sizeKey)?.unit ? ' ' + lu : ''}</span></div>{#if growth != null}<div class="gauge"><i style="width: {Math.min(100, Math.max(8, (growth / Math.max(1, lastMeasure!.measures![sizeKey!])) * 100))}%"></i></div>{/if}<div class="sub">{growth != null ? `${growth >= 0 ? '+' : ''}${MEASURES.find((m) => m.k === sizeKey)?.unit ? len(growth) : growth} since ${firstMeasure!.d}` : `measured ${lastMeasure.d}`}</div></div>{/if}
   </div>
@@ -686,6 +724,21 @@
     </div>
   {/if}
 
+  <!-- The grower's own notes come before the photographs when there are any: they are read more than anything below (round sixty; the grower review, §4). -->
+  {#snippet plantNotes()}
+  <div class="secrule"><h2>Notes on this plant</h2><div class="line"></div></div>
+  <div class="cult">
+    {#if editingNotes}
+      <div class="fields"><textarea id="acc-notes" rows="4" bind:value={notesDraft}></textarea><div class="actions"><button class="btn" onclick={() => (editingNotes = false)}>Cancel</button><button class="btn pri" onclick={saveNotes}>Save</button></div></div>
+    {:else if a.notes}
+      <div class="body">{a.notes}</div><div class="foot"><button class="linkish" onclick={() => { notesDraft = a.notes ?? ''; notesBase = notesDraft; notesBaseStamp = collection.notesStamp('accession', id); editingNotes = true; }}>Edit</button></div>
+    {:else}
+      <div class="none">Nothing yet. <button class="linkish" onclick={() => { notesDraft = ''; notesBase = ''; notesBaseStamp = collection.notesStamp('accession', id); editingNotes = true; }}>Add a note</button></div>
+    {/if}
+    <ReplacedNotes kind="accession" id={a.id} />
+  </div>
+  {/snippet}
+  {#if a.notes}{@render plantNotes()}{/if}
   <div class="secrule" id="photos"><h2>Photographs</h2><div class="line"></div><span class="n">{photos.length ? `${photos.length}` : ''}</span></div>
   {#if adding || !photos.length}
     <div class="cult addrow"><PhotoAdd acc={id} id="acc-photo" onstart={() => (adding = true)} onadded={() => (adding = true)} /></div>
@@ -722,17 +775,7 @@
     {#if !site.current && cond?.lat == null}<p class="small muted siteline">No site is set: set it once in <a href="/settings#site">Settings</a> and the seasons here are read from where you grow.</p>{/if}
   </details>
 
-  <div class="secrule"><h2>Notes on this plant</h2><div class="line"></div></div>
-  <div class="cult">
-    {#if editingNotes}
-      <div class="fields"><textarea id="acc-notes" rows="4" bind:value={notesDraft}></textarea><div class="actions"><button class="btn" onclick={() => (editingNotes = false)}>Cancel</button><button class="btn pri" onclick={saveNotes}>Save</button></div></div>
-    {:else if a.notes}
-      <div class="body">{a.notes}</div><div class="foot"><button class="linkish" onclick={() => { notesDraft = a.notes ?? ''; notesBase = notesDraft; notesBaseStamp = collection.notesStamp('accession', id); editingNotes = true; }}>Edit</button></div>
-    {:else}
-      <div class="none">Nothing yet. <button class="linkish" onclick={() => { notesDraft = ''; notesBase = ''; notesBaseStamp = collection.notesStamp('accession', id); editingNotes = true; }}>Add a note</button></div>
-    {/if}
-    <ReplacedNotes kind="accession" id={a.id} />
-  </div>
+  {#if !a.notes}{@render plantNotes()}{/if}
   <div class="cult">
     <div class="sum">My notes on <i>{a.taxonName}</i> <span class="hint">shared by every plant of this species you own; shown on the species page</span></div>
     {#if editingMy}
@@ -750,7 +793,7 @@
     <div class="tl">
       {#each propagations as p}
         {@const st = collection.sowingStats(p.id)}
-        <a class="tlrow" href="/propagation/{sowNo(p)}"><span class="d">{p.sown}</span><span class="t"><span class="mono">{sowNo(p)}</span> · {p.count} {(PROP_METHODS.find((m) => m.k === p.method) ?? PROP_METHODS[0]).unit}</span><span class="x">{st.germinated} struck · {st.potted} potted · {p.status}</span></a>
+        <a class="tlrow" href={batchHref(p)}><span class="d">{p.sown}</span><span class="t"><span class="mono">{sowNo(p)}</span> · {p.count} {(PROP_METHODS.find((m) => m.k === p.method) ?? PROP_METHODS[0]).unit}</span><span class="x">{st.germinated} struck · {st.potted} potted · {p.status}</span></a>
       {/each}
     </div>
   {/if}
@@ -764,14 +807,14 @@
     {#if a.sourceRef}<div><b>Lot or reference</b>{a.sourceRef}</div>{/if}
     <div><b>Field number</b>{a.fieldNumber ?? 'none'}</div>
     <div><b>Provenance</b>{provLabel(a.provenance)}</div>
-    {#if a.sowingId}<div><b>Raised from</b><a href="/propagation/{a.sowingId}">{sowing ? sowNo(sowing) : a.sowingId}</a>{#if sowing} · {sowing.count} started, {collection.sowingStats(sowing.id).germinated} up, {collection.sowingStats(sowing.id).potted} potted{/if}</div>{/if}
+    {#if a.sowingId}<div><b>Raised from</b><a href={sowing ? batchHref(sowing) : `/propagation/${a.sowingId}`}>{sowing ? sowNo(sowing) : a.sowingId}</a>{#if sowing} · {sowing.count} started, {collection.sowingStats(sowing.id).germinated} up, {collection.sowingStats(sowing.id).potted} potted{/if}</div>{/if}
     {#if a.nameAsReceived}<div><b>Name as received</b>{a.nameAsReceived}</div>{/if}
     {#if kind === 'hybrid'}<div><b>Parentage</b>{a.parentage ?? 'not stated'}</div>{/if}
   </div>
   {/if}
 
   <div class="dangerrow">
-    <span class="small muted">Removing keeps the number reserved; the record stays in the change log, and the plant's page offers to bring it back.</span>
+    <span class="small muted">You can bring it back later from its page; its number stays its own, and its record stays in the change log.</span>
     {#if confirmRemove}<span><button class="btn danger" onclick={remove}>Yes, remove {accNo(a)}</button> <button class="btn" onclick={() => (confirmRemove = false)}>Keep</button></span>{:else}<button class="btn danger" onclick={() => { confirmRemove = true; void focusNext('.dangerrow .btn.danger'); }}>Remove this plant</button>{/if}
   </div>
   {#if lightbox != null && photos.length}
@@ -887,11 +930,25 @@
     .setup .sum .hint { display: none; }
     .setup .setupbody { display: flex; gap: 6px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding: 0 12px 12px; }
     .setup .setupbody::-webkit-scrollbar { display: none; }
-    .setuprow, .setuprow.next, .setuprow.later { display: inline-flex; width: auto; flex: none; gap: 6px; align-items: center; min-height: 36px; padding: 6px 12px; border: 1px solid var(--rule); border-radius: 999px; background: var(--card); white-space: nowrap; }
+    .setuprow, .setuprow.next, .setuprow.later { display: inline-flex; width: auto; flex: none; gap: 6px; align-items: center; min-height: var(--tap); padding: 6px 12px; border: 1px solid var(--rule); border-radius: 999px; background: var(--card); white-space: nowrap; }
     .setuprow.next { border-color: var(--accent); }
     .setuprow .n { font-size: var(--fs-xs); }
     .setuprow .t, .setuprow.next .t, .setuprow.later .t { font-size: var(--fs-md); }
     .setuprow .w { display: none; }
   }
+  /* Under a finger every control here is the tap token: the setup steps, the inline links, the entry's ×, the menu and its items (round sixty; the accessibility review, 6). */
+  .setuprow { min-height: max(48px, var(--tap)); }
+  .factgrid :global(a.tap), .factgrid :global(button.tap), .whybody :global(a.tap) { display: inline-flex; align-items: center; min-height: var(--tap); padding: 0 2px; margin: 0 -2px; vertical-align: middle; }
+  .rm { min-width: max(40px, var(--tap)); min-height: max(40px, var(--tap)); }
+  .cardmenu .menu > * { min-height: var(--tap); display: flex; align-items: center; }
+  .cardmenu .dots { min-width: max(44px, var(--tap)); }
+  /* A name wraps between words, never inside one ("Copia / poa"), and a pill wraps rather than pushing the page sideways at 200% text (round sixty; the accessibility review, 5; the outside review's A40). */
+  .idcard h1.sci { overflow-wrap: break-word; word-break: normal; hyphens: manual; }
+  .idcard .pills .pill { white-space: normal; overflow-wrap: break-word; max-width: 100%; }
+  /* At a large text size (an em query follows the reader's own size: 22em is 352 px at 100%, 704 px at 200%) the tile goes above the name, so the name has the card's width (round sixty; the accessibility review, 5). */
+  @media (max-width: 22em) { .idcard.flat { grid-template-columns: minmax(0, 1fr) !important; } .idcard.flat .who { grid-column: 1 / -1; } }
+  .chooser { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 6px; }
+  .chooser .azrow { grid-template-columns: minmax(0, 1fr); min-height: 56px; }
+  .chooser .nm { overflow-wrap: break-word; word-break: normal; }
   @media (max-width: 640px) { .editform { grid-template-columns: 1fr 1fr; } .hero { margin-top: 0; } .hero.own { min-height: 260px; } .heroimg :global(img) { height: 260px; } .idcard.flat { margin-top: 10px; display: grid; grid-template-columns: 80px minmax(0, 1fr); --tile: 80px; } .idcard.flat .acts { grid-column: 1 / -1; } .idcard.flat .who { flex-basis: auto; } .idcard.flat h1.sci { font-size: var(--fs-2xl); } .idcard.flat .accno.lead { display: table; margin: 0 0 4px; vertical-align: baseline; } }
 </style>

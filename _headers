@@ -3,3 +3,16 @@
 /*
   Referrer-Policy: no-referrer
   X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Permissions-Policy: geolocation=(self), camera=(self), microphone=(), payment=(), usb=()
+  Strict-Transport-Security: max-age=31536000
+
+# The prerendered offline page is a shell, not a page for search engines (round sixty; the corpus review, P3). The
+# Worker's own private pages get the same from hooks.server.ts.
+/offline
+  X-Robots-Tag: noindex
+
+# The two world maps change only with a deploy: a day's cache, not a check on every page (round sixty; the
+# accessibility review, 9).
+/maps/*
+  Cache-Control: public, max-age=86400

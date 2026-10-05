@@ -228,9 +228,10 @@
   />
   {#if taxonKey}<span class="pill ok">GBIF {taxonKey}</span>{:else if resolved === 'no'}<span class="pill warn">not in the backbone, kept as typed</span>{:else if resolved === 'unreached'}<span class="pill warn">name service not reached, kept as typed</span>{/if}
   {#if kind === 'hybrid'}<span class="pill">hybrid{parentage ? '' : ', parentage not stated'}</span>{:else if kind === 'cultivar'}<span class="pill">cultivar</span>{/if}
-  {#if nameServiceDown}<p class="hint svc" role="status">The name service did not answer, so only the reference's own species are offered; a name typed in full is kept as typed and checked later.</p>{/if}
+  <!-- One line under the field, not three stacked: the service's silence is folded into the line that asks (round sixty; the grower review, 18). -->
   {#if nearest}<p class="hint" role="status">Not a reference name. Did you mean <button type="button" class="linkish" onclick={() => pick(nearest)}><SpeciesName name={nearest.name} /></button>? Otherwise Add keeps exactly what you typed.</p>
-  {:else if armed}<p class="hint" id="{listId}-hint" role="status">Pick a name from the list, or press Add to keep exactly what you typed.</p>{/if}
+  {:else if armed}<p class="hint" id="{listId}-hint" role="status">{nameServiceDown ? 'The name service did not answer. ' : ''}Pick a name from the list, or press Add to keep exactly what you typed.</p>
+  {:else if nameServiceDown}<p class="hint svc" role="status">The name service did not answer, so only the reference's own species are offered; a name typed in full is kept as typed and checked later.</p>{/if}
   <ul class="menu card" role="listbox" id={listId} aria-label="Suggested names" hidden={!menuOpen}>
     {#each suggestions as s, i (s.key)}
       <!-- "has a species page", not "has a dossier": the glossary's plain words (round fifty-eight; the accessibility review). -->

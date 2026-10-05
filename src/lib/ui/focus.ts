@@ -41,10 +41,20 @@ function settled(bar: HTMLElement): DOMRect {
   return new DOMRect(r.x - m.m41, r.y - m.m42, r.width, r.height);
 }
 
+/**
+ * The part of the window the reader sees: the visual viewport where the browser has one (a phone's keyboard or a pinch
+ * zoom shrinks it; `innerHeight` does not), in the layout viewport's coordinates (round sixty; the outside review's A39).
+ */
+function viewport(): { top: number; bottom: number } {
+  const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+  return vv ? { top: vv.offsetTop, bottom: vv.offsetTop + vv.height } : { top: 0, bottom: innerHeight };
+}
+
 /** One edge's stack of bars, from the edge inwards, found by asking what is drawn there: the top bar, then whatever sticks under it, and so on. Returns the inner edge of the stack. */
 function stack(x: number, from: 'top' | 'bottom', el: HTMLElement): number {
   const H = innerHeight;
-  let edge = from === 'top' ? 0 : H;
+  const v = viewport();
+  let edge = from === 'top' ? Math.max(0, v.top) : Math.min(H, v.bottom);
   const seen = new Set<HTMLElement>();
   for (let i = 0; i < 5; i++) {
     const y = from === 'top' ? edge + 1 : edge - 1;
@@ -81,13 +91,28 @@ function stack(x: number, from: 'top' | 'bottom', el: HTMLElement): number {
  * screen's edges, so a page's own sticky row counts without being listed; `data-cover="top|bottom"` marks one that
  * floats off the edge. Installed once, by the root layout.
  */
+/** A date or time field, which Chromium does not report as `:focus-visible` when reached by Tab or Shift+Tab: taken as keyboard focus unless a pointer moved it (round sixty; the accessibility review, 3). */
+export const isDateField = (el: Element): boolean => el instanceof HTMLInputElement && /^(date|time|month|week|datetime-local)$/.test(el.type);
+
 export function keepFocusClear(): () => void {
   let frame = 0;
+  /**
+   * How focus last moved: a key, or a pointer or touch. A tap is the reader's own aim and is never scrolled after (a text
+   * field always matches `:focus-visible`, so a tap on one partly under the bar scrolled the page under the finger), and
+   * a key always is, a date field included, which Chromium does not report as `:focus-visible` (round sixty; the outside
+   * review's A39, the accessibility review, 3).
+   */
+  let modality: 'key' | 'pointer' | null = null;
+  const onKey = (e: KeyboardEvent) => { if (!e.metaKey && !e.ctrlKey && !e.altKey) modality = 'key'; };
+  const onPointer = () => { modality = 'pointer'; };
   const check = (el: HTMLElement) => {
     if (document.activeElement !== el || !el.isConnected) return;
-    let fv = true;
-    try { fv = el.matches(':focus-visible'); } catch { /* an old engine: treat it as keyboard focus */ }
-    if (!fv) return;
+    if (modality === 'pointer') return;
+    if (modality !== 'key' && !isDateField(el)) {
+      let fv = true;
+      try { fv = el.matches(':focus-visible'); } catch { /* an old engine: treat it as keyboard focus */ }
+      if (!fv) return;
+    }
     for (let n: HTMLElement | null = el; n; n = n.parentElement) if (getComputedStyle(n).position === 'fixed') return; // a bar's own control, a dialog: the page's scroll does not move it
     // A row that scrolls sideways (the plants list's chips on a phone) was left scrolled past the chip Shift+Tab reached:
     // the row is brought round to it first, by its own scroll alone (round fifty-nine; measured on /plants at 390).
@@ -122,8 +147,14 @@ export function keepFocusClear(): () => void {
     frame = requestAnimationFrame(() => check(el));
   };
   document.addEventListener('focusin', onFocus);
+  document.addEventListener('keydown', onKey, true);
+  document.addEventListener('pointerdown', onPointer, true);
+  document.addEventListener('touchstart', onPointer, { capture: true, passive: true });
   return () => {
     document.removeEventListener('focusin', onFocus);
+    document.removeEventListener('keydown', onKey, true);
+    document.removeEventListener('pointerdown', onPointer, true);
+    document.removeEventListener('touchstart', onPointer, true);
     cancelAnimationFrame(frame);
   };
 }

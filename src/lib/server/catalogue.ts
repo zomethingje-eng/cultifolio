@@ -15,8 +15,16 @@ export async function catalogueRows(platform: Platform, fetch: Fetch, by: By, ch
   const c = held ?? (await corpusNow(platform, fetch));
   const { idx, corpus } = c;
   const file = await product<CatalogueRows>(c, platform, fetch, catalogueFile(by, chip));
-  if (file && Array.isArray(file.rows)) return { cat: file, idx, corpus, fromFile: true };
+  if (file && Array.isArray(file.rows)) return { cat: withPending(file), idx, corpus, fromFile: true };
   return { cat: catalogueOf(idx, by, chip), idx, corpus, fromFile: false };
+}
+
+/** A file from a corpus built before round sixty has no `pending` on its rows: read as 0, once per file. */
+const pendingRead = new WeakMap<CatalogueRows, CatalogueRows>();
+function withPending(file: CatalogueRows): CatalogueRows {
+  let out = pendingRead.get(file);
+  if (!out) pendingRead.set(file, (out = file.rows.every((r) => typeof r.pending === 'number') ? file : { ...file, rows: file.rows.map((r) => ({ ...r, pending: typeof r.pending === 'number' ? r.pending : 0 })) }));
+  return out;
 }
 
 /** Rows in the home page's first window: a phone shows about ten; the rest come from /api/rows as the reader nears the end (round forty-seven, 1). */

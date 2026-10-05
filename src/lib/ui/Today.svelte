@@ -1,6 +1,9 @@
 <script lang="ts">
   import { localDateYearAgo, daysBetween } from '$core/dates';
-  import { site } from '$lib/ui/site.svelte';
+  import { site, readerLat } from '$lib/ui/site.svelte';
+  import { plantLabel } from '$lib/ui/plant-label';
+  import { ruleRain } from '$core/units';
+  import { units } from '$lib/ui/units.svelte';
 
   /**
    * What needs you, on the front page of a grower's collection: the frost watch when a site is remembered and the
@@ -72,7 +75,7 @@
     const out = new Map<string, 'rain' | 'cool'>();
     if (!sheets) return out;
     const month = today.getMonth() + 1;
-    const lat = site.current?.lat ?? null;
+    const lat = readerLat(collection.locations); // the site, else the first place with coordinates, as the species page reads it (round sixty; the self-review's 10)
     for (const a of dry) {
       const sh = sheets.get(speciesSlug(a.taxonName));
       if (!sh || sh.climate.status !== 'ok') continue;
@@ -94,13 +97,13 @@
   const done = $derived(wateredHere.get(HOME));
   let lineHeight = 0;
   async function waterDry(e: MouseEvent) {
-    if (watering) return; // one tap, one set of lines (round fifty-two, 3)
+    if (watering || !sheetsSettled) return; // one tap, one set of lines (round fifty-two, 3); the button says aria-disabled meanwhile, keeping focus (round sixty)
     watering = true;
     try {
       lineHeight = (e.currentTarget as HTMLElement).closest('.line')?.getBoundingClientRect().height ?? 0;
       const plants = [...toWater];
       const ids = await collection.addEventsIds(plants.map((a) => ({ acc: a.id, d: localDate(), t: 'water' as const, note: 'from Today: every plant on the not-watered line' })));
-      wateredHere.add(HOME, ids, plants.map((a) => ({ id: a.id, no: accNo(a), name: a.taxonName })), lineHeight);
+      wateredHere.add(HOME, ids, plants.map((a) => ({ id: a.id, no: accNo(a), name: plantLabel(a) })), lineHeight);
       toast.show(`Watered ${ids.length}.`);
     } finally {
       watering = false;
@@ -117,7 +120,8 @@
       toast.show(`Undone: ${w.ids.length} watering line${w.ids.length === 1 ? '' : 's'} removed.`);
       // The Undo went with the done line: focus goes to the Water button that is back in its place, else to the line's link (round fifty-nine).
       await tick();
-      document.querySelector<HTMLElement>('.today .waterbtn:not(:disabled), .today .withact.warn > a')?.focus();
+      // Each in turn: one querySelector over the list took the first in page order, whichever it was (round sixty; the outside review's A35).
+      for (const sel of ['.today .waterbtn', '.today .withact.warn > a']) { const to = document.querySelector<HTMLElement>(sel); if (to) { to.focus(); break; } }
     } catch (err) {
       toast.show(`Not undone: ${err instanceof Error ? err.message : String(err)}. Try again.`);
     } finally {
@@ -148,7 +152,11 @@
     if (unknown.length) parts.push(`${unknown.length}${overdue ? '' : ` of ${growing.length}`} with no watering recorded yet, ${unknown.length === 1 ? 'its record' : 'their records'} as old as the rhythm or more`);
     // Worded by the rule that applied: a fog-belt habitat has no rainy season to be outside of (round fifty-nine).
     const rules = new Set(restingBy.values());
-    const where = rules.size === 2 ? 'outside the growing months the species sheet names' : rules.has('cool') ? 'outside the cooler six months the species sheet names' : "outside the habitat's rainy season by the species sheet";
+    // Never "dry season" or "rest" for the temperature rule, which reads a year of under 120 mm by its cooler months (round sixty; the words review).
+    const its = resting.length === 1 ? 'its' : 'their';
+    const cool = `in ${its} habitat's warmer six months (a year of under ${ruleRain(120, units.current)} of rain, read by temperature)`;
+    const rain = `in ${its} habitat's dry season`;
+    const where = rules.size === 2 ? `${rain} or ${cool}` : rules.has('cool') ? cool : rain;
     return parts.join(', and ') + (resting.length ? `; ${resting.length === dry.length ? (dry.length === 1 ? 'it is' : 'all of them are') : `${resting.length} of them ${resting.length === 1 ? 'is' : 'are'}`} ${where}` : '') + '.';
   });
   type Line = { href: string; tone: string; text: string; water?: boolean; keeping?: boolean };
@@ -157,7 +165,7 @@
       frostLine && where === 'home' ? { href: '/today#frost', tone: frostLine.tone, text: frostLine.text } : null,
       (dry.length || done) && where === 'home' ? { href: '/today#water', tone: 'warn', text: dry.length ? dryText : '', water: true } : null,
       unseen.length ? { href: '/places', tone: 'warn', text: `${unseen.length} plant${unseen.length === 1 ? '' : 's'} missed at the last audit or not seen for ninety days${unseen.length <= 3 ? ': ' + unseen.map(accNo).join(', ') : ''}.` } : null,
-      sowings.length ? { href: '/propagation', tone: 'ok', text: `${sowings.length} propagation batch${sowings.length === 1 ? '' : 'es'} in the tray, the oldest ${sowNo(sowings[0])} (${sowings[0].taxonName}) ${PROP_METHODS.find((x) => x.k === sowings[0].method)?.veg ? 'started' : 'sown'} ${sowings[0].sown}.` } : null,
+      sowings.length ? { href: '/propagation', tone: 'ok', text: `${sowings.length} propagation batch${sowings.length === 1 ? '' : 'es'} in the tray, the oldest ${sowNo(sowings[0])} (${plantLabel(sowings[0])}) ${PROP_METHODS.find((x) => x.k === sowings[0].method)?.veg ? 'started' : 'sown'} ${sowings[0].sown}.` } : null,
       unphotographed.length && growing.length ? { href: '/plants?show=nophoto', tone: 'muted', text: `${unphotographed.length} of ${growing.length} plants without a photograph in the last twelve months${unphotographed.length <= 3 ? ': ' + unphotographed.map(accNo).join(', ') : ''}.` } : null,
       keeping && !prefs.hideKeeping ? { href: sync.configured ? '/sync' : '/backup', tone: keeping.tone, text: keeping.text, keeping: true } : null
     ] as Array<Line | null>).filter((x): x is Line => !!x)
@@ -165,14 +173,14 @@
 </script>
 
 {#if lines.length}
-  <div class="today" aria-label="Today" data-sveltekit-preload-data="off">
+  <div class="today" role="region" aria-label="Today" data-sveltekit-preload-data="off">
     {#each lines as l (l.href)}
       {#if l.water}
         <div class="line {l.tone} withact" class:doneline={!!done} style:min-height={done?.height ? `${done.height}px` : undefined}>
           {#if done}
-            <span class="donetext">Watered {done.ids.length} just now{#if l.text}; still: <a href={l.href}>{l.text}</a>{/if}</span><button class="btn small" type="button" onclick={undoDry} disabled={undoing}>Undo</button>
+            <span class="donetext">Watered {done.ids.length} just now{#if l.text}; still: <a href={l.href}>{l.text}</a>{/if}</span><button class="btn small" type="button" onclick={undoDry} aria-disabled={undoing}>Undo</button>
           {:else}
-            <a href={l.href}>{l.text}</a>{#if toWater.length}<button class="btn small waterbtn" type="button" onclick={waterDry} disabled={watering || !sheetsSettled} title="One watering line on each, dated today, leaving the plants in their habitat's rest; Undo takes them back">{toWater.length === 1 ? 'Water this one' : `Water these ${toWater.length}`}</button>{/if}
+            <a href={l.href}>{l.text}</a>{#if toWater.length}<button class="btn small waterbtn" type="button" onclick={waterDry} aria-disabled={watering || !sheetsSettled} title="One watering line on each, dated today, leaving out the plants listed as resting by their habitat's seasons; Undo takes them back">{toWater.length === 1 ? 'Water this one' : `Water these ${toWater.length}`}</button>{/if}
           {/if}
         </div>
       {:else if l.keeping}

@@ -10,12 +10,25 @@ import { worldSvg, regionSvg } from '$lib/map/still';
 import { unitsFor } from '$lib/server/units';
 import type { PageServerLoad } from './$types';
 
+/** The 503's sentence when the index lists a species whose page cannot be read (round sixty). */
+const SPECIES_UNREADABLE = 'This species page could not be read just now';
+
 export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders, cookies, request, url, getClientAddress, locals }) => {
-  // An address in capitals is the same species: `/species/Copiapoa-cinerea` said Kew did not accept the name (round
-  // fifty-eight). Moved for good, since the lowercase address is the only one the reference has.
-  if (params.slug !== params.slug.toLowerCase()) redirect(301, `/species/${params.slug.toLowerCase()}${url.search}`);
   // One corpus for the page, the hook's when it held the page: its key, its slug and every index read (round fifty-nine).
+  // A corpus that cannot be read is a 503 that says so (`UNREADABLE`), never the fixture's species (round sixty).
   const c = locals?.corpus ?? (await corpusNow(platform, fetch));
+  // An address in capitals, or with a space, an underscore or any other character a slug does not have, is the same
+  // species: moved for good to the slug, written as a slug, so no decoded character (a space, a `?`, a line break) is
+  // ever put in the Location header or changes which page answers (round sixty; the corpus review, 9: `Copiapoa%20cinerea`
+  // moved to an address with a raw space, `%3F` to another page, and `%0D%0A` was a 500). `/species/Copiapoa-cinerea`
+  // said Kew did not accept the name (round fifty-eight).
+  if (!c.bySlug.has(params.slug)) {
+    const slug = slugify(params.slug);
+    if (slug !== params.slug) {
+      if (!slug) error(404, { message: 'No species page at this address' });
+      redirect(301, `/species/${encodeURIComponent(slug)}${url.search}`);
+    }
+  }
   const key = await resolveSlug(platform, fetch, params.slug, c);
   if (!key) {
     // A genus alone is its row in the catalogue, opened (round fifty-eight): `/species/copiapoa` was a dead end.
@@ -28,12 +41,12 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
     // name is now (round thirty, R2-8; round thirty-two, 2). The move is temporary (a 302, cached for the day the
     // answer is), since the backbone changes its mind and a browser keeps a 301 for good; and a lookup upstream is
     // rate-limited per address, since a script can mint binomial-shaped addresses without end (round thirty-three, 12).
-    let syn = await synonymInIndex(platform, fetch, params.slug);
+    let syn = await synonymInIndex(platform, fetch, params.slug, c); // the page's corpus (round sixty; A27)
     let unchecked = false;
     if (!syn) {
       const stop = await limited(platform, getClientAddress, 'match');
       if (stop) error(429, { message: 'Too many unknown species addresses from this address; wait a few minutes and try again.' });
-      const asked = await synonymOf(platform, fetch, params.slug);
+      const asked = await synonymOf(platform, fetch, params.slug, c);
       unchecked = asked === 'unchecked';
       syn = asked === 'unchecked' ? null : asked;
     }
@@ -50,8 +63,10 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
     const asked = nameFromSlug(params.slug);
     const genus = asked.split(' ')[0] ?? '';
     const index = c.idx;
-    // And the reference's own nearest names, by the catalogue's search (the slips it forgives), so a misspelt address
-    // offers the page it meant (round fifty-eight). Only from the postings: a miss of them is no suggestion, never a whole-index pass.
+    // And the reference's own nearest names, by the catalogue's search (the slips it forgives, and since round sixty the
+    // way growers write names: a variety the reference files under its species is offered that species, as the search's
+    // retry on the first two words finds it), so a misspelt address offers the page it meant (round fifty-eight). Only
+    // from the postings: a miss of them is no suggestion, never a whole-index pass.
     const found = asked ? await searchAnswer(platform, fetch, asked, 3, async () => new Response(null, { status: 429 }), c).catch(() => null) : null;
     const suggest = found && 'hits' in found ? found.hits.filter((e) => e.slug !== params.slug).map((e) => ({ slug: e.slug, name: e.name })) : [];
     const species = genus ? { name: asked, genus, inGenus: indexMaps(index).byGenus.get(genus)?.length ?? 0, wholeGenus: WHOLE_GENERA.has(genus), ...(syn ? { accepted: syn.acceptedName } : {}), suggest } : undefined;
@@ -63,8 +78,19 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   const index = c.idx;
   const { byKey, byGenus } = indexMaps(index); // once per index, not a map of fifty thousand entries per page (round fifty-one, 6)
   const me = byKey.get(key);
-  const [loaded, genusRecordEarly] = await Promise.all([getDossier(platform, fetch, key), me ? getGenus(platform, fetch, slugify(genusOf(me.name))) : Promise.resolve(undefined)]);
-  if (!loaded) error(404, { message: `No species page for “${params.slug}”` });
+  // The species is in the index: a dossier that cannot be read (absent from the bucket, damaged, or R2 not answering) is
+  // a page that could not be read, a 503 not kept by anyone, never "No species page" (round sixty; the first outside
+  // review, A6; rule 2: a refusal is not an absence).
+  // The error carries `unreadable: true` and the species as the index lists it, so the error page can say "could not be
+  // read" and name it, and never "not on the list" (a variable, not a literal: App.Error gains the field at merge).
+  const unreadable = () => {
+    setHeaders({ 'cache-control': 'no-store' });
+    const g = me ? genusOf(me.name) : '';
+    const body = { message: SPECIES_UNREADABLE, unreadable: true as const, ...(me ? { species: { name: me.name, genus: g, inGenus: byGenus.get(g)?.length ?? 0, wholeGenus: WHOLE_GENERA.has(g) } } : {}) };
+    return error(503, body);
+  };
+  const [loaded, genusRecordEarly] = await Promise.all([getDossier(platform, fetch, key, c).catch(() => null), me ? getGenus(platform, fetch, slugify(genusOf(me.name)), c).catch(() => null) : Promise.resolve(undefined)]);
+  if (!loaded) return unreadable();
   // The page's own slug is the index's: a homonym whose plain slug the index gave to the other species carries that
   // plain slug in its file, and every link, Compare, Follow and note keyed on it would point at the other (round seventeen, 6).
   const d = params.slug !== loaded.slug ? { ...loaded, slug: params.slug } : loaded;
@@ -83,7 +109,7 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   // Only a species with a derived climate can be near anything; the build writes it so, and a stale index is not trusted to.
   const near = (me?.near ?? []).map((k) => byKey.get(k)).filter((e): e is NonNullable<typeof me> => !!e && e.climate === 'ok').map(card);
   // About the genus: its Wikipedia lead, written by `--fill genus`; null when that pass has not run for this genus.
-  const genusRecord = genusRecordEarly !== undefined ? genusRecordEarly : await getGenus(platform, fetch, slugify(genus));
+  const genusRecord = genusRecordEarly !== undefined ? genusRecordEarly : await getGenus(platform, fetch, slugify(genus), c).catch(() => null);
   // Shown only when the name is one this species' own record lists (the index's binomials, or the dossier's synonyms):
   // `?was=` is a statement anyone can write into a link, and the page printed it as fact (round thirty-three, 12).
   const was = url.searchParams.get('was');

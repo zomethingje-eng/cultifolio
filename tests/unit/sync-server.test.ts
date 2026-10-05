@@ -173,15 +173,17 @@ describe('vault creation is bounded per address, per day for everyone, and in al
     const today = new Date().toISOString().slice(0, 10);
     const ends = Date.parse(today + 'T00:00:00Z') / 1000 + 2 * 86400;
     expect(kv.opts.get(`vaults:1.2.3.4:${today}`)).toEqual({ expiration: ends });
-    expect(kv.opts.get(`vaults:all:${today}`)).toEqual({ expiration: ends });
+    // the day's count is taken at a vault's first object, not at its creation (round sixty; the self-review, 12)
+    expect(kv.m.has(`vaults:all:${today}`)).toBe(false);
   });
   it('many addresses together meet the day ceiling, then the ceiling in all; both come from the Worker variables', async () => {
     const kv = fakeKV();
     const ips = Array.from({ length: 10 }, (_, i) => `10.0.0.${i}`);
     let ok = 0;
     for (const ip of ips) for (let i = 0; i < 3; i++) if ((await allowCreation(kv as never, ip, T0, { perDay: 12, max: 100 })) === 'ok') ok++;
-    expect(ok).toBe(12);
-    expect(await allowCreation(kv as never, '10.0.0.9', T0, { perDay: 12, max: 100 })).toBe('day');
+    expect(ok).toBe(30); // creations that store nothing spend no part of the day's ceiling (round sixty)
+    kv.m.set(`vaults:all:${new Date(T0).toISOString().slice(0, 10)}`, '12'); // twelve new vaults stored their first object today
+    expect(await allowCreation(kv as never, '10.0.0.10', T0, { perDay: 12, max: 100 })).toBe('day');
     // the next day the day counter is fresh, and the ceiling in all is what stops it
     expect(await allowCreation(kv as never, '10.0.0.9', T0 + 86_400_000, { perDay: 12, max: 100 })).toBe('ok');
     expect(await allowCreation(kv as never, '10.0.1.1', T0 + 86_400_000, { perDay: 12, max: 13 })).toBe('ok'); // thirteen made, none holding anything
@@ -206,8 +208,8 @@ describe('vault creation is bounded per address, per day for everyone, and in al
     kv.fail = false;
     const realPut = kv.put.bind(kv);
     kv.put = async (k: string, v: string, o?: unknown) => { if (k.startsWith('vaults:all:')) throw new Error('kv: too many writes'); return realPut(k, v, o as never); };
-    expect(await allowCreation(kv as never, '9.9.9.9')).toBe('ok');
-    expect(warn).toHaveBeenCalledTimes(2);
+    expect(await allowCreation(kv as never, '9.9.9.9')).toBe('ok'); // the day's shared count is not written at creation any more (round sixty)
+    expect(warn).toHaveBeenCalledTimes(1);
     warn.mockRestore();
   });
   it('a KV that cannot be read is "unavailable", a short wait, not the permanent ceiling (round twenty-one, 6)', async () => {

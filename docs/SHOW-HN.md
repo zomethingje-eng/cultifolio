@@ -1,57 +1,66 @@
 # Show HN draft
 
-Working notes, not the post. Figures in brackets are read from `report.txt` and the index on the day of posting; do not post a number the index does not say.
+Working notes, not the post. Figures in brackets are read from `report.txt` and the index on the day of posting; do not post a number the index does not say. Rewrite it in your own voice before posting (round sixty: every sentence below was checked against the code at this round).
 
 ## Title
 
-Under 80 characters, no "AI", no adjectives. The three candidates, best first:
+Under 80 characters, no adjectives. The candidates, best first:
 
-1. `Show HN: Cultifolio – a plant species reference where every figure shows its derivation`
-2. `Show HN: Cultifolio – habitat climate and cultivation sheets for 8,900 species, derived, not written`
-3. `Show HN: A species reference built only from public data, plus a collection tracker that never phones home`
+1. `Show HN: Cultifolio – the climate where 8,900 cacti and succulents grow wild`
+2. `Show HN: A cactus and succulent reference where every number names its source`
+3. `Show HN: Cultifolio – habitat climate for cacti and bulbs, plus a local-first plant record`
 
-The first says what is different in the fewest words. The count in the second is what people click on but it goes stale by the day, so it goes in the text, not the title.
+The first is true only with "where the sources answered" in the text: not every species has a climate (some are pending, some sources did not answer). The count goes stale; check it on the day.
 
 ## Text
 
-Keep it under 300 words. HN readers skim the first paragraph and the last, and reply to whichever sentence they can argue with, so put the one they should argue with (nothing written, nothing filled in) first.
+Under 300 words. HN skims the first paragraph and the last.
 
 ---
 
-I grow cacti and succulents and got tired of cultivation advice that was either copied from another site or guessed. Cultifolio is a species reference for [8,947] species where nothing on a species page is written by a person or a language model. Each page is derived from public data and says how: the native range from Kew's World Checklist, every georeferenced wild record inside it from GBIF, the climate read from the CHELSA cells those records fall in (median year, 10th to 90th percentile across cells, drawn as a climograph), forty years of frost nights and extremes from NASA POWER at the typical cell, and a cultivation sheet assembled from those figures by two fixed rules. Where a number cannot be derived it is left out and the page says so. Photographs are CC-licensed from GBIF, iNaturalist and Wikimedia Commons, each with its licence and, where the source names one, its author.
+Cultifolio is a reference for growers of cacti, succulents and bulbs: [8,947] species, and for [N] of them, where the sources answered, the habitat climate. Nothing on a species page is written by a person or a language model: every sentence is a credited quotation, a figure with its source, or a labelled reading of a fixed rule. A figure that cannot be derived is left out and said to be missing.
 
-The other half is a collection tracker: accession numbers, timelines, propagation batches that mint numbered plants, places with conditions, labels with QR codes, frost watch. Its records live in your browser and are sent nowhere unless you turn on sync, which is end-to-end encrypted with a key only you hold; the server stores ciphertext and cannot read a plant name. What your own pages send the server is a short list, stated in full on /about/how: the hash bucket of each species you grow (one of 32, so a species is narrowed to one in about 280), your site's or a place's coordinates and altitude for the frost watch (rounded on the device), a units cookie and a one-letter hemisphere cookie on species pages, the name you type in the species picker, and the species page you click through to; no referrer, nothing preloaded on hover, and those pages ask no third-party host for anything by default. No accounts, no analytics. [Sync is open today and costs nothing; the code has a gate for licensing hosted sync later, and the server is in the repository, so you can run your own if I ever charge for mine. Say here what you intend, in one sentence: a commenter who turns sync on wants to know whether it stays free.] The backup file and the wire format are documented so you can read your data without the app.
+Each page takes the native range from Kew's WCVP and the GBIF records inside it, and reads CHELSA's monthly climate at the cells those records fall in: the median year, and the 10th to 90th percentile across cells, drawn as a climograph. The cold floor is the 1st-percentile night at a typical spot in the range, from NASA POWER's daily series (1981 to 2024, 44 years), with the record low printed beside it. Two fixed rules read a season from the curves. The sheet gives no advice. The map shows the openly licensed records; the rest are counted.
 
-Stack: SvelteKit 2 on Svelte 5, on Cloudflare Workers, the corpus in R2 as one JSON per species, IndexedDB on the client. The corpus is built offline on my PC from a names list; a full re-derivation of the rules runs in about an hour with no upstream calls. AGPL-3.0. The engineering log is in the repo, with the adversarial reviews it has been through, one file per round: from round seven on, outside language models were given the repository and the live site and asked to break it (one round asked instead what they would improve), every finding was checked against the source before anything changed, and the file for the round says which findings were real and what was done. A first visit to the front page is about [100] kB of script and style compressed plus [160] kB of fonts for the page itself; the service worker then fetches the rest of the build for offline use, about [260] kB of script and style in all plus about [160] kB of maps and icons; a species page is served rendered and reads without JavaScript.
+Example: [Copiapoa cinerea](https://cultifolio.com/species/copiapoa-cinerea), a fog-coast cactus, or [three side by side](https://cultifolio.com/compare?s=copiapoa-cinerea,ariocarpus-fissuratus,haworthia-truncata).
 
-What I would most like to hear about: a species page where the derived figures are wrong, and why. `/about/how` is the methodology.
+The other half is a plant record: numbered plants, sowings that mint numbered plants, places, labels with QR codes, a frost watch. It lives in your browser, with no sign-up. Sync is optional, end-to-end encrypted, and free during the launch [AUTHOR: confirm the price sentence]. `/about/how` lists every request the site makes.
 
-Site: https://cultifolio.com · Source: https://github.com/zomethingje-eng/cultifolio
+The code was written with AI coding agents (Claude) under my review; the species pages, by design, contain no generated text. AGPL; the corpus scripts are MIT.
+
+I would most like to hear where a derived figure is wrong.
+
+https://cultifolio.com · https://github.com/zomethingje-eng/cultifolio
 
 ---
 
 ## Before posting
 
-- Fresh `npm run dossier -- --index`; put the index's species count and the photograph coverage in the text if you quote them (`report.txt` has both).
-- The first-load figures: `npm run build && npm run preview`, then `node scripts/dev/first-load.mjs` (it prints the gzip weight of the document, script, style and fonts the front page and a species page request, and the whole build's script and style, which is what the worker installs on a first visit); do not post a figure from an older build.
-- Open five species pages in a private window on the deployed site, one from each of: a cactus, a bulb, an epiphyte, a one-cell species, a species with a refused climate. The last two are the ones a commenter will find.
-- `npx wrangler tail` open in a window for the first hour.
-- R2 spend alert set (DEPLOY.md §1). A front-page day is a few hundred thousand reads of small objects; R2 class B reads are cheap, but see the bill before the second day.
-- Rate limits are per address and the name proxy is limited too; a corporate NAT can trip them. That is by design; the reply is "Retry-After", not a ban.
-- Post between 08:00 and 10:00 US Eastern on a weekday. Answer every comment in the first two hours, especially the wrong ones, briefly.
+- Fresh `npm run dossier -- --index`; put the index's species count and the count with a habitat climate in the text (`report.txt` has both). Check that both deep links open in a private window on the deployed site and that the three species are in that build's index.
+- Use the app with your own collection for two weeks first; the first question will be how many plants you keep in it.
+- The first-load figures, if asked: `npm run build && npm run preview`, then `node scripts/dev/first-load.mjs`; do not quote a figure from an older build.
+- Open five species pages in a private window on the deployed site: a cactus, a bulb, an epiphyte, a one-cell species and a species whose climate was not checked. The last two are the ones a commenter will find.
+- `npx wrangler tail --status error` during the first hour (errors only: a full tail streams every request address to your terminal).
+- R2 spend alert set (DEPLOY.md §1).
+- Rate limits are per address; a corporate NAT can trip them. The reply is "Retry-After", not a ban.
+- Post between 08:00 and 10:00 US Eastern on a weekday. Answer the first two hours of comments, the wrong ones too, briefly.
 
 ## Replies to have ready
 
-"Why not an LLM summary?" Because a summary that is 95 % right is a reference that is 5 % wrong and does not say which 5 %. The Wikipedia lead is quoted, attributed and cut at a sentence; nothing else on the page is prose.
+"Why not an LLM summary?" A summary that is 95% right is a reference that is 5% wrong and does not say which 5%. The Wikipedia lead is quoted, credited and cut at a sentence; nothing else on the page is prose.
 
-"Cold floor from a 30-year climatology and a 40-year extreme is not hardiness." Correct, and the page says what it is: the habitat's coldest night on record at the typical cell, not a hardiness rating. Cultivation advice is derived by rule from the figures and the rule is printed.
+"Habitat climate isn't hardiness." Agreed, and the page says so. The cold floor is the 1st-percentile night at a typical spot in the range (one night in a hundred is colder), from NASA POWER over 44 years, and the record low is printed beside it; both are figures about a place, not a tested limit for a plant in a pot. The sheet states the figures and two fixed rules, and no advice.
 
-"CHELSA cells are 1 km; your cell is coarser." The grid is packed to 0.05° cells (each the mean of 36 of CHELSA's 30-arc-second pixels) for the range read; the provenance line on the page says exactly that, with the cell id.
+"Your 10 °C minimum for my Puya is wrong." It no longer exists: the care groups table never raises a cold floor, its four indoor conventions are shown apart and labelled as conventions with no source, and terrestrial bromeliads and orchids are in no group at all (round sixty).
 
-"GBIF records are noisy." Yes: cultivated, naturalised and invasive records are dropped, records outside the WCVP range are dropped, coordinate uncertainty is kept and preferred on dedupe, and the marker moves to the fullest bin so a stray record does not place it. The record map shows every record used.
+"CHELSA cells are 1 km; yours are coarser." The grid is packed to 0.05° cells (each the mean of CHELSA's 30-arc-second pixels in it); the page says how many cells and records the figures rest on.
 
-"The front page is megabytes." Most of it is the catalogue's photographs, lazily loaded as you scroll, and the offline install the worker does once (about 260 kB of script and style compressed, plus the Latin fonts and about 160 kB of maps and icons); the page itself paints from about 100 kB of script and style, and a species page reads without JavaScript. `scripts/dev/first-load.mjs` prints the figures for a build.
+"GBIF records are noisy." Living specimens and records marked introduced are dropped, records outside the WCVP native range are dropped, a record placed worse than 10 km stays on the map and off the climate, and each cell counts once however many records fall in it. The map shows every openly licensed record used; restricted ones are counted, not drawn.
 
-"Why AGPL?" So a hosted fork has to publish its changes. Scripts are MIT so the derivation can be reused anywhere.
+"AI-built?" Yes, and the post says so: the code was written with AI coding agents under my review, and the reviews are in `docs/`. What is on a species page is derived by scripts in `scripts/` and can be rebuilt from the sources in about an hour.
 
-"No accounts means no recovery." Correct. The key is the account; lose it and the ciphertext is nobody's. The backup file exists for that reason and the plant list keeps a link to it.
+"Will sync stay free?" [AUTHOR: one sentence, the same as in the post.] The server is AGPL and in the repository, so you can run your own.
+
+"Why AGPL?" So a hosted fork publishes its changes. The scripts are MIT so the derivation can be reused anywhere.
+
+"No accounts means no recovery." Correct. The key is the account; lose it and the ciphertext is nobody's. The backup file exists for that, and the plants list keeps a link to it.

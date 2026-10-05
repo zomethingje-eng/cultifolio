@@ -13,6 +13,8 @@
 export interface Searchable {
   name: string;
   common?: string;
+  /** Every other English common name (round sixty): searched as `common` is. */
+  commons?: string[];
   family?: string;
   origin?: string[];
   /** Older names for the same species, as binomials: a label's "Haworthia attenuata" finds Haworthiopsis attenuata (round thirty-one, 3). */
@@ -56,13 +58,83 @@ export interface Prepared<T> {
   sortKey: string;
 }
 
-const RANK_MARKERS = new Set(['var', 'subsp', 'ssp', 'f']);
+/**
+ * Words a grower writes between the parts of a name that are not themselves words of it: the rank markers in every
+ * spelling growers use (var., v., subsp., ssp., subspecies, variety, f., fo., forma, cv.), and the hybrid sign written
+ * "x" (the "×" is not a letter, so the tokeniser drops it already). "Aloe x nobilis" found nothing while "Aloe × nobilis"
+ * found the species (round sixty; the corpus review, 3). Like the older ones, a marker is a word while it is the last
+ * thing typed ("aloe v" is Aloe variegata on its way).
+ */
+export const RANK_MARKERS: ReadonlySet<string> = new Set(['var', 'v', 'variety', 'subsp', 'ssp', 'subspecies', 'f', 'fo', 'forma', 'cv', 'x']);
+/** The markers that end a name's species part (all but the hybrid sign): what follows one is a variety, a form or a cultivar. */
+const RANKS: ReadonlySet<string> = new Set([...RANK_MARKERS].filter((m) => m !== 'x'));
+
+/**
+ * A cultivar written in quotes, single or double, straight or curly ("Echeveria 'Perle von Nurnberg'", "Echeveria
+ * elegans ‘Rainbow’", or still being typed with no closing quote): not words of any species' name, so dropped by the
+ * retry (round sixty). Not by the first search: a phone writes "Copiapoa ’cinerea’" with curly quotes for no cultivar at
+ * all, and found the species that way before. An apostrophe inside a word ("law's") is not a quote: an opening quote
+ * follows a space or starts the text.
+ */
+const QUOTED = /(^|\s)['"‘’“”][^'"‘’“”]*(?:['"‘’“”](?=[\s.,;:)]|$)|$)/gu;
+/** A pasted author citation's first token: a bracket, "&", "ex", "et" ("et al."), or a capitalised abbreviation ("Phil.", "N.E.Br.", "L."); after an epithet written in lower case, any capitalised word. */
+const AUTHOR = /^(?:[(&]|ex$|et$|al\.?$|\p{Lu}[\p{L}\p{M}'’-]*\.[\p{L}\p{M}.'’-]*$)/u;
+const bare = (t: string) => fold(t).replace(/[^a-z0-9]+/g, '');
+
+/**
+ * A query as a grower pastes it, with what is not a word of any name taken out (round sixty; the corpus review, 3; the
+ * self-review, 15): an author citation after the epithet ("Copiapoa cinerea (Phil.) Britton & Rose", "Lithops lesliei
+ * N.E.Br."), up to the next rank marker, whose epithet may carry its own; and, with `quotes` (the retry), a quoted
+ * cultivar. Tokens, as written.
+ */
+export function cleanQuery(q: string, quotes = false): string[] {
+  const tokens = (quotes ? q.replace(QUOTED, ' ') : q).split(/\s+/).filter(Boolean);
+  const out: string[] = [];
+  // `lower`: the word that completed the name was written in lower case, as an epithet is, so a capitalised word after
+  // it is an author ("Copiapoa cinerea Britton & Rose"), where after "Cape Provinces" or "Aloe Vera" it is not.
+  let names = 0, need = 2, author = false, lower = false;
+  for (const t of tokens) {
+    const b = bare(t);
+    if (RANKS.has(b)) { author = false; names = 0; need = 1; out.push(t); continue; }
+    if (author) continue;
+    if (names >= need && (AUTHOR.test(t) || (lower && /^\p{Lu}/u.test(t)))) { author = true; continue; }
+    out.push(t);
+    if (b && b !== 'x') { names++; lower = /^\p{Ll}/u.test(t); }
+  }
+  return out;
+}
+/** The query's words as the search reads them: cleaned (`cleanQuery`), folded, split on anything but a letter or digit. Shared by the search and its postings, so the two read one query. */
+export const queryTokens = (q: string): string[] => cleanQuery(q).flatMap(words);
+
+/**
+ * The query retried when nothing matches it: its first two words before any rank marker or quoted cultivar ("Copiapoa
+ * cinerea var. columna-alba" is "Copiapoa cinerea", "Echeveria cv. Perle" and "Echeveria 'Perle von Nurnberg'" are
+ * "Echeveria"), as written. Null when that is the query itself (round sixty; the corpus review, 3: the page then says
+ * "Showing results for …").
+ */
+export function relaxedQuery(q: string): string | null {
+  const kept: string[] = [];
+  let n = 0;
+  for (const t of cleanQuery(q, true)) {
+    const b = bare(t);
+    if (RANKS.has(b)) break;
+    if (b === 'x' || !b) continue;
+    const ws = words(t);
+    if (n + ws.length <= 2) { kept.push(t.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '')); n += ws.length; }
+    else { kept.push(ws.slice(0, 2 - n).join(' ')); n = 2; }
+    if (n >= 2) break;
+  }
+  if (!kept.length) return null;
+  const relaxed = kept.join(' ');
+  const a = rankedWords(q), b = rankedWords(relaxed);
+  return a.length === b.length && a.every((w, i) => w === b[i]) ? null : relaxed;
+}
 
 export function prepare<T extends Searchable>(items: T[]): Prepared<T>[] {
   return items.map((item) => ({
     item,
     nameWords: words(item.name),
-    otherWords: [...words(item.common ?? ''), ...words(item.family ?? ''), ...(item.origin ?? []).flatMap(words)],
+    otherWords: [...words(item.common ?? ''), ...(item.commons ?? []).flatMap(words), ...words(item.family ?? ''), ...(item.origin ?? []).flatMap(words)],
     synWords: (item.syn ?? []).map((x) => words(x).filter((w) => !RANK_MARKERS.has(w))),
     sortKey: fold(item.name)
   }));
@@ -100,7 +172,7 @@ function rank(p: Prepared<unknown>, qs: string[], match: (q: string, w: string) 
  * and "a a" are ranked as "a", and went the long way while "a" took the short one (round fifty-nine; the corpus reviews).
  */
 export function rankedWords(q: string): string[] {
-  const all = words(q);
+  const all = queryTokens(q);
   return [...new Set(all.filter((w, i) => !(RANK_MARKERS.has(w) && i < all.length - 1)))];
 }
 

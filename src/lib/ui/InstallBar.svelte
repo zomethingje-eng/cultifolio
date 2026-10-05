@@ -7,10 +7,13 @@
    */
   import { onMount } from 'svelte';
   import { localDate } from '$core/dates';
+  import IosFirst from './grow/IosFirst.svelte'; // round sixty, agent F: the Home Screen before the first plant
+  import { isIos } from './grow/ios';
   type BIP = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }> };
   let deferred = $state<BIP | null>(null);
   let show = $state(false);
   let ios = $state(false);
+  let iosFirst = $state(false); // round sixty, agent F: the Home Screen card says it first; this bar waits
   const VISITS = 'cultifolio.visits', LAST = 'cultifolio.lastVisit', SNOOZE = 'cultifolio.installSnoozedUntil';
   onMount(() => {
     const standalone = matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
@@ -29,7 +32,7 @@
       return; // no storage: no way to keep the promise of asking once, so do not ask
     }
     if (visits < 2 || Date.now() < snoozed) return;
-    ios = /iphone|ipad|ipod/i.test(navigator.userAgent) && !/crios|fxios/i.test(navigator.userAgent);
+    ios = isIos() && !/crios|fxios|edgios/i.test(navigator.userAgent); // by features, an iPad asking for the desktop site included (round sixty)
     if (ios) show = true;
     const onBip = (e: Event) => {
       e.preventDefault();
@@ -57,7 +60,8 @@
   }
 </script>
 
-{#if show}
+<IosFirst bind:shown={iosFirst} />
+{#if show && !iosFirst}
   <div class="install" role="region" aria-label="Add to your home screen">
     <img src="/icon-192.png" alt="" width="36" height="36" />
     <div class="tx">

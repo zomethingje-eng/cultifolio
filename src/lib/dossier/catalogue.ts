@@ -36,7 +36,10 @@ export type Row = {
   sub: string;
   count: number;
   withClimate: number;
+  /** Species whose habitat climate was refused by its source: not checked (rule 2). Pending ones are counted apart since round sixty. */
   notChecked?: number;
+  /** Species whose habitat climate is still to be built (round sixty; the self-review, 14; A10). Absent in an older corpus's file: read as 0. */
+  pending?: number;
   thumb?: string;
   alt?: string;
   map?: string;
@@ -170,8 +173,10 @@ function build(index: IndexEntry[], by: By, chip: Chip): Catalogue {
       sub,
       count: sorted.length,
       withClimate: sorted.filter((c) => c.climate === 'ok').length,
-      // A refusal or a pending build is not an absence: counted apart from the species with no habitat climate (round fifty-two, 6).
-      notChecked: sorted.filter((c) => c.climate === 'refused' || c.climate === 'pending').length,
+      // A refusal or a pending build is not an absence: counted apart from the species with no habitat climate (round fifty-two, 6),
+      // and apart from each other, since "not checked" and "still to be built" are different facts (round sixty; A10).
+      notChecked: sorted.filter((c) => c.climate === 'refused').length,
+      pending: sorted.filter((c) => c.climate === 'pending').length,
       thumb: by === 'origin' ? undefined : hero?.thumb,
       alt: hero?.name,
       map: by === 'origin' ? groupMap(sorted) : undefined,

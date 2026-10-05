@@ -53,7 +53,7 @@ describe('the sheet in the reader\'s units', () => {
     expect(all).toContain('43.7 °F');
     expect(all).toMatch(/2\.6 in a year/); // 3×9 + 13×3 = 66 mm
     expect(all).toContain('4.7 in (120 mm)'); // the rule's threshold, checkable
-    expect(all.replace(/\(\d+ mm\)|\(0\.5 °C\)|\(1 °C\)/g, '')).not.toMatch(/\d °C|\d mm\b/);
+    expect(all.replace(/\(\d+ mm\)|\(0\.5 °C\)|\(\d °C\)/g, '')).not.toMatch(/\d °C|\d mm\b/); // a rule's threshold carries its metric figure in brackets (round sixty: the shift rule's 4 °C)
     const note = generatedNote({ ...input, units: 'us' });
     expect(note?.text).toContain('Cold floor 43.7 °F');
     expect(note?.text).not.toMatch(/\d °C/);

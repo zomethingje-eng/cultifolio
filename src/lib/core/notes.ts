@@ -33,7 +33,9 @@ export interface ReplacedNotes {
  */
 export function replacedNotes(changes: Change[], opts: { field?: string; baseField?: string; skip?: ReadonlySet<string> } = {}): ReplacedNotes[] {
   const field = opts.field ?? 'notes', baseField = opts.baseField ?? 'notesBase';
-  const ordered = changes.filter((c) => (c.field === field || c.field === baseField) && !opts.skip?.has(c.t)).sort((a, b) => hlcCompare(a.t, b.t));
+  // Every notes change and base, skipped ones included, for the pairing: an edit made from a text the fold has parked
+  // or holds was made from that text's own base, which the chain below follows (round sixty; the first outside review's 16).
+  const ordered = changes.filter((c) => c.field === field || c.field === baseField).sort((a, b) => hlcCompare(a.t, b.t));
   // Each edit's base: the first base its own writer wrote after it.
   const baseOf = new Map<string, unknown>();
   const awaiting = new Map<string, string>(); // writer -> its latest notes stamp without a base yet
@@ -41,7 +43,7 @@ export function replacedNotes(changes: Change[], opts: { field?: string; baseFie
   for (const c of ordered) {
     const writer = hlcDecode(c.t).device;
     if (c.field === field) {
-      notes.push(c);
+      if (!opts.skip?.has(c.t)) notes.push(c);
       awaiting.set(writer, c.t);
     } else {
       const edit = awaiting.get(writer);
@@ -52,7 +54,9 @@ export function replacedNotes(changes: Change[], opts: { field?: string; baseFie
   for (let i = 1; i < notes.length; i++) {
     const prev = notes[i - 1], cur = notes[i];
     if (typeof prev.value !== 'string' || !prev.value.trim() || prev.value === cur.value) continue;
-    if (baseOf.get(cur.t) === prev.t) continue; // made from this text: replaced knowingly
+    let base = baseOf.get(cur.t);
+    for (let hops = 0; typeof base === 'string' && base !== prev.t && opts.skip?.has(base) && hops < 50; hops++) base = baseOf.get(base); // through texts not on screen here
+    if (base === prev.t) continue; // made from this text: replaced knowingly
     out.push({ text: prev.value, was: prev.t, by: cur.t });
   }
   return out;

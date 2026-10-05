@@ -28,9 +28,15 @@
   import { toast } from '$lib/ui/toast.svelte';
   import { today as day } from '$lib/ui/day.svelte';
   import RefPhotoOffer from '$lib/ui/RefPhotoOffer.svelte';
+  import { plantHref, batchHref } from '$lib/db/links';
+  import PlantName from '$lib/ui/PlantName.svelte';
+  import { plantLabel } from '$lib/ui/plant-label';
+  import type { Sowing } from '$lib/db/types';
   onMount(() => collection.load());
   const param = $derived(page.params.id!);
-  const s = $derived(collection.sowing(param));
+  /** Every live batch the address names: several under one number are listed to choose from, by identity, never one picked by load order (round sixty). */
+  const choices = $derived(collection.ready ? (collection.withNumber('sowing', param) as Sowing[]) : []);
+  const s = $derived(choices.length === 1 ? choices[0] : undefined);
   const waiting = $derived(s ? undefined : collection.waiting('sowing', param));
   const id = $derived(s?.id ?? param);
   const m = $derived(PROP_METHODS.find((x) => x.k === s?.method) ?? (s?.method ? { k: s.method, label: s.method, unit: 'units', veg: false } : PROP_METHODS[0])); // a method this build does not know is shown by its word (round thirty, 1)
@@ -228,7 +234,7 @@
     await collection.remove('sowing', id);
     goto('/propagation');
     // One tap removed it; the toast on the list puts it back (round forty-nine, 3).
-    toast.show(`${no} removed.`, 8000, { label: 'Undo', run: () => { void collection.restore('sowing', id).then((moved) => { void goto(`/propagation/${id}`); if (moved) toast.show(`Restored as ${moved.to}: ${moved.from} is another batch's now.`); }); } });
+    toast.show(`${no} removed.`, 8000, { label: 'Undo', run: () => { void collection.restore('sowing', id).then((moved) => { const back = collection.sowing(id); void goto(back ? batchHref(back) : `/propagation/${encodeURIComponent(id)}`); if (moved) toast.show(`Restored as ${moved.to}: ${moved.from} is another batch's now.`); }); } });
   }
 
   /* edit */
@@ -292,7 +298,7 @@
   let renumbering = $state(false);
   /** Which of the records under the number the repair renumbers: said before the button, and the button does that and nothing else (round fifty-eight). */
   const plan = $derived(s && sharedWith.length ? collection.numberPlan('sowing', s.id) : null);
-  const othersNamed = $derived((plan ? [plan.keeper, ...plan.renumbered].filter((x) => x !== s?.id) : []).map((x) => collection.sowing(x)?.taxonName ?? 'another batch'));
+  const othersIds = $derived((plan ? [plan.keeper, ...plan.renumbered].filter((x) => x !== s?.id) : []).map((x) => { const o = collection.sowing(x); return { id: x, name: o ? plantLabel(o) : 'another batch' }; }));
   async function renumberShared() {
     if (!s || renumbering) return;
     const id = s.id, before = sowNo(s);
@@ -321,24 +327,34 @@
   <div class="notice err" role="alert" id="write-error">This change was not saved: {collection.lastWriteError}. Free space or <a href="/backup">back up now</a>.</div>
 {/if}
 {#if s && sharedWith.length}
-  <div class="notice" id="shared-number">{#if plan?.keeper === s.id}{othersNamed.length === 1 ? `Another batch, ${othersNamed[0]},` : `${othersNamed.length} other batches`} {othersNamed.length === 1 ? 'has' : 'have'} the number {sowNo(s)} too: two devices gave it out while offline, or a file was merged in. This batch was recorded first and keeps it; renumbering gives {othersNamed.length === 1 ? 'the other' : 'the others'} the next free number, with a note saying so.{:else}This batch shares the number {sowNo(s)} with {othersNamed.join(', ')}, recorded before it: two devices gave it out while offline, or a file was merged in. Renumbering gives this batch the next free number, with a note saying so.{/if} <button class="btn" onclick={renumberShared} disabled={renumbering}>Renumber now</button></div>
+  <!-- The other batch is a link by its identity (round sixty). -->
+  {#snippet others()}{#each othersIds as o, i (o.id)}{i ? (i === othersIds.length - 1 ? ' and ' : ', ') : ''}<a href="/propagation/{encodeURIComponent(o.id)}">{o.name}</a>{/each}{/snippet}
+  <div class="notice" id="shared-number">{#if plan?.keeper === s.id}{#if othersIds.length === 1}Another batch, {@render others()}, has{:else}{othersIds.length} other batches ({@render others()}) have{/if} the number {sowNo(s)} too: two devices gave it out while offline, or a file was merged in. This batch was recorded first and keeps it; renumbering gives {othersIds.length === 1 ? 'the other' : 'the others'} the next free number, with a note saying so.{:else}This batch shares the number {sowNo(s)} with {@render others()}, recorded before it: two devices gave it out while offline, or a file was merged in. Renumbering gives this batch the next free number, with a note saying so.{/if} <button class="btn" onclick={renumberShared} disabled={renumbering}>Renumber now</button></div>
 {/if}
 {#if !collection.ready}
   <p class="muted">Opening your collection…</p>
+{:else if choices.length > 1}
+  <h1 class="q" style="margin-top: 24px">{param}</h1>
+  <p class="muted" id="number-chooser-why">{choices.length} batches have the number {param}: two devices gave it out while offline, or a file was merged in. Open the one you mean; its page offers to renumber it.</p>
+  <ul class="chooser" id="number-chooser">
+    {#each choices as c (c.id)}
+      <li><a class="azrow accrow" href="/propagation/{encodeURIComponent(c.id)}"><span class="txt"><span class="nm"><span class="accno lead">{sowNo(c)}</span>{' '}<PlantName plant={c} /></span><span class="fam">{c.locationId && collection.placeOf(c.locationId) ? collection.locationName(c.locationId) : 'no place'} · started {c.sown}{c.status !== 'active' ? ` · ${c.status}` : ''}</span></span></a></li>
+    {/each}
+  </ul>
 {:else if !s}
   <h1 class="q" style="margin-top: 24px">{param}</h1>
   {#if waiting}<WaitingRecord kind="sowing" label={param} {waiting} />{:else}<p class="muted">No batch with this number on this device.</p>{/if}
 {:else}
   <div class="hero">
-    {#if idx?.thumb && prefs.referencePhotos && !thumbFailed}<img src={idx.thumb} alt={s.taxonName} style="max-height: 220px" onerror={() => (thumbFailed = true)} /><span class="cred">species photograph</span>{:else if idx?.thumb && prefs.referencePhotos}<div class="ph empty" style="height: 120px">No photograph yet.</div>{:else}<div class="ph" style="height: auto; min-height: 120px; flex-direction: column; gap: 10px; padding: 16px 16px 56px">{m.label}{#if idx?.thumb && !prefs.referencePhotos}<RefPhotoOffer center what="the reference’s photograph of this species" />{/if}</div>{/if}
+    {#if idx?.thumb && prefs.referencePhotos && !thumbFailed}<img src={idx.thumb} alt={s.taxonName} style="max-height: 220px" onerror={() => (thumbFailed = true)} /><span class="cred">species photograph</span>{:else if idx?.thumb && prefs.referencePhotos}<div class="ph empty" style="height: 120px">No photograph yet.</div>{:else}<div class="ph" style="height: auto; min-height: 120px; flex-direction: column; gap: 10px; padding: 16px 16px 56px">{m.label}{#if idx?.thumb && !prefs.referencePhotos}<RefPhotoOffer link what="a reference photograph" /><!-- one line, the host's disclosure behind it; the full choice is in Settings (round sixty; the grower review, §3) -->{/if}</div>{/if}
   </div>
   <div class="idcard">
     <div class="who">
-      <h1 class="sci"><span class="accno big lead">{sowNo(s)}</span><SpeciesName name={s.taxonName} />{#if s.cultivar}{' '}<span style="font-style: normal">‘{s.cultivar}’</span>{/if}{#if kindOf(s) !== 'species'}{' '}<span class="pill c" style="vertical-align: middle">{kindOf(s)}</span>{/if}</h1>
+      <h1 class="sci"><span class="accno big lead">{sowNo(s)}</span>{' '}<SpeciesName name={s.taxonName} />{#if s.cultivar}{' '}<span style="font-style: normal">‘{s.cultivar}’</span>{/if}{#if kindOf(s) !== 'species'}{' '}<span class="pill c" style="vertical-align: middle">{kindOf(s)}</span>{/if}</h1>
       {#if kindOf(s) === 'hybrid' && s.parentage}<p class="vern"><SpeciesName name={s.parentage} /></p>{/if}
       <p class="vern">
         {s.count} {m.unit} on {s.sown}
-        {#if parent}{' '}from <a class="mono" href="/plants/{accNo(parent)}">{accNo(parent)}</a>{:else if s.sourceFrom}{' '}from {s.sourceFrom}{/if}{#if !m.veg && s.fieldNumber}{' · '}<span class="fnchip">{s.fieldNumber}</span>{/if}{#if !m.veg && s.sourceRef}{' · lot '}{s.sourceRef}{/if}
+        {#if parent}{' '}from <a class="mono" href={plantHref(parent)}>{accNo(parent)}</a>{:else if s.sourceFrom}{' '}from {s.sourceFrom}{/if}{#if !m.veg && s.fieldNumber}{' · '}<span class="fnchip">{s.fieldNumber}</span>{/if}{#if !m.veg && s.sourceRef}{' · lot '}{s.sourceRef}{/if}
         {#if !m.veg}{' · '}{s.provenance === 'wild' ? 'wild-collected seed' : s.provenance === 'f1' ? 'seed from F1 plants in cultivation' : s.provenance === 'fn' ? 'seed from cultivated plants' : 'seed provenance not stated'}{/if}
       </p>
       <div class="pills">
@@ -406,7 +422,7 @@
   {/if}
   {#if potted.length}
     <!-- New pots want labels: the notice opens the labels page with just these plants picked (round fifty-eight; the grower review). -->
-    <div class="notice ok potnotice">Potted up {potted.length}: {#each potted as p, i}{#if i}{', '}{/if}<a class="mono" href="/plants/{p}">{p}</a>{/each}.{#if pottedIds.length}{' '}<a class="btn" id="potted-labels" href="/labels?acc={pottedIds.join(',')}">Print {pottedIds.length} {pottedIds.length === 1 ? 'label' : 'labels'}</a>{/if}</div>
+    <div class="notice ok potnotice">Potted up {potted.length}: {#each potted as p, i}{#if i}{', '}{/if}{@const pr = pottedIds[i] ? collection.accession(pottedIds[i]) : undefined}<a class="mono" href={pr ? plantHref(pr) : `/plants/${p}`}>{p}</a>{/each}.{#if pottedIds.length}{' '}<a class="btn" id="potted-labels" href="/labels?acc={pottedIds.join(',')}">Print {pottedIds.length} {pottedIds.length === 1 ? 'label' : 'labels'}</a>{/if}</div>
   {/if}
 
   {#if s.status !== 'active'}
@@ -459,7 +475,7 @@
     <div class="rows">
       {#each raised as a}
         {@const own = collection.cover(a.id)}
-        <a class="azrow accrow" href="/plants/{accNo(a)}"><span class="im">{#if own}<PhotoImg id={own.id} alt="" loading="lazy" />{:else}–{/if}</span><span><span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} /></span><span class="fam">{a.acquired ?? ''}{#if a.locationId}{' · '}{collection.locationName(a.locationId)}{/if}</span></span><span class="fig">{a.status}</span></a>
+        <a class="azrow accrow" href={plantHref(a)}><span class="im">{#if own}<PhotoImg id={own.id} alt="" loading="lazy" />{:else}–{/if}</span><span><span class="nm"><span class="accno lead">{accNo(a)}</span><SpeciesName name={a.taxonName} /></span><span class="fam">{a.acquired ?? ''}{#if a.locationId}{' · '}{collection.locationName(a.locationId)}{/if}</span></span><span class="fig">{a.status}</span></a>
       {/each}
     </div>
   {/if}
@@ -489,7 +505,7 @@
       {#each events as e}
         <div class="tlrow">
           <span class="d">{e.d}</span>
-          <span class="t">{eventLabel(e.t)}{#if e.n != null}&nbsp;<b>{e.n}</b>{/if}{#if e.plants?.length}<span class="x2">{' · '}{#each e.plants as pid, i (pid)}{#if i}{', '}{/if}{@const pl = collection.accession(pid)}{#if pl}<a class="mono" href="/plants/{accNo(pl)}">{accNo(pl)}</a>{:else}a plant since removed{/if}{/each}</span>{/if}{#if e.cause}<span class="x2">{' · '}{e.cause}</span>{/if}{#if e.note}<span class="x2">{' · '}{e.note}</span>{/if}</span>
+          <span class="t">{eventLabel(e.t)}{#if e.n != null}&nbsp;<b>{e.n}</b>{/if}{#if e.plants?.length}<span class="x2">{' · '}{#each e.plants as pid, i (pid)}{#if i}{', '}{/if}{@const pl = collection.accession(pid)}{#if pl}<a class="mono" href={plantHref(pl)}>{accNo(pl)}</a>{:else}a plant since removed{/if}{/each}</span>{/if}{#if e.cause}<span class="x2">{' · '}{e.cause}</span>{/if}{#if e.note}<span class="x2">{' · '}{e.note}</span>{/if}</span>
           {#if e.t === 'potup'}<span class="x small muted">kept: the plants exist</span>{:else if e.t === 'germinate' && !canDropCount(e.id)}<span class="x small muted" title="Without this count the batch would show fewer up than were potted and lost">kept: the potted plants rest on it</span>{:else if confirmEvent === e.id}<button class="rm confirm" type="button" onclick={() => { collection.remove('event', e.id); confirmEvent = null; }}>Remove?</button>{:else}<button class="rm" type="button" title="Remove this entry" aria-label="Remove this entry" onclick={() => { confirmEvent = e.id; void focusNext('.rm.confirm'); }}>×</button>{/if}
         </div>
       {/each}
@@ -558,5 +574,13 @@
   .rm.confirm { color: var(--bad); font-size: var(--fs-md); font-weight: 600; }
   .dangerrow { margin: 46px 0 10px; padding: 0; display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; font-size: var(--fs-md); color: var(--ink3); }
   a.pill { color: inherit; }
+  .chooser { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 6px; }
+  .chooser .azrow { grid-template-columns: minmax(0, 1fr); min-height: 56px; }
+  /* 200% text at 320 px: the count cards and the name may shrink to the screen, the name wraps between words and a pill wraps (round sixty; the accessibility review, 5). */
+  .cards { grid-template-columns: repeat(auto-fit, minmax(min(100%, 206px), 1fr)); }
+  .cards .card { min-width: 0; }
+  .card .val { overflow-wrap: anywhere; }
+  .idcard h1.sci { overflow-wrap: break-word; word-break: normal; }
+  .idcard .pills .pill { white-space: normal; overflow-wrap: break-word; max-width: 100%; }
   @media (max-width: 720px) { .acts3 { grid-template-columns: 1fr; } .editform { grid-template-columns: 1fr 1fr; } .noteform { grid-template-columns: minmax(0, 1fr); } .hero { margin-top: 0; } }
 </style>

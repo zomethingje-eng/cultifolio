@@ -43,10 +43,19 @@ export const photoHosts = (urls: Array<string | null | undefined>): string[] => 
 };
 
 const COMMONS = /^https:\/\/upload\.wikimedia\.org\//;
+/** A Commons thumbnail: `…/commons/thumb/a/ab/File.jpg/800px-File.jpg`, made by Commons at the width its name says. */
+const COMMONS_THUMB = /^https:\/\/upload\.wikimedia\.org\/[^?#]+\/thumb\/[^?#]+\/\d+px-[^/?#]+$/;
 /**
- * The address a page loads a photograph from: its own when it is on one of the three hosts the about page names
- * (iNaturalist, Wikimedia Commons, GBIF's image cache), otherwise its thumbnail on GBIF's cache. A photograph that
+ * The address a page loads a photograph from: its own when it is on one of the four hosts the about page names
+ * (iNaturalist's two, Wikimedia Commons, GBIF's image cache), otherwise its thumbnail on GBIF's cache. A photograph that
  * reached GBIF from another dataset keeps that dataset's address as its original, and the species page fetched its
- * lead photograph from there: a host nobody was told about (round fifty-nine; outside review).
+ * lead photograph from there: a host nobody was told about (round fifty-nine; outside review). A Commons photograph
+ * is shown at the 800-pixel thumbnail the dossier keeps beside it, never the original: an original is often several
+ * megabytes, and a link preview's crawler drops an image that large (round sixty; the self-review, 13; A7). Commons
+ * makes its thumbnails at one width each, so the page asks for that one size (no srcset).
  */
-export const shownAt = (p: { url: string; thumb?: string }): string => (INAT.test(p.url) || GBIF.test(p.url) || COMMONS.test(p.url) || !p.thumb ? p.url : p.thumb);
+export const shownAt = (p: { url: string; thumb?: string }): string => {
+  if (INAT.test(p.url) || GBIF.test(p.url)) return p.url;
+  if (COMMONS.test(p.url)) return !COMMONS_THUMB.test(p.url) && p.thumb && (COMMONS.test(p.thumb) || GBIF.test(p.thumb)) ? p.thumb : p.url;
+  return p.thumb ?? p.url;
+};

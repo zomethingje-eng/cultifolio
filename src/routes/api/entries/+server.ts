@@ -13,7 +13,8 @@ import type { RequestHandler } from './$types';
  * cacheable and kept by the service worker, so it also works in the greenhouse.
  */
 export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddress }) => {
-  // An answer the edge holds never reaches here; a miss is counted (round fifty-eight).
+  // Every request reaches here: a Worker's own answer is not kept by the edge (round sixty corrects the comment that said
+  // it was; the server review, 15). Each is counted; the browser and the service worker keep the answer under the corpus id.
   const stop = await limited(platform, getClientAddress, 'reference');
   if (stop) return stop;
   const buckets = (url.searchParams.get('b') ?? '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);

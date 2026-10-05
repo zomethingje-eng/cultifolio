@@ -7,6 +7,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { corpusNow, _forgetIndex } from '$lib/server/dossiers';
 import { buildProducts } from '$dossier/products';
 import { manifestPath, productPath } from '$dossier/manifest';
+import { md5 } from '$dossier/md5';
 
 const mk = (names: string[]) => names.map((name, i) => ({ key: 1000 + i, slug: name.toLowerCase().replace(/ /g, '-'), name, open: 0 }));
 const X = mk(['Aloe vera', 'Copiapoa cinerea', 'Lithops lesliei', 'Haworthia cooperi']);
@@ -50,13 +51,17 @@ describe('a manifest the Worker refuses (round fifty-nine)', () => {
     for (let i = 2; i <= 6; i++) { vi.spyOn(Date, 'now').mockImplementation(() => T0 + i * 61_000); expect((await corpusNow(platform, noStatic)).corpus).toBe(a.manifest.id); }
     expect(reads).toBe(0); // heads only: the refused manifest is not fetched and parsed again
   });
-  it('an index whose length is not the manifest\'s species count is not the corpus', async () => {
+  it('an index whose length is not the manifest\'s species count is not the corpus, and is not fetched again each minute', async () => {
+    // Etags are the content's own hash, as R2's are: the fake etag before (path and length) made the refused manifest look
+    // like the one held, since both were 7,621 bytes, so it was never fetched and the test passed with the check removed
+    // (round sixty; the harness review, 2).
     _forgetIndex();
     const a = blobsFor(X), b = blobsFor(Y);
     const m = new Map<string, string>([...a.blobs, [manifestPath(), JSON.stringify(a.manifest)]]);
+    const reads: string[] = [];
     const store = {
-      get: async (k: string) => (m.has(k) ? { text: async () => m.get(k)!, json: async () => JSON.parse(m.get(k)!), etag: `"${k}:${m.get(k)!.length}"` } : null),
-      head: async (k: string) => (m.has(k) ? { etag: `"${k}:${m.get(k)!.length}"` } : null)
+      get: async (k: string) => { reads.push(k); return m.has(k) ? { text: async () => m.get(k)!, json: async () => JSON.parse(m.get(k)!), etag: md5(m.get(k)!) } : null; },
+      head: async (k: string) => (m.has(k) ? { etag: md5(m.get(k)!) } : null)
     };
     const platform = { env: { STORE: store } } as unknown as App.Platform;
     const T0 = Date.UTC(2026, 9, 3, 12);
@@ -67,6 +72,12 @@ describe('a manifest the Worker refuses (round fifty-nine)', () => {
     m.set(manifestPath(), JSON.stringify({ ...b.manifest, files: { ...b.manifest.files, 'index.json': a.manifest.files['index.json'] } }));
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(Date, 'now').mockImplementation(() => T0 + 61_000);
-    expect((await corpusNow(platform, noStatic)).corpus).toBe(a.manifest.id);
+    reads.length = 0;
+    const after = await corpusNow(platform, noStatic);
+    expect(reads).toContain(manifestPath()); // the new manifest was read and judged: the test is not vacuous
+    expect({ corpus: after.corpus, species: after.idx.length }).toEqual({ corpus: a.manifest.id, species: X.length });
+    reads.length = 0;
+    for (let i = 2; i <= 6; i++) { vi.spyOn(Date, 'now').mockImplementation(() => T0 + i * 61_000); expect((await corpusNow(platform, noStatic)).corpus).toBe(a.manifest.id); }
+    expect(reads).toEqual([]); // heads only for five minutes: the refusal is remembered
   });
 });

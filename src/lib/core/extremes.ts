@@ -1,5 +1,5 @@
 /**
- * Reduce a multi-decade daily series (NASA POWER, MERRA-2, 0.5°) to the
+ * Reduce a multi-decade daily series (NASA POWER, MERRA-2, 0.5° × 0.625°) to the
  * extremes a grower cares about, and correct them to the elevation of the
  * finer climate cell the normals came from.
  *
@@ -84,10 +84,12 @@ export function extremesUsable(e: Extremes): boolean {
  * The one wording of frost frequency, from the count: the page and the sheet both use it, so they cannot disagree.
  * A series without the count (an older dossier) recovers it from the rate; the rederive writes the count.
  */
+/** One formatter, made once: a count with its thousands separator, "16,071" as the rain figures print theirs (round sixty; words 20). */
+const COUNT = new Intl.NumberFormat('en-US');
 export function frostWording(ex: { frostDaysPerYear: number; frostNights?: number; years: number }): string {
   const nights = ex.frostNights ?? Math.round(ex.frostDaysPerYear * ex.years);
   if (nights === 0) return `no frost in ${ex.years} years`;
   if (nights < ex.years) return `${nights} frost night${nights === 1 ? '' : 's'} in ${ex.years} years`;
   // The count and its rate, not "about N a year": a rounding the rule does not make (round fifty-nine; the round forty-one review, 2).
-  return `${nights} frost nights in ${ex.years} years, ${(nights / ex.years).toFixed(1)} a year`;
+  return `${COUNT.format(nights)} frost nights in ${ex.years} years, ${(nights / ex.years).toFixed(1)} a year`;
 }

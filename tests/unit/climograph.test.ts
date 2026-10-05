@@ -37,7 +37,10 @@ describe('the climograph geometry', () => {
     const g = climograph(cold);
     expect(g.temp.zeroY).not.toBeNull();
     expect(g.temp.minAbs!.y).toBeGreaterThan(g.temp.zeroY!); // below the frost line on screen
-    expect(g.temp.minAbs!.label).toMatch(/-6\.5° lowest night in 30 yrs \(undated\)/);
+    // The extreme names its source on the chart, in years, not "yrs" (round sixty; the round forty-two review, A9).
+    expect(g.temp.minAbs!.label).toBe('-6.5° lowest night in 30 years, NASA POWER (undated)');
+    expect(g.temp.maxP99!.label).toContain('NASA POWER');
+    expect(g.alt).toContain('(NASA POWER)');
   });
   it('marks a habitat with no measurable rain as dry rather than drawing nothing', () => {
     const dry = atacama();

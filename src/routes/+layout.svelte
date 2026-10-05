@@ -20,11 +20,13 @@
   import { browser } from '$app/environment';
   import CompareBar from '$lib/ui/CompareBar.svelte';
   import InstallBar from '$lib/ui/InstallBar.svelte';
+  import { GrowLayer } from '$lib/ui/grow'; // round sixty, agent F: the sample's banner, persist after the first plant, the backup nudge
   import ToastBar from '$lib/ui/ToastBar.svelte';
   import { units } from '$lib/ui/units.svelte';
   import { prefs } from '$lib/ui/prefs.svelte';
   import { METRIC } from '$core/units';
   import { keepFocusClear } from '$lib/ui/focus';
+  import { syncWords } from '$lib/ui/sync-words';
   let { children } = $props();
   // Seed before anything renders. A server-rendered page carries the reader's units in its data (from the cookie or the
   // language); a client-rendered page has no server data and the store reads the cookie itself. So the first paint is in
@@ -149,6 +151,21 @@
   // Hydrated: the end-to-end tests wait for this before typing into a bound field, since a value typed into the
   // server's HTML is dropped when the field hydrates and a click before then has no handler (round fifty-nine; a slow Windows run).
   onMount(() => { document.documentElement.dataset.ready = '1'; });
+  // The server's placeholder for a page drawn only here ("Opening your plants…", app.html) goes once the app is drawn;
+  // CSS already hides it then, and this is for a browser without :has() (round sixty; the accessibility review, 7).
+  onMount(() => document.getElementById('shell')?.remove());
+  // The bars' heights, for the page's scroll padding: anchors and Tab land clear of them at any text size (round sixty; the visitor review, 5).
+  onMount(() => {
+    const root = document.documentElement;
+    const ro = new ResizeObserver(() => {
+      const top = document.getElementById('topbar')?.getBoundingClientRect().height;
+      const tab = document.getElementById('tabbar')?.getBoundingClientRect().height;
+      if (top) root.style.setProperty('--bar-h', `${Math.round(top)}px`);
+      if (tab) root.style.setProperty('--tab-h', `${Math.round(tab)}px`);
+    });
+    for (const id of ['topbar', 'tabbar']) { const el = document.getElementById(id); if (el) ro.observe(el); }
+    return () => ro.disconnect();
+  });
   onMount(async () => {
     today.start();
     prefs.load(); // whether private pages may fetch the reference's photographs: off until switched on
@@ -180,6 +197,43 @@
     frost.start();
     await sync.init();
     if (sync.configured) sync.schedule(1500);
+  });
+  /**
+   * The phone's tabs: a grower's five places, or for a visitor with no plants the four that show something (Species,
+   * Compare, My plants, About): Places, Propagation and Today opened empty private pages (round sixty; the visitor review,
+   * ranked 9). Which set is drawn first is read from the front page's hint (`cultifolio.hasMine`) as the layout starts,
+   * before its first render, so a page drawn here does not swap one set for the other on load; the layout keeps the hint
+   * true once the collection is open. (A page the server drew shows a visitor's set until the scripts run.)
+   */
+  if (browser) {
+    try {
+      if (localStorage.getItem('cultifolio.hasMine') === '1') document.documentElement.dataset.grower = '1';
+    } catch {
+      /* no storage: a visitor's set until the collection opens */
+    }
+  }
+  const tabs: Array<{ href: string; label: string; who: 'all' | 'grower' | 'visitor'; on: (p: string) => boolean }> = [
+    { href: '/', label: 'Species', who: 'all', on: (p) => p === '/' || p.startsWith('/species') },
+    { href: '/compare', label: 'Compare', who: 'visitor', on: (p) => p.startsWith('/compare') },
+    { href: '/plants', label: 'Plants', who: 'all', on: (p) => p.startsWith('/plants') },
+    { href: '/places', label: 'Places', who: 'grower', on: (p) => p.startsWith('/places') },
+    { href: '/propagation', label: 'Propagation', who: 'grower', on: (p) => p.startsWith('/propagation') },
+    { href: '/today', label: 'Today', who: 'grower', on: (p) => p.startsWith('/today') || p.startsWith('/frost') },
+    { href: '/about/how', label: 'About', who: 'visitor', on: (p) => p.startsWith('/about') }
+  ];
+  $effect(() => {
+    if (!collection.ready) return;
+    // A plant, a batch, or a species followed: the front page's own reading of the hint, and more, so the two never disagree about a grower.
+    const grower = collection.accessions.length > 0 || collection.sowings.length > 0 || collection.mySpecies.size > 0;
+    const html = document.documentElement;
+    if (grower) html.dataset.grower = '1';
+    else delete html.dataset.grower;
+    try {
+      if (grower) localStorage.setItem('cultifolio.hasMine', '1');
+      else localStorage.removeItem('cultifolio.hasMine');
+    } catch {
+      /* the hint is a convenience: without it the tabs are a visitor's until the collection opens */
+    }
   });
   const places = [
     { href: '/', label: 'Species', on: (p: string) => p === '/' || p.startsWith('/species') },
@@ -225,7 +279,7 @@
   <nav class="seg topseg" aria-label="Main">
     {#each places as pl}<a href={pl.href} class:on={pl.on(page.url.pathname)} aria-current={pl.on(page.url.pathname) ? 'page' : undefined}>{pl.label === 'Plants' ? 'My plants' : pl.label}</a>{/each}
   </nav>
-  <a class="iconbtn sync" href="/sync" title={sync.configured ? (sync.busy ?? (sync.offline ? (sync.unreached === 'server' ? 'Sync: the server did not answer; changes are kept here' : 'Sync: offline; changes are kept here') : sync.lastError ? 'Sync: ' + sync.lastError : sync.runs ? 'Synced' : 'Sync: not checked yet')) : 'Sync'} aria-label="Sync" class:on={sync.configured} class:busy={!!sync.busy} class:err={!!sync.lastError}>⟳</a>
+  <a class="iconbtn sync" href="/sync" title={sync.configured ? (sync.busy ?? (sync.offline ? (sync.unreached === 'server' ? 'Sync: the server did not answer; changes are kept here' : 'Sync: offline; changes are kept here') : sync.lastError ? 'Sync: ' + (syncWords(sync.lastError)?.text ?? sync.lastError) : sync.runs ? 'Synced' : 'Sync: not checked yet')) : 'Sync'} aria-label="Sync" class:on={sync.configured} class:busy={!!sync.busy} class:err={!!sync.lastError}>⟳</a>
   <!-- Not on the add page itself: pressed there it threw the half-filled form away for an empty one (round forty-nine, 3).
        It adds what the section is about, and says which (round fifty-eight; the grower review). -->
   {#if page.url.pathname !== adds.path}<a class="iconbtn" href={adds.href} title={adds.label} aria-label={adds.label}>+</a>{/if}
@@ -242,8 +296,11 @@
 {/if}
 {#if vaultNote}<p class="vaultnote">{vaultNote}</p>{/if}
 <!-- The frost watch, reachable from every tab (round fifty-three, 3): the risk at the site, as the Today tab says it, on every page but that one. A refusal is said on the front page and the Today tab, not on every page. -->
-<!-- This device's clock reads earlier than its own last change (round fifty-nine): said, not acted on. Its own changes all show; a peer's dated past the clock waits for it. -->
-{#if collection.clockBehindAt && privateRoute}<p class="clockbar" role="status" id="clockbar">This device's date and time read earlier than its last change, {new Date(collection.clockBehindAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}. Nothing is lost: set the clock right, and changes from other devices dated after it come in then.</p>{/if}
+<!-- This device's clock reads earlier than its own last change (round fifty-nine): said, not acted on. Two readings, by
+     whether a sync answer has confirmed the clock: confirmed, the changes were made under a fast clock; not, the clock
+     itself may be the one that is wrong. Either way an edit made now saves and shows; "Nothing is lost" was not true of
+     every case and is not said (round sixty; the lead's wording, the outside review's A17). -->
+{#if collection.clockBehindAt && privateRoute}{@const when = new Date(collection.clockBehindAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}<p class="clockbar" role="status" id="clockbar">{#if collection.clockTrusted}Some changes on this device are dated ahead of now, up to {when}: its clock was probably fast when they were made. They still count, and what you edit now saves and shows.{:else}This device's date reads earlier than its last change ({when}). What you edit now still saves and shows; set the date right when you can.{/if}</p>{/if}
 {#if frost.line?.tone === 'bad' && !page.url.pathname.startsWith('/today') && page.url.pathname !== '/'}<a class="frostbar" href="/today#frost" id="frostbar">{frost.line.text} <span class="go">Today ›</span></a>{/if}
 
 <!-- On the pages about your own plants, links are not preloaded on hover: a preload of a species page sends that species' name to the
@@ -251,26 +308,34 @@
 <main class="wrap" id="main" tabindex="-1" bind:this={mainEl} data-sveltekit-preload-data={privateRoute ? 'off' : 'hover'}>
   <ToastBar />
   <InstallBar />
+  <GrowLayer />
   {@render children()}
 </main>
 
 <CompareBar low={tabAway} />
 
 <!-- Three lines, about the reader: the sources, every one, then what is kept, then the links (round fifty-eight; it was eight lines on a phone, about the server, and its list left four sources out). -->
+<!-- On a page about your own plants the footer waits for the collection: drawn mid-screen under "Opening…" and then
+     pushed off by the list, it was a layout shift of 0.2 to 0.29 on every load of /plants and /today (round sixty; the
+     accessibility review, 2). -->
+{#if !privateRoute || collection.ready}
 <footer class="credits">
   <p>Sources: GBIF Backbone, WCVP (RBG Kew), CHELSA, NASA POWER, ETOPO, Natural Earth, iNaturalist, Wikimedia Commons, Wikidata, Wikipedia, OpenAlex; each figure and photograph names its own, with its licence.</p>
   <p>No account, no analytics. Your collection stays on this device{#if sync.configured}, and in a vault only your key opens{/if}.</p>
   <p><a href="/about/how">How it is made</a> · <a href="/about/how#privacy">Privacy</a> · <a href="/about/formats">Formats</a> · <a href="https://github.com/zomethingje-eng/cultifolio">Source</a></p>
 </footer>
+{/if}
 
 <nav id="tabbar" aria-label="Tabs" class:away={tabAway} data-cover="bottom" data-away={tabAway ? 'true' : undefined} onfocusin={() => (tabAway = false)}>
-  {#each places as pl}
-    <a href={pl.href} class:on={pl.on(page.url.pathname)} aria-current={pl.on(page.url.pathname) ? 'page' : undefined}><!-- aria-current: round fifty-eight; the accessibility review -->
+  {#each tabs as pl (pl.href)}
+    <a href={pl.href} class="t{pl.who[0]}" class:on={pl.on(page.url.pathname)} aria-current={pl.on(page.url.pathname) ? 'page' : undefined}><!-- aria-current: round fifty-eight; the accessibility review -->
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         {#if pl.label === 'Species'}<path d="M12 3v18M5 8c4 0 7 2 7 6M19 8c-4 0-7 2-7 6M7 15c3 0 5 1.5 5 4M17 15c-3 0-5 1.5-5 4" />
         {:else if pl.label === 'Plants'}<path d="M6 21h12M9 21V10a3 3 0 0 1 6 0v11M12 10V4M9 6c0 0 3-2 3-2s3 2 3 2" />
         {:else if pl.label === 'Places'}<path d="M3 10h18M3 15h18M6 10v11M18 10v11M6 15v-5M18 15v-5" />
         {:else if pl.label === 'Propagation'}<path d="M4 19h16M6 19c0-6 3-9 6-9s6 3 6 9M12 10V4M9 7l3-3 3 3" />
+        {:else if pl.label === 'Compare'}<path d="M8 4v16M16 4v16M4 8h8M12 16h8" />
+        {:else if pl.label === 'About'}<circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7.5v.5" />
         {:else}<circle cx="12" cy="12" r="4" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1" />{/if}
       </svg>
       <span>{pl.label === 'Plants' ? 'My plants' : pl.label}</span>
@@ -328,8 +393,15 @@
   #tabbar { display: none; }
   @media (max-width: 700px) {
     main { padding-bottom: calc(56px + 2rem + env(safe-area-inset-bottom)); }
-    #tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 70; display: grid; grid-template-columns: repeat(5, 1fr); background: color-mix(in srgb, var(--card) 94%, transparent); backdrop-filter: blur(10px); border-top: 1px solid var(--rule); padding-bottom: env(safe-area-inset-bottom); }
-    #tabbar a { color: var(--ink2); font-size: var(--fs-sm); font-weight: 600; letter-spacing: 0.02em; min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
+    /* As many equal columns as tabs shown, each allowed to shrink below its word: at 150 to 200% text "Today" went off
+       the screen past a fixed bar nobody can scroll (round sixty; the accessibility review, 5). A word too long for its
+       column wraps under its icon rather than pushing the next tab out. */
+    #tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 70; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); background: color-mix(in srgb, var(--card) 94%, transparent); backdrop-filter: blur(10px); border-top: 1px solid var(--rule); padding-bottom: env(safe-area-inset-bottom); }
+    #tabbar a { color: var(--ink2); font-size: var(--fs-sm); font-weight: 600; letter-spacing: 0.02em; min-height: 56px; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 4px 2px; text-align: center; line-height: 1.15; }
+    #tabbar a span { max-width: 100%; overflow-wrap: anywhere; hyphens: auto; }
+    #tabbar svg { flex: none; }
+    /* A grower's five, or a visitor's four (round sixty; the visitor review). */
+    :global(html:not([data-grower])) #tabbar a.tg, :global(html[data-grower]) #tabbar a.tv { display: none; }
     #tabbar a:hover { text-decoration: none; }
     #tabbar a.on { color: var(--accent); }
     /* Out of the way while scrolling down, by its own height and the safe area under it (round fifty-eight; the grower review). */

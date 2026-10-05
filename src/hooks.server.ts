@@ -3,6 +3,7 @@ import { unitsFor } from '$lib/server/units';
 import { building, version } from '$app/environment';
 import { corpusNow } from '$lib/server/dossiers';
 import { catalogueRows, homeWindow, byOf, chipOf } from '$lib/server/catalogue';
+import { limited } from '$lib/server/sync';
 
 /**
  * A species page is public content rendered in the reader's units and hemisphere, which is why its own header is
@@ -18,11 +19,12 @@ const PAGE_CACHE_S = 60;
  * every request (grouping nine thousand species, the day's featured tiles) and was the one page a stranger always
  * lands on with nothing holding it.
  */
-const HELD_PAGES: Array<{ test: (url: URL) => boolean; query: (event: RequestEvent) => Promise<string | null>; hemi: boolean }> = [
+const HELD_PAGES: Array<{ test: (path: string) => boolean; query: (event: RequestEvent) => Promise<string | null>; hemi: boolean }> = [
   // A species page reached by an old name (`?was=`) is a page in its own right, since the line it prints names the
   // address; it is not held, since anyone can write that query into a link and each spelling minted a copy (round forty-nine, 2).
-  { test: (url) => /^\/species\/[^/]+$/.test(url.pathname), query: async (e) => (e.url.searchParams.has('was') ? null : ''), hemi: true },
-  { test: (url) => url.pathname === '/', query: homeQuery, hemi: false }
+  // The test reads the path as routing reads it, decoded: `/%73pecies/x` is the species page and was rendered unheld (round sixty; A30).
+  { test: (path) => /^\/species\/[^/]+$/.test(path), query: async (e) => (e.url.searchParams.has('was') ? null : ''), hemi: true },
+  { test: (path) => path === '/', query: homeQuery, hemi: false }
 ];
 
 /**
@@ -63,6 +65,25 @@ const MOVED: Array<[RegExp, string]> = [
 ];
 
 /**
+ * The private pages: a grower's own collection, rendered on the device from the vault. Their shells say nothing of
+ * anyone's plants, but a search engine has no use for them either, so they are sent with `X-Robots-Tag: noindex`
+ * (round sixty; the corpus review, P3). /offline is prerendered and gets it from _headers.
+ */
+const PRIVATE = /^\/(plants|places|today|propagation|labels|settings|sync|backup|offline)(\/|$)/;
+
+/**
+ * Headers on every response the Worker renders (round sixty; the server review, 14): the browser is told not to guess a
+ * file's type, which features a page may ask for (location for the frost watch and a place, the camera for the sync
+ * key's code, nothing else), and to come back only over HTTPS for a year. static/_headers says the same for the files
+ * the Worker does not render.
+ */
+const SECURITY: Array<[string, string]> = [
+  ['x-content-type-options', 'nosniff'],
+  ['permissions-policy', 'geolocation=(self), camera=(self), microphone=(), payment=(), usb=()'],
+  ['strict-transport-security', 'max-age=31536000']
+];
+
+/**
  * Two headers on every response the Worker renders. No referrer: a browser would otherwise send the page's own URL
  * with every request it makes, and on a page about your own plants that URL carries the plant's number, the search
  * typed in `?q=`, or a label's record id, none of which is on the list of what leaves the device (round sixteen, 9).
@@ -81,28 +102,37 @@ export function _foreignWrite(request: Request, url: URL): boolean {
   // `/api/%73ync/vault` passed the check (round fifty-nine; two reviews). The site has no write another site may make.
   const method = request?.method ?? 'GET';
   if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return false;
+  // A browser that sends `Sec-Fetch-Site` is believed: same-origin (or a request the reader typed) passes whatever `Origin`
+  // says, since under `no-referrer` a same-origin form post sends `Origin: null`, and it was refused (round sixty; the
+  // server review, 13). `Origin` decides only when the header is absent.
   const site = request.headers.get('sec-fetch-site');
-  if (site && site !== 'same-origin' && site !== 'none') return true;
+  if (site) return site !== 'same-origin' && site !== 'none';
   const origin = request.headers.get('origin');
   return !!origin && origin !== url.origin;
 }
 
 export const handle: Handle = async ({ event, resolve }) => {
   for (const [from, to] of MOVED) if (from.test(event.url.pathname)) redirect(301, event.url.pathname.replace(from, to) + event.url.search);
-  if (_foreignWrite(event.request, event.url)) return new Response('a write from another site', { status: 403, headers: { 'cache-control': 'no-store', 'referrer-policy': 'no-referrer' } });
+  if (_foreignWrite(event.request, event.url)) return new Response('a write from another site', { status: 403, headers: { 'cache-control': 'no-store', 'referrer-policy': 'no-referrer', ...Object.fromEntries(SECURITY) } });
+  const path = pathKey(event.url.pathname);
   const policy = (r: Response) => {
     r.headers.set('referrer-policy', 'no-referrer');
     if (!r.headers.has('x-frame-options')) r.headers.set('x-frame-options', 'DENY');
+    for (const [k, v] of SECURITY) if (!r.headers.has(k)) r.headers.set(k, v);
+    if (PRIVATE.test(path)) r.headers.set('x-robots-tag', 'noindex');
     return r;
   };
-  const held = HELD_PAGES.find((h) => h.test(event.url));
+  const held = HELD_PAGES.find((h) => h.test(path));
+  const method = event.request?.method ?? 'GET';
   // Not while prerendering: the build crawls the home page from the prerendered pages' links, the adapter's emulated
   // platform offers a cache there, and a prerendered page may not read its query.
   // Nor for a data request: a client-side navigation asks for `/__data.json` under the page's own URL (Kit strips the
   // suffix before the hooks see it, and says so in `isDataRequest`), and the held HTML answered it, which the client
   // could not parse and showed as a 500. Round forty-five's key had made the data request's query invisible, so it
   // matched the page's copy; before that it had missed by luck (round forty-six, 3).
-  const cache = held && !building && !event.isDataRequest && event.request.method === 'GET' ? event.platform?.caches?.default : undefined;
+  // HEAD is answered from the copy as GET is (round sixty; the server review, 6): it rendered every time, and costs its
+  // sender nothing to send.
+  const cache = held && !building && !event.isDataRequest && (method === 'GET' || method === 'HEAD') ? event.platform?.caches?.default : undefined;
   let key: Request | undefined;
   if (cache && held) {
     // The key carries everything the rendering reads from the request, and nothing else: the build (a page held across a
@@ -119,11 +149,11 @@ export const handle: Handle = async ({ event, resolve }) => {
     if (q !== null) {
       // And the corpus: a page held across an upload showed the old corpus for its minute (round fifty-two, 5).
       const corpus = event.locals.corpus!.corpus;
-      key = new Request(`https://cache.cultifolio/page?v=${encodeURIComponent(version)}&c=${encodeURIComponent(corpus)}&p=${encodeURIComponent(pathKey(event.url.pathname))}&q=${encodeURIComponent(q)}&u=${unitsFor(event.cookies, event.request)}&h=${hemi === 'n' || hemi === 's' ? hemi : ''}`);
+      key = new Request(`https://cache.cultifolio/page?v=${encodeURIComponent(version)}&c=${encodeURIComponent(corpus)}&p=${encodeURIComponent(path)}&q=${encodeURIComponent(q)}&u=${unitsFor(event.cookies, event.request)}&h=${hemi === 'n' || hemi === 's' ? hemi : ''}`);
       // A cache that fails to answer is a page rendered, not a 500 (round forty-nine, 2).
       const hit = await cache.match(key).catch(() => undefined);
       if (hit) {
-        const r = new Response(hit.body, hit);
+        const r = new Response(method === 'HEAD' ? null : hit.body, hit);
         r.headers.set('cache-control', `private, max-age=${PAGE_CACHE_S}`);
         // The Vary the page set, which the stored copy dropped: a shared cache in front of the Worker must still keep the units and the hemisphere apart (round forty-nine, 2; round thirty-five, R1-6).
         r.headers.set('vary', 'accept-language, cookie');
@@ -132,6 +162,13 @@ export const handle: Handle = async ({ event, resolve }) => {
       }
     }
   }
+  // A render of a held page that cannot be held (a `?was=` page, a client navigation's data, a HEAD the copy did not
+  // answer) is counted per address under a generous bucket: each read the bucket and rendered, with no limit at all
+  // (round sixty; the server review, 6). A GET that misses is held once rendered, so it is not counted.
+  if (held && !building && (event.isDataRequest || method === 'HEAD' || !key)) {
+    const stop = await limited(event.platform, event.getClientAddress ?? (() => 'unknown'), 'render').catch(() => null);
+    if (stop) return policy(new Response(stop.body, stop));
+  }
   const res = await resolve(event);
   // A response taken from the edge cache (the names route returns its hit as it is) has immutable headers in Workers, and
   // setting one throws, which SvelteKit turned into a 500 on every repeated lookup (round seventeen, 1). A copy is mutable.
@@ -139,7 +176,9 @@ export const handle: Handle = async ({ event, resolve }) => {
   // The sync answers carry the server's clock: the device's clock correction reads it, and a dev server sends none, so
   // the correction could not be tested end to end before (round fifty-two, 1). The edge sets it anyway; this is the same clock.
   if (event.url.pathname.startsWith('/api/sync/') && !r.headers.has('date')) r.headers.set('date', new Date().toUTCString());
-  if (cache && key && r.status === 200 && (r.headers.get('content-type') ?? '').startsWith('text/html') && !r.headers.has('set-cookie')) {
+  // A failure is never kept: a page whose reference could not be read is a 503 that the next visit asks again (round sixty).
+  if (r.status >= 500) r.headers.set('cache-control', 'no-store');
+  if (cache && key && method === 'GET' && r.status === 200 && (r.headers.get('content-type') ?? '').startsWith('text/html') && !r.headers.has('set-cookie')) {
     // Stored under the Worker's own key with a public lifetime, which the cache needs to keep it; the reader's copy keeps its private header.
     const copy = new Response(r.clone().body, r);
     copy.headers.set('cache-control', `public, max-age=${PAGE_CACHE_S}`);

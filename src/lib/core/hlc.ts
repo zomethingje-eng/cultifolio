@@ -45,7 +45,7 @@ function readStored(): void {
     const raw = localStorage.getItem(OFFSET_KEY);
     if (raw) {
       const v = JSON.parse(raw) as Stored;
-      if (Number.isFinite(v.offset) && v.confirmedAt && Date.now() - v.confirmedAt < TRUST_EXPIRES_MS) { offsetMs = v.offset; confirmedAt = v.confirmedAt; }
+      if (Number.isFinite(v.offset) && v.confirmedAt && trustedAge(Date.now() - v.confirmedAt)) { offsetMs = v.offset; confirmedAt = v.confirmedAt; }
       else localStorage.removeItem(OFFSET_KEY);
     }
     const p = localStorage.getItem(PENDING_KEY);
@@ -126,7 +126,16 @@ export function trustServerTime(serverMs: number, localMs = Date.now()): number 
  * that never syncs has no such reading, and its own clock decides nothing that is kept.
  */
 export function clockChecked(): boolean {
-  return confirmedAt > 0 && Date.now() - confirmedAt < TRUST_EXPIRES_MS;
+  return confirmedAt > 0 && trustedAge(Date.now() - confirmedAt);
+}
+/**
+ * Whether a server reading this old still confirms the clock. Never one dated after now: the clock was set back since,
+ * and the old reading confirmed a clock that is no longer in force. A negative age passed "less than seven days" and
+ * the device parked its own plants by the wrong clock, for good (round sixty; three reviews). Five minutes of slack
+ * cover the reading's own rounding and a clock nudged back by a time sync, as a set-back of hours or days is not.
+ */
+function trustedAge(age: number): boolean {
+  return age > -5 * 60_000 && age < TRUST_EXPIRES_MS;
 }
 /** The current correction, for the clock warning to say how far off the device is. */
 export const clockOffsetMs = () => offsetMs;

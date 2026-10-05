@@ -8,10 +8,7 @@
  * the card must render the same everywhere.
  */
 import { climograph, type ClimoInput } from '$climate/climograph';
-import { frostWording } from '$core/extremes';
-import { coldFloor } from '$core/sheet';
-import { archFor } from '$core/arch';
-import { temp, rain, tempUnit, rainUnit, METRIC, type Units, dryLabel } from '$core/units';
+import { temp, rain, ruleRain, tempUnit, rainUnit, METRIC, type Units, dryLabel } from '$core/units';
 
 export interface CardInput {
   units?: Units;
@@ -21,6 +18,8 @@ export interface CardInput {
   slug: string;
   climate: ClimoInput & { extremes?: { minAbs: number; minP01: number; maxP99: number; years: number; frostDaysPerYear: number; frostNights?: number } | null };
   cells: number;
+  /** The habitat's hemisphere, so the chart can say whose months it draws (round sixty; visitor 3). */
+  south?: boolean;
 }
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -36,13 +35,15 @@ export function climateCardSvg(c: CardInput): string {
   const dlis = m.map((x) => x.dli).filter((x): x is number => x != null);
   const ex = c.climate.extremes ?? null;
   const u = c.units ?? METRIC;
-  // The same floor rule as the sheet, so the card never names a figure the page does not.
-  const fl = coldFloor(m.map((x) => ({ ...x, tmean: (x.tmax + x.tmin) / 2 })), ex, archFor(c.name, c.family), u); // coldFloor reads only tmin; the mean is the type's, not the rule's
+  // The habitat's own figures, as the page's glance row prints them: the archetype table's convention is never on the card
+  // and never over a habitat night (round sixty; self-review 3). The rule's own wording: "of 25 mm or more", counted as
+  // `>= 25`, with no "(1 in)" on a metric card; "lowest to highest month", since the darkest month is not always winter
+  // (round sixty; visitor 8, words 13).
   const figs: Array<[string, string, string]> = [
-    fl?.raised ? ['Cold floor', temp(fl.floor, u), `${fl.group} group minimum · ${ex ? 'hab. night' : 'coldest mean night'} ${temp(fl.habitat!, u, 1)}`] : ex ? ['Cold floor', temp(ex.minP01, u, 1), `1st-percentile night, ${ex.years} yrs · ${frostWording(ex)}`] : ['Coldest month', temp(m[cold].tmin, u), `${MON[cold]}, mean night`],
-    ['Warmest month', temp(m[hot].tmax, u), `${MON[hot]}, mean day`],
-    ['Rain', `${rain(rainYear, u)}/yr`, wetMonths === 0 ? `no month over 25 mm (1 in)` : `${wetMonths} month${wetMonths === 1 ? '' : 's'} over 25 mm (1 in)`],
-    dlis.length ? ['Light', `${Math.min(...dlis).toFixed(0)}–${Math.max(...dlis).toFixed(0)} DLI`, 'mol/m²/day, winter to summer'] : ['Cells', String(c.cells), 'habitat grid cells read']
+    ex ? ['Coldest nights', temp(ex.minP01, u, 1), `1 night in 100 colder, over ${ex.years} years · NASA POWER`] : ['Coldest mean night', temp(m[cold].tmin, u, 1), `${MON[cold]} mean night, not a floor · CHELSA`],
+    ['Warmest days', temp(m[hot].tmax, u), `${MON[hot]} mean day · CHELSA`],
+    ['Rain', `${rain(rainYear, u)}/yr`, `${wetMonths === 0 ? 'no month' : `${wetMonths} month${wetMonths === 1 ? '' : 's'}`} of ${ruleRain(25, u)} or more · CHELSA`],
+    dlis.length ? ['Light', `${Math.min(...dlis).toFixed(0)}–${Math.max(...dlis).toFixed(0)} DLI`, 'mol/m²/day, lowest to highest month, open sky · CHELSA'] : ['Cells', String(c.cells), 'habitat grid cells read']
   ];
   const g = climograph({ ...c.climate, extremes: ex ? { minAbs: ex.minAbs, maxP99: ex.maxP99, years: ex.years } : null }, 640, u);
   const gx = 520, gy = 96, scale = Math.min(1, 500 / g.height);
@@ -84,15 +85,17 @@ export function climateCardSvg(c: CardInput): string {
   ${figsSvg}
   <rect x="${gx - 12}" y="${gy - 12}" width="${g.width * scale + 24}" height="${g.height * scale + 24}" rx="12" fill="${card}"/>
   ${chart}
-  <g transform="translate(${gx} ${gy + g.height * scale + 34})" font-family="system-ui, sans-serif" font-size="11.5" fill="${ink2}">
+  <!-- Two lines, so the last item ends inside the card: on one line "RH, own scales" ran off its right edge (round sixty; visitor 8). -->
+  <g transform="translate(${gx} ${gy + g.height * scale + 30})" font-family="system-ui, sans-serif" font-size="11.5" fill="${ink2}">
     <line x1="0" x2="16" y1="-4" y2="-4" stroke="${warm}" stroke-width="2.5"/><text x="22" y="0">day</text>
     <line x1="60" x2="76" y1="-4" y2="-4" stroke="${cool}" stroke-width="2.5"/><text x="82" y="0">night</text>
     <rect x="128" y="-11" width="10" height="10" fill="${cool}" opacity="0.55"/><text x="144" y="0">rain</text>
     <rect x="186" y="-11" width="16" height="10" fill="${warm}" opacity="0.25"/><text x="208" y="0">10th–90th percentile across cells</text>
-    <rect x="410" y="-11" width="16" height="10" fill="${ink}" opacity="0.06"/><text x="432" y="0">cold quarter</text>
-    ${g.strip ? `<line x1="520" x2="536" y1="-4" y2="-4" stroke="${accent}" stroke-width="2"/><text x="542" y="0">DLI</text><line x1="580" x2="596" y1="-4" y2="-4" stroke="${ink3}" stroke-width="2" stroke-dasharray="3 3"/><text x="602" y="0">RH, own scales</text>` : ''}
+    <rect x="0" y="9" width="16" height="10" fill="${ink}" opacity="0.06"/><text x="22" y="18">cold quarter</text>
+    ${g.strip ? `<line x1="110" x2="126" y1="14" y2="14" stroke="${accent}" stroke-width="2"/><text x="132" y="18">DLI</text><line x1="170" x2="186" y1="14" y2="14" stroke="${ink3}" stroke-width="2" stroke-dasharray="3 3"/><text x="192" y="18">RH, each on its own scale</text>` : ''}
+    <text x="${g.strip ? 360 : 110}" y="18">habitat months${c.south == null ? '' : `, ${c.south ? 'southern' : 'northern'} hemisphere`}</text>
   </g>
-  <text x="40" y="${H - 40}" font-family="system-ui, sans-serif" font-size="12" fill="${ink2}">Median year across ${c.cells} habitat cell${c.cells === 1 ? '' : 's'} (band: 10th–90th percentile). CHELSA V2.1 1981–2010 (CC0) · NASA POWER · records: GBIF · range: WCVP, RBG Kew (CC BY 4.0).</text>
+  <text x="40" y="${H - 40}" font-family="system-ui, sans-serif" font-size="12" fill="${ink2}">Median year across ${c.cells} habitat cell${c.cells === 1 ? '' : 's'} (band: 10th–90th percentile). CHELSA V2.1 1981–2010 (CC0)${ex ? ` · NASA POWER, ${ex.years} years` : ''} · records: GBIF · range: WCVP, RBG Kew (CC BY 4.0).</text>
   <text x="40" y="${H - 20}" font-family="system-ui, sans-serif" font-size="12" fill="${ink2}">Derived by rule, not written. Every figure and its source: <tspan fill="${accent}" font-weight="700">cultifolio.com/species/${esc(c.slug)}</tspan></text>
 </svg>`;
 }

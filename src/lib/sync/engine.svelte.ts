@@ -38,6 +38,7 @@
  * what records mention that we lack.
  */
 import { collection } from '$lib/db/collection.svelte';
+import { storageErrorText } from '$lib/db/storage-error';
 import { StoppedError, getMeta, setMeta, setMetaIfKey, getPhotoBlobs, putPhotoBlobs, deletePhotoBlobs, photoBlobIds, outboxKeys, outboxAck, outboxFill, outboxClear, changesByKeys, appendChanges, onOtherTabWrite, announceSyncForgotten } from '$lib/db/vault';
 import { deriveKeys, sealJson, openJson, seal, open, packPhoto, unpackPhoto, parseVaultKey, batchFingerprint, dropProof, sha256hex, type VaultKeys } from './crypto';
 import { MAX_BATCH_BYTES, MAX_PHOTO_BYTES, SEAL_OVERHEAD, OVERLAP_MS, CURSOR_SLACK_MS, PUSH_HEADERS, PHOTO_DROP_HEADER, batchName, listAfter, logBatch } from './limits';
@@ -137,6 +138,12 @@ class Sync {
   busy = $state<string | null>(null);
   lastSync = $state<string | null>(null);
   lastError = $state<string | null>(null);
+  /**
+   * The server's own refusal of this vault's uploads, as it said it, and when the device asks again: a vault past the
+   * site's ceiling of vaults is answered 503 with a sentence and a Retry-After, and the sync page shows both rather than
+   * "push failed: 503" (round sixty; three reviews). Receiving carries on meanwhile.
+   */
+  refusal = $state<{ text: string; until: number } | null>(null);
   /** The last run could not reach the server at all (no network), as opposed to the server answering with a refusal: the page says offline, and that the changes are kept (round twenty-four, 9). */
   offline = $state(false);
   /** With `offline`: the browser says it has no network ('offline'), or it has one and the server did not answer at all ('server'); the page words them apart (round twenty-five, 15). */
@@ -531,7 +538,7 @@ class Sync {
         // offline flag says so more plainly when it is set. Either way the page says offline, not failed (round twenty-four, 9).
         this.offline = e instanceof TypeError || (typeof navigator !== 'undefined' && navigator.onLine === false);
         this.unreached = !this.offline ? null : typeof navigator !== 'undefined' && navigator.onLine === false ? 'offline' : 'server';
-        this.lastError = e instanceof Error ? e.message : String(e);
+        this.lastError = (await storageErrorText(e)) ?? (e instanceof Error ? e.message || e.name || 'the run stopped' : String(e));
         const wait = (e as { retryAfterMs?: number })?.retryAfterMs;
         if (wait) this.schedule(wait);
       }
@@ -545,6 +552,31 @@ class Sync {
   }
 
   /** A 429 from the server: not a refusal of the item, a request to come back later. The run stops and is rescheduled for then. */
+  /**
+   * The server refusing this vault's uploads for a while (503: the site is past its ceiling of vaults, or could not count
+   * this one just now), with its own sentence and a time to ask again. Said on the sync page as the server said it; the
+   * outbox keeps every change, uploads wait until then (at most an hour between tries), and receiving carries on (round
+   * sixty; three reviews: "push failed: 503", re-sent every five minutes, the pull never ran).
+   */
+  private async refusedBy(r: Response): Promise<never> {
+    let text = '';
+    try { const body = (await r.clone().json()) as { error?: string; message?: string }; text = body.error || body.message || ''; } catch { /* a 503 with no sentence (the platform's own) */ }
+    const secs = Math.max(5, Math.min(3600, Number(r.headers.get('retry-after')) || 300));
+    if (secs >= 60) this.refusal = { text: text || 'The sync server is not taking uploads from this vault just now.', until: Date.now() + secs * 1000 };
+    const e = new Error(text || `the sync server asked this device to wait ${secs} s`);
+    (e as Error & { retryAfterMs?: number }).retryAfterMs = secs * 1000;
+    throw e;
+  }
+  /** Uploads wait while the server's refusal stands: no batch or photograph is sent to be refused again. */
+  private waitRefusal(): void {
+    if (!this.refusal) return;
+    const left = this.refusal.until - Date.now();
+    if (left <= 0) { this.refusal = null; return; }
+    const e = new Error(this.refusal.text);
+    (e as Error & { retryAfterMs?: number }).retryAfterMs = left;
+    throw e;
+  }
+
   private limited(r: Response): never {
     const secs = Math.max(5, Math.min(600, Number(r.headers.get('retry-after')) || 60));
     const e = new Error(`the server asked this device to wait ${secs} s before syncing again`);
@@ -571,6 +603,7 @@ class Sync {
   }
 
   private async push(m: SyncMeta): Promise<void> {
+    this.waitRefusal();
     const todo = await this.toPush();
     this.pending = todo.length;
     let sent = 0;
@@ -620,8 +653,9 @@ class Sync {
         await this.save(m);
         return;
       }
-      if (r.ok) { m.photosPushed.push(id); if (probing) this.setFull(m, null); }
+      if (r.ok) { m.photosPushed.push(id); this.refusal = null; if (probing) this.setFull(m, null); }
       else if (r.status === 429) this.limited(r);
+      else if (r.status === 503) await this.refusedBy(r);
       else if (r.status === 409 && (await this.serverHolds(m, id, packed))) m.photosPushed.push(id); // our own earlier send whose answer was lost: sealed again with a fresh nonce, so the bytes differ, the pixels do not
       else if (r.status >= 400 && r.status < 500 && r.status !== 401 && r.status !== 403) this.note(m, 'refused', id, `photo refused: ${r.status}`);
       else throw new Error(`photo push failed: ${r.status}`);
@@ -659,6 +693,7 @@ class Sync {
       // these same changes (round sixteen, 2; round seventeen, A1).
       await outboxAck(batch.map((c) => c.t), m.key);
       this.setFull(m, null);
+      this.refusal = null;
       if (!m.have.includes(key)) m.have.push(key);
       (m.haveAt ??= {})[key] = Date.now(); // its arrival, near enough: the server's clock and this one agree to the minute the overlap allows
       return batch.length;
@@ -669,6 +704,7 @@ class Sync {
       return 0;
     }
     if (r.status === 429) this.limited(r);
+    if (r.status === 503) await this.refusedBy(r);
     if ((r.status === 400 || r.status === 409 || r.status === 413) && mayResplit && batch.length > 1) {
       const mid = cutBefore(batch, Math.ceil(batch.length / 2)); // never between a notes change and its base (round twenty-nine, 9)
       const a = await this.pushBatch(m, batch.slice(0, mid));
@@ -962,9 +998,19 @@ class Sync {
     for (const { id, at } of removed) {
       if (have.has(id)) { await deletePhotoBlobs(id).catch(() => {}); collection.forgetPhotoUrls(id); }
       if (dropped.has(id) || nowMs() - at < DROP_AFTER_MS) continue;
-      const r = await syncFetch(`${this.base}/api/sync/photo/${id}?vault=${this.k(m).id}`, { method: 'DELETE', headers: { ...this.h(m), [PHOTO_DROP_HEADER]: await dropProof(this.k(m), id) } });
+      // With the removal's own time, so the server can tell a removal made before a newer upload of this photograph from
+      // another device, and leave the newer one (round sixty; the stale DELETE in both outside reviews).
+      const r = await syncFetch(`${this.base}/api/sync/photo/${id}?vault=${this.k(m).id}`, { method: 'DELETE', headers: { ...this.h(m), [PHOTO_DROP_HEADER]: await dropProof(this.k(m), id), 'x-photo-removed-at': String(Math.round(at)) } });
       if (r.status === 429) this.limited(r);
       if (this.meta !== m) throw stopped();
+      if (r.status === 503) continue; // the photograph is being stored or removed elsewhere this moment: asked again next run, nothing to report
+      if (r.status === 409) {
+        // A newer upload of this photograph (an Undo or an edit elsewhere brought it back) is on the server: it stays, and
+        // this removal is done with; the record's own fold decides what shows.
+        (m.photosDropped ??= []).push(id);
+        changed = true;
+        continue;
+      }
       if (r.status === 403) {
         // Under another vault's proof: the bytes stay, counted, and the sync page says so once (round fifty-one, 2).
         this.note(m, 'refused', id, 'photo: the server kept the bytes of a removed photograph, since the removal proof did not match the one its upload left');

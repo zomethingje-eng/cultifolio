@@ -36,9 +36,11 @@ export const key = (kind: Kind, id: string) => `${kind}:${id}`;
  * those rules, since a snapshot is a fold this build never ran; a test holds a hash of the fold's source and fails when
  * the source changes and this number does not (round fifty-seven). 3: an `importedOn` is an edit like any other, since
  * no build writes one. 4: without an arrival, a change is parked by the clock only when a server reading has confirmed
- * that clock; this device's own changes far past an unchecked clock are folded (round fifty-nine).
+ * that clock; this device's own changes far past an unchecked clock are folded (round fifty-nine). 5: this device's own
+ * changes are never parked by its clock, checked or not; and a snapshot records whether the clock was checked when it
+ * was folded, so one folded unchecked is not read once the clock is (round sixty).
  */
-export const FOLD_RULES = 4;
+export const FOLD_RULES = 5;
 
 /** Field names the record itself owns, plus the fold's own bookkeeping names; a change may never set them. */
 export const RESERVED_FIELDS = new Set(['id', 'kind', '_t', '_deleted=', '*']);
@@ -193,10 +195,17 @@ export interface Hold {
  * device (round fifty-two, 1). Two days is far past any clock drift (a clock a day wrong is held and comes due) and short of any typo in a year.
  */
 export const PARK_MS = 2 * 86_400_000;
-/** Whether the fold parks the change: already parked, or stamped more than two days past its arrival (or the clock). This device's own changes are not exempt: once its clock is corrected, what it stamped years ahead is wrong here too. */
+/** Whether the fold parks the change: already parked, or stamped more than two days past its arrival, or past a confirmed clock when it is a peer's (round sixty: this device's own changes are never parked by its own clock). */
 export function isParked(t: string, hold: Hold): boolean {
   if (hold.parked?.has(t)) return true;
-  if (hold.arrival == null && !hold.clockChecked) return false;
+  if (hold.arrival == null) {
+    // Judged by this device's clock alone: only a clock a sync server has confirmed, and never this device's own
+    // changes (round sixty; three reviews). Its own stamps say what its clock read when they were made; a clock set
+    // back made them look years ahead and hid the grower's plants, for good, and a clock that was fast is undone by the
+    // grower's next edit to the field (collection.stampPast), not by a reading.
+    if (!hold.clockChecked) return false;
+    if (hold.except && t.slice(t.lastIndexOf('-') + 1).startsWith(hold.except)) return false;
+  }
   return hlcWall(t) > (hold.arrival ?? hold.now) + PARK_MS;
 }
 

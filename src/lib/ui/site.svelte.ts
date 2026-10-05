@@ -53,3 +53,12 @@ class SiteStore {
   }
 }
 export const site = new SiteStore();
+
+/**
+ * The reader's latitude for the hemisphere of the months: the site, else the first place with coordinates. One helper
+ * for the species page's rule, the labels and Today: Today read the site alone, so a grower with a place at −33.9 and
+ * no site was told a Copiapoa was out of its cooler months in October (round sixty; the self-review's 10).
+ */
+export function readerLat(places: ReadonlyArray<{ lat?: number | null }>, s: Site | null = site.current): number | null {
+  return s?.lat ?? places.map((l) => l.lat).find((x): x is number => x != null) ?? null;
+}

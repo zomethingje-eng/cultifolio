@@ -119,7 +119,7 @@ const doc = {
   manifestKeys: says(/manifest\.json \{ (format): "cultifolio-backup", (v): 1, (exported): [^,]*, (device), (app), (counts): \{ ([a-zA-Z, ]+) \}, (photosMissing): [^\]]*\], (parked): [^\]]*\] \}/),
   tooBig: says(/A body larger than the limit is (\d+)/)[1],
   rateLimited: says(/past any of these the answer is (\d+) with Retry-After/)[1],
-  ceilings: says(/past either the answer to a creation is (\d+) with a sentence/)[1],
+  ceilings: says(/Past either ceiling the answer is (\d+) with Retry-After and a sentence/)[1],
   pairing: says(/and the (cultifolio:\/\/vault\?k=) prefix of the pairing link/)[1],
   writerTotal: Number(says(/(\d+) characters in all/)[1]),
   idRead: Number(says(/the app reads the time as the (\d+) characters after the prefix/)[1]),

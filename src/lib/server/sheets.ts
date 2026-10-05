@@ -10,7 +10,7 @@ const cache = new Map<string, { at: number; sheets: Sheet[] }>();
 /**
  * Every sheet in a bucket. The build's file named by the manifest (one object read), else derived here from the
  * dossiers (a few hundred reads, sixteen at a time; the fixture corpus, which has no manifest). Kept ten minutes in
- * this isolate; the route puts it in the edge cache (round twelve, 8).
+ * this isolate; the route puts it in the Worker's cache, the Cache API (round twelve, 8).
  */
 export async function sheetsIn(c: Loaded, platform: Platform, fetch: Fetch, bucket: string): Promise<Sheet[]> {
   const corpus = c.corpus;
