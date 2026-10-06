@@ -1,0 +1,18 @@
+74d73
+<     if (claimed != null && claimed > since) return 'newer';
+77,81d75
+<     // R2's own record of the upload, when the device said when it removed the photograph: an object stored after that is
+<     // newer than the removal, even once its claim has been swept.
+<     if (removed != null && existing.uploaded instanceof Date && existing.uploaded.getTime() > removed) return 'newer';
+<     // The token alone could add; it must not be able to destroy. The object carries the proof its upload left, and only a
+<     // key-holder can repeat it (round fifty-one, 2).
+83a78
+>     if (claimed != null && claimed > since) return 'newer';
+613a609
+>   let proved = false;
+617a614
+>       proved = !!extra.drop && md.drop === extra.drop;
+629c626
+<   const r = await withHold(quota, id, key, run, (x) => x === 'stored' || x === 'same');
+---
+>   const r = await withHold(quota, id, key, run, (x) => x === 'stored' || (x === 'same' && proved));
