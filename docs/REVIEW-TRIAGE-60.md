@@ -46,7 +46,7 @@ What round sixty-one takes from `docs/REVIEW-SELF-60.md` (nine reviews, reports 
    - A claim is recorded only for an upload that carries the matching drop proof.
    - The proof is checked before anything else.
    - A DELETE 409 is "ask again next run", not final.
-   - Hold fencing: the delete re-reads the object's version under a renewed hold just before deleting, and skips it if the version changed. This narrows B10's window to the R2 call itself. Generation-addressed photo objects close it, but they are a data-model change and go with that work, stated in `/about/formats`.
+   - Hold fencing: the delete re-reads the object's version under a renewed hold just before deleting, and skips it if the version changed. This narrows B10's window to the R2 call itself; B is right that it is not a correctness guarantee, since a second HEAD is still a race. Generation-addressed photo objects with a fenced pointer close it. They are a data-model change and go with that work, now brought forward to the round after this one, and the residual race is stated in `/about/formats` until then. B10's interleaving becomes a test that fails until they land.
 6. **Server.**
    - **Recounts:** the retry keeps its generation check. After two crossed listings, a 503 asks the device to try again.
    - **Admission:** `unadmit` keeps the place while another lease is live. `filled:true` is written at the first landing, not at admission. The KV fallback counts per vault and gives back the day.
@@ -65,12 +65,12 @@ What round sixty-one takes from `docs/REVIEW-SELF-60.md` (nine reviews, reports 
    - **Length cuts:** `searchCatalogue` cuts by code point.
    - **Common names:** `gbif.vernacular` keeps GBIF's `preferred` flag and a count of sources. The build chooses the display name by the corpus review's rule:
      1. English only.
-     2. Names containing another genus last.
+     2. Names containing another genus last, and so are comma lists of several names and strings shaped like a binomial (B).
      3. Preferred first.
      4. Most sources.
-     5. GBIF's order last.
+     5. GBIF's order last, then the shorter name, then alphabetical order, so the choice never depends on the order of the build.
 
-     Capitals after hyphens are lowered. The species page uses the index's rule. This needs an index rebuild after the deploy.
+     Capitals after hyphens are lowered. No source string is split into new names, and every alternative stays searchable. The species page uses the index's rule, and `/about/how` says the shown name is "the English name GBIF reports, chosen by this rule", not the name growers use most (B). Before the deploy, the audit in `docs/review-60/tests/corpus--common-name-rule.test.ts` is run on the live index and a sample of the changed names is read. This needs an index rebuild after the deploy.
 8. **Words and credibility.**
    - **Labels** become the figures' own names: "Cold floor (1 night in 100)" with the record low beside it, "Warmest month, mean day", "Rain a year", "Open-sky light". On the glance row, compare and the share card.
    - **Sources:** the chart names CHELSA in its caption. The hero's credit sits where a phone shows it.
@@ -95,6 +95,8 @@ What round sixty-one takes from `docs/REVIEW-SELF-60.md` (nine reviews, reports 
     - Settings, units and the frost site are locked in the sample, as Sync and Backup are, and the label sheet's choices are kept per tab.
     - The flag is read before paint, and the bar is drawn from the server. The sample is set out in one commit.
     - A leftover sample database is deleted on any load outside the sample. A second sample tab is told plainly when the sample closes.
+    - Defensive guards in the code, not only CSS: in the sample, the sync engine's setup and run, backup restore and the staging database refuse to start, and the restore staging database is named per collection (B: "the shared staging name and CSS-based hiding").
+    - A storage helper with an explicit scope (this collection or this device) replaces direct `localStorage` calls for settings, so the next feature cannot leak across the sample by accident (B's suggestion).
 11. **Accessibility and performance.**
     - **Focus:** the toast never swallows Tab without a target. `aria-disabled` replaces `disabled` on the new actions, which move focus where it belongs.
     - **Bundle:** the grow layer is imported by its own path, not the barrel.
@@ -127,6 +129,7 @@ What round sixty-one takes from `docs/REVIEW-SELF-60.md` (nine reviews, reports 
       - the 13 harness files.
     - **Vacuous tests:** each one listed is fixed or renamed.
     - **Timeouts** for the zip-bomb and multi-page tests.
+    - **Negative assertions:** the e2e tests that wait a fixed time and then assert that something did not appear (`r60-grow.spec.ts:408`, `:449`, and the like in `smoke.spec.ts`) wait instead for the operation that would cause it to settle, then assert (B).
     - **The port** comes from `baseURL`.
 
 ## Deferred, with reasons
