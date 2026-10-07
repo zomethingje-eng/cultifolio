@@ -7,7 +7,7 @@
  * An index carries each species' English names as `common` then `commons`, in the order the old rule kept them (GBIF's
  * order, one per spelling in lower case), and not GBIF's `preferred` flag or source counts, which the dossiers keep only
  * from this round. So the audit reads the index's names as GBIF's list with neither: it measures rules 1, 2 and 5 and the
- * spelling (the genus, comma and binomial set-back, the grouping of spellings and the hyphen capitals) exactly, and
+ * spelling (the genus, comma and binomial set-back, the grouping of spellings and the capital first letter) exactly, and
  * rules 3 and 4 (preferred, most sources) only as far as two spellings of one name stand for two sources. The rebuild
  * after the deploy reads the dossiers' own flags, so its choices can differ from this audit's where GBIF marks a name
  * preferred; the build's index is the one to read after it (run this again on it).
@@ -22,7 +22,7 @@ export interface Audit {
   changed: number;
   /** Of the changed: the old name was set back (it names another genus, is a comma list, or is shaped like a binomial). */
   setBack: number;
-  /** Of the changed: the same name, spelled otherwise (a capital after a hyphen lowered, or another spelling of it). */
+  /** Of the changed: the same name, spelled otherwise (another spelling of it, or the first letter as a capital). */
   spellingOnly: number;
   /** Of the changed: another name, chosen because two spellings of it count as two sources. */
   bySources: number;

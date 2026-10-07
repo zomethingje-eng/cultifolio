@@ -4,9 +4,10 @@
  *
  * Adopted from docs/review-60/tests/corpus--common-name-rule.test.ts. Its reproduction ("englishNames shows a name that
  * names another genus …") FAILED on the base and PASSES now. Its proposed rule (`displayCommon`) is now the code's, so
- * its cases call `englishNames` with the corpus's genera; two expectations change with the decision, which lowers every
- * capital straight after a hyphen and not only a little word's: "String-Of-Beads" is "String-of-beads" (the review had
- * "String-of-Beads"), and "Queen-Victoria Agave" is "Queen-victoria Agave".
+ * its cases call `englishNames` with the corpus's genera. The decision lowered every capital straight after a hyphen;
+ * the first index built with it showed "Apple-of-peru" and "Black-eyed-susan", and chose "japanese-privet" over GBIF's
+ * own "Japanese Privet" by fewest capitals. So before the deploy: a source's spelling is kept as written, but for its first
+ * letter, which is shown as a capital; of a name's spellings the one more sources give is shown, then GBIF's first.
  *
  * The audit runs only with INDEX=<path to a built index.json>; the same audit is scripts/audit-common-names.ts, for the
  * live index: INDEX=static/s/v2/index.json npx vitest run tests/unit/r61q-common-name-rule.test.ts
@@ -38,12 +39,12 @@ describe('the common name shown (corpus 9, review B)', () => {
     // Base: "String-Of-Beads Senecio".
     expect(englishNames(CURIO, { genus: 'Curio', genera: GENERA }).common).not.toMatch(/Senecio/);
   });
-  it('Curio rowleyanus shows "String of pearls"; every other name stays, in the rule\'s order, one spelling each', () => {
-    expect(englishNames(CURIO, { genus: 'Curio rowleyanus', genera: GENERA })).toEqual({ common: 'String of pearls', commons: ['string of beads', 'String-of-beads Senecio'] });
+  it('Curio rowleyanus shows "String-of-Pearls" (two sources, GBIF\'s spelling first); every other name stays, in the rule\'s order, one spelling each', () => {
+    expect(englishNames(CURIO, { genus: 'Curio rowleyanus', genera: GENERA })).toEqual({ common: 'String-of-Pearls', commons: ['String of beads', 'String-Of-Beads Senecio'] });
   });
-  it('a name naming the species\' own genus is not set back ("Tiger Aloe" for an Aloe); a capital after a hyphen is lowered', () => {
+  it('a name naming the species\' own genus is not set back ("Tiger Aloe" for an Aloe); a capital after a hyphen is the source\'s and stays', () => {
     expect(shown([{ name: 'Tiger Aloe', lang: 'eng' }], 'Aloe')).toBe('Tiger Aloe');
-    expect(shown([{ name: 'Queen-Victoria Agave', lang: 'eng' }, { name: 'Royal agave', lang: 'eng' }], 'Agave')).toBe('Queen-victoria Agave');
+    expect(shown([{ name: 'Queen-Victoria Agave', lang: 'eng' }, { name: 'Royal agave', lang: 'eng' }], 'Agave')).toBe('Queen-Victoria Agave');
   });
   it('the old genus in a name sets it back only when another English name exists', () => {
     expect(shown([{ name: 'Tiger Aloe', lang: 'eng' }], 'Gonialoe')).toBe('Tiger Aloe');
@@ -65,21 +66,25 @@ describe('the common name shown (corpus 9, review B)', () => {
     expect(shown([{ name: 'Jade', lang: 'eng', sources: 5 }, { name: 'Money plant', lang: 'eng', preferred: true }], 'Crassula')).toBe('Money plant');
     expect(shown([{ name: 'Jade', lang: 'eng' }, { name: 'Money aloe', lang: 'eng', preferred: true }], 'Crassula')).toBe('Jade');
   });
-  it('the spelling shown does not depend on the order the sources were read in', () => {
+  it('of a name\'s spellings, the one more sources give is shown; on a tie, the one GBIF lists first', () => {
     const a = [{ name: 'String-of-Pearls', lang: 'eng' }, { name: 'String of pearls', lang: 'eng' }];
-    expect(shown(a, 'Curio')).toBe('String of pearls');
+    expect(shown(a, 'Curio')).toBe('String-of-Pearls');
     expect(shown([...a].reverse(), 'Curio')).toBe('String of pearls');
+    expect(shown([{ name: 'japanese-privet', lang: 'eng' }, { name: 'Japanese Privet', lang: 'eng', sources: 2 }], 'Ligustrum')).toBe('Japanese Privet');
   });
-  it('mechanical title case is undone on the letter after a hyphen only', () => {
-    expect(shown([{ name: 'String-Of-Beads', lang: 'eng' }], 'Curio')).toBe('String-of-beads');
+  it('a source\'s spelling is kept as written but for its first letter, shown as a capital (the first build lowered "Apple-of-Peru")', () => {
+    expect(shown([{ name: 'String-Of-Beads', lang: 'eng' }], 'Curio')).toBe('String-Of-Beads');
+    expect(shown([{ name: 'Apple-of-Peru', lang: 'eng' }], 'Nicandra')).toBe('Apple-of-Peru');
+    expect(shown([{ name: 'flooded-gum', lang: 'eng' }], 'Eucalyptus')).toBe('Flooded-gum');
     expect(shown([{ name: 'Christmas Cactus', lang: 'eng' }], 'Schlumbergera')).toBe('Christmas Cactus');
+    expect(englishNames([{ name: 'Jade', lang: 'eng' }, { name: 'baby jade', lang: 'eng' }]).commons).toEqual(['Baby jade']);
   });
   it('no English name: none; an untagged name is not English', () => {
     expect(shown([{ name: 'tweeblaarkanniedood', lang: 'afr' }], 'Welwitschia')).toBeUndefined();
     expect(shown([{ name: 'Tumboa' }], 'Welwitschia')).toBeUndefined();
   });
   it('without the corpus\'s genera (a caller with no index), comma lists are still set back and nothing else is guessed', () => {
-    expect(englishNames(CURIO)).toEqual({ common: 'String of pearls', commons: ['String-of-beads Senecio', 'string of beads'] });
+    expect(englishNames(CURIO)).toEqual({ common: 'String-of-Pearls', commons: ['String-Of-Beads Senecio', 'String of beads'] });
     expect(englishNames([{ name: 'Iris, flag', lang: 'eng' }, { name: 'Butterfly iris', lang: 'eng' }])).toEqual({ common: 'Butterfly iris', commons: ['Iris, flag'] });
   });
   it('a stored dossier built before (no preferred, no sources) reads as not preferred, one source', () => {
@@ -122,10 +127,10 @@ describe('the audit (scripts/audit-common-names.ts)', () => {
       { name: 'Senecio vulgaris', common: 'Groundsel' },
       { name: 'Crassula ovata', common: 'Jade', commons: ['Money-Plant', 'Money plant'] },
       { name: 'Aloe vera', common: 'Barbados aloe' },
-      { name: 'Agave americana', common: 'Century-Plant' }
+      { name: 'Agave americana', common: 'century-plant' }
     ], 40);
     expect(a).toMatchObject({ species: 5, withCommon: 5, changed: 3, setBack: 1, spellingOnly: 1, bySources: 1 });
-    expect(a.sample).toEqual(['Curio rowleyanus: "String-Of-Beads Senecio" -> "String of pearls"', 'Crassula ovata: "Jade" -> "Money plant"', 'Agave americana: "Century-Plant" -> "Century-plant"']);
+    expect(a.sample).toEqual(['Curio rowleyanus: "String-Of-Beads Senecio" -> "String-of-Pearls"', 'Crassula ovata: "Jade" -> "Money-Plant"', 'Agave americana: "century-plant" -> "Century-plant"']);
   });
   it('on the synthetic 9,000-species corpus it runs and its sample is at most the size asked', () => {
     reseed(7);

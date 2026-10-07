@@ -47,7 +47,7 @@ Tests: the convergence fuzz now asserts its bound, zero: all 120 skewed seeds co
 
 1. "String of Pearls" is searched whole: a capitalised word starts an author citation only after an epithet of four letters or more, and a word ending in "." that is not a rank starts one in any case ("orbea humilis l."). After "x" or "×" the name starts again; a capitalised quoted cultivar is left out of the first pass; a hyphenated epithet is one word.
 2. The picker offers no retried hit as a match and keeps the typed variety.
-3. **Common names by a fixed rule:** English only; names containing another genus, comma lists and binomial-shaped strings last; GBIF's preferred flag; the number of sources; then GBIF's order, length and alphabet. A capital after a hyphen is lowered. Curio rowleyanus now shows "String of pearls". The species page computes its names on the server with the corpus's genera, so page and tile agree. `scripts/audit-common-names.ts` measures the change on an index before the deploy; GBIF's preferred flags and source counts reach a dossier only when a build fetches its names afresh.
+3. **Common names by a fixed rule:** English only; names containing another genus, comma lists and binomial-shaped strings last; GBIF's preferred flag; the number of sources; then GBIF's order, length and alphabet. Of a name's spellings, the one more sources give is shown, then GBIF's first; the first letter is shown as a capital and nothing else is changed. Curio rowleyanus now shows "String-of-Pearls". (The decision also lowered every capital after a hyphen, and chose among spellings by the fewest capitals; the first index built on the PC showed "Apple-of-peru", "Black-eyed-susan" and "japanese-privet", so both were dropped before the deploy: section 12.) The species page computes its names on the server with the corpus's genera, so page and tile agree. `scripts/audit-common-names.ts` measures the change on an index before the deploy; GBIF's preferred flags and source counts reach a dossier only when a build fetches its names afresh.
 4. A request's search passes are charged against one count (corpus 17). The about pages carry no sitemap `lastmod`.
 
 ## 6. Words and the front page (decisions 8, 9)
@@ -100,3 +100,11 @@ The unit suite passes with the clock at 2 January 2027 and at 23:59:50 on New Ye
   - a search request's passes charged together.
 
   The fold-rules hash was re-recorded under 6 for the vault change, which alters no fold.
+
+## 12. Found at the first deploy
+
+- **The deploy stopped at its own tests.** `r61g-layout-bundle` reads the last build's manifest, and `npm run deploy` runs the tests before it builds, so on the PC it read round sixty's build, whose layout still imported the backup module. The test now skips a build older than any source file; in the sandbox it had read a fresh build. Nothing was deployed.
+- **The corpus went up anyway**, built with round sixty-one's index code and served by round sixty's Worker; the index's fields are the same, so the site kept working. Reading that index showed two parts of decision 7's name rule doing harm:
+  - lowering every capital after a hyphen damaged proper nouns: "Apple-of-peru", "Black-eyed-susan", "Cape-may", "Pride-of-barbados";
+  - choosing among a name's spellings by the fewest capitals picked GBIF's lower-case listings: "japanese-privet" over "Japanese Privet", "flooded-gum", "milkwood-pine". 582 shown names began with a lower-case letter.
+- **The rule now:** a source's spelling is kept as written but for its first letter, shown as a capital; of a name's spellings, the one more sources give is shown, then the one GBIF lists first. Run on the PC's dossiers, it shows "Japanese Privet", "Apple of Peru", "Pride of India", "Flooded Gum" and "String-of-Pearls", and no shown name begins in lower case. GBIF's own title case stays where GBIF wrote it ("Bird-Of-Paradise"), since changing it is a guess about which capitals are names. The index is rebuilt after the deploy.

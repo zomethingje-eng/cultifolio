@@ -38,12 +38,15 @@ export function generaOf(names: Iterable<string>): Set<string> {
   return out;
 }
 
-/** A capital straight after a hyphen is lowered: "String-Of-Beads" is "String-of-beads" (round sixty-one, decision 7). Nothing else of the source's spelling is changed. */
-const unHyphenCaps = (s: string) => s.replace(/-(\p{Lu})/gu, (_, c: string) => '-' + c.toLowerCase());
+/**
+ * The first letter as a capital, and nothing else changed: a name listed in lower case ("flooded-gum") reads as a name
+ * under the species ("Flooded-gum"). Capitals inside a name are the source's and stay: lowering the one after a hyphen
+ * (decided in round sixty-one) made "Apple-of-Peru" "Apple-of-peru" and "Black-eyed-Susan" "Black-eyed-susan", so it
+ * was taken out before it shipped (round sixty-one, the first deploy's index).
+ */
+const firstUp = (s: string) => { const c = [...s][0] ?? ''; return /\p{Ll}/u.test(c) ? c.toLocaleUpperCase('en') + s.slice(c.length) : s; };
 /** One name whatever its case, hyphens, spacing or apostrophe: "String-of-Pearls" and "String of pearls" are one name given twice. */
 const nameKey = (s: string) => s.normalize('NFKC').toLowerCase().replace(/[’‘`]/g, "'").replace(/[-\s]+/g, ' ').trim();
-/** Capitals after the first letter: of two spellings of one name, the one with fewer is shown. */
-const extraCaps = (s: string) => (s.slice(1).match(/\p{Lu}/gu) ?? []).length;
 const byCode = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
 /**
@@ -59,23 +62,26 @@ const byCode = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
  *      corpus and one lower-case word). These need `scope`; without it, only comma lists are set back.
  *   3. Then a name GBIF marks preferred.
  *   4. Then the name more sources give.
- *   5. Then GBIF's order, then the shorter name, then alphabetical order. Of a name's spellings, the one with the fewest
- *      capitals after its first letter is shown, then the shorter, then the first alphabetically, so the spelling does
- *      not depend on the order the sources were read in.
- * A capital straight after a hyphen is lowered. No source string is split into new names, and every name stays in the
+ *   5. Then GBIF's order, then the shorter name, then alphabetical order. Of a name's spellings, the one more sources
+ *      give is shown, then the one GBIF lists first. (Fewest capitals chose "japanese-privet" over GBIF's own "Japanese
+ *      Privet" on the first build, so it was dropped.)
+ * The first letter is shown as a capital; nothing else of a source's spelling is changed. No source string is split into new names, and every name stays in the
  * answer, so every alternative stays searchable: `common` is the rule's choice, `commons` every other English name in
  * the rule's order, one spelling each.
  */
 export function englishNames(vernacular: VernacularName[], scope: NameScope = {}): { common?: string; commons?: string[] } {
-  const groups = new Map<string, { at: number; spellings: string[]; sources: number; preferred: boolean }>();
+  const groups = new Map<string, { at: number; spellings: Map<string, { n: number; at: number }>; sources: number; preferred: boolean }>();
   vernacular.forEach((v, i) => {
     if (v.lang !== 'eng' || typeof v.name !== 'string') return;
-    const name = unHyphenCaps(v.name.trim().replace(/\s+/g, ' '));
+    const name = v.name.trim().replace(/\s+/g, ' ');
     if (!name) return;
     const k = nameKey(name);
-    const g = groups.get(k) ?? { at: i, spellings: [], sources: 0, preferred: false };
-    if (!g.spellings.includes(name)) g.spellings.push(name);
-    g.sources += Number.isInteger(v.sources) && v.sources! > 0 ? v.sources! : 1;
+    const g = groups.get(k) ?? { at: i, spellings: new Map(), sources: 0, preferred: false };
+    const n = Number.isInteger(v.sources) && v.sources! > 0 ? v.sources! : 1;
+    const sp = g.spellings.get(name) ?? { n: 0, at: i };
+    sp.n += n;
+    g.spellings.set(name, sp);
+    g.sources += n;
     g.preferred ||= v.preferred === true;
     groups.set(k, g);
   });
@@ -90,10 +96,10 @@ export function englishNames(vernacular: VernacularName[], scope: NameScope = {}
     return /^\p{L}+ (?:× ?)?\p{Ll}[\p{Ll}-]*$/u.test(spelling) && (ws[0] === own || genera.has(ws[0]));
   };
   const named = [...groups.entries()].map(([k, g]) => {
-    const spelling = [...g.spellings].sort((a, b) => extraCaps(a) - extraCaps(b) || a.length - b.length || byCode(a, b))[0];
+    const spelling = [...g.spellings.entries()].sort((a, b) => b[1].n - a[1].n || a[1].at - b[1].at)[0][0];
     return { spelling, back: setBack(spelling, k), ...g };
   });
   named.sort((a, b) => Number(a.back) - Number(b.back) || Number(b.preferred) - Number(a.preferred) || b.sources - a.sources || a.at - b.at || a.spelling.length - b.spelling.length || byCode(a.spelling, b.spelling));
-  const names = named.map((n) => n.spelling);
+  const names = named.map((n) => firstUp(n.spelling));
   return names.length > 1 ? { common: names[0], commons: names.slice(1) } : { common: names[0] };
 }
