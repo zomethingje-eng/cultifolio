@@ -3,6 +3,9 @@
  * "2026-0001 added", "Saved". Never a dialog, never in the way, and the
  * page it lands on says the same thing in full.
  */
+/** The longest a toast waits for a reader resting on it (round sixty-one; the accessibility review, 1). */
+export const HOLD_MAX_MS = 30_000;
+
 class Toast {
   text = $state<string | null>(null);
   /** An action the toast offers for a few seconds, such as Undo (round twenty-six, 5). */
@@ -13,7 +16,15 @@ class Toast {
    * accessibility review, 1).
    */
   origin: HTMLElement | null = null;
+  /**
+   * Where the keyboard came into the toast from, when it was raised with focus nowhere in particular (a tap, a page
+   * load): the way back then, so Tab past the last control and the toast's going never leave focus on nothing (round
+   * sixty-one; the accessibility review, 1).
+   */
+  entry: HTMLElement | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  /** The longest focus or the pointer holds the toast: a reader who rests on Undo keeps it, but not for good (round sixty-one; the accessibility review, 1). */
+  private cap: ReturnType<typeof setTimeout> | null = null;
   private shownAt = 0;
   /** When the running timer ends, and what is left of it while held. */
   private endsAt = 0;
@@ -27,6 +38,7 @@ class Toast {
     this.shownAt = Date.now();
     const a = typeof document !== 'undefined' ? document.activeElement : null;
     this.origin = typeof HTMLElement !== 'undefined' && a instanceof HTMLElement && a !== document.body && !a.closest('.toastregion') ? a : null;
+    this.entry = null;
     this.left = ms;
     this.holds = 0;
     this.arm();
@@ -48,11 +60,15 @@ class Toast {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     this.left = Math.max(0, this.endsAt - Date.now());
+    if (this.cap) clearTimeout(this.cap);
+    this.cap = setTimeout(() => this.hide(), HOLD_MAX_MS);
   }
   release() {
     if (!this.text || this.holds === 0) return;
     this.holds -= 1;
     if (this.holds > 0) return;
+    if (this.cap) clearTimeout(this.cap);
+    this.cap = null;
     this.left = Math.max(this.left, 2000);
     this.arm();
   }
@@ -60,12 +76,25 @@ class Toast {
   get held(): boolean {
     return this.holds > 0;
   }
+  /** Where focus goes from the toast: where it was raised, else where the keyboard came in from; null when neither is still on the page. */
+  wayBack(): HTMLElement | null {
+    if (this.origin?.isConnected) return this.origin;
+    if (this.entry?.isConnected) return this.entry;
+    return null;
+  }
   hide() {
+    // A toast that goes with focus inside it hands focus back first, so it does not fall to the page body as the toast
+    // is taken away (round sixty-one; the accessibility review, 1).
+    const inside = typeof document !== 'undefined' && !!document.activeElement?.closest?.('.toastregion');
+    const back = inside ? (this.wayBack() ?? (document.getElementById('main') as HTMLElement | null)) : null;
     this.text = null;
     this.action = null;
     this.holds = 0;
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
+    if (this.cap) clearTimeout(this.cap);
+    this.cap = null;
+    back?.focus();
   }
   /** A toast belongs to the page it was raised for: one shown just before a navigation rides along, an older one is put away. */
   onNavigate() {

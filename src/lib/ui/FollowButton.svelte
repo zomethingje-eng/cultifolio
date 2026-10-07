@@ -20,7 +20,8 @@
   }
 </script>
 
-<button class="btn" type="button" aria-pressed={on} disabled={!collection.ready || busy} title="Keep this species on your Wanted list without a plant of it" onclick={toggle}>{on ? 'Following ✓' : 'Follow'}</button>{#if wanted}<a class="wantedlink small" href="/plants#wanted">On your Wanted list ›</a>{/if}
+<!-- aria-disabled, not disabled: a disabled button drops keyboard focus to the page while it saves (round sixty-one; the accessibility review, 2). -->
+<button class="btn" type="button" aria-pressed={on} aria-disabled={!collection.ready || busy} title="Keep this species on your Wanted list without a plant of it" onclick={toggle}>{on ? 'Following ✓' : 'Follow'}</button>{#if wanted}<a class="wantedlink small" href="/plants#wanted">On your Wanted list ›</a>{/if}
 
 <style>
   .wantedlink { margin-left: 8px; white-space: nowrap; display: inline-flex; align-items: center; min-height: var(--tap); }

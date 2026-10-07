@@ -52,7 +52,7 @@ import { execSync } from 'node:child_process';
 import { buildDossier, NETWORK_EXTRAS, photosFromMedia, mergeGbifPhotos, type SkippableSource } from '../src/lib/dossier/build';
 import { mendGbifThumb } from '../src/lib/dossier/md5';
 import { heroOf } from '../src/lib/dossier/dedupe';
-import { englishNames } from '../src/lib/dossier/index-entry';
+import { englishNames, generaOf, type VernacularName } from '../src/lib/dossier/index-entry';
 import * as gbif from '../src/lib/dossier/sources/gbif';
 import { literature } from '../src/lib/dossier/sources/openalex';
 import * as inat from '../src/lib/dossier/sources/inat';
@@ -116,16 +116,38 @@ function diskPowerCache(dir: string): PowerCache {
 }
 
 type IndexEntry = { key: number; slug: string; name: string; family?: string; common?: string; commons?: string[]; origin: string[]; thumb?: string; photos: number; open: number; climate: string; near?: number[]; syn?: string[] };
-type Dossierish = { key: number; slug: string; name: { scientific: string; family?: string; status?: string; vernacular: Array<{ name: string; lang?: string }>; synonyms?: string[] }; distribution: { native: Array<{ name: string }> }; photos: Array<{ id: string; url: string; thumb: string; captive?: boolean }>; occurrences: { nOpenInRange: number; nRestrictedInRange?: number; nOutsideRange?: number }; climate: { status: string; months?: Array<{ tmax: number; tmin: number; precipMm: number }> } };
+type Dossierish = { key: number; slug: string; name: { scientific: string; family?: string; status?: string; vernacular: VernacularName[]; synonyms?: string[] }; distribution: { native: Array<{ name: string }> }; photos: Array<{ id: string; url: string; thumb: string; captive?: boolean }>; occurrences: { nOpenInRange: number; nRestrictedInRange?: number; nOutsideRange?: number }; climate: { status: string; months?: Array<{ tmax: number; tmin: number; precipMm: number }> } };
+/**
+ * Each species' English vernacular names, kept from its dossier while the index is made: the common name is chosen by
+ * `englishNames`'s rule, which sets back a name naming another genus of the corpus, and the corpus's genera are known
+ * only once every entry is (`nameEntries`; round sixty-one, decision 7).
+ */
+const vernOf = new Map<number, VernacularName[]>();
+/** The common names of every entry of the finished index, by the rule with the index's own genera. */
+function nameEntries(index: IndexEntry[]): void {
+  const genera = generaOf(index.map((e) => e.name));
+  index.forEach((e, i) => {
+    const names = englishNames(vernOf.get(e.key) ?? [], { genus: e.name, genera });
+    // In the entry's own place, after `family`, so a rebuilt index differs from the last only where a name does.
+    const o: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(e)) {
+      if (k === 'common' || k === 'commons') continue;
+      o[k] = v;
+      if (k === 'family') Object.assign(o, names);
+    }
+    index[i] = o as unknown as IndexEntry;
+  });
+}
 function indexEntry(d: Dossierish): IndexEntry & { status?: string } {
   const hero = heroOf(d.photos);
+  vernOf.set(d.key, d.name.vernacular.filter((v) => v.lang === 'eng'));
   // Older names, as binomials, other-genus ones first (the ones a label most often carries), six at most, so the
   // search and the picker find a species under a name it no longer has (round thirty-one, 3).
   const accepted = d.name.scientific;
   const genus = accepted.split(' ')[0];
   const syn = [...new Set((d.name.synonyms ?? []).map(canonicalSynonym).filter((x): x is string => !!x && x !== accepted))].sort((a, b) => Number(a.startsWith(genus + ' ')) - Number(b.startsWith(genus + ' '))).slice(0, 6);
   // The thumbnail in the form GBIF's cache still answers, whatever form the dossier holds (the Worker mends a dossier's as it reads it; the index carries no key to mend by, so it is mended here: round thirty-two, 1).
-  return { status: d.name.status, key: d.key, slug: d.slug, name: d.name.scientific, family: d.name.family, ...englishNames(d.name.vernacular), origin: d.distribution.native.map((n) => n.name), thumb: hero ? mendGbifThumb(hero.thumb, hero.id, hero.url) : undefined, photos: d.photos.length, open: d.occurrences.nOpenInRange, climate: d.climate.status, ...(syn.length ? { syn } : {}) };
+  return { status: d.name.status, key: d.key, slug: d.slug, name: d.name.scientific, family: d.name.family, ...englishNames(d.name.vernacular, { genus }), origin: d.distribution.native.map((n) => n.name), thumb: hero ? mendGbifThumb(hero.thumb, hero.id, hero.url) : undefined, photos: d.photos.length, open: d.occurrences.nOpenInRange, climate: d.climate.status, ...(syn.length ? { syn } : {}) };
 }
 
 /** Every dossier on disk, as index entries. The corpus is the files; the index is derived from them. */
@@ -570,6 +592,7 @@ function keepList(): void {
 /** The index is derived from the files; after a fill the thumbnails have changed, so it is written again. */
 function writeIndexFromDisk(): void {
   const index = uniqueSlugs(scanDossiers().sort((a, b) => a.name.localeCompare(b.name)));
+  nameEntries(index);
   const idxDir = `${outDir}/s/v${DOSSIER_V}`;
   mkdirSync(idxDir, { recursive: true });
   const indexText = JSON.stringify(index, null, 1);
@@ -825,6 +848,7 @@ async function main() {
   const index: IndexEntry[] = fixtures ? [...thisRun.values()] : scanDossiers().map((e) => thisRun.get(e.key) ?? e);
   index.sort((a, b) => a.name.localeCompare(b.name));
   uniqueSlugs(index);
+  nameEntries(index);
   const idxDir = fixtures ? outDir : `${outDir}/s/v${DOSSIER_V}`;
   mkdirSync(idxDir, { recursive: true });
   writeFileSync(`${idxDir}/index.json`, JSON.stringify(index, null, 1));

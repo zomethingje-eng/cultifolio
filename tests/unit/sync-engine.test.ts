@@ -633,7 +633,7 @@ describe('a peer whose clock is ahead', () => {
     A = await reboot(memA, r2);
     expect(collectionHolds).toBe(true);
     expect(A.collection.accession(plant.id)?.notes).toBe('no: leave it until spring'); // the load() fold skips the held change
-    expect(A.sync.held).toBe(2);
+    expect(A.sync.held).toBe(0); // round sixty-one: both held changes are overridden by A's edit, stamped past them, so neither is said to be on its way (the clock review's 9); the list still keeps them, to fold when due
     // When A's clock reaches B's stamp, the held change is folded in. A's edit, made while B's was held and within a day of
     // it, was stamped just past it (the grower saw the field as it was), so A's edit stands: since round fifty-eight the
     // held change reaches the fold's held list through the pull, and before that A's edit was stamped below it and lost
@@ -648,7 +648,7 @@ describe('a peer whose clock is ahead', () => {
     B = await reboot(memB, r2);
     expect(B.collection.accession(plant.id)?.notes).toBe('phone says: repot');
     expect(B.sync.held).toBe(0);
-    expect(B.sync.clockWarning).toMatch(/clock appears to have jumped back/);
+    expect(B.sync.clockWarning).toMatch(/dated as late as .*Nothing is lost/); // round sixty-one: said as what it means to the grower
     expect(A.sync.clockWarning).toBeNull();
   });
   it('a held change that arrives through a restore (an import) is held too, and re-folded when due', async () => {
@@ -1498,7 +1498,7 @@ describe('a removed photograph\'s pixels go from every device and from the serve
     await B.sync.run(); // asked once, not every run
     expect(D.calls.filter((c) => c === `DELETE /api/sync/photo/${pid2}`)).toHaveLength(1);
   });
-  it('round sixty: the removal carries its time; a 503 is asked again next run without a word, a 409 (a newer upload) is let be', async () => {
+  it('round sixty: the removal carries its time; a 503 is asked again next run without a word; round sixty-one: a 409 is not final either, asked again an hour on, and a 404 or a success ends it', async () => {
     const r2 = fakeR2();
     const memB = newMem('bbbbbbbbbbbb');
     mem = memB;
@@ -1533,9 +1533,22 @@ describe('a removed photograph\'s pixels go from every device and from the serve
       await B.sync.run(); // asked again
       expect(seen).toHaveLength(2);
       expect(B.sync.lastError).toBeNull();
-      expect((memB.meta.get('sync') as { photosDropped?: string[] }).photosDropped).toContain(pid);
-      await B.sync.run(); // and not again
+      // Round sixty-one (decision 5): a 409 is an upload claimed after the removal, a revival or a first upload landing
+      // late; not taken as done (round sixty took it as final, and a late first upload stayed on the server for good).
+      expect((memB.meta.get('sync') as { photosDropped?: string[] }).photosDropped ?? []).not.toContain(pid);
+      await B.sync.run(); // within the hour: not asked again, so a run every few minutes spends no allowance on it
       expect(seen).toHaveLength(2);
+      vi.useFakeTimers({ now: Date.now() + 61 * 60_000, toFake: ['Date'] });
+      try {
+        answer = 200;
+        await B.sync.run(); // an hour on: asked again, and this time the server removes it
+        expect(seen).toHaveLength(3);
+        expect((memB.meta.get('sync') as { photosDropped?: string[] }).photosDropped).toContain(pid);
+        await B.sync.run(); // and done with
+        expect(seen).toHaveLength(3);
+      } finally {
+        vi.useRealTimers();
+      }
     } finally {
       globalThis.fetch = real;
     }
@@ -1588,7 +1601,7 @@ describe('a removed photograph\'s pixels go from every device and from the serve
 });
 
 describe('round fifty-two, 1: a change from a clock years ahead is parked, not held, and the device that made it converges once corrected', () => {
-  it('peers park it by its arrival; the fast device, corrected, keeps its own shown, and its next edit parks the old stamp and is stamped at real time everywhere (round sixty)', async () => {
+  it('peers park it by its arrival, and so does the fast device itself, from the listing that follows its push (round sixty-one); corrected, it shows what its peers show, and its next edit is stamped at real time everywhere', async () => {
     // The correction and its pending reading live in localStorage, which this Node lacks: a stand-in, so a reboot keeps them as a browser would.
     const store = new Map<string, string>();
     const had = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
@@ -1610,8 +1623,14 @@ describe('round fifty-two, 1: a change from a clock years ahead is parked, not h
     let P = await boot(memP, r2);
     await P.sync.setup(KEY, 'join');
     await P.collection.put('accession', plant.id, { notes: 'from 2031' });
-    await P.sync.run();
     expect(P.collection.accession(plant.id)?.notes).toBe('from 2031'); // its own, on its own screen, while it still believes its clock
+    const before = P.calls.length;
+    await P.sync.run();
+    // Round sixty-one (decision 1): the run's listing gives the arrival of P's own batch, and P parks its 2031 stamps by it,
+    // as every peer does: P shows what they show, and lists the edit with Apply (round sixty: it kept showing 'from 2031').
+    expect(P.collection.accession(plant.id)?.notes).toBe('bought at the show');
+    expect(P.collection.parkedFor('accession', plant.id).map((c) => c.field).sort()).toEqual(['notes', 'notesBase']);
+    expect(P.calls.slice(before).filter((c) => c.startsWith('GET /api/sync/log/'))).toHaveLength(1); // its own batch, fetched again once to be judged
     // A pulls: parked by arrival, not held; nothing comes due; the record's page lists it.
     vi.setSystemTime(real);
     A = await reboot(memA, r2);
@@ -1628,17 +1647,16 @@ describe('round fifty-two, 1: a change from a clock years ahead is parked, not h
     await C.sync.setup(KEY, 'join');
     expect(C.collection.accession(plant.id)?.notes).toBe('no: leave it until spring');
     expect(C.collection.parkedRecords).toBe(1);
-    // P syncs again a minute later: the second reading corrects it. Its own 2031 stamps are not parked by its clock
-    // (round sixty: a device never parks its own changes by its clock, since a clock set back looks the same); the line
-    // under the top bar says its changes are dated ahead, and its next edit, with the clock confirmed, parks the 2031
-    // stamp as part of the edit and is stamped by real time.
+    // P syncs again a minute later: the second reading corrects it. Its 2031 stamps were parked by their arrival, not by
+    // its clock (a device never parks its own changes by its clock, round sixty), so it shows A's edit as every device
+    // does, and no line says its changes are dated ahead; its next edit is stamped by real time.
     vi.setSystemTime(real + 5 * 365 * 86_400_000 + 90_000);
     serverClock = real + 90_000;
     P = await reboot(memP, r2);
     await P.sync.run();
-    expect(P.collection.accession(plant.id)?.notes).toBe('from 2031');
+    expect(P.collection.accession(plant.id)?.notes).toBe('no: leave it until spring');
     expect(P.collection.clockTrusted).toBe(true);
-    expect(P.collection.clockBehindAt).toBeGreaterThan(real + 365 * 86_400_000);
+    expect(P.collection.clockBehindAt).toBeNull();
     await P.collection.put('accession', plant.id, { notes: 'P, corrected' });
     const mine = [...memP.changes.values()].find((c) => c.value === 'P, corrected')!;
     expect(hlcWall(mine.t)).toBeLessThan(real + 86_400_000); // real time, not 2031
@@ -1964,7 +1982,7 @@ describe('PROPOSED: the engine against an unchecked clock, the lock retry, the r
     await B.collection.addAccession({ taxonName: 'Lithops', acc: 'B-1' });
     vi.setSystemTime(real); // the clock jumped back
     B = await reboot(memB, r2);
-    expect(B.sync.clockWarning).toMatch(/jumped back/);
+    expect(B.sync.clockWarning).toMatch(/dated as late as/);
     vi.setSystemTime(real + 2 * 86_400_000 + 60_000); // and caught up
     await B.sync.run();
     expect(B.sync.clockWarning).toBeNull();

@@ -19,7 +19,9 @@
   import { onMount, tick } from 'svelte';
   import PageHead from '$lib/ui/PageHead.svelte';
   import Today from '$lib/ui/Today.svelte';
-  import { Firsts, CalendarExport } from '$lib/ui/grow'; // round sixty, agent F: firsts in Also today, the watering calendar
+  // Each by its own path, not the barrel, which carries every grower component into this page (round sixty-one; the accessibility review, 3).
+  import Firsts from '$lib/ui/grow/Firsts.svelte'; // round sixty, agent F: firsts in Also today, the watering calendar
+  import CalendarExport from '$lib/ui/grow/CalendarExport.svelte';
   import { collection, DUE_DAYS } from '$lib/db/collection.svelte';
   import { accNo, kindOf, type Accession, type Location } from '$lib/db/types';
   import { daysBetween, localDate } from '$core/dates';
@@ -53,7 +55,7 @@
         err = 'Latitude is −90 to 90 and longitude −180 to 180; check the figures.';
         return;
       }
-      if (!r.ok) { err = forecastRefusal(r.status); data = null; return; }
+      if (!r.ok) { err = forecastRefusal(r); data = null; return; }
       data = r.body;
     } catch {
       // Whatever went wrong, the page says the check did not happen: never a status code, never that the nights are clear.
@@ -79,11 +81,17 @@
   /** The species in their habitat's dry season now, by the sheets the front page reads too (round fifty-four, 4; the second reviewer's finding 23). Until the sheets have answered (or failed), the Water buttons wait: a button whose count changes as the sheets arrive moves under a reading eye (round fifty-five, 5). */
   let sheets = $state<Map<string, Sheet> | null>(null);
   let sheetsSettled = $state(false);
+  /** The sheets have answered once: the stops are drawn from then on, and a later re-read (a watering changed what is due) only holds the buttons, so a stop never vanishes under focus (round sixty-one). */
+  let sheetsOnce = $state(false);
+  /** The species whose sheets were asked for and answered (or failed): a watering that only shrinks what is due asks again for nothing, so the stops' buttons do not wait on every tap (round sixty-one). */
+  let sheetsAsked = new Set<string>();
   $effect(() => {
     const slugs = [...new Set(growing.filter((a) => due.has(a.id) && kindOf(a) === 'species').map((a) => speciesSlug(a.taxonName)))];
-    if (!slugs.length) { sheets = null; sheetsSettled = true; return; }
+    const open = collection.ready;
+    if (!slugs.length) { sheets = null; sheetsSettled = true; if (open) sheetsOnce = true; return; }
+    if (slugs.every((x) => sheetsAsked.has(x))) { sheetsSettled = true; sheetsOnce = true; return; }
     sheetsSettled = false;
-    void sheetsFor(slugs).then((m) => { sheets = m; }).finally(() => { sheetsSettled = true; });
+    void sheetsFor(slugs).then((m) => { slugs.forEach((x) => sheetsAsked.add(x)); sheets = m; }).finally(() => { sheetsSettled = true; sheetsOnce = true; });
   });
   /**
    * Which rule of the species sheet puts this month outside the plant's growing months, if one does: the rain rule (a
@@ -192,6 +200,11 @@
       // The grower's own action, so a sighting of each plant, not an `auto` line (round fifty-eight).
       const ids = await collection.addEventsIds(plants.map((a) => ({ acc: a.id, d, t: 'water' as const, note: `from Today: ${s.place ? s.place.name : 'plants with no place'}` })));
       wateredHere.add(s.key, ids, plants.map((a) => ({ id: a.id, no: accNo(a), name: plantLabel(a) })), height);
+      // The button gave way to the done row: focus goes to the row's Undo, else the stop's heading, before the toast is
+      // raised, never to the page body (round sixty-one; the accessibility review, 2, still open from round fifty-nine).
+      await tick();
+      const stopEl = document.getElementById(`stop-${s.key}`);
+      for (const sel of ['.row.done button', 'h3']) { const to = stopEl?.querySelector<HTMLElement>(sel); if (to) { to.focus(); break; } }
       toast.show(`Watered ${ids.length}.`); // short: the stop itself says what and offers Undo
     } finally {
       watering = null;
@@ -226,11 +239,24 @@
     const t = setInterval(() => wateredHere.prune(), 30_000);
     return () => clearInterval(t);
   });
+  /**
+   * A row of chips draws its first 50, and says how many more: at 3,000 plants a stop drew about 2,000 chips, 18,200
+   * elements and tasks of seconds (round sixty-one; the accessibility review, 15). The ones not drawn stay ticked, so the
+   * button's count is still every plant ticked; "Show N more" draws them, to untick any.
+   */
+  const CHIPS = 50;
+  let opened = $state(new Set<string>());
+  const openRow = (k: string) => { const n = new Set(opened); n.add(k); opened = n; };
+  const firstOf = <T,>(list: T[], k: string): T[] => (opened.has(k) || list.length <= CHIPS ? list : list.slice(0, CHIPS));
 </script>
 
 <!-- Each plant a chip with its full name (cultivar or cross) and a tick box inside a finger-sized label of its own,
      apart from the link: the 20 px box sat 6 px from the plant link, and a tap just off it opened the plant (round
      sixty; the grower review, 7; the accessibility review, 6; the outside review's A38). -->
+{#snippet more(list: unknown[], k: string, ticks: boolean)}
+  {#if list.length > CHIPS && !opened.has(k)}<button class="linkish morechips" type="button" onclick={() => openRow(k)}>Show {list.length - CHIPS} more{ticks ? ' (ticked)' : ''}</button>{/if}
+{/snippet}
+
 {#snippet chip(a: Accession, fact: string)}
   <span class="chip tick" class:off={skipped.has(a.id)}><label class="tickbox" for="w-{a.id}"><input type="checkbox" id="w-{a.id}" checked={!skipped.has(a.id)} onchange={() => toggleSkip(a.id)} aria-label="Water {accNo(a)} {plantLabel(a)}" /></label><a href={plantHref(a)}><b>{accNo(a)}</b> <i><PlantName plant={a} /></i> <span class="muted">{fact}</span></a></span>
 {/snippet}
@@ -242,10 +268,13 @@
   <HeldNote />
 
   <!-- What needs you first, the frost watch under it: at 390 px the first stop started 570 px down, after the frost card and a method paragraph (round sixty; the grower review, §3 and §4). -->
-  <section id="water" aria-labelledby="water-h">
+  <!-- While it waits, the section keeps most of a screen, so what is drawn under it (the footer) does not jump down when the stops arrive (round sixty-one; the accessibility review, 5). -->
+  <section id="water" aria-labelledby="water-h" class:waiting={!collection.ready || (growing.length && !sheetsOnce)}>
     <div class="secrule"><h2 id="water-h">By place</h2><div class="line"></div></div>
-    {#if !collection.ready}
-      <p class="small muted">Opening the collection…</p>
+    <!-- The stops wait for the species sheets as their buttons did: a stop drawn before them reflowed as its resting plants
+         moved to their own row, and the page shifted under the reader (round sixty-one; the accessibility review, 5). -->
+    {#if !collection.ready || (growing.length && !sheetsOnce)}
+      <p class="small muted">{collection.ready ? 'Reading the species sheets…' : 'Opening the collection…'}</p>
     {:else if !growing.length}
       <div class="emptybox"><p class="muted" style="margin: 0">No growing plants yet. <a href="/plants/new">Add one</a> and this page says what it needs.</p></div>
     {:else if !stops.length}
@@ -266,7 +295,9 @@
               <h3 tabindex="-1">{#if s.place}<a href="/places/{s.place.id}">{s.place.name}</a>{:else}No place{/if} <span class="muted small">{s.n} growing{s.place && collection.children(s.place.id).length ? ' here and inside' : ''}</span></h3>
               <!-- Water while something is ticked; with nothing ticked, words, not a disabled "Water 0 of 3"; and the done mark only once nothing ticked is left anywhere on the stop (round fifty-eight; round sixty). -->
               {#if total && n}
-                <button class="btn small water" type="button" onclick={() => waterHere(s, ticked(s))} aria-disabled={!!watering || !sheetsSettled} title={sheetsSettled ? 'One watering line on each plant ticked, dated today; Undo on the stop takes them back' : 'Reading the species sheets first, for the plants resting by their habitat'}>Water {n === total ? n : `${n} of ${total}`} here</button>
+                <!-- While the sheets are read again, the reason is said beside the button, not only on hover (round sixty-one; the accessibility review, 13). -->
+                {#if !sheetsSettled}<span class="nonetick small muted" id="why-{s.key}">Reading the species sheets first…</span>{/if}
+                <button class="btn small water" type="button" onclick={() => waterHere(s, ticked(s))} aria-disabled={!!watering || !sheetsSettled} aria-describedby={!sheetsSettled ? `why-${s.key}` : undefined} title="One watering line on each plant ticked, dated today; Undo on the stop takes them back">Water {n === total ? n : `${n} of ${total}`} here</button>
               {:else if s.watered && !tickedLeft(s) && (!total || headWatered(s))}
                 <span class="btn small water donemark" aria-hidden="true">Watered ✓</span>
               {:else if total}
@@ -275,35 +306,35 @@
             </div>
             {#if s.watered}
               <!-- The plants just watered stay on the stop, so it keeps its height and the next stop does not move under the finger; the Undo is here and only here. -->
-              <div class="row done"><span class="lab">Watered just now · <button class="linkish" type="button" onclick={() => undoHere(s.key)} aria-disabled={undoing === s.key}>Undo</button></span> {#each s.watered.plants as p (p.id)}{@const pr = collection.accession(p.id)}<a class="chip" href={pr ? plantHref(pr) : `/plants/${p.id}`}><b>{p.no}</b> {#if p.name}<i>{p.name}</i>{/if} <span class="muted">✓</span></a>{/each}</div>
+              <div class="row done"><span class="lab">Watered just now · <button class="linkish" type="button" onclick={() => undoHere(s.key)} aria-disabled={undoing === s.key}>Undo</button></span> {#each firstOf(s.watered.plants, `${s.key}-d`) as p (p.id)}{@const pr = collection.accession(p.id)}<a class="chip" href={pr ? plantHref(pr) : `/plants/${p.id}`}><b>{p.no}</b> {#if p.name}<i>{p.name}</i>{/if} <span class="muted">✓</span></a>{/each}{@render more(s.watered.plants, `${s.key}-d`, false)}</div>
             {/if}
             {#if s.overdue.length}
-              <div class="row warn"><span class="lab">{rhythmWords(s.overdue.map(rhythmOf))}{total > 1 ? '; untick any to leave it out' : ''}</span> {#each s.overdue as a (a.id)}{@render chip(a, dayWords(days(a)))}{/each}</div>
+              <div class="row warn"><span class="lab">{rhythmWords(s.overdue.map(rhythmOf))}{total > 1 ? '; untick any to leave it out' : ''}</span> {#each firstOf(s.overdue, `${s.key}-o`) as a (a.id)}{@render chip(a, dayWords(days(a)))}{/each}{@render more(s.overdue, `${s.key}-o`, true)}</div>
             {/if}
             {#if s.unknown.length}
-              <div class="row unknown"><span class="lab">No watering recorded</span> {#each s.unknown as a (a.id)}{@render chip(a, addedWords(days(a)))}{/each}</div>
+              <div class="row unknown"><span class="lab">No watering recorded</span> {#each firstOf(s.unknown, `${s.key}-u`) as a (a.id)}{@render chip(a, addedWords(days(a)))}{/each}{@render more(s.unknown, `${s.key}-u`, true)}</div>
             {/if}
             {#if s.keptDry}
               <p class="row resting"><span class="lab">Kept dry this month by {s.place ? `${collection.conditions(s.place.id).from.dryMonths ?? s.place.name}'s` : 'its place\'s'} rule: {s.keptDry} plant{s.keptDry === 1 ? '' : 's'}, not counted as due</span></p>
             {/if}
             {#if s.ahead.length}
-              <p class="row ahead"><span class="lab">Watering dated ahead of today, so not counted as due</span> {#each s.ahead as a (a.id)}<a class="chip" href={plantHref(a)}><b>{accNo(a)}</b> <i><PlantName plant={a} /></i> <span class="muted">dated {collection.wateringAhead(a.id)}</span></a>{/each}</p>
+              <p class="row ahead"><span class="lab">Watering dated ahead of today, so not counted as due</span> {#each firstOf(s.ahead, `${s.key}-a`) as a (a.id)}<a class="chip" href={plantHref(a)}><b>{accNo(a)}</b> <i><PlantName plant={a} /></i> <span class="muted">dated {collection.wateringAhead(a.id)}</span></a>{/each}{@render more(s.ahead, `${s.key}-a`, false)}</p>
             {/if}
             <!-- Worded by the rule that applied, in a grower's words, and ticked like the rows above: the button waters what is ticked; with nothing ticked, words, not a disabled "Water these 0" (round fifty-nine; round sixty). -->
             {#each [{ list: s.restRain, rule: 'rain' as const }, { list: s.restCool, rule: 'cool' as const }] as g (g.rule)}
               {#if g.list.length}
                 {@const k = tickedOf(g.list).length}
-                <div class="row resting"><span class="lab">{restWords(g.rule, units.current)}{g.list.length > 1 ? '; untick any to leave it out' : ''}</span> {#each g.list as a (a.id)}{@render chip(a, dayWords(days(a)))}{/each} {#if k}<button class="btn small water restwater" type="button" onclick={() => waterHere(s, tickedOf(g.list))} aria-disabled={!!watering}>{waterWords(k)}</button>{:else}<span class="nonetick small muted">None ticked</span>{/if}</div>
+                <div class="row resting"><span class="lab">{restWords(g.rule, units.current)}{g.list.length > 1 ? '; untick any to leave it out' : ''}</span> {#each firstOf(g.list, `${s.key}-${g.rule}`) as a (a.id)}{@render chip(a, dayWords(days(a)))}{/each}{@render more(g.list, `${s.key}-${g.rule}`, true)} {#if k}<button class="btn small water restwater" type="button" onclick={() => waterHere(s, tickedOf(g.list))} aria-disabled={!!watering}>{waterWords(k)}</button>{:else}<span class="nonetick small muted">None ticked</span>{/if}</div>
               {/if}
             {/each}
             {#if s.unseen.length}
-              <p class="row warn"><span class="lab">Missed at the last audit, or not seen for ninety days since this place's audit</span> {#each s.unseen as a (a.id)}<a class="chip" href={plantHref(a)}><b>{accNo(a)}</b> <i><PlantName plant={a} /></i> <span class="muted">{collection.unseenWhy(a.id) === 'missed' ? `missed ${collection.missedAt(a.id)}` : `seen ${collection.lastSeen(a.id)}`}</span></a>{/each}</p>
+              <p class="row warn"><span class="lab">Missed at the last audit, or not seen for ninety days since this place's audit</span> {#each firstOf(s.unseen, `${s.key}-s`) as a (a.id)}<a class="chip" href={plantHref(a)}><b>{accNo(a)}</b> <i><PlantName plant={a} /></i> <span class="muted">{collection.unseenWhy(a.id) === 'missed' ? `missed ${collection.missedAt(a.id)}` : `seen ${collection.lastSeen(a.id)}`}</span></a>{/each}{@render more(s.unseen, `${s.key}-s`, false)}</p>
             {/if}
           </li>
         {/each}
       </ol>
     {/if}
-    {#if collection.ready && growing.length}
+    {#if collection.ready && growing.length && sheetsOnce}
       <!-- The method, one tap away rather than before the first plant (round sixty; the grower review, §3). -->
       <details class="why howdecides" id="how-today">
         <summary>How Today decides</summary>
@@ -312,6 +343,9 @@
     {/if}
   </section>
 
+  <!-- The frost watch and "Also today" wait for the collection, as the footer does: drawn under "Opening the collection…",
+       they were pushed off the screen by the stops, a shift of 0.15 on a phone (round sixty-one; the accessibility review, 5). -->
+  {#if collection.ready && (!growing.length || sheetsOnce)}
   <section id="frost" aria-labelledby="frost-h">
     <div class="secrule"><h2 id="frost-h">Frost watch</h2><div class="line"></div></div>
     {#if !site.current && site.loaded}
@@ -358,6 +392,7 @@
     <Today where="today" />
     <CalendarExport />
   </section>
+  {/if}
 </div>
 
 <style>
@@ -365,9 +400,8 @@
   #rest:not(:has(> :global(:not(.secrule)))) { display: none; }
   /* One column that may shrink to the screen: an auto column took the width of its widest line at 200% text and the page scrolled sideways (round fifty-nine). */
   .page { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.2rem; }
-  /* "Also today" goes when there is nothing under it: an empty device showed the heading alone (round sixty; the grower review, 17). */
-  :global(#rest:not(:has(.today))) { display: none; }
   section { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.6rem; }
+  section.waiting { min-height: 80vh; align-content: start; }
   .risk { padding: 0.9rem 1.1rem; }
   .risk.frost, .risk.warning { background: var(--bad-soft); }
   .risk.cold { background: var(--warm-soft); }
@@ -418,6 +452,7 @@
   .btn.water { min-height: 44px; } /* a thumb's width */
   .nights > summary { cursor: pointer; font-size: var(--fs-md); font-weight: 600; color: var(--ink2); padding: 4px 0; }
   .muted { color: var(--ink3); }
+  .morechips { margin: 4px 6px 0 0; min-height: var(--tap); color: var(--accent); font-weight: 600; }
   @media (max-width: 640px) {
     .stop { margin-left: calc(var(--depth) * 8px); padding: 8px 12px; }
     .row { font-size: var(--fs-md); }

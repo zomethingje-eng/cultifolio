@@ -34,7 +34,7 @@ interface VaultDB extends DBSchema {
  */
 const DB_NAME = (() => { try { return typeof sessionStorage !== 'undefined' && sessionStorage.getItem('cultifolio.demo') === '1' ? 'cultifolio-demo' : 'cultifolio'; } catch { return 'cultifolio'; } })();
 /** Where a replacement (restore from backup, "replace" mode) is written in full before the live vault is touched. */
-const STAGING_NAME = 'cultifolio-staging';
+const STAGING_NAME = DB_NAME === 'cultifolio' ? 'cultifolio-staging' : `${DB_NAME}-staging`; // the grower's keeps its name, so a replace cut off before this build still finishes (round sixty-one; review B)
 const DB_V = 3;
 /** The meta key the fold snapshot is kept under, and the counter that says it is stale. */
 const FOLD = 'fold';
@@ -121,6 +121,8 @@ export function openVault(): Promise<IDBPDatabase<VaultDB>> {
       blocking(_cur, _next, ev) {
         (ev.target as IDBDatabase | null)?.close();
         dbp = null;
+        // The sample's database is deleted whole when another tab leaves the sample: say that, not "updated" (round sixty-one; the records review, 13).
+        if (DB_NAME !== 'cultifolio') { notify('The sample collection was closed in another tab.'); try { sessionStorage.removeItem('cultifolio.demo'); } catch { /* the tab's flag */ } if (typeof location !== 'undefined') location.href = '/'; return; }
         notify('Cultifolio has been updated in another tab. Reloading…');
         if (typeof location !== 'undefined') {
           const grace = new Promise<void>((r) => setTimeout(r, RELOAD_GRACE_MS));
@@ -172,6 +174,7 @@ function openStagingDb(): Promise<IDBPDatabase<VaultDB>> {
 
 /** A fresh, empty staging database (any leftover from an earlier attempt is deleted first). */
 export async function openStaging(): Promise<StagedReplacement> {
+  if (DB_NAME !== 'cultifolio') throw new Error('A replacement cannot be staged in the sample collection; leave the sample first. Nothing was changed.'); // a guard in code, not only the locked page (round sixty-one; review B)
   await deleteDB(STAGING_NAME);
   let db: IDBPDatabase<VaultDB> | null = await openStagingDb();
   const need = () => {
@@ -722,6 +725,22 @@ export async function arrivalsAfter(seq: number): Promise<{ changes: Change[]; s
   const ch = tx.objectStore('changes');
   const got = await Promise.all(rows.map((r) => ch.get(r.t)));
   return { changes: got.filter((c): c is Change => !!c), seq: keys.length ? Number(keys[keys.length - 1]) : seq, gen };
+}
+/**
+ * The order in which these stamps reached this device (their rows in the order of arrival), for the few a caller asks
+ * about; a stamp stored before the order was kept has none. What the log can say about "before" and "after" without
+ * comparing two devices' clocks (round sixty-one; the records review's 12). One read of the order store: for a rare
+ * action (a restore that meets another record under its number), not for a page's path.
+ */
+export async function arrivalsOf(stamps: string[]): Promise<Map<string, number>> {
+  const want = new Set(stamps);
+  const out = new Map<string, number>();
+  if (!want.size) return out;
+  const db = await openVault();
+  const tx = db.transaction('order');
+  const [rows, keys] = await Promise.all([tx.store.getAll(), tx.store.getAllKeys()]);
+  for (let i = 0; i < rows.length; i++) { const t = (rows[i] as { t?: string })?.t; if (t && want.has(t) && !out.has(t)) out.set(t, Number(keys[i])); }
+  return out;
 }
 /** Every stamp in the log, and nothing else: what a load from the snapshot needs of the log itself. */
 export async function changeKeys(): Promise<string[]> {

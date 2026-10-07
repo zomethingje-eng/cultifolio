@@ -29,6 +29,9 @@ function localDay(offset: number): string {
   d.setDate(d.getDate() + offset);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
+/** This year on the machine's calendar: a plant added today is numbered in it, so a test that names one reads it here
+ *  instead of writing 2026, which failed from 1 January 2027 (round sixty-one; docs/review-60/harness.md 2). */
+const year = () => localDay(0).slice(0, 4);
 async function more(p: Page, name: string) {
   await p.locator('.idcard .cardmenu > button').click();
   await p.locator('#card-menu [role=menuitem]', { hasText: name }).click();
@@ -104,16 +107,17 @@ test.beforeAll(async ({ request }) => {
 test('r60 1: a pasted list is checked name by name, a number in use is renumbered and said, and Add files every line', async ({ page }) => {
   await page.goto('/plants/import');
   await ready(page);
-  await page.fill('#imp-text', 'Copiapoa cinerea\nCopiapoa cinera; ; ; club sale\nNotagenus fakeus; ; 2026-0001; ; a note\nCopiapoa humilis; ; 2026-0001');
+  const y = year();
+  await page.fill('#imp-text', `Copiapoa cinerea\nCopiapoa cinera; ; ; club sale\nNotagenus fakeus; ; ${y}-0001; ; a note\nCopiapoa humilis; ; ${y}-0001`);
   await page.click('#imp-check');
   const summary = page.locator('#imp-summary');
   await expect(summary).toContainText('Matched in the reference: 2');
   await expect(summary).toContainText('ambiguous');
   await expect(summary).toContainText('not in the reference, added as typed: 1');
-  await expect(page.locator('#imp-renumbered')).toContainText('2026-0001 → 2026-0004');
+  await expect(page.locator('#imp-dupes')).toContainText(`${y}-0001 → ${y}-0004`); // a number given twice in the sheet is said as that (round sixty-one)
   await expect(page.locator('#imp-add')).toHaveText('Add 4 plants');
   await page.click('#imp-add');
-  await expect(page.locator('#imp-done')).toContainText('4 plants added, numbered 2026-0001 to 2026-0004');
+  await expect(page.locator('#imp-done')).toContainText(`4 plants added, numbered ${y}-0001 to ${y}-0004`);
   await page.goto('/plants');
   await expect(page.locator('.rows > *')).toHaveCount(4);
   await expect(page.locator('.seccount', { hasText: 'shown' })).toHaveText('4 of 4 shown');
@@ -137,25 +141,29 @@ test('r60 3: a pasted sheet with a BOM and semicolons makes its places when aske
   await ready(page);
   await page.click('#imp-mode-csv');
   await page.locator('#imp-csv-paste-box > summary').click();
-  await page.fill('#imp-csv-text', '﻿number;species;location;acquired;price;notes\n2026-0001;Welwitschia mirabilis;Greenhouse › Bench 9;2025-03-01;£30;"=SUM(1,2)"\n;Copiapoa humilis;Greenhouse › Bench 9;09/03/2024;12;');
+  const y = year();
+  await page.fill('#imp-csv-text', `﻿number;species;location;acquired;price;notes\n${y}-0001;Welwitschia mirabilis;Greenhouse › Bench 9;2025-03-01;£30;"=SUM(1,2)"\n;Copiapoa humilis;Greenhouse › Bench 9;09/03/2024;12;`);
   await page.click('#imp-csv-read');
   await page.click('#imp-check');
   const make = page.locator('#imp-make-places');
   await expect(make).toBeVisible();
   await expect(page.locator('label.makeplaces')).toContainText('Greenhouse › Bench 9');
-  await expect(page.locator('.rvrow', { hasText: '09/03/2024' })).toContainText('not written year first');
+  await expect(page.locator('.rvrow', { hasText: '09/03/2024' })).toContainText('could be 9 March or 3 September');
   await make.check();
   await page.click('#imp-add');
-  await expect(page.locator('#imp-done')).toContainText('2 plants added, numbered 2026-0001 to 2026-0002, and 2 new places');
+  await expect(page.locator('#imp-done')).toContainText(`2 plants added, numbered ${y}-0001 and 2024-0001, and 2 new places`);
   await page.goto('/places');
   await expect(page.locator('.tree .row', { hasText: 'Greenhouse' }).first()).toBeVisible();
   await expect(page.locator('.tree .row', { hasText: 'Bench 9' })).toBeVisible();
-  await page.goto('/plants/2026-0001');
+  await page.goto(`/plants/${y}-0001`);
   await expect(page.locator('h1.sci')).toContainText('Welwitschia mirabilis');
   await expect(page.locator('.cult .body', { hasText: 'SUM' })).toHaveText('=SUM(1,2)');
 });
 
 test('r60 4: "Download as a spreadsheet" gives the backup\'s plants.csv, and a second device imports it to the same numbers, names and places', async ({ page, browser }) => {
+  // Several pages and two devices: 8 s at rest, past the 30 s default under load; 90 s as r60 11 and r60 12 have (round
+  // sixty-one; docs/review-60/harness.md 18).
+  test.setTimeout(90_000);
   await newPlace(page, 'Bench A');
   await plant(page, 'Copiapoa cinerea', { place: 'Bench A' });
   await plant(page, 'Welwitschia mirabilis', { place: null });
@@ -189,6 +197,9 @@ test('r60 4: "Download as a spreadsheet" gives the backup\'s plants.csv, and a s
 });
 
 test('r60 5: Select ticks plants, then Water with Undo, Move with Undo, Print labels and Archive act on exactly those', async ({ page }) => {
+  // Several pages: 7 s at rest, past the 30 s default under load; 90 s as r60 11 and r60 12 have (round
+  // sixty-one; docs/review-60/harness.md 18).
+  test.setTimeout(90_000);
   await newPlace(page, 'Bench S');
   for (const n of ['Copiapoa cinerea', 'Copiapoa humilis', 'Welwitschia mirabilis']) await plant(page, n);
   await page.goto('/plants');
@@ -264,6 +275,9 @@ test('r60 7: a first flowering and a first photograph are each a line on Today',
   await page.getByRole('button', { name: 'Record', exact: true }).click();
   await expect(page.locator('.tlrow', { hasText: 'Flowered' })).toHaveCount(1);
   await page.goto('/today');
+  // Visible first: toContainText passes on an element that is display:none, so a rule that hid Firsts went unseen
+  // (round sixty-one; docs/review-60/harness.md 3, 17).
+  await expect(page.locator('#firsts')).toBeVisible();
   await expect(page.locator('#firsts')).toContainText(`First flowers on ${no} Copiapoa cinerea, today.`);
   await expect(page.locator('#firsts li')).toHaveCount(1);
   // a first photograph
@@ -272,6 +286,7 @@ test('r60 7: a first flowering and a first photograph are each a line on Today',
   await page.locator('#acc-photo-file').setInputFiles({ name: 'a.jpg', mimeType: 'image/jpeg', buffer: a });
   await expect(page.locator('.phgrid .ph')).toHaveCount(1);
   await page.goto('/today');
+  await expect(page.locator('#firsts')).toBeVisible();
   await expect(page.locator('#firsts')).toContainText(`First photograph of ${no} Copiapoa cinerea, added today.`);
   await expect(page.locator('#firsts li')).toHaveCount(2);
 });
@@ -300,7 +315,7 @@ test('r60 9: a followed species not grown is on the Wanted list, with its page l
   await expect(wanted).toContainText('Welwitschia mirabilis');
   await expect(wanted.locator('a[href="/species/welwitschia-mirabilis"]')).toBeVisible();
   await expect(wanted).not.toContainText('Copiapoa cinerea'); // grown: not wanted
-  await wanted.getByRole('button', { name: 'Note and price seen for Welwitschia mirabilis' }).click();
+  await wanted.getByRole('button', { name: 'Add a note for Welwitschia mirabilis' }).click();
   await wanted.getByLabel('Note', { exact: true }).fill('a seedling, not a graft');
   await wanted.getByLabel('Price seen', { exact: true }).fill('40 at the club show');
   await wanted.getByRole('button', { name: 'Save' }).click();
@@ -351,7 +366,7 @@ test('r60 11: the sample collection opens in a database of its own, shows its fi
   await page.goto('/plants');
   await ready(page);
   await expect(page.getByRole('heading', { name: 'Nothing here yet' })).toBeVisible();
-  await expect(page.locator('.demobar')).toHaveCount(0);
+  await expect(page.locator('.demobar')).toBeHidden(); // drawn on every page, shown only in the sample (round sixty-one)
   // again: a fresh sample, since leaving deleted the last one
   await page.click('#try-sample');
   await expect(page.locator('.demobar')).toBeVisible();
@@ -373,7 +388,7 @@ test('r60 12: the sample never touches the grower\'s own collection', async ({ p
   await expect(page.locator('.rows > *')).toHaveCount(1);
   await expect(page.locator('.rows')).toContainText(no);
   await expect(page.locator('.rows')).toContainText('Copiapoa cinerea');
-  await expect(page.locator('.demobar')).toHaveCount(0);
+  await expect(page.locator('.demobar')).toBeHidden(); // drawn on every page, shown only in the sample (round sixty-one)
   expect(await page.evaluate(() => indexedDB.databases().then((d) => d.map((x) => x.name)))).not.toContain('cultifolio-demo');
 });
 
@@ -405,7 +420,10 @@ test('r60 13: on an iPhone in Safari, the Home Screen card comes before the firs
   await page.goto('/plants/new');
   await ready(page);
   await expect(page.locator('#f-loc')).toBeVisible();
-  await page.waitForTimeout(500);
+  // Not a fixed pause: the card is drawn from the opened collection (ready, and no plant yet), and the form's number
+  // preview is drawn from the same collection; once it reads the second number the collection is open with one plant,
+  // so the card's answer is settled (round sixty-one; docs/review-60/harness.md 18, review B).
+  await expect(page.locator('.accno').first()).toHaveText(`${year()}-0002`);
   await expect(card).toHaveCount(0);
   await ctx.close();
 
@@ -422,31 +440,51 @@ test('r60 13: on an iPhone in Safari, the Home Screen card comes before the firs
 });
 
 test('r60 14: after the first plant the browser is asked once to keep the data, and its answer is said once', async ({ page }) => {
-  // Every toast shown, across page loads, in the order shown.
+  // Every toast shown, across page loads, in the order shown, with the page it was shown on; and every call to the
+  // browser's persist() still unanswered, so a negative can wait for the answers instead of a fixed pause (round
+  // sixty-one; docs/review-60/harness.md 18: under load the toast was said on the add form a moment before the
+  // navigation put it away, and the test failed 3 runs in 4).
   await page.addInitScript(() => {
     const seen = () => {
       const t = document.querySelector('.toast')?.textContent?.trim();
       if (!t) return;
-      const all = JSON.parse(sessionStorage.getItem('__toasts') ?? '[]') as string[];
-      if (all[all.length - 1] !== t) { all.push(t); sessionStorage.setItem('__toasts', JSON.stringify(all)); }
+      const all = JSON.parse(sessionStorage.getItem('__toasts') ?? '[]') as Array<{ t: string; path: string }>;
+      if (all[all.length - 1]?.t !== t) { all.push({ t, path: location.pathname }); sessionStorage.setItem('__toasts', JSON.stringify(all)); }
     };
     new MutationObserver(seen).observe(document, { subtree: true, childList: true, characterData: true });
+    const w = window as unknown as { __persisting: number };
+    w.__persisting = 0;
+    const real = StorageManager.prototype.persist;
+    StorageManager.prototype.persist = function () {
+      w.__persisting++;
+      // settled one frame after the answer, so the toast the answer causes is drawn (and recorded) before the count drops
+      return real.call(this).finally(() => requestAnimationFrame(() => requestAnimationFrame(() => { w.__persisting--; })));
+    };
   });
-  const toasts = () => page.evaluate(() => JSON.parse(sessionStorage.getItem('__toasts') ?? '[]') as string[]);
-  const promised = (all: string[]) => all.filter((t) => /^This browser has (not )?promised to keep your (plants|data)/.test(t));
-  await plant(page, 'Copiapoa cinerea');
-  // Said on the new plant's page, where the add form lands (it takes the place of the "added" line, which the page says in full).
+  const toasts = () => page.evaluate(() => JSON.parse(sessionStorage.getItem('__toasts') ?? '[]') as Array<{ t: string; path: string }>);
+  const promised = (all: Array<{ t: string; path: string }>) => all.filter((x) => /^This browser has (not )?promised to keep your (plants|data)/.test(x.t));
+  /** Every persist() asked so far has been answered, and whatever its answer drew is on screen. */
+  const answered = () => expect.poll(() => page.evaluate(() => (window as unknown as { __persisting: number }).__persisting), { timeout: 20_000 }).toBe(0);
+  const no = await plant(page, 'Copiapoa cinerea');
+  // Said once, and on screen on the new plant's page where the add form lands (it takes the place of the "added" line,
+  // which the page says in full): the wait is for the answer to be recorded, however long the browser and a loaded
+  // machine take, and then for it to be on this page. An answer said on the form and put away by the navigation fails
+  // here, as it should: the grower never saw it (the product fix is GrowLayer's).
+  await expect.poll(async () => promised(await toasts()).length, { timeout: 20_000 }).toBe(1);
+  const [said] = promised(await toasts());
+  await expect(page).toHaveURL(new RegExp(`/plants/${no}$`));
   const toast = page.locator('.toast');
-  await expect(toast).toContainText(/This browser has (not )?promised to keep your (plants|data)/);
-  if ((await toast.textContent())?.includes('not promised')) await expect(toast.locator('.undo')).toHaveText('Back up');
-  await expect.poll(async () => promised(await toasts()).length).toBe(1);
+  await expect(toast).toContainText(said.t);
+  if (said.t.includes('not promised')) await expect(toast.locator('.undo')).toHaveText('Back up');
   expect(await page.evaluate(() => localStorage.getItem('cultifolio.persistAfterFirst'))).toBe('1');
   await page.reload();
   await ready(page);
   await plant(page, 'Copiapoa humilis');
   await page.goto('/plants');
   await expect(page.locator('.rows > *')).toHaveCount(2);
-  await page.waitForTimeout(1000);
+  // Not a fixed pause: a second answer could only come from a second persist(); wait until every one asked on these
+  // pages is answered and drawn, then count.
+  await answered();
   expect(promised(await toasts())).toHaveLength(1);
 });
 
@@ -455,7 +493,7 @@ test('r60 15: a label from someone else\'s collection says so and links the spec
   const fl = page.locator('#foreign-label');
   await expect(fl).toContainText("This label is from someone's collection: Copiapoa cinerea");
   await expect(page.locator('#foreign-species')).toHaveAttribute('href', '/species/copiapoa-cinerea');
-  await expect(page.getByText('No plant with this number on this device.')).toBeVisible();
+  await expect(page.locator('h1')).toHaveText('A plant label'); await expect(page.getByText('No plant with this number on this device.')).toHaveCount(0); // a stranger's label is headed as one (round sixty-one; the grower review, 13)
   // markup in the name is shown as text
   await page.goto('/plants/rNOPE789#s=copiapoa-cinerea&n=%3Cimg%20src%3Dx%20onerror%3Dalert(1)%3E');
   await expect(fl).toContainText("This label is from someone's collection: <img src=x onerror=alert(1)>");

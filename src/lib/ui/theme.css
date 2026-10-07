@@ -187,7 +187,9 @@ h2.sec:first-child { margin-top: 14px; }
 /* hero band + ID card */
 .hero { position: relative; background: var(--sunk); min-height: 170px; border-radius: var(--r-lg); overflow: hidden; }
 .hero img { width: 100%; max-height: 430px; object-fit: cover; display: block; }
-.hero .cred { position: absolute; right: 12px; bottom: 10px; font-size: var(--fs-xs); letter-spacing: 0.03em; color: #fff; background: rgba(8, 20, 16, 0.6); padding: 4px 9px; border-radius: var(--r-sm); max-width: calc(100% - 24px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The credit at the top of the photograph: at the foot, the name card's negative margin covered it on a phone, author,
+   licence and link alike (round sixty-one; visitor 2, checked with elementFromPoint at 390 px). */
+.hero .cred { position: absolute; right: 12px; top: 10px; font-size: var(--fs-xs); letter-spacing: 0.03em; color: #fff; background: rgba(8, 20, 16, 0.6); padding: 4px 9px; border-radius: var(--r-sm); max-width: calc(100% - 24px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hero .cred:hover { color: #fff; text-decoration: none; }
 .hero .ph { display: flex; align-items: center; justify-content: center; height: 200px; color: var(--ink3); font-family: var(--mono); font-size: var(--fs-sm); text-align: center; padding: 0 20px; }
 .idcard { background: var(--card); border-radius: var(--r); box-shadow: var(--sh); position: relative; margin: -44px 22px 0; padding: 17px 20px; display: flex; gap: 18px; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; }
@@ -392,6 +394,9 @@ details.why > .whybody { font-family: var(--ui); font-size: var(--fs-md); line-h
 /* A short viewport (a phone on its side, a desktop at 200% zoom): the section row and the tool row stop sticking, so the page keeps most of the screen for reading. */
 @media (max-height: 480px) {
   nav.tabs, .toolrow { position: static; }
+  /* The add forms' pinned bar too: at 400% zoom it covered 161 of 256 px (round sixty-one; the accessibility review, 8). Its
+     own rule is the form's scoped one, hence the weight. */
+  .actions.sticky { position: static !important; }
 }
 
 /* =====================================================================
@@ -435,5 +440,9 @@ html { scroll-padding-top: calc(var(--bar-h, 49px) + 12px); }
    remove, so the pressed state is drawn in the system's own highlight (round sixty; the accessibility review, 4). */
 @media (forced-colors: active) {
   .chipbtn.on, .seg > .on, nav.tabs a.on, [aria-pressed='true'], a[aria-current='page'] { forced-color-adjust: none; background: Highlight; color: HighlightText; border-color: Highlight; outline: 2px solid CanvasText; outline-offset: 1px; }
+  /* The current tab's own colour rule names an id (#tabbar a.on) and outranked the one above: the accent on Highlight,
+     about 1.5:1. The pair is kept whatever a component says (round sixty-one; the accessibility review, 6). */
+  a[aria-current='page'] { background: Highlight !important; color: HighlightText !important; }
+  a[aria-current='page'] * { color: HighlightText !important; }
   :focus-visible, input:focus, select:focus, textarea:focus { outline: 2px solid Highlight !important; outline-offset: 2px; }
 }

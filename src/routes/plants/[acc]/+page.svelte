@@ -21,7 +21,7 @@
   import { entriesFor, sheetForName } from '$lib/ui/index.svelte';
   import ReplacedNotes from '$lib/ui/ReplacedNotes.svelte';
   import type { Sheet } from '$lib/ui/index.svelte';
-  import { cultivationSheet, runs, forReader } from '$core/sheet';
+  import { cultivationSheet, runs, forReader, tiedMonths, monthNames } from '$core/sheet';
   import { EVENT_LABEL, MEASURES, PROP_METHODS, kindOf, type EventType, type Photo } from '$lib/db/types';
   import { parents } from '$core/names';
   import PhotoImg from '$lib/ui/PhotoImg.svelte';
@@ -37,7 +37,8 @@
   import { plantLabel } from '$lib/ui/plant-label';
   import { readerLat } from '$lib/ui/site.svelte';
   import type { Accession } from '$lib/db/types';
-  import { PhotoTimeline, ForeignLabel } from '$lib/ui/grow'; // round sixty, agent F: the photo strip, a stranger's label
+  import PhotoTimeline from '$lib/ui/grow/PhotoTimeline.svelte'; // round sixty, agent F: the photo strip; by its own path, not the barrel (round sixty-one; a11y 3)
+  import ForeignLabel from '$lib/ui/grow/ForeignLabel.svelte'; // a stranger's label
   onMount(() => { site.load(); collection.load(); });
   /** The URL carries the number people know (or an identity, from a printed code); everything below works on the record's identity. */
   const u = $derived(units.current);
@@ -132,7 +133,7 @@
     const sheet = cultivationSheet({ scientific: dossier.name.scientific, family: dossier.name.family, months: m, p10: c.p10, p90: c.p90, extremes: ex, extremesStatus: exStatus, lat: dossier.habitatLat ?? c.at.lat, units: u });
     return {
       dli: dlis.length ? { lo: Math.min(...dlis), hi: Math.max(...dlis), lo10: dli10.length ? Math.min(...dli10) : null, hi90: dli90.length ? Math.max(...dli90) : null } : null,
-      night: { v: m[coldI].tmin, mo: coldI + 1, lo: c.p10[coldI].tmin, hi: c.p90[coldI].tmin },
+      night: { v: m[coldI].tmin, mo: coldI + 1, at: monthNames(tiedMonths(m.map((x) => x.tmin), false, (v) => temp(v, u, 1))), lo: c.p10[coldI].tmin, hi: c.p90[coldI].tmin }, // a tie names every month (round sixty-one; visitor 5)
       ex,
       exStatus,
       year: sheet.year,
@@ -157,13 +158,12 @@
   const coldCompare = $derived.by(() => {
     if (!habitat) return null;
     const n = habitat.night;
-    const night = `coldest month's mean night at the habitat ${temp(n.v, u, 1)} in ${MONTHS[n.mo - 1]} (median year; across the range, ${habitat.cells} grid cells, ${tempN(n.lo, u)} to ${tempN(n.hi, u)}; CHELSA)`;
+    const night = `coldest month's mean night at the habitat ${temp(n.v, u, 1)} in ${n.at} (median year; across the range, ${habitat.cells} grid cells, ${tempN(n.lo, u)} to ${tempN(n.hi, u)}; CHELSA)`;
     // With no extremes, say why, as the species page and compare do: a refusal or a skip is not an absence (round eighteen, 8).
     const p01 = habitat.ex ? `; 1st-percentile night over ${habitat.ex.years} years at a typical spot in the range ${temp(habitat.ex.minP01, u, 1)} (NASA POWER)` : habitat.exStatus === 'refused' ? '; the daily extremes were not checked (NASA POWER did not answer when the species page was built)' : habitat.exStatus === 'skipped' ? '; the daily extremes were not asked for when the species page was built' : habitat.exStatus === 'sea' ? '; the daily extremes were read at a weather cell that is mostly sea and are not used, so no floor is read (the species page says what that cell gave)' : '';
     if (cond?.floorC == null) return { here: null, text: `${night}${p01}; no floor set for this place` };
     return { here: cond.floorC, text: `this place is ${cond.floorHeld ? 'held at' : 'set to bottom out at'} ${temp(cond.floorC, u, 1)}; ${night}${p01}` };
   });
-  const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   // The habitat rain season as a figure: the rain rule's reading in habitat months and shifted to this place's hemisphere. No verdict.
   const season = $derived.by(() => {
     if (!habitat?.year) return null;
@@ -447,6 +447,10 @@
     toast.show(`${no} removed.`, 8000, { label: 'Undo', run: () => { void collection.restore('accession', id).then((moved) => { const back = collection.accession(id); void goto(back ? plantHref(back) : `/plants/${encodeURIComponent(id)}`); if (moved) toast.show(`Restored as ${moved.to}: ${moved.from} is another plant's now.`); }); } });
   }
   const waiting = $derived(a ? undefined : collection.waiting('accession', param));
+  /** A removed plant the address names, by its identity first (a label's code carries it) and then by its number (round sixty-one; the records review's 2). */
+  const removed = $derived(a || !collection.ready ? undefined : collection.removedAccession(param));
+  /** A scanned label of a plant this device has never held: its code carries an identity the log does not have, and a fragment with the species and the printed name (round sixty-one; the grower review's 13). */
+  const strangerLabel = $derived(!a && !removed && collection.ready && !collection.exists('accession', param) && /(^|[#&])(s|n)=/.test(page.url.hash.replace(/^#/, '')));
   async function restoreRemoved() {
     const r = collection.removedAccession(param);
     if (!r) return;
@@ -455,7 +459,7 @@
       const back = collection.accession(r.id);
       await goto(back ? plantHref(back) : `/plants/${encodeURIComponent(r.id)}`);
       toast.show(`Restored as ${moved.to}: ${moved.from} is another plant's now.`);
-    } else toast.show(`${param} restored.`);
+    } else toast.show(`${accNo(r)} restored.`);
   }
   /** The key the reference files this plant's species under, when it answered. */
   let refKey = $state<number | null>(null);
@@ -494,7 +498,7 @@
 
 </script>
 
-<svelte:head><title>{a ? `${accNo(a)} ${a.taxonName}` : param} · Cultifolio</title></svelte:head>
+<svelte:head><title>{a ? `${accNo(a)} ${a.taxonName}` : strangerLabel ? 'A plant label' : removed ? accNo(removed) : param} · Cultifolio</title></svelte:head>
 <svelte:window onbeforeunload={guardUnload} onkeydown={(e) => { if (e.key === 'Escape' && cardMenu) closeCardMenu(true); }} onclick={(e) => { if (cardMenu && !(e.target as Element).closest('.cardmenu')) closeCardMenu(); }} />
 
 {#if collection.lastWriteError}
@@ -525,14 +529,16 @@
     {/each}
   </ul>
 {:else if !a}
-  <h1 class="q" style="margin-top: 24px">{param}</h1>
-  {#if collection.removedAccession(param)}
-    <p class="muted">{param} was given to a plant since removed. The number stays reserved and its record is still in the change log, so it can be brought back as it was, log and photographs included.</p>
+  <!-- A stranger's label is headed as what it is, not by the internal id its code carries (round sixty-one; the grower review's 13). -->
+  <h1 class="q" style="margin-top: 24px">{strangerLabel ? 'A plant label' : removed ? accNo(removed) : param}</h1>
+  {#if removed}
+    <p class="muted" id="removed-plant">{removed.id === param ? `${accNo(removed)} ${removed.taxonName} was removed.` : `${param} was given to a plant since removed.`} The number stays reserved and its record is still in the change log, so it can be brought back as it was, log and photographs included.</p>
     <p><button class="btn pri" onclick={restoreRemoved}>Restore this plant</button></p>
   {:else if waiting}
     <WaitingRecord kind="accession" label={param} {waiting} />
-  {:else}
+  {:else if strangerLabel}
     <ForeignLabel />
+  {:else}
     <p class="muted">{collection.isNumberTaken(param) ? `${param} was given to a plant since removed; the number stays reserved.` : 'No plant with this number on this device.'}</p>
   {/if}
 {:else}

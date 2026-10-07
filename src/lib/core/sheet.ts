@@ -142,6 +142,25 @@ export function runs(ms: number[], style: 'long' | 'short' = 'long'): string {
   return style === 'long' ? out.slice(0, -1).join(', ') + ' and ' + out[out.length - 1] : out.join(', ');
 }
 
+/**
+ * Every month whose figure shows the same as the highest (or lowest) as printed, calendar order, 0-based. A tie names every
+ * month it holds: "warmest day 22 °C in January" was said of a year whose February was as warm, on every surface (round
+ * sixty-one; visitor 5). `fmt` is the surface's own formatter, so a tie is a tie in what the reader sees.
+ */
+export function tiedMonths(values: number[], hi: boolean, fmt: (v: number) => string = (v) => String(v)): number[] {
+  if (!values.length) return [];
+  const best = values.reduce((b, v, i) => ((hi ? v > values[b] : v < values[b]) ? i : b), 0);
+  const shown = fmt(values[best]);
+  return values.map((v, i) => (fmt(v) === shown ? i : -1)).filter((i) => i >= 0);
+}
+
+/** Months by 0-based index as words: "January", "January and February", "Jan, Feb and Mar"; "every month" for all twelve. */
+export function monthNames(idx: number[], style: 'long' | 'short' = 'long'): string {
+  if (idx.length >= 12) return 'every month';
+  const xs = idx.map((i) => (style === 'long' ? MON : MON3)[((i % 12) + 12) % 12]);
+  return xs.length < 2 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`;
+}
+
 /** The long form of `runs`, kept under its old name. */
 export const span = (ms: number[]) => runs(ms, 'long');
 
@@ -227,7 +246,18 @@ export const extremesWhy = (exStatus?: SheetInput['extremesStatus']): string =>
 const extremesWhyShort = (exStatus?: SheetInput['extremesStatus']): string =>
   exStatus === 'refused' ? 'the daily extremes were not checked' : exStatus === 'skipped' ? 'the daily extremes were not asked for' : exStatus === 'sea' ? 'the daily extremes fell on a sea cell and are not used' : 'no daily extremes on file';
 const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
-export function coldFloor(m: Month[] | null, ex: Extremes | null, guess: ArchGuess | null, units: Units = U, exStatus?: SheetInput['extremesStatus']): ColdFloor | null {
+/**
+ * Why there is no habitat figure at all, by the dossier's climate status: a source that did not answer, or a build still to
+ * run, is said as that and never as "on file", which is said of a species with none derivable (round sixty-one; visitor 4,
+ * rule 2: an epiphyte whose climate source refused was told "No habitat figure is on file").
+ */
+const noHabitat = (st?: SheetInput['climateStatus']) =>
+  st === 'refused'
+    ? { s: 'The habitat climate was not checked: a source did not answer when this page was built, so no cold floor is read.', short: 'Habitat climate not checked', lead: 'Habitat climate not checked, so no cold floor is read.' }
+    : st === 'pending'
+      ? { s: 'The habitat climate is pending: it has not been derived yet, so no cold floor is read.', short: 'Habitat climate pending', lead: 'Habitat climate pending, so no cold floor is read.' }
+      : { s: 'No habitat figure is on file for this species, so no cold floor is read.', short: 'No habitat cold figure on file', lead: 'No habitat cold figure on file.' };
+export function coldFloor(m: Month[] | null, ex: Extremes | null, guess: ArchGuess | null, units: Units = U, exStatus?: SheetInput['extremesStatus'], climateStatus?: SheetInput['climateStatus']): ColdFloor | null {
   U = units;
   const conv = guess && guess.arch.minC != null ? { minC: guess.arch.minC, group: guess.arch.many ?? guess.arch.lab.toLowerCase(), why: guess.why, text: conventionOf(guess.arch, T)! } : null;
   if (ex) {
@@ -241,11 +271,14 @@ export function coldFloor(m: Month[] | null, ex: Extremes | null, guess: ArchGue
     // sentence, so the figure's sentence keeps its verb (round sixty; words 9).
     const i = m.reduce((b, x, j) => (x.tmin < m[b].tmin ? j : b), 0);
     const f = m[i].tmin;
-    return { habitat: f, kind: 'mean', convention: conv, s: `Cold floor: none read. The nearest figure is ${T1(f)}, the coldest month's mean night, ${mon(i + 1)}, in the median year (CHELSA); a month's mean night is warmer than the nights a floor is read from. ${extremesWhy(exStatus)}`, short: `Coldest mean night ${T1(f)} (coldest month's mean night, CHELSA; no floor read).`, hab: true, plain: { lead: `Coldest month's mean night ${T1(f)}, not a cold floor: ${extremesWhyShort(exStatus)}.`, rule: 'CHELSA' } };
+    // Every month that ties for the coldest night, as printed (round sixty-one; visitor 5).
+    const at = monthNames(tiedMonths(m.map((x) => x.tmin), false, T1));
+    return { habitat: f, kind: 'mean', convention: conv, s: `Cold floor: none read. The nearest figure is ${T1(f)}, the coldest month's mean night, ${at}, in the median year (CHELSA); a month's mean night is warmer than the nights a floor is read from. ${extremesWhy(exStatus)}`, short: `Coldest mean night ${T1(f)} (coldest month's mean night, CHELSA; no floor read).`, hab: true, plain: { lead: `Coldest month's mean night ${T1(f)}, not a cold floor: ${extremesWhyShort(exStatus)}.`, rule: 'CHELSA' } };
   }
   if (!conv) return null;
   // No habitat figure at all: the convention alone, said as a convention with no source, and no floor (round sixty).
-  return { habitat: null, kind: null, convention: conv, s: `No habitat figure is on file for this species, so no cold floor is read. Apart from the habitat, ${conv.text} (archetype table, by ${conv.why}).`, short: `No habitat cold figure on file; ${conv.text} (archetype table).`, hab: false, plain: { lead: `No habitat cold figure on file. ${cap(conv.text)}.`, rule: 'archetype table' } };
+  const none = noHabitat(climateStatus);
+  return { habitat: null, kind: null, convention: conv, s: `${none.s} Apart from the habitat, ${conv.text} (archetype table, by ${conv.why}).`, short: `${none.short}; ${conv.text} (archetype table).`, hab: false, plain: { lead: `${none.lead} ${cap(conv.text)}.`, rule: 'archetype table' } };
 }
 
 /**
@@ -356,7 +389,10 @@ export function cultivationSheet(input: SheetInput): { rows: Row[]; arch: ArchGu
       bits.push(`Coldest: the 1st-percentile night over ${ex.years} years at a typical spot in the range is ${T1(ex.minP01)}, the absolute minimum ${T1(ex.minAbs)}, ${frost} (NASA POWER daily minima). Warmest: the 99th-percentile day is ${T1(ex.maxP99)}.`);
     }
     const spread10 = p10 && p90 ? ` (across the grid cells of the range ${T1(p10[coldI].tmin)} to ${T1(p90[coldI].tmin)})` : '';
-    bits.push(`Monthly means: coldest night ${T1(m[coldI].tmin)} in ${mon(coldI + 1)}${spread10}, warmest day ${T1(m[hotI].tmax)} in ${mon(hotI + 1)} (${ENV}).`);
+    // Every month that ties, as printed, for the coldest night and the warmest day (round sixty-one; visitor 5).
+    const coldAt = monthNames(tiedMonths(m.map((x) => x.tmin), false, T1));
+    const hotAt = monthNames(tiedMonths(m.map((x) => x.tmax), true, T1));
+    bits.push(`Monthly means: coldest night ${T1(m[coldI].tmin)} in ${coldAt}${spread10}, warmest day ${T1(m[hotI].tmax)} in ${hotAt} (${ENV}).`);
     floorOut = coldFloor(m, ex, guess, U, input.extremesStatus);
     const floor = floorOut;
     if (floor) bits.push(floor.s);
@@ -365,9 +401,11 @@ export function cultivationSheet(input: SheetInput): { rows: Row[]; arch: ArchGu
     const rhs = m.map((x) => x.rh).filter((x): x is number => x != null);
     if (rhs.length) add('Warmth and air', 'Humidity', `Relative humidity at the habitat: ${Math.round(Math.min(...rhs)) === Math.round(Math.max(...rhs)) ? `${Math.round(Math.min(...rhs))}% all year` : `${Math.round(Math.min(...rhs))} to ${Math.round(Math.max(...rhs))}% across the year`} (monthly means, ${ENV}). A figure about the air, saying nothing about how the plant takes water.`, `CHELSA relative humidity, ${ENV.replace(', CHELSA', '')}.`, true);
   } else {
-    floorOut = coldFloor(null, ex, guess);
+    floorOut = coldFloor(null, ex, guess, U, undefined, input.climateStatus);
     const floor = floorOut;
-    if (floor) add('Warmth and air', 'Temperature', floor.s, `The archetype table's convention for growing the group indoors, which gives no source; no habitat figure is on file for this species, so no cold floor is read.`, false, floor.short, floor.plain);
+    // Which kind of absence, said as the sentence says it: not checked, pending, or none on file (round sixty-one; visitor 4).
+    const absent = input.climateStatus === 'refused' ? 'the habitat climate was not checked (a source did not answer)' : input.climateStatus === 'pending' ? 'the habitat climate is pending' : 'no habitat figure is on file for this species';
+    if (floor) add('Warmth and air', 'Temperature', floor.s, `The archetype table's convention for growing the group indoors, which gives no source; ${absent}, so no cold floor is read.`, false, floor.short, floor.plain);
   }
 
   return { rows, arch: guess, year, floor: floorOut };

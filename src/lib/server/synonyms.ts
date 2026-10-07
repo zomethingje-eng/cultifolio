@@ -53,9 +53,10 @@ export async function synonymInIndex(platform: Platform, fetch: Fetch, slug: str
 /**
  * Whether the slug's name is a synonym in the backbone, and of what. Null when the backbone does not know the name or
  * knows it as accepted (then the reference simply lacks it); `'unchecked'` when it could not be asked, which the 404
- * says, since "not an older name" and "could not ask" are different facts (round fifty-nine; rule 2).
+ * says, since "not an older name" and "could not ask" are different facts (round fifty-nine; rule 2); `'held'` when the
+ * site held the call back itself (its minute of calls to GBIF used up), which the 404 says as that (round sixty-one).
  */
-export async function synonymOf(platform: Platform, fetch: Fetch, slug: string, held?: Loaded): Promise<SynonymAnswer | null | 'unchecked'> {
+export async function synonymOf(platform: Platform, fetch: Fetch, slug: string, held?: Loaded): Promise<SynonymAnswer | null | 'unchecked' | 'held'> {
   const name = nameFromSlug(slug);
   if (!name || !/^[A-Z][a-z]+ [a-z]/.test(name)) return null; // a binomial at least: a bare genus is not a species address
   const cacheKey = new Request(`https://cache.cultifolio/match?name=${encodeURIComponent(name.toLowerCase())}`);
@@ -65,7 +66,7 @@ export async function synonymOf(platform: Platform, fetch: Fetch, slug: string, 
   if (hit) body = (await hit.json().catch(() => null)) as Record<string, unknown> | null;
   if (!hit) {
     // The site's own minute of calls to GBIF, for every address together: past it, not checked (round sixty; the server review, 16).
-    if (!(await upstreamAllowed(platform))) return 'unchecked';
+    if (!(await upstreamAllowed(platform))) return 'held'; // held back by the site, said as that (round sixty-one; the server review, 4)
     try {
       const r = await fetch(`${MATCH}?kingdom=Plantae&strict=false&name=${encodeURIComponent(name)}`, { headers: { accept: 'application/json', 'user-agent': 'Cultifolio/3.0 (https://cultifolio.com)' } });
       if (!r.ok) return 'unchecked';

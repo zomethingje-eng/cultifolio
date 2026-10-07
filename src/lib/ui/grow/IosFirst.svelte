@@ -39,4 +39,5 @@
   .iosfirst p { margin: 0; }
   .iosfirst .how { margin-top: 6px; color: var(--ink2); }
   .linkish { background: none; border: 0; padding: 0 0 0 6px; color: var(--ink3); font: inherit; text-decoration: underline; cursor: pointer; min-height: var(--tap); }
+  @media print { .iosfirst { display: none !important; } } /* advice for the screen, not for paper (round sixty-one) */
 </style>

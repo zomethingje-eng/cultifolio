@@ -8,6 +8,7 @@ import { limited } from '$lib/server/sync';
 import { genusOf, slugify, canonicalSynonym } from '$core/names';
 import { worldSvg, regionSvg } from '$lib/map/still';
 import { unitsFor } from '$lib/server/units';
+import { englishNames, generaOf } from '$dossier/index-entry';
 import type { PageServerLoad } from './$types';
 
 /** The 503's sentence when the index lists a species whose page cannot be read (round sixty). */
@@ -43,12 +44,14 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
     // rate-limited per address, since a script can mint binomial-shaped addresses without end (round thirty-three, 12).
     let syn = await synonymInIndex(platform, fetch, params.slug, c); // the page's corpus (round sixty; A27)
     let unchecked = false;
+    let heldBack = false; // the site held its call to GBIF back: not asked, never "did not answer" (round sixty-one)
     if (!syn) {
       const stop = await limited(platform, getClientAddress, 'match');
       if (stop) error(429, { message: 'Too many unknown species addresses from this address; wait a few minutes and try again.' });
       const asked = await synonymOf(platform, fetch, params.slug, c);
-      unchecked = asked === 'unchecked';
-      syn = asked === 'unchecked' ? null : asked;
+      unchecked = asked === 'unchecked' || asked === 'held';
+      heldBack = asked === 'held';
+      syn = asked === 'unchecked' || asked === 'held' ? null : asked;
     }
     if (syn?.slug) {
       setHeaders({ 'cache-control': 'public, max-age=86400' });
@@ -71,7 +74,7 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
     const suggest = found && 'hits' in found ? found.hits.filter((e) => e.slug !== params.slug).map((e) => ({ slug: e.slug, name: e.name })) : [];
     const species = genus ? { name: asked, genus, inGenus: indexMaps(index).byGenus.get(genus)?.length ?? 0, wholeGenus: WHOLE_GENERA.has(genus), ...(syn ? { accepted: syn.acceptedName } : {}), suggest } : undefined;
     if (syn) error(404, { message: `${syn.matched} is ${syn.acceptedName} in the GBIF backbone, and that species is not in the reference`, species });
-    error(404, { message: unchecked ? `No species page for “${params.slug}”. Whether it is an older name for a species that is here was not checked: GBIF's name service did not answer` : `No species page for “${params.slug}”`, species });
+    error(404, { message: unchecked ? `No species page for “${params.slug}”. Whether it is an older name for a species that is here was not checked: ${heldBack ? "this site's calls to GBIF are used up for this minute" : "GBIF's name service did not answer"}` : `No species page for “${params.slug}”`, species });
   }
   // The dossier and the genus record are two objects in the bucket, read together, since the genus is known from the
   // index before the dossier arrives; read one after the other they were two round trips on every page (round forty-three, 2).
@@ -102,6 +105,8 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   // Related: the rest of the genus, and the species whose habitat climate is nearest (from the index; nothing computed here).
   const card = (e: NonNullable<typeof me>) => ({ key: e.key, slug: e.slug, name: e.name, family: e.family, common: e.common, thumb: e.thumb, open: e.open, climate: e.climate });
   const genus = genusOf(d.name.scientific);
+  // The English names by the index's own rule, with the corpus's genera, so the page, its title and its JSON-LD show the name its tile shows (round sixty-one; decision 7).
+  const names = englishNames(d.name.vernacular, { genus: d.name.scientific, genera: generaOf(byGenus.keys()) });
   // The page shows twelve and a count: the rest of a large genus (six hundred cards, taken whole) is not sent (round forty, own).
   const allSiblings = (byGenus.get(genus) ?? []).filter((e) => e.key !== key);
   const siblings = allSiblings.slice(0, 12).map(card);
@@ -127,6 +132,8 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   // may say is what the record holds: the binomial is an older name of this species, and the address named a variety of it.
   const ofOlder = !!wasPlain && !ownNames.has(wasPlain) && !asVariety && wasPlain.split(' ').length > 2 && ownNames.has(binomialOf(wasPlain));
   return {
+    /** English common names, the index's choice first (round sixty-one; decision 7). */
+    commonNames: [names.common, ...(names.commons ?? [])].filter((x): x is string => !!x).slice(0, 4),
     /** The old name this page was reached by, when the address was a synonym the backbone resolved (round thirty, R2-8). */
     was: was && /^[\p{L}\p{M} .'\-×]{3,80}$/u.test(was) && (ownNames.has(wasPlain) || asVariety || ofOlder) ? was : null,
     /** The old name is the binomial of a variety the backbone places under this species, not of the species itself. */

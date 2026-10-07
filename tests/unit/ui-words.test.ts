@@ -136,7 +136,7 @@ describe('the toast waits while it is read (the accessibility review, 1)', () =>
     toast.show('2026-0001 watered.', 2400, { label: 'Undo', run: () => {} });
     vi.advanceTimersByTime(7000);
     toast.hold();
-    vi.advanceTimersByTime(60_000);
+    vi.advanceTimersByTime(20_000); // held, though not for good: HOLD_MAX_MS lets it go (round sixty-one; r61a-toast.test.ts)
     expect(toast.text).toBe('2026-0001 watered.');
     toast.release();
     vi.advanceTimersByTime(1900);

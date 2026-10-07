@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { limited, upstreamAllowed } from '$lib/server/sync';
+import { limited, upstreamCall, heldBack, clientIp } from '$lib/server/sync';
 
 /**
  * Name suggestions for the species picker, proxied from GBIF's backbone so
@@ -44,8 +44,9 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   if (hit) return new Response(hit.body, hit); // a copy: the cached response's own headers are immutable, and the hook adds two (round seventeen, 1)
   const stop = await limited(platform, getClientAddress, 'names');
   if (stop) return stop;
-  // The site's own minute of calls to other services, for every address together (round sixty; the server review, 16).
-  if (!(await upstreamAllowed(platform))) return bad('backbone not asked: this site has made all the calls to it it may this minute');
+  // The site's own minute of calls to GBIF, for every address together, and this address's part of it (round sixty-one; the server review, 4): a held call says so (`held: true`), never that GBIF did not answer.
+  const call = await upstreamCall(platform, ['gbif'], clientIp(getClientAddress));
+  if (!call.ok) return heldBack(call);
   let res: Response;
   try {
     res = await fetch(upstream, { headers: { accept: 'application/json', 'user-agent': 'Cultifolio/3.0 (https://cultifolio.com)' } });

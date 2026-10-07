@@ -17,8 +17,12 @@
   .nc summary { list-style: none; cursor: pointer; display: inline-block; border-radius: 999px; }
   .nc summary::-webkit-details-marker { display: none; }
   .nc summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .tok { display: inline-block; font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.04em; padding: 3px 10px; border-radius: 999px; border: 1.5px dashed var(--warm); color: var(--warm-ink); background: transparent; white-space: nowrap; line-height: 1.3; }
+  /* Wraps rather than being cut at the card's edge: at 320 px and 200% text "Photographs not checked" read "Photographs not c…" (round sixty-one; a11y 7). */
+  .tok { display: inline-block; font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.04em; padding: 3px 10px; border-radius: 999px; border: 1.5px dashed var(--warm); color: var(--warm-ink); background: transparent; white-space: normal; overflow-wrap: anywhere; max-width: 100%; line-height: 1.3; }
+  .nc summary { max-width: 100%; }
   .nc[open] .tok { background: var(--warm-soft); }
   .nc .why { display: block; font-size: var(--fs-md); font-weight: 400; letter-spacing: 0; color: var(--ink2); margin-top: 5px; max-width: 60ch; line-height: 1.4; white-space: normal; text-align: left; }
+  /* The link that explains rule 2 is told apart from its sentence by more than colour (round sixty-one; a11y 12). */
+  .nc .why a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
   .nc.inline .tok { font-size: var(--fs-xs); padding: 2px 8px; }
 </style>

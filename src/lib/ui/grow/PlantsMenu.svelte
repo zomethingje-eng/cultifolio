@@ -16,11 +16,17 @@
     const items = [...(e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>('[role=menuitem]')];
     const i = items.indexOf(document.activeElement as HTMLElement);
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); items[(i + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length]?.focus(); }
+    else if (e.key === 'Home' || e.key === 'End') { e.preventDefault(); items[e.key === 'Home' ? 0 : items.length - 1]?.focus(); } // the menu pattern's keys (round sixty-one; the accessibility review, 11)
     else if (e.key === 'Escape') { e.preventDefault(); close(true); }
     else if (e.key === 'Tab') close();
   }
+  /** Nothing to download yet: the item stays focusable and says so, as the menu pattern asks (round sixty-one; the accessibility review, 11). */
+  const empty = $derived(!collection.ready || !collection.accessions.length);
   async function sheet() {
-    close();
+    if (busy || empty) return;
+    // Focus back on "···" before the item goes: the item was removed under focus and the button disabled, and focus fell
+    // to the page (round sixty-one; the accessibility review, 2).
+    close(true);
     busy = true;
     try { await downloadPlantsSheet(); toast.show('plants.csv made on this device and downloaded.'); }
     catch (e) { toast.show(`The sheet was not made: ${e instanceof Error ? e.message : String(e)}`); }
@@ -30,11 +36,11 @@
 
 <svelte:window onclick={(e) => { if (open && !(e.target as Element).closest('.plantsmenu')) close(); }} />
 <div class="plantsmenu">
-  <button class="btn dots" type="button" id="plants-menu-btn" bind:this={btn} aria-haspopup="menu" aria-expanded={open} aria-controls="plants-menu" aria-label="More: import, download as a spreadsheet" title="Import, download as a spreadsheet" onclick={() => (open = !open)} disabled={busy}>···</button>
+  <button class="btn dots" type="button" id="plants-menu-btn" bind:this={btn} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? 'plants-menu' : undefined} aria-label="More: import, download as a spreadsheet" title="Import, download as a spreadsheet" onclick={() => { if (!busy) open = !open; }} aria-disabled={busy}>···</button>
   {#if open}
     <div class="menu" id="plants-menu" role="menu" tabindex="-1" aria-label="More for My plants" use:first onkeydown={keys}>
       <a role="menuitem" href="/plants/import" onclick={() => close()}>Import from a list or a spreadsheet</a>
-      <button role="menuitem" type="button" id="plants-sheet" onclick={sheet} disabled={!collection.ready || !collection.accessions.length}>Download as a spreadsheet</button>
+      <button role="menuitem" type="button" id="plants-sheet" onclick={sheet} aria-disabled={empty}>Download as a spreadsheet{#if empty}<span class="why">: no plants yet</span>{/if}</button>
     </div>
   {/if}
 </div>
@@ -45,5 +51,5 @@
   .menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 60; /* above the sticky search row (z 40) */ min-width: 240px; display: flex; flex-direction: column; padding: 4px; background: var(--card); border: 1px solid var(--rule); border-radius: var(--r); box-shadow: var(--sh); }
   .menu [role='menuitem'] { display: block; text-align: left; padding: 10px 12px; min-height: var(--tap); border: 0; background: none; color: var(--ink); font: inherit; font-size: var(--fs-md); text-decoration: none; border-radius: var(--r); cursor: pointer; }
   .menu [role='menuitem']:hover, .menu [role='menuitem']:focus-visible { background: var(--sunk); }
-  .menu [role='menuitem']:disabled { color: var(--ink3); cursor: default; }
+  .menu [role='menuitem'][aria-disabled='true'] { color: var(--ink3); cursor: default; }
 </style>

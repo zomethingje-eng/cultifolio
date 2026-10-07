@@ -5,6 +5,7 @@
   import PageHead from '$lib/ui/PageHead.svelte';
   import { site, readerLat } from '$lib/ui/site.svelte';
   import { defaultSheet } from '$lib/ui/label-sheet';
+  import { readSetting, writeSetting } from '$lib/ui/stored';
   /**
    * Printable labels. Pick plants, pick a sheet, print. The page shows the
    * sheet at true size; @media print hides everything else and sets the page
@@ -31,7 +32,7 @@
   import { careLine } from '$core/note';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
   import PlantName from '$lib/ui/PlantName.svelte';
-  import { plantQrUrl } from '$lib/ui/grow'; // round sixty, agent F: the species in the code's fragment
+  import { plantQrUrl } from '$lib/ui/grow/qr'; // round sixty, agent F: the species in the code's fragment; by its own path, not the grow barrel (round sixty-one; the accessibility review, 3)
 
   /** Sheet geometry in mm. Avery numbers are the common US and A4 stocks; the strip is for cutting by hand. */
   const SHEETS = [
@@ -45,13 +46,18 @@
 
   // US Letter stock for the US and Canada, A4 for everyone else, until the grower picks one (it is remembered then): en-GB
   // opened on Avery 5160 and a first print came out on the wrong paper (round sixty; the grower review, 9).
-  let sheetK = $state<Sheet['k']>(defaultSheet(typeof navigator !== 'undefined' ? navigator.language : undefined));
+  // The choice is read here, as the page starts, not after the collection has opened: the saving effect below ran first
+  // with the defaults and wrote them over the grower's choice on every load (round sixty-one; the grower review, 1). It is
+  // this device's (the stock in the printer); in the sample collection a change is kept for the tab only (`stored.ts`).
+  const LABELS_KEY = 'cultifolio.labels';
+  const stored = (() => { try { const s = readSetting(LABELS_KEY, 'device'); const o = s ? JSON.parse(s) : null; return o && typeof o === 'object' ? (o as { sheetK?: unknown; withQr?: unknown; withCare?: unknown; withSource?: unknown }) : null; } catch { return null; } })();
+  let sheetK = $state<Sheet['k']>(SHEETS.find((x) => x.k === stored?.sheetK)?.k ?? defaultSheet(typeof navigator !== 'undefined' ? navigator.language : undefined));
   const sheet = $derived(SHEETS.find((s) => s.k === sheetK)!);
   let skip = $state<number | null>(0); // cells already used on a part-used sheet; null once cleared (Svelte binds an emptied number input to null)
   /** The skip as a whole number inside the sheet: a cleared box is 0, 2.5 is 2, 99 on a 30-cell sheet is 29 (round thirteen, 10). */
-  let withQr = $state(true);
-  let withCare = $state(true);
-  let withSource = $state(false);
+  let withQr = $state(typeof stored?.withQr === 'boolean' ? stored.withQr : true);
+  let withCare = $state(typeof stored?.withCare === 'boolean' ? stored.withCare : true);
+  let withSource = $state(typeof stored?.withSource === 'boolean' ? stored.withSource : false);
   let q = $state('');
   let chosen = $state<Set<string>>(new Set());
   /** What the link picked (?acc=, ?batch=, ?loc=): listed first, so ten plants just potted up are not scattered through three hundred (round fifty-eight; the grower review). */
@@ -90,29 +96,17 @@
       const growing = collection.accessions.filter((a) => a.status === 'growing');
       chosen = new Set(growing.length <= 24 ? growing.map((a) => a.id) : []);
     }
-    try {
-      const s = localStorage.getItem('cultifolio.labels');
-      if (s) {
-        const o = JSON.parse(s);
-        if (SHEETS.some((x) => x.k === o.sheetK)) sheetK = o.sheetK;
-        withQr = o.withQr ?? true;
-        withCare = o.withCare ?? true;
-        withSource = o.withSource ?? false;
-      }
-    } catch {
-      /* fine */
-    }
   });
   $effect(() => {
     setCrumb([{ label: 'My plants', href: '/plants' }, { label: 'Labels' }]);
     return () => setCrumb([]);
   });
+  // Saved when the grower changes a choice, not on the first run, which is the page starting with what it read (round sixty-one; the grower review, 1).
+  let saveArmed = false;
   $effect(() => {
-    try {
-      localStorage.setItem('cultifolio.labels', JSON.stringify({ sheetK, withQr, withCare, withSource }));
-    } catch {
-      /* fine */
-    }
+    const v = JSON.stringify({ sheetK, withQr, withCare, withSource });
+    if (!saveArmed) { saveArmed = true; return; }
+    writeSetting(LABELS_KEY, 'device', v);
   });
 
   const all = $derived<Item[]>([...collection.accessions.filter((a) => a.status === 'growing' || chosen.has(a.id)).map(ofPlant), ...collection.sowings.filter((b) => b.status === 'active' || chosen.has(b.id)).map(ofBatch)]);
@@ -168,7 +162,9 @@
     const needQr = withQr && sheet.qr ? picked.filter((a) => !qrs[a.id] && !qrInflight.has(a.id)) : [];
     if (needQr.length) {
       for (const a of needQr) qrInflight.add(a.id);
-      void Promise.all(needQr.map((a) => QRCode.toString(a.batch ? `${location.origin}/propagation/${a.id}` : plantQrUrl(location.origin, a.rec as Accession), { type: 'svg', errorCorrectionLevel: 'M', margin: 0 }).then((svg) => [a.id, svg] as const, () => [a.id, ''] as const))).then((pairs) => {
+      // Each code is made inside its own promise, so a name that cannot be made into an address fails only its own code: one
+      // threw out of this effect and the sheet printed with no code at all (round sixty-one; the records review, 3).
+      void Promise.all(needQr.map((a) => Promise.resolve().then(() => QRCode.toString(a.batch ? `${location.origin}/propagation/${a.id}` : plantQrUrl(location.origin, a.rec as Accession), { type: 'svg', errorCorrectionLevel: 'M', margin: 0 })).then((svg) => [a.id, svg] as const, () => [a.id, ''] as const))).then((pairs) => {
         const next = { ...qrs };
         for (const [id, svg] of pairs) { if (svg) next[id] = svg; qrInflight.delete(id); }
         qrs = next;
@@ -359,10 +355,13 @@
   .page.tiny .care, .page.tiny .src { display: none; }
 
   @media print {
-    :global(body) { background: #fff !important; }
+    /* The body's side padding is zeroed too: the sheet started 16 px in, was 16 px wider than the paper, and every browser's
+       fit-to-page shrank it to about 98%, so the labels drifted off their cells by a millimetre a row (round sixty-one; the
+       grower review, 2). */
+    :global(body) { background: #fff !important; padding: 0 !important; margin: 0 !important; }
     :global(#topbar), :global(#tabbar), :global(footer), .ui { display: none !important; }
     /* The app around the page is hidden for every printed page by the theme; said again here, where a stray card costs a sheet of labels (round sixty; the self-review's 6). */
-    :global(.install), :global(.frostbar), :global(.clockbar), :global(.vaultnote), :global(.toastregion), :global(.cmppill), :global(.tray) { display: none !important; }
+    :global(.install), :global(.frostbar), :global(.clockbar), :global(.vaultnote), :global(.toastregion), :global(.cmppill), :global(.tray), :global(.demobar), :global(.backupnudge), :global(.iosfirst) { display: none !important; }
     :global(main.wrap) { max-width: none !important; padding: 0 !important; margin: 0 !important; }
     .sheets { margin: 0; gap: 0; overflow: visible; display: block; }
     .page { box-shadow: none; page-break-after: always; break-after: page; margin: 0; }

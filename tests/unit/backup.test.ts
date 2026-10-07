@@ -265,7 +265,7 @@ describe('a zip made to inflate past what a backup can hold is refused at its ta
     await expect(readBackup(zipSync(sheetsBomb))).rejects.toThrow(/not in a shape/); // the sheets were skipped and the (empty) manifest refused as usual
     await expect(readBackup(zipSync({ 'manifest.json': new Uint8Array(5 * 1024 * 1024), 'changes.json': new TextEncoder().encode('[]') }))).rejects.toThrow(/no manifest.json/); // a 5 MB manifest is not inflated: it is not ours
     // (a zip naming an entry twice cannot be made with fflate's writer; the refusal is by the name set in the filter)
-  });
+  }, 60_000); // 5 s at rest, 20 to 31 s on a loaded machine, past the 20 s default (round sixty-one; docs/review-60/harness.md 18)
   it('a table of contents whose entries all point at one stored block, each declaring a byte, is refused by the block\'s own size (round thirty-seven, R1-5)', async () => {
     // fflate copies a stored entry by its compressed size, whatever the entry declares as its original: 100 entries over
     // one 1 MB block declared a hundred bytes and cost a hundred megabytes. Made by hand: one stored entry, its central
@@ -320,7 +320,7 @@ describe('a zip made to inflate past what a backup can hold is refused at its ta
     expect(bytes.length).toBeLessThan(2 * 1024 * 1024);
     const r = await readBackup(bytes);
     expect(r.changes.filter((x) => x.field === 'notes').some((x) => (x.value as string).length === 70 * 1024 * 1024)).toBe(true);
-  });
+  }, 60_000); // 5 s at rest, 20 to 31 s on a loaded machine, past the 20 s default (round sixty-one; docs/review-60/harness.md 18)
   it('a numeric cell is written as a number, a text cell beginning like a formula is made text, after spaces and in full width too', () => {
     const rows = [...log, c(30, 'sowing', 's1', 'no', 'S2026-001'), c(31, 'sowing', 's1', 'taxonName', 'Aloe'), c(32, 'sowing', 's1', 'method', 'seed'), c(33, 'sowing', 's1', 'sown', '2026-03-01'), c(34, 'sowing', 's1', 'count', 3), c(35, 'sowing', 's1', 'status', 'active'), c(36, 'sowing', 's1', 'bottomHeatC', -5), c(37, 'sowing', 's1', 'notes', '  =HYPERLINK("x")'), c(38, 'sowing', 's1', 'medium', '＝pumice')];
     const { state } = materialise(rows);

@@ -32,13 +32,12 @@ describe('hooks.server handle', () => {
     expect(r.headers.get('x-frame-options')).toBe('SAMEORIGIN');
   });
   it('sends the renamed sections\' old paths to the new ones, query kept, and nothing else (improvements, 3)', async () => {
+    // Answered, not thrown, since round sixty-one, so the 301 carries the security headers (the server review, 9).
     const at = async (path: string) => {
-      try {
-        await handle({ event: { url: new URL('http://x' + path) } as never, resolve: async () => new Response('page') } as never);
-        return null;
-      } catch (e) {
-        return e as { status: number; location: string };
-      }
+      const r = (await handle({ event: { url: new URL('http://x' + path), request: new Request('http://x' + path) } as never, resolve: async () => new Response('page') } as never)) as Response;
+      if (r.status !== 301) return null;
+      expect([r.headers.get('strict-transport-security'), r.headers.get('x-content-type-options'), r.headers.get('referrer-policy'), r.headers.get('x-frame-options')]).toEqual(['max-age=31536000', 'nosniff', 'no-referrer', 'DENY']);
+      return { status: r.status, location: r.headers.get('location') };
     };
     expect(await at('/benches')).toMatchObject({ status: 301, location: '/places' });
     expect(await at('/sowings/new?loc=k1')).toMatchObject({ status: 301, location: '/propagation/new?loc=k1' });

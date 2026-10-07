@@ -39,11 +39,11 @@ class FrostWatch {
       const s = site.current;
       if (gen === this.gen) this.hasSite = !!s;
       if (!s) { if (gen === this.gen) { this.risk = null; this.unchecked = null; this.checked = false; } return; }
-      let risk: Risk | null = null, unchecked: string | null = null, at = 0;
+      let risk: Risk | null = null, unchecked: string | null = null, at = 0, held = false;
       try {
         const r = await getForecast<{ risk: Risk }>(s.lat, s.lon, units.current);
         if (r.ok) { risk = r.body.risk; at = r.at; }
-        else unchecked = forecastRefusal(r.status, 'Frost');
+        else { unchecked = forecastRefusal(r, 'Frost'); held = r.held === true; }
       } catch {
         unchecked = forecastRefusal(null, 'Frost');
       }
@@ -54,6 +54,9 @@ class FrostWatch {
       // The answer's own age, not the moment it was asked: one from the session's half hour is read again when that half
       // hour ends, not half an hour after it was taken from the cache (round fifty-eight; the client review).
       if (at && at < this.readAt) this.readAt = at;
+      // A call the site held back is asked again at the first look after a minute (a navigation, the timer, a return to
+      // the tab), not half an hour on: the cap is a minute's (round sixty-one).
+      if (held) this.readAt = Date.now() - FORECAST_TTL_MS + 60_000;
     })();
     return this.p;
   }

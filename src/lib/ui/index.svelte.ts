@@ -112,7 +112,9 @@ export type Found = IndexEntry;
  * is the text in a public catalogue's search box, listed on /about/how; a plant's record never is.
  */
 export async function searchCatalogue(q: string, n = 60): Promise<(Found[] & { relaxed?: { query: string } }) | { limited: number } | null> {
-  const text = q.trim().slice(0, 80);
+  // Cut by code point, as the server's `_clean` does: a cut through an emoji's surrogate pair made `encodeURIComponent`
+  // throw, and the page said the reference could not be reached (round sixty-one; the corpus review, 12).
+  const text = [...q.trim()].slice(0, 80).join('');
   if (!text) return [];
   try {
     const r = await withCorpus(`/api/search?q=${encodeURIComponent(text)}&n=${n}`).then(timed);

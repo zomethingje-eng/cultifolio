@@ -9,6 +9,7 @@
  */
 import { climograph, type ClimoInput } from '$climate/climograph';
 import { temp, rain, ruleRain, tempUnit, rainUnit, METRIC, type Units, dryLabel } from '$core/units';
+import { tiedMonths, monthNames } from '$core/sheet';
 
 export interface CardInput {
   units?: Units;
@@ -23,7 +24,6 @@ export interface CardInput {
 }
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 export function climateCardSvg(c: CardInput): string {
   const W = 1200, H = 630;
@@ -39,11 +39,15 @@ export function climateCardSvg(c: CardInput): string {
   // and never over a habitat night (round sixty; self-review 3). The rule's own wording: "of 25 mm or more", counted as
   // `>= 25`, with no "(1 in)" on a metric card; "lowest to highest month", since the darkest month is not always winter
   // (round sixty; visitor 8, words 13).
+  // Each label is the figure's own name, as on the page's glance row, with the record low beside the floor; every month that
+  // ties as printed is named (round sixty-one; visitor 1, 5). One cell is "cell", not "cells" (visitor 22).
+  const hotAt = monthNames(tiedMonths(m.map((x) => x.tmax), true, (v) => temp(v, u)), 'short');
+  const coldAt = monthNames(tiedMonths(m.map((x) => x.tmin), false, (v) => temp(v, u, 1)), 'short');
   const figs: Array<[string, string, string]> = [
-    ex ? ['Coldest nights', temp(ex.minP01, u, 1), `1 night in 100 colder, over ${ex.years} years · NASA POWER`] : ['Coldest mean night', temp(m[cold].tmin, u, 1), `${MON[cold]} mean night, not a floor · CHELSA`],
-    ['Warmest days', temp(m[hot].tmax, u), `${MON[hot]} mean day · CHELSA`],
-    ['Rain', `${rain(rainYear, u)}/yr`, `${wetMonths === 0 ? 'no month' : `${wetMonths} month${wetMonths === 1 ? '' : 's'}`} of ${ruleRain(25, u)} or more · CHELSA`],
-    dlis.length ? ['Light', `${Math.min(...dlis).toFixed(0)}–${Math.max(...dlis).toFixed(0)} DLI`, 'mol/m²/day, lowest to highest month, open sky · CHELSA'] : ['Cells', String(c.cells), 'habitat grid cells read']
+    ex ? ['Cold floor (1 night in 100)', temp(ex.minP01, u, 1), `record low ${temp(ex.minAbs, u, 1)} in ${ex.years} years · NASA POWER`] : ['Coldest month, mean night', temp(m[cold].tmin, u, 1), `${coldAt}, not a floor · CHELSA`],
+    ['Warmest month, mean day', temp(m[hot].tmax, u), `${hotAt} · CHELSA`],
+    ['Rain a year', `${rain(rainYear, u)}`, `${wetMonths === 0 ? 'no month' : `${wetMonths} month${wetMonths === 1 ? '' : 's'}`} of ${ruleRain(25, u)} or more · CHELSA`],
+    dlis.length ? ['Open-sky light', `${Math.min(...dlis).toFixed(0)}–${Math.max(...dlis).toFixed(0)} DLI`, 'mol/m²/day, lowest to highest month · CHELSA'] : ['Cells', String(c.cells), `habitat grid cell${c.cells === 1 ? '' : 's'} read`]
   ];
   const g = climograph({ ...c.climate, extremes: ex ? { minAbs: ex.minAbs, maxP99: ex.maxP99, years: ex.years } : null }, 640, u);
   const gx = 520, gy = 96, scale = Math.min(1, 500 / g.height);
@@ -90,7 +94,7 @@ export function climateCardSvg(c: CardInput): string {
     <line x1="0" x2="16" y1="-4" y2="-4" stroke="${warm}" stroke-width="2.5"/><text x="22" y="0">day</text>
     <line x1="60" x2="76" y1="-4" y2="-4" stroke="${cool}" stroke-width="2.5"/><text x="82" y="0">night</text>
     <rect x="128" y="-11" width="10" height="10" fill="${cool}" opacity="0.55"/><text x="144" y="0">rain</text>
-    <rect x="186" y="-11" width="16" height="10" fill="${warm}" opacity="0.25"/><text x="208" y="0">10th–90th percentile across cells</text>
+    ${g.hasBand ? `<rect x="186" y="-11" width="16" height="10" fill="${warm}" opacity="0.25"/><text x="208" y="0">10th–90th percentile across cells</text>` : `<text x="186" y="0">${c.cells > 1 ? 'the cells agree within rounding' : 'one cell, so no spread'}</text>`}
     <rect x="0" y="9" width="16" height="10" fill="${ink}" opacity="0.06"/><text x="22" y="18">cold quarter</text>
     ${g.strip ? `<line x1="110" x2="126" y1="14" y2="14" stroke="${accent}" stroke-width="2"/><text x="132" y="18">DLI</text><line x1="170" x2="186" y1="14" y2="14" stroke="${ink3}" stroke-width="2" stroke-dasharray="3 3"/><text x="192" y="18">RH, each on its own scale</text>` : ''}
     <text x="${g.strip ? 360 : 110}" y="18">habitat months${c.south == null ? '' : `, ${c.south ? 'southern' : 'northern'} hemisphere`}</text>

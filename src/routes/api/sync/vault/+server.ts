@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { STATUS } from '$lib/sync/limits';
 import type { RequestHandler } from './$types';
-import { store, vaultId, vaultIdFor, ensureVault, authed, readMeta, recount, vaultBytes, allowCreation, refundCreation, creationCeilings, clientIp, limited, readBody, quotaOf } from '$lib/server/sync';
+import { store, vaultId, vaultIdFor, ensureVault, authed, readMeta, recount, vaultBytes, allowCreation, refundCreation, creationCeilings, clientIp, limited, readBody, quotaOf, RecountCrossed } from '$lib/server/sync';
 
 /** The most a creation body may be: its three fields are under two hundred bytes. */
 const MAX_VAULT_BODY = 1024;
@@ -62,7 +62,14 @@ export const POST: RequestHandler = async ({ request, platform, getClientAddress
   if (!existing && !created) await refundCreation(platform?.env?.COUNTERS, clientIp(getClientAddress), now);
   // A (re)join is the moment the slow, authoritative listing puts the live counter right.
   const kv = platform?.env?.QUEUE;
-  const bytes = created ? 0 : kv ? await vaultBytes(r2, kv, id, meta, Date.now(), true, quotaOf(platform, getClientAddress)) : await recount(r2, id, meta);
+  let bytes: number;
+  try {
+    bytes = created ? 0 : kv ? await vaultBytes(r2, kv, id, meta, Date.now(), true, quotaOf(platform, getClientAddress)) : await recount(r2, id, meta);
+  } catch (e) {
+    // Two listings crossed by landing uploads: 503 with Retry-After, and the device asks again (round sixty-one; B11).
+    if (e instanceof RecountCrossed) return e.response();
+    throw e;
+  }
   return json({ created, entitlement: meta.entitlement, bytes });
 };
 
@@ -74,6 +81,12 @@ export const GET: RequestHandler = async ({ request, url, platform, getClientAdd
   const id = vaultId(url.searchParams.get('vault'));
   const meta = await authed(r2, id, request);
   const kv = platform?.env?.QUEUE;
-  const bytes = kv ? await vaultBytes(r2, kv, id, meta, Date.now(), false, quotaOf(platform, getClientAddress)) : meta.bytes;
+  let bytes: number;
+  try {
+    bytes = kv ? await vaultBytes(r2, kv, id, meta, Date.now(), false, quotaOf(platform, getClientAddress)) : meta.bytes;
+  } catch (e) {
+    if (e instanceof RecountCrossed) return e.response(); // round sixty-one; B11
+    throw e;
+  }
   return json({ entitlement: meta.entitlement, bytes, created: meta.created });
 };

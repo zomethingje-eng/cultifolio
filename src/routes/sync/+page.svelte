@@ -14,6 +14,10 @@
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import { syncWords } from '$lib/ui/sync-words';
   import { heldWords } from '$lib/ui/held-words';
+  import { inDemo } from '$lib/db/demo';
+
+  /** The sample collection: no sync controls are drawn at all (round sixty-one; decision 10, a guard in the page as in the engine), and the heading stays (the accessibility review's 10). */
+  const demo = inDemo();
 
   let mode = $state<'idle' | 'create' | 'join'>('idle');
   let freshKey = $state('');
@@ -31,6 +35,7 @@
   const FRESH = 'cultifolio.freshKey';
   onMount(async () => {
     await collection.load();
+    if (demo) return;
     await sync.init();
     try {
       const kept = sessionStorage.getItem(FRESH);
@@ -159,6 +164,10 @@
 
 <svelte:head><title>Sync · Cultifolio</title></svelte:head>
 
+{#if demo}
+  <!-- The sample's lock says why in the bar above; the page keeps its h1 (round sixty-one; the accessibility review's 10). The wrapper carries the class the sample bar leaves on screen. -->
+  <div class="demolock"><PageHead title="Sync" kick="My plants" places={false} sub="The same collection on your phone and your computer, encrypted with a key only you hold." /></div>
+{:else}
 <PageHead title="Sync" kick="My plants" places={false} sub="The same collection on your phone and your computer, encrypted with a key only you hold." />
 
 {#if sync.configured}
@@ -177,7 +186,8 @@
   {#if errWords?.detail}<details class="tech" id="sync-error-detail"><summary>What the sync reported</summary><p class="mono small">{errWords.detail}</p></details>{/if}
   <!-- The server's own sentence when it refuses this vault's uploads, and when this device asks again; receiving carries on (round sixty; three reviews). -->
   {#if sync.refusal}
-    <p class="notice warn" id="sync-refusal" role="status">{sentence(sync.refusal.text)} This device asks again {when(sync.refusal.until)}. Your changes are kept here meanwhile, and changes from your other devices still come in.</p>
+    <!-- When the server said to, or within the hour: the device never waits longer (round sixty-one; decision 6). The refusal is kept with the sync record, so a reload or another tab waits too. -->
+    <p class="notice warn" id="sync-refusal" role="status">{sentence(sync.refusal.text)} This device asks again {when(sync.refusal.until)}, when the server said to or within the hour. Your changes are kept here meanwhile, and changes from your other devices still come in.</p>
   {/if}
   {#if sync.vaultFull}
     <p class="notice bad" id="vault-full">Your vault is full ({mb(sync.vaultFull.bytes)} of {mb(sync.vaultFull.limit)} MB). Removing photographs frees only their own bytes, once the removal is ten minutes old; the sync bundles of changes stay for good, since the log is the collection. Back up, then set up a new vault for the collection to carry on syncing. Changes made here are kept on this device and sent once there is room; receiving carries on.</p>
@@ -319,6 +329,7 @@
 <!-- Held changes are said here with sync off too: a restored file's changes dated ahead wait the same way, and the lists link here (round sixty; decision 2). -->
 {#if !sync.configured && collection.heldWaiting}
   <p class="notice" id="held">{heldWords(collection.heldWaiting)} They came with a backup restored here, or from a device this one synced with before, and are stored on this device; nothing needs doing.</p>
+{/if}
 {/if}
 
 <style>

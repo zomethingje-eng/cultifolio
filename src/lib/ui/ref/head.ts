@@ -29,10 +29,27 @@ export function speciesTitle(h: HeadInput): string {
   const nm = `${h.name.scientific}${c ? ` (${c})` : ''}`;
   if (h.climate.status !== 'ok' || !h.climate.months?.length) return nm;
   const light = h.climate.months.some((x) => x.dli != null);
-  return `${nm}: habitat rain, cold nights${light ? ' and light' : ''}`;
+  // Cold nights only with the daily extremes, whose 1st-percentile night the page leads with; a month's mean night is not
+  // one. The parts joined with "and", so a title without light is not a list missing its last word (round sixty-one; visitor 13).
+  return `${nm}: ${and(['habitat rain', h.climate.extremes ? 'cold nights' : '', light ? 'light' : ''].filter(Boolean))}`;
 }
 
-const and = (xs: string[]) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+function and(xs: string[]): string {
+  return xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`;
+}
+
+/**
+ * A source's detail as a sentence of its own: capitalised, with its full stop, and with its article when the detail
+ * begins by naming the source ("occurrence source did not answer" read "Occurrence source did not answer."), and when
+ * it says a source did not answer, when (round sixty-one; visitor 16). A fixed rule over the dossier's string.
+ */
+export function detailSentence(t: string | null | undefined, fallback: string): string {
+  let x = (t ?? '').trim() || fallback.trim();
+  if (/^[a-z][\w-]* source\b/.test(x)) x = `the ${x}`;
+  if (/did not answer$/.test(x.replace(/\.$/, ''))) x = `${x.replace(/\.$/, '')} when this page was built`;
+  const y = x.charAt(0).toUpperCase() + x.slice(1);
+  return /[.!?]$/.test(y) ? y : `${y}.`;
+}
 
 /** The meta description, at most 155 characters, cut at a word by `clip`. */
 export function speciesDescription(h: HeadInput, u: Units = METRIC): string {

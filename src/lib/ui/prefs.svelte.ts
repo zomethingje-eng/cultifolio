@@ -7,6 +7,7 @@
  */
 import { browser } from '$app/environment';
 import { units } from '$lib/ui/units.svelte';
+import { readSetting, writeSetting } from '$lib/ui/stored';
 
 const KEY = 'cultifolio.prefs';
 interface Prefs {
@@ -27,7 +28,7 @@ class PrefStore {
   load() {
     if (this.loaded || !browser) return;
     try {
-      const s = localStorage.getItem(KEY);
+      const s = readSetting(KEY, 'device');
       const v = s ? (JSON.parse(s) as Partial<Prefs>) : null;
       const lu = v?.lengthUnits;
       this.current = { ...DEFAULTS, referencePhotos: v?.referencePhotos === true, hideKeeping: v?.hideKeeping === true, lengthUnits: lu === 'mm' || lu === 'in' ? lu : null };
@@ -45,12 +46,8 @@ class PrefStore {
   private listening = false;
   set(p: Partial<Prefs>) {
     this.current = { ...this.current, ...p };
-    try {
-      localStorage.setItem(KEY, JSON.stringify(this.current));
-      this.stored = true;
-    } catch {
-      /* a private window keeps it for the page */
-    }
+    // In the sample collection, for its tab only (round sixty-one; the grower review, 14); a private window keeps it for the page.
+    if (writeSetting(KEY, 'device', JSON.stringify(this.current))) this.stored = true;
   }
   get hideKeeping(): boolean {
     return this.loaded && !!this.current.hideKeeping;

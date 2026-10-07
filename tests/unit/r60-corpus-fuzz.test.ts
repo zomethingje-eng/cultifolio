@@ -37,6 +37,7 @@ describe('r59 corpus reviewer: synthetic 9,000-species fuzz', () => {
     reseed(Number(process.env.SEED ?? 4242));
     const { idx, shape } = synthIndex(9000);
     const { platform, manifest, reads, buildMs } = platformFor(idx);
+    _forgetIndex(); // the module holds a corpus for a minute: without this, a second seed in one process was compared against the first's index (round sixty-one; the corpus review, 16)
     const whole = prepare(idx);
     const ws = (e: (typeof idx)[number]) => [e.name, e.common ?? '', e.family ?? '', ...(e.origin ?? []), ...(e.syn ?? [])].join(' ').split(/[^\p{L}\p{N}]+/u).filter(Boolean);
     const qs: string[] = ['a', 'f a', 'a a', 'var co', 'A', 'x', '× a', "'", 'é', 'Ö', 'ae', 'a e', 'a e i', 'a o', 'c a', 'ca ca', 'var', 'f', 'subsp', 'ssp a', 'a f', 'a var', 'xact', 'zaloe', 'xcac', 'qcac', 'kcact', 'acta', 'cact', 'cacta', 'aceae', 'xaceae'];
@@ -93,13 +94,18 @@ describe('r59 corpus reviewer: synthetic 9,000-species fuzz', () => {
       }
       if (answers.size > 1) twoSpell.push(`${q}: ${answers.size} different answers over ${variants.length} spellings`);
     }
+    // Said on every run, not only with FUZZ_OUT: two spellings with two answers are read, not asserted, since a trailing marker is a word by design (round sixty-one; the corpus review, 16).
+    console.log(`two spellings, two answers: ${twoSpell.length}${twoSpell.length ? ` (${twoSpell.join('; ')})` : ''}`);
     rows.sort((a, b) => b.ms - a.ms);
     const uncharged = rows.filter((r) => r.charged === 0 && !r.path.startsWith('short'));
     if (process.env.FUZZ_OUT) writeFileSync(`${process.env.FUZZ_OUT}/fuzz-${process.env.SEED ?? 4242}.json`, JSON.stringify({ buildMs, n: rows.length, mism, twoSpell, slowest: rows.slice(0, 25), slowestUncharged: uncharged.slice(0, 25), shape: { infra: shape.infra.length, hybrid: shape.hybrid.length, cultivar: shape.cultivar.length } }, null, 1));
     expect(mism).toEqual([]);
   }, 1_800_000);
 
-  it('the near pass is never charged: candidate counts for typo queries', async () => {
+  // Was "the near pass is never charged", asserting only WHOLE_LIKE: the title said the opposite of the rule and nothing
+  // was checked. It now asserts the rule on the counts it measures; r61h-near-charge.test.ts holds the near-pass case
+  // (round sixty-one; docs/review-60/harness.md 17).
+  it('candidate counts for typo queries: each is charged at most once, and never while its exact and near candidates stay under WHOLE_LIKE', async () => {
     reseed(4242);
     const { idx } = synthIndex(9000);
     const { platform } = platformFor(idx);
@@ -122,5 +128,9 @@ describe('r59 corpus reviewer: synthetic 9,000-species fuzz', () => {
     }
     if (process.env.FUZZ_OUT) writeFileSync(`${process.env.FUZZ_OUT}/near.json`, JSON.stringify(out, null, 1));
     expect(WHOLE_LIKE).toBe(2000);
+    for (const o of out) {
+      expect(o.charged, o.q).toBeLessThanOrEqual(1);
+      if (o.exactCands + o.nearCands <= WHOLE_LIKE) expect(o.charged, o.q).toBe(0);
+    }
   }, 1_800_000);
 });

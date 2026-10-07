@@ -15,6 +15,7 @@
    */
   import { parseName } from '$core/names';
   import { searchCatalogue, type Found } from '$lib/ui/index.svelte';
+  import { pickedName } from '$lib/ui/picked-name';
   import SpeciesName from './SpeciesName.svelte';
   import type { NameKind } from '$core/names';
   let { value = $bindable(''), taxonKey = $bindable<number | null>(null), cultivar = $bindable<string | null>(null), kind = $bindable<NameKind>('species'), parentage = $bindable<string | null>(null), id = 'species-name', unresolved = $bindable(false), armed = $bindable(false) }: { value?: string; taxonKey?: number | null; cultivar?: string | null; kind?: NameKind; parentage?: string | null; id?: string; unresolved?: boolean; armed?: boolean } = $props();
@@ -31,6 +32,7 @@
   /** The highlighted row, or -1 for none. */
   let hi = $state(-1);
   /** Enter was pressed once on a name nothing resolved; the next press submits it as typed. */
+  let nameHeld = $state(false); // the site held the call back: "not asked", never "did not answer" (round sixty-one)
   let nameServiceDown = $state(false); // /api/names refused or unreachable: said under the field (round seventeen, 1)
   let root = $state<HTMLDivElement | null>(null);
   const uid = $props.id();
@@ -48,7 +50,8 @@
     if (lastRows && lastRows.q === q) return lastRows.rows;
     // /api/names proxies GBIF's species/suggest (same JSON shape) from the Worker, so no name you type leaves this site from the browser.
     const rows = fetch(`/api/names?q=${encodeURIComponent(q)}`).then(async (r) => {
-      if (!r.ok) throw new Error(String(r.status));
+      // A call the site held back (its minute of calls to GBIF used up) is said as that, not as a silence (round sixty-one; the server review, 4).
+      if (!r.ok) throw new Error((r.status === 503 || r.status === 429) && (await r.json().then((b: unknown) => (b as { held?: unknown } | null)?.held === true, () => false)) ? 'held' : String(r.status));
       return (await r.json()) as Row[];
     });
     const entry = { q, rows };
@@ -84,21 +87,24 @@
     const indexP = (genusOnly || needle.length < 2 ? Promise.resolve([] as Found[]) : searchCatalogue(needle, 6)).then((answer) => {
       if (!live()) return;
       // A hit whose genus is not the one typed came from the one-edit fallback ("polyphylla" → Lupinus polyphyllus): say so.
-      local = (Array.isArray(answer) ? answer : []).map((e) => ({ key: e.key, name: e.name, family: e.family, local: true, far: !e.name.toLowerCase().startsWith(typedGenus.slice(0, Math.min(4, typedGenus.length))) }));
+      // A retried answer ("Showing results for …") is not offered: it answers other words than the name typed, and "Copiapoa
+      // cinerea var. columna-alba" was offered the species as if it were the variety (round sixty-one; the corpus review, 5).
+      local = (Array.isArray(answer) && !('relaxed' in answer && answer.relaxed) ? answer : []).map((e) => ({ key: e.key, name: e.name, family: e.family, local: true, far: !e.name.toLowerCase().startsWith(typedGenus.slice(0, Math.min(4, typedGenus.length))) }));
       show();
     });
     const namesP = needle.length < 3 ? Promise.resolve() : namesFor(p.scientific).then((rows) => {
       if (!live()) return;
       nameServiceDown = false;
+      nameHeld = false;
       remote = rows
         .filter((x) => (genusOnly ? x.rank === 'GENUS' : /SPECIES|SUBSPECIES|VARIETY|FORM/.test(x.rank ?? '')))
         .map((x) => ({ key: x.key, name: x.canonicalName ?? x.scientificName ?? '', family: x.family, rank: x.rank, status: x.status }))
         // The backbone lists a subspecies under several keys (accepted, synonyms of one another); one line per name and rank is enough.
         .filter((x, i, arr) => arr.findIndex((y) => y.name === x.name && y.rank === x.rank) === i);
       show();
-    }, () => {
+    }, (e: unknown) => {
       // A refusal is said, not shown as an empty list: the grower can still type the name and let the plant page repair the key later (round seventeen, 1).
-      if (live()) nameServiceDown = true; // offline: local suggestions only, and said
+      if (live()) { nameServiceDown = true; nameHeld = e instanceof Error && e.message === 'held'; } // offline: local suggestions only, and said
     });
     await Promise.all([indexP, namesP]);
   }
@@ -113,8 +119,8 @@
     timer = setTimeout(() => search(value), 180);
   }
   function pick(s: Sugg) {
-    // Keep the cross as typed; only the matched part changes.
-    value = parentage ? `${parentage}${cultivar ? ` '${cultivar}'` : ''}` : s.name + (cultivar ? ` '${cultivar}'` : '');
+    // Keep the cross as typed; only the matched part changes, and a species keeps the rank and epithet typed after it (`pickedName`).
+    value = pickedName(value, s);
     taxonKey = s.key;
     resolved = 'yes';
     armed = false;
@@ -230,8 +236,8 @@
   {#if kind === 'hybrid'}<span class="pill">hybrid{parentage ? '' : ', parentage not stated'}</span>{:else if kind === 'cultivar'}<span class="pill">cultivar</span>{/if}
   <!-- One line under the field, not three stacked: the service's silence is folded into the line that asks (round sixty; the grower review, 18). -->
   {#if nearest}<p class="hint" role="status">Not a reference name. Did you mean <button type="button" class="linkish" onclick={() => pick(nearest)}><SpeciesName name={nearest.name} /></button>? Otherwise Add keeps exactly what you typed.</p>
-  {:else if armed}<p class="hint" id="{listId}-hint" role="status">{nameServiceDown ? 'The name service did not answer. ' : ''}Pick a name from the list, or press Add to keep exactly what you typed.</p>
-  {:else if nameServiceDown}<p class="hint svc" role="status">The name service did not answer, so only the reference's own species are offered; a name typed in full is kept as typed and checked later.</p>{/if}
+  {:else if armed}<p class="hint" id="{listId}-hint" role="status">{nameServiceDown ? (nameHeld ? "The name service was not asked: this site's calls to it are used up for this minute. " : 'The name service did not answer. ') : ''}Pick a name from the list, or press Add to keep exactly what you typed.</p>
+  {:else if nameServiceDown}<p class="hint svc" role="status">{nameHeld ? "The name service was not asked (this site's calls to it are used up for this minute)" : 'The name service did not answer'}, so only the reference's own species are offered; a name typed in full is kept as typed and checked later.</p>{/if}
   <ul class="menu card" role="listbox" id={listId} aria-label="Suggested names" hidden={!menuOpen}>
     {#each suggestions as s, i (s.key)}
       <!-- "has a species page", not "has a dossier": the glossary's plain words (round fifty-eight; the accessibility review). -->

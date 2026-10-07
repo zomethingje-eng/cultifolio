@@ -71,11 +71,11 @@ describe('a CSV', () => {
     expect(cellText("'Bev's Wonder'")).toBe("'Bev's Wonder'"); // not a guard: nothing formula-like follows
     expect(cellText('  padded  ')).toBe('padded');
   });
-  it('reads a date only when it is written year first, and refuses a future one', () => {
+  it('reads a date written year first, and refuses a future one; 09/03/2024 is left unless the sheet says which way round (round sixty-one)', () => {
     expect(readDate('2024-3-9', '2026-10-04')).toEqual({ d: '2024-03-09' });
     expect(readDate('2024/03/09 10:00', '2026-10-04')).toEqual({ d: '2024-03-09' });
     expect(readDate('09/03/2024', '2026-10-04').d).toBeNull();
-    expect(readDate('09/03/2024', '2026-10-04').why).toMatch(/not written year first/);
+    expect(readDate('09/03/2024', '2026-10-04').why).toMatch(/could be 9 March or 3 September/);
     expect(readDate('2024-02-30', '2026-10-04').why).toMatch(/not a date/);
     expect(readDate('2031-01-01', '2026-10-04').why).toMatch(/future/);
   });
@@ -84,8 +84,9 @@ describe('a CSV', () => {
     const { rows, noName } = rowsFromSheet(sheet, guessMapping(sheet, true), true, '2026-10-04');
     expect(noName).toBe(1);
     expect(rows[0]).toMatchObject({ line: 2, name: 'Copiapoa cinerea', placePath: 'Greenhouse › Bench 1', acquired: '2024-05-01', status: 'archived', provenance: 'wild', price: '12', problems: [] });
-    expect(rows[1]).toMatchObject({ line: 4, name: 'Lithops lesliei', acquired: null, status: 'growing', provenance: null, notes: 'Provenance: seed-grown' });
-    expect(rows[1].problems.join(' | ')).toMatch(/not written year first.*status "sold".*|provenance/);
+    // The date left as written goes to the notes, and the plant is numbered for the year it names (round sixty-one).
+    expect(rows[1]).toMatchObject({ line: 4, name: 'Lithops lesliei', acquired: null, numberYear: 2024, status: 'growing', provenance: null, notes: 'Acquired (as written): 1/2/2024\nProvenance: seed-grown' });
+    expect(rows[1].problems.join(' | ')).toMatch(/left as written.*status "sold".*|provenance/);
   });
   it('never evaluates a cell: formulas, DDE and hyperlinks stay the text they are, and go back out guarded', () => {
     const sheet = parseCsv('species,notes\nCopiapoa cinerea,=HYPERLINK("http://x.example";"click")\n"=cmd|\' /C calc\'!A0",+1+1\n@SUM(A1),-2');
@@ -171,7 +172,8 @@ describe('numbers and places', () => {
   it('finds a place by its path from the top, and lists what would be made, parents first', () => {
     const places = [{ id: 'g', name: 'Greenhouse', parentId: null }, { id: 'b1', name: 'Bench 1', parentId: 'g' }, { id: 'x', name: 'Bench 1', parentId: null }];
     expect(resolvePlace('Greenhouse › Bench 1', places)).toEqual({ id: 'b1' });
-    expect(resolvePlace('greenhouse > bench 1', places)).toEqual({ id: 'b1' });
+    expect(resolvePlace('greenhouse › bench 1', places)).toEqual({ id: 'b1' });
+    expect(resolvePlace('Greenhouse > Bench 1', places)).toEqual({ under: null, make: ['Greenhouse > Bench 1'] }); // " › " only since round sixty-one (the records review, 7)
     expect(resolvePlace('Bench 1', places)).toEqual({ id: 'x' });
     expect(resolvePlace('Greenhouse › Bench 3', places)).toEqual({ under: 'g', make: ['Bench 3'] });
     expect(placesToMake(['Greenhouse › Bench 3', 'Cold frame › Left', 'Cold frame', 'Greenhouse › Bench 1'], places)).toEqual([['Cold frame'], ['Greenhouse', 'Bench 3'], ['Cold frame', 'Left']]);

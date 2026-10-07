@@ -10,7 +10,7 @@
   import { site } from '$lib/ui/site.svelte';
   import { collection } from '$lib/db/collection.svelte';
   import PageHead from '$lib/ui/PageHead.svelte';
-  import { cultivationSheet, CARD_ORDER } from '$core/sheet';
+  import { cultivationSheet, CARD_ORDER, tiedMonths, monthNames } from '$core/sheet';
   import { frostWording } from '$core/extremes';
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import { compare } from '$lib/ui/compare.svelte';
@@ -24,7 +24,6 @@
   const u = $derived(units.current);
   // The grower's hemisphere, from the site or the first place with coordinates: the months follow it, as on the species page.
   const readerLat = $derived(site.current?.lat ?? (site.loaded ? (collection.ready ? (collection.locations.map((l) => l.lat).find((x): x is number => x != null) ?? null) : null) : data.hemiLat));
-  const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   type D = (typeof data.items)[number];
   type Month = { tmax: number; tmin: number; precipMm: number; dli?: number };
   const col = (d: D) => {
@@ -32,7 +31,9 @@
     const ok = cl.status === 'ok';
     const m: Month[] | null = cl.status === 'ok' ? cl.months : null;
     const idx = (f: (x: Month) => number, hi: boolean) => (m ? m.reduce((b: number, x: Month, i: number) => ((hi ? f(x) > f(m[b]) : f(x) < f(m[b])) ? i : b), 0) : 0);
-    const hot = idx((x) => x.tmax, true), cold = idx((x) => x.tmin, false), wet = idx((x) => x.precipMm, true);
+    const hot = idx((x) => x.tmax, true), cold = idx((x) => x.tmin, false);
+    // Every month that ties as printed, named (round sixty-one; visitor 5: Copiapoa humilis, 23 °C in January and February, read "Jan").
+    const at = (f: (x: Month) => number, hi: boolean, fmt: (v: number) => string) => (m ? monthNames(tiedMonths(m.map(f), hi, fmt), 'short') : '');
     const dlis = m ? m.map((x) => x.dli).filter((x): x is number => x != null) : [];
     const sheet = cultivationSheet({ scientific: d.name.scientific, climateStatus: cl.status, family: d.name.family, months: cl.status === 'ok' ? cl.months : null, p10: cl.status === 'ok' ? cl.p10 : null, p90: cl.status === 'ok' ? cl.p90 : null, annualP10: cl.status === 'ok' ? (cl.annualRain?.p10 ?? null) : null, annualP90: cl.status === 'ok' ? (cl.annualRain?.p90 ?? null) : null, extremes: cl.status === 'ok' ? (cl.extremes ?? null) : null, extremesStatus: cl.status === 'ok' ? cl.extremesStatus : null, lat: d.centroid?.lat ?? (cl.status === 'ok' ? cl.at.lat : null), units: u, readerLat });
     const hero = d.photos.find((p) => !p.captive) ?? d.photos[0];
@@ -42,10 +43,10 @@
       ok,
       floor: sheet.floor,
       ex: cl.status === 'ok' ? (cl.extremes ?? null) : null,
-      hot: m ? { v: m[hot].tmax, mo: MON[hot] } : null,
-      cold: m ? { v: m[cold].tmin, mo: MON[cold] } : null,
+      hot: m ? { v: m[hot].tmax, mo: at((x) => x.tmax, true, (v) => temp(v, u)) } : null,
+      cold: m ? { v: m[cold].tmin, mo: at((x) => x.tmin, false, (v) => temp(v, u, 1)) } : null,
       rain: m ? m.reduce((a, x) => a + x.precipMm, 0) : null,
-      wet: m ? { mo: MON[wet], n: m.filter((x) => x.precipMm >= 25).length } : null,
+      wet: m ? { mo: at((x) => x.precipMm, true, (v) => rain(v, u)), n: m.filter((x) => x.precipMm >= 25).length } : null,
       dli: dlis.length ? { lo: Math.min(...dlis), hi: Math.max(...dlis) } : null,
       sheet,
       cards: CARD_ORDER.map((c) => ({ title: c, rows: sheet.rows.filter((r) => r.card === c) }))
@@ -175,7 +176,7 @@
           {#if c.hero && shownImg[c.d.key] !== 'fail'}<a class="cred" href={c.hero.page ?? c.hero.url} rel="noopener">{creditOf(c.hero)}</a>{/if}
           <a class="nm" href="/species/{c.d.slug}"><SpeciesName name={c.d.name.scientific} /></a>
           <div class="fam">{c.d.name.family ?? ''}{c.d.distribution.native.length ? ' · ' + c.d.distribution.native.slice(0, 2).map((r) => r.name).join(', ') : ''}</div>
-          {#if cols.length > 1}<a class="drop small" href={without(c.d.slug)} data-sveltekit-noscroll aria-label="Take {c.d.name.scientific} out of the comparison">Remove</a>{/if}
+          {#if cols.length > 1}<a class="drop small" href={without(c.d.slug)} data-sveltekit-noscroll aria-label="Remove {c.d.name.scientific} from the comparison">Remove</a>{/if}
           {#if c.d.climate.status === 'refused'}<div class="small muted hnote"><NotChecked what="Climate" why="A source did not answer when the species page was built." /></div>{:else if !c.ok}<div class="small muted hnote">{climateWord(c.d)}</div>{/if}
         </div>
       {/each}
@@ -183,20 +184,21 @@
 
     <!-- "not used", not "set aside": what it means (round fifty-eight; the accessibility review). -->
     <div class="row" class:differs={differs.cold} role="row">
-      <div class="rowlab" role="rowheader">Coldest nights in the wild{#if differs.cold}<span class="dif">differs</span>{:else if coldKinds.size > 1}<span class="kinds">figures of different kinds, not compared</span>{/if}</div>
-      {#each cols as c (c.d.key)}<div class="cell fig" role="cell">{#if c.ex}<b>{temp(c.ex.minP01, u, 1)}</b><span>cold floor: 1 night in 100 colder over {c.ex.years} years; lowest {temp(c.ex.minAbs, u, 1)}, {frostWording(c.ex)} (NASA POWER)</span>{:else if c.cold}<b>{temp(c.cold.v, u, 1)}</b><span>{c.cold.mo} mean night at the habitat (CHELSA), not a floor; {c.d.climate.status === 'ok' && c.d.climate.extremesStatus === 'refused' ? 'extremes not checked' : c.d.climate.status === 'ok' && c.d.climate.extremesStatus === 'skipped' ? 'extremes not asked for' : c.d.climate.status === 'ok' && c.d.climate.extremesStatus === 'sea' ? 'extremes read at a sea cell, not used' : 'no extremes series'}</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
+      <!-- The figure's own name, as on the species page's glance row (round sixty-one; visitor 1). -->
+      <div class="rowlab" role="rowheader">{coldKinds.has('mean') ? (coldKinds.has('night') ? 'Cold floor (1 night in 100), or coldest month, mean night' : 'Coldest month, mean night') : 'Cold floor (1 night in 100)'}{#if differs.cold}<span class="dif">differs</span>{:else if coldKinds.size > 1}<span class="kinds">figures of different kinds, not compared</span>{/if}</div>
+      {#each cols as c (c.d.key)}<div class="cell fig" role="cell">{#if c.ex}<b>{temp(c.ex.minP01, u, 1)}</b><span>cold floor, 1 night in 100 colder; record low {temp(c.ex.minAbs, u, 1)} in {c.ex.years} years, {frostWording(c.ex)} (NASA POWER)</span>{:else if c.cold}<b>{temp(c.cold.v, u, 1)}</b><span>coldest month's mean night, {c.cold.mo}, at the habitat (CHELSA), not a floor; {c.d.climate.status === 'ok' && c.d.climate.extremesStatus === 'refused' ? 'extremes not checked' : c.d.climate.status === 'ok' && c.d.climate.extremesStatus === 'skipped' ? 'extremes not asked for' : c.d.climate.status === 'ok' && c.d.climate.extremesStatus === 'sea' ? 'extremes read at a sea cell, not used' : 'no extremes series'}</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
     </div>
     <div class="row" class:differs={differs.hot} role="row">
-      <div class="rowlab" role="rowheader">Warmest days in the wild{#if differs.hot}<span class="dif">differs</span>{/if}</div>
-      {#each cols as c (c.d.key)}<div class="cell fig" role="cell">{#if c.hot}<b>{temp(c.hot.v, u)}</b><span>{c.hot.mo} mean day at the habitat (CHELSA)</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
+      <div class="rowlab" role="rowheader">Warmest month, mean day{#if differs.hot}<span class="dif">differs</span>{/if}</div>
+      {#each cols as c (c.d.key)}<div class="cell fig" role="cell">{#if c.hot}<b>{temp(c.hot.v, u)}</b><span>{c.hot.mo} at the habitat (CHELSA)</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
     </div>
     <div class="row" class:differs={differs.rain} role="row">
-      <div class="rowlab" role="rowheader">Rain in the wild{#if differs.rain}<span class="dif">differs</span>{/if}</div>
-      {#each cols as c (c.d.key)}<div class="cell fig" role="cell">{#if c.rain != null && c.wet}<b>{rain(c.rain, u)}/yr</b><span>{c.wet.n === 0 ? `no month of ${ruleRain(25, u)} or more` : `${c.wet.n} month${c.wet.n === 1 ? '' : 's'} of ${ruleRain(25, u)} or more`} · wettest {c.wet.mo} at the habitat (CHELSA)</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
+      <div class="rowlab" role="rowheader">Rain a year{#if differs.rain}<span class="dif">differs</span>{/if}</div>
+      {#each cols as c (c.d.key)}<div class="cell fig" role="cell">{#if c.rain != null && c.wet}<b>{rain(c.rain, u)}</b><span>{c.wet.n === 0 ? `no month of ${ruleRain(25, u)} or more` : `${c.wet.n} month${c.wet.n === 1 ? '' : 's'} of ${ruleRain(25, u)} or more`} · {c.wet.mo === 'every month' ? 'the same in every month' : `wettest ${c.wet.mo}`} at the habitat (CHELSA)</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
     </div>
     <div class="row" class:differs={differs.light} role="row">
-      <div class="rowlab" role="rowheader">Light in the wild{#if differs.light}<span class="dif">differs</span>{/if}</div>
-      {#each cols as c (c.d.key)}<div class="cell fig" role="cell">{#if c.dli}<b>{c.dli.lo.toFixed(0)}–{c.dli.hi.toFixed(0)} DLI</b><span>mol/m²/day, lowest to highest month (CHELSA shortwave)</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
+      <div class="rowlab" role="rowheader">Open-sky light{#if differs.light}<span class="dif">differs</span>{/if}</div>
+      {#each cols as c (c.d.key)}<div class="cell fig" role="cell">{#if c.dli}<b>{c.dli.lo.toFixed(0)}–{c.dli.hi.toFixed(0)} DLI</b><span>mol/m²/day, lowest to highest month, under the open sky (CHELSA shortwave)</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
     </div>
     <!-- Each species' own chart is on its page: in a column of this table it was too small to read at any width, labels of
          four pixels at 1280 (round fifty-nine; the interface review). One small link per column (round sixty; visitor 10). -->

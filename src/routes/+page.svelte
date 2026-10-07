@@ -26,7 +26,8 @@
   import { site } from '$lib/ui/site.svelte';
   import { units } from '$lib/ui/units.svelte';
   import { cultivationSheet } from '$core/sheet';
-  import { enterDemo } from '$lib/db/demo';
+  import { climograph } from '$climate/climograph';
+  import { enterDemo, inDemo } from '$lib/db/demo';
   let { data } = $props();
   /**
    * One featured species' figures, for "This is what every species page shows" under the visitor's heading (round sixty;
@@ -41,10 +42,11 @@
     climate: { months: Array<{ tmax: number; tmin: number; tmean: number; precipMm: number; dli?: number; rh?: number }>; p10?: unknown; p90?: unknown; cells: number; records: number; extremes?: { minAbs: number; minP01: number; maxP99: number; years: number; frostDaysPerYear: number; frostNights?: number } | null; extremesStatus?: 'ok' | 'none' | 'refused' | 'skipped' | 'sea' | null };
   };
   const feature = $derived((data as typeof data & { feature?: Feature | null }).feature ?? null);
-  /** The reader's hemisphere for the feature's season card: their site, else their first place with coordinates, else north. */
-  const readerLat = $derived(site.current?.lat ?? (collection.ready ? (collection.locations.map((l) => l.lat).find((x): x is number => x != null) ?? null) : null));
-  const featureSheet = $derived(feature ? cultivationSheet({ scientific: feature.name, family: feature.family ?? undefined, months: feature.climate.months, extremes: feature.climate.extremes ?? null, extremesStatus: feature.climate.extremesStatus ?? null, lat: feature.lat, readerLat, units: units.current }) : null);
-  const featureSeason = $derived(featureSheet?.rows.find((r) => r.k === 'Its year') ?? null);
+  // The feature's year, for the chart's hemisphere. Nothing on the front page is in the reader's months: the season card
+  // stays on the species page, so a southern visitor is never shown northern months first (round sixty-one; visitor 19).
+  /** The chart's drawn height, which does not depend on its width, for the box its column holds before it is drawn. */
+  const featureChartH = $derived(feature ? climograph({ months: feature.climate.months, p10: feature.climate.months, p90: feature.climate.months, cells: feature.climate.cells }).height : 0);
+  const featureSheet = $derived(feature ? cultivationSheet({ scientific: feature.name, family: feature.family ?? undefined, months: feature.climate.months, extremes: feature.climate.extremes ?? null, extremesStatus: feature.climate.extremesStatus ?? null, lat: feature.lat, units: units.current }) : null);
   // The search lives in the URL (?q=) so the back button and a shared link bring it back; the server ignores it.
   let q = $state(browser ? (new URLSearchParams(location.search).get('q') ?? '') : '');
   // Only on the catalogue view: on "Your species" the box searches your own plants and species, and what is typed there
@@ -58,7 +60,15 @@
   /** Enter in the search opens the first match: the way a search box is expected to behave. While a catalogue search is in flight, Enter waits for its answer rather than opening the previous query's first hit (round forty, R1-2). */
   async function openTop(e: KeyboardEvent) {
     if (e.key !== 'Enter') return;
-    if (plantHits.length) { e.preventDefault(); goto(plantHref(plantHits[0])); return; } // by id while the number is shared (round sixty)
+    if (plantHits.length) {
+      e.preventDefault();
+      // A number typed whole that two plants share opens the chooser at that number: the first hit by list order was one of
+      // the two by chance (round sixty-one; records 4). Otherwise the first hit, by id while its number is shared (round sixty).
+      const typed = q.trim().toLowerCase();
+      const same = plantHits.filter((a) => accNo(a).toLowerCase() === typed);
+      goto(same.length > 1 ? `/plants/${encodeURIComponent(accNo(same[0]))}` : plantHref(plantHits[0]));
+      return;
+    }
     if (yourView) {
       const own = ownHits[0];
       if (own) { e.preventDefault(); goto(`/species/${own.slug}`); }
@@ -76,6 +86,19 @@
     const needle = q.trim().toLowerCase();
     if (!needle || !collection.ready || needle.length < 2) return [];
     return collection.accessions.filter((a) => accNo(a).toLowerCase().includes(needle) || (a.fieldNumber ?? '').toLowerCase().includes(needle) || (a.nameAsReceived ?? '').toLowerCase().includes(needle) || (a.cultivar ?? '').toLowerCase().includes(needle)).slice(0, 5);
+  });
+  /**
+   * The feature's chart is drawn only on a wide screen, and only once the page knows it is one: on a phone it was shipped
+   * in the HTML and hidden, 14 KB no one saw (round sixty-one; decision 9, a11y 16). Its column keeps its height from the
+   * first paint (`.fchart`), so the chart arriving moves nothing below it.
+   */
+  let wide = $state(false);
+  onMount(() => {
+    const mq = window.matchMedia('(min-width: 900px)');
+    const set = () => (wide = mq.matches);
+    set();
+    mq.addEventListener('change', set);
+    return () => mq.removeEventListener('change', set);
   });
   /** Focus the box on a desktop (a keyboard is there); never on a phone, where focus raises the keyboard over the page. */
   const focusOnDesktop = (el: HTMLInputElement) => { if (window.matchMedia('(min-width: 701px)').matches && !el.value) el.focus({ preventScroll: true }); };
@@ -309,6 +332,7 @@
   });
   $effect(() => {
     if (!collection.ready) return;
+    if (inDemo()) return; // the hint is the grower's own collection's, never the sample's (round sixty-one; the records review, 17)
     try {
       if (hasMine) localStorage.setItem(HINT, '1');
       else localStorage.removeItem(HINT);
@@ -647,28 +671,20 @@
   </PageHead>
   {#if visitor}
     <ul class="pitch">
-      <li>A reference for growers of cacti, succulents and bulbs: {fmtN(data.total)} species, {fmtN(data.withClimate)} with the climate where they grow wild.</li>
-      <!-- On a phone the feature's figures and chart took 1,300 px and put the search four screens down: there the first
-           screen keeps the search, the photographs and the first rows (round fifty, 1), and the feature is this link (round sixty). -->
-      <li>Every figure names its source. Nothing on a species page is written by a person or by AI.{#if feature}<span class="featureline">{' '}<a href="/species/{feature.slug}">See one: <i>{feature.name}</i>&nbsp;›</a></span>{/if}</li>
+      <!-- The counts once, in the line above, not again here (round sixty-one; visitor 22). -->
+      <li>A reference for cacti, succulents and bulbs, with each one's habitat climate where the sources answered.</li>
+      <!-- Precise, and said first: the templates were written once, and nothing is written for one species (round sixty-one; visitor 11). -->
+      <li>Every figure names its source. Nothing about a species is written per page by a person or by AI, apart from credited quotations (<a href="/about/how#written">how</a>).</li>
+      <!-- On a phone the feature is not drawn: its cards sat between the search and the rows it acts on and put the first row two screens down (round fifty, 1), and a link to it took the line the first row needs. The strip's first photograph is the same species (found at the merge of round sixty-one). -->
       <li>No sign-up. Your plants stay on your device, or sync encrypted if you choose. <a href="https://github.com/zomethingje-eng/cultifolio">Free and open source</a>.</li>
     </ul>
   {/if}
   </div>
 
-  {#if visitor && feature && !searchMode}
-    <!-- The figures are the species page's own, each with its source tag, and the chart its own chart: shown, not described. -->
-    <section class="feature" aria-labelledby="feature-h">
-      <h2 class="featurehead" id="feature-h">This is what every species page shows <span class="fname">· <a href="/species/{feature.slug}"><SpeciesName name={feature.name} /></a></span></h2>
-      <div class="fglance"><Glance months={feature.climate.months} extremes={feature.climate.extremes ?? null} extremesStatus={feature.climate.extremesStatus ?? null} year={featureSheet?.year ?? null} seasonLead={featureSeason?.plain?.lead ?? null} seasonRule={featureSeason?.plain?.rule ?? ''} {readerLat} readerFrom={readerLat == null ? null : site.current ? 'site' : 'places'} chartHref={null} /></div>
-      <Climograph id="feature-climo" name={feature.name} south={featureSheet?.year?.south ?? null} climate={{ months: feature.climate.months, p10: feature.climate.p10 as never, p90: feature.climate.p90 as never, cells: feature.climate.cells, extremes: feature.climate.extremes ?? null }} />
-      <p class="small featurefoot"><a href="/species/{feature.slug}">The whole page for <i>{feature.name}</i></a>: the season, the range and its records, photographs and every source. Chosen by rule from today's strip below.</p>
-    </section>
-  {/if}
-
   <!-- The way in, in one line (round twenty-eight, 13; one line since round fifty, 1: the first screen is for the search, a glimpse of the photographs and the first rows). -->
   {#if (!collection.ready || (!hasMine && !collection.accessions.length)) && !welcomeHidden && !searchMode}
-    <p class="welcome" id="welcome"><span><b>Grow some of these?</b> <a href="/plants/new">Add your first plant</a>; it stays on this device. Or <button class="linkish inl" type="button" id="try-sample-home" onclick={() => enterDemo('/plants')}>try a sample collection</button>, or <a href="/backup">restore a backup</a>.</span><button class="linkish dismiss" type="button" onclick={dismissWelcome} aria-label="Not now" title="Not now">×</button></p>
+    <!-- The sample first: the quickest way to see the record half without typing a plant (round sixty-one; decision 9). -->
+    <p class="welcome" id="welcome"><span><b>Grow some of these?</b> <button class="linkish trysample" type="button" id="try-sample-home" onclick={() => enterDemo('/plants')}>Try a sample collection</button>, <a href="/plants/new">add your first plant</a> (kept on this device unless you sync) or <a href="/backup">restore a backup</a>.</span><button class="linkish dismiss" type="button" onclick={dismissWelcome} aria-label="Not now" title="Not now">×</button></p>
   {:else if collection.ready && !hasMine && !collection.accessions.length && !searchMode}
     <!-- "Not now" hides the welcome for good; the way in stays, in one line, or a visitor who comes back has to find /plants/new by the tab bar (round forty-one, R9). -->
     <!-- No "nothing leaves it": the about page lists what does (round sixty; words 17). -->
@@ -706,11 +722,23 @@
           <a class="chipbtn" class:on={chip === 'noclimate'} aria-current={chip === 'noclimate' ? 'page' : undefined} href="?by={data.by}&chip=noclimate" data-sveltekit-noscroll>Without climate<span class="n">{fmtN(data.total - data.withClimate)}</span></a>
         </nav>
         <!-- Kept in place with no index to show (regions), so the toolbar does not change shape (round sixty; visitor 16). -->
-        <button class="btn small azbtn" class:noaz={data.letters.length <= 1} type="button" onclick={showLetters} aria-label="Show the letter index" aria-hidden={data.letters.length <= 1 ? 'true' : undefined} tabindex={data.letters.length <= 1 ? -1 : undefined} disabled={data.letters.length <= 1}>A–Z</button>
+        <button class="btn small azbtn" class:noaz={data.letters.length <= 1} type="button" onclick={showLetters} aria-label="A–Z, show the letter index" aria-hidden={data.letters.length <= 1 ? 'true' : undefined} tabindex={data.letters.length <= 1 ? -1 : undefined} disabled={data.letters.length <= 1}>A–Z</button>
       </div>
     {/if}
   </div>
   </div>
+  {#if visitor && feature && !searchMode}
+    <!-- Under the search and the photographs, so they come first at every width; the four figures as a 2×2 block, and on a
+         wide screen the chart beside them, the season and the rest on the species page (round sixty-one; decision 9, visitor 9).
+         The figures are the species page's own, each with its source tag, and the chart its own chart: shown, not described. -->
+    <section class="feature" aria-labelledby="feature-h">
+      <h2 class="featurehead" id="feature-h">This is what every species page shows <span class="fname">· <a href="/species/{feature.slug}"><SpeciesName name={feature.name} /></a></span></h2>
+      <div class="fglance"><Glance months={feature.climate.months} extremes={feature.climate.extremes ?? null} extremesStatus={feature.climate.extremesStatus ?? null} year={featureSheet?.year ?? null} season={false} chartHref={null} /></div>
+      <div class="fchart" style:--fh="calc({featureChartH}px + 14rem)">{#if wide}<Climograph id="feature-climo" name={feature.name} south={featureSheet?.year?.south ?? null} climate={{ months: feature.climate.months, p10: feature.climate.p10 as never, p90: feature.climate.p90 as never, cells: feature.climate.cells, extremes: feature.climate.extremes ?? null }} />{/if}</div>
+      <p class="small featurefoot"><a href="/species/{feature.slug}">The whole page for <i>{feature.name}</i></a>: {wide ? '' : 'the chart, '}the season in your months, the range and its records, photographs and every source. Chosen by rule from today's strip above.</p>
+    </section>
+  {/if}
+
   {#if relaxedFor && searchMode}<p class="seccount relaxed" role="status">Nothing matched “{q.trim()}” as written. Showing results for “{relaxedFor}”.</p>{/if}
 
   {#if !searchMode && data.letters.length > 1}
@@ -779,14 +807,25 @@
   .pitch { margin: -8px 0 6px; padding-left: 1.1em; font-size: var(--fs-md); color: var(--ink2); line-height: 1.5; display: grid; gap: 2px; max-width: 46rem; }
   .pitch li::marker { color: var(--accent); }
   .feature { margin: 14px 0 6px; }
-  .featureline { display: none; }
-  @media (max-width: 899px) { .feature { display: none; } .featureline { display: inline; } }
+  @media (max-width: 899px) { .feature { display: none; } }
+  /* The four cards two by two at every width but the narrowest, where one column keeps 200% text inside the page (round sixty-one; decision 9). */
+  .fglance :global(.gcards) { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 0; }
+  @media (max-width: 359px) { .fglance :global(.gcards) { grid-template-columns: minmax(0, 1fr); } }
+  .fchart { display: none; }
   .featurehead { font-size: var(--fs-xs); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink3); font-weight: 700; font-family: var(--ui); margin: 0 0 8px; }
   .featurehead .fname { text-transform: none; letter-spacing: 0; font-size: var(--fs-md); font-weight: 600; }
   .feature :global(.climo) { margin-top: 0; }
   .fglance { min-width: 0; }
   .featurefoot { margin: 8px 0 0; color: var(--ink2); }
-  @media (min-width: 900px) { .feature { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 18px; align-items: start; } .featurehead, .featurefoot { grid-column: 1 / -1; } }
+  /* The chart's column holds its height from the first paint, so the chart drawn after hydration moves nothing (round sixty-one; a11y 16). */
+  @media (min-width: 900px) {
+    .feature { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: 'h h' 'g c' 'f c'; grid-template-rows: auto auto 1fr; gap: 0 18px; align-items: start; }
+    .featurehead { grid-area: h; }
+    .fglance { grid-area: g; }
+    .featurefoot { grid-area: f; }
+    /* The chart's own height (the geometry's, in px) and room for its caption's lines (rem): a box at least as tall as the chart. */
+    .fchart { grid-area: c; display: block; min-height: var(--fh, 38rem); }
+  }
   /* The toolbar's controls after the box: one line on a desktop; on a phone one line under the box that scrolls sideways (round sixty; visitor 16). */
   .tools { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; min-width: 0; flex: 0 1 auto; overflow-x: auto; scrollbar-width: none; }
   .tools::-webkit-scrollbar { display: none; }
@@ -807,7 +846,8 @@
   @media (max-width: 700px) { .toolrow :global(.viewseg) { flex-basis: 100%; } .toolrow :global(.viewseg > button) { flex: 1; text-align: center; } }
   .welcome a { font-weight: 600; }
   /* A button in the sentence, read and tapped as its links are (round sixty). */
-  .welcome .inl { background: none; border: 0; padding: 0; font: inherit; font-weight: 600; color: var(--accent); cursor: pointer; min-height: 0; display: inline; }
+  /* A link's weight and colour, not a pill: the pill's padding took a line on a phone and pushed the first catalogue row under the tab bar (round fifty, 1; the merge of round sixty-one). */
+  .welcome .linkish.trysample { color: var(--accent); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; margin: 0; padding: 0; font-size: inherit; display: inline; min-height: 0; }
   .welcome.quiet { color: var(--ink3); font-size: var(--fs-md); }
   /* dismissed on this device: hidden before first paint, by the flag app.html sets, until the state catches up at mount */
   :global(html[data-welcomed]) .welcome:not(.quiet) { display: none; }

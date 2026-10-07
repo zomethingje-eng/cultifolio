@@ -10,6 +10,7 @@
 import { MON3 } from '$core/months';
 import { r1 } from '$core/num';
 import { cToF, mmToIn, temp, rain as rainF, METRIC, type Units, dryLabel } from '$core/units';
+import { tiedMonths, monthNames } from '$core/sheet';
 
 export interface MonthFigures {
   tmax: number;
@@ -132,7 +133,19 @@ export function climograph(c: ClimoInput, width = 720, units: Units = METRIC): C
   const nightBand = band(c.p90.map((m) => m.tmin), c.p10.map((m) => m.tmin));
   const coldest = c.months.reduce((b, m, i) => (m.tmin < c.months[b].tmin ? i : b), 0);
   const warmest = c.months.reduce((b, m, i) => (m.tmax > c.months[b].tmax ? i : b), 0);
-  const q0 = (coldest + 11) % 12; // the month before the coldest
+  // Months that tie for the coldest night, as printed: when they are one run, the cold quarter is centred on the run's
+  // middle month rather than on its first (round sixty-one; visitor 5). Ties that are not one run keep the first.
+  const tf = (v: number) => temp(v, units);
+  const coldTies = tiedMonths(c.months.map((m) => m.tmin), false, tf);
+  const coldRun = (() => {
+    const set = new Set(coldTies);
+    if (set.size < 2 || set.size >= 12) return null;
+    const starts = coldTies.filter((i) => !set.has((i + 11) % 12));
+    if (starts.length !== 1) return null;
+    return (starts[0] + Math.floor((set.size - 1) / 2)) % 12;
+  })();
+  const centre = coldRun ?? coldest;
+  const q0 = (centre + 11) % 12; // the month before the coldest
   const wraps = q0 > 9; // Nov–Jan or Dec–Feb: two rectangles
   const coldQuarter = wraps
     ? { x: left + colW * q0, w: colW * (12 - q0), wraps: true, x2: left, w2: colW * (3 - (12 - q0)) }
@@ -182,10 +195,14 @@ export function climograph(c: ClimoInput, width = 720, units: Units = METRIC): C
   const wetAs = rainF(c.months[wetI].precipMm, units);
   const wetTied = c.months.filter((m) => rainF(m.precipMm, units) === wetAs).length;
   const wettest = wetTied === 12 ? 'the same in every month' : wetTied > 1 ? `the wettest months (${wetTied} at ${wetAs})` : `the wettest month ${MONTHS[wetI]}`;
+  // Each end of each range names every month that ties for it, as printed (round sixty-one; visitor 5: "to 22 °C in Jan"
+  // of a year whose February was as warm).
+  const at = (vals: number[], hi: boolean) => monthNames(tiedMonths(vals, hi, tf), 'short');
+  const days = c.months.map((m) => m.tmax), nights = c.months.map((m) => m.tmin);
   const alt =
     (flatT
       ? `A flat year: mean day about ${temp(c.months[warmest].tmax, units)} and mean night about ${temp(c.months[coldest].tmin, units)} in every month, so the cold quarter is shaded by rounding only. `
-      : `Mean day from ${temp(c.months[dayLo].tmax, units)} in ${MONTHS[dayLo]} to ${temp(c.months[warmest].tmax, units)} in ${MONTHS[warmest]}; mean night from ${temp(c.months[coldest].tmin, units)} in ${MONTHS[coldest]} to ${temp(c.months[nightHi].tmin, units)} in ${MONTHS[nightHi]}. The cold quarter, ${MONTHS[q0]} to ${MONTHS[(coldest + 1) % 12]}, is the three months around the coldest mean night. `) +
+      : `Mean day from ${temp(c.months[dayLo].tmax, units)} in ${at(days, false)} to ${temp(c.months[warmest].tmax, units)} in ${at(days, true)}; mean night from ${temp(c.months[coldest].tmin, units)} in ${at(nights, false)} to ${temp(c.months[nightHi].tmin, units)} in ${at(nights, true)}. The cold quarter, ${MONTHS[q0]} to ${MONTHS[(centre + 1) % 12]}, is the three months around the coldest mean night${coldTies.length < 2 || coldTies.length >= 12 ? '' : coldRun != null ? `, centred on the ${coldTies.length} months in a row that tie for it` : `, around the first of the ${coldTies.length} months that tie for it`}. `) +
     (dry ? `${dryLabel(units)[0].toUpperCase()}${dryLabel(units).slice(1)} of rain.` : `${rainF(rainYear, units)} of rain a year, ${wettest}.`) +
     (hasBand ? ` The bands show the 10th to 90th percentile across ${c.cells} habitat cells.` : c.cells > 1 ? ` The ${c.cells} habitat cells agree to within rounding.` : '') +
     (c.extremes ? ` Over ${c.extremes.years} years at a typical spot in the range (NASA POWER) the absolute minimum was ${temp(c.extremes.minAbs, units, 1)} and the 99th-percentile day ${temp(c.extremes.maxP99, units, 1)}; neither is dated to a month.` : '') +
@@ -208,8 +225,9 @@ export function climograph(c: ClimoInput, width = 720, units: Units = METRIC): C
       nightBand,
       zeroY: tLo < 0 && tHi > 0 ? r1(ty(0)) : null,
       // Each extreme names its source on the chart itself, and "years", not "yrs" (round sixty; the round forty-two review, A9).
-      minAbs: c.extremes ? { y: r1(ty(c.extremes.minAbs)), label: `${temp(c.extremes.minAbs, units, 1).replace(/ °[CF]$/, '°')} lowest night in ${c.extremes.years} years, NASA POWER (undated)` } : null,
-      maxP99: c.extremes ? { y: r1(ty(c.extremes.maxP99)), label: `${temp(c.extremes.maxP99, units, 1).replace(/ °[CF]$/, '°')} 99th-percentile day, NASA POWER (undated)` } : null,
+      // No "(undated)", which read as an error to a stranger: the mark's place at the edge, in no month, says it (round sixty-one; visitor 14).
+      minAbs: c.extremes ? { y: r1(ty(c.extremes.minAbs)), label: `${temp(c.extremes.minAbs, units, 1).replace(/ °[CF]$/, '°')} lowest night in ${c.extremes.years} years, NASA POWER` } : null,
+      maxP99: c.extremes ? { y: r1(ty(c.extremes.maxP99)), label: `${temp(c.extremes.maxP99, units, 1).replace(/ °[CF]$/, '°')} 99th-percentile day, NASA POWER` } : null,
       coldQuarter: { ...coldQuarter, x: r1(coldQuarter.x), w: r1(coldQuarter.w), ...(coldQuarter.x2 != null ? { x2: r1(coldQuarter.x2), w2: r1(coldQuarter.w2!) } : {}) }
     },
     rain: { top: rainTop, height: rainH, ticks: rTicks.map((t) => ({ y: r1(t.y), label: t.label })), bars, dry, max: rMax },

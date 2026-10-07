@@ -154,7 +154,8 @@ describe('the give token', () => {
     await storeOnce(r2 as never, ID, (await readMeta(r2 as never, ID))!, photo(2), new Uint8Array(1000), PROOF, q(T));
     let n = 0; let aHeaded!: () => void; const aHead = new Promise<void>((r) => (aHeaded = r));
     let go!: () => void; const gate = new Promise<void>((r) => (go = r));
-    r2.hooks.afterHead = async (k) => { if (k === photo(1) && ++n === 1) { aHeaded(); await gate; } };
+    // A's second head is its look under the hold (the first, unheld, checks the proof since round sixty-one).
+    r2.hooks.afterHead = async (k) => { if (k === photo(1) && ++n === 2) { aHeaded(); await gate; } };
     const a = deleteCounted(r2 as never, ID, (await readMeta(r2 as never, ID))!, photo(1), q(T + DAY), PROOF.drop);
     await aHead; // A holds the name and has looked
     const b = await deleteCounted(r2 as never, ID, (await readMeta(r2 as never, ID))!, photo(1), q(T + DAY), PROOF.drop);
@@ -178,12 +179,14 @@ describe('the give token', () => {
     let n = 0; let bHeaded!: () => void; const bHead = new Promise<void>((r) => (bHeaded = r));
     let aHeaded!: () => void; const aHead = new Promise<void>((r) => (aHeaded = r));
     let aDone!: () => void; const aFinished = new Promise<void>((r) => (aDone = r));
-    r2.hooks.afterHead = async (k) => { if (k !== photo(1)) return; n++; if (n === 1) { aHeaded(); await bHead; } else if (n === 2) { bHeaded(); await aFinished; } };
+    // Each removal heads twice before its look is done (the proof, unheld, then the look: round sixty-one).
+    r2.hooks.afterHead = async (k) => { if (k !== photo(1)) return; n++; if (n === 2) { aHeaded(); await bHead; } else if (n === 4) { bHeaded(); await aFinished; } };
     const mA = (await readMeta(r2 as never, ID))!, mB = (await readMeta(r2 as never, ID))!;
     const a = deleteCounted(r2 as never, ID, mA, photo(1), qb(T + DAY), PROOF.drop).then((x) => { aDone(); return x; });
     await aHead;
     const b = deleteCounted(r2 as never, ID, mB, photo(1), qb(T + DAY), PROOF.drop);
-    expect(await Promise.all([a, b])).toEqual([true, true]);
+    // B reads the object again just before its delete (round sixty-one; B10) and finds it gone: nothing there (404).
+    expect(await Promise.all([a, b])).toEqual([true, false]);
     expect(r2bytes(r2)).toBe(1000);
     expect((vrow(counters).get('v') as { bytes: number }).bytes).toBe(1000); // taken off once, not twice
   });

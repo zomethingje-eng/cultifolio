@@ -17,9 +17,11 @@ export function sitemapUrls(index: IndexEntry[]): string[] {
   if (!urls) made.set(index, (urls = urlsOf(index)));
   return urls;
 }
+/** The pages that change with a deploy, not with a corpus build: the front page (its feature changes daily too) and the about pages. */
+const FIXED = ['/', '/about/how', '/about/formats'];
 function urlsOf(index: IndexEntry[]): string[] {
   const genera = [...new Set(index.map((e) => genusOf(e.name)))].sort();
-  return ['/', '/about/how', '/about/formats', ...index.map((e) => `/species/${e.slug}`), ...genera.map((g) => `/?by=genus&open=${slugify(g)}`)];
+  return [...FIXED, ...index.map((e) => `/species/${e.slug}`), ...genera.map((g) => `/?by=genus&open=${slugify(g)}`)];
 }
 
 /**
@@ -40,7 +42,13 @@ export function sitemapIndex(urls: string[], lastmod: string | null = null): str
   return `<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${entries.join('\n')}\n</sitemapindex>\n`;
 }
 
+/**
+ * One file of addresses. The corpus's build day is given only to the pages the corpus makes (the species and the genus
+ * rows): the front page and the about pages change with deploys, and a `lastmod` that does not track a page's changes
+ * teaches a crawler to discount every one (round sixty-one; the corpus review, 15). Until the build keeps a date per
+ * dossier, every species shares its build's.
+ */
 export function sitemapChunk(urls: string[], n: number, lastmod: string | null = null): string {
   const part = urls.slice((n - 1) * SITEMAP_CHUNK, n * SITEMAP_CHUNK);
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${part.map((u) => `  <url><loc>${esc(BASE + u)}</loc>${mod(lastmod)}</url>`).join('\n')}\n</urlset>\n`;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${part.map((u) => `  <url><loc>${esc(BASE + u)}</loc>${FIXED.includes(u) ? '' : mod(lastmod)}</url>`).join('\n')}\n</urlset>\n`;
 }

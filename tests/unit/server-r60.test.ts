@@ -6,7 +6,7 @@
  * hourly, the /48 windows, the site's own cap on calls to other services, and the Cache API failing in two routes.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { storeOnce, deleteCounted, readMeta, writeMeta, readBody, resetRateLimits, resetMetaFlush, vaultBytes, admitVault, limited, upstreamAllowed, vaultIdFor, VaultsClosed, VaultUnchecked, PhotoBusy, RATE, NET_RATE_FACTOR, receipt, removedAt, rateLimit, networkKey, RATE_FLUSH_MS, type RateBucket } from '$lib/server/sync';
+import { storeOnce, deleteCounted, readMeta, writeMeta, readBody, resetRateLimits, resetMetaFlush, vaultBytes, admitVault, limited, upstreamAllowed, upstreamCall, vaultIdFor, VaultsClosed, VaultUnchecked, PhotoBusy, RATE, NET_RATE_FACTOR, receipt, removedAt, rateLimit, networkKey, RATE_FLUSH_MS, type RateBucket } from '$lib/server/sync';
 import { tokenHash } from '$lib/sync/crypto';
 import { fakeR2, fakeKV, countersNs, type FakeR2 } from './helpers/fake-sync';
 
@@ -221,7 +221,7 @@ describe('a removal and an upload of one photograph are serialised (round sixty;
     expect(await deleteCounted(r2 as never, ID, await meta(r2), photo(1), { kv: fakeKV() as never, ip: '1.2.3.4', counters, now: T + 5000 }, PROOF.drop, T + 4000)).toBe(true);
     expect(r2.objs.has(photo(1))).toBe(false);
   });
-  it('the DELETE route answers a newer upload with 409, and reads the removal time it is sent', async () => {
+  it('the DELETE route answers a removal made before a later claim with 409, and reads the removal time it is sent', async () => {
     expect(removedAt(new Request('https://x', { headers: { 'x-photo-removed-at': '1759579200000' } }), T)).toBe(1759579200000);
     expect(removedAt(new Request('https://x', { headers: { 'x-photo-removed-at': String(T + 3_600_000) } }), T)).toBeNull(); // ahead of the server: not believed
     expect(removedAt(new Request('https://x', { headers: { 'x-photo-removed-at': 'soon' } }), T)).toBeNull();
@@ -229,13 +229,18 @@ describe('a removal and an upload of one photograph are serialised (round sixty;
     const counters = countersNs(); const kv = fakeKV();
     const platform = { env: { STORE: r2, QUEUE: kv, COUNTERS: counters } };
     const key = `vault/${id}/photo/pabcdef1.bin`;
+    // Claims alone decide since round sixty-one (the server review, 1; B9): an object with no claim on it is removed
+    // whatever R2's own upload time, and one stored through the upload path claims its name.
     await r2.put(key, new Uint8Array(10), { customMetadata: { drop: 'd'.repeat(64) } });
     const route = await import('../../src/routes/api/sync/photo/[id]/+server');
+    const unclaimed = new Request(`https://x/api/sync/photo/pabcdef1?vault=${id}`, { method: 'DELETE', headers: { authorization: `Bearer ${token}`, 'x-photo-drop': 'd'.repeat(64), 'x-photo-removed-at': String(r2.objs.get(key)!.uploaded.getTime() - 60_000) } });
+    expect((await route.DELETE({ request: unclaimed, url: new URL(unclaimed.url), params: { id: 'pabcdef1' }, platform, getClientAddress: () => '1.2.3.4' } as never)).status).toBe(200);
+    await storeOnce(r2 as never, id, (await readMeta(r2 as never, id))!, key, new Uint8Array(10), PROOF, { kv: kv as never, ip: '1.2.3.4', counters, now: Date.now() });
     const del = (at: number) => {
       const req = new Request(`https://x/api/sync/photo/pabcdef1?vault=${id}`, { method: 'DELETE', headers: { authorization: `Bearer ${token}`, 'x-photo-drop': 'd'.repeat(64), 'x-photo-removed-at': String(at) } });
       return route.DELETE({ request: req, url: new URL(req.url), params: { id: 'pabcdef1' }, platform, getClientAddress: () => '1.2.3.4' } as never);
     };
-    const old = await del(r2.objs.get(key)!.uploaded.getTime() - 60_000); // removed before this upload was stored
+    const old = await del(Date.now() - 60_000); // removed before this upload claimed the name
     expect(old.status).toBe(409);
     expect(r2.objs.has(key)).toBe(true);
     const now = await del(Date.now());
@@ -384,17 +389,20 @@ describe('the /48 windows (round sixty; the server review, 4 and 9)', () => {
 });
 
 describe("the site's own calls to other services (round sixty; the server review, 16)", () => {
-  it('are capped for every address together; past the cap the forecast says not checked and asks MET nothing', async () => {
+  it('are capped for every address together; past the cap the forecast says not asked (503) and asks MET nothing', async () => {
     vi.spyOn(Date, 'now').mockImplementation(() => T);
     let ok = 0;
     for (let i = 0; i < RATE.upstream.limit + 5; i++) if (await upstreamAllowed(undefined)) ok++;
     expect(ok).toBe(RATE.upstream.limit);
+    // GBIF's share is spent; MET Norway's is its own (round sixty-one), spent here by the visitors of the minute
+    for (let i = 0; i < RATE.upstream.limit; i++) expect((await upstreamCall(undefined, ['met'], null)).ok).toBe(true);
     const { GET } = await import('../../src/routes/api/forecast/+server');
     let asked = 0;
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => { asked++; return new Response('{}'); });
     const url = new URL('http://x/api/forecast?lat=51.5&lon=-0.1');
     const r = await Promise.resolve(GET({ url, platform: { env: {} }, fetch: globalThis.fetch, getClientAddress: () => '9.9.9.9' } as never)).catch((e: { status?: number }) => e);
-    expect((r as Response).status ?? (r as { status: number }).status).toBe(502);
+    expect((r as Response).status ?? (r as { status: number }).status).toBe(503);
+    expect(await (r as Response).json()).toMatchObject({ error: "not asked: this site's calls are used up for this minute", held: true });
     expect(asked).toBe(0);
     fetchSpy.mockRestore();
   });

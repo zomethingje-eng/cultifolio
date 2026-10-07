@@ -9,6 +9,7 @@
   import { today as day } from '$lib/ui/day.svelte';
   import { toast } from '$lib/ui/toast.svelte';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
+  import { focusNext } from '$lib/ui/focus';
   import { readWanted, writeWanted } from './wanted';
   import { spendOf, spendWords } from './spend';
   const wanted = $derived(collection.ready ? [...collection.mySpecies.values()].filter((s) => s.followed && !s.grown).sort((a, b) => a.name.localeCompare(b.name)) : []);
@@ -19,10 +20,15 @@
     const w = readWanted(collection.taxon(slug)?.myNotes);
     note = w.note; price = w.price; editing = slug;
   }
+  /** The form's way out: focus back on the row's own button, which the form was opened from; it fell to the page (round sixty-one; the accessibility review, 2). */
+  async function done(slug: string) {
+    editing = null;
+    await focusNext(`#wedit-${CSS.escape(slug)}`);
+  }
   async function save(slug: string, name: string) {
     const t = collection.taxon(slug);
     await collection.put('taxon', slug, { name: t?.name ?? name, myNotes: writeWanted(t?.myNotes, note, price) });
-    editing = null;
+    await done(slug);
     toast.show('Saved in the species’ own notes.');
   }
   const year = $derived(day.current.slice(0, 4));
@@ -49,13 +55,14 @@
             <a href="/species/{s.slug}"><SpeciesName name={s.name} /></a>
             {#if w.note || w.price}<span class="muted">{[w.note, w.price ? `price seen ${w.price}` : ''].filter(Boolean).join(' · ')}</span>{/if}
             {#if otherNotes(collection.taxon(s.slug)?.myNotes)}<span class="muted spnote">{otherNotes(collection.taxon(s.slug)?.myNotes)}</span>{/if}
-            <span class="acts"><button class="linkish" type="button" onclick={() => edit(s.slug)} aria-label="Note and price seen for {s.name}">{w.note || w.price ? 'Edit' : 'Add a note'}</button> <a class="linkish" href="/plants/new?species={encodeURIComponent(s.name)}{s.gbifKey ? `&key=${s.gbifKey}` : ''}">Got it</a></span>
+            <!-- Named from its own words, then the species, so a voice saying "Add a note" finds it (round sixty-one; the accessibility review, 14); it says whether its form is open (11). -->
+            <span class="acts"><button class="linkish" type="button" id="wedit-{s.slug}" onclick={() => (editing === s.slug ? done(s.slug) : edit(s.slug))} aria-expanded={editing === s.slug} aria-controls={editing === s.slug ? `wform-${s.slug}` : undefined} aria-label="{w.note || w.price ? 'Edit the note' : 'Add a note'} for {s.name}">{w.note || w.price ? 'Edit' : 'Add a note'}</button> <a class="linkish" href="/plants/new?species={encodeURIComponent(s.name)}{s.gbifKey ? `&key=${s.gbifKey}` : ''}">Got it</a></span>
           </div>
           {#if editing === s.slug}
-            <form class="wform" onsubmit={(e) => { e.preventDefault(); void save(s.slug, s.name); }}>
+            <form class="wform" id="wform-{s.slug}" onsubmit={(e) => { e.preventDefault(); void save(s.slug, s.name); }}>
               <label><span>Note</span><input type="text" bind:value={note} placeholder="e.g. a seedling, not a graft" /></label>
               <label><span>Price seen</span><input type="text" bind:value={price} placeholder="e.g. 18 at the spring sale" /></label>
-              <div class="wacts"><button class="btn" type="button" onclick={() => (editing = null)}>Cancel</button><button class="btn pri" type="submit">Save</button></div>
+              <div class="wacts"><button class="btn" type="button" onclick={() => done(s.slug)}>Cancel</button><button class="btn pri" type="submit">Save</button></div>
             </form>
           {/if}
         </li>
@@ -69,7 +76,7 @@
     <summary>Spent this year: {spendLines.year}</summary>
     <p>All time: {spendLines.all}</p>
     {#if spendLines.left}<p class="muted">{spendLines.left}</p>{/if}
-    <p class="muted">Counted from each plant's price where it is a plain number, by the date it was acquired.</p>
+    <p class="muted">Counted from each plant's price where it is a plain number, by the date it was acquired. Each currency is totalled apart, as written; none is converted.</p>
   </details>
 {/if}
 
@@ -82,7 +89,9 @@
   .wrow .acts { margin-left: auto; display: flex; gap: 12px; }
   .wform { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin: 6px 0 4px; }
   .wform label { display: grid; gap: 2px; font-size: var(--fs-md); }
-  .wform input { min-height: var(--tap); }
+  /* The fields shrink to the screen: at 320 px with 200% text the form was 411 px wide (round sixty-one; the accessibility review, 7). */
+  .wform input { min-height: var(--tap); min-width: 0; width: 100%; box-sizing: border-box; }
+  .wacts { flex-wrap: wrap; }
   .wacts { display: flex; gap: 8px; justify-content: flex-end; }
   .muted { color: var(--ink3); }
   .small { font-size: var(--fs-md); }

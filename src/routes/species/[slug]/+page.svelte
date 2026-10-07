@@ -7,7 +7,8 @@
   import { page } from '$app/state';
   import { motion } from '$lib/ui/focus';
   import { failedBeforeHydration } from '$lib/ui/ref/failed';
-  import { speciesTitle, speciesDescription, tileCredit } from '$lib/ui/ref/head';
+  import { speciesTitle, speciesDescription, tileCredit, detailSentence } from '$lib/ui/ref/head';
+  import { plantHref } from '$lib/db/links';
   import NotChecked from '$lib/ui/NotChecked.svelte';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
   import { accNo, sowNo } from '$lib/db/types';
@@ -37,7 +38,8 @@
   let allPapers = $state(false);
   const u = $derived(units.current);
   const d = $derived(data.d);
-  const common = $derived(d.name.vernacular.filter((v) => !v.lang || v.lang === 'eng').map((v) => v.name).slice(0, 4));
+  // The index's own rule, so the page and the catalogue show one name first: the chosen English name, then its alternatives, up to four (round sixty-one; decision 7).
+  const common = $derived(data.commonNames); // chosen on the server with the corpus's genera, as the index chooses (round sixty-one; decision 7)
   const hero = $derived(heroOf(d.photos));
   const heroSrc = $derived(hero ? shownAt(hero) : undefined);
   // Synonyms as names, not as the backbone's strings: authorship dropped, and a malformed entry ("? glabra Salm-Dyck") left out (round thirty-one, 3).
@@ -197,8 +199,8 @@
   const cell = (med: number | undefined, lo: number | undefined, hi: number | undefined, digits = 0, conv: (x: number) => number = (x) => x) => (med == null ? '–' : lo == null || hi == null || (lo === med && hi === med) ? fixed(conv(med), digits) : `${fixed(conv(med), digits)} / ${fixed(conv(lo), digits)}–${fixed(conv(hi), digits)}`);
   const tC = $derived((x: number) => (u === 'us' ? cToF(x) : x));
   const rMm = $derived((x: number) => (u === 'us' ? mmToIn(x) : x));
-  /** A source's detail string as a sentence of its own: capitalised, with a full stop. */
-  const sentence = (t: string | undefined, fallback: string) => { const x = (t ?? fallback).trim(); const y = x.charAt(0).toUpperCase() + x.slice(1); return y.endsWith('.') ? y : y + '.'; };
+  /** A source's detail string as a sentence of its own: capitalised, with its article and a full stop (round sixty-one; visitor 16). */
+  const sentence = (t: string | undefined, fallback: string) => detailSentence(t, fallback);
   /** The grower's hemisphere, from the first place with coordinates, else north. Only the months in the note depend on it. */
   // Your site's latitude decides the hemisphere of the months; a place with coordinates stands in when no site is set.
   /** The season card's sentence: the sheet's own reading of this year, in plain words (the row the In short list used to repeat). */
@@ -357,14 +359,14 @@
     <div class="acts">
       <a class="btn pri" href="/plants/new?species={encodeURIComponent(d.name.scientific)}&key={d.key}">Add one to my plants</a>
       {#if mine.length}
-        <span class="vern mine">{#each mine.slice(0, 3) as a (a.id)}<a class="accno" href="/plants/{accNo(a)}" title={a.status !== 'growing' ? a.status : 'yours'}>{accNo(a)}</a>{/each}{#if mine.length > 3}<span class="more">+{mine.length - 3}</span>{/if}</span>
+        <span class="vern mine">{#each mine.slice(0, 3) as a (a.id)}<a class="accno" href={plantHref(a)} title={a.status !== 'growing' ? a.status : 'yours'}>{accNo(a)}</a>{/each}{#if mine.length > 3}<span class="more">+{mine.length - 3}</span>{/if}</span>
       {/if}
     </div>
     <div class="acts acts2">
       <a class="btn" href="/propagation/new?species={encodeURIComponent(d.name.scientific)}&key={d.key}">Sow seed</a>
       <FollowButton slug={d.slug} name={d.name.scientific} gbifKey={d.key} />
       <CompareButton slug={d.slug} name={d.name.scientific} />
-      {#if d.climate.status === 'ok'}<ShareCard input={{ units: u, name: d.name.scientific, family: d.name.family, origin: d.distribution.native.map((r) => r.name), slug: d.slug, cells: d.climate.cells, climate: { months: d.climate.months, p10: d.climate.p10, p90: d.climate.p90, cells: d.climate.cells, extremes: d.climate.extremes ?? null } }} />{/if}
+      {#if d.climate.status === 'ok'}<ShareCard input={{ units: u, name: d.name.scientific, family: d.name.family, origin: d.distribution.native.map((r) => r.name), slug: d.slug, cells: d.climate.cells, south: sheet.year?.south, climate: { months: d.climate.months, p10: d.climate.p10, p90: d.climate.p90, cells: d.climate.cells, extremes: d.climate.extremes ?? null } }} />{/if}
     </div>
   </div>
   </div>
@@ -464,7 +466,7 @@
       </details>
     {/each}
     {#if !sheetCards.length}
-      <div class="cult"><div class="none">{#if d.climate.status === 'refused'}Not checked: {sentence(d.climate.detail, 'a source did not answer when this page was built')} No sheet is derived from an answer that was not given, and the archetype table has no figure for this genus or family.{:else if d.climate.status === 'pending'}Pending: the habitat climate has not been derived yet, and the archetype table has no figure for this genus or family.{:else}Nothing derived: no habitat climate for this species, and the archetype table has no figure for its genus or family.{/if}</div></div>
+      <div class="cult"><div class="none">{#if d.climate.status === 'refused'}Not checked. {sentence(d.climate.detail, 'a source did not answer when this page was built')} No sheet is derived from an answer that was not given, and the archetype table has no figure for this genus or family.{:else if d.climate.status === 'pending'}Pending: the habitat climate has not been derived yet, and the archetype table has no figure for this genus or family.{:else}Nothing derived: no habitat climate for this species, and the archetype table has no figure for its genus or family.{/if}</div></div>
     {/if}
     {#if sheetCards.length || sheet.arch}
       <!-- One account of the method per section, closed: the grey "by rule" lines under every block are gone (round sixty; visitor 2). -->
@@ -491,7 +493,7 @@
     <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
     <div class="scroll-x" tabindex="0" role="region" aria-label="Habitat climate by month">
       <table class="wx">
-        <thead><tr><th></th>{#each months as m}<th>{m}</th>{/each}</tr></thead>
+        <thead><tr><th scope="col"><span class="visually-hidden">Figure</span></th>{#each months as m}<th scope="col">{m}</th>{/each}</tr></thead><!-- a named corner cell (round sixty-one; a11y 12) -->
         <tbody>
           <tr><td>Day {tempUnit(u)}</td>{#each d.climate.months as m, i}<td>{cell(m.tmax, d.climate.p10[i].tmax, d.climate.p90[i].tmax, 0, tC)}</td>{/each}</tr>
           <tr><td>Night {tempUnit(u)}</td>{#each d.climate.months as m, i}<td>{cell(m.tmin, d.climate.p10[i].tmin, d.climate.p90[i].tmin, 0, tC)}</td>{/each}</tr>
@@ -599,7 +601,7 @@
   {#if data.siblings.length || data.near.length}
     <h2 class="sec" id="s-related">Related</h2>
     {#if data.near.length}
-      <p class="relhead"><b>Similar habitat climate</b> <span class="small muted">The {data.near.length} nearest by mean day, mean night and rain, month by month. <a href="/about/how#related">How</a>.</span></p>
+      <p class="relhead"><b>Similar habitat climate</b> <span class="small muted">{data.near.length === 1 ? 'The nearest' : `The ${data.near.length} nearest`} by mean day, mean night and rain, month by month. <a href="/about/how#related">How</a>.</span></p>
       <div class="relstrip">
         {#each data.near as c (c.key)}{@render rel(c)}{/each}
       </div>
@@ -633,7 +635,7 @@
     <!-- "Wild" only of records the rule tested against a native range (round sixty; words 20). -->
     <div class="fact"><div class="lab">{d.occurrences.rangeTested === false || !d.distribution.native.length ? 'Records' : 'Wild records'}</div><div class="v">{#if d.occurrences.nOpenInRange || d.occurrences.nRestrictedInRange}{d.occurrences.nOpenInRange + d.occurrences.nRestrictedInRange} {d.occurrences.rangeTested === false ? 'georeferenced' : 'in range'}<span class="small muted">{' · '}{d.occurrences.nOpenInRange} open{d.occurrences.rangeTested === false ? ' · range not tested' : ''}</span>{:else if ['refused', 'error'].includes(d.upstream['gbif.occurrences']?.status ?? '')}<span class="muted">not checked</span>{:else if d.occurrences.rangeTested === false}<span class="muted">no georeferenced records · range not tested</span>{:else}<span class="muted">none in range</span>{/if}</div></div>
   </div>
-  <p class="small muted derived">Every figure here is derived from public data by a stated rule and names its source; nothing is written by a person or a model except the marked, credited quotations. <a href="/about/how">How&nbsp;→</a></p>
+  <p class="small muted derived">Every figure here is derived from public data by a stated rule and names its source; nothing about this species is written for its page by a person or by AI, apart from the marked, credited quotations. <a href="/about/how#written">How&nbsp;→</a></p>
   <Provenance dossier={d} />
 </article>
 
@@ -730,7 +732,7 @@
   .idcard.nophoto .phthumb { grid-row: 1 / span 3; width: 64px; height: 64px; border-radius: var(--r); overflow: hidden; }
   @media (max-width: 420px) { .idcard.nophoto { grid-template-columns: 48px minmax(0, 1fr); } .idcard.nophoto .phthumb { width: 48px; height: 48px; } }
   .hero.failed { position: relative; min-height: 150px; border-radius: var(--r); overflow: hidden; }
-  .hero.failed .cred { position: absolute; left: 8px; bottom: 6px; }
+  .hero.failed .cred { position: absolute; left: 8px; top: 6px; right: auto; } /* at the top, clear of the name card (round sixty-one; visitor 2) */
   /* At 320 px and 200% text the actions wrap rather than widen the page (round sixty; a11y 5). */
   .idcard .acts { flex-wrap: wrap; min-width: 0; }
   .idcard .acts :global(.btn) { white-space: normal; max-width: 100%; }

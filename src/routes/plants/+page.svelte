@@ -2,7 +2,7 @@
   import { sync } from '$lib/sync/engine.svelte';
   import { collection } from '$lib/db/collection.svelte';
   import StateNote from '$lib/ui/StateNote.svelte';
-  import { localDate, localDateYearAgo, daysBetween } from '$core/dates';
+  import { localDate, daysBetween } from '$core/dates';
   import { accNo, sowNo, type Accession } from '$lib/db/types';
   import { toast } from '$lib/ui/toast.svelte';
   import { kindOf } from '$lib/db/types';
@@ -23,7 +23,12 @@
   import PlantName from '$lib/ui/PlantName.svelte';
   import HeldNote from '$lib/ui/HeldNote.svelte';
   import { placeTail, plantName } from '$lib/ui/plant-label';
-  import { PlantsMenu, PlantsEmpty, SelectMode, PlantsFoot } from '$lib/ui/grow'; // round sixty, agent F: import, the sample, selection, Wanted and spending
+  // Each by its own path, not the barrel: a barrel import carries every grower component into this page's chunk (round sixty-one; the accessibility review, 3).
+  import PlantsMenu from '$lib/ui/grow/PlantsMenu.svelte'; // round sixty, agent F: import, the sample, selection, Wanted and spending
+  import PlantsEmpty from '$lib/ui/grow/PlantsEmpty.svelte';
+  import SelectMode from '$lib/ui/grow/SelectMode.svelte';
+  import PlantsFoot from '$lib/ui/grow/PlantsFoot.svelte';
+  import { photoDue, photoDueDays } from '$lib/ui/photo-due';
   onMount(() => { site.load(); collection.load(); }); // the site, for the empty list's third step (round fifty-eight; the grower review)
   /** The storage warning can be put away for this tab's life only; the browser's promise has not changed, so it comes back on the next visit. */
   let storageNoticeHidden = $state(false);
@@ -55,6 +60,13 @@
   let show = $state<'growing' | 'all' | 'due' | 'nophoto'>('growing');
   type Sort = 'number' | 'name' | 'watered' | 'place';
   let sort = $state<Sort>('number');
+  /**
+   * One place and what is inside it (?place=<id>), so a bench is selected by its place and not by a word search that also
+   * finds "2" in "0042" (round sixty-one; the grower review, 7). `?select=1` opens select mode on it: a place page's
+   * "Select these" links to `/plants?place=<id>&select=1`.
+   */
+  let place = $state('');
+  let selectStart = $state(false);
   // The chip, the query and the sort live in the URL (?show=, ?q=, ?sort=), so Back from a plant returns to the same list
   // and a filtered list can be bookmarked; /plants?show=due is where Today points (round twenty-five, 11).
   onMount(() => {
@@ -64,6 +76,8 @@
     q = sp.get('q') ?? '';
     const s = sp.get('sort');
     if (s === 'name' || s === 'watered' || s === 'place') sort = s;
+    place = sp.get('place') ?? '';
+    selectStart = sp.get('select') === '1';
   });
   $effect(() => {
     if (!collection.ready) return;
@@ -71,6 +85,7 @@
     if (show !== 'growing') sp.set('show', show);
     if (q.trim()) sp.set('q', q.trim());
     if (sort !== 'number') sp.set('sort', sort);
+    if (place && collection.location(place)) sp.set('place', place);
     const want = sp.toString() ? `?${sp}` : '';
     if (new URL(location.href).search !== want) replaceState(`/plants${want}`, page.state);
   });
@@ -92,11 +107,11 @@
     watered: (a, b) => care(b) - care(a) || byName(a, b), // longest since watered first
     place: (a, b) => { const pa = a.locationId ? collection.locationName(a.locationId) : '', pb = b.locationId ? collection.locationName(b.locationId) : ''; return (pa === '' ? 1 : 0) - (pb === '' ? 1 : 0) || pa.localeCompare(pb) || byName(a, b); } // unplaced plants last, not first (round twenty-six, 8)
   };
-  const yearAgo = localDateYearAgo();
-  const noPhoto = (id: string) => !collection.photos(id).some((p) => p.d >= yearAgo);
-  const noPhotoN = $derived(collection.accessions.filter((a) => a.status === 'growing' && noPhoto(a.id)).length);
-  /** "No photo in 12 months" waits until a growing plant has been here a year: on a collection made today it counted every plant (round sixty; the grower review, 16). */
-  const yearOld = $derived(collection.accessions.some((a) => a.status === 'growing' && (a.acquired ?? collection.madeOn('accession', a.id) ?? localDate()) <= yearAgo));
+  // Today's rule for the line that links here, so the line and the chip say the same number: growing, here six months or
+  // more, and no photograph in twelve (round sixty-one; the grower review, 11). The chip is offered once it counts one.
+  const photoDays = photoDueDays();
+  const noPhoto = (a: Accession) => photoDue(a, collection, photoDays);
+  const noPhotoN = $derived(collection.accessions.filter(noPhoto).length);
   let thumbs = $state<Map<string, string>>(new Map());
   // Thumbnails for the species grown here, a small request, not the whole catalogue (round eight, 9).
   // Only when the grower has switched the reference's photographs on for their own pages: the thumbnails are the one thing
@@ -112,6 +127,34 @@
   /** Lower-cased with accents folded, as the species search does: "Echeveria agavoïdes" is found by "agavoides" (round twenty-six, 8). */
   const fold = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   const words = $derived(fold(q).split(/\s+/).filter(Boolean));
+  /** The places a search names whole, by their own name or their full path ("bench 2", "greenhouse › bench 2"). */
+  const placeKey = (s: string) => fold(s).replace(/\s*(›|>|\/)\s*/g, ' › ').replace(/\s+/g, ' ').trim();
+  const named = $derived.by(() => {
+    const k = placeKey(q);
+    if (!k) return [] as string[];
+    return collection.locations.filter((l) => placeKey(l.name) === k || placeKey(collection.locationName(l.id)) === k).map((l) => l.id);
+  });
+  /** The places for the place filter: the tree depth-first, each by its full path, as the plant form's picker lists them. */
+  const placeList = $derived.by(() => {
+    const out: Array<{ id: string; label: string }> = [];
+    const seen = new Set<string>();
+    const walk = (parent: string | null) => { for (const l of collection.children(parent)) { if (seen.has(l.id)) continue; seen.add(l.id); out.push({ id: l.id, label: collection.locationName(l.id) || l.name }); walk(l.id); } };
+    walk(null);
+    return out;
+  });
+  /** "Search the words instead": the grower asked for every plant that mentions it, not the place. Per search. */
+  let wordsOnly = $state(false);
+  $effect(() => { void q; wordsOnly = false; });
+  /**
+   * The places the list is held to: the ?place= filter, else the places a search names whole. A search for a place's name
+   * lists that place and what is inside it, so "Tick all" ticks the bench and nothing else; "bench 2" ticked 168 plants on
+   * five places (round sixty-one; the grower review, 7).
+   */
+  const byPlace = $derived(place && collection.location(place) ? [place] : !wordsOnly && named.length ? named : []);
+  const within = $derived(new Set(byPlace.flatMap((id) => collection.subtree(id))));
+  const placeOk = (a: Accession) => !byPlace.length || (!!a.locationId && within.has(collection.placeOf(a.locationId) ?? ''));
+  /** The search's words, unless the search named a place and the list is held to it instead. */
+  const searchWords = $derived(!place && !wordsOnly && named.length ? [] : words);
   /** One tap writes one line, dated today; the toast takes exactly that line back (round forty-nine, 3). */
   let watering = $state('');
   async function water(a: Accession) {
@@ -135,8 +178,8 @@
   const few = $derived(collection.accessions.length < 2);
   const list = $derived.by(() => {
     careMap = new Map();
-    if (few) return collection.accessions.filter((a) => matches(a, words));
-    return collection.accessions.filter((a) => (show === 'all' || a.status === 'growing') && (show !== 'due' || collection.isDue(a)) && (show !== 'nophoto' || noPhoto(a.id)) && matches(a, words)).sort(sorters[sort]);
+    if (few) return collection.accessions.filter((a) => placeOk(a) && matches(a, searchWords));
+    return collection.accessions.filter((a) => (show === 'all' || a.status === 'growing') && (show !== 'due' || collection.isDue(a)) && (show !== 'nophoto' || noPhoto(a)) && placeOk(a) && matches(a, searchWords)).sort(sorters[sort]);
   });
   // The list is drawn in pages of two hundred as the reader scrolls: fifteen hundred rows at once was five seconds to paint (round fifty-one, 5).
   const PAGE = 200;
@@ -169,13 +212,16 @@
 <div class="toolrow plantstools">
   <input id="plants-q" class="searchbar" type="search" placeholder="Search plants…" aria-label="Search your plants" bind:value={q} />
   {#if !few}<select id="plants-sort" class="sortsel" aria-label="Sort" bind:value={sort}><option value="number">Newest first</option><option value="name">By name</option><option value="watered">Longest unwatered</option><option value="place">By place</option></select>{/if}
+  <!-- One place and what is inside it; the address carries it, so a place page can link here (round sixty-one; the grower
+       review, 7). Offered with the "By place" order, or while a place is chosen, so the phone's first screen keeps its one row. -->
+  {#if collection.locations.length && (place || (!few && sort === 'place'))}<select id="plants-place" class="sortsel placesel" aria-label="Place" bind:value={place}><option value="">All places</option>{#each placeList as p (p.id)}<option value={p.id}>{p.label}</option>{/each}</select>{/if}
   {#if (q.trim() || show !== 'growing') && list.length}<a class="btn small" href="/labels?acc={list.map((a) => a.id).join(',')}" title="Labels for exactly the plants listed here">Labels for these {list.length}</a>{/if}
   <!-- "Due" by each plant's rhythm, which a place or the plant may set: the chip no longer says 21 days for all (round fifty-eight; the grower review). -->
   <!-- The one toggle group, as chips, with a name for the group (round fifty-eight; the accessibility review). -->
   {#if !few}<ToggleGroup chips class="showrow" style="margin: 0" label="Which plants" bind:value={show} options={[
     { value: 'growing', label: 'Growing', n: collection.accessions.filter((a) => a.status === 'growing').length },
     { value: 'due', label: 'Due', n: dueN, title: 'Past its watering rhythm: 21 days unless its place or the plant sets another' },
-    ...(yearOld || show === 'nophoto' ? [{ value: 'nophoto' as const, label: 'No photo in 12 months', n: noPhotoN, title: 'Growing plants with no photograph in the last year' }] : []),
+    ...(noPhotoN || show === 'nophoto' ? [{ value: 'nophoto' as const, label: 'No photo in 12 months', n: noPhotoN, title: 'Growing plants kept six months or more and not photographed in the last year' }] : []),
     { value: 'all', label: 'All', n: collection.accessions.length }
   ]} />{/if}
 </div>
@@ -207,14 +253,19 @@
     <p class="muted small">Your plants are recorded on this device and nowhere else until you choose to sync. Moving from another device? <a href="/backup">Restore a backup</a>.</p>
   </div>
   <PlantsEmpty />
-{:else if !list.length}
-  <div class="emptybox"><p class="muted">No plants match.</p></div>
 {:else}
+  {#if byPlace.length && !place}
+    <!-- What the list is held to, said, with the way to the words instead (round sixty-one; the grower review, 7). -->
+    <p class="small muted" id="q-place">The plants at {byPlace.map((id) => collection.locationName(id)).join(' and ')} and inside, since the search names {byPlace.length === 1 ? 'that place' : 'those places'}. <button class="linkish" type="button" id="q-words" onclick={() => (wordsOnly = true)}>Every plant that mentions “{q.trim()}” instead</button></p>
+  {/if}
+  {#if !list.length}
+  <div class="emptybox"><p class="muted">No plants match.</p></div>
+  {:else}
   {#if !prefs.referencePhotos && list.some((a) => !collection.cover(a.id))}
     <!-- One line, the disclosure behind it: the paragraph stood between the chips and the first plant on a phone (round fifty, 4). -->
     <div style="margin: 0 0 8px"><RefPhotoOffer link buckets what="the reference’s photographs for plants without their own" /></div>
   {/if}
-  <SelectMode plants={list} />
+  <SelectMode plants={list} start={selectStart} />
   <div class="rows" class:nopic={!anyPic}>
     {#each shown as a (a.id)}
       {@const w = sinceWater(a.id)}
@@ -229,24 +280,27 @@
           <span class="txt">
             <span class="nm"><span class="accno lead">{accNo(a)}</span>{' '}<PlantName plant={a} /></span>
             <!-- On a phone the watering figure leads the second line, so a row is two lines, not three (round fifty-eight; the grower review). -->
-            <span class="fam"><span class="sr">{', '}</span>{#if a.status === 'growing' || collection.lastWatered(a.id)}<span class="figphone" class:due={collection.isDue(a)}>{wtext}</span>{/if}{#if kindOf(a) !== 'species'}<span class="pill c">{kindOf(a)}</span>{/if}{#if a.fieldNumber}<span class="fnchip">{a.fieldNumber}</span>{/if}{#if a.locationId}<span class="where" title={collection.locationName(a.locationId)}>{placeTail(collection.locationName(a.locationId))}</span>{/if}{#if a.status !== 'growing'}<span class="pill">{a.status}</span>{/if}</span>
+            <span class="fam"><span class="sr">{', '}</span>{#if a.status === 'growing' || collection.lastWatered(a.id)}<span class="figphone" class:due={collection.isDue(a)}>{wtext}</span>{/if}{#if kindOf(a) !== 'species'}<span class="pill c">{kindOf(a)}</span>{/if}{#if a.fieldNumber}<span class="fnchip">{a.fieldNumber}</span>{/if}{#if a.locationId}<span class="where" title={collection.locationName(a.locationId)}><span aria-hidden="true">{placeTail(collection.locationName(a.locationId))}</span><span class="sr">{collection.locationName(a.locationId)}</span></span>{/if}{#if a.status !== 'growing'}<span class="pill">{a.status}</span>{/if}</span>
           </span>
           <span class="fig" class:due={collection.isDue(a)}><span class="sr">{', '}</span>{wtext}</span>
         </a>
         <!-- The one thing done to a plant without opening its page: a watering today, with an Undo (round forty-nine, 3). -->
         <!-- aria-disabled while it saves: a disabled button drops keyboard focus to the page, and the toast's Undo is then 23 Tabs away (round sixty; the accessibility review, 1). -->
-        {#if a.status === 'growing'}<button class="btn small wbtn" type="button" onclick={() => water(a)} aria-disabled={watering === a.id} aria-label="Record {accNo(a)} watered today" title="Record watered today">Water</button>{/if}
+        {#if a.status === 'growing'}<button class="btn small wbtn" type="button" onclick={() => water(a)} aria-disabled={watering === a.id} aria-label="Water {accNo(a)}, record watered today" title="Record watered today">Water</button>{/if}
       </div>
     {/each}
   </div>
   {#if shown.length < list.length}<div class="more" bind:this={moreEl}><button class="btn small" type="button" onclick={() => (limit += PAGE)}>More ({list.length - shown.length} further down)</button></div>{/if}
   <p class="seccount">{list.length} of {collection.accessions.length} shown</p>
+  {/if}
 {/if}
 <PlantsFoot />
 
 <style>
   .keepline { margin: -6px 0 10px; }
   .more { display: flex; justify-content: center; padding: 10px 0; }
+  .placesel { max-width: 100%; text-overflow: ellipsis; }
+  .linkish { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; text-decoration: underline; cursor: pointer; min-height: var(--tap); }
   .sortsel { border: 1px solid var(--field-edge); background: var(--card); border-radius: var(--r); padding: 8px 10px; min-height: var(--tap); font: inherit; font-size: var(--fs-md); color: var(--ink); } /* an edge at 3:1: --rule was 1.17:1 (round fifty-nine) */
   .muted { color: var(--ink3); }
   .notice .linkish { background: none; border: 0; padding: 0; color: var(--ink3); font: inherit; text-decoration: underline; cursor: pointer; }
@@ -275,7 +329,9 @@
     .plantstools { margin-top: 0; padding-top: 4px; row-gap: 6px; }
     .plantstools .searchbar { min-width: 0; flex-basis: 160px; }
     .plantstools > a.btn.small { flex: none; order: 3; } /* the labels link does not squeeze the search box (round fifty-two, 6) */
-    .plantstools .sortsel { flex: none; max-width: 44%; }
+    /* As wide as its longest option, up to the row, and onto a line of its own before it is cut: at 200% text a 44% cap showed "Newe" (round sixty-one; the accessibility review, 7). */
+    .plantstools .sortsel { flex: 0 1 9.5em; min-width: min(9.5em, 100%); max-width: 100%; }
+    .plantstools .placesel { flex: 1 1 auto; min-width: 0; }
     /* :global, since the row is the toggle group's own markup (round fifty-eight; the accessibility review). */
     .plantstools :global(.showrow) { flex-basis: 100%; flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; margin: 0 -16px !important; padding: 2px 16px; }
     .plantstools :global(.showrow::-webkit-scrollbar) { display: none; }

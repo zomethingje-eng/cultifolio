@@ -293,7 +293,7 @@
     const key = condKey; // what this request is for; a place edited before it answers makes the answer stale, and a stale answer is dropped
     forecastErr = '';
     getForecast<ForecastAnswer>(fLat!, fLon!, units.current, fAlt)
-      .then((r) => { if (key !== condKey) return; if (!r.ok) { forecastErr = forecastRefusal(r.status); return; } got = { key, answer: r.body }; })
+      .then((r) => { if (key !== condKey) return; if (!r.ok) { forecastErr = forecastRefusal(r); return; } got = { key, answer: r.body }; })
       // Whatever went wrong, the page says the check did not happen, never a status code, and never that the nights are clear; our own refusals are said as ours.
       .catch(() => { if (key === condKey) forecastErr = forecastRefusal(null); });
   });
@@ -401,6 +401,8 @@
       <button class="btn pri" onclick={() => waterAll('water')} aria-disabled={!!busy}>Water all {deep.length}</button>
       <button class="btn" onclick={() => waterAll('feed')} aria-disabled={!!busy}>Feed all</button>
       <button class="btn" id="audit-start" onclick={startAudit} disabled={auditing}>Audit</button>
+      <!-- The plants here, in My plants' select mode, for what this row does not do (move, archive, labels): the list's own place filter (round sixty-one; decision 12, the grower review). -->
+      <a class="btn" id="select-these" href="/plants?place={encodeURIComponent(id)}&select=1">Select these</a>
     {:else}
       <a class="btn pri" href="/plants/new?loc={id}">Add a plant here</a>
     {/if}

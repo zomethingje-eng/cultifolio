@@ -15,4 +15,6 @@
 
 <style>
   .heldnote { margin: 8px 0 10px; }
+  /* Not on paper: a printed list or label sheet is of the plants, and the notice is about this screen (round sixty-one; decision 4). */
+  @media print { .heldnote { display: none !important; } }
 </style>

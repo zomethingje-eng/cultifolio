@@ -457,17 +457,20 @@ export async function searchAnswer(platform: Platform, fetch: Fetch, q: string, 
   // Charged once a request, however many passes cost what the whole index costs (round sixty; the corpus review, 6).
   let charged: Promise<Response | null> | null = null;
   const charge = () => (charged ??= mayWhole());
-  const first = await searchOnce(c, platform, fetch, q, n, charge);
+  // The candidates ranked by every pass of this request, the retry's included, against one threshold (round sixty-one; the corpus review, 17).
+  let ranked = 0;
+  const heavy = (k: number) => (ranked += k) > WHOLE_LIKE;
+  const first = await searchOnce(c, platform, fetch, q, n, charge, heavy);
   if ('stop' in first || first.hits.length) return first;
   // Nothing matches the query as written: once more on its first two words before any rank marker, and the answer says
   // so, so the page can say "Showing results for …" (round sixty; the corpus review, 3; the self-review, 15).
   const relaxed = relaxedQuery(q);
   if (!relaxed) return first;
-  const again = await searchOnce(c, platform, fetch, relaxed, n, charge);
+  const again = await searchOnce(c, platform, fetch, relaxed, n, charge, heavy);
   if ('stop' in again || !again.hits.length) return 'stop' in again ? again : first;
   return { ...again, relaxed: { query: relaxed } };
 }
-async function searchOnce(c: Loaded, platform: Platform, fetch: Fetch, q: string, n: number, charge: () => Promise<Response | null>): Promise<{ hits: IndexEntry[]; corpus: string } | { stop: Response }> {
+async function searchOnce(c: Loaded, platform: Platform, fetch: Fetch, q: string, n: number, charge: () => Promise<Response | null>, heavy: (k: number) => boolean = (k) => k > WHOLE_LIKE): Promise<{ hits: IndexEntry[]; corpus: string } | { stop: Response }> {
   const corpus = c.corpus; // the id the answer is from, from the same load (round seventeen, 10)
   const m = c.manifest;
   if (!m) return { hits: search(searchIndex(c.idx), q, n), corpus };
@@ -503,7 +506,7 @@ async function searchOnce(c: Loaded, platform: Platform, fetch: Fetch, q: string
   // Candidates past this many (two short words, "a e", narrow almost nothing) cost what the whole index costs, so they
   // are charged as it is (round fifty-nine; the corpus reviews: 127 to 309 ms each under the ordinary search allowance).
   const cands = candidates(plan.exact, posting);
-  if (cands.length > WHOLE_LIKE) { const stop = await charge(); if (stop) return { stop }; }
+  if (heavy(cands.length)) { const stop = await charge(); if (stop) return { stop }; }
   const exactHits = exactPass(entries(cands), q, n);
   if (exactHits) return { hits: exactHits, corpus };
   if (!plan.near) return { hits: [], corpus };
@@ -511,7 +514,7 @@ async function searchOnce(c: Loaded, platform: Platform, fetch: Fetch, q: string
   // The near pass too: a typo whose keys reach a family or an origin ranks close to two thousand candidates after the
   // exact pass ranked its own, and was never charged (round sixty; the corpus review, 6; A26).
   const near = candidates(plan.near, posting);
-  if (cands.length + near.length > WHOLE_LIKE) { const stop = await charge(); if (stop) return { stop }; }
+  if (heavy(near.length)) { const stop = await charge(); if (stop) return { stop }; }
   return { hits: search(prepare(entries(near)), q, n), corpus };
 }
 function exactPass(cands: IndexEntry[], q: string, n: number): IndexEntry[] | null {

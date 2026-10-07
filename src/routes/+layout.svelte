@@ -20,7 +20,11 @@
   import { browser } from '$app/environment';
   import CompareBar from '$lib/ui/CompareBar.svelte';
   import InstallBar from '$lib/ui/InstallBar.svelte';
-  import { GrowLayer } from '$lib/ui/grow'; // round sixty, agent F: the sample's banner, persist after the first plant, the backup nudge
+  // Round sixty, agent F: the sample's banner, persist after the first plant, the backup nudge. By its own path, not the
+  // grow barrel, which brought every grower feature and the backup module into every page (round sixty-one; the
+  // accessibility review, 3).
+  import GrowLayer from '$lib/ui/grow/GrowLayer.svelte';
+  import { inDemo } from '$lib/db/demo';
   import ToastBar from '$lib/ui/ToastBar.svelte';
   import { units } from '$lib/ui/units.svelte';
   import { prefs } from '$lib/ui/prefs.svelte';
@@ -228,6 +232,8 @@
     const html = document.documentElement;
     if (grower) html.dataset.grower = '1';
     else delete html.dataset.grower;
+    // The hint is about the grower's own collection: the sample's twelve plants set it, and the visitor's other tabs drew a grower's tabs (round sixty-one; the records review, 17).
+    if (inDemo()) return;
     try {
       if (grower) localStorage.setItem('cultifolio.hasMine', '1');
       else localStorage.removeItem('cultifolio.hasMine');

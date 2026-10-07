@@ -1,17 +1,19 @@
 <script lang="ts">
   /**
-   * The figures a grower reads first, in growers' words, each with its source as a small tag: the coldest nights, the
-   * warmest days, the rain and the light in the wild, and the season in the reader's own months. The labels are ours and
-   * say what the figure is; the figures, units and sources are the species page's own, unchanged (round sixty; visitor 2
-   * and 3, product 7, self-review "the experience" 2 and 3). The front page shows the same row for one species.
+   * The figures a grower reads first, each with its source as a small tag, and the season in the reader's own months. Each
+   * label is the figure's own name ("Cold floor (1 night in 100)", "Warmest month, mean day", "Rain a year", "Open-sky
+   * light"), never a reading of it: "Coldest nights in the wild" over a 1st-percentile night beside a lower record, and
+   * "Warmest days" over a month's mean day 7 °C under the 99th-percentile day, said more than their figures (round
+   * sixty-one; visitor 1). The record low is printed beside the floor. The front page shows the same row for one species.
    */
   import { units } from '$lib/ui/units.svelte';
   import { tempN, tempUnit, rainN, rainUnit, ruleRain } from '$core/units';
   import type { Year } from '$core/sheet';
   import { seasonStrip } from './season';
   import { MON3 } from '$core/months';
+  import { tiedMonths, monthNames } from '$core/sheet';
   type M = { tmax: number; tmin: number; precipMm: number; dli?: number };
-  type Ex = { minP01: number; years: number } | null;
+  type Ex = { minP01: number; minAbs: number; years: number } | null;
   let {
     months,
     extremes = null,
@@ -22,7 +24,8 @@
     readerLat = null,
     readerFrom = null,
     toggle = true,
-    chartHref = null
+    chartHref = null,
+    season = true
   }: {
     months: M[];
     extremes?: Ex;
@@ -38,11 +41,16 @@
     toggle?: boolean;
     /** Where the chart is, for the line saying it is drawn in the habitat's months. */
     chartHref?: string | null;
+    /** The season card after the four figures; the front page shows the four alone (round sixty-one; decision 9). */
+    season?: boolean;
   } = $props();
   const u = $derived(units.current);
   const idx = (f: (x: M) => number, hi: boolean) => months.reduce((b, x, i) => ((hi ? f(x) > f(months[b]) : f(x) < f(months[b])) ? i : b), 0);
   const hot = $derived(idx((x) => x.tmax, true));
   const cold = $derived(idx((x) => x.tmin, false));
+  // Every month that ties as printed, named (round sixty-one; visitor 5: "Jan mean day" of a year whose February was as warm).
+  const hotAt = $derived(monthNames(tiedMonths(months.map((x) => x.tmax), true, (v) => tempN(v, u)), 'short'));
+  const coldAt = $derived(monthNames(tiedMonths(months.map((x) => x.tmin), false, (v) => tempN(v, u, 1)), 'short'));
   const rainYear = $derived(months.reduce((a, x) => a + x.precipMm, 0));
   // The rule's own count: months of 25 mm or more (`>= 25`), said as such.
   const wetMonths = $derived(months.filter((x) => x.precipMm >= 25).length);
@@ -58,28 +66,29 @@
   {#if toggle}
     <!-- Both units shown, the current one marked: a lone "°F" beside a figure in °C read as a contradiction (round sixty; visitor 13). -->
     <div class="useg" role="group" aria-label="Units">
-      <button type="button" class:on={u !== 'us'} aria-pressed={u !== 'us'} aria-label="Celsius and millimetres" onclick={() => units.set('metric')}>°C</button><span aria-hidden="true">|</span><button type="button" class:on={u === 'us'} aria-pressed={u === 'us'} aria-label="Fahrenheit and inches" onclick={() => units.set('us')}>°F</button>
+      <button type="button" class:on={u !== 'us'} aria-pressed={u !== 'us'} aria-label="°C, Celsius and millimetres" onclick={() => units.set('metric')}>°C</button><span aria-hidden="true">|</span><button type="button" class:on={u === 'us'} aria-pressed={u === 'us'} aria-label="°F, Fahrenheit and inches" onclick={() => units.set('us')}>°F</button>
     </div>
   {/if}
 </div>
+<!-- Each card's label is a heading, so the four read as four figures and not one run of text (round sixty-one; a11y 16). -->
 <div class="cards gcards">
   <div class="card cold">
     {#if extremes}
-      <div class="lab">Coldest nights in the wild</div>
+      <div class="lab" role="heading" aria-level="3">Cold floor (1 night in 100)</div>
       <div class="val">{tempN(extremes.minP01, u, 1)}<span class="u"> {tempUnit(u)}</span></div>
-      <div class="sub">Cold floor: 1 night in 100 is colder <span class="src">NASA POWER</span></div>
+      <div class="sub">Record low {tempN(extremes.minAbs, u, 1)} {tempUnit(u)} in {extremes.years} years, at a typical spot in the range <span class="src">NASA POWER</span></div>
     {:else}
-      <div class="lab">Coldest month's nights</div>
+      <div class="lab" role="heading" aria-level="3">Coldest month, mean night</div>
       <div class="val">{tempN(months[cold].tmin, u, 1)}<span class="u"> {tempUnit(u)}</span></div>
-      <div class="sub">{MON3[cold]} mean night at the habitat, not a floor; {exWhy} <span class="src">CHELSA</span></div>
+      <div class="sub">{coldAt} at the habitat, not a floor; {exWhy} <span class="src">CHELSA</span></div>
     {/if}
   </div>
-  <div class="card"><div class="lab">Warmest days in the wild</div><div class="val">{tempN(months[hot].tmax, u)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">{MON3[hot]} mean day at the habitat <span class="src">CHELSA</span></div></div>
-  <div class="card"><div class="lab">Rain in the wild</div><div class="val">{rainN(rainYear, u)}<span class="u"> {rainUnit(u)}/yr</span></div><div class="gauge" aria-hidden="true"><i class="c" style="width:{Math.min(100, rainYear / 12)}%"></i></div><div class="sub">{wetMonths === 0 ? `No month of ${ruleRain(25, u)} or more` : `${wetMonths} month${wetMonths === 1 ? '' : 's'} of ${ruleRain(25, u)} or more`} <span class="src">CHELSA</span></div></div>
-  {#if dlis.length}<div class="card"><div class="lab">Light in the wild</div><div class="val">{Math.min(...dlis).toFixed(0)}–{Math.max(...dlis).toFixed(0)}<span class="u"> DLI</span></div><div class="gauge" aria-hidden="true"><i class="w" style="width:{Math.min(100, Math.max(...dlis) / 0.7)}%"></i></div><div class="sub">Open sky, lowest to highest month (<a href="/about/how#glossary">DLI</a>) <span class="src">CHELSA</span></div></div>{/if}
-  {#if year && strip}
+  <div class="card"><div class="lab" role="heading" aria-level="3">Warmest month, mean day</div><div class="val">{tempN(months[hot].tmax, u)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">{hotAt} at the habitat <span class="src">CHELSA</span></div></div>
+  <div class="card"><div class="lab" role="heading" aria-level="3">Rain a year</div><div class="val">{rainN(rainYear, u)}<span class="u"> {rainUnit(u)}</span></div><div class="gauge" aria-hidden="true"><i class="c" style="width:{Math.min(100, rainYear / 12)}%"></i></div><div class="sub">{wetMonths === 0 ? `No month of ${ruleRain(25, u)} or more` : `${wetMonths} month${wetMonths === 1 ? '' : 's'} of ${ruleRain(25, u)} or more`} <span class="src">CHELSA</span></div></div>
+  {#if dlis.length}<div class="card"><div class="lab" role="heading" aria-level="3">Open-sky light</div><div class="val">{Math.min(...dlis).toFixed(0)}–{Math.max(...dlis).toFixed(0)}<span class="u"> DLI</span></div><div class="gauge" aria-hidden="true"><i class="w" style="width:{Math.min(100, Math.max(...dlis) / 0.7)}%"></i></div><div class="sub">Lowest to highest month (<a href="/about/how#glossary">DLI</a>) <span class="src">CHELSA</span></div></div>{/if}
+  {#if season && year && strip}
     <div class="card season">
-      <div class="lab">The year in {strip.calendar}</div>
+      <div class="lab" role="heading" aria-level="3">The year in {strip.calendar}</div>
       <!-- Twelve cells, January first, in the reader's months: the rule's months shaded, the months under 5 mm marked. -->
       <ol class="strip" aria-label="Months, January to December{strip.shadeIs ? `; shaded: ${strip.shadeIs}` : ''}">
         {#each strip.cells as c (c.m)}<li class:on={c.on} class:dry={c.dry}><span class="mo">{MON3[c.m - 1][0]}<span class="rest">{MON3[c.m - 1].slice(1)}</span></span><span class="visually-hidden">{c.on && strip.shadeIs ? `, ${strip.shadeIs}` : ''}{c.dry ? `, under ${ruleRain(5, u)} of rain` : ''}</span></li>{/each}

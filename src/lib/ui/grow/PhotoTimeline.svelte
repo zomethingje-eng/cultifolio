@@ -32,7 +32,8 @@
     <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
     <ol class="strip" tabindex="0" aria-label="Photographs, oldest first">
       {#each photos as p (p.id)}
-        <li><button type="button" class="th" class:on={comparing && pair.includes(p.id)} onclick={() => tap(p.id)} aria-label="{photoLabel(p)}{comparing ? (pair.includes(p.id) ? ', compared' : ', compare this one') : ', compare'}" aria-pressed={comparing ? pair.includes(p.id) : undefined}><PhotoImg id={p.id} alt="" loading="lazy" /><span class="d">{p.d.slice(0, 7)}</span></button></li>
+        <!-- Named from the month it shows, then the photograph, so a voice saying "2026-10" finds it (round sixty-one; the accessibility review, 14). -->
+        <li><button type="button" class="th" class:on={comparing && pair.includes(p.id)} onclick={() => tap(p.id)} aria-label="{p.d.slice(0, 7)}: {photoLabel(p)}{comparing ? (pair.includes(p.id) ? ', compared' : ', compare this one') : ', compare'}" aria-pressed={comparing ? pair.includes(p.id) : undefined}><PhotoImg id={p.id} alt="" loading="lazy" /><span class="d">{p.d.slice(0, 7)}</span></button></li>
       {/each}
     </ol>
     {#if comparing && shown.length === 2}

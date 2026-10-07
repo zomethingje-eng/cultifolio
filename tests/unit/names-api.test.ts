@@ -88,8 +88,9 @@ describe('/api/names', () => {
     expect(last!.status).toBe(429);
     expect(Number(last!.headers.get('retry-after'))).toBeGreaterThan(0);
     expect(last!.headers.get('cache-control')).toBe('no-store');
-    expect(await last!.json()).toMatchObject({ error: expect.stringMatching(/too many/), retryAfter: expect.any(Number) });
-    expect(asked).toBe(RATE.names.limit);
+    // Since round sixty-one one address may take a tenth of GBIF's share a minute, which comes before the route's own limit: the refusal then says the site held the call back (the server review, 4).
+    expect(await last!.json()).toMatchObject({ error: expect.stringMatching(/too many|not asked/), retryAfter: expect.any(Number) });
+    expect(asked).toBe(Math.min(RATE.names.limit, Math.floor(RATE.upstream.limit * 0.1)));
     await new Promise((res) => setTimeout(res, 0));
     expect((await call('Genus speciesa', upstream, { cache })).status).toBe(200); // cached: not limited
     expect((await call('Copiapoa', upstream, { cache, ip: '5.6.7.8' })).status).toBe(200);

@@ -35,8 +35,10 @@
  * day's ceiling of new vaults (`day:`) is counted at a vault's first stored object, as the ceiling in all is, not at its
  * creation. A place under the ceiling in all is given back only when the vault's first object did not land (`unfill`):
  * a vault that has stored anything never becomes empty again, since its log batches are never removed (only its
- * photographs are), so there is no later moment at which it holds nothing. A vault left unused for good keeps its place;
- * the operator raises `SYNC_VAULTS_MAX` when the places run short (docs/DEPLOY.md).
+ * photographs are), so there is no later moment at which it holds nothing. Round sixty-one: a vault with no upload for
+ * 90 days gives its place back at the midnight sweep, and its next upload takes one again (`touch`); `f:<vault>` keeps
+ * the day of its last upload for that. The site's own calls to other services are counted here too, in the object named
+ * "upstream" (`upstream`), so the cap on them is one for the whole site.
  *
  * Attached to the Worker by scripts/attach-do.mjs after the SvelteKit build (the adapter's worker exports only the app),
  * and bound as COUNTERS in wrangler.jsonc with a `new_sqlite_classes` migration. Without the binding the KV path in
@@ -84,9 +86,10 @@ export class Counters extends DurableObject {
    */
   async take(kind: 'vault' | 'address', n: number, limit: number, day: string, base: number | null = null, now = Date.now(), gen: number | null = null): Promise<{ ok: boolean; before: number; lease?: string } | { recount: true }> {
     if (kind === 'vault') {
+      // The leases first: one that lapsed marks the row stale, and the row is read after (round sixty-one; B14).
+      const leases = await this.leases(now);
       const got = await this.ctx.storage.get<unknown>(['v', 'gen']);
       const row = got.get('v') as Row | undefined;
-      const leases = await this.leases(now);
       // Today's row stands over a caller's listing: the day's first uploads each listed R2 and passed what they found,
       // and each such base wrote over the takes before it, so ten at once were counted as two (round fifty-nine; two
       // reviews). A listing is the starting figure only for a day with no row yet, and then with what is still in flight.
@@ -114,6 +117,8 @@ export class Counters extends DurableObject {
    * The live leases, and their bytes. A lease older than `LEASE_MS` is dropped here, whatever became of its upload: if it
    * landed, the next listing counts it; if not, the total over-counts it only until that listing (round sixty; the
    * self-review, P2; two reviews: a release that threw, or a Worker killed between take and release, counted for good).
+   * Since round sixty-one a lapsed lease also marks the vault's total stale, so the next request lists rather than keep
+   * the lapsed bytes counted for up to an hour (the second outside review, B14).
    */
   private async leases(now: number): Promise<{ total: number; live: Map<string, Lease> }> {
     const all = await this.ctx.storage.list<Lease>({ prefix: 'p:' });
@@ -124,8 +129,23 @@ export class Counters extends DurableObject {
       if (!l || typeof l !== 'object' || !(now - l.at < LEASE_MS)) stale.push(k);
       else { live.set(k, l); total += l.n; }
     }
-    if (stale.length) await this.ctx.storage.delete(stale);
+    if (stale.length) {
+      await this.ctx.storage.delete(stale);
+      await this.markStale();
+    }
     return { total, live };
+  }
+  /** The vault's total is no longer believed: the next take or read lists the bucket again (round sixty-one; B14). */
+  private async markStale(): Promise<void> {
+    const row = (await this.ctx.storage.get<Row>(['v'])).get('v');
+    if (row && row.day !== STALE_DAY) await this.ctx.storage.put({ v: { ...row, day: STALE_DAY } satisfies Row });
+  }
+  /**
+   * How many uploads of this vault are in flight (live leases): a first upload that failed keeps the vault's place while
+   * another is still landing (round sixty-one; the server review, 5).
+   */
+  async inFlight(now = Date.now()): Promise<number> {
+    return (await this.leases(now)).live.size;
   }
   /**
    * Give `n` bytes back, never below zero; an address's on its day only. For a vault, `token` names a removed object (its
@@ -212,6 +232,19 @@ export class Counters extends DurableObject {
     return { ok: true, token, claimed: c && typeof c.at === 'number' ? c.at : null };
   }
   /**
+   * Renew a hold just before the step it guards (a removal's R2 delete): true, and held for another `HOLD_MS`, only while
+   * the name is still held under this token. A hold that lapsed and was taken by another request, or freed by it, is not
+   * renewed, and the removal skips (round sixty-one; the second outside review, B10). It narrows the window to the R2 call
+   * itself; generation-addressed photo objects close it, in the round after this one.
+   */
+  async renew(name: string, token: string, now = Date.now()): Promise<boolean> {
+    const k = `h:${name}`;
+    const had = (await this.ctx.storage.get<Hold>([k])).get(k);
+    if (had?.token !== token) return false;
+    await this.ctx.storage.put({ [k]: { token, at: now } satisfies Hold });
+    return true;
+  }
+  /**
    * Free a name held with `hold`; only its own holder's token frees it. `claimed` (an upload that stored the name or found
    * it there) records when, kept for two days with the day keys, for a removal that comes after (`hold`'s `claimed`).
    */
@@ -246,8 +279,36 @@ export class Counters extends DurableObject {
     if (n >= max) return 'total';
     const nDay = kDay ? ((got.get(kDay) as number | undefined) ?? 0) : 0;
     if (kDay && nDay >= perDay) return 'day';
-    await this.ctx.storage.put({ all: n + 1, [k]: day ?? 1, ...(kDay ? { [kDay]: nDay + 1 } : {}) });
-    if (kDay) await this.wake(now);
+    // `w`: the day of the vault's last upload, for the 90-day reclaim (round sixty-one).
+    await this.ctx.storage.put({ all: n + 1, [k]: { d: day, w: day ?? dayOf(now) } satisfies Place, ...(kDay ? { [kDay]: nDay + 1 } : {}) });
+    await this.wake(now);
+    return 'counted';
+  }
+  /**
+   * A vault that already took a place uploads again (asked once a day per isolate): its last upload's day is kept, and a
+   * vault whose place was reclaimed after 90 days without an upload takes one again, under the ceiling in all (not the
+   * day's ceiling of new vaults: it is not new). `legacy`, a vault counted at its creation before round fifty-eight
+   * (its meta has no `filled`), is in the seeded total already: it is recorded, not counted again (round sixty-one).
+   */
+  async touch(vault: string, day: string, max: number, seed: number | null = 0, legacy = false, now = Date.now()): Promise<'already' | 'adopted' | 'counted' | 'total' | 'unavailable'> {
+    const k = `f:${vault}`;
+    const got = await this.ctx.storage.get<unknown>([k, 'all']);
+    const had = got.get(k);
+    if (had != null) {
+      const p = place(had);
+      if (p.w !== day) await this.ctx.storage.put({ [k]: { ...p, w: day } satisfies Place });
+      return 'already';
+    }
+    if (got.get('all') == null && seed == null) return 'unavailable';
+    const n = (got.get('all') as number | undefined) ?? seed ?? 0;
+    if (legacy) {
+      await this.ctx.storage.put({ all: n, [k]: { d: null, w: day } satisfies Place });
+      await this.wake(now);
+      return 'adopted';
+    }
+    if (n >= max) return 'total';
+    await this.ctx.storage.put({ all: n + 1, [k]: { d: null, w: day } satisfies Place });
+    await this.wake(now);
     return 'counted';
   }
   /**
@@ -260,7 +321,8 @@ export class Counters extends DurableObject {
     const got = await this.ctx.storage.get<unknown>([k, 'all']);
     const was = got.get(k);
     if (was == null) return false;
-    const kDay = typeof was === 'string' ? `day:${was}` : null;
+    const counted = place(was).d;
+    const kDay = counted ? `day:${counted}` : null;
     const nDay = kDay ? ((await this.ctx.storage.get<number>([kDay])).get(kDay) ?? 0) : 0;
     await this.ctx.storage.delete([k]);
     await this.ctx.storage.put({ all: Math.max(0, ((got.get('all') as number | undefined) ?? 0) - 1), ...(kDay && nDay > 0 ? { [kDay]: nDay - 1 } : {}) });
@@ -287,27 +349,110 @@ export class Counters extends DurableObject {
     await this.tick(Date.now());
   }
   async tick(now: number): Promise<void> {
-    await this.sweep(now);
+    // A sweep that read its page budget and stopped short runs again in a second, from where it stopped (round sixty-one;
+    // the server review, 8: an object grown past what one listing can hold failed its alarm and was never swept).
+    if ((await this.sweepRun(now)).more) { await this.ctx.storage.setAlarm(now + SWEEP_AGAIN_MS); return; }
     // Woken again only while something sweepable remains: a vault's object always keeps its total and its generation, and
     // the vaults object its `all`, so "anything stored" woke every one of them at every midnight for good (round sixty;
-    // the first outside review, A22). The next write of a sweepable key sets the alarm again.
+    // the first outside review, A22). The next write of a sweepable key sets the alarm again. A vault's place (`f:`) is
+    // sweepable since round sixty-one: it is reclaimed after 90 days without an upload.
     for (const prefix of SWEPT) if ((await this.ctx.storage.list({ prefix, limit: 1 })).size) { await this.ctx.storage.setAlarm(nextMidnight(now)); return; }
   }
+  /** One run of the sweep: the keys it deleted. */
   async sweep(now = Date.now()): Promise<string[]> {
-    const keep = new Set([new Date(now).toISOString().slice(0, 10), new Date(now - DAY_MS).toISOString().slice(0, 10)]);
-    const stale: string[] = [];
-    for (const k of (await this.ctx.storage.list({ prefix: 'ip:' })).keys()) if (!keep.has(k.slice(k.lastIndexOf(':') + 1))) stale.push(k);
-    for (const k of (await this.ctx.storage.list({ prefix: 'net:' })).keys()) if (!keep.has(k.slice(k.lastIndexOf(':') + 1))) stale.push(k);
-    for (const k of (await this.ctx.storage.list({ prefix: 'day:' })).keys()) if (!keep.has(k.slice(4))) stale.push(k);
-    for (const k of (await this.ctx.storage.list({ prefix: 'd:' })).keys()) if (!keep.has(k.slice(2))) stale.push(k);
-    for (const [k, d] of await this.ctx.storage.list<string>({ prefix: 'g:' })) if (!keep.has(d)) stale.push(k);
-    for (const [k, c] of await this.ctx.storage.list<Claim>({ prefix: 'c:' })) if (!c || !keep.has(c.day)) stale.push(k);
-    // Leases and holds past their time (round sixty): what a dead Worker left behind.
-    for (const [k, l] of await this.ctx.storage.list<Lease>({ prefix: 'p:' })) if (!(l && now - l.at < LEASE_MS)) stale.push(k);
-    for (const [k, h] of await this.ctx.storage.list<Hold>({ prefix: 'h:' })) if (!(h && now - h.at < HOLD_MS)) stale.push(k);
-    for (let i = 0; i < stale.length; i += 128) await this.ctx.storage.delete(stale.slice(i, i + 128));
-    return stale;
+    return (await this.sweepRun(now)).stale;
   }
+  /**
+   * The sweep, a page of a thousand keys at a time and at most `SWEEP_PAGES` pages a run; where a run stopped is kept
+   * (`s:<prefix>`, the last key read) and the next run starts there (round sixty-one; the server review, 8). A place
+   * (`f:<vault>`) whose vault had no upload for `RECLAIM_DAYS` is given back under the ceiling in all; a place recorded
+   * before its last upload's day was kept starts its count at this sweep.
+   */
+  private async sweepRun(now: number): Promise<{ stale: string[]; more: boolean }> {
+    const today = dayOf(now);
+    const keep = new Set([today, dayOf(now - DAY_MS)]);
+    const reclaimBefore = dayOf(now - RECLAIM_DAYS * DAY_MS); // last upload strictly before this day: 90 whole days without one
+    const judge: Record<string, (k: string, v: unknown) => boolean> = {
+      'ip:': (k) => !keep.has(k.slice(k.lastIndexOf(':') + 1)),
+      'net:': (k) => !keep.has(k.slice(k.lastIndexOf(':') + 1)),
+      'day:': (k) => !keep.has(k.slice(4)),
+      'd:': (k) => !keep.has(k.slice(2)),
+      'g:': (_, d) => !keep.has(d as string),
+      'c:': (_, c) => !c || !keep.has((c as Claim).day),
+      // Leases and holds past their time (round sixty): what a dead Worker left behind.
+      'p:': (_, l) => !(l && now - (l as Lease).at < LEASE_MS),
+      'h:': (_, h) => !(h && now - (h as Hold).at < HOLD_MS),
+      'f:': (_, f) => { const w = place(f).w; return w != null && w < reclaimBefore; }
+    };
+    const stale: string[] = [];
+    let pages = 0;
+    let leasesLapsed = false;
+    let reclaimed = 0;
+    for (const prefix of Object.keys(judge)) {
+      const kc = `s:${prefix}`;
+      let after = (await this.ctx.storage.get<string>([kc])).get(kc);
+      for (;;) {
+        if (pages >= SWEEP_PAGES) {
+          if (after) await this.ctx.storage.put({ [kc]: after });
+          await this.reclaim(reclaimed);
+          if (leasesLapsed) await this.markStale();
+          return { stale, more: true };
+        }
+        pages++;
+        const page = await this.ctx.storage.list<unknown>({ prefix, limit: SWEEP_PAGE, ...(after ? { startAfter: after } : {}) });
+        const gone: string[] = [];
+        const started: Record<string, Place> = {};
+        let last: string | undefined;
+        for (const [k, v] of page) {
+          last = k;
+          if (judge[prefix](k, v)) gone.push(k);
+          else if (prefix === 'f:' && place(v).w == null) started[k] = { ...place(v), w: today };
+        }
+        for (let i = 0; i < gone.length; i += 128) await this.ctx.storage.delete(gone.slice(i, i + 128));
+        if (Object.keys(started).length) await this.ctx.storage.put(started);
+        if (prefix === 'p:' && gone.length) leasesLapsed = true;
+        if (prefix === 'f:') reclaimed += gone.length;
+        stale.push(...gone);
+        // A short page is the prefix's end; a stand-in that ignores `startAfter` hands back the same page, which ends it too.
+        if (page.size < SWEEP_PAGE || !last || last === after) break;
+        after = last;
+      }
+      await this.ctx.storage.delete([kc]);
+    }
+    await this.reclaim(reclaimed);
+    if (leasesLapsed) await this.markStale();
+    return { stale, more: false };
+  }
+  /** Places given back by the sweep come off the ceiling in all, never below zero. */
+  private async reclaim(n: number): Promise<void> {
+    if (!n) return;
+    const all = (await this.ctx.storage.get<number>(['all'])).get('all') ?? 0;
+    await this.ctx.storage.put({ all: Math.max(0, all - n) });
+  }
+
+  /**
+   * The site's own calls to other services, one share a minute for each (MET Norway, the NWS, GBIF), for every address
+   * together, and one address (an IPv4 address or an IPv6 /64) at most `UPSTREAM_ADDRESS_PART` of a share, an IPv6 /48 four
+   * times that. All of `services` are taken or none (a US forecast is two calls). Counted in this object's memory, in
+   * the one object named "upstream", so it is site-wide, which KV counted per isolate was not (round sixty-one; the
+   * server review, 4; B13): a restart of the object (a deploy) forgets at most the current minute.
+   */
+  async upstream(services: string[], share: number, address: string | null = null, net: string | null = null, now = Date.now()): Promise<{ ok: true } | { ok: false; who: 'site' | 'address'; service: string; retryAfter: number }> {
+    const minute = Math.floor(now / 60_000);
+    if (minute !== this.minute) { this.minute = minute; this.calls = new Map(); }
+    const n = (k: string) => this.calls.get(k) ?? 0;
+    const part = Math.max(1, Math.floor(share * UPSTREAM_ADDRESS_PART));
+    const retryAfter = Math.max(1, Math.ceil(((minute + 1) * 60_000 - now) / 1000));
+    for (const s of services) {
+      if (address && n(`${s} ${address}`) >= part) return { ok: false, who: 'address', service: s, retryAfter };
+      if (net && n(`${s} ${net}`) >= part * NET_FACTOR) return { ok: false, who: 'address', service: s, retryAfter };
+      if (n(s) >= share) return { ok: false, who: 'site', service: s, retryAfter };
+    }
+    for (const s of services) for (const k of [s, address && `${s} ${address}`, net && `${s} ${net}`]) if (k) this.calls.set(k, n(k) + 1);
+    return { ok: true };
+  }
+  private minute = -1;
+  private calls = new Map<string, number>();
 }
 
 /** A vault's running total: its bytes, the UTC day it was last put right from a listing, and when (ms; absent on a row from before round sixty). */
@@ -318,9 +463,28 @@ type Lease = { n: number; at: number };
 type Hold = { token: string; at: number };
 /** When an upload last claimed a photograph's name, and the UTC day (for the sweep). */
 type Claim = { at: number; day: string };
+/**
+ * A vault's place under the ceiling in all: the day it was counted under the day's ceiling (null when it was not, as a
+ * place taken again after a reclaim) and the day of its last upload (round sixty-one). Before, the value was the counted
+ * day alone, or 1; `place` reads all three.
+ */
+type Place = { d: string | null; w: string | null };
+const place = (v: unknown): Place => (v && typeof v === 'object' ? { d: (v as Place).d ?? null, w: (v as Place).w ?? null } : { d: typeof v === 'string' ? v : null, w: null });
+const dayOf = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+/** A row's day when it is no longer believed: never today, so the next take lists (round sixty-one). */
+const STALE_DAY = 'stale';
+/** A vault's place is given back after this many whole days without an upload (round sixty-one; the triage, 3). */
+export const RECLAIM_DAYS = 90;
+/** The sweep reads keys a page at a time, and at most this many pages a run (round sixty-one; the server review, 8). */
+export const SWEEP_PAGE = 1000;
+export const SWEEP_PAGES = 100;
+/** How soon a sweep that stopped short runs again. */
+const SWEEP_AGAIN_MS = 1000;
+/** The part of a share one address may take in a minute (round sixty-one). */
+export const UPSTREAM_ADDRESS_PART = 0.1;
 /** How long a lease counts: past the longest upload (the device gives up after three minutes) with room to spare. */
 export const LEASE_MS = 10 * 60_000;
 /** How long a photograph's name may be held: far past a head, a delete and a give. */
 export const HOLD_MS = 60_000;
 /** The keys the midnight sweep looks at; the alarm is set again only while one of them remains. */
-const SWEPT = ['ip:', 'net:', 'day:', 'd:', 'g:', 'p:', 'h:', 'c:'];
+const SWEPT = ['ip:', 'net:', 'day:', 'd:', 'g:', 'p:', 'h:', 'c:', 'f:'];

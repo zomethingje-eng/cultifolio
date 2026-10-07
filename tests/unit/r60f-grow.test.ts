@@ -4,7 +4,7 @@
  * fragment, prices read only when they are plain numbers, firsts read from the log, iOS told by its features.
  */
 import { describe, it, expect } from 'vitest';
-import { buildIcs, foldLine, escapeText, dryDates, addDays, DRY_HORIZON_DAYS, type Rhythm } from '$lib/export/ics';
+import { buildIcs, foldLine, escapeText, wetRuns, addDays, DRY_HORIZON_DAYS, type Rhythm } from '$lib/export/ics';
 import { rhythmsOf, type RhythmSource } from '$lib/export/rhythms';
 import { plantQrUrl, labelFromHash, speciesFromHash, QR_NAME_MAX } from '$lib/ui/grow/qr';
 import { readPrice, spendOf, spendWords, amountWords } from '$lib/ui/grow/spend';
@@ -39,17 +39,17 @@ describe('the watering calendar file', () => {
     expect(t).toContain('\r\nUID:water-place-g@cultifolio\r\n');
     expect(t).not.toContain('EXDATE');
   });
-  it('leaves out the repeats in the dry months, ends the repeat at the horizon, and says so', () => {
+  // Round sixty-one: a series per run of watered months, restarting on the first day after the dry months, in place of
+  // one cadence with its dry repeats excepted (the grower review, "The .ics, validated"); r61a-calendar.test.ts has the rest.
+  it('leaves out the dry months, ends the last series at the horizon, and says so', () => {
     const dry = { ...r, start: '2026-11-25', dry: [12, 1, 2] };
     const t = unfold(buildIcs([dry], NOW));
     const until = addDays('2026-11-25', DRY_HORIZON_DAYS).replaceAll('-', '');
     expect(t).toContain(`RRULE:FREQ=DAILY;INTERVAL=10;UNTIL=${until}`);
-    const ex = [...t.matchAll(/EXDATE;VALUE=DATE:([0-9,]+)/g)].flatMap((m) => m[1].split(','));
-    expect(ex).toContain('20261205');
-    expect(ex).toContain('20270104');
-    expect(ex).not.toContain('20261125'); // November is not dry
-    expect(ex.every((d) => ['12', '01', '02'].includes(d.slice(4, 6)))).toBe(true);
-    expect(ex).toEqual(dryDates(dry, addDays('2026-11-25', DRY_HORIZON_DAYS)).map((d) => d.replaceAll('-', '')));
+    expect(t).toContain('RRULE:FREQ=DAILY;INTERVAL=10;UNTIL=20261130'); // November is not dry; the first series stops before December
+    expect(t).toContain('DTSTART;VALUE=DATE:20270301'); // and the next starts on the first day after the dry months
+    expect(t).not.toContain('EXDATE');
+    expect(wetRuns(dry).every((w) => !['12', '01', '02'].includes(w.from.slice(5, 7)) && !['12', '01', '02'].includes(w.to.slice(5, 7)))).toBe(true);
     expect(t).toMatch(/DESCRIPTION:.*download the calendar again/);
   });
   it('escapes backslash, semicolon, comma and line breaks in text', () => {
@@ -129,14 +129,15 @@ describe('prices and what was spent', () => {
     expect(readPrice('12 €')).toEqual({ v: 12, cur: '€' });
     for (const no of ['a swap', '3 for 10', '1,200', '£6 $7', 'free', '12-15', '-5', '']) expect(readPrice(no), no).toBeNull();
   });
-  it('totals the plain prices, counts the rest as not read, and gives no total across currencies', () => {
-    expect(spendOf(['12', '8.50', 'a swap', null, '', '£3'])).toMatchObject({ mixed: true, skipped: 1 });
+  // Round sixty-one: a total per currency, never across them, in place of no total at all (the grower review, 12).
+  it('totals the plain prices per currency, and counts the rest as not read', () => {
+    expect(spendOf(['12', '8.50', 'a swap', null, '', '£3'])).toMatchObject({ counted: 3, skipped: 1 });
     const s = spendOf(['£12', '£8.50', 'a swap', null, '£0.25']);
-    expect(s).toEqual({ total: 20.75, counted: 3, skipped: 1, currency: '£', mixed: false });
+    expect(s).toEqual({ parts: [{ cur: '£', total: 20.75, counted: 3 }], counted: 3, skipped: 1 });
     expect(amountWords(s)).toBe('£20.75 on 3 plants');
     expect(amountWords(spendOf(['12', '3']))).toBe('15 on 2 plants');
     expect(amountWords(spendOf(['12 EUR']))).toBe('12 EUR on 1 plant');
-    expect(amountWords(spendOf(['12', '£3']))).toMatch(/more than one currency/);
+    expect(amountWords(spendOf(['12', '£3']))).toBe('£3 on 1 plant and 12 on 1 plant with no currency given');
   });
   it('says this year and all time, and how many prices could not be read', () => {
     const w = spendWords(spendOf(['£5']), spendOf(['£5', '£10', 'a swap', 'two for 5']), '2026');

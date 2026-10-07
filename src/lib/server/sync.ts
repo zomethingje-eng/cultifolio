@@ -17,6 +17,7 @@
  *                              put right from an R2 listing (the slow, authoritative figure)
  *   ipbytes:<ip>:<yyyy-mm-dd>  bytes stored from one address today
  *   vaults:<ip>:<yyyy-mm-dd>   vaults created from one address today
+ *   vaultplace:<id>            the day a vault took its place, without the counter object (round sixty-one)
  *   rl:<bucket>:<ip>:<window>  requests from one address in one rate-limit window
  * (<ip> is the IPv4 address, or the /64 of an IPv6 one: see `addressKey`)
  *
@@ -62,25 +63,36 @@ const TOKEN = /^[0-9a-f]{64}$/;
  * grower's; now the device that folded the removal asks for the bytes to go. False when nothing was there; a
  * `PhotoBusy` when the name is held by an upload or another removal of it (the route answers 503 with Retry-After);
  * 'newer' when an upload claimed the name after the removal (`removed`, its own time when the device sends it, else when
- * the request came), or R2 holds an object stored after `removed`: that upload is a newer generation of the
- * photograph, revived on another device, and is left alone (round sixty; A12, B5).
+ * the request came): that upload is a newer generation of the photograph, revived on another device, and is left alone
+ * (round sixty; A12, B5). Round sixty-one (the server review, 1 to 3; B9): decided by claims alone, since R2's own upload
+ * time is as late for a first upload that lands after the removal as for a revival, and that photograph stayed on the
+ * server for good; a claim is two days old at most, so a late first upload is removed once its claim is swept (the
+ * device asks again after a 409). And the proof is checked first, before the hold and the claim, so a request without it
+ * learns nothing of when the photograph was uploaded and holds nothing.
  */
 export async function deleteCounted(r2: R2Bucket, id: string, meta: VaultMeta, key: string, quota?: Quota, proof?: string | null, removed: number | null = null): Promise<boolean | 'noproof' | 'newer' | PhotoBusy> {
   const since = removed ?? quota?.now ?? Date.now();
+  // The token alone could add; it must not be able to destroy. The object carries the proof its upload left, and only a
+  // key-holder can repeat it (round fifty-one, 2).
+  const proved = (o: { customMetadata?: Record<string, string> } | null) => !!o?.customMetadata?.drop && !!proof && o.customMetadata.drop === proof;
+  const first = await r2.head(key);
+  if (first && !proved(first)) return 'noproof';
   // The look, the proof, the delete and the give back are one step for this name: a removal that looked at one upload
   // and then deleted the next one (a photograph revived on another device in between) lost it for good (round sixty;
   // the self-review, P3; two outside reviews, A12 and B5). An upload of the same name waits for it, and it for an upload.
-  return withHold(quota, id, key, async (claimed) => {
-    if (claimed != null && claimed > since) return 'newer';
+  const r = await withHold(quota, id, key, async (claimed, fence) => {
     const existing = await r2.head(key);
     if (!existing) return false;
-    // R2's own record of the upload, when the device said when it removed the photograph: an object stored after that is
-    // newer than the removal, even once its claim has been swept.
-    if (removed != null && existing.uploaded instanceof Date && existing.uploaded.getTime() > removed) return 'newer';
-    // The token alone could add; it must not be able to destroy. The object carries the proof its upload left, and only a
-    // key-holder can repeat it (round fifty-one, 2).
-    const kept = existing.customMetadata?.drop;
-    if (!kept || !proof || kept !== proof) return 'noproof';
+    if (!proved(existing)) return 'noproof';
+    if (claimed != null && claimed > since) return 'newer';
+    // Fenced (round sixty-one; B10): the hold is renewed and the object read again just before the delete. A hold that
+    // lapsed (a stalled call) and was taken by another request, or an object that is no longer the one looked at, is
+    // left alone; the device asks again. A delete call that itself stalls past the hold can still remove a replacement
+    // stored meanwhile: generation-addressed photo objects close that, in the round after this one (/about/formats).
+    if (!(await fence())) return new PhotoBusy(DELETE_BUSY_S);
+    const again = await r2.head(key);
+    if (!again) return false;
+    if (receipt(key, again) !== receipt(key, existing)) return 'newer';
     await r2.delete(key);
     const size = existing.size;
     const kv = quota?.kv;
@@ -101,7 +113,8 @@ export async function deleteCounted(r2: R2Bucket, id: string, meta: VaultMeta, k
       // after the listing already left them out (round sixty; the server review, 10).
       if (held == null) {
         await objs.vault.give('vault', 0, day(now), token);
-        meta.bytes = await vaultBytes(r2, kv, id, meta, now, false, quota);
+        // A listing crossed twice leaves the total unwritten: the next request lists, and the removal stands (round sixty-one).
+        meta.bytes = await vaultBytes(r2, kv, id, meta, now, false, quota).catch((e) => { if (e instanceof RecountCrossed) return meta.bytes; throw e; });
       } else meta.bytes = await objs.vault.give('vault', size, day(now), token);
       await writeMeta(r2, id, meta).catch(() => {});
       return true;
@@ -113,7 +126,12 @@ export async function deleteCounted(r2: R2Bucket, id: string, meta: VaultMeta, k
     await writeMeta(r2, id, meta).catch(() => {});
     return true;
   });
+  // A removal's wait is one fixed figure, never the time left on another request's hold (round sixty-one; the server
+  // review, 3: the photo route answers without timing information).
+  return r instanceof PhotoBusy ? new PhotoBusy(DELETE_BUSY_S) : r;
 }
+/** How long a removal that found the name busy is asked to wait, whatever held it (round sixty-one). */
+const DELETE_BUSY_S = 10;
 
 /**
  * A removed object's give-back receipt: its key and R2's `version`, which is unique per upload, so the same bytes
@@ -137,14 +155,15 @@ export class PhotoBusy extends Error {
 
 /**
  * Run `fn` holding a photograph's name in the vault's counter object, so a removal and an upload of it cannot interleave
- * (round sixty). `fn` is told when an upload last claimed the name (null when none is known). Without the object (tests,
- * a bare dev server) it runs as before. A hold the object cannot give is the name being busy: answered with a short
+ * (round sixty). `fn` is told when an upload last claimed the name (null when none is known), and given `fence`, which
+ * renews the hold and says whether it is still this request's (round sixty-one; B10). Without the object (tests, a bare
+ * dev server) it runs as before. A hold the object cannot give is the name being busy: answered with a short
  * wait, never run unheld. `claims` says whether a result is an upload's claim on the name, recorded as the hold is freed.
  */
-async function withHold<T>(quota: Quota | undefined, id: string, key: string, fn: (claimed: number | null) => Promise<T>, claims: (r: T) => boolean = () => false): Promise<T | PhotoBusy> {
+async function withHold<T>(quota: Quota | undefined, id: string, key: string, fn: (claimed: number | null, fence: () => Promise<boolean>) => Promise<T>, claims: (r: T) => boolean = () => false): Promise<T | PhotoBusy> {
   const ns = quota?.counters;
   const o = ns ? ns.get(ns.idFromName(`bytes:${id}`)) : null;
-  if (!o?.hold || !o.unhold) return fn(null);
+  if (!o?.hold || !o.unhold) return fn(null, async () => true);
   const now = quota?.now ?? Date.now();
   let h: Awaited<ReturnType<NonNullable<typeof o.hold>>>;
   try {
@@ -155,8 +174,10 @@ async function withHold<T>(quota: Quota | undefined, id: string, key: string, fn
   }
   if (!h.ok) return new PhotoBusy(Math.min(60, h.retryAfter));
   let claimed = false;
+  // A renewal that cannot be asked is a hold not known to be this request's: the step it guards is skipped.
+  const fence = async () => (o.renew ? await o.renew(key, h.token, quota?.now ?? Date.now()).catch(() => false) : true);
   try {
-    const r = await fn(h.claimed ?? null);
+    const r = await fn(h.claimed ?? null, fence);
     claimed = claims(r);
     return r;
   } finally {
@@ -429,15 +450,18 @@ export async function vaultBytes(r2: R2Bucket, kv: KVNamespace, id: string, meta
   if (objs) {
     const held = await objs.vault.bytesToday(today);
     if (held != null && !open) return held;
-    for (let tries = 0; ; tries++) {
+    for (let tries = 0; tries < RECOUNT_TRIES; tries++) {
       const g = await objs.vault.generation();
       if (held != null && g.at != null && now - g.at < RECOUNT_MS) return held;
       const bytes = await recount(r2, id, meta);
       // Committed only if no upload landed and nothing was removed while the listing ran: a listing taken before an
-      // upload landed and written after it erased that upload's charge (round sixty; the second outside review, B7).
-      const set = await objs.vault.setBytes(bytes, today, tries === 0 ? g.gen : null, now);
+      // upload landed and written after it erased that upload's charge (round sixty; the second outside review, B7). The
+      // second try keeps the check too: it was committed unchecked, and a landing that crossed it was erased (round
+      // sixty-one; B11).
+      const set = await objs.vault.setBytes(bytes, today, g.gen, now);
       if (set != null) return set;
     }
+    throw new RecountCrossed();
   }
   const row = await kv.get<BytesRow>(`bytes:${id}`, 'json').catch(() => null);
   const fresh = row && row.day === today && typeof row.bytes === 'number';
@@ -448,6 +472,25 @@ export async function vaultBytes(r2: R2Bucket, kv: KVNamespace, id: string, meta
 }
 /** How recent a listing an open accepts (round sixty). */
 export const RECOUNT_MS = 3_600_000;
+/** Listings one request may make of a vault whose uploads keep crossing them, before it asks the device to try again (round sixty-one; B11). */
+export const RECOUNT_TRIES = 2;
+
+/**
+ * A vault's total could not be put right: each of its listings was crossed by an upload that landed or a removal while
+ * it ran, so neither could be written without erasing that change (round sixty-one; B11). Answered 503 with a short
+ * Retry-After, which the device waits out; nothing is stored or counted.
+ */
+export class RecountCrossed extends Error {
+  readonly status = 503;
+  constructor() {
+    super("this vault's total was crossed by other uploads while it was counted");
+  }
+  response(): Response {
+    return new Response(JSON.stringify({ error: 'The site could not count this vault just now: other uploads kept landing while it was counted. It tries again shortly.', retryAfter: RECOUNT_RETRY_S }), { status: STATUS.ceilings, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', 'retry-after': String(RECOUNT_RETRY_S) } });
+  }
+}
+/** How long a device waits after a crossed recount. */
+export const RECOUNT_RETRY_S = 30;
 
 /** The byte objects of a quota, when the counter object is bound and has them: one per vault, one per address. */
 function byteObjects(quota: Quota | undefined, id: string) {
@@ -499,6 +542,7 @@ export async function storeCounted(r2: R2Bucket, id: string, meta: VaultMeta, ke
   } finally {
     if (admitted && !stored) await unadmit(r2, id, meta, quota);
   }
+  if (stored && meta.filled === false) await landed(r2, id, meta, quota);
   return stored;
 }
 async function storeCountedNow(r2: R2Bucket, id: string, meta: VaultMeta, key: string, body: Uint8Array, quota: Quota | undefined, put: () => Promise<boolean>): Promise<boolean> {
@@ -530,12 +574,14 @@ async function storeCountedNow(r2: R2Bucket, id: string, meta: VaultMeta, key: s
     try {
       v = await objs.vault.take('vault', body.length, MAX_BYTES, today, null, now);
       // A day's first upload passes a listing, with the generation read before it: a landing or a removal that crossed
-      // the listing has it refused, and it is listed again, once; then taken as it stands (round sixty; B7).
-      for (let tries = 0; 'recount' in v && tries < 2; tries++) {
+      // the listing has it refused, and it is listed again, once (round sixty; B7); the second listing is checked too,
+      // and a second crossing asks the device to try again (round sixty-one; B11).
+      for (let tries = 0; 'recount' in v && tries < RECOUNT_TRIES; tries++) {
         const g = await objs.vault.generation();
         const listed = await recount(r2, id, meta);
-        v = await objs.vault.take('vault', body.length, MAX_BYTES, today, listed, now, tries === 0 ? g.gen : null);
+        v = await objs.vault.take('vault', body.length, MAX_BYTES, today, listed, now, g.gen);
       }
+      if ('recount' in v) throw new RecountCrossed();
     } catch (e) {
       // The address's bytes go back whatever stopped the vault's step (a listing that threw): they stayed counted till midnight (round fifty-nine).
       await objs.address.give('address', body.length, today).catch(() => 0);
@@ -594,7 +640,7 @@ async function flushMeta(r2: R2Bucket, id: string, meta: VaultMeta, before: numb
 }
 
 /** For tests: forget when each vault's snapshot was last flushed. */
-export const resetMetaFlush = () => lastMetaFlush.clear();
+export const resetMetaFlush = () => { lastMetaFlush.clear(); touched.clear(); };
 
 /**
  * Store an immutable object once. 'same' when the name already holds these
@@ -608,6 +654,11 @@ export const resetMetaFlush = () => lastMetaFlush.clear();
  */
 export async function storeOnce(r2: R2Bucket, id: string, meta: VaultMeta, key: string, body: Uint8Array, extra: BatchMeta = {}, quota?: Quota): Promise<'stored' | 'same' | 'different'> {
   const sha = await sha256hex(body);
+  // A claim on a photograph's name is recorded only for an upload that carries the proof the stored object holds: one
+  // that stored it with its proof, or found it already there with the same proof. The bearer token alone could PUT the
+  // same bytes back with any proof, claim the name and so veto a key-holder's removal (round sixty-one; the server
+  // review, 2).
+  let proved = false;
   // A photograph is stored holding its name, as its removal is, so the two cannot interleave (round sixty): a removal
   // that looked before this upload's look, and deleted after its "already there", left the device sure of a photograph
   // the server no longer held. A batch is never removed, so it needs no hold.
@@ -615,18 +666,20 @@ export async function storeOnce(r2: R2Bucket, id: string, meta: VaultMeta, key: 
     const existing = await r2.head(key);
     if (existing) {
       const md: Partial<Record<string, string>> = existing.customMetadata ?? {};
+      proved = !!extra.drop && md.drop === extra.drop;
       if (md.sha === sha) return 'same';
       if (extra.plain && extra.device && md.plain === extra.plain && md.device === extra.device) return 'same';
       return 'different';
     }
-    if (await storeCounted(r2, id, meta, key, body, sha, extra, quota, true)) return 'stored';
+    if (await storeCounted(r2, id, meta, key, body, sha, extra, quota, true)) { proved = !!extra.drop; return 'stored'; }
     // Another upload took the name between the look and the write: judged against what it stored, as above.
     const now = await r2.head(key);
     const md: Partial<Record<string, string>> = now?.customMetadata ?? {};
+    proved = !!extra.drop && md.drop === extra.drop;
     return md.sha === sha || (extra.plain && extra.device && md.plain === extra.plain && md.device === extra.device) ? 'same' : 'different';
   };
   if (!key.includes('/photo/')) return run();
-  const r = await withHold(quota, id, key, run, (x) => x === 'stored' || x === 'same');
+  const r = await withHold(quota, id, key, run, (x) => (x === 'stored' || x === 'same') && proved);
   if (r instanceof PhotoBusy) throw r;
   return r;
 }
@@ -770,6 +823,10 @@ export type CountersNs = {
     generation?(): Promise<{ gen: number; at: number | null }>;
     hold?(name: string, now?: number): Promise<{ ok: true; token: string; claimed?: number | null } | { ok: false; retryAfter: number }>;
     unhold?(name: string, token: string, claimed?: boolean, now?: number): Promise<void>;
+    renew?(name: string, token: string, now?: number): Promise<boolean>;
+    inFlight?(now?: number): Promise<number>;
+    touch?(vault: string, day: string, max: number, seed?: number | null, legacy?: boolean, now?: number): Promise<'already' | 'adopted' | 'counted' | 'total' | 'unavailable'>;
+    upstream?(services: string[], share: number, address?: string | null, net?: string | null, now?: number): Promise<UpstreamAnswer>;
   };
 };
 /**
@@ -845,11 +902,14 @@ export async function allowCreation(kv: KVNamespace | undefined, ip: string, now
  */
 export class VaultsClosed extends Error {
   readonly status = 503;
-  constructor(public readonly which: 'total' | 'day' = 'total', private readonly now = Date.now()) {
+  /** `reclaimed`: a vault whose place was given back after 90 days without an upload, refused a place again (round sixty-one). */
+  constructor(public readonly which: 'total' | 'day' = 'total', private readonly now = Date.now(), public readonly reclaimed = false) {
     super('sync is not taking new vaults');
   }
   response(): Response {
-    const text = this.which === 'day'
+    const text = this.reclaimed
+      ? 'Sync is full for now. This vault had no upload for 90 days, so its place was given back; what it holds is kept, and it takes a place again when one is free. Your collection stays on this device.'
+      : this.which === 'day'
       ? 'Sync has taken all the new vaults it can today, and this vault holds nothing yet. Your collection stays on this device; it will try again tomorrow.'
       : 'Sync is not taking new vaults for now, and this vault holds nothing yet. Your collection stays on this device.';
     const wait = this.which === 'day' ? untilMidnight(this.now) : 86400;
@@ -880,13 +940,20 @@ export class VaultUnchecked extends Error {
  * FAILS CLOSED. A counter that throws or cannot be seeded refuses the upload for a minute (`VaultUnchecked`); before,
  * the object was stored uncounted. The routes call this before they read the body, so a refused upload costs no
  * sixteen megabytes. True when this call took the vault's place (its caller gives it back if nothing then lands).
+ *
+ * Round sixty-one: the meta says `filled` only once an object has landed (`landed`), not at admission, so a Worker
+ * stopped between the two leaves a vault whose next upload is checked again (the server review, 6). A vault that has a
+ * place is looked at once a day per isolate (`touch`): the day of its last upload is kept, and a place reclaimed after
+ * 90 days without one is taken again. Without the counter object the KV fallback counts a vault once, by a key of its
+ * own (`vaultplace:<id>`), and gives back the day's count too (the server review, 7).
  */
 export async function admitVault(r2: R2Bucket, id: string, meta: VaultMeta, quota?: Quota): Promise<boolean> {
-  if (meta.filled !== false) return false;
+  if (admitting.has(meta)) return false; // this request admitted it already (the route, before the body)
   const kv = quota?.kv;
   const ns = quota?.counters;
   const max = quota?.max ?? MAX_VAULTS;
   const now = quota?.now ?? Date.now();
+  if (meta.filled !== false) return touchVault(id, meta, quota, now);
   let took = false;
   try {
     const o = ns?.get(ns.idFromName('vaults'));
@@ -899,48 +966,127 @@ export async function admitVault(r2: R2Bucket, id: string, meta: VaultMeta, quot
       took = r === 'counted';
     } else if (kv) {
       const kDay = `vaults:all:${day(now)}`;
-      const [n, nDay] = (await Promise.all([kv.get('vaults:all'), kv.get(kDay)])).map((x) => Number(x ?? 0));
-      if (n >= max) throw new VaultsClosed('total', now);
-      if (nDay >= (quota?.perDay ?? MAX_NEW_VAULTS_ALL_PER_DAY)) throw new VaultsClosed('day', now);
-      await kv.put('vaults:all', String(n + 1));
-      await kv.put(kDay, String(nDay + 1), { expiration: endOfNextDay(day(now)) }).catch(() => {});
-      took = true;
+      const kPlace = `vaultplace:${id}`;
+      const [n, nDay, placed] = await Promise.all([kv.get('vaults:all'), kv.get(kDay), kv.get(kPlace)]);
+      if (placed == null) {
+        if (Number(n ?? 0) >= max) throw new VaultsClosed('total', now);
+        if (Number(nDay ?? 0) >= (quota?.perDay ?? MAX_NEW_VAULTS_ALL_PER_DAY)) throw new VaultsClosed('day', now);
+        // The vault's own key first: a second first upload that reads it is not counted again (round sixty-one).
+        await kv.put(kPlace, day(now));
+        await kv.put('vaults:all', String(Number(n ?? 0) + 1));
+        await kv.put(kDay, String(Number(nDay ?? 0) + 1), { expiration: endOfNextDay(day(now)) }).catch(() => {});
+        took = true;
+      }
     } // no counters at all (a test, a bare dev server): nothing to count against
   } catch (e) {
     if (e instanceof VaultsClosed || e instanceof VaultUnchecked) throw e;
     console.error("sync: a vault's first object could not be counted under the ceiling in all; refused for a minute", e);
     throw new VaultUnchecked();
   }
-  meta.filled = true;
-  await writeMeta(r2, id, meta).catch(() => {});
+  admitting.add(meta);
   return took;
+}
+/** The metas (one per request) whose vault this request has admitted: its store does not ask again (round sixty-one). */
+const admitting = new WeakSet<VaultMeta>();
+/** Vaults with a place looked at today by this isolate, by id: the day. Bounded, as the rate windows are. */
+const touched = new Map<string, string>();
+
+/**
+ * A vault that has a place uploads (round sixty-one): once a day per isolate the counter object keeps the day, and a
+ * vault whose place was reclaimed after 90 days without an upload takes one again, under the ceiling in all. Past it the
+ * upload is refused as a new vault is, in words that say the vault holds what it holds. A counter that cannot be asked
+ * is let go for this request (asked again by the next): a vault that has a place is not refused for it.
+ */
+async function touchVault(id: string, meta: VaultMeta, quota: Quota | undefined, now: number): Promise<boolean> {
+  const ns = quota?.counters;
+  const o = ns?.get(ns.idFromName('vaults'));
+  if (!o?.touch) return false;
+  const today = day(now);
+  if (touched.get(id) === today) return false;
+  let r: Awaited<ReturnType<NonNullable<typeof o.touch>>>;
+  try {
+    let seed: number | null = 0;
+    try { seed = quota?.kv ? Number((await quota.kv.get('vaults:all')) ?? 0) : 0; } catch { seed = null; }
+    r = await o.touch(id, today, quota?.max ?? MAX_VAULTS, seed, meta.filled === undefined, now);
+  } catch (e) {
+    console.error("sync: a vault's place could not be looked at; this upload goes on, and the next asks again", e);
+    return false;
+  }
+  if (r === 'total') throw new VaultsClosed('total', now, true);
+  if (r === 'unavailable') return false;
+  if (touched.size > 5000) touched.clear();
+  touched.set(id, today);
+  return r === 'counted';
+}
+
+/**
+ * A vault's first object has landed (round sixty-one; the server review, 5 and 6): its place is asked for once more,
+ * past any ceiling, since the object is stored and a concurrent first upload that failed may have given the place back
+ * while this one was landing; then the meta says `filled`. Best-effort, and logged when it fails: the next upload, whose
+ * meta still reads unfilled, asks again.
+ */
+async function landed(r2: R2Bucket, id: string, meta: VaultMeta, quota?: Quota): Promise<void> {
+  const now = quota?.now ?? Date.now();
+  try {
+    const ns = quota?.counters;
+    const o = ns?.get(ns.idFromName('vaults'));
+    if (o?.fill) {
+      let seed: number | null = 0;
+      try { seed = quota?.kv ? Number((await quota.kv.get('vaults:all')) ?? 0) : 0; } catch { seed = null; }
+      const r = await o.fill(id, Infinity, seed, day(now), Infinity, now);
+      if (r === 'unavailable') return;
+    } else if (quota?.kv && (await quota.kv.get(`vaultplace:${id}`)) == null) {
+      const n = Number((await quota.kv.get('vaults:all')) ?? 0);
+      await quota.kv.put(`vaultplace:${id}`, day(now));
+      await quota.kv.put('vaults:all', String(n + 1));
+    }
+    meta.filled = true;
+    await writeMeta(r2, id, meta);
+  } catch (e) {
+    console.error("sync: a vault's first object landed and its place was not confirmed; the next upload asks again", e);
+  }
 }
 
 /**
  * A vault admitted by this request whose object then did not land: its place goes back, unless the vault already holds
- * an object (another upload of it landed), and its meta says unfilled again so its next upload is counted (round sixty;
- * B8). Best-effort, and logged when it fails: the place is then held until the operator looks.
+ * an object (another upload of it landed) or another upload of it is in flight (round sixty-one; the server review, 5),
+ * and its meta still says unfilled, so its next upload is counted (round sixty; B8). Without the counter object, the
+ * vault's own key and the day's count go back too (round sixty-one; the server review, 7). Best-effort, and logged when
+ * it fails: the place is then held until the 90-day sweep gives it back.
  */
 export async function unadmit(r2: R2Bucket, id: string, meta: VaultMeta, quota?: Quota): Promise<void> {
+  admitting.delete(meta);
   try {
-    for (const sub of ['log', 'photo']) if ((await r2.list({ prefix: `vault/${id}/${sub}/`, limit: 1 })).objects.length) return;
+    for (const sub of ['log', 'photo']) if ((await r2.list({ prefix: `vault/${id}/${sub}/`, limit: 1 })).objects.length) {
+      // The vault holds something and keeps its place; its meta can say so now.
+      if (meta.filled === false) { meta.filled = true; await writeMeta(r2, id, meta).catch(() => {}); }
+      return;
+    }
     const ns = quota?.counters;
+    const v = ns?.get(ns.idFromName(`bytes:${id}`));
+    if (v?.inFlight && (await v.inFlight(quota?.now ?? Date.now())) > 0) return;
     const o = ns?.get(ns.idFromName('vaults'));
     if (o?.unfill) await o.unfill(id);
     else if (quota?.kv) {
-      const n = Number((await quota.kv.get('vaults:all')) ?? 0);
+      const placed = await quota.kv.get(`vaultplace:${id}`);
+      if (placed == null) return;
+      const kDay = `vaults:all:${placed}`;
+      const [n, nDay] = (await Promise.all([quota.kv.get('vaults:all'), quota.kv.get(kDay)])).map((x) => Number(x ?? 0));
+      await quota.kv.delete(`vaultplace:${id}`);
       if (n > 0) await quota.kv.put('vaults:all', String(n - 1));
+      if (nDay > 0) await quota.kv.put(kDay, String(nDay - 1), { expiration: endOfNextDay(placed) });
     } else return;
+    // The stored meta still says unfilled (it says filled only once an object lands), so it is not written: a write here
+    // could put "unfilled" over a concurrent upload's landing.
     meta.filled = false;
-    await writeMeta(r2, id, meta);
   } catch (e) {
     console.error("sync: a vault's place was not given back after its first object failed", e);
   }
 }
 
-/** The answer for a refusal a store can throw (full, the day's bytes, a ceiling, an unchecked place, a busy name), or null for anything else. */
+/** The answer for a refusal a store can throw (full, the day's bytes, a ceiling, an unchecked place, a busy name, a crossed recount), or null for anything else. */
 export function refusal(e: unknown): Response | null {
-  return e instanceof VaultFull || e instanceof DayQuota || e instanceof VaultsClosed || e instanceof VaultUnchecked || e instanceof PhotoBusy ? e.response() : null;
+  return e instanceof VaultFull || e instanceof DayQuota || e instanceof VaultsClosed || e instanceof VaultUnchecked || e instanceof PhotoBusy || e instanceof RecountCrossed ? e.response() : null;
 }
 
 /** A creation counted by the object and then not made (the vault write threw): the count goes back, so a grower retrying through an R2 blip is not told they made too many (round twenty-two, 1). Best-effort. */
@@ -982,7 +1128,7 @@ export const RATE = {
   index: { limit: 6, windowMs: 600_000 },
   /** A species or front page rendered that the page cache cannot hold (a `?was=` page, a client navigation's data, a HEAD the cache did not have): generous, since a reader clicks through many, but bounded (round sixty; the server review, 6). */
   render: { limit: 1200, windowMs: 600_000 },
-  /** Calls to another service under this site's name (MET Norway, the NWS, GBIF), for every address together: a pool of addresses could otherwise get the site's User-Agent blocked, and the frost watch would say "not checked" for everyone (round sixty; the server review, 16). Counted under the one key `all`. */
+  /** Calls to another service under this site's name, for every address together: a pool of addresses could otherwise get the site's User-Agent blocked, and the frost watch would say "not checked" for everyone (round sixty; the server review, 16). Since round sixty-one each service (MET Norway, the NWS, GBIF) has a share of its own of this many a minute, counted in the counter object, and one address may take a tenth of a share (`upstreamCall`). */
   upstream: { limit: 600, windowMs: 60_000 }
 } as const;
 export type RateBucket = keyof typeof RATE;
@@ -1093,13 +1239,67 @@ export function networkKey(ip: string): string | null {
  */
 const UPSTREAM: ReadonlySet<RateBucket> = new Set(['forecast', 'names', 'match', 'search', 'searchmiss', 'reference', 'sync', 'syncobj', 'index', 'sheets', 'render']);
 export const NET_RATE_FACTOR = 4;
+/** The services this site calls under its own name, each with its own share of `RATE.upstream` a minute (round sixty-one). */
+export type Upstream = 'met' | 'nws' | 'gbif';
+export type UpstreamAnswer = { ok: true } | { ok: false; who: 'site' | 'address'; service: string; retryAfter: number };
+/** The words of a call the site held back (round sixty-one; the triage, 6). */
+export const HELD_BACK = "not asked: this site's calls are used up for this minute";
+export const HELD_BACK_ADDRESS = "not asked: this address has used its part of this site's calls for this minute";
+
 /**
- * The site's own allowance of calls to another service, for every address together (`RATE.upstream`). True when the call
- * may go; false when the minute's are spent, and the caller answers as it does for a source that did not answer: not
- * checked (round sixty; the server review, 16).
+ * The site's own calls to other services (round sixty-one; the server review, 4; B13). Each of MET Norway, the NWS and
+ * GBIF has a share of `RATE.upstream.limit` calls a minute for every address together, and one address (`ip`, keyed as
+ * `clientIp` keys it) may take at most a tenth of a share, an IPv6 /48 four tenths: one host spent the whole minute in a
+ * second, and every other visitor was told the source "did not answer". All of `services` are taken or none: a US
+ * forecast is two calls, MET's and the NWS's. `ip` null counts the share alone (the old-name check, which has no reader).
+ *
+ * Counted in the counter object named "upstream", so the cap is one for the whole site. Without the binding, or when the
+ * object does not answer, each isolate counts in its own memory and shares the count through KV once a second: that
+ * bounds each isolate exactly and the site only roughly, since isolates that open the same minute each pass a share
+ * before they see one another's counts.
+ */
+export async function upstreamCall(platform: App.Platform | undefined, services: Upstream[], ip: string | null, now = Date.now()): Promise<UpstreamAnswer> {
+  const share = RATE.upstream.limit;
+  const net = ip ? networkKey(ip) : null;
+  const ns = platform?.env?.COUNTERS as unknown as CountersNs | undefined;
+  if (ns) {
+    try {
+      const o = ns.get(ns.idFromName('upstream'));
+      if (o.upstream) return await o.upstream(services, share, ip, net, now);
+    } catch (e) {
+      console.error("sync: the counter of this site's outside calls did not answer; counted in this isolate for now", e);
+    }
+  }
+  const kv = platform?.env?.QUEUE;
+  const retry = (r: { ok: false; retryAfter: number }) => r.retryAfter;
+  for (const s of services) {
+    for (const [who, scale] of [[ip, UPSTREAM_ADDRESS_PART], [net, UPSTREAM_ADDRESS_PART * NET_RATE_FACTOR]] as const) {
+      if (!who) continue;
+      const r = await rateLimit(kv, 'upstream', `${s}:${who}`, now, 1_000, scale);
+      if (!r.ok) return { ok: false, who: 'address', service: s, retryAfter: retry(r) };
+    }
+    const r = await rateLimit(kv, 'upstream', s, now, 1_000);
+    if (!r.ok) return { ok: false, who: 'site', service: s, retryAfter: retry(r) };
+  }
+  return { ok: true };
+}
+/** One address's part of a share in a minute; the same figure as `UPSTREAM_ADDRESS_PART` in counters.ts, which this module cannot import. */
+export const UPSTREAM_ADDRESS_PART = 0.1;
+/**
+ * The old form: true when a call to GBIF may go, by the share alone (round sixty). Kept for the callers that have not
+ * moved to `upstreamCall`.
  */
 export async function upstreamAllowed(platform: App.Platform | undefined, now = Date.now()): Promise<boolean> {
-  return (await rateLimit(platform?.env?.QUEUE, 'upstream', 'all', now, 1_000)).ok;
+  return (await upstreamCall(platform, ['gbif'], null, now)).ok;
+}
+/**
+ * The answer for a call the site held back: 503 with Retry-After to the next minute when the site's share is used up,
+ * 429 when this address has used its part; plain JSON, never cached, and `held: true` so a page can say that the
+ * source was not asked, not that it did not answer (rule 2).
+ */
+export function heldBack(r: Extract<UpstreamAnswer, { ok: false }>): Response {
+  if (r.who === 'address') return tooMany(HELD_BACK_ADDRESS, r.retryAfter, { held: true, service: r.service });
+  return json({ error: HELD_BACK, held: true, service: r.service, retryAfter: r.retryAfter }, { status: STATUS.ceilings, headers: { 'retry-after': String(r.retryAfter), 'cache-control': 'no-store' } });
 }
 /** Check the bucket for this request; a 429 Response to return, or null to go on. */
 export async function limited(platform: App.Platform | undefined, getClientAddress: () => string, bucket: RateBucket): Promise<Response | null> {

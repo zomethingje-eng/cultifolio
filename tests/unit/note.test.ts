@@ -65,7 +65,7 @@ describe('the label line', () => {
     expect(careLine({ scientific: 'Tylecodon pearsonii', family: 'Crassulaceae', months: namaqua, lat: -30, extremes: null, extremesStatus: 'sea' })).toBe('winter rain Nov–Feb · sky 20–58 DLI');
     expect(careLine({ scientific: 'Tylecodon pearsonii', family: 'Crassulaceae', months: namaqua, lat: -30, extremes: ex }, { readerLat: -34 })).toBe('winter rain May–Aug · hab. night 4.1 °C · sky 20–58 DLI');
     expect(careLine({ scientific: 'Aglaonema commutatum', family: 'Araceae', months: equatorial, lat: 1 })).toBe('rain Mar–May, Oct–Nov, flat T'); // no extremes: no night on the label (round thirty-eight, R1-2)
-    expect(careLine({ scientific: 'Monstera deliciosa', family: 'Araceae' })).toBe('group min 12 °C');
+    expect(careLine({ scientific: 'Monstera deliciosa', family: 'Araceae' })).toBe('group min 12 °C (convention, no source)'); // said as a convention (round sixty-one; visitor 7)
     // The table's convention never stands beside or over a habitat night: no floor is raised (round sixty; self-review 3).
     expect(careLine({ scientific: 'Monstera deliciosa', family: 'Araceae', months: namaqua, lat: -30, extremes: ex })).toBe('winter rain Nov–Feb · hab. night 4.1 °C · sky 20–58 DLI');
     expect(careLine({ scientific: 'Nobodia knowsii', family: 'Asparagaceae' })).toBe('');

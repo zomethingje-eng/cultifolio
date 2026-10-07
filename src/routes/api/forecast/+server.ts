@@ -2,7 +2,7 @@ import { parseUnits } from '$core/units';
 import { json, error } from '@sveltejs/kit';
 import { metUrl, reduceMet, nwsAlertsUrl, reduceNws, isUS, frostRisk, type MetResponse } from '$lib/weather/forecast';
 import { USER_AGENT } from '$dossier/fetch';
-import { limited, upstreamAllowed } from '$lib/server/sync';
+import { limited, upstreamCall, heldBack, clientIp } from '$lib/server/sync';
 import type { RequestHandler } from './$types';
 
 /**
@@ -57,9 +57,12 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   // site shares a cache line, not an allowance. A stream of distinct coordinates is what the limit is for.
   const stop = await limited(platform, getClientAddress, 'forecast');
   if (stop) return stop;
-  // The site's own minute of calls to MET and the NWS, for every address together: past it the page says "not checked",
-  // as it does for a source that did not answer, and the site's User-Agent is never the one MET blocks (round sixty; the server review, 16).
-  if (!(await upstreamAllowed(platform))) return notAnswered();
+  // The site's own minute of calls to MET and the NWS, for every address together, so the site's User-Agent is never the
+  // one MET blocks (round sixty; the server review, 16). Since round sixty-one each has its own share, one address takes
+  // at most a tenth of it, a US point takes from both (two calls), and a call held back is said as held back, 503 "not
+  // asked", never as a source that did not answer (rule 2; the server review, 4; B13).
+  const call = await upstreamCall(platform, isUS(la, lo) ? ['met', 'nws'] : ['met'], clientIp(getClientAddress));
+  if (!call.ok) return heldBack(call);
   const headers = { 'user-agent': USER_AGENT, accept: 'application/json' };
   // Anything short of a well-formed answer from MET (unreachable, a non-2xx, a body that is not JSON or not a forecast) is one
   // plain 502 with no-store: the page says "not checked", and a bad hour is never cached.

@@ -5,6 +5,7 @@
  * before is lost); a place with coordinates stands in for it when it is not set.
  */
 import { browser } from '$app/environment';
+import { readSetting, sampleTab, writeSetting } from '$lib/ui/stored';
 
 const KEY = 'cultifolio.frost.site';
 export interface Site {
@@ -19,7 +20,7 @@ class SiteStore {
   load() {
     if (this.loaded || !browser) return;
     try {
-      const s = localStorage.getItem(KEY);
+      const s = readSetting(KEY, 'collection'); // the sample's own, never the grower's (round sixty-one)
       const v = s ? (JSON.parse(s) as Partial<Site>) : null;
       this.current = v && typeof v.lat === 'number' && typeof v.lon === 'number' && Math.abs(v.lat) <= 90 && Math.abs(v.lon) <= 180 ? { lat: v.lat, lon: v.lon, name: typeof v.name === 'string' ? v.name : undefined } : null;
     } catch {
@@ -30,6 +31,7 @@ class SiteStore {
     this.writeCookie(this.current);
   }
   private writeCookie(s: Site | null) {
+    if (sampleTab()) return; // the hemisphere cookie is the device's: never written from the sample (round sixty-one; the records review, 17)
     try {
       const v = s ? s.lat < 0 ? 's' : 'n' : null;
       for (const path of ['/species', '/compare']) document.cookie = v ? `cultifolio.hemi=${v}; path=${path}; max-age=31536000; samesite=lax` : `cultifolio.hemi=; path=${path}; max-age=0; samesite=lax`;
@@ -39,12 +41,7 @@ class SiteStore {
   }
   set(s: Site | null) {
     this.current = s;
-    try {
-      if (s) localStorage.setItem(KEY, JSON.stringify(s));
-      else localStorage.removeItem(KEY);
-    } catch {
-      /* a private window keeps it for the page */
-    }
+    writeSetting(KEY, 'collection', s ? JSON.stringify(s) : null); // a private window keeps it for the page
     // The hemisphere alone goes in a cookie, so the server renders a southern grower's months southern from the first
     // paint (and for a reader without JavaScript), the way the units cookie seeds the units. The site itself stays here.
     // The cookie is scoped to the two paths that read it, so it rides on no other request, sync and the API included

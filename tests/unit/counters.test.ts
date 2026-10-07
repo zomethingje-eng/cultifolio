@@ -136,11 +136,12 @@ describe('Counters', () => {
     storage.fired();
     await c.tick(Date.UTC(2026, 8, 26));
     expect(storage.alarmAt()).toBe(Date.UTC(2026, 8, 27));
-    // the next midnight sweeps them; only `all` and `f:V` remain, which never go, so it is not woken again
+    // the next midnight sweeps them; only `all` and `f:V` remain. A place is sweepable since round sixty-one (it is
+    // reclaimed after 90 days without an upload), so the vaults object wakes each midnight while a vault holds one
     storage.fired();
     await c.tick(Date.UTC(2026, 8, 27));
     expect([...storage.m.keys()].sort()).toEqual(['all', 'f:V']);
-    expect(storage.alarmAt()).toBeNull();
+    expect(storage.alarmAt()).toBe(Date.UTC(2026, 8, 28));
     // a vault object: its total and generation stay; with no lease, hold, claim or token left it sleeps
     const v = make();
     await v.c.setBytes(10, '2026-09-25', null, T0);

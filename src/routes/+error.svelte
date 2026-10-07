@@ -49,7 +49,8 @@
     <!-- The search the other 404 has, so a misspelt address is one step from the page it meant (round sixty; visitor 14). -->
     <form class="find" action="/" method="get" role="search"><label for="nf-q">Search the species</label><input id="nf-q" class="searchbar" name="q" type="search" value={sp?.name ?? ''} placeholder="A name, a genus, a family or a region" /><button class="btn" type="submit">Search</button></form>
   {:else if page.status === 404}
-    <!-- Any other address: a way back in, not a dead end (round fifty-eight). -->
+    <!-- Any other address: what was asked for, and a way back in, not a dead end (round fifty-eight; the address said, round sixty-one, visitor 18). -->
+    {#if !message}<p>No page at <code>{page.url.pathname}</code>.</p>{/if}
     <form class="find" action="/" method="get" role="search"><label for="nf-q">Search the species</label><input id="nf-q" class="searchbar" name="q" type="search" placeholder="A name, a genus, a family or a region" /><button class="btn" type="submit">Search</button></form>
     <p><a href="/">The front page</a> · <a href="/plants">My plants</a> · <a href="/about/how">How it is made</a></p>
   {/if}

@@ -206,7 +206,7 @@ describe('Q1b: a peer change five years ahead after a never-synced device meets 
 });
 
 describe('Q2b: the writer and its peers judge a fast clock\'s stamps by different rules', () => {
-  it('a device three days fast pushes once and is put right before a second reading: the peers park its edit by arrival, the writer keeps it folded for good', async () => {
+  it('a device three days fast pushes once and is put right before a second reading: the peers park its edit by arrival; the writer\'s fold alone, with no listing, keeps it folded (round sixty-one: the engine\'s listing parks it on the writer too; sync-engine.test.ts, r61l-engine.test.ts)', async () => {
     const { isParked } = await import('$core/log');
     const T0 = Date.now();
     vi.useFakeTimers({ toFake: ['Date'] });
@@ -228,7 +228,7 @@ describe('Q2b: the writer and its peers judge a fast clock\'s stamps by differen
     await b.store.collection.load();
     b.hlc.trustServerTime(Date.now()); // the next run agrees: no correction, nothing re-judged
     await b.store.collection.rebuild();
-    expect(b.store.collection.accession(p.id)?.notes).toBe('typed while three days fast'); // the writer shows it; every peer shows 'before'
+    expect(b.store.collection.accession(p.id)?.notes).toBe('typed while three days fast'); // no listing here: its own clock never parks it (round sixty); the engine's listing does, by the arrival (round sixty-one)
     expect(b.store.collection.parkedRecords).toBe(0);
   });
 });

@@ -7,10 +7,11 @@
   import { collection } from '$lib/db/collection.svelte';
   import { hlcWall, type Kind } from '$core/log';
   import { localDate } from '$core/dates';
+  import { fieldWords } from './held-words';
   let { kind, id }: { kind: Kind; id: string } = $props();
   const parked = $derived(collection.parkedFor(kind, id));
   const when = $derived(parked.length ? localDate(new Date(Math.max(...parked.map((c) => hlcWall(c.t))))) : '');
-  const what = $derived(parked.map((c) => (c.field === '_deleted' ? (c.value ? 'removal' : 'restore') : c.field)).join(', '));
+  const what = $derived(fieldWords(kind, parked).join(', ')); // the fields in words, a notes edit's base with its notes (round sixty-one)
   let busy = $state(false);
   async function go(apply: boolean) {
     if (busy) return;

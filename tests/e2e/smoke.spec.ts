@@ -20,6 +20,9 @@ function localDay(offset: number): string {
   d.setDate(d.getDate() + offset);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
+/** This year on the machine's calendar: a plant added today is numbered in it, so a test that names one reads it here
+ *  instead of writing 2026, which failed from 1 January 2027 (round sixty-one; docs/review-60/harness.md 2). */
+const year = () => localDay(0).slice(0, 4);
 async function more(p: import('@playwright/test').Page, name: string) {
   await p.locator('.idcard .cardmenu > button').click();
   await p.locator('#card-menu [role=menuitem]', { hasText: name }).click();
@@ -610,7 +613,7 @@ test('the species page condenses its cultivation sheet into a note by rule', asy
   await expect(season).toContainText("72 mm of rain a year, under the rule's 120 mm, so no rainy season is read; the cooler six months are November to April");
   await expect(season).toContainText('rain and temperature rules, CHELSA');
   await expect(season).not.toContainText(/fog/);
-  await expect(page.locator('.glance .card.cold')).toContainText('Cold floor: 1 night in 100 is colder');
+  await expect(page.locator('.glance .card.cold')).toContainText('Record low 4.0 °C in 40 years');
   await expect(page.locator('.glance .card.cold')).toContainText('6.5');
   // the note's floor is the card's floor, the same figure with the same quantity named
   await expect(page.locator('.cult', { hasText: /^Warmth and air/ }).first().locator('.body')).toContainText('Cold floor: 6.5 °C, which is the 1st-percentile night over 40 years at a typical spot in the range (NASA POWER).');
@@ -647,7 +650,7 @@ test('first run: the front page explains itself once, and stops once there is a 
   await expect(page.locator('#welcome')).toHaveCount(0);
   // and on a phone every button is a finger's size
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/plants/2026-0001');
+  await page.goto(`/plants/${year()}-0001`);
   const small = await page.evaluate(() => [...document.querySelectorAll('a.btn, button.btn, #tabbar a, .chipbtn')].map((e) => e.getBoundingClientRect().height).filter((h) => h > 0 && h < 40));
   expect(small).toEqual([]);
 });
@@ -994,9 +997,9 @@ test('a refused source is a distinct state on every surface: species page, front
   await expect(tok.locator('.why')).toContainText('GBIF media did not answer when this page was built. Not asked, or not answered, is not "none"');
   await expect(page.locator('.idcard .pill', { hasText: 'Climate known' })).toHaveCount(0); // what is known is shown, not announced
   // climate refused: its own line, with the detail as a sentence
-  await expect(page.locator('.notice', { hasText: 'Occurrence source' })).toContainText('Not checked. Occurrence source did not answer. This is not a statement that no climate exists.');
+  await expect(page.locator('.notice', { hasText: 'Occurrence source' })).toContainText('Not checked. The occurrence source did not answer when this page was built. This is not a statement that no climate exists.');
   // the cultivation section does not say "no habitat climate"
-  await expect(page.locator('.note-slot')).toContainText('Not checked: Occurrence source did not answer. No sheet is derived from an answer that was not given');
+  await expect(page.locator('.note-slot')).toContainText('Not checked. The occurrence source did not answer when this page was built. No sheet is derived from an answer that was not given');
   await expect(page.locator('.note-slot')).not.toContainText('no habitat climate for this species');
   // the map caption does not promise a marker there is none of
   await expect(page.locator('.mapcap').first()).not.toContainText('marker');
@@ -1254,14 +1257,21 @@ test('removing asks twice; a species photograph that fails to load leaves the na
   await expect(page.locator('.accrow', { hasText: '2099-0001' })).toHaveCount(0);
 });
 
-test('the browser talks to no third-party host while a name is typed, and the error page promises nothing', async ({ page }) => {
+test('the browser talks to no third-party host while a name is typed, and the error page promises nothing', async ({ page, baseURL }) => {
   const away: string[] = [];
-  page.on('request', (r) => { const u = new URL(r.url()); if (u.host !== '127.0.0.1:4173') away.push(r.url()); });
+  const own = new URL(baseURL!).host; // the server under test, on whatever port it was given (round sixty-one; docs/review-60/harness.md 18)
+  page.on('request', (r) => { const u = new URL(r.url()); if (u.host !== own) away.push(r.url()); });
   await page.goto('/plants/new');
+  await ready(page);
+  const names = page.waitForResponse((r) => r.url().includes('/api/names?q='));
   await page.fill('#species-name', 'Copiapoa cin');
   await expect(page.locator('.picker [role=option]').first()).toBeVisible(); // the suggestions answered (round sixty; the harness review, 14: a fixed 600 ms)
   await page.locator('#species-name').blur();
-  await page.waitForTimeout(600); // a negative: no request may follow, and only a pause can show that none did; the pause is short and after the page has gone quiet (round sixty; the harness review, 14)
+  // Not a fixed pause: what typing and leaving the field ask is the name service (answered) and the blur's own exact-name
+  // check, which runs as the suggestions close and reuses that answer; both settled, nothing else is left to ask
+  // (round sixty-one; docs/review-60/harness.md 18, review B).
+  await names;
+  await expect(page.locator('#species-name')).toHaveAttribute('aria-expanded', 'false');
   expect(away).toEqual([]);
   await page.goto('/species/nonsensia-fakeii');
   await expect(page.locator('.err')).toContainText('The reference has no Nonsensia: it is built from a fixed list of names');
@@ -1316,11 +1326,14 @@ test('the species field is a combobox: arrows and Enter pick a suggestion; Enter
 
   // a partial name: Enter asks, and nothing is filed under "Welwit"
   await page.goto('/plants/new');
+  await ready(page);
+  const welwit = page.waitForResponse((r) => r.url().includes('/api/names?q=Welwit'));
   await input.fill('Welwit');
-  // The suggestion debounce: a genus fragment matches nothing local, so nothing appears to wait for, and the pause stands
-  // for the debounce. The outcome is now one, not either: with no suggestion there is no nearest name to offer (round
-  // sixty; the harness review, 14: the assertion took both).
-  await page.waitForTimeout(400);
+  // The suggestion debounce: a genus fragment matches nothing local, so nothing appears; what the debounce ends in is the
+  // name service's request, so the test waits for its answer, not a fixed 400 ms (round sixty-one; docs/review-60/harness.md
+  // 18, review B). The outcome is one, not either: with no suggestion there is no nearest name to offer (round sixty; the
+  // harness review, 14: the assertion took both).
+  await welwit;
   await input.press('Enter');
   await expect(page.locator('.picker .hint:not(.svc)')).toContainText('Pick a name from the list');
   await expect(page).toHaveURL(/\/plants\/new$/);
@@ -1652,7 +1665,7 @@ test('the species page answers in the first screen and relates the species by ge
   await page.goto('/species/copiapoa-cinerea');
   const glance = page.locator('.glance');
   await expect(glance.locator('.card', { hasText: 'Cold floor' })).toContainText('6.5');
-  await expect(glance.locator('.card.cold')).toContainText('Cold floor: 1 night in 100 is colder'); // the figure says what it is (round sixty)
+  await expect(glance.locator('.card.cold')).toContainText('Record low 4.0 °C in 40 years'); // the figure says what it is (round sixty)
   await expect(glance.locator('.card:not(.season)', { hasText: 'Rain' })).toContainText('72');
   // related: the nearest habitat climate from the index, with the rule beside it
   await expect(page.locator('#s-related')).toBeVisible();
@@ -1875,7 +1888,7 @@ test('a visitor sees all five places in the top bar and the menu, and a lighter 
   await page.keyboard.press('Escape');
   // the species page says what it is, once, under the name
   await page.goto('/species/copiapoa-cinerea');
-  await expect(page.locator('.derived')).toContainText('nothing is written by a person or a model');
+  await expect(page.locator('.derived')).toContainText('nothing about this species is written for its page by a person or by AI');
   await expect(page.locator('.pill', { hasText: 'open records' })).toHaveCount(0); // the fact strip says it
   await expect(page.locator('.facts')).toContainText('52 open');
   await expect(page.locator('h2.sec#s-glance')).toHaveCount(1); // the heading is there for the section bar and readers; the figures speak for themselves on screen
@@ -1987,7 +2000,7 @@ test('settings previews the next number from the numbers given, and an edited ac
   await page.goto('/settings');
   await ready(page);
   await expect(page.locator('.accno')).toHaveText(/-0003$/);
-  await page.goto('/plants/2026-0001');
+  await page.goto(`/plants/${year()}-0001`);
   await more(page, 'Edit');
   await page.fill('#ed-date', '2024-03-07');
   await page.fill('#ed-from', 'A nursery');
@@ -2025,11 +2038,11 @@ test('two tabs adding at once get two numbers, and each tab sees the other\'s pl
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
   const other = await context.newPage();
   await other.goto('/plants/new?species=Copiapoa%20humilis&key=5384999');
-  await expect(page.locator('.accno').first()).toHaveText('2026-0001');
-  await expect(other.locator('.accno').first()).toHaveText('2026-0001'); // both tabs promise the same next number
+  await expect(page.locator('.accno').first()).toHaveText(`${year()}-0001`);
+  await expect(other.locator('.accno').first()).toHaveText(`${year()}-0001`); // both tabs promise the same next number
   await Promise.all([page.getByRole('button', { name: /^Add/ }).click(), other.getByRole('button', { name: /^Add/ }).click()]);
-  await expect(page).toHaveURL(/\/plants\/2026-000[12]$/);
-  await expect(other).toHaveURL(/\/plants\/2026-000[12]$/);
+  await expect(page).toHaveURL(new RegExp(`/plants/${year()}-000[12]$`));
+  await expect(other).toHaveURL(new RegExp(`/plants/${year()}-000[12]$`));
   expect(page.url()).not.toBe(other.url()); // the vault, not the tab, hands out numbers
   await page.goto('/plants');
   await expect(page.locator('.accrow')).toHaveCount(2); // the other tab's plant is here without a reload of the vault
@@ -2087,10 +2100,10 @@ test('the one search box finds a plant by its number, and the cold floor is one 
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   await page.goto('/');
   await page.waitForLoadState('networkidle'); // a value typed before hydration is dropped when the bound input hydrates
-  await page.fill('.searchbar', '2026-0001');
+  await page.fill('.searchbar', `${year()}-0001`);
   await expect(page.locator('.plantsfound .accrow')).toHaveCount(1);
   await page.locator('.searchbar').press('Enter');
-  await expect(page).toHaveURL(/\/plants\/2026-0001$/);
+  await expect(page).toHaveURL(new RegExp(`/plants/${year()}-0001$`));
   await page.goto('/species/copiapoa-cinerea');
   const glance = page.locator('.glance .card.cold');
   await expect(glance).toContainText('6.5');
@@ -2179,7 +2192,7 @@ test('no page address goes out as a referrer: the policy is on every document an
   }
 });
 
-test('the hemisphere cookie rides only on species and compare pages, never on sync or the API (round sixteen, 11)', async ({ page }) => {
+test('the hemisphere cookie rides only on species and compare pages, never on sync or the API (round sixteen, 11)', async ({ page, baseURL }) => {
   await page.goto('/settings');
   await ready(page);
   await page.getByLabel('Latitude').fill('-33.9');
@@ -2192,9 +2205,10 @@ test('the hemisphere cookie rides only on species and compare pages, never on sy
   expect(await on('/plants')).not.toContain('cultifolio.hemi');
   expect(await on('/sync')).not.toContain('cultifolio.hemi');
   // the cookies the browser would attach to an API or sync request: the units, never the hemisphere
-  const jar = await page.context().cookies(['http://127.0.0.1:4173/api/sync/log', 'http://127.0.0.1:4173/api/sheets']);
+  const origin = new URL(baseURL!).origin; // the server under test, on whatever port it was given (round sixty-one; docs/review-60/harness.md 18)
+  const jar = await page.context().cookies([`${origin}/api/sync/log`, `${origin}/api/sheets`]);
   expect(jar.map((c) => c.name)).not.toContain('cultifolio.hemi');
-  const species = await page.context().cookies(['http://127.0.0.1:4173/species/copiapoa-cinerea']);
+  const species = await page.context().cookies([`${origin}/species/copiapoa-cinerea`]);
   expect(species.map((c) => c.name)).toContain('cultifolio.hemi');
 });
 
@@ -2607,7 +2621,7 @@ test('round forty: on "Your species" the search box stays on the device; the cat
   await page.goto('/');
   await expect(page.getByRole('button', { name: 'Your species' })).toHaveAttribute('aria-pressed', 'true');
   // A number, a field number, a name: found on the device, and nothing goes to the server or the URL (R2-1).
-  await page.fill('.searchbar', '2026-0001');
+  await page.fill('.searchbar', `${year()}-0001`);
   await expect(page.locator('.plantsfound .accrow')).toHaveCount(1);
   await page.fill('.searchbar', 'copiapoa');
   await expect(page.locator('.hitrow .nm', { hasText: 'Copiapoa cinerea' })).toBeVisible();
@@ -2621,7 +2635,7 @@ test('round forty: on "Your species" the search box stays on the device; the cat
   expect(page.url()).toContain('q=copiapoa');
   // On the catalogue view too, a plant's number and anything shaped like one stays on the device (round forty-nine, 3; round thirty-five, R1-2).
   const sent = searches.length;
-  await page.fill('.searchbar', '2026-0001');
+  await page.fill('.searchbar', `${year()}-0001`);
   await expect(page.locator('.plantsfound .accrow')).toHaveCount(1);
   await page.fill('.searchbar', '2031-07');
   await page.waitForTimeout(500); // a negative: no request may follow, and only a pause can show that none did; the pause is short and after the page has gone quiet (round sixty; the harness review, 14)
@@ -2651,7 +2665,7 @@ test('round forty: a measurement typed in inches is stored in millimetres and re
   await page.goto('/settings');
   await ready(page);
   await page.getByRole('button', { name: /°F and inches/ }).click();
-  await page.goto('/plants/2026-0001');
+  await page.goto(`/plants/${year()}-0001`);
   await page.locator('.quickbar .more').click();
   await page.getByRole('button', { name: 'Measure', exact: true }).click();
   await expect(page.locator('.measures label').first()).toContainText('(in)');
@@ -2662,7 +2676,7 @@ test('round forty: a measurement typed in inches is stored in millimetres and re
   await page.goto('/settings');
   await ready(page);
   await page.getByRole('button', { name: /°C and mm/ }).click();
-  await page.goto('/plants/2026-0001');
+  await page.goto(`/plants/${year()}-0001`);
   await expect(page.locator('.card', { hasText: 'Diameter' })).toContainText('50.8');
   await expect(page.locator('.tlrow', { hasText: 'Measure' })).toContainText('Diameter 50.8 mm');
 });
@@ -2795,7 +2809,7 @@ test('round forty-nine: Water is one tap with an Undo, on the plant page and on 
   await expect(page.locator('.tlrow', { hasText: 'Watered' })).toHaveCount(0);
   // the list: the row's own button, without opening the page
   await page.goto('/plants');
-  await page.getByRole('button', { name: `Record ${acc} watered today` }).click();
+  await page.getByRole('button', { name: `Water ${acc}, record watered today` }).click();
   await expect(page.locator('a.accrow .fig', { hasText: 'watered today' })).toBeVisible();
   await page.getByRole('button', { name: 'Undo' }).click();
   await expect(page.locator('a.accrow .fig', { hasText: 'no watering recorded' })).toBeVisible();
@@ -2930,7 +2944,7 @@ test('round fifty: on a phone the first screen of the catalogue, My plants and a
   expect(t0!.width).toBeLessThan(140); // three to a row
   expect(t1!.y + 60).toBeLessThan(fs.bottom);
   // the plant page: the checklist is one row of steps, scrolled sideways
-  await page.goto('/plants/2026-0001');
+  await page.goto(`/plants/${year()}-0001`);
   const steps = page.locator('.setup .setuprow');
   await expect(steps.first()).toBeVisible();
   // polled: the row's layout settles a moment after the fonts and the page's stylesheet do
@@ -3728,7 +3742,7 @@ test('round sixty: "Save and add another" keeps the last watering, and its toast
   await expect(page.locator('.accrow .fig', { hasText: 'watered 3 d ago' })).toHaveCount(1); // Today and the list count from it
 });
 
-test('round sixty: a visitor sees one species\' figures and chart on a desktop, a link to them on a phone, and a search that matched nothing as written says what it searched', async ({ page }) => {
+test('round sixty: a visitor sees one species\' figures and chart on a desktop, none on a phone (its search stays with the rows; round sixty-one), and a search that matched nothing as written says what it searched', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/');
   await ready(page);
@@ -3737,10 +3751,8 @@ test('round sixty: a visitor sees one species\' figures and chart on a desktop, 
   await expect(feature.locator('.featurehead')).toContainText('This is what every species page shows');
   await expect(feature.locator('.card.cold')).toContainText('Cold floor');
   await expect(feature.locator('.climo')).toBeVisible();
-  await expect(page.locator('.featureline')).toBeHidden();
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(feature).toBeHidden();
-  await expect(page.locator('.featureline a')).toBeVisible();
+  await expect(feature).toBeHidden(); await expect(feature.locator('.climo')).toHaveCount(0); // a phone keeps the search with its rows and gets the link, and no chart is drawn (round sixty-one, at the merge)
   await expect(page.locator('#try-sample-home')).toBeVisible();
   // a variety the reference files under its species: nothing as written, the species on the retry, and the page says so
   await page.setViewportSize({ width: 1280, height: 900 });

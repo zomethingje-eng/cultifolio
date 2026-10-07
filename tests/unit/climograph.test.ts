@@ -38,7 +38,7 @@ describe('the climograph geometry', () => {
     expect(g.temp.zeroY).not.toBeNull();
     expect(g.temp.minAbs!.y).toBeGreaterThan(g.temp.zeroY!); // below the frost line on screen
     // The extreme names its source on the chart, in years, not "yrs" (round sixty; the round forty-two review, A9).
-    expect(g.temp.minAbs!.label).toBe('-6.5° lowest night in 30 years, NASA POWER (undated)');
+    expect(g.temp.minAbs!.label).toBe('-6.5° lowest night in 30 years, NASA POWER'); // no "(undated)": the edge says it (round sixty-one; visitor 14)
     expect(g.temp.maxP99!.label).toContain('NASA POWER');
     expect(g.alt).toContain('(NASA POWER)');
   });

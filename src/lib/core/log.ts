@@ -11,7 +11,7 @@
  * This replaces v2's newest-record-wins merge, which could let two devices
  * agree on a state neither of them ever set.
  */
-import { hlcCompare, isHlc, MAX_AHEAD_MS } from './hlc';
+import { hlcCompare, isHlc, isPastStamp, MAX_AHEAD_MS } from './hlc';
 
 export const KINDS = ['accession', 'sowing', 'location', 'event', 'photo', 'taxon', 'setting'] as const;
 export type Kind = (typeof KINDS)[number];
@@ -38,9 +38,12 @@ export const key = (kind: Kind, id: string) => `${kind}:${id}`;
  * no build writes one. 4: without an arrival, a change is parked by the clock only when a server reading has confirmed
  * that clock; this device's own changes far past an unchecked clock are folded (round fifty-nine). 5: this device's own
  * changes are never parked by its clock, checked or not; and a snapshot records whether the clock was checked when it
- * was folded, so one folded unchecked is not read once the clock is (round sixty).
+ * was folded, so one folded unchecked is not read once the clock is (round sixty). 6: a stamp made past another
+ * (`isPastStamp`) is never held or parked; this device's own changes are parked by the arrival of the batch that carried
+ * them, as a peer's are (the engine learns it from the listing); a park judged by the clock alone is a reading, not
+ * stored, and the snapshot carries it in its inventory to be judged again at the next load (round sixty-one).
  */
-export const FOLD_RULES = 5;
+export const FOLD_RULES = 6;
 
 /** Field names the record itself owns, plus the fold's own bookkeeping names; a change may never set them. */
 export const RESERVED_FIELDS = new Set(['id', 'kind', '_t', '_deleted=', '*']);
@@ -195,9 +198,16 @@ export interface Hold {
  * device (round fifty-two, 1). Two days is far past any clock drift (a clock a day wrong is held and comes due) and short of any typo in a year.
  */
 export const PARK_MS = 2 * 86_400_000;
-/** Whether the fold parks the change: already parked, or stamped more than two days past its arrival, or past a confirmed clock when it is a peer's (round sixty: this device's own changes are never parked by its own clock). */
+/**
+ * Whether the fold parks the change: already parked, or stamped more than two days past its arrival, or past a confirmed
+ * clock when it is a peer's (round sixty: this device's own changes are never parked by its own clock). Never a stamp
+ * made past another (`isPastStamp`): it is an edit placed after the field's stamp, not a clock running ahead, and it is
+ * as far ahead as that stamp only because the stamp was (round sixty-one, decision 1). The flag is in the stamp, so the
+ * writer and every peer judge it alike, with or without an arrival.
+ */
 export function isParked(t: string, hold: Hold): boolean {
   if (hold.parked?.has(t)) return true;
+  if (isPastStamp(t)) return false;
   if (hold.arrival == null) {
     // Judged by this device's clock alone: only a clock a sync server has confirmed, and never this device's own
     // changes (round sixty; three reviews). Its own stamps say what its clock read when they were made; a clock set
@@ -212,9 +222,10 @@ export function isParked(t: string, hold: Hold): boolean {
 /** The wall-clock millisecond of an HLC string, without a full decode. */
 export const hlcWall = (t: string) => Number(t.slice(0, 13));
 
-/** Whether the fold with this clock would hold the change. */
+/** Whether the fold with this clock would hold the change. Never a stamp made past another (round sixty-one; `isParked`): holding it until the clock reaches the stamp it was placed after would keep an edit made now off every other device for as long as that stamp is ahead. */
 export function isHeld(t: string, hold: Hold): boolean {
   if (hlcWall(t) <= hold.now + MAX_AHEAD_MS) return false;
+  if (isPastStamp(t)) return false;
   if (isParked(t, hold)) return false; // parked is not held: it never comes due
   // A writer is the device plus a per-tab tag, so the device is a prefix of the writer; every tab of this device counts as "here".
   return !hold.except || !t.slice(t.lastIndexOf('-') + 1).startsWith(hold.except);

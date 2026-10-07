@@ -6,7 +6,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Change } from '$core/log';
-import { hlcEncode, hlcDecode } from '$core/hlc';
+import { hlcEncode, hlcDecode, PAST_BIT } from '$core/hlc';
 import { localDate } from '$core/dates';
 import { accNo, NUMBERING_SETTING } from '$lib/db/types';
 
@@ -52,6 +52,8 @@ vi.mock('$lib/db/vault', () => {
   m.lastArrival = async () => 0;
   m.arrivalsAfter = async () => ({ changes: [...mem.changes.values()], seq: 0, gen: 0 });
   m.changeKeys = async () => [...mem.changes.keys()];
+  // The order of arrival on this device (round sixty-one): the in-memory log's insertion order, as the real vault's order store keeps it.
+  m.arrivalsOf = async (ts: string[]) => { const keys = [...mem.changes.keys()]; return new Map(ts.filter((t) => mem.changes.has(t)).map((t) => [t, keys.indexOf(t) + 1])); };
   if (!m.changesByKeys) m.changesByKeys = async (ts: string[]) => ts.map((t) => mem.changes.get(t)).filter(Boolean);
   if (!m.updateMeta) m.updateMeta = async (k: string, fn: (had: unknown) => unknown) => { const next = fn(mem.meta.get(k)); mem.meta.set(k, next); return next; };
   if (!m.changesOf) m.changesOf = async (kind: string, id: string) => ([...mem.changes.values()] as Change[]).filter((c) => c.kind === kind && c.id === id);
@@ -290,7 +292,7 @@ describe('a clock that was fast (round eight, 4)', () => {
       const changes = [...mem.changes.values()].sort((x, y) => x.t.localeCompare(y.t));
       const notes = changes.filter((c) => c.field === 'notes').map((c) => hlcDecode(c.t));
       expect(notes[1].wall).toBe(notes[0].wall); // stamped just past the fast stamp, not a year ahead again
-      expect(notes[1].count).toBe(notes[0].count + 1);
+      expect(notes[1].count).toBe(PAST_BIT | (notes[0].count + 1)); // and flagged as made past it (round sixty-one: never held or parked)
       const loc = hlcDecode(changes.find((c) => c.field === 'location')!.t);
       expect(loc.wall).toBeLessThan(real + 60_000); // an untouched field is stamped now: nothing else from this device is held elsewhere
     } finally {
@@ -300,7 +302,7 @@ describe('a clock that was fast (round eight, 4)', () => {
 });
 
 describe('round fifty-two, 1, and round sixty: a device a year fast, once its clock is right, keeps its own records shown, and the next edit takes the field', () => {
-  it('neither an unchecked nor a confirmed clock parks this device\'s own changes; an edit to a field it stamped a year ahead shows at once, and parks the old stamp only with a confirmed clock', async () => {
+  it('neither an unchecked nor a confirmed clock parks this device\'s own changes; an edit to a field it stamped a year ahead shows at once, stamped past the old stamp and flagged, with or without a confirmed clock (round sixty-one: the edit-time park is gone)', async () => {
     const real = Date.parse('2026-09-25T12:00:00Z');
     vi.useFakeTimers();
     try {
@@ -326,12 +328,15 @@ describe('round fifty-two, 1, and round sixty: a device a year fast, once its cl
       expect(c2.accession(a.id)?.notes).toBe('second');
       expect(c2.parkedRecords).toBe(0);
       expect(c2.clockTrusted).toBe(true);
-      // With the clock confirmed, an edit to a field still carrying a year-ahead stamp of this device's own parks that
-      // stamp, as part of the edit, and is stamped at real time, so it shows everywhere at once.
+      // With the clock confirmed, an edit to a field still carrying a year-ahead stamp of this device's own is stamped past
+      // it and flagged, as without (round sixty-one): it shows here at once, and no device holds or parks it. The old
+      // stamp is parked by its arrival when the engine lists the vault (decision 1), not by the edit.
       await c2.put('accession', a.id, { status: 'dead' });
       expect(c2.accession(a.id)?.status).toBe('dead');
       const dead = [...mem.changes.values()].find((c) => c.id === a.id && c.field === 'status' && c.value === 'dead')!;
-      expect(hlcDecode(dead.t).wall).toBeLessThan(real + 60_000);
+      expect(hlcDecode(dead.t).wall).toBeGreaterThan(real + 300 * 86_400_000);
+      expect(hlc.isPastStamp(dead.t)).toBe(true);
+      expect(c2.parkedRecords).toBe(0);
       const c3 = (await reload()) as typeof collection;
       expect(c3.accession(a.id)?.status).toBe('dead');
       expect(c3.accession(a.id)?.notes).toBe('second');
@@ -546,15 +551,18 @@ describe('round sixteen', () => {
     expect(mem.changes.size).toBe(0); // nothing durable either: no first plant of three
     expect(collection.numbersIssued).toBe(0);
     mem.fail = null;
-    const recs = await collection.addAccessions(3, { taxonName: 'Lithops', acquired: '2026-09-01', sourceFrom: 'Mesa' });
-    expect(recs.map((r) => accNo(r))).toEqual([`${new Date().getFullYear()}-0001`, `${new Date().getFullYear()}-0002`, `${new Date().getFullYear()}-0003`]);
+    // numbers follow the acquisition year, so the date is this year's: a fixed 2026 failed from 1 January 2027, and with it
+    // `npm run deploy` (round sixty-one; docs/review-60/harness.md 1). 1 January, so it is never a date in the future.
+    const y = new Date().getFullYear();
+    const recs = await collection.addAccessions(3, { taxonName: 'Lithops', acquired: `${y}-01-01`, sourceFrom: 'Mesa' });
+    expect(recs.map((r) => accNo(r))).toEqual([`${y}-0001`, `${y}-0002`, `${y}-0003`]);
     expect(collection.accessions.length).toBe(3);
     expect(recs.every((r) => collection.events(r.id).some((e) => e.t === 'acquire'))).toBe(true); // each with its acquire event
     const again = (await reload()) as typeof collection;
     expect(again.accessions.length).toBe(3);
     // a brought number goes on the first, the rest follow it
     const more = await again.addAccessions(2, { taxonName: 'Conophytum', acc: '2030-0007' });
-    expect(more.map((r) => accNo(r))).toEqual(['2030-0007', `${new Date().getFullYear()}-0004`]);
+    expect(more.map((r) => accNo(r))).toEqual(['2030-0007', `${y}-0004`]);
   });
 });
 

@@ -49,7 +49,12 @@ export interface ParsedName {
   kind: NameKind;
   /** For a hybrid: the cross as written, with abbreviated genera expanded ("Ariocarpus retusus × Ariocarpus trigonus"). */
   parentage?: string;
+  /** "cf.", "aff.", "sp." or "spp." when the name carries one (it stays in `scientific`); the reference is asked about the species part only. */
+  qualifier?: string;
 }
+
+/** The qualifiers of an open name, as the word after the genus: "cf.", "aff.", "sp.", "spp.", with or without the full stop. */
+const QUALIFIER = /^(cf|aff|sp|spp)\.?$/i;
 
 export function parseName(raw: string): ParsedName {
   let s = tidyName(raw);
@@ -92,6 +97,18 @@ export function parseName(raw: string): ParsedName {
     const parentage = rightName ? `${leftName} × ${rightName}` : undefined;
     return { scientific: genus, cultivar, aside, genus, epithet: undefined, kind: 'hybrid', parentage };
   }
+  // A qualifier the grower wrote is a statement of doubt, and stays in the name (round sixty-one; the grower review, 5):
+  // "Mammillaria cf. bombycina" is not a Mammillaria bombycina, and "Lithops sp. C 036" is no species at all. "cf." and
+  // "aff." keep the epithet they compare with (so the reference is asked about that species, and the plant's species
+  // page is its); "sp." and "spp." have none. Written the one way, with its full stop, so a second parse changes nothing.
+  const q = QUALIFIER.exec(parts[1] ?? '')?.[1]?.toLowerCase();
+  if (q) {
+    const word = `${q === 'spp' ? 'spp' : q}.`;
+    const compared = q === 'cf' || q === 'aff' ? (epithetOk(parts[2]) ? parts[2].toLowerCase() : undefined) : undefined;
+    const tail = parts.slice(compared ? 3 : 2).map((w) => (/^nov\.?$/i.test(w) ? 'nov.' : w)).join(' ');
+    const sci = [genus, word, compared, tail].filter(Boolean).join(' ');
+    return { scientific: sci, cultivar, aside, genus, epithet: compared, kind: nothogenus ? 'hybrid' : cultivar ? (compared ? 'cultivar' : 'hybrid') : 'species', qualifier: word };
+  }
   const epithet = epithetOk(parts[1]) ? parts[1].toLowerCase() : undefined;
   const rest = parts.slice(2).join(' ');
   const scientific = [genus, epithet, rest].filter(Boolean).join(' ');
@@ -108,8 +125,10 @@ export function parents(parentage: string | null | undefined): string[] {
 /** Italicise the Latin and leave rank abbreviations and cultivar names roman. */
 export function nameParts(scientific: string): Array<{ text: string; italic: boolean }> {
   const out: Array<{ text: string; italic: boolean }> = [];
+  let open = false; // after "sp." the rest is a grower's or a collector's designation, not Latin ("Lithops sp. C 036")
   for (const tok of scientific.split(' ')) {
-    const roman = /^(subsp\.|var\.|f\.|×|x|cv\.)$/.test(tok) || /^'/.test(tok);
+    const roman = open || /^(subsp\.|var\.|f\.|×|x|cv\.|cf\.|aff\.|sp\.|spp\.|nov\.)$/.test(tok) || /^'/.test(tok);
+    if (/^spp?\.$/.test(tok)) open = true;
     const last = out[out.length - 1];
     if (last && last.italic === !roman) last.text += ' ' + tok;
     else out.push({ text: (out.length ? ' ' : '') + tok, italic: !roman });

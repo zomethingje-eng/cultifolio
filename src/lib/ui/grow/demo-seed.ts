@@ -1,17 +1,22 @@
 /**
  * The sample collection a visitor can walk through (round sixty; the product review's 3, the self-review's experience
  * item 5). It is written only into the sample's own database (`$lib/db/demo`: chosen at page load, deleted whole on
- * leaving), only when that database is empty and has not been seeded before (a meta flag in it), and only through the
- * collection's ordinary functions, so what the visitor sees is what a grower's own records would show. The species are
- * the reference's where it has them (with their keys) and common ones typed as a grower would; there are no field
- * numbers and no named sellers, since none would be true.
+ * leaving), only when that database is empty and has not been seeded before (a meta flag in it), and as ordinary
+ * records, so what the visitor sees is what a grower's own records would show. The species are the reference's where it
+ * has them (with their keys) and common ones typed as a grower would; there are no field numbers and no named sellers,
+ * since none would be true.
+ *
+ * Set out in one commit (round sixty-one; the accessibility review, 4): it was some thirty, one plant at a time, and the
+ * first screen of the sample re-laid itself twelve times in five seconds as the rows arrived and re-sorted. The records
+ * are the ones the collection's own add, pot-up and follow functions write, built here with their numbers and ids.
  */
 import { collection } from '$lib/db/collection.svelte';
 import { getMeta, setMeta } from '$lib/db/vault';
 import { inDemo } from '$lib/db/demo';
 import { localDate } from '$core/dates';
+import { nextAccession, type NumberingScheme } from '$core/accession';
 import { speciesOf, speciesSlug } from '$core/names';
-import type { Accession, EventType, PlantEvent } from '$lib/db/types';
+import type { Accession, EventType, Location, PlantEvent, Sowing } from '$lib/db/types';
 
 export const SEEDED = 'demoSeeded';
 
@@ -35,29 +40,39 @@ export const POTTED = 2;
 
 const ago = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return localDate(d); };
 
+type Rec = { kind: 'location' | 'accession' | 'taxon' | 'sowing'; id: string; fields: Record<string, unknown> };
+
 /**
- * Fill the sample's database once. Refuses outside the sample (this must never write to a grower's own collection), and
- * on a sample that already holds plants or was seeded before (a visitor who removed every plant keeps an empty sample).
+ * Every record of the sample and every line on its timelines, built before anything is written. Ids are shaped as the
+ * collection's own (a letter, the wall time and a counter in base 36, then a device tag), so the day a record was made
+ * reads as today, as it would for a grower's. Pure but for the date: tested on its own.
  */
-export async function seedDemo(): Promise<boolean> {
-  if (!inDemo()) return false;
-  await collection.load();
-  if (!inDemo() || (await getMeta<boolean>(SEEDED)) || collection.accessions.length) return false;
-  await setMeta(SEEDED, true); // first, so a second tab opening the sample does not seed it twice
-  const gh = await collection.addLocation({ name: 'Greenhouse', type: 'greenhouse', indoor: false, floorC: 5, floorHeld: true, waterDays: 10, dryMonths: [12, 1, 2] });
-  const b1 = await collection.addLocation({ name: 'Bench 1', type: 'bench', parentId: gh.id, sort: 1, notes: 'The cacti, in full sun.' });
-  const b2 = await collection.addLocation({ name: 'Bench 2', type: 'bench', parentId: gh.id, waterDays: 14, sort: 2, notes: 'The winter-growers and the mesembs.' });
-  const win = await collection.addLocation({ name: 'Kitchen windowsill', type: 'windowsill', indoor: true, waterDays: 7, dryMonths: [] });
-  const where: Record<Spot, string> = { b1: b1.id, b2: b2.id, win: win.id };
+export function sampleRecords(scheme: NumberingScheme, wall: number = Date.now()): { recs: Rec[]; events: Array<Omit<PlantEvent, 'id'>> } {
+  let k = 0;
+  const id = (p: string) => `${p}${wall.toString(36)}${(k++).toString(36).padStart(2, '0')}sampleseeds0`;
+  const recs: Rec[] = [];
+  const events: Array<Omit<PlantEvent, 'id'>> = [];
+  const place = (l: Omit<Location, 'id'>) => { const r = { ...l, id: id('l') }; recs.push({ kind: 'location', id: r.id, fields: r as unknown as Record<string, unknown> }); return r.id; };
+  const gh = place({ name: 'Greenhouse', type: 'greenhouse', indoor: false, floorC: 5, floorHeld: true, waterDays: 10, dryMonths: [12, 1, 2] });
+  const b1 = place({ name: 'Bench 1', type: 'bench', parentId: gh, sort: 1, notes: 'The cacti, in full sun.' });
+  const b2 = place({ name: 'Bench 2', type: 'bench', parentId: gh, waterDays: 14, sort: 2, notes: 'The winter-growers and the mesembs.' });
+  const win = place({ name: 'Kitchen windowsill', type: 'windowsill', indoor: true, waterDays: 7, dryMonths: [] });
+  const where: Record<Spot, string> = { b1, b2, win };
+  const taxa = new Map<string, Record<string, unknown>>();
+  const taken = new Set<string>();
+  const number = (d: string) => { const n = nextAccession(taken, scheme, Number(d.slice(0, 4))); taken.add(n); return n; };
   const made: Accession[] = [];
   for (const [name, key, cultivar, spot, days, price, , own] of SAMPLE) {
     const slug = speciesSlug(name);
-    if (!collection.taxon(slug)) await collection.put('taxon', slug, { name: speciesOf(name), gbifKey: key });
-    const [a] = await collection.addAccessions(1, { taxonName: name, taxonKey: key, cultivar, nameKind: cultivar ? 'cultivar' : 'species', provenance: 'unknown', acquired: ago(days), sourceFrom: days > 600 ? 'a club plant sale' : days < 200 ? 'a nursery' : null, sourceForm: 'plant', price, locationId: where[spot], waterDays: own ?? null });
+    if (!taxa.has(slug)) taxa.set(slug, { name: speciesOf(name), gbifKey: key });
+    const acquired = ago(days);
+    const sourceFrom = days > 600 ? 'a club plant sale' : days < 200 ? 'a nursery' : null;
+    const a: Accession = { id: id('r'), acc: number(acquired), taxonName: name, taxonKey: key, cultivar, nameKind: cultivar ? 'cultivar' : 'species', provenance: 'unknown', status: 'growing', acquired, sourceFrom, sourceForm: 'plant', price, locationId: where[spot], waterDays: own ?? null };
     made.push(a);
+    events.push({ acc: a.id, d: acquired, t: 'acquire', note: sourceFrom ? `from ${sourceFrom}` : null });
   }
-  const ev: Array<Omit<PlantEvent, 'id'>> = [];
-  const line = (i: number, t: EventType, d: number, extra: Partial<PlantEvent> = {}) => ev.push({ acc: made[i].id, d: ago(d), t, ...extra });
+  made[3].notes = 'Bought as a seedling; the eight ribs are clear now.';
+  const line = (i: number, t: EventType, d: number, extra: Partial<PlantEvent> = {}) => events.push({ acc: made[i].id, d: ago(d), t, ...extra });
   // Waterings over the last weeks: each plant's last one, and the rhythm's worth before it.
   SAMPLE.forEach(([, , , spot, days, , watered, own], i) => {
     if (watered == null) return;
@@ -70,14 +85,33 @@ export async function seedDemo(): Promise<boolean> {
   line(4, 'measure', 20, { measures: { h: 38, spread: 210 } });
   line(5, 'note', 5, { note: 'Splitting into new leaves: no water until the old pair is papery.' });
   line(9, 'treat', 25, { used: 'systemic drench', note: 'mealybug at the stem' });
-  await collection.addEvents(ev);
-  await collection.put('accession', made[3].id, { notes: 'Bought as a seedling; the eight ribs are clear now.' });
-  // A seed batch with its counts, two of its seedlings potted up.
-  const batch = await collection.addSowing({ taxonName: 'Astrophytum asterias', method: 'seed', sown: ago(60), count: 40, locationId: win.id, medium: 'fine grit over sieved loam', covered: true, sourceFrom: 'own pollination' });
-  await collection.addEvents([{ acc: batch.id, d: ago(46), t: 'germinate', n: 17 }, { acc: batch.id, d: ago(35), t: 'germinate', n: 23 }]);
-  await collection.potUp(batch.id, POTTED, { date: ago(7), locationId: b1.id, note: 'the two largest' });
+  // A seed batch with its counts, two of its seedlings potted up (as `potUp` writes them: seed of unstated provenance).
+  const sown = ago(60);
+  const batch: Sowing = { id: id('s'), no: nextAccession([], { mode: 'prefix', prefix: `S${sown.slice(0, 4)}`, width: 3 }), status: 'active', taxonName: 'Astrophytum asterias', method: 'seed', sown, count: 40, locationId: win, medium: 'fine grit over sieved loam', covered: true, sourceFrom: 'own pollination' } as Sowing;
+  events.push({ acc: batch.id, d: ago(46), t: 'germinate', n: 17 }, { acc: batch.id, d: ago(35), t: 'germinate', n: 23 });
+  const potted = ago(7);
+  const seedlings: Accession[] = Array.from({ length: POTTED }, () => ({ id: id('r'), acc: number(potted), taxonName: batch.taxonName, taxonKey: null, cultivar: null, nameKind: null, parentage: null, fieldNumber: null, provenance: 'unknown', status: 'growing', acquired: potted, sourceFrom: batch.sourceFrom ?? null, sourceRef: null, sourceForm: 'seedling', locationId: b1, sowingId: batch.id, notes: null }) as Accession);
+  for (const a of seedlings) events.push({ acc: a.id, d: potted, t: 'acquire', note: `potted up from ${batch.no}` });
+  events.push({ acc: batch.id, d: potted, t: 'potup', n: POTTED, plants: seedlings.map((a) => a.id), note: 'the two largest' });
   // One species followed and not grown yet, so the Wanted list has a line.
-  await collection.follow('aloe-polyphylla', 'Aloe polyphylla', null, true);
-  await collection.put('taxon', 'aloe-polyphylla', { name: 'Aloe polyphylla', myNotes: 'Wanted: a seed-grown plant · price seen 18 at the spring sale' });
+  taxa.set('aloe-polyphylla', { name: 'Aloe polyphylla', gbifKey: null, followed: true, myNotes: 'Wanted: a seed-grown plant · price seen 18 at the spring sale' });
+  for (const a of [...made, ...seedlings]) recs.push({ kind: 'accession', id: a.id, fields: a as unknown as Record<string, unknown> });
+  recs.push({ kind: 'sowing', id: batch.id, fields: batch as unknown as Record<string, unknown> });
+  for (const [slug, fields] of taxa) recs.push({ kind: 'taxon', id: slug, fields });
+  return { recs, events };
+}
+
+/**
+ * Fill the sample's database once. Refuses outside the sample (this must never write to a grower's own collection), and
+ * on a sample that already holds plants or was seeded before (a visitor who removed every plant keeps an empty sample).
+ */
+export async function seedDemo(): Promise<boolean> {
+  if (!inDemo()) return false;
+  await collection.load();
+  if (!inDemo() || (await getMeta<boolean>(SEEDED)) || collection.accessions.length) return false;
+  await setMeta(SEEDED, true); // first, so a second tab opening the sample does not seed it twice
+  const { recs, events } = sampleRecords(collection.scheme);
+  const [first, ...rest] = recs;
+  await collection.putWith(first.kind, first.id, first.fields, events, rest);
   return true;
 }

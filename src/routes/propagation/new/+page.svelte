@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { readSetting, writeSetting } from '$lib/ui/stored';
   import { batchHref } from '$lib/db/links';
   import { units } from '$lib/ui/units.svelte';
   import PageHead from '$lib/ui/PageHead.svelte';
@@ -109,15 +110,20 @@
     const loc = page.url.searchParams.get('loc');
     let want: string | null = loc;
     try {
-      want = loc ?? localStorage.getItem('cultifolio.lastSowLocation');
+      want = loc ?? readSetting('cultifolio.lastSowLocation', 'collection');
     } catch {
       /* fine */
     }
     if (want && collection.location(want)) { locationId = want; if (!loc) lastUsedLoc = want; }
-    // /propagation/new?parent=2026-0004 → a vegetative batch from that plant, species prefilled.
+    // /propagation/new?parent=2026-0004 → a vegetative batch from that plant, species prefilled. By identity first, then
+    // by number, and never one of two plants that share a number: one picked by load order recorded the wrong parent
+    // (round sixty-one; the records review's 4). For two, the method is set and the parent list is filtered to them,
+    // so the grower picks one, as the labels page asks.
     const p = page.url.searchParams.get('parent');
-    if (p && collection.accession(p)) {
-      const a = collection.accession(p)!;
+    const hits = p ? collection.withNumber('accession', p) : [];
+    if (p && hits.length > 1) { method = 'offset'; parentQ = p; }
+    if (p && hits.length === 1) {
+      const a = hits[0] as Accession;
       parentAcc = a.id;
       name = a.taxonName;
       taxonKey = a.taxonKey ?? null;
@@ -181,7 +187,7 @@
         locationId,
         notes: notes.trim() || null
       });
-      try { if (locationId) localStorage.setItem('cultifolio.lastSowLocation', locationId); } catch { /* fine */ }
+      if (locationId) writeSetting('cultifolio.lastSowLocation', 'collection', locationId); // the sample keeps its own (round sixty-one; decision 10)
       saved = true;
       goto(batchHref(rec)); // by identity while another batch shares the number (round sixty)
     } catch {

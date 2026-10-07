@@ -56,7 +56,10 @@ export const load: PageServerLoad = async ({ platform, fetch, setHeaders, url, c
   // The first of the day's strip, read whole, for the visitor's "This is what every species page shows" (round sixty;
   // the self-review's experience item 1). One dossier read under the page's corpus; without a derived climate, or when
   // the read fails, the page simply does not draw the block.
-  const lead = featured.length ? pool[(day * 12) % pool.length] : null;
+  // Only for the plain front page: a genus row's page, a grouping, a chip or a letter is the catalogue, and the feature's
+  // dossier read was spent on every one of them (round sixty-one; corpus 10).
+  const plain = byParam == null && !w.open && chip === 'all' && !fromValid && !atValid;
+  const lead = plain && featured.length ? pool[(day * 12) % pool.length] : null;
   const fd = lead ? await getDossier(platform, fetch, lead.key, c).catch(() => null) : null;
   const feature = fd && lead && fd.climate.status === 'ok'
     ? { slug: lead.slug, name: fd.name.scientific, family: fd.name.family ?? null, lat: fd.centroid?.lat ?? fd.climate.at.lat, climate: { months: fd.climate.months, p10: fd.climate.p10, p90: fd.climate.p90, cells: fd.climate.cells, records: fd.climate.records, extremes: fd.climate.extremes ?? null, extremesStatus: fd.climate.extremesStatus ?? null } }

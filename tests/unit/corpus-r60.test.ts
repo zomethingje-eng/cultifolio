@@ -233,8 +233,8 @@ describe('the names growers write (round sixty; the corpus review, 3; the self-r
     ['Copiapoa ’cinerea’', 'Copiapoa cinerea'], // a phone's quotes around a plain name: the name, as before
     ['Copiapoa cinerea var. columna-alba', 'Copiapoa cinerea', 'Copiapoa cinerea'],
     ['Copiapoa cinerea subsp. haseltoniana', 'Copiapoa cinerea', 'Copiapoa cinerea'],
-    ["Echeveria 'Perle von Nurnberg'", 'Echeveria elegans', 'Echeveria'],
-    ['Echeveria elegans ‘Rainbow’', 'Echeveria elegans', 'Echeveria elegans'],
+    ["Echeveria 'Perle von Nurnberg'", 'Echeveria elegans'], // a quoted cultivar with a capital is dropped in the first search too (round sixty-one; the corpus review, 3)
+    ['Echeveria elegans ‘Rainbow’', 'Echeveria elegans'],
     ['Echeveria cv. Perle', 'Echeveria elegans', 'Echeveria'],
     ['Haworthia attenuata f. clariperla', 'Haworthiopsis attenuata', 'Haworthia attenuata'],
     ['string of pearls', 'Curio rowleyanus'], // a second English name, searched since round sixty
@@ -461,7 +461,9 @@ describe('the sitemap says when the corpus was built (round sixty; the corpus re
 });
 
 describe('the search\'s answers are kept in the Worker\'s cache for a day (round sixty; the server review, 15)', () => {
-  it('the same query under the same corpus is answered from the cache: no posting read, no count against the address', async () => {
+  // The title said "no count against the address", which this test never examined; r61h-search-cache.test.ts asserts it
+  // (round sixty-one; docs/review-60/harness.md 6, 17).
+  it('the same query under the same corpus is answered from the cache: no posting read, one entry for a query cleaned to the same text', async () => {
     const p = productsOf(UX);
     const b = bucket([...p.blobs, [manifestPath(), JSON.stringify(p.manifest)]]);
     const kept = new Map<string, Response>();

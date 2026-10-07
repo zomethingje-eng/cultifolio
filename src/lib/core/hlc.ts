@@ -32,10 +32,20 @@ export const TRUST_EXPIRES_MS = 7 * 86_400_000;
 /** Where the correction is kept between loads, so the first edit of a tab is stamped right, not only the ones after its first pull (round fifty-one, 1). The pending reading is kept too, so one sync per page load still gets a device corrected (round fifty-two, 1). */
 const OFFSET_KEY = 'cultifolio.clockOffsetMs';
 const PENDING_KEY = 'cultifolio.clockPending';
-type Stored = { offset: number; confirmedAt: number };
+/** `serverAt`: the server's time when the reading was taken (round sixty-one); older records have none, and it is then read as `confirmedAt + offset`, which is what it was to within the reading's own rounding. */
+type Stored = { offset: number; confirmedAt: number; serverAt?: number };
 let offsetMs = 0;
 /** When a reading last confirmed the offset in force, by the device clock. */
 let confirmedAt = 0;
+/** The server's time when that reading was taken (round sixty-one; the clock review's 7). */
+let serverAt = 0;
+/**
+ * The device clock and a monotonic clock (`performance.now()`) read together when this tab took or learned the
+ * correction (round sixty-one; the clock review's 7). The two move apart only when the device clock is moved (set right
+ * by hand, a time sync, a sleep on a platform whose monotonic clock pauses), and then the correction no longer describes
+ * the clock it is added to. Within this tab only: another tab has its own.
+ */
+let mono: { dev: number; perf: number; clock: number } | null = null;
 /** A large correction seen once, waiting for a second reading that agrees, and when it was seen (device clock). */
 let pending: { delta: number; at: number } | null = null;
 const listeners = new Set<(offset: number) => void>();
@@ -45,11 +55,12 @@ function readStored(): void {
     const raw = localStorage.getItem(OFFSET_KEY);
     if (raw) {
       const v = JSON.parse(raw) as Stored;
-      if (Number.isFinite(v.offset) && v.confirmedAt && trustedAge(Date.now() - v.confirmedAt)) { offsetMs = v.offset; confirmedAt = v.confirmedAt; }
+      const at = Number.isFinite(v.serverAt) ? (v.serverAt as number) : v.confirmedAt + v.offset;
+      if (Number.isFinite(v.offset) && v.confirmedAt && trustedAge(Date.now() - v.confirmedAt) && !overtaken(v.offset, at, Date.now())) { offsetMs = v.offset; confirmedAt = v.confirmedAt; serverAt = at; mono = monoNow(Date.now()); }
       else localStorage.removeItem(OFFSET_KEY);
     }
     const p = localStorage.getItem(PENDING_KEY);
-    if (p) { const v = JSON.parse(p) as { delta: number; at: number }; if (Number.isFinite(v.delta) && Date.now() - v.at < TRUST_EXPIRES_MS) pending = v; else localStorage.removeItem(PENDING_KEY); }
+    if (p) { const v = JSON.parse(p) as { delta: number; at: number }; if (Number.isFinite(v.delta) && trustedAge(Date.now() - v.at)) pending = v; else localStorage.removeItem(PENDING_KEY); }
   } catch {
     /* storage refused or unreadable: no correction */
   }
@@ -59,7 +70,7 @@ function store(): void {
     if (typeof localStorage === 'undefined') return;
     // Kept whenever a reading confirmed the clock, a correction of nothing included: whether the clock in force is a
     // checked one decides whether a park judged by it is kept (round fifty-nine).
-    if (confirmedAt) localStorage.setItem(OFFSET_KEY, JSON.stringify({ offset: offsetMs, confirmedAt } satisfies Stored));
+    if (confirmedAt) localStorage.setItem(OFFSET_KEY, JSON.stringify({ offset: offsetMs, confirmedAt, serverAt } satisfies Stored));
     else localStorage.removeItem(OFFSET_KEY);
     if (pending) localStorage.setItem(PENDING_KEY, JSON.stringify(pending));
     else localStorage.removeItem(PENDING_KEY);
@@ -67,10 +78,64 @@ function store(): void {
     /* storage refused: the offset lives for this load */
   }
 }
+/** The two clocks read together, and what the device clock read then as the reading counts it (`localMs`), or null where there is no monotonic clock. */
+function monoNow(clock: number): { dev: number; perf: number; clock: number } | null {
+  try {
+    return typeof performance !== 'undefined' && typeof performance.now === 'function' ? { dev: Date.now(), perf: performance.now(), clock } : null;
+  } catch {
+    return null;
+  }
+}
+/** The device clock now, on the reading's own scale: what it read at the reading plus the time since. */
+const deviceNow = () => (mono ? mono.clock + (Date.now() - mono.dev) : Date.now());
+/**
+ * Whether a positive correction (the device clock behind the server's) has been overtaken by the device clock itself:
+ * it now reads at or past the server time the reading was taken at. Either the clock was set right since, or as much
+ * time has passed as the correction was; either way the correction no longer describes this clock, and a new reading is
+ * due (round sixty-one; the clock review's 7, fuzz seed 1008: a three-days-slow clock set right by hand went on stamping
+ * three days ahead, as "confirmed", until the next sync). Only past the five minutes a peer may run ahead before it is
+ * held: a correction that small changes nothing a peer judges, and lapsing it a minute after each reading would make a
+ * device a minute slow flap between two clocks.
+ */
+function overtaken(offset: number, at: number, device: number): boolean {
+  return offset > MAX_AHEAD_MS && device >= at;
+}
+/** Listeners are told after the caller's own work: a lapse is found inside `nowMs`, which a fold may be calling. */
+function tellLater(offset: number): void {
+  const run = () => { for (const l of listeners) l(offset); };
+  if (typeof queueMicrotask === 'function') queueMicrotask(run); else void Promise.resolve().then(run);
+}
+/**
+ * The correction lapses, here and in storage, when it no longer describes the device clock (round sixty-one; the clock
+ * review's 7): a positive correction has been overtaken (`overtaken`), or, within this tab, the device clock has moved
+ * against the monotonic one by more than the half minute the correction itself ignores. The clock is then the device's
+ * own, unconfirmed, until the next reading. A reading dated after the clock, or a week old, is dropped at the next load
+ * (`readStored`) and stops counting as a confirmation at once (`clockChecked`), as before.
+ */
+function lapse(): void {
+  if (!confirmedAt) return;
+  let gone = overtaken(offsetMs, serverAt, deviceNow());
+  if (!gone && offsetMs !== 0 && mono) {
+    try {
+      const drift = Date.now() - mono.dev - (performance.now() - mono.perf);
+      if (Math.abs(drift) > TRUST_SERVER_PAST_MS) gone = true;
+    } catch {
+      /* no monotonic clock after all: the other rules stand */
+    }
+  }
+  if (!gone) return;
+  const was = offsetMs;
+  offsetMs = 0;
+  confirmedAt = 0;
+  serverAt = 0;
+  mono = null;
+  store();
+  if (was) tellLater(0);
+}
 readStored();
 // Another tab's correction reaches this one: a tab already open went on stamping by the old offset until its own next sync (round fifty-two, 1).
 try {
-  if (typeof addEventListener !== 'undefined' && typeof localStorage !== 'undefined') addEventListener('storage', (e) => { if ((e as StorageEvent).key === OFFSET_KEY || (e as StorageEvent).key === PENDING_KEY) { const was = offsetMs; offsetMs = 0; pending = null; readStored(); if (offsetMs !== was) for (const l of listeners) l(offsetMs); } });
+  if (typeof addEventListener !== 'undefined' && typeof localStorage !== 'undefined') addEventListener('storage', (e) => { if ((e as StorageEvent).key === OFFSET_KEY || (e as StorageEvent).key === PENDING_KEY) { const was = offsetMs, wasChecked = clockChecked(); offsetMs = 0; confirmedAt = 0; serverAt = 0; mono = null; pending = null; readStored(); if (offsetMs !== was || clockChecked() !== wasChecked) for (const l of listeners) l(offsetMs); } });
 } catch {
   /* no window */
 }
@@ -81,7 +146,7 @@ try {
  * that same wrong clock, so the device that was wrong saw nothing wrong. The server's `Date` header is read on every
  * sync; a device that never syncs keeps its own clock, which is all it has. The correction is kept across loads.
  */
-export const nowMs = () => Date.now() + offsetMs;
+export const nowMs = () => { lapse(); return Date.now() + offsetMs; };
 /** Called when the correction changes (a reading here, or another tab's): the clock that mints stamps restarts from the corrected time. */
 export function onClockOffsetChange(l: (offset: number) => void): () => void {
   listeners.add(l);
@@ -104,7 +169,18 @@ export function trustServerTime(serverMs: number, localMs = Date.now()): number 
     if (Math.abs(delta - offsetMs) <= TRUST_SERVER_PAST_MS) next = offsetMs; // the same correction as before, give or take the threshold: no jitter
     else if (Math.abs(delta) > TRUST_SERVER_TWICE_PAST_MS) {
       const seen = pending;
-      if (!seen || Math.abs(delta - seen.delta) > TRUST_AGREE_TOL_MS) { pending = { delta, at: localMs }; store(); return offsetMs; } // a first reading of a large correction, or one that disagrees with the last: wait
+      if (!seen || Math.abs(delta - seen.delta) > TRUST_AGREE_TOL_MS) {
+        // A first reading of a large correction, or one that disagrees with the last: wait for a second. Meanwhile a clock
+        // this reading says is days off is no longer counted as confirmed: an older reading confirmed a clock that has
+        // since moved, and a park judged by it would be kept (round sixty-one; the clock review's 7: 72 stamps in the
+        // fuzz were parked by peers while their writer, three days fast, still counted its clock as checked).
+        pending = { delta, at: localMs };
+        const wasChecked = clockChecked();
+        if (Math.abs(delta - offsetMs) > TRUST_SERVER_TWICE_PAST_MS) confirmedAt = 0;
+        store();
+        if (wasChecked && !clockChecked()) for (const l of listeners) l(offsetMs);
+        return offsetMs;
+      }
       if (localMs - seen.at < TRUST_AGREE_GAP_MS) return offsetMs; // the same run, or one straight after: not a second reading yet
       next = delta;
     } else next = delta;
@@ -112,6 +188,8 @@ export function trustServerTime(serverMs: number, localMs = Date.now()): number 
   pending = null;
   const wasChecked = clockChecked();
   confirmedAt = localMs;
+  serverAt = serverMs;
+  mono = monoNow(localMs);
   const was = offsetMs;
   offsetMs = next;
   store();
@@ -126,6 +204,7 @@ export function trustServerTime(serverMs: number, localMs = Date.now()): number 
  * that never syncs has no such reading, and its own clock decides nothing that is kept.
  */
 export function clockChecked(): boolean {
+  lapse();
   return confirmedAt > 0 && trustedAge(Date.now() - confirmedAt);
 }
 /**
@@ -138,13 +217,15 @@ function trustedAge(age: number): boolean {
   return age > -5 * 60_000 && age < TRUST_EXPIRES_MS;
 }
 /** The current correction, for the clock warning to say how far off the device is. */
-export const clockOffsetMs = () => offsetMs;
+export const clockOffsetMs = () => { lapse(); return offsetMs; };
 /** Stop syncing: no server to confirm a correction against, so none is kept (round fifty-two, 1). */
 export function clearClockOffset(): void {
   const was = offsetMs;
   offsetMs = 0;
   pending = null;
   confirmedAt = 0;
+  serverAt = 0;
+  mono = null;
   store();
   if (was) for (const l of listeners) l(0);
 }
@@ -196,9 +277,12 @@ export class Clock {
     else this.last = this.bump(this.last.wall, this.last.count);
     return hlcEncode(this.last);
   }
-  /** Fold in a timestamp seen from another device so our next tick sorts after it. A stamp far ahead of real time is not followed, this device's own included: following one would keep every later stamp from here a year ahead, and every other device would hold them all until then. An edit to a field whose current stamp is ahead of the clock is stamped just past that one stamp instead (`hlcAfter`, used by the store), so it wins the field without moving the clock. */
+  /** Fold in a timestamp seen from another device so our next tick sorts after it. A stamp far ahead of real time is not followed, this device's own included: following one would keep every later stamp from here a year ahead, and every other device would hold them all until then. An edit to a field whose current stamp is ahead of the clock is stamped just past that one stamp instead (`hlcPast`, used by the store), so it wins the field without moving the clock. */
   observe(remote: string): void {
-    const r = hlcDecode(remote);
+    let r = hlcDecode(remote);
+    // A stamp made past another carries the flag in its counter (`hlcPast`): this clock follows it from the next
+    // millisecond, so that its own stamps never carry the flag by counting on from it (round sixty-one).
+    if (r.count >= PAST_BIT) r = { wall: r.wall + 1, count: 0, device: r.device };
     const phys = this.now();
     if (r.wall > phys + MAX_AHEAD_MS) return;
     const wall = Math.max(phys, this.last.wall, r.wall);
@@ -212,10 +296,44 @@ export class Clock {
   }
 }
 
-/** The stamp just past `prev`, as `device`: for one field whose current stamp is ahead of the clock. Unique, since no writer but `device` stamps with that tag and `device`'s own clock never reached that wall. */
+/**
+ * The counter bit of a stamp made past another (`hlcPast`). A clock ticks at most a few times in one millisecond, so a
+ * counter this high is never a tick's (round sixty-one). It keeps the stamp's order (a longer counter is a bigger one,
+ * and the bit makes it longer), and every build reads it as an ordinary stamp; only the hold and the park read the bit.
+ */
+export const PAST_BIT = 0x800000;
+
+/**
+ * Whether the stamp was made past another stamp of the field it changes (`hlcPast`), not read from a clock.
+ *
+ * Why it matters (round sixty-one, decision 1): an edit to a field whose stamp is ahead of this clock is stamped just
+ * past that stamp, so the edit wins the field. When the field's stamp was made by a clock a year fast, the edit's stamp
+ * is a year ahead too, though the edit was made now, by a clock that may long have been put right. Judged by its
+ * arrival, as any change, it would be parked on every device, and the grower's edit would vanish at the next sync. The
+ * flag says what the stamp is: not a clock running ahead, but an edit made in sight of the field, placed after what it
+ * replaced. Such a stamp is never held and never parked (`isHeld`, `isParked` in log.ts); every device reads the same
+ * flag from the same stamp, so the writer and its peers agree.
+ */
+export const isPastStamp = (t: string): boolean => {
+  const end = t.indexOf('-', 14);
+  return end > 14 && parseInt(t.slice(14, end), 16) >= PAST_BIT;
+};
+
+/** The stamp just past `prev`, as `device`, keeping `prev`'s flag (a stamp made past another stays one): for a collision between two stamps given out at once. Unique, since no writer but `device` stamps with that tag and `device`'s own clock never reached that wall. */
 export function hlcAfter(prev: string, device: string): string {
   const p = hlcDecode(prev);
-  return hlcEncode(p.count >= MAX_COUNT ? { wall: p.wall + 1, count: 0, device } : { wall: p.wall, count: p.count + 1, device });
+  return hlcEncode(p.count >= MAX_COUNT ? { wall: p.wall + 1, count: p.count >= PAST_BIT ? PAST_BIT : 0, device } : { wall: p.wall, count: p.count + 1, device });
+}
+
+/**
+ * The stamp just past `prev`, as `device`, flagged as made past it (`isPastStamp`): for an edit to a field whose current
+ * stamp is ahead of the clock (round sixty-one). `prev`'s counter plus one with the flag set is past `prev` whether or
+ * not `prev` carries the flag.
+ */
+export function hlcPast(prev: string, device: string): string {
+  const p = hlcDecode(prev);
+  if (p.count >= MAX_COUNT) return hlcEncode({ wall: p.wall + 1, count: PAST_BIT, device });
+  return hlcEncode({ wall: p.wall, count: PAST_BIT | (p.count + 1), device });
 }
 
 /** The stamp one millisecond before `next`, as `device`: for a machine-made change that must rank below every change a person made to the record (round forty-nine, 1). Unique while `device` is a per-tab writer that stamps nothing else there; the store's collision rule moves it by a count if it is not. */

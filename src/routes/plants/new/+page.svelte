@@ -16,6 +16,7 @@
   import { sheetForName } from '$lib/ui/index.svelte';
   import type { Provenance } from '$lib/db/types';
   import { plantHref } from '$lib/db/links';
+  import { readSetting, writeSetting } from '$lib/ui/stored';
   /** The reference's key for a species-rank name when the reference answers; otherwise the key as given (the plant page repairs it later). */
   async function checkedKey(sp: string | null, k: number): Promise<number> {
     if (!sp || speciesOf(sp) !== sp) return k;
@@ -32,12 +33,8 @@
     // reference is asked anything: the form is live during that wait, and a default applied after it would overwrite a
     // place the grower had already chosen (round seventeen, A3). Only a place not yet touched by hand takes it.
     const loc = page.url.searchParams.get('loc');
-    let last: string | null = null;
-    try {
-      last = localStorage.getItem('cultifolio.lastLocation');
-    } catch {
-      /* fine */
-    }
+    // A place of this collection: the sample's own in the sample, never the grower's (round sixty-one; `stored.ts`).
+    const last = readSetting('cultifolio.lastLocation', 'collection');
     // A ?loc= naming a bench since removed falls back to the last-used one rather than dropping both (round eighteen, 18).
     const want = loc && collection.location(loc) ? loc : last;
     if (want && collection.location(want) && locationId == null) { locationId = want; if (want === last && !(loc && collection.location(loc))) lastUsedLoc = want; }
@@ -136,7 +133,9 @@
     try {
       if (keyCheck) await keyCheck.catch(() => undefined);
       // A name nothing resolved is filed on the second Add, not the first: the first arms and the picker says so (round twenty-three, 4).
-      if (!taxonKey && kind !== 'hybrid' && !nameArmed && !(await picker?.check())) { nameArmed = true; return; }
+      // A name with "cf.", "aff." or "sp." is filed as written, with no key: it names no species of the reference, and the
+      // species part it compares with is what its page and its care line read (round sixty-one; the grower review, 5).
+      if (!taxonKey && kind !== 'hybrid' && !nameArmed && !parseName(name).qualifier && !(await picker?.check())) { nameArmed = true; return; }
     } finally {
       checking = false;
     }
@@ -146,6 +145,7 @@
     try {
       const p = parseName(name);
       const taxonName = p.scientific;
+      if (p.qualifier) taxonKey = null; // a key would say the plant is that species, which "cf." says it may not be
       // Keep a taxon record so the species has a home for your notes even before a dossier exists.
       const slug = speciesSlug(taxonName);
       if (!collection.taxon(slug)) await collection.put('taxon', slug, { name: speciesOf(taxonName), gbifKey: taxonKey });
@@ -158,7 +158,8 @@
         // The picker parses the name on a debounce; the form parses it again here so a quick Add cannot file a hybrid as a species.
         nameKind: p.kind !== 'species' ? p.kind : kind,
         parentage: p.kind === 'hybrid' || kind === 'hybrid' ? (parentage?.trim() || p.parentage || null) : null,
-        nameAsReceived: nameAsReceived.trim() || (nameAsReceived !== name ? null : null),
+        // "Mammillaria theresae (white flower)": the part in brackets is not filed in the name, and kept whole as the name as received rather than dropped (round sixty-one; the grower review, 3).
+        nameAsReceived: nameAsReceived.trim() || (p.aside ? name.trim() : null),
         fieldNumber: fieldNumber.trim() || null,
         provenance,
         acquired: acquired || null,
@@ -173,7 +174,7 @@
       const firstId = accNo(recs[0]);
       // Several new pots want labels next: the toast opens the labels page with these plants picked, by identity as the plant page's Label does (round fifty-eight; the grower review).
       const labelsFor = { label: 'Labels', run: () => { void goto('/labels?acc=' + recs.map((r) => r.id).join(',')); } };
-      try { if (locationId) localStorage.setItem('cultifolio.lastLocation', locationId); } catch { /* fine */ }
+      if (locationId) writeSetting('cultifolio.lastLocation', 'collection', locationId);
       if (addAnother) {
         addAnother = false;
         // Mid-batch the toast offers Undo, not Open: a tap on "Open" left the form and its typed plant behind (round sixty; the grower review, 3).

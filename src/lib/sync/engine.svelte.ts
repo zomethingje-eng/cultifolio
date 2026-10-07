@@ -42,8 +42,9 @@ import { storageErrorText } from '$lib/db/storage-error';
 import { StoppedError, getMeta, setMeta, setMetaIfKey, getPhotoBlobs, putPhotoBlobs, deletePhotoBlobs, photoBlobIds, outboxKeys, outboxAck, outboxFill, outboxClear, changesByKeys, appendChanges, onOtherTabWrite, announceSyncForgotten } from '$lib/db/vault';
 import { deriveKeys, sealJson, openJson, seal, open, packPhoto, unpackPhoto, parseVaultKey, batchFingerprint, dropProof, sha256hex, type VaultKeys } from './crypto';
 import { MAX_BATCH_BYTES, MAX_PHOTO_BYTES, SEAL_OVERHEAD, OVERLAP_MS, CURSOR_SLACK_MS, PUSH_HEADERS, PHOTO_DROP_HEADER, batchName, listAfter, logBatch } from './limits';
-import { readChanges, isHeld, isParked, dueAt, hlcWall, type Change } from '$core/log';
-import { hlcCompare, MAX_AHEAD_MS, nowMs, trustServerTime, clockOffsetMs, clearClockOffset, onClockOffsetChange, clockChecked } from '$core/hlc';
+import { readChanges, isHeld, isParked, dueAt, hlcWall, PARK_MS, type Change } from '$core/log';
+import { hlcCompare, MAX_AHEAD_MS, nowMs, trustServerTime, clockOffsetMs, clearClockOffset, onClockOffsetChange, clockChecked, isPastStamp } from '$core/hlc';
+import { inDemo } from '$lib/db/demo';
 import { version as BUILD } from '$app/environment';
 
 interface SyncMeta {
@@ -71,6 +72,22 @@ interface SyncMeta {
   /** Photographs seen removed at the last run: one of them live again, with pixels here, is sent again whatever `photosPushed` says, since a peer may have asked the server to drop it meanwhile (round fifty-one, 2). */
   photosRemoved?: string[];
   lastSync: string | null;
+  /**
+   * The server's refusal of this vault's uploads (a 503 with a Retry-After of a minute or more), and when the device asks
+   * again: kept here, so a reload or another tab of this device respects it, not only the tab that was told (round
+   * sixty-one; decision 6). Never more than an hour ahead.
+   */
+  refusal?: { text: string; until: number };
+  /**
+   * For each batch this device pushed and has not yet seen listed, the latest wall time among its stamps read from a
+   * clock (a stamp made past another, `isPastStamp`, is left out: it is never parked). The listing gives the batch's
+   * arrival, and a batch whose latest such stamp is more than two days past it holds a change to park (round sixty-one).
+   */
+  ownMax?: Record<string, number>;
+  /** This device's own batches, by key, with their arrival, still to be judged by it (fetched again and their far stamps parked): kept until that is done, so a failed fetch is tried again next run (round sixty-one). */
+  ownJudge?: Record<string, number>;
+  /** Whether this device has listed the whole vault for its own batches since it began judging them (round sixty-one): a device that pushed before then lists once from the start. */
+  ownListed?: boolean;
 }
 
 const META = 'sync';
@@ -188,7 +205,7 @@ class Sync {
     // each init before a vault was set up (the layout, then the sync page) added another (round fifty-eight).
     if (!this.clockHooked) {
       this.clockHooked = true;
-      onClockOffsetChange(() => { void collection.rebuild().then(() => this.scanClock()).catch(() => {}); });
+      onClockOffsetChange(() => this.clockChanged());
     }
     this.wasIn = (await getMeta<{ vaultId: string; at: string; why: 'stopped' | 'replaced' }>(WAS)) ?? null;
     const m = await getMeta<SyncMeta>(META);
@@ -202,11 +219,22 @@ class Sync {
       this.quarantined = this.meta.quarantined ?? [];
       this.refused = this.meta.refused ?? [];
       this.vaultFull = this.meta.vaultFull ? { bytes: this.meta.vaultFull.bytes, limit: this.meta.vaultFull.limit } : null;
+      this.readRefusal(this.meta);
       this.configured = true;
       this.hook();
       await this.scanClock();
       await this.countPending();
     }
+  }
+
+  /**
+   * The clock in force changed (a reading here or in another tab, a correction that lapsed) or was confirmed for the
+   * first time, or stopped counting as confirmed: every hold and every park judged by the clock alone is judged again,
+   * by a fold of the log, and the engine's list of held changes is read again from it. In the fold-rules hash since round
+   * sixty-one: a listener that did nothing passed every test (the clock review's 10, mutations M12 and M13).
+   */
+  private clockChanged(): void {
+    void collection.rebuild().then(() => this.scanClock()).catch(() => {});
   }
 
   private hook() {
@@ -251,6 +279,9 @@ class Sync {
 
   /** First device: make (or adopt) a vault with this key, then push everything and pull. */
   async setup(vaultKey: string, mode: 'create' | 'join' = 'create'): Promise<void> {
+    // Not in the sample collection, whatever the page shows: a vault set up there would send the sample to the server
+    // (round sixty-one; decision 10, a guard in the code and not only the page's CSS).
+    if (inDemo()) throw new Error('Sync is off in the sample collection. Leave the sample to sync your own plants.');
     const key = parseVaultKey(vaultKey);
     if (!key) throw new Error('That is not a sync key.'); // the glossary's word, as the sync page says it (round fifty-eight; the accessibility review)
     const keys = await deriveKeys(key);
@@ -368,6 +399,8 @@ class Sync {
    * never reach the new vault with the old meta (round seventeen, 4). Kept beside the meta, not on the engine.
    */
   private keysOf = new WeakMap<SyncMeta, VaultKeys>();
+  /** Removed photographs the server last answered 409 for, and when, in this tab: asked again only after `ASK_409_MS`. */
+  private asked409 = new Map<string, number>();
   private k(m: SyncMeta): VaultKeys {
     const k = this.keysOf.get(m);
     if (!k || this.meta !== m) throw stopped();
@@ -420,7 +453,7 @@ class Sync {
       if (isHeld(c.t, hold)) {
         if (!this.meta.held?.includes(c.t)) (this.meta.held ??= []).push(c.t);
         added = true;
-      } else if (hold.except && ownStamp(c.t, hold.except) && !followed.has(hlcWall(c.t)) && hlcCompare(c.t, ownLast) > 0) ownLast = c.t;
+      } else if (hold.except && ownStamp(c.t, hold.except) && !followed.has(hlcWall(c.t)) && !isPastStamp(c.t) && hlcCompare(c.t, ownLast) > 0) ownLast = c.t; // a stamp made past another says nothing of this clock (round sixty-one)
     }
     if (added) {
       this.setHeld();
@@ -433,7 +466,8 @@ class Sync {
   private warnClock(ownLast: string): void {
     if (ownLast && hlcWall(ownLast) > nowMs() + MAX_AHEAD_MS) {
       const until = new Date(hlcWall(ownLast));
-      this.clockWarning = `This device's clock appears to have jumped back; edits it made before ${until.toLocaleString()} keep their stamps, and a later edit to the same field is stamped just past them.`;
+      // Said as what it means to the grower, with nothing to do (round sixty-one; the grower review's 9).
+      this.clockWarning = `Some changes made on this device are dated as late as ${until.toLocaleString()}, after today: its clock was set ahead when they were made, or is behind now. Nothing is lost, and what you edit now still shows.`;
     } else if (Math.abs(clockOffsetMs()) > 0) {
       // The device clock disagrees with the server's by more than half a minute: changes are stamped by the server's
       // time while this device syncs, and the warning says so, since the device's own clock is what the grower sees (round forty-nine, 1).
@@ -443,7 +477,9 @@ class Sync {
   }
 
   private setHeld(): void {
-    const held = this.meta?.held ?? [];
+    // Only those still waiting to change something: one an edit here was since stamped past will never show, and is not
+    // said to be on its way (round sixty-one; the clock review's 9). The list itself keeps them, to fold as they come due.
+    const held = collection.stillHeld(this.meta?.held ?? []);
     this.held = held.length;
     this.heldUntil = held.length ? Math.max(...held.map(dueAt)) : null;
   }
@@ -470,6 +506,7 @@ class Sync {
    */
   async run(): Promise<void> {
     if (!this.configured || !this.keys || !this.meta || this.busy) return;
+    if (inDemo()) return; // never in the sample collection (round sixty-one; decision 10)
     const locks = this.locks;
     if (!locks) return this.runNow();
     // Named by the vault: a run of a vault this tab has since left (after "Stop syncing" and a new key) can still be
@@ -490,6 +527,7 @@ class Sync {
         this.quarantined = [...(m.quarantined ?? [])];
         this.refused = [...(m.refused ?? [])];
         this.vaultFull = m.vaultFull ? { bytes: m.vaultFull.bytes, limit: m.vaultFull.limit } : null;
+        this.readRefusal(m);
         this.lastSync = m.lastSync;
         this.setHeld();
       }
@@ -499,6 +537,7 @@ class Sync {
 
   private async runNow(): Promise<void> {
     if (!this.configured || !this.keys || !this.meta || this.busy) return;
+    if (inDemo()) return;
     // The generation this run belongs to: "Stop syncing" or a new vault during the run makes it stale, and a stale run
     // leaves the status, the busy flag and the run count to the vault that replaced it (round sixteen, 2).
     const g = this.gen;
@@ -558,20 +597,38 @@ class Sync {
    * outbox keeps every change, uploads wait until then (at most an hour between tries), and receiving carries on (round
    * sixty; three reviews: "push failed: 503", re-sent every five minutes, the pull never ran).
    */
-  private async refusedBy(r: Response): Promise<never> {
+  private async refusedBy(m: SyncMeta, r: Response): Promise<never> {
     let text = '';
     try { const body = (await r.clone().json()) as { error?: string; message?: string }; text = body.error || body.message || ''; } catch { /* a 503 with no sentence (the platform's own) */ }
     const secs = Math.max(5, Math.min(3600, Number(r.headers.get('retry-after')) || 300));
-    if (secs >= 60) this.refusal = { text: text || 'The sync server is not taking uploads from this vault just now.', until: Date.now() + secs * 1000 };
+    // A wait of a minute or more is the vault refused for a while: kept in the sync record, so a reload or another tab
+    // asks no sooner (round sixty-one; decision 6: it lived in one tab's memory). A shorter one (a photograph held by
+    // another device a moment, a recount that crossed a landing) is no refusal: the run is simply tried again then.
+    if (secs >= 60) {
+      this.refusal = { text: text || 'The sync server is not taking uploads from this vault just now.', until: Date.now() + secs * 1000 };
+      if (this.meta === m) { m.refusal = { ...this.refusal }; await this.save(m).catch(() => {}); }
+    }
     const e = new Error(text || `the sync server asked this device to wait ${secs} s`);
     (e as Error & { retryAfterMs?: number }).retryAfterMs = secs * 1000;
     throw e;
   }
+  /** The refusal as the sync record keeps it, if it still stands, and never more than an hour ahead of this clock. */
+  private readRefusal(m: SyncMeta): void {
+    const r = m.refusal;
+    if (r && typeof r.until === 'number' && r.until > Date.now()) this.refusal = { text: String(r.text ?? ''), until: Math.min(r.until, Date.now() + 3600_000) };
+    else { this.refusal = null; if (r) delete m.refusal; }
+  }
+  /** The refusal is over: an upload was taken. */
+  private clearRefusal(m: SyncMeta): void {
+    this.refusal = null;
+    if (m.refusal) delete m.refusal;
+  }
   /** Uploads wait while the server's refusal stands: no batch or photograph is sent to be refused again. */
-  private waitRefusal(): void {
+  private waitRefusal(m: SyncMeta): void {
+    this.readRefusal(m);
     if (!this.refusal) return;
     const left = this.refusal.until - Date.now();
-    if (left <= 0) { this.refusal = null; return; }
+    if (left <= 0) { this.clearRefusal(m); return; }
     const e = new Error(this.refusal.text);
     (e as Error & { retryAfterMs?: number }).retryAfterMs = left;
     throw e;
@@ -603,7 +660,7 @@ class Sync {
   }
 
   private async push(m: SyncMeta): Promise<void> {
-    this.waitRefusal();
+    this.waitRefusal(m);
     const todo = await this.toPush();
     this.pending = todo.length;
     let sent = 0;
@@ -653,9 +710,9 @@ class Sync {
         await this.save(m);
         return;
       }
-      if (r.ok) { m.photosPushed.push(id); this.refusal = null; if (probing) this.setFull(m, null); }
+      if (r.ok) { m.photosPushed.push(id); this.clearRefusal(m); if (probing) this.setFull(m, null); }
       else if (r.status === 429) this.limited(r);
-      else if (r.status === 503) await this.refusedBy(r);
+      else if (r.status === 503) await this.refusedBy(m, r);
       else if (r.status === 409 && (await this.serverHolds(m, id, packed))) m.photosPushed.push(id); // our own earlier send whose answer was lost: sealed again with a fresh nonce, so the bytes differ, the pixels do not
       else if (r.status >= 400 && r.status < 500 && r.status !== 401 && r.status !== 403) this.note(m, 'refused', id, `photo refused: ${r.status}`);
       else throw new Error(`photo push failed: ${r.status}`);
@@ -693,9 +750,13 @@ class Sync {
       // these same changes (round sixteen, 2; round seventeen, A1).
       await outboxAck(batch.map((c) => c.t), m.key);
       this.setFull(m, null);
-      this.refusal = null;
+      this.clearRefusal(m);
       if (!m.have.includes(key)) m.have.push(key);
       (m.haveAt ??= {})[key] = Date.now(); // its arrival, near enough: the server's clock and this one agree to the minute the overlap allows
+      // The latest stamp in it that a clock gave, for the listing to judge against the batch's arrival (round sixty-one).
+      let far = 0;
+      for (const c of batch) if (!isPastStamp(c.t) && hlcWall(c.t) > far) far = hlcWall(c.t);
+      (m.ownMax ??= {})[key] = far;
       return batch.length;
     }
     const full = await this.fullFrom(r);
@@ -704,7 +765,7 @@ class Sync {
       return 0;
     }
     if (r.status === 429) this.limited(r);
-    if (r.status === 503) await this.refusedBy(r);
+    if (r.status === 503) await this.refusedBy(m, r);
     if ((r.status === 400 || r.status === 409 || r.status === 413) && mayResplit && batch.length > 1) {
       const mid = cutBefore(batch, Math.ceil(batch.length / 2)); // never between a notes change and its base (round twenty-nine, 9)
       const a = await this.pushBatch(m, batch.slice(0, mid));
@@ -746,7 +807,95 @@ class Sync {
       m.have = keep;
       const set = new Set(keep);
       for (const k of Object.keys(at)) if (!set.has(k)) delete at[k];
+      if (m.ownMax) for (const k of Object.keys(m.ownMax)) if (!set.has(k)) delete m.ownMax[k];
     }
+  }
+
+  /**
+   * Whether a batch the listing shows is one this device pushed that may carry a change to park by its arrival: a stamp
+   * read from a clock more than two days past it (round sixty-one, decision 1). Known exactly from what the push kept
+   * (`ownMax`); for a batch pushed before that was kept, from the hour its name carries, which is its last change's
+   * (a batch is a run of the outbox in stamp order), so a batch that cannot hold one is never fetched.
+   */
+  private ownToJudge(m: SyncMeta, key: string, at: number): boolean {
+    const parts = key.split('-');
+    if (parts[2] !== (collection.device || 'dev')) return false;
+    const kept = m.ownMax?.[key];
+    if (m.ownMax && kept !== undefined) delete m.ownMax[key];
+    if (kept !== undefined) return kept > at + PARK_MS;
+    const hour = Number(parts[0]);
+    return Number.isFinite(hour) && hour + 3600_000 > at + PARK_MS;
+  }
+
+  /**
+   * This device's own changes judged by the arrival of the batch that carried them, as `takeBatch` judges a peer's (round
+   * sixty-one, decision 1; the clock review's 3, the second outside review's 7). The writer never learned its arrivals, so
+   * it showed its own year-ahead value over every edit from a correct device while every peer had parked it. The listing
+   * says when each batch arrived; a batch of this device's that may hold a stamp more than two days past that is fetched
+   * again (the same bytes every peer read) and those stamps are parked here too, stored, and listed with Apply, so the
+   * writer and its peers agree. A fetch that fails is tried again next run; nothing else of the batch is written.
+   */
+  private async judgeOwn(m: SyncMeta): Promise<void> {
+    const todo = Object.entries(m.ownJudge ?? {});
+    if (!todo.length) return;
+    let parkedAny = false;
+    for (const [key, at] of todo) {
+      this.step(m, 'Checking this device\'s own changes against when they reached the server…');
+      let res: Response;
+      try {
+        res = await syncFetch(`${this.base}/api/sync/log/${key}?vault=${this.k(m).id}`, { headers: this.h(m) }, BATCH_MS);
+      } catch (e) {
+        if (e instanceof StoppedError || this.meta !== m) throw e;
+        continue; // not reached this time: asked again next run
+      }
+      if (res.status === 429) this.limited(res);
+      if (res.status === 404) { delete m.ownJudge![key]; continue; } // nothing there to judge
+      if (!res.ok) continue;
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      const keys = this.k(m);
+      let changes: Change[];
+      try {
+        const batch = await openJson<{ v: number; device: string; changes: unknown }>(keys, 'log', bytes, key);
+        if (!batch || typeof batch !== 'object' || batch.v !== 1) throw new Error('not a batch this version understands');
+        changes = readChanges(batch.changes).changes;
+      } catch {
+        delete m.ownJudge![key]; // bytes this device cannot open: no peer can fold them either, and there is nothing to judge
+        continue;
+      }
+      const hold = this.hold(at);
+      const parked = changes.filter((c) => isParked(c.t, hold) && !collection.parkedStamps.has(c.t));
+      if (parked.length) {
+        // Into the log as they are (they are this device's own, normally there already), then parked, in the order a
+        // peer's are: a change parked here must be in the log to be listed and applied.
+        await appendChanges(parked, true, false, m.key);
+        await collection.markParked(parked);
+        parkedAny = true;
+      }
+      delete m.ownJudge![key];
+      await this.save(m);
+    }
+    // The fold of this tab had them as ordinary changes: it is read again without them (the other tabs are told by the park).
+    if (parkedAny) { await collection.rebuild(); await this.scanClock(); }
+  }
+
+  /** Once per device: list the whole vault for this device's own batches pushed before it judged them by their arrival (round sixty-one). Only the listing; nothing is fetched unless a batch may hold a far stamp. */
+  private async listOwnOnce(m: SyncMeta): Promise<void> {
+    let after: { at: number; key: string } | null = null;
+    for (;;) {
+      this.step(m, 'Checking this device\'s own changes against when they reached the server…');
+      const q = 'since=' + (after ? `&after=${listAfter(after.at, after.key)}` : '');
+      const r = await syncFetch(`${this.base}/api/sync/log?vault=${this.k(m).id}&${q}`, { headers: this.h(m) });
+      if (r.status === 429) this.limited(r);
+      if (!r.ok) return; // tried again next run
+      const { batches, more, next } = (await r.json()) as { batches: Array<{ key: string; at: number }>; more: boolean; next?: { at: number; key: string } };
+      for (const b of batches) if (this.ownToJudge(m, b.key, b.at)) (m.ownJudge ??= {})[b.key] = b.at;
+      if (!more || !batches.length) break;
+      const last = next ?? { at: batches[batches.length - 1].at, key: batches[batches.length - 1].key };
+      if (after && last.at === after.at && last.key === after.key) break;
+      after = last;
+    }
+    m.ownListed = true;
+    await this.save(m);
   }
 
   /**
@@ -806,6 +955,7 @@ class Sync {
   private async pull(m: SyncMeta): Promise<number> {
     let got = 0;
     this.clockAhead = null; // this run's listings decide it afresh
+    const whole = !m.since; // a listing from the start sees every batch of this device's too
     // The first page of a run starts a minute before the cursor; later pages continue strictly after the last batch listed.
     let after: { at: number; key: string } | null = null;
     for (;;) {
@@ -848,7 +998,7 @@ class Sync {
             if (await this.takeBatch(m, b.key, b.at)) got++;
             m.have.push(b.key);
             have.add(b.key);
-          }
+          } else if (this.ownToJudge(m, b.key, b.at)) (m.ownJudge ??= {})[b.key] = b.at; // this device's own, judged below by this arrival
           (m.haveAt ??= {})[b.key] = b.at;
           // The cursor never moves past this clock by more than the slack: one listing with a far-future arrival (a server
           // clock, or a listing shaped by whoever holds the token) would otherwise make every later `since=` answer empty for
@@ -869,6 +1019,9 @@ class Sync {
       if (after && last.at === after.at && last.key === after.key) break; // no progress (a server without the cursor): stop rather than spin
       after = last;
     }
+    if (whole && !m.ownListed) { m.ownListed = true; await this.save(m); }
+    else if (!m.ownListed) await this.listOwnOnce(m);
+    await this.judgeOwn(m);
     // A batch set aside by an earlier build may be one this build can read (a newer batch format, a kind it did not
     // know). It arrived long before the cursor, so a listing would never show it again: it is fetched by key, after the
     // listing so that new changes arrive even while an old batch keeps failing, and it leaves the quarantine only once it
@@ -998,6 +1151,7 @@ class Sync {
     for (const { id, at } of removed) {
       if (have.has(id)) { await deletePhotoBlobs(id).catch(() => {}); collection.forgetPhotoUrls(id); }
       if (dropped.has(id) || nowMs() - at < DROP_AFTER_MS) continue;
+      if (Date.now() - (this.asked409.get(id) ?? -Infinity) < ASK_409_MS) continue; // answered "kept" within the hour: not asked again yet
       // With the removal's own time, so the server can tell a removal made before a newer upload of this photograph from
       // another device, and leave the newer one (round sixty; the stale DELETE in both outside reviews).
       const r = await syncFetch(`${this.base}/api/sync/photo/${id}?vault=${this.k(m).id}`, { method: 'DELETE', headers: { ...this.h(m), [PHOTO_DROP_HEADER]: await dropProof(this.k(m), id), 'x-photo-removed-at': String(Math.round(at)) } });
@@ -1005,10 +1159,12 @@ class Sync {
       if (this.meta !== m) throw stopped();
       if (r.status === 503) continue; // the photograph is being stored or removed elsewhere this moment: asked again next run, nothing to report
       if (r.status === 409) {
-        // A newer upload of this photograph (an Undo or an edit elsewhere brought it back) is on the server: it stays, and
-        // this removal is done with; the record's own fold decides what shows.
-        (m.photosDropped ??= []).push(id);
-        changed = true;
+        // The server holds an upload of this photograph claimed after the removal: a revival (an Undo or an edit elsewhere
+        // brought it back), or its first upload landing late, after a peer had already removed its record. Not final
+        // (round sixty-one; decision 5, the server review's 1 and the second outside review's 9: taken as done, a late
+        // first upload stayed on the server for good). A revival makes the record live again and this loop stops asking;
+        // a late upload's claim lapses and the next request removes it. Asked again at a later run, at most hourly.
+        this.asked409.set(id, Date.now());
         continue;
       }
       if (r.status === 403) {
@@ -1043,6 +1199,8 @@ export function spanWords(ms: number): string {
 const sameList = (a: string[], b: string[]) => a.length === b.length && a.every((x, i) => x === b[i]);
 /** How old a photograph's removal must be before the server is asked to drop the bytes: past any Undo. */
 const DROP_AFTER_MS = 10 * 60_000;
+/** How long after a 409 ("an upload claimed after the removal is kept") a removed photograph is asked about again: a run is minutes apart, and a request per removed photograph per run would spend the address's allowance (round sixty-one). */
+const ASK_409_MS = 3600_000;
 
 const stopped = () => new StoppedError();
 /** A full vault is probed with a photograph at most this often. */

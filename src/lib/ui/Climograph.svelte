@@ -2,11 +2,11 @@
   import { climograph, type ClimoInput } from '$climate/climograph';
   import { units } from '$lib/ui/units.svelte';
   import { tempUnit, rainUnit, dryLabel, temp, rain } from '$core/units';
+  import { tiedMonths, monthNames } from '$core/sheet';
   /** `name`: the species, for the figure's title (round fifty-eight; the accessibility review). */
   /** `south`: the habitat's hemisphere, so the chart says whose months it draws (round sixty; visitor 3); unset, it says "habitat months" alone. */
   let { climate, id = 'climograph', name, south = null }: { climate: ClimoInput; id?: string; name?: string; south?: boolean | null } = $props();
   const calendar = $derived(`Habitat months${south == null ? '' : `, ${south ? 'southern' : 'northern'} hemisphere`}`);
-  const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   /**
    * The figure in one sentence, for the description a screen reader gives with the title: the warmest month's mean day,
    * the coldest month's mean night and the year's rain, from the figures drawn, and whose figures they are; the longer
@@ -18,7 +18,10 @@
     const hot = m.reduce((b, x, i) => (x.tmax > m[b].tmax ? i : b), 0);
     const cold = m.reduce((b, x, i) => (x.tmin < m[b].tmin ? i : b), 0);
     const year = m.reduce((a, x) => a + x.precipMm, 0);
-    return `Warmest month ${MONTHS[hot]}, mean day ${temp(m[hot].tmax, units.current)}; coldest month ${MONTHS[cold]}, mean night ${temp(m[cold].tmin, units.current)}; ${rain(year, units.current)} of rain a year. Medians across the range, from CHELSA${climate.extremes ? `; the extremes at the edge from NASA POWER` : ''}. ${calendar}.`;
+    // Every month that ties, as printed (round sixty-one; visitor 5).
+    const fmt = (v: number) => temp(v, units.current);
+    const hots = tiedMonths(m.map((x) => x.tmax), true, fmt), colds = tiedMonths(m.map((x) => x.tmin), false, fmt);
+    return `Warmest month${hots.length > 1 ? 's' : ''} ${monthNames(hots)}, mean day ${temp(m[hot].tmax, units.current)}; coldest month${colds.length > 1 ? 's' : ''} ${monthNames(colds)}, mean night ${temp(m[cold].tmin, units.current)}; ${rain(year, units.current)} of rain a year. Medians across the range, from CHELSA${climate.extremes ? `; the extremes at the edge from NASA POWER` : ''}. ${calendar}.`;
   });
   // Drawn at the width it is shown at, so labels keep their size on a phone instead of shrinking with the viewBox.
   let shown = $state(0);
@@ -90,9 +93,10 @@
     <span class="key"><i class="sw day"></i>day</span>
     <span class="key"><i class="sw night"></i>night</span>
     <span class="key"><i class="sw bar"></i>rain</span>
-    {#if g.hasBand}<span class="key"><i class="sw band"></i>10th–90th percentile across {climate.cells} habitat cells</span>{:else if climate.cells > 1}<span class="key muted">{climate.cells} habitat cells, no spread beyond rounding</span>{:else}<span class="key muted">one habitat cell, so no spread is drawn</span>{/if}
+    <!-- The lines, the bars and the strip name their source where a reader sees them, not only in the <desc> (round sixty-one; visitor 3). -->
+    {#if g.hasBand}<span class="key"><i class="sw band"></i>medians and 10th–90th percentile across {climate.cells} habitat cells, CHELSA</span>{:else if climate.cells > 1}<span class="key muted">medians across {climate.cells} habitat cells, CHELSA; no spread beyond rounding</span>{:else}<span class="key muted">one habitat cell, CHELSA, so no spread is drawn</span>{/if}
     <span class="key"><i class="sw quarter"></i>cold quarter: the three months around the coldest mean night</span>
-    {#if climate.extremes}<span class="key"><i class="sw ext"></i>extremes over {climate.extremes.years} years at a typical spot in the range, from NASA POWER, marked at the edge: undated</span>{/if}
+    {#if climate.extremes}<span class="key"><i class="sw ext"></i>extremes over {climate.extremes.years} years at a typical spot in the range, from NASA POWER, marked at the edge, in no month</span>{/if}
     {#if g.strip}{#if g.strip.dli}<span class="key"><i class="sw dli"></i>DLI, mol/m²/day</span>{/if}{#if g.strip.rh}<span class="key"><i class="sw rh"></i>RH %</span>{/if}<span class="key muted">each on its own scale</span>{/if}
   </figcaption>
 </figure>

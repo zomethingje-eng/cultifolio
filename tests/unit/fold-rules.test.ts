@@ -30,7 +30,7 @@ function block(file: string, signature: string): string {
   return text.slice(at, end + indent.length + 2);
 }
 
-const RECORDED = { rules: 5, hash: 'c82fbf4ccaa4f8e2ec14f5bf69e34c91' };
+const RECORDED = { rules: 6, hash: '816550885b9c3dc41d4f0c367dbad696' }; // re-recorded at the merge: the vault's sample staging name and closing notice, no fold change (round sixty-one)
 
 describe('the fold rules number (round fifty-seven)', () => {
   it('moves whenever the fold\'s source does', () => {
@@ -39,13 +39,17 @@ describe('the fold rules number (round fifty-seven)', () => {
     const src = [
       whole('src/lib/core/log.ts'),
       whole('src/lib/core/hlc.ts'),
-      ...['load(): Promise<void> {', 'async rebuild(', 'private async catchUp(', 'private clearFold(', 'private applyHere(', 'private foldAll(', 'private foldSome(', 'private touched(', 'private noteParents(', 'private async foldFromVault(', 'private async fromFold(', 'private async saveFold(', 'private dueNow(', 'private hold(', 'private notePark(', 'async markParked(', 'private async saveParked(', 'private async rereadParked(', 'private async flushParked(', 'private async readParked('].map((sig) => block(col, sig)),
+      // Round sixty-one: `saveParked` and `flushParked` are gone (a load stores no park of its own, rule 5); `stampPast` and
+      // `commit` came in (what an edit is stamped and what a commit folds shape every fold after: the clock review's 10).
+      ...['load(): Promise<void> {', 'async rebuild(', 'private async catchUp(', 'private clearFold(', 'private applyHere(', 'private foldAll(', 'private foldSome(', 'private touched(', 'private noteParents(', 'private async foldFromVault(', 'private async fromFold(', 'private async saveFold(', 'private dueNow(', 'private hold(', 'private notePark(', 'async markParked(', 'private async rereadParked(', 'private async readParked(', 'private stampPast(', 'private async commit('].map((sig) => block(col, sig)),
       // The whole vault module since round fifty-nine: the reviews changed `changesByKeys`, `lastArrival`, `dropFoldIn`,
       // `parkStamps` and a constant, each of which shapes what a snapshot holds or replays, and the hash did not move.
       whole(vault),
       // The sync engine's own hold and its batch intake since round sixty: they decide what is parked on arrival, which
       // shapes every fold after, and a change to either passed the hash and every test (the first outside review, 31).
-      ...['private hold(', 'private async takeBatch('].map((sig) => block('src/lib/sync/engine.svelte.ts', sig)),
+      // Round sixty-one: the clock listener (it re-folds when the clock in force changes), and the judgement of this device's
+      // own batches by their arrival, which parks as `takeBatch` does.
+      ...['private hold(', 'private async takeBatch(', 'private clockChanged(', 'private ownToJudge(', 'private async judgeOwn('].map((sig) => block('src/lib/sync/engine.svelte.ts', sig)),
       JSON.stringify(REQUIRED_FIELDS),
       JSON.stringify(KINDS)
     ].join('\n');

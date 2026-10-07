@@ -61,18 +61,29 @@ export async function synonyms(f: JsonFetcher, key: number): Promise<FetchResult
   return { status: 'ok', data: r.data.results.map((s) => s.scientificName).filter((n): n is string => typeof n === 'string') };
 }
 
-export async function vernacular(f: JsonFetcher, key: number): Promise<FetchResult<Array<{ name: string; lang?: string; source?: string }>>> {
-  const r = await f<{ results: Array<{ vernacularName: string; language?: string; source?: string }> }>(`${GBIF}/species/${key}/vernacularNames?limit=50`);
+/**
+ * GBIF's vernacular names, one row per name and language whatever its case. Each keeps GBIF's `preferred` flag (true if
+ * any of its rows is preferred) and `sources`, the number of different sources that give it (a row with no source is
+ * its own), counted before the duplicates are dropped: the shown common name is chosen by them (round sixty-one,
+ * decision 7; `englishNames`). Both are written only when they say something (preferred, more than one source), so a
+ * dossier built before reads the same as a name no one prefers from one source.
+ */
+export async function vernacular(f: JsonFetcher, key: number): Promise<FetchResult<Array<{ name: string; lang?: string; source?: string; preferred?: boolean; sources?: number }>>> {
+  const r = await f<{ results: Array<{ vernacularName: string; language?: string; source?: string; preferred?: boolean }> }>(`${GBIF}/species/${key}/vernacularNames?limit=50`);
   if (r.status !== 'ok') return r;
-  const seen = new Set<string>();
-  const out: Array<{ name: string; lang?: string; source?: string }> = [];
-  for (const x of r.data.results) {
-    if (typeof x.vernacularName !== 'string') continue;
+  const byKey = new Map<string, { row: { name: string; lang?: string; source?: string; preferred?: boolean; sources?: number }; sources: Set<string> }>();
+  r.data.results.forEach((x, i) => {
+    if (typeof x.vernacularName !== 'string') return;
     const k = x.vernacularName.toLowerCase() + '|' + (x.language ?? '');
-    if (seen.has(k)) continue;
-    seen.add(k);
-    out.push({ name: x.vernacularName, lang: x.language ?? undefined, source: x.source ?? undefined });
-  }
+    let e = byKey.get(k);
+    if (!e) {
+      e = { row: { name: x.vernacularName, lang: x.language ?? undefined, source: x.source ?? undefined }, sources: new Set() };
+      byKey.set(k, e);
+    }
+    e.sources.add(typeof x.source === 'string' && x.source.trim() ? `s:${x.source.trim()}` : `#${i}`);
+    if (x.preferred === true) e.row.preferred = true;
+  });
+  const out = [...byKey.values()].map(({ row, sources }) => (sources.size > 1 ? { ...row, sources: sources.size } : row));
   return { status: 'ok', data: out };
 }
 

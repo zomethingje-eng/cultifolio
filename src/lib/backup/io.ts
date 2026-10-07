@@ -1,4 +1,5 @@
 /** Browser wiring for backups: the vault in, a download out, and a file back in. */
+import { inDemo } from '$lib/db/demo';
 import { collection } from '$lib/db/collection.svelte';
 import { getPhotoBlobs, putPhotoBlobs, deletePhotoBlobs, photoBlobIds, getMeta, openStaging } from '$lib/db/vault';
 import { accNo, sowNo } from '$lib/db/types';
@@ -102,6 +103,9 @@ export interface RestoreReport {
  * folded from the old log.
  */
 export async function restoreBackup(o: Opened, mode: 'merge' | 'replace', onProgress?: (done: number, total: number) => void): Promise<RestoreReport> {
+  // Refused in code, not only hidden by the page (round sixty-one; review B): restored into the sample, a backup would be
+  // deleted with it on leaving, and a replace would stage it beside the grower's own.
+  if (inDemo()) throw new Error(SAMPLE_REFUSAL);
   if (mode === 'replace') return replaceFromBackup(o, onProgress);
   const changes = o.merge.fresh;
   const have = new Set(await photoBlobIds());
@@ -138,6 +142,9 @@ export async function restoreBackup(o: Opened, mode: 'merge' | 'replace', onProg
   for (const id of written) if (collection.photoRemoved(id)) { await deletePhotoBlobs(id).catch(() => {}); photos--; }
   return { changes: changes.length, photos, photosMissing: o.missingPixels.length, settingsRestored: applyDeviceSettings(o.file.settings) };
 }
+
+/** What a restore started in the sample collection is told. */
+export const SAMPLE_REFUSAL = 'Restoring a backup is off in the sample collection: it would go into the sample and be deleted with it. Leave the sample to restore into your own collection';
 
 /** The replace path: stage, verify, turn sync off, switch (see replace.ts and vault.ts). */
 async function replaceFromBackup(o: Opened, onProgress?: (done: number, total: number) => void): Promise<RestoreReport> {

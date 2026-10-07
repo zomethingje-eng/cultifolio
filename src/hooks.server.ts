@@ -1,4 +1,4 @@
-import { redirect, type Handle, type RequestEvent } from '@sveltejs/kit';
+import { type Handle, type RequestEvent } from '@sveltejs/kit';
 import { unitsFor } from '$lib/server/units';
 import { building, version } from '$app/environment';
 import { corpusNow } from '$lib/server/dossiers';
@@ -112,7 +112,9 @@ export function _foreignWrite(request: Request, url: URL): boolean {
 }
 
 export const handle: Handle = async ({ event, resolve }) => {
-  for (const [from, to] of MOVED) if (from.test(event.url.pathname)) redirect(301, event.url.pathname.replace(from, to) + event.url.search);
+  // Answered here with the security headers every other answer carries: Kit's `redirect` was thrown before `policy` ran,
+  // so the 301 had none (round sixty-one; the server review, 9).
+  for (const [from, to] of MOVED) if (from.test(event.url.pathname)) return new Response(null, { status: 301, headers: { location: event.url.pathname.replace(from, to) + event.url.search, 'referrer-policy': 'no-referrer', 'x-frame-options': 'DENY', ...Object.fromEntries(SECURITY) } });
   if (_foreignWrite(event.request, event.url)) return new Response('a write from another site', { status: 403, headers: { 'cache-control': 'no-store', 'referrer-policy': 'no-referrer', ...Object.fromEntries(SECURITY) } });
   const path = pathKey(event.url.pathname);
   const policy = (r: Response) => {

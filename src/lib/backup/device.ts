@@ -9,6 +9,7 @@ import { site } from '$lib/ui/site.svelte';
 import { units } from '$lib/ui/units.svelte';
 import { prefs } from '$lib/ui/prefs.svelte';
 import { parseUnits } from '$core/units';
+import { readSetting, writeSetting } from '$lib/ui/stored';
 import type { DeviceSettings } from './backup';
 
 const LABELS = 'cultifolio.labels';
@@ -23,7 +24,7 @@ export function readDeviceSettings(): DeviceSettings {
   const u = document.cookie.match(/(?:^|;\s*)cultifolio\.units=([^;]+)/)?.[1];
   if (u) out.units = u;
   try {
-    const l = localStorage.getItem(LABELS);
+    const l = readSetting(LABELS, 'device');
     const v = l ? (JSON.parse(l) as Record<string, unknown>) : null;
     const shaped = v ? labelsShape(v) : null;
     if (shaped) out.labels = shaped;
@@ -55,7 +56,7 @@ export function previewDeviceSettings(d: DeviceSettings | null): string[] {
   if (!site.current && siteShape(d.site)) out.push('site');
   if (parseUnits(typeof d.units === 'string' ? d.units : null) && !document.cookie.includes('cultifolio.units=')) out.push('units');
   try {
-    if (d.labels && typeof d.labels === 'object' && labelsShape(d.labels as Record<string, unknown>) && !localStorage.getItem(LABELS)) out.push('label settings');
+    if (d.labels && typeof d.labels === 'object' && labelsShape(d.labels as Record<string, unknown>) && !readSetting(LABELS, 'device')) out.push('label settings');
   } catch {
     /* none */
   }
@@ -82,10 +83,7 @@ export function applyDeviceSettings(d: DeviceSettings | null): string[] {
   }
   try {
     const l = d.labels && typeof d.labels === 'object' ? labelsShape(d.labels as Record<string, unknown>) : null;
-    if (l && !localStorage.getItem(LABELS)) {
-      localStorage.setItem(LABELS, JSON.stringify(l));
-      applied.push('label settings');
-    }
+    if (l && !readSetting(LABELS, 'device') && writeSetting(LABELS, 'device', JSON.stringify(l))) applied.push('label settings');
   } catch {
     /* none */
   }

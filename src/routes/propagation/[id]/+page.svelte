@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { readSetting, writeSetting } from '$lib/ui/stored';
   import Parked from '$lib/ui/Parked.svelte';
   import ReplacedNotes from '$lib/ui/ReplacedNotes.svelte';
   import { units } from '$lib/ui/units.svelte';
@@ -110,11 +111,11 @@
    * The choice is remembered on this device only, as a convenience; nothing about it goes in the log.
    */
   let gmode = $state<'total' | 'now'>('total');
-  onMount(() => { try { if (localStorage.getItem('cultifolio.countMode') === 'now') gmode = 'now'; } catch { /* fine */ } });
+  onMount(() => { try { if (readSetting('cultifolio.countMode', 'device') === 'now') gmode = 'now'; } catch { /* fine */ } });
   function setCountMode(v: 'total' | 'now') {
     gmode = v;
     gmsg = '';
-    try { localStorage.setItem('cultifolio.countMode', v); } catch { /* fine */ }
+    writeSetting('cultifolio.countMode', 'device', v);
   }
   /** Potted up and lost on or before a day: the same reading of the log as inPotOn, so a count dated back is summed against that day's figures, not today's. */
   const outBy = (d: string) => { const ev = collection.events(id).filter((e) => e.d <= d); const sum = (t: string) => ev.filter((e) => e.t === t).reduce((n, e) => n + (e.n ?? 0), 0); return { potted: sum('potup'), lost: sum('loss') }; };

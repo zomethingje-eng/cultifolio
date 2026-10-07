@@ -85,7 +85,7 @@ interface Device { mem: Mem; col: Col; hlc: Hlc; skew: number }
 
 const DAY = 86_400_000;
 let trueNow = 0;
-const server: Array<{ c: Change; arrival: number }> = [];
+const server: Array<{ c: Change; arrival: number; by: string }> = [];
 
 async function bootDevice(mem: Mem): Promise<{ col: Col; hlc: Hlc }> {
   G.__mem = mem;
@@ -102,13 +102,20 @@ async function syncRun(d: Device): Promise<void> {
   // push: the outbox, stamped with its arrival
   for (const t of [...d.mem.outbox]) {
     const c = d.mem.changes.get(t)!;
-    if (!server.some((x) => x.c.t === t)) server.push({ c: structuredClone(c), arrival: trueNow });
+    if (!server.some((x) => x.c.t === t)) server.push({ c: structuredClone(c), arrival: trueNow, by: d.mem.device });
     d.mem.outbox.delete(t);
   }
   // the server's Date header, as the pull reads it
   const wasOff = d.hlc.clockOffsetMs(), wasChecked = d.hlc.clockChecked();
   d.hlc.trustServerTime(trueNow, Date.now());
   if (d.hlc.clockOffsetMs() !== wasOff || (!wasChecked && d.hlc.clockChecked())) await d.col.rebuild();
+  // the listing: this device's own pushed changes judged by their arrival, as the engine does since round sixty-one (judgeOwn)
+  let own = false;
+  for (const { c, arrival, by } of server) {
+    if (by !== d.mem.device || d.col.parkedStamps.has(c.t)) continue;
+    if (isParked(c.t, { now: d.hlc.nowMs(), except: d.col.device, arrival, parked: d.col.parkedStamps, clockChecked: d.hlc.clockChecked() })) { await d.col.markParked([structuredClone(c)]); own = true; }
+  }
+  if (own) await d.col.rebuild();
   // pull: what this device lacks, as takeBatch judges it
   for (const { c, arrival } of server) {
     if (d.mem.changes.has(c.t)) continue;
@@ -216,13 +223,18 @@ describe('convergence fuzz', () => {
     expect(div).toEqual([]);
     expect(lost).toEqual([]);
   }, 600_000);
-  it('with clock skews (+-10 min, +-30 h, +-3 d): nothing is lost; divergence is reported (held and parked changes differ by device until they come due or are applied)', async () => {
+  it('with clock skews (+-10 min, +-30 h, +-3 d): nothing is lost, and every seed converges (round sixty-one: the writer parks its own changes by their arrival as its peers do)', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     const before = { lost: tally.lost.length, div: tally.diverged.length };
     for (let s = 1001; s <= 1000 + Number(process.env.FZ_N ?? 120); s++) await runSeed(s, 60, { skews: true });
     const lost = tally.lost.slice(before.lost), div = tally.diverged.slice(before.div);
     console.log('skew', JSON.stringify({ seeds: 120, lost: lost.length, diverged: div.length, firstLost: lost.slice(0, 8), firstDiv: div.slice(0, 4) }, null, 1));
     expect(lost).toEqual([]); // round sixty: an edit always wins and nothing of this device's is parked by its own clock
+    // The divergence bound (round sixty-one, decision 1): none. Round sixty left 26 of 120 skewed seeds diverged, every
+    // one a change parked by its arrival on the peers and folded by its writer (the clock review's 3 and 7; seed 1012 was
+    // a parked restore that Apply could not bring back, the review's 4). With the writer judging its own batches by the
+    // arrival the listing gives, a flagged edit never parked, and a stale correction lapsing, all 120 converge.
+    expect(div).toEqual([]);
   }, 900_000);
 });
 afterAll(() => { vi.useRealTimers(); console.log('ops', tally.ops); });

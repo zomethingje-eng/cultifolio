@@ -300,6 +300,7 @@ describe('review 59 (server): a vault that holds nothing, refused at the ceiling
     expect(A.sync.refusal?.text).toBe(sentence);
     // Retry-After 86400, held to the engine's hour at most
     expect(A.sync.refusal!.until).toBeGreaterThanOrEqual(t0 + 3_600_000 - 1000);
+    expect(A.sync.refusal!.until).toBeLessThanOrEqual(Date.now() + 3_600_000 + 1000); // and at most the engine's hour, as the comment says (round sixty-one; docs/review-60/harness.md 17)
     // and the next run does not push again while the refusal stands
     const again = A.calls.length;
     await A.sync.run().catch(() => {});

@@ -8,7 +8,8 @@
  * The name, then optionally the cultivar, the plant's number, where it came from and a note, separated by semicolons (or
  * tabs, which is what columns copied out of a spreadsheet arrive as). Bullets and numbering a list was typed with are
  * taken off; empty lines and lines starting with # are skipped. Nothing is guessed: what is left after the note is said
- * on the review list, never filed somewhere it might not belong.
+ * on the review list, never filed somewhere it might not belong. A line with no name comes back with an empty name and
+ * is counted, never filed.
  */
 export interface PastedLine {
   /** 1-based line in what was pasted, for "line 12". */
@@ -36,7 +37,9 @@ export function parsePaste(text: string): PastedLine[] {
     s = s.replace(/^(?:[-*•·–]\s+|\d{1,4}[.)]\s+)/, '');
     const parts = s.split(/[;\t]/).map((x) => x.trim()); // one separator per tab: an empty cell between two tabs is a column
     const name = (parts[0] ?? '').trim();
-    if (!name) return;
+    // A line with something on it but no name is not a plant; it is kept here, nameless, so the review can say it was
+    // left out, as the sheet's rows with no name are counted (round sixty-one; the records review, 11).
+    if (!name) { if (parts.some((x) => x)) out.push({ line: i + 1, name: '', cultivar: null, number: null, source: null, notes: null, problem: 'this line has no name, so it was left out' }); return; }
     const cultivar = (parts[1] ?? '').trim().replace(/^['‘"]|['’"]$/g, '').trim() || null;
     const extra = parts.slice(5).filter((x) => x.trim());
     out.push({

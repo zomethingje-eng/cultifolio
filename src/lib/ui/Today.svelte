@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { localDateYearAgo, daysBetween } from '$core/dates';
+  import { daysBetween } from '$core/dates';
   import { site, readerLat } from '$lib/ui/site.svelte';
   import { plantLabel } from '$lib/ui/plant-label';
   import { ruleRain } from '$core/units';
@@ -23,6 +23,7 @@
   import { getMeta } from '$lib/db/vault';
   import { sync } from '$lib/sync/engine.svelte';
   import { prefs } from '$lib/ui/prefs.svelte';
+  import { photoDue, photoDueDays } from '$lib/ui/photo-due';
   /** Where the lines are shown: the front page carries them all; the Today tab shows the frost and the watering in full above, so those two lines are left to it (round fifty-three, 3). */
   let { where = 'home' }: { where?: 'home' | 'today' } = $props();
   const hasSite = $derived(frost.hasSite);
@@ -41,17 +42,16 @@
     );
   }
   const today = new Date();
-  const yearAgo = localDateYearAgo(today);
   /** When this device last wrote a backup file, for the line below (round forty-nine, 3). */
   let lastBackup = $state<string | null>(null);
   onMount(() => { void getMeta<string>('lastBackup').then((v) => (lastBackup = v ?? null)); });
   const sowings = $derived(collection.ready ? collection.sowings.filter((s) => s.status === 'active').sort((a, b) => a.sown.localeCompare(b.sown) || a.id.localeCompare(b.id)) : []); // two batches sown the same day: the one made first is the older (round twenty-five, 16)
   const growing = $derived(collection.ready ? collection.accessions.filter((a) => a.status === 'growing') : []);
-  // A plant recorded this spring is not "without a photograph in twelve months" yet: the line counts records older than
-  // six months, so a new grower's first weeks are not a reproach (round forty-nine, 3).
-  const halfYearAgo = (() => { const d = new Date(today); d.setMonth(d.getMonth() - 6); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
-  // Counted from the acquisition date on purpose (round forty-nine, 3; kept in round fifty-four against the second reviewer's finding 25): a plant the grower says they have had since 2015 and never photographed is the plant this line is for; a plant acquired last month is not.
-  const unphotographed = $derived(growing.filter((a) => (a.acquired ?? collection.madeOn('accession', a.id) ?? localDate()) <= halfYearAgo && !collection.photos(a.id).some((p) => p.d >= yearAgo)));
+  // A plant recorded this spring is not "without a photograph in twelve months" yet: the line counts records six months
+  // old or more, by the acquisition date on purpose (round forty-nine, 3; kept in round fifty-four). The rule is the plants
+  // list's own, so the chip this line opens lists the same plants (round sixty-one; the grower review, 11).
+  const photoDays = photoDueDays(today);
+  const unphotographed = $derived(growing.filter((a) => photoDue(a, collection, photoDays)));
   // The two facts the plants list and the place pages already flag, said once here: not watered for three weeks (by the
   // log, from the day the record was made when nothing is logged), and missed at the last audit or not seen for ninety
   // days. Facts from the log, not a schedule (round twenty-four, 11).
@@ -180,7 +180,7 @@
           {#if done}
             <span class="donetext">Watered {done.ids.length} just now{#if l.text}; still: <a href={l.href}>{l.text}</a>{/if}</span><button class="btn small" type="button" onclick={undoDry} aria-disabled={undoing}>Undo</button>
           {:else}
-            <a href={l.href}>{l.text}</a>{#if toWater.length}<button class="btn small waterbtn" type="button" onclick={waterDry} aria-disabled={watering || !sheetsSettled} title="One watering line on each, dated today, leaving out the plants listed as resting by their habitat's seasons; Undo takes them back">{toWater.length === 1 ? 'Water this one' : `Water these ${toWater.length}`}</button>{/if}
+            <a href={l.href}>{l.text}</a>{#if toWater.length}<!-- While it waits, the reason is said beside it, not only on hover (round sixty-one; the accessibility review, 13). -->{#if !sheetsSettled}<span class="small muted waitwhy" id="today-water-why">Reading the species sheets first…</span>{/if}<button class="btn small waterbtn" type="button" onclick={waterDry} aria-disabled={watering || !sheetsSettled} aria-describedby={!sheetsSettled ? 'today-water-why' : undefined} title="One watering line on each, dated today, leaving out the plants listed as resting by their habitat's seasons; Undo takes them back">{toWater.length === 1 ? 'Water this one' : `Water these ${toWater.length}`}</button>{/if}
           {/if}
         </div>
       {:else if l.keeping}
@@ -210,6 +210,7 @@
   .line.ok { border-left-color: var(--accent); }
   .line.doneline { border-left-color: var(--accent); }
   .donetext { flex: 1; min-width: 0; }
+  .waitwhy { flex: none; font-size: var(--fs-sm); }
   .donetext a { color: inherit; text-decoration: underline; }
   .muted { color: var(--ink3); }
   .todaynote { margin: 8px 0 0; }

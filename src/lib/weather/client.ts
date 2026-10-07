@@ -12,8 +12,12 @@ import type { Units } from '$core/units';
 export const FORECAST_TTL_MS = 30 * 60_000;
 const KEY = 'cultifolio.forecast';
 
-/** `at`: when the answer was read from the server (ms), which a cached one is older than the moment it is asked for. */
-export type ForecastAnswer<T> = { ok: true; body: T; at: number } | { ok: false; status: number };
+/**
+ * `at`: when the answer was read from the server (ms), which a cached one is older than the moment it is asked for.
+ * `held`: the site held the call back (its calls to the forecast services were used up for the minute), so the source
+ * was not asked (round sixty-one).
+ */
+export type ForecastAnswer<T> = { ok: true; body: T; at: number } | { ok: false; status: number; held?: boolean };
 
 type Entry = { at: number; body: unknown };
 
@@ -66,7 +70,11 @@ async function fetchForecast<T = unknown>(lat: number, lon: number, units: Units
   // and the line under the top bar said nothing (round fifty-eight; the client review).
   const signal = typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal ? AbortSignal.timeout(10_000) : undefined;
   const r = await fetch(`/api/forecast?lat=${la}&lon=${lo}${alt != null ? `&alt=${alt}` : ''}&units=${units}`, { signal });
-  if (!r.ok) return { ok: false, status: r.status };
+  if (!r.ok) {
+    // The server says when it held the call back itself; any other refusal is said by its status alone (round sixty-one).
+    const held = r.status === 503 || r.status === 429 ? await r.json().then((b: unknown) => (b as { held?: unknown } | null)?.held === true, () => false) : false;
+    return held ? { ok: false, status: r.status, held } : { ok: false, status: r.status };
+  }
   const body = (await r.json()) as T;
   writeCache(k, body);
   return { ok: true, body: clockTime(body) as T, at: Date.now() };
@@ -134,7 +142,12 @@ export function clockTime<T>(body: T, zone?: string): T {
  * The sentence for a forecast that was not had. A refusal of ours (a bad altitude, a rate limit) is said as ours; only
  * a failure of the source is blamed on the source. Never a status code, never "no frost".
  */
-export function forecastRefusal(status: number | null, what: 'Forecast' | 'Frost' = 'Forecast'): string {
+export function forecastRefusal(status: number | null | { status: number; held?: boolean }, what: 'Forecast' | 'Frost' = 'Forecast'): string {
+  // The answer itself may be passed, so a call the site held back is said as that: not asked, not "could not be reached"
+  // (round sixty-one; the server review, 4: rule 2). A bare status reads as before.
+  const held = typeof status === 'object' && status != null && status.held === true;
+  if (typeof status === 'object' && status != null) status = status.status;
+  if (held && status === 503) return `${what} not checked: this site's calls to the forecast services are used up for this minute, so they were not asked. This is not an all-clear; it is asked again in a few minutes.`;
   if (status === 429) return `${what} not checked: this site asked this device to wait a few minutes before asking again.`;
   if (status === 400) return `${what} not checked: this place's altitude is outside −500 to 9000 m, or its coordinates are not a place; check them.`;
   // Warmer, and still not an all-clear (round sixty; the grower review's wording table).

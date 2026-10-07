@@ -43,7 +43,7 @@ describe('species notes', () => {
     void base;
   });
 
-  it('an edit made while a peer\'s change is parked: its base is the text on screen; the parked text is not listed; Apply is made in sight of the text on screen, so it lists nothing as replaced unseen (round sixty)', async () => {
+  it('a peer\'s change parked over the text on screen is not listed as replaced; Apply is made in sight of the text on screen, so it lists nothing as replaced unseen (round sixty)', async () => {
     const T0 = Date.now();
     const b = await boot();
     const hlc = await import('$core/hlc');

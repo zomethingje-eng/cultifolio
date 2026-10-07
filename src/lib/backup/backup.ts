@@ -314,11 +314,16 @@ const csvCell = (x: unknown) => {
   // A text cell beginning =, +, -, @ or a tab (after any leading spaces, and the full-width forms too) is read as a
   // formula by a spreadsheet; a note starting "-5 °C" is the real case. A leading apostrophe makes it text, which is
   // what it is (round twenty-six, 14). A number is a number and is written as one: −5 °C of bottom heat stays -5 (round twenty-nine, 10).
-  if (typeof x === 'string' && /^\s*[=+\-@\t\r＝＋－＠]/.test(s)) s = "'" + s;
+  // A value that already begins with an apostrophe and then a formula sign gets one more, so the import, which takes one
+  // off, gives back the apostrophe the grower typed (round sixty-one; the records review, 6).
+  if (typeof x === 'string' && /^'*\s*[=+\-@\t\r＝＋－＠]/.test(s)) s = "'" + s;
   // Text a spreadsheet would read as a number or a date and change: a lot "0012" became 12, "1E5" 100000, "3-12" the
   // 3rd of December (round sixty; the data review's 12). Written as ="0012", which spreadsheets show as the text itself;
-  // the import page reads it back the same way. Real numbers stay numbers.
-  else if (typeof x === 'string' && (/^0\d+$/.test(s) || /^\d+(\.\d+)?[eE][+-]?\d+$/.test(s) || /^\d{1,2}[-/]\d{1,2}$/.test(s) || /^\d{16,}$/.test(s))) s = `="${s}"`;
+  // the import page reads it back the same way. Real numbers stay numbers. Round sixty-one adds the shapes Excel and
+  // Google Sheets also take for a date or a number: a year and a month ("2026-01", a plant number under a two-digit
+  // scheme), a day, month and year ("3-12-2024", "1/2/24"), and a run of 12 digits or more, which a General cell shows
+  // as 1.23457E+11 and saves back that way (the records review, 5).
+  else if (typeof x === 'string' && (/^0\d+$/.test(s) || /^\d+(\.\d+)?[eE][+-]?\d+$/.test(s) || /^\d{1,2}[-/]\d{1,2}$/.test(s) || /^\d{4}-\d{1,2}$/.test(s) || /^\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}$/.test(s) || /^\d{12,}$/.test(s))) s = `="${s}"`;
   return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 };
 

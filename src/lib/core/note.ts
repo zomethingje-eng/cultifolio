@@ -79,7 +79,7 @@ export function careLine(input: SheetInput, o: NoteOpts = {}): string {
     else bits.push(`${year.grow} rain ${months}`);
   }
   const m = input.months && input.months.length === 12 ? input.months : null;
-  const fl = coldFloor(m, input.extremes ?? null, archFor(input.scientific, input.family), input.units ?? METRIC, input.extremesStatus);
+  const fl = coldFloor(m, input.extremes ?? null, archFor(input.scientific, input.family), input.units ?? METRIC, input.extremesStatus, input.climateStatus);
   // The habitat night at one decimal, as the page prints it, named as what it is; "floor" alone reads as a thermostat setting.
   // The archetype table's convention is printed only for a species with no habitat figure at all, and as the group's, never
   // as a night the habitat had or a floor it raised (round sixty; self-review 3).
@@ -91,7 +91,8 @@ export function careLine(input: SheetInput, o: NoteOpts = {}): string {
     // thirty-seven, R1-2; round thirty-eight, R1-2, which found `none` still printing the mean as the night).
     const nightUnchecked = !input.extremes;
     if (fl.habitat != null && !nightUnchecked) bits.push(`hab. night ${temp(fl.habitat, input.units ?? METRIC, 1)}`);
-    if (fl.convention && fl.habitat == null) bits.push(`group min ${temp(fl.convention.minC, input.units ?? METRIC, 0)}`);
+    // Said as what it is, as everywhere else it is shown: a convention with no source, not a figure (round sixty-one; visitor 7).
+    if (fl.convention && fl.habitat == null) bits.push(`group min ${temp(fl.convention.minC, input.units ?? METRIC, 0)} (convention, no source)`);
   }
   const dlis = m ? m.map((x) => x.dli).filter((x): x is number => x != null) : [];
   if (dlis.length) bits.push(`sky ${Math.round(Math.min(...dlis))}–${Math.round(Math.max(...dlis))} DLI`);
