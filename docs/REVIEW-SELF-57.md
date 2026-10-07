@@ -9,14 +9,14 @@ Six reviews run in parallel on 2026-10-04, then checked against the live site in
 | Accessibility and visual consistency | axe-core on 22 routes in both themes, keyboard walks, contrast from the tokens, zoom and reflow. |
 | Client code | The collection, vault, fold snapshot and sync engine. Findings were reproduced with tests in a copy of the repo. |
 | Server code | Routes, search, products, sync storage, rate limits, the service worker. Findings were reproduced with tests and timings. |
-| Copy and positioning | Every user-facing string, the home page, README, and a Show HN title and first comment. |
+| Copy and positioning | Every user-facing string, the home page, README, and a launch title and first comment. |
 
 Limits of the local test run:
 - The local build serves the four-species fixture corpus, and the sandbox could not load outside photographs.
 - Photo-dependent layout was checked on the live site instead.
 - Findings marked "confirmed" were reproduced. "Read" means found by reading the code, not run.
 
-The rest is grouped by when it should land. P0 is before Show HN, because a hostile visitor or a real user would hit it in the first days. P1 is the first impression. P2 is the grower's daily use. P3 is accessibility and the design system.
+The rest is grouped by when it should land. P0 is before launch, because a hostile visitor or a real user would hit it in the first days. P1 is the first impression. P2 is the grower's daily use. P3 is accessibility and the design system.
 
 ---
 
@@ -26,7 +26,7 @@ The rest is grouped by when it should land. P0 is before Show HN, because a host
 
 1. **Anyone can exhaust vault creation, including from visitors' browsers (confirmed).**
    - **Where:** `routes/api/sync/vault/+server.ts`.
-   - **What happens:** A `fetch(..., { mode: 'no-cors', method: 'POST', body: Blob })` sends no Content-Type, passes SvelteKit's origin check, and creates a vault. Any page an HN reader opens can spend that reader's five creations a day.
+   - **What happens:** A `fetch(..., { mode: 'no-cors', method: 'POST', body: Blob })` sends no Content-Type, passes SvelteKit's origin check, and creates a vault. Any page a first-time reader opens can spend that reader's five creations a day.
      - 40 visitors use up the day's 200.
      - 400 visitors use up the lifetime 2,000.
      - IPv6 /48s multiply the per-address limit.
@@ -135,7 +135,7 @@ The rest is grouped by when it should land. P0 is before Show HN, because a host
      - Name the plants (cacti, succulents, bulbs), and say no account, free, open source.
      - Make the home title "Cultifolio: cactus, succulent and bulb reference, and a private plant record".
    - **Drafted intro (recommended):** "A reference for people who grow cacti, succulents and bulbs. 8,947 species, each with its native range, habitat climate and cold nights worked out from public data, every figure with its source. Keep your own plants here too: they stay on your device, with no account."
-   - Add `og:title`, `og:description` and `og:image` to the home page, so the HN link previews.
+   - Add `og:title`, `og:description` and `og:image` to the home page, so the link previews.
 2. **Write the top of the species page in a grower's words.** No invented advice: the same facts in plain words, in a better order.
    - **What happens now:**
      - The first paragraph reads: "Grouped as a cactus or succulent by the genus Copiapoa, which is reliably one kind of plant (archetype table). Rain rule: no rainy season to read…"
@@ -321,16 +321,16 @@ Avoid "fold", "HLC", "dossier", "build", "bucket" and "set aside" in the interfa
 
 ---
 
-## For the Show HN post (drafts in the copy review)
+## For the launch post (drafts in the copy review)
 
-- **Title (recommended):** "Show HN: Habitat climate for 8,947 cacti and succulents, from open data". Link one winter-rainfall species page in the first comment, so the hemisphere shift shows.
+- **Title (recommended):** "Habitat climate for 8,947 cacti and succulents, from open data". Link one winter-rainfall species page in the first comment, so the hemisphere shift shows.
 - **First comment (about 285 words):** plain, first person.
   - What the reference derives and from where.
   - That no text on a species page is generated.
   - The hemisphere shift.
   - The tracker and its privacy.
   - Licences, and known gaps: Aloe is thin, and a cold floor describes a place, not a tested limit.
-- **Answer before HN asks:**
+- **Answer before readers ask:**
   - Does anything cost money, now or later?
   - Was the code written with an AI assistant? One plain sentence, and the fact that species pages contain no generated text.
   - Why is Aloe capped at 9 species?

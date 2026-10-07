@@ -1,6 +1,6 @@
 # Review, round six: the visitor's layer
 
-The author's own review of the surfaces added since round five, before an outside model does the same with `REVIEW-PROMPT-6.md`. Three passes: a first visit, QA of the new code, and the code itself. Findings are numbered so the outside review can refer to them; the ones fixed in the same commit say so.
+The author's own review of the surfaces added since round five, before an outside model does the same with the review brief. Three passes: a first visit, QA of the new code, and the code itself. Findings are numbered so the outside review can refer to them; the ones fixed in the same commit say so.
 
 ## 1. A first visit
 
@@ -14,7 +14,7 @@ The species page, in the new order, answers the grower's question in the first s
 
 **Finding 2 (layout).** Drop the records pill; the pills are states (climate known or not, photographs or not, the archetype, "you grow N") and the strip is the facts. Rename the section heading "At a glance" and leave the card "In short". Fixed in this commit.
 
-The sentence that makes the site what it is, that nothing on a species page is written by a person or a model and every figure says its source, appears on the front page's welcome card and on `/about/how`, and nowhere on the species page itself, which is the page a Show HN visitor will land on from a comment link.
+The sentence that makes the site what it is, that nothing on a species page is written by a person or a model and every figure says its source, appears on the front page's welcome card and on `/about/how`, and nowhere on the species page itself, which is the page a first-time visitor will land on from a comment link.
 
 **Finding 3 (layout).** One line under the id card, in the small muted style: "Every figure on this page is derived from public data by a stated rule and says its source; nothing here is written by a person or a model. How." Fixed in this commit.
 
@@ -56,13 +56,13 @@ Three copies of "which month is coldest, warmest, wettest" exist: the species pa
 
 Untested: the settings page's site form beyond the happy path; `Today.svelte` at the year boundary; the install bar's iOS branch (no Safari in Playwright's Chromium); the service worker's cache-first shells with a changed cookie (finding 6 has a unit-level fix but no e2e); the compare tray across two tabs.
 
-## Before Show HN
+## Before launch
 
 Finding 0 is the reason to redeploy today. Findings 1 to 4 change what a stranger sees in the first minute and are all in this commit. Finding 8 is the one most likely to embarrass on a busy day (a grower's own reloads tripping the forecast limit and the front page saying "Frost not checked"). Findings 9 and 10 can wait a week. The two code notes are for after the post.
 
 ## 4. The outside review, and what was done with it
 
-The outside model reviewed `68419b3` with `REVIEW-PROMPT-6.md` and returned thirteen findings, a first-visitor walk and layout verdicts. Its numbering is kept here; the author's findings above are referred to by "own N".
+The outside model reviewed `68419b3` with the review brief and returned thirteen findings, a first-visitor walk and layout verdicts. Its numbering is kept here; the author's findings above are referred to by "own N".
 
 **Confirmed and fixed (12).** (1) is not code: the custom domain is not yet pointed at the Worker, and is the one step left before the post. (2) UTC dates: fixed with `localDate()`, every grower-entered or event date; the server's own stamps (sync quotas, the forecast's day cut) stay UTC and say so. (3) The forecast cache held the worded verdict without units: the edge caches the raw answer, the verdict is worded per request; unit-tested. (4) The evidence sentence and the archetype note spoke of a climate envelope and a cold floor for species with none: conditional now, and the pending, refused and none cases each say which. (5) Compare on a phone: one scroller, sticky row labels. (6) `near` at a species without climate: filtered at load, and the fixture carries a stale pointer to prove it. (7) Rain and Light cards say CHELSA. (8) The menu focuses its first item and traps Tab. (9) Settings is served network-first by the service worker. (10) The dry label converts. (11) A blank coordinate is a 400. (12) Digits is a whole number 2 to 6. (13) The tray listens for `storage`.
 

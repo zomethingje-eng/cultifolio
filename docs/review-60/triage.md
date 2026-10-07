@@ -98,7 +98,7 @@ The `kept` column says whether the triage (`REVIEW-TRIAGE-59.md`) kept the item 
 | S1 set-back clock hides plants | yes | done | as 1a |
 | S2 two plants under one number | yes | partial | as 1a; species page chip link missed |
 | S3 archetype table raises cold floors | yes | done | `arch-tables.json` `none` list (24 genera); split families assign none; `sheet.ts:211-244` convention apart; `r60x-arch.test.ts` |
-| S4 Show HN draft | yes | partial | 274 words; AI disclosure; replies corrected. Still has two `[AUTHOR]` markers (`SHOW-HN.md:27,62`). Written by an agent, not "in your own voice after two weeks of use". States "1981 to 2024, 44 years", which the sheet stopped hard-coding. See §5 |
+| S4 launch draft | yes | partial | 274 words; AI disclosure; replies corrected. Still has two `[AUTHOR]` markers (the launch draft). Written by an agent, not "in your own voice after two weeks of use". States "1981 to 2024, 44 years", which the sheet stopped hard-coding. See §5 |
 | S5 full device refuses writes silently | yes | done | `collection.svelte.ts:23-25` `writeErrorText`, used at :1254 and :1478; engine :541. No test with an empty-message `QuotaExceededError` on the commit path (the tests throw `new Error('QuotaExceededError…')` with text) |
 | S6 label sheets print misaligned | yes | partial | `theme.css:430-432` and `labels/+page.svelte:361-366` hide the install card, bars and toast. **Not hidden:** the sample collection's `.demobar`. In the sample, a printed label sheet starts 54 px low (reproduced; finding 8) |
 | S7 unchecked-clock edits never shown | yes | done | as 1a |
@@ -289,7 +289,7 @@ Only items whose state differs from "done" are listed. Everything else in those 
 9. **Words:** "Sync batch" against "sync bundle"; "it stays on this device"; three storage keys missing from `/about/how`.
 10. **Experience 2: the species page is 4% shorter, not de-duplicated** (finding 11).
 11. **S13: a Commons original is still loaded when the dossier has no thumb.**
-12. **S4: Show HN** still has two `[AUTHOR]` markers and an agent's voice.
+12. **S4: launch** still has two `[AUTHOR]` markers and an agent's voice.
 13. **Step 5:** one proposed e2e test not adopted; "A's table" cannot be matched.
 14. **A17:** the unchecked state is shown only through the clock line's case.
 15. **Not kept by the triage and still open from 59:**
@@ -321,7 +321,7 @@ Only items whose state differs from "done" are listed. Everything else in those 
   - `src/routes/about/formats/+page.svelte` (the parking paragraph): "This device never parks its own changes by its own clock, checked or not: a change it made, or read from a file, with no arrival to judge it by, is only ever held, as above, never parked."
   - `src/lib/db/collection.svelte.ts:1308` and :1222-1225: under `clockChecked()`, an own stamp more than `PARK_MS` ahead goes into `staleOwn`, and `commit` calls `markParked` on it. The account's §1.2 says so.
 - **Also false in the same sentence:** "a change it made … is only ever held". `isHeld` returns false for this device's own writer (`log.ts:220-222`), so own changes are never held either.
-- **Why it matters:** this is the page HN readers are invited to check. It is wrong on the exact rule round sixty changed.
+- **Why it matters:** this is the page first-time readers are invited to check. It is wrong on the exact rule round sixty changed.
 - **Reproduction:** `/tmp/r60rev/out/tests/triage--about-seams.test.ts`, test 3 (fails).
 - **Fix:** "A change this device made is never held, and is parked by its own clock in one case only: when the clock is confirmed by a sync server and the grower edits a field whose stamp, made here, is more than two days ahead. That old stamp is parked with the edit, and Apply brings it back."
 
@@ -428,7 +428,7 @@ Only items whose state differs from "done" are listed. Everything else in those 
 - **Formats' rank-marker list omits "variety",** which `RANK_MARKERS` (`search.ts:68`) skips.
 - **The snapshot's checked flag and the −5 min slack** are not on `/about/formats`.
 - **"accession number" survives in `README.md:7`;** the app says "plant number" everywhere else.
-- **`SHOW-HN.md` hard-codes "1981 to 2024, 44 years".** X removed the fixed period from the sheet in favour of the series' own length.
+- **the launch draft hard-codes "1981 to 2024, 44 years".** X removed the fixed period from the sheet in favour of the series' own length.
 
 ### 14. P3, read. Leftovers of the merge
 
@@ -461,7 +461,7 @@ Only items whose state differs from "done" are listed. Everything else in those 
 - **Date arithmetic outside `$core/dates`:**
   - `export/ics.ts:30` `addDays`, by UTC;
   - `grow/demo-seed.ts:36` and `Firsts.svelte:13`, by `new Date()` (the raw device clock, not `nowMs()`).
-- **No `TODO`, `FIXME` or `console.log` in `src`.** `[AUTHOR]` appears only in `SHOW-HN.md` (two).
+- **No `TODO`, `FIXME` or `console.log` in `src`.** `[AUTHOR]` appears only in the launch draft (two).
 - **Debug leftovers in the checkout root:** `dbg-proxy.mjs` (a logging proxy to 4173) and `names.txt` (gitignored). Check that `dbg-proxy.mjs` is not tracked.
 
 ---
@@ -511,7 +511,7 @@ Only items whose state differs from "done" are listed. Everything else in those 
 | 55 | Two flakes answered; forecast refusal text | verified (text) | `client.ts:141` (the account's quote omits the last sentence, "It is asked again when this page is next opened.") |
 | 56 | Tab bar pre-paint from `cultifolio.hasMine`; CSP hash updated | verified | the `app.html` script hashes to `I1wC1…` = CSP; `+layout.svelte:404` |
 | 60-63 | Not done: B13, /48, `sheetsIn`, tile credits, corpus harnesses kept as measurements; fuzz and mixed adopted | verified | DEPLOY:96; `r60-corpus-fuzz.test.ts:1,73` |
-| 67 | Common names need a rebuild; check SHOW-HN slugs; settle the price sentence | verified | two `[AUTHOR]` markers remain |
+| 67 | Common names need a rebuild; check the launch draft slugs; settle the price sentence | verified | two `[AUTHOR]` markers remain |
 
 ---
 
@@ -536,13 +536,13 @@ Only items whose state differs from "done" are listed. Everything else in those 
 
 ---
 
-## 6. Show HN readiness: what still blocks a launch, in order
+## 6. Launch readiness: what still blocks a launch, in order
 
 1. **Make the two about pages true again.** Fix findings 1, 2, 4 and 12 and add the seam test to `tests/unit`. A commenter checking "`/about/formats` states every rule" will check the clock rule first, since the post invites it.
-2. **Settle the sync price sentence** (`SHOW-HN.md:27,62`, both `[AUTHOR: …]`). The reply and the post must say the same thing.
+2. **Settle the sync price sentence** (the launch draft, both `[AUTHOR: …]`). The reply and the post must say the same thing.
 3. **Decide on S12 before launch day.** Either reclaim places, or raise `SYNC_VAULTS_MAX` and write in DEPLOY how to raise it quickly. Launch-day traffic plus one script could otherwise fill the 2,000.
 4. **Deploy, then rebuild the index with `commons`** (`npm run dossier -- --index`, upload, DEPLOY §5). Then check on the live index that `ariocarpus-fissuratus` and `haworthia-truncata` exist, since the post's compare link names them.
-5. **The common-name display rule.** The page shows GBIF's first English name ("String-Of-Beads Senecio"). Pick a rule with no hand-picked names before HN reads the catalogue (for example: prefer a name that is not the genus in title case, then the shortest).
+5. **The common-name display rule.** The page shows GBIF's first English name ("String-Of-Beads Senecio"). Pick a rule with no hand-picked names before readers see the catalogue (for example: prefer a name that is not the genus in title case, then the shortest).
 6. **Run the full live check against the real site** with no skips (names, forecast, thumbs, weight were skipped in the local 11 of 11). Confirm that the deployed `wrangler.jsonc` has observability off, and that the R2 spend alert is set.
 7. **Phone first screen on the live site.** At 390×844 with real photographs, check that the search and at least one catalogue row are visible. On the fixture the first row is already cut by the tab bar.
 8. **Use the app with your own plants and rewrite the post in your own voice.** The post is agent-written and says so. The self-review asked for two weeks of real use first, and the draft's own checklist repeats it. Also replace "1981 to 2024, 44 years" with the figure the index reports.

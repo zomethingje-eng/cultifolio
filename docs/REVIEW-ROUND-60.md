@@ -64,4 +64,4 @@ The reviewers' server tests are adopted (`r60-review-server*.test.ts`, `r60-prop
 
 ## 8. After the deploy
 
-The common-names search needs the corpus index rebuilt (`commons`): deploy first, then `npm run dossier -- --index` and the upload as in DEPLOY.md section 5. Until then search reads the first common name only, as before. Check that the slugs in `docs/SHOW-HN.md` exist on the live index, and settle its sync price sentence (marked `[AUTHOR: confirm]`).
+The common-names search needs the corpus index rebuilt (`commons`): deploy first, then `npm run dossier -- --index` and the upload as in DEPLOY.md section 5. Until then search reads the first common name only, as before. Check that the slugs in the launch draft exist on the live index, and settle its sync price sentence (marked `[AUTHOR: confirm]`).

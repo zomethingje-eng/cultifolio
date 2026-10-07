@@ -57,7 +57,7 @@ Tests: the convergence fuzz now asserts its bound, zero: all 120 skewed seeds co
 3. **The front page** says "Nothing about a species is written per page by a person or by AI, apart from credited quotations", and `/about/how` says once that the templates were written by the author with Claude. On a desktop the search and photographs come first and the feature sits under them, its chart drawn only on a wide screen. `feature` is sent only for the plain front page.
 4. **Changed at the merge: phones show no feature.** Decision 9 gave phones the four cards; placed between the search and the rows, they put the first catalogue row two screens down and parted the search from what it searches, which round fifty's first-screen test caught. The cards are not drawn on a phone, the strip's first photograph is the same species, and the sample's button in the welcome line is styled as a link so the first row stays above the tab bar.
 5. Both about pages were corrected against the code, from W's pass and every agent's text. The seam test that every storage key is named is permanent.
-6. `docs/SHOW-HN.md` takes title 2 and "re-derived in about an hour; built from the sources over several days"; the `[AUTHOR]` sentences are left for the author.
+6. the launch draft takes title 2 and "re-derived in about an hour; built from the sources over several days"; the `[AUTHOR]` sentences are left for the author.
 
 ## 7. Accessibility and the grower (decisions 11, 12)
 

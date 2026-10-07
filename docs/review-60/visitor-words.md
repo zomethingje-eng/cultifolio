@@ -18,7 +18,7 @@ The public pages hold up well. One thing is broken, though: the new grower label
   - `cred.mjs` fakes a loaded photograph and asks what sits on top of the credit.
   - `vis.mjs` reads the chart's visible text.
   - `fold.mjs` measures the front page at six viewports.
-- **Docs against the code.** I read `/about/how` and `/about/formats` against `svelte.config.js` (CSP), every `localStorage` and `sessionStorage` key in `src`, `counters.ts`, `sync.ts`, the import, and the label code. I read `docs/SHOW-HN.md` and `README.md` claim by claim.
+- **Docs against the code.** I read `/about/how` and `/about/formats` against `svelte.config.js` (CSP), every `localStorage` and `sessionStorage` key in `src`, `counters.ts`, `sync.ts`, the import, and the label code. I read the launch draft and `README.md` claim by claim.
 - **Tests written.**
   - `/tmp/r60rev/out/tests/visitor-words--rules.test.ts` has seven assertions, all failing today. I ran them with tsx and a minimal harness rather than vitest, so nothing was written into the checkout.
   - `visitor-words--pages.spec.ts` has two e2e tests, both failing today. I reproduced both by script.
@@ -42,10 +42,10 @@ The public pages hold up well. One thing is broken, though: the new grower label
 - **Why it breaks rules 1 and 3.**
   - "Warmest days" is the warmest month's mean of daily maxima from CHELSA. That is not the warmest days. The page's own 99th-percentile day is 7 °C higher.
   - "Coldest nights in the wild" is the 1st-percentile night at one NASA POWER cell of 0.5° × 0.625° (a reanalysis cell about 50 km across) at "a typical spot". It is neither the coldest nights nor a figure "in the wild" at a plant.
-  - The label states a fact that the figure under it does not hold, and `/about/how` says the labels are "names for what each figure is". A climate-literate HN reader will notice 6.5 against 4.0 inside a minute.
+  - The label states a fact that the figure under it does not hold, and `/about/how` says the labels are "names for what each figure is". A climate-literate first-time reader will notice 6.5 against 4.0 inside a minute.
 - **Smallest fix.**
   - Labels that are the figure's own name: "Cold floor (1 night in 100)", "Warmest month, mean day", "Rain a year", "Open-sky light".
-  - Or keep the plain words and make them true: "Cold nights at a typical spot" with the figure, and the record low beside it. SHOW-HN line 23 already says the record low is "printed beside it". On the glance card it is not.
+  - Or keep the plain words and make them true: "Cold nights at a typical spot" with the figure, and the record low beside it. the launch draft already says the record low is "printed beside it". On the glance card it is not.
   - Change Glance, compare and card.ts together.
 
 ### 2. P1, confirmed. On a phone, every species page's hero photograph hides its credit and licence under the name card
@@ -126,10 +126,10 @@ The coldest-night month and the cold quarter (`climograph.ts`, `coldest`) pick t
   - The photo strip is at 988 and the welcome line at 940.
   - The feature (y 236, 694 px tall) fills the first screen.
   - On a phone, the search is at 541 of 844, which is as intended.
-- **Why it matters:** HN readers are mostly on desktops. They get a chart of a species they did not choose, and must scroll to find out whether their own plant is here.
+- **Why it matters:** first-time readers are mostly on desktops. They get a chart of a species they did not choose, and must scroll to find out whether their own plant is here.
 - **Fix:** put the search row and the strip above the feature. Or set the feature beside the search: glance cards left, chart right, at most about 420 px tall, with the season card collapsed.
 
-### 10. P2, read. `docs/SHOW-HN.md`: the claims a skeptical reader challenges first
+### 10. P2, read. the launch draft: the claims a skeptical reader challenges first
 - **Title 1, "the climate where 8,900 cacti and succulents grow wild" (line 9).**
   - `/about/how` says the list is 172 collector genera *plus the 2,500 species most often recorded as cultivated on iNaturalist across every kind of grower*. So many of the 8,947 are not cacti or succulents.
   - Many species have no climate.
@@ -147,9 +147,9 @@ The coldest-night month and the cold quarter (`climograph.ts`, `coldest`) pick t
 ### 11. P2, confirmed. "Nothing on a species page is written by a person or by AI" is false as worded, on the front page and in the pitch
 - **Where:**
   - `src/routes/+page.svelte:653`. Unlike `/about/how`, it drops "except credited quotations". The Wikipedia summary on the page beneath was written by people.
-  - The same claim on `/about/how` line 41, in SHOW-HN and in the README. Every sentence template in `sheet.ts`, every label ("Coldest nights in the wild") and every notice was written once, by the author and by Claude agents (the README and SHOW-HN say the code was).
+  - The same claim on `/about/how` line 41, in the launch draft and in the README. Every sentence template in `sheet.ts`, every label ("Coldest nights in the wild") and every notice was written once, by the author and by Claude agents (the README and the launch draft say the code was).
   - The pages also carry ordinary written sentences that are none of the three kinds: "No openly licensed photograph on file. If you grow this plant, add your own photograph to your record.", "Your notes: none yet. Write what you know", and the map caption.
-- **Why it matters:** the first reply on HN will be "the templates were written by an LLM".
+- **Why it matters:** the first reply at launch will be "the templates were written by an LLM".
 - **Fix:** keep the claim, and make it precise:
   - "No sentence is written for a species: each is a credited quotation, a figure with its source, or a fixed rule's reading. The templates, written once, are in `sheet.ts`."
   - On the front page: "Nothing about a species is written per page by a person or by AI, apart from credited quotations."
@@ -264,7 +264,7 @@ The coldest-night month and the cold quarter (`climograph.ts`, `coldest`) pick t
 
 ## Suggestions for the first minute, ranked (none breaks a rule)
 
-1. **Desktop: search and photographs first.** The search row and the day's strip go at the top, and the feature beside or under them, kept to one screen (finding 9). Today an HN reader on a laptop sees neither the search nor a single photograph.
+1. **Desktop: search and photographs first.** The search row and the day's strip go at the top, and the feature beside or under them, kept to one screen (finding 9). Today a first-time reader on a laptop sees neither the search nor a single photograph.
 2. **One headline that is the product.** "How cold, wet and bright it is where 8,947 cacti, succulents and bulbs grow wild, every number with its source." Then one line: "Keep your own plants here too: no sign-up, on your device." The three bullets currently spend their words on what the site is not.
 3. **True labels.** "Cold floor, 1 night in 100", with "record low 4.0 °C" beside it, and "Warmest month, mean day" (finding 1). An honest label costs nothing and wins the climate-literate commenter.
 4. **Make the AI claim precise and say it first** (finding 11). "Templates written once, filled with sourced figures; no text generated per species; code written with AI agents under review." Said up front, it disarms the thread. Found by a commenter, it derails it.

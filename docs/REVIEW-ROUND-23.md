@@ -29,7 +29,7 @@ The second reviewer's fourteenth pass (three findings) and the first reviewer's 
 
 ## Docs
 
-14. **DEPLOY.md and the Show HN draft** (R2-14). The code fence at the counter section was not closed, so everything after it rendered as code; the 503 quote was a sentence the site no longer says, replaced by the three it does; "check that the placeholder id is gone" now says the id in the repository is the author's, which no other account can deploy under; the live check takes `LIVE_CHECK_ORIGIN` from the environment (or the origin as its argument) so another deployment's `npm run deploy` checks its own site; the draft says "SvelteKit 2 on Svelte 5".
+14. **DEPLOY.md and the launch draft** (R2-14). The code fence at the counter section was not closed, so everything after it rendered as code; the 503 quote was a sentence the site no longer says, replaced by the three it does; "check that the placeholder id is gone" now says the id in the repository is the author's, which no other account can deploy under; the live check takes `LIVE_CHECK_ORIGIN` from the environment (or the origin as its argument) so another deployment's `npm run deploy` checks its own site; the draft says "SvelteKit 2 on Svelte 5".
 
 ## Propagation
 

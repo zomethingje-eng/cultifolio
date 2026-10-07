@@ -43,7 +43,7 @@ Three reviews read together: my own deep pass after round forty-eight, the first
 
 ## Not taken, with reasons
 
-**Units rendered on the client** (R1 P2, R2-6): the edge and the Worker cache are the same per-colo store, so a units-free page would save one render per colo per minute per units value, against a flash of the wrong units on every first paint; left until measured. **`data-sveltekit-preload-data="tap"` on species links** (P3): `hover` already preloads on touchstart; nothing to add. **The search above the featured strip** (U7): the search row is the pinned head of the list, and the strip would then sit between the letter index and the rows; the visitor's sentence under the title says what the site is. **Font subsetting** (P1), **CSV import**, **vault compaction**, **a wire change for atomic creates** (D2 in full): as before. **The Show HN draft**: the author's.
+**Units rendered on the client** (R1 P2, R2-6): the edge and the Worker cache are the same per-colo store, so a units-free page would save one render per colo per minute per units value, against a flash of the wrong units on every first paint; left until measured. **`data-sveltekit-preload-data="tap"` on species links** (P3): `hover` already preloads on touchstart; nothing to add. **The search above the featured strip** (U7): the search row is the pinned head of the list, and the strip would then sit between the letter index and the rows; the visitor's sentence under the title says what the site is. **Font subsetting** (P1), **CSV import**, **vault compaction**, **a wire change for atomic creates** (D2 in full): as before. **The launch draft**: the author's.
 
 ## Counts
 

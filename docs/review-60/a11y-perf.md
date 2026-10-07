@@ -95,7 +95,7 @@ This is round 59's finding 1 again, in the new code. Measured with kb.mjs at 128
   - `/about/how`: CLS 0.17.
   - `/species/copiapoa-cinerea`: CLS 0.535 (the bar plus the photo strip, which fails here).
 - The first visit after "Try a sample collection" sets the sample out one plant at a time. It took 4.9 s at 4× CPU, with 12 separate layout shifts as rows arrive and re-sort (CLS 0.43). The footer is drawn and then pushed away. "Setting it out…" is plain text, not a status.
-- A Show HN visitor who presses the welcome line's button meets this first.
+- A a first-time visitor who presses the welcome line's button meets this first.
 - Smallest fix:
   - Read the flag before first paint, as app.html already does for the theme: `if(sessionStorage.getItem('cultifolio.demo')==='1')d.demo='1'`. Render the bar from the server always, hidden by `html:not([data-demo]) .demobar{display:none}`, and update the CSP hash.
   - Seed the sample in one commit (`collection.putWith` or the import's batch path), with `role="status"` on "Setting it out…".

@@ -1,6 +1,6 @@
 # Self-review of `741180f`: round fifty-nine
 
-Nine reviews ran in parallel on 2026-10-04 against `docs/REVIEW-PROMPT-59.md`. Each worked in its own copy or against one shared local server. The serious findings were then checked again by hand. The full reports are in `docs/review-59/`, and the tests the reviews wrote are in `docs/review-59/tests/`.
+Nine reviews ran in parallel on 2026-10-04 against a written brief. Each worked in its own copy or against one shared local server. The serious findings were then checked again by hand. The full reports are in `docs/review-59/`, and the tests the reviews wrote are in `docs/review-59/tests/`.
 
 | Review | Covered |
 |---|---|
@@ -8,11 +8,11 @@ Nine reviews ran in parallel on 2026-10-04 against `docs/REVIEW-PROMPT-59.md`. E
 | Corpus | Search fuzzed against a synthetic 9,000-species index, the refresh sequence with a fake R2, caching, SEO, link previews, cost per request. |
 | Data | The clock, rule 5, duplicate numbers, a three-device convergence fuzz (160 seeds), a 400-plant backup round trip, quota failures in Chromium. |
 | Harness | 115 mutations of round 58 and 59 fixes. Also the full e2e suite (103 of 103) and the unit suite on Node 22 and 24 (533 of 533). |
-| Visitor | Every public page at 390 and 1280, light and dark, as a stranger from Show HN. |
+| Visitor | Every public page at 390 and 1280, light and dark, as a stranger from a launch link. |
 | Grower | Eight simulated months as a 300-plant collector: places, Today, propagation, labels and printing, backup, sync between two devices, offline. |
 | Accessibility and performance | axe on 32 routes × 2 themes × 2 widths, every round-59 claim measured, keyboard, forced colours, 200% text. Performance: throttled timings, layout shift, collections of 300 and 3,000 plants. |
 | Words | Every sentence template on the species page and compare, generated for edge cases. Both about pages against the code. Every message on the private pages. |
-| Product | The market, positioning, the adoption funnel, feature gaps against the rules, Show HN, and a 30/60/90-day plan. Web research cited in `docs/review-59/product.md`. |
+| Product | The market, positioning, the adoption funnel, feature gaps against the rules, launch, and a 30/60/90-day plan. Web research cited in `docs/review-59/product.md`. |
 
 **Limits:**
 - The local build serves the four-species fixture corpus. Photographs from outside hosts do not load here, and the live site is not reachable from the sandbox.
@@ -37,7 +37,7 @@ The UX reviews agree on the bigger picture: the product is careful, consistent a
 
 ---
 
-## P0: before Show HN
+## P0: before launch
 
 1. **A synced device whose clock is set back hides the grower's plants, and they stay hidden after the clock is fixed** (confirmed in the browser and in unit tests; checked by hand).
    - **The bug:** `clockChecked()` (`src/lib/core/hlc.ts:129`) and `readStored` (`:48`) test `Date.now() - confirmedAt < TRUST_EXPIRES_MS`. When the clock goes back, that age is negative and passes, so the old server reading still counts as confirming the wrong clock.
@@ -60,7 +60,7 @@ The UX reviews agree on the bigger picture: the product is careful, consistent a
      - every other Bromeliaceae by family, Hechtia and Deuterocohnia among them.
    - **What a grower reads:** "Cold floor: 10 °C … the archetype table's conventional minimum for an other epiphyte … the floor rule takes the higher", over a habitat night of −3 °C.
    - **Why this is P0:**
-     - A grower will catch this at once on Show HN.
+     - A grower will catch this at once at launch.
      - It contradicts `/about/how`'s "where a family splits … the app guesses nothing".
      - The 13, 12, 10 and 5 °C minimums cite no source, though the footer says every figure comes from public data.
    - **Fix:**
@@ -68,8 +68,8 @@ The UX reviews agree on the bigger picture: the product is careful, consistent a
      - Stop assigning a group by family where the family splits.
      - Either cite a source for each minimum or present it as a convention with no source and never let it raise the habitat floor.
 
-4. **The Show HN draft is not ready, and its prepared replies contradict the app** (read).
-   - **The draft (`docs/SHOW-HN.md`):** it is 603 words against its own 300, the sync price is still a placeholder, and it says nothing about the code being built largely by AI agents (the DEVLOG does).
+4. **The launch draft is not ready, and its prepared replies contradict the app** (read).
+   - **The draft (the launch draft):** it is 603 words against its own 300, the sync price is still a placeholder, and it says nothing about the code being built largely by AI agents (the DEVLOG does).
    - **The prepared replies get facts wrong:**
      - The cold floor is called "the habitat's coldest night on record"; it is the 1st-percentile night.
      - "Cultivation advice is derived by rule"; the sheet says it gives none.
@@ -275,8 +275,8 @@ Things the reviews advise against, because they break the rules or dilute the pr
 **Market facts the product review found (sourced in its report):**
 - **Who to reach first:** serious collectors. CSSA has about 2,000 members and BCSS about 3,000, each with 80-plus local groups.
 - **Price point:** consumer care apps charge $30 to $45 a year; Pl@ntNet is free.
-- **What competes for the search result:** generated care pages now fill the results for rare species, which makes "not written by AI, every number sourced" a selling point to growers, not only to HN.
-- **Running cost at Show HN traffic:** 10,000 visitors in a day fits the $5 Workers plan, and 100,000 costs about $10. Cost is not the risk.
+- **What competes for the search result:** generated care pages now fill the results for rare species, which makes "not written by AI, every number sourced" a selling point to growers, not only to the launch forum.
+- **Running cost at launch traffic:** 10,000 visitors in a day fits the $5 Workers plan, and 100,000 costs about $10. Cost is not the risk.
 
 ---
 
@@ -321,5 +321,5 @@ Things the reviews advise against, because they break the rules or dilute the pr
 2. **Findings 5 to 15:** the user-facing correctness list, cheapest first: the quota message, print rules, preview wording, Today's hemisphere, the 503 path, Commons thumbs, the climate claims, search markers.
 3. **Finding 16:** adopt the 31 proposed tests before any further change to the corpus, counters or notes, so the next round's claims are guarded.
 4. **The experience list, items 1 to 3 and 7,** which are mostly presentation and cheap. Then paste-a-list import and the sample collection.
-5. **Before posting:** use the app with your own collection for two weeks, then rewrite the Show HN post (finding 4).
+5. **Before posting:** use the app with your own collection for two weeks, then rewrite the launch post (finding 4).
 6. **The P2 list,** server items first.

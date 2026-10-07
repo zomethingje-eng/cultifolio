@@ -35,7 +35,7 @@ The undo of a removal duplicating a number (R2-0) was not reproduced: the ledger
 
 **Observability** (R2-7). `wrangler.jsonc` has `"observability": { "enabled": true }`, which keeps the Worker's invocation logs at Cloudflare for a few days: request URLs (which include `/api/names?q=<the name typed>` and the species pages visited) and whatever the Worker prints. That is at odds with "the one thing the server keeps about a visitor is short-lived rate counters" on `/about/how`. The file is the deployer's and is not changed here. Two honest choices: turn it off (`"observability": { "enabled": false }`), which is what the page claims today; or keep it and add a sentence to the privacy section saying the host keeps request logs for N days. The first is recommended for the post; the Worker's own `console.error` lines carry no visitor data either way.
 
-**The Show HN post and licensing** (R2-8). The draft now carries a bracketed sentence to fill: sync is open today, the code has a gate for licensing hosted sync later, and the server is in the repository. What is intended is the author's to say.
+**The launch post and licensing** (R2-8). The draft now carries a bracketed sentence to fill: sync is open today, the code has a gate for licensing hosted sync later, and the server is in the repository. What is intended is the author's to say.
 
 ## Found by the deploy
 

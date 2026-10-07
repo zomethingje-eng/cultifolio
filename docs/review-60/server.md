@@ -1,6 +1,6 @@
 # Round 60 self-review: server
 
-Covered: `src/lib/server/sync.ts`, `counters.ts`, the load and refusal paths of `dossiers.ts`, `hooks.server.ts`, every `src/routes/api/**` route in the brief, `_headers`, the CSP in `svelte.config.js` and `src/service-worker.ts`, against the nine questions in the brief and section 3 of `REVIEW-PROMPT-60.md`.
+Covered: `src/lib/server/sync.ts`, `counters.ts`, the load and refusal paths of `dossiers.ts`, `hooks.server.ts`, every `src/routes/api/**` route in the brief, `_headers`, the CSP in `svelte.config.js` and `src/service-worker.ts`, against the nine questions in the brief and section 3 of the review brief.
 
 How:
 - **Code read.** Every line of the scope, plus the parts of `engine.svelte.ts` that answer the server (`push`, `dropRemoved`, `refusedBy`), `removedPhotos` in `collection.svelte.ts`, and the clock rules in `hlc.ts`.

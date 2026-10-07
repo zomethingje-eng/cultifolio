@@ -85,7 +85,7 @@ What round sixty-one takes from `docs/REVIEW-SELF-60.md` (nine reviews, reports 
      - "Nothing about a species is written per page by a person or by AI, apart from credited quotations" on the front page;
      - the template disclosure said once and plainly;
      - "undated", "The 1 nearest" and the refusal sentences' article fixed.
-   - **The Show HN post:** title 2; "re-derived in about an hour; built from the sources over several days"; the `[AUTHOR]` sentences left for you.
+   - **The launch post:** title 2; "re-derived in about an hour; built from the sources over several days"; the `[AUTHOR]` sentences left for you.
 9. **The front page.**
    - **Desktop:** the search and the photographs come first; the feature sits beside or under them within one screen.
    - **Phones:** the four figure cards as a 2×2 block; the chart only on its page.

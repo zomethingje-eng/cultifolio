@@ -36,7 +36,7 @@ The first reviewer's round eighteen (eighteen findings, with two areas no round 
 
 ## Claims and small things
 
-18. **The photo-credit claims did not match the corpus** (A-17). `/about/how` says each photograph carries its licence and its author where the source names one, and what happens when it does not; the Show HN draft names Wikimedia Commons beside GBIF and iNaturalist and drops "credited by name".
+18. **The photo-credit claims did not match the corpus** (A-17). `/about/how` says each photograph carries its licence and its author where the source names one, and what happens when it does not; the launch draft names Wikimedia Commons beside GBIF and iNaturalist and drops "credited by name".
 19. **A `?loc=` naming a removed bench also dropped the last-used one** (A-18). An unknown `loc` falls back to it.
 
 ## After the fixes

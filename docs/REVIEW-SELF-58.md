@@ -1,6 +1,6 @@
 # Self-review of `4598c5f`: round fifty-eight
 
-Six reviews ran in parallel on 2026-10-04, each against the brief in `docs/REVIEW-PROMPT-58.md`. The most serious findings were then checked again by hand.
+Six reviews ran in parallel on 2026-10-04, each against a written brief. The most serious findings were then checked again by hand.
 
 | Review | Covered |
 |---|---|
@@ -20,7 +20,7 @@ The headline: round fifty-eight's own account overstated it. Several of its clai
 
 ---
 
-## P0: before Show HN
+## P0: before launch
 
 ### Abuse
 

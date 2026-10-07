@@ -30,8 +30,8 @@ Scope: every user-visible sentence, against rules 1 to 4 and against the code. M
   - October is inside the cooler six months. Today puts it outside.
 - **Fix:** the same reader latitude everywhere: site, else the first place with coordinates. Better, one exported helper.
 
-### 3. P1. The Show HN draft's prepared replies contradict the app (read)
-- **Where:** `docs/SHOW-HN.md`.
+### 3. P1. The launch draft's prepared replies contradict the app (read)
+- **Where:** the launch draft.
 - **Line 47:** "the page says what it is: the habitat's coldest night on record at the typical cell". The cold floor is the 1st-percentile night (`sheet.ts:216`). The coldest night on record is `minAbs`, a different figure the page prints separately.
 - **Line 47:** "Cultivation advice is derived by rule from the figures". The sheet's own header says nothing on it says "what to do to it", and `/about/how` says "No row says what a plant does, wants or tolerates". A commenter will quote both.
 - **Line 51:** "The record map shows every record used." The map shows only openly licensed records. Copiapoa cinerea's page says "the map shows only the 52 openly licensed ones" of 352.
@@ -184,7 +184,7 @@ Scope: every user-visible sentence, against rules 1 to 4 and against the code. M
 - **Today, no site set:** "the places above are watched on their own pages either way" names no places above (`today/+page.svelte:216`).
 - **The 404** ends without a full stop: "...was not checked: GBIF's name service did not answer".
 - **Refusia's description:** "Refusia testii, Testaceae: native range, each with its source."
-- **"Wild records"** heads in-range records the rule did not test for wildness. SHOW-HN line 21 says "every georeferenced wild record".
+- **"Wild records"** heads in-range records the rule did not test for wildness. the launch draft says "every georeferenced wild record".
 - **`/about/how`:**
   - "A species page ends with the six species" (Related is followed by Names and The record).
   - The archetype names "epiphyte", "fern" differ from the labels "Other epiphyte", "Fern or moss".

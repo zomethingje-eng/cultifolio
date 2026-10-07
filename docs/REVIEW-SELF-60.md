@@ -1,6 +1,6 @@
 # Self-review of `21257b7`: round sixty
 
-Nine reviews ran in parallel on 2026-10-05 against `docs/REVIEW-PROMPT-60.md`. Each worked in its own copy or against one shared local server, and every reproduction test they wrote was run again in a clean copy (193 tests: 109 guards pass, 82 reproductions fail as written). The serious findings were then checked by hand. The full reports are in `docs/review-60/`, and their tests in `docs/review-60/tests/`. Two outside reviews arrived while this one ran; how they compare is in the last section.
+Nine reviews ran in parallel on 2026-10-05 against a written brief. Each worked in its own copy or against one shared local server, and every reproduction test they wrote was run again in a clean copy (193 tests: 109 guards pass, 82 reproductions fail as written). The serious findings were then checked by hand. The full reports are in `docs/review-60/`, and their tests in `docs/review-60/tests/`. Two outside reviews arrived while this one ran; how they compare is in the last section.
 
 | Review | Covered |
 |---|---|
@@ -9,7 +9,7 @@ Nine reviews ran in parallel on 2026-10-05 against `docs/REVIEW-PROMPT-60.md`. E
 | Server | Every round-sixty server change. 18 mutations, about 45 routes by curl, Chromium's real sync headers. 30 tests and a prototype fix. |
 | Corpus | 13,200 grower-shaped queries over five seeds (0 mismatches between the two search paths), 32 real names, the picker in a browser, a refusal walk of twelve routes, the front-page feature's cost. |
 | Harness | 129 mutations of round sixty's fixes (99 caught), 12 UI mutations, the unit suite on Node 22 in Auckland time and Node 24 in Los Angeles time (770 of 770 each), clock-shifted runs, the e2e suite (127 of 134 under load; causes below). |
-| Visitor and words | 16 public addresses at two widths in four theme modes (128 shots), every sentence template on 27 synthetic dossiers in both units and hemispheres, both about pages, the README and the Show HN post against the code. |
+| Visitor and words | 16 public addresses at two widths in four theme modes (128 shots), every sentence template on 27 synthetic dossiers in both units and hemispheres, both about pages, the README and the launch post against the code. |
 | Grower | A 300-row real-looking spreadsheet imported, a season of use, two phones on sync, label PDFs measured at 300 dpi with the QR codes decoded, the calendar file expanded. |
 | Accessibility and performance | 242 axe runs, a keyboard walk of every new control, 320 px at 200% and 400% zoom on 65 states, forced colours, throttled loads at 300 and 3,000 plants, bytes per route. |
 | Triage | All 196 items of `REVIEW-TRIAGE-59.md` and the self-review's lists, each with a verdict and evidence; the round's own account sentence by sentence; seams between the agents' work; merge leftovers. |
@@ -33,7 +33,7 @@ Nine reviews ran in parallel on 2026-10-05 against `docs/REVIEW-PROMPT-60.md`. E
 
 ---
 
-## P0: before Show HN
+## P0: before launch
 
 1. **An open edit form or notes draft follows a link to another record, and Save writes it there.** SvelteKit keeps the page component when only the route parameter changes, so `editing`, the form fields and the notes draft survive a move from one plant to another. The leave guard says "What you typed here will be lost", then leaves the form open on the new record. Confirmed on plants (the round's own shared-number link wrote one plant's price and field number into the other, with a false "Renamed" log line), notes (Back carried a draft onto another plant) and places (a place edit renamed the bench inside it). Batches have the same code. Records review 1; fix `{#key id}` around each record page.
 2. **Title-case common names lose their last words.** `search.ts:102` reads a capitalised word after "of", "the" or "and" as the start of an author citation. "String of Pearls" is searched as "String of" and answers Ceropegia woodii first; "string of pearls" answers Curio rowleyanus alone. "Mother of Thousands" answers three species. Confirmed in the corpus review and on the live site by outside review B (B2). Fix: treat a word as an epithet only at four letters or more.
@@ -103,7 +103,7 @@ Nine reviews ran in parallel on 2026-10-05 against `docs/REVIEW-PROMPT-60.md`. E
 - The label line prints the convention minimum as a bare "group min 10 °C" (visitor 7).
 - `/about/how`'s "every key" misses three keys the grower features added; `/about/formats` and `/about/how` disagree on how imported names are checked; the glossary says "Sync batch" where the sync page says "sync bundle" (visitor 8, 12; triage 10, 12; B16).
 - On a desktop the first screen has no search box and no photographs at any size: the feature fills it (visitor 9).
-- The Show HN post: title 1's "8,900 cacti and succulents", "rebuilt from the sources in about an hour", "the record low printed beside it", two `[AUTHOR]` markers (visitor 10).
+- The launch post: title 1's "8,900 cacti and succulents", "rebuilt from the sources in about an hour", "the record low printed beside it", two `[AUTHOR]` markers (visitor 10).
 - "Nothing on a species page is written by a person or by AI" drops the exception for quotations on the front page, and the templates were written once by the author and Claude (visitor 11).
 - A page with a climate but no extremes is still titled "… cold nights" (visitor 13).
 

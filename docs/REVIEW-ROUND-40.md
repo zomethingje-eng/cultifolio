@@ -33,7 +33,7 @@ The key-as-account setup flow (R9), the plant-number search above Today (R11), t
 
 ## Deferred, with reasons
 
-The wire-format changes (R1 atomic create, R2 notes base in the value, R6 per-device sequence numbers, R7 snapshots and deletes) are the first reviewer's strongest ideas and I agree with all four; together they rewrite the fold, the importer, the backup format and the engine, and that is not a thing to do in the weeks before a launch that is otherwise close. R6 is the one to do first, as its own round, when the author says. The store-backed undo (R8) and the plant page's thumb bar (R13) are post-launch. The taxon identity by key (R2 structure 1) and the log checkpoint (R2 structure 2) are noted for the growth work. The Show HN draft's five contradicted claims are listed for the author in the round's message.
+The wire-format changes (R1 atomic create, R2 notes base in the value, R6 per-device sequence numbers, R7 snapshots and deletes) are the first reviewer's strongest ideas and I agree with all four; together they rewrite the fold, the importer, the backup format and the engine, and that is not a thing to do in the weeks before a launch that is otherwise close. R6 is the one to do first, as its own round, when the author says. The store-backed undo (R8) and the plant page's thumb bar (R13) are post-launch. The taxon identity by key (R2 structure 1) and the log checkpoint (R2 structure 2) are noted for the growth work. The launch draft's five contradicted claims are listed for the author in the round's message.
 
 ## Counts
 

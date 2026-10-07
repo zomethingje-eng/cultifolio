@@ -31,7 +31,7 @@ Screenshots: `/tmp/r60rev/out/shots/corpus/picker-variety.png` and `picker-varie
   - "string of pearls", "String Of Pearls" and "String-of-Pearls" each answer Curio rowleyanus alone.
   - "String of Bananas" gives the same four, with Curio radicans third.
   - "Mother of Thousands" and "Mother of Pearl Plant" both answer Graptopetalum paraguayense, Kalanchoe daigremontiana and Kalanchoe delagoensis, Graptopetalum first.
-  - Title case is how these names are written in nursery lists, on labels and by phone keyboards that capitalise. "String of pearls" is the round's own example of a name now searched, so a Show HN reader is likely to try it.
+  - Title case is how these names are written in nursery lists, on labels and by phone keyboards that capitalise. "String of pearls" is the round's own example of a name now searched, so a first-time reader is likely to try it.
 - **The fix:**
   - Treat the word as an epithet only when it has four letters or more: `lower = b.length >= 4 && …`. Epithets are almost never shorter; "of", "the" and "and" are.
   - Reset `lower` after a hybrid sign (finding 2) and when the word starts with "×" (finding 7).

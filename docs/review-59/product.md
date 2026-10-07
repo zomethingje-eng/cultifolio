@@ -1,9 +1,9 @@
-# Round 59 review: product (positioning, adoption, Show HN)
+# Round 59 review: product (positioning, adoption, launch)
 
 > **Withdrawn after verification (REVIEW-SELF-59):** the logging finding below read the sandbox's stale copy of `wrangler.jsonc`. The deployer's file on the PC, which is the one deployed, has `"observability": { "enabled": false }`. `/about/how`'s "the server does not log paths" holds for the deployed Worker.
 
 
-Reviewer area: product. Read README.md, docs/SHOW-HN.md, docs/UX-REVIEW.md, DEVLOG rounds 53 to 59, /about/how, the front page and the species page as served by the shared build at http://127.0.0.1:4180 (four-species fixture corpus). The live site is not reachable from this machine, so anything about the real 8,947-species corpus (common names, the catalogue's first rows, real page length) is read from the code and the docs, not seen. Market facts come from web searches made on 2026-10-04 and are cited inline; Reddit itself could not be fetched from here, so subreddit sizes are left unverified on purpose.
+Reviewer area: product. Read README.md, the launch draft, docs/UX-REVIEW.md, DEVLOG rounds 53 to 59, /about/how, the front page and the species page as served by the shared build at http://127.0.0.1:4180 (four-species fixture corpus). The live site is not reachable from this machine, so anything about the real 8,947-species corpus (common names, the catalogue's first rows, real page length) is read from the code and the docs, not seen. Market facts come from web searches made on 2026-10-04 and are cited inline; Reddit itself could not be fetched from here, so subreddit sizes are left unverified on purpose.
 
 Scratch and screenshots: /tmp/review59/product/ (s1.mjs, s2.mjs, stranger-qr.png, visitor-today.png, sp404.png, page text dumps).
 
@@ -16,16 +16,16 @@ Scratch and screenshots: /tmp/review59/product/ (s1.mjs, s2.mjs, stranger-qr.png
 - `wrangler.jsonc:9` sets `"observability": { "enabled": true }`. Cloudflare's Workers Logs documentation says each invocation then writes an invocation log "that contains details such as the Request, Response, and related metadata"; for a fetch that means the method and URL. Logs are kept 3 days on the free plan and 7 on paid, and can be queried in the dashboard. Invocation logs are on by default and are turned off with `invocation_logs = false` ([Workers Logs docs](https://developers.cloudflare.com/workers/observability/logs/workers-logs/)).
 - The URLs that would be kept are exactly the private ones /about/how lists. `/api/forecast?lat=..&lon=..&alt=..` carries the grower's rounded site coordinates (`src/lib/weather/client.ts:68`). `/api/search?q=` and `/api/names?q=` carry what was typed (`src/lib/ui/index.svelte.ts:118`, `SpeciesPicker.svelte:50`). The hash-bucket requests show which species buckets a grower holds. `/plants/2026-0001` is fetched on the first visit after install. Each of these would sit in a searchable log next to its timestamp and the request metadata.
 - What the site says: `/about/how` (src/routes/about/how/+page.svelte:90) says "The server does not log paths". Line 86 says "The server keeps short-lived rate counters by address, dropped within two days, and nothing about your plants." Settings (src/routes/settings/+page.svelte:229) says "Nothing on this site is stored about you beyond short-lived rate counters".
-- docs/SHOW-HN.md's checklist also says to keep `npx wrangler tail` open for the first hour. That streams every request URL to the author's terminal for as long as it runs.
-- Why this is the top finding: an HN reader who opens `wrangler.jsonc` (13 lines) will find it within minutes, and the whole pitch rests on the privacy claims being exactly true.
+- the launch draft's checklist also says to keep `npx wrangler tail` open for the first hour. That streams every request URL to the author's terminal for as long as it runs.
+- Why this is the top finding: a first-time reader who opens `wrangler.jsonc` (13 lines) will find it within minutes, and the whole pitch rests on the privacy claims being exactly true.
 - Smallest fix: `"observability": { "enabled": true, "logs": { "invocation_logs": false } }`. Metrics (request counts, errors, CPU) stay available in the dashboard. Run `wrangler tail --status error` instead of a full tail. Add one sentence to /about/how saying what Cloudflare, as the host, sees at its edge (aggregate request metrics, the operator's console.warn lines, which name no person). Then check in the dashboard that no invocation log is being kept.
 
-### 2. P0. The Show HN draft is not ready to post (confirmed by reading docs/SHOW-HN.md)
+### 2. P0. The launch draft is not ready to post (confirmed by reading the launch draft)
 
 - **Length.** The post body is 603 words (counted between the `---` rules), against the draft's own rule of "under 300 words". The whole second paragraph is the /about/how privacy list repeated word for word. That list is the most argumentative text in the project, so posting it in full gives commenters a dozen clauses to pick at.
 - **Unanswered pricing.** The bracket "[Sync is open today and costs nothing ... Say here what you intend, in one sentence ...]" is still a placeholder. "Will sync stay free?" is a certain question. The answer the project has settled on (hosted sync as the paid part, self-hosting possible under AGPL) has to be in the post.
-- **First sentence vs current use.** The post opens "I grow cacti and succulents and got tired of ...". REVIEW-PROMPT-59 says "Nobody uses it yet, the author included". A collection tracker launched by an author whose own collection is not in it will be found out the first time someone asks "how many plants do you track in it?"
-- **AI authorship is not disclosed.** DEVLOG round 58 says "Three agents built most of the grower flows and a fourth the accessibility pass". The docs folder holds 66 review files, mostly by language models. HN will see both. Show HN's rule is "something you've made"; a 2026 thread argued that agent-built projects fail it, and the poster's defence (the design and decisions were his) was accepted ([HN thread](https://news.ycombinator.com/item?id=46912429)). Saying it in the post makes it a strength: the code was written with AI, the species pages may not be, and that difference is the product. Leaving it unsaid turns it into an exposé.
+- **First sentence vs current use.** The post opens "I grow cacti and succulents and got tired of ...". The review brief says "Nobody uses it yet, the author included". A collection tracker launched by an author whose own collection is not in it will be found out the first time someone asks "how many plants do you track in it?"
+- **AI authorship is not disclosed.** DEVLOG round 58 says "Three agents built most of the grower flows and a fourth the accessibility pass". The docs folder holds 66 review files, mostly by language models. Readers will see both. The launch forum's rule is "something you've made"; a 2026 thread argued that agent-built projects fail it, and the poster's defence (the design and decisions were his) was accepted. Saying it in the post makes it a strength: the code was written with AI, the species pages may not be, and that difference is the product. Leaving it unsaid turns it into an exposé.
 - **No links to a strong example.** A curious reader should land on one species page that shows the climograph, a winter-rainfall season and photographs, and on a sample collection (see 3). The post links only the bare domain and /about/how.
 - A rewrite is in Part E.
 
@@ -33,7 +33,7 @@ Scratch and screenshots: /tmp/review59/product/ (s1.mjs, s2.mjs, stranger-qr.png
 
 - `grep -i "sample collection|demo"` over src/routes and src/lib/ui finds nothing.
 - A first-time visitor to /today sees "No site set" and "No growing plants yet" (visitor-today.png).
-- An HN reader will not enter twenty plants to find out what Today, places, propagation batches, labels and frost watch do. The tracker is the part that makes the site worth returning to, and on launch day it will be invisible.
+- An first-time reader will not enter twenty plants to find out what Today, places, propagation batches, labels and frost watch do. The tracker is the part that makes the site worth returning to, and on launch day it will be invisible.
 - Smallest fix that keeps rule 5: "Look around with a sample collection". It opens a separate IndexedDB vault under another name (never the grower's log), seeded from a fixed file of about 25 plants of species in the corpus, with places, a batch, waterings and one frost night. It shows a persistent banner ("Sample collection: nothing here is yours. Leave"), and leaving deletes that vault. Sync and backup are disabled while it is open. The fixed file is the same kind of thing as `fixtures/`.
 
 ### 4. P1. No import: the serious collector, who is the beachhead, has to retype everything (confirmed by reading)
@@ -69,7 +69,7 @@ Scratch and screenshots: /tmp/review59/product/ (s1.mjs, s2.mjs, stranger-qr.png
   - programmatic care pages from greg.app, plantiary.com, getgrowli.app and botanicohub.com.
 - For "...habitat climate rainfall minimum temperature" there is no data-driven page at all, only Greg's "Hardiness Zones" page and the BCSS genus notes (searches on 2026-10-04).
 - That second query is the one Cultifolio should own.
-- The one plant Show HN with traction (GetAnyPlant, 427 points, 132 comments) drew complaints about common-name search ("if I type in 'ficus ginseng' I don't see a result") and requests for hardiness zones and native-range filters ([HN 40273470](https://news.ycombinator.com/item?id=40273470)).
+- The one plant launch with traction (GetAnyPlant, 427 points, 132 comments) drew complaints about common-name search ("if I type in 'ficus ginseng' I don't see a result") and requests for hardiness zones and native-range filters.
 - Fix (rule 1 allows a figure with its source, so this stays within the rules):
   - Title: `Copiapoa cinerea (common name if any): habitat rain, cold nights and light | Cultifolio`.
   - Description built by rule from the figures: "In the wild in northern Chile: 72 mm of rain a year, 1 night in 100 below 6.5 °C, light 30 to 65 DLI. Every figure sourced (CHELSA, NASA POWER, GBIF)."
@@ -117,7 +117,7 @@ Scratch and screenshots: /tmp/review59/product/ (s1.mjs, s2.mjs, stranger-qr.png
 
 - `static/.assetsignore` (contents `s/`) is in `$service-worker`'s `files`, which `PRECACHE` spreads (src/service-worker.ts:39).
 - `curl /.assetsignore` returns 404. The install logs "service worker: 1 of N files not cached at install" (line 48).
-- An HN reader with devtools open sees a red 404 on the first load.
+- An first-time reader with devtools open sees a red 404 on the first load.
 - Fix: `files.filter((f) => !f.split('/').pop()!.startsWith('.'))`.
 
 ### 13. P3. Twelve of the first visit's 19 Worker requests are app shells the visitor may never open (measured, s2.mjs)
@@ -167,7 +167,7 @@ Nobody else offers habitat climate read across every wild record, with sources, 
 
 - **Serious growers:** "See the weather where your plant grows wild: its rain, its coldest nights and its light, worked out from every wild record, never copied from a care sheet. And keep your collection under its own numbers, on your own device."
 - **Beginners:** not the launch audience. Don't water the pitch down for them. They arrive through search later (see 6) and leave through "Add one to my plants".
-- **HN:** "A plant reference with no written text: every number derived from open data by a stated rule, and a local-first, end-to-end encrypted collection tracker."
+- **One line:** "A plant reference with no written text: every number derived from open data by a stated rule, and a local-first, end-to-end encrypted collection tracker."
 
 **Is "every figure sourced, no accounts, local-first" a selling point to growers?**
 
@@ -258,15 +258,15 @@ CSV, paste, and the Windows DB's Excel export. It is a must and breaks no rule (
 
 ---
 
-## Part F. Show HN (5)
+## Part F. launch (5)
 
 ### 5.1 Title
 
-The draft's first choice, "Show HN: Cultifolio – a plant species reference where every figure shows its derivation", is accurate but abstract: "derivation" asks the reader to do work. The titles that do well name a concrete thing. Better, best first:
+The draft's first choice, "Cultifolio – a plant species reference where every figure shows its derivation", is accurate but abstract: "derivation" asks the reader to do work. The titles that do well name a concrete thing. Better, best first:
 
-1. `Show HN: Cultifolio – the climate where 8,900 cacti and succulents grow wild, from open data`
-2. `Show HN: A cactus and succulent reference with no written text, every number traced to its source`
-3. `Show HN: Cultifolio – habitat climate for cacti and succulents, plus a local-first collection tracker`
+1. `Cultifolio – the climate where 8,900 cacti and succulents grow wild, from open data`
+2. `A cactus and succulent reference with no written text, every number traced to its source`
+3. `Cultifolio – habitat climate for cacti and succulents, plus a local-first collection tracker`
 
 The count goes stale, but a launch-day title only needs to be true on the day.
 
@@ -282,7 +282,7 @@ The count goes stale, but a launch-day title only needs to be true on the day.
 >
 > I'd most like to hear where a derived figure is wrong.
 
-### 5.3 What HN will attack, and the answer
+### 5.3 What readers will attack, and the answer
 
 | Attack | Answer |
 |---|---|
@@ -294,13 +294,13 @@ The count goes stale, but a launch-day title only needs to be true on the day.
 | "What will sync cost?" | One sentence, in the post (finding 2). |
 | "Your privacy page is wrong" | Fix finding 1 before posting, or this row becomes the thread. |
 | "Licences: CC BY-NC GBIF records used for the climate?" | /about/how says restricted records only feed derived numbers and the map shows only open ones; have the GBIF terms link ready. |
-| "Megabytes on the front page" | Already prepared in SHOW-HN.md, with `scripts/dev/first-load.mjs`. |
-| "Common name search doesn't work" | Fix finding 6's indexing first. It was the top complaint on the last plant Show HN. |
+| "Megabytes on the front page" | Already prepared in the launch draft, with `scripts/dev/first-load.mjs`. |
+| "Common name search doesn't work" | Fix finding 6's indexing first. It was the top complaint on the last plant launch. |
 
 ### 5.4 Load and cost for 10,000 visitors in a day
 
 - **Measured here:** a first visit (front page, one search, one species page) makes 19 requests that invoke the Worker. 12 of them are the service worker's shells (finding 13). Static assets under the `assets` binding are not Worker invocations.
-- **Requests:** a heavy HN visitor reads 3 to 10 pages, so call it 20 to 40 Worker requests per visitor: 200,000 to 400,000 requests a day. The Workers Paid plan includes 10 million requests and 30 million CPU-ms a month, then $0.30 per million requests and $0.02 per million CPU-ms ([budgetforge summary of Cloudflare pricing](https://www.budgetforge.dev/tools/cloudflare-workers-pricing-2026)).
+- **Requests:** a heavy first-time visitor reads 3 to 10 pages, so call it 20 to 40 Worker requests per visitor: 200,000 to 400,000 requests a day. The Workers Paid plan includes 10 million requests and 30 million CPU-ms a month, then $0.30 per million requests and $0.02 per million CPU-ms ([budgetforge summary of Cloudflare pricing](https://www.budgetforge.dev/tools/cloudflare-workers-pricing-2026)).
 - **CPU:** even at 50 ms per server render, 400,000 requests is 20 million CPU-ms, inside the monthly allowance.
 - **R2:** class B reads are $0.36 per million after 10 million free a month; egress is free ([egresscost](https://egresscost.com/cloudflare/)). At most a few hundred thousand reads come to cents.
 - **KV:** the rate limiter writes at most once per 5 s per address and bucket (sync.ts:820, 851). Even 100,000 writes a day sits inside the 1 million monthly writes included; beyond that, $5 per million.
@@ -316,7 +316,7 @@ The count goes stale, but a launch-day title only needs to be true on the day.
 - The project's own live check, run from a cron every 15 minutes on launch day.
 - No client script is needed.
 
-### 5.6 Launch checklist (in addition to SHOW-HN.md's)
+### 5.6 Launch checklist (in addition to the launch draft's)
 
 - Finding 1 fixed and checked in the dashboard.
 - A 10-minute load test against a staging deployment of the real corpus: about 50 requests a second over species pages, front page, search and rows; not forecast or names, which would hit upstreams. Watch CPU per request, isolate memory and errors. Delete the staging Worker after.

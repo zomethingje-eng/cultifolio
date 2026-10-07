@@ -27,7 +27,7 @@ The second reviewer's round twenty-three (seven findings) and the first reviewer
 
 ## Not taken, with reasons
 
-**A shared synonym** (R1-13): the index answers with the first species whose own list carries it; a choice page for a name two accepted species both list is a feature, noted. **Naturalised records captioned wild** (R1-13): iNaturalist's `captive=false` includes them; the out-of-range flag is still deferred with the photograph pass. **The Show HN draft** (R2-6): the author's; the figures the reviewer measured are in their review for him. **Wrangler 4.145.0** (R2): the deployer's.
+**A shared synonym** (R1-13): the index answers with the first species whose own list carries it; a choice page for a name two accepted species both list is a feature, noted. **Naturalised records captioned wild** (R1-13): iNaturalist's `captive=false` includes them; the out-of-range flag is still deferred with the photograph pass. **The launch draft** (R2-6): the author's; the figures the reviewer measured are in their review for him. **Wrangler 4.145.0** (R2): the deployer's.
 
 ## After the changes
 

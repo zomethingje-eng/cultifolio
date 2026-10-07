@@ -30,7 +30,7 @@ The first reviewer's round thirty-two (nine findings and three small ones, in de
 
 ## Not taken, with reasons
 
-**Orphan pixels kept after a restore** (R1 small): pixels with no record at all are bytes nothing names, and also the pixels a record arriving later by sync would otherwise fetch again; they are kept. **The Show HN draft** (R2-3): the author's. **The 404's cache header** (R1, unverified): the live check reads it. **A choice page for a shared synonym**, **naturalised records captioned wild**: still deferred, as in round thirty-five.
+**Orphan pixels kept after a restore** (R1 small): pixels with no record at all are bytes nothing names, and also the pixels a record arriving later by sync would otherwise fetch again; they are kept. **The launch draft** (R2-3): the author's. **The 404's cache header** (R1, unverified): the live check reads it. **A choice page for a shared synonym**, **naturalised records captioned wild**: still deferred, as in round thirty-five.
 
 ## Counts
 
