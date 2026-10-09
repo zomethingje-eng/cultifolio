@@ -126,8 +126,9 @@ describe('review B\'s three live species keep what they show', () => {
 });
 
 describe('guard', () => {
-  it('a comma list is still set back and never split; preferred, then sources, then GBIF\'s order', () => {
-    expect(englishNames([eng('Living stones, pebble plants'), eng('Split rock')], { genus: 'Lithops', genera: GENERA })).toEqual({ common: 'Split rock', commons: ['Living stones, pebble plants'] });
+  it('a semicolon list is still set back and never split (a comma list is split since round sixty-three, N1); preferred, then sources, then GBIF\'s order', () => {
+    expect(englishNames([eng('Living stones; pebble plants'), eng('Split rock')], { genus: 'Lithops', genera: GENERA })).toEqual({ common: 'Split rock', commons: ['Living stones; pebble plants'] });
+    expect(englishNames([eng('Living stones, pebble plants'), eng('Split rock')], { genus: 'Lithops', genera: GENERA })).toEqual({ common: 'Living stones', commons: ['Pebble plants', 'Split rock'] });
     expect(shown([eng('Snake plant', { source: 'a' }), eng("Mother-in-law's tongue", { source: 'b', preferred: true })], 'Dracaena')).toBe("Mother-in-law's tongue");
     expect(shown([eng('Jade'), eng('Money plant', { sources: 3 })], 'Crassula ovata')).toBe('Money plant');
     expect(shown([eng('Jade'), eng('Money plant')], 'Crassula ovata')).toBe('Jade');

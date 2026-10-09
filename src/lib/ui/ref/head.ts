@@ -10,20 +10,21 @@
 import { clip } from '$core/text';
 import { licenceLabel, licenceTag, type LicenceTag } from '$core/licence';
 import { temp, rain, METRIC, type Units } from '$core/units';
+import { yearRain } from '$climate/year-rain';
 
 /**
  * The link-preview image's alt, on the front page and on a species page with no photograph: the words `static/og.png`
  * shows, as it shows them. The alt once described a wider line than the image holds, and the species page's fallback
- * a narrower one (round sixty-two; the words review's 2, outside review A2). When the image is redrawn with the list's
- * whole reach, this line changes with it.
+ * a narrower one (round sixty-two; the words review's 2, outside review A2). The image is drawn by scripts/dev/og.mjs from
+ * scripts/dev/og.html (round sixty-three); change the two together.
  */
-export const OG_ALT = 'Cultifolio. A reference for growers of cacti, succulents and bulbs, every figure with its source. Your own plants stay on your device, or sync encrypted. cultifolio.com, no account, open source.';
+export const OG_ALT = 'Cultifolio, species reference. Cactus, succulent and bulb species, and the plants most grown alongside them. Every figure names its source. Your own plants stay on your device, or sync encrypted. cultifolio.com, no sign-up, free and open source.';
 
 type M = { tmax: number; tmin: number; precipMm: number; dli?: number };
 export interface HeadInput {
   name: { scientific: string; family?: string | null };
   common?: string | null;
-  climate: { status: string; months?: M[]; records?: number; extremes?: { minP01: number; years: number } | null };
+  climate: { status: string; months?: M[]; records?: number; extremes?: { minP01: number; years: number } | null; annualRain?: { p50?: number | null } | null };
   native: number;
   photos: number;
   summary: boolean;
@@ -64,14 +65,14 @@ export function speciesDescription(h: HeadInput, u: Units = METRIC): string {
   const c = h.climate;
   if (c.status === 'ok' && c.months?.length === 12) {
     const m = c.months;
-    const yr = m.reduce((a, x) => a + x.precipMm, 0);
+    const yr = yearRain(m, c.annualRain); // the median of the cells' own years when the dossier has it (round sixty-three)
     const cold = m.reduce((b, x, i) => (x.tmin < m[b].tmin ? i : b), 0);
     const dl = m.map((x) => x.dli).filter((x): x is number => x != null);
     // The habitat, never "in the wild": the floor is one reanalysis cell at a typical spot, and a link preview unfurls this
     // line (round sixty-two; outside review A3). Each figure by its own name; whole parts are left off the end when the line
     // would pass 155 characters, so no figure is cut from its source.
     const night = c.extremes ? `cold floor ${temp(c.extremes.minP01, u, 1)}, 1 night in 100 at a typical spot (NASA POWER)` : `coldest month, mean nightly low ${temp(m[cold].tmin, u, 1)} (CHELSA)`;
-    const wet = `${rain(yr, u)} of rain a year (sum of monthly medians, CHELSA)`;
+    const wet = `${rain(yr.mm, u)} of rain a year (${yr.cells ? 'median across the range' : 'sum of monthly medians'}, CHELSA)`;
     const light = dl.length ? `${Math.round(Math.min(...dl))}–${Math.round(Math.max(...dl))} DLI open-sky light (CHELSA)` : '';
     const n = c.records ?? 0;
     const parts = [night, wet, light, `from ${n.toLocaleString('en-US')} in-range record${n === 1 ? '' : 's'}`].filter(Boolean);
@@ -121,7 +122,37 @@ export function creditParts(p: { attribution: string; licence?: LicenceTag | nul
 
 /** A tile's credit line: the author and licence where the tile has them, else the source it came from, else nothing. */
 export function tileCredit(t: { credit?: string | null; thumb?: string | null }): string | null {
-  if (t.credit?.trim()) return t.credit.trim();
+  if (t.credit?.trim()) return `Photo: ${t.credit.trim()}`; // the index's credit, licence first (`tileCreditOf`; round sixty-three)
   const s = photoSource(t.thumb);
   return s ? `Photo: ${s}` : null;
+}
+
+/** An author's name in a tile's credit is cut past this many characters, at a word, so the index stays small. */
+export const TILE_AUTHOR_MAX = 40;
+/** The source's own words around the author in a credit line, which a tile has no room for: the species page keeps them. */
+const INAT_LINE = /^(?:\(c\)|©)?\s*(.+?),\s*(?:some|no) rights reserved(?:\s*\(([^)]*)\))?$/i;
+const VIA_LINE = /^(.+?),\s*([^,]+?),\s*(?:iNaturalist via GBIF|via GBIF|via Wikimedia Commons)$/;
+
+/** A licence as a credit line words it, tagged: spaces made hyphens as `creditParts` does, and Commons' "PD-…" as the build reads it. */
+const lineTag = (t: string) => licenceTag(t.trim().replace(/^Public domain$/i, 'cc0').replace(/^PD.*$/i, 'cc0').replace(/^(cc[\s-].*)$/i, (x) => x.replace(/[\s_]+/g, '-')));
+
+/**
+ * The credit a tile gives the index's thumbnail, as the index carries it: the licence, then the author, in the species
+ * page's words for that photograph (`creditParts`) with the source's own wording around the author left off ("(c) …,
+ * some rights reserved (CC BY)" is "CC BY, …"). Licence first, as the species page's hero gives it, because a tile's one
+ * line is cut at its end on a phone and the licence must survive the cut. Null, so the tile names the source instead,
+ * when the line cannot be said short and true: no licence, an author's line naming another licence than the source's,
+ * or a line in no form the build writes (round sixty-three; REVIEW-TRIAGE-61's deferred list).
+ */
+export function tileCreditOf(p: { attribution: string; licence?: LicenceTag | null } | null | undefined): string | null {
+  if (!p) return null;
+  const c = creditParts(p);
+  if (!c.lic || c.disagree || c.lic === 'restricted' || c.lic === 'licence not stated') return null;
+  const m = INAT_LINE.exec(c.who) ?? VIA_LINE.exec(c.who);
+  // The licence the line names must be the source's own; "author not stated" is said as that, under CC0 only (the build drops it otherwise).
+  if (!m || (m[2] && lineTag(m[2]) !== p.licence)) return null;
+  let who = m[1].trim();
+  if (!who) return null;
+  if (who.length > TILE_AUTHOR_MAX) who = `${who.slice(0, TILE_AUTHOR_MAX).replace(/[\s,;]+\S*$/, '')}…`;
+  return `${c.lic}, ${who}`;
 }

@@ -122,9 +122,9 @@ describe('a restore refuses to start in the sample (review B)', () => {
     session.m.set('cultifolio.demo', '1');
     const { restoreBackup } = await import('$lib/backup/io');
     const { replaceThroughStaging } = await import('$lib/backup/replace');
-    await expect(restoreBackup({} as never, 'merge')).rejects.toThrow(/off in the sample collection/);
+    await expect(restoreBackup({} as never, 'merge')).rejects.toThrow(/off in the example collection/);
     let opened = false;
-    await expect(replaceThroughStaging({ unreadable: [], changes: [] } as never, async () => { opened = true; return {} as never; })).rejects.toThrow(/sample collection/);
+    await expect(replaceThroughStaging({ unreadable: [], changes: [] } as never, async () => { opened = true; return {} as never; })).rejects.toThrow(/example collection/);
     expect(opened).toBe(false);
   });
 });

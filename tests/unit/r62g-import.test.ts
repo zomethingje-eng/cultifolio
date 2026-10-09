@@ -133,7 +133,7 @@ describe('import keys: a second run adds only what the first did not (the record
     await collection.addAccession({ taxonName: 'Aloe vera', acc: '0010' });
     const sheet = 'number,species\n0010,Haworthia truncata\n';
     const first = await run(sheetOf(sheet));
-    expect(first.res.added.map((a) => a.acc)).toEqual(['2026-0001']);
+    expect(first.res.added.map((a) => a.acc)).toEqual(['0011']); // in the sheet's own numbering since round sixty-three (L3); 2026-0001 before
     const again = await run(sheetOf(sheet));
     expect(again.done).toBe(1);
     expect(collection.accessions.filter((a) => a.taxonName === 'Haworthia truncata')).toHaveLength(1);
@@ -165,7 +165,7 @@ describe('import keys: a second run adds only what the first did not (the record
     await run(sheetOf('number,species,source\n7,Lithops lesliei,Bob\n'));
     const second = await run(sheetOf('number,species,source\n7,Lithops lesliei,Mesa Garden\n'));
     expect(second.rows.map((r) => [r.already, r.drop])).toEqual([[true, false]]); // said, and kept: base dropped it
-    expect(collection.accessions.map((a) => a.acc).sort()).toEqual(['2026-0001', '7']);
+    expect(collection.accessions.map((a) => a.acc).sort()).toEqual(['7', '8']); // numbered on in the sheet's own numbering since round sixty-three (L3); 2026-0001 before
   });
   it('a backup\'s own plants.csv read back into its collection is every plant here already, by its record id', async () => {
     const { collection, run } = await fresh();

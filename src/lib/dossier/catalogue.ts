@@ -25,6 +25,7 @@ export type Item = {
   origin: string[];
   syn?: string[];
   thumb?: string;
+  credit?: string;
   alt?: string;
   photos?: number;
   open: number;
@@ -118,6 +119,7 @@ export function catalogueItems(index: IndexEntry[]): Item[] {
     origin: e.origin ?? [],
     syn: e.syn,
     thumb: e.thumb,
+    credit: e.credit,
     alt: e.thumb ? e.name : undefined,
     photos: e.photos,
     open: e.open,

@@ -209,6 +209,8 @@ export function climograph(c: ClimoInput, width = 720, units: Units = METRIC): C
   }
 
   const hasBand = !!(dayBand || nightBand || bars.some((b) => b.lo != null));
+  // The bars' own total, named as such: the chart draws monthly medians, and their sum is not the median of the cells'
+  // yearly totals the rain card shows when the dossier has it (round sixty-three; REVIEW-TRIAGE-61).
   const rainYear = c.months.reduce((a, m) => a + m.precipMm, 0);
   // Day and night ranges each from their own series: the coolest day is not always in the coldest-night month.
   const dayLo = c.months.reduce((b, m, i) => (m.tmax < c.months[b].tmax ? i : b), 0);
@@ -227,7 +229,7 @@ export function climograph(c: ClimoInput, width = 720, units: Units = METRIC): C
     (flatT
       ? `A flat year: mean daily high about ${temp(c.months[warmest].tmax, units)} and mean nightly low about ${temp(c.months[coldest].tmin, units)} in every month, so the cold quarter is shaded by rounding only. `
       : `Mean daily high from ${temp(c.months[dayLo].tmax, units)} in ${at(days, false)} to ${temp(c.months[warmest].tmax, units)} in ${at(days, true)}; mean nightly low from ${temp(c.months[coldest].tmin, units)} in ${at(nights, false)} to ${temp(c.months[nightHi].tmin, units)} in ${at(nights, true)}. The cold quarter, ${MONTHS[q0]} to ${MONTHS[(centre + 1) % 12]}, is the three months around the coldest month's mean nightly low${coldTies.length < 2 || coldTies.length >= 12 ? '' : coldRun != null ? `, centred on the ${coldTies.length} months in a row that tie for it` : `, around the first of the ${coldTies.length} months that tie for it`}. `) +
-    (dry ? `${dryLabel(units)[0].toUpperCase()}${dryLabel(units).slice(1)} of rain.` : `${rainF(rainYear, units)} of rain a year, ${wettest}.`) +
+    (dry ? `${dryLabel(units)[0].toUpperCase()}${dryLabel(units).slice(1)} of rain.` : `${rainF(rainYear, units)} of rain a year (the twelve monthly medians added), ${wettest}.`) +
     (hasBand ? ` The bands show the 10th to 90th percentile across ${c.cells} habitat cells.` : c.cells > 1 ? ` The ${c.cells} habitat cells agree to within rounding.` : '') +
     (c.extremes ? ` Over ${c.extremes.years} years at a typical spot in the range (NASA POWER) the absolute minimum was ${temp(c.extremes.minAbs, units, 1)} and the 99th-percentile day ${temp(c.extremes.maxP99, units, 1)}; neither is dated to a month.` : '') +
     (strip ? ` Beneath: ${has('dli') ? 'daily light integral' : ''}${has('dli') && has('rh') ? ' and ' : ''}${has('rh') ? 'relative humidity' : ''} through the year, each on its own scale.` : '');

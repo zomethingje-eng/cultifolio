@@ -28,7 +28,8 @@
   import { units } from '$lib/ui/units.svelte';
   import { cultivationSheet } from '$core/sheet';
   import { climograph } from '$climate/climograph';
-  import { enterDemo, inDemo } from '$lib/db/demo';
+  import { inDemo } from '$lib/db/demo';
+  import { enterExample, notEnteredWords, type NotEntered } from '$lib/ui/grow/example.svelte';
   let { data } = $props();
   /**
    * One featured species' figures, for "This is what a species page with a habitat climate shows" under the visitor's heading (round sixty;
@@ -40,7 +41,7 @@
     name: string;
     family?: string | null;
     lat: number | null;
-    climate: { months: Array<{ tmax: number; tmin: number; tmean: number; precipMm: number; dli?: number; rh?: number }>; p10?: unknown; p90?: unknown; cells: number; records: number; extremes?: { minAbs: number; minP01: number; maxP99: number; years: number; frostDaysPerYear: number; frostNights?: number } | null; extremesStatus?: 'ok' | 'none' | 'refused' | 'skipped' | 'sea' | null };
+    climate: { months: Array<{ tmax: number; tmin: number; tmean: number; precipMm: number; dli?: number; rh?: number }>; p10?: unknown; p90?: unknown; cells: number; records: number; extremes?: { minAbs: number; minP01: number; maxP99: number; years: number; frostDaysPerYear: number; frostNights?: number } | null; extremesStatus?: 'ok' | 'none' | 'refused' | 'skipped' | 'sea' | null; annualRain?: { p50?: number } | null };
   };
   const sentFeature = $derived((data as typeof data & { feature?: Feature | null }).feature ?? null);
   /**
@@ -122,6 +123,10 @@
   // half the home page's score; round forty-five, 1). A device that dismissed it hides it before first paint by a
   // flag app.html's inline script sets from localStorage, and the state here catches up at mount.
   let welcomeHidden = $state(false);
+  /** One transparent pixel, inline: the desktop strip's photographs below the desktop's width, where that copy is hidden (R1, 8). */
+  const NO_PIXELS = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+  /** The welcome's "See the example collection" did not open it: said under the line, never a press answered with nothing (round sixty-three, the fix pass; R1, 7). */
+  let exampleRefused = $state<NotEntered | null>(null);
   // A returning grower's device remembers that the page will be their species, not the catalogue: until the collection is
   // open, the server-rendered catalogue is swapped for a light skeleton so neither the wrong head nor "You grow 0" shows.
   // The server never sees the hint, so crawlers and first visits get the catalogue at once.
@@ -459,7 +464,7 @@
     if (ownFailed) return;
     const m = await entriesFor([...mine.keys()]);
     if (!m) { ownFailed = true; return; }
-    ownEntries = new Map([...m.values()].map((e) => [e.slug, { key: e.key, slug: e.slug, name: e.name, family: e.family, common: e.common, origin: e.origin ?? [], syn: e.syn, thumb: prefs.referencePhotos ? e.thumb : undefined, alt: prefs.referencePhotos && e.thumb ? e.name : undefined, thumbOff: !prefs.referencePhotos && !!e.thumb, photos: e.photos, open: e.open, climate: e.climate } as Item]));
+    ownEntries = new Map([...m.values()].map((e) => [e.slug, { key: e.key, slug: e.slug, name: e.name, family: e.family, common: e.common, origin: e.origin ?? [], syn: e.syn, thumb: prefs.referencePhotos ? e.thumb : undefined, alt: prefs.referencePhotos && e.thumb ? e.name : undefined, thumbOff: !prefs.referencePhotos && !!e.thumb, credit: prefs.referencePhotos ? e.credit : undefined, photos: e.photos, open: e.open, climate: e.climate } as Item]));
   }
   $effect(() => { if (hasMine) { mine.size; prefs.referencePhotos; loadOwn(); } }); // rebuilt when the photograph preference changes
   const retryOwn = () => { ownFailed = false; loadOwn(); };
@@ -484,6 +489,8 @@
   const homeDesc = $derived(`Cactus, succulent and bulb species and the plants most grown alongside them: sourced habitat climate for ${fmtN(data.withClimate)} of ${fmtN(data.total)}. Your records, encrypted before sync.`);
   // A visitor: no plants on this device (until the collection has opened, the server's catalogue stands as the visitor's page).
   const visitor = $derived(!collection.ready || (!hasMine && !collection.accessions.length));
+  /** The welcome line is drawn: a visitor's page, not dismissed, no search typed. */
+  const showWelcome = $derived(visitor && !welcomeHidden && !searchMode);
   const openRow = $derived(data.rows.find((r) => r.id === data.open));
   const rowDesc = $derived(openRow ? `${openRow.label}: ${fmtN(openRow.count)} species in the reference, ${fmtN(openRow.withClimate)} with a habitat climate; every figure sourced.` : '');
   /** Species per page of an opened row (the server's HOME_ITEMS). */
@@ -492,7 +499,7 @@
   const rowHref = (id: string) => `?by=${data.by}${chip !== 'all' ? `&chip=${chip}` : ''}${id === data.open ? '' : `&open=${id}`}`;
   /* ---- your species ---- */
   // A tile's data: a catalogue entry, or, until the index is here, the name alone. `missing`: the index is here and has no such species.
-  type Tile = { slug: string; key?: number; name: string; family?: string; common?: string; thumb?: string; alt?: string; open?: number; climate?: string; missing?: boolean; /** the reference has a photograph, and the grower has it switched off for their own tiles */ thumbOff?: boolean };
+  type Tile = { slug: string; key?: number; name: string; family?: string; common?: string; thumb?: string; /** the photograph's credit, licence first, as the catalogue's tiles say it (round sixty-three, the fix pass; R1, 6b) */ credit?: string; alt?: string; open?: number; climate?: string; missing?: boolean; /** the reference has a photograph, and the grower has it switched off for their own tiles */ thumbOff?: boolean };
   const mineTiles = $derived.by(() => {
     const list = [...mine.values()].sort((a, b) => a.name.localeCompare(b.name));
     const bySlug = ownEntries;
@@ -532,6 +539,7 @@
     <meta property="og:site_name" content="Cultifolio" />
     <meta property="og:url" content="https://cultifolio.com/?by={data.by}&open={data.open}" />
     <meta property="og:image" content={openRow.thumb ? photoAt(openRow.thumb, 'medium') : 'https://cultifolio.com/og.png'} />
+    {#if !openRow.thumb}<meta property="og:image:alt" content={OG_ALT} />{/if}
     <meta name="twitter:card" content="summary_large_image" />
   {:else}
     <!-- The list's whole reach: Hoya, Peperomia and Pelargonium are on it too (round sixty-two; outside review A2). -->
@@ -555,7 +563,8 @@
     <!-- A visitor's largest first-screen paint is a featured tile on a third party's host: the first is preloaded from the head and the
          hosts of the first three are preconnected, so the handshakes start with the stylesheet (round forty-two, 1). A grower's own
          page replaces the strip after the collection opens; the one small file this costs them is cached by then. -->
-    <link rel="preload" as="image" href={photoAt(data.featured[0].thumb, 'small')} fetchpriority="high" />
+    <!-- A desktop's only: on a phone the strip follows the first rows, and a row is the first screen's paint (round sixty-three, V4). -->
+    <link rel="preload" as="image" href={photoAt(data.featured[0].thumb, 'small')} fetchpriority="high" media="(min-width: 701px)" />
     {#each photoHosts(data.featured.slice(0, 3).map((c) => c.thumb)) as h (h)}<link rel="preconnect" href={h} />{/each}
   {/if}
 </svelte:head>
@@ -569,7 +578,7 @@
        the rest on the species page (round sixty-one; decision 9, visitor 9). Not drawn on a phone (below 900 px). -->
   <section class="feature" aria-labelledby="feature-h">
     <h2 class="featurehead" id="feature-h">This is what a species page with a habitat climate shows <span class="fname">· <a href="/species/{feature.slug}"><SpeciesName name={feature.name} /></a></span></h2>
-    <div class="fglance"><Glance months={feature.climate.months} extremes={feature.climate.extremes ?? null} extremesStatus={feature.climate.extremesStatus ?? null} year={featureSheet?.year ?? null} season={false} chartHref={null} /></div>
+    <div class="fglance"><Glance months={feature.climate.months} annualRain={feature.climate.annualRain ?? null} extremes={feature.climate.extremes ?? null} extremesStatus={feature.climate.extremesStatus ?? null} year={featureSheet?.year ?? null} season={false} chartHref={null} /></div>
     <div class="fchart" style:--fh="calc({featureChartH}px + 14rem)">{#if wide}<Climograph id="feature-climo" name={feature.name} south={featureSheet?.year?.south ?? null} climate={{ months: feature.climate.months, p10: feature.climate.p10 as never, p90: feature.climate.p90 as never, cells: feature.climate.cells, extremes: feature.climate.extremes ?? null }} />{/if}</div>
     <p class="small featurefoot"><a href="/species/{feature.slug}">The whole page for <i>{feature.name}</i></a>: {wide ? '' : 'the chart, '}the season in your months, the range and its records, photographs and every source. <a href="/about/how#feature">Chosen by rule</a> from today's strip above.</p>
   </section>
@@ -583,8 +592,14 @@
   {/if}
 {/snippet}
 
-{#snippet featured(titled = false)}
-  <section class="featured" aria-label="From the reference">
+{#snippet featured(titled = false, where: 'any' | 'wide' | 'phone' = 'any')}
+  <!-- On a phone the strip follows the first rows (`where`: drawn twice, one shown per width by CSS): above the search it
+       put the search, the chips and the first row under the tab bar on Safari's 390 × 664 page (round sixty-three, V4;
+       docs/REVIEW-ROUND-62.md, section 7). The phone's copy loads its photographs lazily, so on a desktop, where it is
+       hidden, it fetches nothing. The desktop's copy fetches its first three at once, and an eager image is fetched even
+       inside `display: none`: below the desktop's width its picture names a pixel already on the page instead, so a phone
+       does not spend two high-priority requests on photographs it does not show yet (round sixty-three, the fix pass; R1, 8). -->
+  <section class="featured" class:wideonly={where === 'wide'} class:phoneonly={where === 'phone'} aria-label="From the reference">
     {#if titled}<h2 class="q grouptitle">From the reference</h2>{/if}
     <div class="strip">
       {#each data.featured as c, i (c.slug)}
@@ -593,7 +608,7 @@
           <!-- The first phone viewport shows two or three tiles, and whichever is largest is the first-screen paint: the first three
                are fetched at once, the first with priority, the rest of the strip lazily (round thirty-seven, R2-4; round forty, R2-5).
                A photograph that does not load leaves a placeholder with the name, not a blank card (round forty, own). -->
-          {#if failedTiles.has(c.slug)}<div class="fph"><Placeholder name={c.name} family={c.family} caption="photograph did not load" /></div>{:else}<img src={photoAt(c.thumb, 'small')} width="240" height="240" alt={c.name} loading={i < 3 ? 'eager' : 'lazy'} fetchpriority={i < 2 ? 'high' : 'auto'} use:failedBeforeHydration={() => (failedTiles = new Set([...failedTiles, c.slug]))} />{/if}
+          {#if failedTiles.has(c.slug)}<div class="fph"><Placeholder name={c.name} family={c.family} caption="photograph did not load" /></div>{:else if where === 'wide'}<picture><source media="(max-width: 700px)" srcset={NO_PIXELS} /><img src={photoAt(c.thumb, 'small')} width="240" height="240" alt="" loading={i < 3 ? 'eager' : 'lazy'} fetchpriority={i < 2 ? 'high' : 'auto'} use:failedBeforeHydration={() => (failedTiles = new Set([...failedTiles, c.slug]))} /></picture>{:else}<img src={photoAt(c.thumb, 'small')} width="240" height="240" alt="" loading={i < 3 && where !== 'phone' ? 'eager' : 'lazy'} fetchpriority={i < 2 && where !== 'phone' ? 'high' : 'auto'} use:failedBeforeHydration={() => (failedTiles = new Set([...failedTiles, c.slug]))} />{/if}
           <span class="fnm"><SpeciesName name={c.name} /></span>
           {#if commonOr(c)}<span class="fcom">{commonOr(c)}</span>{/if}
           <!-- The photograph's source on the tile, its author and licence on the page it opens (round sixty; rule 1, the round forty-two review G). -->
@@ -701,7 +716,7 @@
   {/if}
 {:else}
   <!-- While a search is typed on a phone the head steps aside with the strip and the chips: the box is the page then (round fifty, 2). -->
-  <div class="headwrap" class:searching={searchMode}>
+  <div class="headwrap" class:searching={searchMode} class:withwelcome={showWelcome}>
   <!-- To a visitor the head says what this is in three short lines, not a 62-word sentence that read as a disclaimer, and then
        shows it: one species' figures and its chart, as its page shows them (round sixty; visitor 1, the self-review's
        experience item 1). To a grower it is the catalogue's head, as before. -->
@@ -723,9 +738,13 @@
   </div>
 
   <!-- The way in, in one line (round twenty-eight, 13; one line since round fifty, 1: the first screen is for the search, a glimpse of the photographs and the first rows). -->
-  {#if (!collection.ready || (!hasMine && !collection.accessions.length)) && !welcomeHidden && !searchMode}
-    <!-- The sample first: the quickest way to see the record half without typing a plant (round sixty-one; decision 9). -->
-    <p class="welcome" id="welcome"><span><b>Grow some of these?</b> <button class="linkish trysample" type="button" id="try-sample-home" onclick={() => enterDemo('/plants')}>Try a sample collection</button>, <a href="/plants/new">add your first plant</a> (kept on this device unless you sync) or <a href="/backup">restore a backup</a>.</span><button class="linkish dismiss" type="button" onclick={dismissWelcome} aria-label="Not now" title="Not now">×</button></p>
+  {#if showWelcome}
+    <!-- The example first: the quickest way to see the record half without typing a plant (round sixty-one; decision 9).
+         It opens on Today, the page that shows most of what the record does at once (round sixty-three, V2). What a grower
+         gets is said in a few words, each a page the app has (round sixty-three, V3: a visitor "isn't given the knowledge
+         of the app's capabilities"); short, so the first screen still holds a whole row on a phone (V4). -->
+    <p class="welcome" id="welcome"><span><b>Grow some of these?</b> Keep their record on this device: watering read against each species' habitat season, places, seed batches, frost warnings, labels. <button class="linkish trysample" type="button" id="try-sample-home" onclick={() => { const r = enterExample('/today'); exampleRefused = r === true ? null : r; }}>See the example collection</button>, <a href="/plants/new">add your first plant</a> or <a href="/backup">restore a backup</a>.</span><button class="linkish dismiss" type="button" onclick={dismissWelcome} aria-label="Not now" title="Not now">×</button></p>
+    {#if exampleRefused}<p class="small" role="status" id="try-sample-home-refused">{notEnteredWords(exampleRefused)}</p>{/if}
   {:else if collection.ready && !hasMine && !collection.accessions.length && !searchMode}
     <!-- "Not now" hides the welcome for good; the way in stays, in one line, or a visitor who comes back has to find /plants/new by the tab bar (round forty-one, R9). -->
     <!-- No "nothing leaves it": the about page lists what does (round sixty; words 17). -->
@@ -735,7 +754,7 @@
   {#if visitor && data.featured.length && !searchMode}
     <!-- A stranger sees plants before a list of them: one photographed species from each of the largest genera, by rule,
          rotated daily; above the one toolbar now, so the search, the grouping and the chips sit together (round sixty; visitor 16). -->
-    {@render featured()}
+    {@render featured(false, 'wide')}
   {/if}
 
 
@@ -759,9 +778,9 @@
         </nav>
         <!-- Links between addresses, so the current one is the page, not "true" (round fifty-eight; the accessibility review). -->
         <nav class="chiprow" aria-label="Filter by climate">
-          <a class="chipbtn" class:on={chip === 'all'} aria-current={chip === 'all' ? 'page' : undefined} href="?by={data.by}" data-sveltekit-noscroll>All<span class="n">{fmtN(data.total)}</span></a>
-          <a class="chipbtn" class:on={chip === 'climate'} aria-current={chip === 'climate' ? 'page' : undefined} href="?by={data.by}&chip=climate" data-sveltekit-noscroll>Climate known<span class="n">{fmtN(data.withClimate)}</span></a>
-          <a class="chipbtn" class:on={chip === 'noclimate'} aria-current={chip === 'noclimate' ? 'page' : undefined} href="?by={data.by}&chip=noclimate" data-sveltekit-noscroll>Without climate<span class="n">{fmtN(data.total - data.withClimate)}</span></a>
+          <a class="chipbtn" class:on={chip === 'all'} aria-current={chip === 'all' ? 'page' : undefined} href="?by={data.by}" aria-label="All, {fmtN(data.total)}" data-sveltekit-noscroll>All<span class="n">{fmtN(data.total)}</span></a>
+          <a class="chipbtn" class:on={chip === 'climate'} aria-current={chip === 'climate' ? 'page' : undefined} href="?by={data.by}&chip=climate" aria-label="Climate known, {fmtN(data.withClimate)}" data-sveltekit-noscroll>Climate known<span class="n">{fmtN(data.withClimate)}</span></a>
+          <a class="chipbtn" class:on={chip === 'noclimate'} aria-current={chip === 'noclimate' ? 'page' : undefined} href="?by={data.by}&chip=noclimate" aria-label="Without climate, {fmtN(data.total - data.withClimate)}" data-sveltekit-noscroll>Without climate<span class="n">{fmtN(data.total - data.withClimate)}</span></a>
         </nav>
         <!-- Kept in place with no index to show (regions), so the toolbar does not change shape (round sixty; visitor 16). -->
         <button class="btn small azbtn" class:noaz={data.letters.length <= 1} type="button" onclick={showLetters} aria-label="A–Z, show the letter index" aria-hidden={data.letters.length <= 1 ? 'true' : undefined} tabindex={data.letters.length <= 1 ? -1 : undefined} disabled={data.letters.length <= 1}>A–Z</button>
@@ -823,6 +842,7 @@
           {/if}
         {/if}
         {#if visitor && feature && start === 0 && i === Math.min(FEATURE_AFTER, visibleRows.length) - 1}{@render featureBlock(feature)}{/if}
+        {#if visitor && data.featured.length && start === 0 && i === Math.min(FEATURE_AFTER, visibleRows.length) - 1}{@render featured(false, 'phone')}{/if}
       {/each}
       {#if end < data.rowCount}<div class="more" bind:this={sentinel}><a class="btn small" href="?by={data.by}{chip !== 'all' ? `&chip=${chip}` : ''}&at={end}" onclick={async (e) => { e.preventDefault(); if (!(await growOnce())) location.href = (e.currentTarget as HTMLAnchorElement).href; }}>More of the {fmtN(data.rowCount)} {rowWord(data.rowCount)}</a></div>{/if}
     </div>
@@ -834,6 +854,8 @@
   .plantsfound { margin: 12px 0 4px; }
   .plantsfound .accrow .nm .accno { font-style: normal; vertical-align: 2px; }
   .welcome { margin: 10px 0 0; font-size: var(--fs-md); color: var(--ink2); line-height: 1.6; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  /* A little closer on a phone, where the line is four or five lines and the first row must still show (round sixty-three, V4). */
+  @media (max-width: 640px) { .welcome { line-height: 1.45; } :global(html:not([data-welcomed])) .welcome:not(.quiet) ~ .stickyhead .toolrow { margin-top: 6px; } }
   .welcome .dismiss { font-size: var(--fs-xl); line-height: 1; padding: 4px 8px; min-height: var(--tap); min-width: var(--tap); text-decoration: none; } /* 44 px under a finger (round sixty; visitor 17) */
   /* The visitor's three lines, then the product itself (round sixty; visitor 1). */
   .pitch { margin: -8px 0 6px; padding-left: 1.1em; font-size: var(--fs-md); color: var(--ink2); line-height: 1.5; display: grid; gap: 2px; max-width: 46rem; }
@@ -842,6 +864,14 @@
      row are on the first screen; what the other two lines say is on the about page (round sixty-two; outside
      review A10, B1). The four feature cards stay off phones. */
   @media (max-width: 640px) { .pitch { padding-left: 0; list-style: none; } .pitch li:not(:first-child) { display: none; } }
+  /* While the welcome line is shown on a phone it is the introduction, under the head's "Species reference", and the
+     pitch's sentence waits until it is dismissed: the two were eight lines, and with the welcome saying what a grower
+     gets, Safari's page on an iPhone SE (375 × 548) had no room left for a row (round sixty-three, V3 and V4). A device
+     that dismissed the welcome draws the pitch from the first paint (`data-welcomed`, set by app.html). */
+  @media (max-width: 640px) { :global(html:not([data-welcomed])) .headwrap.withwelcome .pitch { display: none; } }
+  /* On a phone the first letter's heading sits right under the letter index that names it: it is kept for a screen
+     reader and for `#l-A`, and not drawn, which gave the first row its 46 px (round sixty-three, V4). */
+  @media (max-width: 640px) { .rows > h2.letter:first-child { position: absolute; width: 1px; height: 1px; margin: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } }
   .feature { margin: 14px 0 6px; }
   @media (max-width: 899px) { .feature { display: none; } }
   /* The four cards two by two at every width but the narrowest, where one column keeps 200% text inside the page (round sixty-one; decision 9). */
@@ -891,6 +921,9 @@
   .welcome .linkish { color: var(--ink3); margin-left: 4px; }
   /* the featured strip: one row, scrolls sideways on a phone, six-up on a desktop */
   .featured { margin: 12px 0 2px; }
+  /* One strip per width: above the search on a desktop, after the first rows on a phone (round sixty-three, V4). */
+  @media (max-width: 700px) { .featured.wideonly { display: none; } .featured.phoneonly { margin: 6px 0 4px; } }
+  @media (min-width: 701px) { .featured.phoneonly { display: none; } }
   /* A sampler, not the page: on a phone the tiles are 112px squares, three and a half across, the first one two tiles
      wide so one photograph gets room; on a desktop the six-up grid as before (round fifty, 1). */
   .strip { display: grid; grid-auto-flow: column; grid-auto-columns: 112px; gap: 10px; overflow-x: auto; scroll-snap-type: x proximity; padding: 2px 2px 8px; margin: 0 -2px; scrollbar-width: thin; }
@@ -901,6 +934,7 @@
   /* `height: auto`, or the img's height attribute (240) beats the aspect ratio: a loaded photograph drew 240 px tall in a
      112 px tile, and the live strip was 320 px high (round sixty-two; outside review A10, B1: the fixture's photographs
      never load, so no test saw it). */
+  .ftile picture { display: block; }
   .ftile img { width: 100%; height: auto; aspect-ratio: 1; object-fit: cover; display: block; background: var(--sunk); }
   .ftile .fph { width: 100%; aspect-ratio: 1; }
   .ftile .fnm { display: block; padding: 6px 9px 0; font-family: var(--serif); font-style: italic; font-size: var(--fs-md); font-weight: 600; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

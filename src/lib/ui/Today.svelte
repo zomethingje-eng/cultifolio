@@ -178,7 +178,9 @@
 </script>
 
 {#if lines.length}
-  <div class="today" role="region" aria-label="Today" data-sveltekit-preload-data="off">
+  <!-- A region named Today on the front page; on /today it sits under the page's own "Also today" heading, where a second
+       region called Today was announced inside it (round sixty-three; the screen-reader reading, U4). -->
+  <div class="today" role={where === 'home' ? 'region' : undefined} aria-label={where === 'home' ? 'Today' : undefined} data-sveltekit-preload-data="off">
     {#each lines as l (l.href)}
       {#if l.water}
         <div class="line {l.tone} withact" class:doneline={!!done} style:min-height={done?.height ? `${done.height}px` : undefined}>

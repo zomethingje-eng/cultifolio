@@ -16,6 +16,8 @@ export type Sheet = {
   slug: string;
   name: { scientific: string; family?: string };
   thumb?: string;
+  /** The thumbnail's credit as a tile gives it (licence, then author), so a plant's page credits the species photograph it shows (round sixty-three). */
+  credit?: string;
   centroid: { lat: number } | null;
   /** The habitat's latitude for the season rules: the marker's, else the typical cell's; null only without a climate. A label printed from a sheet without a marker was six months off before this existed (round twelve, 1). */
   habitatLat: number | null;
@@ -26,13 +28,14 @@ const r1 = (x: number) => Math.round(x * 10) / 10;
 const slimYear = (y: Ok['months']): SheetMonth[] => y.map((m) => ({ tmax: r1(m.tmax), tmin: r1(m.tmin), tmean: r1(m.tmean), precipMm: r1(m.precipMm), ...(m.dli != null ? { dli: r1(m.dli) } : {}), ...(m.rh != null ? { rh: r1(m.rh) } : {}) }));
 const slimSpan = (y: Ok['months']) => y.map((m) => ({ tmin: r1(m.tmin), ...(m.dli != null ? { dli: r1(m.dli) } : {}) }));
 
-export function sheetOf(d: Dossier, thumb?: string): Sheet {
+export function sheetOf(d: Dossier, thumb?: string, credit?: string): Sheet {
   const c = d.climate;
   return {
     key: d.key,
     slug: d.slug,
     name: { scientific: d.name.scientific, family: d.name.family },
     thumb,
+    ...(credit ? { credit } : {}),
     centroid: d.centroid ? { lat: d.centroid.lat } : null,
     habitatLat: d.centroid?.lat ?? (c.status === 'ok' ? c.at.lat : null),
     climate: c.status === 'ok'

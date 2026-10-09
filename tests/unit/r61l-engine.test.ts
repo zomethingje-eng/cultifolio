@@ -386,7 +386,7 @@ describe('decision 10: no sync in the sample collection, whatever the page shows
     const memA = newMem('aaaaaaaaaaaa');
     const A = await boot(memA, r2);
     ss.set('cultifolio.demo', '1');
-    await expect(A.sync.setup(KEY, 'create')).rejects.toThrow(/sample collection/);
+    await expect(A.sync.setup(KEY, 'create')).rejects.toThrow(/example collection/);
     expect(A.calls).toEqual([]);
     expect(memA.meta.get('sync')).toBeUndefined();
     // a device that had a key before the tab entered the sample: its run does nothing while the sample is open

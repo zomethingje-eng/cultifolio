@@ -146,9 +146,9 @@ test('r61g 6: the sample is marked before the first paint, does not shift the pa
   // Settings: shut, with its heading.
   await page.goto('/settings');
   await ready(page);
-  await expect(page.locator('#demo-locked')).toContainText('Settings are off in the sample collection.');
+  await expect(page.locator('#demo-locked')).toContainText('Settings are off in the example collection.');
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
-  await expect(page.locator('#main button:visible')).toHaveText(['Leave the sample']);
+  await expect(page.locator('#main button:visible')).toHaveText(['Add your first plant', 'Leave the example']) // the example's words, and its second way out (round sixty-three, V2);
   // A label stock picked in the sample is the tab's, not the device's.
   await page.goto('/labels');
   await ready(page);
@@ -156,7 +156,7 @@ test('r61g 6: the sample is marked before the first paint, does not shift the pa
   await expect.poll(() => page.evaluate(() => sessionStorage.getItem('cultifolio.demo.labels'))).toContain('5163');
   expect(await page.evaluate(() => localStorage.getItem('cultifolio.labels'))).toBeNull();
   expect(await page.evaluate(() => localStorage.getItem('cultifolio.hasMine'))).toBeNull();
-  await page.getByRole('button', { name: 'Leave the sample' }).click();
+  await page.getByRole('button', { name: 'Leave the example' }).click();
   await expect(page).toHaveURL(/^http:\/\/[^/]+\/$/);
   expect(await page.evaluate(() => Object.keys(sessionStorage).filter((k) => k.startsWith('cultifolio.demo')))).toEqual([]);
 });
@@ -170,9 +170,9 @@ test('r61g 7: a second sample tab is told plainly when the sample closes, and a 
   const [second] = await Promise.all([context.waitForEvent('page'), page.evaluate(() => { window.open('/today'); })]);
   await ready(second);
   await expect(second.locator('.demobar')).toBeVisible();
-  await page.getByRole('button', { name: 'Leave the sample' }).click();
+  await page.getByRole('button', { name: 'Leave the example' }).click();
   await expect(second).toHaveURL(/^http:\/\/[^/]+\/$/, { timeout: 20_000 }); // told on the leaving tab's pagehide since round sixty-two: twenty seconds under load
-  await expect(second.locator('.toast')).toContainText('The sample collection was closed in another tab. This is your own collection.');
+  await expect(second.locator('.toast')).toContainText('The example collection was closed in another tab. This is your own collection.');
   await expect(second.locator('.demobar')).toBeHidden();
   await second.close();
   // A sample tab closed without Leave: its database stays until the next load outside the sample.

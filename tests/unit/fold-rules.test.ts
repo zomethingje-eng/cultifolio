@@ -30,7 +30,7 @@ function block(file: string, signature: string): string {
   return text.slice(at, end + indent.length + 2);
 }
 
-const RECORDED = { rules: 7, hash: 'c7aed688a8047c4d54b1e5f3adec874a' }; // round sixty-two: 7, a stored park of a marked stamp is not read (the clock review's 8); the hash takes in the blocks A42 named; re-recorded at the merge for vault.ts's ledger read once and the field list's importKey (an unknown field was always accepted, so no fold changes); re-recorded in the second pass for the push's parked verdicts and the batch's `parked` (a fold of a given log, parked set and clock is unchanged: the behaviour hash holds)
+const RECORDED = { rules: 7, hash: 'c3b3f86989d1029197c45158a2c33d00' }; // round sixty-two: 7, a stored park of a marked stamp is not read (the clock review's 8); the hash takes in the blocks A42 named; re-recorded at the merge for vault.ts's ledger read once and the field list's importKey (an unknown field was always accepted, so no fold changes); re-recorded in the second pass for the push's parked verdicts and the batch's `parked` (a fold of a given log, parked set and clock is unchanged: the behaviour hash holds); re-recorded in round sixty-three for the recorded time beside the stamp (`w`), which no fold reads, and the vault's keeping of the earliest one (agent L; the behaviour hash holds); re-recorded at the merge for the vault's and engine's refusal words, sample to example (no fold changes)
 
 describe('the fold rules number (round fifty-seven)', () => {
   it('moves whenever the fold\'s source does', () => {

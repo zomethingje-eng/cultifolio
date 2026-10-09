@@ -32,7 +32,9 @@
   const rb = $derived(g.rain.top + g.rain.height);
 </script>
 
-<figure class="climo" bind:clientWidth={shown}>
+<!-- The figure is named by the chart's title: named by its caption, the key, a screen reader read the whole key as the
+     figure's name and then again in place (round sixty-three; U4). -->
+<figure class="climo" aria-labelledby="{id}-t" bind:clientWidth={shown}>
   <!-- Whose calendar: the chart is in the habitat's months, the season card in the reader's (round sixty; visitor 3, words 14). -->
   <p class="cal">{calendar}</p>
   <!-- The title names the species, and the description is one sentence of the figures with the longer account after it

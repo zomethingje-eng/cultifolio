@@ -7,29 +7,74 @@
 @font-face { font-family: 'Newsreader Variable'; font-style: italic; font-display: swap; font-weight: 200 800; src: url('@fontsource-variable/newsreader/files/newsreader-latin-wght-italic.woff2') format('woff2-variations'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
 /* Cultifolio — the "Bench" look, carried over from v2 as tokens. */
 /*
- * The fallback faces, with the web fonts' metrics. The two faces every page sets in arrive after the first paint on a
- * phone's network, and text set in the system's font until then reflowed when they landed: a layout shift of 0.08 to
- * 0.10 on the species and home pages in Lighthouse, and 0.17 on the species page with the fonts held back locally. Each local face the stacks fall back to is
- * declared again with ascent, descent, line gap and size adjusted to the web font's own, so a line set in it is the
- * height and nearly the width it will be when the web font replaces it. The figures are the fonts' tables (capsize's
- * metrics of Newsreader, Public Sans, Georgia, Times New Roman, Noto Serif, Segoe UI, Roboto, Helvetica Neue and
- * Arial); a device without the local face skips its entry (round forty-four, 1).
+ * The fallback faces, with the web fonts' metrics. The three faces every page sets in arrive after the first paint on a
+ * phone's network, and text set in the system's font until then reflowed when they landed. Each local face the stacks
+ * fall back to is declared again, scaled so that its average letter is as wide as the web font's at the weight it stands
+ * in for, and with the web font's ascent and descent, so a line set in it wraps at the same words and is the same height
+ * (round forty-four, 1; Linux's faces, round sixty-two, N10).
+ *
+ * Round sixty-three (the review of round sixty-two, 11): Windows still shifted 0.107 on the front page at 390 px. Not the
+ * Segoe UI face: the count beside the title is monospace, Windows set it in Consolas (an advance of 0.550 em against DM
+ * Mono's 0.600), it fitted beside "Cultifolio", and when DM Mono came it wrapped under it and pushed the page down 24 px.
+ * Linux's DejaVu Sans Mono is 0.602 em, so Linux never saw it. Measured here with open faces of the same widths under the
+ * Windows names (Selawik for Segoe UI, Gelasio for Georgia, Inconsolata SemiExpanded for Consolas; each one's capsize
+ * average equals the Windows face's): 0.1066 before, as the PC measured. Now every family also has its own bold and
+ * italic faces, not the regular one emboldened or slanted by the browser: Safari and Firefox widen a synthetic bold by
+ * about a pixel a letter, and Newsreader's italic is 6% narrower than its roman.
+ *
+ * The arithmetic, for each face (scripts/dev/fallback-faces.mjs prints every line of it and this block):
+ *   size-adjust = (web average / web em) / (local average / local em); ascent and descent = the web font's / size-adjust;
+ *   line gap 0. Averages are capsize's weighted advance (English letter frequencies); local faces' from
+ *   @capsizecss/metrics 4.3.0 (DejaVu's from its files), the web fonts' from the files served here at each weight.
+ *   Public Sans 400 over Segoe UI: (935/2000) / (908/2048) = 105.4449%; ascent 0.95 / 1.05445 = 90.0944%,
+ *     descent 0.225 / 1.05445 = 21.3382%. Its 600 over Segoe UI Semibold (937): 103.6021%; 700 over Bold (973): 100.9266%.
+ *   Newsreader 400 over Georgia: (857/2000) / (913/2048) = 96.1192%; ascent 0.735 / 0.96119 = 76.4676%. Its 600 over
+ *     Georgia Bold (1062): 86.7797%; its italic 400 (804) over Georgia Italic (931): 88.4314%; italic 600 (873) over
+ *     Georgia Bold Italic (1082): 82.6203%.
+ *   DM Mono over Consolas: (600/1000) / (1126/2048) = 109.1297%; ascent 0.992 / 1.0913 = 90.901%. Over Menlo and DejaVu
+ *     Sans Mono (1233/2048): 99.6594%; over Liberation Mono (1229/2048): 99.9837%.
+ * A family with a bold face has two, `100 500` and `600 900`, the bold scaled to the web font's 600 (the weight of the
+ * buttons, chips, tabs and serif titles; the 700 text is short capitals); Segoe UI has a semibold, so three. A device
+ * without a local face skips its entry. Safari takes size-adjust (17 and later); where it ignores the three overrides,
+ * the widths still match and a line's height is still its set line-height, as nearly every line here has one.
  */
-@font-face { font-family: 'Newsreader Fallback Georgia'; src: local('Georgia'); ascent-override: 76.4676%; descent-override: 27.5699%; size-adjust: 96.1192%; }
-@font-face { font-family: 'Newsreader Fallback Times'; src: local('Times New Roman'), local('TimesNewRomanPSMT'); ascent-override: 69.6835%; descent-override: 25.124%; line-gap-override: 0%; size-adjust: 105.4769%; }
-@font-face { font-family: 'Newsreader Fallback Noto'; src: local('Noto Serif Regular'), local('NotoSerif-Regular'); ascent-override: 82.5053%; descent-override: 29.7468%; size-adjust: 89.0852%; }
-@font-face { font-family: 'Public Sans Fallback Segoe'; src: local('Segoe UI'), local('SegoeUI'); ascent-override: 90.0944%; descent-override: 21.3382%; size-adjust: 105.4449%; }
-@font-face { font-family: 'Public Sans Fallback Roboto'; src: local('Roboto Regular'), local('Roboto-Regular'); descent-override: 21.4087%; size-adjust: 105.0977%; }
-@font-face { font-family: 'Public Sans Fallback Helvetica Neue'; src: local('Helvetica Neue'), local('HelveticaNeue'); ascent-override: 91.4439%; descent-override: 21.6578%; line-gap-override: 0%; size-adjust: 103.8889%; }
-@font-face { font-family: 'Public Sans Fallback Arial'; src: local('Arial'), local('ArialMT'); ascent-override: 90.5905%; descent-override: 21.4557%; line-gap-override: 0%; size-adjust: 104.8675%; }
-/* Linux: `local('Arial')` does not resolve there, and the text was set in the system's own face until the web fonts came:
-   the front page shifted 0.15 at 390 px as the welcome rewrapped. Liberation Sans and Serif have Arial's and Times New
-   Roman's widths, so their figures are those; DejaVu's are its own tables against the same targets (round sixty-two;
-   the self-review's N10, the accessibility review of round sixty-one, 9). */
-@font-face { font-family: 'Public Sans Fallback Liberation'; src: local('Liberation Sans'), local('LiberationSans'); ascent-override: 90.5905%; descent-override: 21.4557%; line-gap-override: 0%; size-adjust: 104.8675%; }
-@font-face { font-family: 'Public Sans Fallback DejaVu'; src: local('DejaVu Sans'), local('DejaVuSans'); ascent-override: 104.0177%; descent-override: 24.6358%; line-gap-override: 0%; size-adjust: 91.3306%; }
-@font-face { font-family: 'Newsreader Fallback Liberation'; src: local('Liberation Serif'), local('LiberationSerif'); ascent-override: 69.6835%; descent-override: 25.124%; line-gap-override: 0%; size-adjust: 105.4769%; }
-@font-face { font-family: 'Newsreader Fallback DejaVu'; src: local('DejaVu Serif'), local('DejaVuSerif'); ascent-override: 89.2255%; descent-override: 32.1697%; line-gap-override: 0%; size-adjust: 82.3755%; }
+@font-face { font-family: 'Public Sans Fallback Segoe'; font-weight: 100 500; src: local('Segoe UI'), local('SegoeUI'); ascent-override: 90.0944%; descent-override: 21.3382%; line-gap-override: 0%; size-adjust: 105.4449%; }
+@font-face { font-family: 'Public Sans Fallback Segoe'; font-weight: 600; src: local('Segoe UI Semibold'), local('SegoeUI-Semibold'); ascent-override: 91.697%; descent-override: 21.7177%; line-gap-override: 0%; size-adjust: 103.6021%; }
+@font-face { font-family: 'Public Sans Fallback Segoe'; font-weight: 700 900; src: local('Segoe UI Bold'), local('SegoeUI-Bold'); ascent-override: 94.1278%; descent-override: 22.2934%; line-gap-override: 0%; size-adjust: 100.9266%; }
+@font-face { font-family: 'Public Sans Fallback Roboto'; font-weight: 100 500; src: local('Roboto Regular'), local('Roboto-Regular'), local('Roboto'); ascent-override: 90.3921%; descent-override: 21.4087%; line-gap-override: 0%; size-adjust: 105.0977%; }
+@font-face { font-family: 'Public Sans Fallback Roboto'; font-weight: 600 900; src: local('Roboto Bold'), local('Roboto-Bold'); ascent-override: 90.6205%; descent-override: 21.4627%; line-gap-override: 0%; size-adjust: 104.8328%; }
+@font-face { font-family: 'Public Sans Fallback Helvetica Neue'; font-weight: 100 500; src: local('Helvetica Neue'), local('HelveticaNeue'); ascent-override: 91.4439%; descent-override: 21.6578%; line-gap-override: 0%; size-adjust: 103.8889%; }
+@font-face { font-family: 'Public Sans Fallback Helvetica Neue'; font-weight: 600 900; src: local('Helvetica Neue Bold'), local('HelveticaNeue-Bold'); ascent-override: 96.2025%; descent-override: 22.7848%; line-gap-override: 0%; size-adjust: 98.75%; }
+@font-face { font-family: 'Public Sans Fallback Arial'; font-weight: 100 500; src: local('Arial'), local('ArialMT'); ascent-override: 90.5905%; descent-override: 21.4557%; line-gap-override: 0%; size-adjust: 104.8675%; }
+@font-face { font-family: 'Public Sans Fallback Arial'; font-weight: 600 900; src: local('Arial Bold'), local('Arial-BoldMT'); ascent-override: 96.1986%; descent-override: 22.7839%; line-gap-override: 0%; size-adjust: 98.754%; }
+@font-face { font-family: 'Public Sans Fallback Liberation'; font-weight: 100 500; src: local('Liberation Sans'), local('LiberationSans'); ascent-override: 90.5905%; descent-override: 21.4557%; line-gap-override: 0%; size-adjust: 104.8675%; }
+@font-face { font-family: 'Public Sans Fallback Liberation'; font-weight: 600 900; src: local('Liberation Sans Bold'), local('LiberationSans-Bold'); ascent-override: 96.1986%; descent-override: 22.7839%; line-gap-override: 0%; size-adjust: 98.754%; }
+@font-face { font-family: 'Public Sans Fallback DejaVu'; font-weight: 100 500; src: local('DejaVu Sans'), local('DejaVuSans'); ascent-override: 103.2911%; descent-override: 24.4637%; line-gap-override: 0%; size-adjust: 91.9731%; }
+@font-face { font-family: 'Public Sans Fallback DejaVu'; font-weight: 600 900; src: local('DejaVu Sans Bold'), local('DejaVuSans-Bold'); ascent-override: 115.086%; descent-override: 27.2572%; line-gap-override: 0%; size-adjust: 82.5469%; }
+@font-face { font-family: 'Newsreader Fallback Georgia'; font-weight: 100 500; src: local('Georgia'); ascent-override: 76.4676%; descent-override: 27.5699%; line-gap-override: 0%; size-adjust: 96.1192%; }
+@font-face { font-family: 'Newsreader Fallback Georgia'; font-weight: 600 900; src: local('Georgia Bold'), local('Georgia-Bold'); ascent-override: 84.6973%; descent-override: 30.5371%; line-gap-override: 0%; size-adjust: 86.7797%; }
+@font-face { font-family: 'Newsreader Fallback Georgia'; font-style: italic; font-weight: 100 500; src: local('Georgia Italic'), local('Georgia-Italic'); ascent-override: 83.1153%; descent-override: 29.9667%; line-gap-override: 0%; size-adjust: 88.4314%; }
+@font-face { font-family: 'Newsreader Fallback Georgia'; font-style: italic; font-weight: 600 900; src: local('Georgia Bold Italic'), local('Georgia-BoldItalic'); ascent-override: 88.9612%; descent-override: 32.0744%; line-gap-override: 0%; size-adjust: 82.6203%; }
+@font-face { font-family: 'Newsreader Fallback Times'; font-weight: 100 500; src: local('Times New Roman'), local('TimesNewRomanPSMT'); ascent-override: 69.6835%; descent-override: 25.124%; line-gap-override: 0%; size-adjust: 105.4769%; }
+@font-face { font-family: 'Newsreader Fallback Times'; font-weight: 600 900; src: local('Times New Roman Bold'), local('TimesNewRomanPS-BoldMT'); ascent-override: 70.6608%; descent-override: 25.4763%; line-gap-override: 0%; size-adjust: 104.0181%; }
+@font-face { font-family: 'Newsreader Fallback Times'; font-style: italic; font-weight: 100 500; src: local('Times New Roman Italic'), local('TimesNewRomanPS-ItalicMT'); ascent-override: 74.6342%; descent-override: 26.9089%; line-gap-override: 0%; size-adjust: 98.4804%; }
+@font-face { font-family: 'Newsreader Fallback Times'; font-style: italic; font-weight: 600 900; src: local('Times New Roman Bold Italic'), local('TimesNewRomanPS-BoldItalicMT'); ascent-override: 70.4618%; descent-override: 25.4046%; line-gap-override: 0%; size-adjust: 104.3118%; }
+@font-face { font-family: 'Newsreader Fallback Noto'; font-weight: 100 500; src: local('Noto Serif Regular'), local('NotoSerif-Regular'), local('Noto Serif'); ascent-override: 82.5053%; descent-override: 29.7468%; line-gap-override: 0%; size-adjust: 89.0852%; }
+@font-face { font-family: 'Newsreader Fallback Noto'; font-weight: 600 900; src: local('Noto Serif Bold'), local('NotoSerif-Bold'); ascent-override: 83.6267%; descent-override: 30.1511%; line-gap-override: 0%; size-adjust: 87.8906%; }
+@font-face { font-family: 'Newsreader Fallback Noto'; font-style: italic; font-weight: 100 500; src: local('Noto Serif Italic'), local('NotoSerif-Italic'); ascent-override: 85.75%; descent-override: 30.9167%; line-gap-override: 0%; size-adjust: 85.7143%; }
+@font-face { font-family: 'Newsreader Fallback Noto'; font-style: italic; font-weight: 600 900; src: local('Noto Serif Bold Italic'), local('NotoSerif-BoldItalic'); ascent-override: 87.055%; descent-override: 31.3872%; line-gap-override: 0%; size-adjust: 84.4294%; }
+@font-face { font-family: 'Newsreader Fallback Liberation'; font-weight: 100 500; src: local('Liberation Serif'), local('LiberationSerif'); ascent-override: 69.6835%; descent-override: 25.124%; line-gap-override: 0%; size-adjust: 105.4769%; }
+@font-face { font-family: 'Newsreader Fallback Liberation'; font-weight: 600 900; src: local('Liberation Serif Bold'), local('LiberationSerif-Bold'); ascent-override: 70.6608%; descent-override: 25.4763%; line-gap-override: 0%; size-adjust: 104.0181%; }
+@font-face { font-family: 'Newsreader Fallback Liberation'; font-style: italic; font-weight: 100 500; src: local('Liberation Serif Italic'), local('LiberationSerif-Italic'); ascent-override: 74.6342%; descent-override: 26.9089%; line-gap-override: 0%; size-adjust: 98.4804%; }
+@font-face { font-family: 'Newsreader Fallback Liberation'; font-style: italic; font-weight: 600 900; src: local('Liberation Serif Bold Italic'), local('LiberationSerif-BoldItalic'); ascent-override: 70.4618%; descent-override: 25.4046%; line-gap-override: 0%; size-adjust: 104.3118%; }
+@font-face { font-family: 'Newsreader Fallback DejaVu'; font-weight: 100 500; src: local('DejaVu Serif'), local('DejaVuSerif'); ascent-override: 88.6119%; descent-override: 31.9485%; line-gap-override: 0%; size-adjust: 82.9459%; }
+@font-face { font-family: 'Newsreader Fallback DejaVu'; font-weight: 600 900; src: local('DejaVu Serif Bold'), local('DejaVuSerif-Bold'); ascent-override: 93.151%; descent-override: 33.5851%; line-gap-override: 0%; size-adjust: 78.9041%; }
+@font-face { font-family: 'Newsreader Fallback DejaVu'; font-style: italic; font-weight: 100 500; src: local('DejaVu Serif Italic'), local('DejaVuSerif-Italic'); ascent-override: 94.4533%; descent-override: 34.0546%; line-gap-override: 0%; size-adjust: 77.8163%; }
+@font-face { font-family: 'Newsreader Fallback DejaVu'; font-style: italic; font-weight: 600 900; src: local('DejaVu Serif Bold Italic'), local('DejaVuSerif-BoldItalic'); ascent-override: 96.032%; descent-override: 34.6238%; line-gap-override: 0%; size-adjust: 76.537%; }
+@font-face { font-family: 'DM Mono Fallback Consolas'; src: local('Consolas'); ascent-override: 90.901%; descent-override: 28.4066%; line-gap-override: 0%; size-adjust: 109.1297%; }
+@font-face { font-family: 'DM Mono Fallback Menlo'; src: local('Menlo Regular'), local('Menlo-Regular'), local('Menlo'); ascent-override: 99.5391%; descent-override: 31.106%; line-gap-override: 0%; size-adjust: 99.6594%; }
+@font-face { font-family: 'DM Mono Fallback Liberation'; src: local('Liberation Mono'), local('LiberationMono'); ascent-override: 99.2161%; descent-override: 31.005%; line-gap-override: 0%; size-adjust: 99.9837%; }
+@font-face { font-family: 'DM Mono Fallback DejaVu'; src: local('DejaVu Sans Mono'), local('DejaVuSansMono'); ascent-override: 99.5391%; descent-override: 31.106%; line-gap-override: 0%; size-adjust: 99.6594%; }
 
 :root {
   --bg: #f3f5f4; --card: #fff; --sunk: #e8ecea;
@@ -45,7 +90,7 @@
   --sh2: 0 3px 7px rgba(16, 33, 29, 0.08), 0 12px 24px rgba(16, 33, 29, 0.07);
   --ui: 'Public Sans Variable', 'Public Sans Fallback Segoe', 'Public Sans Fallback Roboto', 'Public Sans Fallback Helvetica Neue', 'Public Sans Fallback Arial', 'Public Sans Fallback Liberation', 'Public Sans Fallback DejaVu', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --serif: 'Newsreader Variable', 'Newsreader Fallback Georgia', 'Newsreader Fallback Times', 'Newsreader Fallback Noto', 'Newsreader Fallback Liberation', 'Newsreader Fallback DejaVu', Georgia, 'Times New Roman', serif;
-  --mono: 'DM Mono', ui-monospace, Menlo, Consolas, monospace;
+  --mono: 'DM Mono', 'DM Mono Fallback Consolas', 'DM Mono Fallback Menlo', 'DM Mono Fallback Liberation', 'DM Mono Fallback DejaVu', ui-monospace, Menlo, Consolas, monospace;
   --maxw: 1180px;
   /* The type scale (round fifty-eight; the accessibility review): seven steps in rem, so the browser's own text size
      applies (every size was in px, and the setting did nothing), and nothing smaller than 11 px at the default. Display
@@ -362,7 +407,7 @@ table.wx tr:last-child td { border-bottom: 0; }
 details.why { margin: 8px 0 0; }
 details.why > summary { cursor: pointer; list-style: none; font-family: var(--ui); font-size: var(--fs-sm); font-weight: 600; color: var(--ink3); display: inline-flex; align-items: center; gap: 6px; min-height: 28px; }
 details.why > summary::-webkit-details-marker { display: none; }
-details.why > summary::before { content: '›'; display: inline-block; transition: transform 0.15s; font-size: var(--fs-md); }
+details.why > summary::before { content: '›'; content: '›' / ''; display: inline-block; transition: transform 0.15s; font-size: var(--fs-md); } /* the arrow is drawn, not said: a screen reader read "single right-pointing angle quotation mark, How this section is made" (round sixty-three; U4); a browser without the alt-text form keeps the first */
 details.why[open] > summary::before { transform: rotate(90deg); }
 details.why > summary:hover { color: var(--accent); }
 details.why > .whybody { font-family: var(--ui); font-size: var(--fs-md); line-height: 1.6; color: var(--ink2); margin: 4px 0 0; white-space: normal; }
@@ -459,6 +504,39 @@ html { scroll-padding-top: calc(var(--bar-h, 49px) + 12px); }
    label off its cell; the frost and clock bars, the toast and the tray would do the same (round sixty; the self-review's 6). */
 @media print {
   #topbar, #tabbar, #menu, .scrim, footer.credits, .skip, .install, .frostbar, .clockbar, .vaultnote, .toastregion, .toast, .tray, .cmppill { display: none !important; }
+}
+/* Paper, in every browser (round sixty-three; the review of round sixty-two, 11: Safari, Firefox and printers):
+   - The light theme's colours, whatever the screen's: in the dark theme the figures printed near-white on white paper
+     (Chromium, measured), since no browser prints the dark ground by default. The selector is tripled to outrank the
+     dark theme's own two (`:root:not([data-theme='light'])` and `:root[data-theme='dark']`) without !important.
+   - Nothing sticks: Firefox and Safari can draw a sticky or fixed bar again on each sheet, over the text.
+   - A card's edge is an outline, not its shadow: Firefox and Safari leave shadows off the paper with the backgrounds,
+     and the cards ran together with the page.
+   - A card, a chart or a table row is not cut across two sheets, and a heading stays with what it heads. */
+@media print {
+  :root:root:root {
+    --bg: #fff; --card: #fff; --sunk: #eef1ef;
+    --ink: #16211d; --ink2: #44524c; --ink3: #5f6d67;
+    --rule: #dfe5e2; --rule2: #c6cfcb;
+    --accent: #12795a; --accent-soft: #e2f1eb; --on-accent: #fff;
+    --warm: #a8702a; --warm-soft: #f7ecdc;
+    --cool: #3f6d8c; --cool-soft: #e4eef4;
+    --bad: #a3402f; --bad-soft: #fbeae7;
+    --map-sea: #d3e1e7; --map-land: #e7e2d4; --map-coast: #a89f8d;
+    --field-edge: #7d8a85; --warm-ink: #8a5a1c;
+    --sh: none; --sh2: none;
+    color-scheme: light;
+  }
+  body { background: #fff; }
+  /* A photograph's placeholder sets its own dark-theme tint in its component, which the tokens above do not reach: its
+     initial printed light on white (round sixty-three, the fix pass; R1, 8). Its light-theme tint, by the hue it carries
+     (other `.ph` boxes carry none), five classes to outrank the component's four (the dark selector's two, `.ph` and the
+     component's own class). */
+  :root:root:root .ph[style*='--h'] { background: hsl(var(--h) 48% 92%); color: hsl(var(--h) 30% 30%); }
+  nav.tabs, .toolrow, .stickyhead .toolrow, .selbar, .actions.sticky, .addbar, .pinnames, table.wx th, table.wx td, .rowlab { position: static !important; }
+  :is(.card, .idcard, .mapbox, .factgrid, .cult, .paper, .grouphead, a.tile, .tl, table.wx, .ftile, a.grow, .reltile, .today, li.stop, .prov, .climo, .firsts, .wl, .bcard, .rv, .brief) { box-shadow: none !important; outline: 1px solid #c6cfcb; outline-offset: -1px; }
+  :is(.card, .idcard, .factgrid > div, .paper, a.tile, .tl, .ftile, a.grow, .reltile, li.stop, .prov, .climo, .firsts, .bcard, .rv, figure, img, tr) { break-inside: avoid; }
+  :is(h1, h2, h3, h4, .secrule, .kick) { break-after: avoid; }
 }
 
 /* Forced colours (Windows high contrast): the chosen chip, segment and tab are a fill in the theme, which forced colours

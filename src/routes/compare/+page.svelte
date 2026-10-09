@@ -22,6 +22,7 @@
   import { photoCredit, detailSentence } from '$lib/ui/ref/head';
   import { climateDetail } from '$lib/ui/ref/upstream';
   import { showable } from '$lib/ui/ref/photos';
+  import { yearRain } from '$climate/year-rain';
   import { failedBeforeHydration } from '$lib/ui/ref/failed';
   let { data } = $props();
   const u = $derived(units.current);
@@ -38,7 +39,7 @@
     // Every month that ties as printed, named (round sixty-one; visitor 5: Copiapoa humilis, 23 °C in January and February, read "Jan").
     const at = (f: (x: Month) => number, hi: boolean, fmt: (v: number) => string) => (m ? monthNames(tiedMonths(m.map(f), hi, fmt), 'short') : '');
     const dlis = m ? m.map((x) => x.dli).filter((x): x is number => x != null) : [];
-    const sheet = cultivationSheet({ scientific: d.name.scientific, climateStatus: cl.status, family: d.name.family, months: cl.status === 'ok' ? cl.months : null, p10: cl.status === 'ok' ? cl.p10 : null, p90: cl.status === 'ok' ? cl.p90 : null, annualP10: cl.status === 'ok' ? (cl.annualRain?.p10 ?? null) : null, annualP90: cl.status === 'ok' ? (cl.annualRain?.p90 ?? null) : null, extremes: cl.status === 'ok' ? (cl.extremes ?? null) : null, extremesStatus: cl.status === 'ok' ? cl.extremesStatus : null, lat: d.centroid?.lat ?? (cl.status === 'ok' ? cl.at.lat : null), units: u, readerLat });
+    const sheet = cultivationSheet({ scientific: d.name.scientific, climateStatus: cl.status, family: d.name.family, months: cl.status === 'ok' ? cl.months : null, p10: cl.status === 'ok' ? cl.p10 : null, p90: cl.status === 'ok' ? cl.p90 : null, annualP10: cl.status === 'ok' ? (cl.annualRain?.p10 ?? null) : null, annualP90: cl.status === 'ok' ? (cl.annualRain?.p90 ?? null) : null, annualP50: cl.status === 'ok' ? (cl.annualRain?.p50 ?? null) : null, extremes: cl.status === 'ok' ? (cl.extremes ?? null) : null, extremesStatus: cl.status === 'ok' ? cl.extremesStatus : null, lat: d.centroid?.lat ?? (cl.status === 'ok' ? cl.at.lat : null), units: u, readerLat });
     const shown = d.photos.filter(showable); // a Commons photograph with no thumbnail is not shown (round sixty-two; outside review A35)
     const hero = shown.find((p) => !p.captive) ?? shown[0];
     return {
@@ -50,6 +51,7 @@
       hot: m ? { v: m[hot].tmax, mo: at((x) => x.tmax, true, (v) => temp(v, u)) } : null,
       cold: m ? { v: m[cold].tmin, mo: at((x) => x.tmin, false, (v) => temp(v, u, 1)) } : null,
       rain: m ? m.reduce((a, x) => a + x.precipMm, 0) : null,
+      rainYr: m && cl.status === 'ok' ? yearRain(m, cl.annualRain) : null,
       wet: m ? { mo: at((x) => x.precipMm, true, (v) => rain(v, u)), n: m.filter((x) => x.precipMm >= 25).length } : null,
       dli: dlis.length ? { lo: Math.min(...dlis), hi: Math.max(...dlis) } : null,
       sheet,
@@ -74,11 +76,15 @@
   // figures, and ranking one against another was a comparison the rule does not make (round fifty-nine).
   const coldKind = (c: (typeof cols)[number]) => (c.ex ? 'night' : c.cold ? 'mean' : null);
   const coldKinds = $derived(new Set(cols.map(coldKind).filter(Boolean)));
+  // The year's rain of one kind across the row: the median of the cells' own years when every column with a climate has it,
+  // else every column's monthly medians added, under that name (round sixty-three; REVIEW-TRIAGE-61), as the nights are.
+  const rainCells = $derived(cols.some((c) => c.rainYr) && cols.every((c) => !c.rainYr || c.rainYr.cells));
+  const rainOf = (c: (typeof cols)[number]) => (c.rainYr && rainCells ? c.rainYr.mm : c.rain);
   const spread = (xs: Array<number | null>) => { const v = xs.filter((x): x is number => x != null); return v.length > 1 ? Math.max(...v) - Math.min(...v) : 0; };
   const differs = $derived({
     cold: coldKinds.size === 1 && spread(cols.map(coldOf)) > 2,
     hot: spread(cols.map((c) => c.hot?.v ?? null)) > 2,
-    rain: (() => { const v = cols.map((c) => c.rain).filter((x): x is number => x != null); return v.length > 1 && Math.max(...v) > 1.25 * Math.min(...v) + 10; })(),
+    rain: (() => { const v = cols.map(rainOf).filter((x): x is number => x != null); return v.length > 1 && Math.max(...v) > 1.25 * Math.min(...v) + 10; })(),
     light: spread(cols.map((c) => c.dli?.hi ?? null)) > 5
   });
 
@@ -202,8 +208,8 @@
       {#each cols as c (c.d.key)}<div class="cell fig" role="cell">{#if c.hot}<b>{temp(c.hot.v, u)}</b><span>{c.hot.mo} at the habitat (CHELSA)</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
     </div>
     <div class="row" class:differs={differs.rain} role="row">
-      <div class="rowlab" role="rowheader">Rain a year (sum of monthly medians){#if differs.rain}<span class="dif">differs</span>{/if}</div>
-      {#each cols as c (c.d.key)}<div class="cell fig" role="cell">{#if c.rain != null && c.wet}<b>{rain(c.rain, u)}</b><span>{c.wet.n === 0 ? `no month of ${ruleRain(25, u)} or more` : `${c.wet.n} month${c.wet.n === 1 ? '' : 's'} of ${ruleRain(25, u)} or more`} · {c.wet.mo === 'every month' ? 'the same in every month' : `wettest ${c.wet.mo}`} at the habitat (CHELSA)</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
+      <div class="rowlab" role="rowheader">{rainCells ? 'Rain a year (median across the range)' : 'Rain a year (sum of monthly medians)'}{#if differs.rain}<span class="dif">differs</span>{/if}</div>
+      {#each cols as c (c.d.key)}<div class="cell fig" role="cell">{#if rainOf(c) != null && c.wet}<b>{rain(rainOf(c)!, u)}</b><span>{c.wet.n === 0 ? `no month of ${ruleRain(25, u)} or more` : `${c.wet.n} month${c.wet.n === 1 ? '' : 's'} of ${ruleRain(25, u)} or more`} · {c.wet.mo === 'every month' ? 'the same in every month' : `wettest ${c.wet.mo}`} at the habitat (CHELSA)</span>{:else}<span class="muted small">{climateWord(c.d) || 'no figure'}</span>{/if}</div>{/each}
     </div>
     <div class="row" class:differs={differs.light} role="row">
       <div class="rowlab" role="rowheader">Open-sky light{#if differs.light}<span class="dif">differs</span>{/if}</div>

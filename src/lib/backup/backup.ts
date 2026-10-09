@@ -5,10 +5,11 @@
  */
 import { Zip, ZipPassThrough, ZipDeflate, unzipSync, strToU8, strFromU8 } from 'fflate';
 import * as v from 'valibot';
-import { materialise, live, known, readChanges, isComplete, type Change, type Record_ } from '$core/log';
+import { materialise, apply, live, known, readChanges, isComplete, type Change, type Record_ } from '$core/log';
 import { kindOf, accNo, sowNo, EVENT_LABEL, MEASURES, type Accession, type Photo, type Sowing, type PlantEvent } from '$lib/db/types';
 import { MAX_PHOTO_BYTES, SEAL_OVERHEAD } from '$lib/sync/limits';
 import { isPastStamp } from '$core/hlc';
+import { isRecordedTime } from '$core/when';
 import { BACKUP_FORMAT, BACKUP_V, Manifest, ChangeRow, photoPath, thumbPath } from './format';
 
 /** Why a photo's bytes cannot be stored, or null: both files must be JPEGs (the app only ever writes JPEGs) and small enough to sync. */
@@ -120,7 +121,7 @@ export async function buildBackup(o: BuildOpts): Promise<BuiltBackup> {
   const parked = [...new Set(o.parked ?? [])].filter((t) => inLog.has(t)).sort();
   const manifest: Manifest = {
     format: BACKUP_FORMAT,
-    v: o.changes.some((c) => isPastStamp(c.t)) ? BACKUP_V : 1, // 2 only with a marked stamp, which an older build would misread (round sixty-two; outside review B8)
+    v: o.changes.some((c) => isRecordedTime(c.w)) ? BACKUP_V : o.changes.some((c) => isPastStamp(c.t)) ? 2 : 1, // 3 with a recorded time, which a round-sixty-two build would drop (round sixty-three); 2 only with a marked stamp, which an older build would misread (round sixty-two; outside review B8)
     app: o.app,
     exported: new Date().toISOString(),
     device: o.device,
@@ -162,9 +163,11 @@ export interface ReadBackup {
 }
 
 /** Photo records in a backup (not removed, whole or waiting) whose pixels are not in it, counted from the file itself (the manifest's list is what the exporting device said; this is what the file holds). */
-export function photosWithoutPixels(file: Pick<ReadBackup, 'changes' | 'photoIds'>): string[] {
+export function photosWithoutPixels(file: Pick<ReadBackup, 'changes' | 'photoIds'>, state: Map<string, Record_> = materialise(file.changes).state): string[] {
+  // The fold of the file may be passed in: the confirm screen has it already from `summarise`, and a second fold of the
+  // file was most of a second at 5,000 plants (round sixty-three; the backlog audit, 19).
   const have = new Set(file.photoIds);
-  return known<Pick<Photo, 'id'> & Record_>(materialise(file.changes).state, 'photo')
+  return known<Pick<Photo, 'id'> & Record_>(state, 'photo')
     .map((p) => p.id)
     .filter((id) => !have.has(id));
 }
@@ -266,8 +269,14 @@ export async function readBackup(bytes: Uint8Array): Promise<ReadBackup> {
 export function previewMerge(current: Change[], incoming: Change[]) {
   const have = new Set(current.map((c) => c.t));
   const fresh = incoming.filter((c) => !have.has(c.t));
-  const before = materialise(current).state;
-  const after = materialise([...current, ...fresh]).state;
+  // One fold, not two: the device's log is folded once and the file's new changes are folded on top of it, which is what
+  // folding the two together does change by change (`materialise` is `apply` over the list). Only each record's latest
+  // stamp is kept from before. Folding the device's log a second time was a second whole fold on the confirm screen of a
+  // large collection (round sixty-three; the backlog audit, 19).
+  const { state: after, seen } = materialise(current);
+  const before = new Map<string, string>();
+  for (const [k, r] of after) before.set(k, r._t);
+  apply(after, fresh, seen);
   let added = 0, changed = 0, addedDeleted = 0, addedWaiting = 0;
   const waitingNames: string[] = []; // named, so the grower can find them: a count alone gave nothing to act on (round thirty-seven, R1-4)
   // Added, by kind, live records only, so the preview can say "5 plants, 20 timeline entries" in the words the "In the
@@ -275,6 +284,19 @@ export function previewMerge(current: Change[], incoming: Change[]) {
   // (round twenty-three, 18) and records the file leaves without a required field, which the pages will not show
   // (round thirty-five, R1-4).
   const addedByKind: Record<string, number> = {};
+  // A removal tombstones the plant or batch alone, so its timeline lines (a batch's lines are events too) and its
+  // photographs fold live. They are on no page while it is removed, so they are counted apart, by kind, rather than as
+  // entries "added": a backup holding a removed plant with two lines said "2 timeline entries will be added" (round
+  // sixty-three; the backlog audit, 20). An entry whose plant or batch is waiting for a field, or is not in the log at
+  // all, is on no page either, and is counted with them.
+  let addedOnRemoved = 0;
+  const addedOnRemovedByKind: Record<string, number> = {};
+  const ownerLive = (r: Record_): boolean => {
+    const at = (k: string) => { const o = after.get(k); return o ? !o._deleted && isComplete(o) : null; };
+    if (r.kind === 'event') return at(`accession:${String(r.acc)}`) ?? at(`sowing:${String(r.acc)}`) ?? false;
+    if (r.kind === 'photo') return r.acc ? at(`accession:${String(r.acc)}`) ?? false : r.sowing ? at(`sowing:${String(r.sowing)}`) ?? false : true; // a photograph of neither is shown as before
+    return true;
+  };
   for (const [k, r] of after) {
     const b = before.get(k);
     if (!b) {
@@ -285,8 +307,12 @@ export function previewMerge(current: Change[], incoming: Change[]) {
         const what = r.kind === 'accession' ? accNo(r as unknown as Accession) : r.kind === 'sowing' ? sowNo(r as unknown as Sowing) : (r.name ?? r.id);
         waitingNames.push(`${r.kind === 'accession' ? 'plant' : r.kind === 'sowing' ? 'batch' : r.kind === 'location' ? 'place' : r.kind} ${String(what)}`);
       }
+      else if (!ownerLive(r)) {
+        addedOnRemoved++;
+        addedOnRemovedByKind[r.kind] = (addedOnRemovedByKind[r.kind] ?? 0) + 1;
+      }
       else addedByKind[r.kind] = (addedByKind[r.kind] ?? 0) + 1;
-    } else if (b._t !== r._t) changed++;
+    } else if (b !== r._t) changed++;
   }
   // Numbers the merge would leave shared: a plant here and a plant in the file under one number. Nothing renumbers on
   // its own any more (round fifty-nine): both keep the number until the grower presses Renumber on either page, which
@@ -306,7 +332,7 @@ export function previewMerge(current: Change[], incoming: Change[]) {
     }
   }
   sharedNumbers.sort((a, b) => a.no.localeCompare(b.no) || Number(b.here) - Number(a.here));
-  return { fresh, added, changed, unchanged: after.size - added - changed, addedByKind, addedDeleted, addedWaiting, waitingNames, sharedNumbers };
+  return { fresh, added, changed, unchanged: after.size - added - changed, addedByKind, addedDeleted, addedWaiting, waitingNames, addedOnRemoved, addedOnRemovedByKind, sharedNumbers };
 }
 
 const csvCell = (x: unknown) => {

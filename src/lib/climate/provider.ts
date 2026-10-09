@@ -193,9 +193,12 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
       const records = used.reduce((a, c) => a + c.n, 0); // the records in the cells the envelope reads, not every in-range record (round thirty-three, 4)
       const years = used.map((c) => c.months);
       const months = monthStat(years, 0.5), p10 = monthStat(years, 0.1), p90 = monthStat(years, 0.9);
-      // Annual rain per cell, then its percentiles: a sum of monthly percentiles would be a year no cell has.
+      // Annual rain per cell, then its percentiles: a sum of monthly percentiles would add months from different cells' years.
+      // The median of the cells' own years is the year's rain the pages show (round sixty-three; REVIEW-TRIAGE-61's deferred
+      // list). Each percentile is interpolated between the two nearest totals, so with an even number of cells the median is
+      // halfway between the two middle ones, not a total any cell has; the pages do not claim it is (the fix pass, R2 2).
       const annual = years.map((y) => y.reduce((a, m) => a + m.precipMm, 0)).sort((a, b) => a - b);
-      const annualRain = { p10: r1(quantile(annual, 0.1)), p90: r1(quantile(annual, 0.9)) };
+      const annualRain = { p10: r1(quantile(annual, 0.1)), p90: r1(quantile(annual, 0.9)), p50: r1(quantile(annual, 0.5)) };
       // The typical cell: the one whose coldest month's mean night is nearest the median of that across cells. Monthly means are
       // what the grid holds; the coldest single night is a POWER figure, read there afterwards.
       const coldest = (y: Month[]) => Math.min(...y.map((m) => m.tmin));

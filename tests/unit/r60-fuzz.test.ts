@@ -53,8 +53,11 @@ vi.mock('$lib/db/vault', () => {
       const kept: Change[] = [];
       for (const c of cs) {
         const had = mem().changes.get(c.t);
-        if (had && JSON.stringify(had) !== JSON.stringify(c)) throw new Error('two contents under one stamp ' + c.t);
-        mem().changes.set(c.t, structuredClone(c));
+        // The content, not the recorded time beside the stamp (round sixty-three): two devices that write one number repair
+        // write it under one stamp at two times, and the vault keeps the earlier time (vault.ts storeIn).
+        const content = (x: Change) => JSON.stringify({ ...x, w: undefined });
+        if (had && content(had) !== content(c)) throw new Error('two contents under one stamp ' + c.t);
+        mem().changes.set(c.t, structuredClone(had && typeof had.w === 'number' && !(typeof c.w === 'number' && c.w < had.w) ? { ...c, w: had.w } : c));
         if (!fromServer) mem().outbox.add(c.t);
         kept.push(c);
       }

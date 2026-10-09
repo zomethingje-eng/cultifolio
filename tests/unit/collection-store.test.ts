@@ -170,7 +170,9 @@ describe('the numbering scheme is a synced setting (finding 32)', () => {
     mem = y.mem;
     await y.collection.ingest(xLog, 'server');
     await y.collection.repairNumbers({ kind: 'accession', no: '2026-0007' }); // the grower's "Renumber now": a merge repairs nothing on its own (round fifty-nine)
-    const sortLog = (m: Mem) => [...m.changes.values()].sort((a, b) => a.t.localeCompare(b.t));
+    // Byte for byte but the recorded time each device wrote beside the stamp (round sixty-three): the real vault keeps the
+    // earliest of two (vault.ts storeIn; r63l-vault-time.test.ts), and this in-memory one keeps the last it was given.
+    const sortLog = (m: Mem) => [...m.changes.values()].map(({ w: _w, ...c }) => (void _w, c)).sort((a, b) => a.t.localeCompare(b.t));
     expect(sortLog(x.mem)).toEqual(sortLog(y.mem)); // byte for byte
     expect(accNo(x.collection.accession(mine.id)!)).toBe('2026-0007');
     expect(accNo(x.collection.accession(theirs.id)!)).toBe('2026-0008');

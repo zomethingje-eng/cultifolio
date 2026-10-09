@@ -328,7 +328,7 @@
         {@const row = Math.floor(i / sheet.cols)}
         <div class="label" style="left: calc(var(--left) + {col} * (var(--lw) + var(--gx))); top: calc(var(--top) + {row} * (var(--lh) + var(--gy)))">
           {#if a}
-            {#if withQr && sheet.qr && qrs[a.id]}<div class="qr">{@html qrs[a.id]}</div>{/if}
+            {#if withQr && sheet.qr && qrs[a.id]}<div class="qr" aria-hidden="true">{@html qrs[a.id]}</div>{/if}<!-- the code is for a phone's camera, and a screen reader said "image", unnamed, before each label; the number beside it is its text (round sixty-three; U4) -->
             <div class="txt">
               <div class="no">{a.no}{#if a.fieldNumber}{' '}<span class="fn">{a.fieldNumber}</span>{/if}</div>
               <div class="sci"><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}<span class="cv">‘{a.cultivar}’</span>{/if}{#if kindOf(a.rec) === 'hybrid' && a.parentage}{' '}<span class="cv">({a.parentage})</span>{/if}</div>

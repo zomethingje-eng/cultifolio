@@ -6,7 +6,6 @@
    * log when a pull or a file replaced it.
    */
   import { collection } from '$lib/db/collection.svelte';
-  import { hlcWall } from '$core/log';
   import { localDate } from '$core/dates';
   import type { ReplacedNotes } from '$core/notes';
   let { kind, id }: { kind: 'accession' | 'sowing' | 'taxon'; id: string } = $props();
@@ -25,7 +24,8 @@
   <details class="replaced">
     <summary>{found.length === 1 ? 'An earlier text was' : `${found.length} earlier texts were`} replaced by an edit made without seeing {found.length === 1 ? 'it' : 'them'}</summary>
     {#each [...found].reverse() as r (r.was)}
-      <div class="was"><span class="when">Replaced {localDate(new Date(hlcWall(r.by)))}; written {localDate(new Date(hlcWall(r.was)))}</span><p>{r.text}</p></div>
+      <!-- Dated by when each edit was made: a marked edit's stamp says only where it sits, and its recorded time says when (round sixty-three). -->
+      <div class="was"><span class="when">Replaced {localDate(new Date(r.byAt))}; written {localDate(new Date(r.wasAt))}</span><p>{r.text}</p></div>
     {/each}
   </details>
 {/if}

@@ -172,8 +172,12 @@ export const Climate = v.variant('status', [
     months: Year,
     p10: Year,
     p90: Year,
-    /** 10th and 90th percentile of the per-cell annual rain totals: a range of years cells actually have, unlike a sum of monthly percentiles. */
-    annualRain: v.optional(v.object({ p10: v.number(), p90: v.number() })),
+    /**
+     * 10th and 90th percentile of the per-cell annual rain totals: each interpolated between the two nearest cells' own
+     * totals, unlike a sum of monthly percentiles, which adds months from different cells' years. `p50` is their median, the year's rain the pages show; a dossier built before round sixty-three
+     * has none, and its pages show the twelve monthly medians added, labelled as that (round sixty-three; REVIEW-TRIAGE-61).
+     */
+    annualRain: v.optional(v.object({ p10: v.number(), p90: v.number(), p50: v.optional(v.number()) })),
     extremes: v.optional(Extremes),
     /**
      * The daily extremes read at a POWER cell that is mostly sea (`landFraction` under a half): set aside here by the
@@ -237,7 +241,9 @@ export const Dossier = v.object({
   photos: v.array(Photo),
   literature: v.array(Paper),
   links: v.record(v.string(), v.string()),
-  upstream: v.record(v.string(), Upstream)
+  upstream: v.record(v.string(), Upstream),
+  /** The day the page's substance last changed and its fingerprint, for the sitemap (src/lib/dossier/changed.ts; round sixty-three). Absent in a dossier built before. */
+  changed: v.optional(v.object({ on: v.string(), h: v.string() }))
 });
 
 export type Dossier = v.InferOutput<typeof Dossier>;

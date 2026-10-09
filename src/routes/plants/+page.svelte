@@ -20,12 +20,15 @@
   import RefPhotoOffer from '$lib/ui/RefPhotoOffer.svelte';
   import { site } from '$lib/ui/site.svelte';
   import { plantHref } from '$lib/db/links';
+  import { numberFirst } from '$lib/db/number-order'; // the sort and search (agent L, round sixty-three)
   import PlantName from '$lib/ui/PlantName.svelte';
   import HeldNote from '$lib/ui/HeldNote.svelte';
   import { placeTail, plantName } from '$lib/ui/plant-label';
   // Each by its own path, not the barrel: a barrel import carries every grower component into this page's chunk (round sixty-one; the accessibility review, 3).
   import PlantsMenu from '$lib/ui/grow/PlantsMenu.svelte'; // round sixty, agent F: import, the sample, selection, Wanted and spending
   import PlantsEmpty from '$lib/ui/grow/PlantsEmpty.svelte';
+  import TrySample from '$lib/ui/grow/TrySample.svelte'; // round sixty-three, V2: the example at the head of the empty page
+  import { example } from '$lib/ui/grow/example.svelte';
   import SelectMode from '$lib/ui/grow/SelectMode.svelte';
   import PlantsFoot from '$lib/ui/grow/PlantsFoot.svelte';
   import { photoDue, photoDueDays } from '$lib/ui/photo-due';
@@ -195,7 +198,9 @@
   const list = $derived.by(() => {
     careMap = new Map();
     if (few) return collection.accessions.filter((a) => placeOk(a) && matches(a, searchWords));
-    return collection.accessions.filter((a) => (show === 'all' || a.status === 'growing') && (show !== 'due' || collection.isDue(a)) && (show !== 'nophoto' || noPhoto(a)) && placeOk(a) && matches(a, searchWords)).sort(sorters[sort]);
+    // A search that is a plant's whole number lists that plant first: "0001" listed 2026-0001 and 2014-0001 above it (round sixty-three; the round-sixty grower review, 10).
+    const found = collection.accessions.filter((a) => (show === 'all' || a.status === 'growing') && (show !== 'due' || collection.isDue(a)) && (show !== 'nophoto' || noPhoto(a)) && placeOk(a) && matches(a, searchWords)).sort(sorters[sort]);
+    return searchWords.length ? numberFirst(found, q, accNo) : found;
   });
   // The list is drawn in pages of two hundred as the reader scrolls: fifteen hundred rows at once was five seconds to paint (round fifty-one, 5).
   const PAGE = 200;
@@ -257,12 +262,18 @@
 
 {#if !opened}
   <p class="muted">Opening your collection…</p>
+{:else if !collection.accessions.length && example.seeding}
+  <!-- The example being set out: said, not "Nothing here yet" under it (round sixty-three, V2). -->
+  <p class="muted" role="status" id="example-opening">Setting out the example collection…</p>
 {:else if !collection.accessions.length}
   <!-- Three steps in the order they help, each a link, a step done says so: a sort menu and zero chips over nothing was the first thing a new grower saw (round fifty-eight; the grower review). -->
   <div class="emptybox firststeps">
     <h2 class="q" style="font-size: var(--fs-2xl)">Nothing here yet</h2>
+    <!-- The example first, where a visitor starts: a look at every page filled in before typing a plant (round sixty-three, V2). -->
+    <TrySample />
     <ol class="steps">
-      <li><a href="/places"><span class="n">1</span><span class="t">Where you grow</span><span class="w">{collection.locations.length ? `${collection.locations.length === 1 ? 'one place' : `${collection.locations.length} places`} so far; add another` : 'add your bench or windowsill'}</span></a></li>
+      <!-- To the add form: an empty Places opens the example by itself, and this step is for the grower's own place (round sixty-three, V2). -->
+      <li><a href="/places#add"><span class="n">1</span><span class="t">Where you grow</span><span class="w">{collection.locations.length ? `${collection.locations.length === 1 ? 'one place' : `${collection.locations.length} places`} so far; add another` : 'add your bench or windowsill'}</span></a></li>
       <li><a href="/plants/new"><span class="n">2</span><span class="t">Your first plant</span><span class="w">its name, where it came from and where it lives</span></a></li>
       <li><a href="/settings#site"><span class="n">3</span><span class="t">Your location for the frost watch</span><span class="w">{site.current ? `set${site.current.name ? `: ${site.current.name}` : ''}` : 'the frost watch reads its forecast there, and the months follow its hemisphere'}</span></a></li>
     </ol>

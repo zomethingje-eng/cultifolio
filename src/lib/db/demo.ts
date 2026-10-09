@@ -22,10 +22,66 @@ export const CLOSED_NOTE = 'cultifolio.sampleClosed';
 export function inDemo(): boolean {
   try { return typeof sessionStorage !== 'undefined' && sessionStorage.getItem(KEY) === '1'; } catch { return false; }
 }
-/** Switch this tab to the sample collection and load it; the caller seeds it after the reload when it is empty. */
-export function enterDemo(to = '/plants'): void {
-  try { sessionStorage.setItem(KEY, '1'); } catch { return; }
+/**
+ * Switch this tab to the sample collection and load it; the caller seeds it after the reload when it is empty. False when
+ * the tab's storage refuses the flag: nothing happens, and the page shows its own empty state (round sixty-three, V2).
+ *
+ * A load the page calls off is no entry (round sixty-three, the fix pass; R1, 1): a "Leave site?" answered Cancel kept
+ * the flag, so the tab showed the grower's own collection while it read as the example's (the hint unwritten, the
+ * settings read from the example's copies, and the next load opening the example over a plant just saved). The flag is
+ * taken off again, and `onStay` called, as soon as the page is known to stay, as Leave does (`leaveDemo`): the browser
+ * says the navigation was called off (the Navigation API's `navigateerror`), or, in a browser without it, the page asked
+ * "Leave site?" and is still showing 3 seconds later. No later fallback: a slow load is not a called-off one, and taking
+ * the flag off under it would open the next page outside the example.
+ */
+export function enterDemo(to = '/today', onStay?: () => void): boolean {
+  try { sessionStorage.setItem(KEY, '1'); } catch { return false; }
+  if (typeof addEventListener !== 'function') { location.href = to; return true; } // no page to stay (a test without one)
+  let armed = true;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const nav = (globalThis as { navigation?: EventTarget }).navigation;
+  const disarm = () => { armed = false; try { removeEventListener('pagehide', disarm); removeEventListener('beforeunload', asked); nav?.removeEventListener('navigateerror', stay); } catch { /* nothing was listening */ } clearTimeout(timer); };
+  function stay() {
+    if (!armed) return;
+    disarm();
+    try { sessionStorage.removeItem(KEY); } catch { /* it was set a moment ago; a storage that refuses now keeps it */ }
+    onStay?.();
+  }
+  /** After the page's own listeners (added before this one): whether it will ask "Leave site?". */
+  let prompted = false;
+  function asked(e: Event) { const b = e as BeforeUnloadEvent; if (b.defaultPrevented || (typeof b.returnValue === 'string' && b.returnValue !== '')) prompted = true; }
+  addEventListener('pagehide', disarm); // really going: the flag is the next page's
+  addEventListener('beforeunload', asked);
+  try { nav?.addEventListener('navigateerror', stay); } catch { /* no Navigation API: the timer below */ }
   location.href = to;
+  if (!nav && armed) timer = setTimeout(() => { if (prompted && (typeof document === 'undefined' || document.visibilityState === 'visible')) stay(); }, 3000);
+  return true;
+}
+
+/**
+ * A page brought back from the back-forward cache into a tab whose mode changed since it was shown (it was the grower's
+ * own and the tab is now the example's, or the other way) loads afresh (round sixty-three, the fix pass; R1, 3): Safari
+ * restored the front page from before a tap into the example, its own vault open and no bar, in a tab marked as the
+ * example's, and a plant added there went into the grower's own collection under the example's settings. Returns the way
+ * to stop listening.
+ */
+export function freshOnRestore(): () => void {
+  const opened = inDemo();
+  const f = (e: Event) => { if ((e as PageTransitionEvent).persisted && inDemo() !== opened) location.reload(); };
+  addEventListener('pageshow', f);
+  return () => removeEventListener('pageshow', f);
+}
+/**
+ * Set in a tab that has left the sample (by Leave, or sent home because another tab closed it): an empty Today, Places or
+ * Propagation then offers the example instead of opening it again, so Leave never loops back into it (round sixty-three, V2).
+ */
+export const OUT = 'cultifolio.sampleOut';
+/** This tab has left the sample: an empty grower page offers it rather than opening it by itself. */
+export function leftHere(): boolean {
+  try { return sessionStorage.getItem(OUT) === '1'; } catch { return true; } // no storage: never entered by itself either
+}
+function markOut(): void {
+  try { sessionStorage.setItem(OUT, '1'); } catch { /* without storage the sample is never entered by itself */ }
 }
 /** The flag and the tab's own copies of the settings, gone. */
 function clearFlag(): void {
@@ -46,6 +102,7 @@ export const SEED_TOP = 'demoSeedTop';
  */
 export function sampleClosedHere(): void {
   clearFlag();
+  markOut();
   try { sessionStorage.setItem(CLOSED_NOTE, '1'); } catch { /* said nowhere, then */ }
   location.href = '/';
 }
@@ -73,6 +130,7 @@ export async function sampleEdits(): Promise<number> {
 /** This tab is going on Leave: the flag and the tab's copies go, the sample's other tabs are told, and the next page deletes it. */
 function leaving(): void {
   clearFlag();
+  markOut();
   try { sessionStorage.setItem(LEFT, '1'); } catch { /* the leftover is then deleted on a later load */ }
   tellOthers();
 }
@@ -90,6 +148,11 @@ function tellOthers(): void {
 export const LEFT_PARAM = 'left';
 function readyToLeave(): void {
   try { sessionStorage.removeItem(KEY); sessionStorage.setItem(LEFT, '1'); } catch { /* the leftover is then deleted on a later load */ }
+  markOut(); // kept by a Leave called off too: it is read only outside the sample, where a later Leave would set it again
+}
+/** The first page after a Leave marks the tab as out of the sample by its address too, which reaches it whatever the storage race `leaveDemo` describes (round sixty-three, V2). */
+export function markLeftByAddress(): void {
+  markOut();
 }
 function stayInSample(): void {
   try { sessionStorage.setItem(KEY, '1'); sessionStorage.removeItem(LEFT); } catch { /* the tab then loads outside the sample next time */ }

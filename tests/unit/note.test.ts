@@ -12,7 +12,7 @@ describe('the generated note', () => {
     const n = generatedNote({ scientific: 'Tylecodon pearsonii', family: 'Crassulaceae', months: namaqua, lat: -30, extremes: ex })!;
     expect(n.text).toContain('Grouped as a cactus or succulent, listed under the genus Tylecodon in the archetype table.'); // round sixty-two: what the table lists (A4)
     expect(n.text).toContain('Rain rule: a winter growing season, November to February in the northern hemisphere (May to August at the habitat, southern).');
-    expect(n.text).toMatch(/Habitat rain 194 mm a year/);
+    expect(n.text).toMatch(/Habitat rain 194 mm in the median year/);
     expect(n.text).toContain('Cold floor (1 night in 100) 4.1 °C, at a typical spot in the range (NASA POWER).'); // round sixty-two: named as the glance card names it
     expect(n.text).toContain('Open sky over the habitat: 20 to 58 mol/m²/day (CHELSA shortwave).');
     expect(n.from).toEqual(['Its year', 'Rain', 'Light', 'Temperature']);
@@ -22,7 +22,7 @@ describe('the generated note', () => {
     expect(n.items).toEqual([
       { lead: 'A cactus or succulent, by its genus.', rule: 'archetype table' },
       { lead: 'Wet winters: the rain comes November to February (May to August at the habitat), read as a winter growing season.', rule: 'rain rule, CHELSA' },
-      { lead: '194 mm of rain a year, 4 months under 5 mm.', rule: 'CHELSA' },
+      { lead: '194 mm of rain in the median year, 4 months under 5 mm.', rule: 'CHELSA' },
       { lead: 'Open-sky light of 20 to 58 DLI across the year.', rule: 'CHELSA shortwave' },
       { lead: 'Cold floor 4.1 °C: one night in a hundred at a typical spot in the range is colder.', rule: 'NASA POWER, 44 years' }
     ]);

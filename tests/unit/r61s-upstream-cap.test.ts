@@ -50,7 +50,7 @@ describe('the cap on outside calls (round sixty-one; the server review, 4; B13)'
   it("once the share is spent by many addresses, another visitor's forecast is 503 \"not asked\" with Retry-After to the next minute, and MET is not asked", async () => {
     const platform = platformDO();
     let spent = 0;
-    for (let a = 0; spent < SHARE && a < 100; a++) spent += await take(platform, ['met'], `192.0.2.${a}`, PART);
+    for (let a = 0; spent < SHARE && a < 100; a++) spent += await take(platform, ['met'], `192.0.${a}.2`, PART); // each address in its own /24, which the shares count as one network since round sixty-three (S2)
     const { r, asked } = await forecast(platform, '198.51.100.7', 51.5);
     const body = (await r.json()) as { error: string; held: boolean };
     expect({ status: r.status, error: body.error, held: body.held, asked: asked() }).toEqual({ status: 503, error: HELD_BACK, held: true, asked: 0 });
@@ -66,7 +66,7 @@ describe('the cap on outside calls (round sixty-one; the server review, 4; B13)'
   it("a US forecast is two calls: when the NWS's share is spent, it is held back whole, and one elsewhere still goes", async () => {
     const platform = platformDO();
     let spent = 0;
-    for (let a = 0; spent < SHARE && a < 100; a++) spent += await take(platform, ['nws'], `192.0.2.${a}`, PART);
+    for (let a = 0; spent < SHARE && a < 100; a++) spent += await take(platform, ['nws'], `192.0.${a}.2`, PART); // each address in its own /24, which the shares count as one network since round sixty-three (S2)
     // Pittsburgh: held back whole. No route spends the NWS's share alone (every NWS call is taken with a MET call), so the
     // first pass's "MET alone, alerts not asked" answer was removed in the second (round sixty-two; the server review, 4).
     expect((await forecast(platform, '198.51.100.7', 40.4, -80)).asked()).toBe(0);

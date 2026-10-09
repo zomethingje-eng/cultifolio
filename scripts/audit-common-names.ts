@@ -11,21 +11,26 @@
  *
  * An index carries each species' English names as `common` then `commons`, in the order a rule kept them, and not GBIF's
  * `preferred` flag or source counts, which only the dossiers keep (since the `--names` step of round sixty-two). So the
- * audit reads the index's names as GBIF's list with neither: it measures rules 1, 2 and 5 and the spelling (the genus,
- * comma and binomial set-back, the grouping of spellings and the capital first letter) exactly, and rules 3 and 4
+ * audit reads the index's names as GBIF's list with neither: it measures rules 1, 2, 2a and 5 and the spelling (a list
+ * split into its names, the genus and binomial set-back, a bare genus word after a longer name, the grouping of
+ * spellings and the capital first letter) exactly, and rules 3 and 4
  * (preferred, most sources) only as far as two spellings of one name stand for two sources. Run on an index the rule
  * itself built, it reports what the rule changes of its own order, which is nothing for most species: it is meant for
  * an index built under an older rule. The index built after the `--names` step reads the dossiers' own flags.
  */
 import { readFileSync } from 'node:fs';
-import { englishNames, generaOf } from '../src/lib/dossier/index-entry';
+import { englishNames, generaOf, bareGenus } from '../src/lib/dossier/index-entry';
 
 export type AuditEntry = { name: string; common?: string; commons?: string[] };
 export interface Audit {
   species: number;
   withCommon: number;
   changed: number;
-  /** Of the changed: the old name was set back (it names another genus, is a comma list, or is shaped like a binomial). */
+  /** Of the changed: the old name was a list of several names in one, now read as its names (round sixty-three, N1). */
+  split: number;
+  /** Of the changed: the old name was a bare genus word ("Aloe"), now after a longer name (round sixty-three, N2). */
+  bare: number;
+  /** Of the changed: the old name was set back (it names another genus, is a semicolon list, or is shaped like a binomial). */
   setBack: number;
   /** Of the changed: the same name, spelled otherwise (another spelling of it, or the first letter as a capital). */
   spellingOnly: number;
@@ -39,7 +44,7 @@ const key = (s: string) => s.normalize('NFKC').toLowerCase().replace(/[’‘`]/
 
 export function auditCommonNames(idx: AuditEntry[], sampleSize = 40): Audit {
   const genera = generaOf(idx.map((e) => e.name));
-  let withCommon = 0, setBack = 0, spellingOnly = 0, bySources = 0;
+  let withCommon = 0, split = 0, bare = 0, setBack = 0, spellingOnly = 0, bySources = 0;
   const changes: string[] = [];
   for (const e of idx) {
     if (!e.common) continue;
@@ -49,13 +54,15 @@ export function auditCommonNames(idx: AuditEntry[], sampleSize = 40): Audit {
     const after = englishNames(v, { genus: e.name, genera }).common;
     if (after === before) continue;
     changes.push(`${e.name}: "${before}" -> "${after}"`);
-    if (after && key(after) === key(before)) spellingOnly++;
+    if (before.includes(',')) split++;
+    else if (bareGenus(before, { genus: e.name, genera }) && !(after && bareGenus(after, { genus: e.name, genera }))) bare++;
+    else if (after && key(after) === key(before)) spellingOnly++;
     else if (englishNames([{ name: before, lang: 'eng' }, { name: after ?? '', lang: 'eng' }], { genus: e.name, genera }).common !== before) setBack++;
     else bySources++;
   }
   const step = changes.length / Math.max(1, sampleSize);
   const sample = changes.length <= sampleSize ? changes : Array.from({ length: sampleSize }, (_, i) => changes[Math.floor(i * step)]);
-  return { species: idx.length, withCommon, changed: changes.length, setBack, spellingOnly, bySources, sample };
+  return { species: idx.length, withCommon, changed: changes.length, split, bare, setBack, spellingOnly, bySources, sample };
 }
 
 /** What changed between two indexes: species (by name) in both whose shown common name differs, with an evenly spread sample. */
@@ -120,7 +127,7 @@ async function main(): Promise<void> {
   }
   const a = auditCommonNames(await read(src), n);
   if (json) { console.log(JSON.stringify(a, null, 1)); return; }
-  console.log(`${a.species} species, ${a.withCommon} with a common name; the rule changes ${a.changed} (${a.setBack} set back, ${a.spellingOnly} spelling only, ${a.bySources} by sources).`);
+  console.log(`${a.species} species, ${a.withCommon} with a common name; the rule changes ${a.changed} (${a.split} a list split into its names, ${a.bare} a bare genus word after a longer name, ${a.setBack} set back, ${a.spellingOnly} spelling only, ${a.bySources} by sources).`);
   console.log(`A sample of ${a.sample.length}, before -> after:`);
   for (const s of a.sample) console.log(`  ${s}`);
 }

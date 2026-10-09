@@ -12,10 +12,13 @@
 import { test, expect, type Page } from '@playwright/test';
 import zlib from 'node:zlib';
 import { inject, type Row } from './helpers/inject';
+import { ownPages } from './helpers/r63v-own';
 
 // The service worker is not under test here; once it controls a page its fetches pass by `page.route` (flaky in the first
 // deploy's strict run on Windows; round sixty-two).
 test.use({ serviceWorkers: 'block' });
+// The grower's own pages, empty, rather than the example collection an empty device opens on them (round sixty-three, V2).
+test.beforeEach(async ({ context }) => { await context.addInitScript(ownPages); });
 
 async function ready(p: Page) {
   await p.locator('html[data-ready]').waitFor({ state: 'attached' });
@@ -63,7 +66,7 @@ test('in the sample collection the front page writes no "this device has plants"
   // the test waits for the load itself; reading storage while it ran destroyed the context in the full run (round
   // sixty-two second pass; the harness's full run).
   const loaded = page.waitForEvent('load');
-  await page.getByRole('button', { name: 'Leave the sample' }).click();
+  await page.getByRole('button', { name: 'Leave the example' }).click();
   await loaded; await ready(page);
   await expect(page).toHaveURL(/^http:\/\/[^/]+\/$/);
   expect(await page.evaluate(() => localStorage.getItem('cultifolio.hasMine'))).toBeNull(); // the grower's own collection is empty

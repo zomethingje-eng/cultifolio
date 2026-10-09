@@ -23,8 +23,15 @@ import { localDate } from '$core/dates';
 import * as v from 'valibot';
 
 export const BACKUP_FORMAT = 'cultifolio-backup';
-/** The newest backup format this build reads. 2 is written when the log holds a marked stamp (`isPastStamp`), 1 otherwise: a round-sixty reader refuses a 2 with a sentence rather than park what every later build folds (round sixty-two; outside review B8). */
-export const BACKUP_V = 2;
+/**
+ * The newest backup format this build reads. 2 is written when the log holds a marked stamp (`isPastStamp`), 1 otherwise: a
+ * round-sixty reader refuses a 2 with a sentence rather than park what every later build folds (round sixty-two; outside
+ * review B8). 3 is written when a change carries its recorded time (`w`, round sixty-three): a round-sixty-two reader
+ * reads each row through `ChangeRow` without it, so it would restore the changes and drop their times, silently; it
+ * refuses a 3 with the same sentence instead, and says to update. Sync needs no new version: a round-sixty-two build
+ * passes a change's other fields through untouched, on the wire, into its log and into its own backups.
+ */
+export const BACKUP_V = 3;
 export const EXT = '.cultifolio.zip';
 
 export const Manifest = v.object({
@@ -57,7 +64,9 @@ export const ChangeRow = v.object({
 
   id: v.string(),
   field: v.string(),
-  value: v.unknown()
+  value: v.unknown(),
+  /** The recorded time (round sixty-three): kept as it is, and read by `readChanges`, which leaves off one that is not a time. */
+  w: v.optional(v.unknown())
 });
 
 export const photoPath = (id: string) => `photos/${id}.jpg`;

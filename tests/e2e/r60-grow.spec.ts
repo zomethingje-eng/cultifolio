@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import QRCode from 'qrcode';
 import { test, expect, type Page } from '@playwright/test';
+import { ownPages } from './helpers/r63v-own';
 
 /**
  * Round sixty's grower features, end to end (agent F's list; the unit tests cover each piece's rules): the paste and CSV
@@ -10,6 +11,8 @@ import { test, expect, type Page } from '@playwright/test';
  *
  * The helpers are copies of smoke.spec.ts's own (kept in step by hand; this file does not import that one).
  */
+// The grower's own pages, empty, rather than the example collection an empty device opens on them (round sixty-three, V2).
+test.beforeEach(async ({ context }) => { await context.addInitScript(ownPages); });
 
 /** The page hydrated: before then a value typed into a bound field is dropped, and a click has no handler (round fifty-nine). */
 async function ready(p: Page) {
@@ -348,7 +351,7 @@ test('r60 11: the sample collection opens in a database of its own, shows its fi
   await ready(page);
   await expect(page.getByRole('heading', { name: 'Nothing here yet' })).toBeVisible();
   await page.click('#try-sample');
-  await expect(page.locator('.demobar')).toContainText('This is a sample collection. Nothing here is yours or saved with your plants.');
+  await expect(page.locator('.demobar')).toContainText('An example collection, so you can see what this page does. Your own starts when you add a plant.') // round sixty-three, V2;
   await expect(page.locator('.rows > *')).toHaveCount(12, { timeout: 20_000 });
   await expect(page.locator('#try-sample')).toHaveCount(0);
   await page.goto('/today');
@@ -357,11 +360,11 @@ test('r60 11: the sample collection opens in a database of its own, shows its fi
     await page.goto(path);
     await ready(page);
     await expect(page.locator('#demo-locked')).toBeVisible();
-    await expect(page.locator('#main button:visible')).toHaveCount(1);
-    await expect(page.locator('#main button:visible')).toHaveText('Leave the sample');
+    await expect(page.locator('#main button:visible')).toHaveCount(2);
+    await expect(page.locator('#main button:visible')).toHaveText(['Add your first plant', 'Leave the example']); // round sixty-three, V2
   }
-  await expect(page.locator('#demo-locked')).toContainText('A file restored here would go into the sample');
-  await page.getByRole('button', { name: 'Leave the sample' }).click();
+  await expect(page.locator('#demo-locked')).toContainText('A file restored here would go into the example');
+  await page.getByRole('button', { name: 'Leave the example' }).click();
   await expect(page).toHaveURL(/^http:\/\/[^/]+\/$/);
   await page.goto('/plants');
   await ready(page);
@@ -381,7 +384,7 @@ test('r60 12: the sample never touches the grower\'s own collection', async ({ p
   await page.goto('/plants');
   await expect(page.locator('.demobar')).toBeVisible();
   await expect(page.locator('.rows > *')).toHaveCount(12, { timeout: 20_000 });
-  await page.getByRole('button', { name: 'Leave the sample' }).click();
+  await page.getByRole('button', { name: 'Leave the example' }).click();
   await expect(page).toHaveURL(/^http:\/\/[^/]+\/$/);
   await page.goto('/plants');
   await ready(page);

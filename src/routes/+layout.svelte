@@ -22,7 +22,11 @@
   // grow barrel, which brought every grower feature and the backup module into every page (round sixty-one; the
   // accessibility review, 3).
   import GrowLayer from '$lib/ui/grow/GrowLayer.svelte';
-  import { inDemo } from '$lib/db/demo';
+  import { freshOnRestore, inDemo } from '$lib/db/demo';
+  // The example collection as the answer to an empty grower page (round sixty-three, V2), decided on the page once it has
+  // arrived, never on the tap: a tap that went straight in skipped the pages' own "Leave this page?" (the fix pass; R1, 1).
+  import { example, notEnteredWords, openExample } from '$lib/ui/grow/example.svelte';
+  import { toast } from '$lib/ui/toast.svelte';
   import ToastBar from '$lib/ui/ToastBar.svelte';
   import { units } from '$lib/ui/units.svelte';
   import { prefs } from '$lib/ui/prefs.svelte';
@@ -56,6 +60,20 @@
     { href: '/about/formats', label: 'Formats' },
     { href: 'https://github.com/zomethingje-eng/cultifolio', label: 'Source' }
   ];
+  /**
+   * Anyone can look at the example from the menu, a grower with plants too: their own collection is left as it is, and
+   * Leave returns to it (round sixty-three, V2). By the app's own move to Today first, so the page being left asks about
+   * what is typed on it, and not while a restore or an import is in progress; a refusal is said (the fix pass; R1, 1, 2, 7).
+   */
+  let demoTab = $state(false);
+  onMount(() => { demoTab = inDemo(); });
+  async function menuExample() {
+    menuOpen = false;
+    const r = await openExample('/today');
+    if (r === 'busy' || r === 'refused') toast.show(notEnteredWords(r), 10000);
+  }
+  // A page the back-forward cache brings back into a tab whose mode changed loads afresh (the fix pass; R1, 3).
+  onMount(() => freshOnRestore());
   let mainEl = $state<HTMLElement | null>(null);
   /** The routes about the grower's own collection: what they link to says what is grown. */
   const privateRoute = $derived(/^\/(plants|propagation|places|labels|backup|sync|settings|today|frost)(\/|$)/.test(page.url.pathname));
@@ -197,46 +215,35 @@
     // frost that appeared (round fifty-four, 4).
     void frost.check();
     frost.start();
-    await sync.init();
+    // The example decides only once sync's key is read too: a device with sync set up is a grower's (the fix pass; R1, 2).
+    try { await sync.init(); } finally { example.settled = true; }
     if (sync.configured) sync.schedule(1500);
   });
   /**
-   * The phone's tabs: a grower's five places, or for a visitor with no plants the four that show something (Species,
-   * Compare, My plants, About): Places, Propagation and Today opened empty private pages (round sixty; the visitor review,
-   * ranked 9). Which set is drawn first is read from the front page's hint (`cultifolio.hasMine`) as the layout starts,
-   * before its first render, so a page drawn here does not swap one set for the other on load; the layout keeps the hint
-   * true once the collection is open. (A page the server drew shows a visitor's set until the scripts run.)
+   * The phone's tabs: the same five for everyone, with or without a collection, in or out of the example (round
+   * sixty-three, V1). A visitor's own four (Species, Compare, My plants, About) hid what the app does until a first plant
+   * was added, and the set changed under the owner as his phone held no collection; an empty Places, Propagation or
+   * Today now opens the example collection on that page (`ExampleOffer`). Compare and About are in the menu and the
+   * footer on every page, and Compare in its pill.
    */
-  if (browser) {
-    try {
-      if (localStorage.getItem('cultifolio.hasMine') === '1') document.documentElement.dataset.grower = '1';
-    } catch {
-      /* no storage: a visitor's set until the collection opens */
-    }
-  }
-  const tabs: Array<{ href: string; label: string; who: 'all' | 'grower' | 'visitor'; on: (p: string) => boolean }> = [
-    { href: '/', label: 'Species', who: 'all', on: (p) => p === '/' || p.startsWith('/species') },
-    { href: '/compare', label: 'Compare', who: 'visitor', on: (p) => p.startsWith('/compare') },
-    { href: '/plants', label: 'Plants', who: 'all', on: (p) => p.startsWith('/plants') },
-    { href: '/places', label: 'Places', who: 'grower', on: (p) => p.startsWith('/places') },
-    { href: '/propagation', label: 'Propagation', who: 'grower', on: (p) => p.startsWith('/propagation') },
-    { href: '/today', label: 'Today', who: 'grower', on: (p) => p.startsWith('/today') || p.startsWith('/frost') },
-    { href: '/about/how', label: 'About', who: 'visitor', on: (p) => p.startsWith('/about') }
+  const tabs: Array<{ href: string; label: string; on: (p: string) => boolean }> = [
+    { href: '/', label: 'Species', on: (p) => p === '/' || p.startsWith('/species') },
+    { href: '/plants', label: 'Plants', on: (p) => p.startsWith('/plants') },
+    { href: '/places', label: 'Places', on: (p) => p.startsWith('/places') },
+    { href: '/propagation', label: 'Propagation', on: (p) => p.startsWith('/propagation') },
+    { href: '/today', label: 'Today', on: (p) => p.startsWith('/today') || p.startsWith('/frost') }
   ];
   $effect(() => {
     if (!collection.ready) return;
-    // A plant, a batch, or a species followed: the front page's own reading of the hint, and more, so the two never disagree about a grower.
-    const grower = collection.accessions.length > 0 || collection.sowings.length > 0 || collection.mySpecies.size > 0;
-    const html = document.documentElement;
-    if (grower) html.dataset.grower = '1';
-    else delete html.dataset.grower;
     // The hint is about the grower's own collection: the sample's twelve plants set it, and the visitor's other tabs drew a grower's tabs (round sixty-one; the records review, 17).
     if (inDemo()) return;
+    // A plant, a batch, or a species followed: the front page's own reading of the hint, and more, so the two never disagree about a grower.
+    const grower = collection.accessions.length > 0 || collection.sowings.length > 0 || collection.mySpecies.size > 0;
     try {
       if (grower) localStorage.setItem('cultifolio.hasMine', '1');
       else localStorage.removeItem('cultifolio.hasMine');
     } catch {
-      /* the hint is a convenience: without it the tabs are a visitor's until the collection opens */
+      /* the hint is a convenience: without it the front page opens on the catalogue until the collection does */
     }
   });
   const places = [
@@ -294,6 +301,7 @@
     <div class="menuhead"><span class="kick">Cultifolio</span><button class="iconbtn" type="button" aria-label="Close menu" onclick={closeMenu}>×</button></div>
     {#each menu as m, i (i)}
       {#if m}<a href={m.href} class:on={m.href === '/' ? page.url.pathname === '/' || page.url.pathname.startsWith('/species') : page.url.pathname.startsWith(m.href)} rel={m.href.startsWith('http') ? 'external' : undefined}>{m.label}</a>{:else}<hr />{/if}
+      {#if i === 4 && !demoTab}<button class="menuexample" type="button" id="menu-example" onclick={menuExample}>See the example collection</button>{/if}
     {/each}
   </nav>
 {/if}
@@ -325,7 +333,8 @@
 <footer class="credits">
   <p>Sources: GBIF Backbone, WCVP (RBG Kew), CHELSA, NASA POWER, ETOPO, Natural Earth, iNaturalist, Wikimedia Commons, Wikidata, Wikipedia, OpenAlex; each figure and photograph names its own, with its licence.</p>
   <p>No account, no analytics. Your collection stays on this device{#if sync.configured}, and in a vault only your key opens{/if}.</p>
-  <p><a href="/about/how">How it is made</a> · <a href="/about/how#privacy">Privacy</a> · <a href="/about/formats">Formats</a> · <a href="https://github.com/zomethingje-eng/cultifolio">Source</a></p>
+  <!-- Compare and About from every page, now that the phone's tabs are the grower's five for everyone (round sixty-three, V1). -->
+  <p><a href="/compare">Compare species</a> · <a href="/about/how">How it is made</a> · <a href="/about/how#privacy">Privacy</a> · <a href="/about/formats">Formats</a> · <a href="https://github.com/zomethingje-eng/cultifolio">Source</a></p>
 </footer>
 {/if}
 
@@ -347,19 +356,17 @@
   fit();
   const ro = new ResizeObserver(fit);
   ro.observe(bar);
-  for (const a of bar.querySelectorAll('a')) ro.observe(a); // a visitor's four becoming a grower's five changes the columns, not the bar
+  for (const a of bar.querySelectorAll('a')) ro.observe(a); // a label's own width changes as the web font comes in, not the bar's
   void document.fonts?.ready.then(fit);
   return () => ro.disconnect();
 }}>
   {#each tabs as pl (pl.href)}
-    <a href={pl.href} class="t{pl.who[0]}" class:on={pl.on(page.url.pathname)} aria-current={pl.on(page.url.pathname) ? 'page' : undefined}><!-- aria-current: round fifty-eight; the accessibility review -->
+    <a href={pl.href} class:on={pl.on(page.url.pathname)} aria-current={pl.on(page.url.pathname) ? 'page' : undefined}><!-- aria-current: round fifty-eight; the accessibility review -->
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         {#if pl.label === 'Species'}<path d="M12 3v18M5 8c4 0 7 2 7 6M19 8c-4 0-7 2-7 6M7 15c3 0 5 1.5 5 4M17 15c-3 0-5 1.5-5 4" />
         {:else if pl.label === 'Plants'}<path d="M6 21h12M9 21V10a3 3 0 0 1 6 0v11M12 10V4M9 6c0 0 3-2 3-2s3 2 3 2" />
         {:else if pl.label === 'Places'}<path d="M3 10h18M3 15h18M6 10v11M18 10v11M6 15v-5M18 15v-5" />
         {:else if pl.label === 'Propagation'}<path d="M4 19h16M6 19c0-6 3-9 6-9s6 3 6 9M12 10V4M9 7l3-3 3 3" />
-        {:else if pl.label === 'Compare'}<path d="M8 4v16M16 4v16M4 8h8M12 16h8" />
-        {:else if pl.label === 'About'}<circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7.5v.5" />
         {:else}<circle cx="12" cy="12" r="4" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1" />{/if}
       </svg>
       <span>{pl.label === 'Plants' ? 'My plants' : pl.label}</span>
@@ -401,6 +408,9 @@
   #menu { position: fixed; z-index: 65; top: 48px; left: max(12px, env(safe-area-inset-left)); width: 240px; background: var(--card); border: 1px solid var(--rule); border-radius: var(--r-lg); box-shadow: var(--sh2); padding: 6px; display: flex; flex-direction: column; }
   #menu a { display: block; padding: 10px 12px; border-radius: var(--r); color: var(--ink); font-weight: 600; font-size: var(--fs-md); min-height: 40px; }
   #menu a:hover { background: var(--sunk); text-decoration: none; }
+  /* A link's look for the one item that is a button (it switches the tab into the example before it loads). */
+  #menu .menuexample { display: block; width: 100%; text-align: start; padding: 10px 12px; border: 0; border-radius: var(--r); background: none; color: var(--accent); font: inherit; font-weight: 600; font-size: var(--fs-md); min-height: 40px; cursor: pointer; }
+  #menu .menuexample:hover { background: var(--sunk); }
   #menu a.on { color: var(--accent); }
   #menu .menuhead { display: none; align-items: center; justify-content: space-between; padding: 0 4px 4px 12px; }
   #menu hr { border: 0; border-top: 1px solid var(--rule); margin: 6px 4px; }
@@ -432,8 +442,6 @@
        not drawn (round sixty-two; A11). */
     #tabbar:global([data-icons]) a span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     #tabbar:global([data-icons]) svg { width: 26px; height: 26px; }
-    /* A grower's five, or a visitor's four (round sixty; the visitor review). */
-    :global(html:not([data-grower])) #tabbar a.tg, :global(html[data-grower]) #tabbar a.tv { display: none; }
     #tabbar a:hover { text-decoration: none; }
     #tabbar a.on { color: var(--accent); }
     /* Out of the way while scrolling down, by its own height and the safe area under it (round fifty-eight; the grower review). */

@@ -41,7 +41,7 @@ describe('a refusal is said as one on the species page (the grower review\'s 2, 
   });
   it('the build writes a refusal as a refusal', () => {
     const b = code('src/lib/dossier/build.ts');
-    expect(b).toContain("`occurrence source ${occ.status === 'refused' ? 'refused the request' : 'did not answer'}`");
+    expect(b).toContain("`the occurrence source ${occ.status === 'refused' ? 'refused the request' : 'did not answer'} when this page was built`"); // a full clause since round sixty-three
     expect(b).not.toContain("detail: 'occurrence source did not answer'");
   });
   it('the species page and Provenance use these words, and name each source in plain words', () => {
@@ -165,7 +165,7 @@ describe('a credit says two licences disagree only when they do (the words revie
 
 describe('the link-preview image\'s alt (the words review\'s 2)', () => {
   it('is the image\'s own words, on the front page and on a species page with no photograph', () => {
-    expect(OG_ALT).toContain('A reference for growers of cacti, succulents and bulbs, every figure with its source. Your own plants stay on your device, or sync encrypted.');
+    expect(OG_ALT).toContain('Cactus, succulent and bulb species, and the plants most grown alongside them. Every figure names its source. Your own plants stay on your device, or sync encrypted.');
     expect(home).toContain('<meta property="og:image:alt" content={OG_ALT} />');
     expect(species).toContain('content={hero ? heroAlt : OG_ALT}');
   });
@@ -181,7 +181,7 @@ describe('the front page and the species page say what is so (the words review\'
     expect(species).toContain('Grouped as {aLabel(sheet.arch.arch.lab)}, {sheet.arch.why}.');
   });
   it('the 404 says the held call with GBIF as its subject', () => {
-    expect(code('src/routes/species/[slug]/+page.server.ts')).toContain("GBIF was not asked whether it is an older name for a species that is here: this site's calls to GBIF are used up for this minute");
+    expect(code('src/routes/species/[slug]/+page.server.ts')).toContain("GBIF was not asked whether it is an older name for a species that is here: this site held its call to GBIF back for this minute");
   });
   it("the grower's placeholder fits a phone, the field number kept in the label (the grower review's 7)", () => {
     expect(home).toContain('placeholder="Search your plants by number or name…"');

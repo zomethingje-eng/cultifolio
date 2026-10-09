@@ -228,10 +228,12 @@ describe('the Worker and the manifest', () => {
     expect(nine.headers.get('cache-control')).toBe('no-store');
     expect((await call(sheetsGET as never, `/api/sheets?b=00&n=64&c=${manifest.id}`, platform)).status).toBe(409);
     expect((await call(entriesGET as never, `/api/entries?b=00&n=32&c=${manifest.id}`, platform)).status).toBe(200);
-    // "hile" for Chile: no exact hit anywhere, and the whole index has thirty near ones
-    const r = await call(searchGET as never, `/api/search?q=hile&c=${manifest.id}`, platform);
+    // "ilver" for silver: no exact hit anywhere, and the whole index has nine near ones. Changed in round sixty-three
+    // (N3): it was "hile" for Chile, and a place is no longer matched by a similar spelling, only as typed.
+    const r = await call(searchGET as never, `/api/search?q=ilver&c=${manifest.id}`, platform);
     const hits = (await r.json()) as IndexEntry[];
-    expect(hits.length).toBe(idx.filter((e) => e.origin?.[0] === 'Chile North').length);
+    expect(hits.length).toBe(idx.filter((e) => e.common === 'silver cactus').length);
+    expect(hits.length).toBe(9);
     // and a query with no words at all is nothing, with nothing prepared
     expect(await (await call(searchGET as never, `/api/search?q=%E6%A4%8D%E7%89%A9&c=${manifest.id}`, platform)).json()).toEqual([]);
   });

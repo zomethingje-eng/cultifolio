@@ -57,7 +57,7 @@
    * suggests", which the sheet does not give (round sixty; self-review 14, the round forty-two review A5, product 6).
    */
   const climateOk = $derived(d.climate.status === 'ok');
-  const headIn = $derived({ name: d.name, common: common[0] ?? null, climate: d.climate.status === 'ok' ? { status: 'ok', months: d.climate.months, records: d.climate.records, extremes: d.climate.extremes ?? null } : { status: d.climate.status }, native: d.distribution.native.length, photos: photos.length, summary: !!d.summary });
+  const headIn = $derived({ name: d.name, common: common[0] ?? null, climate: d.climate.status === 'ok' ? { status: 'ok', months: d.climate.months, records: d.climate.records, extremes: d.climate.extremes ?? null, annualRain: d.climate.annualRain ?? null } : { status: d.climate.status }, native: d.distribution.native.length, photos: photos.length, summary: !!d.summary });
   const title = $derived(speciesTitle(headIn));
   const desc = $derived(speciesDescription(headIn, u));
   /** The photograph's own words for a screen reader: the species and the credit (round sixty; a11y 12). */
@@ -207,7 +207,7 @@
   }
   // The site once loaded; before that (and on the server) the hemisphere cookie, so a southern grower never sees northern months first.
   const readerLat = $derived(readerLatOf(data.hemiLat));
-  const sheetIn = $derived({ readerLat, scientific: d.name.scientific, climateStatus: d.climate.status, family: d.name.family, months: d.climate.status === 'ok' ? d.climate.months : null, p10: d.climate.status === 'ok' ? d.climate.p10 : null, p90: d.climate.status === 'ok' ? d.climate.p90 : null, annualP10: d.climate.status === 'ok' ? (d.climate.annualRain?.p10 ?? null) : null, annualP90: d.climate.status === 'ok' ? (d.climate.annualRain?.p90 ?? null) : null, extremes: d.climate.status === 'ok' ? (d.climate.extremes ?? null) : null, extremesStatus: d.climate.status === 'ok' ? d.climate.extremesStatus : null, lat: d.centroid?.lat ?? (d.climate.status === 'ok' ? d.climate.at.lat : null), units: u });
+  const sheetIn = $derived({ readerLat, scientific: d.name.scientific, climateStatus: d.climate.status, family: d.name.family, months: d.climate.status === 'ok' ? d.climate.months : null, p10: d.climate.status === 'ok' ? d.climate.p10 : null, p90: d.climate.status === 'ok' ? d.climate.p90 : null, annualP10: d.climate.status === 'ok' ? (d.climate.annualRain?.p10 ?? null) : null, annualP90: d.climate.status === 'ok' ? (d.climate.annualRain?.p90 ?? null) : null, annualP50: d.climate.status === 'ok' ? (d.climate.annualRain?.p50 ?? null) : null, extremes: d.climate.status === 'ok' ? (d.climate.extremes ?? null) : null, extremesStatus: d.climate.status === 'ok' ? d.climate.extremesStatus : null, lat: d.centroid?.lat ?? (d.climate.status === 'ok' ? d.climate.at.lat : null), units: u });
   const sheet = $derived(cultivationSheet(sheetIn));
   /** An upstream that refused or failed. Only 'none' is ever rendered as an absence; these get their own line. */
   /** Not answered: refused, failed, or not asked (a skipped source). Only 'none' is ever rendered as an absence. */
@@ -395,7 +395,7 @@
       <a class="btn" href="/propagation/new?species={encodeURIComponent(d.name.scientific)}&key={d.key}">Sow seed</a>
       <FollowButton slug={d.slug} name={d.name.scientific} gbifKey={d.key} />
       <CompareButton slug={d.slug} name={d.name.scientific} />
-      {#if d.climate.status === 'ok'}<ShareCard input={{ units: u, name: d.name.scientific, family: d.name.family, origin: d.distribution.native.map((r) => r.name), slug: d.slug, cells: d.climate.cells, south: sheet.year?.south, climate: { months: d.climate.months, p10: d.climate.p10, p90: d.climate.p90, cells: d.climate.cells, extremes: d.climate.extremes ?? null }, extremesStatus: d.climate.extremesStatus ?? null }} />{/if}
+      {#if d.climate.status === 'ok'}<ShareCard input={{ units: u, name: d.name.scientific, family: d.name.family, origin: d.distribution.native.map((r) => r.name), slug: d.slug, cells: d.climate.cells, south: sheet.year?.south, climate: { months: d.climate.months, p10: d.climate.p10, p90: d.climate.p90, cells: d.climate.cells, extremes: d.climate.extremes ?? null }, extremesStatus: d.climate.extremesStatus ?? null, annualRain: d.climate.annualRain ?? null }} />{/if}
     </div>
   </div>
   </div>
@@ -424,7 +424,7 @@
       <!-- The figures once, in growers' words, each with a small source tag; the season in the reader's months beside them.
            The "In short" list that repeated these cards line by line is gone: its one new line, the season, is the season
            card's sentence now (round sixty; visitor 2, 3, product 7, self-review "the experience" 2 and 3). -->
-      <Glance months={d.climate.status === 'ok' ? d.climate.months : []} extremes={glance.ex} extremesStatus={d.climate.status === 'ok' ? (d.climate.extremesStatus ?? null) : null} year={sheet.year} seasonLead={seasonRow?.plain?.lead ?? null} seasonRule={seasonRow?.plain?.rule ?? ''} {readerLat} {readerFrom} chartHref="#s-climate" />
+      <Glance months={d.climate.status === 'ok' ? d.climate.months : []} annualRain={d.climate.status === 'ok' ? (d.climate.annualRain ?? null) : null} extremes={glance.ex} extremesStatus={d.climate.status === 'ok' ? (d.climate.extremesStatus ?? null) : null} year={sheet.year} seasonLead={seasonRow?.plain?.lead ?? null} seasonRule={seasonRow?.plain?.rule ?? ''} {readerLat} {readerFrom} chartHref="#s-climate" />
       {#if d.climate.status === 'ok' && d.climate.records < 12}<p class="small muted thinline">Under a dozen records behind these figures ({d.climate.records}). <a href="#s-habitat">The records.</a></p>{/if}
       {#if placeLine}
         <!-- The grower's own place against this habitat's cold floor: the one comparison the site can make that no other does, one line under the figures (round fifty, 3). Nothing is inferred; two figures and their difference. -->

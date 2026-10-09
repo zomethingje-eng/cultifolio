@@ -4,7 +4,8 @@
  * so "cop cin", "cinerea copiapoa" and "silver cactus" all find Copiapoa
  * cinerea. When nothing matches at all, each query word of four letters or
  * more is allowed one typing error (a swapped, missing, extra or wrong
- * letter) against the start of a word, so "Conophitum" still finds
+ * letter) against the start of a word of a name (never of a family or a
+ * place: round sixty-three, N3), so "Conophitum" still finds
  * Conophytum; the relaxed pass is only ever a fallback, so a correct spelling
  * never sees near misses beside its hits. Ranking: name matches before
  * common-name, family or origin matches; among names, the genus first;
@@ -52,7 +53,11 @@ function edit1(a: string, b: string): boolean {
 export interface Prepared<T> {
   item: T;
   nameWords: string[];
-  otherWords: string[];
+  /**
+   * The family's and the places' words: matched only as typed, in either pass, never by a similar spelling (round
+   * sixty-three, N3: "aloe" was one letter from the start of "Algeria", and "Aloe Verra" answered Drimia noctiflora).
+   */
+  placeWords: string[];
   /** The common names' words alone: the first reading of a query is whole, against these (round sixty-two; B2). */
   commonWords: string[];
   /** Each older name's words, kept apart: the words of a query that fall to the synonyms must all sit in one of them. */
@@ -350,7 +355,7 @@ export function prepare<T extends Searchable>(items: T[]): Prepared<T>[] {
   return items.map((item) => ({
     item,
     nameWords: words(item.name),
-    otherWords: [...words(item.common ?? ''), ...(item.commons ?? []).flatMap(words), ...words(item.family ?? ''), ...(item.origin ?? []).flatMap(words)],
+    placeWords: [...words(item.family ?? ''), ...(item.origin ?? []).flatMap(words)],
     commonWords: [...words(item.common ?? ''), ...(item.commons ?? []).flatMap(words)],
     synWords: (item.syn ?? []).map((x) => words(x).filter((w) => !RANK_MARKERS.has(w))),
     sortKey: fold(item.name)
@@ -361,14 +366,17 @@ export function prepare<T extends Searchable>(items: T[]): Prepared<T>[] {
  * Rank: 0 every query word starts a name word, the first one the genus; 1 name words only; 2 mixed; 3 other fields
  * only. A query word not in the name or the other fields may come from an older name, but every such word must come
  * from the same older name: "aloe margaritifera" found Tulista pumila through two of its synonyms, Aloe x and
- * Haworthia margaritifera, which is a name nobody wrote (round thirty-three, 13).
+ * Haworthia margaritifera, which is a name nobody wrote (round thirty-three, 13). A family or a place is matched as
+ * typed whatever `match` forgives: a similar spelling is a typing error in a name, and read against names only (round
+ * sixty-three, N3: "Aloe Verra" answered Drimia noctiflora, "aloe" one letter from its range's "Algeria" and "verra" one
+ * from its older name's "Vera-duthiea").
  */
 function rank(p: Prepared<unknown>, qs: string[], match: (q: string, w: string) => boolean): number | null {
   let inName = 0, inOther = 0, genus = false;
   const fromSyn: string[] = [];
   for (const q of qs) {
     const n = p.nameWords.some((w) => match(q, w));
-    const o = !n && p.otherWords.some((w) => match(q, w));
+    const o = !n && (p.commonWords.some((w) => match(q, w)) || p.placeWords.some((w) => w.startsWith(q)));
     if (n) inName++;
     else if (o) inOther++;
     else if (!p.synWords.some((g) => g.some((w) => match(q, w)))) return null; // no word of the entry can take q: no older name can either, so stop here (round fifty-eight)

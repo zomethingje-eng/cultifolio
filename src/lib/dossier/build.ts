@@ -294,9 +294,11 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     };
   }
   let climate: Climate = { status: 'none', detail: 'no georeferenced record inside the range' };
-  // A refusal said as a refusal, a failure as "did not answer" (round sixty-two; the grower review's 2, rule 2).
-  if (occ.status === 'refused' || occ.status === 'error') climate = { status: 'refused', detail: `occurrence source ${occ.status === 'refused' ? 'refused the request' : 'did not answer'}` };
-  else if (dist.status === 'refused' || dist.status === 'error') climate = { status: 'refused', detail: `distribution source ${dist.status === 'refused' ? 'refused the request' : 'did not answer'}, so the range could not be verified` };
+  // A refusal said as a refusal, a failure as "did not answer" (round sixty-two; the grower review's 2, rule 2), each as a
+  // full clause with its article and its time, as the page says it: the page still words the bare form of a dossier built
+  // before (`detailSentence`, `climateDetail`), so both read the same (round sixty-three; review-60 visitor-words 16).
+  if (occ.status === 'refused' || occ.status === 'error') climate = { status: 'refused', detail: `the occurrence source ${occ.status === 'refused' ? 'refused the request' : 'did not answer'} when this page was built` };
+  else if (dist.status === 'refused' || dist.status === 'error') climate = { status: 'refused', detail: `the distribution source ${dist.status === 'refused' ? 'refused the request' : 'did not answer'} when this page was built, so the range could not be verified` };
   // No verified native range means no way to tell a habitat record from a garden one, so no habitat climate: the map stays, the advice does not.
   else if (ambiguous) climate = { status: 'none', detail: `native range not verified: ${ambiguous}` };
   else if (!verified || !boxes.length) climate = { status: 'none', detail: !verified ? 'native range not verified: no WCVP distribution with native status for this name, so records cannot be told from cultivation and no habitat climate is derived' : 'native range is stated at country level only, with no region boxes to test records against' };

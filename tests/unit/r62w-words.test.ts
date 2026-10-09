@@ -151,7 +151,7 @@ describe('the species page, compare and the 404 (A13, A21, A33, A35, visitor-wor
   });
   it('the 404 says "was not asked" for a held call', () => {
     const s = code('src/routes/species/[slug]/+page.server.ts');
-    expect(s).toMatch(/heldBack \? "GBIF was not asked whether it is an older name for a species that is here: this site's calls to GBIF are used up for this minute"/); // round sixty-two, second pass: the words review's 15
+    expect(s).toMatch(/heldBack \? "GBIF was not asked whether it is an older name for a species that is here: this site held its call to GBIF back for this minute"/); // round sixty-two, second pass: the words review's 15
     expect(s).not.toMatch(/was not checked: \$\{heldBack/);
   });
   it('compare says when it left a species out, and has a description', () => {

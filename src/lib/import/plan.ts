@@ -134,6 +134,61 @@ export interface NumberPlan {
   renumbered: Array<{ key: string; line: number; given: string; got: string; inFile?: number }>;
   /** The order the rows are written in: rows keeping their own number first, so a number minted for another row cannot take it. */
   order: string[];
+  /**
+   * The number the import numbered on from, when the sheet's numbers share one pattern that is not this collection's
+   * scheme (`sheetPattern`) and a plant was numbered in it: the highest number of that pattern in the sheet or here,
+   * before the first number it gave (round sixty-three; the fix pass, R2 5: it named the sheet's highest beside a line
+   * that got one past this collection's). Null when no plant was numbered in the sheet's pattern: a renumbered line then
+   * takes this collection's next number, as before.
+   */
+  onFrom: string | null;
+  /** True when `onFrom` is a plant's number here, higher than any in the sheet; false when it is the sheet's own highest. */
+  onFromHere: boolean;
+  /** How many further plants of a line of several (Qty) were numbered in the sheet's pattern (the fix pass, R2 6). */
+  extrasOn: number;
+  /** Whether the sheet's numbers do not share one pattern, so a renumbered line took this collection's next number (said on the review). */
+  mixed: boolean;
+  /** Whether the sheet numbers as this collection does (a Cultifolio export, over several years too), so a renumbered line took this collection's next number by its own rule (the fix pass, R2 4). */
+  own: boolean;
+}
+
+/** A number as a pattern: what comes before its last run of digits, and how many digits. */
+const PATTERN = /^(.*?)(\d+)$/;
+/** A run of digits padded with a leading zero ("0007"; a lone "0" is not padding). */
+const padded = (digits: string) => digits.length > 1 && digits[0] === '0';
+/** A number in a pattern, as the sheet writes it: zero-padded to the width, or unpadded when the width is 0. */
+const inPattern = (prefix: string, width: number, n: number) => prefix + (width ? String(n).padStart(width, '0') : String(n));
+/**
+ * The pattern the sheet's own numbers share, when they share one (round sixty-three; the round-sixty grower review,
+ * finding 10): the same prefix, and the same width of digits (0001 to 0300, A001 to A095) or, when no number is
+ * zero-padded, digits of any width (1 to 300, A9 to A95), recorded as width 0 (the fix pass, R2 3: the commonest
+ * spreadsheet numbering, and the grower review's own A9 to A95, were told they followed no pattern). A renumbered line in
+ * a collection numbered 0001 to 0300 was given 2026-0009. A sheet that numbers as this collection does (2026-0001 under
+ * the year scheme, over one year or several, GH-001 under a GH prefix of width 3) is not a pattern of its own: this
+ * collection's rule numbers it, the year of a plant included, and 'own' says so (the fix pass, R2 4).
+ */
+export function sheetPattern(rows: ImportRow[], scheme: NumberingScheme): { prefix: string; width: number; top: number; last: string } | 'mixed' | 'own' | null {
+  const nos = rows.map((r) => r.number?.trim()).filter((g): g is string => !!g);
+  if (!nos.length) return null;
+  const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const ownRe = new RegExp(`^${scheme.mode === 'year' ? '\\d{4}' : esc(scheme.prefix ?? 'ACC')}-\\d{${scheme.width},}$`);
+  if (nos.every((g) => ownRe.test(g))) return 'own';
+  let prefix: string | null = null, top = -1, last = '';
+  const widths = new Set<number>();
+  let anyPadded = false;
+  for (const g of nos) {
+    const m = PATTERN.exec(g);
+    if (!m) return 'mixed';
+    if (prefix === null) prefix = m[1];
+    else if (m[1] !== prefix) return 'mixed';
+    widths.add(m[2].length);
+    anyPadded ||= padded(m[2]);
+    const n = Number(m[2]);
+    if (n > top) { top = n; last = g; }
+  }
+  // Unpadded numbers carry on unpadded, whatever their widths; padded ones only at one width.
+  if (anyPadded && widths.size > 1) return 'mixed';
+  return { prefix: prefix!, width: anyPadded ? [...widths][0] : 0, top, last };
 }
 
 /**
@@ -175,17 +230,48 @@ export function planNumbers(rows: ImportRow[], taken: Iterable<string>, scheme: 
     used.add(id);
     return id;
   };
+  // A line whose own number is taken is numbered on in the sheet's own pattern, when the sheet has one, past the sheet's
+  // highest number and this collection's in that pattern; past the pattern's width, by this collection's rule (round sixty-three).
+  const found = sheetPattern(rows, scheme);
+  const pat = found !== null && typeof found === 'object' ? found : null;
+  // In the pattern: the same prefix, and the same width (padded) or no zero padding (unpadded, width 0).
+  const fits = (m: RegExpExecArray) => !!pat && m[1] === pat.prefix && (pat.width ? m[2].length === pat.width : !padded(m[2]));
+  let patTop = pat ? pat.top : 0, hereTop = -1, startN: number | null = null;
+  if (pat) for (const id of here) { const m = PATTERN.exec(id); if (m && fits(m)) hereTop = Math.max(hereTop, Number(m[2])); }
+  if (pat) for (const id of used) { const m = PATTERN.exec(id); if (m && fits(m)) patTop = Math.max(patTop, Number(m[2])); }
+  const nextInSheet = (): string | null => {
+    if (!pat) return null;
+    const from = patTop;
+    let id: string;
+    do {
+      const n = String(++patTop);
+      if (pat.width && n.length > pat.width) return null;
+      id = inPattern(pat.prefix, pat.width, Number(n));
+    } while (used.has(id) || isTaken(id));
+    used.add(id);
+    startN ??= from; // the number the import numbered on from: the highest in the pattern, here or in the sheet, before its first
+    return id;
+  };
+  let extrasOn = 0;
   for (const r of live) {
     const year = yearOf(r.acquired) ?? r.numberYear ?? thisYear;
     const plan = byRow.get(r.key) ?? { numbers: [], kept: false, given: r.number?.trim() || null };
-    while (plan.numbers.length < r.qty) plan.numbers.push(next(year));
+    // Every plant of a line that gave a number, kept or renumbered, is numbered in the sheet's pattern when it has one: a
+    // kept line's further plants took this collection's scheme while a renumbered line's took the sheet's, two schemes in
+    // one import (the fix pass, R2 6). A line with no number keeps this collection's rule.
+    while (plan.numbers.length < r.qty) {
+      const n = plan.given ? nextInSheet() : null;
+      if (n && plan.numbers.length) extrasOn++;
+      plan.numbers.push(n ?? next(year));
+    }
     byRow.set(r.key, plan);
     if (plan.given && !plan.kept) {
       const earlier = keptBy.get(plan.given);
       renumbered.push({ key: r.key, line: r.line, given: plan.given, got: plan.numbers[0], ...(earlier !== undefined && !here.has(plan.given) && !isTaken(plan.given) ? { inFile: earlier } : {}) });
     }
   }
-  return { byRow, renumbered, order };
+  const onFrom = pat && startN !== null ? inPattern(pat.prefix, pat.width, startN) : null;
+  return { byRow, renumbered, order, onFrom, onFromHere: onFrom !== null && startN === hereTop && hereTop > pat!.top, extrasOn, mixed: found === 'mixed' && renumbered.length > 0, own: found === 'own' && renumbered.length > 0 };
 }
 
 /**

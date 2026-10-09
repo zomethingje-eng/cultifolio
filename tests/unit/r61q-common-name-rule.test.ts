@@ -55,8 +55,10 @@ describe('the common name shown (corpus 9, review B)', () => {
     // word for Gonialoe variegata, as "Lace aloe" is for Aristaloe, and keeps GBIF's place.
     expect(shown([{ name: 'Tiger Aloe', lang: 'eng' }, { name: 'Partridge-breast', lang: 'eng' }], 'Gonialoe')).toBe('Tiger Aloe');
   });
-  it('a comma list of several names and a string shaped like a binomial go last too, and are not split', () => {
-    expect(englishNames([{ name: 'Living stones, pebble plants', lang: 'eng' }, { name: 'Split rock', lang: 'eng' }], { genus: 'Lithops', genera: GENERA })).toEqual({ common: 'Split rock', commons: ['Living stones, pebble plants'] });
+  it('a list of several names and a string shaped like a binomial go last too (a comma list is split since round sixty-three)', () => {
+    // Changed in round sixty-three (N1): a comma list is read as its names, in their place in GBIF's order.
+    expect(englishNames([{ name: 'Living stones, pebble plants', lang: 'eng' }, { name: 'Split rock', lang: 'eng' }], { genus: 'Lithops', genera: GENERA })).toEqual({ common: 'Living stones', commons: ['Pebble plants', 'Split rock'] });
+    expect(englishNames([{ name: 'Living stones; pebble plants', lang: 'eng' }, { name: 'Split rock', lang: 'eng' }], { genus: 'Lithops', genera: GENERA })).toEqual({ common: 'Split rock', commons: ['Living stones; pebble plants'] });
     // Changed in round sixty-two (decision 3): only another genus's binomial (the species' older name) is set back; the
     // species' own genus with a lower-case word ("Aloe vera", "Crinum lily") is a name growers use.
     expect(shown([{ name: 'Aloe vera', lang: 'eng' }, { name: 'Barbados aloe', lang: 'eng' }], 'Aloe vera')).toBe('Aloe vera');
@@ -90,9 +92,12 @@ describe('the common name shown (corpus 9, review B)', () => {
     expect(shown([{ name: 'tweeblaarkanniedood', lang: 'afr' }], 'Welwitschia')).toBeUndefined();
     expect(shown([{ name: 'Tumboa' }], 'Welwitschia')).toBeUndefined();
   });
-  it('without the corpus\'s genera (a caller with no index), comma lists are still set back and nothing else is guessed', () => {
+  it('without the corpus\'s genera (a caller with no index), semicolon lists are still set back and nothing else is guessed', () => {
     expect(englishNames(CURIO)).toEqual({ common: 'String-of-Pearls', commons: ['String-Of-Beads Senecio', 'String of beads'] });
-    expect(englishNames([{ name: 'Iris, flag', lang: 'eng' }, { name: 'Butterfly iris', lang: 'eng' }])).toEqual({ common: 'Butterfly iris', commons: ['Iris, flag'] });
+    // Changed in round sixty-three (N1, N2): "Iris, flag" is two names, and "Iris", a genus English uses as a noun, goes
+    // after the longer names; a semicolon list is still one string, set back.
+    expect(englishNames([{ name: 'Iris, flag', lang: 'eng' }, { name: 'Butterfly iris', lang: 'eng' }])).toEqual({ common: 'Flag', commons: ['Butterfly iris', 'Iris'] });
+    expect(englishNames([{ name: 'Iris; flag', lang: 'eng' }, { name: 'Butterfly iris', lang: 'eng' }])).toEqual({ common: 'Butterfly iris', commons: ['Iris; flag'] });
   });
   it('a stored dossier built before (no preferred, no sources) reads as not preferred, one source', () => {
     const old = [{ name: 'Tree tumbo', lang: 'eng' }, { name: 'Tumboa', lang: 'eng' }];

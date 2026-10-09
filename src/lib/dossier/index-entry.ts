@@ -9,6 +9,8 @@ export interface IndexEntry {
   commons?: string[];
   origin?: string[];
   thumb?: string;
+  /** The thumbnail's credit, licence first, as a tile shows it after "Photo: " (`tileCreditOf`; round sixty-three). Absent in an index built before, or when the credit cannot be said short and true; the tile then names the source. */
+  credit?: string;
   photos: number;
   open: number;
   climate: string;
@@ -16,6 +18,8 @@ export interface IndexEntry {
   near?: number[];
   /** Older names for the species, as binomials, written at index time (round thirty-one, 3). */
   syn?: string[];
+  /** The day the species' dossier last changed in substance, as whole days since 1970-01-01 (src/lib/dossier/changed.ts; round sixty-three): the sitemap's lastmod. Absent in an index built before. */
+  changed?: number;
 }
 
 /** One vernacular name as a dossier holds it (src/lib/dossier/schema.ts `Vernacular`); `preferred`, `sources` and `alsoFrom` are absent in a dossier whose names were fetched before, and read as "not preferred" and "one source". */
@@ -63,48 +67,80 @@ export const ENGLISH_USE: ReadonlySet<string> = new Set(['agave', 'aloe', 'amary
 const stem = (w: string) => foldWord(w).replace(/(?:us|um|a|is|e|es|i)$/, '');
 
 /**
+ * The names one vernacular value gives: a value with commas is a list of names (round sixty-three, N1; the lead's count
+ * of the live corpus: 1,843 of 103,256 values held a comma, every one read a list of alternatives, "Sago palm, King
+ * sago, Sago cycad, Japanese sago palm", and none an inverted form such as "Cactus, barrel"), split on each comma with
+ * or without a space after it, each part trimmed with its spaces closed up, empty parts dropped, and a part given twice
+ * in one value given once. A value with no comma is one name, as before.
+ */
+export function namesOf(value: string): string[] {
+  return [...new Set(value.split(',').map((x) => x.trim().replace(/\s+/g, ' ')).filter(Boolean))];
+}
+
+/**
+ * Whether a name is a bare genus word (round sixty-three, N2, the owner's decision): one word, in any case and with any
+ * accents, that is the species' own genus ("Aloe" for Aloe vera), another genus of the corpus (`scope.genera`), or a
+ * genus English uses as a noun (`ENGLISH_USE`: "Lotus" for Nelumbo nucifera). Such a word names a genus, so it is the
+ * headline only when no source gives the species a longer name; it stays among the names.
+ */
+export function bareGenus(spelling: string, scope: NameScope = {}): boolean {
+  const ts = tokensOf(spelling.trim());
+  if (ts.length !== 1) return false;
+  const w = foldWord(ts[0]).replace(/[^a-z]/g, '');
+  return !!w && (ENGLISH_USE.has(w) || (!!scope.genus && w === genusWord(scope.genus)) || !!scope.genera?.has(w));
+}
+
+/**
  * A species' English common names as the index and the species page show them (round sixty-one, decision 7; round
  * sixty-two, decision 3). Before, the first name GBIF listed was shown as it was written, so Curio rowleyanus was
  * "String-Of-Beads Senecio" on its tile, its row and its page title, while "String-of-Pearls" sat in `commons`.
  *
  * The rule, with no name picked by hand:
- *   1. English names only (`lang` "eng"). Spellings of one name (case, hyphens, spaces, apostrophes) are one name, and
- *      it is given by as many sources as give any of its spellings, each source counted once.
- *   2. Set back, after every name that is not: a comma list of several names; and, with `scope`, another genus of the
+ *   1. English names only (`lang` "eng"). A source's value with commas is a list of names, each its own name, given by
+ *      that row's sources (`namesOf`; round sixty-three, N1). Spellings of one name (case, hyphens, spaces, apostrophes)
+ *      are one name, and it is given by as many sources as give any of its spellings, each source counted once.
+ *   2. Set back, after every name that is not: a semicolon list of several names; and, with `scope`, another genus of the
  *      corpus named alone ("Osteospermum" for a Dimorphotheca), or a name of two words or more whose last word is another genus of the corpus ("Flatleaf Senecio" and "String-of-Beads Senecio" for a
  *      Curio), unless that word is one English uses as a noun of its own (`ENGLISH_USE`: "Lace aloe", "Autumn crocus",
  *      "Zebra haworthia", "Peacock iris"); or that is another genus followed by the species' own epithet (an older name
  *      of it, "Senecio rowleyanus" for Curio rowleyanus). Words are compared in any case: the rule read a source's
  *      capitals, and the same name was set back or shown by how one source happened to write it (round sixty-two; the
  *      verification review's search 16; A34). A genus word that is not the last ("Arum lily") is not read.
+ *   2a. A bare genus word that is not set back (the species' own genus, "Aloe" for Aloe vera, or a genus English uses as
+ *      a noun, "Lotus" for Nelumbo nucifera) goes after every longer name and before the set-back ones: it is the
+ *      headline only when no source gives a fuller name (`bareGenus`; round sixty-three, N2, the owner's decision).
  *   3. Then a name GBIF marks preferred.
  *   4. Then the name more sources give.
- *   5. Then GBIF's order. Of a name's spellings, the one more sources give is shown, then the one GBIF lists first.
+ *   5. Then GBIF's order (a list's names in their place in it). Of a name's spellings, the one more sources give is
+ *      shown, then the one GBIF lists first.
  * Preferred flags and source counts exist only for names fetched since round sixty-two's `--names` step; for the rest,
  * every spelling row counts as one source. The first letter is shown as a capital; nothing else of a source's spelling
- * is changed. No source string is split into new names, and every name stays in the answer, so every alternative stays
- * searchable: `common` is the rule's choice, `commons` every other English name in the rule's order, one spelling each.
+ * is changed, and every name stays in the answer, so every alternative stays searchable: `common` is the rule's choice,
+ * `commons` every other English name in the rule's order, one spelling each.
  */
 export function englishNames(vernacular: VernacularName[], scope: NameScope = {}): { common?: string; commons?: string[] } {
   const groups = new Map<string, { at: number; spellings: Map<string, { n: number; at: number }>; from: Set<string>; preferred: boolean }>();
+  let seq = 0; // each name's place in GBIF's order, a list's names each in its own (round sixty-three, N1)
   vernacular.forEach((v, i) => {
     if (v.lang !== 'eng' || typeof v.name !== 'string') return;
-    const name = v.name.trim().replace(/\s+/g, ' ');
-    if (!name) return;
-    const k = nameKey(name);
-    const g = groups.get(k) ?? { at: i, spellings: new Map(), from: new Set<string>(), preferred: false };
     // The row's sources: the named ones by name, so one source giving three spellings is one (the corpus review, 8);
-    // the rest (a row with no source, or a count from a dossier fetched before) each its own.
+    // the rest (a row with no source, or a count from a dossier fetched before) each its own, the same for every name
+    // the row lists, so a source counts once per name and never once per list (round sixty-three, N1).
     const named = [v.source, ...(Array.isArray(v.alsoFrom) ? v.alsoFrom : [])].filter((x): x is string => typeof x === 'string' && !!x.trim()).map((x) => `s:${x.trim()}`);
     const total = Number.isInteger(v.sources) && v.sources! > 0 ? v.sources! : 1;
     const own = new Set(named);
     for (let j = own.size; j < total; j++) own.add(`#${i}:${j}`);
-    const sp = g.spellings.get(name) ?? { n: 0, at: i };
-    sp.n += own.size;
-    g.spellings.set(name, sp);
-    for (const x of own) g.from.add(x);
-    g.preferred ||= v.preferred === true;
-    groups.set(k, g);
+    for (const name of namesOf(v.name)) {
+      const at = seq++;
+      const k = nameKey(name);
+      const g = groups.get(k) ?? { at, spellings: new Map(), from: new Set<string>(), preferred: false };
+      const sp = g.spellings.get(name) ?? { n: 0, at };
+      sp.n += own.size;
+      g.spellings.set(name, sp);
+      for (const x of own) g.from.add(x);
+      g.preferred ||= v.preferred === true;
+      groups.set(k, g);
+    }
   });
   if (!groups.size) return {};
   const ownWords = scope.genus ? scope.genus.trim().replace(/^(?:×\s*|x\s+)/i, '').split(/\s+/) : [];
@@ -113,7 +149,7 @@ export function englishNames(vernacular: VernacularName[], scope: NameScope = {}
   const genera = scope.genera;
   const other = (w: string) => { const f = foldWord(w).replace(/[^a-z]/g, ''); return !!f && f !== own && !!genera?.has(f); };
   const setBack = (spelling: string): boolean => {
-    if (/[,;]/.test(spelling)) return true;
+    if (/;/.test(spelling)) return true; // a comma list is split by `namesOf` and never reaches here (round sixty-three, N1)
     if (!genera) return false;
     const ts = tokensOf(spelling);
     // Another genus as the last word of a name of two words or more, in any case, unless English uses it as a noun.
@@ -130,10 +166,12 @@ export function englishNames(vernacular: VernacularName[], scope: NameScope = {}
   };
   const named = [...groups.values()].map((g) => {
     const spelling = [...g.spellings.entries()].sort((a, b) => b[1].n - a[1].n || a[1].at - b[1].at)[0][0];
-    return { spelling, back: setBack(spelling), at: g.at, sources: g.from.size, preferred: g.preferred };
+    const back = setBack(spelling);
+    // 0 a name; 1 a bare genus word (rule 2a); 2 set back.
+    return { spelling, tier: back ? 2 : bareGenus(spelling, scope) ? 1 : 0, at: g.at, sources: g.from.size, preferred: g.preferred };
   });
-  // GBIF's order last: each name's place is its first row's, which no two names share, so nothing after it could decide.
-  named.sort((a, b) => Number(a.back) - Number(b.back) || Number(b.preferred) - Number(a.preferred) || b.sources - a.sources || a.at - b.at);
+  // GBIF's order last: each name's place is its first place in GBIF's list, which no two names share, so nothing after it could decide.
+  named.sort((a, b) => a.tier - b.tier || Number(b.preferred) - Number(a.preferred) || b.sources - a.sources || a.at - b.at);
   const names = named.map((n) => firstUp(n.spelling));
   return names.length > 1 ? { common: names[0], commons: names.slice(1) } : { common: names[0] };
 }

@@ -162,7 +162,7 @@ describe('climate envelope', () => {
     expect(c.p10[6].precipMm).toBe(7);
     expect(c.p90[6].precipMm).toBe(23);
     // annual rain is per cell first (24, 48, 72, 96, 120), then its percentiles: not a sum of monthly percentiles
-    expect(c.annualRain).toEqual({ p10: 33.6, p90: 110.4 });
+    expect(c.annualRain).toEqual({ p10: 33.6, p90: 110.4, p50: 72 }); // and their median, the year's rain the pages show (round sixty-three)
     // the typical cell: coldest month's mean night nearest the median across cells (shift 0), and `at` is its centre
     expect(c.cell).toBe(centres[2].id);
     expect(c.at).toEqual({ lat: centres[2].lat, lon: centres[2].lon });

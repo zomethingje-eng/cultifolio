@@ -150,7 +150,8 @@ describe('the front page (decision 9)', () => {
     expect(welcome.indexOf('try-sample-home')).toBeGreaterThan(-1);
     expect(welcome.indexOf('try-sample-home')).toBeLessThan(welcome.indexOf('/plants/new'));
     const at = (t: string) => p.indexOf(t, p.indexOf('{:else}\n  <!-- While a search is typed'));
-    expect(at('{@render featured()}')).toBeLessThan(at('{@render featureBlock(feature)}'));
+    expect(at("{@render featured(false, 'wide')}")).toBeGreaterThan(-1); // the desktop's strip; the phone's follows the first rows (round sixty-three, V4)
+    expect(at("{@render featured(false, 'wide')}")).toBeLessThan(at('{@render featureBlock(feature)}'));
     // Round sixty-two, second pass (the outside triage's 2): the feature after the search and the first rows, so a desktop's
     // first screen holds the search and a row, and the chips still sit with the rows they govern (A10, B1).
     expect(at('class="searchbar" type="search" placeholder="Search species')).toBeLessThan(at('{@render featureBlock(feature)}'));

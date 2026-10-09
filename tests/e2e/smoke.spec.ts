@@ -2,6 +2,11 @@ import { zipSync, strToU8 } from 'fflate';
 import { test, expect } from '@playwright/test';
 import { inject } from './helpers/inject';
 import { fromAddress, docAddress, limitAddress } from './helpers/address';
+import { ownPages } from './helpers/r63v-own';
+import { textSize, textSizeHeld } from './helpers/text-size';
+
+// The grower's own pages, empty, rather than the example collection an empty device opens on them (round sixty-three, V2).
+test.beforeEach(async ({ context }) => { await context.addInitScript(ownPages); });
 
 /** The plant page's id card keeps one primary action; Edit, Label and Propagate are behind "More" (improvements, 7). */
 /** Click Add on the add-plant form. A name the reference does not hold (the name service is not reachable here) is asked about once, and the second Add keeps it as typed (round twenty-three, 4). */
@@ -614,7 +619,7 @@ test('the species page condenses its cultivation sheet into a note by rule', asy
   await page.goto('/species/copiapoa-cinerea');
   // since round sixty the season card in the first screen carries the reading, fact first and its rule and source after
   const season = page.locator('.glance .card.season');
-  await expect(season).toContainText("72 mm of rain a year, under the rule's 120 mm, so no rainy season is read; the cooler six months are November to April");
+  await expect(season).toContainText("72 mm of rain in the median year, under the rule's 120 mm, so no rainy season is read; the cooler six months are November to April");
   await expect(season).toContainText('rain and temperature rules, CHELSA');
   await expect(season).not.toContainText(/fog/);
   await expect(page.locator('.glance .card.cold')).toContainText('Record low 4.0 °C in 40 years');
@@ -663,6 +668,7 @@ test('sync: two devices share one encrypted vault; changes and photos cross both
   test.setTimeout(120_000);
   // Device A: a place, a plant with a photo and a watering; then set up a vault.
   const A = await browser.newContext();
+  await A.addInitScript(ownPages); // the grower's own pages, not the example (round sixty-three, V2)
   await fromAddress(A); // the vault is made from an address of its own, not 127.0.0.1's five a day (round sixty-two second pass)
   const a = await A.newPage();
   await a.goto('/places');
@@ -1096,7 +1102,7 @@ test('the species page carries the envelope: median with its span, the cells it 
   const t = page.locator('.card', { hasText: 'Habitat rain season' });
   await page.locator('#habitat > summary').click(); // folded under the log since round fifty-eight
   await expect(t).toContainText('No rainy season to read');
-  await expect(t).toContainText("72 mm a year; the temperature rule's cooler six months May–Oct (S), shifted to the north (no site set): Nov–Apr (CHELSA).");
+  await expect(t).toContainText("72 mm of rain in the median year; the temperature rule's cooler six months May–Oct (S), shifted to the north (no site set): Nov–Apr (CHELSA).");
   await expect(t.getByRole('link', { name: 'The sheet' })).toBeVisible();
   await expect(t).not.toContainText(/Rest expected|Growth expected|Water when/);
 });
@@ -1907,12 +1913,12 @@ test('the species page reads in reference order: the facts and the figures, then
   await expect(page.locator('#s-genus + .notice')).toContainText('Not checked');
 });
 
-test('a visitor sees all five places in the top bar and the menu, and a lighter tab bar on a phone until a first plant (round sixty; the visitor review)', async ({ page }) => {
+test('a visitor sees all five places in the top bar, the menu and, since round sixty-three, the phone\'s tab bar (round sixty; the visitor review; round sixty-three, V1)', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('.topseg a')).toHaveText(['Species', 'My plants', 'Places', 'Propagation', 'Today']);
-  // On a phone a visitor's tabs are the four that show something: Places, Propagation and Today opened empty private pages (round sixty; the visitor review, product 10).
+  // On a phone a visitor's tabs are the grower's five: an empty Today, Places or Propagation opens the example collection (round sixty-three, V1 and V2).
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.locator('#tabbar a:visible')).toHaveText(['Species', 'Compare', 'My plants', 'About']);
+  await expect(page.locator('#tabbar a:visible')).toHaveText(['Species', 'My plants', 'Places', 'Propagation', 'Today']);
   await page.setViewportSize({ width: 1280, height: 800 });
   // a click that lands before hydration opens nothing: poll the button's own state rather than the first click
   await expect.poll(async () => { await page.getByRole('button', { name: 'Menu' }).click(); return page.getByRole('button', { name: 'Menu' }).getAttribute('aria-expanded'); }).toBe('true');
@@ -2894,6 +2900,9 @@ test('round forty-nine: a place takes plants in from a ticked list, in one commi
 test('round forty-nine: a letter near the end of the catalogue still lands with its heading under the bar; the list is padded, and the padding goes once rows fill in above (4)', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
+  // The fixture's catalogue is a few rows: on a phone the strip now follows them (round sixty-three, V4) and makes the page
+  // tall enough to place W without padding; taken away here, the list is as short as the padding is for.
+  await page.addStyleTag({ content: 'section.featured.phoneonly { display: none !important; }' });
   await page.locator('.letters a', { hasText: 'W' }).click();
   // landed: the heading is at or below the pinned row's foot; polled, not after a fixed 300 ms (round sixty; the harness review, 14)
   await expect.poll(async () => { const b = (await page.locator('.stickyhead .toolrow').boundingBox())!; return (await page.locator('#l-W').boundingBox())!.y >= b.y + b.height; }).toBe(true);
@@ -2918,13 +2927,13 @@ test('round fifty: on a phone the first screen of the catalogue, My plants and a
   let fs = await firstScreen(page);
   const firstRow = await page.locator('.rows .grow').first().boundingBox();
   expect(firstRow!.y + 24).toBeLessThan(fs.bottom); // the first genus row begins above the tab bar
-  const strip = await page.locator('.featured .strip').boundingBox();
+  const strip = await page.locator('section.featured.phoneonly .strip').boundingBox();
   const search = await page.locator('.toolrow .searchbar').boundingBox();
-  expect(strip!.y).toBeLessThan(search!.y); // since round sixty the strip sits above the one toolbar, so the search, the grouping and the chips sit with the rows they act on (visitor 16)
+  expect(strip!.y).toBeGreaterThan(firstRow!.y); // since round sixty-three the phone's strip follows the first rows, so the search, the grouping, the chips and a row are on Safari's first screen (V4); round sixty had it above the one toolbar (visitor 16)
   expect(search!.y + search!.height).toBeLessThan(fs.bottom); // and the search is on the first screen
   expect(strip!.height).toBeLessThan(200);
   // the lead tile is double width; the rest are 112px
-  const tiles = page.locator('.featured .strip .ftile');
+  const tiles = page.locator('section.featured.phoneonly .strip .ftile');
   const lead = await tiles.first().boundingBox();
   expect(lead!.width).toBeGreaterThan(200);
   if (await tiles.count() > 1) { const second = await tiles.nth(1).boundingBox(); expect(Math.round(second!.width)).toBe(112); }
@@ -2991,7 +3000,7 @@ test('round fifty: on a phone the first screen of the catalogue, My plants and a
 test('round fifty: typing a search is a mode on a phone: the box pinned, the strip and chips away, the matches as rows, Cancel puts the page back (2)', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
-  await expect(page.locator('.featured .strip')).toBeVisible();
+  await expect(page.locator('section.featured.phoneonly .strip')).toBeVisible(); // the phone's strip, after the first rows (round sixty-three, V4)
   await expect(page.locator('.toolrow .tools .chiprow')).toBeVisible();
   const box = page.locator('.toolrow .searchbar');
   await box.click();
@@ -3018,7 +3027,7 @@ test('round fifty: typing a search is a mode on a phone: the box pinned, the str
   await expect(page.locator('.hitrow')).toHaveCount(1);
   await page.locator('.cancelsearch').click();
   await expect(page.locator('.toolrow .searchbar')).toHaveValue('');
-  await expect(page.locator('.featured .strip')).toBeVisible();
+  await expect(page.locator('section.featured.phoneonly .strip')).toBeVisible();
   await expect(page.locator('.toolrow .tools .chiprow')).toBeVisible();
   await expect(page.locator('.cancelsearch')).toHaveCount(0);
 });
@@ -3099,6 +3108,7 @@ test('round fifty-three: the Today tab lists what needs you by place, "no wateri
   // One context whose clock can be moved: the plant's record must be three weeks old for "no watering recorded" to count.
   // Without the service worker, so the forecast mock below is what answers (a worker would fetch the real route).
   const C = await browser.newContext({ serviceWorkers: 'block' });
+  await C.addInitScript(ownPages); // the grower's own pages, not the example (round sixty-three, V2)
   await C.addInitScript(() => { const real = Date.now; const OD = Date; let shift = 0; try { shift = Number(localStorage.getItem('__shift') ?? 0); } catch { /* none */ } (globalThis as { __shift?: number }).__shift = shift; globalThis.Date = class extends OD { constructor(...args: unknown[]) { if (args.length === 0) super(real() + ((globalThis as { __shift?: number }).__shift ?? 0)); else super(...(args as [number])); } static now() { return real() + ((globalThis as { __shift?: number }).__shift ?? 0); } } as DateConstructor; });
   const page = await C.newPage();
   const frosty = { lat: 40.38, lon: -80.05, forecast: { source: 'met.no', fetched: '2026-11-01T00:00:00Z', days: [{ date: '2026-11-02', tmin: -2, tmax: 9, precipMm: 0, steps: 24 }, { date: '2026-11-03', tmin: 4, tmax: 12, precipMm: 0, steps: 24 }], hoursCovered: 48, offsetH: -5, firstFrost: '2026-11-02' }, alerts: [], alertsStatus: 'none', risk: { level: 'frost', text: 'Frost forecast: -2.0 °C around 05:00 Monday solar time (2026-11-02, MET Norway).' }, attribution: ['Forecast data from MET Norway (CC BY 4.0)'] };
@@ -3240,6 +3250,7 @@ test('round fifty-four: a Today page left open overnight dates the morning\'s wa
 
 test('round fifty-five: a watered stop keeps its height and the next stop does not move under the finger; the Undo survives a trip to another tab (5)', async ({ browser }) => {
   const C = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 844 }, hasTouch: true });
+  await C.addInitScript(ownPages); // the grower's own pages, not the example (round sixty-three, V2)
   await C.addInitScript(() => { const real = Date.now; const OD = Date; let shift = 0; try { shift = Number(localStorage.getItem('__shift') ?? 0); } catch { /* none */ } (globalThis as { __shift?: number }).__shift = shift; globalThis.Date = class extends OD { constructor(...args: unknown[]) { if (args.length === 0) super(real() + ((globalThis as { __shift?: number }).__shift ?? 0)); else super(...(args as [number])); } static now() { return real() + ((globalThis as { __shift?: number }).__shift ?? 0); } } as DateConstructor; });
   const page = await C.newPage();
   await page.goto('/places');
@@ -3310,6 +3321,7 @@ test('round fifty-six: two plants under one number are not renumbered by opening
 
 test('round fifty-eight: a place\'s watering rhythm decides what is due, its dry months are one quiet line, and a stop waters only the plants left ticked', async ({ browser }) => {
   const C = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 844 }, hasTouch: true });
+  await C.addInitScript(ownPages); // the grower's own pages, not the example (round sixty-three, V2)
   await C.addInitScript(() => { const real = Date.now; const OD = Date; let shift = 0; try { shift = Number(localStorage.getItem('__shift') ?? 0); } catch { /* none */ } (globalThis as { __shift?: number }).__shift = shift; globalThis.Date = class extends OD { constructor(...args: unknown[]) { if (args.length === 0) super(real() + ((globalThis as { __shift?: number }).__shift ?? 0)); else super(...(args as [number])); } static now() { return real() + ((globalThis as { __shift?: number }).__shift ?? 0); } } as DateConstructor; });
   const page = await C.newPage();
   await page.goto('/places');
@@ -3579,7 +3591,7 @@ test('round sixty: at 320 px with the browser\'s text at 200%, the phone\'s tab 
     await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
     // The preference first, the layout after: a browser that does not read the profile's text size (the bundled Chromium on
     // Windows, outside review B14) says nothing about the layout at 200%, and is not a failure of it (round sixty-two).
-    const text = await page.evaluate(() => getComputedStyle(document.documentElement).fontSize);
+    const text = await textSize(page, 32); // the profile, or CDP where Windows' bundled Chromium ignores it (round sixty-three; harness H4)
     test.skip(text !== '32px', `preference not applied by this browser (its text is ${text}, not 32px)`);
     await addPlant(page);
     const plant = new URL(page.url()).pathname;
@@ -3592,6 +3604,7 @@ test('round sixty: at 320 px with the browser\'s text at 200%, the phone\'s tab 
     for (const route of ['/plants', plant, '/today', '/places', '/propagation', batch, '/settings', '/sync', '/backup']) {
       await page.goto(route);
       await expect(page.locator('#tabbar')).toBeVisible();
+      await textSizeHeld(page, 32, route); // on every page measured, not the first alone (round sixty-three; R3 5)
       await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
       const w = await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]);
       if (w[0] > w[1]) sideways.push(`${route} ${w[0]}>${w[1]}`);

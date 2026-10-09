@@ -144,14 +144,14 @@ test('r62g 7: Leave on a page with an unsaved edit, answered Cancel, leaves a wo
   await page.fill('#ed-price', '12');
   let asked = '';
   page.once('dialog', (d) => { asked = d.type(); void d.dismiss(); });
-  await page.getByRole('button', { name: 'Leave the sample' }).click();
+  await page.getByRole('button', { name: 'Leave the example' }).click();
   await expect.poll(() => asked).toBe('beforeunload');
   await expect(page.locator('.demobar')).toBeVisible();
   expect(await page.evaluate(() => sessionStorage.getItem('cultifolio.demo'))).toBe('1'); // base: gone, with the database closed
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.locator('.notice.err')).toHaveCount(0);
   await expect(page.locator('main')).toContainText('12');
-  await expect(page.getByRole('button', { name: 'Leave the sample' })).toBeEnabled({ timeout: 10_000 });
+  await expect(page.getByRole('button', { name: 'Leave the example' })).toBeEnabled({ timeout: 10_000 });
 });
 
 test('r62g 8: Leave says how many records the visitor added or changed, and asks; the sample is deleted on the next page (A9)', async ({ page }) => {
@@ -169,11 +169,11 @@ test('r62g 8: Leave says how many records the visitor added or changed, and asks
   let said = '';
   page.removeAllListeners('dialog');
   page.once('dialog', (d) => { said = d.message(); void d.dismiss(); });
-  await page.getByRole('button', { name: 'Leave the sample' }).click();
-  await expect.poll(() => said).toMatch(/^Leave the sample collection\? The \d+ records you added or changed here are deleted with it\.$/);
+  await page.getByRole('button', { name: 'Leave the example' }).click();
+  await expect.poll(() => said).toMatch(/^Leave the example collection\? The \d+ records you added or changed here are deleted with it\.$/);
   await expect(page.locator('.demobar')).toBeVisible(); // Cancel: still the sample
   page.once('dialog', (d) => void d.accept());
-  await page.getByRole('button', { name: 'Leave the sample' }).click();
+  await page.getByRole('button', { name: 'Leave the example' }).click();
   await expect(page).toHaveURL(/^http:\/\/[^/]+\/$/);
   await expect.poll(() => page.evaluate(() => indexedDB.databases().then((d) => d.map((x) => x.name))), { timeout: 10_000 }).not.toContain('cultifolio-demo');
 });

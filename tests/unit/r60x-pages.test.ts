@@ -113,7 +113,7 @@ describe('photograph credits outside a species page (round sixty; rule 1)', () =
     expect(photoSource('https://example.com/x.jpg')).toBeNull();
     expect(tileCredit({ thumb: 'https://static.inaturalist.org/photos/1/small.jpg' })).toBe('Photo: iNaturalist');
     expect(tileCredit({ thumb: 'https://example.com/x.jpg' })).toBeNull();
-    expect(tileCredit({ credit: '(c) Jane Doe · CC BY', thumb: 'https://static.inaturalist.org/photos/1/small.jpg' })).toBe('(c) Jane Doe · CC BY');
+    expect(tileCredit({ credit: 'CC BY, Jane Doe', thumb: 'https://static.inaturalist.org/photos/1/small.jpg' })).toBe('Photo: CC BY, Jane Doe'); // round sixty-three: the index's credit, licence first, after "Photo:" (was returned as given)
   });
 });
 

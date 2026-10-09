@@ -27,7 +27,7 @@ describe('staging a replacement, inside and outside the sample', () => {
     ss.set('cultifolio.demo', '1');
     vi.resetModules();
     const vault = await import('$lib/db/vault');
-    await expect(vault.openStaging()).rejects.toThrow(/cannot be staged in the sample collection/);
+    await expect(vault.openStaging()).rejects.toThrow(/cannot be staged in the example collection/);
     expect((await names()).filter((n) => n?.includes('staging'))).toEqual([]);
   });
   it("outside the sample, staging opens the grower's own staging database, as before this round", async () => {

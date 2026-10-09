@@ -37,13 +37,25 @@ export async function sheetsIn(c: Loaded, platform: Platform, fetch: Fetch, buck
   if (until != null && Date.now() < until) throw new SheetsUnreadable(bucket, Math.max(1, Math.ceil((until - Date.now()) / 1000)));
   refused.delete(ck);
   // The bucket file and the index it is derived from are the corpus the request holds, never whichever is current at the read (round fifty-eight).
-  let out: Sheet[] | null = await product<Sheet[]>(c, platform, fetch, `sheets/${bucket}.json`);
+  let out: Sheet[] | null = await product<Sheet[]>(c, platform, fetch, `sheets/${bucket}.json`, REFUSED_S * 1000);
+  // Under a manifest the build wrote every bucket's file (a manifest without them is refused), so one that cannot be read
+  // is the store's fault, said as a refusal and asked again shortly. Deriving it read the dossiers as the store holds them
+  // now, which after an upload is another corpus than the request's, at a few hundred reads (round sixty-three; S5, left
+  // in round fifty-nine). Only a corpus with no manifest (the fixture corpus) derives its buckets.
+  // Kept refused for the half minute its Retry-After says, a read that threw as well as a miss, and the file's miss is
+  // kept no longer than that (`product`'s `missMs`), so a device that waits as told is answered from a fresh read (round
+  // sixty-three; the server review of the round, R3 3: the miss was kept a minute and a throw not at all).
+  if (!out && c.manifest) {
+    for (const k of refused.keys()) if (!k.startsWith(`${corpus}:`)) refused.delete(k);
+    refused.set(ck, Date.now() + REFUSED_S * 1000);
+    throw new SheetsUnreadable(bucket);
+  }
   if (!out) {
     const entries = c.idx.filter((e) => bucketOf(e.slug, c.buckets) === bucket);
     out = [];
     const width = 16;
     for (let i = 0; i < entries.length; i += width) {
-      const got = await Promise.all(entries.slice(i, i + width).map(async (e) => { const d = await getDossier(platform, fetch, e.key); return d ? { ...sheetOf(d, e.thumb), slug: e.slug } : null; })); // under the index slug, as the build's bucket files are (round seventeen, 6)
+      const got = await Promise.all(entries.slice(i, i + width).map(async (e) => { const d = await getDossier(platform, fetch, e.key); return d ? { ...sheetOf(d, e.thumb, e.credit), slug: e.slug } : null; })); // under the index slug, as the build's bucket files are (round seventeen, 6)
       // A species the index lists whose dossier cannot be read is a failure of the bucket, never an absence: left out,
       // a device read it as "not in the reference" (round sixty-two; the corpus review of round sixty, 13, open until now).
       if (got.some((s) => !s)) {

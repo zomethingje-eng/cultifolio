@@ -48,18 +48,17 @@ for (const who of ['grower', 'visitor'] as const) for (const width of [320, 360,
     const page = await ctx.newPage();
     if (who === 'grower') {
       await seeded(page, plants(1), '/today');
-      await page.locator('html[data-grower]').waitFor({ state: 'attached', timeout: 30_000 });
     } else {
       await page.goto('/'); await ready(page);
     }
-    await expect(page.locator('#tabbar a:visible')).toHaveCount(who === 'grower' ? 5 : 4);
+    await expect(page.locator('#tabbar a:visible')).toHaveCount(5); // the grower's five for a visitor too (round sixty-three, V1)
     await page.evaluate(() => document.fonts.ready.then(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))));
     await expect(page.locator('#tabbar')).not.toHaveAttribute('data-icons', '1'); // the first pass: data-icons="1" at 320 and 360, five bare icons
     const labels = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('#tabbar a')].filter((a) => a.offsetParent).map((a) => {
       const s = a.querySelector('span')!;
       return { t: s.textContent, w: s.getBoundingClientRect().width, whole: s.scrollWidth <= s.clientWidth + 1 };
     }));
-    expect(labels.map((l) => l.t)).toEqual(who === 'grower' ? ['Species', 'My plants', 'Places', 'Propagation', 'Today'] : ['Species', 'Compare', 'My plants', 'About']);
+    expect(labels.map((l) => l.t)).toEqual(['Species', 'My plants', 'Places', 'Propagation', 'Today']);
     for (const l of labels) { expect(l.whole, l.t!).toBe(true); expect(l.w, l.t!).toBeGreaterThan(20); }
     await ctx.close();
   });
@@ -97,8 +96,7 @@ for (const who of ['grower', 'visitor'] as const) {
     const seen: string[] = [];
     for (const width of [320, 360, 375, 390, 412]) {
       await page.setViewportSize({ width, height: 780 });
-      if (who === 'grower') await page.locator('html[data-grower]').waitFor({ state: 'attached', timeout: 30_000 });
-      await expect(page.locator('#tabbar a:visible')).toHaveCount(who === 'grower' ? 5 : 4);
+      await expect(page.locator('#tabbar a:visible')).toHaveCount(5); // everyone's five (round sixty-three, V1)
       await page.evaluate(() => document.fonts.ready.then(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))));
       const st = await tabState(page);
       seen.push(`${width}: ${st.icons ? 'icons' : 'labels'}`);
@@ -229,10 +227,13 @@ const PIXEL = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQ
 for (const path of ['/', '/species/copiapoa-cinerea']) {
   test(`r62ba N10: at 390 px, ${path} shifts by less than 0.05 when the web fonts arrive late`, async ({ browser, baseURL }) => {
     test.setTimeout(120_000);
-    // The fallback faces this measures are tuned for Linux's fonts (Liberation, DejaVu). On Windows the front page shifted
-    // 0.107 in the first strict run on the author's PC (the Segoe UI and Georgia faces, which this round did not
-    // measure): an open item in docs/REVIEW-ROUND-62.md, not a pass (round sixty-two, the first deploy).
-    test.skip(process.platform !== 'linux', 'the fallback faces are measured on Linux only; Windows shifted 0.107 on the front page (see docs/REVIEW-ROUND-62.md)');
+    // The fallback faces are tuned for Linux's fonts (Liberation, DejaVu), Windows' (Segoe UI, Georgia, Consolas) and
+    // Apple's (Helvetica Neue, Georgia, Menlo). Windows shifted 0.107 here in round sixty-two's first strict run on the
+    // author's PC: the count beside the title, set in Consolas, wrapped when DM Mono came. Round sixty-three's monospace
+    // faces took it to 0.000, measured with open fonts of the Windows faces' widths under their names, so the test runs
+    // on Windows too; elsewhere the local fonts are not known, and a shift would say nothing about the faces (round
+    // sixty-three, U1).
+    test.skip(!['linux', 'win32', 'darwin'].includes(process.platform), `the fallback faces are tuned for Linux's, Windows' and Apple's fonts, not ${process.platform}'s`);
     const ctx = await browser.newContext({ baseURL, viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, locale: 'en-GB', serviceWorkers: 'block' });
     await ctx.addInitScript(quiet);
     await ctx.addInitScript(() => {

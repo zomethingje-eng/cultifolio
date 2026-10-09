@@ -22,7 +22,7 @@ const metBody = () => JSON.stringify({ properties: { timeseries: [{ time: '2026-
 
 async function spendNws(platform: unknown) {
   let spent = 0;
-  for (let a = 0; spent < SHARE && a < 100; a++) for (let i = 0; i < PART; i++) if ((await upstreamCall(platform as never, ['nws'], `192.0.2.${a}`)).ok) spent++;
+  for (let a = 0; spent < SHARE && a < 100; a++) for (let i = 0; i < PART; i++) if ((await upstreamCall(platform as never, ['nws'], `192.0.${a}.2`)).ok) spent++; // each in its own /24 (round sixty-three; S2)
   expect(spent).toBe(SHARE);
 }
 

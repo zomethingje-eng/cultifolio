@@ -8,6 +8,7 @@
    */
   import { onMount, tick, untrack } from 'svelte';
   import { beforeNavigate } from '$app/navigation';
+  import { keepWorking } from '$lib/ui/grow/example.svelte';
   import PageHead from '$lib/ui/PageHead.svelte';
   import ToggleGroup from '$lib/ui/ToggleGroup.svelte';
   import LocationPicker from '$lib/ui/LocationPicker.svelte';
@@ -170,12 +171,14 @@
     const here = new Set<string>();
     for (const a of collection.accessions) if (a.importKey) here.add(a.importKey);
     const marked = markAlreadyImported(markImported(next, (k) => here.has(k), (id) => !!collection.accession(id) && collection.accession(id)!.id === id), (no) => collection.withNumber('accession', no) as Array<{ taxonName: string; cultivar?: string | null; importKey?: string | null }>);
+    // The ledger is read before the rows are set, so the review and its numbering sentence are drawn together and nothing
+    // above the place box moves under a tap as the plan arrives (round sixty-three, the strict run).
+    ledger = (await getMeta<string[]>('issued:accession').catch(() => undefined)) ?? [];
     const pass = passOf(marked, MAX_ROWS);
     doneN = pass.done;
     laterN = pass.later;
     // A line the grower changed (a name used, a line dropped) keeps the change when the sheet is read again.
     rows = before ? pass.rows.map((r) => { const b = before.get(r.key); return b && !r.done ? { ...r, name: b.name !== b.originalName ? b.name : r.name, drop: b.drop } : r; }) : pass.rows;
-    ledger = (await getMeta<string[]>('issued:accession').catch(() => undefined)) ?? [];
     replan();
     await recheck();
     if (again) {
@@ -280,7 +283,9 @@
     adding = { done: 0, total: plantsN }; // in plants, as the button counts them
     status = `Adding ${plantsN} plant${plantsN === 1 ? '' : 's'}…`;
     try {
-      result = await commitImport(rows, checks, plan, { makePlaces, lastWatered: lastWatered || null, onProgress: (done, total) => (adding = { done, total }) });
+      // No page goes into the example collection (a full load) while the plants are added (round sixty-three, the fix pass; R1, 2).
+      const p = plan;
+      result = await keepWorking(() => commitImport(rows, checks, p, { makePlaces, lastWatered: lastWatered || null, onProgress: (done, total) => (adding = { done, total }) }));
       // A sheet with lines past this pass keeps the file: "Check names" again reads the next lines, the ones added now being here.
       if (!result.failed) { rows = []; plan = null; reviewedWith = ''; if (!laterN) { text = ''; sheet = null; fileName = ''; } }
       else {
@@ -420,6 +425,9 @@
     {#if otherLineRows.length}<p class="small notice" id="imp-other-line">{otherLineRows.length === 1 ? 'One line has' : `${otherLineRows.length} lines have`} the number and name of a plant an earlier import added from another line ({otherLineRows.slice(0, 6).map((r) => `line ${r.line}`).join(', ')}{otherLineRows.length > 6 ? ', …' : ''}): added under the next free number. Drop {otherLineRows.length === 1 ? 'it' : 'any'} if it is the same plant.</p>{/if}
     {#if hereRenumbered.length}<p class="small" id="imp-renumbered">{hereRenumbered.length === 1 ? 'One number given is' : `${hereRenumbered.length} numbers given are`} already used here: {hereRenumbered.length === 1 ? 'that plant gets' : 'those plants get'} the next free number ({hereRenumbered.slice(0, 6).map((x) => `${x.given} → ${x.got}`).join(', ')}{hereRenumbered.length > 6 ? ', …' : ''}).</p>{/if}
     {#if inFileRenumbered.length}<p class="small" id="imp-dupes">{inFileRenumbered.length === 1 ? 'One number is' : `${inFileRenumbered.length} numbers are`} given twice in this sheet: the first line keeps it, and the later one gets the next free number ({inFileRenumbered.slice(0, 6).map((x) => `line ${x.line}, as on line ${x.inFile}: ${x.given} → ${x.got}`).join('; ')}{inFileRenumbered.length > 6 ? '; …' : ''}).</p>{/if}
+    <!-- Which numbering a renumbered line follows (round sixty-three; the round-sixty grower review, 10), from the number it
+         truly carried on from, and a line's further plants with it (the fix pass, R2 3 to 6). -->
+    {#if plan && ((plan.renumbered.length && (plan.onFrom || plan.mixed || plan.own)) || (plan.extrasOn && plan.onFrom))}<p class="small" id="imp-numbered-on">{plan.onFrom ? `${plan.renumbered.length && plan.extrasOn ? 'Renumbered lines, and the further plants of a line of several,' : plan.renumbered.length ? 'Renumbered lines' : 'The further plants of a line of several'} carry on your sheet's own numbering, from ${plan.onFromHere ? `the highest number of that kind here, ${plan.onFrom}` : `its highest number, ${plan.onFrom}`}.` : plan.own ? 'Renumbered lines take this collection\'s next number by its own rule, since your sheet is numbered as this collection numbers.' : 'Renumbered lines take this collection\'s next number, since the numbers in your sheet do not all follow one pattern (the same letters before the digits, and either as many digits or none padded with a leading 0).'}</p>{/if}
     {#if loose.paths && rows.length}<label class="small makeplaces"><input type="checkbox" id="imp-paths" checked={pathsOn} onchange={(e) => (pathsAnswer = (e.currentTarget as HTMLInputElement).checked)} /> Read &gt; and / as a path, as in {loose.example} ({loose.paths === 1 ? 'one place' : `${loose.paths} places`} in this sheet); unticked, each is one place by that whole name</label>{/if}
     {#if toMake.length}<label class="small makeplaces"><input type="checkbox" id="imp-make-places" bind:checked={makePlaces} /> Make {toMake.length === 1 ? 'this place' : `these ${toMake.length} places`}, which {toMake.length === 1 ? 'is' : 'are'} not here yet: {toMake.map((p) => p.join(' › ')).join(', ')}</label>{/if}
     <div class="reviewopts">

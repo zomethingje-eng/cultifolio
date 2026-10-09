@@ -12,6 +12,7 @@
  * agree on a state neither of them ever set.
  */
 import { hlcCompare, isHlc, isPastStamp, MAX_AHEAD_MS } from './hlc';
+import { isRecordedTime } from './when';
 
 export const KINDS = ['accession', 'sowing', 'location', 'event', 'photo', 'taxon', 'setting'] as const;
 export type Kind = (typeof KINDS)[number];
@@ -23,6 +24,13 @@ export interface Change {
   id: string;
   field: string;
   value: unknown; // JSON-serialisable; `undefined` never appears, use null
+  /**
+   * The writer's corrected clock when it wrote the change, in ms (round sixty-three; outside review B9). Information only:
+   * no fold, hold or park reads it, so a log folds the same with it or without it. A marked stamp (`isPastStamp`) says
+   * nothing of when the change was made, and this does (`shownTime` in $core/when). Absent on changes written before
+   * round sixty-three.
+   */
+  w?: number;
 }
 
 export type Record_ = { id: string; kind: Kind; _t: string; _deleted?: boolean; [k: string]: unknown };
@@ -152,6 +160,9 @@ export function readChanges(rows: unknown): { changes: Change[]; dropped: string
     if (shape) throw new Error(`change ${i}: ${shape}`);
     const e = changeError(c);
     if (e) dropped.push(`change ${i}: ${e}`);
+    // A recorded time this build cannot read is left off and the change kept: it is information only, and a change is
+    // never refused or set aside for it (round sixty-three).
+    else if ('w' in (c as object) && !isRecordedTime((c as Change).w)) { const { w: _w, ...rest } = c as Change; void _w; kept.push(rest); }
     else kept.push(c as Change);
   }
   return { changes: kept, dropped };

@@ -110,3 +110,11 @@ The `--names` step ran on the PC while the deploy was still stopped: 8,947 dossi
 Deployed on 9 October 2026 as Worker version `b66c973e-a246-444c-9232-e6d3ad604ea7`, after the unit suite passed on the PC (1,829 passing, 1 skipped) and the live check passed 18 of 18; the corpus `8a9396b6d10f0d45` (the `--names` step's names, with a genus named alone set back) was uploaded after it, and the live check passed 18 of 18 again.
 
 The strict browser run before it, on the PC with two workers: 294 tests, 286 passing, 4 skipped (the two Linux-only font tests, and two 200%-text tests whose preference Windows' bundled browser does not take), and 2 flaky, so the script said not to deploy and the deploy went ahead on the author's judgement. One flake was a test fault: a page the service worker had come to control fetched past the test's `page.route`, so the sheets request the test held back reached the server (r62a, "still reading the species sheets"). Every spec that answers requests with `page.route` now blocks the service worker, as the picker specs already did. The other, r61a a11y-perf 2, timed out loading its first page and passed on its retry; no cause is established, and it is watched.
+
+## 14. Corrections (round sixty-three)
+
+- **Section 7's first-screen claim was wrong on the owner's phone.** "the search, the grouping and a row are above the tab bar at 390 × 844" held at 390 × 844, which is the iPhone's whole screen; Safari's page is about 390 × 664, and there the tab bar began under the chips and no row showed. Round sixty-three measures at 390 × 664, 375 × 548 and 360 × 640 (`r63v-first-screen`) and draws the phone's strip after the first rows.
+- **Section 11's QA probes** are removed, not kept stale.
+- **Section 13's count of the PC's strict run:** r61a a11y-perf 7 counted as passed, but Windows' bundled Chromium ignores the profile's text size, so it most likely ran at 16 px and tested nothing (inferred from the two tests skipped for that reason; the test now sets the size through CDP and skips with its reason if neither takes).
+- **Section 13's watched flake** (r61a a11y-perf 2) has a cause: the run began at the server's open port, before the Worker answered. Round sixty-three waits for the front page's answer.
+- **Section 12's "B1's first screen on a phone"** was checked by the owner after the deploy and failed (above).

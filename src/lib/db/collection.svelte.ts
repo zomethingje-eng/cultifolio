@@ -26,6 +26,8 @@ async function writeErrorText(e: unknown): Promise<string> {
 /** How far ahead of the corrected clock a held stamp may be for a local edit to its field to be stamped just past it (round fifty-one, 1). */
 export const FOLLOW_HELD_MS = 86_400_000;
 import { tag36 } from '$core/tag';
+import { isRecordedTime } from '$core/when';
+import { byNumberNewest } from './number-order';
 import { storageErrorText } from './storage-error';
 import { replacedNotes as replacedNotesIn, type ReplacedNotes } from '$core/notes';
 import { apply, diff, readChanges, changeError, isComplete, isHeld, REQUIRED_FIELDS, KINDS, FOLD_RULES, key as recKey, type Change, type Kind, type Record_, type State, type Hold, hlcWall } from '$core/log';
@@ -326,7 +328,7 @@ class Collection {
    * list, Today and the search each read `accessions` several times a keystroke, and each read scanned and sorted every
    * record. The arrays are shared: a reader that wants its own order copies first.
    */
-  private accessionsSorted = $derived.by(() => this.live<Accession>('accession').sort((a, b) => accNo(b).localeCompare(accNo(a))));
+  private accessionsSorted = $derived.by(() => this.live<Accession>('accession').sort((a, b) => byNumberNewest(accNo(a), accNo(b)))); // digit runs as numbers: A95, A94, A77, A9 (round sixty-three; the round-sixty grower review, 10)
   get accessions(): Accession[] {
     return this.accessionsSorted;
   }
@@ -688,9 +690,49 @@ class Collection {
     if (ev) this.eventsByAcc = ev;
     if (ph) this.photosByAcc = ph;
   }
-  /** A plant's (or batch's) events, newest first. */
+  /** A plant's (or batch's) events, newest first, one number repair said once (`onceEach`; round sixty-three). */
   events(acc: string): PlantEvent[] {
-    return this.eventsByAcc.get(acc) ?? [];
+    const list = this.eventsByAcc.get(acc);
+    return list ? onceEach(list) : [];
+  }
+  /**
+   * The other lines saying the same number repair as the event `id` (`onceEach`), removed or not as asked: a line shown
+   * once is removed and brought back with its twins, or removing it showed the twin it stood for (round sixty-three).
+   */
+  private renumberTwins(id: string, removed: boolean): string[] {
+    const e = this.state.get(recKey('event', id)) as unknown as PlantEvent | undefined;
+    if (!e || !isRenumberNote(e)) return [];
+    const out: string[] = [];
+    for (const r of this.kinds.event.values()) {
+      const x = r as unknown as PlantEvent;
+      if (r.id !== id && !!r._deleted === removed && x.acc === e.acc && isRenumberNote(x) && x.note === e.note) out.push(r.id);
+    }
+    return out;
+  }
+  /**
+   * The day to show for each line of a record whose date the app took from a stamp placed past another (`isPastStamp`):
+   * the number repair's note on a record whose latest stamp is marked is dated by that record's clock-read stamps, and its
+   * stamp says only where it sits. Such a line written since round sixty-three carries its recorded time (`w`), and the
+   * day shown is that time's: the day the repair was written (round sixty-three; outside review B9). A line without one
+   * reads as before; a date the grower gave is never replaced. By event id.
+   */
+  async recordedLineDates(acc: string): Promise<Map<string, string>> {
+    const want = new Map<string, string>(); // stamp of the line's date -> the line
+    for (const e of this.events(acc)) {
+      const t = this.seen.get(recKey('event', e.id) + '\0d');
+      // Only the repair writes a date it derived from stamps, under its own writer tag ('zz', which no device id starts with).
+      if (t && isPastStamp(t) && hlcDecode(t).device.startsWith('zz')) want.set(t, e.id);
+    }
+    const out = new Map<string, string>();
+    if (!want.size) return out;
+    for (const [t, w] of await this.recordedTimes([...want.keys()])) out.set(want.get(t)!, localDate(new Date(w)));
+    return out;
+  }
+  /** The recorded times (`w`) of those of `stamps` that are marked and carry one, read from the log: what the app shows for a marked change's time (round sixty-three). */
+  async recordedTimes(stamps: string[]): Promise<Map<string, number>> {
+    const marked = stamps.filter(isPastStamp);
+    if (!marked.length) return new Map();
+    return new Map((await changesByKeys(marked)).filter((c) => isRecordedTime(c.w)).map((c) => [c.t, c.w as number]));
   }
   private taxaLive = $derived.by(() => this.live<Taxon>('taxon'));
   get taxa(): Taxon[] {
@@ -1093,12 +1135,12 @@ class Collection {
    * (`isPastStamp`): its wall is that stamp's, which may be a year ahead, and says nothing of when the removal was made, so
    * the engine takes the earlier of it and when this device first saw the removal (round sixty-two; the clock review's 15).
    */
-  removedPhotos(): Array<{ id: string; at: number; marked?: boolean }> {
-    const out: Array<{ id: string; at: number; marked?: boolean }> = [];
+  removedPhotos(): Array<{ id: string; at: number; marked?: boolean; t?: string }> {
+    const out: Array<{ id: string; at: number; marked?: boolean; t?: string }> = [];
     for (const r of this.state.values()) {
       if (r.kind !== 'photo' || !r._deleted) continue;
       const t = this.seen.get(recKey('photo', r.id) + '\0_deleted');
-      out.push(t && isPastStamp(t) ? { id: r.id, at: hlcWall(t), marked: true } : { id: r.id, at: t ? hlcWall(t) : 0 });
+      out.push(t && isPastStamp(t) ? { id: r.id, at: hlcWall(t), marked: true, t } : { id: r.id, at: t ? hlcWall(t) : 0 });
     }
     return out;
   }
@@ -1412,7 +1454,11 @@ class Collection {
    */
   private stampPast(changes: Change[]): Change[] {
     const given = new Set<string>(); // the stamps given out in this commit: two fields bumped past stamps that differ only by writer must not land on one stamp (round twelve, 4)
+    // Beside each stamp, the corrected clock at writing (round sixty-three; outside review B9): a stamp placed past another
+    // says only where the change sits in the order, and this says when it was made. Information only: no fold reads it.
+    const at = nowMs();
     for (const c of changes) {
+      c.w = at;
       const k = recKey(c.kind, c.id);
       let prev = this.seen.get(k + '\0' + c.field); // the fold's own key: record, NUL, field
       // Whether a record is deleted is decided against its latest edit to any field, so a removal must clear that too.
@@ -1515,7 +1561,8 @@ class Collection {
   }
 
   async remove(kind: Kind, id: string): Promise<void> {
-    await this.commit([{ t: this.tick(), kind, id, field: '_deleted', value: true }]);
+    const ids = [id, ...(kind === 'event' ? this.renumberTwins(id, false) : [])]; // a repair's note shown once goes with its twins (round sixty-three)
+    await this.commit(ids.map((x) => ({ t: this.tick(), kind, id: x, field: '_deleted', value: true })));
   }
 
   /**
@@ -1527,7 +1574,12 @@ class Collection {
   async restore(kind: Kind, id: string): Promise<{ from: string; to: string; unknown?: boolean } | null> {
     const back: Change = { t: this.tick(), kind, id, field: '_deleted', value: false };
     const rec = this.state.get(recKey(kind, id));
-    if ((kind !== 'accession' && kind !== 'sowing') || !rec) { await this.commit([back]); return null; }
+    if ((kind !== 'accession' && kind !== 'sowing') || !rec) {
+      // A repair's note shown once comes back with the twins it was removed with (round sixty-three).
+      const twins = kind === 'event' ? this.renumberTwins(id, true).map((x): Change => ({ t: this.tick(), kind, id: x, field: '_deleted', value: false })) : [];
+      await this.commit([back, ...twins]);
+      return null;
+    }
     // A record coming back yields its number only to a record made while it was away: one that held the number before
     // the removal (two devices gave it out offline) is the duplicate the grower already had, which the record pages offer
     // to renumber with the keeper chosen by first stamp; renumbering the restored one here reversed that choice, without
@@ -1876,7 +1928,11 @@ class Collection {
           // The fold's own stamp map and the held inventory too: a snapshot load has not read the stamps it restored (the first reviewer's finding 11).
           if (this.applied.has(stamp(0)) || this.heldStamps.has(stamp(0)) || this.seen.get(recKey(kind, r.id) + '\0' + (kind === 'accession' ? 'acc' : 'no')) === stamp(0)) continue;
           changes.push({ t: stamp(0), kind, id: r.id, field: kind === 'accession' ? 'acc' : 'no', value: fresh });
-          const eid = 'e' + (marked ? base.wall + 1 : wall).toString(36) + '00' + device;
+          // The note's identity is the repair's own (the record, the number it had and the number it gets), not the stamp's:
+          // two devices that repair from logs that differ (one has seen a later edit of the record) place their stamps
+          // apart, and named by the stamp their two notes were two lines saying the same thing (round sixty-three; round
+          // sixty-two's section 11). The underscore keeps `madeOn` from reading a day out of it.
+          const eid = 'e_' + tag36(`renumber:${kind}:${r.id}:${no}:${fresh}`);
           // The day is taken in UTC, not the reader's zone: two devices in different zones must write the identical note, or the one that arrives second wins by chance.
           const note = { acc: r.id, d: when.toISOString().slice(0, 10), t: 'note', note: `Renumbered from ${no} to ${fresh}: another ${kind === 'accession' ? 'plant' : 'batch'}, recorded first, had been given ${no} (on another device, or in a file merged in).` };
           let count = 1;
@@ -1913,6 +1969,35 @@ class Collection {
 function markedPast(base: { wall: number; count: number }, count: number, device: string): string {
   const n = (base.count & (PAST_BIT - 1)) + 1 + count;
   return n < PAST_BIT ? hlcEncode({ wall: base.wall, count: PAST_BIT | n, device }) : hlcEncode({ wall: base.wall + 1, count: PAST_BIT | count, device });
+}
+
+/** Whether a line is a note the app wrote for a change of number ("Renumbered from …"): the repair's, or a return's. */
+const isRenumberNote = (e: PlantEvent): boolean => e.t === 'note' && typeof e.note === 'string' && e.note.startsWith('Renumbered from ');
+const collapsed = new WeakMap<PlantEvent[], PlantEvent[]>();
+/**
+ * A record's lines with each number repair said once (round sixty-three; round sixty-two's section 11). Two devices of
+ * different builds that both pressed "Renumber now" wrote two notes for one repair, under two identities and perhaps two
+ * days: the words are the same (the number it had and the number it got), and the record is right. Lines with the same
+ * words are one line here, the earliest dated (a note dated a year ahead is a fast clock's); nothing is written. Read
+ * once per list: the lists are replaced, never changed in place, when a record of theirs folds.
+ */
+function onceEach(list: PlantEvent[]): PlantEvent[] {
+  let out = collapsed.get(list);
+  if (out) return out;
+  let n = 0;
+  for (const e of list) if (isRenumberNote(e)) n++;
+  if (n < 2) out = list;
+  else {
+    const keep = new Map<string, PlantEvent>();
+    for (const e of list) {
+      if (!isRenumberNote(e)) continue;
+      const h = keep.get(e.note!);
+      if (!h || e.d < h.d || (e.d === h.d && e.id < h.id)) keep.set(e.note!, e);
+    }
+    out = keep.size === n ? list : list.filter((e) => !isRenumberNote(e) || keep.get(e.note!) === e);
+  }
+  collapsed.set(list, out);
+  return out;
 }
 
 export const collection = new Collection();

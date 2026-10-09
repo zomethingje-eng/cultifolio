@@ -9,6 +9,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import zlib from 'node:zlib';
 import { inject } from './helpers/inject';
+import { textSize } from './helpers/text-size';
 
 // The service worker is not under test here; once it controls a page its fetches pass by `page.route` (flaky in the first
 // deploy's strict run on Windows; round sixty-two).
@@ -60,14 +61,15 @@ test.describe('phone', () => {
     // photograph is the same species (this comment put right in round sixty-two; the verification triage-self review N8).
     await expect(page.locator('section.feature')).toBeHidden();
     await expect(page.locator('.featured .strip a').first()).toHaveAttribute('href', /\/species\//); // the strip's first photograph is the featured species
-    expect(await top('.featured')).toBeLessThan(await top('.toolrow .searchbar'));
+    // On a phone the strip follows the first rows since round sixty-three (V4; the first screen is measured at Safari's page size in r63v-first-screen.spec.ts).
+    expect(await top('section.featured:visible')).toBeGreaterThan(await top('.rows .grow'));
     expect(await top('.toolrow .searchbar')).toBeLessThan(844); // on the first screen
     expect(await top('.rows .grow')).toBeLessThan(844); // and the first row
-    // the sample first in the welcome line
+    // the example first in the welcome line's ways in (round sixty-three, V2)
     const welcome = await page.locator('#welcome').innerText();
-    expect(welcome.indexOf('Try a sample collection')).toBeGreaterThan(-1);
-    expect(welcome.indexOf('Try a sample collection')).toBeLessThan(welcome.indexOf('add your first plant'));
-    expect(welcome).toContain('kept on this device unless you sync');
+    expect(welcome.indexOf('See the example collection')).toBeGreaterThan(-1);
+    expect(welcome.indexOf('See the example collection')).toBeLessThan(welcome.indexOf('add your first plant'));
+    expect(welcome).toContain('on this device');
   });
 
   test('Enter on a number two plants share opens the chooser at that number, not one of the two (records 4)', async ({ page }) => {
@@ -167,7 +169,7 @@ test('at 320 px with 200% text, the refusal pills wrap rather than being cut (a1
     await page.goto('/species/refusia-testii'); await ready(page);
     // The preference first, the layout after: a browser that does not read the profile's text size says nothing about
     // the pills at 200%, and is not a failure of them (round sixty-two; outside review B14).
-    const text = await page.evaluate(() => getComputedStyle(document.documentElement).fontSize);
+    const text = await textSize(page, 32); // the profile, or CDP where Windows' bundled Chromium ignores it (round sixty-three; harness H4)
     test.skip(text !== '32px', `preference not applied by this browser (its text is ${text}, not 32px)`);
     const [s, c] = await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]);
     expect(s).toBeLessThanOrEqual(c);

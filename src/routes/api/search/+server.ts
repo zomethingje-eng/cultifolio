@@ -52,7 +52,7 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   const c = await corpusNow(platform, fetch);
   const headers = (corpus: string) => ({ 'cache-control': asked === corpus ? `public, max-age=${CACHE_S}` : 'no-store' });
   const edge = platform?.caches?.default;
-  const key = new Request(`https://cache.cultifolio/search4?c=${encodeURIComponent(c.corpus)}&n=${n}&q=${encodeURIComponent(q)}`); // the case kept: an author citation is read by its capitals; search4: answers kept before the second pass of round sixty-two's readings are not served
+  const key = new Request(`https://cache.cultifolio/search5?c=${encodeURIComponent(c.corpus)}&n=${n}&q=${encodeURIComponent(q)}`); // the case kept: an author citation is read by its capitals; search5: answers kept before round sixty-three's similar-spelling rule (N3) are not served
   const shaped = url.searchParams.get('shape') === '2';
   // `near`: the hits came by a similar spelling, so the picker can say "similar spelling" (round sixty-two; A7, B2).
   // `relaxed.left`: the reading matched and left these typed words out (an author, a cultivar, "sp."), where a relaxed

@@ -41,10 +41,10 @@ test('r62bg 1: a Leave answered Cancel is called off: the button comes back at o
   await page.fill('#ed-price', '12');
   let asked = '';
   page.once('dialog', (d) => { asked = d.type(); void d.dismiss(); });
-  await page.getByRole('button', { name: 'Leave the sample' }).click();
+  await page.getByRole('button', { name: 'Leave the example' }).click();
   await expect.poll(() => asked).toBe('beforeunload');
   // At once, not after 4 s under "Leaving…" (base: disabled and "Leaving…" for 4 s).
-  await expect(page.getByRole('button', { name: 'Leave the sample' })).toBeEnabled({ timeout: 1500 });
+  await expect(page.getByRole('button', { name: 'Leave the example' })).toBeEnabled({ timeout: 1500 });
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.locator('main')).toContainText('12');
   expect(await page.evaluate(() => sessionStorage.getItem('cultifolio.demo'))).toBe('1');

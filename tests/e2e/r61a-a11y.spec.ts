@@ -10,6 +10,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { inject as injectRows } from './helpers/inject';
 import { framesSettled } from './helpers/settled';
+import { textSize, textSizeHeld } from './helpers/text-size';
 
 async function ready(p: Page) {
   await p.locator('html[data-ready]').waitFor({ state: 'attached' });
@@ -151,19 +152,25 @@ test('r61a a11y-perf 7: at 320 px with 200% text, the Wanted note form, Today\'s
     const page = ctx.pages()[0] ?? (await ctx.newPage());
     await page.addInitScript(() => { try { localStorage.setItem('cultifolio.persistAfterFirst', '1'); sessionStorage.setItem('cultifolio.backupNudgeHidden', '1'); } catch { /* fine */ } });
     await page.goto('/plants'); await ready(page);
+    // The text size first: Windows' bundled Chromium does not read the profile, and this test passed there at 16 px (round sixty-three; harness H4).
+    const text = await textSize(page, 32);
+    test.skip(text !== '32px', `preference not applied by this browser (its text is ${text}, not 32px)`);
     await inject(page, [...plants(2), ['taxon', 'refusia-testii', 'name', 'Refusia testii'], ['taxon', 'refusia-testii', 'followed', true]]);
     const wide: string[] = [];
     const sideways = async (label: string) => { const [s, c] = await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]); if (s > c) wide.push(`${label} ${s}>${c}`); };
     await page.goto('/plants'); await ready(page);
+    await textSizeHeld(page, 32, '/plants'); // on every page measured, not the first alone (round sixty-three; R3 5)
     // The sort shows its whole option: the select is as wide as its words, or the row.
     const sort = await page.locator('#plants-sort').evaluate((el) => { const s = el as unknown as HTMLSelectElement; return { w: s.clientWidth, sw: s.scrollWidth, row: s.parentElement!.clientWidth }; });
     expect(sort.w).toBeGreaterThan(100);
     await page.locator('#wanted button.linkish').first().click();
     await sideways('Wanted form');
     await page.goto('/today'); await ready(page);
+    await textSizeHeld(page, 32, '/today');
     await page.locator('#calendar summary').click();
     await sideways('calendar');
     await page.goto('/plants'); await ready(page);
+    await textSizeHeld(page, 32, '/plants, to move');
     await page.locator('#select-toggle').click(); await page.locator('.selrow input').first().check(); await page.locator('#sel-move').click();
     await sideways('select: move');
     expect(wide).toEqual([]);

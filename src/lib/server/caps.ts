@@ -13,3 +13,13 @@ export const UPSTREAM_ADDRESS_PART = 0.1;
  * thirty-eight, R1-8; round fifty-eight).
  */
 export const NET_FACTOR = 4;
+
+/**
+ * The part of each service's share kept, in every minute, for networks new to it (round sixty-three; S2): once the
+ * rest is spent, a network (an IPv4 /24 or an IPv6 /48) that has made `UPSTREAM_RESERVE_EACH` calls to that service in
+ * the minute is held back, and one that has made fewer may make up to that many. Ten addresses could spend a whole share
+ * before; now it takes at least 77 different networks (two at the network limit for the open part, and 75 more at two
+ * calls each for the reserve).
+ */
+export const UPSTREAM_RESERVE_PART = 0.25;
+export const UPSTREAM_RESERVE_EACH = 2;

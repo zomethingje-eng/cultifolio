@@ -40,12 +40,17 @@
  * the day of its last upload for that. The site's own calls to other services are counted here too, in the object named
  * "upstream" (`upstream`), so the cap on them is one for the whole site.
  *
+ * Round sixty-three: a vault's object also keeps the photographs a removal or a store of a removed photograph has marked
+ * (`u:<name>`), and its alarm removes their generations that nothing names (`photoSweep`), so such bytes no longer wait
+ * for that photograph's next touch. The shares of outside calls keep a reserve for networks new to the minute (`upstream`).
+ *
  * Attached to the Worker by scripts/attach-do.mjs after the SvelteKit build (the adapter's worker exports only the app),
  * and bound as COUNTERS in wrangler.jsonc with a `new_sqlite_classes` migration. Without the binding the KV path in
  * `allowCreation` is used, which is bounding, not accounting.
  */
 import { DurableObject } from 'cloudflare:workers';
-import { NET_FACTOR, UPSTREAM_ADDRESS_PART } from './caps';
+import { NET_FACTOR, UPSTREAM_ADDRESS_PART, UPSTREAM_RESERVE_PART, UPSTREAM_RESERVE_EACH } from './caps';
+import { unnamedGenerations, receipt, STRAY_MS, PointerUnreadable } from './photogen';
 
 export type Creation = 'ok' | 'address' | 'day' | 'total' | 'unavailable';
 const DAY_MS = 86_400_000;
@@ -404,6 +409,8 @@ export class Counters extends DurableObject {
     // A sweep that read its page budget and stopped short runs again in a second, from where it stopped (round sixty-one;
     // the server review, 8: an object grown past what one listing can hold failed its alarm and was never swept).
     if ((await this.sweepRun(now)).more) { await this.ctx.storage.setAlarm(now + SWEEP_AGAIN_MS); return; }
+    // Then the photographs marked as possibly holding unnamed bytes, a page at a time (round sixty-three; S1).
+    if ((await this.photoSweep(now)).more) { await this.ctx.storage.setAlarm(now + SWEEP_AGAIN_MS); return; }
     // Woken again only while something sweepable remains: a vault's object always keeps its total and its generation, and
     // the vaults object its `all`, so "anything stored" woke every one of them at every midnight for good (round sixty;
     // the first outside review, A22). The next write of a sweepable key sets the alarm again. A vault's place (`f:`) is
@@ -521,22 +528,141 @@ export class Counters extends DurableObject {
   }
 
   /**
+   * A photograph is about to be given a step that can leave bytes nothing names (round sixty-three; S1): a removal about
+   * to move its pointer to a receipt (its bytes are deleted after), or an upload about to store a new generation of a
+   * removed photograph (its pointer is moved after). Either can be cut off between its two writes. The mark is written
+   * first, while the caller holds the name, so a step cut off anywhere after it is known to this object, whose alarm then
+   * removes what is unnamed (`photoSweep`). Before, such bytes went only at the photograph's next touch, and a photograph
+   * never touched again kept them, counted against the vault's 2 GB, for good.
+   */
+  async markUnnamed(name: string, now = Date.now()): Promise<void> {
+    await this.ctx.storage.put({ [`u:${name}`]: { at: now } satisfies Mark });
+    await this.wake(now);
+  }
+  /**
+   * The sweep of unnamed photograph bytes (round sixty-three; S1), run by this vault's own alarm after the key sweep. It
+   * reads only the photographs marked (`u:<name>`), so a vault with no removal and no re-store costs nothing, and at most
+   * `PHOTO_SWEEP_PAGE` of them a run, from a cursor (`s:u:`), the rest a second later. A mark is looked at once it is
+   * `STRAY_MS` old: the photograph's pointer is read and its generations listed (one read and one listing), and each
+   * generation the pointer does not name and that is at least `STRAY_MS` old is removed as a removal removes (`strayOff`).
+   * A photograph whose name is held (an upload or a removal of it is under way) is left, and so is one with an unnamed
+   * generation younger than that (an upload may be between writing its bytes and naming them); the mark stays for the
+   * next run. A mark goes only when its photograph has nothing unnamed left. Without the bucket bound (a test's object)
+   * nothing is read.
+   *
+   * A photograph that could not be read (its pointer could not be read, or the bucket failed) keeps its mark and loses
+   * nothing; a mark kept that way on `MARK_FAULT_NIGHTS` nights, with no new mark between, is dropped at the next, its
+   * photograph's name logged once, so one photograph the bucket cannot read does not wake the vault's object every
+   * midnight for good (round sixty-three; R3 8). Its bytes, if any are unnamed, then go at the photograph's next touch, as
+   * before this round. A night the name was held or a generation was too young to judge is not counted: the sweep did
+   * not fail to read then. Each hold is dated by the time it is taken, not the run's start, so a slow page does not write
+   * holds that have already lapsed (R3 6); the age of a generation is still judged from the run's start, which only
+   * leaves more.
+   */
+  private async photoSweep(now: number): Promise<{ more: boolean }> {
+    const r2 = (this.env as { STORE?: R2Bucket } | undefined)?.STORE;
+    if (!r2) return { more: false };
+    const started = Date.now();
+    const clock = () => now + Math.max(0, Date.now() - started);
+    const kc = 's:u:';
+    const after = (await this.ctx.storage.get<string>([kc])).get(kc);
+    const page = await this.ctx.storage.list<Mark>({ prefix: 'u:', limit: PHOTO_SWEEP_PAGE, ...(after ? { startAfter: after } : {}) });
+    let last: string | undefined;
+    for (const [k, m] of page) {
+      last = k;
+      const at = m && typeof m === 'object' && typeof m.at === 'number' ? m.at : 0;
+      if (now - at < STRAY_MS) continue;
+      const r = await this.sweepPhoto(r2, k.slice(2), now, clock);
+      if (r === 'keep') continue;
+      // Changed only if no newer mark came while the bucket was read (a mark is written by a holder of the name, which
+      // the sweep was, so none should; the check costs nothing).
+      const still = (await this.ctx.storage.get<Mark>([k])).get(k);
+      if (!still || still.at !== at) continue;
+      if (r === 'done') { await this.ctx.storage.delete([k]); continue; }
+      const day = dayOf(now), nights = typeof still.n === 'number' ? still.n : 0;
+      if (still.d === day) continue; // this night is counted already (a run again a second later)
+      if (nights >= MARK_FAULT_NIGHTS) {
+        console.error(`counters: the photograph ${k.slice(2)} could not be read by the sweep on ${nights} nights; its mark is dropped, and anything unnamed goes at its next touch`);
+        await this.ctx.storage.delete([k]);
+      } else await this.ctx.storage.put({ [k]: { at, n: nights + 1, d: day } satisfies Mark });
+    }
+    // A short page is the end; a stand-in that ignores `startAfter` hands back the same page, which ends it too.
+    const end = page.size < PHOTO_SWEEP_PAGE || !last || last === after;
+    if (end) await this.ctx.storage.delete([kc]);
+    else await this.ctx.storage.put({ [kc]: last! });
+    return { more: !end };
+  }
+  /**
+   * One marked photograph: 'done' when nothing unnamed is left, 'keep' when the mark must stay for a later run, 'fault'
+   * when it must stay because the photograph could not be read (counted towards `MARK_FAULT_NIGHTS`). `clock` dates the
+   * holds; `now`, the run's start, judges the generations' age.
+   */
+  private async sweepPhoto(r2: R2Bucket, name: string, now: number, clock: () => number = () => now): Promise<'done' | 'keep' | 'fault'> {
+    // Held as an upload or a removal holds it, so neither runs while the sweep reads and deletes (they are asked to wait
+    // ten seconds, as for any busy photograph).
+    const h = await this.hold(name, clock());
+    if (!h.ok) return 'keep';
+    try {
+      // A pointer that cannot be read throws (round sixty-three; R3 2): it is not known what it names, so nothing goes.
+      const found = await unnamedGenerations(r2, name, now);
+      if (!found) return 'done'; // no pointer: the first generation is the photograph, and nothing else was ever stored
+      for (const key of found.old) {
+        if (!(await this.renew(name, h.token, clock()))) return 'keep';
+        await this.strayOff(r2, key, now);
+      }
+      return found.young ? 'keep' : 'done';
+    } catch (e) {
+      if (e instanceof PointerUnreadable) console.error("counters: a photograph's pointer could not be read; nothing of it is removed, and its mark is kept for the next run", e);
+      else console.error("counters: a photograph's unnamed generations could not be swept; its mark is kept for the next run", e);
+      return 'fault';
+    } finally {
+      await this.unhold(name, h.token);
+    }
+  }
+  /**
+   * Remove one unnamed generation and give its bytes back, crash-consistent as a removal is (round sixty-two; A24): a
+   * removal lease of no bytes before the delete, so a listing made meanwhile is not believed; the give-back once, under
+   * the object's receipt, with the lease, in one step. A run stopped between the delete and the give-back leaves the
+   * lease, which lapses in ten minutes and marks the total stale, so the next upload lists the vault again; and the mark,
+   * so the next run finds nothing left and ends it. The meta's snapshot of the bytes is not written here: it lags by
+   * design (`flushMeta`) and is put right by the next listing.
+   */
+  private async strayOff(r2: R2Bucket, key: string, now: number): Promise<void> {
+    const o = await r2.head(key);
+    if (!o) return;
+    const token = receipt(key, o);
+    await this.removing(token, now);
+    await r2.delete(key);
+    await this.give('vault', o.size, dayOf(now), token);
+  }
+
+  /**
    * The site's own calls to other services, one share a minute for each (MET Norway, the NWS, GBIF), for every address
    * together, and one address (an IPv4 address or an IPv6 /64) at most `UPSTREAM_ADDRESS_PART` of a share, an IPv6 /48 four
    * times that. All of `services` are taken or none (a US forecast is two calls). Counted in this object's memory, in
    * the one object named "upstream", so it is site-wide, which KV counted per isolate was not (round sixty-one; the
    * server review, 4; B13): a restart of the object (a deploy) forgets at most the current minute.
+   *
+   * Round sixty-three (S2; deferred in the triage of round sixty-one: ten addresses could spend a share): `net` is the
+   * network around the address, an IPv4 /24 as well as an IPv6 /48, and the last `UPSTREAM_RESERVE_PART` of each share is
+   * kept for networks new to the minute. Past the rest, a network (or, with none, the address) that has already made
+   * `UPSTREAM_RESERVE_EACH` calls to that service in the minute is held back as `reserve`, said as the rest being kept
+   * for others (the server review of the round, R3 1: it was said as the site's calls used up, while up to a quarter of
+   * them were still open); one that has made fewer may make up to that many. A call with no address counts the share alone.
    */
-  async upstream(services: string[], share: number, address: string | null = null, net: string | null = null, now = Date.now()): Promise<{ ok: true } | { ok: false; who: 'site' | 'address'; service: string; retryAfter: number }> {
+  async upstream(services: string[], share: number, address: string | null = null, net: string | null = null, now = Date.now()): Promise<{ ok: true } | { ok: false; who: 'site' | 'address' | 'network' | 'reserve'; service: string; retryAfter: number }> {
     const minute = Math.floor(now / 60_000);
     if (minute !== this.minute) { this.minute = minute; this.calls = new Map(); }
     const n = (k: string) => this.calls.get(k) ?? 0;
     const part = Math.max(1, Math.floor(share * UPSTREAM_ADDRESS_PART));
     const retryAfter = Math.max(1, Math.ceil(((minute + 1) * 60_000 - now) / 1000));
+    const open = share - Math.floor(share * UPSTREAM_RESERVE_PART);
+    const who = net ?? address;
     for (const s of services) {
       if (address && n(`${s} ${address}`) >= part) return { ok: false, who: 'address', service: s, retryAfter };
-      if (net && n(`${s} ${net}`) >= part * NET_FACTOR) return { ok: false, who: 'address', service: s, retryAfter };
+      if (net && n(`${s} ${net}`) >= part * NET_FACTOR) return { ok: false, who: 'network', service: s, retryAfter };
       if (n(s) >= share) return { ok: false, who: 'site', service: s, retryAfter };
+      if (who && n(s) >= open && n(`${s} ${who}`) >= UPSTREAM_RESERVE_EACH) return { ok: false, who: 'reserve', service: s, retryAfter };
     }
     for (const s of services) for (const k of [s, address && `${s} ${address}`, net && `${s} ${net}`]) if (k) this.calls.set(k, n(k) + 1);
     return { ok: true };
@@ -560,6 +686,11 @@ type Row = { bytes: number; day: string; rc?: number };
 type Lease = { n: number; at: number };
 /** A name held by a removal or an upload. */
 type Hold = { token: string; at: number };
+/**
+ * A photograph that may hold bytes nothing names, and when it was marked (round sixty-three; S1); `n`, the nights the
+ * sweep could not read it since, and `d`, the last such night's UTC day (R3 8).
+ */
+type Mark = { at: number; n?: number; d?: string };
 /** When an upload last claimed a photograph's name, and the UTC day (for the sweep). */
 type Claim = { at: number; day: string };
 /**
@@ -577,11 +708,15 @@ export const RECLAIM_DAYS = 90;
 /** The sweep reads keys a page at a time, and at most this many pages a run (round sixty-one; the server review, 8). */
 export const SWEEP_PAGE = 1000;
 export const SWEEP_PAGES = 100;
+/** Marked photographs one run of the sweep of unnamed bytes looks at (round sixty-three; S1). */
+export const PHOTO_SWEEP_PAGE = 100;
+/** Nights a mark is kept while its photograph cannot be read; at the next, it is dropped (round sixty-three; R3 8). */
+export const MARK_FAULT_NIGHTS = 7;
 /** How soon a sweep that stopped short runs again. */
 const SWEEP_AGAIN_MS = 1000;
 /** How long a lease counts: past the longest upload (the device gives up after three minutes) with room to spare. */
 export const LEASE_MS = 10 * 60_000;
 /** How long a photograph's name may be held: far past a head, a delete and a give. */
 export const HOLD_MS = 60_000;
-/** The keys the midnight sweep looks at; the alarm is set again only while one of them remains. */
-const SWEPT = ['ip:', 'net:', 'day:', 'd:', 'g:', 'p:', 'h:', 'c:', 'f:'];
+/** The keys the midnight sweep looks at; the alarm is set again only while one of them remains (`u:`, the photographs marked for the sweep of unnamed bytes, since round sixty-three). */
+const SWEPT = ['ip:', 'net:', 'day:', 'd:', 'g:', 'p:', 'h:', 'c:', 'f:', 'u:'];

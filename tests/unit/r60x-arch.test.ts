@@ -84,7 +84,7 @@ describe('sheet wording (round sixty; words)', () => {
     const karoo = mk([28, 28, 26, 23, 20, 17, 17, 18, 21, 23, 25, 27], [14, 14, 12, 9, 6, 3, 3, 4, 6, 9, 11, 13], [30, 32, 40, 30, 22, 18, 16, 20, 25, 30, 35, 30]);
     const { rows } = cultivationSheet({ scientific: 'Dioscorea elephantipes', family: 'Dioscoreaceae', months: karoo, lat: -33 });
     const r = rows.find((x) => x.k === 'Its year')!;
-    expect(r.plain!.lead).toMatch(/^Rain spread over \d+ months: no short rainy season; \d+ mm a year\.$/);
+    expect(r.plain!.lead).toMatch(/^Rain spread over \d+ months: no short rainy season; \d+ mm in the median year\.$/);
     expect(r.s + r.short + r.plain!.lead).not.toMatch(/No rainy season|no season/);
   });
   it('tied months are not named as one month', () => {

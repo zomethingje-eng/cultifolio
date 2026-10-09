@@ -13,6 +13,7 @@
   import { seasonStrip } from './season';
   import { MON3 } from '$core/months';
   import { tiedMonths, monthNames, extremesWhyTag } from '$core/sheet';
+  import { yearRain } from '$climate/year-rain';
   type M = { tmax: number; tmin: number; precipMm: number; dli?: number };
   type Ex = { minP01: number; minAbs: number; years: number } | null;
   let {
@@ -26,7 +27,8 @@
     readerFrom = null,
     toggle = true,
     chartHref = null,
-    season = true
+    season = true,
+    annualRain = null
   }: {
     months: M[];
     extremes?: Ex;
@@ -44,6 +46,8 @@
     chartHref?: string | null;
     /** The season card after the four figures; the front page shows the four alone (round sixty-one; decision 9). */
     season?: boolean;
+    /** The dossier's per-cell yearly totals; with their median the rain card shows it (round sixty-three; REVIEW-TRIAGE-61). */
+    annualRain?: { p50?: number | null } | null;
   } = $props();
   const u = $derived(units.current);
   const idx = (f: (x: M) => number, hi: boolean) => months.reduce((b, x, i) => ((hi ? f(x) > f(months[b]) : f(x) < f(months[b])) ? i : b), 0);
@@ -52,7 +56,9 @@
   // Every month that ties as printed, named (round sixty-one; visitor 5: "Jan mean day" of a year whose February was as warm).
   const hotAt = $derived(monthNames(tiedMonths(months.map((x) => x.tmax), true, (v) => tempN(v, u)), 'short'));
   const coldAt = $derived(monthNames(tiedMonths(months.map((x) => x.tmin), false, (v) => tempN(v, u, 1)), 'short'));
-  const rainYear = $derived(months.reduce((a, x) => a + x.precipMm, 0));
+  // The median of the cells' own years when the dossier has it, else the monthly medians added, each under its own name.
+  const yr = $derived(yearRain(months, annualRain));
+  const rainYear = $derived(yr.mm);
   // The rule's own count: months of 25 mm or more (`>= 25`), said as such.
   const wetMonths = $derived(months.filter((x) => x.precipMm >= 25).length);
   const dlis = $derived(months.map((x) => x.dli).filter((x): x is number => x != null));
@@ -92,7 +98,7 @@
     {/if}
   </div>
   <div class="card"><div class="lab" role="heading" aria-level="3">Warmest month, mean daily high</div><div class="val">{tempN(months[hot].tmax, u)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">{hotAt} at the habitat <span class="src">CHELSA</span></div></div>
-  <div class="card"><div class="lab" role="heading" aria-level="3">Rain a year (sum of monthly medians)</div><div class="val">{rainN(rainYear, u)}<span class="u"> {rainUnit(u)}</span></div><div class="gauge" role="img" aria-label="{rainN(rainYear, u)} {rainUnit(u)} on a bar from 0 to {rainN(RAIN_FULL, u)} {rainUnit(u)}"><i class="c" style="width:{Math.min(100, (rainYear / RAIN_FULL) * 100)}%"></i></div><div class="gscale" aria-hidden="true">bar 0 to {rainN(RAIN_FULL, u)} {rainUnit(u)}</div><div class="sub">{wetMonths === 0 ? `No month of ${ruleRain(25, u)} or more` : `${wetMonths} month${wetMonths === 1 ? '' : 's'} of ${ruleRain(25, u)} or more`} <span class="src">CHELSA</span></div></div>
+  <div class="card"><div class="lab" role="heading" aria-level="3">{yr.cells ? 'Rain a year (median across the range)' : 'Rain a year (sum of monthly medians)'}</div><div class="val">{rainN(rainYear, u)}<span class="u"> {rainUnit(u)}</span></div><div class="gauge" role="img" aria-label="{rainN(rainYear, u)} {rainUnit(u)} on a bar from 0 to {rainN(RAIN_FULL, u)} {rainUnit(u)}"><i class="c" style="width:{Math.min(100, (rainYear / RAIN_FULL) * 100)}%"></i></div><div class="gscale" aria-hidden="true">bar 0 to {rainN(RAIN_FULL, u)} {rainUnit(u)}</div><div class="sub">{wetMonths === 0 ? `No month of ${ruleRain(25, u)} or more` : `${wetMonths} month${wetMonths === 1 ? '' : 's'} of ${ruleRain(25, u)} or more`} <span class="src">CHELSA</span></div></div>
   {#if dlis.length}<div class="card"><div class="lab" role="heading" aria-level="3">Open-sky light</div><div class="val">{Math.min(...dlis).toFixed(0)}–{Math.max(...dlis).toFixed(0)}<span class="u"> DLI</span></div><div class="gauge" role="img" aria-label="Highest month {Math.max(...dlis).toFixed(0)} DLI on a bar from 0 to {DLI_FULL} DLI"><i class="w" style="width:{Math.min(100, (Math.max(...dlis) / DLI_FULL) * 100)}%"></i></div><div class="gscale" aria-hidden="true">bar 0 to {DLI_FULL} DLI</div><div class="sub">Lowest to highest month (<a href="/about/how#glossary">DLI</a>) <span class="src">CHELSA</span></div></div>{/if}
   {#if season && year && strip}
     <div class="card season">

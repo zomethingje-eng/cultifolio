@@ -1,0 +1,36 @@
+<!doctype html>
+<!--
+  The link-preview image, static/og.png (1200 x 630), drawn from this page by scripts/dev/og.mjs. Its words are the front
+  page's own (the title, the pitch's first two sentences, the head's "No sign-up"), and OG_ALT in src/lib/ui/ref/head.ts
+  says them as they are drawn: change one, change the other. No figure on it: the counts move with every corpus, and an
+  image is not redrawn with the corpus (round sixty-three; the review of round sixty-two, 8 and 11).
+  The fonts are the site's, put in by og.mjs (FONT_* below); the colours are theme.css's light theme.
+-->
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<style>
+  @font-face { font-family: 'Newsreader Variable'; font-weight: 200 800; src: url(FONT_SERIF) format('woff2'); }
+  @font-face { font-family: 'Public Sans Variable'; font-weight: 100 900; src: url(FONT_SANS) format('woff2'); }
+  @font-face { font-family: 'DM Mono'; font-weight: 400; src: url(FONT_MONO) format('woff2'); }
+  html, body { margin: 0; }
+  body { width: 1200px; height: 630px; overflow: hidden; background: #f3f5f4; color: #16211d; font-family: 'Public Sans Variable', sans-serif; position: relative; }
+  .bar { position: absolute; inset: 0 0 auto 0; height: 14px; background: #12795a; }
+  main { position: absolute; left: 80px; right: 80px; top: 92px; }
+  .kick { font-size: 22px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: #5f6d67; margin: 0; }
+  h1 { font-family: 'Newsreader Variable', serif; font-weight: 600; font-size: 132px; line-height: 1; letter-spacing: -0.015em; margin: 14px 0 30px; }
+  p.pitch { font-size: 36px; line-height: 1.38; margin: 0; max-width: 1040px; color: #16211d; }
+  p.pitch span { color: #44524c; }
+  p.foot { position: absolute; left: 80px; bottom: 58px; margin: 0; font-family: 'DM Mono', monospace; font-size: 28px; color: #12795a; }
+</style>
+</head>
+<body>
+  <div class="bar"></div>
+  <main>
+    <p class="kick">Species reference</p>
+    <h1>Cultifolio</h1>
+    <p class="pitch">Cactus, succulent and bulb species, and the plants most grown alongside them. Every figure names its source. <span>Your own plants stay on your device, or sync encrypted.</span></p>
+  </main>
+  <p class="foot">cultifolio.com · no sign-up · free and open source</p>
+</body>
+</html>

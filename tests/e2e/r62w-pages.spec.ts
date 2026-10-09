@@ -74,16 +74,16 @@ test.describe('phone, 390 × 844', () => {
     // A client-side visit, so the page is drawn from the live-shaped data: twelve photographs that load, 25 letters, long names.
     await page.locator('#tabbar a[href="/"]').first().click();
     await page.waitForURL(/\/$/);
-    await expect(page.locator('.strip .ftile')).toHaveCount(12);
+    await expect(page.locator('section.featured:visible .strip .ftile')).toHaveCount(12); // the phone's copy, after the first rows (round sixty-three, V4)
     await expect(page.locator('.letters a')).toHaveCount(25);
-    await page.waitForFunction(() => [...document.querySelectorAll<HTMLImageElement>('.strip img')].slice(0, 3).every((i) => i.complete && i.naturalWidth > 0));
+    await page.waitForFunction(() => [...document.querySelectorAll<HTMLImageElement>('section.featured.phoneonly .strip img')].slice(0, 3).every((i) => i.complete && i.naturalWidth > 0));
     const m = await page.evaluate(() => {
       const b = (s: string) => document.querySelector(s)!.getBoundingClientRect();
       const tab = b('#tabbar').top;
-      return { scrollY, tab, pitchLines: [...document.querySelectorAll('.pitch li')].filter((l) => (l as HTMLElement).offsetParent).length, strip: b('.featured').height, search: b('.toolrow .searchbar').bottom, group: b('.tools .seg').bottom, chips: b('.tools .chiprow').bottom, az: b('.tools .azbtn').bottom, letters: b('.letters').height, row: b('.rows .grow').bottom };
+      return { scrollY, tab, pitchLines: [...document.querySelectorAll('.pitch li')].filter((l) => (l as HTMLElement).offsetParent).length, strip: b('section.featured.phoneonly').height, search: b('.toolrow .searchbar').bottom, group: b('.tools .seg').bottom, chips: b('.tools .chiprow').bottom, az: b('.tools .azbtn').bottom, letters: b('.letters').height, row: b('.rows .grow').bottom };
     });
     expect(m.scrollY).toBe(0);
-    expect(m.pitchLines).toBe(1); // the introduction is one sentence
+    expect(m.pitchLines).toBe(0); // the welcome line is the introduction while it is shown, the pitch's one sentence after (round sixty-three, V3 and V4)
     expect(m.letters).toBeLessThanOrEqual(48); // one line of letters, not four
     expect(m.strip).toBeLessThanOrEqual(200); // the strip's height capped: a loaded photograph keeps its tile's shape
     for (const [k, y] of Object.entries({ search: m.search, group: m.group, chips: m.chips, az: m.az, row: m.row })) expect(y, `${k} bottom ${y} against the tab bar at ${m.tab}`).toBeLessThanOrEqual(m.tab);

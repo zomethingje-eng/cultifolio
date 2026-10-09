@@ -10,6 +10,8 @@
   import { plantHref } from '$lib/db/links';
   import { plantLabel } from '$lib/ui/plant-label';
   import { toast } from '$lib/ui/toast.svelte';
+  // An empty collection's Places opens the example collection, or offers it (round sixty-three, V2).
+  import ExampleOffer from '$lib/ui/grow/ExampleOffer.svelte';
   onMount(() => collection.load());
   let adding = $state(false);
   // The top bar's "+" on this section lands on /places#add: the form opens with its first field focused, and the hash is
@@ -19,7 +21,7 @@
     const open = () => {
       adding = true;
       void focusNext('#loc-name');
-      if (location.hash === '#add') replaceState(location.pathname + location.search, page.state);
+      if (location.hash === '#add') setTimeout(() => { try { replaceState(location.pathname + location.search, page.state); } catch { /* the router not up yet: the hash stays, harmlessly (round sixty-three) */ } }, 0);
     };
     const onHash = () => { if (location.hash === '#add') open(); };
     const onTap = (e: MouseEvent) => {
@@ -113,7 +115,9 @@
   <p class="muted">Opening your collection…</p>
 {:else}
   {#if !rows.length}
-    <div class="emptybox"><h2 class="q" style="font-size: var(--fs-2xl)">No places yet</h2><p class="muted">Start with the room or greenhouse, then the shelves or benches inside it.</p></div>
+    <!-- Held while the add form is open or asked for (`#add`, read before the page's own mount takes it off the address): a
+         visitor who asked to add a place (the "+", My plants' first step) is not taken into the example. -->
+    <ExampleOffer what="places" hold={adding || page.url.hash === '#add'}><div class="emptybox"><h2 class="q" style="font-size: var(--fs-2xl)">No places yet</h2><p class="muted">Start with the room or greenhouse, then the shelves or benches inside it.</p></div></ExampleOffer>
   {:else}
     <div class="tree">
       {#each rows as r (r.loc.id)}

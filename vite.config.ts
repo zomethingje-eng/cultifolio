@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 export default defineConfig({
   plugins: [sveltekit()],
   test: {
-    include: process.env.QA_PROBES ? ['tests/qa/**/*.test.ts'] : ['tests/unit/**/*.test.ts', 'src/**/*.test.ts'],
+    include: ['tests/unit/**/*.test.ts', 'src/**/*.test.ts'],
     environment: 'node',
     // The counter class imports `cloudflare:workers`, which exists only in the Workers runtime; in tests the base class is a stub, so the real class runs against a fake storage (round twenty-three, 8).
     alias: { 'cloudflare:workers': fileURLToPath(new URL('./tests/stubs/cloudflare-workers.ts', import.meta.url)) },

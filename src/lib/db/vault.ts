@@ -190,7 +190,7 @@ function openStagingDb(): Promise<IDBPDatabase<VaultDB>> {
 
 /** A fresh, empty staging database (any leftover from an earlier attempt is deleted first). */
 export async function openStaging(): Promise<StagedReplacement> {
-  if (DB_NAME !== 'cultifolio') throw new Error('A replacement cannot be staged in the sample collection; leave the sample first. Nothing was changed.'); // a guard in code, not only the locked page (round sixty-one; review B)
+  if (DB_NAME !== 'cultifolio') throw new Error('A replacement cannot be staged in the example collection; leave the example first. Nothing was changed.'); // a guard in code, not only the locked page (round sixty-one; review B)
   await deleteDB(STAGING_NAME);
   let db: IDBPDatabase<VaultDB> | null = await openStagingDb();
   const need = () => {
@@ -375,7 +375,7 @@ async function storeIn(tx: Tx, changes: Change[], fromServer: boolean, extra: Pa
     for (const t of byStamp.keys()) if (existing.has(t)) collisions++;
     if (collisions > 200) stored = new Map(((await ch.getAll(range)) as Change[]).map((c) => [c.t, c]));
   }
-  for (const c of byStamp.values()) {
+  for (let c of byStamp.values()) {
     const had = strict || (existing && !existing.has(c.t)) ? undefined : stored ? stored.get(c.t) : await ch.get(c.t);
     if (had && !sameChange(had, c)) {
       if (rank(c) > rank(had)) {
@@ -386,6 +386,10 @@ async function storeIn(tx: Tx, changes: Change[], fromServer: boolean, extra: Pa
       } else console.warn(`change ${c.t} is already stored with other content; the stored one stands`);
       continue;
     }
+    // The same change met again keeps the earliest recorded time either copy carries (round sixty-three): two devices that
+    // write one repair record two times under one stamp, and a copy from a build that does not keep the time (a restore
+    // on round sixty-two's) carries none; the same on every device, whatever order it met them in.
+    if (had && typeof had.w === 'number' && !(typeof c.w === 'number' && c.w < had.w)) c = { ...c, w: had.w };
     kept.push(c);
     if (!had) arrived.push(c);
   }

@@ -8,6 +8,8 @@
   import { PROP_METHODS } from '$lib/db/types';
   import { plantHref, batchHref } from '$lib/db/links';
   import PlantName from '$lib/ui/PlantName.svelte';
+  // An empty collection's Propagation opens the example collection, or offers it (round sixty-three, V2).
+  import ExampleOffer from '$lib/ui/grow/ExampleOffer.svelte';
   onMount(() => collection.load());
   let show = $state<'active' | 'all'>('active');
   // The table is wider than a phone: a fade on the right says there is more until the reader has scrolled to it (round twenty-three, 19).
@@ -42,7 +44,7 @@
   <!-- The one toggle group, as chips, with a name for the group (round fifty-eight; the accessibility review). -->
   <ToggleGroup chips label="Which batches" bind:value={show} options={[{ value: 'active', label: 'In progress', n: collection.sowings.filter((s) => s.status === 'active').length }, { value: 'all', label: 'All', n: collection.sowings.length }]} />
   {#if !rows.length}
-    <div class="emptybox"><p class="muted">{show === 'active' ? 'Nothing in progress.' : 'No batches yet.'} <a href="/propagation/new">Start one.</a></p></div>
+    <ExampleOffer what="propagation"><div class="emptybox"><p class="muted">{show === 'active' ? 'Nothing in progress.' : 'No batches yet.'} <a href="/propagation/new">Start one.</a></p></div></ExampleOffer>
   {:else}
     <!-- Under 640px the table was cut off at Date: a phone gets one card per batch with the same figures, the table stays above it. Two renderings, one hidden per width by CSS (round fifty-eight; the grower review). -->
     <ul class="bcards" aria-label="Batches">

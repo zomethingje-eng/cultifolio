@@ -52,7 +52,7 @@ export const load: PageServerLoad = async ({ platform, fetch, setHeaders, url, c
   // genera, chosen by rule (the most-recorded species of the genus) and rotated by the day so the strip is not editorial.
   const pool = featuredPool(index, list);
   const day = Math.floor(Date.now() / 86_400_000);
-  const featured = pool.length ? Array.from({ length: Math.min(12, pool.length) }, (_, i) => pool[(day * 12 + i) % pool.length]).map((c) => ({ slug: c.slug, name: c.name, thumb: c.thumb!, common: c.common, family: c.family })) : [];
+  const featured = pool.length ? Array.from({ length: Math.min(12, pool.length) }, (_, i) => pool[(day * 12 + i) % pool.length]).map((c) => ({ slug: c.slug, name: c.name, thumb: c.thumb!, credit: c.credit, common: c.common, family: c.family })) : [];
   // The first of the day's strip, read whole, for the visitor's "This is what a species page with a habitat climate shows" (round sixty;
   // the self-review's experience item 1). One dossier read under the page's corpus; without a derived climate, or when
   // the read fails, the page simply does not draw the block.
@@ -64,7 +64,7 @@ export const load: PageServerLoad = async ({ platform, fetch, setHeaders, url, c
   const lead = plain && featured.length ? pool[(day * 12) % pool.length] : null;
   const fd = lead ? await getDossier(platform, fetch, lead.key, c).catch(() => null) : null;
   const feature = fd && lead && fd.climate.status === 'ok'
-    ? { slug: lead.slug, name: fd.name.scientific, family: fd.name.family ?? null, lat: fd.centroid?.lat ?? fd.climate.at.lat, climate: { months: fd.climate.months, p10: fd.climate.p10, p90: fd.climate.p90, cells: fd.climate.cells, records: fd.climate.records, extremes: fd.climate.extremes ?? null, extremesStatus: fd.climate.extremesStatus ?? null } }
+    ? { slug: lead.slug, name: fd.name.scientific, family: fd.name.family ?? null, lat: fd.centroid?.lat ?? fd.climate.at.lat, climate: { months: fd.climate.months, p10: fd.climate.p10, p90: fd.climate.p90, cells: fd.climate.cells, records: fd.climate.records, extremes: fd.climate.extremes ?? null, extremesStatus: fd.climate.extremesStatus ?? null, annualRain: fd.climate.annualRain ?? null } }
     : null;
   return {
     units: unitsFor(cookies, request),

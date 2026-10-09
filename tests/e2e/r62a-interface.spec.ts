@@ -349,11 +349,11 @@ test('r62a A40: in forced colours the toast is drawn whole from its first frame 
 
 /**
  * The grower's five tabs drawn and measured: they were counted before `html[data-grower]` swapped in the grower's set, and
- * the test failed 2 of 6 repeats with four (round sixty-two; the verification review's triage-outside 5). Then the web
- * font and two frames, for the bar's own fit to have run.
+ * the test failed 2 of 6 repeats with four (round sixty-two; the verification review's triage-outside 5). The five are
+ * everyone's since round sixty-three (V1), with no swap to wait for. Then the web font and two frames, for the bar's own
+ * fit to have run.
  */
 async function growerTabs(page: Page) {
-  await page.locator('html[data-grower]').waitFor({ state: 'attached', timeout: 30_000 });
   await expect(page.locator('#tabbar a:visible')).toHaveCount(5);
   await page.evaluate(() => document.fonts.ready.then(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))));
 }

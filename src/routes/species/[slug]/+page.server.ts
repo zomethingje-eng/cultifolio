@@ -77,7 +77,7 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
     // A held call is "not asked", a silence "not checked" (round sixty-two; visitor-words 12, rule 2). "The calls this site
     // allows" covers the site's share and this address's part of it alike.
     // Each said in the order it happened, the held call with GBIF as its subject (round sixty-two; the words review's 15).
-    error(404, { message: unchecked ? `No species page for “${params.slug}”. ${heldBack ? "GBIF was not asked whether it is an older name for a species that is here: this site's calls to GBIF are used up for this minute" : "Whether it is an older name for a species that is here was not checked: GBIF's name service did not answer"}` : `No species page for “${params.slug}”`, species });
+    error(404, { message: unchecked ? `No species page for “${params.slug}”. ${heldBack ? "GBIF was not asked whether it is an older name for a species that is here: this site held its call to GBIF back for this minute" : "Whether it is an older name for a species that is here was not checked: GBIF's name service did not answer"}` : `No species page for “${params.slug}”`, species });
   }
   // The dossier and the genus record are two objects in the bucket, read together, since the genus is known from the
   // index before the dossier arrives; read one after the other they were two round trips on every page (round forty-three, 2).
@@ -106,7 +106,7 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   // Short and never stale: HTML names the build's hashed chunks, and a stale page after a deploy would import chunks that are gone.
   setHeaders({ 'cache-control': 'private, max-age=60', vary: 'accept-language, cookie' }); // private: the page is rendered in the reader's units, so no shared cache may hand one reader's page to another
   // Related: the rest of the genus, and the species whose habitat climate is nearest (from the index; nothing computed here).
-  const card = (e: NonNullable<typeof me>) => ({ key: e.key, slug: e.slug, name: e.name, family: e.family, common: e.common, thumb: e.thumb, open: e.open, climate: e.climate });
+  const card = (e: NonNullable<typeof me>) => ({ key: e.key, slug: e.slug, name: e.name, family: e.family, common: e.common, thumb: e.thumb, credit: e.credit, open: e.open, climate: e.climate });
   const genus = genusOf(d.name.scientific);
   // The English names by the index's own rule, with the corpus's genera, so the page, its title and its JSON-LD show the name its tile shows (round sixty-one; decision 7).
   const names = englishNames(d.name.vernacular, { genus: d.name.scientific, genera: generaOf(byGenus.keys()) });

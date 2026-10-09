@@ -40,7 +40,7 @@ export async function replaceThroughStaging(file: ReadBackup, open: () => Promis
   if (file.unreadable.length) throw new Error(`${file.unreadable.length} ${file.unreadable.length === 1 ? 'change' : 'changes'} in that file cannot be read by this version (${file.unreadable[0]}), and a replacement would lose ${file.unreadable.length === 1 ? 'it' : 'them'} for good. Merge instead, which leaves ${file.unreadable.length === 1 ? 'it' : 'them'} in the file, or replace from a newer version of the app; this device is unchanged.`);
   // The staging database is never opened from the sample collection (round sixty-one; review B): it is one name for the
   // device, and a replace staged from the sample would sit beside, and could be promoted into, the grower's own.
-  if (inDemo()) throw new Error('A replacement cannot be staged in the sample collection; leave the sample first. Nothing was changed.');
+  if (inDemo()) throw new Error('A replacement cannot be staged in the example collection; leave the example first. Nothing was changed.');
   const changes = replacementChanges(file);
   const stage = await open();
   let switching = false;

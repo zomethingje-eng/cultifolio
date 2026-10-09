@@ -32,6 +32,9 @@
   import { growingYear, forReader } from '$core/sheet';
   import { speciesSlug } from '$core/names';
   import { inDemo } from '$lib/db/demo';
+  // An empty collection's Today opens the example collection, or offers it (round sixty-three, V2).
+  import ExampleOffer from '$lib/ui/grow/ExampleOffer.svelte';
+  import { example } from '$lib/ui/grow/example.svelte';
   import type { Forecast, Alert } from '$lib/weather/forecast';
   type Payload = { lat: number; lon: number; forecast: Forecast; alerts: Alert[]; alertsStatus: string; risk: { level: string; text: string }; attribution: string[] };
   let data = $state<Payload | null>(null);
@@ -345,14 +348,14 @@
 
   <!-- What needs you first, the frost watch under it: at 390 px the first stop started 570 px down, after the frost card and a method paragraph (round sixty; the grower review, §3 and §4). -->
   <!-- While it waits, the section keeps most of a screen, so what is drawn under it (the footer) does not jump down when the stops arrive (round sixty-one; the accessibility review, 5). -->
-  <section id="water" aria-labelledby="water-h" class:waiting={!collection.ready || (growing.length && !sheetsOnce)}>
+  <section id="water" aria-labelledby="water-h" class:waiting={!collection.ready || (growing.length && !sheetsOnce) || example.entering || (example.seeding && !growing.length)}>
     <div class="secrule"><h2 id="water-h" tabindex="-1">By place</h2><div class="line"></div></div>
     <!-- The stops wait for the species sheets as their buttons did: a stop drawn before them reflowed as its resting plants
          moved to their own row, and the page shifted under the reader (round sixty-one; the accessibility review, 5). -->
     {#if !collection.ready || (growing.length && !sheetsOnce)}
       <p class="small muted">{collection.ready ? (sheetsSlow ? 'Still reading the species sheets…' : 'Reading the species sheets…') : 'Opening the collection…'}</p>
     {:else if !growing.length}
-      <div class="emptybox"><p class="muted" style="margin: 0">No growing plants yet. <a href="/plants/new">Add one</a> and this page says what it needs.</p></div>
+      <ExampleOffer what="today"><div class="emptybox"><p class="muted" style="margin: 0">No growing plants yet. <a href="/plants/new">Add one</a> and this page says what it needs.</p></div></ExampleOffer>
     {:else if !stops.length}
       <!-- What is true: no record meets the checks; not that every plant was watered. The outcome first, the rule one tap away (round sixty; the grower review, §3). -->
       <p class="small" id="nothing"><b>All caught up.</b> Nothing is past its watering rhythm.{#if nextDue}{' '}The next to come due is <a href={plantHref(nextDue.a)}>{accNo(nextDue.a)} {plantLabel(nextDue.a)}</a>, in {nextDue.days === 1 ? '1 day' : `${nextDue.days} days`}.{/if}</p>
@@ -425,7 +428,8 @@
 
   <!-- The frost watch and "Also today" wait for the collection, as the footer does: drawn under "Opening the collection…",
        they were pushed off the screen by the stops, a shift of 0.15 on a phone (round sixty-one; the accessibility review, 5). -->
-  {#if collection.ready && (!growing.length || sheetsOnce)}
+  <!-- Nor while the page is on its way into the example, or the example is being set out: the empty page's sections would be drawn and gone (round sixty-three, V2). -->
+  {#if collection.ready && (!growing.length || sheetsOnce) && !example.entering && !(example.seeding && !growing.length)}
   <section id="frost" aria-labelledby="frost-h">
     <div class="secrule"><h2 id="frost-h">Frost watch</h2><div class="line"></div></div>
     {#if !site.current && site.loaded}

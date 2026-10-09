@@ -108,11 +108,26 @@ export function sampleRecords(scheme: NumberingScheme, wall: number = Date.now()
 export async function seedDemo(): Promise<boolean> {
   if (!inDemo()) return false;
   await collection.load();
-  if (!inDemo() || (await getMeta<boolean>(SEEDED)) || collection.accessions.length) return false;
-  await setMeta(SEEDED, true); // first, so a second tab opening the sample does not seed it twice
+  if (!inDemo()) return false;
+  // One tab at a time, the check and the seed together (round sixty-three, the fix pass; R1, 8): two tabs opening the
+  // example at once (Safari reopening several on Today) could both find it empty, and the seeded mark written first left
+  // an empty example for good when the page was reloaded before the seed's one commit landed. Under the lock the mark is
+  // written after the commit, so a seed cut off is done again on the next load. A browser without Web Locks keeps the
+  // older order: the mark first, so a second tab does not seed it twice.
+  const locks = typeof navigator !== 'undefined' ? (navigator as Navigator & { locks?: LockManager }).locks : undefined;
+  if (!locks) return seedOnce(true);
+  return locks.request(SEED_LOCK, () => seedOnce(false));
+}
+/** The lock the seed is set out under, held by one tab at a time. */
+export const SEED_LOCK = 'cultifolio-sample-seed';
+async function seedOnce(markFirst: boolean): Promise<boolean> {
+  // The mark, or plants already (a seed whose commit landed before a reload took the mark's write; this tab's collection was read at its own load).
+  if ((await getMeta<boolean>(SEEDED)) || collection.accessions.length) return false;
+  if (markFirst) await setMeta(SEEDED, true);
   const { recs, events } = sampleRecords(collection.scheme);
   const [first, ...rest] = recs;
   await collection.putWith(first.kind, first.id, first.fields, events, rest);
+  if (!markFirst) await setMeta(SEEDED, true);
   // The seed's last stamp: what comes after it is the visitor's own, which Leave counts and asks about (round sixty-two; A9).
   const top = (await changeKeys().catch(() => [] as string[])).reduce((a, b) => (b > a ? b : a), '');
   if (top) await setMeta(SEED_TOP, top);

@@ -314,7 +314,7 @@ class Sync {
   async setup(vaultKey: string, mode: 'create' | 'join' = 'create'): Promise<void> {
     // Not in the sample collection, whatever the page shows: a vault set up there would send the sample to the server
     // (round sixty-one; decision 10, a guard in the code and not only the page's CSS).
-    if (inDemo()) throw new Error('Sync is off in the sample collection. Leave the sample to sync your own plants.');
+    if (inDemo()) throw new Error('Sync is off in the example collection. Leave the example to sync your own plants.');
     const key = parseVaultKey(vaultKey);
     if (!key) throw new Error('That is not a sync key.'); // the glossary's word, as the sync page says it (round fifty-eight; the accessibility review)
     const keys = await deriveKeys(key);
@@ -1181,7 +1181,7 @@ class Sync {
     if (!ids.length) return;
     const live = new Set(collection.knownPhotos().map((p) => p.id));
     const done: string[] = [];
-    const removedAt = new Map(this.removedAt(m).map((r) => [r.id, r.at]));
+    const removedAt = new Map((await this.removedAt(m)).map((r) => [r.id, r.at]));
     for (const id of ids) {
       if (!live.has(id)) {
         // Still removed: kept while an Undo could bring the pixels back here; past that window, with no pixels, there is nothing this device could send.
@@ -1225,7 +1225,7 @@ class Sync {
     const dropped = new Set(m.photosDropped ?? []);
     let changed = false;
     const seenBefore = JSON.stringify(m.removedSeen ?? {});
-    const removed = this.removedAt(m);
+    const removed = await this.removedAt(m);
     if (JSON.stringify(m.removedSeen ?? {}) !== seenBefore) changed = true;
     const removedNow = new Set(removed.map((r) => r.id));
     if (!sameList(m.photosRemoved ?? [], [...removedNow])) { m.photosRemoved = [...removedNow]; changed = true; }
@@ -1273,12 +1273,20 @@ class Sync {
    * for a removal stamped past another (marked, its wall as far ahead as the stamp it was placed after), the earlier of
    * that and when this device first saw it, noted in the sync record (round sixty-two; the clock review's 15: a removal
    * placed past a stamp a year ahead kept its bytes on the server for that year, and was then sent as made a year ahead).
+   * Since round sixty-three a removal carries the time it was made (`w`, outside review B9), and a marked one is dated by
+   * the earlier of that and the first sighting; one written before carries none and is dated as before. A `w` is the
+   * writer's clock as it stood, and a peer's fast clock that never synced writes one ahead of now: taken alone it held the
+   * server's bytes until that time, the very wait round sixty-two closed (round sixty-three; the fix pass, R2 7).
    */
-  private removedAt(m: SyncMeta): Array<{ id: string; at: number }> {
-    return collection.removedPhotos().map((r) => {
+  private async removedAt(m: SyncMeta): Promise<Array<{ id: string; at: number }>> {
+    const removed = collection.removedPhotos();
+    const marked = removed.flatMap((r) => (r.marked && r.t ? [r.t] : []));
+    const made = marked.length ? await collection.recordedTimes(marked).catch(() => new Map<string, number>()) : new Map<string, number>();
+    return removed.map((r) => {
       if (!r.marked) return { id: r.id, at: r.at };
+      const w = r.t ? made.get(r.t) : undefined;
       const seen = (m.removedSeen ??= {})[r.id] ?? (m.removedSeen[r.id] = nowMs());
-      return { id: r.id, at: Math.min(r.at, seen) };
+      return { id: r.id, at: Math.min(w ?? r.at, seen) };
     });
   }
 }

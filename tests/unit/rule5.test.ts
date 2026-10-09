@@ -124,12 +124,12 @@ describe('notes replaced unseen, the rule (src/lib/core/notes.ts)', () => {
   it('an edit made from the text it replaced is knowing; one made from another, or with no base, is unseen; an empty text or the same text is nothing', () => {
     const a = s(1000, 'aaaaaaaaaaaatab1'), b = s(2000, 'bbbbbbbbbbbbtab1'), c = s(3000, 'aaaaaaaaaaaatab1');
     expect(replacedNotes([n(a, 'notes', 'one'), n(b, 'notes', 'two'), n(s(2000, 'bbbbbbbbbbbbtab1', 1), 'notesBase', a)])).toEqual([]);
-    expect(replacedNotes([n(a, 'notes', 'one'), n(b, 'notes', 'two'), n(s(2000, 'bbbbbbbbbbbbtab1', 1), 'notesBase', 'x')])).toEqual([{ text: 'one', was: a, by: b }]);
-    expect(replacedNotes([n(a, 'notes', 'one'), n(b, 'notes', 'two')])).toEqual([{ text: 'one', was: a, by: b }]);
+    expect(replacedNotes([n(a, 'notes', 'one'), n(b, 'notes', 'two'), n(s(2000, 'bbbbbbbbbbbbtab1', 1), 'notesBase', 'x')])).toEqual([{ text: 'one', was: a, by: b, wasAt: 1000, byAt: 2000 }]) // the times shown (round sixty-three; L1);
+    expect(replacedNotes([n(a, 'notes', 'one'), n(b, 'notes', 'two')])).toEqual([{ text: 'one', was: a, by: b, wasAt: 1000, byAt: 2000 }]) // the times shown (round sixty-three; L1);
     expect(replacedNotes([n(a, 'notes', ''), n(b, 'notes', 'two')])).toEqual([]);
     expect(replacedNotes([n(a, 'notes', 'one'), n(b, 'notes', 'one')])).toEqual([]);
     // a base of another writer is not this edit's; its own writer's is, even with another writer's notes stamped between (round fifty-nine)
-    expect(replacedNotes([n(a, 'notes', 'one'), n(b, 'notes', 'two'), n(s(2000, 'cccccccccccctab1', 1), 'notesBase', a)])).toEqual([{ text: 'one', was: a, by: b }]);
+    expect(replacedNotes([n(a, 'notes', 'one'), n(b, 'notes', 'two'), n(s(2000, 'cccccccccccctab1', 1), 'notesBase', a)])).toEqual([{ text: 'one', was: a, by: b, wasAt: 1000, byAt: 2000 }]) // the times shown (round sixty-three; L1);
     expect(replacedNotes([n(a, 'notes', 'one'), n(b, 'notes', 'two'), n(c, 'notes', 'three'), n(s(3000, 'bbbbbbbbbbbbtab1', 1), 'notesBase', a)]).map((r) => r.text)).toEqual(['two']);
   });
 });

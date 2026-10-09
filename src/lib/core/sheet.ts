@@ -42,6 +42,8 @@ export interface SheetInput {
   /** 10th and 90th percentile of the per-cell annual rain totals, when the dossier carries them. */
   annualP10?: number | null;
   annualP90?: number | null;
+  /** The median of the per-cell annual rain totals, when the dossier carries it (round sixty-three). */
+  annualP50?: number | null;
   family?: string | null;
   /** The median year across the grid cells of the range. */
   months?: Month[] | null;
@@ -339,17 +341,17 @@ export function cultivationSheet(input: SheetInput): { rows: Row[]; arch: ArchGu
     const yours = year.shiftable ? `${reader}${reader !== at ? ` (${at} at the habitat)` : ''}` : `${at} (the habitat's months, not shifted)`;
     if (year.none) {
       s = `Rain at the habitat is ${RAIN(year.annualMm)} a year (${ENV}). Under ${ruleRain(120, U)} the rain rule reads no rainy season, and the growing-season rule infers nothing from it. The temperature curve moves ${DT(year.rangeT)} between the warmest and coldest month and the coolest six months are within a degree of the warmest six, so the temperature rule names no cooler half either.`;
-      short = `Rain rule: no rainy season to read (${RAIN(year.annualMm)} a year); the temperature curve is flat (${DT(year.rangeT)} of range), so no cooler half is named.`;
-      lead = `${RAIN(year.annualMm)} of rain a year, under the rule's ${ruleRain(120, U)}, and an even temperature: no season to read.`;
+      short = `Rain rule: no rainy season to read (${RAIN(year.annualMm)} in the median year); the temperature curve is flat (${DT(year.rangeT)} of range), so no cooler half is named.`;
+      lead = `${RAIN(year.annualMm)} of rain in the median year, under the rule's ${ruleRain(120, U)}, and an even temperature: no season to read.`;
     } else if (year.fog) {
       s = `Rain at the habitat is ${RAIN(year.annualMm)} a year (${ENV}). Under ${ruleRain(120, U)} the rain rule reads no rainy season, and the growing-season rule infers nothing from it. The temperature rule reads the cooler six months as ${at}. ${hemi}`;
-      short = `Rain rule: no rainy season to read (${RAIN(year.annualMm)} a year); the temperature rule's cooler six months are ${forYou}.`;
-      lead = `${RAIN(year.annualMm)} of rain a year, under the rule's ${ruleRain(120, U)}, so no rainy season is read; the cooler six months are ${yours}.`;
+      short = `Rain rule: no rainy season to read (${RAIN(year.annualMm)} in the median year); the temperature rule's cooler six months are ${forYou}.`;
+      lead = `${RAIN(year.annualMm)} of rain in the median year, under the rule's ${ruleRain(120, U)}, so no rainy season is read; the cooler six months are ${yours}.`;
     } else if (year.spread) {
       // What the rule reads: the rain is spread, so no short rainy season; eight wet months can still be a long one (round sixty; the round forty-two review).
       s = `The rain rule reads no short rainy season: 70% of the year's rain (${RAIN(year.wetMm)} of ${RAIN(year.annualMm)}) takes ${year.growMonths.length} months, ${at}. Mean temperature moves ${DT(year.rangeT)} between the warmest and coldest month. ${hemi}`;
       short = `Rain rule: rain spread over ${year.growMonths.length} months, so no short rainy season (${forYou}).`;
-      lead = `Rain spread over ${year.growMonths.length} months: no short rainy season; ${RAIN(year.annualMm)} a year.`;
+      lead = `Rain spread over ${year.growMonths.length} months: no short rainy season; ${RAIN(year.annualMm)} in the median year.`;
     } else if (year.flat) {
       s = `The rain rule reads a sharp season: 70% of the year's rain (${RAIN(year.wetMm)} of ${RAIN(year.annualMm)}) falls in ${at}. The temperature curve is flat, ${DT(year.rangeT)} between the warmest and coldest month, so the growing-season rule does not infer a growing season from it. ${hemi}`;
       short = `Rain rule: a sharp rainy season, ${forYou}; the temperature curve is flat (${DT(year.rangeT)} of range), so no growing season is inferred.`;
@@ -372,7 +374,12 @@ export function cultivationSheet(input: SheetInput): { rows: Row[]; arch: ArchGu
     const even = m.every((x) => RAIN(x.precipMm) === RAIN(m[0].precipMm));
     const wd = even ? `The same in every month, ${RAIN(m[0].precipMm)}` : `${cap(extremeMonths(m, year.wettest - 1, RAIN, 'wettest'))}, ${extremeMonths(m, year.driest - 1, RAIN, 'driest')}`;
     // The source in a sentence of its own: "under 0.20 in (5 mm) (median year …)" was two brackets in a row (round sixty; words 20).
-    add('Rain', 'Rain', `${RAIN(year.annualMm)} a year at the habitat${wetSpanText}. ${wd}${dry ? `; ${dry} month${dry === 1 ? '' : 's'} under ${ruleRain(5, U)}` : ''}.${input.annualP10 != null && input.annualP90 != null && Math.round(input.annualP10) !== Math.round(input.annualP90) ? ` Across the grid cells of the range the year's total runs ${RAIN(input.annualP10)} to ${RAIN(input.annualP90)}, the 10th to 90th percentile of each cell's own year.` : ''} Habitat calendar, ${home} hemisphere; ${ENV}.`, `CHELSA monthly precipitation, ${ENV.replace(', CHELSA', '')}. The rain that falls where the species is recorded; nothing about how the plant takes water.`, true, `Habitat rain ${RAIN(year.annualMm)} a year, ${even ? `the same in every month` : `${extremeMonths(m, year.wettest - 1, RAIN, 'wettest')}, ${extremeMonths(m, year.driest - 1, RAIN, 'driest')}`} (CHELSA; habitat calendar, ${home} hemisphere).`, { lead: `${RAIN(year.annualMm)} of rain a year${dry ? `, ${dry === 12 ? 'every month' : `${dry} month${dry === 1 ? '' : 's'}`} under ${ruleRain(5, U)}` : ''}.`, rule: 'CHELSA' });
+    // The median year's total is named as that wherever it is said, and the cells' median is said whenever the dossier has
+    // it, not only when the 10th and 90th percentiles differ: the glance card's "Rain a year (median across the range)"
+    // and this row's figure are two different numbers (round sixty-three; the fix pass, R2 1).
+    const cellSpread = input.annualP10 != null && input.annualP90 != null && Math.round(input.annualP10) !== Math.round(input.annualP90) ? ` Across the grid cells of the range the year's total runs ${RAIN(input.annualP10)} to ${RAIN(input.annualP90)}, the 10th to 90th percentile of each cell's own year.` : '';
+    const cellMedian = input.annualP50 != null ? ` The median of the cells' own yearly totals, ${RAIN(input.annualP50)}, is the year's rain at the top of the page; the ${RAIN(year.annualMm)} here is the median year's, the twelve monthly medians added, which the rain rule reads.` : '';
+    add('Rain', 'Rain', `${RAIN(year.annualMm)} in the median year at the habitat${wetSpanText}. ${wd}${dry ? `; ${dry} month${dry === 1 ? '' : 's'} under ${ruleRain(5, U)}` : ''}.${cellSpread}${cellMedian} Habitat calendar, ${home} hemisphere; ${ENV}.`, `CHELSA monthly precipitation, ${ENV.replace(', CHELSA', '')}. The rain that falls where the species is recorded; nothing about how the plant takes water.`, true, `Habitat rain ${RAIN(year.annualMm)} in the median year, ${even ? `the same in every month` : `${extremeMonths(m, year.wettest - 1, RAIN, 'wettest')}, ${extremeMonths(m, year.driest - 1, RAIN, 'driest')}`} (CHELSA; habitat calendar, ${home} hemisphere).`, { lead: `${RAIN(year.annualMm)} of rain in the median year${dry ? `, ${dry === 12 ? 'every month' : `${dry} month${dry === 1 ? '' : 's'}`} under ${ruleRain(5, U)}` : ''}.`, rule: 'CHELSA' });
   }
 
   /* ---- light ---- */

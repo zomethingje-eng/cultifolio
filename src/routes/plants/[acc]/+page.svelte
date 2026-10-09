@@ -2,6 +2,7 @@
   import { units } from '$lib/ui/units.svelte';
   import { toast } from '$lib/ui/toast.svelte';
   import { site } from '$lib/ui/site.svelte';
+  import { detailSentence } from '$lib/ui/ref/head';
   import { localDate, daysBetween } from '$core/dates';
   import { temp, tempN, rain, deltaT, numberOrNull, fixed, mmToIn, inToMm } from '$core/units';
   import { plural } from '$core/words';
@@ -64,9 +65,18 @@
   /** The log entry whose × was pressed once; a second press removes it. */
   let confirmEvent = $state<string | null>(null);
   const openPhoto = (ph: Photo) => (lightbox = Math.max(0, photos.findIndex((x) => x.id === ph.id)));
+  // The number repair's note on a plant whose latest stamp is marked is dated by the day the repair was written, when the
+  // note carries that time (round sixty-three; outside review B9): read from the log when the lines change, by line.
+  let lineDates = $state<Map<string, string>>(new Map());
+  let linesAsked = 0;
+  $effect(() => {
+    void events;
+    const seq = ++linesAsked;
+    collection.recordedLineDates(id).then((m) => { if (seq === linesAsked) lineDates = m; }, () => {});
+  });
   /** Events and photos on one timeline, newest first. */
   const timeline = $derived(
-    [...events.map((e) => ({ k: 'e' as const, d: e.d, id: e.id, e })), ...photos.map((ph) => ({ k: 'p' as const, d: ph.d, id: ph.id, ph }))].sort((a, b) => b.d.localeCompare(a.d) || b.id.localeCompare(a.id))
+    [...events.map((e) => ({ k: 'e' as const, d: lineDates.get(e.id) ?? e.d, id: e.id, e })), ...photos.map((ph) => ({ k: 'p' as const, d: ph.d, id: ph.id, ph }))].sort((a, b) => b.d.localeCompare(a.d) || b.id.localeCompare(a.id))
   );
   // The log shows its latest five lines, the rest one tap away: on a phone the photographs and the habitat follow it (round fifty-eight; the grower review).
   const LOG_FIRST = 5;
@@ -186,9 +196,11 @@
     const here = runs(forReader(y, hereLat ?? 40), 'short');
     const home = `${runs(y.growMonths, 'short')} (${y.south ? 'S' : 'N'})`;
     const shift = `shifted to ${cond?.lat != null ? 'this place' : hereLat != null ? 'your site' : 'the north'}${hereLat == null ? ' (no site set)' : ''}: ${here}`;
-    if (y.none) return { label: 'No season to read', note: `${rain(y.annualMm, u)} a year and a flat temperature curve (${deltaT(y.rangeT, u)} of range): no rainy season and no cooler half (CHELSA).` };
+    // The median year's total, named as that: the species page's glance card shows the median of the cells' own yearly
+    // totals, a different figure (round sixty-three; the fix pass, R2 1).
+    if (y.none) return { label: 'No season to read', note: `${rain(y.annualMm, u)} of rain in the median year and a flat temperature curve (${deltaT(y.rangeT, u)} of range): no rainy season and no cooler half (CHELSA).` };
     const same = !y.shiftable ? 'not shifted: no thermal season to reverse' : southHere === y.south ? 'the same here' : shift;
-    if (y.fog) return { label: 'No rainy season to read', note: `${rain(y.annualMm, u)} a year; the temperature rule's cooler six months ${home}, ${same} (CHELSA).` };
+    if (y.fog) return { label: 'No rainy season to read', note: `${rain(y.annualMm, u)} of rain in the median year; the temperature rule's cooler six months ${home}, ${same} (CHELSA).` };
     if (y.spread) return { label: 'Rain spread, no season', note: `70% of the rain takes ${y.growMonths.length} months, ${home} (CHELSA).` };
     if (y.flat) return { label: `Rain ${home}, flat temperature`, note: `a sharp rainy season, but the temperature curve moves ${deltaT(y.rangeT, u)}, so no growing season is inferred; ${same} (CHELSA).` };
     if (y.grow === 'even') return { label: `Rain ${home}, neither winter nor summer`, note: `the wet season sits at the year's mean temperature; ${same} (rain rule, CHELSA).` };
@@ -453,7 +465,9 @@
     editingMy = false;
   }
   async function remove() {
-    const no = accNo(a!);
+    // The record's id read now: the page's `id` falls back to the address once the plant is removed, and an Undo pressed
+    // later restored a record named by the number, which is no record (round sixty-three, found at the merge).
+    const no = accNo(a!), id = a!.id;
     await collection.remove('accession', id);
     goto('/plants');
     // The removal is one tap; the way back is one too (round twenty-six, 5). The record never left the log.
@@ -564,7 +578,7 @@
     </div>
   {:else if speciesThumb && !thumbFailed}
     <div class="hero">
-      <img src={speciesThumb} alt={a.taxonName} class="spthumb" onerror={() => (thumbFailed = true)} /><button class="cred" type="button" onclick={() => { adding = true; setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: motion(), block: 'center' }), 0); }}>species photograph · add your own</button>
+      <img src={speciesThumb} alt={a.taxonName} class="spthumb" onerror={() => (thumbFailed = true)} /><button class="cred" type="button" onclick={() => { adding = true; setTimeout(() => document.getElementById('photos')?.scrollIntoView({ behavior: motion(), block: 'center' }), 0); }}>species photograph{dossier?.credit ? ` (${dossier.credit})` : ''} · add your own</button>
     </div>
   {/if}
   <PhotoTimeline acc={id} />
@@ -652,7 +666,7 @@
       <button class="btn" onclick={() => quick('flower')}>Flower</button>
       {#if a.status === 'growing'}{#if confirmArchive}<span class="confirmrow"><button class="btn" id="status-toggle" onclick={() => { confirmArchive = false; setStatus('archived'); }}>Yes, archive</button><button class="btn" type="button" onclick={() => (confirmArchive = false)}>Keep</button></span>{:else}<button class="btn" id="status-toggle" onclick={() => { confirmArchive = true; void focusNext('#status-toggle'); }} title="Takes the plant off the growing list; it can be marked growing again">Archive</button>{/if}{:else}<button class="btn" id="status-toggle" onclick={() => setStatus('growing')}>Mark growing</button>{/if}
     {:else}
-      <button class="btn more" type="button" aria-expanded="false" onclick={() => { moreActs = true; void focusNext('#verb-feed'); }}>More ▾</button>
+      <button class="btn more" type="button" aria-expanded="false" aria-label="More" onclick={() => { moreActs = true; void focusNext('#verb-feed'); }}>More ▾</button>
     {/if}
   </div>
 
@@ -727,7 +741,7 @@
         {#if row.k === 'e'}
           {@const e = row.e}
           <div class="tlrow" class:auto={!!e.auto} title={e.auto ? 'Written by the app or by a place-wide action, not an observation of this plant' : undefined}>
-            <span class="d">{e.d}</span>
+            <span class="d">{lineDates.get(e.id) ?? e.d}</span>
             <span class="t">{e.t === 'audit' && e.note === 'not seen' ? 'Not seen at audit' : (EVENT_LABEL[e.t] ?? e.t)}{#if e.used}<span class="x2">{' · '}{e.used}</span>{/if}{#if e.cause}<span class="x2">{' · '}{e.cause}</span>{/if}{#if e.measures}<span class="x2">{' · '}{Object.entries(e.measures).map(([k, v]) => { const m = measureOf(k); return `${m?.label ?? k} ${m?.unit ? len(v) : v}`; }).join(', ')}</span>{/if}{#if e.note && !(e.t === 'audit' && e.note === 'not seen')}<span class="x2">{' · '}{e.note}</span>{/if}</span>
             {#if confirmEvent === e.id}<button class="rm confirm" type="button" onclick={() => removeEntry(e.id)}>Remove?</button>{:else}<button class="rm" type="button" title="Remove this entry" aria-label="Remove this entry" onclick={() => { confirmEvent = e.id; void focusNext('.rm.confirm'); }}>×</button>{/if}
           </div>
@@ -781,7 +795,7 @@
   <details class="hab" id="habitat">
     <summary class="secrule"><h2>{#if compared}Compare: <SpeciesName name={compared} />, habitat vs this place{:else}Habitat vs this place{/if}</h2><div class="line"></div><span class="n">{a.locationId && collection.placeOf(a.locationId) ? collection.locationName(a.locationId) : ''}</span></summary>
     <div class="cards">
-      <div class="card"><div class="lab">Habitat rain season</div><div class="val" style="font-family: var(--ui); font-size: var(--fs-lg); font-weight: 700">{#if !season && dossier?.climate.status === 'refused'}<NotChecked what="Climate" why="A source did not answer when the species page was built{dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}." />{:else}{season ? season.label : dossier?.climate.status === 'pending' ? 'Climate pending' : dossier ? 'No habitat climate' : ref === 'unreachable' ? 'Reference not reached' : ref === 'none' ? (kind === 'hybrid' ? 'A hybrid' : 'No species page') : '…'}{/if}</div><div class="sub">{#if season}{season.note} <a href="/species/{speciesHref}#s-cultivation">The sheet</a>.{:else if dossier?.climate.status === 'refused'}No season is read from an answer that was not given.{:else if dossier?.climate.status === 'pending'}The habitat climate for this species has not been derived yet.{:else if dossier}Nothing to read a season from{dossier.climate.status === 'none' && dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}.{:else if ref === 'unreachable'}The species reference could not be reached from here; nothing is known either way.{:else if ref === 'none'}{kind === 'hybrid' ? (parentLinks.some((p) => p.slug) ? 'No habitat of its own; its parents have species pages.' : 'No habitat of its own.') : 'Not in the reference.'}{:else}reading the species page{/if}</div></div>
+      <div class="card"><div class="lab">Habitat rain season</div><div class="val" style="font-family: var(--ui); font-size: var(--fs-lg); font-weight: 700">{#if !season && dossier?.climate.status === 'refused'}<NotChecked what="Climate" why={detailSentence(dossier.climate.detail, 'A source did not answer when the species page was built').replace('when this page was built', 'when the species page was built')} />{:else}{season ? season.label : dossier?.climate.status === 'pending' ? 'Climate pending' : dossier ? 'No habitat climate' : ref === 'unreachable' ? 'Reference not reached' : ref === 'none' ? (kind === 'hybrid' ? 'A hybrid' : 'No species page') : '…'}{/if}</div><div class="sub">{#if season}{season.note} <a href="/species/{speciesHref}#s-cultivation">The sheet</a>.{:else if dossier?.climate.status === 'refused'}No season is read from an answer that was not given.{:else if dossier?.climate.status === 'pending'}The habitat climate for this species has not been derived yet.{:else if dossier}Nothing to read a season from{dossier.climate.status === 'none' && dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}.{:else if ref === 'unreachable'}The species reference could not be reached from here; nothing is known either way.{:else if ref === 'none'}{kind === 'hybrid' ? (parentLinks.some((p) => p.slug) ? 'No habitat of its own; its parents have species pages.' : 'No habitat of its own.') : 'Not in the reference.'}{:else}reading the species page{/if}</div></div>
     </div>
     {#if habitat && a.locationId}
     <div class="factgrid hvh">

@@ -10,6 +10,7 @@
 import { climograph, type ClimoInput } from '$climate/climograph';
 import { temp, rain, ruleRain, tempUnit, rainUnit, METRIC, type Units, dryLabel } from '$core/units';
 import { tiedMonths, monthNames, extremesWhyTag } from '$core/sheet';
+import { yearRain } from '$climate/year-rain';
 
 export interface CardInput {
   units?: Units;
@@ -23,6 +24,8 @@ export interface CardInput {
   south?: boolean;
   /** Why there is no floor, said as the glance row says it (round sixty-two; visitor-words 11, rule 2). */
   extremesStatus?: string | null;
+  /** The dossier's per-cell yearly totals; with their median the card shows it (round sixty-three). */
+  annualRain?: { p50?: number | null } | null;
 }
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -32,7 +35,8 @@ export function climateCardSvg(c: CardInput): string {
   const m = c.climate.months;
   const hot = m.reduce((b, x, i) => (x.tmax > m[b].tmax ? i : b), 0);
   const cold = m.reduce((b, x, i) => (x.tmin < m[b].tmin ? i : b), 0);
-  const rainYear = m.reduce((a, x) => a + x.precipMm, 0);
+  const yr = yearRain(m, c.annualRain);
+  const rainYear = yr.mm;
   const wetMonths = m.filter((x) => x.precipMm >= 25).length;
   const dlis = m.map((x) => x.dli).filter((x): x is number => x != null);
   const ex = c.climate.extremes ?? null;
@@ -50,7 +54,7 @@ export function climateCardSvg(c: CardInput): string {
     // sixty-two; outside review A3, visitor-words 3 and 11).
     ex ? ['Cold floor (1 night in 100)', temp(ex.minP01, u, 1), `record low ${temp(ex.minAbs, u, 1)} in ${ex.years} years at a typical spot · NASA POWER`] : ['Coldest month, mean nightly low', temp(m[cold].tmin, u, 1), `${coldAt}, not a floor; ${extremesWhyTag(c.extremesStatus)} · CHELSA`],
     ['Warmest month, mean daily high', temp(m[hot].tmax, u), `${hotAt} · CHELSA`],
-    ['Rain a year (sum of monthly medians)', `${rain(rainYear, u)}`, `${wetMonths === 0 ? 'no month' : `${wetMonths} month${wetMonths === 1 ? '' : 's'}`} of ${ruleRain(25, u)} or more · CHELSA`],
+    [yr.cells ? 'Rain a year (median across the range)' : 'Rain a year (sum of monthly medians)', `${rain(rainYear, u)}`, `${wetMonths === 0 ? 'no month' : `${wetMonths} month${wetMonths === 1 ? '' : 's'}`} of ${ruleRain(25, u)} or more · CHELSA`],
     dlis.length ? ['Open-sky light', `${Math.min(...dlis).toFixed(0)}–${Math.max(...dlis).toFixed(0)} DLI`, 'mol/m²/day, lowest to highest month · CHELSA'] : ['Cells', String(c.cells), `habitat grid cell${c.cells === 1 ? '' : 's'} read`]
   ];
   const g = climograph({ ...c.climate, extremes: ex ? { minAbs: ex.minAbs, maxP99: ex.maxP99, years: ex.years } : null }, 640, u);

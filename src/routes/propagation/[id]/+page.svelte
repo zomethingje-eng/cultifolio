@@ -44,6 +44,18 @@
   const m = $derived(PROP_METHODS.find((x) => x.k === s?.method) ?? (s?.method ? { k: s.method, label: s.method, unit: 'units', veg: false } : PROP_METHODS[0])); // a method this build does not know is shown by its word (round thirty, 1)
   const st = $derived(collection.sowingStats(id));
   const events = $derived(collection.events(id));
+  // The number repair's note on a batch whose latest stamp is marked is dated by the day the repair was written, when the
+  // note carries that time (round sixty-three; outside review B9): read from the log when the lines change, by line.
+  let lineDates = $state<Map<string, string>>(new Map());
+  let linesAsked = 0;
+  $effect(() => {
+    void events;
+    const seq = ++linesAsked;
+    collection.recordedLineDates(id).then((m) => { if (seq === linesAsked) lineDates = m; }, () => {});
+  });
+  // The lines in the order of the dates they show, newest first, as the plant page orders its timeline: a repair note
+  // shown under the day it was written sat among lines of its stored day, months back (round sixty-three; the fix pass, R2 9).
+  const shownEvents = $derived([...events].sort((a, b) => (lineDates.get(b.id) ?? b.d).localeCompare(lineDates.get(a.id) ?? a.d) || b.id.localeCompare(a.id)));
   const raised = $derived(collection.raisedFrom(id));
   const photos = $derived(collection.photosOfSowing(id));
   let lightbox = $state<number | null>(null);
@@ -232,7 +244,8 @@
   let confirmRemove = $state(false);
   async function remove() {
     if (raised.length) return;
-    const no = s ? sowNo(s) : id;
+    // The record's id read now, as on the plant page: once the batch is removed the page's `id` falls back to the address (round sixty-three).
+    const id = s?.id ?? param, no = s ? sowNo(s) : id;
     await collection.remove('sowing', id);
     goto('/propagation');
     // One tap removed it; the toast on the list puts it back (round forty-nine, 3).
@@ -348,7 +361,7 @@
   {#if waiting}<WaitingRecord kind="sowing" label={param} {waiting} />{:else}<p class="muted">No batch with this number on this device.</p>{/if}
 {:else}
   <div class="hero">
-    {#if idx?.thumb && prefs.referencePhotos && !thumbFailed}<img src={idx.thumb} alt={s.taxonName} style="max-height: 220px" onerror={() => (thumbFailed = true)} /><span class="cred">species photograph</span>{:else if idx?.thumb && prefs.referencePhotos}<div class="ph empty" style="height: 120px">No photograph yet.</div>{:else}<div class="ph" style="height: auto; min-height: 120px; flex-direction: column; gap: 10px; padding: 16px 16px 56px">{m.label}{#if idx?.thumb && !prefs.referencePhotos}<RefPhotoOffer link what="a reference photograph" /><!-- one line, the host's disclosure behind it; the full choice is in Settings (round sixty; the grower review, §3) -->{/if}</div>{/if}
+    {#if idx?.thumb && prefs.referencePhotos && !thumbFailed}<img src={idx.thumb} alt={s.taxonName} style="max-height: 220px" onerror={() => (thumbFailed = true)} /><span class="cred">species photograph{idx.credit ? ` (${idx.credit})` : ''}</span>{:else if idx?.thumb && prefs.referencePhotos}<div class="ph empty" style="height: 120px">No photograph yet.</div>{:else}<div class="ph" style="height: auto; min-height: 120px; flex-direction: column; gap: 10px; padding: 16px 16px 56px">{m.label}{#if idx?.thumb && !prefs.referencePhotos}<RefPhotoOffer link what="a reference photograph" /><!-- one line, the host's disclosure behind it; the full choice is in Settings (round sixty; the grower review, §3) -->{/if}</div>{/if}
   </div>
   <div class="idcard">
     <div class="who">
@@ -504,9 +517,9 @@
     <div class="cult"><div class="none">Nothing recorded yet.</div></div>
   {:else}
     <div class="tl">
-      {#each events as e}
+      {#each shownEvents as e}
         <div class="tlrow">
-          <span class="d">{e.d}</span>
+          <span class="d">{lineDates.get(e.id) ?? e.d}</span>
           <span class="t">{eventLabel(e.t)}{#if e.n != null}&nbsp;<b>{e.n}</b>{/if}{#if e.plants?.length}<span class="x2">{' · '}{#each e.plants as pid, i (pid)}{#if i}{', '}{/if}{@const pl = collection.accession(pid)}{#if pl}<a class="mono" href={plantHref(pl)}>{accNo(pl)}</a>{:else}a plant since removed{/if}{/each}</span>{/if}{#if e.cause}<span class="x2">{' · '}{e.cause}</span>{/if}{#if e.note}<span class="x2">{' · '}{e.note}</span>{/if}</span>
           {#if e.t === 'potup'}<span class="x small muted">kept: the plants exist</span>{:else if e.t === 'germinate' && !canDropCount(e.id)}<span class="x small muted" title="Without this count the batch would show fewer up than were potted and lost">kept: the potted plants rest on it</span>{:else if confirmEvent === e.id}<button class="rm confirm" type="button" onclick={() => { collection.remove('event', e.id); confirmEvent = null; }}>Remove?</button>{:else}<button class="rm" type="button" title="Remove this entry" aria-label="Remove this entry" onclick={() => { confirmEvent = e.id; void focusNext('.rm.confirm'); }}>×</button>{/if}
         </div>

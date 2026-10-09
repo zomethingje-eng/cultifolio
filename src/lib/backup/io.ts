@@ -85,7 +85,7 @@ export async function openBackup(f: File): Promise<Opened> {
   const merge = previewMerge(current, file.changes);
   const have = new Set(await photoBlobIds());
   const newPhotos = file.photoIds.filter((id) => !have.has(id)).length;
-  const missingPixels = photosWithoutPixels(file).filter((id) => !have.has(id));
+  const missingPixels = photosWithoutPixels(file, counts.state).filter((id) => !have.has(id));
   const inFile = new Set(file.changes.map((c) => `${c.kind}:${c.id}`));
   const onlyHere = [...collection.accessions.filter((a) => !inFile.has(`accession:${a.id}`)).map(accNo), ...collection.sowings.filter((s) => !inFile.has(`sowing:${s.id}`)).map(sowNo)];
   // And the records the file does hold that were edited here since: a note written after the merge is gone with a replace too (round fifty-two, 4).
@@ -162,7 +162,7 @@ export async function restoreBackup(o: Opened, mode: 'merge' | 'replace', onProg
 }
 
 /** What a restore started in the sample collection is told. */
-const SAMPLE_REFUSAL = 'Restoring a backup is off in the sample collection: it would go into the sample and be deleted with it. Leave the sample to restore into your own collection';
+const SAMPLE_REFUSAL = 'Restoring a backup is off in the example collection: it would go into the example and be deleted with it. Leave the example to restore into your own collection';
 
 /** The replace path: stage, verify, turn sync off, switch (see replace.ts and vault.ts). */
 async function replaceFromBackup(o: Opened, onProgress?: (done: number, total: number) => void): Promise<RestoreReport> {

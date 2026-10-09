@@ -122,7 +122,7 @@ describe('storage keys, by the store each is kept in, both ways', () => {
   it("the sample's template-built keys: formats names a copy for every setting stored.ts keeps, and no other", () => {
     expect(raw('src/lib/ui/stored.ts')).toMatch(/SAMPLE_PREFIX = 'cultifolio\.demo\.'/);
     expect(raw('src/lib/ui/stored.ts')).toMatch(/SAMPLE_PREFIX \+ key\.replace\(\/\^cultifolio\\\.\/, ''\)/);
-    const sample = formats.slice(formats.indexOf('The sample collection is a database of its own'));
+    const sample = formats.slice(formats.indexOf('The example collection (the sample, in the code) is a database of its own'));
     const copies = new Set([...sample.matchAll(/cultifolio\.demo\.([a-zA-Z][\w.]*[a-zA-Z])/g)].map((m) => `cultifolio.${m[1]}`));
     // The units are read through the helper only inside a sample tab, so they have a copy too.
     const helper = new Set([...viaHelper, 'cultifolio.units']);

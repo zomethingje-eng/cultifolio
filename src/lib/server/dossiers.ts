@@ -270,9 +270,12 @@ const MISS_MS = 60_000;
 /**
  * A product of the corpus `c` the request holds, by name (round fifty-eight: never of whichever corpus is current when
  * the read happens, which mixed two generations in one answer; all three reviews). Kept by hash, which names the bytes
- * whatever corpus names them. A file the bucket lacks, or one that does not parse, is a miss for a minute from the miss.
+ * whatever corpus names them. A file the bucket lacks, or one that does not parse, is a miss for a minute from the miss,
+ * or for `missMs` when the caller says: the sheets keep a refused bucket half a minute and say so, so their files' misses
+ * are kept no longer (round sixty-three; the server review of the round, R3 3: a device that waited the thirty seconds it
+ * was told was refused again by the minute's miss).
  */
-export async function product<T>(c: Loaded, platform: Platform, fetch: Fetch, name: string): Promise<T | null> {
+export async function product<T>(c: Loaded, platform: Platform, fetch: Fetch, name: string, missMs = MISS_MS): Promise<T | null> {
   const m = c.manifest;
   if (!m) return null;
   const hash = m.files[name];
@@ -291,11 +294,12 @@ export async function product<T>(c: Loaded, platform: Platform, fetch: Fetch, na
         if (obj) text = await obj.text();
       }
       if (text === null && !c.fromStore) { try { const r = await fetch(`/${path}`); if (r.ok) text = await r.text(); } catch { /* no static file */ } }
-      if (text === null) { held.retryAt = Date.now() + MISS_MS; return null; }
+      if (text === null) { held.retryAt = Date.now() + missMs; return null; }
       let parsed: unknown;
       try { parsed = JSON.parse(text); } catch {
-        console.warn(`product ${name} (${hash}) does not parse; derived from the index for a minute`);
-        held.retryAt = Date.now() + MISS_MS;
+        // Said without what the caller does then: most derive from the index, the sheets under a manifest refuse (R3 3).
+        console.warn(`product ${name} (${hash}) does not parse; read as missing for ${Math.round(missMs / 1000)} s`);
+        held.retryAt = Date.now() + missMs;
         return null;
       }
       held.size = text.length;

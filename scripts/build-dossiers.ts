@@ -53,6 +53,7 @@
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, unlinkSync } from 'node:fs';
 import { execSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { buildDossier, NETWORK_EXTRAS, photosFromMedia, mergeGbifPhotos, type SkippableSource } from '../src/lib/dossier/build';
 import { mendGbifThumb } from '../src/lib/dossier/md5';
 import { heroOf } from '../src/lib/dossier/dedupe';
@@ -79,6 +80,13 @@ import { bulkFetcher } from '../src/lib/dossier/bulk';
 import { nearestByClimate } from '../src/lib/core/near';
 import { loadWcvp, loadOccurrences, wantedKeys } from './bulk-load';
 import { refetchNames, vernacularMark } from './names-step';
+import { stampOnBuild, restamp, dayNumber, type Changed } from '../src/lib/dossier/changed';
+import { tileCreditOf } from '../src/lib/ui/ref/head';
+
+/** The substance fingerprint's hash: node's own, for nine thousand files (round sixty-three; src/lib/dossier/changed.ts). */
+const sha1 = (s: string) => createHash('sha1').update(s).digest('hex');
+/** Today, UTC, as the day a fill's or a prune's change is stamped with when the index is written. */
+const today = () => new Date().toISOString().slice(0, 10);
 
 const args = process.argv.slice(2);
 const upload = args.includes('--upload');
@@ -120,8 +128,8 @@ function diskPowerCache(dir: string): PowerCache {
   };
 }
 
-type IndexEntry = { key: number; slug: string; name: string; family?: string; common?: string; commons?: string[]; origin: string[]; thumb?: string; photos: number; open: number; climate: string; near?: number[]; syn?: string[] };
-type Dossierish = { key: number; slug: string; name: { scientific: string; family?: string; status?: string; vernacular: VernacularName[]; synonyms?: string[] }; distribution: { native: Array<{ name: string }> }; photos: Array<{ id: string; url: string; thumb: string; captive?: boolean }>; occurrences: { nOpenInRange: number; nRestrictedInRange?: number; nOutsideRange?: number }; climate: { status: string; months?: Array<{ tmax: number; tmin: number; precipMm: number }> } };
+type IndexEntry = { key: number; slug: string; name: string; family?: string; common?: string; commons?: string[]; origin: string[]; thumb?: string; credit?: string; photos: number; open: number; climate: string; near?: number[]; syn?: string[]; changed?: number };
+type Dossierish = { key: number; slug: string; name: { scientific: string; family?: string; status?: string; vernacular: VernacularName[]; synonyms?: string[] }; distribution: { native: Array<{ name: string }> }; photos: Array<{ id: string; url: string; thumb: string; captive?: boolean; attribution: string; licence?: string }>; occurrences: { nOpenInRange: number; nRestrictedInRange?: number; nOutsideRange?: number }; climate: { status: string; months?: Array<{ tmax: number; tmin: number; precipMm: number }> }; changed?: Changed };
 /**
  * Each species' English vernacular names, kept from its dossier while the index is made: the common name is chosen by
  * `englishNames`'s rule, which sets back a name naming another genus of the corpus, and the corpus's genera are known
@@ -152,22 +160,34 @@ function indexEntry(d: Dossierish): IndexEntry & { status?: string } {
   const genus = accepted.split(' ')[0];
   const syn = [...new Set((d.name.synonyms ?? []).map(canonicalSynonym).filter((x): x is string => !!x && x !== accepted))].sort((a, b) => Number(a.startsWith(genus + ' ')) - Number(b.startsWith(genus + ' '))).slice(0, 6);
   // The thumbnail in the form GBIF's cache still answers, whatever form the dossier holds (the Worker mends a dossier's as it reads it; the index carries no key to mend by, so it is mended here: round thirty-two, 1).
-  return { status: d.name.status, key: d.key, slug: d.slug, name: d.name.scientific, family: d.name.family, ...englishNames(d.name.vernacular, { genus }), origin: d.distribution.native.map((n) => n.name), thumb: hero ? mendGbifThumb(hero.thumb, hero.id, hero.url) : undefined, photos: d.photos.length, open: d.occurrences.nOpenInRange, climate: d.climate.status, ...(syn.length ? { syn } : {}) };
+  // Its credit, licence first, so a tile names the photographer and not only the host; and the day the dossier last
+  // changed in substance, for the sitemap (round sixty-three; REVIEW-TRIAGE-61's deferred list).
+  const credit = hero ? tileCreditOf(hero as Parameters<typeof tileCreditOf>[0]) : null;
+  const changed = dayNumber(d.changed?.on);
+  return { status: d.name.status, key: d.key, slug: d.slug, name: d.name.scientific, family: d.name.family, ...englishNames(d.name.vernacular, { genus }), origin: d.distribution.native.map((n) => n.name), thumb: hero ? mendGbifThumb(hero.thumb, hero.id, hero.url) : undefined, ...(credit ? { credit } : {}), photos: d.photos.length, open: d.occurrences.nOpenInRange, climate: d.climate.status, ...(syn.length ? { syn } : {}), ...(changed ? { changed } : {}) };
 }
 
 /** Every dossier on disk, as index entries. The corpus is the files; the index is derived from them. */
 /** Dossiers under a name the backbone does not accept: seen on the last scan, so --index can list them. */
 let notAccepted: Array<{ key: number; name: string; status: string; records: number }> = [];
-function scanDossiers(): Array<IndexEntry & { status?: string }> {
+/**
+ * `stamp`: when the index is being written, each dossier's substance stamp is checked and, where a fill, a prune or a
+ * hand edit changed the dossier since, written again with today's day (or, never stamped, its last reading); only those
+ * files are rewritten (round sixty-three; src/lib/dossier/changed.ts).
+ */
+function scanDossiers(stamp = false): Array<IndexEntry & { status?: string }> {
   const dir = `${outDir}/s/v${DOSSIER_V}`;
   if (!existsSync(dir)) return [];
   const out: Array<IndexEntry & { status?: string }> = [];
   const withClimate: Array<{ key: number; months: Array<{ tmax: number; tmin: number; precipMm: number }> }> = [];
+  let stamped = 0;
   notAccepted = [];
   for (const f of readdirSync(dir)) {
     if (!/^\d+\.json$/.test(f)) continue;
     try {
       const d = JSON.parse(readFileSync(`${dir}/${f}`, 'utf8')) as Dossierish;
+      const st = stamp ? restamp(d, today(), sha1) : null;
+      if (st) { d.changed = st; writeFileSync(`${dir}/${f}`, JSON.stringify(d)); stamped++; }
       out.push(indexEntry(d));
       if (d.climate.status === 'ok' && d.climate.months?.length === 12) withClimate.push({ key: d.key, months: d.climate.months });
       if (d.name.status && d.name.status !== 'accepted') notAccepted.push({ key: d.key, name: d.name.scientific, status: d.name.status, records: d.occurrences.nOpenInRange + (d.occurrences.nRestrictedInRange ?? 0) + (d.occurrences.nOutsideRange ?? 0) });
@@ -175,6 +195,7 @@ function scanDossiers(): Array<IndexEntry & { status?: string }> {
       /* a half-written file from a killed run: rebuilt when its name comes round */
     }
   }
+  if (stamped) console.log(`  ${stamped} dossier${stamped === 1 ? '' : 's'} changed since ${stamped === 1 ? 'its' : 'their'} last stamp (or never stamped): the day each last changed written into the file, for the sitemap`);
   // "Grows like": the six nearest habitat climates per species, by the distance in src/lib/core/near.ts, into the index.
   if (withClimate.length > 1) {
     const t0 = Date.now();
@@ -509,7 +530,7 @@ function sheetBuckets(index: IndexEntry[], idxDir: string, count: number): { buc
     try {
       const d = parseDossier(JSON.parse(readFileSync(`${idxDir}/${e.key}.json`, 'utf8')));
       const b = bucketOf(e.slug, count);
-      (buckets.get(b) ?? buckets.set(b, []).get(b)!).push({ ...sheetOf(d, e.thumb), slug: e.slug }); // filed under the index slug, and carrying it: a suffixed homonym's sheet must not answer to the plain name (round sixteen, 8)
+      (buckets.get(b) ?? buckets.set(b, []).get(b)!).push({ ...sheetOf(d, e.thumb, e.credit), slug: e.slug }); // filed under the index slug, and carrying it: a suffixed homonym's sheet must not answer to the plain name (round sixteen, 8)
       n++;
     } catch {
       /* a dossier that does not parse is not served as a sheet either; the Worker derives what it can */
@@ -610,7 +631,7 @@ async function fillNames(): Promise<void> {
 
 /** The index is derived from the files; after a fill the thumbnails have changed, so it is written again. */
 function writeIndexFromDisk(): void {
-  const index = uniqueSlugs(scanDossiers().sort((a, b) => a.name.localeCompare(b.name)));
+  const index = uniqueSlugs(scanDossiers(true).sort((a, b) => a.name.localeCompare(b.name)));
   nameEntries(index);
   const idxDir = `${outDir}/s/v${DOSSIER_V}`;
   mkdirSync(idxDir, { recursive: true });
@@ -791,8 +812,10 @@ async function main() {
     // across a schema bump (photographs, summary, identifiers and literature keep their shape; the derivation does not).
     const legacyPath = `${outDir}/s/v${DOSSIER_V - 1}/${d.key}.json`;
     const prevPath = existsSync(path) ? path : existsSync(legacyPath) ? legacyPath : null;
+    let prevFile: typeof d | null = null;
     if (prevPath) {
       const prev = JSON.parse(readFileSync(prevPath, 'utf8')) as typeof d;
+      prevFile = prev;
       // copy() returns whether anything was carried; the upstream record says "carried" only then.
       const carry = (src: string, copy: () => boolean) => {
         const now = d.upstream[src]?.status, before = prev.upstream?.[src]?.status;
@@ -857,6 +880,9 @@ async function main() {
         for (const k of Object.keys(prev.upstream ?? {})) if (d.upstream[k]?.status === 'skipped' && prev.upstream[k]) d.upstream[k] = { ...prev.upstream[k], detail: carried(prev.upstream[k]) };
       }
     }
+    // The day the page last changed in substance: the previous file's when this build changed nothing it shows, else this
+    // build's (round sixty-three; src/lib/dossier/changed.ts), so a refresh that changes nothing does not move the sitemap.
+    d.changed = stampOnBuild(d, prevFile, sha1);
     mkdirSync(path.slice(0, path.lastIndexOf('/')), { recursive: true });
     writeFileSync(path, JSON.stringify(d));
     const refusedSrcs = Object.entries(d.upstream)
@@ -871,7 +897,7 @@ async function main() {
     if (upload) execSync(`npx wrangler r2 object put cultifolio/${dossierPath(d.key)} --file="${path}" --content-type=application/json`, { stdio: 'inherit' });
   }
   // The index is every dossier on disk, this run's entries fresh, then sorted.
-  const index: IndexEntry[] = fixtures ? [...thisRun.values()] : scanDossiers().map((e) => thisRun.get(e.key) ?? e);
+  const index: IndexEntry[] = fixtures ? [...thisRun.values()] : scanDossiers(true).map((e) => thisRun.get(e.key) ?? e);
   index.sort((a, b) => a.name.localeCompare(b.name));
   uniqueSlugs(index);
   nameEntries(index);

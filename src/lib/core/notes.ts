@@ -16,6 +16,7 @@
  */
 import { hlcCompare, hlcDecode } from './hlc';
 import type { Change } from './log';
+import { shownTime } from './when';
 
 export interface ReplacedNotes {
   /** The text that was replaced. */
@@ -24,6 +25,9 @@ export interface ReplacedNotes {
   was: string;
   /** The stamp of the edit that replaced it. */
   by: string;
+  /** When the text was written and when it was replaced, to show (`shownTime`): a marked edit's recorded time, else its stamp's wall (round sixty-three). */
+  wasAt: number;
+  byAt: number;
 }
 
 /**
@@ -57,7 +61,7 @@ export function replacedNotes(changes: Change[], opts: { field?: string; baseFie
     let base = baseOf.get(cur.t);
     for (let hops = 0; typeof base === 'string' && base !== prev.t && opts.skip?.has(base) && hops < 50; hops++) base = baseOf.get(base); // through texts not on screen here
     if (base === prev.t) continue; // made from this text: replaced knowingly
-    out.push({ text: prev.value, was: prev.t, by: cur.t });
+    out.push({ text: prev.value, was: prev.t, by: cur.t, wasAt: shownTime(prev), byAt: shownTime(cur) });
   }
   return out;
 }
