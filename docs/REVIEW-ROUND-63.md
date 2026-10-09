@@ -286,3 +286,25 @@ All runs were in the sandbox, on the merged code after the fix pass.
 - **Not run here:** WebKit and Firefox (not installed), and the PC's own strict run on Windows. The latter is the gate before the deploy.
 
 Before the fix pass, the strict run had passed 325 of 326 with one flaky test: the new r63h phone test, which opened `/places` on an empty device and was carried into the example. It now opens with the device's own collection.
+
+## 15. The deploy
+
+Round sixty-three went up on 9 October 2026, commit `1cd6390`.
+- **The strict run on the PC** (Chromium and the Chromium phone, two workers) passed 333 of 333 first time, with nothing flaky and nothing skipped. It ran the font-swap tests on Windows for the first time: the front page and the species page shift by less than 0.05 there now, against the 0.107 round sixty-two measured. The 200%-text tests ran too, where round sixty-two skipped two of them.
+- **The deploy's own checks:** svelte-check found 0 errors, and the unit suite passed 2,019 with 1 skipped. The Worker is version `2a9cb93a-ec5b-4507-a272-0349989544e1`, and the live check passed 18 of 18.
+
+**The corpus step.**
+- **The offline rederive** built 8,947 species.
+  - It made 2,103 requests to GBIF, which is by design: the download held occurrence sets for 7,540 species, and the rest go to the API path. One 429 was retried.
+- **`--index`** wrote corpus `4208359789dbd5e6`: 32 buckets and 64 posting files.
+- **The audit** against the index from before the round found 49 shown names changed, not the few hundred estimated.
+  - **What the rules did:** a bare genus gave way to a fuller name (Aloe vera "Barbados aloe", Ficus benjamina "Weeping fig", Camellia japonica "Common camellia"), Dracaena trifasciata's seven-name string became "Snake plant", and Fraxinus pennsylvanica became "Green ash".
+  - **What went wrong:** about a dozen were case flips the other way ("China Aster", "Red-osier Dogwood", "Sensitive Fern"). Splitting the lists had given Title Case spellings more sources, and a name's spelling was chosen by count.
+- **The upload** carried 9,013 files (290 MB), and the live check passed 18 of 18.
+
+**The case fix, after the audit.**
+- **The rule.** Spellings of a name that differ only in capitals now count together. Of them, the one shown is a spelling a source gave with the fewest capitals after the first letter, and a spelling all in lower case is set aside when another has a capital, since a source that lowers every word says nothing of a proper noun. Between spellings that differ otherwise (a hyphen, a space), the one more sources give is still shown, as round sixty-one decided.
+- **Test:** `r63z-name-case` (3 of its 5 cases failed before the fix).
+- **When it takes effect.** Species pages read the names when they are served, so they change with the deploy; tiles, rows and search change with `--index` and the upload.
+- **What it cannot fix:** a source's own misspelling winning on count (Nepenthes rafflesiana's "Raffle's Pitcher").
+

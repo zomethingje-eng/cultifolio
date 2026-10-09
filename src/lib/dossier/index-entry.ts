@@ -165,7 +165,29 @@ export function englishNames(vernacular: VernacularName[], scope: NameScope = {}
     return ws.length === 2 && other(ws[0]) && !!epithet && stem(ws[1]) === stem(epithet);
   };
   const named = [...groups.values()].map((g) => {
-    const spelling = [...g.spellings.entries()].sort((a, b) => b[1].n - a[1].n || a[1].at - b[1].at)[0][0];
+    // Which spelling of a name to show. Spellings that differ only in capitals count together, and of them the one shown is
+    // one a source gave with the fewest capitals after the first letter ("China aster" over "China Aster"), so a list in
+    // Title Case cannot flip a headline's case by its count; one all in lower case is set aside when another has a
+    // capital, since a source that lowers every word says nothing of a proper noun ("Christmas cactus", not "christmas
+    // cactus"). Spellings that differ otherwise are chosen by their sources, then GBIF's order, as before (round
+    // sixty-three, after the --index audit: splitting the lists gave Title Case spellings more sources, and about a dozen
+    // headlines flipped case).
+    const byCase = new Map<string, { forms: Array<[string, { n: number; at: number }]>; n: number; at: number }>();
+    for (const [sp, c] of g.spellings) {
+      const k = sp.toLowerCase();
+      const e = byCase.get(k) ?? { forms: [], n: 0, at: c.at };
+      e.forms.push([sp, c]);
+      e.n += c.n;
+      e.at = Math.min(e.at, c.at);
+      byCase.set(k, e);
+    }
+    const caps = (sp: string) => (sp.slice(1).match(/\p{Lu}/gu) ?? []).length;
+    const formOf = (forms: Array<[string, { n: number; at: number }]>) => {
+      const cased = forms.some(([sp]) => /\p{Lu}/u.test(sp)) ? forms.filter(([sp]) => /\p{Lu}/u.test(sp)) : forms;
+      return cased.sort((a, b) => caps(a[0]) - caps(b[0]) || b[1].n - a[1].n || a[1].at - b[1].at)[0][0];
+    };
+    // Between spellings that differ otherwise (a hyphen, a space), the one more sources give, as round sixty-one decided.
+    const spelling = formOf([...byCase.values()].sort((a, b) => b.n - a.n || a.at - b.at)[0].forms);
     const back = setBack(spelling);
     // 0 a name; 1 a bare genus word (rule 2a); 2 set back.
     return { spelling, tier: back ? 2 : bareGenus(spelling, scope) ? 1 : 0, at: g.at, sources: g.from.size, preferred: g.preferred };
