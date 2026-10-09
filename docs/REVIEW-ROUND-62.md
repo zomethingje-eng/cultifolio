@@ -104,3 +104,9 @@ The `--names` step ran on the PC while the deploy was still stopped: 8,947 dossi
 2. The live commands in `docs/review-61/corpus.md`, B1's first screen on a phone, and B2's queries.
 3. `npm run live-check` with no skips.
 4. Update every device soon: a round-sixty-one device sets version-2 batches aside until it does.
+
+## 13. The deploy
+
+Deployed on 9 October 2026 as Worker version `b66c973e-a246-444c-9232-e6d3ad604ea7`, after the unit suite passed on the PC (1,829 passing, 1 skipped) and the live check passed 18 of 18; the corpus `8a9396b6d10f0d45` (the `--names` step's names, with a genus named alone set back) was uploaded after it, and the live check passed 18 of 18 again.
+
+The strict browser run before it, on the PC with two workers: 294 tests, 286 passing, 4 skipped (the two Linux-only font tests, and two 200%-text tests whose preference Windows' bundled browser does not take), and 2 flaky, so the script said not to deploy and the deploy went ahead on the author's judgement. One flake was a test fault: a page the service worker had come to control fetched past the test's `page.route`, so the sheets request the test held back reached the server (r62a, "still reading the species sheets"). Every spec that answers requests with `page.route` now blocks the service worker, as the picker specs already did. The other, r61a a11y-perf 2, timed out loading its first page and passed on its retry; no cause is established, and it is watched.

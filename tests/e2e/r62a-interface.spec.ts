@@ -11,6 +11,10 @@ import { test, expect, type Page, type BrowserContext } from '@playwright/test';
 import { inject as sharedInject, type Row } from './helpers/inject';
 import { framesSettled } from './helpers/settled';
 
+// The service worker is not under test here; once it controls a page its fetches pass by `page.route`, so a sheets request
+// the test holds back reached the server instead (flaky in the first deploy's strict run on Windows; round sixty-two).
+test.use({ serviceWorkers: 'block' });
+
 async function ready(p: Page) {
   await p.locator('html[data-ready]').waitFor({ state: 'attached', timeout: 60_000 });
 }

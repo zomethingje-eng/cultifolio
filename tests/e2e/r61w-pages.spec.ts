@@ -10,6 +10,10 @@ import { test, expect, type Page } from '@playwright/test';
 import zlib from 'node:zlib';
 import { inject } from './helpers/inject';
 
+// The service worker is not under test here; once it controls a page its fetches pass by `page.route` (flaky in the first
+// deploy's strict run on Windows; round sixty-two).
+test.use({ serviceWorkers: 'block' });
+
 async function ready(p: Page) {
   await p.locator('html[data-ready]').waitFor({ state: 'attached' });
 }

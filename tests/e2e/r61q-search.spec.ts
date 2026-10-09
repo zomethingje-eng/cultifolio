@@ -5,6 +5,10 @@
  */
 import { test, expect } from '@playwright/test';
 
+// The service worker is not under test here; once it controls a page its fetches pass by `page.route` (flaky in the first
+// deploy's strict run on Windows; round sixty-two).
+test.use({ serviceWorkers: 'block' });
+
 test('the picker offers no retried species for a variety, and a picked species keeps the typed rank and epithet', async ({ page }) => {
   // Changed in round sixty-two (decision 3; the corpus review, 2 and 3; B3): the picker asks about the species part only,
   // so the variety's species is a direct hit, offered as the species compared, filed with no key; and the typed rest is
