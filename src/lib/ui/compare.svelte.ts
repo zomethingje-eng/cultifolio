@@ -2,8 +2,12 @@
  * The compare tray: up to three species picked from their pages, kept in this
  * browser's local storage (a convenience, never synced), shown as a bar with
  * a link to /compare?s=a,b,c. Nothing here is about the collection.
+ *
+ * Read and written through `stored.ts` with the collection's scope (round sixty-two; A9, the grower review, 11): a tray
+ * chosen in the sample collection is that tab's own and goes with it, never into the grower's own tray.
  */
 import { browser } from '$app/environment';
+import { readSetting, writeSetting } from '$lib/ui/stored';
 
 const KEY = 'cultifolio.compare';
 export const MAX = 3;
@@ -12,7 +16,7 @@ type Pick = { slug: string; name: string };
 function read(): Pick[] {
   if (!browser) return [];
   try {
-    const v = JSON.parse(localStorage.getItem(KEY) ?? '[]');
+    const v = JSON.parse(readSetting(KEY, 'collection') ?? '[]');
     return Array.isArray(v) ? v.filter((x) => x && typeof x.slug === 'string' && typeof x.name === 'string').slice(0, MAX) : [];
   } catch {
     return [];
@@ -51,11 +55,7 @@ class Compare {
     return `/compare?s=${this.picks.map((p) => p.slug).join(',')}`;
   }
   private save() {
-    try {
-      localStorage.setItem(KEY, JSON.stringify(this.picks));
-    } catch {
-      /* a private window: the tray lives for the page */
-    }
+    writeSetting(KEY, 'collection', JSON.stringify(this.picks)); // refused in a private window: the tray lives for the page
   }
 }
 export const compare = new Compare();

@@ -2,7 +2,7 @@
  * The grower's own species list: every kind with a growing plant, plus every
  * kind followed without one. Pure, so it can be tested without the store.
  */
-import { speciesSlug, speciesOf } from '$core/names';
+import { speciesSlug, speciesOf, parseName, slugify } from '$core/names';
 import type { Accession, Taxon } from './types';
 
 export interface MySpecies {
@@ -35,4 +35,22 @@ export function mySpeciesOf(accessions: readonly Accession[], taxa: readonly Tax
     } else if (t.followed) out.set(slug, { slug, name: t.name, gbifKey: t.gbifKey ?? null, grown: 0, followed: true });
   }
   return out;
+}
+
+/**
+ * Which taxon record a plant's "My notes on …" are kept on, and the name it carries (round sixty-two; A21). A plant of a
+ * species, a cultivar or a "cf." or "aff." plant keeps them on its species' record, shared with every plant of that
+ * species and shown on its page. An "sp." or "spp." plant is no species: its notes are kept by its full name ("Lithops sp.
+ * C 036"), not on the bare genus, where every "Lithops sp." plant shared one text. `shared` is the record they were kept on
+ * before, when it differs: still read, so notes written there are not lost from the page.
+ */
+export function notesTaxon(taxonName: string): { slug: string; name: string; shared?: string } {
+  const p = parseName(taxonName);
+  if ((p.qualifier === 'sp.' || p.qualifier === 'spp.') && !p.epithet) return { slug: slugify(taxonName), name: taxonName.trim(), shared: speciesSlug(taxonName) };
+  return { slug: speciesSlug(taxonName), name: speciesOf(taxonName) };
+}
+/** The species a "cf." or "aff." plant is compared with ("Copiapoa cf. cinerea" → "Copiapoa cinerea"), or null: its links and its habitat are that species', and say so (round sixty-two; A21). */
+export function comparedSpecies(taxonName: string): string | null {
+  const p = parseName(taxonName);
+  return (p.qualifier === 'cf.' || p.qualifier === 'aff.') && p.epithet ? `${p.genus} ${p.epithet}` : null;
 }

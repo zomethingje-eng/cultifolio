@@ -31,3 +31,14 @@ export function fieldWords(kind: string, changes: Array<{ field: string; value: 
   }
   return out;
 }
+
+/**
+ * What a restore that changed the number says, on the plant's page and the batch's alike (round sixty-two; A22): when
+ * the order in which the two records reached this device is not known (both from before it kept that order, or both
+ * copied in by a replace from a backup), it says so, and that the one that stayed keeps the number.
+ */
+export function restoredWords(m: { from: string; to: string; unknown?: boolean }, what: 'plant' | 'batch'): string {
+  return m.unknown
+    ? `Restored as ${m.to}: another ${what} has ${m.from}, and which reached this device first is not known, so the ${what} that stayed keeps it.`
+    : `Restored as ${m.to}: ${m.from} is another ${what}'s now.`;
+}

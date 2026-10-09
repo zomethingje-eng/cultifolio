@@ -67,15 +67,15 @@ describe('the species page head (round sixty; the self-review 14, product 6)', (
   it('with a climate: the figures, each with its source, and never the Wikipedia lead or advice', () => {
     expect(speciesTitle(cinerea)).toBe('Copiapoa cinerea: habitat rain, cold nights and light');
     const d = speciesDescription(cinerea);
-    expect(d).toBe('Copiapoa cinerea in the wild: 1 night in 100 below 6.5 °C (NASA POWER); 60 mm of rain a year and 30–63 DLI of light (CHELSA); from 352 in-range records.');
+    expect(d).toBe('Copiapoa cinerea habitat: cold floor 6.5 °C, 1 night in 100 at a typical spot (NASA POWER); 60 mm of rain a year (sum of monthly medians, CHELSA).'); // round sixty-two: never "in the wild" (A3); whole parts left off past 155
     expect(d.length).toBeLessThanOrEqual(155);
     expect(d).not.toMatch(/cultivation|suggests|wants|tolerates/);
     // The reader's units, as the page renders them.
-    expect(speciesDescription(cinerea, 'us')).toContain('43.7 °F (NASA POWER)');
+    expect(speciesDescription(cinerea, 'us')).toContain('cold floor 43.7 °F, 1 night in 100 at a typical spot (NASA POWER)');
   });
   it('without extremes the mean night is named as what it is, with its source', () => {
     const d = speciesDescription({ ...cinerea, climate: { ...cinerea.climate, extremes: null } });
-    expect(d).toContain("coldest month's mean night 9.0 °C (CHELSA)");
+    expect(d).toContain('coldest month, mean nightly low 9.0 °C (CHELSA)'); // round sixty-two (visitor-words 3)
     expect(d).not.toContain('NASA POWER');
   });
   it('a long name is clipped at a word under 155 characters', () => {

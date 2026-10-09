@@ -8,17 +8,30 @@
   import { localDate } from '$core/dates';
   import { calendarOf, type RhythmSource } from '$lib/export/rhythms';
   import { saveFile } from '$lib/export/save';
-  import { DRY_HORIZON_DAYS } from '$lib/export/ics';
+  import { DRY_HORIZON_DAYS, wholeDays } from '$lib/export/ics';
   import { accNo } from '$lib/db/types';
+  import { tag36 } from '$core/tag';
   let msg = $state('');
   const growing = $derived(collection.ready ? collection.accessions.filter((a) => a.status === 'growing') : []);
+  /**
+   * The collection's tag for the calendar's UIDs: the earliest record's id, hashed, the same on every device the collection
+   * syncs to and in every download, and naming nothing (round sixty-two; the outside review's A27). The log keeps no id of
+   * the collection itself.
+   */
+  const collectionTag = () => {
+    const ids = [...collection.accessions, ...collection.locations, ...collection.sowings].map((r) => r.id).sort();
+    return ids.length ? tag36(ids[0]) : 'empty';
+  };
   function sourceOf(): RhythmSource {
     const today = localDate();
     return {
       today,
-      plants: growing.map((a) => ({ id: a.id, no: accNo(a), name: a.taxonName + (a.cultivar ? ` ‘${a.cultivar}’` : ''), placeId: collection.placeOf(a.locationId) ?? null, ownDays: typeof a.waterDays === 'number' && a.waterDays > 0 ? a.waterDays : null })),
+      collection: collectionTag(),
+      // A rhythm the calendar can write: a whole number of days from 1 to 365; any other figure that reached the record
+      // (a backup, an import, a sync) is replaced by the default, the plant's by its place's (round sixty-two; A27).
+      plants: growing.map((a) => ({ id: a.id, no: accNo(a), name: a.taxonName + (a.cultivar ? ` ‘${a.cultivar}’` : ''), placeId: collection.placeOf(a.locationId) ?? null, ownDays: wholeDays(a.waterDays, 0) || null })),
       placeName: (id) => collection.locationName(id),
-      rule: (id) => { const c = id ? collection.conditions(id) : null; return { every: c?.waterDays && c.waterDays > 0 ? c.waterDays : DUE_DAYS, dry: c?.dryMonths ?? [] }; },
+      rule: (id) => { const c = id ? collection.conditions(id) : null; return { every: wholeDays(c?.waterDays, DUE_DAYS), dry: c?.dryMonths ?? [] }; },
       from: (id) => collection.lastWatered(id) ?? collection.madeOn('accession', id) ?? collection.accession(id)?.acquired ?? today
     };
   }

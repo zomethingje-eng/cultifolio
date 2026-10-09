@@ -8,6 +8,7 @@ import * as v from 'valibot';
 import { materialise, live, known, readChanges, isComplete, type Change, type Record_ } from '$core/log';
 import { kindOf, accNo, sowNo, EVENT_LABEL, MEASURES, type Accession, type Photo, type Sowing, type PlantEvent } from '$lib/db/types';
 import { MAX_PHOTO_BYTES, SEAL_OVERHEAD } from '$lib/sync/limits';
+import { isPastStamp } from '$core/hlc';
 import { BACKUP_FORMAT, BACKUP_V, Manifest, ChangeRow, photoPath, thumbPath } from './format';
 
 /** Why a photo's bytes cannot be stored, or null: both files must be JPEGs (the app only ever writes JPEGs) and small enough to sync. */
@@ -119,7 +120,7 @@ export async function buildBackup(o: BuildOpts): Promise<BuiltBackup> {
   const parked = [...new Set(o.parked ?? [])].filter((t) => inLog.has(t)).sort();
   const manifest: Manifest = {
     format: BACKUP_FORMAT,
-    v: BACKUP_V,
+    v: o.changes.some((c) => isPastStamp(c.t)) ? BACKUP_V : 1, // 2 only with a marked stamp, which an older build would misread (round sixty-two; outside review B8)
     app: o.app,
     exported: new Date().toISOString(),
     device: o.device,

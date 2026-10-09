@@ -45,8 +45,8 @@ export function generatedNote(input: SheetInput, o: NoteOpts = {}): Condensed | 
   const from: string[] = [];
   const items: Array<{ lead: string; rule: string }> = [];
   // Without a habitat climate the sentence says which kind of without: pending, not checked, or none derivable. Three different facts.
-  const why = input.climateStatus === 'pending' ? 'the habitat climate is pending' : input.climateStatus === 'refused' ? 'the habitat climate was not checked (a source did not answer)' : 'no habitat climate could be derived for this species';
-  if (arch) s.push(`Grouped as ${aLabel(arch.arch.lab)} by ${arch.why} (archetype table)${year ? '.' : `; ${why}.`}`);
+  const why = input.climateStatus === 'pending' ? 'the habitat climate is pending' : input.climateStatus === 'refused' ? 'the habitat climate was not checked (a source refused or did not answer)' : 'no habitat climate could be derived for this species';
+  if (arch) s.push(`Grouped as ${aLabel(arch.arch.lab)}, ${arch.why}${year ? '.' : `; ${why}.`}`);
   if (arch) items.push({ lead: `${aLabel(arch.arch.lab)[0].toUpperCase()}${aLabel(arch.arch.lab).slice(1)}, by its ${arch.tier}.${year ? '' : ` ${why[0].toUpperCase()}${why.slice(1)}.`}`, rule: 'archetype table' });
   else if (!year) items.push({ lead: `${why[0].toUpperCase()}${why.slice(1)}.`, rule: 'the dossier' });
   for (const r of picked) {
@@ -90,12 +90,15 @@ export function careLine(input: SheetInput, o: NoteOpts = {}): string {
     // different, warmer figure, and a label stays in the pot for years (round seventeen, 7; round eighteen, 8; round
     // thirty-seven, R1-2; round thirty-eight, R1-2, which found `none` still printing the mean as the night).
     const nightUnchecked = !input.extremes;
-    if (fl.habitat != null && !nightUnchecked) bits.push(`hab. night ${temp(fl.habitat, input.units ?? METRIC, 1)}`);
+    // Named as the pages name it, with its rate and source: "hab. night" read as a typical habitat night (round sixty-two;
+    // visitor-words 4, outside review A3).
+    if (fl.habitat != null && !nightUnchecked) bits.push(`floor ${temp(fl.habitat, input.units ?? METRIC, 1)} (1 in 100, NASA POWER)`);
     // Said as what it is, as everywhere else it is shown: a convention with no source, not a figure (round sixty-one; visitor 7).
     if (fl.convention && fl.habitat == null) bits.push(`group min ${temp(fl.convention.minC, input.units ?? METRIC, 0)} (convention, no source)`);
   }
   const dlis = m ? m.map((x) => x.dli).filter((x): x is number => x != null) : [];
-  if (dlis.length) bits.push(`sky ${Math.round(Math.min(...dlis))}–${Math.round(Math.max(...dlis))} DLI`);
+  // With its source, as the floor has its own (round sixty-two, second pass; the words review's 27, rule 1).
+  if (dlis.length) bits.push(`open sky ${Math.round(Math.min(...dlis))}–${Math.round(Math.max(...dlis))} DLI (CHELSA)`);
   return bits.join(' · ');
 }
 

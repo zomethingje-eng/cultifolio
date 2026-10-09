@@ -9,7 +9,7 @@
  */
 import { climograph, type ClimoInput } from '$climate/climograph';
 import { temp, rain, ruleRain, tempUnit, rainUnit, METRIC, type Units, dryLabel } from '$core/units';
-import { tiedMonths, monthNames } from '$core/sheet';
+import { tiedMonths, monthNames, extremesWhyTag } from '$core/sheet';
 
 export interface CardInput {
   units?: Units;
@@ -21,6 +21,8 @@ export interface CardInput {
   cells: number;
   /** The habitat's hemisphere, so the chart can say whose months it draws (round sixty; visitor 3). */
   south?: boolean;
+  /** Why there is no floor, said as the glance row says it (round sixty-two; visitor-words 11, rule 2). */
+  extremesStatus?: string | null;
 }
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -44,9 +46,11 @@ export function climateCardSvg(c: CardInput): string {
   const hotAt = monthNames(tiedMonths(m.map((x) => x.tmax), true, (v) => temp(v, u)), 'short');
   const coldAt = monthNames(tiedMonths(m.map((x) => x.tmin), false, (v) => temp(v, u, 1)), 'short');
   const figs: Array<[string, string, string]> = [
-    ex ? ['Cold floor (1 night in 100)', temp(ex.minP01, u, 1), `record low ${temp(ex.minAbs, u, 1)} in ${ex.years} years · NASA POWER`] : ['Coldest month, mean night', temp(m[cold].tmin, u, 1), `${coldAt}, not a floor · CHELSA`],
-    ['Warmest month, mean day', temp(m[hot].tmax, u), `${hotAt} · CHELSA`],
-    ['Rain a year', `${rain(rainYear, u)}`, `${wetMonths === 0 ? 'no month' : `${wetMonths} month${wetMonths === 1 ? '' : 's'}`} of ${ruleRain(25, u)} or more · CHELSA`],
+    // "typical spot" and the figures' own names, as on the glance row; with no floor, the glance row's reason (round
+    // sixty-two; outside review A3, visitor-words 3 and 11).
+    ex ? ['Cold floor (1 night in 100)', temp(ex.minP01, u, 1), `record low ${temp(ex.minAbs, u, 1)} in ${ex.years} years at a typical spot · NASA POWER`] : ['Coldest month, mean nightly low', temp(m[cold].tmin, u, 1), `${coldAt}, not a floor; ${extremesWhyTag(c.extremesStatus)} · CHELSA`],
+    ['Warmest month, mean daily high', temp(m[hot].tmax, u), `${hotAt} · CHELSA`],
+    ['Rain a year (sum of monthly medians)', `${rain(rainYear, u)}`, `${wetMonths === 0 ? 'no month' : `${wetMonths} month${wetMonths === 1 ? '' : 's'}`} of ${ruleRain(25, u)} or more · CHELSA`],
     dlis.length ? ['Open-sky light', `${Math.min(...dlis).toFixed(0)}–${Math.max(...dlis).toFixed(0)} DLI`, 'mol/m²/day, lowest to highest month · CHELSA'] : ['Cells', String(c.cells), `habitat grid cell${c.cells === 1 ? '' : 's'} read`]
   ];
   const g = climograph({ ...c.climate, extremes: ex ? { minAbs: ex.minAbs, maxP99: ex.maxP99, years: ex.years } : null }, 640, u);
@@ -99,8 +103,8 @@ export function climateCardSvg(c: CardInput): string {
     ${g.strip ? `<line x1="110" x2="126" y1="14" y2="14" stroke="${accent}" stroke-width="2"/><text x="132" y="18">DLI</text><line x1="170" x2="186" y1="14" y2="14" stroke="${ink3}" stroke-width="2" stroke-dasharray="3 3"/><text x="192" y="18">RH, each on its own scale</text>` : ''}
     <text x="${g.strip ? 360 : 110}" y="18">habitat months${c.south == null ? '' : `, ${c.south ? 'southern' : 'northern'} hemisphere`}</text>
   </g>
-  <text x="40" y="${H - 40}" font-family="system-ui, sans-serif" font-size="12" fill="${ink2}">Median year across ${c.cells} habitat cell${c.cells === 1 ? '' : 's'} (band: 10th–90th percentile). CHELSA V2.1 1981–2010 (CC0)${ex ? ` · NASA POWER, ${ex.years} years` : ''} · records: GBIF · range: WCVP, RBG Kew (CC BY 4.0).</text>
-  <text x="40" y="${H - 20}" font-family="system-ui, sans-serif" font-size="12" fill="${ink2}">Derived by rule, not written. Every figure and its source: <tspan fill="${accent}" font-weight="700">cultifolio.com/species/${esc(c.slug)}</tspan></text>
+  <text x="40" y="${H - 40}" font-family="system-ui, sans-serif" font-size="12" fill="${ink2}">Median year across ${c.cells} habitat cell${c.cells === 1 ? '' : 's'}${g.hasBand ? ' (band: 10th–90th percentile)' : ''}. CHELSA V2.1 1981–2010 (CC0)${ex ? ` · NASA POWER, ${ex.years} years` : ''} · records: GBIF · range: WCVP, RBG Kew (CC BY 4.0).</text>
+  <text x="40" y="${H - 20}" font-family="system-ui, sans-serif" font-size="12" fill="${ink2}">Figures derived by rule. Every figure and its source: <tspan fill="${accent}" font-weight="700">cultifolio.com/species/${esc(c.slug)}</tspan></text>
 </svg>`;
 }
 

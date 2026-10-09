@@ -10,11 +10,22 @@ import type { RequestHandler } from './$types';
  * MET Norway Locationforecast reduced to daily min/max, plus NWS frost/freeze
  * alerts for US points, plus the frost-risk verdict. The forecast and alerts
  * are kept in the Worker's cache (the Cache API) for an hour per 0.01° cell so a site polls MET no
- * more than hourly however many devices watch it; the verdict is worded in the
+ * more than hourly however many devices watch it (five minutes when the NWS did
+ * not answer for the alerts: `REFUSED_TTL_S`); the verdict is worded in the
  * reader's units on every request, so the cache never hands a Fahrenheit
  * sentence to a Celsius reader. MET asks for ≤4 decimals and an identifying
  * User-Agent.
  */
+/**
+ * How long an answer whose alerts the NWS did not answer is kept, at the edge and in the browser (seconds): kept for the
+ * hour, it said "alerts not checked" for an hour after the NWS recovered (round sixty-two; the words review, 18). Short
+ * enough that the alerts are asked again soon, long enough that a site watched by many devices still asks MET at most
+ * twelve times an hour while the NWS is down.
+ */
+const REFUSED_TTL_S = 300;
+/** How long any other answer is kept (seconds). */
+const TTL_S = 3600;
+const ttlOf = (status: string | undefined) => (status === 'refused' ? REFUSED_TTL_S : TTL_S);
 const notAnswered = () => json({ error: 'forecast source did not answer' }, { status: 502, headers: { 'cache-control': 'no-store' } });
 
 export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddress }) => {
@@ -47,7 +58,11 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
       // The cached body is the raw forecast; the verdict is worded here, in this reader's units, and the browser keeps
       // the worded answer only for the rest of the hour the Worker's cache would.
       const age = Number(hit.headers.get('age')) || 0;
-      return withRisk((await hit.json()) as Cached, `public, max-age=${Math.max(60, 3600 - age)}`);
+      const c = (await hit.json()) as Cached;
+      // Never past what the edge keeps it for: an hour, or five minutes when the NWS did not answer (round sixty-two; the
+      // words review, 18). The floor of a minute stays below either.
+      const ttl = ttlOf(c.alertsStatus);
+      return withRisk(c, `public, max-age=${Math.max(Math.min(60, ttl), ttl - age)}`);
     } catch {
       /* an unreadable cache entry is fetched afresh below */
     }
@@ -61,7 +76,11 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   // one MET blocks (round sixty; the server review, 16). Since round sixty-one each has its own share, one address takes
   // at most a tenth of it, a US point takes from both (two calls), and a call held back is said as held back, 503 "not
   // asked", never as a source that did not answer (rule 2; the server review, 4; B13).
-  const call = await upstreamCall(platform, isUS(la, lo) ? ['met', 'nws'] : ['met'], clientIp(getClientAddress));
+  const us = isUS(la, lo);
+  // No answer says "only the NWS's share was spent": every NWS call is taken with a MET call, both shares are equal and MET
+  // is checked first, so a refusal always names MET. The branch that answered MET alone with the alerts "not asked" was
+  // a state no request reached, and is gone (round sixty-two, second pass; the server review, 4).
+  const call = await upstreamCall(platform, us ? ['met', 'nws'] : ['met'], clientIp(getClientAddress));
   if (!call.ok) return heldBack(call);
   const headers = { 'user-agent': USER_AGENT, accept: 'application/json' };
   // Anything short of a well-formed answer from MET (unreachable, a non-2xx, a body that is not JSON or not a forecast) is one
@@ -78,8 +97,8 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   if (!forecast.days.length || !forecast.days.some((d) => Number.isFinite(d.tmin))) return notAnswered();
 
   let alerts: ReturnType<typeof reduceNws> = [];
-  let alertsStatus: 'ok' | 'none' | 'refused' | 'n/a' = 'n/a';
-  if (isUS(la, lo)) {
+  let alertsStatus: Cached['alertsStatus'] = 'n/a';
+  if (us) {
     try {
       const r = await fetch(nwsAlertsUrl(la, lo), { headers });
       if (r.ok) {
@@ -90,7 +109,8 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
       alertsStatus = 'refused';
     }
   }
-  const raw: Cached = { lat: la, lon: lo, forecast, alerts, alertsStatus, attribution: ['Forecast data from MET Norway (CC BY 4.0)', ...(isUS(la, lo) ? ['Alerts: NOAA National Weather Service'] : [])] };
-  if (cache && platform?.context) platform.context.waitUntil(cache.put(cacheKey, json(raw, { headers: { 'cache-control': 'public, max-age=3600' } })).catch(() => {}));
-  return withRisk(raw, 'public, max-age=3600');
+  const raw: Cached = { lat: la, lon: lo, forecast, alerts, alertsStatus, attribution: ['Forecast data from MET Norway (CC BY 4.0)', ...(us ? ['Alerts: NOAA National Weather Service'] : [])] };
+  // The lifetimes are written out (REFUSED_TTL_S and TTL_S) so the about pages' check reads them from the put.
+  if (cache && platform?.context) platform.context.waitUntil(cache.put(cacheKey, json(raw, { headers: { 'cache-control': alertsStatus === 'refused' ? 'public, max-age=300' : 'public, max-age=3600' } })).catch(() => {}));
+  return withRisk(raw, `public, max-age=${ttlOf(alertsStatus)}`);
 };

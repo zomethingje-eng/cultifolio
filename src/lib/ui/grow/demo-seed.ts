@@ -11,8 +11,8 @@
  * are the ones the collection's own add, pot-up and follow functions write, built here with their numbers and ids.
  */
 import { collection } from '$lib/db/collection.svelte';
-import { getMeta, setMeta } from '$lib/db/vault';
-import { inDemo } from '$lib/db/demo';
+import { changeKeys, getMeta, setMeta } from '$lib/db/vault';
+import { inDemo, SEED_TOP } from '$lib/db/demo';
 import { localDate } from '$core/dates';
 import { nextAccession, type NumberingScheme } from '$core/accession';
 import { speciesOf, speciesSlug } from '$core/names';
@@ -113,5 +113,8 @@ export async function seedDemo(): Promise<boolean> {
   const { recs, events } = sampleRecords(collection.scheme);
   const [first, ...rest] = recs;
   await collection.putWith(first.kind, first.id, first.fields, events, rest);
+  // The seed's last stamp: what comes after it is the visitor's own, which Leave counts and asks about (round sixty-two; A9).
+  const top = (await changeKeys().catch(() => [] as string[])).reduce((a, b) => (b > a ? b : a), '');
+  if (top) await setMeta(SEED_TOP, top);
   return true;
 }

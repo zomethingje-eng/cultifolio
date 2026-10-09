@@ -5,6 +5,7 @@
  */
 import { openDB, deleteDB, type IDBPDatabase, type DBSchema, type IDBPTransaction } from 'idb';
 import type { Change } from '$core/log';
+import { sampleClosedHere, inDemo, DEMO_DB } from './demo';
 
 /** The pixels for one photo record; metadata is in the change log. */
 export interface PhotoBlobs {
@@ -32,15 +33,29 @@ interface VaultDB extends DBSchema {
  * visitor can try Today, a plant page and labels on plants that are not theirs, and leaving the sample deletes it
  * whole, with nothing written to the grower's own log and nothing synced. `inDemo()` is read once per page life.
  */
-const DB_NAME = (() => { try { return typeof sessionStorage !== 'undefined' && sessionStorage.getItem('cultifolio.demo') === '1' ? 'cultifolio-demo' : 'cultifolio'; } catch { return 'cultifolio'; } })();
+const DB_NAME = inDemo() ? DEMO_DB : 'cultifolio'; // demo.ts's one reading of the flag and its one name (round sixty-two, second pass; the self-review's N7)
 /** Where a replacement (restore from backup, "replace" mode) is written in full before the live vault is touched. */
 const STAGING_NAME = DB_NAME === 'cultifolio' ? 'cultifolio-staging' : `${DB_NAME}-staging`; // the grower's keeps its name, so a replace cut off before this build still finishes (round sixty-one; review B)
-const DB_V = 3;
+/**
+ * 4 since round sixty-two, with nothing new in it: opening the vault at a new version makes every tab of an older build
+ * let go of it and reload into this one (`blocking`, below; round sixty-one's has it too). A round-sixty-one tab left
+ * open beside this build stored parks of its clock alone into the shared set, which this build reads as verdicts kept for
+ * good, and folded the log again at each turn (the second pass; the data review's suspected items).
+ */
+const DB_V = 4;
 /** The meta key the fold snapshot is kept under, and the counter that says it is stale. */
 const FOLD = 'fold';
 const FOLD_GEN = 'foldGen';
 /** Set in the live vault's meta from the moment the live log is wiped until the staged replacement has been copied in; on open, a set flag resumes the copy. */
 const STAGING_PENDING = 'staging-pending';
+/**
+ * The last arrival number a replace from a backup wrote (round sixty-two, second pass; the data review's 6, the
+ * self-review's N3). A backup carries no order of arrival, and the copy writes its changes' rows in stamp order: rows up
+ * to this number say when the file was copied in, not when each change reached this device, so `arrivalsOf` gives them
+ * no place, and the restore rule reads their order as not known rather than as two clocks. The snapshot's catch-up
+ * (`arrivalsAfter`) still reads them: for it any order of a whole log is a right one.
+ */
+const ORDER_FROM = 'orderFrom';
 
 let dbp: Promise<IDBPDatabase<VaultDB>> | null = null;
 
@@ -86,7 +101,7 @@ export const RELOAD_MAX_MS = 5000;
 const RELOAD_GRACE_MS = 800;
 
 /** What the person should be told about the vault itself (another tab holding an old version open); null when there is nothing to say. */
-export const vaultNotice: { text: string | null } = { text: null };
+const vaultNotice: { text: string | null } = { text: null };
 const listeners = new Set<(text: string | null) => void>();
 export function onVaultNotice(fn: (text: string | null) => void): () => void {
   listeners.add(fn);
@@ -106,6 +121,7 @@ function upgrade(db: IDBPDatabase<VaultDB>, oldV: number) {
   }
   if (oldV < 2) db.createObjectStore('outbox', { keyPath: 't' });
   if (oldV < 3) db.createObjectStore('order', { autoIncrement: true });
+  // 4: no change of shape (`DB_V`).
 }
 
 export function openVault(): Promise<IDBPDatabase<VaultDB>> {
@@ -122,7 +138,7 @@ export function openVault(): Promise<IDBPDatabase<VaultDB>> {
         (ev.target as IDBDatabase | null)?.close();
         dbp = null;
         // The sample's database is deleted whole when another tab leaves the sample: say that, not "updated" (round sixty-one; the records review, 13).
-        if (DB_NAME !== 'cultifolio') { notify('The sample collection was closed in another tab.'); try { sessionStorage.removeItem('cultifolio.demo'); } catch { /* the tab's flag */ } if (typeof location !== 'undefined') location.href = '/'; return; }
+        if (DB_NAME !== 'cultifolio') { sampleClosedHere(); return; } // one path with the channel's: the flag and the tab's copies go, and the next page says why (round sixty-two; the triage's 4)
         notify('Cultifolio has been updated in another tab. Reloading…');
         if (typeof location !== 'undefined') {
           const grace = new Promise<void>((r) => setTimeout(r, RELOAD_GRACE_MS));
@@ -253,6 +269,13 @@ async function copyStagingIn(live: IDBPDatabase<VaultDB>): Promise<void> {
     }
     // The parked set is the file's: the device's own named changes the wiped log no longer has (round fifty-eight).
     await live.put('meta', ((await stage.get('meta', 'parked')) as string[] | undefined) ?? [], 'parked');
+    // Every row the copy wrote is of unknown order (`ORDER_FROM`). Read after the copy, so a run that resumes after a stop
+    // marks the same rows: the live order store was cleared before it, and nothing else writes while the flag is up.
+    {
+      const tx = live.transaction(['order', 'meta'], 'readwrite');
+      const cur = await tx.objectStore('order').openKeyCursor(null, 'prev');
+      await Promise.all([cur ? tx.objectStore('meta').put(Number(cur.key), ORDER_FROM) : tx.objectStore('meta').delete(ORDER_FROM), tx.done]);
+    }
     // Photographs one at a time: a transaction holding every blob of a large collection would be one large allocation.
     for (const id of await stage.getAllKeys('photos')) {
       const p = await stage.get('photos', id);
@@ -311,7 +334,7 @@ export class StoppedError extends Error {
     super('syncing was stopped on this device while this run was under way');
   }
 }
-async function storeIn(tx: Tx, changes: Change[], fromServer: boolean, extra: Partial<Record<NumberKind, Set<string>>> = {}, strict = false, requireKey?: string): Promise<Stored> {
+async function storeIn(tx: Tx, changes: Change[], fromServer: boolean, extra: Partial<Record<NumberKind, Set<string>>> = {}, strict = false, requireKey?: string, ledger: Partial<Record<NumberKind, Set<string>>> = {}): Promise<Stored> {
   const ch = tx.objectStore('changes'), ob = tx.objectStore('outbox'), meta = tx.objectStore('meta');
   // A write for a sync run happens only while the stored sync record still carries that run's key, checked inside this
   // very transaction: another tab's "Stop syncing" or new vault between a check and a write can no longer let a batch of
@@ -377,10 +400,14 @@ async function storeIn(tx: Tx, changes: Change[], fromServer: boolean, extra: Pa
   const order = tx.objectStore('order');
   const rows = arrived.map((c) => order.add({ t: c.t }));
   const puts: Promise<unknown>[] = [...kept.map((c) => (strict ? ch.add(c) : ch.put(c))), ...(fromServer ? [] : kept.map((c) => ob.put({ t: c.t }))), ...rows];
+  // The ledger is read once per transaction (a caller that minted passes the copy it read) and written back only when
+  // this write adds a number to it: an import read and rewrote the whole ledger twice per line, and slowed from 33 lines
+  // a second to 5 over 2,000 (round sixty-two; agent G, outside review A's decision 3).
   for (const k of Object.keys(carried) as NumberKind[]) {
-    const set = await issuedIn(tx, k);
-    for (const n of carried[k]!) set.add(n);
-    puts.push(meta.put([...set], ISSUED(k)));
+    const set = ledger[k] ?? (await issuedIn(tx, k));
+    let added = false;
+    for (const n of carried[k]!) if (!set.has(n)) { set.add(n); added = true; }
+    if (added) puts.push(meta.put([...set], ISSUED(k)));
   }
   await Promise.all([...puts, tx.done]);
   const last = rows.length ? Number(await rows[rows.length - 1]) : 0;
@@ -415,15 +442,18 @@ export async function appendChangesClaiming<T>(kind: NumberKind, known: Set<stri
     const db = await openVault();
     const tx = db.transaction(STORES, 'readwrite');
     let built: { changes: Change[]; result: T };
+    let ledger: Set<string>;
     try {
-      const issued = await issuedIn(tx, kind);
+      ledger = await issuedIn(tx, kind);
+      const issued = new Set(ledger);
       for (const n of known) issued.add(n);
       built = build(issued);
     } catch (e) {
+      tx.done.catch(() => {}); // the abort is the point; its rejection is not a second error (round sixty-two: an import's group refused this way left an unhandled rejection)
       tx.abort();
       throw e;
     }
-    await storeIn(tx, built.changes, false);
+    await storeIn(tx, built.changes, false, {}, false, undefined, { [kind]: ledger });
     return built.result;
   });
   announce();
@@ -443,7 +473,7 @@ function announce(what: VaultNotice = 'written'): void {
   try { chan?.postMessage(what); } catch { /* a closed channel is nothing to report */ }
 }
 /** Tell the other tabs to fold the log again: the inputs of the fold changed under them (a stamp parked; round fifty-five, 2). */
-export const announceRefold = () => announce('refold');
+const announceRefold = () => announce('refold');
 /** Tell the other tabs something they must not sync through: the sync key was forgotten here (round fifteen, 2). */
 export const announceSyncForgotten = () => announce('sync-forgotten');
 /** Called when another tab wrote to the vault ('written'), replaced the whole collection ('replaced'), or stopped syncing ('sync-forgotten'). */
@@ -481,13 +511,21 @@ export async function outboxAck(ts: string[], key?: string): Promise<void> {
     await Promise.all([...ts.map((t) => ob.delete(t)), tx.done]);
   });
 }
-/** Put every change on this device in the outbox: the first push after sync is set up sends the whole collection. */
+/**
+ * Put every change on this device in the outbox: the first push after sync is set up sends the whole collection. The
+ * changes it holds as parked go too, and the push sends their verdicts with them (`logBatch`'s `parked`), so a device
+ * that joins parks them as this one does, and Apply on any device sends one as an edit made now (round sixty-two, second
+ * pass; the data review's 5: left out, a record whose own fields were parked reached the joining device as waiting for a
+ * newer version of the app, with nothing to Apply; judged by the new vault's arrival alone, A15, a change parked long ago
+ * would fold there).
+ */
 export async function outboxFill(): Promise<number> {
   return writing(async () => {
     const db = await openVault();
-    const ts = await db.getAllKeys('changes');
-    const tx = db.transaction('outbox', 'readwrite');
-    await Promise.all([...ts.map((t) => tx.store.put({ t })), tx.done]);
+    const tx = db.transaction(['changes', 'outbox'], 'readwrite');
+    const ts = await tx.objectStore('changes').getAllKeys();
+    const ob = tx.objectStore('outbox');
+    await Promise.all([...ts.map((t) => ob.put({ t })), tx.done]);
     return ts.length;
   });
 }
@@ -589,7 +627,7 @@ export async function wipeVault(): Promise<void> {
   await writing(async () => {
     const db = await openVault();
     const tx = db.transaction(['changes', 'photos', 'outbox', 'order', 'meta'], 'readwrite');
-    await Promise.all([tx.objectStore('changes').clear(), tx.objectStore('photos').clear(), tx.objectStore('outbox').clear(), tx.objectStore('order').clear(), dropFoldIn(tx)]);
+    await Promise.all([tx.objectStore('changes').clear(), tx.objectStore('photos').clear(), tx.objectStore('outbox').clear(), tx.objectStore('order').clear(), tx.objectStore('meta').delete(ORDER_FROM), dropFoldIn(tx)]);
     await tx.done;
   });
 }
@@ -728,18 +766,20 @@ export async function arrivalsAfter(seq: number): Promise<{ changes: Change[]; s
 }
 /**
  * The order in which these stamps reached this device (their rows in the order of arrival), for the few a caller asks
- * about; a stamp stored before the order was kept has none. What the log can say about "before" and "after" without
- * comparing two devices' clocks (round sixty-one; the records review's 12). One read of the order store: for a rare
- * action (a restore that meets another record under its number), not for a page's path.
+ * about; a stamp stored before the order was kept has none, and nor has one a replace from a backup wrote (`ORDER_FROM`).
+ * What the log can say about "before" and "after" without comparing two devices' clocks (round sixty-one; the records
+ * review's 12). One read of the order store: for a rare action (a restore that meets another record under its number),
+ * not for a page's path.
  */
 export async function arrivalsOf(stamps: string[]): Promise<Map<string, number>> {
   const want = new Set(stamps);
   const out = new Map<string, number>();
   if (!want.size) return out;
   const db = await openVault();
-  const tx = db.transaction('order');
-  const [rows, keys] = await Promise.all([tx.store.getAll(), tx.store.getAllKeys()]);
-  for (let i = 0; i < rows.length; i++) { const t = (rows[i] as { t?: string })?.t; if (t && want.has(t) && !out.has(t)) out.set(t, Number(keys[i])); }
+  const tx = db.transaction(['order', 'meta']);
+  const [rows, keys, from] = await Promise.all([tx.objectStore('order').getAll(), tx.objectStore('order').getAllKeys(), tx.objectStore('meta').get(ORDER_FROM)]);
+  const known = Number(from ?? 0) || 0;
+  for (let i = 0; i < rows.length; i++) { const t = (rows[i] as { t?: string })?.t; if (t && want.has(t) && !out.has(t) && Number(keys[i]) > known) out.set(t, Number(keys[i])); }
   return out;
 }
 /** Every stamp in the log, and nothing else: what a load from the snapshot needs of the log itself. */

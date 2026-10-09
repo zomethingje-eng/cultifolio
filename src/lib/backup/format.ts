@@ -23,7 +23,8 @@ import { localDate } from '$core/dates';
 import * as v from 'valibot';
 
 export const BACKUP_FORMAT = 'cultifolio-backup';
-export const BACKUP_V = 1;
+/** The newest backup format this build reads. 2 is written when the log holds a marked stamp (`isPastStamp`), 1 otherwise: a round-sixty reader refuses a 2 with a sentence rather than park what every later build folds (round sixty-two; outside review B8). */
+export const BACKUP_V = 2;
 export const EXT = '.cultifolio.zip';
 
 export const Manifest = v.object({

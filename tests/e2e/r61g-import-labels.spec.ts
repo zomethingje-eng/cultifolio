@@ -3,6 +3,7 @@
  * browser. Adopts the grower review's labels spec (docs/review-60/tests/grower--labels.spec.ts) as tests 1 and 2.
  */
 import { test, expect, type Page } from '@playwright/test';
+import { framesSettled } from './helpers/settled';
 
 test.use({ locale: 'en-GB' });
 
@@ -98,7 +99,8 @@ test('r61g 4: a sheet\'s unmatched columns are listed and kept, its dates asked 
   await page.fill('#imp-csv-text', lines.join('\n'));
   await page.click('#imp-csv-read');
   await page.click('#imp-check');
-  await expect(page.locator('#imp-already')).toContainText('300 lines look already imported', { timeout: 60_000 });
+  // Known by the import keys on the plants since round sixty-two: left out and counted, not a "looks already imported" guess.
+  await expect(page.locator('#imp-done-lines')).toContainText('300 lines were imported before', { timeout: 60_000 });
   await expect(page.locator('#imp-add')).toHaveText('Add 0 plants');
   // What the first run kept: the locality in the notes, the date read day first, the month-only date at its precision.
   await page.goto('/plants/0007');
@@ -139,7 +141,7 @@ test('r61g 6: the sample is marked before the first paint, does not shift the pa
   await ready(page);
   await expect(page.locator('html')).toHaveAttribute('data-demo', '1');
   await expect(page.locator('.demobar')).toBeVisible();
-  await page.waitForTimeout(1000);
+  await framesSettled(page); // fonts and frames settled, not a fixed pause (round sixty-two; the round-sixty-one self-review's triage 6)
   expect(await page.evaluate(() => (window as unknown as { __cls: number }).__cls)).toBeLessThan(0.05);
   // Settings: shut, with its heading.
   await page.goto('/settings');
@@ -169,7 +171,7 @@ test('r61g 7: a second sample tab is told plainly when the sample closes, and a 
   await ready(second);
   await expect(second.locator('.demobar')).toBeVisible();
   await page.getByRole('button', { name: 'Leave the sample' }).click();
-  await expect(second).toHaveURL(/^http:\/\/[^/]+\/$/, { timeout: 10_000 });
+  await expect(second).toHaveURL(/^http:\/\/[^/]+\/$/, { timeout: 20_000 }); // told on the leaving tab's pagehide since round sixty-two: twenty seconds under load
   await expect(second.locator('.toast')).toContainText('The sample collection was closed in another tab. This is your own collection.');
   await expect(second.locator('.demobar')).toBeHidden();
   await second.close();

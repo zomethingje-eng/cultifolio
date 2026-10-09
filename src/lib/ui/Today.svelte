@@ -24,6 +24,7 @@
   import { sync } from '$lib/sync/engine.svelte';
   import { prefs } from '$lib/ui/prefs.svelte';
   import { photoDue, photoDueDays } from '$lib/ui/photo-due';
+  import { today as day } from '$lib/ui/day.svelte';
   /** Where the lines are shown: the front page carries them all; the Today tab shows the frost and the watering in full above, so those two lines are left to it (round fifty-three, 3). */
   let { where = 'home' }: { where?: 'home' | 'today' } = $props();
   const hasSite = $derived(frost.hasSite);
@@ -41,7 +42,6 @@
       { timeout: 10000 }
     );
   }
-  const today = new Date();
   /** When this device last wrote a backup file, for the line below (round forty-nine, 3). */
   let lastBackup = $state<string | null>(null);
   onMount(() => { void getMeta<string>('lastBackup').then((v) => (lastBackup = v ?? null)); });
@@ -49,8 +49,9 @@
   const growing = $derived(collection.ready ? collection.accessions.filter((a) => a.status === 'growing') : []);
   // A plant recorded this spring is not "without a photograph in twelve months" yet: the line counts records six months
   // old or more, by the acquisition date on purpose (round forty-nine, 3; kept in round fifty-four). The rule is the plants
-  // list's own, so the chip this line opens lists the same plants (round sixty-one; the grower review, 11).
-  const photoDays = photoDueDays(today);
+  // list's own, so the chip this line opens lists the same plants (round sixty-one; the grower review, 11). Cut on the
+  // shared day store's corrected day, as the list is, never the raw device clock (round sixty-two; outside review B4).
+  const photoDays = $derived(photoDueDays(day.current));
   const unphotographed = $derived(growing.filter((a) => photoDue(a, collection, photoDays)));
   // The two facts the plants list and the place pages already flag, said once here: not watered for three weeks (by the
   // log, from the day the record was made when nothing is logged), and missed at the last audit or not seen for ninety
@@ -64,17 +65,19 @@
    */
   let sheets = $state<Map<string, Sheet> | null>(null);
   let sheetsSettled = $state(false); // the button waits for the sheets, as the Today tab's do: its count must not change under a reading eye (round fifty-five, 5)
+  /** The sheets did not answer: no plant on the line is set apart for its habitat's rest, and the line says so, never "none resting" (round sixty-two; rule 2, the grower review, 1). */
+  let sheetsFailed = $state(false);
   $effect(() => {
     const slugs = [...new Set(dry.filter((a) => kindOf(a) === 'species').map((a) => speciesSlug(a.taxonName)))];
-    if (!slugs.length) { sheets = null; sheetsSettled = true; return; }
+    if (!slugs.length) { sheets = null; sheetsSettled = true; sheetsFailed = false; return; }
     sheetsSettled = false;
-    void sheetsFor(slugs).then((m) => { if (m) sheets = m; }).finally(() => { sheetsSettled = true; });
+    void sheetsFor(slugs).then((m) => { if (m) sheets = m; sheetsFailed = !m; }, () => { sheetsFailed = true; }).finally(() => { sheetsSettled = true; });
   });
   /** Each resting plant with the rule that rests it: the rain rule's season, or under 120 mm a year the temperature rule's cooler six months, worded apart as the Today tab words them (round fifty-nine). */
   const restingBy = $derived.by(() => {
     const out = new Map<string, 'rain' | 'cool'>();
     if (!sheets) return out;
-    const month = today.getMonth() + 1;
+    const month = Number(day.current.slice(5, 7)); // the corrected day's month (round sixty-two; outside review B4)
     const lat = readerLat(collection.locations); // the site, else the first place with coordinates, as the species page reads it (round sixty; the self-review's 10)
     for (const a of dry) {
       const sh = sheets.get(speciesSlug(a.taxonName));
@@ -157,7 +160,9 @@
     const cool = `in ${its} habitat's warmer six months (a year of under ${ruleRain(120, units.current)} of rain, read by temperature)`;
     const rain = `in ${its} habitat's dry season`;
     const where = rules.size === 2 ? `${rain} or ${cool}` : rules.has('cool') ? cool : rain;
-    return parts.join(', and ') + (resting.length ? `; ${resting.length === dry.length ? (dry.length === 1 ? 'it is' : 'all of them are') : `${resting.length} of them ${resting.length === 1 ? 'is' : 'are'}`} ${where}` : '') + '.';
+    // The sheets did not answer: said, so no line reads as "none of them resting" (round sixty-two; rule 2).
+    const unread = sheetsFailed && !resting.length && dry.some((a) => kindOf(a) === 'species') ? '; resting months not checked: the species sheets did not answer' : '';
+    return parts.join(', and ') + (resting.length ? `; ${resting.length === dry.length ? (dry.length === 1 ? 'it is' : 'all of them are') : `${resting.length} of them ${resting.length === 1 ? 'is' : 'are'}`} ${where}` : '') + unread + '.';
   });
   type Line = { href: string; tone: string; text: string; water?: boolean; keeping?: boolean };
   const lines = $derived(
@@ -180,7 +185,8 @@
           {#if done}
             <span class="donetext">Watered {done.ids.length} just now{#if l.text}; still: <a href={l.href}>{l.text}</a>{/if}</span><button class="btn small" type="button" onclick={undoDry} aria-disabled={undoing}>Undo</button>
           {:else}
-            <a href={l.href}>{l.text}</a>{#if toWater.length}<!-- While it waits, the reason is said beside it, not only on hover (round sixty-one; the accessibility review, 13). -->{#if !sheetsSettled}<span class="small muted waitwhy" id="today-water-why">Reading the species sheets first…</span>{/if}<button class="btn small waterbtn" type="button" onclick={waterDry} aria-disabled={watering || !sheetsSettled} aria-describedby={!sheetsSettled ? 'today-water-why' : undefined} title="One watering line on each, dated today, leaving out the plants listed as resting by their habitat's seasons; Undo takes them back">{toWater.length === 1 ? 'Water this one' : `Water these ${toWater.length}`}</button>{/if}
+            <!-- One plant to water is named by its number, and to a screen reader by its name too: "Water this one" after "3 of 3 plants past their rhythm; 2 of them resting" did not say which (round sixty-two; the verification review's grower, smaller). -->
+            <a href={l.href}>{l.text}</a>{#if toWater.length}<!-- While it waits, the reason is said beside it, not only on hover (round sixty-one; the accessibility review, 13). -->{#if !sheetsSettled}<span class="small muted waitwhy" id="today-water-why">Reading the species sheets first…</span>{/if}<button class="btn small waterbtn" type="button" onclick={waterDry} aria-disabled={watering || !sheetsSettled} aria-describedby={!sheetsSettled ? 'today-water-why' : undefined} title="One watering line on each, dated today, leaving out the plants listed as resting by their habitat's seasons; Undo takes them back" aria-label={toWater.length === 1 ? `Water ${accNo(toWater[0])} ${plantLabel(toWater[0])}` : undefined}>{toWater.length === 1 ? `Water ${accNo(toWater[0])}` : `Water these ${toWater.length}`}</button>{/if}
           {/if}
         </div>
       {:else if l.keeping}

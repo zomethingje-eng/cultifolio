@@ -12,7 +12,7 @@
  * 60″ surface elevation (public domain), resampled by mean.
  */
 
-export const GRID_V = 1 as const;
+const GRID_V = 1 as const;
 export const NODATA = -32768;
 
 export interface LayerSpec {
@@ -40,11 +40,11 @@ export interface GridHeader {
   sources: string[];
 }
 
-export const CLIMATE_VARS = ['tasmax', 'tasmin', 'tas', 'pr', 'rsds', 'hurs', 'vpd', 'sfcWind'] as const;
+const CLIMATE_VARS = ['tasmax', 'tasmin', 'tas', 'pr', 'rsds', 'hurs', 'vpd', 'sfcWind'] as const;
 export type ClimateVar = (typeof CLIMATE_VARS)[number];
 
 /** The quantisation the packer uses; the header carries it, this is the default it writes. */
-export const QUANT: Record<ClimateVar | 'elev', { scale: number; unit: string }> = {
+const QUANT: Record<ClimateVar | 'elev', { scale: number; unit: string }> = {
   tasmax: { scale: 0.1, unit: '°C' },
   tasmin: { scale: 0.1, unit: '°C' },
   tas: { scale: 0.1, unit: '°C' },
@@ -56,7 +56,7 @@ export const QUANT: Record<ClimateVar | 'elev', { scale: number; unit: string }>
   elev: { scale: 1, unit: 'm' }
 };
 
-export function defaultLayers(): LayerSpec[] {
+function defaultLayers(): LayerSpec[] {
   const out: LayerSpec[] = [];
   for (const v of CLIMATE_VARS) for (let m = 1; m <= 12; m++) out.push({ id: `${v}_${String(m).padStart(2, '0')}`, var: v, month: m, scale: QUANT[v].scale, offset: 0, unit: QUANT[v].unit });
   out.push({ id: 'elev', var: 'elev', scale: 1, offset: 0, unit: 'm' });

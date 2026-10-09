@@ -176,8 +176,9 @@ describe('the query read as characters (round sixty; A28, A29)', () => {
     const decomposed = `${long}é more`;
     expect(_clean(decomposed)).toBe(_clean(composed));
     expect(_clean(composed)).toBe(`${long}é`);
-    const astral = _clean(`${'b'.repeat(79)}𝔸𝔸`);
-    expect(astral).toBe(`${'b'.repeat(79)}𝔸`);
+    // An astral letter NFKC keeps (round sixty-two: the query is NFKC now, which reads "𝔸" as "A").
+    const astral = _clean(`${'b'.repeat(79)}𠀀𠀀`);
+    expect(astral).toBe(`${'b'.repeat(79)}𠀀`);
     expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(astral)).toBe(false);
   });
   it('clip never leaves half a character, keeps a word that ends where the room does, and never ends ".…"', () => {
@@ -235,7 +236,7 @@ describe('the names growers write (round sixty; the corpus review, 3; the self-r
     ['Copiapoa cinerea subsp. haseltoniana', 'Copiapoa cinerea', 'Copiapoa cinerea'],
     ["Echeveria 'Perle von Nurnberg'", 'Echeveria elegans'], // a quoted cultivar with a capital is dropped in the first search too (round sixty-one; the corpus review, 3)
     ['Echeveria elegans ‘Rainbow’', 'Echeveria elegans'],
-    ['Echeveria cv. Perle', 'Echeveria elegans', 'Echeveria'],
+    ['Echeveria cv. Perle', 'Echeveria elegans'], // what follows "cv." is left out by the first reading, no retry (round sixty-two, second pass; the verification review's search 8)
     ['Haworthia attenuata f. clariperla', 'Haworthiopsis attenuata', 'Haworthia attenuata'],
     ['string of pearls', 'Curio rowleyanus'], // a second English name, searched since round sixty
     ['tree tumbo', 'Welwitschia mirabilis']

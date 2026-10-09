@@ -6,6 +6,7 @@
 import type { NumberingScheme } from '$core/accession';
 import type { AccStatus, NameKind, Provenance } from '$lib/db/types';
 import { parseName } from '$core/names';
+import { yearOf } from '$core/year';
 
 export interface ImportRow {
   /** Stable for the review list. */
@@ -41,12 +42,90 @@ export interface ImportRow {
   dateText?: string | null;
   /** Its number is held here by a plant of the same name: most likely a line a first, interrupted import already added (round sixty-one; the grower review, 6). */
   already?: boolean;
+  /** The import key of each plant this line still makes, in order (`keyLines`): one per plant, so `qty` is its length. */
+  importKeys?: string[];
+  /** The name as the sheet gave it, before the review changed it ("Use it", an edit): kept as the name as received when the name filed differs (round sixty-two; the records review, 2). */
+  originalName?: string;
+  /** Every plant this line makes is here already, by its import key: a first run added it (round sixty-two). */
+  done?: boolean;
+  /** How many of this line's plants are here already: the line offers only the rest. */
+  partDone?: number;
+  /** The record id a Cultifolio plants.csv gives in its id column: the same plant, when a live plant here has it. */
+  recordId?: string | null;
 }
 
-export const blankRow = (key: string, line: number, name: string): ImportRow => ({ key, line, name, cultivar: null, fieldNumber: null, qty: 1, number: null, placePath: null, placeId: null, acquired: null, source: null, notes: null, price: null, nameKind: null, parentage: null, nameAsReceived: null, provenance: null, status: 'growing', lot: null, form: null, problems: [], drop: false });
+export const blankRow = (key: string, line: number, name: string): ImportRow => ({ key, line, name, cultivar: null, fieldNumber: null, qty: 1, number: null, placePath: null, placeId: null, acquired: null, source: null, notes: null, price: null, nameKind: null, parentage: null, nameAsReceived: null, provenance: null, status: 'growing', lot: null, form: null, problems: [], drop: false, originalName: name });
 
-/** The year of a date at any precision the import reads: 2024-03-09, 2024-03 or 2024. */
-const yearOf = (d: string | null): number | undefined => (d && /^\d{4}(?:-|$)/.test(d) ? Number(d.slice(0, 4)) : undefined);
+/**
+ * A line's cells as a key (round sixty-two; the records review, 1, the grower review, 3, A18, B6): each cell as the
+ * import reads it (trimmed, the backup's guard apostrophe off), its spaces closed up and its case folded, the empty cells
+ * at the end left off (a spreadsheet saving the sheet again may drop them), hashed (53 bits, cyrb53). Nothing of the
+ * text is kept, and the same line always gives the same key, whatever its number, its name after the review, or where it
+ * sits in the sheet.
+ */
+export function lineHash(cells: string[]): string {
+  const norm = cells.map((c) => (c ?? '').replace(/^'(?='*\s*[=+\-@])/, '').normalize('NFKC').replace(/\s+/g, ' ').trim().toLowerCase());
+  while (norm.length && !norm[norm.length - 1]) norm.pop();
+  const str = norm.join('\u001f');
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for (let i = 0; i < str.length; i++) {
+    const ch = str.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return 'i' + (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+}
+
+/**
+ * The import key of every plant each line makes: the line's hash, then the plant's place among the plants that line and
+ * the identical lines before it make ("i3k9…#1" to "#3" for a Qty of 3; a second identical line goes on at "#4"), so two
+ * identical lines are two plants, and a line cut off after its first plant is known by its second.
+ */
+export function keyLines(lines: Array<{ cells: string[]; qty: number }>): string[][] {
+  const seen = new Map<string, number>();
+  return lines.map((l) => {
+    const h = lineHash(l.cells);
+    const from = seen.get(h) ?? 0;
+    seen.set(h, from + l.qty);
+    return Array.from({ length: l.qty }, (_, i) => `${h}#${from + i + 1}`);
+  });
+}
+
+/**
+ * The lines a first run already added, by the import keys on the live plants here (`has`): a line whose every plant is
+ * here is done, and left out; a line some of whose plants are here offers only the rest, under new numbers, its own
+ * number having gone to the first (round sixty-two; the records review, 1, the grower review, 3, A18, B6).
+ */
+export function markImported(rows: ImportRow[], has: (key: string) => boolean, isHere: (recordId: string) => boolean = () => false): ImportRow[] {
+  return rows.map((r) => {
+    // A backup's own plants.csv read back into the collection that wrote it: each line names its plant's record.
+    if (r.recordId && isHere(r.recordId)) return { ...r, done: true, drop: true };
+    const keys = r.importKeys;
+    if (!keys?.length) return r;
+    const missing = keys.filter((k) => !has(k));
+    if (!missing.length) return { ...r, done: true, drop: true };
+    if (missing.length === keys.length) return r;
+    return { ...r, importKeys: missing, qty: missing.length, partDone: keys.length - missing.length, number: has(keys[0]) ? null : r.number };
+  });
+}
+
+/**
+ * One pass of a sheet (round sixty-two; the records review, 5): the lines already here are left out and counted, the
+ * lines that look already imported are kept (said, and overridable), and of the rest the first `max` are read; the
+ * others wait for the next pass, which reads the same file again and finds these here.
+ */
+export function passOf(rows: ImportRow[], max: number): { rows: ImportRow[]; done: number; later: number } {
+  const out: ImportRow[] = [];
+  let done = 0, taken = 0, later = 0;
+  for (const r of rows) {
+    if (r.done) { done++; continue; }
+    if (r.already && r.drop) { out.push(r); continue; }
+    if (taken < max) { out.push(r); taken++; } else later++;
+  }
+  return { rows: out, done, later };
+}
 
 export interface NumberPlan {
   /** By row key: the numbers its plants will get, in order, and whether the sheet's own number was kept. */
@@ -110,18 +189,23 @@ export function planNumbers(rows: ImportRow[], taken: Iterable<string>, scheme: 
 }
 
 /**
- * Rows whose number a plant here already holds under the same name: offered as "already imported" and dropped by
- * default, so a second run of an import that was cut off does not file the same plants again under new numbers (round
- * sixty-one; the grower review, 6). `held` lists the live plants that carry a number.
+ * Rows whose number a plant here already holds under the same name: said as "looks already imported" (round sixty-one;
+ * the grower review, 6). Since round sixty-two this is only that warning: the import keys (`markImported`) decide what a
+ * first run added, and a line they settle is left alone. A plant with no import key (added by hand, or by an import
+ * before round sixty-two) is the only evidence there is, so the line is skipped unless the grower adds it anyway. A plant
+ * that carries another line's import key came from another line (a second sheet that starts its numbering again, "7
+ * Lithops lesliei", or a line since edited), so the line is said and kept, under the next free number, for the grower to
+ * drop if it is the same plant (A18). `held` lists the live plants that carry a number.
  */
-export function markAlreadyImported(rows: ImportRow[], held: (no: string) => Array<{ taxonName: string; cultivar?: string | null }>): ImportRow[] {
+export function markAlreadyImported(rows: ImportRow[], held: (no: string) => Array<{ taxonName: string; cultivar?: string | null; importKey?: string | null }>): ImportRow[] {
   return rows.map((r) => {
     const g = r.number?.trim();
-    if (!g) return r;
+    if (!g || r.done || r.partDone) return r;
     const p = parseName(r.name);
     const cv = (r.cultivar ?? p.cultivar ?? '').toLowerCase();
-    const same = held(g).some((a) => a.taxonName.toLowerCase() === p.scientific.toLowerCase() && (a.cultivar ?? '').toLowerCase() === cv);
-    return same ? { ...r, already: true, drop: true } : r;
+    const same = held(g).filter((a) => a.taxonName.toLowerCase() === p.scientific.toLowerCase() && (a.cultivar ?? '').toLowerCase() === cv);
+    if (!same.length) return r;
+    return { ...r, already: true, drop: same.some((a) => !a.importKey) };
   });
 }
 
@@ -131,6 +215,68 @@ export function markAlreadyImported(rows: ImportRow[], held: (no: string) => Arr
  * path with " › ", and a ">" or "/" inside a name is the name's.
  */
 export const splitPath = (p: string): string[] => p.split(' › ').map((s) => s.trim()).filter(Boolean);
+
+/**
+ * Where a place cell written with ">" or "/" steps down a path (round sixty-two; the grower review, 6, and the
+ * verification grower review, 6). Outside brackets only: "Cold frame (N/S)" is one place. A ">" between letters or with
+ * spaces on both sides ("Greenhouse > Bench 2", "Greenhouse>Bench 2"; not "Shelf >1 m"). A "/" with spaces on both sides
+ * ("Greenhouse / Bench 2"); a "/" with none only between two words of three letters or more when the part before it
+ * names a place here ("Greenhouse/Bench 2" with a Greenhouse here): "S/W window", "N/E bench", "Shelf 1/2" and a
+ * "Front/back" that is no place here are each one place, and a slash made junk places of their halves ("S" with "W
+ * window" inside). The parts, trimmed; one part when the cell is no path.
+ */
+function pathParts(cell: string, places: PlaceNode[]): string[] {
+  const parts: string[] = [];
+  let depth = 0, from = 0;
+  const letter = (ch: string | undefined) => !!ch && /\p{L}/u.test(ch);
+  const alnum = (ch: string | undefined) => !!ch && /[\p{L}\p{N}]/u.test(ch);
+  for (let i = 0; i < cell.length; i++) {
+    const ch = cell[i];
+    if ('([{'.includes(ch)) depth++;
+    else if (')]}'.includes(ch)) depth = Math.max(0, depth - 1);
+    if (depth || (ch !== '>' && ch !== '/')) continue;
+    const before = cell.slice(from, i), after = cell.slice(i + 1);
+    const spaced = /\s$/.test(before) && /^\s/.test(after);
+    const l = before.trimEnd().at(-1), r = after.trimStart()[0];
+    let step: boolean;
+    if (ch === '>') step = (letter(l) && letter(r)) || (spaced && alnum(l) && alnum(r));
+    else if (spaced) step = alnum(l) && alnum(r);
+    else {
+      const wl = /\p{L}+$/u.exec(before)?.[0] ?? '', wr = /^\p{L}+/u.exec(after)?.[0] ?? '';
+      step = Array.from(wl).length >= 3 && Array.from(wr).length >= 3 && 'id' in resolvePlace([...parts, before.trim()].join(' › '), places);
+    }
+    if (!step) continue;
+    parts.push(before.trim());
+    from = i + 1;
+  }
+  parts.push(cell.slice(from).trim());
+  return parts.filter(Boolean);
+}
+/**
+ * The sheet's place cells written with ">" or "/" for a path, as a keyboard writes one (round sixty-two; the grower
+ * review, 6): asked once for the sheet, "Read > and / as a path". `paths` is how many cells have one; `yes` is the
+ * default, yes when the first part names a place here or is the first part of another such cell, which a place called
+ * "Front/back" is not.
+ */
+export function loosePaths(cells: Array<string | null>, places: PlaceNode[]): { paths: number; yes: boolean; example: string | null } {
+  const firsts = new Map<string, number>();
+  let paths = 0;
+  let example: string | null = null;
+  for (const c of new Set(cells.filter((x): x is string => !!x))) {
+    if (places.some((p) => same(p.name.trim(), c.trim()))) continue; // a place here by that whole name is that place
+    const parts = pathParts(c, places);
+    if (parts.length < 2) continue;
+    paths++;
+    example ??= c;
+    const first = parts[0].toLowerCase();
+    firsts.set(first, (firsts.get(first) ?? 0) + 1);
+  }
+  const here = (n: string) => places.some((p) => p.parentId === null && same(p.name.trim(), n));
+  const yes = [...firsts].some(([f, n]) => n > 1 || here(f));
+  return { paths, yes, example };
+}
+/** A place cell read with ">" and "/" as a path: written the app's way, "Greenhouse › Bench 2". `places` are the places here, which a "/" with no spaces must start from. */
+export const asPath = (p: string, places: PlaceNode[] = []): string => pathParts(p, places).join(' › ');
 const same = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'accent' }) === 0;
 
 export interface PlaceNode { id: string; name: string; parentId: string | null }
@@ -170,4 +316,20 @@ export function placesToMake(paths: string[], places: PlaceNode[]): string[][] {
     }
   }
   return [...out.values()].sort((a, b) => a.length - b.length);
+}
+
+/**
+ * "Use it": the reference's species put in place of the species part of the name as typed, and nothing else (round
+ * sixty-two; the records review, 2). "Copiapoa cf. cinera" becomes "Copiapoa cf. cinerea", "Copiapoa cinera subsp.
+ * haseltoniana (white spines)" becomes "Copiapoa cinerea subsp. haseltoniana (white spines)": the qualifier, the rank
+ * and what follows it, the cultivar and the aside stay. The sheet's own text is kept apart (`originalName`) for the name
+ * as received.
+ */
+export function useSpecies(typed: string, species: string): string {
+  const p = parseName(typed);
+  const [g, ...ep] = species.trim().split(/\s+/);
+  const toks = p.scientific.split(' ');
+  const tail = p.qualifier ? toks.slice(p.epithet ? 3 : 2) : toks.slice(p.epithet ? 2 : 1);
+  const name = [g, p.qualifier, ...ep, ...tail].filter(Boolean).join(' ');
+  return `${name}${p.cultivar ? ` '${p.cultivar}'` : ''}${p.aside ? ` (${p.aside})` : ''}`;
 }

@@ -74,8 +74,8 @@ const PRIVATE = /^\/(plants|places|today|propagation|labels|settings|sync|backup
 /**
  * Headers on every response the Worker renders (round sixty; the server review, 14): the browser is told not to guess a
  * file's type, which features a page may ask for (location for the frost watch and a place, the camera for the sync
- * key's code, nothing else), and to come back only over HTTPS for a year. static/_headers says the same for the files
- * the Worker does not render.
+ * key's code, nothing else), and to come back only over HTTPS for a year. `_headers`, at the project root, says the same
+ * for the files the Worker does not render.
  */
 const SECURITY: Array<[string, string]> = [
   ['x-content-type-options', 'nosniff'],
@@ -89,7 +89,8 @@ const SECURITY: Array<[string, string]> = [
  * typed in `?q=`, or a label's record id, none of which is on the list of what leaves the device (round sixteen, 9).
  * The meta tag in app.html says the same for the document; the header covers responses that are not the document.
  * X-Frame-Options mirrors the CSP's `frame-ancestors 'none'` for the older readers that only know the header. The
- * prerendered pages are served as static files and get theirs from static/_headers.
+ * prerendered pages are served as static files and get theirs from `_headers` at the project root (round sixty-two:
+ * this said static/_headers, which is not where the file is).
  */
 /**
  * A write to the sync routes from another site is refused, whatever its content type: Kit's own origin check covers
@@ -97,6 +98,8 @@ const SECURITY: Array<[string, string]> = [
  * fifty-eight; the server review). The device's own requests are same-origin; a browser names another site in `Origin`
  * or `Sec-Fetch-Site`, and a client that sends neither (a script, curl) can make any request it likes anyway.
  */
+/** The header the sync engine marks its writes with (`syncFetch`; round sixty-two). */
+const SYNC_MARK = 'x-cultifolio-sync';
 export function _foreignWrite(request: Request, url: URL): boolean {
   // Every path, not the sync routes by name: the name was tested on the raw path while routing decodes it, so
   // `/api/%73ync/vault` passed the check (round fifty-nine; two reviews). The site has no write another site may make.
@@ -108,6 +111,12 @@ export function _foreignWrite(request: Request, url: URL): boolean {
   const site = request.headers.get('sec-fetch-site');
   if (site) return site !== 'same-origin' && site !== 'none';
   const origin = request.headers.get('origin');
+  // `Origin: null` with no `Sec-Fetch-Site`: under no-referrer a same-origin fetch POST sends it from a browser that
+  // predates the header (Safari before 16.4), and so does a page on another site that hides its origin. The sync
+  // engine marks its own writes with `X-Cultifolio-Sync: 1`, a header no page on another site can add without a
+  // preflight, which this site never grants; such a write is the site's own (round sixty-two; outside review A31: every
+  // sync write from those browsers was refused). The Referer stays off.
+  if (origin === 'null' && request.headers.get(SYNC_MARK) === '1') return false;
   return !!origin && origin !== url.origin;
 }
 

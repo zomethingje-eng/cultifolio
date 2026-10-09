@@ -1,8 +1,6 @@
 <script lang="ts">
   import '@fontsource-variable/public-sans';
   import '@fontsource-variable/newsreader';
-  // Italic (botanical names) from the weight-only Latin file, 64 KB, not the optical-size one at 147 KB: the difference is invisible at text sizes and the file is on every first visit.
-  import newsreaderItalic from '@fontsource-variable/newsreader/files/newsreader-latin-wght-italic.woff2?url';
   // The two faces every page paints with, preloaded so the title and the body do not reflow when they arrive.
   import publicSansLatin from '@fontsource-variable/public-sans/files/public-sans-latin-wght-normal.woff2?url';
   import newsreaderLatin from '@fontsource-variable/newsreader/files/newsreader-latin-wght-normal.woff2?url';
@@ -257,7 +255,6 @@
 <svelte:head>
   <link rel="preload" as="font" type="font/woff2" href={publicSansLatin} crossorigin="anonymous" />
   <link rel="preload" as="font" type="font/woff2" href={newsreaderLatin} crossorigin="anonymous" />
-  {@html `<style>@font-face{font-family:'Newsreader Variable';font-style:italic;font-display:swap;font-weight:200 800;src:url(${newsreaderItalic}) format('woff2-variations');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}</style>`}
   <!-- No <title> here: every page sets its own, and this one won on the server, so every species page was served as
        "Cultifolio" to crawlers and link previews (round fifty-nine; the accessibility and words review). -->
 </svelte:head>
@@ -306,7 +303,7 @@
      whether a sync answer has confirmed the clock: confirmed, the changes were made under a fast clock; not, the clock
      itself may be the one that is wrong. Either way an edit made now saves and shows; "Nothing is lost" was not true of
      every case and is not said (round sixty; the lead's wording, the outside review's A17). -->
-{#if collection.clockBehindAt && privateRoute}{@const when = new Date(collection.clockBehindAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}<p class="clockbar" role="status" id="clockbar">{#if collection.clockTrusted}Some changes on this device are dated ahead of now, up to {when}: its clock was probably fast when they were made. They still count, and what you edit now saves and shows.{:else}This device's date reads earlier than its last change ({when}). What you edit now still saves and shows; set the date right when you can.{/if}</p>{/if}
+{#if collection.clockBehindAt && privateRoute}{@const when = new Date(collection.clockBehindAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}<p class="clockbar" role="status" id="clockbar">{#if collection.clockTrusted}Some changes on this device are dated ahead of now, up to {when}: its clock was probably fast when they were made. They count here. Once synced, any change dated more than two days after the sync bundle carrying it arrived is parked on every device: kept, not applied, and offered with Apply on the Sync page. What you edit now saves and shows.{:else}This device's date reads earlier than its last change ({when}). What you edit now still saves and shows; set the date right when you can.{/if}</p>{/if}
 {#if frost.line?.tone === 'bad' && !page.url.pathname.startsWith('/today') && page.url.pathname !== '/'}<a class="frostbar" href="/today#frost" id="frostbar">{frost.line.text} <span class="go">Today ›</span></a>{/if}
 
 <!-- On the pages about your own plants, links are not preloaded on hover: a preload of a species page sends that species' name to the
@@ -332,7 +329,28 @@
 </footer>
 {/if}
 
-<nav id="tabbar" aria-label="Tabs" class:away={tabAway} data-cover="bottom" data-away={tabAway ? 'true' : undefined} onfocusin={() => (tabAway = false)}>
+<!-- When a label does not fit its column whole, the bar shows its icons, each tab named by its label: a label never breaks
+     inside a word ("Spec/ies", "Prop/agati/on" at 320 px with 200% text). Measured on the bar's own resize and once the
+     web font is in (round sixty-two; the outside review's A11). -->
+<nav id="tabbar" aria-label="Tabs" class:away={tabAway} data-cover="bottom" data-away={tabAway ? 'true' : undefined} onfocusin={() => (tabAway = false)} {@attach (bar: HTMLElement) => {
+  const tight = () => [...bar.querySelectorAll<HTMLElement>('a > span')].some((s) => s.offsetParent !== null && s.scrollWidth > s.clientWidth + 1);
+  const fit = () => {
+    delete bar.dataset.icons; // an attribute, not a class: the bar's class is Svelte's to set, and it changes as the bar hides
+    delete bar.dataset.small;
+    // First a smaller step, closer set: "Propagation" was 72 px in a 68 px column at 360 px with normal text, and five
+    // bare icons on the commonest phone width was the fallback taking over too soon (round sixty-two; the verification
+    // review's grower 1). Icons only when even that step breaks a word.
+    if (!tight()) return;
+    bar.dataset.small = '1';
+    if (tight()) bar.dataset.icons = '1';
+  };
+  fit();
+  const ro = new ResizeObserver(fit);
+  ro.observe(bar);
+  for (const a of bar.querySelectorAll('a')) ro.observe(a); // a visitor's four becoming a grower's five changes the columns, not the bar
+  void document.fonts?.ready.then(fit);
+  return () => ro.disconnect();
+}}>
   {#each tabs as pl (pl.href)}
     <a href={pl.href} class="t{pl.who[0]}" class:on={pl.on(page.url.pathname)} aria-current={pl.on(page.url.pathname) ? 'page' : undefined}><!-- aria-current: round fifty-eight; the accessibility review -->
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -404,8 +422,16 @@
        column wraps under its icon rather than pushing the next tab out. */
     #tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 70; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); background: color-mix(in srgb, var(--card) 94%, transparent); backdrop-filter: blur(10px); border-top: 1px solid var(--rule); padding-bottom: env(safe-area-inset-bottom); }
     #tabbar a { color: var(--ink2); font-size: var(--fs-sm); font-weight: 600; letter-spacing: 0.02em; min-height: 56px; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 4px 2px; text-align: center; line-height: 1.15; }
-    #tabbar a span { max-width: 100%; overflow-wrap: anywhere; hyphens: auto; }
+    /* Words whole: a label wraps between its words ("My / plants") and never inside one (round sixty-two; A11). */
+    #tabbar a span { max-width: 100%; overflow-wrap: normal; word-break: normal; hyphens: manual; }
     #tabbar svg { flex: none; }
+    /* The smaller step: one size down, no tracking, no side padding; a label still wraps only between its words
+       (round sixty-two; the verification review's grower 1). */
+    #tabbar:global([data-small]) a { font-size: var(--fs-xs); letter-spacing: 0; padding-left: 0; padding-right: 0; }
+    /* A label that would not fit whole: every tab is its icon, larger, and the label stays its accessible name, read but
+       not drawn (round sixty-two; A11). */
+    #tabbar:global([data-icons]) a span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    #tabbar:global([data-icons]) svg { width: 26px; height: 26px; }
     /* A grower's five, or a visitor's four (round sixty; the visitor review). */
     :global(html:not([data-grower])) #tabbar a.tg, :global(html[data-grower]) #tabbar a.tv { display: none; }
     #tabbar a:hover { text-decoration: none; }

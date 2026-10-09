@@ -11,7 +11,7 @@ import { limited, upstreamCall, heldBack, clientIp } from '$lib/server/sync';
  *
  * What is forwarded is bounded twice. The query must look like a name (letters
  * in any script with their marks, spaces, the period of an abbreviation, an
- * apostrophe, a hyphen, the × of a hybrid; two to eighty characters), so the
+ * apostrophe, a hyphen, the × of a hybrid, an author's "&"; two to eighty characters), so the
  * cache and GBIF's goodwill are not spent on junk under the User-Agent the
  * corpus build shares. And one address gets `RATE.names` requests per window.
  *
@@ -21,8 +21,14 @@ import { limited, upstreamCall, heldBack, clientIp } from '$lib/server/sync';
  */
 const FIELDS = ['key', 'canonicalName', 'scientificName', 'family', 'rank', 'status'] as const;
 type Row = { [K in (typeof FIELDS)[number]]?: unknown };
-/** Letters and marks of any script, space, period, apostrophe, hyphen, the hybrid sign. */
-export const _NAME_QUERY = /^[\p{L}\p{M}\s.'\-×]{2,80}$/u;
+/** Letters and marks of any script, space, period, apostrophe, hyphen, the hybrid sign, and the "&" of a pasted author (round sixty-two; A8). */
+export const _NAME_QUERY = /^[\p{L}\p{M}\s.'\-×&]{2,80}$/u;
+/**
+ * The query as the route reads it (round sixty-two; A7, A8): NFKC, so full-width letters are letters; the format
+ * characters (`\p{Cf}`: a zero-width space, a soft hyphen) taken out, since they break a word in two; a curly apostrophe
+ * written as the straight one (iOS writes every apostrophe as ’, and "Aloe ’Blue Elf’" was refused with a 400).
+ */
+export const _readName = (q: string) => q.normalize('NFKC').replace(/\p{Cf}/gu, '').replace(/[‘’]/g, "'").replace(/\s+/g, ' ').trim().slice(0, 80);
 
 /** The GBIF backbone key of the kingdom Plantae. */
 export const _PLANTAE = 6;
@@ -30,9 +36,9 @@ export const _PLANTAE = 6;
 const bad = (why: string) => json({ error: why }, { status: 502, headers: { 'cache-control': 'no-store' } });
 
 export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddress }) => {
-  const q = (url.searchParams.get('q') ?? '').trim().slice(0, 80);
+  const q = _readName([...(url.searchParams.get('q') ?? '')].slice(0, 200).join(''));
   if (q.length < 3) return json([], { headers: { 'cache-control': 'public, max-age=86400' } });
-  if (!_NAME_QUERY.test(q)) return json({ error: 'a name is letters, spaces, periods, apostrophes, hyphens and ×' }, { status: 400, headers: { 'cache-control': 'no-store' } });
+  if (!_NAME_QUERY.test(q)) return json({ error: 'a name is letters and their marks, spaces, full stops, apostrophes, hyphens, & and ×' }, { status: 400, headers: { 'cache-control': 'no-store' } });
   // Plants only (higherTaxonKey 6 is Plantae in the backbone): unfiltered, "gaster" answered twelve weevils, fishes and
   // fungi and no Gasteria, since the suggest ranks across every kingdom and the picker shows the first twelve (round twenty-eight, deploy).
   const upstream = `https://api.gbif.org/v1/species/suggest?datasetKey=d7dddbf4-2cf0-4f39-9b2a-bb099caae36c&higherTaxonKey=${_PLANTAE}&limit=12&q=${encodeURIComponent(q)}`;

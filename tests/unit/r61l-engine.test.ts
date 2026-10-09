@@ -336,6 +336,23 @@ describe('decision 6: the refusal is kept in the sync record', () => {
     expect(A.sync.refusal).toBeNull();
     expect((memA.meta.get('sync') as { refusal?: unknown }).refusal).toBeUndefined();
   });
+  // Harness review of round sixty-one, mutation E2.
+  it('a refusal read back from the record after the clock was set back is held to an hour from now, not to the stored time', async () => {
+    const r2 = fakeR2();
+    const memA = newMem('aaaaaaaaaaaa');
+    let A = await boot(memA, r2);
+    await A.sync.setup(KEY, 'create');
+    kv.set('vaults:all', '2000');
+    await A.collection.addAccession({ taxonName: 'Copiapoa cinerea', acc: 'A-1' });
+    await A.sync.run().catch(() => {});
+    const rec = memA.meta.get('sync') as { refusal?: { until: number; text: string } };
+    expect(rec.refusal).toBeDefined();
+    rec.refusal!.until = Date.now() + 10 * 3_600_000; // stored an hour ahead by a clock nine hours fast, since set right
+    A = await reboot(memA, r2);
+    expect(A.sync.refusal).not.toBeNull();
+    expect(A.sync.refusal!.until).toBeLessThanOrEqual(Date.now() + 3_600_000 + 1000);
+    kv.set('vaults:all', '0');
+  });
   it('a 503 asking for a few seconds (a recount that crossed a landing) is no refusal: nothing is kept, and the next run sends', async () => {
     const r2 = fakeR2();
     const memA = newMem('aaaaaaaaaaaa');
@@ -416,8 +433,12 @@ describe('decision 1: this device\'s own changes judged by their arrival, throug
     expect(hlcWall(edit.t) - real).toBeGreaterThan(YEAR - DAY);
     const { isPastStamp } = await import('$core/hlc');
     expect(isPastStamp(edit.t)).toBe(true);
+    const c0 = P.calls.length;
     await P.sync.run();
     expect(P.collection.parkedStamps.has(fast.t)).toBe(true); // parked by its own batch's arrival, from the listing
+    // Only the batch pushed while fast is fetched again to be judged: the edit's batch holds no stamp a clock gave (its one
+    // stamp is flagged), so `ownMax` leaves it out and it is never fetched (harness review of round sixty-one, mutation C8).
+    expect(P.calls.slice(c0).filter((c) => c.startsWith('GET /api/sync/log/'))).toHaveLength(1);
     expect(P.collection.accession(plant.id)?.notes).toBe('typed after the clock was put right');
     expect(P.collection.parkedFor('accession', plant.id)).toEqual([]); // the replaced text is not offered back
     mem = memA;

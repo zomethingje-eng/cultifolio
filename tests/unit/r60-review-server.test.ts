@@ -5,7 +5,7 @@
  */
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { storeOnce, deleteCounted, readMeta, writeMeta, vaultIdFor, resetRateLimits, resetMetaFlush, VaultsClosed, VaultUnchecked, PhotoBusy, type CountersNs } from '$lib/server/sync';
-import { limited, RATE, NET_RATE_FACTOR } from '$lib/server/sync';
+import { limited, RATE, NET_RATE_FACTOR, photoObjectKey } from '$lib/server/sync';
 import { Counters } from '$lib/server/counters';
 import { corpusNow, _forgetIndex, UNREADABLE } from '$lib/server/dossiers';
 import { createHash } from 'node:crypto';
@@ -59,7 +59,7 @@ function countersNs() {
 }
 const ID ='ABCDEFGHJKMNPQRSTVWXYZ2346';
 const vrow = (c: ReturnType<typeof countersNs>) => c.objects.get(`bytes:${ID}`)!.m;
-const r2bytes = (r2: ReturnType<typeof fakeR2>) => [...r2.objs].filter(([k]) => !k.endsWith('meta.json')).reduce((s, [, o]) => s + o.size, 0);
+const r2bytes = (r2: ReturnType<typeof fakeR2>) => [...r2.objs].filter(([k]) => !k.endsWith('.json')) /* the meta and, since round sixty-two, photographs' pointers: not counted */.reduce((s, [, o]) => s + o.size, 0);
 const PROOF = { drop: 'd'.repeat(64) };
 const photo = (i: number) => `vault/${ID}/photo/p${String(i).padStart(6, '0')}.bin`;
 const DAY = 86_400_000;
@@ -208,7 +208,8 @@ describe('a DELETE racing a PUT of one name', () => {
     expect(await del).toBe(true);
     expect(put).toBeInstanceOf(PhotoBusy); // not "already there" from the object the DELETE then removed
     expect(await storeOnce(r2 as never, ID, (await readMeta(r2 as never, ID))!, photo(1), bytes, PROOF, quota)).toBe('stored');
-    expect(r2.objs.has(photo(1))).toBe(true);
+    const at = await photoObjectKey(r2 as never, photo(1)); // a new generation since round sixty-two
+    expect(!!at && r2.objs.has(at)).toBe(true);
   });
 });
 

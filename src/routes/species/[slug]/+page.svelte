@@ -3,11 +3,11 @@
   import { aLabel } from '$core/arch';
   import Glance from '$lib/ui/ref/Glance.svelte';
   import Placeholder from '$lib/ui/Placeholder.svelte';
-  import { replaceState } from '$app/navigation';
+  import { replaceState, beforeNavigate } from '$app/navigation';
   import { page } from '$app/state';
   import { motion } from '$lib/ui/focus';
   import { failedBeforeHydration } from '$lib/ui/ref/failed';
-  import { speciesTitle, speciesDescription, tileCredit, detailSentence } from '$lib/ui/ref/head';
+  import { speciesTitle, speciesDescription, tileCredit, detailSentence, creditParts, OG_ALT } from '$lib/ui/ref/head';
   import { plantHref } from '$lib/db/links';
   import NotChecked from '$lib/ui/NotChecked.svelte';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
@@ -24,15 +24,18 @@
   import { isDatasetDoi } from '$dossier/sources/openalex';
   import { photoAt, srcsetOf, photoHosts, shownAt } from '$dossier/photo-size';
   import { heroOf } from '$dossier/dedupe';
+  import { showable, photoSourceGaps } from '$lib/ui/ref/photos';
+  import { notAnswered, climateDetail } from '$lib/ui/ref/upstream';
   import { firstSentences, clip } from '$core/text';
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import { cultivationSheet, CARD_ORDER } from '$core/sheet';
   import { collection } from '$lib/db/collection.svelte';
-  import { slugify, genusOf, speciesSlug, canonicalSynonym } from '$core/names';
+  import { slugify, genusOf, speciesSlug, canonicalSynonym, parseName } from '$core/names';
   import { unitName } from '$core/regions';
   import { onMount } from 'svelte';
   import { units } from '$lib/ui/units.svelte';
   import { site } from '$lib/ui/site.svelte';
+  import { readerLat as readerLatOf } from '$lib/ui/ref/reader-lat.svelte';
   import { temp, deltaT, rain, tempUnit, rainUnit, cToF, mmToIn, fixed } from '$core/units';
   let { data } = $props();
   let allPapers = $state(false);
@@ -40,8 +43,11 @@
   const d = $derived(data.d);
   // The index's own rule, so the page and the catalogue show one name first: the chosen English name, then its alternatives, up to four (round sixty-one; decision 7).
   const common = $derived(data.commonNames); // chosen on the server with the corpus's genera, as the index chooses (round sixty-one; decision 7)
-  const hero = $derived(heroOf(d.photos));
+  // A Commons photograph with no thumbnail is not shown: its original would load (round sixty-two; outside review A35).
+  const photos = $derived(d.photos.filter(showable));
+  const hero = $derived(heroOf(photos));
   const heroSrc = $derived(hero ? shownAt(hero) : undefined);
+  const heroCredit = $derived(hero ? creditParts(hero) : { lic: '', who: '', named: false, disagree: false });
   // Synonyms as names, not as the backbone's strings: authorship dropped, and a malformed entry ("? glabra Salm-Dyck") left out (round thirty-one, 3).
   const synonyms = $derived([...new Set(d.name.synonyms.map(canonicalSynonym).filter((x): x is string => !!x && x !== d.name.scientific))]);
   /*
@@ -51,7 +57,7 @@
    * suggests", which the sheet does not give (round sixty; self-review 14, the round forty-two review A5, product 6).
    */
   const climateOk = $derived(d.climate.status === 'ok');
-  const headIn = $derived({ name: d.name, common: common[0] ?? null, climate: d.climate.status === 'ok' ? { status: 'ok', months: d.climate.months, records: d.climate.records, extremes: d.climate.extremes ?? null } : { status: d.climate.status }, native: d.distribution.native.length, photos: d.photos.length, summary: !!d.summary });
+  const headIn = $derived({ name: d.name, common: common[0] ?? null, climate: d.climate.status === 'ok' ? { status: 'ok', months: d.climate.months, records: d.climate.records, extremes: d.climate.extremes ?? null } : { status: d.climate.status }, native: d.distribution.native.length, photos: photos.length, summary: !!d.summary });
   const title = $derived(speciesTitle(headIn));
   const desc = $derived(speciesDescription(headIn, u));
   /** The photograph's own words for a screen reader: the species and the credit (round sixty; a11y 12). */
@@ -75,13 +81,14 @@
   const evidence = $derived.by(() => {
     const o = d.occurrences;
     const up = d.upstream['gbif.occurrences']?.status;
-    if (up === 'refused' || up === 'error') return { tone: 'warn', text: 'The occurrence source did not answer when this species page was built. Nothing here is derived from records, and this is not a statement that none exist.' };
+    // A refusal said as one, a failure as "did not answer" (round sixty-two; the grower review's 2, rule 2).
+    if (up === 'refused' || up === 'error') return { tone: 'warn', text: `The occurrence source ${notAnswered(up)} when this species page was built. Nothing here is derived from records, and this is not a statement that none exist.` };
     // A refused range is said before anything is read as an absence of one (round seventeen, 5).
     const rangeUp = d.upstream['wcvp.distribution']?.status;
     if (o.rangeTested === false && (rangeUp === 'refused' || rangeUp === 'error')) {
       // The range source did not answer: no marker and no envelope are made, and the records were tested against nothing (round eighteen, 9).
       const all = o.nOpenInRange + o.nRestrictedInRange;
-      return { tone: 'warn', text: `The range source did not answer when this species page was built, so none of the ${all} georeferenced record${all === 1 ? '' : 's'} was tested against a native range, and no map marker or climate across the range is derived without one. ${o.nOpenInRange ? `The map shows the ${o.nOpenInRange} openly licensed one${o.nOpenInRange === 1 ? '' : 's'}, garden and roadside records included.` : 'None carries a licence permitting republication, so the map shows no points.'} This is not a statement that they are in range.` };
+      return { tone: 'warn', text: `The range source ${notAnswered(rangeUp)} when this species page was built, so none of the ${all} georeferenced record${all === 1 ? '' : 's'} was tested against a native range, and no map marker or climate across the range is derived without one. ${o.nOpenInRange ? `The map shows the ${o.nOpenInRange} openly licensed one${o.nOpenInRange === 1 ? '' : 's'}, garden and roadside records included.` : 'None carries a licence permitting republication, so the map shows no points.'} This is not a statement that they are in range.` };
     }
     if (d.distribution.verified === false || (!d.distribution.native.length && d.distribution.reported?.length)) {
       const all = o.nOpenInRange + o.nRestrictedInRange;
@@ -106,7 +113,7 @@
     // A count, not advice: "treat as indicative" told the reader what to do (round sixty; words 2).
     if (o.thin) t += ` Under a dozen records behind the map${climateOk ? ' and the climate' : ''}.`;
     else if (climateOk && climRecs < 12) t += ` Under a dozen records behind the climate.`;
-    if (!climateOk) t += d.climate.status === 'pending' ? ' No climate across the range yet: the habitat climate is pending.' : d.climate.status === 'refused' ? ' No climate across the range: the climate source did not answer.' : ' No climate across the range is derived for this species.';
+    if (!climateOk) t += d.climate.status === 'pending' ? ' No climate across the range yet: the habitat climate is pending.' : d.climate.status === 'refused' ? ` No climate across the range: ${climDetail ? detailSentence(climDetail, '').replace(/\.$/, '').replace(/^./, (c) => c.toLowerCase()) : 'the climate source did not answer'}.` : ' No climate across the range is derived for this species.';
     return { tone: 'ok', text: t };
   });
   $effect(() => {
@@ -166,11 +173,15 @@
     return () => removeEventListener('scroll', onScroll);
   });
   // Yours: by the name's slug, or by the reference key, so a suffixed homonym's page lists its own plants (round eighteen, 6).
-  const mine = $derived(collection.ready ? collection.accessions.filter((a) => speciesSlug(a.taxonName) === d.slug || (a.taxonKey != null && a.taxonKey === d.key)) : []);
-  const growing = $derived(mine.filter((a) => a.status === 'growing'));
+  const joined = $derived(collection.ready ? collection.accessions.filter((a) => speciesSlug(a.taxonName) === d.slug || (a.taxonKey != null && a.taxonKey === d.key)) : []);
+  // A "cf." or "aff." plant is compared with this species, not one of it: listed apart, never among yours, and its
+  // photographs are not this species' (round sixty-two; outside review A21).
+  const isCompared = (a: { taxonName: string }) => { const q = parseName(a.taxonName).qualifier; return q === 'cf.' || q === 'aff.'; };
+  const mine = $derived(joined.filter((a) => !isCompared(a)));
+  const compared = $derived(joined.filter(isCompared));
   /** Your own photographs of this species, across every plant of it you own. */
   /** Up to six photographs other than the one at the top, for the strip under the card. */
-  const stripPhotos = $derived(d.photos.filter((p) => p !== hero && p.thumb).slice(0, 6));
+  const stripPhotos = $derived(photos.filter((p) => p !== hero && p.thumb).slice(0, 6));
   const myPhotos = $derived(mine.flatMap((a) => collection.photos(a.id).map((p) => ({ ...p, plant: a }))).sort((x, y) => y.d.localeCompare(x.d)));
   let lightbox = $state<number | null>(null);
   let heroFailed = $state(false);
@@ -178,29 +189,40 @@
   let editingMy = $state(false);
   let myDraft = $state('');
   let myBase: string | null = null; // the stamp of the text the editor opened on (round fifty-nine)
-  const openMy = (text: string) => { myDraft = text; myBase = collection.notesStamp('taxon', d.slug); editingMy = true; };
+  let myOpen = ''; // the text the editor opened on, so an unchanged draft leaves without a question
+  const openMy = (text: string) => { myDraft = text; myOpen = text; myBase = collection.notesStamp('taxon', d.slug); editingMy = true; };
+  // An open notes draft with changes is not lost to a related-species tile, a tab-bar tap or a reload without asking: the
+  // plant page's guard (round sixty-two; outside review A13). The keyed layout then makes the next species' page afresh.
+  const myDirty = () => editingMy && myDraft.trim() !== myOpen.trim();
+  beforeNavigate((nav) => {
+    if (!myDirty() || nav.type === 'leave' || nav.willUnload) return;
+    if (!confirm('Leave this page? What you typed here will be lost.')) nav.cancel();
+  });
+  function guardUnload(e: BeforeUnloadEvent) {
+    if (myDirty()) e.preventDefault();
+  }
   async function saveMy() {
     await collection.put('taxon', d.slug, { name: d.name.scientific, gbifKey: d.key, myNotes: myDraft.trim() || null, myNotesBase: myBase });
     editingMy = false;
   }
   // The site once loaded; before that (and on the server) the hemisphere cookie, so a southern grower never sees northern months first.
-  const readerLat = $derived(site.current?.lat ?? (site.loaded ? (collection.ready ? (collection.locations.map((l) => l.lat).find((x): x is number => x != null) ?? null) : null) : data.hemiLat));
+  const readerLat = $derived(readerLatOf(data.hemiLat));
   const sheetIn = $derived({ readerLat, scientific: d.name.scientific, climateStatus: d.climate.status, family: d.name.family, months: d.climate.status === 'ok' ? d.climate.months : null, p10: d.climate.status === 'ok' ? d.climate.p10 : null, p90: d.climate.status === 'ok' ? d.climate.p90 : null, annualP10: d.climate.status === 'ok' ? (d.climate.annualRain?.p10 ?? null) : null, annualP90: d.climate.status === 'ok' ? (d.climate.annualRain?.p90 ?? null) : null, extremes: d.climate.status === 'ok' ? (d.climate.extremes ?? null) : null, extremesStatus: d.climate.status === 'ok' ? d.climate.extremesStatus : null, lat: d.centroid?.lat ?? (d.climate.status === 'ok' ? d.climate.at.lat : null), units: u });
   const sheet = $derived(cultivationSheet(sheetIn));
   /** An upstream that refused or failed. Only 'none' is ever rendered as an absence; these get their own line. */
   /** Not answered: refused, failed, or not asked (a skipped source). Only 'none' is ever rendered as an absence. */
   const refused = (k: string) => ['refused', 'error', 'skipped'].includes(d.upstream[k]?.status ?? '');
-  // A source that refused or errored is named. One merely skipped in the latest build (its earlier answer carried over) is
-  // named only when the page has no photographs at all; beside 57 photographs "did not answer" would be untrue.
-  const refusedPhotoSources = $derived(['inat.taxon', 'inat.photos.wild', 'inat.photos.cultivated', 'commons', 'gbif.media'].filter((k) => { const st = d.upstream[k]?.status ?? ''; return st === 'refused' || st === 'error' || (st === 'skipped' && !d.photos.length); }));
-  const photoSourceName: Record<string, string> = { 'inat.taxon': 'iNaturalist', 'inat.photos.wild': 'iNaturalist', 'inat.photos.cultivated': 'iNaturalist', commons: 'Wikimedia Commons', 'gbif.media': 'GBIF media' };
-  const refusedPhotoNames = $derived([...new Set(refusedPhotoSources.map((k) => photoSourceName[k]))]);
+  // A source that refused or errored is named, each said as what it did; one merely skipped in the latest build (its
+  // earlier answer carried over) only when the page has no photographs at all (round sixty-two; outside review A35).
+  const photoGaps = $derived(photoSourceGaps(d.upstream, photos.length));
   /** "12 / 8–15": the median with the 10th–90th span across the envelope cells. */
   const cell = (med: number | undefined, lo: number | undefined, hi: number | undefined, digits = 0, conv: (x: number) => number = (x) => x) => (med == null ? '–' : lo == null || hi == null || (lo === med && hi === med) ? fixed(conv(med), digits) : `${fixed(conv(med), digits)} / ${fixed(conv(lo), digits)}–${fixed(conv(hi), digits)}`);
   const tC = $derived((x: number) => (u === 'us' ? cToF(x) : x));
   const rMm = $derived((x: number) => (u === 'us' ? mmToIn(x) : x));
   /** A source's detail string as a sentence of its own: capitalised, with its article and a full stop (round sixty-one; visitor 16). */
   const sentence = (t: string | undefined, fallback: string) => detailSentence(t, fallback);
+  /** The climate's reason as its source did: a dossier built before round sixty-two said a refusal as "did not answer". */
+  const climDetail = $derived(climateDetail('detail' in d.climate ? d.climate.detail : undefined, d.upstream));
   /** The grower's hemisphere, from the first place with coordinates, else north. Only the months in the note depend on it. */
   // Your site's latitude decides the hemisphere of the months; a place with coordinates stands in when no site is set.
   /** The season card's sentence: the sheet's own reading of this year, in plain words (the row the In short list used to repeat). */
@@ -259,7 +281,7 @@
   const distWords = $derived.by(() => {
     const st = d.upstream['wcvp.distribution']?.status;
     if (st === 'none') return 'No published distribution for this name.';
-    if (st === 'refused' || st === 'error' || !st) return 'Not checked: the distribution source did not answer when this page was built.';
+    if (st === 'refused' || st === 'error' || !st) return `Not checked: the distribution source ${notAnswered(st)} when this page was built.`;
     if (d.distribution.ambiguous) return `WCVP holds more than one name spelt this way (${d.distribution.ambiguous}); no native region is read from it.`;
     return d.distribution.introduced.length || d.distribution.extinct?.length ? 'WCVP lists no region where it is native; the regions it does list are named here.' : 'WCVP lists no native region for this name.';
   });
@@ -286,7 +308,7 @@
   <a class="reltile" href="/species/{c.slug}">
     <!-- Hidden on a failure heard before hydration too, and credited: the tile names its photograph's source, and the species
          page it opens names the author and licence (round sixty; visitor 4, rule 1, the round forty-two review G). -->
-    {#if c.thumb}<img src={c.thumb} alt={c.name} loading="lazy" use:failedBeforeHydration={(im) => (im.style.visibility = 'hidden')} />{:else}<div class="noim"></div>{/if}
+    {#if c.thumb}<img src={c.thumb} alt={c.name} loading="lazy" use:failedBeforeHydration={(im) => (im.style.visibility = 'hidden')} />{/if}<!-- no photograph, no empty square (round sixty-two; outside review A35) -->
     <span class="rn"><SpeciesName name={c.name} /></span>
     <span class="rf">{c.common ?? c.family ?? ''}</span>
     {#if c.thumb && tileCredit(c)}<span class="rc">{tileCredit(c)}</span>{/if}
@@ -303,7 +325,7 @@
   <meta property="og:url" content="https://cultifolio.com/species/{d.slug}" />
   <!-- A species with no photograph previews as the site's own card, not as no picture (round sixty; product 6, visitor 20). -->
   <meta property="og:image" content={hero ? heroSrc : 'https://cultifolio.com/og.png'} />
-  <meta property="og:image:alt" content={hero ? heroAlt : 'Cultifolio: habitat climate for cacti, succulents and bulbs, every figure sourced'} />
+  <meta property="og:image:alt" content={hero ? heroAlt : OG_ALT} />
   <meta name="twitter:card" content="summary_large_image" />
   {#if hero}
     <!-- The photograph is the largest paint on a phone and lives on a third party's host. Preloaded from the head, one size by
@@ -317,6 +339,8 @@
   <!-- A vernacular name is user-contributed upstream; a "<" in it must not end this script early. -->
   {@html `<script type="application/ld+json">${jsonld.replace(/</g, '\\u003c')}</script>`}
 </svelte:head>
+
+<svelte:window onbeforeunload={guardUnload} />
 
 <article class="species">
   {#if data.was}
@@ -332,7 +356,9 @@
       <!-- One size by surface, not by pixel density (round thirty-five, R2-7): under 640 px the 500 px file fills a 150 px band cropped to cover,
            and a phone's density promoted it to the 1024 px one, three times the bytes for a crop that showed a third of it (round forty-two, 1). -->
       <a href={hero.page ?? hero.url} rel="noopener"><picture><source media="(max-width: 640px)" srcset={photoAt(heroSrc!, 'medium')} /><img src={photoAt(heroSrc!, 'large')} srcset={srcsetOf(heroSrc!, ['medium', 'large'])} sizes="480px" alt={heroAlt} loading="eager" fetchpriority="high" use:failedBeforeHydration={() => (heroFailed = true)} /></picture></a>
-      <a class="cred" href={hero.page ?? hero.url} rel="noopener">{hero.attribution}{hero.captive === true ? ' · in cultivation' : hero.captive === false ? ' · observed growing wild' : ''}{hero.observedOn ? ' · ' + hero.observedOn : ''}</a>
+      <!-- Licence first, then the author's line: on a phone the two are two lines, so a long author name never cuts the
+           licence to an ellipsis (round sixty-two; outside review A12); a licence the author's line contradicts is said. -->
+      <a class="cred" href={hero.page ?? hero.url} rel="noopener">{#if heroCredit.lic}<span class="lic">{heroCredit.lic}{heroCredit.disagree ? '; the author\'s line names another licence' : ''}</span>{/if}<span class="by">{hero.attribution}{hero.captive === true ? ' · in cultivation' : hero.captive === false ? ' · observed growing wild' : ''}{hero.observedOn ? ' · ' + hero.observedOn : ''}</span></a>
     </div>
   {/if}
   <!-- No photograph: no grey box of text where one would be; the card takes the width, with the one placeholder as a small
@@ -343,15 +369,15 @@
       <h1 class="sci"><SpeciesName name={d.name.scientific} authorship={d.name.authorship} /></h1>
       <!-- One line under the name: common names, then family, native range and the group; the facts grid they came from is at the foot of the page now (round fifty, 3). -->
       <p class="vern">
-        {#if common.length}{common.join(', ')}{/if}
+        {#if common.length}{common.join('; ')}{/if}<!-- semicolons, so a name that is itself a comma list stays whole (round sixty-two; outside review A33) -->
         {#if d.name.status === 'synonym' && d.name.acceptedName}· <span class="pill w">synonym of {d.name.acceptedName}</span>{:else if d.name.status !== 'accepted'}· <span class="pill">{d.name.status}</span>{/if}
       </p>
       <p class="vern meta">{[d.name.family, d.distribution.native.length ? d.distribution.native.slice(0, 2).map((r) => unitName(r.name)).join(', ') + (d.distribution.native.length > 2 ? ` +${d.distribution.native.length - 2}` : '') : null, sheet.arch ? sheet.arch.arch.lab.toLowerCase() : null].filter(Boolean).join(' · ')}</p>
       <!-- Pills say a state that is not the usual one; what is known is shown, not announced. Counts and groupings are plain text (improvements, 7). -->
-      {#if d.climate.status !== 'ok' || (!d.photos.length && refusedPhotoNames.length)}
+      {#if d.climate.status !== 'ok' || (!photos.length && photoGaps)}
         <div class="pills">
-          {#if d.climate.status === 'pending'}<span class="pill">Climate pending</span>{:else if d.climate.status === 'refused'}<NotChecked what="Climate" why={sentence(d.climate.detail, 'A source did not answer when this page was built')} />{:else if d.climate.status !== 'ok'}<span class="pill">No habitat climate</span>{/if}
-          {#if !d.photos.length && refusedPhotoNames.length}<NotChecked what="Photographs" why="{refusedPhotoNames.join(' and ')} {refusedPhotoSources.every((k) => d.upstream[k]?.status === 'skipped') ? `${refusedPhotoNames.length === 1 ? 'was' : 'were'} not asked` : 'did not answer'} when this page was built." />{/if}
+          {#if d.climate.status === 'pending'}<span class="pill">Climate pending</span>{:else if d.climate.status === 'refused'}<NotChecked what="Climate" why={sentence(climDetail, 'A source did not answer when this page was built')} />{:else if d.climate.status !== 'ok'}<span class="pill">No habitat climate</span>{/if}
+          {#if !photos.length && photoGaps}<NotChecked what="Photographs" why="{photoGaps.allUncredited ? `${photoGaps.names.join(' and ')} answered, but with no photograph credited under its licence` : photoGaps.clause} when this page was built." />{/if}
         </div>
       {/if}
     </div>
@@ -361,21 +387,24 @@
       {#if mine.length}
         <span class="vern mine">{#each mine.slice(0, 3) as a (a.id)}<a class="accno" href={plantHref(a)} title={a.status !== 'growing' ? a.status : 'yours'}>{accNo(a)}</a>{/each}{#if mine.length > 3}<span class="more">+{mine.length - 3}</span>{/if}</span>
       {/if}
+      {#if compared.length}
+        <span class="vern mine compared" id="compared-plants">Compared with this species: {#each compared.slice(0, 3) as a (a.id)}<a class="accno" href={plantHref(a)} title={a.taxonName}>{accNo(a)}</a>{/each}{#if compared.length > 3}<span class="more">+{compared.length - 3}</span>{/if}</span>
+      {/if}
     </div>
     <div class="acts acts2">
       <a class="btn" href="/propagation/new?species={encodeURIComponent(d.name.scientific)}&key={d.key}">Sow seed</a>
       <FollowButton slug={d.slug} name={d.name.scientific} gbifKey={d.key} />
       <CompareButton slug={d.slug} name={d.name.scientific} />
-      {#if d.climate.status === 'ok'}<ShareCard input={{ units: u, name: d.name.scientific, family: d.name.family, origin: d.distribution.native.map((r) => r.name), slug: d.slug, cells: d.climate.cells, south: sheet.year?.south, climate: { months: d.climate.months, p10: d.climate.p10, p90: d.climate.p90, cells: d.climate.cells, extremes: d.climate.extremes ?? null } }} />{/if}
+      {#if d.climate.status === 'ok'}<ShareCard input={{ units: u, name: d.name.scientific, family: d.name.family, origin: d.distribution.native.map((r) => r.name), slug: d.slug, cells: d.climate.cells, south: sheet.year?.south, climate: { months: d.climate.months, p10: d.climate.p10, p90: d.climate.p90, cells: d.climate.cells, extremes: d.climate.extremes ?? null }, extremesStatus: d.climate.extremesStatus ?? null }} />{/if}
     </div>
   </div>
   </div>
 
   {#if stripPhotos.length}
     <!-- A few of the photographs under the name card, on a phone too: the grid was three and a half thousand pixels down (round fifty-eight; the first-impression review). Each opens its credit and licence in the Photographs section. -->
-    <a class="thumbstrip" href="#{myPhotos.length ? 's-photos-open' : 's-photos'}" aria-label="Photographs of {d.name.scientific}, with their credits">
+    <a class="thumbstrip" href="#{myPhotos.length ? 's-photos-open' : 's-photos'}" aria-label="{photos.length} photograph{photos.length === 1 ? '' : 's'} of {d.name.scientific}, with their credits">
       {#each stripPhotos as p (p.src + p.id)}<img src={p.thumb} alt="{d.name.scientific}, photograph {p.attribution}" title={p.attribution} loading="lazy" width="72" height="72" onerror={(e) => (e.currentTarget as HTMLImageElement).remove()} />{/each}
-      <span class="more">{d.photos.length} photograph{d.photos.length === 1 ? '' : 's'} ›</span>
+      <span class="more">{photos.length} photograph{photos.length === 1 ? '' : 's'} ›</span>
     </a>
   {/if}
   <!-- The section menu under the card, where a phone reader still is (round fifty-eight); it stays pinned as the page scrolls. -->
@@ -383,7 +412,7 @@
     <a href="#s-cultivation" class:on={active === 's-cultivation'} onclick={(e) => goTab(e, 's-cultivation')}>Cultivation</a>
     <a href="#s-climate" class:on={active === 's-climate'} onclick={(e) => goTab(e, 's-climate')}>Climate</a>
     <a href="#s-habitat" class:on={active === 's-habitat'} onclick={(e) => goTab(e, 's-habitat')}>Habitat</a>
-    {#if d.photos.length !== 1}<a href="#s-photos" class:on={active === 's-photos' || active === 's-photos-open'} onclick={(e) => goTab(e, 's-photos')}>Photographs</a>{/if}
+    {#if photos.length !== 1}<a href="#s-photos" class:on={active === 's-photos' || active === 's-photos-open'} onclick={(e) => goTab(e, 's-photos')}>Photographs</a>{/if}
     {#if papers.length || refused('openalex')}<a href="#s-research" class:on={active === 's-research'} onclick={(e) => goTab(e, 's-research')}>Papers</a>{/if}
     {#if data.siblings.length || data.near.length}<a href="#s-related" class:on={active === 's-related'} onclick={(e) => goTab(e, 's-related')}>Related</a>{/if}
     <a href="#s-registers" class:on={active === 's-registers'} onclick={(e) => goTab(e, 's-registers')}>Registers</a>
@@ -411,7 +440,7 @@
     <p class="small muted">Quoted from <a href={d.summary.url} rel="noopener">Wikipedia, "{d.summary.title}"</a>, {d.summary.licence}.</p>
   {:else if refused('wikipedia')}
     <h2 class="sec" id="s-summary">Summary</h2>
-    <div class="notice"><b>Not checked.</b> Wikipedia did not answer when this page was built. Not a statement that it has no article.</div>
+    <div class="notice"><b>{d.upstream['wikipedia']?.status === 'skipped' ? 'Not asked.' : 'Not checked.'}</b> Wikipedia {notAnswered(d.upstream['wikipedia']?.status)} when this page was built. Not a statement that it has no article.</div>
   {/if}
 
   {#if data.genusRecord?.status === 'ok' && data.genusRecord.summary && !genusRepeats}
@@ -447,7 +476,7 @@
     {#if sheet.arch}
       <!-- The group and, apart from every habitat figure, its convention, said as one with no source: it never raises or
            replaces the cold floor (round sixty; self-review 3, words 1). -->
-      <p class="small archline">Grouped as {aLabel(sheet.arch.arch.lab)}, by its {sheet.arch.tier} (archetype table).{#if sheet.floor?.convention && d.climate.status === 'ok'}{' '}Not a habitat figure: {sheet.floor.convention.text}.{/if}</p>
+      <p class="small archline">Grouped as {aLabel(sheet.arch.arch.lab)}, {sheet.arch.why}.{#if sheet.floor?.convention && d.climate.status === 'ok'}{' '}Not a habitat figure: {sheet.floor.convention.text}.{/if}</p>
     {/if}
     <!-- Closed at rest, title only: the glance row above carries their figures, so a summary line under each title said
          them a second time (round sixty; visitor 2, self-review "the experience" 2). -->
@@ -466,7 +495,7 @@
       </details>
     {/each}
     {#if !sheetCards.length}
-      <div class="cult"><div class="none">{#if d.climate.status === 'refused'}Not checked. {sentence(d.climate.detail, 'a source did not answer when this page was built')} No sheet is derived from an answer that was not given, and the archetype table has no figure for this genus or family.{:else if d.climate.status === 'pending'}Pending: the habitat climate has not been derived yet, and the archetype table has no figure for this genus or family.{:else}Nothing derived: no habitat climate for this species, and the archetype table has no figure for its genus or family.{/if}</div></div>
+      <div class="cult"><div class="none">{#if d.climate.status === 'refused'}Not checked. {sentence(climDetail, 'a source did not answer when this page was built')} No sheet is derived from an answer that was not given, and the archetype table has no figure for this genus or family.{:else if d.climate.status === 'pending'}Pending: the habitat climate has not been derived yet, and the archetype table has no figure for this genus or family.{:else}Nothing derived: no habitat climate for this species, and the archetype table has no figure for its genus or family.{/if}</div></div>
     {/if}
     {#if sheetCards.length || sheet.arch}
       <!-- One account of the method per section, closed: the grey "by rule" lines under every block are gone (round sixty; visitor 2). -->
@@ -475,7 +504,7 @@
         <div class="whybody">
           <p class="whyline">Each card states this species' habitat figures with their sources, and what two fixed rules read from them; nothing here says what the plant does, wants or tolerates. <a href="/about/how#year">The rules</a> · <a href="/about/how#glossary">the terms</a>.</p>
           {#each sheetCards as c (c.title)}{#each c.rows as r}<p class="whyline"><b>{c.rows.length > 1 ? r.k : c.title}.</b> {r.why}</p>{/each}{/each}
-          {#if sheet.arch}<p class="whyline"><b>Group.</b> By {sheet.arch.why}, from the archetype table. {sheet.arch.arch.minC != null ? 'The table gives one figure for this group, a convention for growing it indoors, with no source; it is shown apart and never changes the cold floor.' : 'The table gives no figure for this group, which spans too much for one; the cold floor is the habitat\'s alone.'} The table gives no prose.</p>{/if}
+          {#if sheet.arch}<p class="whyline"><b>Group.</b> {sheet.arch.why.charAt(0).toUpperCase() + sheet.arch.why.slice(1)}. {sheet.arch.arch.minC != null ? 'The table gives one figure for this group, a convention for growing it indoors, with no source; it is shown apart and never changes the cold floor.' : 'The table gives no figure for this group, which spans too much for one; the cold floor is the habitat\'s alone.'} The table gives no prose.</p>{/if}
         </div>
       </details>
     {/if}
@@ -513,7 +542,7 @@
       <p class="notice small" id="hemispheres">Records on both sides of the equator: the {other} {other === 1 ? 'cell' : 'cells'} at least 10° {hs.used === 'north' ? 'south' : 'north'} of it {other === 1 ? 'has' : 'have'} seasons six months apart and {other === 1 ? 'is' : 'are'} left out, not combined into a year no place has. These figures are across the {d.climate.cells} cells that remain: {remain}.</p>
     {/if}
     {#if d.climate.extremesSea && d.climate.landFraction != null}
-      <p class="notice small" id="seacell">The daily extremes were read at a NASA POWER cell that is {Math.round(d.climate.landFraction * 100)}% land: neither it nor the next candidates whose coldest night is within 2 °C of the median across cells sit in a POWER cell that is mostly land, and the rule reads a cold floor only from a cell that is mostly land, so none is read for this species. Nor is the coldest month's mean night taken as one: it is a mean of a month's lows, not its coldest night. What that cell gave over {d.climate.extremesSea.years} years: absolute minimum {temp(d.climate.extremesSea.minAbs, u, 1)}, 1st-percentile night {temp(d.climate.extremesSea.minP01, u, 1)}, 99th-percentile day {temp(d.climate.extremesSea.maxP99, u, 1)}.</p>
+      <p class="notice small" id="seacell">The daily extremes were read at a NASA POWER cell that is {Math.round(d.climate.landFraction * 100)}% land: neither it nor the next candidates whose coldest month's mean nightly low is within 2 °C of the median across cells sit in a POWER cell that is mostly land, and the rule reads a cold floor only from a cell that is mostly land, so none is read for this species. Nor is the coldest month's mean nightly low taken as one: it is a mean of a month's lows, not its coldest night. What that cell gave over {d.climate.extremesSea.years} years: absolute minimum {temp(d.climate.extremesSea.minAbs, u, 1)}, 1st-percentile night {temp(d.climate.extremesSea.minP01, u, 1)}, 99th-percentile day {temp(d.climate.extremesSea.maxP99, u, 1)}.</p>
     {/if}
     <!-- "a typical spot in the range" and "across the range", the glossary's words (round fifty-eight; the accessibility review). -->
     <details class="why">
@@ -527,7 +556,7 @@
   {:else if d.climate.status === 'pending'}
     <div class="cult"><div class="none">Pending: the habitat climate for this species has not been derived yet{d.climate.detail ? ` (${d.climate.detail})` : ''}. Not a statement that none exists.</div></div>
   {:else if d.climate.status === 'refused'}
-    <div class="notice"><b>Not checked.</b> {sentence(d.climate.detail, 'An upstream source did not answer when this page was built')} This is not a statement that no climate exists.</div>
+    <div class="notice"><b>Not checked.</b> {sentence(climDetail, 'An upstream source did not answer when this page was built')} This is not a statement that no climate exists.</div>
   {:else}
     <div class="cult"><div class="none">No habitat climate can be derived: {sentence(d.climate.detail, 'no in-range records to read one at')}{#if d.occurrences.nVague}{' '}{d.occurrences.nVague} of the {d.occurrences.nOpenInRange + (d.occurrences.nRestrictedInRange ?? 0)} in-range records {d.occurrences.nVague === 1 ? 'is' : 'are'} placed to worse than 10 km, or to no stated accuracy and fewer than three decimals or by something other than a person's observation, and cannot place a climate cell, though {d.occurrences.nVague === 1 ? 'it counts' : 'they count'} for the map and its marker.{/if}</div></div>
   {/if}
@@ -535,7 +564,7 @@
   <h2 class="sec" id="s-habitat">Natural habitat</h2>
   <div class="maprow">
     <div class="mapbox">{@html data.worldSvg}<div class="mapcap">Native range as published by WCVP{#if d.centroid}; the marker is where the records are densest and decides nothing{#if d.climate.status === 'ok'}: the climate was read across the cells of the in-range records placed well enough to read one, not at the marker{/if}{/if}.</div></div>
-    <div class="mapbox">{@html data.regionSvg}<div class="mapcap">{d.occurrences.nOpenInRange ? (d.occurrences.rangeTested === false ? 'Openly licensed records, not tested against the stated range, framed on where they fall.' : 'Openly licensed records inside the range, framed on where they fall.') : ['refused', 'error'].includes(d.upstream['gbif.occurrences']?.status ?? '') ? 'Records not checked: the occurrence source did not answer when this page was built.' : d.occurrences.rangeTested === false ? 'No openly licensed georeferenced record to show; records were not tested against the stated range.' : 'No openly licensed record to show inside the range.'}</div></div>
+    <div class="mapbox">{@html data.regionSvg}<div class="mapcap">{d.occurrences.nOpenInRange ? (d.occurrences.rangeTested === false ? 'Openly licensed records, not tested against the stated range, framed on where they fall.' : 'Openly licensed records inside the range, framed on where they fall.') : ['refused', 'error'].includes(d.upstream['gbif.occurrences']?.status ?? '') ? `Records not checked: the occurrence source ${notAnswered(d.upstream['gbif.occurrences']?.status)} when this page was built.` : d.occurrences.rangeTested === false ? 'No openly licensed georeferenced record to show; records were not tested against the stated range.' : 'No openly licensed record to show inside the range.'}</div></div>
   </div>
   <div class="factgrid">
     <div class:wide={longRange}><b>Native</b>{#if d.distribution.native.length}{d.distribution.native.map((r) => unitName(r.name)).join(', ')}{#if d.distribution.verified === false}<span class="small muted"> · stated native by a national checklist, not by WCVP: unverified</span>{/if}{:else if d.distribution.reported?.length}<span class="muted">Not verified.</span><span class="small muted"> Reported present (native status not stated): {d.distribution.reported.map((r) => r.name).join(', ')}</span>{:else}{distWords}{/if}{#if d.distribution.introduced.length}<span class="small muted"> · introduced: {d.distribution.introduced.map((r) => r.name).join(', ')}</span>{/if}</div>
@@ -558,7 +587,7 @@
     <!-- Each named by the plant, the day and the caption; the image inside is then decorative (round fifty-eight; the accessibility review). -->
     <div class="myph">
       {#each myPhotos.slice(0, 12) as ph, i (ph.id)}
-        <button class="ph" type="button" onclick={() => (lightbox = i)} title="{accNo(ph.plant)} · {ph.d}" aria-label={photoLabel(ph)}>
+        <button class="ph" type="button" onclick={() => (lightbox = i)} title="{accNo(ph.plant)} · {ph.d}" aria-label="{accNo(ph.plant)}: {photoLabel(ph)}">
           <PhotoImg id={ph.id} alt="" loading="lazy" />
           <span class="pd">{accNo(ph.plant)}</span>
         </button>
@@ -566,20 +595,20 @@
     </div>
     {#if myPhotos.length > 12}<p class="faint small">Showing the newest 12 of {myPhotos.length}; the rest are on each plant's page.</p>{/if}
   {/if}
-  {#if d.photos.length > 1}
+  {#if photos.length > 1}
     <h2 class="sec" id={myPhotos.length ? 's-photos-open' : 's-photos'}>{myPhotos.length ? 'Open photographs' : 'Photographs'}</h2>
-    <Photos photos={d.photos} name={d.name.scientific} strip />
-  {:else if !d.photos.length}
+    <Photos {photos} name={d.name.scientific} strip />
+  {:else if !photos.length}
     <!-- Why there is no photograph, here and not as the page's hero (round sixty; visitor 12). -->
     <h2 class="sec" id={myPhotos.length ? 's-photos-open' : 's-photos'}>{myPhotos.length ? 'Open photographs' : 'Photographs'}</h2>
-    {#if refusedPhotoNames.length}
-      <div class="notice"><b>Not checked.</b> {refusedPhotoNames.join(' and ')} {refusedPhotoSources.every((k) => (d.upstream[k]?.detail ?? '').startsWith('no credited photograph')) ? 'answered, but every photograph they gave lacked an author to credit under its licence, so none is shown' : refusedPhotoSources.every((k) => d.upstream[k]?.status === 'skipped') ? `${refusedPhotoNames.length === 1 ? 'was' : 'were'} not asked when this page was built` : `did not answer when this page was built`}{#if d.upstream['gbif.media']?.status === 'none' && !refusedPhotoSources.includes('gbif.media')}; GBIF's observation records with coordinates hold none{/if}. Not a statement that none exist.</div>
+    {#if photoGaps}
+      <div class="notice"><b>Not checked.</b> {photoGaps.allUncredited ? `${photoGaps.names.join(' and ')} answered, but every photograph they gave lacked an author to credit under its licence, so none is shown` : `${photoGaps.clause} when this page was built`}{#if d.upstream['gbif.media']?.status === 'none' && !photoGaps.names.includes('GBIF media')}; GBIF's observation records with coordinates hold none{/if}. Not a statement that none exist.</div>
     {:else}
       <p class="small muted">No openly licensed photograph on file. If you grow this plant, add your own photograph to your record.</p>
     {/if}
   {/if}
-  {#if refusedPhotoNames.length && d.photos.length}
-    <p class="small muted">Photographs: {refusedPhotoNames.join(' and ')} did not answer when this page was built; what is shown came from the sources that did.</p>
+  {#if photoGaps && photos.length}
+    <p class="small muted">Photographs: {photoGaps.clause} when this page was built; what is shown came from the sources that answered.</p>
   {/if}
   {#if lightbox != null && myPhotos.length}
     <Lightbox photos={myPhotos} bind:index={lightbox} acc={myPhotos[lightbox]?.plant.id ?? null} onclose={() => (lightbox = null)} />
@@ -587,7 +616,7 @@
 
   {#if refused('openalex') && !papers.length}
     <h2 class="sec" id="s-research">Papers naming this species</h2>
-    <div class="notice"><b>Not checked.</b> OpenAlex did not answer when this page was built. Not a statement that no paper names this species.</div>
+    <div class="notice"><b>{d.upstream['openalex']?.status === 'skipped' ? 'Not asked.' : 'Not checked.'}</b> OpenAlex {notAnswered(d.upstream['openalex']?.status)} when this page was built. Not a statement that no paper names this species.</div>
   {/if}
   {#if papers.length}
     <h2 class="sec" id="s-research">Papers naming this species</h2>
@@ -601,7 +630,7 @@
   {#if data.siblings.length || data.near.length}
     <h2 class="sec" id="s-related">Related</h2>
     {#if data.near.length}
-      <p class="relhead"><b>Similar habitat climate</b> <span class="small muted">{data.near.length === 1 ? 'The nearest' : `The ${data.near.length} nearest`} by mean day, mean night and rain, month by month. <a href="/about/how#related">How</a>.</span></p>
+      <p class="relhead"><b>Similar habitat climate</b> <span class="small muted">{data.near.length === 1 ? 'The nearest' : `The ${data.near.length} nearest`} by mean daily high, mean nightly low and rain, month by month. <a href="/about/how#related">How</a>.</span></p>
       <div class="relstrip">
         {#each data.near as c (c.key)}{@render rel(c)}{/each}
       </div>
@@ -673,7 +702,7 @@
   .relstrip { display: grid; grid-auto-flow: column; grid-auto-columns: 132px; gap: 10px; overflow-x: auto; padding: 2px 2px 10px; scroll-snap-type: x proximity; }
   .reltile { display: block; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); overflow: hidden; color: inherit; scroll-snap-align: start; }
   .reltile:hover { text-decoration: none; color: inherit; box-shadow: var(--sh2); }
-  .reltile img, .reltile .noim { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; background: var(--sunk); }
+  .reltile img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; background: var(--sunk); }
   .reltile .rn { display: block; padding: 7px 9px 0; font-family: var(--serif); font-style: italic; font-size: var(--fs-md); line-height: 1.25; font-weight: 600; }
   .reltile .rf { display: block; padding: 3px 9px 9px; font-size: var(--fs-xs); letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink3); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .reltile .rc { display: block; padding: 0 9px 8px; margin-top: -5px; font-size: var(--fs-xs); color: var(--ink3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

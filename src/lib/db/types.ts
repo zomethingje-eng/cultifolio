@@ -49,6 +49,12 @@ export interface Accession {
   cover?: string | null;
   /** This plant's own watering rhythm, in days, over its place's (round fifty-eight); null follows the place. */
   waterDays?: number | null;
+  /**
+   * The sheet line an import filed this plant from: a hash of the line's cells, then the plant's place among the plants
+   * that line and its identical lines make ("i1a2b3c4d#2"), so running the same sheet again adds only what is not here
+   * (round sixty-two; the records review, 1, the grower review, 3, A18, B6). Never shown; null for a plant not imported.
+   */
+  importKey?: string | null;
 }
 
 /**

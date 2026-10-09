@@ -1,5 +1,5 @@
 import { json, error } from '@sveltejs/kit';
-import { sheetsIn } from '$lib/server/sheets';
+import { sheetsIn, SheetsUnreadable } from '$lib/server/sheets';
 import { corpusNow } from '$lib/server/dossiers';
 import { limited } from '$lib/server/sync';
 import { isBucket, bucketWidth } from '$core/bucket';
@@ -49,7 +49,16 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
     // Charged per bucket derived, not per request (round thirteen, 12).
     const stop = await limited(platform, getClientAddress, 'sheets');
     if (stop) return stop;
-    const sheets = await sheetsIn(c, platform, fetch, b);
+    let sheets;
+    try { sheets = await sheetsIn(c, platform, fetch, b); }
+    catch (e) {
+      // Rule 2: a bucket with a species it could not read is not answered at all, so no device takes the species as
+      // missing from the reference (round sixty-two; the corpus review of round sixty, 13).
+      // Its Retry-After is how long this isolate keeps the refusal, half a minute at most (round sixty-two, second pass; the
+      // server review, 6), where it was a fixed minute.
+      if (e instanceof SheetsUnreadable) return json({ error: 'The species sheets could not all be read just now.' }, { status: 503, headers: { 'retry-after': String(e.retryAfter), 'cache-control': 'no-store' } });
+      throw e;
+    }
     out.push(sheets);
     if (edge && current) {
       const body = JSON.stringify(sheets);

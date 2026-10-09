@@ -13,13 +13,13 @@ describe('spending, per currency', () => {
     const prices = [...Array(180).fill('£12'), '€15', '€30', ...Array(12).fill('10'), 'a swap', 'gift', '?'];
     const s = spendOf(prices);
     expect(s.parts).toEqual([{ cur: '£', total: 2160, counted: 180 }, { cur: '€', total: 45, counted: 2 }, { cur: null, total: 120, counted: 12 }]);
-    expect(s.skipped).toBe(3);
-    expect(amountWords(s)).toBe('£2,160 on 180 plants, €45 on 2 plants and 120 on 12 plants with no currency given');
+    expect([s.skipped, s.free]).toEqual([2, 1]); // "gift" is nothing spent, not unread (round sixty-two; A39)
+    expect(amountWords(s)).toBe('£2,160 on 180 plants, €45 on 2 plants, 120 on 12 plants with no currency given and 1 plant free or a gift');
   });
   it('says one currency, or prices with none named, as before', () => {
     expect(amountWords(spendOf(['£5', '£10']))).toBe('£15 on 2 plants');
     expect(amountWords(spendOf(['5', '10.5']))).toBe('15.50 on 2 plants');
-    expect(spendOf(['6 EUR', '€4']).parts.map((p) => p.cur).sort()).toEqual(['EUR', '€'].sort()); // as written: no currency is merged or converted
+    expect(spendOf(['6 EUR', '€4']).parts.map((p) => p.cur)).toEqual(['€']); // one currency by two names is one total, never converted (round sixty-two; A39)
     expect(amountWords(spendOf(['a swap']))).toBe('nothing counted');
   });
   it('orders the parts by the number of plants, never by the order they were entered', () => {

@@ -4,7 +4,7 @@
  * below failed on the base (shown before the fix) unless it says it is a guard.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { cleanQuery, relaxedQuery, prepare, search } from '$core/search';
+import { cleanQuery, relaxedQuery, prepare, search, droppedLabel } from '$core/search';
 import { pickedName } from '$lib/ui/picked-name';
 
 const E = (key: number, name: string, common?: string, commons?: string[]) => ({ key, slug: name.toLowerCase().replace(/[^a-z0-9]+/g, '-'), name, common, commons, family: 'X', origin: [] as string[] });
@@ -69,7 +69,10 @@ describe('hybrids and cultivars (corpus 2, 3, 6, 7)', () => {
   it('the retry is never a single letter (corpus 8): "E. cv. Perle" is not answered as every genus beginning with E', () => {
     expect(relaxedQuery('E. cv. Perle')).toBeNull();
     expect(answer('E. cv. Perle').names).toEqual([]);
-    expect(relaxedQuery('Ec. cv. Perle')).toBe('Ec'); // two letters are a beginning, as the search box treats them
+    // Two letters are a beginning, as the search box treats them; since round sixty-two's second pass the first reading
+    // leaves out what follows "cv." (the verification review's search 8), so "Ec." is searched there and needs no retry.
+    expect(relaxedQuery('Ec. cv. Perle')).toBeNull();
+    expect(droppedLabel('Ec. cv. Perle', [{ name: 'Echeveria elegans' }])).toBe('Ec.');
   });
 });
 
@@ -78,8 +81,11 @@ describe('the picker keeps the rank and epithet typed after a species (corpus 5)
     expect(pickedName('Copiapoa cinerea var. columna-alba', { name: 'Copiapoa cinerea' })).toBe('Copiapoa cinerea var. columna-alba');
     expect(pickedName('Copiapoa cinerea var. columna-alba', { name: 'Copiapoa cinerea', rank: 'SPECIES' })).toBe('Copiapoa cinerea var. columna-alba');
   });
-  it('a misspelt species corrected by the pick keeps the variety too', () => {
+  it('a misspelt species corrected by the pick carries the variety, filed with no key (changed again in round sixty-two\'s second pass: the verification review\'s search 11)', () => {
+    // The variety typed is never dropped when the species picked has the epithet typed, one typing error away; it is
+    // filed with no key. A variety typed under another species is not carried there.
     expect(pickedName('copiapoa cineria var. columna-alba', { name: 'Copiapoa cinerea' })).toBe('Copiapoa cinerea var. columna-alba');
+    expect(pickedName('copiapoa cinerea var. columna-alba', { name: 'Lithops lesliei' })).toBe('Lithops lesliei');
   });
   it('a suggestion below species rank is its own whole name; a cultivar and a cross are kept as before (guards)', () => {
     expect(pickedName('Copiapoa cinerea var. col', { name: 'Copiapoa cinerea var. columna-alba', rank: 'VARIETY' })).toBe('Copiapoa cinerea var. columna-alba');

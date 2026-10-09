@@ -8,9 +8,10 @@
   let { climate, id = 'climograph', name, south = null }: { climate: ClimoInput; id?: string; name?: string; south?: boolean | null } = $props();
   const calendar = $derived(`Habitat months${south == null ? '' : `, ${south ? 'southern' : 'northern'} hemisphere`}`);
   /**
-   * The figure in one sentence, for the description a screen reader gives with the title: the warmest month's mean day,
-   * the coldest month's mean night and the year's rain, from the figures drawn, and whose figures they are; the longer
-   * account follows it (round fifty-eight; the accessibility review; the source, round fifty-nine).
+   * The figure in one sentence, for the description a screen reader gives with the title: the warmest month's mean daily
+   * high, the coldest month's mean nightly low and the year's rain, from the figures drawn, and whose figures they are; the longer
+   * account follows it (round fifty-eight; the accessibility review; the source, round fifty-nine). The year's rain is the
+   * twelve monthly medians added, said so before "Medians" (round sixty-two; the words review's 5b).
    */
   const summary = $derived.by(() => {
     const m = climate.months;
@@ -18,10 +19,11 @@
     const hot = m.reduce((b, x, i) => (x.tmax > m[b].tmax ? i : b), 0);
     const cold = m.reduce((b, x, i) => (x.tmin < m[b].tmin ? i : b), 0);
     const year = m.reduce((a, x) => a + x.precipMm, 0);
-    // Every month that ties, as printed (round sixty-one; visitor 5).
-    const fmt = (v: number) => temp(v, units.current);
-    const hots = tiedMonths(m.map((x) => x.tmax), true, fmt), colds = tiedMonths(m.map((x) => x.tmin), false, fmt);
-    return `Warmest month${hots.length > 1 ? 's' : ''} ${monthNames(hots)}, mean day ${temp(m[hot].tmax, units.current)}; coldest month${colds.length > 1 ? 's' : ''} ${monthNames(colds)}, mean night ${temp(m[cold].tmin, units.current)}; ${rain(year, units.current)} of rain a year. Medians across the range, from CHELSA${climate.extremes ? `; the extremes at the edge from NASA POWER` : ''}. ${calendar}.`;
+    // Every month that ties, as printed; the coldest night judged and printed at one decimal, as the glance card does
+    // (round sixty-one; visitor 5; round sixty-two, outside review A35: at no decimals it named months the card did not).
+    const fmt = (v: number) => temp(v, units.current), fmt1 = (v: number) => temp(v, units.current, 1);
+    const hots = tiedMonths(m.map((x) => x.tmax), true, fmt), colds = tiedMonths(m.map((x) => x.tmin), false, fmt1);
+    return `Warmest month${hots.length > 1 ? 's' : ''} ${monthNames(hots)}, mean daily high ${fmt(m[hot].tmax)}; coldest month${colds.length > 1 ? 's' : ''} ${monthNames(colds)}, mean nightly low ${fmt1(m[cold].tmin)}; ${rain(year, units.current)} of rain a year (the twelve monthly medians added). Medians across the range, from CHELSA${climate.extremes ? `; the extremes at the edge from NASA POWER` : ''}. ${calendar}.`;
   });
   // Drawn at the width it is shown at, so labels keep their size on a phone instead of shrinking with the viewBox.
   let shown = $state(0);
@@ -61,7 +63,7 @@
       <text class="extlab" x={g.left + g.plotW - 14} y={g.temp.minAbs.y + 3.5} text-anchor="end">{g.temp.minAbs.label}</text>
     {/if}
     <text class="panel" x={g.left + 2} y={g.temp.top - 2}>{tempUnit(g.units)} · day and night</text>
-    <text class="quarterlab" x={g.temp.coldQuarter.x + 4} y={g.temp.top + g.temp.height - 5}>cold quarter</text>
+    <text class="quarterlab" x={g.temp.quarterLabel.x} y={g.temp.quarterLabel.y}>cold quarter</text>
 
     <!-- rain panel -->
     {#each g.rain.ticks as t}
@@ -95,7 +97,7 @@
     <span class="key"><i class="sw bar"></i>rain</span>
     <!-- The lines, the bars and the strip name their source where a reader sees them, not only in the <desc> (round sixty-one; visitor 3). -->
     {#if g.hasBand}<span class="key"><i class="sw band"></i>medians and 10th–90th percentile across {climate.cells} habitat cells, CHELSA</span>{:else if climate.cells > 1}<span class="key muted">medians across {climate.cells} habitat cells, CHELSA; no spread beyond rounding</span>{:else}<span class="key muted">one habitat cell, CHELSA, so no spread is drawn</span>{/if}
-    <span class="key"><i class="sw quarter"></i>cold quarter: the three months around the coldest mean night</span>
+    <span class="key"><i class="sw quarter"></i>cold quarter: the three months around the coldest month's mean nightly low</span>
     {#if climate.extremes}<span class="key"><i class="sw ext"></i>extremes over {climate.extremes.years} years at a typical spot in the range, from NASA POWER, marked at the edge, in no month</span>{/if}
     {#if g.strip}{#if g.strip.dli}<span class="key"><i class="sw dli"></i>DLI, mol/m²/day</span>{/if}{#if g.strip.rh}<span class="key"><i class="sw rh"></i>RH %</span>{/if}<span class="key muted">each on its own scale</span>{/if}
   </figcaption>

@@ -13,7 +13,7 @@
    */
   import { onMount } from 'svelte';
   import { page } from '$app/state';
-  import { CLOSED_NOTE, dropLeftoverSample, inDemo, keepSampleOpen, leaveDemo } from '$lib/db/demo';
+  import { CLOSED_NOTE, dropLeftoverSample, finishLeaving, inDemo, keepSampleOpen, leaveDemo, sampleEdits } from '$lib/db/demo';
   import { toast } from '$lib/ui/toast.svelte';
   let seeding = $state(false);
   let leaving = $state(false);
@@ -24,7 +24,12 @@
       delete document.documentElement.dataset.demo;
       // Sent home because the sample was closed in another tab: said here, plainly (round sixty-one; the records review, 13).
       try { if (sessionStorage.getItem(CLOSED_NOTE) === '1') { sessionStorage.removeItem(CLOSED_NOTE); toast.show('The sample collection was closed in another tab. This is your own collection.', 8000); } } catch { /* nothing to say */ }
-      void dropLeftoverSample();
+      // The first page after Leave deletes the sample; a delete that is held up or refused is said, never taken as done (round sixty-two; A9).
+      void finishLeaving().then((left) => {
+        if (left === 'blocked') toast.show('The sample collection is still open in another tab, so it is not deleted yet: it goes when that tab is closed.', 10000);
+        else if (left === 'failed') toast.show('The sample collection could not be deleted: the browser refused. It is tried again the next time a page opens here.', 10000);
+        else if (left === null) void dropLeftoverSample();
+      });
       return;
     }
     document.documentElement.dataset.demo = '1'; // a browser that ran no inline script still shows the bar
@@ -42,9 +47,17 @@
     document.body.classList.add('demo-locked');
     return () => document.body.classList.remove('demo-locked');
   });
+  /**
+   * Leave asks first when the visitor added or changed records here, saying how many (round sixty-two; A9); then the tab
+   * navigates, and the next page deletes the sample. A page's own "Leave site?" answered Cancel keeps the tab as it was,
+   * so the button comes back at once, not 4 seconds later under "Leaving…" (round sixty-two, second pass; the
+   * verification grower review, 4).
+   */
   async function leave() {
+    const n = await sampleEdits();
+    if (n && !confirm(`Leave the sample collection? The ${n === 1 ? 'record you added or changed here is' : `${n} records you added or changed here are`} deleted with it.`)) return;
     leaving = true;
-    await leaveDemo('/');
+    leaveDemo('/', () => (leaving = false));
   }
 </script>
 

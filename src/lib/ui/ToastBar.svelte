@@ -56,7 +56,7 @@
     if (from && box.contains(from)) return; // a move between the toast's own buttons: already held
     if (!toast.origin && from instanceof HTMLElement && from !== document.body && !from.closest('.toastregion')) toast.entry = from;
     hasWayBack = !!toast.wayBack();
-    toast.hold(); // once per visit, released on leaving: a hold per button moved through was never given back (round sixty-one)
+    toast.hold('focus'); // once per visit, released on leaving: a hold per button moved through was never given back (round sixty-one); for as long as focus stays (round sixty-two)
   }
   $effect(() => { void toast.text; hasWayBack = false; });
 </script>
@@ -69,7 +69,7 @@
   <!-- A toast with no action lets taps through: it sits over the lower part of the page on a phone, where the next button a grower reaches for is (round fifty-five, 5). -->
   <!-- While focus or the pointer is on it, its timer waits, up to HOLD_MAX_MS (round sixty; round sixty-one; the accessibility review, 1). -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="toast" class:quiet={!toast.text} class:through={!toast.action} onfocusin={onIn} onfocusout={(e) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node | null)) toast.release(); }} onpointerenter={() => toast.hold()} onpointerleave={() => toast.release()} onkeydown={onKey}><span role="status" aria-live="polite" aria-atomic="true">{toast.text ?? ''}</span>{#if toast.text && toast.action}{' '}<button type="button" class="undo" bind:this={undoBtn} onclick={act}>{toast.action.label}</button>{#if toast.origin || hasWayBack}<button type="button" class="skipback" onclick={back}>Back to where you were</button>{/if}{/if}</div>
+  <div class="toast" class:quiet={!toast.text} class:through={!toast.action} onfocusin={onIn} onfocusout={(e) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node | null)) toast.release('focus'); }} onpointerenter={() => toast.hold('pointer')} onpointerleave={() => toast.release('pointer')} onkeydown={onKey}><span role="status" aria-live="polite" aria-atomic="true">{toast.said}</span>{#if toast.text && toast.action}{' '}<button type="button" class="undo" bind:this={undoBtn} onclick={act}>{toast.action.label}</button>{#if toast.origin || hasWayBack}<button type="button" class="skipback" onclick={back}>Back to where you were</button>{/if}{/if}</div>
 </div>
 
 <style>
@@ -87,11 +87,18 @@
   /* On the add form, above its pinned bar by the bar's measured height, one row of buttons or two: at 60 px fixed it
      covered "Save and add another" once the buttons wrapped (round sixty; the grower review, 3). */
   @media (max-width: 640px) { .toast { top: auto; bottom: calc(66px + env(safe-area-inset-bottom)); } :global(body.stickyacts) .toast { bottom: calc(56px + var(--acts-h, 70px) + 10px + env(safe-area-inset-bottom)); } }
+  /* Above select mode's bar by its measured height, as above the add form's: at 320 to 375 px the Undo toast covered the
+     Archive button focus had just moved to (round sixty-two; the accessibility review, 3). By the bar's measured place
+     (`--sel-lift`, safe area included), since on a short list the bar is not at the foot (the verification review's grower 3). */
+  @media (max-width: 640px) { :global(body.grow-selecting) .toast { bottom: var(--sel-lift, calc(var(--tab-h, 57px) + var(--sel-h, 120px) + 16px + env(safe-area-inset-bottom))); } }
   .undo { min-height: var(--tap); min-width: var(--tap); } /* the tap token: 44 px under a finger (round fifty-nine) */
   /* The focus ring in the toast's own colours: the accent was 2.04:1 on the inverted toast in dark (round sixty-one; the accessibility review, 12). */
   .toast button:focus-visible { outline: 2px solid var(--bg); outline-offset: 2px; }
   /* Forced colours draw the toast as text on Canvas over the page: an edge sets it apart, and Undo reads as a button (round sixty-one; the accessibility review, 6). */
   @media (forced-colors: active) { .toast:not(.quiet), .toast .undo { border: 1px solid CanvasText; } }
+  /* Opaque from its first frame: the fade-in drew the toast see-through over the select bar for 0.18 s, its words over the
+     bar's in forced colours (round sixty-two; the outside review's A40). */
+  @media (forced-colors: active) { .toast { animation: none; opacity: 1; background: Canvas; } }
   @keyframes toastin { from { opacity: 0; transform: translate(-50%, -6px); } to { opacity: 1; transform: translate(-50%, 0); } }
   @media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
 </style>

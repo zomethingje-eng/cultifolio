@@ -4,10 +4,11 @@
  *
  * Adopted from docs/review-60/tests/server--photo-removal.test.ts (its three reproductions, which assert the fixed
  * behaviour, and its guard), with B10's interleaving added: the fenced case passes now, and the residual one (a delete
- * call that itself stalls past the hold) is `it.fails` until generation-addressed photo objects land in round sixty-two.
+ * call that itself stalls past the hold) was `it.fails` until generation-addressed photo objects landed in round
+ * sixty-two, when it became a plain test (decision 7).
  */
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { storeOnce, deleteCounted, readMeta, writeMeta, resetRateLimits, resetMetaFlush, PhotoBusy } from '$lib/server/sync';
+import { storeOnce, deleteCounted, readMeta, writeMeta, resetRateLimits, resetMetaFlush, PhotoBusy, photoObjectKey } from '$lib/server/sync';
 import { HOLD_MS } from '$lib/server/counters';
 import { fakeR2, fakeKV, countersNs, type FakeR2 } from './helpers/fake-sync';
 
@@ -137,24 +138,30 @@ describe("the hold is fenced just before the delete (round sixty-one; B10)", () 
     await atStall;
     // A's hold lapses; C removes the photograph, and B revives it (stores it again) after that.
     const c = await deleteCounted(r2 as never, ID, await meta(r2), photo(1), q(counters, A + HOLD_MS + 1_000), OWNER, A + HOLD_MS);
-    expect(c).toBe(true);
     expect(await storeOnce(r2 as never, ID, await meta(r2), photo(1), new Uint8Array(300).fill(2), { drop: OWNER }, q(counters, A + HOLD_MS + 2_000))).toBe('stored');
     go();
     const ra = await a;
-    return { ra, kept: r2.objs.has(photo(1)) };
+    // Kept: the name's pointer names a generation that holds the revival's bytes (round sixty-two: a revival is stored as
+    // a new generation, not under the name itself).
+    const at = await photoObjectKey(r2 as never, photo(1));
+    return { ra, c, kept: !!at && r2.objs.get(at)?.body[0] === 2 };
   }
 
   it("a removal whose look stalled past its hold does not delete the revival stored meanwhile", async () => {
-    const { ra, kept } = await interleave('look');
+    const { ra, c, kept } = await interleave('look');
+    expect(c).toBe(true);
     expect(kept).toBe(true);
     expect(ra).toBeInstanceOf(PhotoBusy); // its hold is gone: the device asks again, and then the revival's claim keeps it
   });
 
-  // The residual race, stated on /about/formats: the fence is a renewal and a second look, and the R2 delete call that
-  // follows can itself stall past the hold. Generation-addressed photo objects with a fenced pointer close it; they are
-  // the data-model work of round sixty-two. Until then this interleaving loses the revival, and this test fails.
-  it.fails('a removal whose R2 delete call itself stalls past its hold still deletes the revival (until round sixty-two)', async () => {
-    const { kept } = await interleave('delete');
-    expect(kept).toBe(true);
+  // The residual race of round sixty-one: the R2 delete call can itself stall past the hold. Closed in round sixty-two by
+  // generation-addressed photo objects with a fenced pointer (decision 7): the removal moved the pointer before its
+  // delete, so the second removal finds the photograph already removed, the revival is a new generation, and the stalled
+  // delete removes only the generation the first removal saw. This was `it.fails` until then.
+  it('a removal whose R2 delete call itself stalls past its hold deletes only the generation it saw: the revival stays', async () => {
+    const { ra, c, kept } = await interleave('delete');
+    // The second removal finishes the first one's (its receipt names the generation it saw, still there): true since the
+    // second pass of round sixty-two (the server review, 2), where it was false.
+    expect([ra, c, kept]).toEqual([true, true, true]);
   });
 });

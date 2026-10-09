@@ -17,14 +17,14 @@ import { quantile } from '$core/extremes';
 import { r1 } from '$core/num';
 
 /** PAR is ~45% of shortwave and 4.6 µmol/J, so 1 MJ/m²/day of rsds ≈ 2.07 mol/m²/day of PAR. */
-export const DLI_PER_MJ = 2.07;
+const DLI_PER_MJ = 2.07;
 
 export interface PowerCache {
   get(id: string): Promise<PowerSeries | null>;
   set(id: string, s: PowerSeries): Promise<void>;
 }
 
-export const memoryPowerCache = (): PowerCache => {
+const memoryPowerCache = (): PowerCache => {
   const m = new Map<string, PowerSeries>();
   return { get: async (k) => m.get(k) ?? null, set: async (k, v) => void m.set(k, v) };
 };
@@ -110,8 +110,10 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
       src.extremes = `NASA POWER series too short (${e.extremes.years} years); extremes not derived`;
       return { extremes: undefined, status: 'none' };
     }
-    // Every case says what was done about elevation: corrected, or not, and why not.
-    const lapse = e.deltaM
+    // Every case says what was done about elevation: corrected, or not, and why not. Chosen by whether both elevations
+    // exist, not by the difference: a correction of 0 m is a correction, and it fell through to "POWER gave no cell
+    // elevation" (round sixty-two; outside review A3).
+    const lapse = target != null && ps.elevationM != null
       ? `, lapse-corrected ${e.deltaM > 0 ? '+' : ''}${e.deltaM} m at 6.5 °C/km`
       : elevationM != null && elevationM < 0
         ? ', no lapse correction (the cell mean elevation is below sea level: a coastal cell)'
@@ -219,7 +221,7 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
       if (landFraction < 0.5) { typical = nearest; landFraction = nearestLand; }
       const src: ClimateOk['src'] = {
         normals: `CHELSA V2.1 1981–2010 climatology, ${h.cell}° cells (each the mean of ~${Math.round((h.cell / 0.008333) ** 2)} 1 km pixels)`,
-        envelope: `median and 10th–90th percentile of each month across the ${used.length} distinct grid cells holding ${records} of the ${points.length} in-range records${sea ? ` (${sea} further cell${sea === 1 ? '' : 's'} with records at sea, by the elevation layer, left out)` : ''}${hemispheres ? ` on the ${hemispheres.used}ern side of the equator (${hemispheres.north} cells poleward of 10° north, ${hemispheres.south} poleward of 10° south: the two sides' seasons are not combined, and cells within 10° of the equator stay in)` : ''}; extremes and elevation at the typical cell ${typical.id} (its coldest month's mean night nearest the median across cells${landFraction < 0.5 ? `, though its NASA POWER cell is only ${Math.round(landFraction * 100)}% land and none of the ${tried} next candidates within 2 °C of the median was mostly land` : ''}); its position is the cell centre`,
+        envelope: `median and 10th–90th percentile of each month across the ${used.length} distinct grid cells holding ${records} of the ${points.length} in-range records${sea ? ` (${sea} further cell${sea === 1 ? '' : 's'} with records at sea, by the elevation layer, left out)` : ''}${hemispheres ? ` on the ${hemispheres.used}ern side of the equator (${hemispheres.north} cells poleward of 10° north, ${hemispheres.south} poleward of 10° south: the two sides' seasons are not combined, and cells within 10° of the equator stay in)` : ''}; extremes and elevation at the typical cell ${typical.id} (its coldest month's mean nightly low nearest the median across cells${landFraction < 0.5 ? `, though its NASA POWER cell is only ${Math.round(landFraction * 100)}% land and none of the ${tried} next candidates within 2 °C of the median was mostly land` : ''}); its position is the cell centre`,
         elevation: typical.elevationM != null ? `ETOPO 2022, ${Math.round(typical.elevationM)} m (cell mean)` : undefined
       };
       const { extremes, status: extremesStatus } = await extremesAt(typical.lat, typical.lon, typical.elevationM, src);

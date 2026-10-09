@@ -2,9 +2,8 @@
  * Corpus review of round sixty: every route that reads the reference, walked under each way the bucket can fail.
  * A guard, adopted in round sixty-one from docs/review-60/tests/corpus--refusal-walk.test.ts as it was (one type-only
  * change: a route's answer is wrapped in Promise.resolve for svelte-check). It passed on the base and passes now,
- * except the one `it.fails` case, which documents finding 13 (the sheets of a species whose dossier is unreadable are
- * absent, which a device reads as "not in the reference"; the triage left `sheetsIn`'s fallback open on purpose, so it
- * is marked, not asserted).
+ * including finding 13's case, an `it.fails` until round sixty-two (the sheets of a species whose dossier is unreadable
+ * were left out, which a device read as "not in the reference"); since round sixty-two the bucket is answered 503.
  *
  * The bucket can (A) hold a manifest this build refuses and no top-level index, (B) throw on every call, with nothing
  * held. Each route must answer 503 (a Kit error or a Response), never 200 with the fixture's species, never 404 or an
@@ -108,7 +107,7 @@ describe('a dossier the index lists but cannot be read', () => {
     // The fixture's Welwitschia has its climate pending, so the block is not drawn for it either: "without a derived climate, the page simply does not draw the block".
     expect(page.feature).toBeNull();
   });
-  it.fails('without a manifest, its sheet is absent from its bucket, which a plant page reads as "not in the reference" (finding 13; sheetsIn fallback, open by choice)', async () => {
+  it('without a manifest, a bucket whose species cannot be read is answered 503, never left without it (finding 13, fixed in round sixty-two)', async () => {
     const b = bucket([['s/v2/index.json', JSON.stringify(idx)]]);
     const c = await corpusNow(plat(b), noStatic);
     const { GET } = await import('../../src/routes/api/sheets/+server');

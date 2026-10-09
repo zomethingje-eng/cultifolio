@@ -24,6 +24,24 @@ export interface Lookup {
   search(q: string): Promise<Entry[] | { limited: number } | null>;
 }
 
+/**
+ * What the review says of a line's name, one verdict for its row and for the summary above the rows, which disagreed
+ * (round sixty-two, second pass; the verification grower review): "Copiapoa sp." was counted "not in the reference,
+ * added as typed" while its row said "filed as written, with no reference key", a cf. line was counted as matched, and
+ * "Copiapoa cinerea var. albispina" read "matched as Copiapoa cinerea" though it is filed with no key.
+ * - `found`: filed with the reference's key;
+ * - `keyless`: filed as written, with no reference key: a qualified name ("cf.", "aff.", "sp."), or a rank below the
+ *   species, whose species the reference has (the check is then `found` with no key);
+ * - `near`, `missing`, `hybrid`, `unchecked` as the check said; `waiting` while it is asked.
+ */
+export type NameVerdict = 'found' | 'keyless' | 'near' | 'missing' | 'hybrid' | 'unchecked' | 'waiting';
+export function nameVerdict(c: NameCheck | undefined, typed: string): NameVerdict {
+  if (!c) return 'waiting';
+  if (c.s === 'near') return 'near';
+  if (parseName(typed).qualifier || (c.s === 'found' && c.key === null)) return 'keyless';
+  return c.s;
+}
+
 /** The part of a typed name the reference is asked about: the scientific name without the cultivar. */
 export const checkKey = (typed: string): string => parseName(typed).scientific;
 

@@ -9,7 +9,10 @@ import type { PageServerLoad } from './$types';
  * it was called missing), and the page is then not kept.
  */
 export const load: PageServerLoad = async ({ url, platform, fetch, setHeaders, cookies, request, locals }) => {
-  const slugs = [...new Set((url.searchParams.get('s') ?? '').split(',').map((x) => x.trim()).filter(Boolean))].slice(0, 3);
+  const asked = [...new Set((url.searchParams.get('s') ?? '').split(',').map((x) => x.trim()).filter(Boolean))];
+  const slugs = asked.slice(0, 3);
+  // Three at a time; a fourth in a shared link is said, not dropped in silence (round sixty-two; visitor-words 13).
+  const leftOut = asked.slice(3);
   const c = locals?.corpus ?? (await corpusNow(platform, fetch));
   const found = await Promise.all(
     slugs.map(async (slug) => {
@@ -23,5 +26,5 @@ export const load: PageServerLoad = async ({ url, platform, fetch, setHeaders, c
   const unreadable = found.filter((x) => !x.d && x.listed).map((x) => x.slug);
   // private: the page is rendered in the reader's units, so no shared cache may hand one reader's page to another
   setHeaders({ 'cache-control': unreadable.length ? 'no-store' : 'private, max-age=60', vary: 'accept-language, cookie' });
-  return { units: unitsFor(cookies, request), hemiLat: cookies.get('cultifolio.hemi') === 's' ? -1 : cookies.get('cultifolio.hemi') === 'n' ? 1 : null, items: found.filter((x) => x.d).map((x) => x.d!), missing: found.filter((x) => !x.listed).map((x) => x.slug), unreadable };
+  return { units: unitsFor(cookies, request), hemiLat: cookies.get('cultifolio.hemi') === 's' ? -1 : cookies.get('cultifolio.hemi') === 'n' ? 1 : null, items: found.filter((x) => x.d).map((x) => x.d!), missing: found.filter((x) => !x.listed).map((x) => x.slug), unreadable, leftOut };
 };

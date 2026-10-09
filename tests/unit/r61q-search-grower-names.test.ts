@@ -8,7 +8,7 @@
  * `relaxedQuery` when nothing matched); the postings path is equal to it (fuzzed in corpus--fuzz-grower.test.ts).
  */
 import { describe, it, expect } from 'vitest';
-import { prepare, search, relaxedQuery } from '$core/search';
+import { prepare, search, relaxedQuery, droppedLabel } from '$core/search';
 
 const E = (key: number, name: string, common?: string, commons?: string[], syn?: string[]) => ({ key, slug: name.toLowerCase().replace(/[^a-z0-9]+/g, '-'), name, common, commons, syn, family: 'X', origin: [] as string[] });
 const idx = [
@@ -77,7 +77,10 @@ describe('a quoted cultivar picks a species by its spelling, and the retry never
 
 describe('the retry names a hyphenated epithet by its first half (finding 6)', () => {
   it('"Agave victoriae-reginae cv. Compacta" is shown as results for "Agave victoriae-reginae", not "Agave victoriae"', () => {
-    expect(relaxedQuery('Agave victoriae-reginae cv. Compacta')).toBe('Agave victoriae-reginae');
+    // Round sixty-two, second pass: what follows "cv." is left out by the first reading (the verification review's search 8),
+    // so there is no retry; the label is the reading's, and names the whole epithet.
+    expect(relaxedQuery('Agave victoriae-reginae cv. Compacta')).toBeNull();
+    expect(droppedLabel('Agave victoriae-reginae cv. Compacta', [{ name: 'Agave victoriae-reginae' }])).toBe('Agave victoriae-reginae');
     expect(relaxedQuery('Opuntia ficus-indica var. burbankii')).toBe('Opuntia ficus-indica');
   });
 });

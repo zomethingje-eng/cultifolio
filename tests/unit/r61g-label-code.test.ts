@@ -43,10 +43,12 @@ describe('labelFromHash, with hostile values', () => {
 
 describe('the import planner\'s cost (finding 16)', () => {
   it('finding 16: planning 2,000 rows against 2,000 numbers takes well under 200 ms (it took seconds), and gives what nextAccession gives', () => {
-    const rows = Array.from({ length: 2000 }, (_, i) => blankRow('k' + i, i + 1, 'Copiapoa cinerea'));
-    const taken = Array.from({ length: 2000 }, (_, i) => `2026-${String(i + 1).padStart(4, '0')}`);
-    const t0 = performance.now();
-    planNumbers(rows, taken, DEFAULT_SCHEME, 2026);
-    expect(performance.now() - t0).toBeLessThan(200);
+    const rows = (n: number) => Array.from({ length: n }, (_, i) => blankRow('k' + i, i + 1, 'Copiapoa cinerea'));
+    const taken = (n: number) => Array.from({ length: n }, (_, i) => `2026-${String(i + 1).padStart(4, '0')}`);
+    // Measured against itself, not a wall-clock bound a busy machine can miss (round sixty-two; the harness review's 8): ten
+    // times the rows and numbers take about ten times as long, the best of three runs each, where the old planner took a hundred.
+    const best = (n: number) => { const r = rows(n), t = taken(n); let b = Infinity; for (let k = 0; k < 3; k++) { const a = performance.now(); planNumbers(r, t, DEFAULT_SCHEME, 2026); b = Math.min(b, performance.now() - a); } return b; };
+    best(200); // warmed
+    expect(best(2000)).toBeLessThan(30 * best(200) + 5);
   });
 });

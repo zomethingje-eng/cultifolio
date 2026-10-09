@@ -72,12 +72,18 @@ function stack(x: number, from: 'top' | 'bottom', el: HTMLElement): number {
     const r = settled(found);
     edge = from === 'top' ? Math.max(edge, r.bottom) : Math.min(edge, r.top);
   }
-  // Bars marked by hand that do not touch the edge (the compare tray floats 16 px above it): counted where they cross the element's column.
+  // Bars marked by hand that do not touch the edge (the compare tray floats 16 px above it, select mode's bar 8 px above
+  // the tab bar): counted where they cross the element's column. Only while they float: select mode's bar is static on a
+  // short screen and sticky bars rest in their place at the list's end, and one in the page's flow before or after the
+  // element covers nothing (round sixty-two; the accessibility review, 1).
   const er = el.getBoundingClientRect();
   for (const bar of document.querySelectorAll<HTMLElement>(`[data-cover="${from}"]`)) {
     if (seen.has(bar) || bar.contains(el)) continue;
+    const pos = getComputedStyle(bar).position;
+    if (pos !== 'fixed' && pos !== 'sticky') continue;
     const r = settled(bar);
     if (r.height <= 0 || r.width <= 0 || r.right <= er.left || r.left >= er.right || r.bottom <= 0 || r.top >= H) continue;
+    if (from === 'bottom' ? r.bottom <= er.top : r.top >= er.bottom) continue; // wholly before the element (a bottom bar above it, a top bar below): not over it
     edge = from === 'top' ? Math.max(edge, r.bottom) : Math.min(edge, r.top);
   }
   return edge;

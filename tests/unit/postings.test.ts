@@ -88,5 +88,5 @@ describe('the candidates answer what the whole answers', () => {
       qs.push(rnd(8) ? q : `${q} (${AB[rnd(26)].toUpperCase()}.) ${AB[rnd(26)].toUpperCase()}${AB[rnd(26)]}`);
     }
     for (const q of qs) expect({ q, keys: answer(q).map((x) => x.key) }).toEqual({ q, keys: search(whole, q, 100).map((x) => x.key) });
-  });
+  }, 90_000); // six hundred queries, each searched twice over the whole index: past vitest's 20 s on a loaded machine (round sixty-two; the harness review's 8)
 });

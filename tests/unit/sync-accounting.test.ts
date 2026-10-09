@@ -63,7 +63,7 @@ function countersNs() {
 }
 const ID = 'ABCDEFGHJKMNPQRSTVWXYZ2346';
 const vbytes = (c: ReturnType<typeof countersNs>) => (c.objects.get(`bytes:${ID}`)!.m.get('v') as { bytes: number }).bytes;
-const r2bytes = (r2: ReturnType<typeof fakeR2>) => [...r2.objs].filter(([k]) => !k.endsWith('meta.json')).reduce((s, [, o]) => s + o.size, 0);
+const r2bytes = (r2: ReturnType<typeof fakeR2>) => [...r2.objs].filter(([k]) => !k.endsWith('.json')) /* the meta and, since round sixty-two, photographs' pointers: not counted */.reduce((s, [, o]) => s + o.size, 0);
 const all = (c: ReturnType<typeof countersNs>) => c.objects.get('vaults')?.m.get('all');
 const PROOF = { drop: 'd'.repeat(64) };
 const photo = (i: number) => `vault/${ID}/photo/p${String(i).padStart(6, '0')}.bin`;

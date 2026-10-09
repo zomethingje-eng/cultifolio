@@ -1,6 +1,7 @@
 <script lang="ts">
   import { readSetting, writeSetting } from '$lib/ui/stored';
   import Parked from '$lib/ui/Parked.svelte';
+  import { restoredWords } from '$lib/ui/held-words';
   import ReplacedNotes from '$lib/ui/ReplacedNotes.svelte';
   import { units } from '$lib/ui/units.svelte';
   import { localDate } from '$core/dates';
@@ -235,7 +236,7 @@
     await collection.remove('sowing', id);
     goto('/propagation');
     // One tap removed it; the toast on the list puts it back (round forty-nine, 3).
-    toast.show(`${no} removed.`, 8000, { label: 'Undo', run: () => { void collection.restore('sowing', id).then((moved) => { const back = collection.sowing(id); void goto(back ? batchHref(back) : `/propagation/${encodeURIComponent(id)}`); if (moved) toast.show(`Restored as ${moved.to}: ${moved.from} is another batch's now.`); }); } });
+    toast.show(`${no} removed.`, 8000, { label: 'Undo', run: () => { void collection.restore('sowing', id).then((moved) => { const back = collection.sowing(id); void goto(back ? batchHref(back) : `/propagation/${encodeURIComponent(id)}`); if (moved) toast.show(restoredWords(moved, 'batch')); }); } });
   }
 
   /* edit */
@@ -487,7 +488,7 @@
     <div class="phgrid">
       {#each photos as ph, i (ph.id)}
         <!-- Named by the batch, the day and the caption; the image inside is then decorative (round fifty-eight; the accessibility review). -->
-        <button class="ph" type="button" onclick={() => (lightbox = i)} title={ph.caption ?? ph.d} aria-label={photoLabel(ph)}><PhotoImg id={ph.id} alt="" loading="lazy" /><span class="pd">{ph.d}</span></button>
+        <button class="ph" type="button" onclick={() => (lightbox = i)} title={ph.caption ?? ph.d} aria-label="{ph.d}: {photoLabel(ph)}"><PhotoImg id={ph.id} alt="" loading="lazy" /><span class="pd">{ph.d}</span></button>
       {/each}
     </div>
   {/if}

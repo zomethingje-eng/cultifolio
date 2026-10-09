@@ -8,7 +8,9 @@
  * Adopted in round sixty-one (agent H; docs/review-60/harness.md). Run: `npx vitest run tests/unit/r61h-upstream-cap.test.ts`.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { resetRateLimits, upstreamAllowed, RATE } from '$lib/server/sync';
+import { resetRateLimits, upstreamCall, RATE } from '$lib/server/sync';
+/** GBIF by the site's share alone, as `upstreamAllowed` asked before it went in round sixty-two. */
+const upstreamAllowed = async (p: undefined) => (await upstreamCall(p, ['gbif'], null)).ok;
 
 const T = Date.UTC(2026, 9, 4, 12);
 beforeEach(() => { resetRateLimits(); vi.spyOn(Date, 'now').mockImplementation(() => T); });
@@ -35,7 +37,7 @@ describe('past the site-wide cap on outside calls (harness review)', () => {
     let asked = 0;
     const f = (async () => { asked++; return new Response(JSON.stringify({ matchType: 'EXACT', status: 'ACCEPTED' }), { headers: { 'content-type': 'application/json' } }); }) as typeof fetch;
     const { synonymOf } = await import('$lib/server/synonyms');
-    expect(await synonymOf(undefined as never, f, 'copiapoa-cinereax')).toBe('held'); // held back by the site, said as that (round sixty-one)
+    expect(await synonymOf(undefined as never, f, 'copiapoa-cinereax', undefined, null)).toBe('held'); // held back by the site, said as that (round sixty-one)
     expect(asked).toBe(0);
   });
 });

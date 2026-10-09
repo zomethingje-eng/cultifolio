@@ -33,9 +33,9 @@ describe('every month that ties is named (V5)', () => {
   });
   it('the sheet names both months for the coldest night and the warmest day', () => {
     const t = cultivationSheet({ scientific: 'Copiapoa cinerea', family: 'Cactaceae', months: cinerea, lat: -28 }).rows.find((r) => r.k === 'Temperature')!.s;
-    expect(t).toContain('coldest night 9.0 °C in July and August');
-    expect(t).toContain('warmest day 22.0 °C in January and February');
-    expect(t).toContain("the coldest month's mean night, July and August,");
+    expect(t).toContain("the coldest month's mean nightly low 9.0 °C in July and August");
+    expect(t).toContain("the warmest month's mean daily high 22.0 °C in January and February");
+    expect(t).toContain("the coldest month's mean nightly low, July and August,");
   });
   it("the chart's reading names each end's months, and the cold quarter is centred on a run of tied months", () => {
     const g = climograph({ months: cinerea, p10: cinerea, p90: cinerea, cells: 12 });
@@ -49,7 +49,7 @@ describe('every month that ties is named (V5)', () => {
   });
   it('the share card names both months', () => {
     expect(card()).toContain('Jan and Feb · CHELSA');
-    expect(card({ extremes: null })).toContain('Jul and Aug, not a floor · CHELSA');
+    expect(card({ extremes: null })).toContain('Jul and Aug, not a floor; no extremes series · CHELSA'); // round sixty-two: the glance row's reason (visitor-words 11)
   });
 });
 
@@ -58,14 +58,14 @@ describe("the labels are the figures' own names, with the record low beside the 
     const glance = code('src/lib/ui/ref/Glance.svelte');
     const compare = code('src/routes/compare/+page.svelte');
     const svg = card();
-    for (const lab of ['Cold floor (1 night in 100)', 'Warmest month, mean day', 'Rain a year', 'Open-sky light']) {
+    for (const lab of ['Cold floor (1 night in 100)', 'Warmest month, mean daily high', 'Rain a year (sum of monthly medians)', 'Open-sky light']) { // round sixty-two (visitor-words 3, A3)
       expect(glance).toContain(lab);
       expect(compare).toContain(lab);
       expect(svg).toContain(lab.toUpperCase());
     }
     for (const src of [glance, compare, svg]) expect(src).not.toMatch(/Coldest nights|Warmest days|Rain in the wild|Light in the wild|COLDEST NIGHTS|WARMEST DAYS/);
     expect(glance).toMatch(/Record low \{tempN\(extremes\.minAbs/);
-    expect(svg).toContain('record low 4.0 °C in 40 years · NASA POWER');
+    expect(svg).toContain('record low 4.0 °C in 40 years at a typical spot · NASA POWER'); // round sixty-two (A3)
   });
   it('the card says "cell" for one, and draws no band legend without a band (V22)', () => {
     const one = card({ cells: 1, months: cinerea.map(({ dli: _d, ...m }) => m) });
@@ -136,9 +136,11 @@ describe('the front page (decision 9)', () => {
     const { load } = await import('../../src/routes/+page.server');
     return (await load({ url: new URL(u), request: new Request(u), cookies: { get: () => undefined }, platform: undefined, fetch: noStatic, locals: {}, setHeaders: () => {} } as never)) as { feature: unknown };
   };
-  it('sends the feature for the plain front page only, not for a genus row, a grouping, a chip or a letter (corpus 10)', async () => {
+  it('sends the feature for the front page and its groupings and chips, not for a genus row, a letter or a later window (corpus 10; round sixty-two, A10)', async () => {
     expect((await load('https://cultifolio.com/')).feature).toBeTruthy();
-    for (const q of ['?by=genus&open=copiapoa', '?by=family', '?chip=climate', '?by=genus&from=C', '?by=genus&at=1']) expect((await load(`https://cultifolio.com/${q}`)).feature, q).toBeNull();
+    // Round sixty-two: a grouping or a chip keeps it, since it stands above the toolbar and leaving moved the rows (A10, B1).
+    for (const q of ['?by=family', '?chip=climate']) expect((await load(`https://cultifolio.com/${q}`)).feature, q).toBeTruthy();
+    for (const q of ['?by=genus&open=copiapoa', '?by=genus&from=C', '?by=genus&at=1']) expect((await load(`https://cultifolio.com/${q}`)).feature, q).toBeNull();
   });
   it('says the precise claim, puts the sample first, and the search and photographs before the feature', () => {
     const p = readFileSync('src/routes/+page.svelte', 'utf8');
@@ -148,7 +150,10 @@ describe('the front page (decision 9)', () => {
     expect(welcome.indexOf('try-sample-home')).toBeGreaterThan(-1);
     expect(welcome.indexOf('try-sample-home')).toBeLessThan(welcome.indexOf('/plants/new'));
     const at = (t: string) => p.indexOf(t, p.indexOf('{:else}\n  <!-- While a search is typed'));
-    expect(at('{@render featured()}')).toBeLessThan(at('<section class="feature"'));
-    expect(at('class="searchbar" type="search" placeholder="Search the catalogue')).toBeLessThan(at('<section class="feature"'));
+    expect(at('{@render featured()}')).toBeLessThan(at('{@render featureBlock(feature)}'));
+    // Round sixty-two, second pass (the outside triage's 2): the feature after the search and the first rows, so a desktop's
+    // first screen holds the search and a row, and the chips still sit with the rows they govern (A10, B1).
+    expect(at('class="searchbar" type="search" placeholder="Search species')).toBeLessThan(at('{@render featureBlock(feature)}'));
+    expect(at('{#each visibleRows')).toBeLessThan(at('{@render featureBlock(feature)}'));
   });
 });

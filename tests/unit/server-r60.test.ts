@@ -6,7 +6,7 @@
  * hourly, the /48 windows, the site's own cap on calls to other services, and the Cache API failing in two routes.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { storeOnce, deleteCounted, readMeta, writeMeta, readBody, resetRateLimits, resetMetaFlush, vaultBytes, admitVault, limited, upstreamAllowed, upstreamCall, vaultIdFor, VaultsClosed, VaultUnchecked, PhotoBusy, RATE, NET_RATE_FACTOR, receipt, removedAt, rateLimit, networkKey, RATE_FLUSH_MS, type RateBucket } from '$lib/server/sync';
+import { storeOnce, deleteCounted, readMeta, writeMeta, readBody, resetRateLimits, resetMetaFlush, vaultBytes, admitVault, limited, photoObjectKey, upstreamCall, vaultIdFor, VaultsClosed, VaultUnchecked, PhotoBusy, RATE, NET_RATE_FACTOR, receipt, removedAt, rateLimit, networkKey, RATE_FLUSH_MS, type RateBucket } from '$lib/server/sync';
 import { tokenHash } from '$lib/sync/crypto';
 import { fakeR2, fakeKV, countersNs, type FakeR2 } from './helpers/fake-sync';
 
@@ -16,10 +16,12 @@ const photo = (i: number) => `vault/${ID}/photo/p${String(i).padStart(6, '0')}.b
 const DAY = 86_400_000;
 const T = Date.UTC(2026, 9, 4, 12);
 const meta0 = (filled = true) => ({ tokenHash: 'h', created: 'c', entitlement: 'open' as const, bytes: 0, filled });
-const r2bytes = (r2: FakeR2) => [...r2.objs].filter(([k]) => !k.endsWith('meta.json')).reduce((s, [, o]) => s + o.size, 0);
+const r2bytes = (r2: FakeR2) => [...r2.objs].filter(([k]) => !k.endsWith('.json')) /* the meta and, since round sixty-two, photographs' pointers: not counted */.reduce((s, [, o]) => s + o.size, 0);
 const vrow = (c: ReturnType<typeof countersNs>) => c.objects.get(`bytes:${ID}`)!.m;
 const vbytes = (c: ReturnType<typeof countersNs>) => (vrow(c).get('v') as { bytes: number }).bytes;
 const meta = async (r2: FakeR2) => (await readMeta(r2 as never, ID))!;
+/** Whether a photograph's name holds bytes now, through its pointer (round sixty-two: a revival is a new generation). */
+const held = async (r2: FakeR2, name: string) => { const at = await photoObjectKey(r2 as never, name); return !!at && r2.objs.has(at); };
 beforeEach(() => { resetRateLimits(); resetMetaFlush(); });
 afterEach(() => vi.restoreAllMocks());
 
@@ -203,7 +205,7 @@ describe('a removal and an upload of one photograph are serialised (round sixty;
     // the device tries again: now it stores, and the server holds it
     r2.hooks.beforeDelete = undefined;
     expect(await storeOnce(r2 as never, ID, await meta(r2), photo(1), bytes, PROOF, quota)).toBe('stored');
-    expect(r2.objs.has(photo(1))).toBe(true);
+    expect(await held(r2, photo(1))).toBe(true); // as a new generation since round sixty-two
     expect(vbytes(counters)).toBe(r2bytes(r2));
   });
   it('a DELETE made before a newer upload of the photograph (revived elsewhere) leaves it alone', async () => {
@@ -242,10 +244,10 @@ describe('a removal and an upload of one photograph are serialised (round sixty;
     };
     const old = await del(Date.now() - 60_000); // removed before this upload claimed the name
     expect(old.status).toBe(409);
-    expect(r2.objs.has(key)).toBe(true);
+    expect(await held(r2, key)).toBe(true);
     const now = await del(Date.now());
     expect(now.status).toBe(200);
-    expect(r2.objs.has(key)).toBe(false);
+    expect(await held(r2, key)).toBe(false);
   });
   it("concurrent removals of one photograph give its bytes back once, on a day with no row yet too (the review's finding 10, turned round)", async () => {
     const r2 = fakeR2(); const counters = countersNs();
@@ -267,7 +269,7 @@ describe('a removal and an upload of one photograph are serialised (round sixty;
     const etags: string[] = [];
     for (let round = 0; round < 2; round++) {
       await storeOnce(r2 as never, ID, await meta(r2), photo(0), body, PROOF, quota);
-      etags.push(r2.objs.get(photo(0))!.etag);
+      etags.push(r2.objs.get((await photoObjectKey(r2 as never, photo(0)))!)!.etag); // the second time, a new generation (round sixty-two)
       await deleteCounted(r2 as never, ID, await meta(r2), photo(0), quota, PROOF.drop);
     }
     expect(etags[0]).toBe(etags[1]); // R2's etag is the content's: it cannot tell the two uploads apart
@@ -392,7 +394,7 @@ describe("the site's own calls to other services (round sixty; the server review
   it('are capped for every address together; past the cap the forecast says not asked (503) and asks MET nothing', async () => {
     vi.spyOn(Date, 'now').mockImplementation(() => T);
     let ok = 0;
-    for (let i = 0; i < RATE.upstream.limit + 5; i++) if (await upstreamAllowed(undefined)) ok++;
+    for (let i = 0; i < RATE.upstream.limit + 5; i++) if ((await upstreamCall(undefined, ['gbif'], null)).ok) ok++; // `upstreamAllowed` went in round sixty-two
     expect(ok).toBe(RATE.upstream.limit);
     // GBIF's share is spent; MET Norway's is its own (round sixty-one), spent here by the visitors of the minute
     for (let i = 0; i < RATE.upstream.limit; i++) expect((await upstreamCall(undefined, ['met'], null)).ok).toBe(true);

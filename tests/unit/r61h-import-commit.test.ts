@@ -50,7 +50,7 @@ describe('commitImport (harness review)', () => {
       if (++n === 2) throw new Error('QuotaExceededError: the phone is full');
       return real(...args);
     });
-    const r = await b.commit.commitImport(rows, new Map(), plan, { makePlaces: false });
+    const r = await b.commit.commitImport(rows, new Map(), plan, { makePlaces: false, chunk: 1 }); // a line per commit, as a failed group is written again (round sixty-two)
     expect(r.failed?.line).toBe(3);
     expect(r.doneKeys).toEqual(['a']);
     expect(r.added.map((a) => a.taxonName)).toEqual(['Copiapoa cinerea']);

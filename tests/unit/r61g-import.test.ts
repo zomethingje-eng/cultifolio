@@ -19,9 +19,12 @@ describe('dates, read at their precision (the grower review, 4)', () => {
   it.each([
     ['2009', '2009'], ['2017-08', '2017-08'], ['08/2017', '2017-08'], ['August 2017', '2017-08'], ['Feb 2022', '2022-02'],
     ['17-Feb-2017', '2017-02-17'], ['17 February 2017', '2017-02-17'], ['Feb 17, 2017', '2017-02-17'], ['17th Feb 2017', '2017-02-17'],
-    ['17.11.2007', '2007-11-17'], ['22/10/2023', '2023-10-22'], ['10/22/2023', '2023-10-22'], ['09/09/2024', '2024-09-09'], ['30/09/09', '2009-09-30'], ['01/02/99', '1999-02-01']
+    ['17.11.2007', '2007-11-17'], ['22/10/2023', '2023-10-22'], ['10/22/2023', '2023-10-22'], ['09/09/2024', '2024-09-09'], ['30/09/09', '2009-09-30'], ['1/2/03', '2003-02-01']
   ])('%s is read as %s', (cell, want) => {
-    expect(readDate(cell, TODAY, cell === '01/02/99' ? 'dmy' : null).d).toBe(want);
+    expect(readDate(cell, TODAY, cell === '1/2/03' ? 'dmy' : null).d).toBe(want);
+  });
+  it('a two-digit year is read only when 20YY has come: "01/02/99" could be 1999 or 2099 (round sixty-two; A20)', () => {
+    expect(readDate('01/02/99', TODAY, 'dmy')).toMatchObject({ d: null, why: '"01/02/99" has a two-digit year that could be 1999 or 2099, so it was not read' });
   });
   it('a day and month either way round is read only by the sheet\'s one choice, and left otherwise with its year', () => {
     expect(readDate('09/03/2024', TODAY)).toMatchObject({ d: null, ambiguous: true, year: 2024 });
@@ -40,7 +43,7 @@ describe('dates, read at their precision (the grower review, 4)', () => {
   });
   it('the sheet\'s ambiguous dates are counted for the choice; an unread one is kept in the notes and numbers the plant for its year', () => {
     const s = parseCsv('Name,Date Acq.\nCopiapoa cinerea,09/03/2024\nLithops lesliei,22/10/2023\nAloe vera,spring 2019\nAloe ferox,soon\n');
-    expect(ambiguousDates(s, guessMapping(s, true), true, TODAY)).toEqual({ n: 1, first: '09/03/2024' });
+    expect(ambiguousDates(s, guessMapping(s, true), true, TODAY)).toMatchObject({ n: 1, first: '09/03/2024' });
     const { rows } = rowsFromSheet(s, guessMapping(s, true), true, TODAY);
     expect(rows.map((r) => [r.acquired, r.numberYear ?? null])).toEqual([[null, 2024], ['2023-10-22', null], [null, 2019], [null, null]]);
     expect(rows[0].notes).toBe('Acquired (as written): 09/03/2024');
@@ -158,7 +161,7 @@ describe('the commit writes what the review showed (the records review, 16; the 
     expect(res.added.find((a) => a.taxonName === 'Lithops lesliei')).toMatchObject({ acquired: null, notes: 'Acquired (as written): 09/03/2024' });
     expect(res.watered).toEqual({ lines: 6, failed: null });
     expect(collection.lastWatered(res.added[0].id)).toBe('2026-10-01');
-    // The species records, then a commit per row (the year-only row of two is written a plant at a time), then the waterings.
-    expect(mem.appends - before).toBe(1 + 1 + 2 + 1 + 1);
+    // The species records, then the rows in one group (round sixty-two: up to 50 plants a commit), then the waterings.
+    expect(mem.appends - before).toBe(1 + 1 + 1);
   });
 });

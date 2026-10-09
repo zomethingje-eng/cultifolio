@@ -7,6 +7,7 @@
 export function slugify(name: string): string {
   return name
     .normalize('NFKD')
+    .replace(/\p{Cf}/gu, '') // an invisible character pasted inside a word (a soft hyphen) no longer splits the slug (round sixty-two; agent G)
     .replace(/[̀-ͯ]/g, '')
     .replace(/×/g, ' x ')
     .toLowerCase()
@@ -17,12 +18,23 @@ export function slugify(name: string): string {
 
 /** "Copiapoa  cinerea ssp alboviridis f. longispina" → tidy spacing and rank abbreviations. */
 export function tidyName(raw: string): string {
-  return raw
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/\b(ssp|subsp)\.?\s/gi, 'subsp. ')
-    .replace(/\b(var|v)\.?\s/gi, 'var. ')
-    .replace(/\b(f|fa|forma)\.?\s/gi, 'f. ')
+  // NFKC first, and no format character (a zero-width space, a soft hyphen), as the server reads a query: a full-width
+  // "Ｃｏｐｉａｐｏａ ｃｉｎｅｒｅａ" from a CJK input method was filed as the genus alone, and a pasted zero-width space
+  // made a species address of "copia-poa-cinerea" (round sixty-two; the verification review's search 12; A7).
+  const t = raw.normalize('NFKC').replace(/\p{Cf}/gu, '').replace(/\s+/g, ' ').trim();
+  // After "sp." the rest is a collector's or a grower's designation, not ranks: "Lithops sp. v 036" keeps its "v" (round
+  // sixty-two; the records review, 14).
+  const open = /\bspp?\.(?:\s|$)/i.exec(t);
+  if (open && open.index > 0) return tidyHead(t.slice(0, open.index)) + t.slice(open.index);
+  return tidyHead(t);
+}
+function tidyHead(t: string): string {
+  // Every spelling of a rank the search knows is written one way ("fo.", "variety", "subspecies" as well), so a pick
+  // keeps the rank typed rather than dropping it (round sixty-two; the verification review's search 10).
+  return t
+    .replace(/\b(ssp|subsp|subspecies)\.?\s/gi, 'subsp. ')
+    .replace(/\b(var|v|variety)\.?\s/gi, 'var. ')
+    .replace(/\b(f|fa|fo|forma)\.?\s/gi, 'f. ')
     // "cv. Blue Curls" → 'Blue Curls': the rest of the line is the cultivar name, closed as well as opened.
     .replace(/\bcv\.?\s+(.+)$/i, (_, c: string) => (/^['‘"]/.test(c) ? c : `'${c.trim()}'`))
     // "xGraptoveria" / "XGraptoveria": a nothogenus written without its space.
@@ -53,8 +65,13 @@ export interface ParsedName {
   qualifier?: string;
 }
 
-/** The qualifiers of an open name, as the word after the genus: "cf.", "aff.", "sp.", "spp.", with or without the full stop. */
-const QUALIFIER = /^(cf|aff|sp|spp)\.?$/i;
+/**
+ * The qualifiers of an open name, as the word after the genus, with or without the full stop: "cf." (and "cfr."), "aff."
+ * (and "vel aff."), "nr." (and "near"), "sp." and "spp." (round sixty-two; the records review, 3, the grower review, 7).
+ */
+const QUALIFIER = /^(cf|cfr|aff|nr|near|sp|spp)\.?$/i;
+/** Each written one way, so a second parse changes nothing: "cfr." is "cf.", "near" is "nr.". */
+const QUALIFIER_AS: Record<string, string> = { cf: 'cf.', cfr: 'cf.', aff: 'aff.', nr: 'nr.', near: 'nr.', sp: 'sp.', spp: 'spp.' };
 
 export function parseName(raw: string): ParsedName {
   let s = tidyName(raw);
@@ -69,12 +86,22 @@ export function parseName(raw: string): ParsedName {
     aside = a.trim();
     return '';
   });
-  // A cross: "×" or a lone "x" between names. A leading × marks a nothogenus (× Graptoveria).
-  s = s.replace(/\s+x\s+/gi, ' × ').replace(/^(?:×\s*|[xX]\s+)(?=[A-Z])/, '× ').replace(/\s+/g, ' ').trim();
+  // A cross: "×" or a lone "x" between names. A leading × marks a nothogenus (× Graptoveria). A sign written against
+  // the epithet, as the backbone writes it ("Aloe ×spinosissima"), is the same sign: it was read as no epithet, and Add
+  // filed "Aloe" (round sixty-two; the verification review's search 13).
+  s = s.replace(/\s+x\s+/gi, ' × ').replace(/(\S\s+)×(?=\p{Ll})/gu, '$1× ').replace(/^(?:×\s*|[xX]\s+)(?=[A-Z])/, '× ').replace(/\s+/g, ' ').trim();
   const nothogenus = s.startsWith('× ');
   if (nothogenus) s = s.slice(2);
+  // The nothogenus keeps its sign in the name filed: "× Gasteraloe 'Green Ice'" was filed as "Gasteraloe" (round
+  // sixty-two; the self-review's triage N10, the grower review, 11). Genus, species and slug read past it (`genusOf`).
+  const sign = nothogenus ? '× ' : '';
   const cap = (w: string) => (w ? w[0].toUpperCase() + w.slice(1).toLowerCase() : '');
   const parts = s.split(' ').filter(Boolean);
+  // A qualifier written first ("cf. Mammillaria bombycina") is the same doubt as one written after the genus, never a
+  // genus called "Cf." (round sixty-two; the records review, 14, A21).
+  if (parts.length >= 2 && QUALIFIER.test(parts[0]) && /^\p{L}/u.test(parts[1])) parts.splice(0, 2, parts[1], parts[0]);
+  // "vel aff." is one qualifier: "or near" (round sixty-two; the records review, 3).
+  if (/^vel$/i.test(parts[1] ?? '') && /^aff\.?$/i.test(parts[2] ?? '')) parts.splice(1, 2, 'vel aff.');
   const genus = cap(parts[0] ?? '');
   const epithetOk = (w: string | undefined) => !!w && /^[a-z-]+$/i.test(w) && w !== '×';
   if (parts.includes('×')) {
@@ -101,17 +128,28 @@ export function parseName(raw: string): ParsedName {
   // "Mammillaria cf. bombycina" is not a Mammillaria bombycina, and "Lithops sp. C 036" is no species at all. "cf." and
   // "aff." keep the epithet they compare with (so the reference is asked about that species, and the plant's species
   // page is its); "sp." and "spp." have none. Written the one way, with its full stop, so a second parse changes nothing.
-  const q = QUALIFIER.exec(parts[1] ?? '')?.[1]?.toLowerCase();
+  const q = parts[1] === 'vel aff.' ? 'vel aff.' : QUALIFIER.exec(parts[1] ?? '')?.[1]?.toLowerCase();
   if (q) {
-    const word = `${q === 'spp' ? 'spp' : q}.`;
-    const compared = q === 'cf' || q === 'aff' ? (epithetOk(parts[2]) ? parts[2].toLowerCase() : undefined) : undefined;
-    const tail = parts.slice(compared ? 3 : 2).map((w) => (/^nov\.?$/i.test(w) ? 'nov.' : w)).join(' ');
-    const sci = [genus, word, compared, tail].filter(Boolean).join(' ');
+    const word = q === 'vel aff.' ? q : QUALIFIER_AS[q];
+    const open = word === 'sp.' || word === 'spp.';
+    const compared = !open ? (epithetOk(parts[2]) ? parts[2].toLowerCase() : undefined) : undefined;
+    // A provisional name in quotes after "sp." ("Copiapoa sp. 'Pan de Azúcar'") is the name of an undescribed species, and
+    // stays in the name; it is no cultivar of a bare genus, and no cross (round sixty-two; the grower review, 7).
+    const provisional = open && cultivar ? `'${cultivar}'` : '';
+    if (provisional) cultivar = undefined;
+    const tail = [...parts.slice(compared ? 3 : 2).map((w) => (/^nov\.?$/i.test(w) ? 'nov.' : w)), provisional].filter(Boolean).join(' ');
+    const sci = [sign + genus, word, compared, tail].filter(Boolean).join(' ');
     return { scientific: sci, cultivar, aside, genus, epithet: compared, kind: nothogenus ? 'hybrid' : cultivar ? (compared ? 'cultivar' : 'hybrid') : 'species', qualifier: word };
   }
-  const epithet = epithetOk(parts[1]) ? parts[1].toLowerCase() : undefined;
-  const rest = parts.slice(2).join(' ');
-  const scientific = [genus, epithet, rest].filter(Boolean).join(' ');
+  // A field number after the genus is no epithet and is kept as written: "Gymnocalycium LB 123" was filed as
+  // "Gymnocalycium lb 123", and "Lithops C 036" as "Lithops c 036". A collector's code of one to three capitals, or a
+  // capitalised word a token with a digit follows, is one (round sixty-two; the verification review's search 13).
+  const fieldNo = !!parts[1] && (/^\p{Lu}{1,3}$/u.test(parts[1]) || (/^\p{Lu}/u.test(parts[1]) && /\d/.test(parts[2] ?? '')));
+  const epithet = !fieldNo && epithetOk(parts[1]) ? parts[1].toLowerCase() : undefined;
+  // A second word that is no epithet stays in the name: "St. John's wort" was filed as "St. wort". A rank with no species
+  // before it ("Mammillaria ssp. bombycina") is still left out, and the import keeps the text as the name as received.
+  const rest = parts.slice(epithet || /^(?:subsp|var|f)\.$/.test(parts[1] ?? '') ? 2 : 1).join(' ');
+  const scientific = [sign + genus, epithet, rest].filter(Boolean).join(' ');
   const kind: NameKind = nothogenus ? 'hybrid' : epithet ? (cultivar ? 'cultivar' : 'species') : cultivar ? 'hybrid' : 'species';
   return { scientific, cultivar, aside, genus, epithet, kind };
 }
@@ -127,7 +165,7 @@ export function nameParts(scientific: string): Array<{ text: string; italic: boo
   const out: Array<{ text: string; italic: boolean }> = [];
   let open = false; // after "sp." the rest is a grower's or a collector's designation, not Latin ("Lithops sp. C 036")
   for (const tok of scientific.split(' ')) {
-    const roman = open || /^(subsp\.|var\.|f\.|×|x|cv\.|cf\.|aff\.|sp\.|spp\.|nov\.)$/.test(tok) || /^'/.test(tok);
+    const roman = open || /^(subsp\.|var\.|f\.|×|x|cv\.|cf\.|aff\.|nr\.|vel|sp\.|spp\.|nov\.)$/.test(tok) || /^'/.test(tok);
     if (/^spp?\.$/.test(tok)) open = true;
     const last = out[out.length - 1];
     if (last && last.italic === !roman) last.text += ' ' + tok;

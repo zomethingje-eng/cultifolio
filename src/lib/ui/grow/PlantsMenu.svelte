@@ -4,7 +4,6 @@
    * overflow): bring plants in from a list or a sheet, and take them out as the backup's own plants.csv, made on the
    * device and downloaded directly.
    */
-  import { downloadPlantsSheet } from '$lib/export/sheet';
   import { toast } from '$lib/ui/toast.svelte';
   import { collection } from '$lib/db/collection.svelte';
   let open = $state(false);
@@ -28,7 +27,8 @@
     // to the page (round sixty-one; the accessibility review, 2).
     close(true);
     busy = true;
-    try { await downloadPlantsSheet(); toast.show('plants.csv made on this device and downloaded.'); }
+    // Loaded when asked for: a static import carried the backup module, 9% of the page's script, into every visit to My plants (round sixty-two; the accessibility review, 9).
+    try { const { downloadPlantsSheet } = await import('$lib/export/sheet'); await downloadPlantsSheet(); toast.show('plants.csv made on this device and downloaded.'); }
     catch (e) { toast.show(`The sheet was not made: ${e instanceof Error ? e.message : String(e)}`); }
     finally { busy = false; }
   }

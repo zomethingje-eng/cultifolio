@@ -3,6 +3,7 @@
 // in, and then checks the result: the export line present, the class file present and named as the binding expects.
 // The build's own validation runs against wrangler.dev.jsonc, which has no object, so it does not see this step at all.
 import { readFileSync, appendFileSync, existsSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 const worker = '.svelte-kit/cloudflare/_worker.js';
 const cls = 'src/lib/server/counters.ts';
 if (!existsSync(worker)) {
@@ -21,3 +22,8 @@ if (!out.includes(`export { Counters } from '../../${cls}'`)) fail('the export l
 if (!/export class Counters extends DurableObject/.test(src)) fail(`${cls} does not export class Counters extending DurableObject`);
 if (bound !== 'Counters') fail(`wrangler.jsonc binds class "${bound}", not Counters`);
 console.log('attach-do: Counters exported from the worker and bound as COUNTERS');
+// The bundle gate runs here, at the end of every build, so a build that ships the grower's feature set or the backup
+// module in the root layout fails before anything deploys it; it first records the sources this build was made from
+// (round sixty-two; the harness review's 3, A43). `npm run build` ends with this script, so package.json is unchanged.
+const gate = spawnSync(process.execPath, ['scripts/check-bundle.mjs', '--record'], { stdio: 'inherit' });
+if (gate.status !== 0) process.exit(gate.status ?? 1);

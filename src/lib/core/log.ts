@@ -41,14 +41,16 @@ export const key = (kind: Kind, id: string) => `${kind}:${id}`;
  * was folded, so one folded unchecked is not read once the clock is (round sixty). 6: a stamp made past another
  * (`isPastStamp`) is never held or parked; this device's own changes are parked by the arrival of the batch that carried
  * them, as a peer's are (the engine learns it from the listing); a park judged by the clock alone is a reading, not
- * stored, and the snapshot carries it in its inventory to be judged again at the next load (round sixty-one).
+ * stored, and the snapshot carries it in its inventory to be judged again at the next load (round sixty-one). 7: a
+ * stored park of a marked stamp (one an older build stored) is not read, so the change folds (round sixty-two; the clock
+ * review's 8).
  */
-export const FOLD_RULES = 6;
+export const FOLD_RULES = 7;
 
 /** Field names the record itself owns, plus the fold's own bookkeeping names; a change may never set them. */
 export const RESERVED_FIELDS = new Set(['id', 'kind', '_t', '_deleted=', '*']);
 
-export function assertField(field: string): void {
+function assertField(field: string): void {
   if (RESERVED_FIELDS.has(field)) throw new Error(`"${field}" is a reserved record field and cannot be set by a change`);
 }
 
@@ -101,7 +103,7 @@ export const FIELD_ENUMS: Partial<Record<Kind, Record<string, readonly string[]>
   location: { type: ['room', 'shelf', 'bench', 'tray', 'windowsill', 'greenhouse', 'coldframe', 'garden', 'outdoor', 'other'] }
 };
 export const FIELD_TYPES: Record<Kind, Record<string, ValueType>> = {
-  accession: { ...strings('acc', 'taxonName', 'nameAsReceived', 'cultivar', 'nameKind', 'parentage', 'fieldNumber', 'provenance', 'status', 'locationId', 'acquired', 'sourceFrom', 'sourceRef', 'sourceForm', 'price', 'notes', 'notesBase', 'sowingId', 'cover'), taxonKey: 'number', waterDays: 'number' },
+  accession: { ...strings('acc', 'taxonName', 'nameAsReceived', 'cultivar', 'nameKind', 'parentage', 'fieldNumber', 'provenance', 'status', 'locationId', 'acquired', 'sourceFrom', 'sourceRef', 'sourceForm', 'price', 'notes', 'notesBase', 'sowingId', 'cover', 'importKey'), taxonKey: 'number', waterDays: 'number' },
   sowing: { ...strings('no', 'taxonName', 'cultivar', 'nameKind', 'parentage', 'method', 'parentAcc', 'sown', 'sourceFrom', 'sourceRef', 'fieldNumber', 'provenance', 'medium', 'container', 'treatment', 'locationId', 'status', 'notes', 'notesBase'), taxonKey: 'number', count: 'number', bottomHeatC: 'number', covered: 'boolean' },
   location: { ...strings('name', 'parentId', 'type', 'notes'), indoor: 'boolean', floorC: 'number', floorHeld: 'boolean', ppfd: 'number', lightHours: 'number', lat: 'number', lon: 'number', altM: 'number', sort: 'number', waterDays: 'number', dryMonths: 'array' },
   event: { ...strings('acc', 'd', 't', 'note', 'cause', 'used'), followUp: 'number', n: 'number', measures: 'figures', auto: 'boolean', plants: 'array' },
@@ -176,10 +178,10 @@ export function validateChanges(changes: unknown): Change[] {
 export interface Hold {
   now: number;
   except?: string;
-  /** When the batch these changes came in reached the server, by the server's clock: a change stamped more than a day past it is a broken clock's, and is parked rather than held (round fifty-two, 1). Absent for a local commit or a load, where `now` stands in. */
+  /** When the batch these changes came in reached the server, by the server's clock: a change stamped more than two days (`PARK_MS`) past it is a broken clock's, and is parked rather than held (round fifty-two, 1). Absent for a local commit or a load, where `now` stands in. */
   arrival?: number;
   /** Stamps parked before, by this device or by the arrival rule: never folded, whatever the clock says now. */
-  parked?: Set<string>;
+  parked?: ReadonlySet<string>;
   /** Told of each change the fold parks. */
   onParked?: (c: Change) => void;
   /**
@@ -206,8 +208,11 @@ export const PARK_MS = 2 * 86_400_000;
  * writer and every peer judge it alike, with or without an arrival.
  */
 export function isParked(t: string, hold: Hold): boolean {
-  if (hold.parked?.has(t)) return true;
+  // A marked stamp first, before the stored parks: a build older than round sixty-one read the mark as a large counter and
+  // parked such a change by its arrival, and the verdict it stored would have kept it parked here after the update while
+  // every other device showed it (round sixty-two; the clock review's 8). No build since stores one.
   if (isPastStamp(t)) return false;
+  if (hold.parked?.has(t)) return true;
   if (hold.arrival == null) {
     // Judged by this device's clock alone: only a clock a sync server has confirmed, and never this device's own
     // changes (round sixty; three reviews). Its own stamps say what its clock read when they were made; a clock set

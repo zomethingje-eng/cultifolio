@@ -53,12 +53,14 @@ export const load: PageServerLoad = async ({ platform, fetch, setHeaders, url, c
   const pool = featuredPool(index, list);
   const day = Math.floor(Date.now() / 86_400_000);
   const featured = pool.length ? Array.from({ length: Math.min(12, pool.length) }, (_, i) => pool[(day * 12 + i) % pool.length]).map((c) => ({ slug: c.slug, name: c.name, thumb: c.thumb!, common: c.common, family: c.family })) : [];
-  // The first of the day's strip, read whole, for the visitor's "This is what every species page shows" (round sixty;
+  // The first of the day's strip, read whole, for the visitor's "This is what a species page with a habitat climate shows" (round sixty;
   // the self-review's experience item 1). One dossier read under the page's corpus; without a derived climate, or when
   // the read fails, the page simply does not draw the block.
-  // Only for the plain front page: a genus row's page, a grouping, a chip or a letter is the catalogue, and the feature's
-  // dossier read was spent on every one of them (round sixty-one; corpus 10).
-  const plain = byParam == null && !w.open && chip === 'all' && !fromValid && !atValid;
+  // Only for the front page and its groupings and chips: a genus row's page, a letter or a later window is the catalogue,
+  // and the feature's dossier read was spent on every one of them (round sixty-one; corpus 10). A grouping or a chip keeps
+  // it, since it stands above the toolbar on a wide screen and leaving with the chip's page moved every row under the
+  // chips up 700 px (round sixty-two; outside review A10, B1).
+  const plain = !w.open && !fromValid && !atValid;
   const lead = plain && featured.length ? pool[(day * 12) % pool.length] : null;
   const fd = lead ? await getDossier(platform, fetch, lead.key, c).catch(() => null) : null;
   const feature = fd && lead && fd.climate.status === 'ok'

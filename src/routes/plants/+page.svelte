@@ -29,6 +29,7 @@
   import SelectMode from '$lib/ui/grow/SelectMode.svelte';
   import PlantsFoot from '$lib/ui/grow/PlantsFoot.svelte';
   import { photoDue, photoDueDays } from '$lib/ui/photo-due';
+  import { today as day } from '$lib/ui/day.svelte';
   onMount(() => { site.load(); collection.load(); }); // the site, for the empty list's third step (round fifty-eight; the grower review)
   /** The storage warning can be put away for this tab's life only; the browser's promise has not changed, so it comes back on the next visit. */
   let storageNoticeHidden = $state(false);
@@ -67,6 +68,8 @@
    */
   let place = $state('');
   let selectStart = $state(false);
+  /** Select mode is on: kept drawn while the list is empty, so a Move that empties a filtered list keeps it and its focus (round sixty-two; the grower review, 10). */
+  let selecting = $state(false);
   // The chip, the query and the sort live in the URL (?show=, ?q=, ?sort=), so Back from a plant returns to the same list
   // and a filtered list can be bookmarked; /plants?show=due is where Today points (round twenty-five, 11).
   onMount(() => {
@@ -109,9 +112,22 @@
   };
   // Today's rule for the line that links here, so the line and the chip say the same number: growing, here six months or
   // more, and no photograph in twelve (round sixty-one; the grower review, 11). The chip is offered once it counts one.
-  const photoDays = photoDueDays();
+  // Cut on the shared day store's corrected day, as Today's line is, so the two agree and both move at midnight and at a
+  // clock correction (round sixty-two; outside review B4).
+  const photoDays = $derived(photoDueDays(day.current));
   const noPhoto = (a: Accession) => photoDue(a, collection, photoDays);
   const noPhotoN = $derived(collection.accessions.filter(noPhoto).length);
+  // The keep line below reads `persisted`, which the collection asks the browser for once it is open: drawn a moment after the
+  // list, it moved the list 26 px down (CLS 0.011 to 0.020). The list waits for that answer, a few milliseconds in Chromium,
+  // and at most a quarter of a second where the browser asks the grower first (round sixty-two; the self-review's N10, the
+  // accessibility review of round sixty-one, 9).
+  let persistWaited = $state(false);
+  $effect(() => {
+    if (!collection.ready || collection.persisted !== null) return;
+    const t = setTimeout(() => (persistWaited = true), 250);
+    return () => clearTimeout(t);
+  });
+  const opened = $derived(collection.ready && (collection.persisted !== null || persistWaited));
   let thumbs = $state<Map<string, string>>(new Map());
   // Thumbnails for the species grown here, a small request, not the whole catalogue (round eight, 9).
   // Only when the grower has switched the reference's photographs on for their own pages: the thumbnails are the one thing
@@ -231,15 +247,15 @@
 {#if collection.lastWriteError}
   <div class="notice err" role="alert" id="write-error">This change was not saved: {collection.lastWriteError}. Free space or <a href="/backup">back up now</a>.</div>
 {/if}
-{#if collection.ready && storageLow && !storageNoticeHidden}
+{#if opened && storageLow && !storageNoticeHidden}
   <div class="notice" id="storage-notice">This browser's storage is nearly full{collection.persisted === false ? ', and it has not promised to keep this site\'s data' : ''}: it may clear photographs to make room. <a href="/backup">Back up now</a>. <button class="linkish" type="button" onclick={hideStorageNotice}>Hide for now</button></div>
-{:else if collection.ready && collection.persisted === false && !sync.configured}
+{:else if opened && collection.persisted === false && !sync.configured}
   <p class="small muted keepline" id="storage-notice">Kept in this browser only: <a href="/backup">back up</a> or install the app.</p>
 {/if}
 <!-- What "set aside" meant, and "version of the app", not "build" (round fifty-eight; the accessibility review). -->
 {#if collection.incomplete}<StateNote word="{collection.incomplete} waiting" id="incomplete-notice">{collection.incomplete} {collection.incomplete === 1 ? 'record waits' : 'records wait'} for a field this device does not have ({#if sync.quarantined.length}a sync bundle from a newer version of the app, which could not be read here; see <a href="/sync">Sync</a>{:else}a file that never had it, or a sync bundle from a newer version of the app that has not arrived{/if}), and {collection.incomplete === 1 ? 'is' : 'are'} not shown until it comes; a plant's own page, by its number, says which field. <a href="/about/how#glossary">Glossary</a>.</StateNote>{/if}
 
-{#if !collection.ready}
+{#if !opened}
   <p class="muted">Opening your collection…</p>
 {:else if !collection.accessions.length}
   <!-- Three steps in the order they help, each a link, a step done says so: a sort menu and zero chips over nothing was the first thing a new grower saw (round fifty-eight; the grower review). -->
@@ -258,14 +274,15 @@
     <!-- What the list is held to, said, with the way to the words instead (round sixty-one; the grower review, 7). -->
     <p class="small muted" id="q-place">The plants at {byPlace.map((id) => collection.locationName(id)).join(' and ')} and inside, since the search names {byPlace.length === 1 ? 'that place' : 'those places'}. <button class="linkish" type="button" id="q-words" onclick={() => (wordsOnly = true)}>Every plant that mentions “{q.trim()}” instead</button></p>
   {/if}
-  {#if !list.length}
-  <div class="emptybox"><p class="muted">No plants match.</p></div>
-  {:else}
-  {#if !prefs.referencePhotos && list.some((a) => !collection.cover(a.id))}
+  {#if list.length && !prefs.referencePhotos && list.some((a) => !collection.cover(a.id))}
     <!-- One line, the disclosure behind it: the paragraph stood between the chips and the first plant on a phone (round fifty, 4). -->
     <div style="margin: 0 0 8px"><RefPhotoOffer link buckets what="the reference’s photographs for plants without their own" /></div>
   {/if}
-  <SelectMode plants={list} start={selectStart} />
+  <!-- Drawn while selecting even when the list is empty: a Move that emptied a place's list unmounted it, and focus fell to the page (round sixty-two; the grower review, 10). -->
+  {#if list.length || selecting}<SelectMode plants={list} start={selectStart} bind:on={selecting} />{/if}
+  {#if !list.length}
+  <div class="emptybox"><p class="muted">No plants match.</p></div>
+  {:else}
   <div class="rows" class:nopic={!anyPic}>
     {#each shown as a (a.id)}
       {@const w = sinceWater(a.id)}

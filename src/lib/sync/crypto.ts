@@ -22,7 +22,7 @@ export const B32 = 'ABCDEFGHJKMNPQRSTVWXYZ23456789'; // 30 symbols: no I, L, O, 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
-export const KEY_GROUPS = 6; // 6 × 5 = 30 symbols from a 30-letter alphabet: log2(30^30) ≈ 147 bits
+const KEY_GROUPS = 6; // 6 × 5 = 30 symbols from a 30-letter alphabet: log2(30^30) ≈ 147 bits
 
 /** A new vault key: "A3KQ7-...-..." Six groups of five from an unambiguous alphabet, each symbol drawn without bias. */
 export function newVaultKey(random: (n: number) => Uint8Array = (n) => crypto.getRandomValues(new Uint8Array(n))): string {

@@ -11,17 +11,21 @@
    * that replaces a button hands focus to what replaced it and back (round sixty-one; the accessibility review, 2).
    */
   import { goto } from '$app/navigation';
-  import { onMount } from 'svelte';
   import { collection } from '$lib/db/collection.svelte';
   import { accNo, type Accession } from '$lib/db/types';
   import { localDate } from '$core/dates';
   import { toast } from '$lib/ui/toast.svelte';
   import { focusNext } from '$lib/ui/focus';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
-  /** `start`: open in select mode, as `/plants?place=<id>&select=1` asks (round sixty-one; the grower review, 7). */
-  let { plants, start = false }: { plants: Accession[]; start?: boolean } = $props();
-  let on = $state(false);
-  onMount(() => { if (start) on = true; });
+  import { archivePlants, undoArchive, type Archived } from '$lib/ui/grow/select-actions';
+  /**
+   * `start`: open in select mode, as `/plants?place=<id>&select=1` asks (round sixty-one; the grower review, 7). Read as it
+   * changes, not once at mount: the page reads the address in its own onMount, after this one's, so a "Select these"
+   * followed inside the app opened the list unselected (round sixty-two; the grower review, 4). `on` is bound by the page,
+   * which keeps this mounted while selecting even when the list is empty.
+   */
+  let { plants, start = false, on = $bindable(false) }: { plants: Accession[]; start?: boolean; on?: boolean } = $props();
+  $effect(() => { if (start) on = true; });
   let picked = $state<Set<string>>(new Set());
   let busy = $state(false);
   let moving = $state(false);
@@ -38,6 +42,39 @@
     document.body.classList.add('grow-selecting');
     return () => document.body.classList.remove('grow-selecting');
   });
+  /** The bar's height, for the toast to stand clear of it on a phone, as it does of the add form's pinned bar (round sixty-two; the accessibility review, 3). */
+  let barEl = $state<HTMLElement | null>(null);
+  $effect(() => {
+    const el = barEl;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const root = document.documentElement;
+    // Where the bar really is, not where a pinned bar would be: on a short list the sticky bar rests in the page under the
+    // last row, and a toast placed for a bar at the foot sat over the Archive button focus had moved to. The toast goes
+    // just above the bar's top; with the bar too near the top of the screen for that, under it, where it goes without one
+    // (round sixty-two; the verification review's grower 3).
+    let frame = 0;
+    const place = () => {
+      frame = 0;
+      const r = el.getBoundingClientRect();
+      root.style.setProperty('--sel-h', `${Math.round(r.height)}px`);
+      const tab = document.getElementById('tabbar')?.getBoundingClientRect().height || 0;
+      const lift = r.top >= 160 && r.top < innerHeight ? innerHeight - r.top + 8 : tab + 10;
+      root.style.setProperty('--sel-lift', `${Math.round(lift)}px`);
+    };
+    const soon = () => { if (!frame) frame = requestAnimationFrame(place); };
+    const ro = new ResizeObserver(place);
+    ro.observe(el);
+    ro.observe(document.body); // rows archived or moved away move the bar without resizing it
+    addEventListener('scroll', soon, { passive: true });
+    addEventListener('resize', soon);
+    return () => { ro.disconnect(); removeEventListener('scroll', soon); removeEventListener('resize', soon); if (frame) cancelAnimationFrame(frame); root.style.removeProperty('--sel-h'); root.style.removeProperty('--sel-lift'); };
+  });
+  /** Escape answers the open panel or question as Cancel or Keep does, focus back on the button that opened it (round sixty-two; the outside review's A40). */
+  function onBarKey(e: KeyboardEvent) {
+    if (e.key !== 'Escape') return;
+    if (moving) { e.preventDefault(); void closeMove(); }
+    else if (confirmArchive) { e.preventDefault(); void keep(); }
+  }
   // What is ticked is what is listed: a plant filtered out of view is not acted on unseen.
   const chosen = $derived(plants.filter((a) => picked.has(a.id)));
   const growing = $derived(chosen.filter((a) => a.status === 'growing'));
@@ -126,32 +163,26 @@
     busy = true;
     try {
       // The status and its line on each plant, all in one commit: all are archived or none is.
-      const d = localDate();
-      const [first, ...rest] = list;
-      const before = new Set(list.flatMap((a) => collection.events(a.id).map((e) => e.id)));
-      await collection.putWith('accession', first.id, { status: 'archived' }, list.map((a) => ({ acc: a.id, d, t: 'note' as const, note: 'Archived' })), rest.map((a) => ({ kind: 'accession' as const, id: a.id, fields: { status: 'archived' } })));
-      // The lines this commit wrote, found as the ones that were not there before it, so the Undo takes away exactly those.
-      const lines = list.flatMap((a) => collection.events(a.id).filter((e) => !before.has(e.id) && e.t === 'note' && e.note === 'Archived').map((e) => e.id));
+      const done = await archivePlants(collection, list.map((a) => a.id), localDate());
       picked = new Set([...picked].filter((id) => !list.some((a) => a.id === id)));
       await focusNext('#sel-archive');
-      toast.show(`${list.length} archived, and logged.`, 8000, { label: 'Undo', run: () => { void unarchive(list.map((a) => a.id), lines); } });
+      toast.show(`${list.length} archived, and logged.`, 8000, { label: 'Undo', run: () => { void unarchive(done); } });
     } finally {
       busy = false;
     }
   }
   /**
    * Archive's Undo (round sixty-one; the grower review, 8; the accessibility review, 9; review B3): the plants still
-   * archived go back to growing in one commit, as the archive went, then the "Archived" lines it wrote are taken away, as
-   * the plant page's death Undo does. A plant marked otherwise since is left as it is.
+   * archived go back to growing and their own "Archived" lines go, in one commit (`undoArchive`; round sixty-two, A25). A
+   * plant marked otherwise since is left as it is. A failure is said, and nothing was changed.
    */
-  async function unarchive(ids: string[], lines: string[]) {
-    const back = ids.filter((id) => collection.accession(id)?.status === 'archived');
-    if (back.length) {
-      const [first, ...rest] = back;
-      await collection.putWith('accession', first, { status: 'growing' }, [], rest.map((id) => ({ kind: 'accession' as const, id, fields: { status: 'growing' } })));
+  async function unarchive(done: Archived[]) {
+    try {
+      const { back, lines } = await undoArchive(collection, done);
+      toast.show(back ? `Undone: ${back} growing again, the archive line${lines === 1 ? '' : 's'} removed.` : 'Nothing to undo: they were marked otherwise since.');
+    } catch (err) {
+      toast.show(`Not undone: ${err instanceof Error ? err.message : String(err)}. They are still archived.`);
     }
-    await collection.removeEvents(lines);
-    toast.show(`Undone: ${back.length} growing again, the archive line${lines.length === 1 ? '' : 's'} removed.`);
   }
   function labels() {
     if (!chosen.length) { toast.show('Nothing is ticked.'); return; }
@@ -172,7 +203,10 @@
     {/each}
   </ul>
   <!-- A group, not a toolbar: a toolbar promises the arrow keys, and each button here is its own Tab stop (round sixty-one; the accessibility review, 11). -->
-  <div class="selbar" role="group" aria-label="For the ticked plants">
+  <!-- data-cover: the bar floats above the tab bar, off the screen's edge, so the focus helper counts it by this mark; a
+       tick box under it was reached by Tab and never seen (round sixty-two; the accessibility review, 1). -->
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+  <div class="selbar" role="group" aria-label="For the ticked plants" data-cover="bottom" bind:this={barEl} onkeydown={onBarKey}>
     {#if moving}
       <div class="moveto">
         <label class="movelab" for="sel-loc">Move to</label>
@@ -204,7 +238,8 @@
   .selrow input { width: 22px; height: 22px; margin: 0; accent-color: var(--accent); flex: none; }
   .where { font-size: var(--fs-md); }
   /* Above the tab bar by its measured height, which the layout sets (round sixty-one; the accessibility review, 8). */
-  .selbar { position: sticky; bottom: calc(env(safe-area-inset-bottom, 0px) + var(--tab-h, 64px) + 8px); z-index: 5; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 12px; background: var(--card); border: 1px solid var(--rule); border-radius: var(--r); box-shadow: var(--sh); }
+  /* At the window's foot on a desktop, where there is no tab bar: it floated 72 px up with rows showing under it (round sixty-two; the accessibility review, 8). */
+  .selbar { position: sticky; bottom: calc(env(safe-area-inset-bottom, 0px) + 8px); z-index: 5; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 12px; background: var(--card); border: 1px solid var(--rule); border-radius: var(--r); box-shadow: var(--sh); }
   .selbar .btn { min-height: var(--tap); }
   .moveto { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; width: 100%; min-width: 0; }
   /* The picker shrinks to the bar and its options' words wrap no further than the screen: at 320 px with 200% text it was
@@ -213,9 +248,12 @@
   .movelab { font-weight: 600; }
   .why { flex-basis: 100%; color: var(--bad); }
   .selbar [aria-disabled='true'] { opacity: 0.55; cursor: default; }
+  @media (max-width: 700px) { .selbar { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--tab-h, 57px) + 8px); } }
   /* A short screen (a phone on its side, 400% zoom): the bar takes its place in the page instead of 110 of 256 px over the
-     list, as the tool row does (round sixty-one; the accessibility review, 8). */
-  @media (max-height: 480px) { .selbar { position: static; } }
+     list, as the tool row does (round sixty-one; the accessibility review, 8). In em, which a media query reads at the
+     browser's own text size: 480 px at 100% text, 960 px at 200%, where the bars covered 682 of 700 px (round sixty-two;
+     the accessibility review, 1). */
+  @media (max-height: 30em) { .selbar { position: static; } }
   .muted { color: var(--ink3); }
   .small { font-size: var(--fs-md); }
   /* The plain rows give way to the tick rows while selecting. */

@@ -9,7 +9,11 @@
  *                                    the keyed fingerprint (HMAC-SHA-256 under the vault's naming key) of the changes
  *                                    as JSON, so a re-seal of the same batch has the same name and the server holds
  *                                    nothing it could test a guess against
- *   vault/<id>/photo/<photoId>.bin one sealed photo (full + thumb)
+ *   vault/<id>/photo/<photoId>.bin one sealed photo (full + thumb): the name's first generation
+ *   vault/<id>/photo/<photoId>.<g>  a later generation of it (`g` and base-36 digits), stored when a removed photograph is
+ *                                    stored again (round sixty-two)
+ *   vault/<id>/photoref/<photoId>.json  the name's pointer, once it was removed: { g } naming the generation it holds, or
+ *                                    { g: null, drop, at } with the removal's receipt. Absent: the first generation.
  *
  * And in KV (the QUEUE binding), small counters that R2 cannot keep quickly:
  *
@@ -34,6 +38,7 @@
  */
 import { error, json } from '@sveltejs/kit';
 import { tokenHash, sha256hex } from '$lib/sync/crypto';
+import { NET_FACTOR, UPSTREAM_ADDRESS_PART } from './caps';
 export { MAX_BATCH_BYTES, MAX_PHOTO_BYTES } from '$lib/sync/limits';
 
 export interface VaultMeta {
@@ -41,6 +46,12 @@ export interface VaultMeta {
   created: string;
   /** False from creation until the vault's first stored object, which is when it takes its place under the ceiling in all (round fifty-eight). Absent: a vault from before, counted at its creation. */
   filled?: boolean;
+  /**
+   * When the midnight sweep gave the vault's place back after 90 days without an upload (ms; round sixty-two). Written by
+   * the counter object before it gives the place back, and cleared when an upload takes one again: the evidence a write
+   * is judged on, since a missing place entry alone is also what a vault from before round fifty-nine has.
+   */
+  reclaimedAt?: number;
   /** 'open' while nobody pays; the licence check lands here. */
   entitlement: 'open' | 'licensed' | 'none';
   /**
@@ -69,69 +80,198 @@ const TOKEN = /^[0-9a-f]{64}$/;
  * server for good; a claim is two days old at most, so a late first upload is removed once its claim is swept (the
  * device asks again after a 409). And the proof is checked first, before the hold and the claim, so a request without it
  * learns nothing of when the photograph was uploaded and holds nothing.
+ *
+ * Round sixty-two (decision 7): a photograph is stored by generation. `key` is its name (`…/photo/<id>.bin`, which is
+ * also where its first generation lies); its pointer says which generation it holds now. A removal moves the pointer to
+ * its receipt, under R2's condition that the pointer is still the one it read, and only then deletes the generation it
+ * looked at: a removal that stalls anywhere can delete nothing but that generation, and a revival stored meanwhile is a
+ * new generation the removal never names. A revival that found the old generation still there (the removal stalled
+ * before its pointer write) claims it by moving the pointer, so the stalled write then fails (the server review, 1). The
+ * receipt names the generation it takes, so a removal cut off after it is finished when the device asks again (the server
+ * review, 2).
  */
 export async function deleteCounted(r2: R2Bucket, id: string, meta: VaultMeta, key: string, quota?: Quota, proof?: string | null, removed: number | null = null): Promise<boolean | 'noproof' | 'newer' | PhotoBusy> {
   const since = removed ?? quota?.now ?? Date.now();
   // The token alone could add; it must not be able to destroy. The object carries the proof its upload left, and only a
   // key-holder can repeat it (round fifty-one, 2).
   const proved = (o: { customMetadata?: Record<string, string> } | null) => !!o?.customMetadata?.drop && !!proof && o.customMetadata.drop === proof;
-  const first = await r2.head(key);
+  const photo = key.includes('/photo/');
+  const look = async () => {
+    const ref: PhotoRef = photo ? await photoRef(r2, key) : { exists: false, etag: null, key, removed: null };
+    // A removal cut off after its receipt was written (the R2 delete failed, the counter object threw, the Worker stopped)
+    // left the generation its receipt names: the device asks again, with the same proof, and this finishes it (round
+    // sixty-two; the server review, 2: the retry was answered 404, "done", and the bytes stayed, counted, for good).
+    const left = !ref.key && ref.removed?.was && proof && ref.removed.drop === proof ? (ref.removed.was === 'bin' ? key : genKey(key, ref.removed.was)) : null;
+    const at = ref.key ?? left;
+    return { ref, left, o: at ? await r2.head(at) : null };
+  };
+  const first = (await look()).o;
   if (first && !proved(first)) return 'noproof';
   // The look, the proof, the delete and the give back are one step for this name: a removal that looked at one upload
   // and then deleted the next one (a photograph revived on another device in between) lost it for good (round sixty;
   // the self-review, P3; two outside reviews, A12 and B5). An upload of the same name waits for it, and it for an upload.
   const r = await withHold(quota, id, key, async (claimed, fence) => {
-    const existing = await r2.head(key);
-    if (!existing) return false;
+    const { ref, left, o: existing } = await look();
+    if (!existing) {
+      // Nothing to remove; an unnamed generation of a removed photograph goes at this touch of it (the server review, 2).
+      if (photo && ref.exists) await dropStrays(r2, id, meta, key, quota);
+      return false;
+    }
     if (!proved(existing)) return 'noproof';
+    if (left) {
+      // The removal was already decided (the pointer holds its receipt, and nothing revived the name since, or the pointer
+      // would have moved): only its bytes remain to go.
+      if (!(await fence())) return new PhotoBusy(PHOTO_BUSY_S);
+      await takeOff(r2, id, meta, left, existing, quota);
+      await dropStrays(r2, id, meta, key, quota);
+      return true;
+    }
+    if (!ref.key) return false;
     if (claimed != null && claimed > since) return 'newer';
-    // Fenced (round sixty-one; B10): the hold is renewed and the object read again just before the delete. A hold that
-    // lapsed (a stalled call) and was taken by another request, or an object that is no longer the one looked at, is
-    // left alone; the device asks again. A delete call that itself stalls past the hold can still remove a replacement
-    // stored meanwhile: generation-addressed photo objects close that, in the round after this one (/about/formats).
-    if (!(await fence())) return new PhotoBusy(DELETE_BUSY_S);
-    const again = await r2.head(key);
-    if (!again) return false;
-    if (receipt(key, again) !== receipt(key, existing)) return 'newer';
-    await r2.delete(key);
-    const size = existing.size;
-    const kv = quota?.kv;
-    if (!kv) {
-      meta.bytes = Math.max(0, meta.bytes - size);
-      await writeMeta(r2, id, meta).catch(() => {});
-      return true;
-    }
-    const now = quota.now ?? Date.now();
-    const objs = byteObjects(quota, id);
-    if (objs) {
-      const token = receipt(key, existing);
-      const held = await objs.vault.bytesToday(day(now));
-      // Given back once per object, by its key and R2's version of it (round sixty: unique per upload; before, its etag and
-      // upload time): concurrent removals of one photograph each saw it before the delete and each gave its bytes back, so
-      // the total could be pushed down at will (round fifty-nine; the server reviews). On a day with no row yet the
-      // receipt is recorded before the listing, so a second removal that looked first cannot give the bytes back again
-      // after the listing already left them out (round sixty; the server review, 10).
-      if (held == null) {
-        await objs.vault.give('vault', 0, day(now), token);
-        // A listing crossed twice leaves the total unwritten: the next request lists, and the removal stands (round sixty-one).
-        meta.bytes = await vaultBytes(r2, kv, id, meta, now, false, quota).catch((e) => { if (e instanceof RecountCrossed) return meta.bytes; throw e; });
-      } else meta.bytes = await objs.vault.give('vault', size, day(now), token);
-      await writeMeta(r2, id, meta).catch(() => {});
-      return true;
-    }
-    const before = await vaultBytes(r2, kv, id, meta, now);
-    const after = Math.max(0, before - size);
-    await kv.put(`bytes:${id}`, JSON.stringify({ bytes: after, day: day(now) } satisfies BytesRow)).catch(() => {});
-    meta.bytes = after;
-    await writeMeta(r2, id, meta).catch(() => {});
+    // Fenced (round sixty-one; B10): a hold that lapsed (a stalled call) and was taken by another request is not this
+    // removal's, and it is left; the device asks again.
+    if (!(await fence())) return new PhotoBusy(PHOTO_BUSY_S);
+    // The pointer moves to the removal's receipt only if it is still the one read (round sixty-two): a revival stored
+    // since moved it, and is kept. The receipt asks a later first store of the name for the removal's proof (A23).
+    // A pointer that moved to another removal's receipt is a removal already made: nothing more to do here.
+    // The receipt names the generation it takes (`was`), so a removal cut off after this write is finished by the device
+    // asking again (the server review, 2).
+    if (photo && !(await point(r2, key, ref, { g: null, drop: existing.customMetadata?.drop ?? '', at: since, was: genOf(key, ref.key) }))) return (await photoRef(r2, key)).key ? 'newer' : false;
+    await takeOff(r2, id, meta, ref.key, existing, quota);
+    // Generations nothing names (an upload cut off between storing its bytes and naming them) go with the photograph.
+    if (photo) await dropStrays(r2, id, meta, key, quota);
     return true;
   });
   // A removal's wait is one fixed figure, never the time left on another request's hold (round sixty-one; the server
   // review, 3: the photo route answers without timing information).
-  return r instanceof PhotoBusy ? new PhotoBusy(DELETE_BUSY_S) : r;
+  return r instanceof PhotoBusy ? new PhotoBusy(PHOTO_BUSY_S) : r;
 }
-/** How long a removal that found the name busy is asked to wait, whatever held it (round sixty-one). */
-const DELETE_BUSY_S = 10;
+/**
+ * How long a request that found a photograph's name busy is asked to wait, whatever held it: removals since round
+ * sixty-one, uploads since round sixty-two (A30: an upload was told the time left on the hold, up to a minute, and the
+ * engine keeps a wait of a minute or more as a refusal of the whole vault, so one photograph stopped every upload).
+ */
+export const PHOTO_BUSY_S = 10;
+
+/**
+ * Delete one stored object and take its bytes off the vault's count. With the counter object, the removal is held as a
+ * lease of no bytes from before the delete until its give-back, so a listing made between the two is not believed
+ * (round sixty-two; A24: it left the object out, and the give-back then took its bytes off again).
+ */
+async function takeOff(r2: R2Bucket, id: string, meta: VaultMeta, key: string, existing: R2Object, quota?: Quota): Promise<void> {
+  const size = existing.size;
+  const kv = quota?.kv;
+  if (!kv) {
+    await r2.delete(key);
+    meta.bytes = Math.max(0, meta.bytes - size);
+    await writeMeta(r2, id, meta).catch(() => {});
+    return;
+  }
+  const now = quota.now ?? Date.now();
+  const objs = byteObjects(quota, id);
+  if (objs) {
+    const token = receipt(key, existing);
+    await objs.vault.removing?.(token, now);
+    await r2.delete(key);
+    const held = await objs.vault.bytesToday(day(now));
+    // Given back once per object, by its key and R2's version of it (round sixty: unique per upload; before, its etag and
+    // upload time): concurrent removals of one photograph each saw it before the delete and each gave its bytes back, so
+    // the total could be pushed down at will (round fifty-nine; the server reviews). On a day with no row yet the
+    // receipt is recorded before the listing, so a second removal that looked first cannot give the bytes back again
+    // after the listing already left them out (round sixty; the server review, 10).
+    if (held == null) {
+      await objs.vault.give('vault', 0, day(now), token);
+      // A listing crossed twice leaves the total unwritten: the next request lists, and the removal stands (round sixty-one).
+      meta.bytes = await vaultBytes(r2, kv, id, meta, now, false, quota).catch((e) => { if (e instanceof RecountCrossed) return meta.bytes; throw e; });
+    } else meta.bytes = await objs.vault.give('vault', size, day(now), token);
+    await writeMeta(r2, id, meta).catch(() => {});
+    return;
+  }
+  await r2.delete(key);
+  const before = await vaultBytes(r2, kv, id, meta, now);
+  const after = Math.max(0, before - size);
+  await kv.put(`bytes:${id}`, JSON.stringify({ bytes: after, day: day(now) } satisfies BytesRow)).catch(() => {});
+  meta.bytes = after;
+  await writeMeta(r2, id, meta).catch(() => {});
+}
+
+/**
+ * A photograph's pointer as read: whether there is one and its etag, the key its bytes are under now (null: removed), and
+ * the removal's receipt, with the generation that removal took (`was`: 'bin' or a `g…` suffix; null in a receipt
+ * written before it was recorded).
+ */
+type PhotoRef = { exists: boolean; etag: string | null; key: string | null; removed: { drop: string; at: number; was: string | null } | null };
+/** A generation's suffix: `g` and base-36 digits, never `bin` (the first generation's). */
+const GEN = /^g[0-9a-z]{6,40}$/;
+const refKey = (name: string) => name.replace('/photo/', '/photoref/').replace(/\.bin$/, '.json');
+const genKey = (name: string, g: string) => name.replace(/\.bin$/, `.${g}`);
+/** A generation's suffix as a pointer names it: the first generation is 'bin' (round sixty-two; the server review, 1). */
+const genOf = (name: string, key: string) => (key === name ? 'bin' : key.slice(key.lastIndexOf('.') + 1));
+/**
+ * Where a photograph's bytes are now (round sixty-two; decision 7). No pointer: the name's first generation, under the
+ * name itself, which is where every photograph stored before this round lies, so those are read where they are and
+ * nothing is moved (read-through).
+ */
+async function photoRef(r2: R2Bucket, name: string): Promise<PhotoRef> {
+  const o = await r2.get(refKey(name));
+  if (!o) return { exists: false, etag: null, key: name, removed: null };
+  type Ref = { g?: unknown; drop?: unknown; at?: unknown; was?: unknown };
+  const p = await o.json<Ref>().catch(() => null); // an unreadable pointer names nothing, and is moved by the next store
+  // 'bin': the first generation, named by a claim on it (round sixty-two; the server review, 1).
+  if (p && p.g === 'bin') return { exists: true, etag: o.etag ?? null, key: name, removed: null };
+  if (p && typeof p.g === 'string' && GEN.test(p.g)) return { exists: true, etag: o.etag ?? null, key: genKey(name, p.g), removed: null };
+  const was = typeof p?.was === 'string' && (p.was === 'bin' || GEN.test(p.was)) ? p.was : null;
+  return { exists: true, etag: o.etag ?? null, key: null, removed: { drop: typeof p?.drop === 'string' ? p.drop : '', at: typeof p?.at === 'number' ? p.at : 0, was } };
+}
+/** Move a photograph's pointer, only if it is still the one `ref` read (R2's conditional write): false when it moved. */
+async function point(r2: R2Bucket, name: string, ref: PhotoRef, to: { g: string | null; drop?: string; at?: number; was?: string }): Promise<boolean> {
+  // `n`: each write's own, so two pointers that say the same have different etags, and a condition read before one of
+  // them never passes after it.
+  const body = JSON.stringify({ ...to, n: crypto.randomUUID() });
+  const onlyIf = !ref.exists ? { etagDoesNotMatch: '*' } : ref.etag ? { etagMatches: ref.etag } : undefined; // R2 always gives an etag
+  return (await r2.put(refKey(name), body, { httpMetadata: { contentType: 'application/json' }, ...(onlyIf ? { onlyIf } : {}) })) !== null;
+}
+/** The key a photograph's bytes are under now, or null when it was removed (round sixty-two): the GET and HEAD routes read through it. */
+export async function photoObjectKey(r2: R2Bucket, name: string): Promise<string | null> {
+  return (await photoRef(r2, name)).key;
+}
+/** How old a generation nothing names must be before it is taken for an upload cut off between its two writes: past the longest upload, as a lease is. */
+const STRAY_MS = 10 * 60_000;
+/** Remove the generations of a photograph that its pointer does not name and that are older than `STRAY_MS` (round sixty-two). */
+async function dropStrays(r2: R2Bucket, id: string, meta: VaultMeta, name: string, quota?: Quota): Promise<void> {
+  const prefix = name.replace(/\.bin$/, '.');
+  const now = quota?.now ?? Date.now();
+  try {
+    const ref = await photoRef(r2, name);
+    if (!ref.exists) return; // no pointer: the first generation is the photograph, and no other was ever stored
+    const named = ref.key;
+    for (const o of (await r2.list({ prefix, limit: 100 })).objects) {
+      // The first generation (`.bin`) too, once the pointer names something else (round sixty-two; the server review, 2):
+      // a removal cut off after its receipt left it there, and an upload that stalled past its hold can write it after one.
+      const g = o.key.slice(prefix.length);
+      if (o.key === named || !(GEN.test(g) || g === 'bin') || now - o.uploaded.getTime() < STRAY_MS) continue;
+      const h = await r2.head(o.key);
+      if (h) await takeOff(r2, id, meta, o.key, h, quota);
+    }
+  } catch (e) {
+    console.error("sync: a photograph's unnamed generations were not removed; the next removal of it tries again", e);
+  }
+}
+
+/**
+ * A first store of a photograph that was removed, without the proof its removal carried (round sixty-two; A23): a
+ * holder of the token alone could put back a copy of the ciphertext under any proof, and the grower's removal was then
+ * refused for good. Answered 403; a device that holds the vault's key always carries the proof.
+ */
+export class PhotoRemoved extends Error {
+  readonly status = 403;
+  constructor() {
+    super('this photograph was removed');
+  }
+  response(): Response {
+    return new Response(JSON.stringify({ error: 'This photograph was removed, and only a device that holds the vault\'s key can store it again.' }), { status: 403, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
+  }
+}
 
 /**
  * A removed object's give-back receipt: its key and R2's `version`, which is unique per upload, so the same bytes
@@ -170,9 +310,10 @@ async function withHold<T>(quota: Quota | undefined, id: string, key: string, fn
     h = await o.hold(key, now);
   } catch (e) {
     console.error("sync: a photograph's name could not be held; the request waits", e);
-    return new PhotoBusy(10);
+    return new PhotoBusy(PHOTO_BUSY_S);
   }
-  if (!h.ok) return new PhotoBusy(Math.min(60, h.retryAfter));
+  // One fixed short wait, never the time left on the hold (round sixty-two; A30).
+  if (!h.ok) return new PhotoBusy(PHOTO_BUSY_S);
   let claimed = false;
   // A renewal that cannot be asked is a hold not known to be this request's: the step it guards is skipped.
   const fence = async () => (o.renew ? await o.renew(key, h.token, quota?.now ?? Date.now()).catch(() => false) : true);
@@ -186,7 +327,8 @@ async function withHold<T>(quota: Quota | undefined, id: string, key: string, fn
 }
 
 /** The header a removal may carry: when the device made it (ms), so an upload of the name after that is left alone (round sixty). */
-export const PHOTO_REMOVED_AT_HEADER = 'x-photo-removed-at';
+export { PHOTO_REMOVED_AT_HEADER } from '$lib/sync/limits'; // one name for both ends (round sixty-two; agent L)
+import { PHOTO_REMOVED_AT_HEADER } from '$lib/sync/limits';
 /** A removal's own time from its request, when sent and believable (not ahead of the server by more than five minutes); else null. */
 export function removedAt(request: Request, now = Date.now()): number | null {
   const v = request.headers.get(PHOTO_REMOVED_AT_HEADER);
@@ -451,8 +593,11 @@ export async function vaultBytes(r2: R2Bucket, kv: KVNamespace, id: string, meta
     const held = await objs.vault.bytesToday(today);
     if (held != null && !open) return held;
     for (let tries = 0; tries < RECOUNT_TRIES; tries++) {
-      const g = await objs.vault.generation();
+      const g = await objs.vault.generation(now);
       if (held != null && g.at != null && now - g.at < RECOUNT_MS) return held;
+      // No listing while one could not be kept (round sixty-two; the server review, 5): it was made and then refused. The
+      // upload that is live may have put today's total right itself; else the device asks again shortly.
+      if (g.busy) { const t = held ?? (await objs.vault.bytesToday(today)); if (t != null) return t; continue; }
       const bytes = await recount(r2, id, meta);
       // Committed only if no upload landed and nothing was removed while the listing ran: a listing taken before an
       // upload landed and written after it erased that upload's charge (round sixty; the second outside review, B7). The
@@ -461,6 +606,9 @@ export async function vaultBytes(r2: R2Bucket, kv: KVNamespace, id: string, meta
       const set = await objs.vault.setBytes(bytes, today, g.gen, now);
       if (set != null) return set;
     }
+    // An open with today's total already kept answers that total: its listing was only to put it right, and since round
+    // sixty-two a listing is refused while any upload or removal is live, which a long push from another device often is.
+    if (held != null) return held;
     throw new RecountCrossed();
   }
   const row = await kv.get<BytesRow>(`bytes:${id}`, 'json').catch(() => null);
@@ -577,7 +725,12 @@ async function storeCountedNow(r2: R2Bucket, id: string, meta: VaultMeta, key: s
       // the listing has it refused, and it is listed again, once (round sixty; B7); the second listing is checked too,
       // and a second crossing asks the device to try again (round sixty-one; B11).
       for (let tries = 0; 'recount' in v && tries < RECOUNT_TRIES; tries++) {
-        const g = await objs.vault.generation();
+        const g = await objs.vault.generation(now);
+        // An upload or a removal is live, so a listing would be refused: none is made (round sixty-two; the server review,
+        // 5: up to four whole-vault listings were made and thrown away). The live upload is often a first upload of the day
+        // that has just put today's total right, so the take is asked again without one; if it still needs a listing,
+        // the device asks again shortly.
+        if (g.busy) { v = await objs.vault.take('vault', body.length, MAX_BYTES, today, null, now); continue; }
         const listed = await recount(r2, id, meta);
         v = await objs.vault.take('vault', body.length, MAX_BYTES, today, listed, now, g.gen);
       }
@@ -679,7 +832,61 @@ export async function storeOnce(r2: R2Bucket, id: string, meta: VaultMeta, key: 
     return md.sha === sha || (extra.plain && extra.device && md.plain === extra.plain && md.device === extra.device) ? 'same' : 'different';
   };
   if (!key.includes('/photo/')) return run();
-  const r = await withHold(quota, id, key, run, (x) => (x === 'stored' || x === 'same') && proved);
+  /** Judged against what the name holds: the same bytes (or a re-seal of the same batch) or not; a matching proof is a claim. */
+  const against = (o: { customMetadata?: Record<string, string> } | null): 'same' | 'different' => {
+    const md: Partial<Record<string, string>> = o?.customMetadata ?? {};
+    proved = !!extra.drop && md.drop === extra.drop;
+    return md.sha === sha ? 'same' : 'different';
+  };
+  // Round sixty-two (decision 7): through the name's pointer. A name never removed is stored as before, under the name
+  // itself (its first generation); a removed one is stored as a new generation, and the pointer is moved to it only if it
+  // is still the one read, so a removal that read the pointer before cannot move it back.
+  /**
+   * An upload with the proof that found the photograph already there claims it, and the claim moves the pointer to the
+   * generation it found, under the condition the pointer is still the one read (round sixty-two; the server review, 1). A
+   * removal whose own conditional write stalled past its hold read the pointer before, so it now fails and answers
+   * 'newer', where it deleted the generation this upload had just told its device was on the server. One conditional
+   * write per such upload (a retry after a lost reply, an Undo). A pointer that moved meanwhile is a removal that landed:
+   * the device is asked to wait and try again, and then stores the photograph anew.
+   */
+  const claim = async (ref: PhotoRef, found: string, r: 'same' | 'different'): Promise<'same' | 'different'> => {
+    if (!proved) return r;
+    if (await point(r2, key, ref, { g: genOf(key, found) })) return r;
+    proved = false;
+    throw new PhotoBusy(PHOTO_BUSY_S);
+  };
+  const runPhoto = async (): Promise<'stored' | 'same' | 'different'> => {
+    const ref = await photoRef(r2, key);
+    const existing = ref.key ? await r2.head(ref.key) : null;
+    if (existing) {
+      // A revived photograph is where a generation stored and never named can be left (an upload cut off between its two
+      // writes): it goes at this touch, once old enough (the server review, 2).
+      if (ref.key !== key) await dropStrays(r2, id, meta, key, quota);
+      return claim(ref, ref.key!, against(existing));
+    }
+    // A removed name keeps its removal's receipt: a first store of it carries the removal's proof, or is refused (A23).
+    if (ref.removed?.drop && ref.removed.drop !== extra.drop) throw new PhotoRemoved();
+    if (!ref.exists) {
+      if (await storeCounted(r2, id, meta, key, body, sha, extra, quota, true)) { proved = !!extra.drop; return 'stored'; }
+      // Another upload took the name between the look and the write: judged against what it stored, as above.
+      return claim(ref, key, against(await r2.head(key)));
+    }
+    await dropStrays(r2, id, meta, key, quota);
+    const gk = genKey(key, `g${(quota?.now ?? Date.now()).toString(36)}${crypto.randomUUID().slice(0, 8)}`);
+    if (!(await storeCounted(r2, id, meta, gk, body, sha, extra, quota, true))) throw new PhotoBusy(PHOTO_BUSY_S);
+    if (await point(r2, key, ref, { g: gk.slice(gk.lastIndexOf('.') + 1) })) { proved = !!extra.drop; return 'stored'; }
+    // The pointer moved while this generation was written (another request, past a hold that lapsed): the generation goes,
+    // its bytes given back, and the upload is judged against what the name holds now.
+    const mine = await r2.head(gk);
+    if (mine) await takeOff(r2, id, meta, gk, mine, quota);
+    const now = await photoRef(r2, key);
+    const o = now.key ? await r2.head(now.key) : null;
+    if (!o) throw new PhotoBusy(PHOTO_BUSY_S);
+    return claim(now, now.key!, against(o));
+  };
+  // A claim whenever the proof matches, whatever the answer (round sixty-two; A23): a re-sealed Undo makes different
+  // bytes, was answered 409 with no claim, and a removal asked for before it then deleted it.
+  const r = await withHold(quota, id, key, runPhoto, () => proved);
   if (r instanceof PhotoBusy) throw r;
   return r;
 }
@@ -820,12 +1027,13 @@ export type CountersNs = {
     release?(lease: string, landed: boolean): Promise<void>;
     setBytes?(bytes: number, day: string, gen?: number | null, now?: number): Promise<number | null>;
     bytesToday?(day: string): Promise<number | null>;
-    generation?(): Promise<{ gen: number; at: number | null }>;
+    generation?(now?: number): Promise<{ gen: number; at: number | null; busy?: boolean }>;
     hold?(name: string, now?: number): Promise<{ ok: true; token: string; claimed?: number | null } | { ok: false; retryAfter: number }>;
     unhold?(name: string, token: string, claimed?: boolean, now?: number): Promise<void>;
     renew?(name: string, token: string, now?: number): Promise<boolean>;
     inFlight?(now?: number): Promise<number>;
-    touch?(vault: string, day: string, max: number, seed?: number | null, legacy?: boolean, now?: number): Promise<'already' | 'adopted' | 'counted' | 'total' | 'unavailable'>;
+    touch?(vault: string, day: string, max: number, seed?: number | null, reclaimed?: boolean, now?: number): Promise<'already' | 'adopted' | 'counted' | 'total' | 'unavailable'>;
+    removing?(token: string, now?: number): Promise<void>;
     upstream?(services: string[], share: number, address?: string | null, net?: string | null, now?: number): Promise<UpstreamAnswer>;
   };
 };
@@ -908,11 +1116,13 @@ export class VaultsClosed extends Error {
   }
   response(): Response {
     const text = this.reclaimed
-      ? 'Sync is full for now. This vault had no upload for 90 days, so its place was given back; what it holds is kept, and it takes a place again when one is free. Your collection stays on this device.'
+      ? 'Sync is full for now. This vault had no upload for 90 days, so its place was given back. What it holds stays on the server, and every device can still receive from it, but only an upload takes a place again: receiving does not. Your changes stay on this device, which asks again within the hour.'
       : this.which === 'day'
       ? 'Sync has taken all the new vaults it can today, and this vault holds nothing yet. Your collection stays on this device; it will try again tomorrow.'
       : 'Sync is not taking new vaults for now, and this vault holds nothing yet. Your collection stays on this device.';
-    const wait = this.which === 'day' ? untilMidnight(this.now) : 86400;
+    // A reclaimed vault is asked about again within the hour, as its sentence says (round sixty-two); the engine keeps at
+    // most an hour in any case.
+    const wait = this.which === 'day' ? untilMidnight(this.now) : this.reclaimed ? 3600 : 86400;
     return new Response(JSON.stringify({ error: text }), { status: STATUS.ceilings, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', 'retry-after': String(wait) } });
   }
 }
@@ -953,7 +1163,7 @@ export async function admitVault(r2: R2Bucket, id: string, meta: VaultMeta, quot
   const ns = quota?.counters;
   const max = quota?.max ?? MAX_VAULTS;
   const now = quota?.now ?? Date.now();
-  if (meta.filled !== false) return touchVault(id, meta, quota, now);
+  if (meta.filled !== false) return touchVault(r2, id, meta, quota, now);
   let took = false;
   try {
     const o = ns?.get(ns.idFromName('vaults'));
@@ -994,26 +1204,39 @@ const touched = new Map<string, string>();
 /**
  * A vault that has a place uploads (round sixty-one): once a day per isolate the counter object keeps the day, and a
  * vault whose place was reclaimed after 90 days without an upload takes one again, under the ceiling in all. Past it the
- * upload is refused as a new vault is, in words that say the vault holds what it holds. A counter that cannot be asked
- * is let go for this request (asked again by the next): a vault that has a place is not refused for it.
+ * upload is refused as a new vault is, in words that say the vault holds what it holds.
+ *
+ * Round sixty-two (the triage, 6; B11): a vault whose meta says it was reclaimed (`reclaimedAt`) needs a checked place
+ * before it writes, every time until it has one: a counter that throws or cannot answer refuses the write for a minute
+ * (`VaultUnchecked`), since nothing else shows that it holds a place. Any other vault that has a place is let go when the
+ * counter cannot be asked (asked again by the next upload): it is not refused for the counter's fault. Reads never come
+ * here. A vault adopted (from before round fifty-eight, or first filled under it) or counted again has its meta written:
+ * `filled`, and no `reclaimedAt`.
  */
-async function touchVault(id: string, meta: VaultMeta, quota: Quota | undefined, now: number): Promise<boolean> {
+async function touchVault(r2: R2Bucket, id: string, meta: VaultMeta, quota: Quota | undefined, now: number): Promise<boolean> {
   const ns = quota?.counters;
   const o = ns?.get(ns.idFromName('vaults'));
   if (!o?.touch) return false;
+  const reclaimed = typeof meta.reclaimedAt === 'number';
   const today = day(now);
-  if (touched.get(id) === today) return false;
+  if (!reclaimed && touched.get(id) === today) return false;
   let r: Awaited<ReturnType<NonNullable<typeof o.touch>>>;
   try {
     let seed: number | null = 0;
     try { seed = quota?.kv ? Number((await quota.kv.get('vaults:all')) ?? 0) : 0; } catch { seed = null; }
-    r = await o.touch(id, today, quota?.max ?? MAX_VAULTS, seed, meta.filled === undefined, now);
+    r = await o.touch(id, today, quota?.max ?? MAX_VAULTS, seed, reclaimed, now);
   } catch (e) {
+    if (reclaimed) { console.error("sync: a reclaimed vault's place could not be checked; its upload is refused for a minute", e); throw new VaultUnchecked(); }
     console.error("sync: a vault's place could not be looked at; this upload goes on, and the next asks again", e);
     return false;
   }
   if (r === 'total') throw new VaultsClosed('total', now, true);
-  if (r === 'unavailable') return false;
+  if (r === 'unavailable') { if (reclaimed) throw new VaultUnchecked(); return false; }
+  if (reclaimed || meta.filled === undefined) {
+    delete meta.reclaimedAt;
+    meta.filled = true;
+    await writeMeta(r2, id, meta).catch((e) => console.error("sync: a vault's meta was not written after its place was checked; the next upload checks again", e));
+  }
   if (touched.size > 5000) touched.clear();
   touched.set(id, today);
   return r === 'counted';
@@ -1084,9 +1307,9 @@ export async function unadmit(r2: R2Bucket, id: string, meta: VaultMeta, quota?:
   }
 }
 
-/** The answer for a refusal a store can throw (full, the day's bytes, a ceiling, an unchecked place, a busy name, a crossed recount), or null for anything else. */
+/** The answer for a refusal a store can throw (full, the day's bytes, a ceiling, an unchecked place, a busy name, a crossed recount, a removed photograph's name), or null for anything else. */
 export function refusal(e: unknown): Response | null {
-  return e instanceof VaultFull || e instanceof DayQuota || e instanceof VaultsClosed || e instanceof VaultUnchecked || e instanceof PhotoBusy || e instanceof RecountCrossed ? e.response() : null;
+  return e instanceof VaultFull || e instanceof DayQuota || e instanceof VaultsClosed || e instanceof VaultUnchecked || e instanceof PhotoBusy || e instanceof RecountCrossed || e instanceof PhotoRemoved ? e.response() : null;
 }
 
 /** A creation counted by the object and then not made (the vault write threw): the count goes back, so a grower retrying through an R2 blip is not told they made too many (round twenty-two, 1). Best-effort. */
@@ -1094,8 +1317,6 @@ export async function refundCreation(counters: CountersNs | undefined, ip: strin
   if (!counters) return;
   await counters.get(counters.idFromName('vaults')).refund(addressKey(ip), day(now), networkKey(ip)).catch((e) => console.warn('sync: a vault-creation refund did not land', e));
 }
-/** The day key of the address-keyed counters, for callers that need to pair a count with its refund. */
-export const creationDay = (now = Date.now()) => day(now);
 
 /* ---------- Rate limit ---------- */
 
@@ -1238,7 +1459,7 @@ export function networkKey(ip: string): string | null {
  * a vault opened from twenty /64s of one /48 was walked twenty times, and the whole index answered two hundred).
  */
 const UPSTREAM: ReadonlySet<RateBucket> = new Set(['forecast', 'names', 'match', 'search', 'searchmiss', 'reference', 'sync', 'syncobj', 'index', 'sheets', 'render']);
-export const NET_RATE_FACTOR = 4;
+export const NET_RATE_FACTOR = NET_FACTOR;
 /** The services this site calls under its own name, each with its own share of `RATE.upstream` a minute (round sixty-one). */
 export type Upstream = 'met' | 'nws' | 'gbif';
 export type UpstreamAnswer = { ok: true } | { ok: false; who: 'site' | 'address'; service: string; retryAfter: number };
@@ -1251,7 +1472,7 @@ export const HELD_BACK_ADDRESS = "not asked: this address has used its part of t
  * GBIF has a share of `RATE.upstream.limit` calls a minute for every address together, and one address (`ip`, keyed as
  * `clientIp` keys it) may take at most a tenth of a share, an IPv6 /48 four tenths: one host spent the whole minute in a
  * second, and every other visitor was told the source "did not answer". All of `services` are taken or none: a US
- * forecast is two calls, MET's and the NWS's. `ip` null counts the share alone (the old-name check, which has no reader).
+ * forecast is two calls, MET's and the NWS's. `ip` null counts the share alone.
  *
  * Counted in the counter object named "upstream", so the cap is one for the whole site. Without the binding, or when the
  * object does not answer, each isolate counts in its own memory and shares the count through KV once a second: that
@@ -1283,15 +1504,8 @@ export async function upstreamCall(platform: App.Platform | undefined, services:
   }
   return { ok: true };
 }
-/** One address's part of a share in a minute; the same figure as `UPSTREAM_ADDRESS_PART` in counters.ts, which this module cannot import. */
-export const UPSTREAM_ADDRESS_PART = 0.1;
-/**
- * The old form: true when a call to GBIF may go, by the share alone (round sixty). Kept for the callers that have not
- * moved to `upstreamCall`.
- */
-export async function upstreamAllowed(platform: App.Platform | undefined, now = Date.now()): Promise<boolean> {
-  return (await upstreamCall(platform, ['gbif'], null, now)).ok;
-}
+/** One address's part of a share in a minute, and the /48's factor: from caps.ts, which counters.ts reads too (round sixty-two). */
+export { UPSTREAM_ADDRESS_PART };
 /**
  * The answer for a call the site held back: 503 with Retry-After to the next minute when the site's share is used up,
  * 429 when this address has used its part; plain JSON, never cached, and `held: true` so a page can say that the

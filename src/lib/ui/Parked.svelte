@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * The changes the fold parked for one record: stamped more than a day past their arrival by a device whose clock was
+   * The changes the fold parked for one record: stamped more than two days past their arrival (PARK_MS) by a device whose clock was
    * wrong, kept in the log and never folded on their own (round fifty-two, 1). Apply writes the same values as edits made
    * now, so every device takes them; Dismiss leaves them in the log, unlisted here.
    */

@@ -7,7 +7,9 @@
  * spends the minute; two isolates pass twice the cap) now assert the fix, and the arithmetic guard is restated.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { resetRateLimits, RATE, upstreamCall, upstreamAllowed, heldBack, HELD_BACK, UPSTREAM_ADDRESS_PART, NET_RATE_FACTOR } from '$lib/server/sync';
+import { resetRateLimits, RATE, upstreamCall, heldBack, HELD_BACK, UPSTREAM_ADDRESS_PART, NET_RATE_FACTOR } from '$lib/server/sync';
+/** GBIF by the site's share alone, as the old `upstreamAllowed` asked (it went in round sixty-two). */
+const gbifAllowed = async (platform: unknown) => (await upstreamCall(platform as never, ['gbif'], null)).ok;
 import { forecastRefusal } from '$lib/weather/client';
 import { fakeKV, countersNs } from './helpers/fake-sync';
 
@@ -61,24 +63,26 @@ describe('the cap on outside calls (round sixty-one; the server review, 4; B13)'
     expect((await forecast(platform, '198.51.100.7', 51.5)).asked()).toBe(1);
   });
 
-  it("a US forecast is two calls: it is held back when the NWS's share is spent, while one elsewhere still goes", async () => {
+  it("a US forecast is two calls: when the NWS's share is spent, it is held back whole, and one elsewhere still goes", async () => {
     const platform = platformDO();
     let spent = 0;
     for (let a = 0; spent < SHARE && a < 100; a++) spent += await take(platform, ['nws'], `192.0.2.${a}`, PART);
-    expect((await forecast(platform, '198.51.100.7', 40.4, -80)).r.status).toBe(503); // Pittsburgh: MET and the NWS
+    // Pittsburgh: held back whole. No route spends the NWS's share alone (every NWS call is taken with a MET call), so the
+    // first pass's "MET alone, alerts not asked" answer was removed in the second (round sixty-two; the server review, 4).
+    expect((await forecast(platform, '198.51.100.7', 40.4, -80)).asked()).toBe(0);
     expect((await forecast(platform, '198.51.100.7', 51.5, -0.1)).asked()).toBe(1); // London: MET alone
   });
 
   it('the services have shares of their own: GBIF spent leaves MET and the NWS', async () => {
     const platform = platformDO();
-    for (let i = 0; i < SHARE; i++) await upstreamAllowed(platform as never);
-    expect(await upstreamAllowed(platform as never)).toBe(false);
+    for (let i = 0; i < SHARE; i++) await gbifAllowed(platform);
+    expect(await gbifAllowed(platform)).toBe(false);
     expect((await upstreamCall(platform as never, ['met', 'nws'], '198.51.100.7')).ok).toBe(true);
   });
 
   it('with the counter object bound, two isolates share one count: together they pass one share, not two', async () => {
     const platform = platformDO();
-    const isolate = async () => { vi.resetModules(); return (await import('$lib/server/sync')).upstreamAllowed; };
+    const isolate = async () => { vi.resetModules(); const m = await import('$lib/server/sync'); return async (p: never) => (await m.upstreamCall(p, ['gbif'], null)).ok; };
     const a = await isolate();
     const b = await isolate();
     let ok = 0;

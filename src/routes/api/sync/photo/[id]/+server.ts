@@ -1,7 +1,7 @@
 import { json, error } from '@sveltejs/kit';
 import { STATUS } from '$lib/sync/limits';
 import type { RequestHandler } from './$types';
-import { store, vaultId, authed, photoKey, storeOnce, deleteCounted, readBody, admitVault, unadmit, refusal, PhotoBusy, MAX_PHOTO_BYTES, limited, quotaOf, dropProof, removedAt } from '$lib/server/sync';
+import { store, vaultId, authed, photoKey, photoObjectKey, storeOnce, deleteCounted, readBody, admitVault, unadmit, refusal, PhotoBusy, MAX_PHOTO_BYTES, limited, quotaOf, dropProof, removedAt } from '$lib/server/sync';
 
 export const GET: RequestHandler = async ({ request, url, params, platform, getClientAddress }) => {
   const r2 = store(platform);
@@ -9,7 +9,9 @@ export const GET: RequestHandler = async ({ request, url, params, platform, getC
   if (stop) return stop;
   const id = vaultId(url.searchParams.get('vault'));
   await authed(r2, id, request);
-  const o = await r2.get(photoKey(id, params.id));
+  // Through the name's pointer: the generation it holds now, or nothing once removed (round sixty-two; decision 7).
+  const at = await photoObjectKey(r2, photoKey(id, params.id));
+  const o = at ? await r2.get(at) : null;
   if (!o) return new Response('no such photo', { status: 404 });
   return new Response(o.body, { headers: { 'content-type': 'application/octet-stream', 'cache-control': 'private, max-age=31536000, immutable' } });
 };
@@ -18,7 +20,8 @@ export const GET: RequestHandler = async ({ request, url, params, platform, getC
  * Store a sealed photo. Photos are immutable by id: the same bytes again is a no-op, different bytes
  * under a held id are refused (409); a full vault is 507; an address past its day's bytes or the
  * rate limit is 429 with Retry-After; a name held by a removal of it, or a vault whose place cannot be
- * checked or is past a ceiling, is 503 with Retry-After and a sentence (round sixty).
+ * checked or is past a ceiling, is 503 with Retry-After and a sentence (round sixty). A removed photograph is
+ * stored again only with the proof its removal carried, else 403 (round sixty-two; A23).
  */
 export const PUT: RequestHandler = async ({ request, url, params, platform, getClientAddress }) => {
   const r2 = store(platform);
@@ -55,7 +58,8 @@ export const HEAD: RequestHandler = async ({ request, url, params, platform, get
   if (stop) return stop;
   const id = vaultId(url.searchParams.get('vault'));
   await authed(r2, id, request);
-  return new Response(null, { status: (await r2.head(photoKey(id, params.id))) ? 200 : 404 });
+  const at = await photoObjectKey(r2, photoKey(id, params.id));
+  return new Response(null, { status: at && (await r2.head(at)) ? 200 : 404 });
 };
 
 /**

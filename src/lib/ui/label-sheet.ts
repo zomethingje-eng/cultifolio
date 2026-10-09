@@ -7,3 +7,12 @@ export function defaultSheet(lang: string | null | undefined): '5160' | 'L7160' 
   const region = (lang ?? '').replace('_', '-').split('-')[1]?.toUpperCase();
   return region === 'US' || region === 'CA' ? '5160' : 'L7160';
 }
+
+/**
+ * How many care lines print a group's convention, which has no source (`careLine`'s "group min 13 °C (convention, no
+ * source)"): the labels page says what that is, once, above the sheet (round sixty-two, second pass; triage-self N10,
+ * the visitor-words review's V7).
+ */
+export function conventionLines(lines: Array<string | null | undefined>): number {
+  return lines.filter((l) => !!l && l.includes('(convention, no source)')).length;
+}

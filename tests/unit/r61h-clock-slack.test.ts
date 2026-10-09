@@ -27,21 +27,24 @@ async function hlc() {
 }
 
 describe('a server reading dated after the clock (harness review)', () => {
+  // Round sixty-two (agent L, decision 5): within a tab a move of the device clock back is now followed by the
+  // correction, so the clock in force never moves and its reading still confirms it; the slack is read at each load.
   it('confirms the clock within five minutes of slack, and not past it', async () => {
     const T0 = Date.UTC(2026, 9, 5, 12, 0, 0);
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(T0);
-    const h = await hlc();
+    let h = await hlc();
     h._resetClockOffset();
     h.trustServerTime(T0, T0);
     expect(h.clockChecked()).toBe(true);
     vi.setSystemTime(T0 - 2 * 60_000); // a time sync nudged the clock back two minutes
+    h = await hlc();
     expect(h.clockChecked()).toBe(true);
     vi.setSystemTime(T0 - 4 * 60_000 - 59_000);
+    h = await hlc();
     expect(h.clockChecked()).toBe(true);
     vi.setSystemTime(T0 - 5 * 60_000 - 1000); // set back past the slack: the reading confirms a clock no longer in force
-    expect(h.clockChecked()).toBe(false);
-    vi.setSystemTime(T0 - 3 * 86_400_000);
+    h = await hlc();
     expect(h.clockChecked()).toBe(false);
   });
 

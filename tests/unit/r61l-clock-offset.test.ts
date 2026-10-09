@@ -1,8 +1,9 @@
 /**
  * Round-60 self-review, clock area: the stored correction and its confirmation after a real change of the device clock.
  * Adopted in round sixty-one (agent L) from docs/review-60/tests/clock--offset.test.ts: the three reproductions now
- * assert the fixed behaviour (a positive correction lapses once the device clock reaches the server time of its reading,
- * across loads and within a tab; a load stores no park judged by its own clock). The two guards are as they were.
+ * assert the fixed behaviour (a load stores no park judged by its own clock; since round sixty-two a slow clock set
+ * right is followed within a tab, and across a load the correction is kept, unconfirmed, until a reading). The two
+ * guards are as they were.
  * Each reproduction failed on the round-sixty base and passes with the fix.
  */
 import 'fake-indexeddb/auto';
@@ -63,29 +64,44 @@ async function slowAndCorrected(T0: number) {
 }
 
 describe('a correction outlives the clock change it corrected', () => {
-  it('the grower sets a three-days-slow clock right and reopens the app offline: the stale correction lapses, edits are stamped and dated today, and no peer parks them', async () => {
+  // Round sixty-two (decision 5; B9, A17): changed. A reload cannot tell a slow clock set right from three days passed
+  // (round sixty-one guessed the first, and so lapsed a correction that was still right), so the stored correction is
+  // kept, unconfirmed, and a reading is asked for at load; the first reading replaces it with one refold. Offline, edits
+  // made before that reading are stamped by the correction, and their arrival parks them, listed with "Apply all from
+  // this device" on the Sync page (/about/formats says so).
+  it('the grower sets a three-days-slow clock right and reopens the app offline: the stored correction is kept, unconfirmed, until the first reading replaces it', async () => {
     const T0 = Date.now();
     const { p } = await slowAndCorrected(T0);
     const fixedAt = T0 + 20 * MIN;
     vi.setSystemTime(fixedAt); // the clock set right (forward three days); no sync yet (a greenhouse, no signal)
-    const b = await boot();
+    let b = await boot();
     await b.store.collection.load();
-    expect(b.hlc.clockChecked()).toBe(false); // the device clock has reached the reading's server time: the correction no longer describes it (round 60: still "confirmed")
+    expect(Math.round(b.hlc.clockOffsetMs() / DAY)).toBe(3);
+    expect(b.hlc.clockUnsure()).toBe(true);
+    b.hlc.trustServerTime(fixedAt, Date.now()); // online again: the reading says the clock is right
     expect(b.hlc.clockOffsetMs()).toBe(0);
+    b = await boot();
+    await b.store.collection.load();
     await b.store.collection.put('accession', p.id, { notes: 'repotted' });
     const edit = (await b.vault.allChanges()).find((c) => c.value === 'repotted')!;
-    const ahead = Number(edit.t.slice(0, 13)) - fixedAt;
-    expect.soft(b.dates.localDate()).toBe(b.dates.localDate(new Date(fixedAt))); // a watering logged now is dated today (on 21257b7: three days on)
-    expect.soft(ahead).toBeLessThan(DAY); // on 21257b7: ~3 days
-    // pushed when the device is next online, it reaches the server at true time: every peer parks it by arrival, the writer folds it
+    expect(Number(edit.t.slice(0, 13)) - fixedAt).toBeLessThan(DAY);
     expect(isParked(edit.t, { now: fixedAt + 30 * MIN, arrival: fixedAt + 30 * MIN, clockChecked: true })).toBe(false);
   });
 
-  it('the same in one open tab: the clock set right while the page stays open lapses the correction at once (round 60: nothing noticed until the next sync reading)', async () => {
+  it('the same in one open tab: the clock set right while the page stays open is followed at once (round 60: nothing noticed until the next sync reading)', async () => {
     const T0 = Date.now();
-    const { b, p } = await slowAndCorrected(T0);
+    vi.useFakeTimers({ toFake: ['Date', 'performance'] }); // the monotonic clock moves with true time, as a browser's does
+    vi.setSystemTime(T0 - 3 * DAY);
+    const b = await boot();
+    b.hlc.trustServerTime(T0, Date.now());
+    vi.advanceTimersByTime(5 * MIN);
+    b.hlc.trustServerTime(T0 + 5 * MIN, Date.now());
+    expect(Math.round(b.hlc.clockOffsetMs() / DAY)).toBe(3);
+    await b.store.collection.load();
+    const p = await b.store.collection.addAccession({ taxonName: 'Copiapoa cinerea', notes: 'before' } as never);
+    vi.advanceTimersByTime(15 * MIN);
     const fixedAt = T0 + 20 * MIN;
-    vi.setSystemTime(fixedAt);
+    vi.setSystemTime(fixedAt); // set right by hand: forward by about the correction
     await b.store.collection.put('accession', p.id, { notes: 'repotted' });
     const edit = (await b.vault.allChanges()).find((c) => c.value === 'repotted')!;
     expect(Number(edit.t.slice(0, 13)) - fixedAt).toBeLessThan(DAY); // on 21257b7: ~3 days

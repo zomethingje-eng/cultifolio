@@ -163,7 +163,8 @@ describe('the fold snapshot', () => {
     // the correction in force differs from the snapshot's
     b = await boot();
     const hlc = await import('$core/hlc');
-    expect(Math.abs(hlc.trustServerTime(Date.now() + 3_600_000) - 3_600_000)).toBeLessThan(50); // an hour: taken on one reading
+    const at = Date.now(); // one reading of the clock, passed in: two reads a busy machine apart missed a 50 ms bound (round sixty-two; the harness review's 8)
+    expect(hlc.trustServerTime(at + 3_600_000, at)).toBe(3_600_000); // an hour: taken on one reading
     await b.store.collection.load();
     expect(b.store.collection.loaded.from).toBe('log');
     hlc._resetClockOffset();

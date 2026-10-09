@@ -17,15 +17,32 @@ export interface PreparedBackup {
   photosMissing: string[];
 }
 
+/**
+ * The app a backup names (`manifest.app`). Every build before round sixty-two wrote "cultifolio 3", and listed as parked
+ * what it held parked in memory too, a park judged by its clock alone; since then a file lists the stored verdicts only,
+ * and says so by this name (round sixty-two, second pass; the data review's suspected items, B7 through an old file).
+ */
+const APP = 'cultifolio 3 (stored parks)';
+/**
+ * The parks a file's restore stores: its list, unless an older build wrote it (a version-1 manifest naming no app, or
+ * the old name). Then the list may hold parks of that device's clock alone, which restored here would be kept for good,
+ * so it is not read, and its changes are judged here as any change arriving now is (round sixty-two, second pass).
+ */
+export function fileParks(m: { v: number; app?: string; parked?: string[] }): string[] {
+  return m.v === 1 && (m.app === undefined || m.app === 'cultifolio 3') ? [] : (m.parked ?? []);
+}
+
 /** Build the backup file without downloading it, so the page can say what is not in it first. */
 export async function prepareBackup(onProgress?: (done: number, total: number) => void): Promise<PreparedBackup> {
   const changes = await collection.exportChanges();
   const built = await buildBackup({
     changes,
     device: await getMeta<string>('device'),
-    app: 'cultifolio 3',
+    app: APP,
     settings: readDeviceSettings(),
-    parked: collection.parkedStamps,
+    // The stored parks only: a park judged by this device's clock alone is a reading of this load, and a restore of the file
+    // would store it for good, here or on a new phone (round sixty-two; rule 5, B7, A16, the clock review's 2).
+    parked: collection.storedParks,
     onProgress,
     readPhoto: async (id) => {
       const b = await getPhotoBlobs(id);
@@ -124,8 +141,9 @@ export async function restoreBackup(o: Opened, mode: 'merge' | 'replace', onProg
       photos++;
       onProgress?.(i + 1, ids.length);
     }
-    // What the exporting device had parked is parked here too, before it can be folded (round fifty-eight).
-    const parked = new Set(o.file.manifest.parked ?? []);
+    // What the exporting device had parked is parked here too, before it can be folded (round fifty-eight), when the file
+    // lists stored verdicts only (`fileParks`).
+    const parked = new Set(fileParks(o.file.manifest));
     const toPark = changes.filter((c) => parked.has(c.t));
     if (toPark.length) await collection.markParked(toPark);
     await collection.ingest(changes);
@@ -144,10 +162,13 @@ export async function restoreBackup(o: Opened, mode: 'merge' | 'replace', onProg
 }
 
 /** What a restore started in the sample collection is told. */
-export const SAMPLE_REFUSAL = 'Restoring a backup is off in the sample collection: it would go into the sample and be deleted with it. Leave the sample to restore into your own collection';
+const SAMPLE_REFUSAL = 'Restoring a backup is off in the sample collection: it would go into the sample and be deleted with it. Leave the sample to restore into your own collection';
 
 /** The replace path: stage, verify, turn sync off, switch (see replace.ts and vault.ts). */
 async function replaceFromBackup(o: Opened, onProgress?: (done: number, total: number) => void): Promise<RestoreReport> {
-  const r = await replaceThroughStaging(o.file, openStaging, { onProgress, beforeSwitch: async () => { if (sync.configured) await sync.forget('replaced'); else await sync.markReplaced(); } });
+  // A file of an older build is staged with no parks (`fileParks`): replace.ts stages the manifest's list as it is.
+  const parks = fileParks(o.file.manifest);
+  const file = parks === o.file.manifest.parked ? o.file : { ...o.file, manifest: { ...o.file.manifest, parked: parks } };
+  const r = await replaceThroughStaging(file, openStaging, { onProgress, beforeSwitch: async () => { if (sync.configured) await sync.forget('replaced'); else await sync.markReplaced(); } });
   return { ...r, settingsRestored: applyDeviceSettings(o.file.settings) };
 }

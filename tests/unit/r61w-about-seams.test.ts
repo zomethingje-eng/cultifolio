@@ -42,7 +42,9 @@ describe('about pages against the code', () => {
 
   it('formats says how often a listing puts the vault total right, as sync.ts does it', () => {
     expect(formats).not.toMatch(/puts its total right on every open/);
-    if (RECOUNT_MS === 3_600_000) expect(formats).toMatch(/on an open at most once an hour/); // the merged wording (round sixty-one; agent S's text)
+    // No `if`: a change of the figure must fail here until the page says the new one (round sixty-two; outside review A5).
+    expect(RECOUNT_MS).toBe(3_600_000);
+    expect(formats).toMatch(/on an open at most once an hour/); // the merged wording (round sixty-one; agent S's text)
   });
 
   it("formats parks by arrival on every device, the writer's own changes included, and by no device's own clock", () => {
@@ -53,17 +55,18 @@ describe('about pages against the code', () => {
 
   it('the glossary and the sync page use one word for a sync unit', () => {
     const syncWords = readFileSync('src/lib/ui/sync-words.ts', 'utf8');
-    if (/sync bundle/.test(syncWords)) {
-      expect(how).not.toMatch(/Sync batch:/);
-      expect(how).toMatch(/Sync bundle:/);
-    }
+    expect(syncWords).toMatch(/sync bundle/); // the word the sync page uses; no `if` (round sixty-two)
+    expect(how).not.toMatch(/Sync batch:/);
+    expect(how).toMatch(/Sync bundle:/);
   });
 
   it('formats states the clock slack and the snapshot key the code uses', () => {
     const hlc = readFileSync('src/lib/core/hlc.ts', 'utf8');
-    if (/age > -5 \* 60_000/.test(hlc)) expect(formats).toMatch(/more than five minutes after the device's own clock/);
+    expect(hlc).toMatch(/age > -5 \* 60_000/); // the slack the page states; no `if` (round sixty-two)
+    expect(formats).toMatch(/more than five minutes after the device's own clock/);
     const col = readFileSync('src/lib/db/collection.svelte.ts', 'utf8');
-    if (/f\.checked/.test(col)) expect(formats).toMatch(/with the clock confirmed where it is now not/);
+    expect(col).toMatch(/f\.checked/);
+    expect(formats).toMatch(/with the clock confirmed where it is now not/);
   });
 
   it("formats' rank markers are the search's", () => {

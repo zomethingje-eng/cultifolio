@@ -3,10 +3,9 @@
  * said "40 plants · 1 photos" (round sixty; the grower review, 16).
  */
 
-/** "0 photos", "1 photo", "40 photos", "2 propagation batches". */
-export function plural(n: number, one: string, many?: string): string {
-  return `${n.toLocaleString('en-US')} ${n === 1 ? one : (many ?? one + 's')}`;
-}
+/** "0 photos", "1 photo", "40 photos", "2 propagation batches": the core's one helper (round sixty-two; decision 11). */
+import { plural } from '$core/words';
+export { plural };
 
 /** Only when there are some: an empty string for none, so a list leaves it out. */
 export const some = (n: number, one: string, many?: string): string => (n ? plural(n, one, many) : '');

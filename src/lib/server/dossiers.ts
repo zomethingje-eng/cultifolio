@@ -76,12 +76,6 @@ export async function getIndex(platform: Platform, fetch: Fetch): Promise<IndexE
   return (await loadIndex(platform, fetch)).idx;
 }
 
-/** The index and the corpus id it came with, from one load: a route that reads them in two calls can straddle the cache's minute and answer old entries under a new id (round seventeen, 10). */
-export async function getIndexWithCorpus(platform: Platform, fetch: Fetch): Promise<{ idx: IndexEntry[]; corpus: string }> {
-  const c = await loadIndex(platform, fetch);
-  return { idx: c.idx, corpus: c.corpus };
-}
-
 /**
  * The corpus id: what the client puts on its reference requests (`?c=`) so a corpus refresh, which is an upload and
  * not a deploy, turns the Worker's own cache (the Cache API), the service worker's and the browser's over (round twelve, 7). The R2 object's etag when the index

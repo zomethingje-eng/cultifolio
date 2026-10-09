@@ -42,6 +42,10 @@
  *                                                                # ("unknown", "Wikimedia Commons", "iNaturalist user"); no API calls; then --index
  *   npx tsx scripts/build-dossiers.ts --fill gbif --bulk bulk    # photographs from the download's multimedia.txt into every dossier on disk; no API calls
  *   npx tsx scripts/build-dossiers.ts --fill genus               # "About the genus": one Wikipedia lead per genus in the index, to s/v<N>/g/<slug>.json
+ *   npx tsx scripts/build-dossiers.ts --names                   # GBIF's vernacular names asked afresh for every dossier on disk (one paced call
+ *                                                                # each, about 9,000), only each dossier's vernacular block rewritten, so the
+ *                                                                # common-name rule has GBIF's preferred flags and source counts; resumable (a
+ *                                                                # dossier done says "names fetched" and is skipped); then the index is rebuilt
  *   npx tsx scripts/build-dossiers.ts --fixtures                # synthetic dossiers for dev
  *
  * The same buildDossier() runs in the Worker for the tail; this script exists
@@ -74,6 +78,7 @@ type ClimateOk = Extract<Climate, { status: 'ok' }>;
 import { bulkFetcher } from '../src/lib/dossier/bulk';
 import { nearestByClimate } from '../src/lib/core/near';
 import { loadWcvp, loadOccurrences, wantedKeys } from './bulk-load';
+import { refetchNames, vernacularMark } from './names-step';
 
 const args = process.argv.slice(2);
 const upload = args.includes('--upload');
@@ -589,6 +594,20 @@ function keepList(): void {
   console.log(`  keep.txt: the ${keep.length} files manifest ${live.id} (live, ${live.species} species)${also.length ? ` and this checkout's ${also.join(', ')}` : ''} name; pass it to rclone delete as --exclude-from`);
 }
 
+/**
+ * GBIF's vernacular names afresh for every dossier on disk (round sixty-two, decision 3; scripts/names-step.ts), then the
+ * index, whose common names are chosen from them. A refusal stops the run and says how many are left; the same command
+ * picks up where it stopped.
+ */
+async function fillNames(): Promise<void> {
+  const dir = `${outDir}/s/v${DOSSIER_V}`;
+  console.log(`Asking GBIF for the vernacular names of every dossier in ${dir}…`);
+  const r = await refetchNames(dir, makeFetcher(), { progress: (n, of) => { if (n % 100 === 0) process.stdout.write(`\r  ${n} of ${of}…   `); } });
+  console.log(`\n  ${r.done} fetched${r.truncated ? ` (${r.truncated} recorded truncated)` : ''}, ${r.kept} done before${r.errors ? `, ${r.errors} errored (asked again next run)` : ''}.`);
+  if (r.refused) console.log(`  GBIF refused (${r.refused}); ${r.left} still to do. Run --names again later: it picks up where it stopped.`);
+  writeIndexFromDisk();
+}
+
 /** The index is derived from the files; after a fill the thumbnails have changed, so it is written again. */
 function writeIndexFromDisk(): void {
   const index = uniqueSlugs(scanDossiers().sort((a, b) => a.name.localeCompare(b.name)));
@@ -622,6 +641,7 @@ async function main() {
   if (fill === 'gbif') return fillGbifPhotos();
   if (fill === 'genus') return fillGenera();
   if (fill) throw new Error(`--fill ${fill}: openalex, inat, gbif or genus`);
+  if (args.includes('--names')) return fillNames();
   let climate: ClimateProvider | undefined;
   if (gridDir) {
     if (!existsSync(`${gridDir}/climate.grid`) || !existsSync(`${gridDir}/climate.json`)) {
@@ -758,6 +778,12 @@ async function main() {
       continue;
     }
     const d = r.dossier;
+    // The names step's mark, kept by every build: a build that asked GBIF for the names writes it, as the step does, and
+    // an offline re-derivation that carried the name block carries the mark it had. A rederive dropped it, and the
+    // formats page's "truncated" was no longer true, and the next `--names` asked again for every species (round
+    // sixty-two; the verification review's search 17).
+    const vu = d.upstream['gbif.vernacular'];
+    if (vu) d.upstream['gbif.vernacular'] = { ...vu, detail: vernacularMark(vu, offline ? { detail: j.key ? readPrev(j.key)?.upstream?.['gbif.vernacular']?.detail : undefined } : null) };
     const path = `${outDir}/${dossierPath(d.key)}`;
     // A source that refused this time does not erase what it gave us last time: carry the previous
     // build's section forward and say so in the upstream record.

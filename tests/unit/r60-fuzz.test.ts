@@ -10,13 +10,35 @@
  * Two properties:
  *  - convergence: every device folds the same visible records;
  *  - nothing silently lost: right after a grower edit returns without an error, the device shows the value written.
+ *
+ * Round sixty-two (decision 5; the clock review's 10, A14), three changes to the model, each nearer the real engine:
+ *  - the monotonic clock is true time (`performance.now` follows the simulation's clock), as on a device: a correction in
+ *    force lasts while no clock is moved (docs/review-61/tests/clock--fuzz-mono.test.ts; the real `performance.now` moved
+ *    a few milliseconds a step, and round sixty-one's lapse dropped nearly every correction within a step);
+ *  - the server holds batches, and each device judges each batch once, when it first lists it, against its stored parks
+ *    alone (`takeBatch`), and its own batches once by their arrival (`judgeOwn`), skipping only what it stores as parked;
+ *    a park of a change it had already folded refolds once at the end. The model re-judged every change at every sync,
+ *    which hid the clock review's 1 (A14);
+ *  - a backup merge: one device's log merged into another's as a file is (`restoreBackup`'s merge: the file's stored parks
+ *    parked, the rest ingested as an import, to be pushed), and a push leaves out what the device stores as parked.
+ *
+ * Second pass of round sixty-two (agent L), adopted from the data review's `data--fuzz-ls.test.ts` (its 8):
+ *  - each device keeps its own localStorage, so a reload keeps the correction as a browser does (node has none, and the
+ *    fuzz's reload dropped it: round sixty-one's behaviour, which left the new paths unfuzzed);
+ *  - a push sends what the device stores as parked too, with the verdict (`logBatch`'s `parked`), and a reader stores the
+ *    verdicts before it folds (`takeBatch`, `judgeOwn`; the data review's 5);
+ *  - the settle is what the rules imply (`SETTLE_DAYS`, below), not three days.
  */
-import { describe, it, expect, vi, afterAll } from 'vitest';
+import { describe, it, expect, vi, afterAll, beforeAll } from 'vitest';
 import type { Change } from '$core/log';
 import { isParked } from '$core/log';
 
 type Mem = { device: string; changes: Map<string, Change>; outbox: Set<string>; meta: Map<string, unknown> };
 const G = globalThis as unknown as { __mem: Mem };
+// Each device its own localStorage (the data review's 8): keyed by the device whose turn it is.
+const lsOf = new Map<string, Map<string, string>>();
+const curLs = () => { const k = G.__mem.device; let m = lsOf.get(k); if (!m) lsOf.set(k, (m = new Map())); return m; };
+Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: (k: string) => curLs().get(k) ?? null, setItem: (k: string, v: string) => void curLs().set(k, v), removeItem: (k: string) => void curLs().delete(k) } });
 const newMem = (device: string): Mem => ({ device, changes: new Map(), outbox: new Set(), meta: new Map() });
 G.__mem = newMem('xxxxxxxxxxxx');
 
@@ -81,11 +103,26 @@ function rng(seed: number) {
 
 type Col = typeof import('$lib/db/collection.svelte')['collection'];
 type Hlc = typeof import('$core/hlc');
-interface Device { mem: Mem; col: Col; hlc: Hlc; skew: number }
+/** `taken`: the batches this device has listed and judged (the engine's `have`); `ownJudge`: its own batches still to judge by their arrival. Kept across reloads, as the sync record is. */
+interface Device { mem: Mem; col: Col; hlc: Hlc; skew: number; taken: Set<number>; ownJudge: Set<number> }
 
 const DAY = 86_400_000;
 let trueNow = 0;
-const server: Array<{ c: Change; arrival: number; by: string }> = [];
+/** The batches on the server, in arrival order. */
+const server: Array<{ id: number; changes: Change[]; arrival: number; by: string; parked: Set<string> }> = [];
+/**
+ * How long the settle runs, from the rules (the data review's 8): a held change folds when real time reaches its stamp,
+ * and the clock in force (device clock plus correction) runs ahead of real time by at most the fastest skew plus the
+ * largest positive correction, since a correction is kept across a move forward of the device clock it cannot account
+ * for: a device 3 days slow, corrected by 3 days, then set 3 days fast, stamps 6 days ahead until its next reading. A
+ * change parked by its arrival needs no settle. One day more for the runs themselves: 7. Three days, as before, left
+ * five seeds of 400 with changes still held (never lost).
+ */
+const SETTLE_DAYS = Number(process.env.FZ_SETTLE_DAYS ?? 7);
+// The monotonic clock: true elapsed time, whatever a device's clock is set to (round sixty-two).
+let mono: { mockRestore(): void } | null = null;
+beforeAll(() => { mono = vi.spyOn(performance, 'now').mockImplementation(() => trueNow); });
+afterAll(() => mono?.mockRestore());
 
 async function bootDevice(mem: Mem): Promise<{ col: Col; hlc: Hlc }> {
   G.__mem = mem;
@@ -99,32 +136,57 @@ const on = (d: Device) => { G.__mem = d.mem; vi.setSystemTime(trueNow + d.skew);
 
 async function syncRun(d: Device): Promise<void> {
   on(d);
-  // push: the outbox, stamped with its arrival
-  for (const t of [...d.mem.outbox]) {
-    const c = d.mem.changes.get(t)!;
-    if (!server.some((x) => x.c.t === t)) server.push({ c: structuredClone(c), arrival: trueNow, by: d.mem.device });
-    d.mem.outbox.delete(t);
+  // push: the outbox as one batch, stamped with its arrival, what this device stores as parked with its verdict (the
+  // second pass; the data review's 5)
+  const out = [...d.mem.outbox].map((t) => d.mem.changes.get(t)!);
+  d.mem.outbox.clear();
+  if (out.length) {
+    const b = { id: server.length, changes: out.map((c) => structuredClone(c)), arrival: trueNow, by: d.mem.device, parked: new Set(out.filter((c) => d.col.storedParks.has(c.t)).map((c) => c.t)) };
+    server.push(b);
+    d.taken.add(b.id); // in `have`: never taken as a peer's
+    d.ownJudge.add(b.id); // judged by its arrival when the listing gives it
   }
-  // the server's Date header, as the pull reads it
+  // the server's Date header, as the pull reads it: one refold per change of the clock in force
   const wasOff = d.hlc.clockOffsetMs(), wasChecked = d.hlc.clockChecked();
   d.hlc.trustServerTime(trueNow, Date.now());
   if (d.hlc.clockOffsetMs() !== wasOff || (!wasChecked && d.hlc.clockChecked())) await d.col.rebuild();
-  // the listing: this device's own pushed changes judged by their arrival, as the engine does since round sixty-one (judgeOwn)
-  let own = false;
-  for (const { c, arrival, by } of server) {
-    if (by !== d.mem.device || d.col.parkedStamps.has(c.t)) continue;
-    if (isParked(c.t, { now: d.hlc.nowMs(), except: d.col.device, arrival, parked: d.col.parkedStamps, clockChecked: d.hlc.clockChecked() })) { await d.col.markParked([structuredClone(c)]); own = true; }
+  const hold = (arrival: number) => ({ now: d.hlc.nowMs(), except: d.col.device, arrival, parked: d.col.storedParks, clockChecked: d.hlc.clockChecked() });
+  let stale = false;
+  // pull: every batch not listed before, once, in arrival order, as takeBatch judges it
+  for (const b of server) {
+    if (d.taken.has(b.id)) continue;
+    d.taken.add(b.id);
+    const h = hold(b.arrival);
+    const here = (c: Change) => isParked(c.t, h) || b.parked.has(c.t);
+    const parked = b.changes.filter(here);
+    if (parked.length) {
+      for (const c of parked) G.__mem.changes.set(c.t, structuredClone(c));
+      if (await d.col.markParked(parked.map((c) => structuredClone(c)))) stale = true;
+    }
+    const rest = b.changes.filter((c) => !here(c));
+    if (rest.length) await d.col.ingest(rest.map((c) => structuredClone(c)), 'server');
   }
-  if (own) await d.col.rebuild();
-  // pull: what this device lacks, as takeBatch judges it
-  for (const { c, arrival } of server) {
-    if (d.mem.changes.has(c.t)) continue;
-    const hold = { now: d.hlc.nowMs(), except: d.col.device, arrival, parked: d.col.parkedStamps, clockChecked: d.hlc.clockChecked() };
-    if (isParked(c.t, hold)) {
-      G.__mem.changes.set(c.t, structuredClone(c));
-      await d.col.markParked([c]);
-    } else await d.col.ingest([structuredClone(c)], 'server');
+  // this device's own batches, once each, by their arrival (judgeOwn), skipping only what it stores as parked
+  for (const id of [...d.ownJudge]) {
+    const b = server[id];
+    const h = hold(b.arrival);
+    const parked = b.changes.filter((c) => (isParked(c.t, h) || b.parked.has(c.t)) && !d.col.storedParks.has(c.t));
+    if (parked.length) { await d.col.markParked(parked.map((c) => structuredClone(c))); stale = true; }
+    d.ownJudge.delete(id);
   }
+  if (stale) await d.col.rebuild();
+}
+
+/** A backup of one device merged into another, as `restoreBackup('merge')` does: the file's stored parks parked first, the changes the device lacks ingested as an import (round sixty-two). */
+async function backupMerge(from: Device, to: Device): Promise<void> {
+  on(from);
+  const log = [...from.mem.changes.values()].map((c) => structuredClone(c));
+  const parked = new Set(from.col.storedParks);
+  on(to);
+  const fresh = log.filter((c) => !to.mem.changes.has(c.t));
+  const toPark = fresh.filter((c) => parked.has(c.t));
+  if (toPark.length) await to.col.markParked(toPark.map((c) => structuredClone(c)));
+  if (fresh.length) await to.col.ingest(fresh, 'import');
 }
 
 const visible = (col: Col) => {
@@ -141,13 +203,14 @@ const tally: Tally = { lost: [], diverged: [], ops: {}, seeds: 0 };
 async function runSeed(seed: number, steps: number, opts: { skews: boolean }): Promise<void> {
   const r = rng(seed);
   server.length = 0;
+  lsOf.clear();
   trueNow = Date.UTC(2026, 9, 4, 12, 0, 0);
   vi.setSystemTime(trueNow);
   const devs: Device[] = [];
   for (const id of ['aaaaaaaaaaaa', 'bbbbbbbbbbbb', 'cccccccccccc']) {
     const mem = newMem(id);
     const b = await bootDevice(mem);
-    devs.push({ mem, col: b.col, hlc: b.hlc, skew: 0 });
+    devs.push({ mem, col: b.col, hlc: b.hlc, skew: 0, taken: new Set(), ownJudge: new Set() });
   }
   const skewLog: string[] = [];
   const names = ['Copiapoa cinerea', 'Lithops lesliei', 'Welwitschia mirabilis', 'Aloe polyphylla'];
@@ -187,6 +250,10 @@ async function runSeed(seed: number, steps: number, opts: { skews: boolean }): P
         count('skew');
         d.skew = r.pick([0, 0, 0, 10 * 60_000, 3 * 3600_000, 30 * 3600_000, 3 * DAY, -10 * 60_000, -30 * 3600_000, -3 * DAY]);
         skewLog.push(`${d.mem.device.slice(0, 1)}@${step}:${d.skew / 3600_000}h`);
+      } else if (op < 69 && opts.skews) {
+        count('merge');
+        const from = r.pick(devs.filter((x) => x !== d));
+        await backupMerge(from, d);
       } else if (op < 72) {
         count('reload');
         const b = await bootDevice(d.mem);
@@ -199,9 +266,9 @@ async function runSeed(seed: number, steps: number, opts: { skews: boolean }): P
       tally.lost.push({ seed, step, what: `threw: ${(e as Error).message}` });
     }
   }
-  // settle: clocks right, three days on, everyone syncs twice (a minute apart) and reloads
+  // settle: clocks right, the settle's days on (`SETTLE_DAYS`), everyone syncs three times (two minutes apart) and reloads
   for (const d of devs) d.skew = 0;
-  trueNow += 3 * DAY;
+  trueNow += SETTLE_DAYS * DAY;
   for (let round = 0; round < 3; round++) { for (const d of devs) await syncRun(d); trueNow += 2 * 60_000; }
   for (const d of devs) { const b = await bootDevice(d.mem); d.col = b.col; d.hlc = b.hlc; }
   for (const d of devs) await syncRun(d);
@@ -226,9 +293,10 @@ describe('convergence fuzz', () => {
   it('with clock skews (+-10 min, +-30 h, +-3 d): nothing is lost, and every seed converges (round sixty-one: the writer parks its own changes by their arrival as its peers do)', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     const before = { lost: tally.lost.length, div: tally.diverged.length };
-    for (let s = 1001; s <= 1000 + Number(process.env.FZ_N ?? 120); s++) await runSeed(s, 60, { skews: true });
+    const from = Number(process.env.FZ_FROM ?? 1001); // a run in parts on a small machine: FZ_FROM=1031 FZ_N=30
+    for (let s = from; s < from + Number(process.env.FZ_N ?? 120); s++) await runSeed(s, 60, { skews: true });
     const lost = tally.lost.slice(before.lost), div = tally.diverged.slice(before.div);
-    console.log('skew', JSON.stringify({ seeds: 120, lost: lost.length, diverged: div.length, firstLost: lost.slice(0, 8), firstDiv: div.slice(0, 4) }, null, 1));
+    console.log('skew', JSON.stringify({ seeds: Number(process.env.FZ_N ?? 120), from, lost: lost.length, diverged: div.length, firstLost: lost.slice(0, 8), firstDiv: div.slice(0, 4) }, null, 1));
     expect(lost).toEqual([]); // round sixty: an edit always wins and nothing of this device's is parked by its own clock
     // The divergence bound (round sixty-one, decision 1): none. Round sixty left 26 of 120 skewed seeds diverged, every
     // one a change parked by its arrival on the peers and folded by its writer (the clock review's 3 and 7; seed 1012 was

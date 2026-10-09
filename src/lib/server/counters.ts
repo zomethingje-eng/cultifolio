@@ -45,12 +45,13 @@
  * `allowCreation` is used, which is bounding, not accounting.
  */
 import { DurableObject } from 'cloudflare:workers';
+import { NET_FACTOR, UPSTREAM_ADDRESS_PART } from './caps';
 
 export type Creation = 'ok' | 'address' | 'day' | 'total' | 'unavailable';
 const DAY_MS = 86_400_000;
 /** The next UTC midnight after `now`: the alarm runs there, so "older than two days" is counted in whole UTC days from a fixed point (round twenty-three, 8). */
-/** A /48's allowance of new vaults a day, as a multiple of one address's. */
-export const NET_FACTOR = 4;
+/** A /48's allowance of new vaults a day, as a multiple of one address's (caps.ts since round sixty-two). */
+export { NET_FACTOR, UPSTREAM_ADDRESS_PART };
 export const nextMidnight = (now: number) => Math.floor(now / DAY_MS) * DAY_MS + DAY_MS;
 
 export class Counters extends DurableObject {
@@ -95,6 +96,10 @@ export class Counters extends DurableObject {
       // reviews). A listing is the starting figure only for a day with no row yet, and then with what is still in flight.
       const today = row && row.day === day;
       if (!today && base != null && gen != null && gen !== ((got.get('gen') as number | undefined) ?? 0)) return { recount: true };
+      // A listing made while an upload was between its R2 put and its release, or a removal between its R2 delete and its
+      // give-back, may or may not have seen it, so it is not believed while either is live: the caller lists again (round
+      // sixty-two; A24: an upload's bytes were counted twice, and a removal's taken off twice).
+      if (!today && base != null && gen != null && leases.live.size) return { recount: true };
       const before = today ? row.bytes : base == null ? null : base + leases.total;
       if (before == null) return { recount: true };
       const rc = today ? row.rc : now;
@@ -129,16 +134,21 @@ export class Counters extends DurableObject {
       if (!l || typeof l !== 'object' || !(now - l.at < LEASE_MS)) stale.push(k);
       else { live.set(k, l); total += l.n; }
     }
-    if (stale.length) {
-      await this.ctx.storage.delete(stale);
-      await this.markStale();
-    }
+    // The lapsed leases go and the total is marked stale in one step: a failure between the two dropped the leases and
+    // kept the total believed, lapsed bytes and all (round sixty-two; B10).
+    if (stale.length) await this.atomic(async (s) => {
+      for (let i = 0; i < stale.length; i += BATCH) await s.delete(stale.slice(i, i + BATCH));
+      await markStale(s);
+    });
     return { total, live };
   }
-  /** The vault's total is no longer believed: the next take or read lists the bucket again (round sixty-one; B14). */
-  private async markStale(): Promise<void> {
-    const row = (await this.ctx.storage.get<Row>(['v'])).get('v');
-    if (row && row.day !== STALE_DAY) await this.ctx.storage.put({ v: { ...row, day: STALE_DAY } satisfies Row });
+  /**
+   * Run `fn` as one storage transaction: every write in it lands, or none does (round sixty-two; B10). A storage without
+   * transactions (a test's stand-in) runs it as it is.
+   */
+  private atomic<T>(fn: (s: Store) => Promise<T>): Promise<T> {
+    const st = this.ctx.storage as unknown as Store & { transaction?: (f: (txn: Store) => Promise<T>) => Promise<T> };
+    return typeof st.transaction === 'function' ? st.transaction(fn) : fn(st);
   }
   /**
    * How many uploads of this vault are in flight (live leases): a first upload that failed keeps the vault's place while
@@ -165,31 +175,53 @@ export class Counters extends DurableObject {
       await this.ctx.storage.put({ [k]: v });
       return v;
     }
-    if (gk && got.get(gk) != null) return typeof had === 'object' && had ? had.bytes : 0;
+    // The removal's lease (`removing`) goes with its give-back, in one step (round sixty-two; A24).
+    const kr = token ? `p:rm:${token}` : null;
+    if (gk && got.get(gk) != null) { if (kr) await this.ctx.storage.delete([kr]); return typeof had === 'object' && had ? had.bytes : 0; }
     const gen = ((got.get('gen') as number | undefined) ?? 0) + 1;
     const out: Record<string, unknown> = { gen, ...(gk ? { [gk]: day } : {}) };
     let v = 0;
     if (had && typeof had === 'object') { v = Math.max(0, had.bytes - n); out.v = { ...had, bytes: v } satisfies Row; }
-    await this.ctx.storage.put(out);
+    await this.atomic(async (s) => { await s.put(out); if (kr) await s.delete([kr]); });
     if (gk) await this.wake(Date.now());
     return v;
   }
   /**
    * An upload taken with `take` has finished: its lease goes. `landed` false gives its bytes back too (the write failed or
    * the name was taken); true bumps the generation, since a listing made before it cannot have seen it. A lease already
-   * gone (released, or dropped after ten minutes) is nothing, so a release cannot run twice.
+   * gone that did not land is nothing, so a failed upload's bytes cannot be given back twice. One that landed after its
+   * lease lapsed still bumps the generation and marks the total stale: a listing committed meanwhile could not see it, and
+   * its bytes went uncounted until the next day's listing (round sixty-two; the server review, 4).
    */
   async release(lease: string, landed: boolean): Promise<void> {
     const k = `p:${lease}`;
-    const got = await this.ctx.storage.get<unknown>(['v', 'gen', k]);
-    const l = got.get(k) as Lease | undefined;
-    if (!l) return;
-    const row = got.get('v') as Row | undefined;
-    const out: Record<string, unknown> = {};
-    if (landed) out.gen = ((got.get('gen') as number | undefined) ?? 0) + 1;
-    else if (row) out.v = { ...row, bytes: Math.max(0, row.bytes - l.n) } satisfies Row;
-    await this.ctx.storage.delete([k]);
-    if (Object.keys(out).length) await this.ctx.storage.put(out);
+    await this.atomic(async (s) => {
+      const got = await s.get<unknown>(['v', 'gen', k]);
+      const l = got.get(k) as Lease | undefined;
+      const row = got.get('v') as Row | undefined;
+      const out: Record<string, unknown> = {};
+      if (landed) out.gen = ((got.get('gen') as number | undefined) ?? 0) + 1;
+      if (!l) {
+        if (!landed) return;
+        if (row && row.day !== STALE_DAY) out.v = { ...row, day: STALE_DAY } satisfies Row;
+        await s.put(out);
+        return;
+      }
+      if (!landed && row) out.v = { ...row, bytes: Math.max(0, row.bytes - l.n) } satisfies Row;
+      await s.delete([k]);
+      if (Object.keys(out).length) await s.put(out);
+    });
+  }
+  /**
+   * A removal is about to delete an object from R2 (round sixty-two; A24): held as a lease of no bytes until its give-back
+   * (`give` with its token) or ten minutes, so a listing made meanwhile is not believed. A listing between the delete and
+   * the give-back left the object out, and the give-back then took its bytes off again, so a holder of the token could
+   * store past the allowance by removing and listing. A removal whose Worker stopped before its give-back marks the total
+   * stale when its lease lapses, as an upload's does.
+   */
+  async removing(token: string, now = Date.now()): Promise<void> {
+    await this.ctx.storage.put({ [`p:rm:${token}`]: { n: 0, at: now } satisfies Lease });
+    await this.wake(now);
   }
   /**
    * A vault's total from an R2 listing, with the live leases added (the listing cannot see them), kept for the day. With
@@ -198,7 +230,9 @@ export class Counters extends DurableObject {
    */
   async setBytes(bytes: number, day: string, gen: number | null = null, now = Date.now()): Promise<number | null> {
     if (gen != null && gen !== ((await this.ctx.storage.get<number>(['gen'])).get('gen') ?? 0)) return null;
-    const { total } = await this.leases(now);
+    const { total, live } = await this.leases(now);
+    // Not while an upload or a removal is live: the listing may or may not have seen it (round sixty-two; A24).
+    if (gen != null && live.size) return null;
     await this.ctx.storage.put({ v: { bytes: bytes + total, day, rc: now } satisfies Row });
     return bytes + total;
   }
@@ -207,11 +241,16 @@ export class Counters extends DurableObject {
     const row = (await this.ctx.storage.get<Row>(['v'])).get('v');
     return row && row.day === day ? row.bytes : null;
   }
-  /** The generation (read before a listing, passed back with its figure) and when the vault was last put right from a listing (ms, or null). */
-  async generation(): Promise<{ gen: number; at: number | null }> {
+  /** The generation (read before a listing, passed back with its figure), when the vault was last put right from a listing (ms, or null), and whether a listing could be kept now. */
+  async generation(now = Date.now()): Promise<{ gen: number; at: number | null; busy: boolean }> {
     const got = await this.ctx.storage.get<unknown>(['gen', 'v']);
     const row = got.get('v') as Row | undefined;
-    return { gen: (got.get('gen') as number | undefined) ?? 0, at: typeof row?.rc === 'number' ? row.rc : null };
+    // `busy`: an upload or a removal is live, so a listing made now would be refused (`setBytes`, `take` with a base): the
+    // caller makes none. A refused request listed the whole vault twice and threw both listings away (round sixty-two; the
+    // server review, 5). Read only: a lapsed lease is dropped by the next `take` or `setBytes`, as before.
+    let busy = false;
+    for (const l of (await this.ctx.storage.list<Lease>({ prefix: 'p:' })).values()) if (l && typeof l === 'object' && now - l.at < LEASE_MS) { busy = true; break; }
+    return { gen: (got.get('gen') as number | undefined) ?? 0, at: typeof row?.rc === 'number' ? row.rc : null, busy };
   }
   /**
    * Hold a name (a photograph's key) for a short while, or say how long until it is free: a removal and an upload of one
@@ -287,27 +326,40 @@ export class Counters extends DurableObject {
   /**
    * A vault that already took a place uploads again (asked once a day per isolate): its last upload's day is kept, and a
    * vault whose place was reclaimed after 90 days without an upload takes one again, under the ceiling in all (not the
-   * day's ceiling of new vaults: it is not new). `legacy`, a vault counted at its creation before round fifty-eight
-   * (its meta has no `filled`), is in the seeded total already: it is recorded, not counted again (round sixty-one).
+   * day's ceiling of new vaults: it is not new).
+   *
+   * Reclaimed only on evidence (round sixty-two; the triage, 6; A24): the sweep's own note (`r:<vault>`, written in the
+   * step that gave the place back) or the vault's meta (`reclaimed`, its `reclaimedAt`). A vault with no place entry and
+   * neither is adopted: recorded, not counted again. That is a vault counted at its creation before round fifty-eight (in
+   * the seeded total already) or first filled under round fifty-eight (whose count kept no entry). Before, a missing
+   * entry was read as a reclaim, so the second were counted twice (5 → 6), and the first, adopted again after every real
+   * reclaim, were never counted again (5 → 4 → 3). Every write here wakes the object, so a place's 90 days start even on
+   * an object that had no alarm (round sixty-two; the server review, 11).
    */
-  async touch(vault: string, day: string, max: number, seed: number | null = 0, legacy = false, now = Date.now()): Promise<'already' | 'adopted' | 'counted' | 'total' | 'unavailable'> {
-    const k = `f:${vault}`;
-    const got = await this.ctx.storage.get<unknown>([k, 'all']);
+  async touch(vault: string, day: string, max: number, seed: number | null = 0, reclaimed = false, now = Date.now()): Promise<'already' | 'adopted' | 'counted' | 'total' | 'unavailable'> {
+    const k = `f:${vault}`, kr = `r:${vault}`;
+    const got = await this.ctx.storage.get<unknown>([k, 'all', kr]);
     const had = got.get(k);
     if (had != null) {
       const p = place(had);
-      if (p.w !== day) await this.ctx.storage.put({ [k]: { ...p, w: day } satisfies Place });
+      if (p.w !== day) {
+        await this.ctx.storage.put({ [k]: { ...p, w: day } satisfies Place });
+        await this.wake(now);
+      }
       return 'already';
     }
     if (got.get('all') == null && seed == null) return 'unavailable';
     const n = (got.get('all') as number | undefined) ?? seed ?? 0;
-    if (legacy) {
+    if (!reclaimed && got.get(kr) == null) {
       await this.ctx.storage.put({ all: n, [k]: { d: null, w: day } satisfies Place });
       await this.wake(now);
       return 'adopted';
     }
     if (n >= max) return 'total';
-    await this.ctx.storage.put({ all: n + 1, [k]: { d: null, w: day } satisfies Place });
+    await this.atomic(async (s) => {
+      await s.put({ all: n + 1, [k]: { d: null, w: day } satisfies Place });
+      await s.delete([kr]);
+    });
     await this.wake(now);
     return 'counted';
   }
@@ -367,6 +419,12 @@ export class Counters extends DurableObject {
    * (`s:<prefix>`, the last key read) and the next run starts there (round sixty-one; the server review, 8). A place
    * (`f:<vault>`) whose vault had no upload for `RECLAIM_DAYS` is given back under the ceiling in all; a place recorded
    * before its last upload's day was kept starts its count at this sweep.
+   *
+   * Round sixty-two (B10; the triage, 6): each page is one storage transaction, with its deletions, the places it gives
+   * back off `all`, a note of each (`r:<vault>`), the stale mark for lapsed leases and the cursor; a run that failed
+   * between them deleted places and never lowered `all`, and nothing could find them again. A place is given back only
+   * once its vault's meta says so (`reclaimedAt`, written first, in R2): the evidence a later write to the vault is
+   * judged on. One whose meta could not be written keeps its place until the next sweep.
    */
   private async sweepRun(now: number): Promise<{ stale: string[]; more: boolean }> {
     const today = dayOf(now);
@@ -386,21 +444,14 @@ export class Counters extends DurableObject {
     };
     const stale: string[] = [];
     let pages = 0;
-    let leasesLapsed = false;
-    let reclaimed = 0;
     for (const prefix of Object.keys(judge)) {
       const kc = `s:${prefix}`;
       let after = (await this.ctx.storage.get<string>([kc])).get(kc);
       for (;;) {
-        if (pages >= SWEEP_PAGES) {
-          if (after) await this.ctx.storage.put({ [kc]: after });
-          await this.reclaim(reclaimed);
-          if (leasesLapsed) await this.markStale();
-          return { stale, more: true };
-        }
+        if (pages >= SWEEP_PAGES) return { stale, more: true }; // the cursor was kept with the last page
         pages++;
         const page = await this.ctx.storage.list<unknown>({ prefix, limit: SWEEP_PAGE, ...(after ? { startAfter: after } : {}) });
-        const gone: string[] = [];
+        let gone: string[] = [];
         const started: Record<string, Place> = {};
         let last: string | undefined;
         for (const [k, v] of page) {
@@ -408,26 +459,65 @@ export class Counters extends DurableObject {
           if (judge[prefix](k, v)) gone.push(k);
           else if (prefix === 'f:' && place(v).w == null) started[k] = { ...place(v), w: today };
         }
-        for (let i = 0; i < gone.length; i += 128) await this.ctx.storage.delete(gone.slice(i, i + 128));
-        if (Object.keys(started).length) await this.ctx.storage.put(started);
-        if (prefix === 'p:' && gone.length) leasesLapsed = true;
-        if (prefix === 'f:') reclaimed += gone.length;
-        stale.push(...gone);
+        if (prefix === 'f:' && gone.length) gone = await this.marked(gone, now);
         // A short page is the prefix's end; a stand-in that ignores `startAfter` hands back the same page, which ends it too.
-        if (page.size < SWEEP_PAGE || !last || last === after) break;
+        const end = page.size < SWEEP_PAGE || !last || last === after;
+        await this.atomic(async (s) => {
+          // Judged again inside the transaction (round sixty-two; the server review, 3): `marked()` awaits R2, and the object
+          // delivers other requests meanwhile, so an upload's `touch` can have kept today as a judged vault's last upload.
+          // Its place is kept (and a started place is not written over); its meta's `reclaimedAt` is cleared by its next write.
+          if (prefix === 'f:' && (gone.length || Object.keys(started).length)) {
+            const keys = [...gone, ...Object.keys(started)];
+            const now2 = new Map<string, unknown>();
+            for (let i = 0; i < keys.length; i += BATCH) for (const [k, v] of await s.get<unknown>(keys.slice(i, i + BATCH))) now2.set(k, v);
+            gone = gone.filter((k) => now2.has(k) && judge[prefix](k, now2.get(k)));
+            for (const k of Object.keys(started)) if (!now2.has(k) || place(now2.get(k)).w != null) delete started[k];
+          }
+          for (let i = 0; i < gone.length; i += BATCH) await s.delete(gone.slice(i, i + BATCH));
+          const out: Record<string, unknown> = { ...started };
+          if (prefix === 'f:' && gone.length) {
+            out.all = Math.max(0, ((await s.get<number>(['all'])).get('all') ?? 0) - gone.length);
+            for (const k of gone) out[`r:${k.slice(2)}`] = today;
+          }
+          if (!end && last) out[kc] = last;
+          const entries = Object.entries(out);
+          for (let i = 0; i < entries.length; i += BATCH) await s.put(Object.fromEntries(entries.slice(i, i + BATCH)));
+          if (end) await s.delete([kc]);
+          if (prefix === 'p:' && gone.length) await markStale(s);
+        });
+        stale.push(...gone);
+        if (end) break;
         after = last;
       }
-      await this.ctx.storage.delete([kc]);
     }
-    await this.reclaim(reclaimed);
-    if (leasesLapsed) await this.markStale();
     return { stale, more: false };
   }
-  /** Places given back by the sweep come off the ceiling in all, never below zero. */
-  private async reclaim(n: number): Promise<void> {
-    if (!n) return;
-    const all = (await this.ctx.storage.get<number>(['all'])).get('all') ?? 0;
-    await this.ctx.storage.put({ all: Math.max(0, all - n) });
+  /**
+   * The places of `keys` (`f:<vault>`) whose vault's meta now says it was reclaimed (round sixty-two; the triage, 6),
+   * written in R2 before the place is given back, under R2's condition that the meta is still the one read, so a request
+   * writing it at the same moment is not overwritten. A vault with no meta (none to mark) is given back too. Without
+   * the bucket bound (a test's object) the sweep's own note decides alone.
+   */
+  private async marked(keys: string[], now: number): Promise<string[]> {
+    const r2 = (this.env as { STORE?: R2Bucket } | undefined)?.STORE;
+    if (!r2) return keys;
+    const out: string[] = [];
+    for (const k of keys) {
+      const key = `vault/${k.slice(2)}/meta.json`;
+      try {
+        for (let tries = 0; tries < 2; tries++) {
+          const o = await r2.get(key);
+          if (!o) { out.push(k); break; }
+          const meta = (await o.json()) as Record<string, unknown>;
+          if (typeof meta.reclaimedAt === 'number') { out.push(k); break; }
+          meta.reclaimedAt = now;
+          if ((await r2.put(key, JSON.stringify(meta), { httpMetadata: { contentType: 'application/json' }, onlyIf: { etagMatches: o.etag } })) !== null) { out.push(k); break; }
+        }
+      } catch (e) {
+        console.error("counters: a vault's meta could not be marked reclaimed; its place is kept until the next sweep", e);
+      }
+    }
+    return out;
   }
 
   /**
@@ -455,6 +545,15 @@ export class Counters extends DurableObject {
   private calls = new Map<string, number>();
 }
 
+/** What a storage call and a transaction's both give (round sixty-two). */
+type Store = Pick<DurableObjectStorage, 'get' | 'put' | 'delete' | 'list'>;
+/** Keys one storage call may take. */
+const BATCH = 128;
+/** The vault's total is no longer believed: the next take or read lists the bucket again (round sixty-one; B14). */
+async function markStale(s: Store): Promise<void> {
+  const row = (await s.get<Row>(['v'])).get('v');
+  if (row && row.day !== STALE_DAY) await s.put({ v: { ...row, day: STALE_DAY } satisfies Row });
+}
 /** A vault's running total: its bytes, the UTC day it was last put right from a listing, and when (ms; absent on a row from before round sixty). */
 type Row = { bytes: number; day: string; rc?: number };
 /** An upload in flight: its bytes and when it was taken. */
@@ -480,8 +579,6 @@ export const SWEEP_PAGE = 1000;
 export const SWEEP_PAGES = 100;
 /** How soon a sweep that stopped short runs again. */
 const SWEEP_AGAIN_MS = 1000;
-/** The part of a share one address may take in a minute (round sixty-one). */
-export const UPSTREAM_ADDRESS_PART = 0.1;
 /** How long a lease counts: past the longest upload (the device gives up after three minutes) with room to spare. */
 export const LEASE_MS = 10 * 60_000;
 /** How long a photograph's name may be held: far past a head, a delete and a give. */

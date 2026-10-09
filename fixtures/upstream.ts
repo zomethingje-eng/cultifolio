@@ -44,7 +44,8 @@ function inatObs(taxon: number, n: number, seed: number, captive: boolean) {
           id,
           license_code: ['cc-by', 'cc0', 'cc-by-sa'][i % 3],
           url: `https://inaturalist-open-data.s3.amazonaws.com/photos/${id}/square.jpg`,
-          attribution: `(c) grower${i}, some rights reserved (CC BY)`,
+          // The credit names the licence the code gives, as iNaturalist's own do (round sixty-two; visitor-words 14).
+          attribution: [`(c) grower${i}, some rights reserved (CC BY)`, `grower${i}, no rights reserved (CC0)`, `(c) grower${i}, some rights reserved (CC BY-SA)`][i % 3],
           original_dimensions: { width: 2048, height: 1536 }
         }
       ]

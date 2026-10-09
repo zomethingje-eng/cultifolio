@@ -55,7 +55,7 @@ describe('the sheet in the reader\'s units', () => {
     expect(all).toContain('4.7 in (120 mm)'); // the rule's threshold, checkable
     expect(all.replace(/\(\d+ mm\)|\(0\.5 °C\)|\(\d °C\)/g, '')).not.toMatch(/\d °C|\d mm\b/); // a rule's threshold carries its metric figure in brackets (round sixty: the shift rule's 4 °C)
     const note = generatedNote({ ...input, units: 'us' });
-    expect(note?.text).toContain('Cold floor 43.7 °F');
+    expect(note?.text).toContain('Cold floor (1 night in 100) 43.7 °F'); // round sixty-two: named as the glance card names it
     expect(note?.text).not.toMatch(/\d °C/);
     expect(careLine({ ...input, units: 'us' })).toContain('43.7 °F');
   });

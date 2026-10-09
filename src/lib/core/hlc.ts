@@ -27,37 +27,75 @@ export const TRUST_SERVER_TWICE_PAST_MS = 2 * 86_400_000;
 export const TRUST_AGREE_GAP_MS = 60_000;
 /** And agree to within this: a device whose clock also drifts a little between the two readings still gets its correction, while one wrong answer (off by hours or days) never agrees with a right one. */
 export const TRUST_AGREE_TOL_MS = 5 * 60_000;
-/** A correction not confirmed by a reading for this long is dropped: a device that stopped syncing with a correction in force would otherwise stamp by it for good, long after its clock was set right (round fifty-two, 1). */
+/**
+ * A correction not confirmed by a reading for this long no longer counts as confirmed (`clockChecked`): a park judged by
+ * it alone is not made. The correction itself stays in force (round sixty-two; the clock review's 4 and 5, the outside
+ * reviews' A17 and B9): no amount of elapsed time makes a correction wrong, since a slow clock does not catch up by
+ * waiting, and dropping it put a device ten minutes slow on two clocks by turns and refolded the log at each turn.
+ */
 export const TRUST_EXPIRES_MS = 7 * 86_400_000;
 /** Where the correction is kept between loads, so the first edit of a tab is stamped right, not only the ones after its first pull (round fifty-one, 1). The pending reading is kept too, so one sync per page load still gets a device corrected (round fifty-two, 1). */
 const OFFSET_KEY = 'cultifolio.clockOffsetMs';
 const PENDING_KEY = 'cultifolio.clockPending';
 /** `serverAt`: the server's time when the reading was taken (round sixty-one); older records have none, and it is then read as `confirmedAt + offset`, which is what it was to within the reading's own rounding. */
-type Stored = { offset: number; confirmedAt: number; serverAt?: number };
+/**
+ * `jumped` and `unsure`: see the variables of those names (round sixty-two, second pass; the data review's 1 and 2). A
+ * record with `confirmedAt` 0 is a correction in force that no reading confirms now (one large reading disagreed with
+ * it): it is kept, so every tab and the next load stamp alike until a second reading decides (the data review's 3).
+ */
+type Stored = { offset: number; confirmedAt: number; serverAt?: number; jumped?: number; unsure?: boolean };
 let offsetMs = 0;
-/** When a reading last confirmed the offset in force, by the device clock. */
+/** When a reading last confirmed the offset in force, by the device clock (moved with the device clock when this tab follows a change of it). */
 let confirmedAt = 0;
 /** The server's time when that reading was taken (round sixty-one; the clock review's 7). */
 let serverAt = 0;
 /**
- * The device clock and a monotonic clock (`performance.now()`) read together when this tab took or learned the
- * correction (round sixty-one; the clock review's 7). The two move apart only when the device clock is moved (set right
- * by hand, a time sync, a sleep on a platform whose monotonic clock pauses), and then the correction no longer describes
- * the clock it is added to. Within this tab only: another tab has its own.
+ * The device clock and a monotonic clock (`performance.now()`) read together when this tab took, learned or last
+ * followed the correction (round sixty-one; the clock review's 7). The two move apart only when the device clock is moved
+ * (set by hand, a time sync) or when the monotonic clock stops while the device sleeps (some platforms pause it). Within
+ * this tab only: another tab has its own.
  */
-let mono: { dev: number; perf: number; clock: number } | null = null;
+let mono: { dev: number; perf: number } | null = null;
+/**
+ * Whether the correction in force is unconfirmed: kept from storage at this load, or kept across a move of the device
+ * clock this tab could not account for, and not yet met by a reading here (round sixty-two; the clock review's 4 and 5).
+ *
+ * What it does, and all it does: the engine is asked for a reading at once (`onReadingWanted`), and the next reading
+ * either confirms the correction (it agrees within the half minute: nothing is refolded) or replaces it (one refold).
+ * It changes nothing else. Stamps and local dates are still read from the correction in force (`nowMs`); the hold and
+ * the far-ahead rules are judged by that same clock; whether a park judged by the clock alone is made is still
+ * `clockChecked()` (a reading under a week old, not dated after the clock), which being unconfirmed does not change.
+ * This device's own edits are never held or parked by its own clock, confirmed or not (`isParked`, `isHeld` in log.ts).
+ */
+let unsure = false;
+/**
+ * The moves forward of the device clock the correction was kept across since the last reading (sleeps, or the clock set
+ * forward), summed, in ms: a move back undoes them first, as far as they go (`follow`). Kept with the correction in
+ * storage, so a reload and every other tab undo a move forward that one tab kept (round sixty-two, second pass; the data
+ * review's 1 and 2: in one tab's memory only, a reload or a second tab followed the move back and stamped a year ahead).
+ */
+let jumped = 0;
 /** A large correction seen once, waiting for a second reading that agrees, and when it was seen (device clock). */
 let pending: { delta: number; at: number } | null = null;
 const listeners = new Set<(offset: number) => void>();
-function readStored(): void {
+const wanting = new Set<() => void>();
+/** At a load (`adopt` false) the correction is unconfirmed until a reading here; taken from another tab's write (`adopt`), it is as sure as that tab says. */
+function readStored(adopt = false): void {
   try {
     if (typeof localStorage === 'undefined') return;
     const raw = localStorage.getItem(OFFSET_KEY);
     if (raw) {
       const v = JSON.parse(raw) as Stored;
       const at = Number.isFinite(v.serverAt) ? (v.serverAt as number) : v.confirmedAt + v.offset;
-      if (Number.isFinite(v.offset) && v.confirmedAt && trustedAge(Date.now() - v.confirmedAt) && !overtaken(v.offset, at, Date.now())) { offsetMs = v.offset; confirmedAt = v.confirmedAt; serverAt = at; mono = monoNow(Date.now()); }
-      else localStorage.removeItem(OFFSET_KEY);
+      // Kept across the load, however old, confirmed or not (round sixty-two; the data review's 3): only a reading dated
+      // after the device clock says the clock was set back since it was taken (a fast clock put right), and then the
+      // correction no longer describes it.
+      const c = Number.isFinite(v.confirmedAt) ? v.confirmedAt : 0;
+      if (Number.isFinite(v.offset) && (!c || notAfterClock(Date.now() - c))) {
+        offsetMs = v.offset; confirmedAt = c; serverAt = c ? at : 0; mono = monoNow();
+        jumped = Number.isFinite(v.jumped) && (v.jumped as number) > 0 ? (v.jumped as number) : 0;
+        unsure = adopt ? !!v.unsure : true;
+      } else localStorage.removeItem(OFFSET_KEY);
     }
     const p = localStorage.getItem(PENDING_KEY);
     if (p) { const v = JSON.parse(p) as { delta: number; at: number }; if (Number.isFinite(v.delta) && trustedAge(Date.now() - v.at)) pending = v; else localStorage.removeItem(PENDING_KEY); }
@@ -69,73 +107,109 @@ function store(): void {
   try {
     if (typeof localStorage === 'undefined') return;
     // Kept whenever a reading confirmed the clock, a correction of nothing included: whether the clock in force is a
-    // checked one decides whether a park judged by it is kept (round fifty-nine).
-    if (confirmedAt) localStorage.setItem(OFFSET_KEY, JSON.stringify({ offset: offsetMs, confirmedAt, serverAt } satisfies Stored));
-    else localStorage.removeItem(OFFSET_KEY);
+    // checked one decides whether a park judged by it is kept (round fifty-nine). Kept too while no reading confirms it
+    // (one disagreed), and while it holds kept moves: removed only when there is nothing to keep (round sixty-two,
+    // second pass; the data review's 3: a reload and the other tabs ran on the raw clock while this tab kept the offset).
+    if (confirmedAt || offsetMs || jumped) {
+      const v: Stored = { offset: offsetMs, confirmedAt, serverAt };
+      if (jumped) v.jumped = jumped;
+      if (unsure) v.unsure = true;
+      localStorage.setItem(OFFSET_KEY, JSON.stringify(v));
+    } else localStorage.removeItem(OFFSET_KEY);
     if (pending) localStorage.setItem(PENDING_KEY, JSON.stringify(pending));
     else localStorage.removeItem(PENDING_KEY);
   } catch {
     /* storage refused: the offset lives for this load */
   }
 }
-/** The two clocks read together, and what the device clock read then as the reading counts it (`localMs`), or null where there is no monotonic clock. */
-function monoNow(clock: number): { dev: number; perf: number; clock: number } | null {
+/** The two clocks read together, or null where there is no monotonic clock. */
+function monoNow(): { dev: number; perf: number } | null {
   try {
-    return typeof performance !== 'undefined' && typeof performance.now === 'function' ? { dev: Date.now(), perf: performance.now(), clock } : null;
+    return typeof performance !== 'undefined' && typeof performance.now === 'function' ? { dev: Date.now(), perf: performance.now() } : null;
   } catch {
     return null;
   }
 }
-/** The device clock now, on the reading's own scale: what it read at the reading plus the time since. */
-const deviceNow = () => (mono ? mono.clock + (Date.now() - mono.dev) : Date.now());
-/**
- * Whether a positive correction (the device clock behind the server's) has been overtaken by the device clock itself:
- * it now reads at or past the server time the reading was taken at. Either the clock was set right since, or as much
- * time has passed as the correction was; either way the correction no longer describes this clock, and a new reading is
- * due (round sixty-one; the clock review's 7, fuzz seed 1008: a three-days-slow clock set right by hand went on stamping
- * three days ahead, as "confirmed", until the next sync). Only past the five minutes a peer may run ahead before it is
- * held: a correction that small changes nothing a peer judges, and lapsing it a minute after each reading would make a
- * device a minute slow flap between two clocks.
- */
-function overtaken(offset: number, at: number, device: number): boolean {
-  return offset > MAX_AHEAD_MS && device >= at;
-}
-/** Listeners are told after the caller's own work: a lapse is found inside `nowMs`, which a fold may be calling. */
-function tellLater(offset: number): void {
-  const run = () => { for (const l of listeners) l(offset); };
+/** Listeners are told after the caller's own work: a move of the clock is found inside `nowMs`, which a fold may be calling. */
+function tellLater(offset: number | null): void {
+  const run = () => { if (offset != null) for (const l of listeners) l(offset); for (const w of wanting) w(); };
   if (typeof queueMicrotask === 'function') queueMicrotask(run); else void Promise.resolve().then(run);
 }
 /**
- * The correction lapses, here and in storage, when it no longer describes the device clock (round sixty-one; the clock
- * review's 7): a positive correction has been overtaken (`overtaken`), or, within this tab, the device clock has moved
- * against the monotonic one by more than the half minute the correction itself ignores. The clock is then the device's
- * own, unconfirmed, until the next reading. A reading dated after the clock, or a week old, is dropped at the next load
- * (`readStored`) and stops counting as a confirmation at once (`clockChecked`), as before.
+ * The device clock moved under this tab (round sixty-two; the clock review's 4, the outside reviews' A17 and B9). It is
+ * read against the monotonic clock, and only a move past the half minute the correction itself ignores counts. The rule
+ * (round sixty-two, second pass; the self-review's N1): the correction follows a move only as far as what it already
+ * knows says the move puts the clock right. A move back never moves the clock in force ahead (its errors stamp behind,
+ * which parks nothing); a move forward it cannot account for is kept, as decided, and may stamp ahead until a reading:
+ *  - backwards, first as far as it undoes the moves forward kept since the last reading (`jumped`, stored and so shared
+ *    by every tab and a reload): the clock set forward by mistake and put back. The correction is kept as it was;
+ *  - backwards beyond that, as far as a negative correction says the clock was fast: a fast clock set right. The
+ *    correction follows (it shrinks towards nothing by the move), so a fast clock set right offline is right at once;
+ *  - backwards beyond that again: kept. Nothing known says the clock was that far fast, so it is taken as set wrong,
+ *    and left slow it stamps behind. (Round sixty-two's first pass followed every move back, and a device opened a year
+ *    fast and set right stayed a year ahead, stored so for the next load);
+ *  - forwards by about a positive correction: a slow clock set right. The correction follows to about nothing (a sleep
+ *    exactly as long as the correction, to the half minute, is the one case this reads wrong, and stamps behind);
+ *  - forwards otherwise: a sleep on a platform whose monotonic clock pauses, or the clock set forward. The two cannot be
+ *    told apart here, so the correction is kept (a sleep leaves it right) and the move is added to `jumped`. Kept, a
+ *    clock set forward stamps ahead by the move plus any positive correction until a reading.
+ * After any counted move the reference is read afresh, the correction is unconfirmed (`unsure`), it is stored, and a
+ * reading is asked for at once. No amount of time passing changes it: the round-sixty-one lapse when a slow clock
+ * "reached" its reading's server time dropped a correction that was still right (B9: six minutes slow across midnight
+ * read yesterday's date).
  */
-function lapse(): void {
-  if (!confirmedAt) return;
-  let gone = overtaken(offsetMs, serverAt, deviceNow());
-  if (!gone && offsetMs !== 0 && mono) {
-    try {
-      const drift = Date.now() - mono.dev - (performance.now() - mono.perf);
-      if (Math.abs(drift) > TRUST_SERVER_PAST_MS) gone = true;
-    } catch {
-      /* no monotonic clock after all: the other rules stand */
-    }
+function follow(): void {
+  if (!mono) return;
+  let drift: number;
+  try {
+    drift = Math.round(Date.now() - mono.dev - (performance.now() - mono.perf)); // whole milliseconds: a stamp's wall is one
+  } catch {
+    return; /* no monotonic clock after all */
   }
-  if (!gone) return;
+  if (Math.abs(drift) <= TRUST_SERVER_PAST_MS) return;
   const was = offsetMs;
-  offsetMs = 0;
-  confirmedAt = 0;
-  serverAt = 0;
-  mono = null;
+  let d = drift;
+  if (d < 0 && jumped > 0) {
+    const undo = Math.min(-d, jumped);
+    jumped -= undo;
+    d += undo;
+    if (jumped <= TRUST_SERVER_PAST_MS) jumped = 0;
+    if (-d <= TRUST_SERVER_PAST_MS) d = 0;
+  }
+  let f = 0; // the part of the move the correction follows
+  if (d < 0 && offsetMs < 0) f = Math.max(d, offsetMs);
+  else if (d > 0 && offsetMs > 0 && Math.abs(d - offsetMs) <= TRUST_SERVER_PAST_MS) f = d;
+  else if (d > 0) jumped += d;
+  if (f) {
+    offsetMs -= f;
+    if (Math.abs(offsetMs) <= TRUST_SERVER_PAST_MS / 2) offsetMs = 0; // the clocks now agree, as a reading would say
+    // The reading's own time, and a pending one's, on the device clock's new scale: their age is unchanged by the move.
+    if (confirmedAt) confirmedAt += f;
+    if (pending) pending = { ...pending, at: pending.at + f };
+  }
+  mono = monoNow();
+  unsure = true;
   store();
-  if (was) tellLater(0);
+  tellLater(offsetMs !== was ? offsetMs : null);
+}
+/**
+ * Another tab wrote the correction: this tab takes it as written (round sixty-two, second pass; the data review's 2 and
+ * 7). This tab does not first measure a move of the device clock itself: a tab writes only after following every move up
+ * to its write (`follow` runs first in `nowMs` and in a reading), so the record already accounts for it, and measuring it
+ * here too counted the move twice (`jumped`), told this tab's listeners twice (one refold each), and in the old rule
+ * replaced a right correction with a wrong one. The reference is read afresh from the record. Listeners are told once,
+ * when the correction or whether it is checked changed.
+ */
+function adoptStored(): void {
+  const was = offsetMs, wasChecked = checkedNow();
+  offsetMs = 0; confirmedAt = 0; serverAt = 0; mono = null; pending = null; jumped = 0; unsure = false;
+  readStored(true);
+  if (offsetMs !== was || checkedNow() !== wasChecked) for (const l of listeners) l(offsetMs);
 }
 readStored();
 // Another tab's correction reaches this one: a tab already open went on stamping by the old offset until its own next sync (round fifty-two, 1).
 try {
-  if (typeof addEventListener !== 'undefined' && typeof localStorage !== 'undefined') addEventListener('storage', (e) => { if ((e as StorageEvent).key === OFFSET_KEY || (e as StorageEvent).key === PENDING_KEY) { const was = offsetMs, wasChecked = clockChecked(); offsetMs = 0; confirmedAt = 0; serverAt = 0; mono = null; pending = null; readStored(); if (offsetMs !== was || clockChecked() !== wasChecked) for (const l of listeners) l(offsetMs); } });
+  if (typeof addEventListener !== 'undefined' && typeof localStorage !== 'undefined') addEventListener('storage', (e) => { if ((e as StorageEvent).key === OFFSET_KEY || (e as StorageEvent).key === PENDING_KEY) adoptStored(); });
 } catch {
   /* no window */
 }
@@ -146,7 +220,7 @@ try {
  * that same wrong clock, so the device that was wrong saw nothing wrong. The server's `Date` header is read on every
  * sync; a device that never syncs keeps its own clock, which is all it has. The correction is kept across loads.
  */
-export const nowMs = () => { lapse(); return Date.now() + offsetMs; };
+export const nowMs = () => { follow(); return Date.now() + offsetMs; };
 /** Called when the correction changes (a reading here, or another tab's): the clock that mints stamps restarts from the corrected time. */
 export function onClockOffsetChange(l: (offset: number) => void): () => void {
   listeners.add(l);
@@ -160,6 +234,7 @@ export function onClockOffsetChange(l: (offset: number) => void): () => void {
  */
 export function trustServerTime(serverMs: number, localMs = Date.now()): number {
   if (!Number.isFinite(serverMs) || serverMs <= 0) return offsetMs;
+  follow(); // a move of the device clock since the last reading is followed first, so the reading is met by the correction in force
   const delta = serverMs - localMs;
   const far = Math.abs(delta) > TRUST_SERVER_PAST_MS;
   const agree = Math.abs(delta) <= TRUST_SERVER_PAST_MS / 2;
@@ -177,6 +252,9 @@ export function trustServerTime(serverMs: number, localMs = Date.now()): number 
         pending = { delta, at: localMs };
         const wasChecked = clockChecked();
         if (Math.abs(delta - offsetMs) > TRUST_SERVER_TWICE_PAST_MS) confirmedAt = 0;
+        // The correction itself stays in force and stored, unconfirmed: a disagreeing reading replaces it once a second
+        // agrees, and never deletes it (round sixty-two, second pass; the data review's 3).
+        unsure = true;
         store();
         if (wasChecked && !clockChecked()) for (const l of listeners) l(offsetMs);
         return offsetMs;
@@ -189,7 +267,9 @@ export function trustServerTime(serverMs: number, localMs = Date.now()): number 
   const wasChecked = clockChecked();
   confirmedAt = localMs;
   serverAt = serverMs;
-  mono = monoNow(localMs);
+  mono = monoNow();
+  unsure = false; // met by a reading: confirmed, or replaced by it (round sixty-two)
+  jumped = 0;
   const was = offsetMs;
   offsetMs = next;
   store();
@@ -204,7 +284,11 @@ export function trustServerTime(serverMs: number, localMs = Date.now()): number 
  * that never syncs has no such reading, and its own clock decides nothing that is kept.
  */
 export function clockChecked(): boolean {
-  lapse();
+  follow();
+  return checkedNow();
+}
+/** `clockChecked` as the state stands, with no move followed first. */
+function checkedNow(): boolean {
   return confirmedAt > 0 && trustedAge(Date.now() - confirmedAt);
 }
 /**
@@ -214,10 +298,21 @@ export function clockChecked(): boolean {
  * cover the reading's own rounding and a clock nudged back by a time sync, as a set-back of hours or days is not.
  */
 function trustedAge(age: number): boolean {
-  return age > -5 * 60_000 && age < TRUST_EXPIRES_MS;
+  return notAfterClock(age) && age < TRUST_EXPIRES_MS;
+}
+/** A reading not dated more than the five minutes of slack after the device clock (`trustedAge`). */
+function notAfterClock(age: number): boolean {
+  return age > -5 * 60_000;
 }
 /** The current correction, for the clock warning to say how far off the device is. */
-export const clockOffsetMs = () => { lapse(); return offsetMs; };
+export const clockOffsetMs = () => { follow(); return offsetMs; };
+/** Whether the correction in force waits for a reading to confirm it (`unsure`; round sixty-two). */
+export const clockUnsure = () => { follow(); return unsure; };
+/** Called when this tab wants a reading of the server's clock at once: the device clock moved under it (round sixty-two). */
+export function onReadingWanted(w: () => void): () => void {
+  wanting.add(w);
+  return () => void wanting.delete(w);
+}
 /** Stop syncing: no server to confirm a correction against, so none is kept (round fifty-two, 1). */
 export function clearClockOffset(): void {
   const was = offsetMs;
@@ -226,6 +321,8 @@ export function clearClockOffset(): void {
   confirmedAt = 0;
   serverAt = 0;
   mono = null;
+  unsure = false;
+  jumped = 0;
   store();
   if (was) for (const l of listeners) l(0);
 }
@@ -281,8 +378,10 @@ export class Clock {
   observe(remote: string): void {
     let r = hlcDecode(remote);
     // A stamp made past another carries the flag in its counter (`hlcPast`): this clock follows it from the next
-    // millisecond, so that its own stamps never carry the flag by counting on from it (round sixty-one).
-    if (r.count >= PAST_BIT) r = { wall: r.wall + 1, count: 0, device: r.device };
+    // millisecond, so that its own stamps never carry the flag by counting on from it (round sixty-one). So does an
+    // unmarked counter one short of the flag, which no clock ticks to and which a bump would carry onto it (round
+    // sixty-two; the harness review's 7, the first outside review's A32).
+    if (r.count >= PAST_BIT - 1) r = { wall: r.wall + 1, count: 0, device: r.device };
     const phys = this.now();
     if (r.wall > phys + MAX_AHEAD_MS) return;
     const wall = Math.max(phys, this.last.wall, r.wall);
@@ -291,8 +390,9 @@ export class Clock {
     else if (wall === this.last.wall) this.last = this.bump(wall, this.last.count);
     else this.last = { wall, count: 0, device: this.device };
   }
+  /** The next counter, or the next millisecond when the counter is full or the next count would carry the flag (`PAST_BIT`): a clock's own stamp never does (round sixty-two; the harness review's 7). */
   private bump(wall: number, count: number): Hlc {
-    return count >= MAX_COUNT ? { wall: wall + 1, count: 0, device: this.device } : { wall, count: count + 1, device: this.device };
+    return count >= MAX_COUNT || count + 1 >= PAST_BIT ? { wall: wall + 1, count: 0, device: this.device } : { wall, count: count + 1, device: this.device };
   }
 }
 
@@ -319,10 +419,16 @@ export const isPastStamp = (t: string): boolean => {
   return end > 14 && parseInt(t.slice(14, end), 16) >= PAST_BIT;
 };
 
-/** The stamp just past `prev`, as `device`, keeping `prev`'s flag (a stamp made past another stays one): for a collision between two stamps given out at once. Unique, since no writer but `device` stamps with that tag and `device`'s own clock never reached that wall. */
+/**
+ * The stamp just past `prev`, as `device`, keeping `prev`'s flag (a stamp made past another stays one) and never adding
+ * it (an unmarked counter one short of the flag moves to the next millisecond instead; round sixty-two, the harness
+ * review's 7): for a collision between two stamps given out at once. Unique, since no writer but `device` stamps with
+ * that tag and `device`'s own clock never reached that wall.
+ */
 export function hlcAfter(prev: string, device: string): string {
   const p = hlcDecode(prev);
-  return hlcEncode(p.count >= MAX_COUNT ? { wall: p.wall + 1, count: p.count >= PAST_BIT ? PAST_BIT : 0, device } : { wall: p.wall, count: p.count + 1, device });
+  const marked = p.count >= PAST_BIT;
+  return hlcEncode(p.count >= MAX_COUNT || (!marked && p.count + 1 >= PAST_BIT) ? { wall: p.wall + 1, count: marked ? PAST_BIT : 0, device } : { wall: p.wall, count: p.count + 1, device });
 }
 
 /**
@@ -334,10 +440,4 @@ export function hlcPast(prev: string, device: string): string {
   const p = hlcDecode(prev);
   if (p.count >= MAX_COUNT) return hlcEncode({ wall: p.wall + 1, count: PAST_BIT, device });
   return hlcEncode({ wall: p.wall, count: PAST_BIT | (p.count + 1), device });
-}
-
-/** The stamp one millisecond before `next`, as `device`: for a machine-made change that must rank below every change a person made to the record (round forty-nine, 1). Unique while `device` is a per-tab writer that stamps nothing else there; the store's collision rule moves it by a count if it is not. */
-export function hlcBefore(next: string, device: string): string {
-  const n = hlcDecode(next);
-  return hlcEncode({ wall: Math.max(0, n.wall - 1), count: 0, device });
 }

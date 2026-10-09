@@ -25,8 +25,13 @@ export const Upstream = v.object({
 
 export const BoxSchema = v.object({ s: v.number(), w: v.number(), n: v.number(), e: v.number() });
 
-/** `preferred` (GBIF marks the name preferred) and `sources` (how many sources give it, when more than one) are kept since round sixty-one, decision 7; absent in a dossier built before, and read as not preferred, one source. */
-export const Vernacular = v.object({ name: v.string(), lang: v.optional(v.string()), source: v.optional(v.string()), preferred: v.optional(v.boolean()), sources: v.optional(v.number()) });
+/**
+ * `preferred` (GBIF marks the name preferred) and `sources` (how many sources give it, when more than one) are kept since
+ * round sixty-one, decision 7; `alsoFrom` (the other named sources of that exact spelling) since round sixty-two, when
+ * each spelling became its own row (`gbif.vernacular`), so the rule counts distinct sources. All absent in a dossier
+ * whose names were fetched before, and read as not preferred, one source each.
+ */
+export const Vernacular = v.object({ name: v.string(), lang: v.optional(v.string()), source: v.optional(v.string()), preferred: v.optional(v.boolean()), sources: v.optional(v.number()), alsoFrom: v.optional(v.array(v.string())) });
 
 export const NameBlock = v.object({
   scientific: v.string(),

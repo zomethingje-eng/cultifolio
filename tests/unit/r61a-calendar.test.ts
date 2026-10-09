@@ -35,7 +35,7 @@ const r: Rhythm = { uid: 'water-place-g@cultifolio', summary: 'Water Greenhouse 
 describe('the calendar, round sixty-one', () => {
   it('rings at 09:00 on the day: every event carries a VALARM with a display action, a description and TRIGGER:PT9H', () => {
     const t = buildIcs([r, { ...r, uid: 'water-plant-x@cultifolio', dry: [] }], NOW);
-    const evs = expand(t, '2030-01-01');
+    const evs = expand(t, '2030-01-01').filter((e) => !e.uid.startsWith('download-again')); // the reminder to download again rings with its own words (round sixty-two)
     expect(evs.length).toBeGreaterThan(1);
     for (const e of evs) expect(e.alarm).toEqual(['BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:Water Greenhouse (every 10 days)', 'TRIGGER:PT9H', 'END:VALARM']);
     for (const line of t.split('\r\n')) expect(new TextEncoder().encode(line).length).toBeLessThanOrEqual(75);
@@ -43,15 +43,18 @@ describe('the calendar, round sixty-one', () => {
 
   it('restarts the series on the first day after each run of dry months, the day Today lists the place again', () => {
     const t = buildIcs([r], NOW);
-    const evs = expand(t, '2030-01-01');
+    const all0 = expand(t, '2030-01-01');
+    expect(all0.at(-1)!.uid).toBe('download-again.cultifolio@cultifolio'); // since round sixty-two, the file's last word
+    const evs = all0.slice(0, -1);
     // Three runs in two years: 25 to 30 Nov 2026, Mar to Nov 2027, Mar 2028 to the horizon.
     expect(evs.map((e) => e.days[0])).toEqual(['2026-11-25', '2027-03-01', '2028-03-01']);
     const all = evs.flatMap((e) => e.days);
     expect(all.some((d) => [12, 1, 2].includes(Number(d.slice(5, 7))))).toBe(false);
     expect(all).toContain('2027-03-11');
     expect(all.at(-1)! <= addDays(r.start, DRY_HORIZON_DAYS)).toBe(true);
-    // each series its own event: the first keeps the rhythm's UID, the later ones are marked by their first day
-    expect(evs.map((e) => e.uid)).toEqual(['water-place-g@cultifolio', 'water-place-g-from-20270301@cultifolio', 'water-place-g-from-20280301@cultifolio']);
+    // each series its own event, marked by the first day of its watered months, the first one too (round sixty-two: the
+    // first series took the plain UID, which a later download gave to another series; r62a-calendar.test.ts)
+    expect(evs.map((e) => e.uid)).toEqual(['water-place-g-from-20260301@cultifolio', 'water-place-g-from-20270301@cultifolio', 'water-place-g-from-20280301@cultifolio']);
     expect(t).not.toContain('EXDATE');
     const text = unfold(t).replace(/\\([,;\\])/g, '$1'); // TEXT unescaped
     expect(text).toMatch(/This series ends on 2026-11-30, before the months kept dry; the next starts after them\./);
@@ -88,7 +91,7 @@ describe('the calendar, round sixty-one', () => {
     expect(c.leftOut).toEqual(['Cold shed']);
     expect(c.text).not.toContain('Cold shed');
     expect(c.events).toBe(3); // Bench 1's three runs
-    expect(c.events).toBe((c.text.match(/BEGIN:VEVENT/g) ?? []).length);
+    expect(c.events + 1).toBe((c.text.match(/BEGIN:VEVENT/g) ?? []).length); // and, since round sixty-two, the one that says to download again
   });
 
   it('says the dry months in the order the seasons run, as the place page does', () => {

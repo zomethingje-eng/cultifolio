@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Photo } from '$dossier/schema';
   import { heroOf } from '$dossier/dedupe';
-  import { licenceLabel } from '$core/licence';
+  import { photoCredit } from '$lib/ui/ref/head';
   let { photos, name, strip = false }: { photos: Photo[]; name: string; strip?: boolean } = $props();
   // "Wild" is what a source says, not what it leaves unsaid: iNaturalist marks each photograph; Commons and GBIF media
   // carry no flag, so those go unsaid rather than captioned as wild (round thirty, R2-12).
@@ -12,14 +12,9 @@
   let showAll = $state(false);
   const LIMIT = 6;
   const shown = $derived(showAll ? rest : rest.slice(0, LIMIT));
-  // A credit names its licence only when the attribution does not already: "J. Doe (CC BY)" is not followed by "· CC BY".
-  const credit = (p: Photo) => {
-    const lic = licenceLabel(p.licence);
-    // "CC BY", "CC-BY", "cc by 4.0" all name the same licence; "CC BY-SA" names another, so the label must end there.
-    const norm = (t: string) => t.replace(/[\s-]+/g, ' ').trim().toLowerCase();
-    const named = new RegExp(`(^|[^a-z0-9])${norm(lic).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![a-z0-9]| (?:sa|nc|nd)\\b)`).test(norm(p.attribution));
-    return named ? p.attribution : `${p.attribution} · ${lic}`;
-  };
+  // A credit names its licence only when the attribution does not already, and says so when the two disagree: one helper
+  // for the gallery, compare and the tests (round sixty-two; outside review A35).
+  const credit = (p: Photo) => photoCredit(p);
   // One credit line for the strip instead of a caption under every thumbnail.
   const credits = $derived.by(() => {
     const m = new Map<string, number>();

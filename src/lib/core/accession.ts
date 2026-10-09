@@ -30,7 +30,3 @@ export function nextAccession(existing: Iterable<string>, scheme: NumberingSchem
   while (taken.has(id));
   return id;
 }
-
-export function isAccessionNumber(s: string): boolean {
-  return /^[A-Za-z0-9]+-\d+$/.test(s);
-}

@@ -4,9 +4,11 @@
  * their log, a backup or sync. Its settings are the tab's own (`$lib/ui/stored`).
  *
  * Round sixty-one (the records review, 13): leaving tells the sample's other tabs, which go to the grower's own
- * collection and say why, rather than reload into a fresh sample under a false "updated in another tab"; leaving closes
- * this tab's own connection first, so its own deletion does not reload it either; and a sample left behind (a tab
- * closed without Leave) is deleted on the next load outside the sample, unless a sample tab is still open.
+ * collection and say why, rather than reload into a fresh sample under a false "updated in another tab"; and a sample
+ * left behind (a tab closed without Leave) is deleted on the next load outside the sample, unless a sample tab is still
+ * open. Round sixty-two (A9): Leave navigates first and the next page deletes the sample, so a "Leave site?" answered
+ * Cancel leaves a working tab; Leave asks first when the visitor added or changed records; a delete that is blocked is
+ * said, never taken as done.
  */
 const KEY = 'cultifolio.demo';
 export const DEMO_DB = 'cultifolio-demo';
@@ -32,16 +34,122 @@ function clearFlag(): void {
     for (let i = sessionStorage.length - 1; i >= 0; i--) { const k = sessionStorage.key(i); if (k?.startsWith(`${KEY}.`)) sessionStorage.removeItem(k); }
   } catch { /* the flag goes with the tab anyway */ }
 }
-/** Leave the sample: its other tabs are told, its database is deleted whole, and the tab goes back to the grower's own collection. */
-export async function leaveDemo(to = '/'): Promise<void> {
-  // This tab's own connection is closed first (the vault module is the sample's, loaded with the page): open, it heard its
-  // own deletion as "updated in another tab" and reloaded, which sometimes won the race against the move below (the
-  // records review, 13).
-  try { const { openVault } = await import('./vault'); (await openVault()).close(); } catch { /* not open */ }
+/** Set as a sample tab goes on Leave, so the next page deletes the sample and says how that went. */
+const LEFT = 'cultifolio.sampleLeft';
+/** The meta key under which the sample keeps the last stamp it was set out with: what came after is the visitor's. */
+export const SEED_TOP = 'demoSeedTop';
+
+/**
+ * The sample was closed in another tab: this tab goes to the grower's own collection, and its next page says why. One
+ * function for both ways a tab hears it, the channel (`keepSampleOpen`) and the vault's `versionchange` (round sixty-two;
+ * the triage's 4): the two copies disagreed, and the vault's left the tab's settings behind and said nothing.
+ */
+export function sampleClosedHere(): void {
   clearFlag();
+  try { sessionStorage.setItem(CLOSED_NOTE, '1'); } catch { /* said nowhere, then */ }
+  location.href = '/';
+}
+
+/**
+ * How many records the visitor added or changed in the sample since it was set out: Leave asks before deleting them
+ * (round sixty-two; A9). Read from the sample's own log: every record a change after the seed's last stamp touched. A
+ * sample set out before round sixty-two has no such stamp, and counts the records not of the seed.
+ */
+export async function sampleEdits(): Promise<number> {
+  if (!inDemo()) return 0;
+  try {
+    const { allChanges, getMeta } = await import('./vault');
+    const top = await getMeta<string>(SEED_TOP);
+    const touched = new Set<string>();
+    for (const c of await allChanges()) {
+      if (top ? c.t > top : c.kind !== 'taxon' && c.kind !== 'setting' && !c.id.endsWith('sampleseeds0')) touched.add(`${c.kind}:${c.id}`);
+    }
+    return touched.size;
+  } catch {
+    return 0;
+  }
+}
+
+/** This tab is going on Leave: the flag and the tab's copies go, the sample's other tabs are told, and the next page deletes it. */
+function leaving(): void {
+  clearFlag();
+  try { sessionStorage.setItem(LEFT, '1'); } catch { /* the leftover is then deleted on a later load */ }
   try { const c = new BroadcastChannel(LIFE); c.postMessage('closed'); c.close(); } catch { /* no other tab to tell */ }
-  await new Promise<void>((done) => { try { const r = indexedDB.deleteDatabase(DEMO_DB); r.onsuccess = r.onerror = r.onblocked = () => done(); } catch { done(); } });
+}
+
+/**
+ * Leave the sample (round sixty-two; A9): the tab navigates first, and only when the page is really going (`pagehide`)
+ * does it leave the sample; the next page, outside it, deletes the sample's database (`finishLeaving`). A page that asks
+ * "Leave site?" (an unsaved form) and is answered Cancel stays a working sample tab: before, the database was closed and
+ * the flag cleared first, and the tab was left with neither. Returns once the navigation is asked for, with the way to
+ * call the Leave off.
+ *
+ * A Leave the page stays through is no Leave (round sixty-two, second pass; triage-outside 1, the verification grower
+ * review, 4): the `pagehide` listener stayed armed after a Cancel, so the next reload or closing the tab left the sample,
+ * deleted it with the visitor's records and sent the other sample tabs home. It is taken off, and `onStay` called, as
+ * soon as the page is known to stay: the browser says the navigation was called off (the Navigation API's
+ * `navigateerror`, which a "Leave site?" answered Cancel raises); or, in a browser without it, the page asked "Leave
+ * site?" and is still showing 3 seconds later; or, in any browser, it is still showing 10 seconds later. A navigation
+ * slower than that lands in the sample, which is still whole; Leave is pressed again.
+ */
+export function leaveDemo(to = '/', onStay?: () => void): () => void {
+  if (typeof addEventListener !== 'function') { leaving(); location.href = to; return () => {}; } // no page to hide (a test): leave now
+  let armed = true;
+  const timers: Array<ReturnType<typeof setTimeout>> = [];
+  const nav = (globalThis as { navigation?: EventTarget }).navigation;
+  const off = (t: string, f: (e: Event) => void, on: EventTarget | undefined = undefined) => { try { (on ?? globalThis).removeEventListener(t, f); } catch { /* nothing was listening */ } };
+  const disarm = () => { armed = false; off('pagehide', hide); off('beforeunload', asked); off('navigateerror', stay, nav); for (const t of timers) clearTimeout(t); };
+  function hide() {
+    if (!armed) return;
+    disarm();
+    leaving();
+    // Brought back from the back-forward cache after it left: it is no longer the sample's tab, so it loads afresh.
+    addEventListener('pageshow', (e) => { if ((e as PageTransitionEvent).persisted) location.reload(); }, { once: true });
+  }
+  function stay() {
+    if (!armed) return;
+    disarm();
+    onStay?.();
+  }
+  /** After the page's own listeners (added before this one): whether it will ask "Leave site?". */
+  let prompted = false;
+  function asked(e: Event) { const b = e as BeforeUnloadEvent; if (b.defaultPrevented || (typeof b.returnValue === 'string' && b.returnValue !== '')) prompted = true; }
+  const showing = () => typeof document === 'undefined' || document.visibilityState === 'visible';
+  addEventListener('pagehide', hide);
+  addEventListener('beforeunload', asked);
+  try { nav?.addEventListener('navigateerror', stay); } catch { /* no Navigation API: the timers below */ }
   location.href = to;
+  // Chromium asks "Leave site?" inside the line above and says a Cancel as `navigateerror` before it returns; a browser without the Navigation API is given 3 seconds.
+  if (!nav) timers.push(setTimeout(() => { if (prompted && showing()) stay(); }, 3000));
+  timers.push(setTimeout(() => { if (showing()) stay(); }, 10_000));
+  return stay;
+}
+
+/** The sample's database deleted: 'deleted', 'blocked' while a tab still holds it open (the delete then waits for it), or 'failed'. */
+function deleteSample(waitMs: number): Promise<'deleted' | 'blocked' | 'failed'> {
+  return new Promise((done) => {
+    try {
+      const r = indexedDB.deleteDatabase(DEMO_DB);
+      let t: ReturnType<typeof setTimeout> | undefined;
+      r.onsuccess = () => { clearTimeout(t); done('deleted'); };
+      r.onerror = () => { clearTimeout(t); done('failed'); };
+      // Blocked is not done: the request waits for the other connection to close. Said if it is still waiting after a while.
+      r.onblocked = () => { t = setTimeout(() => done('blocked'), waitMs); };
+    } catch {
+      done('failed');
+    }
+  });
+}
+
+/**
+ * On the first page after Leave: the sample's database is deleted, and what happened is returned for the page to say.
+ * Null when this page does not follow a Leave. No lock is asked for: the grower asked for this deletion, the sample's
+ * other tabs were told to go, and a tab that has not gone yet only holds the delete until it does.
+ */
+export async function finishLeaving(waitMs = 10_000): Promise<'deleted' | 'blocked' | 'failed' | null> {
+  if (inDemo()) return null;
+  try { if (sessionStorage.getItem(LEFT) !== '1') return null; sessionStorage.removeItem(LEFT); } catch { return null; }
+  return deleteSample(waitMs);
 }
 
 /**
@@ -56,12 +164,7 @@ export function keepSampleOpen(): () => void {
   let chan: BroadcastChannel | null = null;
   try {
     chan = new BroadcastChannel(LIFE);
-    chan.onmessage = (e) => {
-      if (e.data !== 'closed') return;
-      clearFlag();
-      try { sessionStorage.setItem(CLOSED_NOTE, '1'); } catch { /* said nowhere, then */ }
-      location.href = '/';
-    };
+    chan.onmessage = (e) => { if (e.data === 'closed') sampleClosedHere(); };
   } catch { /* no channel: the vault's own reload catches it */ }
   return () => { chan?.close(); release(); };
 }
@@ -78,8 +181,7 @@ export async function dropLeftoverSample(): Promise<boolean> {
     if (!known) return false;
     return await navigator.locks.request(OPEN_LOCK, { ifAvailable: true }, async (lock) => {
       if (!lock) return false; // a sample tab is open
-      await new Promise<void>((done) => { const r = indexedDB.deleteDatabase(DEMO_DB); r.onsuccess = r.onerror = r.onblocked = () => done(); });
-      return true;
+      return (await deleteSample(10_000)) === 'deleted'; // blocked or failed is not done: tried again on a later load
     });
   } catch {
     return false;

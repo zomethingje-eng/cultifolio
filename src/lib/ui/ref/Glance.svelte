@@ -1,8 +1,9 @@
 <script lang="ts">
   /**
    * The figures a grower reads first, each with its source as a small tag, and the season in the reader's own months. Each
-   * label is the figure's own name ("Cold floor (1 night in 100)", "Warmest month, mean day", "Rain a year", "Open-sky
-   * light"), never a reading of it: "Coldest nights in the wild" over a 1st-percentile night beside a lower record, and
+   * label is the figure's own name ("Cold floor (1 night in 100)", "Warmest month, mean daily high", "Rain a year (sum of
+   * monthly medians)", "Open-sky light"), never a reading of it (round sixty-two; visitor-words 3, outside review A3: "mean
+   * day" read as a daily mean, and the year's rain is the twelve monthly medians added, not a median year's total): "Coldest nights in the wild" over a 1st-percentile night beside a lower record, and
    * "Warmest days" over a month's mean day 7 °C under the 99th-percentile day, said more than their figures (round
    * sixty-one; visitor 1). The record low is printed beside the floor. The front page shows the same row for one species.
    */
@@ -11,7 +12,7 @@
   import type { Year } from '$core/sheet';
   import { seasonStrip } from './season';
   import { MON3 } from '$core/months';
-  import { tiedMonths, monthNames } from '$core/sheet';
+  import { tiedMonths, monthNames, extremesWhyTag } from '$core/sheet';
   type M = { tmax: number; tmin: number; precipMm: number; dli?: number };
   type Ex = { minP01: number; minAbs: number; years: number } | null;
   let {
@@ -55,14 +56,21 @@
   // The rule's own count: months of 25 mm or more (`>= 25`), said as such.
   const wetMonths = $derived(months.filter((x) => x.precipMm >= 25).length);
   const dlis = $derived(months.map((x) => x.dli).filter((x): x is number => x != null));
-  const exWhy = $derived(extremesStatus === 'refused' ? 'extremes not checked' : extremesStatus === 'skipped' ? 'extremes not asked for' : extremesStatus === 'sea' ? 'extremes not used (sea cell)' : 'no extremes series');
+  const exWhy = $derived(extremesWhyTag(extremesStatus));
+  // Each gauge's full width, said beside it and in its text alternative: the bars were drawn on scales no reader was
+  // told (round sixty-two; the self-review's N10, visitor-words 17). A year's rain over 1,200 mm and a month over 70 DLI
+  // fill the bar.
+  const RAIN_FULL = 1200;
+  const DLI_FULL = 70;
 
   /* ---- the season, in the reader's months: built only from the rules' outputs (the year the sheet read) ---- */
   const strip = $derived(seasonStrip(year, months, readerLat));
 </script>
 
 <div class="ghead">
-  <span class="gt">In the wild</span>
+  <!-- "Habitat figures", not "In the wild": the floor is one reanalysis cell at a typical spot and the rest are medians
+       across cells, which "in the wild" said more than (round sixty-two; the words review's 1, outside review A3). -->
+  <span class="gt">Habitat figures</span>
   {#if toggle}
     <!-- Both units shown, the current one marked: a lone "°F" beside a figure in °C read as a contradiction (round sixty; visitor 13). -->
     <div class="useg" role="group" aria-label="Units">
@@ -78,14 +86,14 @@
       <div class="val">{tempN(extremes.minP01, u, 1)}<span class="u"> {tempUnit(u)}</span></div>
       <div class="sub">Record low {tempN(extremes.minAbs, u, 1)} {tempUnit(u)} in {extremes.years} years, at a typical spot in the range <span class="src">NASA POWER</span></div>
     {:else}
-      <div class="lab" role="heading" aria-level="3">Coldest month, mean night</div>
+      <div class="lab" role="heading" aria-level="3">Coldest month, mean nightly low</div>
       <div class="val">{tempN(months[cold].tmin, u, 1)}<span class="u"> {tempUnit(u)}</span></div>
       <div class="sub">{coldAt} at the habitat, not a floor; {exWhy} <span class="src">CHELSA</span></div>
     {/if}
   </div>
-  <div class="card"><div class="lab" role="heading" aria-level="3">Warmest month, mean day</div><div class="val">{tempN(months[hot].tmax, u)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">{hotAt} at the habitat <span class="src">CHELSA</span></div></div>
-  <div class="card"><div class="lab" role="heading" aria-level="3">Rain a year</div><div class="val">{rainN(rainYear, u)}<span class="u"> {rainUnit(u)}</span></div><div class="gauge" aria-hidden="true"><i class="c" style="width:{Math.min(100, rainYear / 12)}%"></i></div><div class="sub">{wetMonths === 0 ? `No month of ${ruleRain(25, u)} or more` : `${wetMonths} month${wetMonths === 1 ? '' : 's'} of ${ruleRain(25, u)} or more`} <span class="src">CHELSA</span></div></div>
-  {#if dlis.length}<div class="card"><div class="lab" role="heading" aria-level="3">Open-sky light</div><div class="val">{Math.min(...dlis).toFixed(0)}–{Math.max(...dlis).toFixed(0)}<span class="u"> DLI</span></div><div class="gauge" aria-hidden="true"><i class="w" style="width:{Math.min(100, Math.max(...dlis) / 0.7)}%"></i></div><div class="sub">Lowest to highest month (<a href="/about/how#glossary">DLI</a>) <span class="src">CHELSA</span></div></div>{/if}
+  <div class="card"><div class="lab" role="heading" aria-level="3">Warmest month, mean daily high</div><div class="val">{tempN(months[hot].tmax, u)}<span class="u"> {tempUnit(u)}</span></div><div class="sub">{hotAt} at the habitat <span class="src">CHELSA</span></div></div>
+  <div class="card"><div class="lab" role="heading" aria-level="3">Rain a year (sum of monthly medians)</div><div class="val">{rainN(rainYear, u)}<span class="u"> {rainUnit(u)}</span></div><div class="gauge" role="img" aria-label="{rainN(rainYear, u)} {rainUnit(u)} on a bar from 0 to {rainN(RAIN_FULL, u)} {rainUnit(u)}"><i class="c" style="width:{Math.min(100, (rainYear / RAIN_FULL) * 100)}%"></i></div><div class="gscale" aria-hidden="true">bar 0 to {rainN(RAIN_FULL, u)} {rainUnit(u)}</div><div class="sub">{wetMonths === 0 ? `No month of ${ruleRain(25, u)} or more` : `${wetMonths} month${wetMonths === 1 ? '' : 's'} of ${ruleRain(25, u)} or more`} <span class="src">CHELSA</span></div></div>
+  {#if dlis.length}<div class="card"><div class="lab" role="heading" aria-level="3">Open-sky light</div><div class="val">{Math.min(...dlis).toFixed(0)}–{Math.max(...dlis).toFixed(0)}<span class="u"> DLI</span></div><div class="gauge" role="img" aria-label="Highest month {Math.max(...dlis).toFixed(0)} DLI on a bar from 0 to {DLI_FULL} DLI"><i class="w" style="width:{Math.min(100, (Math.max(...dlis) / DLI_FULL) * 100)}%"></i></div><div class="gscale" aria-hidden="true">bar 0 to {DLI_FULL} DLI</div><div class="sub">Lowest to highest month (<a href="/about/how#glossary">DLI</a>) <span class="src">CHELSA</span></div></div>{/if}
   {#if season && year && strip}
     <div class="card season">
       <div class="lab" role="heading" aria-level="3">The year in {strip.calendar}</div>
@@ -123,6 +131,7 @@
   .sw { display: inline-block; width: 12px; height: 10px; border-radius: 2px; }
   .sw.on { background: color-mix(in srgb, var(--cool) 30%, var(--card)); border: 1px solid var(--rule2); }
   .sw.dry { width: 6px; height: 6px; border-radius: 50%; background: var(--warm); }
+  .gscale { margin: -6px 0 6px; font-size: var(--fs-xs); color: var(--ink3); }
   .lead { margin-top: 6px; color: var(--ink); }
   .hemi { margin-top: 4px; font-size: var(--fs-sm); color: var(--ink3); }
   .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

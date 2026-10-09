@@ -6,7 +6,7 @@
   import { page } from '$app/state';
   import { accNo } from '$lib/db/types';
   import { photoAt, photoHosts } from '$dossier/photo-size';
-  import { entriesFor, searchCatalogue, catalogueRows, type Found } from '$lib/ui/index.svelte';
+  import { entriesFor, searchCatalogue, catalogueRows, plantNumberShaped, type Found } from '$lib/ui/index.svelte';
   import { fillBefore } from '$lib/ui/fill';
   import PageHead from '$lib/ui/PageHead.svelte';
   import ToggleGroup from '$lib/ui/ToggleGroup.svelte';
@@ -21,7 +21,8 @@
   import Glance from '$lib/ui/ref/Glance.svelte';
   import Climograph from '$lib/ui/Climograph.svelte';
   import { failedBeforeHydration } from '$lib/ui/ref/failed';
-  import { tileCredit } from '$lib/ui/ref/head';
+  import { tileCredit, OG_ALT } from '$lib/ui/ref/head';
+  import { searchedSentence, type SearchedAnswer } from '$lib/ui/ref/searched';
   import { plantHref } from '$lib/db/links';
   import { site } from '$lib/ui/site.svelte';
   import { units } from '$lib/ui/units.svelte';
@@ -30,7 +31,7 @@
   import { enterDemo, inDemo } from '$lib/db/demo';
   let { data } = $props();
   /**
-   * One featured species' figures, for "This is what every species page shows" under the visitor's heading (round sixty;
+   * One featured species' figures, for "This is what a species page with a habitat climate shows" under the visitor's heading (round sixty;
    * visitor 1, the self-review's experience item 1). The server's load sends it (`feature`, the first of the day's strip
    * with a derived climate); until it does, the block is not drawn.
    */
@@ -41,7 +42,17 @@
     lat: number | null;
     climate: { months: Array<{ tmax: number; tmin: number; tmean: number; precipMm: number; dli?: number; rh?: number }>; p10?: unknown; p90?: unknown; cells: number; records: number; extremes?: { minAbs: number; minP01: number; maxP99: number; years: number; frostDaysPerYear: number; frostNights?: number } | null; extremesStatus?: 'ok' | 'none' | 'refused' | 'skipped' | 'sea' | null };
   };
-  const feature = $derived((data as typeof data & { feature?: Feature | null }).feature ?? null);
+  const sentFeature = $derived((data as typeof data & { feature?: Feature | null }).feature ?? null);
+  /**
+   * The feature stays drawn when a row is opened from the page that showed it: the server sends none for `?open=`
+   * (corpus 10), and with the feature among the first rows its going would move every row below it under the pointer
+   * that opened one (round sixty-two; the outside triage's 2). A page loaded at `?open=` has none, as before.
+   */
+  let keptFeature = $state<Feature | null>(null);
+  $effect(() => { if (sentFeature) keptFeature = sentFeature; });
+  const feature = $derived(sentFeature ?? (data.open ? keptFeature : null));
+  /** The feature follows this many rows of the first window, or all of them when there are fewer. */
+  const FEATURE_AFTER = 3;
   // The feature's year, for the chart's hemisphere. Nothing on the front page is in the reader's months: the season card
   // stays on the species page, so a southern visitor is never shown northern months first (round sixty-one; visitor 19).
   /** The chart's drawn height, which does not depend on its width, for the box its column holds before it is drawn. */
@@ -370,8 +381,9 @@
   const yourView = $derived(hasMine && !browsing);
   // And in three more cases the text stays here whichever view this is (round forty-nine, 3; round thirty-five, R1-2):
   // before the collection has opened (the view is not yet known, and a grower's first keystrokes were going to the
-  // server), while the text matches one of the grower's plants, and when it is shaped like a plant number.
-  const keepLocal = $derived(yourView || !collection.ready || plantHits.length > 0 || /^\d{2,4}-?\d/.test(q.trim()));
+  // server), while the text matches one of the grower's plants, and when it is shaped like a plant number under the
+  // collection's own scheme ("ACC-0013" went to the server; round sixty-two, the self-review's triage N4).
+  const keepLocal = $derived(yourView || !collection.ready || plantHits.length > 0 || plantNumberShaped(q, collection.scheme));
   // The hint says "your species" is coming; hold the catalogue back until the collection says which view this is.
   const settling = $derived(expectMine && !collection.ready);
   type Row = (typeof data.rows)[number];
@@ -385,9 +397,14 @@
   let searchGen = 0;
   let searchTimer: ReturnType<typeof setTimeout> | undefined;
   let pendingSearch: Promise<unknown> | null = null;
-  /** The text the server searched instead, when nothing matched as typed and it retried on the first two words (`relaxed`); said on the page (round sixty). */
-  let relaxedFor = $state<string | null>(null);
-  const relaxedOf = (r: unknown): string | null => { const x = (r as { relaxed?: { query?: unknown } } | null)?.relaxed?.query; return typeof x === 'string' && x.trim() ? x.trim() : null; };
+  /**
+   * What the server's answer says of the words it searched (`relaxed`) and of a similar spelling (`near`), said on the
+   * page (round sixty; round sixty-two, the search review's 3 and 18: a name pasted with its author matched, and was said
+   * to have matched nothing).
+   */
+  let relaxedFor = $state<SearchedAnswer | null>(null);
+  const relaxedOf = (r: unknown): SearchedAnswer | null => (r && typeof r === 'object' ? (r as SearchedAnswer) : null);
+  const searchedLine = $derived(searchedSentence(q, relaxedFor, found));
   /** The hits, whether the answer is the list itself or carries it as `hits` beside `relaxed`. */
   const hitsOf = (r: unknown): Found[] => (Array.isArray(r) ? (r as Found[]) : Array.isArray((r as { hits?: unknown } | null)?.hits) ? (r as { hits: Found[] }).hits : []);
   $effect(() => {
@@ -460,12 +477,15 @@
   /** A tile's second line: the English name, unless it is only the genus again (Welwitschia's is "Welwitschia"), when the family says more (round fifty-nine; self review). */
   const commonOr = (c: { name: string; common?: string; family?: string }) => (c.common && c.common.toLowerCase() !== c.name.split(' ')[0].toLowerCase() ? c.common : c.family);
   const fmtN = (n: number) => n.toLocaleString('en-US');
-  /** The home page's description: the counts as they read, under 160 characters (round sixty). */
-  const homeDesc = $derived(`Habitat climate for ${fmtN(data.withClimate)} of ${fmtN(data.total)} cactus, succulent and bulb species, every figure sourced. Your plant records stay on your device.`);
+  /**
+   * The home page's description: the counts as they read, under 160 characters (round sixty). The list's whole reach, not
+   * only cacti, succulents and bulbs, and the sync caveat beside the privacy claim (round sixty-two; outside review A2, A35).
+   */
+  const homeDesc = $derived(`Cactus, succulent and bulb species and the plants most grown alongside them: sourced habitat climate for ${fmtN(data.withClimate)} of ${fmtN(data.total)}. Your records, encrypted before sync.`);
   // A visitor: no plants on this device (until the collection has opened, the server's catalogue stands as the visitor's page).
   const visitor = $derived(!collection.ready || (!hasMine && !collection.accessions.length));
   const openRow = $derived(data.rows.find((r) => r.id === data.open));
-  const rowDesc = $derived(openRow ? `${openRow.label}: ${fmtN(openRow.count)} species in the reference, ${fmtN(openRow.withClimate)} with habitat climate where the sources answered; every figure sourced.` : '');
+  const rowDesc = $derived(openRow ? `${openRow.label}: ${fmtN(openRow.count)} species in the reference, ${fmtN(openRow.withClimate)} with a habitat climate; every figure sourced.` : '');
   /** Species per page of an opened row (the server's HOME_ITEMS). */
   const ITEMS = 240;
   const partHref = (id: string, part: number) => `?by=${data.by}${chip !== 'all' ? `&chip=${chip}` : ''}&open=${id}${part > 0 ? `&part=${part}` : ''}`;
@@ -495,14 +515,15 @@
     q = '';
   };
   /** The climate state in words: a refusal is never shown as an absence. */
-  const climateWord = (c: string) => (c === 'ok' ? 'habitat climate known' : c === 'pending' ? 'habitat climate pending' : c === 'refused' ? 'habitat climate not checked: a source did not answer' : 'no habitat climate derived');
+  const climateWord = (c: string) => (c === 'ok' ? 'habitat climate known' : c === 'pending' ? 'habitat climate pending' : c === 'refused' ? 'habitat climate not checked: a source refused or did not answer' : 'no habitat climate derived');
 </script>
 
 <svelte:head>
   {#if openRow}
     <!-- A genus (or family, or origin) opened by its address is its own page to a crawler: its own title, description and canonical, not the home page's 1,321 times over (round thirty-one, 5). -->
     <title>{openRow.label}, {openRow.count} species · Cultifolio</title>
-    <!-- Only what holds for the row: its counts, the climate where the sources answered (round sixty; the self-review's 14, A5). -->
+    <!-- Only what holds for the row: its counts and how many have a climate (round sixty; the self-review's 14, A5). Not "where the
+         sources answered": most without one lack it because their records allow none, which is no refusal (round sixty-two; the words review's 11). -->
     <meta name="description" content={rowDesc} />
     <link rel="canonical" href="https://cultifolio.com/?by={data.by}&open={data.open}" />
     <meta property="og:title" content="{openRow.label}, {openRow.count} species · Cultifolio" />
@@ -513,11 +534,12 @@
     <meta property="og:image" content={openRow.thumb ? photoAt(openRow.thumb, 'medium') : 'https://cultifolio.com/og.png'} />
     <meta name="twitter:card" content="summary_large_image" />
   {:else}
-    <title>Cultifolio: cactus, succulent and bulb reference, and a private plant record</title>
+    <!-- The list's whole reach: Hoya, Peperomia and Pelargonium are on it too (round sixty-two; outside review A2). -->
+    <title>Cultifolio: cactus, succulent and bulb species, and the plants most grown alongside them, with a private plant record</title>
     <!-- Under 160 characters, so a search result shows it whole (round sixty). -->
     <meta name="description" content={homeDesc} />
     <link rel="canonical" href="https://cultifolio.com/" />
-    <meta property="og:title" content="Cultifolio: cactus, succulent and bulb reference, and a private plant record" />
+    <meta property="og:title" content="Cultifolio: cactus, succulent and bulb species, and the plants most grown alongside them, with a private plant record" />
     <meta property="og:description" content={homeDesc} />
     <meta property="og:site_name" content="Cultifolio" />
     <meta property="og:type" content="website" />
@@ -525,7 +547,8 @@
     <meta property="og:image" content="https://cultifolio.com/og.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="Cultifolio: a cactus, succulent and bulb reference with sourced habitat figures, and a private plant record kept on your device." />
+    <!-- The image's own words: the alt described a line the image does not hold (round sixty-two; the words review's 2). -->
+    <meta property="og:image:alt" content={OG_ALT} />
     <meta name="twitter:card" content="summary_large_image" />
   {/if}
   {#if visitor && data.featured.length}
@@ -536,6 +559,21 @@
     {#each photoHosts(data.featured.slice(0, 3).map((c) => c.thumb)) as h (h)}<link rel="preconnect" href={h} />{/each}
   {/if}
 </svelte:head>
+
+{#snippet featureBlock(feature: Feature)}
+  <!-- After the first rows on a wide screen: above the toolbar it pushed the search to y 1224 at 1280 × 800, so a first
+       desktop visit saw no search and no row; below the toolbar it stood between the chips and the rows they govern
+       (round sixty-two; the outside triage's 2, outside review A10, B1). Here the search, the grouping, the chips and the
+       first rows are on the first screen, and a chip click moves no row: the feature is kept on a chip's page, and it
+       comes after the first rows, never above them. The four figures as a 2×2 block, the chart beside them, the season and
+       the rest on the species page (round sixty-one; decision 9, visitor 9). Not drawn on a phone (below 900 px). -->
+  <section class="feature" aria-labelledby="feature-h">
+    <h2 class="featurehead" id="feature-h">This is what a species page with a habitat climate shows <span class="fname">· <a href="/species/{feature.slug}"><SpeciesName name={feature.name} /></a></span></h2>
+    <div class="fglance"><Glance months={feature.climate.months} extremes={feature.climate.extremes ?? null} extremesStatus={feature.climate.extremesStatus ?? null} year={featureSheet?.year ?? null} season={false} chartHref={null} /></div>
+    <div class="fchart" style:--fh="calc({featureChartH}px + 14rem)">{#if wide}<Climograph id="feature-climo" name={feature.name} south={featureSheet?.year?.south ?? null} climate={{ months: feature.climate.months, p10: feature.climate.p10 as never, p90: feature.climate.p90 as never, cells: feature.climate.cells, extremes: feature.climate.extremes ?? null }} />{/if}</div>
+    <p class="small featurefoot"><a href="/species/{feature.slug}">The whole page for <i>{feature.name}</i></a>: {wide ? '' : 'the chart, '}the season in your months, the range and its records, photographs and every source. <a href="/about/how#feature">Chosen by rule</a> from today's strip above.</p>
+  </section>
+{/snippet}
 
 {#snippet plantsFound()}
   {#if plantHits.length}
@@ -606,10 +644,11 @@
     <a class="btn pri headadd" href="/plants/new">Add a plant</a>
   </PageHead>
 
-  <!-- The box above Today, focused on a desktop: a returning grower's first act is "find 2026-0013" (round forty-one, R11). -->
+  <!-- The box above Today, focused on a desktop: a returning grower's first act is "find 2026-0013" (round forty-one, R11).
+       Its placeholder fits a phone's box; the field number is named in its label (round sixty-two; the grower review's 7). -->
   <div class="stickyhead">
   <div class="toolrow" bind:this={toolrowEl}>
-    <input class="searchbar" type="search" placeholder="Search your plants by number, name or field number…" bind:value={q} onkeydown={openTop} onfocus={pinSearch} aria-label="Search your plants and species (on this device)" use:focusOnDesktop />
+    <input class="searchbar" type="search" placeholder="Search your plants by number or name…" bind:value={q} onkeydown={openTop} onfocus={pinSearch} aria-label="Search your plants by number, name or field number, and species (on this device)" use:focusOnDesktop />
     {#if searchMode}
       <button class="btn small cancelsearch" type="button" onclick={cancelSearch}>Cancel</button>
     {:else}
@@ -672,7 +711,9 @@
   {#if visitor}
     <ul class="pitch">
       <!-- The counts once, in the line above, not again here (round sixty-one; visitor 22). -->
-      <li>A reference for cacti, succulents and bulbs, with each one's habitat climate where the sources answered.</li>
+      <!-- The list's whole reach (round sixty-two; outside review A2). On a phone this line alone is the introduction, so the
+           search, the grouping and a whole catalogue row fit above the tab bar (round sixty-two; outside review A10, B1). -->
+      <li>A reference for cactus, succulent and bulb species, and the plants most grown alongside them, with each one's habitat climate where its records allow one.</li>
       <!-- Precise, and said first: the templates were written once, and nothing is written for one species (round sixty-one; visitor 11). -->
       <li>Every figure names its source. Nothing about a species is written per page by a person or by AI, apart from credited quotations (<a href="/about/how#written">how</a>).</li>
       <!-- On a phone the feature is not drawn: its cards sat between the search and the rows it acts on and put the first row two screens down (round fifty, 1), and a link to it took the line the first row needs. The strip's first photograph is the same species (found at the merge of round sixty-one). -->
@@ -697,6 +738,7 @@
     {@render featured()}
   {/if}
 
+
   <!-- One toolbar: the search, then Group by, then the chips, then A–Z, the same shape in every grouping and chip
        (round sixty; visitor 16). The letters scroll away under it; A–Z brings them back. -->
   <div class="stickyhead">
@@ -705,7 +747,7 @@
       <!-- round fifty-eight; the accessibility review: the same toggle group as on the grower's view -->
       <ToggleGroup class="viewseg" label="Which species" options={[{ value: 'mine', label: 'Your species' }, { value: 'all', label: `All ${fmtN(data.total)}` }]} value="all" onchange={(v) => { if (v === 'mine') stopBrowsing(); }} />
     {/if}
-    <input class="searchbar" type="search" placeholder="Search the catalogue by name, genus, family or origin…" bind:value={q} onkeydown={openTop} onfocus={pinSearch} aria-label="Search the whole species catalogue" />
+    <input class="searchbar" type="search" placeholder="Search species, genus, family or origin…" bind:value={q} onkeydown={openTop} onfocus={pinSearch} aria-label="Search the whole species catalogue" />
     {#if searchMode}
       <!-- Typing is a mode on a phone: the box pinned under the top bar, the strip, the grouping, the chips and the letters out of the way, the matches as rows under it, and Cancel to put the page back (round fifty, 2). -->
       <button class="btn small cancelsearch" type="button" onclick={cancelSearch}>Cancel</button>
@@ -727,19 +769,8 @@
     {/if}
   </div>
   </div>
-  {#if visitor && feature && !searchMode}
-    <!-- Under the search and the photographs, so they come first at every width; the four figures as a 2×2 block, and on a
-         wide screen the chart beside them, the season and the rest on the species page (round sixty-one; decision 9, visitor 9).
-         The figures are the species page's own, each with its source tag, and the chart its own chart: shown, not described. -->
-    <section class="feature" aria-labelledby="feature-h">
-      <h2 class="featurehead" id="feature-h">This is what every species page shows <span class="fname">· <a href="/species/{feature.slug}"><SpeciesName name={feature.name} /></a></span></h2>
-      <div class="fglance"><Glance months={feature.climate.months} extremes={feature.climate.extremes ?? null} extremesStatus={feature.climate.extremesStatus ?? null} year={featureSheet?.year ?? null} season={false} chartHref={null} /></div>
-      <div class="fchart" style:--fh="calc({featureChartH}px + 14rem)">{#if wide}<Climograph id="feature-climo" name={feature.name} south={featureSheet?.year?.south ?? null} climate={{ months: feature.climate.months, p10: feature.climate.p10 as never, p90: feature.climate.p90 as never, cells: feature.climate.cells, extremes: feature.climate.extremes ?? null }} />{/if}</div>
-      <p class="small featurefoot"><a href="/species/{feature.slug}">The whole page for <i>{feature.name}</i></a>: {wide ? '' : 'the chart, '}the season in your months, the range and its records, photographs and every source. Chosen by rule from today's strip above.</p>
-    </section>
-  {/if}
 
-  {#if relaxedFor && searchMode}<p class="seccount relaxed" role="status">Nothing matched “{q.trim()}” as written. Showing results for “{relaxedFor}”.</p>{/if}
+  {#if searchedLine && searchMode}<p class="seccount relaxed" role="status">{searchedLine}</p>{/if}
 
   {#if !searchMode && data.letters.length > 1}
   <div class="filters" bind:this={filtersEl}>
@@ -791,6 +822,7 @@
             </nav>
           {/if}
         {/if}
+        {#if visitor && feature && start === 0 && i === Math.min(FEATURE_AFTER, visibleRows.length) - 1}{@render featureBlock(feature)}{/if}
       {/each}
       {#if end < data.rowCount}<div class="more" bind:this={sentinel}><a class="btn small" href="?by={data.by}{chip !== 'all' ? `&chip=${chip}` : ''}&at={end}" onclick={async (e) => { e.preventDefault(); if (!(await growOnce())) location.href = (e.currentTarget as HTMLAnchorElement).href; }}>More of the {fmtN(data.rowCount)} {rowWord(data.rowCount)}</a></div>{/if}
     </div>
@@ -806,6 +838,10 @@
   /* The visitor's three lines, then the product itself (round sixty; visitor 1). */
   .pitch { margin: -8px 0 6px; padding-left: 1.1em; font-size: var(--fs-md); color: var(--ink2); line-height: 1.5; display: grid; gap: 2px; max-width: 46rem; }
   .pitch li::marker { color: var(--accent); }
+  /* On a phone the introduction is its first line alone, one sentence, so the search, the grouping and a whole catalogue
+     row are on the first screen; what the other two lines say is on the about page (round sixty-two; outside
+     review A10, B1). The four feature cards stay off phones. */
+  @media (max-width: 640px) { .pitch { padding-left: 0; list-style: none; } .pitch li:not(:first-child) { display: none; } }
   .feature { margin: 14px 0 6px; }
   @media (max-width: 899px) { .feature { display: none; } }
   /* The four cards two by two at every width but the narrowest, where one column keeps 200% text inside the page (round sixty-one; decision 9). */
@@ -862,12 +898,17 @@
   .ftile:first-child img, .ftile:first-child .fph { aspect-ratio: 2 / 1; }
   .ftile { scroll-snap-align: start; display: block; border-radius: var(--r); overflow: hidden; background: var(--card); box-shadow: var(--sh); color: inherit; text-decoration: none; transition: transform 0.18s, box-shadow 0.18s; }
   .ftile:hover { transform: translateY(-2px); box-shadow: var(--sh2); text-decoration: none; color: inherit; }
-  .ftile img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; background: var(--sunk); }
+  /* `height: auto`, or the img's height attribute (240) beats the aspect ratio: a loaded photograph drew 240 px tall in a
+     112 px tile, and the live strip was 320 px high (round sixty-two; outside review A10, B1: the fixture's photographs
+     never load, so no test saw it). */
+  .ftile img { width: 100%; height: auto; aspect-ratio: 1; object-fit: cover; display: block; background: var(--sunk); }
   .ftile .fph { width: 100%; aspect-ratio: 1; }
   .ftile .fnm { display: block; padding: 6px 9px 0; font-family: var(--serif); font-style: italic; font-size: var(--fs-md); font-weight: 600; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ftile .fcom { display: block; padding: 1px 9px 8px; font-size: var(--fs-xs); color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ftile .fnm:last-child { padding-bottom: 8px; }
-  @media (min-width: 701px) { .ftile .fnm { padding: 8px 11px 0; font-size: var(--fs-md); white-space: normal; } .ftile .fcom { padding: 2px 11px 10px; font-size: var(--fs-sm); } .ftile:first-child { grid-column: auto; } .ftile:first-child img, .ftile:first-child .fph { aspect-ratio: 1; } }
+  /* On a desktop the photographs are 3 : 2, not square: the strip was 257 px high, and with the feature after the first
+     rows the search and a whole row now fit a first screen of 768 px (round sixty-two; the outside triage's 2). */
+  @media (min-width: 701px) { .ftile .fnm { padding: 8px 11px 0; font-size: var(--fs-md); white-space: normal; } .ftile .fcom { padding: 2px 11px 10px; font-size: var(--fs-sm); } .ftile:first-child { grid-column: auto; } .ftile img, .ftile .fph, .ftile:first-child img, .ftile:first-child .fph { aspect-ratio: 3 / 2; } }
   @media (min-width: 701px) { .strip { grid-auto-columns: minmax(0, 1fr); grid-template-columns: repeat(6, minmax(0, 1fr)); grid-auto-flow: row; overflow: visible; } .ftile:nth-child(n + 7) { display: none; } }
   @media (min-width: 1000px) { .strip { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
   .muted { color: var(--ink3); }
@@ -883,7 +924,7 @@
      whole list (round forty-eight, 1). The A–Z button brings the chips and the index back. */
   .stickyhead { display: contents; }
   .stickyhead .toolrow { position: sticky; top: 44px; z-index: 40; background: var(--bg); margin: 10px 0 0; padding: 4px 0 8px; border-bottom: 1px solid var(--rule); }
-  @media (max-height: 480px) { .stickyhead .toolrow { position: static; } }
+  @media (max-height: 30em) { .stickyhead .toolrow { position: static; } } /* in em: 960 px at 200% text (round sixty-two; the accessibility review, 1) */
   .rows { overflow-anchor: none; }
   .azbtn { display: inline-flex; margin-left: auto; }
   .cancelsearch { margin-left: auto; }
@@ -899,6 +940,9 @@
   @media (max-width: 640px) { .hgrid.mine { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; } }
   .offer { margin: -4px 0 10px; }
   .letters { display: flex; flex-wrap: wrap; gap: 2px; margin: 0 0 2px; }
+  /* On a phone the letter index is one line that scrolls sideways: wrapped, the live corpus's 25 letters were four lines,
+     176 px, between the chips and the first row (round sixty-two; outside review B1). */
+  @media (max-width: 640px) { .letters { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; } .letters::-webkit-scrollbar { display: none; } .letters a { flex: none; } }
   .parts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 10px 0 16px; font-size: var(--fs-md); color: var(--ink2); }
   .letters a { font-family: var(--mono); font-size: var(--fs-sm); font-weight: 600; color: var(--ink2); min-width: var(--tap); min-height: var(--tap); display: inline-flex; align-items: center; justify-content: center; border-radius: var(--r-sm); }
   .letters a:hover { background: var(--sunk); text-decoration: none; color: var(--ink); }
@@ -915,7 +959,9 @@
   .grow .gmap { width: 56px; aspect-ratio: 2 / 1; border-radius: var(--r-sm); overflow: hidden; background: var(--map-sea); }
   .grow .gmap :global(.map) { border-radius: 0; aspect-ratio: 2 / 1; }
   .grow .gtx { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; min-width: 0; }
-  .grow .gname { font-family: var(--ui); font-weight: 700; font-size: var(--fs-base); color: var(--ink); }
+  /* A long family name ("Welwitschiaceae") breaks rather than push the page sideways at 320 px and 200% text (round
+     sixty-two, second pass; the self-review's N10, a11y 9: /?by=family was 323 px wide). */
+  .grow .gname { font-family: var(--ui); font-weight: 700; font-size: var(--fs-base); color: var(--ink); max-width: 100%; overflow-wrap: anywhere; }
   .grow .gname.sci { font-family: var(--serif); font-style: italic; font-size: var(--fs-lg); }
   .grow .d { font-size: var(--fs-md); color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
   .grow .st { font-family: var(--mono); font-size: var(--fs-sm); color: var(--ink3); flex-basis: 100%; }

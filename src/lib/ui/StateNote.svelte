@@ -8,10 +8,12 @@
   let { word, id = undefined, children }: { word: string; id?: string; children: Snippet } = $props();
 </script>
 
-<p class="statenote small" {id}>
+<!-- A div, not a p: a <details> inside a <p> is split off by the HTML parser when the template is cloned, and every page
+     that drew a state note threw "Illegal invocation" (round sixty-two, agent L). -->
+<div class="statenote small" {id}>
   <span class="word">{word}</span>
   <details class="why"><summary>Why?</summary><span class="text">{@render children()}</span></details>
-</p>
+</div>
 
 <style>
   .statenote { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin: 10px 0; color: var(--ink2); }

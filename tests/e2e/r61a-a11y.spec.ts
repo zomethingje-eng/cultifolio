@@ -8,32 +8,17 @@
  * Wanted note, the select bar at a short height, Today's chips paged at 50 and its photo count.
  */
 import { test, expect, type Page } from '@playwright/test';
+import { inject as injectRows } from './helpers/inject';
+import { framesSettled } from './helpers/settled';
 
 async function ready(p: Page) {
   await p.locator('html[data-ready]').waitFor({ state: 'attached' });
 }
 type Row = [string, string, string, unknown];
-/** As smoke.spec.ts's helper: wait for the page's own stores, write rows, drop the fold snapshot. */
+/** The shared helper (./helpers/inject.ts) with this file's defaults: it writes the arrival order and moves the fold
+ *  counter in the one transaction, so the second delete after a 500 ms pause that stood here is gone (round sixty-two; harness 2, A44). */
 async function inject(page: Page, rows: Row[], wall = Date.now() - 86_400_000, writer = 'r61aaaaaaaaaaaaa') {
-  await page.evaluate(async ({ rows, wall, writer }) => {
-    let db: IDBDatabase | null = null;
-    for (let i = 0; i < 100 && !db; i++) {
-      const d = await new Promise<IDBDatabase | null>((res) => { const r = indexedDB.open('cultifolio'); r.onupgradeneeded = () => r.transaction!.abort(); r.onsuccess = () => res(r.result); r.onerror = () => res(null); });
-      if (d && d.objectStoreNames.contains('changes') && d.objectStoreNames.contains('meta')) db = d;
-      else { d?.close(); await new Promise((r) => setTimeout(r, 100)); }
-    }
-    if (!db) throw new Error('no stores');
-    const tx = db.transaction(['changes', 'meta'], 'readwrite');
-    rows.forEach(([kind, id, field, value], i) => tx.objectStore('changes').put({ t: `${String(wall + i).padStart(13, '0')}-0000-${writer}`, kind, id, field, value }));
-    tx.objectStore('meta').delete('fold');
-    await new Promise<void>((res) => { tx.oncomplete = () => res(); });
-    // The page's own first load may save its (empty) snapshot after the delete above, and a snapshot's tail is read from
-    // the arrival order, which these rows are not in: drop it again once that save has had its moment (round sixty-one, at the merge).
-    await new Promise((r) => setTimeout(r, 500));
-    const tx2 = db.transaction(['meta'], 'readwrite');
-    tx2.objectStore('meta').delete('fold');
-    await new Promise<void>((res) => { tx2.oncomplete = () => res(); });
-  }, { rows, wall, writer });
+  await injectRows(page, rows, wall, writer);
 }
 const dayAgo = (n: number) => { const d = new Date(Date.now() - n * 86_400_000); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 /** n plants on one place, each watered a month ago; `at` names the place (id, name). */
@@ -69,7 +54,7 @@ test('r61a a11y-perf 2: Water in select mode keeps keyboard focus on a control, 
   await expect(page.locator('.toast .undo')).toBeFocused();
 });
 
-test('r61a a11y-perf 1: a toast with an action is never a keyboard trap, even when it was raised with focus on the page', async ({ page }) => {
+test('r61a a11y-perf 1: a toast with an action raised by a pointer is never a keyboard trap', async ({ page }) => {
   await seeded(page, plants(3));
   await page.locator('#select-toggle').click();
   await page.locator('.selrow input').first().check();
@@ -81,8 +66,10 @@ test('r61a a11y-perf 1: a toast with an action is never a keyboard trap, even wh
   expect(await page.evaluate(() => !!document.activeElement?.closest('.toast'))).toBe(false);
 });
 
-test('r61a 1b: a toast raised with focus on the page body lets Tab out of its last button, and its timer is not held for good', async ({ page }) => {
-  test.setTimeout(90_000); // the hold ends after 30 s, past the default test timeout (round sixty-one, at the merge)
+test('r61a 1b: a toast raised with focus on the page body lets Tab out of its last button, and its timer waits while focus is on it', async ({ page }) => {
+  // The page's clock is Playwright's, so the 35 s hold and the toast's going are jumped over, not waited for in real
+  // time (round sixty-two; the verification triage-self review, N10).
+  await page.clock.install();
   await seeded(page, plants(3));
   await page.locator('#select-toggle').click();
   await page.locator('.selrow input').first().check();
@@ -93,9 +80,18 @@ test('r61a 1b: a toast raised with focus on the page body lets Tab out of its la
   await page.locator('.toast .undo').focus();
   await page.keyboard.press('Tab');
   expect(await page.evaluate(() => !!document.activeElement?.closest('.toast'))).toBe(false);
-  // Focus parked on the Undo holds the timer, but not for ever: the toast goes, and focus does not fall to the body.
+  // Focus parked on the Undo holds the timer for as long as it stays (the cap is the pointer's alone since round sixty-two;
+  // the accessibility review, 9); once focus leaves, the toast goes, and focus does not fall to the body.
   await page.locator('.toast .undo').focus().catch(() => {});
-  await expect(page.locator('.toast')).toBeHidden({ timeout: 45_000 });
+  await page.clock.fastForward(35_000); // past the pointer's 30 s cap: focus alone holds it
+  await expect(page.locator('.toast .undo')).toBeVisible();
+  await expect(page.locator('.toast .undo')).toBeFocused();
+  await page.keyboard.press('Tab');
+  // Focus came to Undo from the page this time, so "Back to where you were" is offered after it: Tab past it too.
+  if (await page.evaluate(() => !!document.activeElement?.closest('.toast'))) await page.keyboard.press('Tab');
+  expect(await page.evaluate(() => !!document.activeElement?.closest('.toast'))).toBe(false);
+  await page.clock.fastForward(9_000); // what was left of its 8 s, and more
+  await expect(page.locator('.toast')).toBeHidden();
   expect(await page.evaluate(() => document.activeElement === document.body)).toBe(false);
 });
 
@@ -131,8 +127,13 @@ test('r61a a11y-perf 5: Today with 300 plants does not shift as the collection o
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
   await page.addInitScript(() => { (window as unknown as { __cls: number }).__cls = 0; new PerformanceObserver((l) => { for (const e of l.getEntries() as unknown as Array<{ value: number; hadRecentInput: boolean }>) if (!e.hadRecentInput) (window as unknown as { __cls: number }).__cls += e.value; }).observe({ type: 'layout-shift', buffered: true }); });
   await page.goto('/today'); await ready(page);
-  await expect(page.locator('#calendar')).toBeAttached({ timeout: 60_000 });
-  await page.waitForTimeout(2000);
+  // Every section Today holds until the collection and the sheets are read, by its own sign: the watering list no
+  // longer waiting, the frost strip and the last section (#rest, with the calendar) drawn; then the frames settled,
+  // not a fixed pause (round sixty-two; the round-sixty-one self-review's triage 6).
+  await expect(page.locator('#water')).not.toHaveClass(/waiting/, { timeout: 60_000 });
+  await expect(page.locator('#frost .froststrip, #frost .risk')).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator('#rest #calendar')).toBeAttached({ timeout: 60_000 });
+  await framesSettled(page);
   expect(await page.evaluate(() => (window as unknown as { __cls: number }).__cls)).toBeLessThan(0.1);
 });
 
@@ -168,6 +169,7 @@ test('r61a a11y-perf 7: at 320 px with 200% text, the Wanted note form, Today\'s
     expect(wide).toEqual([]);
   } finally {
     await ctx.close();
+    fs.rmSync(dir, { recursive: true, force: true }); // the profile made for this test, not one per run left in /tmp (round sixty-two; outside review A)
   }
 });
 

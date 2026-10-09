@@ -3,8 +3,8 @@
  *  - `hlcPast` flags a stamp made past a field's stamp; the hold and the park never take a flagged stamp, with or without
  *    an arrival; a clock that observes a flagged stamp does not carry the flag into its own ticks.
  *  - A first reading that disagrees with the clock in force by more than two days unconfirms it (the clock review's 7).
- *  - Within a tab, a correction lapses when the device clock moves against the monotonic one; a correction of five
- *    minutes or less does not lapse when overtaken, so a device a minute slow does not flap.
+ *  - Within a tab, a correction follows the device clock when it moves back against the monotonic one; since round
+ *    sixty-two no correction lapses by time passing (decision 5).
  */
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { hlcEncode, hlcDecode, hlcPast, hlcAfter, hlcCompare, isPastStamp, PAST_BIT, MAX_COUNT, Clock, trustServerTime, clockChecked, clockOffsetMs, nowMs, onClockOffsetChange, _resetClockOffset } from '$core/hlc';
@@ -40,8 +40,10 @@ describe('a stamp made past another (hlcPast)', () => {
     }
     expect(isParked(unflagged, { now, arrival: now })).toBe(true);
     expect(isHeld(unflagged, { now })).toBe(true);
-    // a stamp parked before (a stored verdict) stays parked, flagged or not
-    expect(isParked(flagged, { now, parked: new Set([flagged]) })).toBe(true);
+    // a stored verdict parks an unflagged stamp; a flagged one is never parked, even when an older build stored it as
+    // parked (round sixty-two; the clock review's 8)
+    expect(isParked(unflagged, { now, parked: new Set([unflagged]) })).toBe(true);
+    expect(isParked(flagged, { now, parked: new Set([flagged]) })).toBe(false);
     expect(hlcDecode(flagged).wall - now).toBeGreaterThan(PARK_MS);
   });
   it('a clock that observes a flagged stamp at its own time ticks on unflagged, and after it', () => {
@@ -76,7 +78,9 @@ describe('the correction lapses when it no longer describes the clock (the clock
     trustServerTime(local + 11 * DAY + 140_000, local + 140_000); // a day further off: pending, still confirmed
     expect(clockChecked()).toBe(true);
   });
-  it('within a tab: a fast clock set back by hand drops a negative correction at once (the monotonic clock says the device clock moved)', () => {
+  // Round sixty-two (decision 5): the correction follows a move of the device clock back, so the clock in force never moves
+  // and the reading still confirms it (it was "unconfirmed" here before).
+  it('within a tab: a fast clock set back by hand takes the correction to nothing at once (the monotonic clock says the device clock moved)', () => {
     const T0 = Date.now();
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(T0 + 3 * DAY);
@@ -87,9 +91,10 @@ describe('the correction lapses when it no longer describes the clock (the clock
     vi.setSystemTime(T0 + 80_000); // set right: the device clock jumps back three days, the monotonic clock does not
     expect(nowMs() - (T0 + 80_000)).toBeLessThan(60_000); // stamped by the device's own, right, clock
     expect(clockOffsetMs()).toBe(0);
-    expect(clockChecked()).toBe(false);
+    expect(clockChecked()).toBe(true);
   });
-  it('a positive correction lapses once the device clock reaches the reading\'s server time; one of five minutes or less does not, so a device a minute slow does not flap', () => {
+  // Round sixty-two (decision 5; the clock review's 5, B9, A17): inverted. No amount of elapsed time lapses a correction.
+  it('a positive correction lapses never by time: not one of a minute, nor one of ten minutes once the device clock reaches the reading\'s server time', () => {
     const T0 = Date.now();
     vi.useFakeTimers({ toFake: ['Date', 'performance'], now: T0 - 60_000 }); // the monotonic clock moves with the device clock here: no drift
     trustServerTime(T0, Date.now());
@@ -103,7 +108,7 @@ describe('the correction lapses when it no longer describes the clock (the clock
     vi.advanceTimersByTime(9 * 60_000);
     expect(clockOffsetMs()).toBe(10 * 60_000); // not yet reached
     vi.advanceTimersByTime(2 * 60_000);
-    expect(clockOffsetMs()).toBe(0); // reached: the correction no longer describes this clock, and a new reading is due
-    expect(clockChecked()).toBe(false);
+    expect(clockOffsetMs()).toBe(10 * 60_000); // reached, and still right: a slow clock does not catch up by waiting
+    expect(clockChecked()).toBe(true);
   });
 });

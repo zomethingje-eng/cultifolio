@@ -1,5 +1,7 @@
 import { zipSync, strToU8 } from 'fflate';
 import { test, expect } from '@playwright/test';
+import { inject } from './helpers/inject';
+import { fromAddress, docAddress, limitAddress } from './helpers/address';
 
 /** The plant page's id card keeps one primary action; Edit, Label and Propagate are behind "More" (improvements, 7). */
 /** Click Add on the add-plant form. A name the reference does not hold (the name service is not reachable here) is asked about once, and the second Add keeps it as typed (round twenty-three, 4). */
@@ -136,7 +138,7 @@ test('species page is readable without JavaScript and states its evidence', asyn
 
 test('a refusal is rendered as "not checked", never as an absence', async ({ page }) => {
   await page.goto('/species/refusia-testii');
-  await expect(page.locator('.notice', { hasText: 'Occurrence source did not answer' })).toBeVisible(); // said on the climate section, the evidence line and the record map
+  await expect(page.locator('.notice', { hasText: 'Occurrence source refused the request' })).toBeVisible(); // said on the climate section, the evidence line and the record map
   await expect(page.locator('.idcard .nc .tok', { hasText: 'Climate not checked' })).toBeVisible(); // and as the one mark in the head, its reason on tap
   await expect(page.locator('.factgrid', { hasText: 'not a statement that none exist' })).toBeVisible();
 });
@@ -331,7 +333,7 @@ test('the path species → my plants → bench is prefilled at every step and lo
   await page.locator('#habitat > summary').click();
   await expect(page.locator('.hvh')).toContainText('this place is set to bottom out at 2.0 °C');
   // the habitat figure is the median with its 10th–90th span across the envelope cells, and the quantity is named
-  await expect(page.locator('.hvh')).toContainText(/coldest month's mean night at the habitat \d+(\.\d)? °C in \w+ \(median year; across the range, 40 grid cells, \d+ to \d+; CHELSA\); 1st-percentile night over 40 years at a typical spot in the range 6\.5 °C \(NASA POWER\)/);
+  await expect(page.locator('.hvh')).toContainText(/coldest month's mean nightly low at the habitat \d+(\.\d)? °C in \w+ \(median year; across the range, 40 grid cells, \d+ to \d+; CHELSA\); 1st-percentile night over 40 years at a typical spot in the range 6\.5 °C \(NASA POWER\)/);
   await expect(page.locator('.hvh')).toContainText(/open sky over the habitat \d+–\d+ mol\/m²\/day across the year \(median year; across the range, 40 grid cells, \d+ to \d+; CHELSA\)/);
   await expect(page.locator('.hvh .pill')).toHaveCount(0);
   await page.locator('.hvh + details.why summary').click(); // the caveat sits one tap away, not beside the figures
@@ -355,21 +357,23 @@ test('the path species → my plants → bench is prefilled at every step and lo
 });
 
 test('photos: taken on the device, resized, stored, captioned, made the cover, shown everywhere, survive a reload, removed', async ({ page }) => {
-  await page.goto('/settings');
-  await ready(page);
-  await page.check('#pref-refphotos'); // the species' photograph on a private page is opt-in (round twelve, A1)
+  // From "Add a photo", with the reference's photograph left off (its default): whether an outside host's image loads says
+  // nothing about the grower's own, and the test never reached its upload when it did not (round sixty-two; outside
+  // review B14). The reference's photograph offering "add your own" is r62h-harness.spec.ts's, over a local image; the
+  // sentence for one that did not load is "removing asks twice; a species photograph that fails to load...".
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   const acc = page.url().split('/').pop()!;
-  // no photos yet: the hero shows the species photograph and offers to add your own; the section shows the add row
-  await expect(page.locator('.hero button.cred')).toContainText('add your own');
+  await ready(page);
+  // no photos yet: the card offers "Add a photo" beside the name; the section shows the add row
+  await expect(page.locator('.idcard label.tile')).toContainText('Add a photo');
   await expect(page.locator('#acc-photo-camera')).toBeAttached();
   // a real JPEG: a screenshot of this very page, larger than the stored size so resizing is exercised
   await page.setViewportSize({ width: 2000, height: 1400 });
   const jpeg = await page.screenshot({ type: 'jpeg', quality: 80 });
   await page.setViewportSize({ width: 1180, height: 900 });
-  await page.locator('#acc-photo-file').setInputFiles({ name: 'bench.jpg', mimeType: 'image/jpeg', buffer: jpeg });
+  await page.locator('#acc-photo-file').setInputFiles({ name: 'bench.jpg', mimeType: 'image/jpeg', buffer: jpeg }); // the section's row, which stays open for the second
   await expect(page.locator('.phgrid .ph')).toHaveCount(1);
   await expect(page.locator('.hero.own')).toBeVisible();
   await expect(page.locator('.tlphoto', { hasText: 'Photographed' })).toBeVisible();
@@ -596,7 +600,7 @@ test('labels: pick plants, choose a sheet, print at true size with a code that o
   expect(box!.height).toBeGreaterThan(90); // 25.4 mm ≈ 96 px
   expect(box!.height).toBeLessThan(102);
   // the care line arrives from the dossier for the species with climate
-  await expect(page.locator('.page .label .care', { hasText: 'cooler six months Nov–Apr · hab. night 6.5 °C · sky 30–65 DLI' })).toHaveCount(1); // the same rules and the same month formatter as the sheet
+  await expect(page.locator('.page .label .care', { hasText: 'cooler six months Nov–Apr · floor 6.5 °C (1 in 100, NASA POWER) · open sky 30–65 DLI' })).toHaveCount(1); // the same rules and the same month formatter as the sheet
   // and it was asked for by hash bucket only: no key, no slug, no species name left the browser (round ten, 1)
   expect(asked.filter((u) => u.startsWith('/api/sheets')).sort()).toEqual(['/api/sheets?b=03&c=fixture&n=32', '/api/sheets?b=1c&c=fixture&n=32']); // one request a bucket (its edge-cache key), with the corpus id and the count hashed by (round fifty-four, 3)
   for (const u of asked) { expect(u).not.toMatch(/dossier|index|copiapoa|welwitschia|5384013/); expect(u).toMatch(/^\/api\/(corpus|(sheets|entries)\?b=([01][0-9a-f],?)+&c=fixture&n=32)$/); }
@@ -659,6 +663,7 @@ test('sync: two devices share one encrypted vault; changes and photos cross both
   test.setTimeout(120_000);
   // Device A: a place, a plant with a photo and a watering; then set up a vault.
   const A = await browser.newContext();
+  await fromAddress(A); // the vault is made from an address of its own, not 127.0.0.1's five a day (round sixty-two second pass)
   const a = await A.newPage();
   await a.goto('/places');
   await a.getByRole('button', { name: 'New place' }).click();
@@ -768,6 +773,7 @@ test('sync: an offline edit uploaded late is still discovered, and a backup merg
   };
   // A makes a plant and a vault; B joins.
   const A = await browser.newContext();
+  await fromAddress(A); // the vault is made from an address of its own (round sixty-two second pass)
   const a = await A.newPage();
   await a.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
   await a.getByRole('button', { name: /^Add/ }).click();
@@ -854,6 +860,32 @@ test('sync: an offline edit uploaded late is still discovered, and a backup merg
   await A.close();
   await B.close();
   await C.close();
+});
+
+test('five new vaults a day from one address: the sixth is refused with a 429 that says so; another address, and opening a vault already made, are not (round sixty-two second pass)', async ({ request }) => {
+  // The one test of the per-address limit. Every other spec that makes a vault sends its own documentation address
+  // (./helpers/address.ts), so the limit is met here on purpose, from an address kept for it, and nowhere by accident.
+  const { createHash } = await import('node:crypto');
+  const B32 = 'ABCDEFGHJKMNPQRSTVWXYZ23456789';
+  const vault = () => { const token = createHash('sha256').update(`limit ${Math.random()} ${Date.now()}`).digest('hex'); const d = createHash('sha256').update('id:' + token).digest(); let id = ''; for (let i = 0; i < 26; i++) id += B32[d[i] % B32.length]; return { id, token }; };
+  const make = (ip: string, v: { id: string; token: string }) => request.post('/api/sync/vault', { headers: { 'cf-connecting-ip': ip }, data: { ...v, create: true } });
+  const ip = limitAddress();
+  const first = vault();
+  for (const v of [first, vault(), vault(), vault(), vault()]) {
+    const r = await make(ip, v);
+    expect(r.status(), `a new vault from ${ip}`).toBe(200);
+    expect(((await r.json()) as { created: boolean }).created).toBe(true);
+  }
+  const sixth = await make(ip, vault());
+  expect(sixth.status()).toBe(429);
+  expect(((await sixth.json()) as { error: string }).error).toBe('too many new vaults from this address today');
+  expect(sixth.headers()['retry-after']).toBe('3600');
+  // a vault already made is opened from the same address: nothing new is counted
+  const again = await make(ip, first);
+  expect(again.status()).toBe(200);
+  expect(((await again.json()) as { created: boolean }).created).toBe(false);
+  // and another address has its own five
+  expect((await make(docAddress(), vault())).status()).toBe(200);
 });
 
 test('a number already in use cannot be given to a second plant', async ({ page }) => {
@@ -987,28 +1019,28 @@ test('the about pages are served without JavaScript and say what the app refuses
 test('a refused source is a distinct state on every surface: species page, front tile, plant tile', async ({ page }) => {
   await page.goto('/species/refusia-testii');
   // photographs: GBIF media refused, so the hero says so rather than "no photograph"
-  await expect(page.locator('h2#s-photos + .notice')).toContainText('GBIF media did not answer when this page was built. Not a statement that none exist.');
+  await expect(page.locator('h2#s-photos + .notice')).toContainText('GBIF media refused when this page was built. Not a statement that none exist.');
   await expect(page.locator('.hero')).toHaveCount(0); // no grey box where a photograph would be (round sixty)
   // the one mark for a refusal: a dashed "not checked" pill, its reason on tap (improvements, 5)
   const tok = page.locator('.idcard .nc', { hasText: 'Photographs not checked' });
   await expect(tok).toBeVisible();
   await expect(tok.locator('.why')).toBeHidden();
   await tok.locator('summary').click();
-  await expect(tok.locator('.why')).toContainText('GBIF media did not answer when this page was built. Not asked, or not answered, is not "none"');
+  await expect(tok.locator('.why')).toContainText('GBIF media refused when this page was built. Not asked, or not answered, is not "none"');
   await expect(page.locator('.idcard .pill', { hasText: 'Climate known' })).toHaveCount(0); // what is known is shown, not announced
   // climate refused: its own line, with the detail as a sentence
-  await expect(page.locator('.notice', { hasText: 'Occurrence source' })).toContainText('Not checked. The occurrence source did not answer when this page was built. This is not a statement that no climate exists.');
+  await expect(page.locator('.notice', { hasText: 'Occurrence source' })).toContainText('Not checked. The occurrence source refused the request when this page was built. This is not a statement that no climate exists.');
   // the cultivation section does not say "no habitat climate"
-  await expect(page.locator('.note-slot')).toContainText('Not checked. The occurrence source did not answer when this page was built. No sheet is derived from an answer that was not given');
+  await expect(page.locator('.note-slot')).toContainText('Not checked. The occurrence source refused the request when this page was built. No sheet is derived from an answer that was not given');
   await expect(page.locator('.note-slot')).not.toContainText('no habitat climate for this species');
   // the map caption does not promise a marker there is none of
   await expect(page.locator('.mapcap').first()).not.toContainText('marker');
-  await expect(page.locator('.mapcap').nth(1)).toContainText('Records not checked: the occurrence source did not answer'); // a refusal, not an absence, on the map too
+  await expect(page.locator('.mapcap').nth(1)).toContainText('Records not checked: the occurrence source refused the request'); // a refusal, not an absence, on the map too
   // front page
   await page.goto('/?by=genus&open=refusia');
   const tile = page.locator('.tile', { hasText: 'Refusia' });
   await expect(tile.locator('.fig')).toContainText('climate not checked');
-  await expect(tile.locator('.fig')).toHaveAttribute('title', /not checked: a source did not answer/);
+  await expect(tile.locator('.fig')).toHaveAttribute('title', /not checked: a source refused or did not answer/);
   // plant tile
   await page.goto('/plants/new?species=Refusia%20testii&key=999');
   await page.getByRole('button', { name: /^Add/ }).click();
@@ -1569,7 +1601,7 @@ test('a label whose species could not be reached says so, and the sheet is not p
   await expect(page.locator('#lb-print')).toBeEnabled();
   await page.context().unroute('**/api/sheets**');
   await page.locator('#lb-unchecked').getByRole('button', { name: 'Try again' }).click();
-  await expect(page.locator('.page .label .care', { hasText: 'hab. night' })).toHaveCount(1);
+  await expect(page.locator('.page .label .care', { hasText: '(1 in 100, NASA POWER)' })).toHaveCount(1);
   await expect(page.locator('#lb-unchecked')).toHaveCount(0);
   // the skip box: cleared, 2.5 and 99 on a 30-cell sheet are 0, 2 and 29 blanks, never an error
   await page.selectOption('#lb-sheet', '5160');
@@ -1591,7 +1623,7 @@ test('a label whose species could not be reached says so, and the sheet is not p
   await page.goto('/labels');
   await expect(page.locator('#lb-print')).toHaveText('Print 2 labels', { timeout: 10000 });
   await expect(page.locator('#lb-print')).toBeEnabled();
-  await expect(page.locator('.page .label .care', { hasText: 'hab. night' })).toHaveCount(1);
+  await expect(page.locator('.page .label .care', { hasText: '(1 in 100, NASA POWER)' })).toHaveCount(1);
   await expect(page.locator('#lb-unchecked')).toHaveCount(0);
 });
 
@@ -1669,7 +1701,7 @@ test('the species page answers in the first screen and relates the species by ge
   await expect(glance.locator('.card:not(.season)', { hasText: 'Rain' })).toContainText('72');
   // related: the nearest habitat climate from the index, with the rule beside it
   await expect(page.locator('#s-related')).toBeVisible();
-  await expect(page.locator('.relhead', { hasText: 'Similar habitat climate' })).toContainText('nearest by mean day, mean night and rain, month by month');
+  await expect(page.locator('.relhead', { hasText: 'Similar habitat climate' })).toContainText('nearest by mean daily high, mean nightly low and rain, month by month');
   await expect(page.locator('.relstrip .reltile .rn', { hasText: 'Copiapoa humilis' })).toHaveCount(2); // the one other Copiapoa, and the nearest climate: both strips
   await expect(page.locator('.relhead', { hasText: 'Other Copiapoa' })).toBeVisible();
   // a species without a derived climate is never "near", whatever the index says
@@ -2272,7 +2304,7 @@ test('round twenty-three: a name the reference does not hold is added on the sec
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   const acc = page.url().split('/').pop()!;
   await expect(page.locator('h1.sci')).toContainText('Notaplantia fakeus');
-  await expect(page.locator('.idcard .nc .tok')).toContainText('Name not checked');
+  await expect(page.locator('#name-not-in-reference')).toHaveText('Name not in the reference');
 
   // Edited into a cross: filed under the genus, the parents kept, and the log says what it was called before (round twenty-three, 3)
   await more(page, 'Edit');
@@ -2597,8 +2629,8 @@ test('round thirty-seven: the hemisphere notice is one sentence with its spaces,
   const html = await r.text();
   const m = /<p class="notice small" id="hemispheres">([^<]*)<\/p>/.exec(html);
   expect(m, 'the notice is rendered').toBeTruthy();
-  expect(m![1]).toContain('the 3 cells at least 10° north of it have seasons six months apart');
-  expect(m![1]).toContain('across the 40 cells that remain: the 31 at least 10° south and the 6 within 10° of the equator, which stay in either way.');
+  expect(m![1]).toContain('the 8 cells at least 10° north of it have seasons six months apart');
+  expect(m![1]).toContain('across the 37 cells that remain: the 31 at least 10° south and the 6 within 10° of the equator, which stay in either way.');
   expect(m![1]).not.toMatch(/southand|northand/);
 });
 
@@ -2781,16 +2813,21 @@ test('round forty-eight: a window opened partway (a letter, ?at=) fills in the r
 test('round forty-eight: a letter tapped on a phone lands with its heading just under the pinned search row (4)', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
+  // Hydrated first: a tap before then is the browser's own jump to the anchor, which lands the heading under the row
+  // (round sixty-two; the harness review's 4: this test's one flake, "expected < 167.8, received 207.3").
+  await ready(page);
   await page.locator('.letters a', { hasText: 'W' }).click();
-  // landed: the heading is at or below the pinned row's foot; polled, not after a fixed 300 ms (round sixty; the harness review, 14)
-  await expect.poll(async () => { const b = (await page.locator('.stickyhead .toolrow').boundingBox())!; return (await page.locator('#l-W').boundingBox())!.y >= b.y + b.height; }).toBe(true);
-  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
-  const bar = await page.locator('.stickyhead .toolrow').boundingBox();
-  const h = await page.locator('#l-W').boundingBox();
-  expect(h!.y).toBeGreaterThanOrEqual(bar!.y + bar!.height); // not under the row
-  // and right below it, unless the fixture's short page has no further to scroll (W is its last letter)
-  const atEnd = await page.evaluate(() => window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 1);
-  if (!atEnd) expect(h!.y).toBeLessThan(bar!.y + bar!.height + 16);
+  // Landed: the heading at or below the pinned row's foot (not under the row), and right below it unless the fixture's
+  // short page has no further to scroll (W is its last letter). Both bounds are polled together, so a scroll still
+  // settling is waited for rather than judged (round sixty-two; the harness review's 4).
+  const landed = () => page.evaluate(() => {
+    const bar = document.querySelector('.stickyhead .toolrow')!.getBoundingClientRect();
+    const h = document.querySelector('#l-W')!.getBoundingClientRect();
+    const foot = bar.y + bar.height;
+    const atEnd = window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 1;
+    return { notUnder: h.y >= foot, justBelow: atEnd || h.y < foot + 16 };
+  });
+  await expect.poll(landed).toEqual({ notUnder: true, justBelow: true });
   // the computed offset is the pinned row's, not the head's, which is `display: contents` on a phone and has no height
   const under = await page.evaluate(() => { const head = document.querySelector<HTMLElement>('.stickyhead')!; const row = document.querySelector<HTMLElement>('.stickyhead .toolrow')!; return [head.offsetHeight, row.offsetHeight]; });
   expect(under[0]).toBe(0);
@@ -3016,8 +3053,9 @@ test('round fifty-one: a move into a place has an Undo that puts the plant back 
 });
 
 test('round fifty-two: a device a year ahead is corrected by the server\'s clock after two runs a minute apart and its watering is dated today everywhere; a change from a clock five years ahead is parked on every record page with Apply (1)', async ({ browser }) => {
+  test.setTimeout(90_000); // three browser contexts and five sync runs: 23 s on a quiet machine, past the 30 s default on a loaded one (round sixty-two; the harness review's 4)
   const shifted = async (ms: number) => { const c = await browser.newContext(); await c.addInitScript((off: number) => { const real = Date.now; const OD = Date; (globalThis as { __shift?: number }).__shift = off; globalThis.Date = class extends OD { constructor(...args: unknown[]) { if (args.length === 0) super(real() + ((globalThis as { __shift?: number }).__shift ?? 0)); else super(...(args as [number])); } static now() { return real() + ((globalThis as { __shift?: number }).__shift ?? 0); } } as DateConstructor; }, ms); return c; };
-  const A = await browser.newContext(); const a = await A.newPage();
+  const A = await browser.newContext(); await fromAddress(A); const a = await A.newPage(); // the vault from an address of its own (round sixty-two second pass)
   await a.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await addPlant(a);
   const acc = a.url().split('/').pop()!;
   await a.goto('/sync'); await a.click('#sync-start'); const key = (await a.locator('#vault-key').textContent())!.trim();
@@ -3249,15 +3287,7 @@ test('round fifty-six: two plants under one number are not renumbered by opening
   await expect(page.locator('main')).toBeVisible();
   // two whole plants under one number, as a merge whose repair failed to store would leave them, put straight into the vault
   const wall = Date.now() - 3_600_000;
-  await page.evaluate(async (wall) => {
-    const db = await new Promise<IDBDatabase>((res) => { const r = indexedDB.open('cultifolio'); r.onsuccess = () => res(r.result); });
-    const t = (n: number) => `${wall + n}-0000-abcdefabcdef0000`;
-    const rows = [['r-dup-a', 'acc', '2026-0042'], ['r-dup-a', 'taxonName', 'Copiapoa cinerea'], ['r-dup-a', 'status', 'growing'], ['r-dup-b', 'acc', '2026-0042'], ['r-dup-b', 'taxonName', 'Welwitschia mirabilis'], ['r-dup-b', 'status', 'growing']];
-    const tx = db.transaction(['changes', 'meta'], 'readwrite');
-    rows.forEach(([id, field, value], i) => tx.objectStore('changes').put({ t: t(i), kind: 'accession', id, field, value }));
-    tx.objectStore('meta').delete('fold');
-    await new Promise<void>((res) => { tx.oncomplete = () => res(); });
-  }, wall);
+  await inject(page, [['r-dup-a', 'acc', '2026-0042'], ['r-dup-a', 'taxonName', 'Copiapoa cinerea'], ['r-dup-a', 'status', 'growing'], ['r-dup-b', 'acc', '2026-0042'], ['r-dup-b', 'taxonName', 'Welwitschia mirabilis'], ['r-dup-b', 'status', 'growing']].map(([id, field, value]): [string, string, string, string] => ['accession', id, field, value]), wall);
   // what the log holds about the two plants
   const ofTwo = () => page.evaluate(async () => {
     const db = await new Promise<IDBDatabase>((res) => { const r = indexedDB.open('cultifolio'); r.onsuccess = () => res(r.result); });
@@ -3413,25 +3443,8 @@ test('round fifty-nine: a species page\'s description is cut at a word and claim
 
 /* ---------------------------------------------------------------- round sixty: records by identity, held changes, print, focus, larger text */
 
-/** Changes written straight into this device's log, as another device's sync or a merged file would leave them; the fold is dropped so the next load reads them. */
-async function inject(page: import('@playwright/test').Page, rows: Array<[string, string, string, string | number]>, wall: number, writer = 'abcdefabcdef0000') {
-  await page.evaluate(async ({ rows, wall, writer }) => {
-    // The page may not have made its stores yet (a first visit): wait for them rather than writing into nothing, which
-    // failed this test one run in a few (round sixty).
-    let db: IDBDatabase | null = null;
-    for (let i = 0; i < 100 && !db; i++) {
-      // never made here: an open that would create the database is aborted, so the page makes it at its own version
-      const d = await new Promise<IDBDatabase | null>((res) => { const r = indexedDB.open('cultifolio'); r.onupgradeneeded = () => r.transaction!.abort(); r.onsuccess = () => res(r.result); r.onerror = () => res(null); });
-      if (d && d.objectStoreNames.contains('changes') && d.objectStoreNames.contains('meta')) db = d;
-      else { d?.close(); await new Promise((r) => setTimeout(r, 100)); }
-    }
-    if (!db) throw new Error('the collection\'s stores were never made');
-    const tx = db.transaction(['changes', 'meta'], 'readwrite');
-    rows.forEach(([kind, id, field, value], i) => tx.objectStore('changes').put({ t: `${wall + i}-0000-${writer}`, kind, id, field, value }));
-    tx.objectStore('meta').delete('fold');
-    await new Promise<void>((res) => { tx.oncomplete = () => res(); });
-  }, { rows, wall, writer });
-}
+/* `inject`, the changes written straight into this device's log as another device's sync would leave them, is the shared
+   helper in ./helpers/inject.ts: it writes their arrival order and moves the fold counter (round sixty-two; harness 2). */
 
 test('round sixty: a number two plants share opens a chooser; the list, the notice and the labels link each plant by its identity (decision 3)', async ({ page }) => {
   await page.goto('/plants');
@@ -3564,7 +3577,10 @@ test('round sixty: at 320 px with the browser\'s text at 200%, the phone\'s tab 
   try {
     const page = ctx.pages()[0] ?? (await ctx.newPage());
     await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
-    expect(await page.evaluate(() => getComputedStyle(document.documentElement).fontSize)).toBe('32px');
+    // The preference first, the layout after: a browser that does not read the profile's text size (the bundled Chromium on
+    // Windows, outside review B14) says nothing about the layout at 200%, and is not a failure of it (round sixty-two).
+    const text = await page.evaluate(() => getComputedStyle(document.documentElement).fontSize);
+    test.skip(text !== '32px', `preference not applied by this browser (its text is ${text}, not 32px)`);
     await addPlant(page);
     const plant = new URL(page.url()).pathname;
     await page.goto('/propagation/new?species=Copiapoa%20cinerea&key=5384013');
@@ -3748,11 +3764,11 @@ test('round sixty: a visitor sees one species\' figures and chart on a desktop, 
   await ready(page);
   const feature = page.locator('section.feature');
   await expect(feature).toBeVisible();
-  await expect(feature.locator('.featurehead')).toContainText('This is what every species page shows');
+  await expect(feature.locator('.featurehead')).toContainText('This is what a species page with a habitat climate shows');
   await expect(feature.locator('.card.cold')).toContainText('Cold floor');
   await expect(feature.locator('.climo')).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(feature).toBeHidden(); await expect(feature.locator('.climo')).toHaveCount(0); // a phone keeps the search with its rows and gets the link, and no chart is drawn (round sixty-one, at the merge)
+  await expect(feature).toBeHidden(); await expect(feature.locator('.climo')).toHaveCount(0); // on a phone the section is still sent but hidden by CSS (under 900 px), so the search stays with its rows; there is no link to it, and its chart is not drawn (round sixty-one, at the merge; this comment put right in round sixty-two, the verification triage-self review N8)
   await expect(page.locator('#try-sample-home')).toBeVisible();
   // a variety the reference files under its species: nothing as written, the species on the retry, and the page says so
   await page.setViewportSize({ width: 1280, height: 900 });

@@ -130,7 +130,7 @@ test('r60 2: an ambiguous name offers the reference\'s spelling, and "Use it" re
   await page.click('#imp-check');
   const row = page.locator('.rvrow').first();
   await expect(row).toContainText('ambiguous: not under this name; did you mean');
-  await row.getByRole('button', { name: 'Use it' }).click();
+  await row.getByRole('button', { name: 'Use Copiapoa cinerea on line 1' }).click();
   await expect(row.locator('input.nm')).toHaveValue('Copiapoa cinerea');
   await expect(row.locator('.ok')).toHaveText('matched');
   await expect(page.locator('#imp-summary')).toContainText('Matched in the reference: 1');
@@ -389,7 +389,7 @@ test('r60 12: the sample never touches the grower\'s own collection', async ({ p
   await expect(page.locator('.rows')).toContainText(no);
   await expect(page.locator('.rows')).toContainText('Copiapoa cinerea');
   await expect(page.locator('.demobar')).toBeHidden(); // drawn on every page, shown only in the sample (round sixty-one)
-  expect(await page.evaluate(() => indexedDB.databases().then((d) => d.map((x) => x.name)))).not.toContain('cultifolio-demo');
+  await expect.poll(() => page.evaluate(() => indexedDB.databases().then((d) => d.map((x) => x.name))), { timeout: 10_000 }).not.toContain('cultifolio-demo'); // deleted by the first page after Leave (round sixty-two; A9)
 });
 
 const IPHONE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1';

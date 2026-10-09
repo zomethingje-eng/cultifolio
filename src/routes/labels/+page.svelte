@@ -4,7 +4,7 @@
   import { units } from '$lib/ui/units.svelte';
   import PageHead from '$lib/ui/PageHead.svelte';
   import { site, readerLat } from '$lib/ui/site.svelte';
-  import { defaultSheet } from '$lib/ui/label-sheet';
+  import { conventionLines, defaultSheet } from '$lib/ui/label-sheet';
   import { readSetting, writeSetting } from '$lib/ui/stored';
   /**
    * Printable labels. Pick plants, pick a sheet, print. The page shows the
@@ -27,7 +27,7 @@
   const ofBatch = (s: Sowing): Item => ({ id: s.id, batch: true, no: sowNo(s), taxonName: s.taxonName, cultivar: s.cultivar ?? null, fieldNumber: s.fieldNumber ?? null, parentage: s.parentage ?? null, taxonKey: s.taxonKey ?? null, locationId: s.locationId ?? null, sourceFrom: s.sourceFrom ?? null, when: s.sown ?? null, count: s.count ?? null, method: s.method ?? null, rec: s });
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import { sheetForName, sheetsFor, type Sheet as SpeciesSheet } from '$lib/ui/index.svelte';
-  import { slugify, speciesSlug, speciesOf } from '$core/names';
+  import { slugify, speciesSlug, speciesOf, parseName } from '$core/names';
   import { numberOrNull } from '$core/units';
   import { careLine } from '$core/note';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
@@ -38,7 +38,7 @@
   const SHEETS = [
     { k: '5160', label: 'Avery 5160 · 30 per sheet · 2⅝ × 1 in', page: [215.9, 279.4], cols: 3, rows: 10, w: 66.675, h: 25.4, left: 4.7625, top: 12.7, gapX: 3.175, gapY: 0, qr: true },
     { k: '5163', label: 'Avery 5163 · 10 per sheet · 4 × 2 in', page: [215.9, 279.4], cols: 2, rows: 5, w: 101.6, h: 50.8, left: 4.0, top: 12.7, gapX: 4.7, gapY: 0, qr: true },
-    { k: '5167', label: 'Avery 5167 · 80 per sheet · 1¾ × ½ in (pot rim)', page: [215.9, 279.4], cols: 4, rows: 20, w: 44.45, h: 12.7, left: 7.3, top: 12.7, gapX: 7.6, gapY: 0, qr: false },
+    { k: '5167', label: 'Avery 5167 · 80 per sheet · 1¾ × ½ in (pot rim)', page: [215.9, 279.4], cols: 4, rows: 20, w: 44.45, h: 12.7, left: 7.62, top: 12.7, gapX: 7.62, gapY: 0, qr: false }, // 0.3 in each side and between: 7.3 and 7.6 set every column a third of a millimetre left (round sixty-two; A36)
     { k: 'L7160', label: 'Avery L7160 · 21 per sheet · 63.5 × 38.1 mm (A4)', page: [210, 297], cols: 3, rows: 7, w: 63.5, h: 38.1, left: 7.2, top: 15.1, gapX: 2.5, gapY: 0, qr: true },
     { k: 'strip', label: 'Strips to cut · 70 × 18 mm · 3 across', page: [215.9, 279.4], cols: 3, rows: 14, w: 70, h: 18, left: 3, top: 10, gapX: 2, gapY: 1, qr: true }
   ] as const;
@@ -74,7 +74,14 @@
     const acc = page.url.searchParams.get('acc');
     const batch = page.url.searchParams.get('batch');
     const loc = page.url.searchParams.get('loc');
-    if (acc) {
+    if (rememberedPicks) {
+      // The plants picked on this very page before a reload, as they were: "Print 0 labels" after a reload lost a
+      // filtered pick (round sixty-two; the grower review, 11). This tab's only, kept with the address it was made at,
+      // so a later visit from the menu, or from another plant's Label, starts afresh (round sixty-two, at the merge: a
+      // pick of one plant's label was being offered again from the menu).
+      chosen = new Set(rememberedPicks.filter((id) => collection.accession(id) || collection.sowing(id)));
+      if (acc || batch || loc) arrived = new Set(chosen);
+    } else if (acc) {
       // Numbers or ids in the URL; identities inside. A number two plants share picks neither, and says so: picking one
       // by load order printed a label for the wrong plant (round sixty; the self-review's 2).
       const ids: string[] = [];
@@ -89,7 +96,8 @@
     }
     else if (batch) chosen = new Set(batch.split(',').map((x) => collection.sowing(x)?.id).filter((x): x is string => !!x)); // a tray's label from the batch page (round forty-one, R10)
     else if (loc) chosen = new Set(collection.plantsAt(loc, true).map((a) => a.id));
-    if (acc || batch || loc) arrived = new Set(chosen);
+    if (rememberedPicks) { /* chosen above */ }
+    else if (acc || batch || loc) arrived = new Set(chosen);
     else {
       // From the menu: every growing plant is picked when they fit a sheet or two; past that nothing is, since a tap
       // on Print was three hundred labels, and "Pick all shown" is one tap (round forty-nine, 3).
@@ -100,6 +108,28 @@
   $effect(() => {
     setCrumb([{ label: 'My plants', href: '/plants' }, { label: 'Labels' }]);
     return () => setCrumb([]);
+  });
+  /**
+   * The plants picked, kept for this tab across a reload (`stored.ts`, scope 'tab'): "Print 0 labels" after a reload lost a
+   * filtered pick (round sixty-two; the grower review, 11). Written as the page goes (`pagehide`) and read once, and only
+   * when the page is this one reloaded, so a later visit from the menu or from another plant's Label starts afresh, as it did before
+   * (round sixty-two, at the merge: a remembered pick of one plant's label was being offered again from the menu).
+   */
+  const PICKED_KEY = 'cultifolio.labelsPicked';
+  const rememberedPicks = (() => {
+    try {
+      const v = JSON.parse(readSetting(PICKED_KEY, 'tab') ?? 'null') as { at?: unknown; ids?: unknown } | null;
+      writeSetting(PICKED_KEY, 'tab', null);
+      // Only when this very page was reloaded: the document's own navigation is a reload, of this address.
+      const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+      const reloaded = nav?.type === 'reload' && new URL(nav.name).pathname === page.url.pathname && new URL(nav.name).search === page.url.search;
+      return reloaded && v && v.at === page.url.search && Array.isArray(v.ids) ? v.ids.filter((x): x is string => typeof x === 'string') : null;
+    } catch { return null; }
+  })();
+  $effect(() => {
+    const keep = () => { if (collection.ready) writeSetting(PICKED_KEY, 'tab', JSON.stringify({ at: page.url.search, ids: [...chosen] })); };
+    window.addEventListener('pagehide', keep);
+    return () => window.removeEventListener('pagehide', keep);
   });
   // Saved when the grower changes a choice, not on the first run, which is the page starting with what it read (round sixty-one; the grower review, 1).
   let saveArmed = false;
@@ -143,6 +173,8 @@
   // Reactive sets mutated in place: a copy of the set per answer was quadratic over a thousand plants (round fifty-two, 5).
   const nightOff = new SvelteSet<string>();
   const nightOffCount = $derived(picked.filter((a) => nightOff.has(a.id)).length);
+  /** Care lines that print a group's convention, which has no source: said once above the sheet (round sixty-two, second pass; triage-self N10, the visitor-words review's V7). */
+  const conventionCount = $derived(conventionLines(picked.map((a) => care[a.id])));
   /** Plants whose sheet has been asked for and not yet answered: its own set, since an answer can be an empty line (a species with no climate) and must count as answered (round fourteen, 3). */
   const asking = new SvelteSet<string>();
   const pending = $derived(withCare && picked.some((a) => asking.has(a.id)));
@@ -179,7 +211,10 @@
           if (d === 'unreachable') { care[a.id] = null; return; } // not "no data": not reached
           const lat = readerLat(collection.locations); // the site, else the first place with coordinates: one helper with Today and the plant page (round sixty)
           const line = careLine({ scientific: a.taxonName, climateStatus: d?.climate.status, family: d?.name.family, months: d?.climate.status === 'ok' ? d.climate.months : null, extremes: d?.climate.status === 'ok' ? (d.climate.extremes ?? null) : null, extremesStatus: d?.climate.status === 'ok' ? d.climate.extremesStatus : null, lat: d?.habitatLat ?? null, units: units.current }, { readerLat: lat });
-          care[a.id] = line; // one key, not a copy of the map per answer (round fifty-one, 5)
+          // A cf. or aff. plant is not that species: its care line says whose care it borrows (round sixty-two; A21).
+          const p = parseName(a.taxonName);
+          const asFor = line && line !== 'climate not checked' && line !== 'climate pending' && p.qualifier && p.epithet ? `care as for ${p.genus.charAt(0)}. ${p.epithet}: ` : '';
+          care[a.id] = asFor + line; // one key, not a copy of the map per answer (round fifty-one, 5)
           if (d && d.climate.status === 'ok' && !d.climate.extremes) nightOff.add(a.id); // the night is left off this label; counted below (round seventeen, 7)
         }).catch(() => { done(); care[a.id] = null; });
       }
@@ -229,14 +264,17 @@
         <button id="lb-print" class="btn pri" onclick={() => window.print()} disabled={!picked.length || pending}>{pending ? 'Reading the reference…' : `Print ${picked.length} ${picked.length === 1 ? 'label' : 'labels'}`}</button>
       </div>
       {#if withCare && stillPending.length}
-        <p class="small muted" role="status">{stillPending.length === 1 ? 'One care line' : `${stillPending.length} care lines`} say "climate pending": the reference has not built that species' climate yet.</p>
+        <p class="small muted" role="status">{stillPending.length === 1 ? 'One care line' : `${stillPending.length} care lines`} {stillPending.length === 1 ? 'says' : 'say'} "climate pending": the reference has not built that species' climate yet.</p>
       {/if}
       {#if withCare && refused.length}
         <p class="small muted" role="status">{refused.length === 1 ? 'One care line' : `${refused.length} care lines`} <NotChecked inline why="The climate source did not answer when the species page was built." />: the preview marks {refused.length === 1 ? 'it' : 'them'}; the printed labels leave {refused.length === 1 ? 'it' : 'them'} blank.</p>
       {/if}
       {#if withCare && nightOffCount}
         <!-- "so not used", not "set aside": what it means (round fifty-eight; the accessibility review). -->
-        <p class="small muted" role="status">{nightOffCount === 1 ? 'One label prints' : `${nightOffCount} labels print`} no habitat night: the species has no daily extremes series on file (none read, the source did not answer or was not asked, or it was read at a weather cell that is mostly sea and so not used); the mean night is a different, warmer figure, so it is left off rather than printed in its place.</p>
+        <p class="small muted" role="status">{nightOffCount === 1 ? 'One label prints' : `${nightOffCount} labels print`} no habitat night: the species has no daily extremes series on file (none read, the source did not answer or was not asked, or it was read at a weather cell that is mostly sea and so not used); the coldest month's mean nightly low is a different, warmer figure, so it is left off rather than printed in its place.</p>
+      {/if}
+      {#if withCare && conventionCount}
+        <p class="small muted" role="status" id="lb-convention">{conventionCount === 1 ? 'One care line gives' : `${conventionCount} care lines give`} a group's minimum, marked "convention, no source": the lowest temperature growers conventionally keep that group at indoors, not a figure read from the species' habitat, which has none on file. <a href="/about/how#glossary">Convention</a> is in the glossary.</p>
       {/if}
       {#if withCare && unchecked.length}
         <div class="notice" id="lb-unchecked" role="status">{unchecked.length === 1 ? 'One care line' : `${unchecked.length} care lines`} <NotChecked inline why="The species reference could not be reached from here." />: the preview marks {unchecked.length === 1 ? 'it' : 'them'}; the printed labels leave {unchecked.length === 1 ? 'it' : 'them'} blank. <button type="button" class="linkish" onclick={retryCare}>Try again</button> before printing.</div>

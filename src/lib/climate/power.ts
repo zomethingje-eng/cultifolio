@@ -8,8 +8,8 @@
 import type { JsonFetcher, FetchResult } from '$dossier/fetch';
 import { reduceExtremes, extremesUsable, type Extremes, type DailySeries } from '$core/extremes';
 
-export const POWER_START = '19810101';
-export const POWER_END = '20241231';
+const POWER_START = '19810101';
+const POWER_END = '20241231';
 
 interface PowerResponse {
   geometry?: { coordinates?: [number, number, number] };

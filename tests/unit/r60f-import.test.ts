@@ -85,7 +85,7 @@ describe('a CSV', () => {
     expect(noName).toBe(1);
     expect(rows[0]).toMatchObject({ line: 2, name: 'Copiapoa cinerea', placePath: 'Greenhouse › Bench 1', acquired: '2024-05-01', status: 'archived', provenance: 'wild', price: '12', problems: [] });
     // The date left as written goes to the notes, and the plant is numbered for the year it names (round sixty-one).
-    expect(rows[1]).toMatchObject({ line: 4, name: 'Lithops lesliei', acquired: null, numberYear: 2024, status: 'growing', provenance: null, notes: 'Acquired (as written): 1/2/2024\nProvenance: seed-grown' });
+    expect(rows[1]).toMatchObject({ line: 4, name: 'Lithops lesliei', acquired: null, numberYear: 2024, status: 'growing', provenance: null, notes: 'Acquired (as written): 1/2/2024\nProvenance: seed-grown\nStatus: sold' }); // an unread status is kept in the notes (round sixty-two; the records review, 4)
     expect(rows[1].problems.join(' | ')).toMatch(/left as written.*status "sold".*|provenance/);
   });
   it('never evaluates a cell: formulas, DDE and hyperlinks stay the text they are, and go back out guarded', () => {

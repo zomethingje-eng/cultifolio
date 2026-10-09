@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { inject } from './helpers/inject';
 
 /**
  * Round sixty-one (agent L): the record pages keyed by their record (decision 2), adopted from the records review's
@@ -14,26 +15,7 @@ import { test, expect, type Page } from '@playwright/test';
 async function ready(p: Page) {
   await p.locator('html[data-ready]').waitFor({ state: 'attached' });
 }
-/** Writes straight into the page's IndexedDB (a copy of smoke.spec.ts's helper), then the next load folds them. */
-async function inject(page: Page, rows: Array<[string, string, string, string | number | boolean]>, wall: number, writer = 'abcdefabcdef0000', parked = false) {
-  await page.evaluate(async ({ rows, wall, writer, parked }) => {
-    let db: IDBDatabase | null = null;
-    for (let i = 0; i < 100 && !db; i++) {
-      const d = await new Promise<IDBDatabase | null>((res) => { const r = indexedDB.open('cultifolio'); r.onupgradeneeded = () => r.transaction!.abort(); r.onsuccess = () => res(r.result); r.onerror = () => res(null); });
-      if (d && d.objectStoreNames.contains('changes') && d.objectStoreNames.contains('meta') && d.objectStoreNames.contains('order')) db = d;
-      else { d?.close(); await new Promise((r) => setTimeout(r, 100)); }
-    }
-    if (!db) throw new Error('the collection\'s stores were never made');
-    const tx = db.transaction(['changes', 'meta', 'order'], 'readwrite');
-    const stamps = rows.map((_, i) => `${wall + i}-0000-${writer}`);
-    rows.forEach(([kind, id, field, value], i) => tx.objectStore('changes').put({ t: stamps[i], kind, id, field, value }));
-    for (const t of stamps) tx.objectStore('order').add({ t }); // their arrival on this device, in the order written, as the vault keeps it
-    if (parked) tx.objectStore('meta').put(stamps, 'parked');
-    tx.objectStore('meta').delete('fold');
-    await new Promise<void>((res) => { tx.oncomplete = () => res(); });
-    db.close();
-  }, { rows, wall, writer, parked });
-}
+/* `inject` is the shared helper (./helpers/inject.ts), the arrival order this file's copy wrote and the fold counter (round sixty-two; harness 2). */
 const plant = (id: string, no: string, name: string, more: Record<string, string> = {}): Array<[string, string, string, string]> => [['accession', id, 'acc', no], ['accession', id, 'taxonName', name], ['accession', id, 'status', 'growing'], ...Object.entries(more).map(([k, v]) => ['accession', id, k, v] as [string, string, string, string])];
 
 test('an edit form open on one plant does not follow the shared-number link to another plant (records review 1; failed on round sixty)', async ({ page }) => {

@@ -1,3 +1,10 @@
+/*
+ * The italic face (botanical names), from the weight-only Latin file, 64 KB, not the optical-size one at 147 KB: the
+ * difference is invisible at text sizes and the file is on every first visit. Declared here, in the stylesheet Vite
+ * builds, not in an inline <style> the layout wrote with {@html}, whose font request carried the page's address as its
+ * Referer (round sixty-two; A1, rule 4). The url is resolved by Vite to the hashed asset.
+ */
+@font-face { font-family: 'Newsreader Variable'; font-style: italic; font-display: swap; font-weight: 200 800; src: url('@fontsource-variable/newsreader/files/newsreader-latin-wght-italic.woff2') format('woff2-variations'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
 /* Cultifolio — the "Bench" look, carried over from v2 as tokens. */
 /*
  * The fallback faces, with the web fonts' metrics. The two faces every page sets in arrive after the first paint on a
@@ -15,6 +22,14 @@
 @font-face { font-family: 'Public Sans Fallback Roboto'; src: local('Roboto Regular'), local('Roboto-Regular'); descent-override: 21.4087%; size-adjust: 105.0977%; }
 @font-face { font-family: 'Public Sans Fallback Helvetica Neue'; src: local('Helvetica Neue'), local('HelveticaNeue'); ascent-override: 91.4439%; descent-override: 21.6578%; line-gap-override: 0%; size-adjust: 103.8889%; }
 @font-face { font-family: 'Public Sans Fallback Arial'; src: local('Arial'), local('ArialMT'); ascent-override: 90.5905%; descent-override: 21.4557%; line-gap-override: 0%; size-adjust: 104.8675%; }
+/* Linux: `local('Arial')` does not resolve there, and the text was set in the system's own face until the web fonts came:
+   the front page shifted 0.15 at 390 px as the welcome rewrapped. Liberation Sans and Serif have Arial's and Times New
+   Roman's widths, so their figures are those; DejaVu's are its own tables against the same targets (round sixty-two;
+   the self-review's N10, the accessibility review of round sixty-one, 9). */
+@font-face { font-family: 'Public Sans Fallback Liberation'; src: local('Liberation Sans'), local('LiberationSans'); ascent-override: 90.5905%; descent-override: 21.4557%; line-gap-override: 0%; size-adjust: 104.8675%; }
+@font-face { font-family: 'Public Sans Fallback DejaVu'; src: local('DejaVu Sans'), local('DejaVuSans'); ascent-override: 104.0177%; descent-override: 24.6358%; line-gap-override: 0%; size-adjust: 91.3306%; }
+@font-face { font-family: 'Newsreader Fallback Liberation'; src: local('Liberation Serif'), local('LiberationSerif'); ascent-override: 69.6835%; descent-override: 25.124%; line-gap-override: 0%; size-adjust: 105.4769%; }
+@font-face { font-family: 'Newsreader Fallback DejaVu'; src: local('DejaVu Serif'), local('DejaVuSerif'); ascent-override: 89.2255%; descent-override: 32.1697%; line-gap-override: 0%; size-adjust: 82.3755%; }
 
 :root {
   --bg: #f3f5f4; --card: #fff; --sunk: #e8ecea;
@@ -28,8 +43,8 @@
   --r: 10px;
   --sh: 0 1px 2px rgba(16, 33, 29, 0.055), 0 3px 10px rgba(16, 33, 29, 0.04);
   --sh2: 0 3px 7px rgba(16, 33, 29, 0.08), 0 12px 24px rgba(16, 33, 29, 0.07);
-  --ui: 'Public Sans Variable', 'Public Sans Fallback Segoe', 'Public Sans Fallback Roboto', 'Public Sans Fallback Helvetica Neue', 'Public Sans Fallback Arial', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --serif: 'Newsreader Variable', 'Newsreader Fallback Georgia', 'Newsreader Fallback Times', 'Newsreader Fallback Noto', Georgia, 'Times New Roman', serif;
+  --ui: 'Public Sans Variable', 'Public Sans Fallback Segoe', 'Public Sans Fallback Roboto', 'Public Sans Fallback Helvetica Neue', 'Public Sans Fallback Arial', 'Public Sans Fallback Liberation', 'Public Sans Fallback DejaVu', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --serif: 'Newsreader Variable', 'Newsreader Fallback Georgia', 'Newsreader Fallback Times', 'Newsreader Fallback Noto', 'Newsreader Fallback Liberation', 'Newsreader Fallback DejaVu', Georgia, 'Times New Roman', serif;
   --mono: 'DM Mono', ui-monospace, Menlo, Consolas, monospace;
   --maxw: 1180px;
   /* The type scale (round fifty-eight; the accessibility review): seven steps in rem, so the browser's own text size
@@ -191,6 +206,14 @@ h2.sec:first-child { margin-top: 14px; }
    licence and link alike (round sixty-one; visitor 2, checked with elementFromPoint at 390 px). */
 .hero .cred { position: absolute; right: 12px; top: 10px; font-size: var(--fs-xs); letter-spacing: 0.03em; color: #fff; background: rgba(8, 20, 16, 0.6); padding: 4px 9px; border-radius: var(--r-sm); max-width: calc(100% - 24px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hero .cred:hover { color: #fff; text-decoration: none; }
+/* Licence first, then the author's line; on a phone two lines, each cut alone, so a long author name never takes the
+   licence with it (round sixty-two; outside review A12: one nowrap line lost the licence past about 15 characters). */
+.hero .cred .lic::after { content: ' · '; }
+@media (max-width: 640px) {
+  .hero .cred { display: flex; flex-direction: column; white-space: normal; line-height: 1.35; }
+  .hero .cred > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hero .cred .lic::after { content: none; }
+}
 .hero .ph { display: flex; align-items: center; justify-content: center; height: 200px; color: var(--ink3); font-family: var(--mono); font-size: var(--fs-sm); text-align: center; padding: 0 20px; }
 .idcard { background: var(--card); border-radius: var(--r); box-shadow: var(--sh); position: relative; margin: -44px 22px 0; padding: 17px 20px; display: flex; gap: 18px; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; }
 .idcard .who { min-width: 0; flex: 1 1 320px; }
@@ -392,7 +415,9 @@ details.why > .whybody { font-family: var(--ui); font-size: var(--fs-md); line-h
 }
 
 /* A short viewport (a phone on its side, a desktop at 200% zoom): the section row and the tool row stop sticking, so the page keeps most of the screen for reading. */
-@media (max-height: 480px) {
+/* In em, which a media query reads at the browser's own text size: 480 px at 100% text, 960 px at 200%, where a phone's
+   bars took 682 of its 700 px and Tab reached tick boxes no one could see (round sixty-two; the accessibility review, 1). */
+@media (max-height: 30em) {
   nav.tabs, .toolrow { position: static; }
   /* The add forms' pinned bar too: at 400% zoom it covered 161 of 256 px (round sixty-one; the accessibility review, 8). Its
      own rule is the form's scoped one, hence the weight. */
@@ -446,3 +471,30 @@ html { scroll-padding-top: calc(var(--bar-h, 49px) + 12px); }
   a[aria-current='page'] * { color: HighlightText !important; }
   :focus-visible, input:focus, select:focus, textarea:focus { outline: 2px solid Highlight !important; outline-offset: 2px; }
 }
+
+/* =====================================================================
+   Round sixty-two: the front page while a grower's collection opens, and
+   the plant page's links in a fact grid.
+   ===================================================================== */
+/* The skeleton a returning grower sees while the collection opens is a screen tall: shorter than a desktop window, it let
+   the footer jump up into view and back, a shift of 0.14 to 0.20 at 1280 (round sixty-two; the accessibility review, 4). */
+.skeleton[aria-busy='true'] { min-height: 100vh; }
+/* A device that knows its grower (`data-grower`, set before paint) never paints the visitor's head and welcome while the
+   scripts load: they stood on screen, "Grow some of these?", until hydration swapped them for the skeleton. Hidden, not
+   removed, so nothing moves; shown again once the app is drawn (`data-ready`) for whatever page the grower then has. */
+html[data-grower]:not([data-ready]) :is(.headwrap, #welcome, .featured) { visibility: hidden; }
+/* A link among a fact grid's figures (the plant page's Source) is told apart by an underline, not by colour alone: 2.03:1
+   against its text in the dark theme (round sixty-two; the accessibility review of round sixty-one, 12; WCAG 1.4.1). */
+.factgrid > div > a:not(.btn) { text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent) 50%, transparent); text-underline-offset: 3px; text-decoration-thickness: 1px; }
+.factgrid > div > a:not(.btn):hover { text-decoration-color: currentColor; }
+/* Forced colours take away box-shadow, and the cards drawn by a shadow alone lost their edges: the front page's strip
+   tiles, catalogue rows and "You grow" tiles ran together with the page. An outline inside the edge, so nothing moves
+   (round sixty-two; the verification review's grower, smaller). */
+@media (forced-colors: active) {
+  :is(.card, .idcard, .mapbox, .factgrid, .cult, .paper, .grouphead, a.tile, .tl, table.wx, .ftile, a.grow, .reltile, .today, li.stop, .prov, .climo, .firsts, .selrows, .wl, .bcard, .rv, .cell, .brief):not(:focus-visible) { outline: 1px solid CanvasText; outline-offset: -1px; }
+}
+/* A button never wider than its line: `.btn` keeps its words on one line, and at 320 px with 200% text the plant page's
+   "Compare: Copiapoa cinerea" was 385 px, and the page scrolled sideways (432 px). On a phone a button too long for the
+   line wraps between its words; one that fits is as it was, and in a row of buttons none is squeezed to wrap, as with its
+   words on one line none could be (round sixty-two; the self-review's N10; WCAG 1.4.10). */
+@media (max-width: 480px) { .btn { white-space: normal; max-width: 100%; flex-shrink: 0; } }

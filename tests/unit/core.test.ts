@@ -90,7 +90,9 @@ describe('hlc', () => {
     expect(hlcDecode(c.tick()).wall).toBe(now);
     expect(hlcCompare(hlcAfter(stampedFast, 'dev1'), stampedFast)).toBe(1);
   });
-  it('the counter widens past ffff and still parses and orders; past six digits the wall takes a millisecond', () => {
+  // Round sixty-two (the harness review's 7, A32): a clock's own counter never reaches the mark (0x800000), which says a
+  // stamp was placed past another; one short of it, the wall takes a millisecond (it was six digits full before).
+  it('the counter widens past ffff and still parses and orders; one short of the mark the wall takes a millisecond', () => {
     const c = new Clock('dev1', () => 1_700_000_000_000);
     let last = '';
     for (let i = 0; i <= 0xffff; i++) last = c.tick();
@@ -98,7 +100,7 @@ describe('hlc', () => {
     expect(hlcDecode(next).count).toBe(0x10000);
     expect(hlcCompare(next, last)).toBe(1);
     expect(hlcCompare(last, next)).toBe(-1);
-    for (let i = 0x10001; i <= 0xffffff; i++) c.tick();
+    for (let i = 0x10001; i <= 0x7fffff; i++) c.tick();
     const rolled = hlcDecode(c.tick());
     expect(rolled).toMatchObject({ wall: 1_700_000_000_001, count: 0 });
     expect(hlcCompare('1700000000000-0001-a', '1700000000000-0000-b')).toBe(1); // then device breaks ties
@@ -286,7 +288,8 @@ describe('cultivars and hybrids', () => {
   });
   it('a named nothospecies and a nothogenus are hybrids the backbone may know', () => {
     expect(parseName('Echeveria × imbricata')).toMatchObject({ scientific: 'Echeveria × imbricata', kind: 'hybrid', epithet: 'imbricata' });
-    expect(parseName("x Graptoveria 'Fred Ives'")).toMatchObject({ scientific: 'Graptoveria', kind: 'hybrid', cultivar: 'Fred Ives' });
+    // The nothogenus keeps its sign since round sixty-two's second pass (the self-review's triage N10).
+    expect(parseName("x Graptoveria 'Fred Ives'")).toMatchObject({ scientific: '× Graptoveria', genus: 'Graptoveria', kind: 'hybrid', cultivar: 'Fred Ives' });
   });
   it('a plain species is still a species, ranks and all', () => {
     expect(parseName('Copiapoa cinerea ssp alboviridis f. longispina')).toMatchObject({ scientific: 'Copiapoa cinerea subsp. alboviridis f. longispina', kind: 'species' });

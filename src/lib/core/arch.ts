@@ -44,7 +44,12 @@ const byGenus = new Map<string, ArchKey>();
 for (const [k, list] of Object.entries(tables.genus as Record<string, string[]>)) for (const g of list) byGenus.set(g.split(' ')[0].toLowerCase(), k as ArchKey);
 const byFamily = new Map<string, ArchKey>();
 for (const [k, list] of Object.entries(tables.family as Record<string, string[]>)) for (const f of list) byFamily.set(f.toLowerCase(), k as ArchKey);
-/** Genera never grouped, whatever their family: terrestrial bromeliads and terrestrial or temperate orchids (round sixty; self-review 3). */
+/**
+ * Genera never grouped, whatever their family: terrestrial bromeliads and terrestrial or temperate orchids (round sixty;
+ * self-review 3), and since round sixty-two the terrestrial orchids the orchid group still held (Paphiopedilum, Ludisia,
+ * Phaius, Phragmipedium, Cynorkis, Cymbidium), the rock and ground bromeliads Alcantarea and Billbergia, and Selaginella
+ * (outside review A4).
+ */
 const ungrouped = new Set((tables as { none?: string[] }).none?.map((g) => g.toLowerCase()) ?? []);
 const bySpecies = new Map<string, ArchKey>(Object.entries(tables.species as Record<string, string>).map(([s, k]) => [s, k as ArchKey]));
 
@@ -52,7 +57,7 @@ export interface ArchGuess {
   arch: Archetype;
   tier: 'species' | 'genus' | 'family';
   of: string;
-  /** How the inference reads in a sentence, at the strength it has. */
+  /** Where the table lists it, as a phrase: "listed under the genus Copiapoa in the archetype table" (round sixty-two). */
   why: string;
 }
 
@@ -60,12 +65,14 @@ export function archFor(scientific: string, family?: string | null): ArchGuess |
   const name = scientific.trim().toLowerCase();
   const genus = name.split(/\s+/)[0];
   const sp = bySpecies.get(name.split(/\s+/).slice(0, 2).join(' '));
-  if (sp) return { arch: ARCH[sp], tier: 'species', of: scientific, why: `${scientific} specifically, which is the exception in its genus` };
+  if (sp) return { arch: ARCH[sp], tier: 'species', of: scientific, why: `listed by name in the archetype table, apart from its genus` };
   if (ungrouped.has(genus)) return null;
   const g = byGenus.get(genus);
-  if (g) return { arch: ARCH[g], tier: 'genus', of: genus, why: `the genus ${genus[0].toUpperCase() + genus.slice(1)}, which is reliably one kind of plant` };
+  // What the table says, not a claim about the plant: "the genus X, which is reliably one kind of plant" was an authored
+  // claim on a species page (round sixty-two; outside review A4). The tier still says how wide the listing is.
+  if (g) return { arch: ARCH[g], tier: 'genus', of: genus, why: `listed under the genus ${genus[0].toUpperCase() + genus.slice(1)} in the archetype table` };
   const f = family ? byFamily.get(family.toLowerCase()) : undefined;
-  if (f) return { arch: ARCH[f], tier: 'family', of: family!, why: `${family}, which is usually but not always one kind of plant` };
+  if (f) return { arch: ARCH[f], tier: 'family', of: family!, why: `listed under the family ${family} in the archetype table` };
   return null;
 }
 

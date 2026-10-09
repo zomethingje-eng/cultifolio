@@ -33,6 +33,9 @@ export function restWords(rule: 'rain' | 'cool', u: Units): string {
     : `Its habitat's warmer six months now (under ${ruleRain(120, u)} of rain a year, its year is read by temperature); water only if you want to`;
 }
 
+/** A rhythm in words: "every day" for one day, never "every 1 days" (round sixty-two; the grower review, 11). */
+export const everyWords = (n: number): string => (n === 1 ? 'every day' : `every ${n} days`);
+
 /** A day count in words: "today", "1 d", "11 d". */
 export const dayWords = (n: number): string => (n <= 0 ? 'today' : `${n} d`);
 

@@ -22,19 +22,19 @@ describe('an old name at a species address (round thirty, R2-8)', () => {
     const asked: string[] = [];
     // the reply as the live service gives it: `status: "SYNONYM"`, no `synonym` boolean
     const f = (url: string) => { asked.push(url); return gbif({ usageKey: 2780322, acceptedUsageKey: 2776776, status: 'SYNONYM', confidence: 100, matchType: 'EXACT', canonicalName: 'Haworthia attenuata', species: 'Haworthiopsis attenuata', speciesKey: 2776776 })(url); };
-    const a = await synonymOf(undefined, f as unknown as typeof fetch, 'haworthia-attenuata');
+    const a = await synonymOf(undefined, f as unknown as typeof fetch, 'haworthia-attenuata', undefined, null);
     expect(a).toEqual({ matched: 'Haworthia attenuata', acceptedKey: 2776776, acceptedName: 'Haworthiopsis attenuata', slug: 'haworthiopsis-attenuata' });
     expect(asked[0]).toContain('kingdom=Plantae');
     expect(asked[0]).toContain('name=Haworthia%20attenuata');
-    const b = await synonymOf(undefined, gbif({ synonym: true, matchType: 'EXACT', canonicalName: 'Cotyledon paniculata', species: 'Tylecodon paniculatus', acceptedUsageKey: 99 }), 'cotyledon-paniculata');
+    const b = await synonymOf(undefined, gbif({ synonym: true, matchType: 'EXACT', canonicalName: 'Cotyledon paniculata', species: 'Tylecodon paniculatus', acceptedUsageKey: 99 }), 'cotyledon-paniculata', undefined, null);
     expect(b).toMatchObject({ slug: null, acceptedName: 'Tylecodon paniculatus' });
-    expect(await synonymOf(undefined, gbif({ status: 'ACCEPTED', matchType: 'EXACT', usageKey: 5 }), 'aloe-vera')).toBeNull();
-    expect(await synonymOf(undefined, gbif({ matchType: 'NONE' }), 'nosuch-plant')).toBeNull();
-    expect(await synonymOf(undefined, gbif({ synonym: true, matchType: 'HIGHERRANK', acceptedUsageKey: 2776776, species: 'x' }), 'haworthia-attenuata')).toBeNull(); // a match at a higher rank is not this name
-    expect(await synonymOf(undefined, gbif({}), 'haworthia')).toBeNull(); // a bare genus is not asked
+    expect(await synonymOf(undefined, gbif({ status: 'ACCEPTED', matchType: 'EXACT', usageKey: 5 }), 'aloe-vera', undefined, null)).toBeNull();
+    expect(await synonymOf(undefined, gbif({ matchType: 'NONE' }), 'nosuch-plant', undefined, null)).toBeNull();
+    expect(await synonymOf(undefined, gbif({ synonym: true, matchType: 'HIGHERRANK', acceptedUsageKey: 2776776, species: 'x' }), 'haworthia-attenuata', undefined, null)).toBeNull(); // a match at a higher rank is not this name
+    expect(await synonymOf(undefined, gbif({}), 'haworthia', undefined, null)).toBeNull(); // a bare genus is not asked
     // A service that does not answer is not a name that is no synonym (round fifty-nine)
-    expect(await synonymOf(undefined, (async () => new Response('busy', { status: 503 })) as unknown as typeof fetch, 'haworthia-attenuata')).toBe('unchecked');
-    expect(await synonymOf(undefined, (async () => { throw new TypeError('offline'); }) as unknown as typeof fetch, 'haworthia-attenuata')).toBe('unchecked');
+    expect(await synonymOf(undefined, (async () => new Response('busy', { status: 503 })) as unknown as typeof fetch, 'haworthia-attenuata', undefined, null)).toBe('unchecked');
+    expect(await synonymOf(undefined, (async () => { throw new TypeError('offline'); }) as unknown as typeof fetch, 'haworthia-attenuata', undefined, null)).toBe('unchecked');
   });
   it('a name the index lists under a species is answered from the index, with no request (round thirty-two, 2)', async () => {
     const asked: string[] = [];
@@ -45,6 +45,6 @@ describe('an old name at a species address (round thirty, R2-8)', () => {
     expect(await synonymInIndex(undefined, f as unknown as typeof fetch, 'cotyledon-nosuch')).toBeNull();
     expect(await synonymInIndex(undefined, f as unknown as typeof fetch, 'tylecodon')).toBeNull();
     // the backbone alone would have made this a 404
-    expect(await synonymOf(undefined, f as unknown as typeof fetch, 'cotyledon-paniculata')).toBeNull();
+    expect(await synonymOf(undefined, f as unknown as typeof fetch, 'cotyledon-paniculata', undefined, null)).toBeNull();
   });
 });

@@ -97,11 +97,14 @@ describe('the CSV reader, attacked', () => {
     expect(readDate('2024-03-09T10:00:00Z', '2026-10-05').d).toBe('2024-03-09');
   });
   it('PASSES: 10,000 rows parse in well under a second in Node', () => {
-    const text = 'number,species,notes\n' + Array.from({ length: 10_000 }, (_, i) => `2020-${i},Copiapoa cinerea,"note ${i}, with a comma"`).join('\n');
-    const t0 = performance.now();
+    const sheet = (n: number) => 'number,species,notes\n' + Array.from({ length: n }, (_, i) => `2020-${i},Copiapoa cinerea,"note ${i}, with a comma"`).join('\n');
+    const text = sheet(10_000), tenth = sheet(1_000);
     const { rows } = sheetRows(text);
     expect(rows).toHaveLength(10_000);
-    expect(performance.now() - t0).toBeLessThan(1500);
+    // Measured against itself, not a wall-clock bound a busy machine can miss (round sixty-two; the harness review's 8): ten
+    // times the rows take about ten times as long, the best of three runs each, where a pass per row would take a hundred.
+    const best = (t: string) => { let b = Infinity; for (let k = 0; k < 3; k++) { const a = performance.now(); sheetRows(t); b = Math.min(b, performance.now() - a); } return b; };
+    expect(best(text)).toBeLessThan(30 * best(tenth) + 5);
   });
 });
 
@@ -160,7 +163,7 @@ describe('the commit, with a vault that fills up partway', () => {
     const { rows } = sheetRows(sheet);
     const plan = planNumbers(rows, [], collection.scheme, 2026, (n) => collection.isNumberTaken(n));
     mem.failAfter = 4; // places 2, species 1, plant 1, then refused
-    const res = await commitImport(rows, new Map(), plan, { makePlaces: true });
+    const res = await commitImport(rows, new Map(), plan, { makePlaces: true, chunk: 1 }); // a line per commit, as a failed group is written again (round sixty-two)
     expect(res.failed?.line).toBe(3);
     expect(res.doneKeys).toHaveLength(1);
     expect({ places: collection.locations.length, plants: collection.accessions.length }).toEqual({ places: 2, plants: 1 });

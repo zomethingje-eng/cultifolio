@@ -8,8 +8,16 @@
  * self-review's 14, the round forty-two review A5, product 6).
  */
 import { clip } from '$core/text';
-import { licenceLabel, type LicenceTag } from '$core/licence';
+import { licenceLabel, licenceTag, type LicenceTag } from '$core/licence';
 import { temp, rain, METRIC, type Units } from '$core/units';
+
+/**
+ * The link-preview image's alt, on the front page and on a species page with no photograph: the words `static/og.png`
+ * shows, as it shows them. The alt once described a wider line than the image holds, and the species page's fallback
+ * a narrower one (round sixty-two; the words review's 2, outside review A2). When the image is redrawn with the list's
+ * whole reach, this line changes with it.
+ */
+export const OG_ALT = 'Cultifolio. A reference for growers of cacti, succulents and bulbs, every figure with its source. Your own plants stay on your device, or sync encrypted. cultifolio.com, no account, open source.';
 
 type M = { tmax: number; tmin: number; precipMm: number; dli?: number };
 export interface HeadInput {
@@ -46,7 +54,7 @@ function and(xs: string[]): string {
 export function detailSentence(t: string | null | undefined, fallback: string): string {
   let x = (t ?? '').trim() || fallback.trim();
   if (/^[a-z][\w-]* source\b/.test(x)) x = `the ${x}`;
-  if (/did not answer$/.test(x.replace(/\.$/, ''))) x = `${x.replace(/\.$/, '')} when this page was built`;
+  if (/(did not answer|refused the request)$/.test(x.replace(/\.$/, ''))) x = `${x.replace(/\.$/, '')} when this page was built`;
   const y = x.charAt(0).toUpperCase() + x.slice(1);
   return /[.!?]$/.test(y) ? y : `${y}.`;
 }
@@ -59,10 +67,18 @@ export function speciesDescription(h: HeadInput, u: Units = METRIC): string {
     const yr = m.reduce((a, x) => a + x.precipMm, 0);
     const cold = m.reduce((b, x, i) => (x.tmin < m[b].tmin ? i : b), 0);
     const dl = m.map((x) => x.dli).filter((x): x is number => x != null);
-    const night = c.extremes ? `1 night in 100 below ${temp(c.extremes.minP01, u, 1)} (NASA POWER)` : `coldest month's mean night ${temp(m[cold].tmin, u, 1)} (CHELSA)`;
-    const chelsa = `${rain(yr, u)} of rain a year${dl.length ? ` and ${Math.round(Math.min(...dl))}–${Math.round(Math.max(...dl))} DLI of light` : ''} (CHELSA)`;
+    // The habitat, never "in the wild": the floor is one reanalysis cell at a typical spot, and a link preview unfurls this
+    // line (round sixty-two; outside review A3). Each figure by its own name; whole parts are left off the end when the line
+    // would pass 155 characters, so no figure is cut from its source.
+    const night = c.extremes ? `cold floor ${temp(c.extremes.minP01, u, 1)}, 1 night in 100 at a typical spot (NASA POWER)` : `coldest month, mean nightly low ${temp(m[cold].tmin, u, 1)} (CHELSA)`;
+    const wet = `${rain(yr, u)} of rain a year (sum of monthly medians, CHELSA)`;
+    const light = dl.length ? `${Math.round(Math.min(...dl))}–${Math.round(Math.max(...dl))} DLI open-sky light (CHELSA)` : '';
     const n = c.records ?? 0;
-    return clip(`${h.name.scientific} in the wild: ${night}; ${chelsa}; from ${n.toLocaleString('en-US')} in-range record${n === 1 ? '' : 's'}.`, 155);
+    const parts = [night, wet, light, `from ${n.toLocaleString('en-US')} in-range record${n === 1 ? '' : 's'}`].filter(Boolean);
+    const line = (k: number) => `${h.name.scientific} habitat: ${parts.slice(0, k).join('; ')}.`;
+    let k = parts.length;
+    while (k > 1 && line(k).length > 155) k--;
+    return clip(line(k), 155);
   }
   const has = [h.native ? 'native range' : '', h.photos ? 'photographs' : '', h.summary ? 'a quoted, credited Wikipedia summary' : ''].filter(Boolean);
   const state = c.status === 'pending' ? 'habitat climate pending' : c.status === 'refused' ? 'habitat climate not checked' : '';
@@ -80,12 +96,27 @@ export function photoSource(url: string | null | undefined): string | null {
   return null;
 }
 
-/** A photograph's credit, as the species page's gallery words it: the author's line, its licence named once. */
+/** A licence named inside an author's line: "(CC BY)", "CC-BY-SA 4.0", "CC0", "public domain". */
+const NAMED_LICENCE = /\b(?:cc[\s-]?0|cc[\s-]by(?:[\s-](?:sa|nc|nd))*|public domain)\b/gi;
+
+/**
+ * A photograph's credit, as the species page's gallery, compare and the hero word it: the author's line, its licence
+ * named once. When the author's line names a licence other than the one the source tags it with, the credit says the
+ * two disagree, rather than printing "(CC BY) · CC0" as if both held (round sixty-two; outside review A35).
+ */
 export function photoCredit(p: { attribution: string; licence?: LicenceTag | null }): string {
+  const c = creditParts(p);
+  return !c.lic || (c.named && !c.disagree) ? c.who : c.disagree ? `${c.who} · the source tags it ${c.lic}: the two licences disagree` : `${c.who} · ${c.lic}`;
+}
+
+/** The parts of a credit: the source's licence, the author's line, whether that line names a licence, and whether it names another. */
+export function creditParts(p: { attribution: string; licence?: LicenceTag | null }): { lic: string; who: string; named: boolean; disagree: boolean } {
   const lic = p.licence ? licenceLabel(p.licence) : '';
-  const norm = (t: string) => t.replace(/[\s-]+/g, ' ').trim().toLowerCase();
   const who = p.attribution.trim();
-  return !lic || norm(who).includes(norm(lic)) ? who : `${who} · ${lic}`;
+  // Spaces made hyphens before tagging: `licenceTag` reads "by-sa" and "by-nc", and "CC BY SA" with spaces was read as
+  // CC BY, so an author's line agreeing with the source was said to disagree (round sixty-two; the words review's 4).
+  const named = [...who.matchAll(NAMED_LICENCE)].map((x) => licenceTag(x[0].replace(/^cc[\s-]?0$/i, 'cc0').replace(/^(cc[\s-].*)$/i, (t) => t.replace(/[\s_]+/g, '-'))));
+  return { lic, who, named: named.length > 0, disagree: !!lic && named.some((t) => t !== p.licence) };
 }
 
 /** A tile's credit line: the author and licence where the tile has them, else the source it came from, else nothing. */

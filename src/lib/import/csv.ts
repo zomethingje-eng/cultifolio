@@ -213,12 +213,15 @@ export interface ReadDate {
  * - 17.11.2007, 22/10/2023: a day over 12 says which number is the day; 09/09/2024 is the same either way;
  * - 09/03/2024 is the ninth of March in one country and the third of September in another: read by the sheet's one
  *   choice (`order`), or left (null), never guessed row by row;
- * - a two-digit year is read with a day-month order only ("30/09/09"): as 20YY, or 19YY when 20YY is still to come.
- *   With dashes ("24-03-09") it could be written year first, so it is left.
+ * - a two-digit year is read with a day-month order only ("30/09/09"), as 20YY, and only when 20YY has come: "15/06/27"
+ *   could be 1927 or 2027, so it is left (round sixty-two; A20, the records review, 14). When the first number could be
+ *   a year too ("24-03-09", "24/03/09", "24.03.09"), it could be written year first, so it is left;
+ * - a time after a date ("09/03/2024 10:15", as a spreadsheet writes a date and time) is not part of the date;
+ * - a 0 day or month is no date, and "2019.5" is a number, not May 2019.
  * A date in the future or before 1900 is not read. What is not read is said, and the sheet's text goes to the notes.
  */
 export function readDate(cell: string, today: string, order: DateOrder = null): ReadDate {
-  const t = cell.trim();
+  const t = cell.trim().replace(/\s+\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:\s*[ap]\.?m\.?)?$/i, '');
   if (!t) return { d: null };
   const thisYear = Number(today.slice(0, 4));
   const yearIn = (() => { const ys = [...t.matchAll(/(?<!\d)(19\d{2}|20\d{2})(?!\d)/g)].map((x) => Number(x[1])).filter((y) => y <= thisYear); return ys.length === 1 ? ys[0] : undefined; })();
@@ -230,12 +233,23 @@ export function readDate(cell: string, today: string, order: DateOrder = null): 
     return check(`${y}-${p2(mo)}-${p2(da)}`, y);
   };
   const month = (y: number, mo: number): ReadDate => (mo >= 1 && mo <= 12 ? check(`${y}-${p2(mo)}`, y) : not(`"${t}" is not a date, so it was not read`));
-  const twoDigit = (yy: string): number => { const n = 2000 + Number(yy); return n <= thisYear ? n : n - 100; };
+  /** A two-digit year as 20YY, or null when 20YY is still to come: then it could as well be 19YY, and is not guessed. */
+  const twoDigit = (yy: string): number | null => { const n = 2000 + Number(yy); return n <= thisYear ? n : null; };
+  const century = (yy: string) => not(`"${t}" has a two-digit year that could be 19${yy} or 20${yy}, so it was not read`);
   let m: RegExpExecArray | null;
   if ((m = /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?:[T\s].*)?$/.exec(t))) return full(+m[1], +m[2], +m[3]);
   if ((m = /^(\d{4})$/.exec(t))) return check(m[1], +m[1]);
-  if ((m = /^(\d{4})[-/.](\d{1,2})$/.exec(t))) return month(+m[1], +m[2]);
-  if ((m = /^(\d{1,2})[-/.](\d{4})$/.exec(t))) return month(+m[2], +m[1]);
+  // "2019.5" is a number a spreadsheet wrote, not May 2019: a full stop between a year and a month is not read.
+  if ((m = /^(\d{4})[-/](\d{1,2})$/.exec(t))) return month(+m[1], +m[2]);
+  if ((m = /^(\d{1,2})[-/](\d{4})$/.exec(t)) || (m = /^(\d{2})\.(\d{4})$/.exec(t))) return month(+m[2], +m[1]);
+  // Two forms a spreadsheet writes on its own, said for what they are rather than "not read" alone (round sixty-two,
+  // second pass; triage-self N10, the self-review's grower 11). Neither is read: each could be read two ways.
+  if ((m = /^([a-z]{3,9})[-\s](\d{1,2})$/i.exec(t)) && MONTHS[m[1].toLowerCase()] !== undefined)
+    return not(`"${t}" looks like a spreadsheet's month and two-digit year (${MONTH_NAME[MONTHS[m[1].toLowerCase()] - 1]} ${twoDigit(m[2]) ?? `19${p2(+m[2])} or 20${p2(+m[2])}`}), but it could as well be ${+m[2]} ${MONTH_NAME[MONTHS[m[1].toLowerCase()] - 1]} of a year not given, so it was not read: give the column a four-digit year in the spreadsheet and save the CSV again`);
+  if ((m = /^(\d{5})(?:\.\d+)?$/.exec(t)) && +m[1] >= 10000) {
+    const d = new Date(Date.UTC(1899, 11, 30) + +m[1] * 864e5).toISOString().slice(0, 10);
+    return not(`"${t}" is a number, perhaps a date a spreadsheet keeps as a count of days (in the usual count it would be ${+d.slice(8)} ${MONTH_NAME[+d.slice(5, 7) - 1]} ${d.slice(0, 4)}), so it was not read: show the column as dates in the spreadsheet and save the CSV again`);
+  }
   // A named month: "August 2017", "17-Feb-2017", "Feb 17, 2017", "17th February 2017".
   const words = t.toLowerCase().replace(/,/g, ' ').split(/[\s\-/.]+/).filter(Boolean).map((w) => w.replace(/^(\d{1,2})(st|nd|rd|th)$/, '$1'));
   const mi = words.findIndex((w) => MONTHS[w] !== undefined);
@@ -246,7 +260,10 @@ export function readDate(cell: string, today: string, order: DateOrder = null): 
     if (nums.length === 2) {
       const [a, b] = nums;
       // Day then year ("17 Feb 2017", "Feb 17 2017", "17-Feb-17"), or year then day ("2017 Feb 17").
-      if (/^\d{1,2}$/.test(a) && /^(\d{4}|\d{2})$/.test(b) && mi !== 2) return full(b.length === 4 ? +b : twoDigit(b), mo, +a);
+      if (/^\d{1,2}$/.test(a) && /^(\d{4}|\d{2})$/.test(b) && mi !== 2) {
+        const y = b.length === 4 ? +b : twoDigit(b);
+        return y === null ? century(b) : full(y, mo, +a);
+      }
       if (/^\d{4}$/.test(a) && /^\d{1,2}$/.test(b)) return full(+a, mo, +b);
     }
     return not(`the date "${t}" was not read`);
@@ -254,8 +271,16 @@ export function readDate(cell: string, today: string, order: DateOrder = null): 
   // Three numbers with one separator: day and month in some order, then the year.
   if ((m = /^(\d{1,2})([-/.])(\d{1,2})\2(\d{4}|\d{2})$/.exec(t))) {
     const a = +m[1], b = +m[3];
-    if (m[4].length === 2 && m[2] === '-') return not(`"${t}" could be written year first or year last, so it was not read`);
+    if (a === 0 || b === 0) return not(`"${t}" is not a date, so it was not read`); // never "0 January" or "1 undefined"
+    if (m[4].length === 2) {
+      // "24/03/09" is 24 March 2009 or 9 March 2024: a two-digit first number that is a year already come (and a day
+      // and month after it) could be written year first, with any separator, so it is left, as dashes always were.
+      const yf = m[1].length === 2 ? twoDigit(m[1]) : null;
+      const asYearFirst = yf !== null && b <= 12 && +m[4] >= 1 && +m[4] <= 31 && full(yf, b, +m[4]).d !== null;
+      if (m[2] === '-' || asYearFirst) return not(`"${t}" could be written year first or year last, so it was not read`);
+    }
     const y = m[4].length === 4 ? +m[4] : twoDigit(m[4]);
+    if (y === null) return century(m[4]);
     if (a > 12 && b > 12) return not(`"${t}" is not a date, so it was not read`);
     if (a > 12 || a === b) return full(y, b, a);
     if (b > 12) return full(y, a, b);
@@ -266,16 +291,28 @@ export function readDate(cell: string, today: string, order: DateOrder = null): 
   return not(`the date "${t}" was not read`);
 }
 
-/** How many of the sheet's date cells read differently day first and month first: the choice is offered only when there is one. */
-export function ambiguousDates(rows: string[][], m: Mapping, header: boolean, today: string): { n: number; first: string | null } {
+/**
+ * How many of the sheet's date cells read differently day first and month first: the choice is offered only when there
+ * is one. With it, what the sheet's other dates show of its order (round sixty-two, second pass; triage-self N10, the
+ * self-review's grower 11): a date whose first number is over 12 can only be day first ("17/11/2007"), one whose second
+ * is, only month first. Said beside the question as evidence; nothing is chosen for the grower.
+ */
+export function ambiguousDates(rows: string[][], m: Mapping, header: boolean, today: string): { n: number; first: string | null; dayFirst: { n: number; first: string | null }; monthFirst: { n: number; first: string | null } } {
+  const dayFirst = { n: 0, first: null as string | null }, monthFirst = { n: 0, first: null as string | null };
   const i = m.acquired;
-  if (i === undefined) return { n: 0, first: null };
+  if (i === undefined) return { n: 0, first: null, dayFirst, monthFirst };
   let n = 0;
   let first: string | null = null;
   rows.forEach((r, k) => {
     if (header && k === 0) return;
     const c = cellText(r[i]);
-    if (c && readDate(c, today).ambiguous) { n++; first ??= c; }
+    if (!c) return;
+    const d = readDate(c, today);
+    if (d.ambiguous) { n++; first ??= c; return; }
+    const x = d.d ? /^(\d{1,2})[-/.](\d{1,2})[-/.](?:\d{4}|\d{2})(?:\s|$)/.exec(c) : null;
+    if (!x) return;
+    const by = +x[1] > 12 ? dayFirst : +x[2] > 12 ? monthFirst : null;
+    if (by) { by.n++; by.first ??= c; }
   });
-  return { n, first };
+  return { n, first, dayFirst, monthFirst };
 }

@@ -256,9 +256,9 @@ describe('Counters', () => {
   });
   it('generation() says when the vault was last put right from a listing', async () => {
     const { c } = make();
-    expect(await c.generation()).toEqual({ gen: 0, at: null });
+    expect(await c.generation()).toEqual({ gen: 0, at: null, busy: false });
     await c.setBytes(5, '2026-10-04', null, 1234);
-    expect(await c.generation()).toEqual({ gen: 0, at: 1234 });
+    expect(await c.generation()).toEqual({ gen: 0, at: 1234, busy: false });
   });
   it("a photograph's name is held by one request at a time, for at most a minute; an upload's claim is kept two days (round sixty; A12, B5)", async () => {
     const { c, storage } = make();

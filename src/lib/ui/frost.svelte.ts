@@ -5,7 +5,7 @@
  */
 import { site } from './site.svelte';
 import { units } from './units.svelte';
-import { getForecast, forecastRefusal, FORECAST_TTL_MS } from '$lib/weather/client';
+import { getForecast, forecastRefusal, FORECAST_TTL_MS, REFUSED_TTL_MS } from '$lib/weather/client';
 
 export type Risk = { level: string; text: string };
 
@@ -39,10 +39,10 @@ class FrostWatch {
       const s = site.current;
       if (gen === this.gen) this.hasSite = !!s;
       if (!s) { if (gen === this.gen) { this.risk = null; this.unchecked = null; this.checked = false; } return; }
-      let risk: Risk | null = null, unchecked: string | null = null, at = 0, held = false;
+      let risk: Risk | null = null, unchecked: string | null = null, at = 0, held = false, refused = false;
       try {
-        const r = await getForecast<{ risk: Risk }>(s.lat, s.lon, units.current);
-        if (r.ok) { risk = r.body.risk; at = r.at; }
+        const r = await getForecast<{ risk: Risk; alertsStatus?: string }>(s.lat, s.lon, units.current);
+        if (r.ok) { risk = r.body.risk; at = r.at; refused = r.body.alertsStatus === 'refused'; }
         else { unchecked = forecastRefusal(r, 'Frost'); held = r.held === true; }
       } catch {
         unchecked = forecastRefusal(null, 'Frost');
@@ -57,6 +57,9 @@ class FrostWatch {
       // A call the site held back is asked again at the first look after a minute (a navigation, the timer, a return to
       // the tab), not half an hour on: the cap is a minute's (round sixty-one).
       if (held) this.readAt = Date.now() - FORECAST_TTL_MS + 60_000;
+      // An answer whose alerts the NWS did not answer is read again after five minutes, as the client and the server keep
+      // it (round sixty-two; the words review, 18).
+      if (refused) this.readAt = Math.min(this.readAt, this.readAt - FORECAST_TTL_MS + REFUSED_TTL_MS);
     })();
     return this.p;
   }

@@ -31,6 +31,8 @@
   import { focusNext, motion } from '$lib/ui/focus';
   import RefPhotoOffer from '$lib/ui/RefPhotoOffer.svelte';
   import Parked from '$lib/ui/Parked.svelte';
+  import { restoredWords } from '$lib/ui/held-words';
+  import { notesTaxon, comparedSpecies } from '$lib/db/species-list';
   import NotChecked from '$lib/ui/NotChecked.svelte';
   import { plantHref, batchHref } from '$lib/db/links';
   import PlantName from '$lib/ui/PlantName.svelte';
@@ -79,8 +81,14 @@
   /** A repot's pot size rides in `measures` as `pot`, in millimetres; it is not a size of the plant, so it is not in the measure form (round fifty-eight). */
   const POT = { k: 'pot', label: 'Pot', unit: 'mm' };
   const measureOf = (k: string) => MEASURES.find((x) => x.k === k) ?? (k === POT.k ? POT : undefined);
-  const taxonSlug = $derived(a ? speciesSlug(a.taxonName) : '');
+  /** The record "My notes on …" are kept on: the species', or an "sp." plant's own full name (round sixty-two; A21). */
+  const notesOn = $derived(a ? notesTaxon(a.taxonName) : null);
+  const taxonSlug = $derived(notesOn?.slug ?? '');
   const taxon = $derived(a ? collection.taxon(taxonSlug) : undefined);
+  /** An "sp." plant's notes written before they were kept by its full name, on the bare genus every such plant shared: still shown, and offered to the editor (round sixty-two; A21). */
+  const sharedNotes = $derived(notesOn?.shared && !taxon?.myNotes ? (collection.taxon(notesOn.shared)?.myNotes ?? null) : null);
+  /** The species a "cf." or "aff." plant is compared with: its link and its habitat comparison say so (round sixty-two; A21). */
+  const compared = $derived(a ? comparedSpecies(a.taxonName) : null);
   const sowing = $derived(a?.sowingId ? collection.sowing(a.sowingId) : undefined);
   let dossier = $state<Sheet | null>(null);
   /** The species page's slug: the sheet's own (a homonym's is suffixed) when the sheet is here, else the name's (round eighteen, 6). */
@@ -116,6 +124,10 @@
       ref = d === 'none' ? 'none' : d ? 'ok' : 'unreachable';
     })();
     const ps = parents(parentage);
+    // The parents the record states are shown at once, unlinked, and linked when the index answers: an empty list while it
+    // was asked said "parentage not stated" of a hybrid whose parentage is stated (round sixty-two, second pass; the
+    // self-review's N5, the grower review's 11).
+    parentLinks = ps.map((pn) => ({ name: pn, slug: null }));
     entriesFor(ps.map((n) => slugify(n))).then((m) => { if (seq === asked) parentLinks = ps.map((pn) => ({ name: pn, slug: m?.has(slugify(pn)) ? slugify(pn) : null })); });
   });
   /** A photograph of the species for the plant without one of its own: the index's thumb when the index was read, else the dossier's own first wild photograph. */
@@ -158,7 +170,7 @@
   const coldCompare = $derived.by(() => {
     if (!habitat) return null;
     const n = habitat.night;
-    const night = `coldest month's mean night at the habitat ${temp(n.v, u, 1)} in ${n.at} (median year; across the range, ${habitat.cells} grid cells, ${tempN(n.lo, u)} to ${tempN(n.hi, u)}; CHELSA)`;
+    const night = `coldest month's mean nightly low at the habitat ${temp(n.v, u, 1)} in ${n.at} (median year; across the range, ${habitat.cells} grid cells, ${tempN(n.lo, u)} to ${tempN(n.hi, u)}; CHELSA)`;
     // With no extremes, say why, as the species page and compare do: a refusal or a skip is not an absence (round eighteen, 8).
     const p01 = habitat.ex ? `; 1st-percentile night over ${habitat.ex.years} years at a typical spot in the range ${temp(habitat.ex.minP01, u, 1)} (NASA POWER)` : habitat.exStatus === 'refused' ? '; the daily extremes were not checked (NASA POWER did not answer when the species page was built)' : habitat.exStatus === 'skipped' ? '; the daily extremes were not asked for when the species page was built' : habitat.exStatus === 'sea' ? '; the daily extremes were read at a weather cell that is mostly sea and are not used, so no floor is read (the species page says what that cell gave)' : '';
     if (cond?.floorC == null) return { here: null, text: `${night}${p01}; no floor set for this place` };
@@ -310,6 +322,8 @@
   }
   /** The form as it opened: only the fields the grower changed in it are written, so a form open while another tab or a sync changed the record does not write the old values back over the new (round fifty-two, 4). */
   let fOpen = {} as typeof f;
+  /** The stored acquisition date when it is not a whole day (a year, a year and month): the form keeps it unless a day is picked. */
+  const partialAcquired = $derived(a?.acquired && !/^\d{4}-\d{2}-\d{2}$/.test(a.acquired) && f.acquired === (a.acquired ?? '') ? a.acquired : null);
   let edDateMsg = $state('');
   let edWaterMsg = $state('');
   /** The rhythm this plant follows when it sets none: its place's, inherited down the tree, else 21 days (round fifty-eight; the grower review). */
@@ -430,12 +444,12 @@
   let myNotesBaseStamp: string | null = null;
   async function saveMyNotes() {
     if (!a) return;
-    const slug = speciesSlug(a.taxonName);
+    const on = notesTaxon(a.taxonName);
     const next = myNotesDraft.trim() || null;
     // The edit carries the stamp of the text it was opened on, so a text that changed meanwhile (another device, another
     // tab) is read from the log as replaced unseen, on every device, and nothing more is written; the species' key is
     // left to the species page, which has the reference's (round fifty-nine; the round forty-one review, 7).
-    await collection.put('taxon', slug, { name: speciesOf(a.taxonName), myNotes: next, myNotesBase: myNotesBaseStamp });
+    await collection.put('taxon', on.slug, { name: on.name, myNotes: next, myNotesBase: myNotesBaseStamp });
     editingMy = false;
   }
   async function remove() {
@@ -444,7 +458,7 @@
     goto('/plants');
     // The removal is one tap; the way back is one too (round twenty-six, 5). The record never left the log.
     // Back by its identity, whatever number it holds after the restore: by number, a plant brought back beside another under the same number opened the other (round sixty).
-    toast.show(`${no} removed.`, 8000, { label: 'Undo', run: () => { void collection.restore('accession', id).then((moved) => { const back = collection.accession(id); void goto(back ? plantHref(back) : `/plants/${encodeURIComponent(id)}`); if (moved) toast.show(`Restored as ${moved.to}: ${moved.from} is another plant's now.`); }); } });
+    toast.show(`${no} removed.`, 8000, { label: 'Undo', run: () => { void collection.restore('accession', id).then((moved) => { const back = collection.accession(id); void goto(back ? plantHref(back) : `/plants/${encodeURIComponent(id)}`); if (moved) toast.show(restoredWords(moved, 'plant')); }); } });
   }
   const waiting = $derived(a ? undefined : collection.waiting('accession', param));
   /** A removed plant the address names, by its identity first (a label's code carries it) and then by its number (round sixty-one; the records review's 2). */
@@ -458,7 +472,7 @@
     if (moved) {
       const back = collection.accession(r.id);
       await goto(back ? plantHref(back) : `/plants/${encodeURIComponent(r.id)}`);
-      toast.show(`Restored as ${moved.to}: ${moved.from} is another plant's now.`);
+      toast.show(restoredWords(moved, 'plant'));
     } else toast.show(`${accNo(r)} restored.`);
   }
   /** The key the reference files this plant's species under, when it answered. */
@@ -532,7 +546,7 @@
   <!-- A stranger's label is headed as what it is, not by the internal id its code carries (round sixty-one; the grower review's 13). -->
   <h1 class="q" style="margin-top: 24px">{strangerLabel ? 'A plant label' : removed ? accNo(removed) : param}</h1>
   {#if removed}
-    <p class="muted" id="removed-plant">{removed.id === param ? `${accNo(removed)} ${removed.taxonName} was removed.` : `${param} was given to a plant since removed.`} The number stays reserved and its record is still in the change log, so it can be brought back as it was, log and photographs included.</p>
+    <p class="muted" id="removed-plant">{removed.id === param ? `${accNo(removed)} ${removed.taxonName}${removed.cultivar ? ` '${removed.cultivar}'` : ''} was removed.` : `${param} was given to a plant since removed.`} The number stays reserved and its record is still in the change log, so it can be brought back as it was, log and photographs included.</p>
     <p><button class="btn pri" onclick={restoreRemoved}>Restore this plant</button></p>
   {:else if waiting}
     <WaitingRecord kind="accession" label={param} {waiting} />
@@ -568,13 +582,14 @@
         {#if a.provenance === 'unknown' && !a.sourceFrom && !a.fieldNumber}Added {fmtDate(a.acquired)}{:else}{provLabel(a.provenance)}{#if a.acquired}{' · '}{a.sourceForm ?? 'acquired'}{a.sourceFrom ? ` from ${a.sourceFrom}` : ''}{' '}{fmtDate(a.acquired)}{/if}{/if}
         {#if a.sowingId}{' · '}raised from <a class="mono" href={sowing ? batchHref(sowing) : `/propagation/${a.sowingId}`}>{sowing ? sowNo(sowing) : a.sowingId}</a>{#if sowing && sowing.parentAcc}{@const pa = collection.accession(sowing.parentAcc)} (from <a class="mono" href={pa ? plantHref(pa) : `/plants/${sowing.parentAcc}`}>{pa ? accNo(pa) : sowing.parentAcc}</a>){/if}{/if}
         {#if a.locationId && collection.placeOf(a.locationId)}{' · '}at <a class="place" href="/places/{collection.placeOf(a.locationId)}">{collection.locationName(a.locationId)}</a>{:else if a.locationId}{' · '}<span class="place">its place was removed; no place now</span>{/if}
-        {#if !a.taxonKey && kind !== 'hybrid' && ref !== 'ok' && ref !== 'loading'}{' · '}<NotChecked inline what="Name" why="The name was kept as typed: it matched no reference name, or the name service did not answer when the plant was added. Edit the plant and pick the name from the list to check it." />{/if}
+        <!-- An answer is said as an answer, a silence as a silence (rule 2; round sixty-two, the grower review's 9): "none" is the reference holding no such name; "not checked" is the reference not reached. -->
+        {#if !a.taxonKey && kind !== 'hybrid' && ref === 'none'}{' · '}<span id="name-not-in-reference">Name not in the reference</span>{:else if !a.taxonKey && kind !== 'hybrid' && ref === 'unreachable'}{' · '}<NotChecked inline what="Name" why="The species reference could not be reached from here just now, so whether it holds this name is not known. It is asked again when this page opens." />{/if}
       </p>
       {#if kind === 'hybrid'}
         <p class="vern parentage">{#if parentLinks.length}{#each parentLinks as pl, i}{#if i}{' × '}{/if}{#if pl.slug}<a href="/species/{pl.slug}"><SpeciesName name={pl.name} /></a>{:else}<SpeciesName name={pl.name} />{/if}{/each}{:else}A hybrid; parentage not stated. <button class="linkish" type="button" onclick={startEdit}>Add it</button> if you know it.{/if}</p>
       {/if}
       {#if !hasHero && speciesThumb && thumbFailed}<p class="vern muted">The reference's photograph did not load.</p>{/if}
-      {#if !hasHero && dossier?.thumb && !prefs.referencePhotos}<RefPhotoOffer link what="the reference’s photograph of this species" />{/if}
+      {#if !hasHero && dossier?.thumb && !prefs.referencePhotos}<RefPhotoOffer link what={compared ? 'the reference’s photograph of the species it is compared with' : 'the reference’s photograph of this species'} />{/if}
       {#if a.status !== 'growing' || collection.isDue(a)}
         <div class="pills">
           {#if a.status !== 'growing'}<span class="pill {a.status === 'dead' ? 'b' : ''}">{a.status}</span>{/if}
@@ -583,7 +598,7 @@
       {/if}
     </div>
     <div class="acts">
-      {#if kind !== 'hybrid' && ref === 'ok'}<a class="btn" href="/species/{speciesHref}">Species page</a>{:else if kind !== 'hybrid' && ref === 'loading'}<span class="btn skelbtn" aria-hidden="true">Species page</span>{/if}
+      {#if kind !== 'hybrid' && ref === 'ok'}<a class="btn" href="/species/{speciesHref}" id="species-link">{#if compared}Compare: <SpeciesName name={compared} />{:else}Species page{/if}</a>{:else if kind !== 'hybrid' && ref === 'loading'}<span class="btn skelbtn" aria-hidden="true">Species page</span>{/if}
       <div class="cardmenu">
         <button class="btn dots" type="button" bind:this={cardMenuBtn} aria-haspopup="menu" aria-expanded={cardMenu} aria-controls="card-menu" aria-label="More for this plant: edit, label, propagate" title="Edit, label, propagate" onclick={() => (cardMenu = !cardMenu)}>···</button>
         {#if cardMenu}
@@ -608,7 +623,8 @@
       <label><span>Name as received</span><input id="ed-recv" type="text" bind:value={f.nameAsReceived} /></label>
       <label><span>Field number</span><input id="ed-fn" type="text" bind:value={f.fieldNumber} /></label>
       <label><span>Provenance</span><select id="ed-prov" bind:value={f.provenance}>{#if !['unknown', 'wild', 'f1', 'fn', 'veg'].includes(f.provenance)}<option value={f.provenance}>{f.provenance} (a word this version of the app does not know)</option>{/if}<option value="unknown">Not stated</option><option value="wild">Wild-collected</option><option value="f1">F1: raised from wild-collected seed</option><option value="fn">Cultivated seed (Fn)</option><option value="veg">Vegetative</option></select></label>
-      <label><span>Acquired</span><input id="ed-date" type="date" bind:value={f.acquired} oninput={() => (edDateMsg = '')} aria-invalid={!!edDateMsg} aria-describedby={edDateMsg ? 'ed-date-bad' : undefined} />{#if edDateMsg}<span class="bad small" id="ed-date-bad">{edDateMsg}</span>{/if}</label>
+      <!-- A partial date ("2017-08", "2019") is kept as it is, and a date field cannot show it: said under the field, so a grower who thinks it is missing does not guess a day (round sixty-two; the records review's 11). -->
+      <label><span>Acquired</span><input id="ed-date" type="date" bind:value={f.acquired} oninput={() => (edDateMsg = '')} aria-invalid={!!edDateMsg} aria-describedby={[edDateMsg ? 'ed-date-bad' : '', partialAcquired ? 'ed-date-partial' : ''].filter(Boolean).join(' ') || undefined} />{#if partialAcquired}<span class="small muted" id="ed-date-partial">As imported: {partialAcquired}. Pick a day only if you know it.</span>{/if}{#if edDateMsg}<span class="bad small" id="ed-date-bad">{edDateMsg}</span>{/if}</label>
       <label><span>From</span><input id="ed-from" type="text" bind:value={f.sourceFrom} /></label>
       <label><span>Form</span><input id="ed-form" type="text" bind:value={f.sourceForm} placeholder="plant, seedling, seed, cutting" /></label>
       <label><span>Price</span><input id="ed-price" type="text" bind:value={f.price} /></label>
@@ -753,7 +769,7 @@
     <!-- Each thumbnail is named by the plant, the day and the caption, the cover said too; the image inside is then decorative (round fifty-eight; the accessibility review). -->
     <div class="phgrid">
       {#each photos as ph, i (ph.id)}
-        <button class="ph" type="button" class:cov={cover?.id === ph.id} onclick={() => (lightbox = i)} title={ph.caption ?? ph.d} aria-label="{photoLabel(ph)}{cover?.id === ph.id ? ' (the cover)' : ''}">
+        <button class="ph" type="button" class:cov={cover?.id === ph.id} onclick={() => (lightbox = i)} title={ph.caption ?? ph.d} aria-label="{ph.d}{cover?.id === ph.id ? ' cover' : ''}: {photoLabel(ph)}">
           <PhotoImg id={ph.id} alt="" loading="lazy" />
           <span class="pd">{ph.d}</span>
           {#if cover?.id === ph.id}<span class="tag">cover</span>{/if}
@@ -763,7 +779,7 @@
   {/if}
 
   <details class="hab" id="habitat">
-    <summary class="secrule"><h2>Habitat vs this place</h2><div class="line"></div><span class="n">{a.locationId && collection.placeOf(a.locationId) ? collection.locationName(a.locationId) : ''}</span></summary>
+    <summary class="secrule"><h2>{#if compared}Compare: <SpeciesName name={compared} />, habitat vs this place{:else}Habitat vs this place{/if}</h2><div class="line"></div><span class="n">{a.locationId && collection.placeOf(a.locationId) ? collection.locationName(a.locationId) : ''}</span></summary>
     <div class="cards">
       <div class="card"><div class="lab">Habitat rain season</div><div class="val" style="font-family: var(--ui); font-size: var(--fs-lg); font-weight: 700">{#if !season && dossier?.climate.status === 'refused'}<NotChecked what="Climate" why="A source did not answer when the species page was built{dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}." />{:else}{season ? season.label : dossier?.climate.status === 'pending' ? 'Climate pending' : dossier ? 'No habitat climate' : ref === 'unreachable' ? 'Reference not reached' : ref === 'none' ? (kind === 'hybrid' ? 'A hybrid' : 'No species page') : '…'}{/if}</div><div class="sub">{#if season}{season.note} <a href="/species/{speciesHref}#s-cultivation">The sheet</a>.{:else if dossier?.climate.status === 'refused'}No season is read from an answer that was not given.{:else if dossier?.climate.status === 'pending'}The habitat climate for this species has not been derived yet.{:else if dossier}Nothing to read a season from{dossier.climate.status === 'none' && dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}.{:else if ref === 'unreachable'}The species reference could not be reached from here; nothing is known either way.{:else if ref === 'none'}{kind === 'hybrid' ? (parentLinks.some((p) => p.slug) ? 'No habitat of its own; its parents have species pages.' : 'No habitat of its own.') : 'Not in the reference.'}{:else}reading the species page{/if}</div></div>
     </div>
@@ -783,12 +799,16 @@
 
   {#if !a.notes}{@render plantNotes()}{/if}
   <div class="cult">
-    <div class="sum">My notes on <i>{a.taxonName}</i> <span class="hint">shared by every plant of this species you own; shown on the species page</span></div>
+    <!-- A cf. or aff. plant's notes are the compared species' (shown on every plant of it and on its page), and say so: they read as this plant's species' own (round sixty-two, second pass; the grower review). -->
+    <div class="sum" id="species-notes-head">My notes on <SpeciesName name={notesOn?.name ?? a.taxonName} />{#if compared}, the species it is compared with{/if} <span class="hint">{notesOn?.shared ? 'kept under this name, shared by every plant you have under it' : compared ? 'shared by every plant of that species you own; shown on its species page' : 'shared by every plant of this species you own; shown on the species page'}</span></div>
     {#if editingMy}
       <div class="fields"><textarea id="taxon-notes" rows="4" bind:value={myNotesDraft}></textarea><div class="actions"><button class="btn" onclick={() => (editingMy = false)}>Cancel</button><button class="btn pri" onclick={saveMyNotes}>Save</button></div></div>
     {:else if taxon?.myNotes}
       <div class="body">{taxon.myNotes}</div><div class="foot"><button class="linkish" onclick={() => { myNotesDraft = taxon?.myNotes ?? ''; myNotesOpen = myNotesDraft; myNotesBaseStamp = collection.notesStamp('taxon', taxonSlug); editingMy = true; }}>Edit</button></div>
       <ReplacedNotes kind="taxon" id={taxonSlug} />
+    {:else if sharedNotes}
+      <!-- Written before an "sp." plant's notes were kept by its own name, when every plant of the genus without a species shared them (round sixty-two; A21): shown, and the editor opens on them so they can be kept here. -->
+      <div class="body" id="shared-genus-notes">{sharedNotes}</div><div class="foot small muted">Written on the genus, before these notes were kept by this name, so every <i>{parseName(a.taxonName).genus}</i> plant without a species shows them. <button class="linkish" onclick={() => { myNotesDraft = sharedNotes ?? ''; myNotesOpen = ''; myNotesBaseStamp = collection.notesStamp('taxon', taxonSlug); editingMy = true; }}>Keep them for this name</button></div>
     {:else}
       <div class="none">Nothing yet. <button class="linkish" onclick={() => { myNotesDraft = ''; myNotesOpen = ''; myNotesBaseStamp = collection.notesStamp('taxon', taxonSlug); editingMy = true; }}>Write cultivation notes</button></div>
     {/if}

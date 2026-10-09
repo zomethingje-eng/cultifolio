@@ -241,8 +241,15 @@ export interface ColdFloor {
   plain: { lead: string; rule: string };
 }
 /** Why there is no daily extremes series, as its own sentence: a refusal is "not checked", never an absence (rule 2). */
-export const extremesWhy = (exStatus?: SheetInput['extremesStatus']): string =>
+const extremesWhy = (exStatus?: SheetInput['extremesStatus']): string =>
   exStatus === 'refused' ? 'The daily extremes were not checked: NASA POWER did not answer when this page was built.' : exStatus === 'skipped' ? 'The daily extremes were not asked for when this page was built.' : exStatus === 'sea' ? 'The daily extremes were read at a weather cell that is mostly sea and are not used.' : 'No daily extremes are on file.';
+/**
+ * Why a page, compare or the share card has no floor to print, in the few words the glance row gives beside the mean
+ * nightly low (rule 2: a refusal is "not checked", a skip "not asked for"). One wording for every surface (round
+ * sixty-two; visitor-words 11: the card gave no reason at all).
+ */
+export const extremesWhyTag = (exStatus?: string | null): string =>
+  exStatus === 'refused' ? 'extremes not checked' : exStatus === 'skipped' ? 'extremes not asked for' : exStatus === 'sea' ? 'extremes not used (sea cell)' : 'no extremes series';
 const extremesWhyShort = (exStatus?: SheetInput['extremesStatus']): string =>
   exStatus === 'refused' ? 'the daily extremes were not checked' : exStatus === 'skipped' ? 'the daily extremes were not asked for' : exStatus === 'sea' ? 'the daily extremes fell on a sea cell and are not used' : 'no daily extremes on file';
 const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
@@ -253,7 +260,7 @@ const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
  */
 const noHabitat = (st?: SheetInput['climateStatus']) =>
   st === 'refused'
-    ? { s: 'The habitat climate was not checked: a source did not answer when this page was built, so no cold floor is read.', short: 'Habitat climate not checked', lead: 'Habitat climate not checked, so no cold floor is read.' }
+    ? { s: 'The habitat climate was not checked: a source refused or did not answer when this page was built, so no cold floor is read.', short: 'Habitat climate not checked', lead: 'Habitat climate not checked, so no cold floor is read.' }
     : st === 'pending'
       ? { s: 'The habitat climate is pending: it has not been derived yet, so no cold floor is read.', short: 'Habitat climate pending', lead: 'Habitat climate pending, so no cold floor is read.' }
       : { s: 'No habitat figure is on file for this species, so no cold floor is read.', short: 'No habitat cold figure on file', lead: 'No habitat cold figure on file.' };
@@ -262,7 +269,7 @@ export function coldFloor(m: Month[] | null, ex: Extremes | null, guess: ArchGue
   const conv = guess && guess.arch.minC != null ? { minC: guess.arch.minC, group: guess.arch.many ?? guess.arch.lab.toLowerCase(), why: guess.why, text: conventionOf(guess.arch, T)! } : null;
   if (ex) {
     const f = ex.minP01;
-    return { habitat: f, kind: 'night', convention: conv, s: `Cold floor: ${T1(f)}, which is the 1st-percentile night over ${ex.years} years at a typical spot in the range (NASA POWER).`, short: `Cold floor ${T1(f)} (1st-percentile habitat night, NASA POWER).`, hab: true, plain: { lead: `Cold floor ${T1(f)}: one night in a hundred at a typical spot in the range is colder.`, rule: `NASA POWER, ${ex.years} years` } };
+    return { habitat: f, kind: 'night', convention: conv, s: `Cold floor: ${T1(f)}, which is the 1st-percentile night over ${ex.years} years at a typical spot in the range (NASA POWER).`, short: `Cold floor (1 night in 100) ${T1(f)}, at a typical spot in the range (NASA POWER).`, hab: true, plain: { lead: `Cold floor ${T1(f)}: one night in a hundred at a typical spot in the range is colder.`, rule: `NASA POWER, ${ex.years} years` } };
   }
   if (m) {
     // A month's mean night is not a floor: it is the mean of a month's lows, above the nights a floor is read from. Headed
@@ -273,12 +280,12 @@ export function coldFloor(m: Month[] | null, ex: Extremes | null, guess: ArchGue
     const f = m[i].tmin;
     // Every month that ties for the coldest night, as printed (round sixty-one; visitor 5).
     const at = monthNames(tiedMonths(m.map((x) => x.tmin), false, T1));
-    return { habitat: f, kind: 'mean', convention: conv, s: `Cold floor: none read. The nearest figure is ${T1(f)}, the coldest month's mean night, ${at}, in the median year (CHELSA); a month's mean night is warmer than the nights a floor is read from. ${extremesWhy(exStatus)}`, short: `Coldest mean night ${T1(f)} (coldest month's mean night, CHELSA; no floor read).`, hab: true, plain: { lead: `Coldest month's mean night ${T1(f)}, not a cold floor: ${extremesWhyShort(exStatus)}.`, rule: 'CHELSA' } };
+    return { habitat: f, kind: 'mean', convention: conv, s: `Cold floor: none read. The nearest figure is ${T1(f)}, the coldest month's mean nightly low, ${at}, in the median year (CHELSA); a month's mean of its nightly lows is warmer than the nights a floor is read from. ${extremesWhy(exStatus)}`, short: `Coldest month, mean nightly low ${T1(f)} (CHELSA; no floor read).`, hab: true, plain: { lead: `Coldest month, mean nightly low ${T1(f)}, not a cold floor: ${extremesWhyShort(exStatus)}.`, rule: 'CHELSA' } };
   }
   if (!conv) return null;
   // No habitat figure at all: the convention alone, said as a convention with no source, and no floor (round sixty).
   const none = noHabitat(climateStatus);
-  return { habitat: null, kind: null, convention: conv, s: `${none.s} Apart from the habitat, ${conv.text} (archetype table, by ${conv.why}).`, short: `${none.short}; ${conv.text} (archetype table).`, hab: false, plain: { lead: `${none.lead} ${cap(conv.text)}.`, rule: 'archetype table' } };
+  return { habitat: null, kind: null, convention: conv, s: `${none.s} Apart from the habitat, ${conv.text} (${conv.why}).`, short: `${none.short}; ${conv.text} (archetype table).`, hab: false, plain: { lead: `${none.lead} ${cap(conv.text)}.`, rule: 'archetype table' } };
 }
 
 /**
@@ -392,19 +399,23 @@ export function cultivationSheet(input: SheetInput): { rows: Row[]; arch: ArchGu
     // Every month that ties, as printed, for the coldest night and the warmest day (round sixty-one; visitor 5).
     const coldAt = monthNames(tiedMonths(m.map((x) => x.tmin), false, T1));
     const hotAt = monthNames(tiedMonths(m.map((x) => x.tmax), true, T1));
-    bits.push(`Monthly means: coldest night ${T1(m[coldI].tmin)} in ${coldAt}${spread10}, warmest day ${T1(m[hotI].tmax)} in ${hotAt} (${ENV}).`);
+    // Named as the labels name them, "mean nightly low" and "mean daily high" (round sixty-two; the words review's 5).
+    bits.push(`Monthly means: the coldest month's mean nightly low ${T1(m[coldI].tmin)} in ${coldAt}${spread10}, the warmest month's mean daily high ${T1(m[hotI].tmax)} in ${hotAt} (${ENV}).`);
     floorOut = coldFloor(m, ex, guess, U, input.extremesStatus);
     const floor = floorOut;
     if (floor) bits.push(floor.s);
     // The series' own length, never a fixed "1981–2024" (round sixty; words 20); the convention is never part of the floor (round sixty).
-    add('Warmth and air', 'Temperature', bits.join(' '), `${ex ? `NASA POWER daily minima and maxima over ${ex.years} years at a typical spot in the range${ex.lapseAppliedM ? ', lapse-corrected to its elevation' : ', without lapse correction'}; ` : ''}CHELSA monthly means, ${ENV.replace(', CHELSA', '')}. ${ex ? 'The cold floor is the 1st-percentile night named in its sentence.' : 'No cold floor is read without a daily extremes series; the mean night named in its sentence is not one.'} Not a measured survival limit for any plant in a pot.`, true, floor?.short, floor?.plain);
+    // The dossier records a correction of 0 m and no correction alike (`lapseAppliedM: 0`), so a 0 is said as either,
+    // never as "without lapse correction" (round sixty-two; the outside triage's 3, outside review A3).
+    const lapse = ex?.lapseAppliedM == null ? '' : ex.lapseAppliedM !== 0 ? `, lapse-corrected ${ex.lapseAppliedM > 0 ? '+' : ''}${ex.lapseAppliedM} m to its elevation` : ', with a lapse correction of 0 m or none (the two are recorded alike)';
+    add('Warmth and air', 'Temperature', bits.join(' '), `${ex ? `NASA POWER daily minima and maxima over ${ex.years} years at a typical spot in the range${lapse}; ` : ''}CHELSA monthly means, ${ENV.replace(', CHELSA', '')}. ${ex ? 'The cold floor is the 1st-percentile night named in its sentence.' : "No cold floor is read without a daily extremes series; the coldest month's mean nightly low named in its sentence is not one."} Not a measured survival limit for any plant in a pot.`, true, floor?.short, floor?.plain);
     const rhs = m.map((x) => x.rh).filter((x): x is number => x != null);
     if (rhs.length) add('Warmth and air', 'Humidity', `Relative humidity at the habitat: ${Math.round(Math.min(...rhs)) === Math.round(Math.max(...rhs)) ? `${Math.round(Math.min(...rhs))}% all year` : `${Math.round(Math.min(...rhs))} to ${Math.round(Math.max(...rhs))}% across the year`} (monthly means, ${ENV}). A figure about the air, saying nothing about how the plant takes water.`, `CHELSA relative humidity, ${ENV.replace(', CHELSA', '')}.`, true);
   } else {
     floorOut = coldFloor(null, ex, guess, U, undefined, input.climateStatus);
     const floor = floorOut;
     // Which kind of absence, said as the sentence says it: not checked, pending, or none on file (round sixty-one; visitor 4).
-    const absent = input.climateStatus === 'refused' ? 'the habitat climate was not checked (a source did not answer)' : input.climateStatus === 'pending' ? 'the habitat climate is pending' : 'no habitat figure is on file for this species';
+    const absent = input.climateStatus === 'refused' ? 'the habitat climate was not checked (a source refused or did not answer)' : input.climateStatus === 'pending' ? 'the habitat climate is pending' : 'no habitat figure is on file for this species';
     if (floor) add('Warmth and air', 'Temperature', floor.s, `The archetype table's convention for growing the group indoors, which gives no source; ${absent}, so no cold floor is read.`, false, floor.short, floor.plain);
   }
 

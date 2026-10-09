@@ -9,7 +9,7 @@
  * not hold; the answer is kept in the Worker's cache (the Cache API) for a day.
  */
 import { getIndex, indexMaps, type Platform, type Fetch, type Loaded } from './dossiers';
-import { upstreamAllowed } from './sync';
+import { upstreamCall } from './sync';
 
 export interface SynonymAnswer {
   /** The name as the backbone matched it. */
@@ -55,8 +55,13 @@ export async function synonymInIndex(platform: Platform, fetch: Fetch, slug: str
  * knows it as accepted (then the reference simply lacks it); `'unchecked'` when it could not be asked, which the 404
  * says, since "not an older name" and "could not ask" are different facts (round fifty-nine; rule 2); `'held'` when the
  * site held the call back itself (its minute of calls to GBIF used up), which the 404 says as that (round sixty-one).
+ * `ip` is the reader's address as `clientIp` keys it: the call is counted to it as the names route counts its own, so
+ * one address takes at most its tenth of GBIF's share whichever route asks (round sixty-two; the server review, 3; A29:
+ * counted to the site alone, one address took a fifth). Null counts the share alone, for a caller with no reader. It
+ * is required, with no default: a default of null counted a new caller to the site alone without a word (round
+ * sixty-two; the self-review's triage, agent S's need).
  */
-export async function synonymOf(platform: Platform, fetch: Fetch, slug: string, held?: Loaded): Promise<SynonymAnswer | null | 'unchecked' | 'held'> {
+export async function synonymOf(platform: Platform, fetch: Fetch, slug: string, held: Loaded | undefined, ip: string | null): Promise<SynonymAnswer | null | 'unchecked' | 'held'> {
   const name = nameFromSlug(slug);
   if (!name || !/^[A-Z][a-z]+ [a-z]/.test(name)) return null; // a binomial at least: a bare genus is not a species address
   const cacheKey = new Request(`https://cache.cultifolio/match?name=${encodeURIComponent(name.toLowerCase())}`);
@@ -65,8 +70,9 @@ export async function synonymOf(platform: Platform, fetch: Fetch, slug: string, 
   const hit = await cache?.match(cacheKey).catch(() => undefined); // a cache that fails is a lookup, not a 500 (round sixty)
   if (hit) body = (await hit.json().catch(() => null)) as Record<string, unknown> | null;
   if (!hit) {
-    // The site's own minute of calls to GBIF, for every address together: past it, not checked (round sixty; the server review, 16).
-    if (!(await upstreamAllowed(platform))) return 'held'; // held back by the site, said as that (round sixty-one; the server review, 4)
+    // The site's own minute of calls to GBIF, for every address together, and this reader's part of it: past either, not
+    // asked (round sixty; the server review, 16; round sixty-two: the server review, 3).
+    if (!(await upstreamCall(platform, ['gbif'], ip)).ok) return 'held'; // held back by the site, said as that (round sixty-one; the server review, 4)
     try {
       const r = await fetch(`${MATCH}?kingdom=Plantae&strict=false&name=${encodeURIComponent(name)}`, { headers: { accept: 'application/json', 'user-agent': 'Cultifolio/3.0 (https://cultifolio.com)' } });
       if (!r.ok) return 'unchecked';

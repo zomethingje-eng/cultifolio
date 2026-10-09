@@ -52,7 +52,6 @@ export function corpusInfo(): Promise<CorpusInfo> {
  */
 const forgetCorpus = (used: CorpusInfo) => { if (corpusResolved === used) { corpusP = null; corpusResolved = null; } };
 let corpusResolved: CorpusInfo | null = null;
-export const corpusId = () => corpusInfo().then((c) => c.id);
 const remembered = (): CorpusInfo => {
   try {
     const raw = localStorage.getItem(CORPUS_KEY);
@@ -91,15 +90,18 @@ export async function entriesFor(slugs: Iterable<string>, again = false): Promis
     const p = bucketFetch(`/api/entries?b=${chunk.join(',')}`, info).then((r) => (r?.ok ? (r.json() as Promise<IndexEntry[]>) : null)).catch(() => null);
     for (const b of chunk) bucketCache.set(ckey(info, b), p.then((all) => (all ? all.filter((e) => bucketOf(e.slug, count) === b) : null)));
   }
+  // As `sheetsFor`: every failed bucket is let go before the failure is answered, so the next call asks for all of them
+  // again (round sixty-two; agent A).
+  let failed = false;
   for (const b of buckets) {
     const entries = await bucketCache.get(ckey(info, b));
-    if (!entries) {
-      bucketCache.delete(ckey(info, b));
-      // The count changed under the request (a 409): hashed again under the one now served, once.
-      if (!again && (await corpusInfo()).buckets !== count) return entriesFor(list, true);
-      return null; // not reached: asked again next time
-    }
+    if (!entries) { bucketCache.delete(ckey(info, b)); failed = true; continue; }
     for (const e of entries) if (want.has(e.slug)) out.set(e.slug, e);
+  }
+  if (failed) {
+    // The count changed under the request (a 409): hashed again under the one now served, once.
+    if (!again && (await corpusInfo()).buckets !== count) return entriesFor(list, true);
+    return null; // not reached: asked again next time
   }
   return out;
 }
@@ -111,7 +113,7 @@ export type Found = IndexEntry;
  * browser whole. Null when the reference could not be reached (a different fact from "nothing matches"). What is sent
  * is the text in a public catalogue's search box, listed on /about/how; a plant's record never is.
  */
-export async function searchCatalogue(q: string, n = 60): Promise<(Found[] & { relaxed?: { query: string } }) | { limited: number } | null> {
+export async function searchCatalogue(q: string, n = 60): Promise<(Found[] & { relaxed?: { query: string; left?: string }; near?: boolean }) | { limited: number } | null> {
   // Cut by code point, as the server's `_clean` does: a cut through an emoji's surrogate pair made `encodeURIComponent`
   // throw, and the page said the reference could not be reached (round sixty-one; the corpus review, 12).
   const text = [...q.trim()].slice(0, 80).join('');
@@ -122,15 +124,41 @@ export async function searchCatalogue(q: string, n = 60): Promise<(Found[] & { r
     if (r.status === 429) return { limited: Math.max(1, Number(r.headers.get('retry-after')) || 60) }; // the address's allowance is spent: a wait, not "not reached" (round forty, R1-3)
     if (!r.ok) return null;
     const hits = (await r.json()) as Found[];
-    // Nothing matched as typed and the server searched its first two words instead: the header names them, so the page
-    // can say "Showing results for …" (round sixty).
+    // The server answered other words than those typed (its retry on the first two, or a reading that dropped an author, a
+    // quoted cultivar or "sp."): the header names them, so the page can say "Showing results for …" (round sixty; round
+    // sixty-two, B2).
     const h = r.headers.get('x-search-relaxed');
     let relaxed: string | null = null;
     if (h) { try { relaxed = decodeURIComponent(h).trim() || null; } catch { relaxed = null; } }
-    return relaxed ? Object.assign(hits, { relaxed: { query: relaxed } }) : hits;
+    // What that reading left out, when it matched (an author, a cultivar): the page then says "leaving out …", not "Nothing
+    // matched" (round sixty-two; the verification review's search 3).
+    const l = r.headers.get('x-search-left');
+    let left: string | null = null;
+    if (l) { try { left = decodeURIComponent(l).trim() || null; } catch { left = null; } }
+    // The hits came by a similar spelling: the picker says so on each (round sixty-two; A7, B2).
+    const near = r.headers.get('x-search-near') === '1';
+    return Object.assign(hits, relaxed ? { relaxed: { query: relaxed, ...(left ? { left } : {}) } } : {}, near ? { near } : {});
   } catch {
     return null;
   }
+}
+
+/**
+ * Whether what is typed in the front page's search is shaped like one of the collection's plant numbers, which is never
+ * sent to the server (rule 4): digits, a dash and a digit ("2026-0013", as the year scheme numbers), and, under a
+ * prefix scheme, the collection's own prefix with a dash or a digit after it ("ACC-0013", "acc 13"). Only the year
+ * shape was tested, and "ACC-0013" with no plant of that number went to /api/search (round sixty-two; the self-review's
+ * triage N4). A sowing's number ("S2026-001", whatever the scheme) is the collection's too.
+ */
+export function plantNumberShaped(text: string, scheme?: { mode: 'year' | 'prefix'; prefix?: string } | null): boolean {
+  const t = text.trim();
+  if (/^\d{2,4}-?\d/.test(t) || /^S\d{4}-?\d/i.test(t)) return true;
+  if (scheme?.mode !== 'prefix') return false;
+  const prefix = (scheme.prefix ?? 'ACC').trim();
+  if (!prefix) return false;
+  // The prefix with a dash, or with a digit after it (a space or dash between): "Aloe vera" under a prefix "ALOE" is a search.
+  const re = new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:-|[-\\s]?\\d)`, 'i');
+  return re.test(t);
 }
 
 export type { Row as CatalogueRow } from '$lib/server/catalogue';
@@ -169,14 +197,18 @@ export async function sheetsFor(slugs: Iterable<string>, again = false): Promise
   // One bucket a request: the URL is then the edge cache's own key for that bucket, and the worker's, so it repeats
   // across devices and visits; the requests run in parallel.
   for (const b of missing) sheetBucketCache.set(ckey(info, b), bucketFetch(`/api/sheets?b=${b}`, info).then((r) => (r?.ok ? (r.json() as Promise<Sheet[]>) : null)).catch(() => null));
+  // Every bucket is waited for before a failure is answered, and each failed one let go, so the next call asks again for
+  // all of them: returning at the first left the others' failures cached, and each "Check again" cleared one (round
+  // sixty-two; agent A, Today's sheets).
+  let failed = false;
   for (const b of buckets) {
     const sheets = await sheetBucketCache.get(ckey(info, b));
-    if (!sheets) {
-      sheetBucketCache.delete(ckey(info, b));
-      if (!again && (await corpusInfo()).buckets !== count) return sheetsFor(list, true);
-      return null;
-    }
+    if (!sheets) { sheetBucketCache.delete(ckey(info, b)); failed = true; continue; }
     for (const s of sheets) if (want.has(s.slug)) out.set(s.slug, s);
+  }
+  if (failed) {
+    if (!again && (await corpusInfo()).buckets !== count) return sheetsFor(list, true);
+    return null;
   }
   return out;
 }

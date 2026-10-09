@@ -5,7 +5,23 @@ export { sheetOf, type Sheet, type SheetMonth, type SheetClimate } from '$dossie
 import { sheetOf, type Sheet } from '$dossier/sheet';
 
 const CACHE_MS = 10 * 60_000;
+
+/**
+ * A bucket one of whose species' dossiers could not be read: the route answers 503, and nothing is cached. `retryAfter`
+ * (seconds): how long this isolate keeps the refusal before deriving the bucket again.
+ */
+export class SheetsUnreadable extends Error {
+  constructor(bucket: string, readonly retryAfter = REFUSED_S) { super(`the sheets of bucket ${bucket} could not all be read`); this.name = 'SheetsUnreadable'; }
+}
 const cache = new Map<string, { at: number; sheets: Sheet[] }>();
+/**
+ * A refused bucket is kept refused in this isolate for half a minute (round sixty-two, second pass; the server review,
+ * 6): every device's retry derived it again, up to a few hundred dossier reads each, before reaching the unreadable one.
+ */
+const REFUSED_S = 30;
+const refused = new Map<string, number>();
+/** For tests: forget the buckets this isolate refused. */
+export const _forgetRefusedSheets = () => refused.clear();
 
 /**
  * Every sheet in a bucket. The build's file named by the manifest (one object read), else derived here from the
@@ -17,6 +33,9 @@ export async function sheetsIn(c: Loaded, platform: Platform, fetch: Fetch, buck
   const ck = `${corpus}:${bucket}`; // keyed by corpus as well as bucket, so an isolate that outlives a refresh does not serve the old one (round thirteen, 4)
   const hit = cache.get(ck);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.sheets;
+  const until = refused.get(ck);
+  if (until != null && Date.now() < until) throw new SheetsUnreadable(bucket, Math.max(1, Math.ceil((until - Date.now()) / 1000)));
+  refused.delete(ck);
   // The bucket file and the index it is derived from are the corpus the request holds, never whichever is current at the read (round fifty-eight).
   let out: Sheet[] | null = await product<Sheet[]>(c, platform, fetch, `sheets/${bucket}.json`);
   if (!out) {
@@ -25,6 +44,17 @@ export async function sheetsIn(c: Loaded, platform: Platform, fetch: Fetch, buck
     const width = 16;
     for (let i = 0; i < entries.length; i += width) {
       const got = await Promise.all(entries.slice(i, i + width).map(async (e) => { const d = await getDossier(platform, fetch, e.key); return d ? { ...sheetOf(d, e.thumb), slug: e.slug } : null; })); // under the index slug, as the build's bucket files are (round seventeen, 6)
+      // A species the index lists whose dossier cannot be read is a failure of the bucket, never an absence: left out,
+      // a device read it as "not in the reference" (round sixty-two; the corpus review of round sixty, 13, open until now).
+      if (got.some((s) => !s)) {
+        // Named in the log, so the operator can see which dossier keeps the bucket refused: one that fails its schema, or
+        // that the index lists and the store lacks, refuses its bucket until it is put right (the server review, 6).
+        const keys = entries.slice(i, i + width).filter((_, j) => !got[j]).map((e) => `${e.key} (${e.slug})`);
+        console.error(`sheets: bucket ${bucket} of corpus ${corpus} refused; these dossiers could not be read: ${keys.join(', ')}`);
+        for (const k of refused.keys()) if (!k.startsWith(`${corpus}:`)) refused.delete(k);
+        refused.set(ck, Date.now() + REFUSED_S * 1000);
+        throw new SheetsUnreadable(bucket);
+      }
       for (const s of got) if (s) out.push(s);
     }
   }

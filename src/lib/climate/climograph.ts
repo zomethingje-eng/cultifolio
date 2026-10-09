@@ -64,8 +64,10 @@ export interface Climograph {
      */
     minAbs: { y: number; label: string } | null;
     maxP99: { y: number; label: string } | null;
-    /** The three consecutive months around the coldest mean night, shaded as the habitat's cold quarter. */
+    /** The three consecutive months around the coldest month's mean nightly low, shaded as the habitat's cold quarter. */
     coldQuarter: { x: number; w: number; wraps: boolean; x2?: number; w2?: number };
+    /** Where "cold quarter" is written: clear of the extremes' labels and the frost label (round sixty-two; V22). */
+    quarterLabel: { x: number; y: number };
   };
   rain: {
     top: number;
@@ -151,6 +153,28 @@ export function climograph(c: ClimoInput, width = 720, units: Units = METRIC): C
     ? { x: left + colW * q0, w: colW * (12 - q0), wraps: true, x2: left, w2: colW * (3 - (12 - q0)) }
     : { x: left + colW * q0, w: colW * 3, wraps: false };
 
+  // "Cold quarter" written where it touches no other label: at a phone's width the record low's label ran into it
+  // (round sixty-two; the self-review's N10, V22). Widths are estimated at the 11 px label size, a little generously;
+  // the label tries the panel's foot, then its head, then each line up from the foot, in the quarter and then (when it
+  // wraps) in its other part; at a phone's width the extremes' labels span nearly the whole panel at both ends.
+  const xsLabels: { x0: number; x1: number; y: number }[] = [];
+  const edge = left + plotW - 14;
+  const extW = (t: string) => t.length * 6.2;
+  if (c.extremes) {
+    const lab = (v: number, t: string) => xsLabels.push({ x0: edge - extW(t), x1: edge, y: ty(v) + 3.5 });
+    lab(c.extremes.minAbs, `${temp(c.extremes.minAbs, units, 1)} lowest night in ${c.extremes.years} years, NASA POWER`);
+    lab(c.extremes.maxP99, `${temp(c.extremes.maxP99, units, 1)} 99th-percentile day, NASA POWER`);
+  }
+  if (tLo < 0 && tHi > 0) xsLabels.push({ x0: left + plotW - 2 - 40, x1: left + plotW - 2, y: ty(0) - 4 });
+  const QW = 92; // "COLD QUARTER", upper case and spaced
+  const clear = (x: number, y: number) => x + QW <= left + plotW && xsLabels.every((b) => b.x1 < x - 2 || b.x0 > x + QW + 2 || Math.abs(b.y - y) > 14);
+  const qxs = [coldQuarter.x + 4, ...(coldQuarter.wraps ? [left + 4] : [])];
+  const qys = [tempTop + tempH - 5, tempTop + 13, ...Array.from({ length: Math.floor((tempH - 30) / 14) }, (_, i) => tempTop + tempH - 19 - 14 * i)];
+  const quarterLabel = (() => {
+    for (const y of qys) for (const x of qxs) if (clear(x, y)) return { x, y };
+    return { x: qxs[0], y: qys[0] };
+  })();
+
   /* ---- rain ---- */
   const rMax = Math.max(...c.p90.map((m) => m.precipMm), ...c.months.map((m) => m.precipMm));
   const dry = rMax < 1;
@@ -201,8 +225,8 @@ export function climograph(c: ClimoInput, width = 720, units: Units = METRIC): C
   const days = c.months.map((m) => m.tmax), nights = c.months.map((m) => m.tmin);
   const alt =
     (flatT
-      ? `A flat year: mean day about ${temp(c.months[warmest].tmax, units)} and mean night about ${temp(c.months[coldest].tmin, units)} in every month, so the cold quarter is shaded by rounding only. `
-      : `Mean day from ${temp(c.months[dayLo].tmax, units)} in ${at(days, false)} to ${temp(c.months[warmest].tmax, units)} in ${at(days, true)}; mean night from ${temp(c.months[coldest].tmin, units)} in ${at(nights, false)} to ${temp(c.months[nightHi].tmin, units)} in ${at(nights, true)}. The cold quarter, ${MONTHS[q0]} to ${MONTHS[(centre + 1) % 12]}, is the three months around the coldest mean night${coldTies.length < 2 || coldTies.length >= 12 ? '' : coldRun != null ? `, centred on the ${coldTies.length} months in a row that tie for it` : `, around the first of the ${coldTies.length} months that tie for it`}. `) +
+      ? `A flat year: mean daily high about ${temp(c.months[warmest].tmax, units)} and mean nightly low about ${temp(c.months[coldest].tmin, units)} in every month, so the cold quarter is shaded by rounding only. `
+      : `Mean daily high from ${temp(c.months[dayLo].tmax, units)} in ${at(days, false)} to ${temp(c.months[warmest].tmax, units)} in ${at(days, true)}; mean nightly low from ${temp(c.months[coldest].tmin, units)} in ${at(nights, false)} to ${temp(c.months[nightHi].tmin, units)} in ${at(nights, true)}. The cold quarter, ${MONTHS[q0]} to ${MONTHS[(centre + 1) % 12]}, is the three months around the coldest month's mean nightly low${coldTies.length < 2 || coldTies.length >= 12 ? '' : coldRun != null ? `, centred on the ${coldTies.length} months in a row that tie for it` : `, around the first of the ${coldTies.length} months that tie for it`}. `) +
     (dry ? `${dryLabel(units)[0].toUpperCase()}${dryLabel(units).slice(1)} of rain.` : `${rainF(rainYear, units)} of rain a year, ${wettest}.`) +
     (hasBand ? ` The bands show the 10th to 90th percentile across ${c.cells} habitat cells.` : c.cells > 1 ? ` The ${c.cells} habitat cells agree to within rounding.` : '') +
     (c.extremes ? ` Over ${c.extremes.years} years at a typical spot in the range (NASA POWER) the absolute minimum was ${temp(c.extremes.minAbs, units, 1)} and the 99th-percentile day ${temp(c.extremes.maxP99, units, 1)}; neither is dated to a month.` : '') +
@@ -228,7 +252,8 @@ export function climograph(c: ClimoInput, width = 720, units: Units = METRIC): C
       // No "(undated)", which read as an error to a stranger: the mark's place at the edge, in no month, says it (round sixty-one; visitor 14).
       minAbs: c.extremes ? { y: r1(ty(c.extremes.minAbs)), label: `${temp(c.extremes.minAbs, units, 1).replace(/ °[CF]$/, '°')} lowest night in ${c.extremes.years} years, NASA POWER` } : null,
       maxP99: c.extremes ? { y: r1(ty(c.extremes.maxP99)), label: `${temp(c.extremes.maxP99, units, 1).replace(/ °[CF]$/, '°')} 99th-percentile day, NASA POWER` } : null,
-      coldQuarter: { ...coldQuarter, x: r1(coldQuarter.x), w: r1(coldQuarter.w), ...(coldQuarter.x2 != null ? { x2: r1(coldQuarter.x2), w2: r1(coldQuarter.w2!) } : {}) }
+      coldQuarter: { ...coldQuarter, x: r1(coldQuarter.x), w: r1(coldQuarter.w), ...(coldQuarter.x2 != null ? { x2: r1(coldQuarter.x2), w2: r1(coldQuarter.w2!) } : {}) },
+      quarterLabel: { x: r1(quarterLabel.x), y: r1(quarterLabel.y) }
     },
     rain: { top: rainTop, height: rainH, ticks: rTicks.map((t) => ({ y: r1(t.y), label: t.label })), bars, dry, max: rMax },
     strip: stripOut,

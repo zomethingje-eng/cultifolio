@@ -2,12 +2,32 @@
 import type { AccStatus, NameKind, Provenance } from '$lib/db/types';
 import { cellText, readDate, readRow, unmappedColumns, type DateOrder, type Mapping } from './csv';
 import type { PastedLine } from './paste';
-import { blankRow, type ImportRow } from './plan';
+import { blankRow, keyLines, type ImportRow } from './plan';
+
+/**
+ * A name cell as the reference and the collection read it (round sixty-two, second pass; the verification grower
+ * review): compatibility forms folded (NFKC: full-width letters, a ligature, a no-break space) and the invisible format
+ * characters a paste from a web page brings taken out (a soft hyphen, a zero-width space, a byte order mark), so
+ * "Copia\u00adpoa cinerea" is Copiapoa cinerea and not "not in the reference". A zero-width joiner inside an emoji is kept.
+ */
+const INVISIBLE = /(?!\u200d(?=\p{Extended_Pictographic}))\p{Cf}/gu;
+export const cleanName = (s: string): string => s.normalize('NFKC').replace(INVISIBLE, '').replace(/\s+/g, ' ').trim();
+/** A row named by its cleaned name; when cleaning changed it, the text as received is kept (`recordOf` files it as the name as received). */
+const named = (key: string, line: number, raw: string): ImportRow => {
+  const name = cleanName(raw);
+  const r = blankRow(key, line, name);
+  if (name !== raw.trim()) r.originalName = raw.trim();
+  return r;
+};
 
 /** A paste: the same place and date acquired for every line; the source given for the list unless a line names its own. A line with no name is left out (the page counts it). */
 export function rowsFromPaste(lines: PastedLine[], common: { placeId: string | null; acquired: string | null; source: string | null }): ImportRow[] {
-  return lines.filter((l) => l.name).map((l) => ({
-    ...blankRow(`p${l.line}`, l.line, l.name),
+  const named_ = lines.filter((l) => cleanName(l.name));
+  // Each line's own parts are what make it that line: the same list pasted again is the same plants (round sixty-two).
+  const keys = keyLines(named_.map((l) => ({ cells: [l.name, l.cultivar ?? '', l.number ?? '', l.source ?? '', l.notes ?? ''], qty: 1 })));
+  return named_.map((l, i) => ({
+    ...named(`p${l.line}`, l.line, l.name),
+    importKeys: keys[i],
     cultivar: l.cultivar,
     number: l.number,
     notes: l.notes,
@@ -49,6 +69,10 @@ export function rowsFromSheet(rows: string[][], m: Mapping, header: boolean, tod
   let repeatedHeader = 0;
   const head = header ? (rows[0] ?? []).map((c) => cellText(c).toLowerCase()) : null;
   const extra = opts.extra ?? unmappedColumns(rows, m, header).extra;
+  const cellsOf: string[][] = [];
+  // A Cultifolio plants.csv names each plant's record in its id column: read back into the collection that wrote it, a
+  // line whose plant is here is that plant (round sixty-two).
+  const idCol = head ? head.findIndex((h) => h === 'id') : -1;
   rows.forEach((cells, i) => {
     if (header && i === 0) return;
     if (head && cells.length && head.every((h, k) => h === cellText(cells[k]).toLowerCase())) { repeatedHeader++; return; }
@@ -57,8 +81,8 @@ export function rowsFromSheet(rows: string[][], m: Mapping, header: boolean, tod
     let name = orNull(v.name);
     // "Copiapoa" and "cinerea" in two columns are "Copiapoa cinerea"; a Species cell that already starts with its genus is kept as it is.
     if (genus) name = !name ? genus : name.toLowerCase().startsWith(`${genus.toLowerCase()} `) || name.toLowerCase() === genus.toLowerCase() ? name : `${genus} ${name}`;
-    if (!name) { noName++; return; }
-    const r = blankRow(`s${i + 1}`, i + 1, name);
+    if (!name || !cleanName(name)) { noName++; return; }
+    const r = named(`s${i + 1}`, i + 1, name);
     r.cultivar = orNull(v.cultivar);
     r.fieldNumber = orNull(v.fieldNumber);
     r.number = orNull(v.number);
@@ -70,9 +94,10 @@ export function rowsFromSheet(rows: string[][], m: Mapping, header: boolean, tod
     r.nameAsReceived = orNull(v.nameAsReceived);
     r.lot = orNull(v.lot);
     r.form = orNull(v.form);
+    if (idCol >= 0) r.recordId = orNull(cellText(cells[idCol]));
     const q = orNull(v.qty);
     if (q) {
-      const n = /^\d+$/.test(q) ? Number(q) : NaN;
+      const n = /^\d+(?:\.0+)?$/.test(q) ? Number(q) : NaN; // "3.0": a number cell saved with decimals (round sixty-two; the records review, 14)
       if (n >= 1 && n <= QTY_MAX) r.qty = n;
       else { r.problems.push(`"${q}" was not read as a number of plants (1 to ${QTY_MAX}): one plant, and the text is in the notes`); addNote(r, `Qty: ${q}`); }
     }
@@ -88,15 +113,21 @@ export function rowsFromSheet(rows: string[][], m: Mapping, header: boolean, tod
       }
     }
     const kind = orNull(v.kind)?.toLowerCase();
-    if (kind) { if (KINDS.includes(kind as NameKind)) r.nameKind = kind as NameKind; else r.problems.push(`kind "${v.kind}" is not species, cultivar or hybrid; read from the name`); }
+    // An unread Kind or Status is kept in the notes, as Provenance is: said on the row and then lost, a sold plant arrived
+    // as growing with no word of it (round sixty-two; the records review, 4).
+    if (kind) { if (KINDS.includes(kind as NameKind)) r.nameKind = kind as NameKind; else { r.problems.push(`kind "${v.kind}" is not species, cultivar or hybrid; read from the name, and kept in the notes`); addNote(r, `Kind: ${v.kind}`); } }
     const prov = orNull(v.provenance)?.toLowerCase();
     if (prov) { if (PROV.includes(prov as Provenance)) r.provenance = prov as Provenance; else r.problems.push(`provenance "${v.provenance}" was not read; kept in the notes`); }
     if (prov && !PROV.includes(prov as Provenance)) addNote(r, `Provenance: ${v.provenance}`);
     const st = orNull(v.status)?.toLowerCase();
-    if (st) { if (STATUS.includes(st as AccStatus)) r.status = st as AccStatus; else r.problems.push(`status "${v.status}" was not read; added as growing`); }
+    if (st) { if (STATUS.includes(st as AccStatus)) r.status = st as AccStatus; else { r.problems.push(`status "${v.status}" was not read; added as growing, and kept in the notes`); addNote(r, `Status: ${v.status}`); } }
     // Every column no field takes, in the notes as "Locality: Totoral, Chile": nothing in the sheet is dropped unseen.
     for (const c of extra) { const t = cellText(cells[c.i]); if (t) addNote(r, `${c.name}: ${t}`); }
     out.push(r);
+    cellsOf.push(cells);
   });
+  // The plants each line makes, by the line's own cells: what a second run of the same sheet finds here (round sixty-two).
+  const keys = keyLines(out.map((r, i) => ({ cells: cellsOf[i], qty: r.qty })));
+  out.forEach((r, i) => { r.importKeys = keys[i]; });
   return { rows: out, noName, repeatedHeader };
 }

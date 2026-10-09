@@ -125,18 +125,18 @@ describe('prices and what was spent', () => {
     expect(readPrice('3,50')).toEqual({ v: 3.5, cur: null });
     expect(readPrice('£6')).toEqual({ v: 6, cur: '£' });
     expect(readPrice(' $ 14.99 ')).toEqual({ v: 14.99, cur: '$' });
-    expect(readPrice('6 EUR')).toEqual({ v: 6, cur: 'EUR' });
+    expect(readPrice('6 EUR')).toEqual({ v: 6, cur: '€' }); // one currency written one way (round sixty-two; A39)
     expect(readPrice('12 €')).toEqual({ v: 12, cur: '€' });
-    for (const no of ['a swap', '3 for 10', '1,200', '£6 $7', 'free', '12-15', '-5', '']) expect(readPrice(no), no).toBeNull();
+    for (const no of ['a swap', '3 for 10', '1,2000', '£6 $7', '12-15', '-5', '']) expect(readPrice(no), no).toBeNull(); // "1,200" and "free" are read since round sixty-two (A39)
   });
   // Round sixty-one: a total per currency, never across them, in place of no total at all (the grower review, 12).
   it('totals the plain prices per currency, and counts the rest as not read', () => {
     expect(spendOf(['12', '8.50', 'a swap', null, '', '£3'])).toMatchObject({ counted: 3, skipped: 1 });
     const s = spendOf(['£12', '£8.50', 'a swap', null, '£0.25']);
-    expect(s).toEqual({ parts: [{ cur: '£', total: 20.75, counted: 3 }], counted: 3, skipped: 1 });
+    expect(s).toEqual({ parts: [{ cur: '£', total: 20.75, counted: 3 }], counted: 3, skipped: 1, free: 0 });
     expect(amountWords(s)).toBe('£20.75 on 3 plants');
     expect(amountWords(spendOf(['12', '3']))).toBe('15 on 2 plants');
-    expect(amountWords(spendOf(['12 EUR']))).toBe('12 EUR on 1 plant');
+    expect(amountWords(spendOf(['12 EUR']))).toBe('€12 on 1 plant');
     expect(amountWords(spendOf(['12', '£3']))).toBe('£3 on 1 plant and 12 on 1 plant with no currency given');
   });
   it('says this year and all time, and how many prices could not be read', () => {

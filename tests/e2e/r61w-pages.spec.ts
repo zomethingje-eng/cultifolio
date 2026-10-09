@@ -8,6 +8,7 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 import zlib from 'node:zlib';
+import { inject } from './helpers/inject';
 
 async function ready(p: Page) {
   await p.locator('html[data-ready]').waitFor({ state: 'attached' });
@@ -24,23 +25,7 @@ function png(w: number, h: number): Buffer {
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ih), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
 }
 
-/** Writes straight into the page's IndexedDB (a copy of smoke.spec.ts's helper), then the next load folds them. */
-async function inject(page: Page, rows: Array<[string, string, string, string | number | boolean]>, wall: number, writer = 'abcdefabcdef0000') {
-  await page.evaluate(async ({ rows, wall, writer }) => {
-    let db: IDBDatabase | null = null;
-    for (let i = 0; i < 100 && !db; i++) {
-      const d = await new Promise<IDBDatabase | null>((res) => { const r = indexedDB.open('cultifolio'); r.onupgradeneeded = () => r.transaction!.abort(); r.onsuccess = () => res(r.result); r.onerror = () => res(null); });
-      if (d && d.objectStoreNames.contains('changes') && d.objectStoreNames.contains('meta')) db = d;
-      else { d?.close(); await new Promise((r) => setTimeout(r, 100)); }
-    }
-    if (!db) throw new Error("the collection's stores were never made");
-    const tx = db.transaction(['changes', 'meta'], 'readwrite');
-    rows.forEach(([kind, id, field, value], i) => tx.objectStore('changes').put({ t: `${wall + i}-0000-${writer}`, kind, id, field, value }));
-    tx.objectStore('meta').delete('fold');
-    await new Promise<void>((res) => { tx.oncomplete = () => res(); });
-    db.close();
-  }, { rows, wall, writer });
-}
+/* `inject` is the shared helper (./helpers/inject.ts), which writes the arrival order and moves the fold counter (round sixty-two; harness 2, B13). */
 const plant = (id: string, no: string, name: string, more: Record<string, string> = {}): Array<[string, string, string, string]> => [['accession', id, 'acc', no], ['accession', id, 'taxonName', name], ['accession', id, 'status', 'growing'], ...Object.entries(more).map(([k, v]) => ['accession', id, k, v] as [string, string, string, string])];
 
 test.describe('phone', () => {
@@ -60,14 +45,15 @@ test.describe('phone', () => {
     expect(onTop).toEqual([true, true, true]);
   });
 
-  test('the front page on a phone: the search with its rows on the first screen, the feature not drawn, and no chart shipped (decision 9, changed at the merge)', async ({ page }) => {
+  test('the front page on a phone: the search with its rows on the first screen, the feature hidden, and no chart shipped (decision 9, changed at the merge)', async ({ page }) => {
     const html = await (await page.request.get('/')).text();
     expect(html).not.toMatch(/class="climo[ "]/); // the chart is not in the HTML a phone is sent
     await page.goto('/');
     await ready(page);
     const top = async (sel: string) => (await page.locator(sel).first().boundingBox())!.y;
     // The four cards between the search and the rows put the first row two screens down and parted the search from what it
-    // searches (round fifty, 1): on a phone the feature is the pitch's link, as in round sixty.
+    // searches (round fifty, 1): on a phone the feature is sent but hidden by CSS, with no link to it; the strip's first
+    // photograph is the same species (this comment put right in round sixty-two; the verification triage-self review N8).
     await expect(page.locator('section.feature')).toBeHidden();
     await expect(page.locator('.featured .strip a').first()).toHaveAttribute('href', /\/species\//); // the strip's first photograph is the featured species
     expect(await top('.featured')).toBeLessThan(await top('.toolrow .searchbar'));
@@ -109,19 +95,20 @@ test.describe('desktop', () => {
     expect(await fig.evaluate((f) => (f as HTMLElement).innerText)).not.toMatch(/undated/);
   });
 
-  test('the front page: the search and the photographs come first, the feature under them within a screen, and drawing the chart moves nothing (decision 9)', async ({ page }) => {
+  // Round sixty-two (decision 8, outside review A10, B1): the chips sit with the rows they govern. Second pass (the outside
+  // triage's 2): above the search the feature pushed the search off a desktop's first screen, so it follows the first rows.
+  test('the front page: the photographs come first, then the search and the first rows, then the feature, and drawing the chart moves nothing (decision 9; round sixty-two)', async ({ page }) => {
     await page.goto('/');
     await ready(page);
     const box = async (sel: string) => (await page.locator(sel).first().boundingBox())!;
     const feature = page.locator('section.feature');
     await expect(feature.locator('figure.climo')).toBeVisible();
     const search = await box('.toolrow .searchbar'), strip = await box('.featured'), f = await box('section.feature');
-    expect(search.y + search.height).toBeLessThan(900); // the search on the first screen
     expect(strip.y).toBeLessThan(900);
     expect(strip.y).toBeLessThan(f.y);
-    expect(search.y).toBeLessThan(f.y);
-    expect(f.y).toBeLessThan(900); // the feature starts on the first screen
-    expect(f.height).toBeLessThanOrEqual(900); // and is no taller than one
+    expect(search.y + search.height).toBeLessThanOrEqual(f.y); // round sixty-two, second pass: after the search and the first rows
+    expect((await box('.rows .grow')).y).toBeLessThan(f.y);
+    expect(f.height).toBeLessThanOrEqual(900); // no taller than a screen
     // the four cards two by two beside the chart
     const cards = await feature.locator('.gcards > .card').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().x)));
     expect(cards).toHaveLength(4);
@@ -143,16 +130,16 @@ test.describe('desktop', () => {
     const g = page.locator('.glance');
     await expect(g.locator('.card.cold')).toContainText('Cold floor (1 night in 100)');
     await expect(g.locator('.card.cold')).toContainText('Record low 4.0 °C in 40 years');
-    await expect(g.locator('.card', { hasText: 'Warmest month, mean day' })).toContainText('Jan and Feb at the habitat');
-    await expect(g.locator('.card .lab', { hasText: /^Rain a year$/ })).toHaveCount(1);
+    await expect(g.locator('.card', { hasText: 'Warmest month, mean daily high' })).toContainText('Jan and Feb at the habitat'); // round sixty-two (visitor-words 3)
+    await expect(g.locator('.card .lab', { hasText: /^Rain a year \(sum of monthly medians\)$/ })).toHaveCount(1);
     await expect(g.locator('.card .lab', { hasText: /^Open-sky light$/ })).toHaveCount(1);
     await expect(g).not.toContainText('in the wild');
     await page.goto('/compare?s=copiapoa-cinerea,copiapoa-humilis');
     await ready(page);
     await expect(page.locator('.rowlab', { hasText: 'Cold floor (1 night in 100)' })).toHaveCount(1);
-    await expect(page.locator('.rowlab', { hasText: 'Warmest month, mean day' })).toHaveCount(1);
+    await expect(page.locator('.rowlab', { hasText: 'Warmest month, mean daily high' })).toHaveCount(1);
     await expect(page.locator('.cmp')).not.toContainText('in the wild');
-    await expect(page.locator('.row', { hasText: 'Warmest month, mean day' }).locator('.cell').first()).toContainText('Jan and Feb');
+    await expect(page.locator('.row', { hasText: 'Warmest month, mean daily high' }).locator('.cell').first()).toContainText('Jan and Feb');
   });
 
   test('a plain 404 says which address, then offers the search (visitor 18)', async ({ page }) => {
@@ -174,7 +161,10 @@ test('at 320 px with 200% text, the refusal pills wrap rather than being cut (a1
   try {
     const page = ctx.pages()[0] ?? (await ctx.newPage());
     await page.goto('/species/refusia-testii'); await ready(page);
-    expect(await page.evaluate(() => getComputedStyle(document.documentElement).fontSize)).toBe('32px');
+    // The preference first, the layout after: a browser that does not read the profile's text size says nothing about
+    // the pills at 200%, and is not a failure of them (round sixty-two; outside review B14).
+    const text = await page.evaluate(() => getComputedStyle(document.documentElement).fontSize);
+    test.skip(text !== '32px', `preference not applied by this browser (its text is ${text}, not 32px)`);
     const [s, c] = await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]);
     expect(s).toBeLessThanOrEqual(c);
     // each pill's text is whole inside the pill: nothing clipped
@@ -183,5 +173,6 @@ test('at 320 px with 200% text, the refusal pills wrap rather than being cut (a1
     await expect(page.locator('.idcard .nc .tok', { hasText: 'Climate not checked' })).toBeVisible();
   } finally {
     await ctx.close();
+    fs.rmSync(dir, { recursive: true, force: true }); // the profile made for this test, not one per run left in /tmp (round sixty-two; outside review A)
   }
 });

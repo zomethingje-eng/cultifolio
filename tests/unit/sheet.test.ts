@@ -113,8 +113,8 @@ describe('the sheet', () => {
     // lows is warmer than the nights a floor is read from (round thirty-seven, R1-2).
     for (const extremesStatus of ['sea', 'none', 'refused'] as const) {
       const sea = cultivationSheet({ scientific: 'Tylecodon pearsonii', family: 'Crassulaceae', months: namaqua, lat: -30, extremes: null, extremesStatus });
-      expect(sea.floor?.s).toMatch(/^Cold floor: none read\. The nearest figure is 6\.0 °C, the coldest month's mean night, .*warmer than the nights a floor is read from/);
-      expect(sea.floor?.short).toMatch(/^Coldest mean night 6\.0 °C \(coldest month's mean night, CHELSA; no floor read\)\.$/);
+      expect(sea.floor?.s).toMatch(/^Cold floor: none read\. The nearest figure is 6\.0 °C, the coldest month's mean nightly low, .*warmer than the nights a floor is read from/);
+      expect(sea.floor?.short).toMatch(/^Coldest month, mean nightly low 6\.0 °C \(CHELSA; no floor read\)\.$/); // round sixty-two (visitor-words 3)
       expect(sea.floor?.kind).toBe('mean');
     }
     expect(cultivationSheet({ scientific: 'Tylecodon pearsonii', family: 'Crassulaceae', months: namaqua, lat: -30, extremes: null, extremesStatus: 'sea' }).floor?.s).toContain('read at a weather cell that is mostly sea and are not used');
@@ -126,7 +126,7 @@ describe('the sheet', () => {
     const p90 = namaqua.map((m) => ({ ...m, tmin: m.tmin + 2, dli: (m.dli ?? 0) + 5, precipMm: m.precipMm + 3 }));
     const { rows } = cultivationSheet({ scientific: 'Tylecodon pearsonii', family: 'Crassulaceae', months: namaqua, p10, p90, lat: -30, annualP10: 170, annualP90: 240 });
     expect(rows.find((r) => r.k === 'Light')!.s).toContain('the lowest 10th-percentile month across the cells is 15, the highest 90th-percentile month 63');
-    expect(rows.find((r) => r.k === 'Temperature')!.s).toContain('coldest night 6.0 °C in July (across the grid cells of the range 4.0 °C to 8.0 °C)');
+    expect(rows.find((r) => r.k === 'Temperature')!.s).toContain("the coldest month's mean nightly low 6.0 °C in July (across the grid cells of the range 4.0 °C to 8.0 °C)");
     // The annual range is the percentiles of per-cell years, carried in, never a sum of monthly percentiles.
     expect(rows.find((r) => r.k === 'Rain')!.s).toContain("Across the grid cells of the range the year's total runs 170 mm to 240 mm, the 10th to 90th percentile of each cell's own year.");
     const noAnnual = cultivationSheet({ scientific: 'Tylecodon pearsonii', family: 'Crassulaceae', months: namaqua, p10, p90, lat: -30 });
@@ -144,19 +144,19 @@ describe('the sheet', () => {
     // Without extremes the quantity is the coldest month's mean night, named as such, and why there are none is its own sentence.
     const fl2 = coldFloor(namaqua, null, archFor('Tylecodon pearsonii', 'Crassulaceae'))!;
     expect(fl2.habitat).toBe(6);
-    expect(fl2.s).toContain("the coldest month's mean night, July, in the median year (CHELSA); a month's mean night is warmer than the nights a floor is read from. No daily extremes are on file.");
+    expect(fl2.s).toContain("the coldest month's mean nightly low, July, in the median year (CHELSA); a month's mean of its nightly lows is warmer than the nights a floor is read from. No daily extremes are on file.");
     // A refused extremes source is not an absence: the sentence says the extremes were not checked (round sixteen, 7), and
     // the plain line never says "no cold floor could be read" of a refusal (round sixty; words 2).
     const fl2r = coldFloor(namaqua, null, archFor('Tylecodon pearsonii', 'Crassulaceae'), undefined, 'refused')!;
     expect(fl2r.habitat).toBe(6);
     expect(fl2r.s).toContain('The daily extremes were not checked: NASA POWER did not answer when this page was built.');
     expect(fl2r.s).not.toContain('No daily extremes are on file');
-    expect(fl2r.plain.lead).toBe("Coldest month's mean night 6.0 °C, not a cold floor: the daily extremes were not checked.");
+    expect(fl2r.plain.lead).toBe('Coldest month, mean nightly low 6.0 °C, not a cold floor: the daily extremes were not checked.'); // round sixty-two
     // No climate at all: the convention alone, said as a convention, and no floor.
     const fl3 = coldFloor(null, null, archFor('Monstera deliciosa', 'Araceae'))!;
     expect(fl3.hab).toBe(false);
     expect(fl3.habitat).toBeNull();
-    expect(fl3.s).toBe('No habitat figure is on file for this species, so no cold floor is read. Apart from the habitat, the convention for tropical foliage plants grown indoors is 12 °C; no source is given for it (archetype table, by the genus Monstera, which is reliably one kind of plant).');
+    expect(fl3.s).toBe('No habitat figure is on file for this species, so no cold floor is read. Apart from the habitat, the convention for tropical foliage plants grown indoors is 12 °C; no source is given for it (listed under the genus Monstera in the archetype table).'); // round sixty-two: what the table lists (A4)
     expect(coldFloor(null, null, archFor('Copiapoa cinerea', 'Cactaceae'))).toBeNull();
   });
   it('with no climate, only the archetype figure appears, credited, and nothing else', () => {

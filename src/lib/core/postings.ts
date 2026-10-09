@@ -20,7 +20,7 @@
  * ranking then judges; it never loses one. The candidates for a query are the intersection, over its words, of each
  * word's postings (an entry must match every word), so "cop cin" ranks the few entries under both keys.
  */
-import { RANK_MARKERS, queryTokens } from './search';
+import { RANK_MARKERS, queryTokens, wholeReading } from './search';
 
 const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 /** A text's words as the postings read them: folded, split on anything but a letter or digit. */
@@ -103,7 +103,12 @@ export function queryPlan(q: string): { exact: string[][]; near: string[][] | nu
   const exact = ws.map((w) => [exactKey(w)]);
   const all = [...new Set(queryTokens(q).filter((w, i, a) => !(RANK_MARKERS.has(w) && i < a.length - 1)))];
   const anyLong = all.some((w) => w.length >= 4);
-  if (!anyLong) return { exact, near: null };
+  // A genus followed by capitalised words has a similar-spelling pass too, of whole words for its capitalised ones: their
+  // candidates are among the near keys' (round sixty-two; the verification review's search 1).
+  // A query whose whole reading is tried first (`wholeReading`: "b b (A.) Aa") always has a plan for the second pass, so
+  // the server's short answers, which know only the one word left after the author, never stand in for it (round
+  // sixty-two; B2). Its short words are matched exactly there too, so the pass ranks what the whole index ranks.
+  if (!anyLong) return { exact, near: wholeReading(q) ? exact : null };
   const longInSlice = ws.some((w) => w.length >= 4);
   const near = (longInSlice ? ws : all).map((w) => (w.length >= 4 ? nearKeys(w) : [exactKey(w)]));
   return { exact, near };

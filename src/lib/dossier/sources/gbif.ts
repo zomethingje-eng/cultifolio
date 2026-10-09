@@ -61,30 +61,60 @@ export async function synonyms(f: JsonFetcher, key: number): Promise<FetchResult
   return { status: 'ok', data: r.data.results.map((s) => s.scientificName).filter((n): n is string => typeof n === 'string') };
 }
 
+/** One vernacular name as `vernacular` gives it: an exact spelling in a language, with its own sources. */
+export type VernacularRow = { name: string; lang?: string; source?: string; preferred?: boolean; sources?: number; alsoFrom?: string[] };
+/** How many rows of GBIF's vernacular names are asked for at a time, and how many pages at most: past them, the list is recorded truncated. */
+export const VERNACULAR_PAGE = 1000;
+export const VERNACULAR_PAGES = 4;
+
 /**
- * GBIF's vernacular names, one row per name and language whatever its case. Each keeps GBIF's `preferred` flag (true if
- * any of its rows is preferred) and `sources`, the number of different sources that give it (a row with no source is
- * its own), counted before the duplicates are dropped: the shown common name is chosen by them (round sixty-one,
- * decision 7; `englishNames`). Both are written only when they say something (preferred, more than one source), so a
- * dossier built before reads the same as a name no one prefers from one source.
+ * GBIF's vernacular names: one row per exact spelling and language, in GBIF's order (round sixty-two; the corpus review,
+ * 7 and 8). Each keeps its own sources: `source` (the first that gives it), `alsoFrom` (the other named sources that
+ * give that exact spelling), `sources` (how many sources give it, a row with no source counting as its own, written
+ * when more than one), and GBIF's `preferred` flag (true if any of its rows is). Spellings that differ only in case are
+ * kept apart, so `englishNames` can show the one more sources give: one row per name whatever its case kept the first
+ * row's spelling, and "japanese privet" (one source) was shown over "Japanese Privet" (two).
+ *
+ * The list is asked for page by page until GBIF says `endOfRecords`: one page of fifty rows across every language
+ * stopped short of the English names of the most widely named species. Past `VERNACULAR_PAGES` pages the rows read
+ * are kept and the answer carries `truncated` (how many were read), which the build records; a page refused after
+ * the first is a refusal, never a shorter list taken as the whole.
  */
-export async function vernacular(f: JsonFetcher, key: number): Promise<FetchResult<Array<{ name: string; lang?: string; source?: string; preferred?: boolean; sources?: number }>>> {
-  const r = await f<{ results: Array<{ vernacularName: string; language?: string; source?: string; preferred?: boolean }> }>(`${GBIF}/species/${key}/vernacularNames?limit=50`);
-  if (r.status !== 'ok') return r;
-  const byKey = new Map<string, { row: { name: string; lang?: string; source?: string; preferred?: boolean; sources?: number }; sources: Set<string> }>();
-  r.data.results.forEach((x, i) => {
-    if (typeof x.vernacularName !== 'string') return;
-    const k = x.vernacularName.toLowerCase() + '|' + (x.language ?? '');
-    let e = byKey.get(k);
-    if (!e) {
-      e = { row: { name: x.vernacularName, lang: x.language ?? undefined, source: x.source ?? undefined }, sources: new Set() };
-      byKey.set(k, e);
+export async function vernacular(f: JsonFetcher, key: number): Promise<FetchResult<VernacularRow[]> & { truncated?: number }> {
+  const rows: Array<{ vernacularName: string; language?: string; source?: string; preferred?: boolean }> = [];
+  let ended = false;
+  for (let p = 0; p < VERNACULAR_PAGES && !ended; p++) {
+    // From the rows read so far: a server that gives fewer than asked per page loses none between pages.
+    const r = await f<{ results: Array<{ vernacularName: string; language?: string; source?: string; preferred?: boolean }>; endOfRecords?: boolean }>(`${GBIF}/species/${key}/vernacularNames?limit=${VERNACULAR_PAGE}&offset=${rows.length}`);
+    if (r.status !== 'ok') {
+      if (p > 0 && r.status === 'none') { ended = true; break; } // nothing past the end
+      return r;
     }
-    e.sources.add(typeof x.source === 'string' && x.source.trim() ? `s:${x.source.trim()}` : `#${i}`);
+    const got = Array.isArray(r.data.results) ? r.data.results : [];
+    rows.push(...got);
+    // An answer that does not say it ended, but has no rows, has ended: nothing past it can be asked for.
+    ended = r.data.endOfRecords !== false || !got.length;
+  }
+  const bySpelling = new Map<string, { row: VernacularRow; named: Set<string>; anonymous: number }>();
+  rows.forEach((x) => {
+    if (typeof x.vernacularName !== 'string') return;
+    const k = x.vernacularName + '|' + (x.language ?? '');
+    let e = bySpelling.get(k);
+    if (!e) {
+      e = { row: { name: x.vernacularName, lang: x.language ?? undefined }, named: new Set(), anonymous: 0 };
+      bySpelling.set(k, e);
+    }
+    const src = typeof x.source === 'string' ? x.source.trim() : '';
+    if (src) e.named.add(src);
+    else e.anonymous++;
     if (x.preferred === true) e.row.preferred = true;
   });
-  const out = [...byKey.values()].map(({ row, sources }) => (sources.size > 1 ? { ...row, sources: sources.size } : row));
-  return { status: 'ok', data: out };
+  const out = [...bySpelling.values()].map(({ row, named, anonymous }) => {
+    const [first, ...also] = [...named];
+    const n = named.size + anonymous;
+    return { ...row, ...(first ? { source: first } : {}), ...(n > 1 ? { sources: n } : {}), ...(also.length ? { alsoFrom: also } : {}) };
+  });
+  return ended ? { status: 'ok', data: out } : { status: 'ok', data: out, truncated: rows.length };
 }
 
 export interface GbifDistribution {

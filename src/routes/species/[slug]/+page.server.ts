@@ -4,7 +4,7 @@ import { synonymOf, synonymInIndex, nameFromSlug } from '$lib/server/synonyms';
 import generaList from '../../../../scripts/specialist-genera.txt?raw';
 /** The genera the species list takes whole (the file the derivation reads), for the 404 to say so. */
 const WHOLE_GENERA = new Set(generaList.split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#')));
-import { limited } from '$lib/server/sync';
+import { limited, clientIp } from '$lib/server/sync';
 import { genusOf, slugify, canonicalSynonym } from '$core/names';
 import { worldSvg, regionSvg } from '$lib/map/still';
 import { unitsFor } from '$lib/server/units';
@@ -48,7 +48,7 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
     if (!syn) {
       const stop = await limited(platform, getClientAddress, 'match');
       if (stop) error(429, { message: 'Too many unknown species addresses from this address; wait a few minutes and try again.' });
-      const asked = await synonymOf(platform, fetch, params.slug, c);
+      const asked = await synonymOf(platform, fetch, params.slug, c, clientIp(getClientAddress)); // the reader's part of GBIF's share as well as the site's (round sixty-two; the server review's 3, outside review A29)
       unchecked = asked === 'unchecked' || asked === 'held';
       heldBack = asked === 'held';
       syn = asked === 'unchecked' || asked === 'held' ? null : asked;
@@ -74,7 +74,10 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
     const suggest = found && 'hits' in found ? found.hits.filter((e) => e.slug !== params.slug).map((e) => ({ slug: e.slug, name: e.name })) : [];
     const species = genus ? { name: asked, genus, inGenus: indexMaps(index).byGenus.get(genus)?.length ?? 0, wholeGenus: WHOLE_GENERA.has(genus), ...(syn ? { accepted: syn.acceptedName } : {}), suggest } : undefined;
     if (syn) error(404, { message: `${syn.matched} is ${syn.acceptedName} in the GBIF backbone, and that species is not in the reference`, species });
-    error(404, { message: unchecked ? `No species page for “${params.slug}”. Whether it is an older name for a species that is here was not checked: ${heldBack ? "this site's calls to GBIF are used up for this minute" : "GBIF's name service did not answer"}` : `No species page for “${params.slug}”`, species });
+    // A held call is "not asked", a silence "not checked" (round sixty-two; visitor-words 12, rule 2). "The calls this site
+    // allows" covers the site's share and this address's part of it alike.
+    // Each said in the order it happened, the held call with GBIF as its subject (round sixty-two; the words review's 15).
+    error(404, { message: unchecked ? `No species page for “${params.slug}”. ${heldBack ? "GBIF was not asked whether it is an older name for a species that is here: this site's calls to GBIF are used up for this minute" : "Whether it is an older name for a species that is here was not checked: GBIF's name service did not answer"}` : `No species page for “${params.slug}”`, species });
   }
   // The dossier and the genus record are two objects in the bucket, read together, since the genus is known from the
   // index before the dossier arrives; read one after the other they were two round trips on every page (round forty-three, 2).

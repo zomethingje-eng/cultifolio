@@ -34,8 +34,8 @@ describe('ties: a month shared by several is not named as one (round sixty claim
   it('the sheet does not name January alone as the warmest month when February is as warm', () => {
     const sh = cultivationSheet({ scientific: 'Copiapoa cinerea', family: 'Cactaceae', months: cinerea, extremes: ex, lat: -28.55 });
     const t = sh.rows.find((r) => r.k === 'Temperature')!.s;
-    expect(t).not.toMatch(/warmest day 22\.0 °C in January[^ ]/);
-    expect(t).toMatch(/warmest day 22\.0 °C in January and February/);
+    expect(t).not.toMatch(/mean daily high 22\.0 °C in January[^ ]/); // the labels' words (round sixty-two, second pass; the words review's 5e)
+    expect(t).toMatch(/mean daily high 22\.0 °C in January and February/);
   });
   it("the climograph's reading does not name January alone either", () => {
     const g = climograph({ months: cinerea, p10: cinerea, p90: cinerea, cells: 40, extremes: ex });

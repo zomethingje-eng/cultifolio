@@ -4,41 +4,60 @@
  * thirty minutes per site and units. The Worker's Cache API keeps an hour per cell, but a
  * grower who opens the app ten times in an hour would still make ten calls,
  * and /api/forecast is rate-limited per address; this keeps that to two. A
- * refusal is never kept: the next open asks again.
+ * refusal is never kept: the next open asks again. A forecast whose alerts the
+ * NWS did not answer is kept five minutes, not thirty.
  */
 import { browser } from '$app/environment';
 import type { Units } from '$core/units';
 
 export const FORECAST_TTL_MS = 30 * 60_000;
+/**
+ * An answer whose alerts the National Weather Service did not answer is kept five minutes, as the server keeps it, so
+ * "alerts not checked" does not outlast the NWS's recovery by half an hour (round sixty-two; the words review, 18).
+ */
+export const REFUSED_TTL_MS = 5 * 60_000;
 const KEY = 'cultifolio.forecast';
 
 /**
  * `at`: when the answer was read from the server (ms), which a cached one is older than the moment it is asked for.
  * `held`: the site held the call back (its calls to the forecast services were used up for the minute), so the source
- * was not asked (round sixty-one).
+ * was not asked (round sixty-one), and `retryAfter` when to ask again (seconds; round sixty-two).
  */
-export type ForecastAnswer<T> = { ok: true; body: T; at: number } | { ok: false; status: number; held?: boolean };
+export type ForecastAnswer<T> = { ok: true; body: T; at: number } | { ok: false; status: number; held?: boolean; retryAfter?: number };
 
-type Entry = { at: number; body: unknown };
+/**
+ * When a page should ask again after this answer, in ms, or null when it waits for its next opening: a call the site
+ * held back is asked again once the server's wait is over, as its sentence says (round sixty-two; the server review, 6:
+ * the place page said "asked again in a few minutes" and never asked). A minute when the server named no wait.
+ */
+export function reaskAfterMs(r: ForecastAnswer<unknown> | null | undefined): number | null {
+  if (!r || r.ok || r.held !== true) return null;
+  const s = typeof r.retryAfter === 'number' && r.retryAfter > 0 ? Math.min(r.retryAfter, 600) : 60;
+  return s * 1000;
+}
+
+/** `ttl`: how long this answer is kept (ms); absent, `FORECAST_TTL_MS`. */
+type Entry = { at: number; body: unknown; ttl?: number };
+const ttlOf = (e: Entry) => (typeof e.ttl === 'number' ? Math.min(e.ttl, FORECAST_TTL_MS) : FORECAST_TTL_MS);
 
 function readCache(k: string): Entry | undefined {
   if (!browser) return undefined;
   try {
     const all = JSON.parse(sessionStorage.getItem(KEY) ?? '{}') as Record<string, Entry>;
     const e = all[k];
-    return e && Date.now() - e.at < FORECAST_TTL_MS ? e : undefined;
+    return e && Date.now() - e.at < ttlOf(e) ? e : undefined;
   } catch {
     return undefined;
   }
 }
 
-function writeCache(k: string, body: unknown) {
+function writeCache(k: string, body: unknown, ttl: number) {
   if (!browser) return;
   try {
     const all = JSON.parse(sessionStorage.getItem(KEY) ?? '{}') as Record<string, Entry>;
     const now = Date.now();
-    for (const [key, e] of Object.entries(all)) if (now - e.at >= FORECAST_TTL_MS) delete all[key];
-    all[k] = { at: now, body };
+    for (const [key, e] of Object.entries(all)) if (now - e.at >= ttlOf(e)) delete all[key];
+    all[k] = { at: now, body, ...(ttl !== FORECAST_TTL_MS ? { ttl } : {}) };
     sessionStorage.setItem(KEY, JSON.stringify(all));
   } catch {
     /* a browser without session storage asks each time, as before */
@@ -73,10 +92,11 @@ async function fetchForecast<T = unknown>(lat: number, lon: number, units: Units
   if (!r.ok) {
     // The server says when it held the call back itself; any other refusal is said by its status alone (round sixty-one).
     const held = r.status === 503 || r.status === 429 ? await r.json().then((b: unknown) => (b as { held?: unknown } | null)?.held === true, () => false) : false;
-    return held ? { ok: false, status: r.status, held } : { ok: false, status: r.status };
+    const wait = Number(r.headers.get('retry-after'));
+    return held ? { ok: false, status: r.status, held, ...(wait > 0 ? { retryAfter: wait } : {}) } : { ok: false, status: r.status };
   }
   const body = (await r.json()) as T;
-  writeCache(k, body);
+  writeCache(k, body, (body as { alertsStatus?: unknown } | null)?.alertsStatus === 'refused' ? REFUSED_TTL_MS : FORECAST_TTL_MS);
   return { ok: true, body: clockTime(body) as T, at: Date.now() };
 }
 

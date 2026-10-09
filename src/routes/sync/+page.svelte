@@ -56,6 +56,15 @@
     else qr = '';
   });
 
+  /** Records with parked changes made on this device, and the one press that applies them all (round sixty-two). */
+  const ownParked = $derived(collection.parkedRecords ? collection.parkedOwn().length : 0);
+  let applyingOwn = $state(false);
+  async function applyOwn() {
+    if (applyingOwn) return;
+    applyingOwn = true;
+    try { await collection.applyAllOwnParked(); } finally { applyingOwn = false; }
+  }
+
   /** The last group of the fresh key, typed back: the one proof the key was kept, not glanced at (round forty-one, R9). */
   let typedBack = $state('');
   let copied = $state(false);
@@ -201,14 +210,19 @@
     <p class="notice" id="held">{heldWords(collection.heldWaiting)} They are stored here; nothing needs doing.</p>
   {/if}
   {#if collection.parkedRecords}
-    <!-- A change stamped more than a day past its arrival is a broken clock's: parked, never folded on its own, and offered on its record with Apply (round fifty-two, 1). -->
+    <!-- A change stamped more than two days past its arrival (PARK_MS) is a broken clock's: parked, never folded on its own, and offered on its record with Apply (round fifty-two, 1). -->
     <div class="notice" id="parked">
-      <p style="margin: 0 0 6px">{collection.parkedRecords} {collection.parkedRecords === 1 ? 'record has' : 'records have'} edits from a device whose clock was wrong, kept but not applied. Apply writes them again as edits made now, so every device takes them.</p>
+      <!-- Parked changes go to a new vault with their verdict, so every device parks them alike; Apply sends one as an edit made now (round sixty-two, second pass; A15, the data review's 5). -->
+      <p style="margin: 0 0 6px">{collection.parkedRecords} {collection.parkedRecords === 1 ? 'record has' : 'records have'} edits from a device whose clock was wrong, kept but not applied, here and on every device that syncs with this one. Apply writes them again as edits made now, so every device takes them.</p>
       <ul class="parkedlist">
         {#each collection.parkedList() as p (p.kind + ':' + p.id)}
           <li><span>{p.label}</span> <span class="small muted">({p.fields.join(', ')})</span> <button class="btn small" type="button" onclick={() => collection.applyParked(p.kind, p.id)}>Apply</button> <button class="linkish" type="button" onclick={() => collection.dismissParked(p.kind, p.id)}>Leave</button></li>
         {/each}
       </ul>
+      <!-- A month offline at a wrong clock parks everything this device did then, its own new plants included: one press for all of it, a peer's left to judge one by one (round sixty-two; the clock review's suggestion). -->
+      {#if ownParked}
+        <p style="margin: 8px 0 0"><button class="btn small" id="apply-own" type="button" onclick={applyOwn} disabled={applyingOwn}>Apply all from this device ({ownParked} {ownParked === 1 ? 'record' : 'records'})</button></p>
+      {/if}
     </div>
   {/if}
   <div class="quickbar">

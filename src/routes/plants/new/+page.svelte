@@ -14,7 +14,8 @@
   import { parseName, slugify, type NameKind, speciesSlug, speciesOf } from '$core/names';
   import { numberOrNull } from '$core/units';
   import { sheetForName } from '$lib/ui/index.svelte';
-  import type { Provenance } from '$lib/db/types';
+  import type { Accession, Provenance } from '$lib/db/types';
+  import { plantLabel } from '$lib/ui/plant-label';
   import { plantHref } from '$lib/db/links';
   import { readSetting, writeSetting } from '$lib/ui/stored';
   /** The reference's key for a species-rank name when the reference answers; otherwise the key as given (the plant page repairs it later). */
@@ -60,6 +61,8 @@
   let kind = $state<NameKind>('species');
   let parentage = $state<string | null>(null);
   let nameAsReceived = $state('');
+  /** The text as typed, when a pick in the picker wrote a name that left some of it out (round sixty-two; the grower review, 9). */
+  let pickReceived = $state<string | null>(null);
   let fieldNumber = $state('');
   let provenance = $state<Provenance>('unknown');
   let acquired = $state(day.current); // follows the calendar while the form is open (round twenty-five, 4)
@@ -159,7 +162,8 @@
         nameKind: p.kind !== 'species' ? p.kind : kind,
         parentage: p.kind === 'hybrid' || kind === 'hybrid' ? (parentage?.trim() || p.parentage || null) : null,
         // "Mammillaria theresae (white flower)": the part in brackets is not filed in the name, and kept whole as the name as received rather than dropped (round sixty-one; the grower review, 3).
-        nameAsReceived: nameAsReceived.trim() || (p.aside ? name.trim() : null),
+        // What a pick left out of the name typed ("Copiapoa cinerea Pan de Azucar" picked as the species) is kept the same way.
+        nameAsReceived: nameAsReceived.trim() || (p.aside ? name.trim() : null) || pickReceived,
         fieldNumber: fieldNumber.trim() || null,
         provenance,
         acquired: acquired || null,
@@ -212,7 +216,7 @@
   <div class="cult sheet">
 
   <!-- One hint line under the field; the ways to write a cultivar or a cross are one tap away, not a fourth paragraph (round sixty; the grower review, 18). -->
-  <label class="field"><span>Species</span><SpeciesPicker bind:value={name} bind:taxonKey bind:cultivar bind:kind bind:parentage bind:unresolved={nameUnresolved} bind:armed={nameArmed} bind:this={picker} /></label>
+  <label class="field"><span>Species</span><SpeciesPicker bind:value={name} bind:taxonKey bind:cultivar bind:kind bind:parentage bind:unresolved={nameUnresolved} bind:armed={nameArmed} bind:received={pickReceived} bind:this={picker} /></label>
   <details class="namehelp"><summary class="faint">How to write cultivars and hybrids</summary><p class="faint small">A cultivar after its species (<i>Haworthia truncata</i> 'Lime Green'); a hybrid as the cross (<i>Ariocarpus retusus</i> × <i>trigonus</i>), or the genus and the name (<i>Echeveria</i> 'Blue Curls') when the parents are not known.</p></details>
   {#if kind === 'hybrid'}
     <label class="field"><span>Parentage <span class="faint">(if known)</span></span><input id="f-parentage" type="text" bind:value={parentage} placeholder="Seed parent × pollen parent" /><span class="faint small">The plant is filed under the genus; its parents' species pages carry the biology. A hybrid has no habitat of its own, so the climate-derived cultivation rows do not apply to it.</span></label>
@@ -266,7 +270,8 @@
     <summary class="faint">Use my own number</summary>
     <!-- Both with visible names: the box's placeholder was its only one, and "accession" is the trade's word, not the app's (round fifty-eight; the accessibility review). -->
     <div class="ownrow"><label class="ownchk"><input id="f-own" type="checkbox" bind:checked={useOwnNumber} /> Use my own number</label> <label class="ownno"><span class="eyebrow">Your plant number</span><input id="f-own-no" type="text" bind:value={ownNumber} placeholder="e.g. 2019-0147" disabled={!useOwnNumber} aria-invalid={ownTaken} aria-describedby={ownTaken ? 'f-own-taken' : undefined} /></label></div>
-    {#if ownTaken}<p class="bad small" id="f-own-taken" role="alert">{ownNumber.trim()} is already used by <a href="/plants/{collection.accession(ownNumber.trim())?.id}">{collection.accession(ownNumber.trim())?.taxonName ?? 'a plant no longer growing'}</a>. A number is never reused; pick another.</p>{/if}
+    <!-- Every plant that holds the number, never one picked by load order; a number held only by a removed plant names it and links its own page, never /plants/undefined (round sixty-two; A35). -->
+    {#if ownTaken}{@const sharers = collection.withNumber('accession', ownNumber.trim()) as Accession[]}{@const gone = sharers.length ? undefined : collection.removedAccession(ownNumber.trim())}<p class="bad small" id="f-own-taken" role="alert">{ownNumber.trim()} is already used by {#each sharers as a, i (a.id)}{i ? (i === sharers.length - 1 ? ' and ' : ', ') : ''}<a href="/plants/{a.id}">{plantLabel(a)}</a>{/each}{#if !sharers.length}{#if gone}<a href="/plants/{gone.id}">{plantLabel(gone)}</a>, a plant you removed{:else}a plant no longer here{/if}{/if}. A number is never reused; pick another.</p>{/if}
   </details>
   </div>
 

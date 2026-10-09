@@ -11,7 +11,7 @@
  * Run: npx vitest run tests/unit/r61s-cap-guards.test.ts
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { resetRateLimits, RATE, upstreamAllowed } from '$lib/server/sync';
+import { resetRateLimits, RATE, upstreamCall } from '$lib/server/sync';
 import { synonymOf } from '$lib/server/synonyms';
 import { Counters } from '$lib/server/counters';
 import { fakeKV } from './helpers/fake-sync';
@@ -19,14 +19,15 @@ import { fakeKV } from './helpers/fake-sync';
 const T = Date.UTC(2026, 9, 4, 12, 0, 0);
 beforeEach(() => { resetRateLimits(); vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(T); });
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
-const spend = async (platform: unknown) => { for (let i = 0; i < RATE.upstream.limit; i++) expect(await upstreamAllowed(platform as never)).toBe(true); };
+// GBIF's share, spent by the site as a whole (`upstreamAllowed`, its old form, went in round sixty-two).
+const spend = async (platform: unknown) => { for (let i = 0; i < RATE.upstream.limit; i++) expect((await upstreamCall(platform as never, ['gbif'], null)).ok).toBe(true); };
 
 describe('the cap on outside calls, in the two routes no test held to it', () => {
   it("synonymOf: past the cap, 'held', and GBIF is not asked", async () => {
     const platform = { env: { QUEUE: fakeKV() } };
     await spend(platform);
     const gbif = vi.fn(async () => new Response('{}'));
-    expect(await synonymOf(platform as never, gbif as never, 'haworthia-attenuata')).toBe('held'); // the site held it back, said as that (round sixty-one, at the merge)
+    expect(await synonymOf(platform as never, gbif as never, 'haworthia-attenuata', undefined, null)).toBe('held'); // the site held it back, said as that (round sixty-one, at the merge)
     expect(gbif).not.toHaveBeenCalled();
   });
   it('the names route: past the cap, a refusal that says the backbone was not asked, and GBIF is not asked', async () => {

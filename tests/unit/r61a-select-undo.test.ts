@@ -2,7 +2,7 @@
  * Adopted in round sixty-one by agent A from docs/review-60/tests/records--select-undo.test.ts (the records review, round
  * sixty): the store calls select mode makes (src/lib/ui/grow/SelectMode.svelte): water and its Undo (addEventsIds /
  * removeEvents), move and its Undo (movePlantsUndoable), archive (putWith) and, since round sixty-one, archive's Undo
- * (putWith back to growing, then removeEvents of the lines the archive wrote). In-memory vault, the mock of
+ * (since round sixty-two one putWith, through select mode's own `archivePlants` and `undoArchive`). In-memory vault, the mock of
  * collection-store.test.ts.
  *
  * The guards are as they were. The reproduction of finding 14 (R14) is inverted to assert the fix: move Undo deletes the
@@ -96,21 +96,28 @@ async function fresh(device: string) {
 }
 
 describe('select mode, through the store', () => {
-  it('archive Undo as select mode does it: the plants still archived go back to growing, and the archive lines go', async () => {
+  // Select mode's own functions, as SelectMode.svelte calls them: the test re-typed the old two-commit Undo (putWith, then
+  // removeEvents) under this title, so it passed whatever the component did (round sixty-two; the self-review's N8).
+  it('archive Undo as select mode does it: one commit puts the plants still archived back to growing and takes their archive lines', async () => {
     const { collection } = await fresh('testdevice');
+    const { archivePlants, undoArchive } = await import('$lib/ui/grow/select-actions');
     const a = await collection.addAccession({ taxonName: 'Copiapoa', status: 'growing' });
     const b = await collection.addAccession({ taxonName: 'Lithops', status: 'growing' });
-    const before = new Set([a, b].flatMap((x) => collection.events(x.id).map((e) => e.id)));
-    await collection.putWith('accession', a.id, { status: 'archived' }, [a, b].map((x) => ({ acc: x.id, d: localDate(), t: 'note' as const, note: 'Archived' })), [{ kind: 'accession', id: b.id, fields: { status: 'archived' } }]);
-    const lines = [a, b].flatMap((x) => collection.events(x.id).filter((e) => !before.has(e.id) && e.t === 'note' && e.note === 'Archived').map((e) => e.id));
-    expect(lines).toHaveLength(2);
-    await collection.put('accession', b.id, { status: 'dead' }); // marked otherwise before the Undo: left as it is
-    const back = [a.id, b.id].filter((id) => collection.accession(id)?.status === 'archived');
-    await collection.putWith('accession', back[0], { status: 'growing' }, [], back.slice(1).map((id) => ({ kind: 'accession' as const, id, fields: { status: 'growing' } })));
-    await collection.removeEvents(lines);
-    expect([collection.accession(a.id)!.status, collection.accession(b.id)!.status]).toEqual(['growing', 'dead']);
-    expect(collection.events(a.id).concat(collection.events(b.id)).filter((e) => e.note === 'Archived')).toHaveLength(0);
-  });
+    const c = await collection.addAccession({ taxonName: 'Aloe', status: 'growing' });
+    const done = await archivePlants(collection, [a.id, b.id, c.id], localDate());
+    expect(done.every((x) => !!x.line)).toBe(true);
+    await collection.put('accession', b.id, { status: 'dead' }); // marked otherwise before the Undo: left as it is, with its line
+    const heard: Change[][] = [];
+    collection.onLocalChange((cs) => heard.push(cs));
+    expect(await undoArchive(collection, done)).toEqual({ back: 2, lines: 2 });
+    expect(heard).toHaveLength(1); // one commit: the statuses and the lines' removal together
+    expect([collection.accession(a.id)!.status, collection.accession(b.id)!.status, collection.accession(c.id)!.status]).toEqual(['growing', 'dead', 'growing']);
+    expect(collection.events(a.id).concat(collection.events(c.id)).filter((e) => e.note === 'Archived')).toHaveLength(0);
+    expect(collection.events(b.id).filter((e) => e.note === 'Archived')).toHaveLength(1);
+    const after = await reload(); // and so it stays once the log is read again
+    expect([after.accession(a.id)!.status, after.accession(c.id)!.status]).toEqual(['growing', 'growing']);
+    expect(after.events(a.id).concat(after.events(c.id)).filter((e) => e.note === 'Archived')).toHaveLength(0);
+  }, 90_000); // a reload and three plants: 35 s on a machine shared by seven builds
   it('PASSES: water is one commit and its Undo removes exactly those lines, in one commit', async () => {
     const { collection } = await fresh('testdevice');
     const a = await collection.addAccession({ taxonName: 'Copiapoa', status: 'growing' });

@@ -108,3 +108,13 @@ The unit suite passes with the clock at 2 January 2027 and at 23:59:50 on New Ye
   - lowering every capital after a hyphen damaged proper nouns: "Apple-of-peru", "Black-eyed-susan", "Cape-may", "Pride-of-barbados";
   - choosing among a name's spellings by the fewest capitals picked GBIF's lower-case listings: "japanese-privet" over "Japanese Privet", "flooded-gum", "milkwood-pine". 582 shown names began with a lower-case letter.
 - **The rule now:** a source's spelling is kept as written but for its first letter, shown as a capital; of a name's spellings, the one more sources give is shown, then the one GBIF lists first. Run on the PC's dossiers, it shows "Japanese Privet", "Apple of Peru", "Pride of India", "Flooded Gum" and "String-of-Pearls", and no shown name begins in lower case. GBIF's own title case stays where GBIF wrote it ("Bird-Of-Paradise"), since changing it is a guess about which capitals are names. The index is rebuilt after the deploy.
+
+## 13. Corrections, made in round sixty-two
+
+Three reviews of this round (`docs/REVIEW-TRIAGE-61.md`) found that this account said more than its logs and measurements showed. The text above is left as it was written; these are the corrections.
+
+- **"Each agent showed its new tests failing on the base first."** Not every agent did. Several adopted guards pass on the base by design, and some e2e tests were not run against a build of the base.
+- **"Two earlier full runs found five failures and three flaky tests."** The logs show four failures and two flaky tests.
+- **"All 179 passing on the last full run."** That run came before the last test edit and before section 12's changes. A spot run after them passed; the full suite was not run again.
+- **"Fixed waits before negative assertions wait for the operation instead."** Four were changed; eight short pauses remained, and two new CLS tests added fixed waits. Round sixty-two replaced the CLS waits.
+- **Section 6, item 4: "the first row stays above the tab bar."** It did not on the live site. At 390 × 844 the first catalogue row began at y 1,030, below the tab bar at 787 (outside review B1, measured on cultifolio.com; outside review A10). The first-screen test used the fixture corpus, whose photographs never load, so it never saw the strip at its real height: a loaded photograph's `height` attribute beat the tile's `aspect-ratio` and drew the strip 320 px tall. Round sixty-two fixed the strip and measured the first screen with a live-shaped response.

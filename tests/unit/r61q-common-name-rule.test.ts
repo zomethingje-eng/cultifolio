@@ -40,6 +40,8 @@ describe('the common name shown (corpus 9, review B)', () => {
     expect(englishNames(CURIO, { genus: 'Curio', genera: GENERA }).common).not.toMatch(/Senecio/);
   });
   it('Curio rowleyanus shows "String-of-Pearls" (two sources, GBIF\'s spelling first); every other name stays, in the rule\'s order, one spelling each', () => {
+    // Changed again in round sixty-two's second pass (the verification review's search 16): another genus as a name's last
+    // word sets it back in any case, so "String-Of-Beads Senecio" goes last, as round sixty-one meant.
     expect(englishNames(CURIO, { genus: 'Curio rowleyanus', genera: GENERA })).toEqual({ common: 'String-of-Pearls', commons: ['String of beads', 'String-Of-Beads Senecio'] });
   });
   it('a name naming the species\' own genus is not set back ("Tiger Aloe" for an Aloe); a capital after a hyphen is the source\'s and stays', () => {
@@ -47,13 +49,18 @@ describe('the common name shown (corpus 9, review B)', () => {
     expect(shown([{ name: 'Queen-Victoria Agave', lang: 'eng' }, { name: 'Royal agave', lang: 'eng' }], 'Agave')).toBe('Queen-Victoria Agave');
   });
   it('the old genus in a name sets it back only when another English name exists', () => {
-    expect(shown([{ name: 'Tiger Aloe', lang: 'eng' }], 'Gonialoe')).toBe('Tiger Aloe');
-    expect(shown([{ name: 'Tiger Aloe', lang: 'eng' }, { name: 'Partridge-breast', lang: 'eng' }], 'Gonialoe')).toBe('Partridge-breast');
+    expect(shown([{ name: 'Flatleaf Senecio', lang: 'eng' }], 'Curio')).toBe('Flatleaf Senecio');
+    expect(shown([{ name: 'Flatleaf Senecio', lang: 'eng' }, { name: 'Blue chalkstick', lang: 'eng' }], 'Curio')).toBe('Blue chalkstick');
+    // Round sixty-two, second pass: "aloe" is a genus English uses as a noun (`ENGLISH_USE`), so "Tiger Aloe" is a grower's
+    // word for Gonialoe variegata, as "Lace aloe" is for Aristaloe, and keeps GBIF's place.
+    expect(shown([{ name: 'Tiger Aloe', lang: 'eng' }, { name: 'Partridge-breast', lang: 'eng' }], 'Gonialoe')).toBe('Tiger Aloe');
   });
   it('a comma list of several names and a string shaped like a binomial go last too, and are not split', () => {
     expect(englishNames([{ name: 'Living stones, pebble plants', lang: 'eng' }, { name: 'Split rock', lang: 'eng' }], { genus: 'Lithops', genera: GENERA })).toEqual({ common: 'Split rock', commons: ['Living stones, pebble plants'] });
-    expect(shown([{ name: 'Aloe vera', lang: 'eng' }, { name: 'Barbados aloe', lang: 'eng' }], 'Aloe')).toBe('Barbados aloe');
-    expect(shown([{ name: 'Senecio rowleyanus', lang: 'eng' }, { name: 'String of pearls', lang: 'eng' }], 'Curio')).toBe('String of pearls');
+    // Changed in round sixty-two (decision 3): only another genus's binomial (the species' older name) is set back; the
+    // species' own genus with a lower-case word ("Aloe vera", "Crinum lily") is a name growers use.
+    expect(shown([{ name: 'Aloe vera', lang: 'eng' }, { name: 'Barbados aloe', lang: 'eng' }], 'Aloe vera')).toBe('Aloe vera');
+    expect(shown([{ name: 'Senecio rowleyanus', lang: 'eng' }, { name: 'String of pearls', lang: 'eng' }], 'Curio rowleyanus')).toBe('String of pearls');
     expect(shown([{ name: 'Aloe vera', lang: 'eng' }], 'Aloe')).toBe('Aloe vera'); // the only English name is still shown
   });
   it('a name GBIF marks preferred goes first; then the one more sources give; then GBIF\'s order', () => {
@@ -64,7 +71,7 @@ describe('the common name shown (corpus 9, review B)', () => {
   });
   it('preferred outranks sources, and the set-back outranks preferred', () => {
     expect(shown([{ name: 'Jade', lang: 'eng', sources: 5 }, { name: 'Money plant', lang: 'eng', preferred: true }], 'Crassula')).toBe('Money plant');
-    expect(shown([{ name: 'Jade', lang: 'eng' }, { name: 'Money aloe', lang: 'eng', preferred: true }], 'Crassula')).toBe('Jade');
+    expect(shown([{ name: 'Jade', lang: 'eng' }, { name: 'Money Kalanchoe', lang: 'eng', preferred: true }], 'Crassula')).toBe('Jade'); // another genus as the last word (round sixty-two)
   });
   it('of a name\'s spellings, the one more sources give is shown; on a tie, the one GBIF lists first', () => {
     const a = [{ name: 'String-of-Pearls', lang: 'eng' }, { name: 'String of pearls', lang: 'eng' }];
@@ -95,7 +102,7 @@ describe('the common name shown (corpus 9, review B)', () => {
   });
 });
 
-describe('gbif.vernacular keeps GBIF\'s preferred flag and counts its sources', () => {
+describe('gbif.vernacular keeps GBIF\'s preferred flag and counts its sources (each exact spelling its own row since round sixty-two)', () => {
   const answer = (results: object[]) => (async () => ({ status: 'ok', data: { results } })) as never;
   it('a name given by three sources (in two cases) is one row with sources 3; one preferred row marks it preferred', async () => {
     const r = await vernacular(answer([
@@ -106,13 +113,20 @@ describe('gbif.vernacular keeps GBIF\'s preferred flag and counts its sources', 
       { vernacularName: 'Erwtjies', language: 'afr' }
     ]), 1);
     expect(r).toEqual({ status: 'ok', data: [
-      { name: 'String of pearls', lang: 'eng', source: 'A', preferred: true, sources: 3 },
-      { name: 'Erwtjies', lang: 'afr', source: undefined }
+      { name: 'String of pearls', lang: 'eng', source: 'A' },
+      { name: 'String Of Pearls', lang: 'eng', source: 'B', preferred: true },
+      { name: 'string of pearls', lang: 'eng', source: 'C' },
+      { name: 'Erwtjies', lang: 'afr' }
     ] });
+    if (r.status !== 'ok') throw new Error('fetch');
+    // The rule then reads one name from three sources, preferred.
+    expect(englishNames([...r.data, { name: 'Rosary', lang: 'eng', sources: 2 }])).toEqual({ common: 'String of pearls', commons: ['Rosary'] });
   });
   it('rows with no source each count as one; a name from one source carries neither field', async () => {
     const r = await vernacular(answer([{ vernacularName: 'Jade', language: 'eng' }, { vernacularName: 'jade', language: 'eng' }, { vernacularName: 'Money plant', language: 'eng', source: 'X' }]), 1);
-    expect(r).toEqual({ status: 'ok', data: [{ name: 'Jade', lang: 'eng', source: undefined, sources: 2 }, { name: 'Money plant', lang: 'eng', source: 'X' }] });
+    expect(r).toEqual({ status: 'ok', data: [{ name: 'Jade', lang: 'eng' }, { name: 'jade', lang: 'eng' }, { name: 'Money plant', lang: 'eng', source: 'X' }] });
+    const twice = await vernacular(answer([{ vernacularName: 'Jade', language: 'eng' }, { vernacularName: 'Jade', language: 'eng' }]), 1);
+    expect(twice).toEqual({ status: 'ok', data: [{ name: 'Jade', lang: 'eng', sources: 2 }] });
   });
 });
 
@@ -129,8 +143,11 @@ describe('the audit (scripts/audit-common-names.ts)', () => {
       { name: 'Aloe vera', common: 'Barbados aloe' },
       { name: 'Agave americana', common: 'century-plant' }
     ], 40);
+    // Changed in round sixty-two's second pass (the verification review's search 16): "String-Of-Beads Senecio" is set back
+    // again, whatever its capitals (the last word is another genus). "Flatleaf Senecio" is set back.
     expect(a).toMatchObject({ species: 5, withCommon: 5, changed: 3, setBack: 1, spellingOnly: 1, bySources: 1 });
     expect(a.sample).toEqual(['Curio rowleyanus: "String-Of-Beads Senecio" -> "String-of-Pearls"', 'Crassula ovata: "Jade" -> "Money-Plant"', 'Agave americana: "century-plant" -> "Century-plant"']);
+    expect(auditCommonNames([{ name: 'Curio ficoides', common: 'Flatleaf Senecio', commons: ['Blue chalkstick'] }, { name: 'Senecio vulgaris', common: 'Groundsel' }])).toMatchObject({ changed: 1, setBack: 1 });
   });
   it('on the synthetic 9,000-species corpus it runs and its sample is at most the size asked', () => {
     reseed(7);

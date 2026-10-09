@@ -6,6 +6,7 @@
   import { toast } from '$lib/ui/toast.svelte';
   import { temp, tempN, tempUnit, cToF, fToC } from '$core/units';
   import { plural } from '$core/words';
+  import { everyWords } from '$lib/ui/today-words';
   import { page } from '$app/state';
   import { accNo, sowNo } from '$lib/db/types';
   import { goto, beforeNavigate } from '$app/navigation';
@@ -90,7 +91,7 @@
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   /** The place's rules in one line at the top: "Every 10 days · dry Dec to Feb · held at 5 °C" (round sixty; the grower review, §4). Only what is set here or above. */
   const summary = $derived([
-    cond.waterDays ? `every ${cond.waterDays} days` : null,
+    cond.waterDays ? everyWords(cond.waterDays) : null,
     cond.dryMonths?.length ? `dry ${monthRuns(cond.dryMonths)}` : null,
     cond.floorC != null ? `${cond.floorHeld ? 'held at' : 'bottoms out at'} ${temp(cond.floorC, units.current, 1)}` : null
   ].filter((x): x is string => !!x));
@@ -288,14 +289,29 @@
   const watchable = $derived(fLat != null && fLon != null && cond.indoor !== true);
   const condKey = $derived(watchable ? `${fLat},${fLon},${fAlt ?? ''},${units.current}` : '');
   const forecast = $derived(got && got.key === condKey ? got.answer : null);
+  // A call the site held back is asked again once the server's wait is over, as its sentence promises (round sixty-two;
+  // the server review, 6: it said "asked again in a few minutes" and was asked again only when the page was reopened).
+  let reask = $state(0);
   $effect(() => {
+    void reask;
     if (!condKey || (got && got.key === condKey)) return;
     const key = condKey; // what this request is for; a place edited before it answers makes the answer stale, and a stale answer is dropped
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let gone = false;
     forecastErr = '';
     getForecast<ForecastAnswer>(fLat!, fLon!, units.current, fAlt)
-      .then((r) => { if (key !== condKey) return; if (!r.ok) { forecastErr = forecastRefusal(r); return; } got = { key, answer: r.body }; })
+      .then((r) => {
+        if (key !== condKey) return;
+        if (!r.ok) {
+          forecastErr = forecastRefusal(r);
+          if (r.held && !gone) timer = setTimeout(() => { if (key === condKey) reask++; }, Math.min(r.retryAfter && r.retryAfter > 0 ? r.retryAfter : 60, 600) * 1000);
+          return;
+        }
+        got = { key, answer: r.body };
+      })
       // Whatever went wrong, the page says the check did not happen, never a status code, and never that the nights are clear; our own refusals are said as ours.
       .catch(() => { if (key === condKey) forecastErr = forecastRefusal(null); });
+    return () => { gone = true; clearTimeout(timer); };
   });
   /**
    * A heater set-point protects the plants even outdoors, so with a floor set the first question is whether the outside
@@ -321,7 +337,7 @@
     const above = `Outside stays above the ${F} floor for the ${forecast.forecast.hoursCovered} hours of forecast.`;
     return forecast.risk.level === 'none' ? { level: 'none', text: above } : { level: forecast.risk.level, text: `${forecast.risk.text} ${above}` };
   });
-  const alertsUnchecked = $derived(forecast?.alertsStatus === 'refused');
+  const alertsUnchecked = $derived(forecast?.alertsStatus === 'refused'); // the forecast route no longer answers 'held' for alerts: an NWS call always takes MET's share too (round sixty-two second pass; the server review's 4)
 
   let confirmRemove = $state(false);
   async function remove() {
@@ -460,7 +476,7 @@
 
   {#if cond.lat != null || cond.altM != null || loc.notes || cond.waterDays || cond.dryMonths?.length}
     <div class="factgrid">
-      {#if cond.waterDays || cond.dryMonths?.length}<div><b>Watering</b>{cond.waterDays ? `about every ${cond.waterDays} days` : `every ${DUE_DAYS} days (the default)`}{cond.dryMonths?.length ? `; kept dry ${monthRuns(cond.dryMonths)}` : ''}{#if (cond.from.waterDays && cond.from.waterDays !== loc.name) || (cond.from.dryMonths && cond.from.dryMonths !== loc.name)}<span class="small muted">{' · '}from {cond.from.waterDays ?? cond.from.dryMonths}</span>{/if}</div>{/if}
+      {#if cond.waterDays || cond.dryMonths?.length}<div><b>Watering</b>{cond.waterDays ? `about ${everyWords(cond.waterDays)}` : `every ${DUE_DAYS} days (the default)`}{cond.dryMonths?.length ? `; kept dry ${monthRuns(cond.dryMonths)}` : ''}{#if (cond.from.waterDays && cond.from.waterDays !== loc.name) || (cond.from.dryMonths && cond.from.dryMonths !== loc.name)}<span class="small muted">{' · '}from {cond.from.waterDays ?? cond.from.dryMonths}</span>{/if}</div>{/if}
       {#if cond.lat != null}<div><b>Coordinates</b>{cond.lat}, {cond.lon}{#if cond.from.lat && cond.from.lat !== loc.name}<span class="small muted">{' · '}from {cond.from.lat}</span>{/if}</div>{/if}
       <!-- Its own row: an altitude saved without coordinates showed nowhere but the edit form (round fifty-nine). -->
       {#if cond.altM != null}<div><b>Altitude</b>{altShown(cond.altM)}{#if cond.from.altM && cond.from.altM !== loc.name}<span class="small muted">{' · '}from {cond.from.altM}</span>{/if}</div>{/if}

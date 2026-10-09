@@ -6,7 +6,7 @@
    * functions, with the next free numbers (a sheet's own number is kept when it is free). Nothing is sent but the
    * reference lookups the add form already makes.
    */
-  import { onMount, tick } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import { beforeNavigate } from '$app/navigation';
   import PageHead from '$lib/ui/PageHead.svelte';
   import ToggleGroup from '$lib/ui/ToggleGroup.svelte';
@@ -22,9 +22,9 @@
   import { parsePaste } from '$lib/import/paste';
   import { parseCsv, detectHeader, guessMapping, unmappedColumns, ambiguousDates, FIELDS, FIELD_LABEL, type Mapping, type Field } from '$lib/import/csv';
   import { rowsFromPaste, rowsFromSheet } from '$lib/import/rows';
-  import { checkNames, checkKey, type NameCheck, type Lookup } from '$lib/import/check';
-  import { planNumbers, placesToMake, resolvePlace, splitPath, markAlreadyImported, type ImportRow, type NumberPlan } from '$lib/import/plan';
-  import { commitImport, type ImportResult } from '$lib/import/commit';
+  import { checkNames, checkKey, nameVerdict, type NameCheck, type Lookup } from '$lib/import/check';
+  import { planNumbers, placesToMake, resolvePlace, splitPath, markAlreadyImported, markImported, passOf, loosePaths, asPath, useSpecies, type ImportRow, type NumberPlan } from '$lib/import/plan';
+  import { commitImport, numbersSaid, type ImportResult } from '$lib/import/commit';
 
   onMount(() => { void collection.load(); });
   $effect(() => {
@@ -82,7 +82,19 @@
   const colName = (i: number) => (sheet && header ? sheet[0][i]?.trim() || `Column ${i + 1}` : `Column ${i + 1}`);
   const preview = $derived(sheet ? sheet.slice(header ? 1 : 0, (header ? 1 : 0) + 3) : []);
   const unmapped = $derived(sheet ? unmappedColumns(sheet, mapping, header) : { extra: [], own: [] });
-  const amb = $derived(sheet ? ambiguousDates(sheet, mapping, header, localDate()) : { n: 0, first: null });
+  const amb = $derived(sheet ? ambiguousDates(sheet, mapping, header, localDate()) : { n: 0, first: null, dayFirst: { n: 0, first: null }, monthFirst: { n: 0, first: null } });
+  /**
+   * What the sheet's other dates show of its order, said beside the question and never chosen for the grower (round
+   * sixty-two, second pass; triage-self N10): a sheet with 17/11/2007 asked about 09/03/2024 with no hint.
+   */
+  const ambHint = $derived.by(() => {
+    const d = amb.dayFirst, m = amb.monthFirst;
+    const more = (n: number) => (n > 1 ? ` and ${n - 1} more like it` : '');
+    if (d.n && m.n) return `This sheet has dates that can only be day first (${d.first}${more(d.n)}) and others that can only be month first (${m.first}${more(m.n)}), so it seems to mix the two.`;
+    if (d.n) return `This sheet also has ${d.first}${more(d.n)}, which can only be day first, so its dates seem to be written day first.`;
+    if (m.n) return `This sheet also has ${m.first}${more(m.n)}, which can only be month first, so its dates seem to be written month first.`;
+    return 'Nothing else in this sheet shows which way round its dates are written.';
+  });
   /** The two readings of the sheet's first ambiguous date, for the choice's own words. */
   const ambWords = $derived.by(() => {
     const m = amb.first ? /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$/.exec(amb.first.trim()) : null;
@@ -105,7 +117,14 @@
   let result = $state<ImportResult | null>(null);
   let noName = $state(0);
   let repeatedHeader = $state(0);
-  let truncated = $state(false);
+  /** Lines every plant of which is here by its import key (a first run added them): left out of the review, and counted. */
+  let doneN = $state(0);
+  /** Lines past this pass's 2,000, for the next pass (round sixty-two; the records review, 5). */
+  let laterN = $state(0);
+  /** "Read > and / as a path": the grower's answer, or null for the sheet's default (round sixty-two; the grower review, 6). */
+  let pathsAnswer = $state<boolean | null>(null);
+  /** Said once the review was read again because a choice above it changed (round sixty-two; the records review, 6, A19). */
+  let rereadMsg = $state('');
   /** The numbers each plant will get, worked out once when the list is read and again only when a line is dropped or kept: frozen while adding, so 300 commits do not plan 300 times (round sixty-one; the records review, 16). */
   let plan = $state.raw<NumberPlan | null>(null);
   let ledger: string[] = [];
@@ -117,13 +136,15 @@
   /** What the page says as it works, in one status line that is always there (round sixty-one; the accessibility review, 2). */
   let status = $state('');
   const look: Lookup = { entries: (slugs) => entriesFor(slugs), search: (q) => searchCatalogue(q, 5) };
-  function reset() { rows = []; checks = new Map(); result = null; noName = 0; repeatedHeader = 0; truncated = false; plan = null; onlyNeeds = false; }
+  function reset() { rows = []; checks = new Map(); result = null; noName = 0; repeatedHeader = 0; doneN = 0; laterN = 0; plan = null; onlyNeeds = false; pathsAnswer = null; rereadMsg = ''; reviewedWith = ''; }
   function replan() {
     plan = collection.ready ? planNumbers(rows, new Set([...ledger, ...collection.accessions.map(accNo)]), collection.scheme, Number(localDate().slice(0, 4)), (n) => collection.isNumberTaken(n)) : null;
   }
-  async function review() {
+  async function review(again = false) {
     if (checking || !collection.ready) return;
     result = null;
+    reviewedWith = choices; // first, before anything this sets wakes the effect that reads the sheet again
+    const before = again ? new Map(rows.map((r) => [r.key, r])) : null;
     let next: ImportRow[];
     if (mode === 'paste') {
       pasteMsg = acquired && acquired > localDate() ? `${acquired} is in the future; the number is minted for the acquisition year, for good.` : acquired && acquired < '1900-01-01' ? `${acquired} is before 1900.` : '';
@@ -131,7 +152,7 @@
       const lines = parsePaste(text);
       if (!lines.some((l) => l.name)) { pasteMsg = 'Nothing to read: paste one plant per line.'; return; }
       next = rowsFromPaste(lines, { placeId, acquired: acquired || null, source: source.trim() || null });
-      noName = lines.filter((l) => !l.name).length;
+      noName = lines.length - next.length; // a line whose name was only invisible characters is nameless too
       repeatedHeader = 0;
     } else {
       if (!sheet) return;
@@ -141,14 +162,29 @@
       noName = r.noName;
       repeatedHeader = r.repeatedHeader;
     }
-    truncated = next.length > MAX_ROWS;
-    if (truncated) next = next.slice(0, MAX_ROWS);
-    // A line whose number a plant here already holds under the same name: most likely added by a first run that was cut off. Skipped unless kept (round sixty-one; the grower review, 6).
-    rows = markAlreadyImported(next, (no) => collection.withNumber('accession', no) as Array<{ taxonName: string; cultivar?: string | null }>);
+    if (mode === 'csv' && pathsOn) next = next.map((r) => (r.placePath ? { ...r, placePath: asPath(r.placePath, nodes) } : r));
+    // The lines a first run added, by the import keys on the plants here, are left out; a line part added offers the rest
+    // (round sixty-two). A line whose number a plant here holds under the same name (a plant with no import key, so added
+    // by hand or before round sixty-two) still looks already imported, and is skipped unless kept (round sixty-one; the
+    // grower review, 6). Then the next 2,000 lines, so a longer sheet is taken in passes (the records review, 5).
+    const here = new Set<string>();
+    for (const a of collection.accessions) if (a.importKey) here.add(a.importKey);
+    const marked = markAlreadyImported(markImported(next, (k) => here.has(k), (id) => !!collection.accession(id) && collection.accession(id)!.id === id), (no) => collection.withNumber('accession', no) as Array<{ taxonName: string; cultivar?: string | null; importKey?: string | null }>);
+    const pass = passOf(marked, MAX_ROWS);
+    doneN = pass.done;
+    laterN = pass.later;
+    // A line the grower changed (a name used, a line dropped) keeps the change when the sheet is read again.
+    rows = before ? pass.rows.map((r) => { const b = before.get(r.key); return b && !r.done ? { ...r, name: b.name !== b.originalName ? b.name : r.name, drop: b.drop } : r; }) : pass.rows;
     ledger = (await getMeta<string[]>('issued:accession').catch(() => undefined)) ?? [];
     replan();
     await recheck();
-    status = `${rows.length} line${rows.length === 1 ? '' : 's'} read; the review is below.`;
+    if (again) {
+      rereadMsg = 'Your choice changed, so the sheet was read again: the review below follows it.';
+      status = rereadMsg;
+      return;
+    }
+    rereadMsg = '';
+    status = !rows.length && doneN ? `Every line of this sheet is here already: ${doneN === 1 ? 'it was' : `${doneN} lines were`} imported before.` : `${rows.length} line${rows.length === 1 ? '' : 's'} read; the review is below.`;
     await tick();
     const h = document.getElementById('imp-review-h');
     h?.scrollIntoView({ block: 'start' });
@@ -168,15 +204,29 @@
   }
   const live = $derived(rows.filter((r) => !r.drop));
   const nodes = $derived(collection.locations.map((l) => ({ id: l.id, name: l.name, parentId: (collection.locationPath(l.id).at(-2)?.id ?? null) as string | null })));
+  /** The sheet's place cells with ">" or "/" between words, and whether to read them as paths by default. */
+  const loose = $derived(mode === 'csv' && sheet && mapping.place !== undefined ? loosePaths(sheet.slice(header ? 1 : 0).map((c) => c[mapping.place!]?.trim() || null), nodes) : { paths: 0, yes: false, example: null });
+  const pathsOn = $derived(pathsAnswer ?? loose.yes);
+  /** The choices the review was read with: a change to any of them after "Check names" reads the sheet again at once. */
+  let reviewedWith = '';
+  const choices = $derived(JSON.stringify([mode, mode === 'csv' ? [dateOrder, extraToNotes, mapping, header, pathsOn] : null]));
+  $effect(() => {
+    const now = choices;
+    if (!reviewedWith || now === reviewedWith || adding || checking || !rows.length) return; // while names are checked, it waits for them
+    untrack(() => void review(true));
+  });
   const toMake = $derived(placesToMake([...new Set(live.map((r) => r.placePath).filter((p): p is string => !!p))], nodes));
   const plantsN = $derived(live.reduce((n, r) => n + r.qty, 0));
   const statusOf = (r: ImportRow) => checks.get(checkKey(r.name));
+  /** The summary counts each line by the verdict its row shows (`nameVerdict`), so the two never disagree. */
   const counts = $derived.by(() => {
-    const c = { found: 0, near: 0, missing: 0, unchecked: 0, hybrid: 0, waiting: 0 };
-    for (const r of live) { const s = statusOf(r); if (!s) c.waiting++; else c[s.s]++; }
+    const c = { found: 0, keyless: 0, near: 0, missing: 0, unchecked: 0, hybrid: 0, waiting: 0 };
+    for (const r of live) c[nameVerdict(statusOf(r), r.name)]++;
     return c;
   });
-  const alreadyRows = $derived(rows.filter((r) => r.already));
+  const alreadyRows = $derived(rows.filter((r) => r.already && r.drop));
+  /** Lines sharing a number and a name with a plant an earlier import added from another line: kept, and said (round sixty-two; A18). */
+  const otherLineRows = $derived(rows.filter((r) => r.already && !r.drop));
   const renumberedKeys = $derived(new Set(plan?.renumbered.map((x) => x.key) ?? []));
   const inFileRenumbered = $derived(plan?.renumbered.filter((x) => x.inFile !== undefined) ?? []);
   const hereRenumbered = $derived(plan?.renumbered.filter((x) => x.inFile === undefined) ?? []);
@@ -189,9 +239,18 @@
   };
   const needN = $derived(rows.filter(needs).length);
   const shown = $derived(onlyNeeds ? rows.filter(needs) : rows);
-  function useSuggestion(r: ImportRow, name: string) {
-    const p = r.name.match(/[‘'"].+[’'"]/)?.[0];
-    rename(r, p ? `${name} ${p}` : name);
+  /**
+   * "Use it" puts the reference's species in place of the species part only (round sixty-two; the records review, 2). The
+   * button goes as the name is checked again; with only the lines that need the grower shown, the row then leaves the
+   * list, so focus moves to the next row's first control, never to the page (A37).
+   */
+  async function useSuggestion(r: ImportRow, name: string) {
+    const i = shown.findIndex((x) => x.key === r.key);
+    const nextKey = onlyNeeds ? shown[i + 1]?.key : r.key;
+    rename(r, useSpecies(r.name, name));
+    await tick();
+    const li = nextKey ? document.querySelector<HTMLElement>(`.rvrow[data-key="${nextKey}"]`) : null;
+    ((onlyNeeds ? li?.querySelector<HTMLElement>('button.use') : null) ?? li?.querySelector<HTMLElement>('input.nm') ?? document.getElementById('imp-review-h'))?.focus();
   }
   function rename(r: ImportRow, name: string) {
     const i = rows.findIndex((x) => x.key === r.key);
@@ -218,20 +277,20 @@
     if (!plan || adding || !live.length || checking) return;
     waterMsg = lastWatered && lastWatered > localDate() ? `${lastWatered} is in the future.` : '';
     if (waterMsg) { document.getElementById('imp-watered')?.focus(); return; }
-    adding = { done: 0, total: live.length };
+    adding = { done: 0, total: plantsN }; // in plants, as the button counts them
     status = `Adding ${plantsN} plant${plantsN === 1 ? '' : 's'}…`;
     try {
-      result = await commitImport(rows, checks, plan, { makePlaces, lastWatered: lastWatered || null, thisYear: Number(localDate().slice(0, 4)), onProgress: (done, total) => (adding = { done, total }) });
-      if (!result.failed) { rows = []; text = ''; sheet = null; fileName = ''; plan = null; }
+      result = await commitImport(rows, checks, plan, { makePlaces, lastWatered: lastWatered || null, onProgress: (done, total) => (adding = { done, total }) });
+      // A sheet with lines past this pass keeps the file: "Check names" again reads the next lines, the ones added now being here.
+      if (!result.failed) { rows = []; plan = null; reviewedWith = ''; if (!laterN) { text = ''; sheet = null; fileName = ''; } }
       else {
-        // The rest stay for a second try; the added ones are on My plants. A row of several plants stopped partway keeps only the plants still to add.
+        // The rest stay for a second try; the added ones are on My plants. A line is one commit, so it is in whole or not at all.
         const done = new Set(result.doneKeys);
-        const part = result.partial;
-        rows = rows.filter((r) => !done.has(r.key)).map((r) => (part && r.key === part.key ? { ...r, qty: r.qty - part.written, number: null } : r));
+        rows = rows.filter((r) => !done.has(r.key));
         replan();
       }
     } catch (e) {
-      result = { added: [], renumbered: [], failed: { line: null, error: collection.lastWriteError ?? (e instanceof Error ? e.message : String(e)) }, doneKeys: [], partial: null, placesMade: 0, watered: null, ms: 0 };
+      result = { added: [], renumbered: [], failed: { line: null, error: collection.lastWriteError ?? (e instanceof Error ? e.message : String(e)) }, doneKeys: [], alreadyHere: [], placesMade: 0, watered: null, ms: 0 };
     } finally {
       adding = null;
     }
@@ -242,7 +301,7 @@
   // While the plants are being added, leaving would stop the import partway: asked first, in the app and by the browser (round sixty-one; the grower review, 6).
   beforeNavigate((nav) => {
     if (adding && !nav.willUnload && nav.type !== 'leave') {
-      if (!confirm(`Leave while the import is adding plants? ${adding.done} of ${adding.total} lines are in; the rest would not be added.`)) nav.cancel();
+      if (!confirm(`Leave while the import is adding plants? ${adding.done} of ${adding.total} plants are in; the rest would not be added.`)) nav.cancel();
       return;
     }
     if (!rows.length || result || nav.willUnload || nav.type === 'leave') return;
@@ -251,16 +310,7 @@
   function guardUnload(e: BeforeUnloadEvent) {
     if (adding) e.preventDefault();
   }
-  /**
-   * The numbers added, by scheme: "0001 to 0300, and A1 to A95", in number order within each, not a string sort over
-   * all of them, which said "0001 to A95" (round sixty-one; the grower review, 10).
-   */
-  const range = (r: ImportResult) => {
-    const groups = new Map<string, string[]>();
-    for (const no of r.added.map(accNo)) { const k = no.replace(/\d+$/, ''); const g = groups.get(k); if (g) g.push(no); else groups.set(k, [no]); }
-    const parts = [...groups.values()].map((ns) => { ns.sort((a, b) => a.localeCompare(b, undefined, { numeric: true })); return ns.length > 1 ? `${ns[0]} to ${ns[ns.length - 1]}` : ns[0]; });
-    return parts.length > 3 ? `${parts.slice(0, 3).join(', ')} and others` : parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : (parts[0] ?? '');
-  };
+  const range = (r: ImportResult) => numbersSaid(r.added.map(accNo));
   /** "cf.", "aff.", "sp.": the name is filed as written, and the reference was asked about the species part only. */
   const qualifierOf = (r: ImportRow) => parseName(r.name).qualifier;
 </script>
@@ -280,11 +330,13 @@
       <h2 class="donehead" id="imp-done-h" tabindex="-1">{result.failed ? 'The import stopped' : 'The import is done'}</h2>
       <p><b>{result.added.length} plant{result.added.length === 1 ? '' : 's'} added</b>{result.added.length ? `, numbered ${range(result)}` : ''}{result.placesMade ? `, and ${result.placesMade} new place${result.placesMade === 1 ? '' : 's'}` : ''}. <span class="muted">({(result.ms / 1000).toFixed(1)} s)</span></p>
       {#if result.renumbered.length}<p>{result.renumbered.length === 1 ? 'One number was' : `${result.renumbered.length} numbers were`} taken, so the next free one was given: {result.renumbered.slice(0, 12).map((x) => `line ${x.line}, ${x.given} → ${x.got}`).join('; ')}{result.renumbered.length > 12 ? '; …' : ''}.</p>{/if}
+      {#if result.alreadyHere.length}{@const k = result.alreadyHere.length}<p id="imp-already-here">Meanwhile {k === 1 ? 'one line was' : `${k} lines were`} imported elsewhere (in another tab, or by sync), so {k === 1 ? 'its plants were' : 'their plants were'} left out, never added twice: {result.alreadyHere.slice(0, 12).map((x) => (x.whole ? `line ${x.line}` : `line ${x.line} (${x.plants === 1 ? 'one plant' : `${x.plants} plants`} of it; the rest added)`)).join(', ')}{k > 12 ? ', …' : ''}.</p>{/if}
       {#if result.watered}{#if result.watered.failed}<p class="bad">The last watering was not recorded: {result.watered.failed}. The plants stand; record it from Today or My plants.</p>{:else}<p>Last watered on {lastWatered || 'the date given'}: recorded on {result.watered.lines} plant{result.watered.lines === 1 ? '' : 's'}.</p>{/if}{/if}
       {#if result.failed}
         {#if result.failed.line === null}<p class="bad">Stopped before any plant was added: {result.failed.error}.{result.placesMade ? ` ${result.placesMade === 1 ? 'One new place was' : `${result.placesMade} new places were`} made, and stay${result.placesMade === 1 ? 's' : ''}; a second try finds ${result.placesMade === 1 ? 'it' : 'them'} and makes no other.` : ''} Every line is still in the list below.</p>
-        {:else}<p class="bad">Stopped at line {result.failed.line}: {result.failed.error}. The lines before it were added; the rest are still in the list below{result.partial ? `, line ${result.failed.line} with the ${result.partial.written === 1 ? 'one plant' : `${result.partial.written} plants`} added taken off it` : ''}.</p>{/if}
+        {:else}<p class="bad">Stopped at line {result.failed.line}: {result.failed.error}. The lines before it were added; the rest, line {result.failed.line} with them, are still in the list below.</p>{/if}
       {/if}
+      {#if !result.failed && laterN && sheet}<p id="imp-next-pass">{laterN === 1 ? 'One more line' : `${laterN} more lines`} of {fileName} {laterN === 1 ? 'is' : 'are'} still to come: <button class="linkish" type="button" onclick={() => review()}>check the next {laterN > MAX_ROWS ? MAX_ROWS : laterN}</button>.</p>{/if}
       <p><a class="btn pri" href="/plants">See them on My plants</a> {#if result.added.length}<a class="btn" href="/labels?acc={result.added.map((a) => a.id).join(',')}">Labels for these</a>{/if}</p>
     </div>
   </div>
@@ -303,7 +355,7 @@
     <label><span class="lab">Date acquired</span><input id="imp-date" type="date" bind:value={acquired} /><span class="hint">Blank: not stated; numbers take this year.</span></label>
     <label><span class="lab">From</span><input id="imp-from" type="text" bind:value={source} placeholder="a nursery, a club sale, a friend" /></label>
     {#if pasteMsg}<p class="bad full" role="alert">{pasteMsg}</p>{/if}
-    <div class="full acts"><button class="btn pri" type="button" id="imp-check" onclick={review} aria-disabled={!text.trim() || checking || !collection.ready}>{checking ? 'Checking names…' : 'Check names'}</button></div>
+    <div class="full acts"><button class="btn pri" type="button" id="imp-check" onclick={() => review()} aria-disabled={!text.trim() || checking || !collection.ready}>{checking ? 'Checking names…' : 'Check names'}</button></div>
   </div>
 {:else}
   <div class="cult form">
@@ -340,30 +392,35 @@
       {#if amb.n}
         <fieldset class="full dates" id="imp-dates">
           <legend class="small">{amb.n === 1 ? 'One date' : `${amb.n} dates`} in this sheet, like {ambWords?.text ?? amb.first}, could be read day first or month first. How are they written?</legend>
+          <p class="small" id="imp-dates-hint">{ambHint}</p>
           <label class="check"><input type="radio" name="imp-date-order" value="dmy" bind:group={dateOrder} /> Day first{ambWords ? ` (${ambWords.dmy})` : ''}</label>
           <label class="check"><input type="radio" name="imp-date-order" value="mdy" bind:group={dateOrder} /> Month first{ambWords ? ` (${ambWords.mdy})` : ''}</label>
           <label class="check"><input type="radio" name="imp-date-order" value="leave" bind:group={dateOrder} /> Leave them: the text goes into the notes, and the plant is numbered for the year written</label>
         </fieldset>
       {/if}
-      <div class="full acts"><button class="btn pri" type="button" id="imp-check" onclick={review} aria-disabled={checking || (mapping.name === undefined && mapping.genus === undefined) || !collection.ready}>{checking ? 'Checking names…' : 'Check names'}</button></div>
+      <div class="full acts"><button class="btn pri" type="button" id="imp-check" onclick={() => review()} aria-disabled={checking || (mapping.name === undefined && mapping.genus === undefined) || !collection.ready}>{checking ? 'Checking names…' : 'Check names'}</button></div>
     {/if}
   </div>
 {/if}
 
-{#if rows.length && plan}
+{#if (rows.length || doneN) && plan}
   <section id="imp-review" aria-labelledby="imp-review-h">
     <div class="secrule"><h2 id="imp-review-h" tabindex="-1">Review</h2><div class="line"></div><span class="n">{plantsN} plant{plantsN === 1 ? '' : 's'}</span></div>
     <p class="small" id="imp-summary">
       {live.length} line{live.length === 1 ? '' : 's'}{rows.length - live.length ? ` (${rows.length - live.length} dropped)` : ''}, {plantsN} plant{plantsN === 1 ? '' : 's'}.
-      Matched in the reference: {counts.found}{counts.near ? ` · ambiguous, another name suggested: ${counts.near}` : ''}{counts.missing ? ` · not in the reference, added as typed: ${counts.missing}` : ''}{counts.hybrid ? ` · crosses, filed under the genus: ${counts.hybrid}` : ''}{counts.unchecked ? ` · not checked (the reference did not answer): ${counts.unchecked}` : ''}{counts.waiting ? ` · still checking: ${counts.waiting}` : ''}.
+      Matched in the reference: {counts.found}{counts.keyless ? ` · filed as written, with no reference key (cf., aff., sp., or a rank below the species): ${counts.keyless}` : ''}{counts.near ? ` · ambiguous, another name suggested: ${counts.near}` : ''}{counts.missing ? ` · not in the reference, added as typed: ${counts.missing}` : ''}{counts.hybrid ? ` · crosses, filed under the genus: ${counts.hybrid}` : ''}{counts.unchecked ? ` · not checked (the reference did not answer): ${counts.unchecked}` : ''}{counts.waiting ? ` · still checking: ${counts.waiting}` : ''}.
       {#if counts.unchecked && !checking}<button class="linkish" type="button" onclick={recheck}>Check again</button>{/if}
       {#if noName}{noName} {mode === 'paste' ? 'line' : 'row'}{noName === 1 ? '' : 's'} with no name {noName === 1 ? 'was' : 'were'} left out.{/if}
       {#if repeatedHeader}{repeatedHeader === 1 ? 'A row repeating the header was' : `${repeatedHeader} rows repeating the header were`} left out.{/if}
-      {#if truncated}Only the first {MAX_ROWS} lines are read at once; import the rest after.{/if}
+      {#if doneN}<span id="imp-done-lines">{doneN === 1 ? 'One line was' : `${doneN} lines were`} imported before (every plant {doneN === 1 ? 'it makes is' : 'they make is'} here), so {doneN === 1 ? 'it is' : 'they are'} left out.</span>{/if}
+      {#if laterN}<span id="imp-later">{MAX_ROWS} lines are read at a time: add these, then press Check names again for the next {laterN === 1 ? 'line' : `${laterN} lines`} of this sheet.</span>{/if}
     </p>
+    {#if rereadMsg}<p class="small notice" id="imp-reread">{rereadMsg}</p>{/if}
     {#if alreadyRows.length}<p class="small notice" id="imp-already">{alreadyRows.length === 1 ? 'One line looks' : `${alreadyRows.length} lines look`} already imported: {alreadyRows.length === 1 ? 'its number is' : 'their numbers are'} held here by a plant of the same name, so {alreadyRows.length === 1 ? 'it is' : 'they are'} skipped. {#if alreadyRows.some((r) => r.drop)}<button class="linkish" type="button" id="imp-keep-already" onclick={keepAlready}>Add {alreadyRows.length === 1 ? 'it' : 'them'} anyway, under new numbers</button>{/if}</p>{/if}
+    {#if otherLineRows.length}<p class="small notice" id="imp-other-line">{otherLineRows.length === 1 ? 'One line has' : `${otherLineRows.length} lines have`} the number and name of a plant an earlier import added from another line ({otherLineRows.slice(0, 6).map((r) => `line ${r.line}`).join(', ')}{otherLineRows.length > 6 ? ', …' : ''}): added under the next free number. Drop {otherLineRows.length === 1 ? 'it' : 'any'} if it is the same plant.</p>{/if}
     {#if hereRenumbered.length}<p class="small" id="imp-renumbered">{hereRenumbered.length === 1 ? 'One number given is' : `${hereRenumbered.length} numbers given are`} already used here: {hereRenumbered.length === 1 ? 'that plant gets' : 'those plants get'} the next free number ({hereRenumbered.slice(0, 6).map((x) => `${x.given} → ${x.got}`).join(', ')}{hereRenumbered.length > 6 ? ', …' : ''}).</p>{/if}
     {#if inFileRenumbered.length}<p class="small" id="imp-dupes">{inFileRenumbered.length === 1 ? 'One number is' : `${inFileRenumbered.length} numbers are`} given twice in this sheet: the first line keeps it, and the later one gets the next free number ({inFileRenumbered.slice(0, 6).map((x) => `line ${x.line}, as on line ${x.inFile}: ${x.given} → ${x.got}`).join('; ')}{inFileRenumbered.length > 6 ? '; …' : ''}).</p>{/if}
+    {#if loose.paths && rows.length}<label class="small makeplaces"><input type="checkbox" id="imp-paths" checked={pathsOn} onchange={(e) => (pathsAnswer = (e.currentTarget as HTMLInputElement).checked)} /> Read &gt; and / as a path, as in {loose.example} ({loose.paths === 1 ? 'one place' : `${loose.paths} places`} in this sheet); unticked, each is one place by that whole name</label>{/if}
     {#if toMake.length}<label class="small makeplaces"><input type="checkbox" id="imp-make-places" bind:checked={makePlaces} /> Make {toMake.length === 1 ? 'this place' : `these ${toMake.length} places`}, which {toMake.length === 1 ? 'is' : 'are'} not here yet: {toMake.map((p) => p.join(' › ')).join(', ')}</label>{/if}
     <div class="reviewopts">
       <label class="check"><input type="checkbox" id="imp-only-needs" bind:checked={onlyNeeds} /> Show only lines that need me ({needN})</label>
@@ -374,7 +431,8 @@
         {@const c = statusOf(r)}
         {@const nos = plan.byRow.get(r.key)?.numbers ?? []}
         {@const qual = qualifierOf(r)}
-        <li class:dropped={r.drop} class="rvrow" data-line={r.line}>
+        {@const v = nameVerdict(c, r.name)}
+        <li class:dropped={r.drop} class="rvrow" data-line={r.line} data-key={r.key}>
           <span class="ln mono">{r.line}</span>
           <span class="main">
             <input class="nm" type="text" value={r.name} aria-label="Name on line {r.line}" disabled={r.drop} onchange={(e) => rename(r, (e.currentTarget as HTMLInputElement).value)} />
@@ -389,10 +447,13 @@
                 {#if r.source && (mode === 'csv' || r.source !== source.trim())}<span class="muted">from {r.source}</span>{/if}
                 {#if r.price}<span class="muted">{r.price}</span>{/if}
                 {#if r.notes}<span class="muted note" title={r.notes}>{r.notes.length > 60 ? `${r.notes.slice(0, 60)}…` : r.notes}</span>{/if}
-                {#if r.already}<span class="warn">its number is held here by a plant of the same name</span>{/if}
+                {#if r.already}<span class="warn">looks already imported: its number is held here by a plant of the same name{r.drop ? '' : ', from another line'}</span>{/if}
+                {#if r.partDone}<span class="warn">{r.partDone === 1 ? 'one plant' : `${r.partDone} plants`} of this line {r.partDone === 1 ? 'is' : 'are'} here already, from an import cut off partway: {r.qty === 1 ? 'the other is' : `the other ${r.qty} are`} added</span>{/if}
                 {#if !c}<span class="muted">checking…</span>
-                {:else if c.s === 'found'}<span class="ok">{qual ? `filed as written; the reference was asked about ${c.refName}` : `matched${c.refName.toLowerCase() !== checkKey(r.name).toLowerCase() ? ` as ${c.refName}` : ''}`}</span>
-                {:else if c.s === 'near'}<span class="warn">ambiguous: not under this name; {c.why === 'older name' ? 'an older name for' : 'did you mean'} <SpeciesName name={c.suggestion} />? <button class="linkish" type="button" aria-label="Use it: {c.suggestion} on line {r.line}" onclick={() => useSuggestion(r, c.suggestion)}>Use it</button></span>
+                {:else if c.s === 'found' && v === 'keyless'}<span class="ok">filed as written, with no reference key{qual === 'sp.' || qual === 'spp.' ? '' : `; the reference has ${c.refName}`}</span>
+                {:else if c.s === 'found'}<span class="ok">matched{c.refName.toLowerCase() !== checkKey(r.name).toLowerCase() ? ` as ${c.refName}` : ''}</span>
+                {:else if c.s === 'near'}<span class="warn">{qual ? 'filed as written, with no reference key; ' : ''}ambiguous: not under this name; {c.why === 'older name' ? 'an older name for' : 'did you mean'} <SpeciesName name={c.suggestion} />? <button class="linkish use" type="button" aria-label="Use {c.suggestion} on line {r.line}" onclick={() => useSuggestion(r, c.suggestion)}>Use it</button></span>
+                {:else if qual}<span class="muted">filed as written, with no reference key</span>
                 {:else if c.s === 'missing'}<span class="warn">not in the reference; added as typed</span>
                 {:else if c.s === 'hybrid'}<span class="muted">a cross, filed under its genus</span>
                 {:else}<span class="warn">not checked: the reference did not answer</span>{/if}
@@ -403,11 +464,11 @@
           <button class="btn small" type="button" onclick={() => drop(r, !r.drop)} aria-label="{r.drop ? 'Keep' : 'Drop'} line {r.line}">{r.drop ? 'Keep' : 'Drop'}</button>
         </li>
       {:else}
-        <li class="rvrow none">No line needs you: every name matched and every value was read.</li>
+        <li class="rvrow none">{rows.length ? 'No line needs you: every name matched and every value was read.' : 'Nothing is left to add: every line of this sheet is here already.'}</li>
       {/each}
     </ol>
     <div class="addbar">
-      <button class="btn pri" type="button" id="imp-add" onclick={add} aria-disabled={!!adding || !plantsN || checking}>{adding ? `Adding ${adding.done} of ${adding.total}…` : `Add ${plantsN} plant${plantsN === 1 ? '' : 's'}`}</button>
+      <button class="btn pri" type="button" id="imp-add" onclick={add} aria-disabled={!!adding || !plantsN || checking}>{adding ? `Adding ${adding.done} of ${adding.total} plants…` : `Add ${plantsN} plant${plantsN === 1 ? '' : 's'}`}</button>
       <span class="small muted">Each gets the number shown{[...plan.byRow.values()].some((x) => x.kept) ? ': its own from the sheet when free, else the next free one' : ''}.{adding ? ' Keep this page open until it is done.' : ''}</span>
     </div>
   </section>
@@ -451,7 +512,7 @@
   .done p { margin: 0 0 8px; }
   .linkish { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; text-decoration: underline; cursor: pointer; }
   .check { display: flex !important; grid-template-columns: none; align-items: center; gap: 8px; min-height: var(--tap); font-size: var(--fs-md); }
-  .unmapped p, .dates legend { margin: 0 0 4px; }
+  .unmapped p, .dates legend, .dates p { margin: 0 0 4px; }
   .dates { border: 1px solid var(--rule); border-radius: var(--r); padding: 8px 12px; margin: 0; }
   .reviewopts { display: flex; flex-wrap: wrap; align-items: end; gap: 8px 20px; margin: 8px 0; }
   .watered { display: grid; gap: 4px; }

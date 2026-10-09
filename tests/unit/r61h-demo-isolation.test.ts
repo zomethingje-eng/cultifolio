@@ -34,10 +34,13 @@ describe('the sample collection is a database of its own (harness review)', () =
     expect(await names()).toContain('cultifolio-demo');
     expect(await names()).not.toContain('cultifolio');
     (await vault.openVault()).close();
-    const { leaveDemo } = await import('$lib/db/demo');
-    await leaveDemo('/');
+    // Round sixty-two (A9): Leave navigates first; the tab leaves the sample as its page goes (here at once, there being no
+    // page to hide), and the next page, outside the sample, deletes it.
+    const { leaveDemo, finishLeaving } = await import('$lib/db/demo');
+    leaveDemo('/');
     expect(ss.has('cultifolio.demo')).toBe(false);
     expect(loc.href).toBe('/');
+    expect(await finishLeaving()).toBe('deleted');
     expect(await names()).not.toContain('cultifolio-demo');
   });
   it('a page outside the sample opens the grower\'s own database', async () => {

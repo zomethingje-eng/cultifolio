@@ -9,10 +9,11 @@
   import { entriesFor } from '$lib/ui/index.svelte';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
   import { labelFromHash } from './qr';
+  import { shownLabel } from './foreign-label';
   let label = $state<{ slug: string | null; name: string | null }>({ slug: null, name: null });
   let entry = $state<{ name: string; slug: string } | null | 'unreached' | 'none'>(null);
   onMount(() => {
-    label = labelFromHash(location.hash);
+    label = shownLabel(labelFromHash(location.hash));
     const want = label.slug;
     if (!want) return;
     void entriesFor([want]).then((m) => { entry = m === null ? 'unreached' : (m.get(want) ?? 'none'); }, () => (entry = 'unreached'));

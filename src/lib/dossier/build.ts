@@ -171,6 +171,8 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     [syn, vern] = await Promise.all([gbif.synonyms(f, key), gbif.vernacular(f, key)]);
     mark('gbif.synonyms', syn);
     mark('gbif.vernacular', vern);
+    // A list GBIF pages past the build's limit is kept as far as it was read, and said (round sixty-two; agent Q, corpus 7).
+    if (vern.status === 'ok' && vern.truncated) upstream['gbif.vernacular'] = { status: 'ok', at: now(), detail: `truncated: the first ${vern.truncated} rows only` };
   }
 
   /* ---- 2. Distribution (WCVP via GBIF) ---- */
@@ -292,8 +294,9 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     };
   }
   let climate: Climate = { status: 'none', detail: 'no georeferenced record inside the range' };
-  if (occ.status === 'refused' || occ.status === 'error') climate = { status: 'refused', detail: 'occurrence source did not answer' };
-  else if (dist.status === 'refused' || dist.status === 'error') climate = { status: 'refused', detail: 'distribution source did not answer, so the range could not be verified' };
+  // A refusal said as a refusal, a failure as "did not answer" (round sixty-two; the grower review's 2, rule 2).
+  if (occ.status === 'refused' || occ.status === 'error') climate = { status: 'refused', detail: `occurrence source ${occ.status === 'refused' ? 'refused the request' : 'did not answer'}` };
+  else if (dist.status === 'refused' || dist.status === 'error') climate = { status: 'refused', detail: `distribution source ${dist.status === 'refused' ? 'refused the request' : 'did not answer'}, so the range could not be verified` };
   // No verified native range means no way to tell a habitat record from a garden one, so no habitat climate: the map stays, the advice does not.
   else if (ambiguous) climate = { status: 'none', detail: `native range not verified: ${ambiguous}` };
   else if (!verified || !boxes.length) climate = { status: 'none', detail: !verified ? 'native range not verified: no WCVP distribution with native status for this name, so records cannot be told from cultivation and no habitat climate is derived' : 'native range is stated at country level only, with no region boxes to test records against' };
