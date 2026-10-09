@@ -302,9 +302,14 @@ Round sixty-three went up on 9 October 2026, commit `1cd6390`.
   - **What went wrong:** about a dozen were case flips the other way ("China Aster", "Red-osier Dogwood", "Sensitive Fern"). Splitting the lists had given Title Case spellings more sources, and a name's spelling was chosen by count.
 - **The upload** carried 9,013 files (290 MB), and the live check passed 18 of 18.
 
-**The case fix, after the audit.**
-- **The rule.** Spellings of a name that differ only in capitals now count together. Of them, the one shown is a spelling a source gave with the fewest capitals after the first letter, and a spelling all in lower case is set aside when another has a capital, since a source that lowers every word says nothing of a proper noun. Between spellings that differ otherwise (a hyphen, a space), the one more sources give is still shown, as round sixty-one decided.
-- **Test:** `r63z-name-case` (3 of its 5 cases failed before the fix).
-- **When it takes effect.** Species pages read the names when they are served, so they change with the deploy; tiles, rows and search change with `--index` and the upload.
-- **What it cannot fix:** a source's own misspelling winning on count (Nepenthes rafflesiana's "Raffle's Pitcher").
-
+**The case fix, in two passes.**
+- **The first pass** (commit `4e9e65e`, Worker `e4da8e00-c3c4-45c7-bccc-144a18018193`, corpus `c35211b17e4ea414`) counted spellings that differ only in capitals together and showed the one with the fewest capitals. It set a spelling all in lower case aside whenever another had a capital, meaning to protect proper nouns. Its audit changed 539 headlines, and about half went the wrong way ("Butterfly Milkweed", "Snow-On-The-Mountain", "Desert-Rose"): the lower-case spelling was often the one most sources gave, and setting it aside handed the name to a Title Case list. That corpus went live and is replaced by the second pass.
+- **The second pass.**
+  - **The rule.** Spellings that differ only in capitals still count together. The one shown keeps the capitals some source gave on purpose and no others. A capital counts as meant when its spelling leaves another word in lower case ("herb Robert"); Title Case and all-lower-case spellings say nothing either way. Hyphenated words count as one word for that test, so "Red-osier Dogwood" is Title Case.
+  - **Between other spellings.** Where spellings differ otherwise (a hyphen, a space), the one more sources give is still shown, now with its capital variants' sources pooled.
+  - **Checked on the real names before the deploy.** Every dossier's names were extracted on the PC and run through round sixty-two's rule, this round's first rule, the first pass and the second pass in the sandbox. The harness reproduced the PC's audit exactly (539 between the first rule and the first pass). Against round sixty-two, the second pass changes 555 headlines:
+    - 449 in capitals only. 447 of those have fewer capitals ("Common Milkweed" becomes "Common milkweed", "Large-Leaved Lime" becomes "Large-leaved lime"), and 2 keep a proper noun a source meant ("White Egyptian lotus", "Cape Province pygmyweed").
+    - 72 between a hyphen and a space, by pooled sources ("Maidenhair tree", "Spider plant", "Swiss cheese plant").
+    - 34 from the round's two rules (a bare genus giving way, the lists split).
+  - **What it does not change.** Where no source gives a name in lower case, it stays as written ("Tenerife Aeonium"), since nothing is invented. A source's misspelling winning on count ("Raffle's Pitcher") is beyond any rule.
+  - **Tests.** `r63z-name-case` has 8 cases; the second pass's 3 new ones failed on the first pass. `r62q-common-names` now expects "Japanese privet" where round sixty-two showed "Japanese Privet" by count.

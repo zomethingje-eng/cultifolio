@@ -1,7 +1,8 @@
 /**
- * Round sixty-three, after the --index audit on the owner's PC: names that differ only in capitals are one name, and the
- * spelling shown is one a source gave with the fewest capitals after the first letter; an all-lower-case spelling is set
- * aside when another has a capital. The first four cases FAILED before (the most-counted spelling was shown).
+ * Round sixty-three, after the --index audits on the owner's PC: names that differ only in capitals are one name, and the
+ * spelling shown keeps the capitals a source gave on purpose (a capital in a spelling that leaves another word in lower
+ * case) and no others. The first rule (fewest capitals, lower-case spellings set aside) flipped 539 headlines to Title
+ * Case where the lower-case spelling had the sources; the last describe's cases FAILED on it.
  */
 import { describe, it, expect } from 'vitest';
 import { englishNames, type VernacularName } from '$dossier/index-entry';
@@ -26,5 +27,17 @@ describe('a name\'s case is not decided by a Title Case list\'s count', () => {
   it('guard: one spelling, any case, is shown as given (first letter up)', () => {
     expect(shown([eng('Common Christmas Cactus', 'A')])).toBe('Common Christmas Cactus');
     expect(shown([eng('wild cherry', 'A')])).toBe('Wild cherry');
+  });
+});
+
+describe('a lower-case spelling is a spelling, and a capital counts when a source meant it', () => {
+  it('Butterfly milkweed, where the lower-case spelling has the sources and a list gives Title Case', () => {
+    expect(shown([eng('butterfly milkweed', 'A'), eng('butterfly milkweed', 'B'), eng('Pleurisy root, Butterfly Milkweed', 'C'), eng('Butterfly Milkweed', 'D'), eng('Butterfly Milkweed', 'E')])).toBe('Butterfly milkweed');
+  });
+  it('Snow-on-the-mountain, though a source writes every word up', () => {
+    expect(shown([eng('Snow-On-The-Mountain', 'A'), eng('Snow-On-The-Mountain', 'B'), eng('snow-on-the-mountain', 'C')])).toBe('Snow-on-the-mountain');
+  });
+  it('Herb Robert keeps the capital a source gave on purpose', () => {
+    expect(shown([eng('herb robert', 'A'), eng('herb robert', 'B'), eng('herb Robert', 'C'), eng('Herb Robert', 'D')])).toBe('Herb Robert');
   });
 });

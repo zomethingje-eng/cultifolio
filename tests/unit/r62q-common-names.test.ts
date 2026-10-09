@@ -30,14 +30,16 @@ const pages = (rows: Row[], size = 2) => {
 };
 
 describe('gbif.vernacular keeps each exact spelling with its own sources, and pages to the end (corpus 7, 8)', () => {
-  it('the spelling more sources give is shown: "Japanese Privet" (two) over "japanese privet" (one)', async () => {
+  // Round sixty-three: spellings that differ only in capitals count together, and the capitals shown are the ones a source
+  // meant; between spellings that differ otherwise, the one more sources give is still shown (r63z-name-case).
+  it('spellings that differ only in capitals count together: "Japanese privet", not a Title Case list\'s "Japanese Privet"', async () => {
     const r = await vernacular(pages([
       { vernacularName: 'japanese privet', language: 'eng', source: 'A' },
       { vernacularName: 'Japanese Privet', language: 'eng', source: 'B' },
       { vernacularName: 'Japanese Privet', language: 'eng', source: 'C' }
     ], 50).f, 1);
     if (r.status !== 'ok') throw new Error('fetch');
-    expect(shown(r.data, 'Ligustrum japonicum')).toBe('Japanese Privet'); // base: "Japanese privet"
+    expect(shown(r.data, 'Ligustrum japonicum')).toBe('Japanese privet'); // round sixty-two showed "Japanese Privet" by count
   });
   it('pages until endOfRecords: a name past the first page is kept', async () => {
     const rows: Row[] = Array.from({ length: 7 }, (_, i) => ({ vernacularName: `Name ${String.fromCharCode(97 + i)}`, language: i % 2 ? 'eng' : 'fra', source: `S${i}` }));

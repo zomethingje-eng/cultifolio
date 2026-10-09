@@ -51,6 +51,8 @@ export function generaOf(names: Iterable<string>): Set<string> {
 // Past a leading ʻokina, modifier letter or apostrophe: "ʻihi" is "ʻIhi" (round sixty-two; the corpus review, 10a).
 const firstUp = (s: string) => { const lead = /^[\p{Lm}'’‘]*/u.exec(s)![0]; const c = [...s.slice(lead.length)][0] ?? ''; return /\p{Ll}/u.test(c) ? lead + c.toLocaleUpperCase('en') + s.slice(lead.length + c.length) : s; };
 /** One name whatever its case, hyphens, spacing or apostrophe: "String-of-Pearls" and "String of pearls" are one name given twice. */
+/** Words a Title Case name leaves in lower case, which say nothing of a source's way with capitals. */
+const SMALL_WORDS = new Set(['a', 'an', 'and', 'at', 'by', 'de', 'for', 'in', 'of', 'on', 'or', 'the', 'to', 'with']);
 const nameKey = (s: string) => s.normalize('NFKC').toLowerCase().replace(/[’‘`]/g, "'").replace(/[-\s]+/g, ' ').trim();
 
 /** The words of a spelling, split on spaces and hyphens, as written. */
@@ -165,13 +167,12 @@ export function englishNames(vernacular: VernacularName[], scope: NameScope = {}
     return ws.length === 2 && other(ws[0]) && !!epithet && stem(ws[1]) === stem(epithet);
   };
   const named = [...groups.values()].map((g) => {
-    // Which spelling of a name to show. Spellings that differ only in capitals count together, and of them the one shown is
-    // one a source gave with the fewest capitals after the first letter ("China aster" over "China Aster"), so a list in
-    // Title Case cannot flip a headline's case by its count; one all in lower case is set aside when another has a
-    // capital, since a source that lowers every word says nothing of a proper noun ("Christmas cactus", not "christmas
-    // cactus"). Spellings that differ otherwise are chosen by their sources, then GBIF's order, as before (round
-    // sixty-three, after the --index audit: splitting the lists gave Title Case spellings more sources, and about a dozen
-    // headlines flipped case).
+    // Which spelling of a name to show. Spellings that differ only in capitals count together, and of them the one shown
+    // keeps the capitals a source gave on purpose and no others (formOf, below): "China aster" over "China Aster",
+    // "Butterfly milkweed" over "Butterfly Milkweed", "Herb Robert" where a source wrote "herb Robert". So a list in Title
+    // Case cannot flip a headline's case by its count (round sixty-three, after the --index audits: splitting the lists
+    // gave Title Case spellings more sources, and a first rule that set lower-case spellings aside flipped 539 the other
+    // way). Spellings that differ otherwise are chosen by their sources, then GBIF's order, as before.
     const byCase = new Map<string, { forms: Array<[string, { n: number; at: number }]>; n: number; at: number }>();
     for (const [sp, c] of g.spellings) {
       const k = sp.toLowerCase();
@@ -181,10 +182,20 @@ export function englishNames(vernacular: VernacularName[], scope: NameScope = {}
       e.at = Math.min(e.at, c.at);
       byCase.set(k, e);
     }
-    const caps = (sp: string) => (sp.slice(1).match(/\p{Lu}/gu) ?? []).length;
     const formOf = (forms: Array<[string, { n: number; at: number }]>) => {
-      const cased = forms.some(([sp]) => /\p{Lu}/u.test(sp)) ? forms.filter(([sp]) => /\p{Lu}/u.test(sp)) : forms;
-      return cased.sort((a, b) => caps(a[0]) - caps(b[0]) || b[1].n - a[1].n || a[1].at - b[1].at)[0][0];
+      // A capital a source gave on purpose: one in a spelling that leaves a word in lower case (a word between spaces,
+      // so "Red-osier Dogwood" is Title Case, and not a small word such as "of" or "the"), as "herb Robert". Title Case
+      // and all-lower-case spellings say nothing either way. Each spelling is scored by the capitals it puts where no
+      // source meant one and those it leaves out where one did, word by word past the first (hyphens part words here);
+      // the lowest wins, then the most sources, then GBIF's order.
+      const words = (sp: string) => sp.split(/[\s-]+/).filter(Boolean);
+      const upper = (w: string) => /^\p{Lu}/u.test(w);
+      const meant = new Set<string>();
+      for (const [sp] of forms) {
+        if (sp.split(/\s+/).some((w) => !!w && !upper(w) && !SMALL_WORDS.has(w.toLowerCase()))) for (const w of words(sp).slice(1)) if (upper(w)) meant.add(w.toLowerCase());
+      }
+      const off = (sp: string) => words(sp).slice(1).reduce((n, w) => n + (upper(w) !== meant.has(w.toLowerCase()) ? 1 : 0), 0);
+      return forms.sort((a, b) => off(a[0]) - off(b[0]) || b[1].n - a[1].n || a[1].at - b[1].at)[0][0];
     };
     // Between spellings that differ otherwise (a hyphen, a space), the one more sources give, as round sixty-one decided.
     const spelling = formOf([...byCase.values()].sort((a, b) => b.n - a.n || a.at - b.at)[0].forms);
