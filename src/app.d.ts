@@ -20,6 +20,8 @@ declare global {
         COUNTERS?: DurableObjectNamespace<import('$lib/server/counters').Counters>;
         /** '1' lets any vault sync without a licence (dev and pre-launch). */
         SYNC_OPEN?: string;
+        /** Set only by the browser suite's local server (`--var E2E_OFFLINE:1`): the server asks no outside service, as if none answered (round sixty-two, the first deploy). */
+        E2E_OFFLINE?: string;
         /** Ceilings on new vaults, for everyone per day and in all; the code's defaults when unset (see `allowCreation`). */
         SYNC_VAULTS_PER_DAY?: string;
         SYNC_VAULTS_MAX?: string;

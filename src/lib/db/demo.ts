@@ -74,7 +74,25 @@ export async function sampleEdits(): Promise<number> {
 function leaving(): void {
   clearFlag();
   try { sessionStorage.setItem(LEFT, '1'); } catch { /* the leftover is then deleted on a later load */ }
+  tellOthers();
+}
+function tellOthers(): void {
   try { const c = new BroadcastChannel(LIFE); c.postMessage('closed'); c.close(); } catch { /* no other tab to tell */ }
+}
+/**
+ * Before the navigation is asked for, the flag goes and the next page is told to delete the sample; a Leave called off
+ * puts both back (round sixty-two, the first deploy). Done at `pagehide`, as the first pass had it, it lost a race one
+ * time in five in Chromium: the next page commits, and its first script reads the tab's storage, before the old page's
+ * `pagehide` runs, so it opened in the sample again with the sample kept. The tab's own copies of the settings go at
+ * `pagehide` still, when the page is really going (a Leave called off keeps them), and the next page reads none of them.
+ */
+/** The address the first page after a Leave is opened at carries `left=sample`; the page takes it off its address once read. */
+export const LEFT_PARAM = 'left';
+function readyToLeave(): void {
+  try { sessionStorage.removeItem(KEY); sessionStorage.setItem(LEFT, '1'); } catch { /* the leftover is then deleted on a later load */ }
+}
+function stayInSample(): void {
+  try { sessionStorage.setItem(KEY, '1'); sessionStorage.removeItem(LEFT); } catch { /* the tab then loads outside the sample next time */ }
 }
 
 /**
@@ -102,13 +120,15 @@ export function leaveDemo(to = '/', onStay?: () => void): () => void {
   function hide() {
     if (!armed) return;
     disarm();
-    leaving();
+    clearFlag();
+    tellOthers();
     // Brought back from the back-forward cache after it left: it is no longer the sample's tab, so it loads afresh.
     addEventListener('pageshow', (e) => { if ((e as PageTransitionEvent).persisted) location.reload(); }, { once: true });
   }
   function stay() {
     if (!armed) return;
     disarm();
+    stayInSample();
     onStay?.();
   }
   /** After the page's own listeners (added before this one): whether it will ask "Leave site?". */
@@ -118,7 +138,10 @@ export function leaveDemo(to = '/', onStay?: () => void): () => void {
   addEventListener('pagehide', hide);
   addEventListener('beforeunload', asked);
   try { nav?.addEventListener('navigateerror', stay); } catch { /* no Navigation API: the timers below */ }
-  location.href = to;
+  readyToLeave();
+  // The address says it too (`left=sample`), and the next page's first script reads it before anything else (app.html):
+  // the tab's storage set just above can reach a new page late (the race below), the address cannot.
+  location.href = `${to}${to.includes('?') ? '&' : '?'}left=sample`;
   // Chromium asks "Leave site?" inside the line above and says a Cancel as `navigateerror` before it returns; a browser without the Navigation API is given 3 seconds.
   if (!nav) timers.push(setTimeout(() => { if (prompted && showing()) stay(); }, 3000));
   timers.push(setTimeout(() => { if (showing()) stay(); }, 10_000));

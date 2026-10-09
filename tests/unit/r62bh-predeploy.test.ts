@@ -26,7 +26,9 @@ beforeAll(() => {
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 function predeploy(spec: string) {
-  const r = spawnSync(process.execPath, ['scripts/predeploy.mjs', '--config', join(dir, 'pw.config.ts'), join(dir, spec)], {
+  // The spec by its name alone: Playwright reads a file argument as a pattern, and a Windows path's backslashes matched
+  // nothing ("No tests found", round sixty-two's first deploy).
+  const r = spawnSync(process.execPath, ['scripts/predeploy.mjs', '--config', join(dir, 'pw.config.ts'), spec], {
     cwd: root,
     encoding: 'utf8',
     env: { ...process.env, CI_STRICT: '', PW_REUSE: '1' },

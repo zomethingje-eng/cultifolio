@@ -13,7 +13,8 @@
    */
   import { onMount } from 'svelte';
   import { page } from '$app/state';
-  import { CLOSED_NOTE, dropLeftoverSample, finishLeaving, inDemo, keepSampleOpen, leaveDemo, sampleEdits } from '$lib/db/demo';
+  import { CLOSED_NOTE, LEFT_PARAM, dropLeftoverSample, finishLeaving, inDemo, keepSampleOpen, leaveDemo, sampleEdits } from '$lib/db/demo';
+  import { replaceState } from '$app/navigation';
   import { toast } from '$lib/ui/toast.svelte';
   let seeding = $state(false);
   let leaving = $state(false);
@@ -25,6 +26,9 @@
       // Sent home because the sample was closed in another tab: said here, plainly (round sixty-one; the records review, 13).
       try { if (sessionStorage.getItem(CLOSED_NOTE) === '1') { sessionStorage.removeItem(CLOSED_NOTE); toast.show('The sample collection was closed in another tab. This is your own collection.', 8000); } } catch { /* nothing to say */ }
       // The first page after Leave deletes the sample; a delete that is held up or refused is said, never taken as done (round sixty-two; A9).
+      // The address a Leave opened this page at says so (`?left=sample`, read by app.html's first script); taken off it here,
+      // so a reload or a link copied from it is an ordinary visit (round sixty-two, the first deploy).
+      if (page.url.searchParams.get(LEFT_PARAM) === 'sample') { const u = new URL(page.url); u.searchParams.delete(LEFT_PARAM); setTimeout(() => { try { replaceState(u, page.state); } catch { /* the router not up yet: the address keeps it, harmlessly */ } }, 0); }
       void finishLeaving().then((left) => {
         if (left === 'blocked') toast.show('The sample collection is still open in another tab, so it is not deleted yet: it goes when that tab is closed.', 10000);
         else if (left === 'failed') toast.show('The sample collection could not be deleted: the browser refused. It is tried again the next time a page opens here.', 10000);

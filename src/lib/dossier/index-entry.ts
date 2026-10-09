@@ -58,7 +58,7 @@ const tokensOf = (s: string) => s.split(/[\s-]+/).filter(Boolean);
  * fixed list, written here and on /about/how; any other genus as a name's last word sets the name back (round sixty-two;
  * the verification review's search 16).
  */
-export const ENGLISH_USE: ReadonlySet<string> = new Set(['agave', 'aloe', 'amaryllis', 'cereus', 'crocus', 'haworthia', 'iris', 'yucca']);
+export const ENGLISH_USE: ReadonlySet<string> = new Set(['agave', 'aloe', 'amaryllis', 'cereus', 'crocus', 'haworthia', 'iris', 'lotus', 'mimosa', 'yucca']); // lotus and mimosa: Nelumbo nucifera's and Leucaena's English names in the live index (round sixty-two, after --names)
 /** An epithet's stem, so a genus transfer that changed its ending ("dichotoma", "dichotomum") still reads as one epithet. */
 const stem = (w: string) => foldWord(w).replace(/(?:us|um|a|is|e|es|i)$/, '');
 
@@ -70,8 +70,8 @@ const stem = (w: string) => foldWord(w).replace(/(?:us|um|a|is|e|es|i)$/, '');
  * The rule, with no name picked by hand:
  *   1. English names only (`lang` "eng"). Spellings of one name (case, hyphens, spaces, apostrophes) are one name, and
  *      it is given by as many sources as give any of its spellings, each source counted once.
- *   2. Set back, after every name that is not: a comma list of several names; and, with `scope`, a name of two words or
- *      more whose last word is another genus of the corpus ("Flatleaf Senecio" and "String-of-Beads Senecio" for a
+ *   2. Set back, after every name that is not: a comma list of several names; and, with `scope`, another genus of the
+ *      corpus named alone ("Osteospermum" for a Dimorphotheca), or a name of two words or more whose last word is another genus of the corpus ("Flatleaf Senecio" and "String-of-Beads Senecio" for a
  *      Curio), unless that word is one English uses as a noun of its own (`ENGLISH_USE`: "Lace aloe", "Autumn crocus",
  *      "Zebra haworthia", "Peacock iris"); or that is another genus followed by the species' own epithet (an older name
  *      of it, "Senecio rowleyanus" for Curio rowleyanus). Words are compared in any case: the rule read a source's
@@ -119,6 +119,10 @@ export function englishNames(vernacular: VernacularName[], scope: NameScope = {}
     // Another genus as the last word of a name of two words or more, in any case, unless English uses it as a noun.
     const last = ts[ts.length - 1] ?? '';
     if (ts.length >= 2 && other(last) && !ENGLISH_USE.has(foldWord(last).replace(/[^a-z]/g, ''))) return true;
+    // Another genus's name alone ("Osteospermum" for Dimorphotheca jucunda): a genus, not this species' English name,
+    // unless English uses it as a noun (round sixty-two, after the --names step: 1,613 shown names changed, and the
+    // audit's sample showed one).
+    if (ts.length === 1 && other(last) && !ENGLISH_USE.has(foldWord(last).replace(/[^a-z]/g, ''))) return true;
     // Another genus and the species' own epithet, in any case: an older name of it, written as an English one ("Aloe
     // Variegata" escaped as "Aloe variegata" did not).
     const ws = spelling.split(' ');

@@ -49,6 +49,7 @@ describe('a Leave answered Cancel is called off', () => {
     beforeunload();
     nav.dispatchEvent(new Event('navigateerror')); // "Leave site?" answered Cancel
     expect(stayed).toHaveBeenCalledTimes(1); // base: no way to hear it; the bar said "Leaving…" for 4 s
+    expect([session.m.get('cultifolio.demo'), session.m.get('cultifolio.sampleLeft')]).toEqual(['1', undefined]); // put back
     page.dispatchEvent(new Event('pagehide')); // the visitor reloads, or closes the tab
     expect(left()).toBe(false); // base: the flag cleared and the sample marked for deletion
   });
@@ -89,7 +90,7 @@ describe('a Leave that goes still leaves', () => {
     const { leaveDemo } = await import('$lib/db/demo');
     const stayed = vi.fn();
     leaveDemo('/', stayed);
-    expect(loc.href).toBe('/');
+    expect(loc.href).toBe('/?left=sample');
     beforeunload();
     page.dispatchEvent(new Event('pagehide'));
     expect([session.m.get('cultifolio.demo'), session.m.get('cultifolio.sampleLeft')]).toEqual([undefined, '1']);

@@ -36,10 +36,11 @@ describe('Leave (A9)', () => {
     await vault.setMeta('device', 'demodemodemo');
     const { leaveDemo, inDemo, finishLeaving } = await import('$lib/db/demo');
     leaveDemo('/');
-    expect(loc.href).toBe('/');
-    // A "Leave site?" answered Cancel: no pagehide. The tab still works.
-    expect(inDemo()).toBe(true); // base: the flag was cleared and the database closed before the navigation was even asked
-    expect(await vault.getMeta('device')).toBe('demodemodemo');
+    expect(loc.href).toBe('/?left=sample'); // the address says it, for the next page's first script (round sixty-two, the first deploy)
+    // Until the page goes the database is in place and open; the flag is already off and the next page told, so the next
+    // page cannot read them late (the first deploy's race); a Leave called off puts them back (r62bg-sample).
+    expect([inDemo(), session.m.get('cultifolio.sampleLeft'), session.m.get('cultifolio.demo.units')]).toEqual([false, '1', 'us']);
+    expect(await vault.getMeta('device')).toBe('demodemodemo'); // base: the database closed before the navigation was even asked
     expect(await names()).toContain('cultifolio-demo');
     // The page goes: the flag and the tab's copies go with it, and the next page deletes the sample.
     fire('pagehide');

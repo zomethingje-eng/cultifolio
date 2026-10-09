@@ -127,6 +127,8 @@ test.describe('phone, 390 × 844', () => {
     await inject(page, [['accession', 'a1', 'acc', '2026-0001'], ['accession', 'a1', 'taxonName', 'Copiapoa cinerea'], ['accession', 'a1', 'status', 'growing']], Date.now() - 86_400_000, 'r62bwplaceh0lder');
     await page.goto('/');
     await ready(page);
+    // The grower's box is drawn once the collection has opened; read it then, not the visitor's first (a flake at the merge).
+    await expect(page.locator('.searchbar').first()).toHaveAttribute('aria-label', /field number/, { timeout: 15_000 });
     const fit = await page.locator('.searchbar').first().evaluate((el: HTMLInputElement) => {
       const cs = getComputedStyle(el);
       const ctx = document.createElement('canvas').getContext('2d')!;

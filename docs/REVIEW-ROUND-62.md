@@ -72,7 +72,25 @@ The full run after the second pass's merge (one worker, wrangler dev on a fresh 
 
 The first pass's full runs, for the record, each of 237 tests: the first had 233 passing and 4 failing (a service worker answering a request the test had mocked; the labels page's remembered pick, in two tests; a hover preload that passed alone); the second, 235 passing and 2 failing, both met by the five-new-vaults-a-day limit from 127.0.0.1. Each was fixed at that merge.
 
+### The first strict run on the author's PC, and what it found
+
+The first `node scripts/predeploy.mjs` on the author's Windows PC (Node 24, Playwright's default eight workers): 292 tests, 279 passing, 2 failing, 9 flaky, 2 skipped; and `npm run deploy` stopped at its unit tests, with 5 failures that only Windows shows. Nothing was deployed. What each was, and what was done:
+
+- **Unit tests that assumed `/` in paths** (the about seam tests' file walks and the strict run's own test, whose spec path Playwright read as a pattern): the walks write forward slashes and the spec is named alone.
+- **The suite met GBIF.** The browser suite was written where GBIF, MET Norway and the NWS cannot be reached; the PC can reach them, and a test met GBIF's live suggestion ("Did you mean Welwitschia mirabilis?") where it asserts silence, twice. The suite's local server now asks no outside service (`E2E_OFFLINE`, a variable only `playwright.config.ts` sets, read by a `handleFetch` hook; never set in production; `tests/unit/r62x-e2e-offline.test.ts`).
+- **Eight workers on one local server:** seven of the nine flaky tests timed out loading a page. The strict run now uses two workers unless told otherwise (`PW_WORKERS`).
+- **A real fault, found by the flake:** leaving the sample collection kept the sample one time in five in Chromium (r62g 8, flaky on both machines). The next page committed and read the tab's storage before the old page's `pagehide` had cleared the flag. The flag is now cleared, and the next page told, before the navigation is asked for, and put back if the Leave is called off; and the address says it too (`?left=sample`), read by the page's first script (`app.html`, whose CSP hash changed with it). 20 runs of 20 pass.
+- **Windows' font swap:** with the web fonts held back, the front page shifted 0.107 at 390 px. The fallback faces this round tuned are Linux's (Liberation, DejaVu); the Segoe UI and Georgia faces were not measured. The test now runs on Linux only and says why elsewhere: an open item below.
+
+The run after those fixes, here (two workers, strict, `E2E_OFFLINE`): 292 tests, 292 passing first time, no retries (the one flake of the run before, the grower's placeholder read before the grower's box was drawn, now waits for it, and passed ten runs of ten).
+
+### The corpus step, done before the deploy
+
+The `--names` step ran on the PC while the deploy was still stopped: 8,947 dossiers asked again, none refused, and the corpus `e0cac43aa4c41ce5` uploaded and served by round sixty-one's Worker (the live check passed 18 of 18, against that Worker). The audit against the index before it: 1,613 of 8,947 species show another common name. In its sample of 40 most are the commoner name ("Okra" for Lady's-Finger, "Peanut", "Quince", "Asparagus Fern" for a botanical string GBIF had listed as a name); some are another spelling of the same name, the one more sources give ("Red-Hot-Poker", "Mock-orange"); one was wrong by the rule's own aim: "Osteospermum", another genus named alone, for Dimorphotheca jucunda. The set-back now takes another genus named alone, as it takes one at the end of a longer name; the live index has three such names, and the two that are English nouns ("Lotus" for Nelumbo nucifera, "Mimosa" for Leucaena leucocephala) join the list of genera English uses as nouns. An index rebuild after the deploy (no GBIF calls) puts it right.
+
 ## 11. Not done, and why
+
+- **Windows' layout shift when the web fonts arrive late:** 0.107 on the front page at 390 px in the PC's strict run (the species page passed). Tuning the Segoe UI and Georgia fallback faces needs a measurement on Windows.
 
 - **The link-preview image** is not redrawn (section 8).
 - **A daily sweep of every vault's unnamed photograph bytes** is not built: it would cost a read per photograph a day. Such bytes go at that photograph's next touch, and count until then (stated on `/about/formats`).
@@ -82,7 +100,7 @@ The first pass's full runs, for the record, each of 237 tests: the first had 233
 
 ## 12. After the deploy
 
-1. `npm run dossier -- --names`, then the upload (docs/DEPLOY.md, round sixty-two's corpus step), and the audit against the old index.
+1. The `--names` step is done (above). After the deploy, `npm run dossier -- --index` and the two-line upload, for the set-back of a genus named alone.
 2. The live commands in `docs/review-61/corpus.md`, B1's first screen on a phone, and B2's queries.
 3. `npm run live-check` with no skips.
 4. Update every device soon: a round-sixty-one device sets version-2 batches aside until it does.

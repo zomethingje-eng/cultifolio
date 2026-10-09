@@ -22,3 +22,14 @@ describe('the set-back does not depend on a source\'s capitals', () => {
     expect(title.common).toBe('Autumn Crocus'); // merged: "Meadow Saffron", "Autumn Crocus" set back
   });
 });
+
+// Round sixty-two, after the --names step on the PC: the audit's sample showed Dimorphotheca jucunda's shown name become
+// "Osteospermum", another genus of the reference named alone.
+import { englishNames as en2 } from '$lib/dossier/index-entry';
+import { it as it2, expect as expect2 } from 'vitest';
+it2('another genus named alone is set back, as one at the end of a longer name is', () => {
+  const rows = [{ name: 'Osteospermum', lang: 'eng', source: 'a', sources: 3 }, { name: 'Cape daisy', lang: 'eng', source: 'b' }] as never;
+  expect2(en2(rows, { genus: 'Dimorphotheca jucunda', genera: new Set(['dimorphotheca', 'osteospermum']) }).common).toBe('Cape daisy');
+  // A genus English uses as a noun stays a name: "Aloe" for an Aristaloe.
+  expect2(en2([{ name: 'Aloe', lang: 'eng', source: 'a' }] as never, { genus: 'Aristaloe aristata', genera: new Set(['aloe', 'aristaloe']) }).common).toBe('Aloe');
+});

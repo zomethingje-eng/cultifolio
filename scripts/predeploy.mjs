@@ -25,7 +25,12 @@ if (env.PW_REUSE) {
   console.log('predeploy: PW_REUSE is set; ignoring it, so the run starts its own server from a fresh state');
   delete env.PW_REUSE;
 }
-const args = [cli, 'test', '--fail-on-flaky-tests', ...process.argv.slice(2)];
+// Two workers unless told otherwise (PW_WORKERS, or a --workers argument): the suite shares one wrangler dev, and the first
+// strict run on a sixteen-thread PC took Playwright's default of eight, where page loads timed out in nine tests that
+// pass alone (round sixty-two, the first deploy).
+const extra = process.argv.slice(2);
+const workers = extra.some((a) => a.startsWith('--workers') || a === '-j') ? [] : [`--workers=${process.env.PW_WORKERS || 2}`];
+const args = [cli, 'test', '--fail-on-flaky-tests', ...workers, ...extra];
 console.log('predeploy: the browser suite, strict (a test that passes only on its retry fails the run)');
 const run = spawnSync(process.execPath, args, { stdio: 'inherit', env });
 if (run.error) {

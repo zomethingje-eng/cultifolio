@@ -17,7 +17,7 @@ function walk(dir: string, out: string[] = []): string[] {
   for (const f of readdirSync(dir)) {
     const p = join(dir, f);
     if (statSync(p).isDirectory()) walk(p, out);
-    else if (/\.(ts|svelte|js|html)$/.test(f)) out.push(p);
+    else if (/\.(ts|svelte|js|html)$/.test(f)) out.push(p.replace(/\\/g, '/')); // forward slashes on Windows too: the filters below read '/' (round sixty-two, the first deploy)
   }
   return out;
 }

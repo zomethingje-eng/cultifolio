@@ -1,4 +1,4 @@
-import { type Handle, type RequestEvent } from '@sveltejs/kit';
+import { type Handle, type HandleFetch, type RequestEvent } from '@sveltejs/kit';
 import { unitsFor } from '$lib/server/units';
 import { building, version } from '$app/environment';
 import { corpusNow } from '$lib/server/dossiers';
@@ -200,4 +200,15 @@ export const handle: Handle = async ({ event, resolve }) => {
     else await put;
   }
   return r;
+};
+
+/**
+ * The browser suite's local server asks no outside service (`E2E_OFFLINE`, set only by playwright.config.ts's
+ * webServer): a request to another host fails as an unreachable one does. The suite was written where GBIF, MET Norway
+ * and the NWS cannot be reached, and on a PC that can reach them a test met GBIF's live suggestions instead of the
+ * silence it asserts (round sixty-two, the first strict run on the author's PC). Never set in production.
+ */
+export const handleFetch: HandleFetch = async ({ event, request, fetch }) => {
+  if (event.platform?.env?.E2E_OFFLINE === '1' && new URL(request.url).origin !== event.url.origin) throw new TypeError(`fetch failed: ${new URL(request.url).host} is not asked under E2E_OFFLINE`);
+  return fetch(request);
 };
