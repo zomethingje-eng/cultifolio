@@ -5,6 +5,7 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 import { inject as sharedInject } from './helpers/inject';
+import { allowWrites, seedWait, writeWait, SEED_REQUESTS, WEBKIT_MS_PER_REQUEST } from './helpers/pace';
 
 test.use({ locale: 'en-GB' });
 test.describe.configure({ timeout: 240_000 });
@@ -127,11 +128,12 @@ test('r62g 6: no request a plant page makes carries a Referer (A1, rule 4)', asy
   expect(leaks).toEqual([]); // base: the italic font's request carried /plants/<id>
 });
 
-test('r62g 7: Leave on a page with an unsaved edit, answered Cancel, leaves a working sample tab (A9)', async ({ page }) => {
+test('r62g 7: Leave on a page with an unsaved edit, answered Cancel, leaves a working sample tab (A9)', async ({ page, browserName }) => {
   test.setTimeout(90_000);
+  allowWrites(1 * SEED_REQUESTS * WEBKIT_MS_PER_REQUEST); // the example set out at Safari's engine's pace (helpers/pace.ts)
   await page.goto('/plants'); await ready(page);
   await page.click('#try-sample');
-  await expect(page.locator('.rows > *')).toHaveCount(12, { timeout: 20_000 });
+  await expect(page.locator('.rows > *')).toHaveCount(12, { timeout: seedWait() });
   await page.locator('.rows a').first().click();
   await ready(page);
   await page.getByRole('button', { name: /More for this plant/ }).click();
@@ -142,7 +144,10 @@ test('r62g 7: Leave on a page with an unsaved edit, answered Cancel, leaves a wo
   await page.getByRole('button', { name: 'Leave the example' }).click();
   await expect.poll(() => asked).toBe('beforeunload');
   await expect(page.locator('.demobar')).toBeVisible();
-  expect(await page.evaluate(() => sessionStorage.getItem('cultifolio.demo'))).toBe('1'); // base: gone, with the database closed
+  // The tab knows it stayed when the browser says the Cancel (Chromium's \`navigateerror\`, at once) or, in a browser that
+  // does not say it, after the page's 3 s for a "Leave site?" that is still showing: Firefox read the flag before then
+  // (round sixty-five; the all-engines rerun, as r62bg 1 in Safari's engine in round sixty-four).
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem('cultifolio.demo')), { timeout: browserName === 'chromium' ? 1500 : 4500 }).toBe('1'); // base: gone, with the database closed
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.locator('.notice.err')).toHaveCount(0);
   await expect(page.locator('main')).toContainText('12');
@@ -151,9 +156,10 @@ test('r62g 7: Leave on a page with an unsaved edit, answered Cancel, leaves a wo
 
 test('r62g 8: Leave says how many records the visitor added or changed, and asks; the sample is deleted on the next page (A9)', async ({ page }) => {
   test.setTimeout(90_000);
+  allowWrites(1 * SEED_REQUESTS * WEBKIT_MS_PER_REQUEST); // the example set out at Safari's engine's pace (helpers/pace.ts)
   await page.goto('/plants'); await ready(page);
   await page.click('#try-sample');
-  await expect(page.locator('.rows > *')).toHaveCount(12, { timeout: 20_000 });
+  await expect(page.locator('.rows > *')).toHaveCount(12, { timeout: seedWait() });
   await page.goto('/plants/new'); await ready(page);
   await page.fill('#species-name', 'Aloe vera');
   await page.locator('#species-name').blur();
@@ -179,7 +185,7 @@ test('r62g 9: the labels page remembers the plants picked across a reload (the g
   await page.fill('#imp-text', names);
   await page.click('#imp-check');
   await page.click('#imp-add');
-  await expect(page.locator('#imp-done')).toContainText('26 plants added');
+  await expect(page.locator('#imp-done')).toContainText('26 plants added', { timeout: writeWait(5_000, 1_500) }); // about 1,500 requests: 30 s at Safari's engine's pace (helpers/pace.ts)
   await page.goto('/labels'); await ready(page);
   await expect(page.locator('#lb-print')).toHaveText('Print 0 labels'); // more than a sheet or two: none picked by default
   await page.fill('#lb-q', 'cinerea');

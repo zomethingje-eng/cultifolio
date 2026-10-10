@@ -6,6 +6,8 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 import { inject } from './helpers/inject';
+import { openDisclosure } from './helpers/disclosure';
+import { allowWrites, seedWait, SEED_REQUESTS, WEBKIT_MS_PER_REQUEST } from './helpers/pace';
 
 test.use({ locale: 'en-GB' });
 test.describe.configure({ timeout: 180_000 });
@@ -31,9 +33,10 @@ async function accessions(page: Page) {
 
 test('r62bg 1: a Leave answered Cancel is called off: the button comes back at once, and a reload stays in the sample (triage-outside 1; A9)', async ({ page, browserName }) => {
   test.setTimeout(120_000);
+  allowWrites(1 * SEED_REQUESTS * WEBKIT_MS_PER_REQUEST); // the example set out at Safari's engine's pace (helpers/pace.ts)
   await page.goto('/plants'); await ready(page);
   await page.click('#try-sample');
-  await expect(page.locator('.rows > *')).toHaveCount(12, { timeout: 20_000 });
+  await expect(page.locator('.rows > *')).toHaveCount(12, { timeout: seedWait() });
   await page.locator('.rows a').first().click();
   await ready(page);
   await page.getByRole('button', { name: /More for this plant/ }).click();
@@ -135,7 +138,7 @@ test('r62bg 5: "already used by" names every plant with the number, and a remove
     ['accession', 'r-c', 'acc', '0099'], ['accession', 'r-c', 'taxonName', 'Lithops lesliei'], ['accession', 'r-c', 'cultivar', 'Albinica'], ['accession', 'r-c', 'status', 'growing'], ['accession', 'r-c', '_deleted', true]
   ], Date.now() - 3_600_000);
   await page.goto('/plants/new'); await ready(page);
-  await page.locator('details.own summary').click();
+  await openDisclosure(page, 'details.own');
   await page.check('#f-own');
   await page.fill('#f-own-no', '0013');
   const said = page.locator('#f-own-taken');

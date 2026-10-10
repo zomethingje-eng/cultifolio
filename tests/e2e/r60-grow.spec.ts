@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import QRCode from 'qrcode';
 import { test, expect, type Page } from '@playwright/test';
 import { ownPages } from './helpers/r63v-own';
+import { allowWrites, seedWait, SEED_REQUESTS, WEBKIT_MS_PER_REQUEST } from './helpers/pace';
 
 /**
  * Round sixty's grower features, end to end (agent F's list; the unit tests cover each piece's rules): the paste and CSV
@@ -21,9 +22,13 @@ async function ready(p: Page) {
 /** Click Add on the add-plant form. A name the reference does not hold is asked about once, and the second Add keeps it as typed. */
 async function addPlant(p: Page) {
   await p.getByRole('button', { name: /^Add/ }).click();
-  const asked = p.locator('.picker .hint', { hasText: 'press Add to keep exactly what you typed' });
-  await Promise.race([p.waitForURL(/\/plants\/\d{4}-\d{4}$/), asked.waitFor()]);
-  if (await asked.isVisible()) await p.getByRole('button', { name: /^Add/ }).click();
+  // The first Add arms the field when the name is not settled, and the second keeps it as typed. Armed is read from the
+  // field itself: the line under it asks "press Add to keep exactly what you typed", or, when the name service did not
+  // answer in time and the reference offers the same name, "Did you mean …? Otherwise Add keeps exactly what you typed"
+  // (Firefox on the PC, r60 14's retry; round sixty-five), which the helper did not know and waited on for good.
+  const armed = p.locator('#species-name[aria-describedby]');
+  await Promise.race([p.waitForURL(/\/plants\/\d{4}-\d{4}$/), armed.waitFor()]);
+  if (!/\/plants\/\d{4}-\d{4}$/.test(p.url()) && (await armed.count())) await p.getByRole('button', { name: /^Add/ }).click();
   await expect(p).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
 }
 /** A day on the machine's own calendar, as the app dates things. */
@@ -116,6 +121,10 @@ test('r60 1: a pasted list is checked name by name, a number in use is renumbere
   await page.fill('#imp-text', `Copiapoa cinerea\nCopiapoa cinera; ; ; club sale\nNotagenus fakeus; ; ${y}-0001; ; a note\nCopiapoa humilis; ; ${y}-0001`);
   await page.click('#imp-check');
   const summary = page.locator('#imp-summary');
+  // The first page of a new device, with the service worker installing and fetching the shells: in Safari's engine the
+  // name checks were "still checking: 4" past the 5 s an assertion waits, most likely queued behind those fetches (round
+  // sixty-five; the all-engines rerun, r60 1 and r61h, both attempts). A check gives up at 10 s, so 15 s sees its end.
+  await expect(summary).not.toContainText('still checking', { timeout: 15_000 });
   await expect(summary).toContainText('Matched in the reference: 2');
   await expect(summary).toContainText('ambiguous');
   await expect(summary).toContainText('not in the reference, added as typed: 1');
@@ -349,12 +358,13 @@ test('r60 10: the watering calendar is an RFC 5545 file: CRLF, the place\'s ten 
 
 test('r60 11: the sample collection opens in a database of its own, shows its firsts, shuts sync and backup, and leaving deletes it', async ({ page }) => {
   test.setTimeout(90_000);
+  allowWrites(2 * SEED_REQUESTS * WEBKIT_MS_PER_REQUEST); // the example set out at Safari's engine's pace (helpers/pace.ts)
   await page.goto('/plants');
   await ready(page);
   await expect(page.getByRole('heading', { name: 'Nothing here yet' })).toBeVisible();
   await page.click('#try-sample');
   await expect(page.locator('.demobar')).toContainText('An example collection, so you can see what this page does. Your own starts when you add a plant.') // round sixty-three, V2;
-  await expect(page.locator('.rows > *')).toHaveCount(12, { timeout: 20_000 });
+  await expect(page.locator('.rows > *')).toHaveCount(12, { timeout: seedWait() });
   await expect(page.locator('#try-sample')).toHaveCount(0);
   await page.goto('/today');
   await expect(page.locator('#firsts')).toContainText('First flowers');
@@ -375,17 +385,18 @@ test('r60 11: the sample collection opens in a database of its own, shows its fi
   // again: a fresh sample, since leaving deleted the last one
   await page.click('#try-sample');
   await expect(page.locator('.demobar')).toBeVisible();
-  await expect(page.locator('.rows > *')).toHaveCount(12, { timeout: 20_000 });
+  await expect(page.locator('.rows > *')).toHaveCount(12, { timeout: seedWait() });
 });
 
 test('r60 12: the sample never touches the grower\'s own collection', async ({ page }) => {
   test.setTimeout(90_000);
+  allowWrites(1 * SEED_REQUESTS * WEBKIT_MS_PER_REQUEST); // the example set out at Safari's engine's pace (helpers/pace.ts)
   const no = await plant(page, 'Copiapoa cinerea');
   // The way in is on the empty My plants page and the visitor's front page; a grower with a plant is let in as enterDemo does.
   await page.evaluate(() => sessionStorage.setItem('cultifolio.demo', '1'));
   await page.goto('/plants');
   await expect(page.locator('.demobar')).toBeVisible();
-  await expect(page.locator('.rows > *')).toHaveCount(12, { timeout: 20_000 });
+  await expect(page.locator('.rows > *')).toHaveCount(12, { timeout: seedWait() });
   await page.getByRole('button', { name: 'Leave the example' }).click();
   await expect(page).toHaveURL(/^http:\/\/[^/]+\/$/);
   await page.goto('/plants');
@@ -444,15 +455,17 @@ test('r60 13: on an iPhone in Safari, the Home Screen card comes before the firs
   await home.close();
 });
 
-test('r60 14: after the first plant the browser is asked once to keep the data, and its answer is said once', async ({ page, context, browserName }) => {
-  // Firefox puts the question to the person and answers only when they do; nobody answers it in a test, so the person's
-  // "Allow" is given beforehand, as the permission it records (round sixty-four; the Firefox run, where no answer came).
-  if (browserName === 'firefox') await context.grantPermissions(['persistent-storage']);
+test('r60 14: after the first plant the browser is asked once to keep the data, and its answer is said once', async ({ page, browserName }) => {
+  // Firefox puts the question to the person and answers only when they do; nobody answers it in a test. Round sixty-four
+  // gave the person's "Allow" beforehand as a granted permission, and on the PC Firefox still asked and no answer came in
+  // 20 s (round sixty-five; the all-engines rerun): so in Firefox the person's Allow is the answer persist() gives here. The
+  // test is of what the site does with an answer, said once; Safari and Chrome answer by themselves and are asked for real.
+  const personAllows = browserName === 'firefox';
   // Every toast shown, across page loads, in the order shown, with the page it was shown on; and every call to the
   // browser's persist() still unanswered, so a negative can wait for the answers instead of a fixed pause (round
   // sixty-one; docs/review-60/harness.md 18: under load the toast was said on the add form a moment before the
   // navigation put it away, and the test failed 3 runs in 4).
-  await page.addInitScript(() => {
+  await page.addInitScript((allows) => {
     const seen = () => {
       const t = document.querySelector('.toast')?.textContent?.trim();
       if (!t) return;
@@ -466,9 +479,9 @@ test('r60 14: after the first plant the browser is asked once to keep the data, 
     StorageManager.prototype.persist = function () {
       w.__persisting++;
       // settled one frame after the answer, so the toast the answer causes is drawn (and recorded) before the count drops
-      return real.call(this).finally(() => requestAnimationFrame(() => requestAnimationFrame(() => { w.__persisting--; })));
+      return (allows ? Promise.resolve(true) : real.call(this)).finally(() => requestAnimationFrame(() => requestAnimationFrame(() => { w.__persisting--; })));
     };
-  });
+  }, personAllows);
   const toasts = () => page.evaluate(() => JSON.parse(sessionStorage.getItem('__toasts') ?? '[]') as Array<{ t: string; path: string }>);
   const promised = (all: Array<{ t: string; path: string }>) => all.filter((x) => /^This browser has (not )?promised to keep your (plants|data)/.test(x.t));
   /** Every persist() asked so far has been answered, and whatever its answer drew is on screen. */

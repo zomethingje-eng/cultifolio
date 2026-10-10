@@ -57,3 +57,33 @@ The two agents' copies were merged with two overlapping hunks. The persistence f
 - unit tests: 2,036 passing and 1 skipped, on 246 files;
 - build: passes its bundle check;
 - strict browser run (Chromium and the Chromium phone, two workers): 345 tests, 343 passing and 2 skipped, with nothing flaky.
+
+## 6. The second run, and what it settled (round sixty-five)
+
+After the deploy (Worker `8a3fae20-297b-4c1c-a40f-e10f95866014`), the owner ran the suite again on the PC.
+
+- **Chromium strict run:** 343 of 343 first time.
+- **WebKit, phone-webkit and Firefox together:** 592 passed, 33 failed (30 WebKit, 3 Firefox) and 6 flaky, in 36 minutes. The first run had 134 failures in two hours. The page reloading itself, the Private Browsing photograph, and Firefox's wait on the "keep data" question did not come up again.
+
+**WebKit's stuck writes were slowness, not a hang.**
+- **What failed.** Most of the WebKit failures were writes that seemed never to finish: the example collection at "Setting it out…", an import of 5 plants at "Adding 5 plants…", and a 400-plant backup restore.
+- **The diagnosis (agent X).** Playwright's WebKit on Windows answers about one IndexedDB request every 16 ms, against about 0.1 ms in Chromium; the Windows timer tick is the likely cause, though that is unproven. The app spends three requests per change it writes. So the example's one write of 1,297 requests takes about 21 s, against a test budget of 20 s, and an import of 5 plants takes about 310 requests, just over a 5 s budget, while 3 plants pass.
+- **The probe confirmed it on the PC.**
+  - The example collection set out after 20.9 s, with no lock pending and the database answering.
+  - The two imports finished in 4.3 s and 5.4 s.
+- **What changed.** Nothing in the app. The tests' waits after a write in WebKit are now set from each write's request count (`tests/e2e/helpers/pace.ts`, at 20 ms a request), the WebKit projects have 60 s per test, and r61g 4 and 5 import 60 rows there instead of 300 and 200.
+- **The real-device check.** On the owner's iPhone in Safari, the example collection should set out within a second or two. If it does not, batching the vault's outbox and arrival rows (three requests per change down to one) is the change, and a format change for its own round.
+
+**The rest of the second run.**
+- **One real fault, in every engine (smoke 2819).** When a strip tile's photograph failed to load, its credit line went with it, so the strip shrank 21 px and the rows moved under the reader. The line now keeps its height.
+- **Test assumptions:**
+  - smoke 442's backup dump now reads a photograph kept either as a Blob or as bytes;
+  - smoke 924 skips its route check in WebKit, where a route answers before the service worker sees the request;
+  - smoke 1324 and 1959 skip in WebKit, whose offline mode under Playwright fails a navigation with "internal error"; a plant page opened in airplane mode on the iPhone replaces them;
+  - smoke 1528 blocks the service worker;
+  - r60 14 gives Firefox the person's Allow;
+  - r62g 7 polls for the example's flag;
+  - r62s 63 starts on the grower's own pages.
+- **Races:** r60 1 and r61h wait for the name checks to end; smoke 2322 waits for the page and the name check; smoke 901 and r62bg 5 open the "Use my own number" disclosure only while it is shut (`tests/e2e/helpers/disclosure.ts`).
+- **Not explained:** two Firefox flakes (an import of 4 plants and a new place, each over 5 s once).
+

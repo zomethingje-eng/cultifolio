@@ -6,6 +6,7 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 import { createHash } from 'node:crypto';
+import { ownPages } from './helpers/r63v-own';
 
 const B32 = 'ABCDEFGHJKMNPQRSTVWXYZ23456789';
 const vaultIdFor = (token: string) => { const d = createHash('sha256').update('id:' + token).digest(); let s = ''; for (let i = 0; i < 26; i++) s += B32[d[i] % B32.length]; return s; };
@@ -60,6 +61,10 @@ async function ready(p: Page) {
 
 test.describe('without the service worker', () => {
   test.use({ serviceWorkers: 'block' });
+  // The grower's own Places, not the example an empty device opens there (round sixty-three, V2): in Firefox the example
+  // opened under the test after "New place" was pressed, and the form it waited for was on the page that went (round
+  // sixty-five; the all-engines rerun).
+  test.beforeEach(async ({ context }) => { await context.addInitScript(ownPages); });
   test('a place whose forecast the site held back asks again when the wait is over, and then shows it (round sixty-two; the server review, 6)', async ({ page }) => {
     const days = [{ date: '2026-11-02', tmin: 8, tmax: 15, precipMm: 0, steps: 24 }, { date: '2026-11-03', tmin: 9, tmax: 14, precipMm: 0, steps: 24 }];
     const ok = JSON.stringify({ forecast: { source: 'met.no', fetched: '2026-11-01T00:00:00Z', days, hoursCovered: 48, offsetH: 1 }, alerts: [], alertsStatus: 'n/a', risk: { level: 'none', text: 'No frost in the next 48 hours of forecast; coldest 8 °C (MET Norway).' }, attribution: ['Forecast data from MET Norway (CC BY 4.0)'] });

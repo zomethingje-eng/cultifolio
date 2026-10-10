@@ -33,8 +33,13 @@ const projects: PlaywrightTestProject[] = [
   // sixty-two's first-screen test passed at while the phone failed), touch, the mobile viewport rules and Safari's user agent.
   { name: 'phone', grep: PHONE, use: { browserName: 'chromium', viewport: iPhone.viewport, deviceScaleFactor: iPhone.deviceScaleFactor, isMobile: true, hasTouch: true, userAgent: iPhone.userAgent, launchOptions: chromiumLaunch } }
 ];
-if (engines.has('webkit')) projects.push({ name: 'webkit', grepInvert: [PHONE_ONLY, CHROMIUM_ONLY], use: { browserName: 'webkit' } });
-if (engines.has('phone-webkit')) projects.push({ name: 'phone-webkit', grep: PHONE, grepInvert: CHROMIUM_ONLY, use: { ...iPhone } });
+// Safari's engine as Playwright builds it for Windows answers one IndexedDB request about every 16 ms, where Chromium and
+// Firefox answer thousands a second (round sixty-five; the all-engines rerun, tests/e2e/helpers/pace.ts): a plant added is
+// about 90 requests, six plants 370, an import of five 310. So an assertion that follows a write waits 10 s there, not
+// 5, and a test has 60 s; the writes of hundreds of plants and the example collection say their own (helpers/pace.ts).
+const WEBKIT_PACE = { timeout: 60_000, expect: { timeout: 10_000 } };
+if (engines.has('webkit')) projects.push({ name: 'webkit', grepInvert: [PHONE_ONLY, CHROMIUM_ONLY], use: { browserName: 'webkit' }, ...WEBKIT_PACE });
+if (engines.has('phone-webkit')) projects.push({ name: 'phone-webkit', grep: PHONE, grepInvert: CHROMIUM_ONLY, use: { ...iPhone }, ...WEBKIT_PACE });
 if (engines.has('firefox')) projects.push({ name: 'firefox', grepInvert: [PHONE_ONLY, CHROMIUM_ONLY], use: { browserName: 'firefox' } });
 export default defineConfig({
   testDir: 'tests/e2e',

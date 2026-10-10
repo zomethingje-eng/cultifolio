@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { inject, type Row } from './helpers/inject';
 import { ownPages } from './helpers/r63v-own';
+import { allowWrites, seedWait, SEED_REQUESTS, WEBKIT_MS_PER_REQUEST } from './helpers/pace';
 
 /**
  * Round sixty-four (agent F): the faults of the site that the first Firefox run met, each emulated here in Chromium,
@@ -61,10 +62,11 @@ test.describe("Firefox's unanswered question about keeping the data", () => {
   });
 
   test('r64f 3: on an empty device Today opens the example collection while the browser waits on the grower', async ({ page }) => {
+    allowWrites(1 * SEED_REQUESTS * WEBKIT_MS_PER_REQUEST); // the example set out at Safari's engine's pace (helpers/pace.ts)
     await page.goto('/today');
     await ready(page);
     await expect(page.locator('html[data-demo]')).toBeAttached({ timeout: 20_000 });
-    await expect(page.locator('#water .stop').first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator('#water .stop').first()).toBeVisible({ timeout: seedWait() });
   });
 });
 
@@ -106,6 +108,7 @@ test('r64f 4: a second worker of the build the page runs takes over without relo
 });
 
 test('r64f 5: nothing kept, nothing asked: a visitor on My plants and in the example is not asked to keep data; the first plant is, and every load after it', async ({ page, context }) => {
+  allowWrites(1 * SEED_REQUESTS * WEBKIT_MS_PER_REQUEST); // the example set out at Safari's engine's pace (helpers/pace.ts)
   // Every call to persist() on this page; persisted() (which asks nothing) is free. In Firefox each call is a question
   // put to the person, so a visitor with nothing of their own met it on their first page (round sixty-four).
   await context.addInitScript(() => {
@@ -126,7 +129,7 @@ test('r64f 5: nothing kept, nothing asked: a visitor on My plants and in the exa
   await expect(page.locator('html[data-demo]')).toBeAttached({ timeout: 20_000 });
   await expect(page.locator('#demobar')).toBeVisible();
   await page.goto('/plants'); await ready(page);
-  await expect(page.locator('.rows > *')).toHaveCount(12, { timeout: 20_000 });
+  await expect(page.locator('.rows > *')).toHaveCount(12, { timeout: seedWait() });
   expect(await asked()).toBe(0);
   await page.locator('#demo-leave').click();
   await expect(page).toHaveURL(/^http:\/\/[^/]+\/(\?left=sample)?$/);

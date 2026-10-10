@@ -9,6 +9,7 @@
  */
 import { test, expect, type Page, type BrowserContext } from '@playwright/test';
 import { inject, type Row } from './helpers/inject';
+import { allowWrites, seedWait, SEED_REQUESTS, WEBKIT_MS_PER_REQUEST } from './helpers/pace';
 
 const FIVE = ['Species', 'My plants', 'Places', 'Propagation', 'Today'];
 const quiet = () => { try { localStorage.setItem('cultifolio.persistAfterFirst', '1'); sessionStorage.setItem('cultifolio.backupNudgeHidden', '1'); } catch { /* fine */ } };
@@ -61,10 +62,11 @@ test('r63v V1: on a desktop the top bar is the same five for a visitor', async (
 });
 
 test('r63v V2: Today by tab on an empty device opens the example on Today, and Leave goes home without looping back', async ({ page }) => {
+  allowWrites(2 * SEED_REQUESTS * WEBKIT_MS_PER_REQUEST); // the example set out at Safari's engine's pace (helpers/pace.ts)
   await page.goto('/'); await ready(page);
   await page.locator('#tabbar a[href="/today"]').click();
   await inExample(page, '/today');
-  await expect(page.locator('#water .stop').first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('#water .stop').first()).toBeVisible({ timeout: seedWait() });
   await page.locator('#demo-leave').click();
   await expect(page).toHaveURL(/^http:\/\/[^/]+\/(\?left=sample)?$/);
   await ready(page);
@@ -90,22 +92,23 @@ test('r63v V2: Today by tab on an empty device opens the example on Today, and L
   // The offer enters it on this page.
   await page.locator('#see-example').click();
   await inExample(page, '/propagation');
-  await expect(page.locator('.bcards li').first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('.bcards li').first()).toBeVisible({ timeout: seedWait() });
 });
 
 test('r63v V2: Today opened by a link, and by its address, on an empty device opens the example on Today', async ({ page }) => {
+  allowWrites(2 * SEED_REQUESTS * WEBKIT_MS_PER_REQUEST); // the example set out at Safari's engine's pace (helpers/pace.ts)
   await page.goto('/about/how'); await ready(page);
   // A link in a page, not one of the layout's own: the router's client-side visit, decided on the page.
   await page.evaluate(() => { const a = document.createElement('a'); a.href = '/today'; a.id = 'r63v-link'; a.textContent = 'Today'; const m = document.getElementById('main')!; m.insertBefore(a, m.firstChild); });
   await page.locator('#r63v-link').click();
   await inExample(page, '/today');
-  await expect(page.locator('#water .stop').first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('#water .stop').first()).toBeVisible({ timeout: seedWait() });
 
   // By its address, in a fresh tab (a tab of its own: the left flag is the tab's).
   const fresh = await page.context().newPage();
   await fresh.goto('/today');
   await inExample(fresh, '/today');
-  await expect(fresh.locator('#water .stop').first()).toBeVisible({ timeout: 20_000 });
+  await expect(fresh.locator('#water .stop').first()).toBeVisible({ timeout: seedWait() });
   await fresh.close();
 });
 
@@ -116,7 +119,7 @@ test('r63v V2: the way in moves nothing once Today is drawn (layout shift on the
   });
   await page.goto('/today');
   await inExample(page, '/today');
-  await expect(page.locator('#water .stop').first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('#water .stop').first()).toBeVisible({ timeout: seedWait() });
   await page.waitForTimeout(1500);
   const cls = await page.evaluate(() => (window as unknown as { __cls: number }).__cls);
   console.log(`r63v: layout shift on the example's Today after the way in: ${cls.toFixed(3)}`);
@@ -124,9 +127,10 @@ test('r63v V2: the way in moves nothing once Today is drawn (layout shift on the
 });
 
 test('r63v V2: "Add your first plant" leaves the example for the add form, and the plant is the visitor\'s own', async ({ page }) => {
+  allowWrites(1 * SEED_REQUESTS * WEBKIT_MS_PER_REQUEST); // the example set out at Safari's engine's pace (helpers/pace.ts)
   await page.goto('/today');
   await inExample(page, '/today');
-  await expect(page.locator('#water .stop').first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('#water .stop').first()).toBeVisible({ timeout: seedWait() });
   await page.locator('#demo-add').click();
   await expect(page).toHaveURL(/\/plants\/new(\?left=sample)?$/);
   await ready(page);
@@ -151,6 +155,7 @@ test('r63v V2: "Add your first plant" leaves the example for the add form, and t
 });
 
 test('r63v V2: a grower with plants is never taken into the example, and can look at it from the menu and leave back to their own', async ({ page }) => {
+  allowWrites(2 * SEED_REQUESTS * WEBKIT_MS_PER_REQUEST); // the example set out at Safari's engine's pace (helpers/pace.ts)
   await grower(page, 2);
   for (const path of ['/today', '/places', '/propagation']) {
     await page.goto(path); await ready(page);
@@ -165,9 +170,9 @@ test('r63v V2: a grower with plants is never taken into the example, and can loo
   await inExample(page, '/today');
   await expect(page.locator('#demobar')).toContainText('Your own plants are kept apart, as you left them.');
   await expect(page.locator('#demo-add')).toHaveCount(0);
-  await expect(page.locator('#water .stop').first()).toBeVisible({ timeout: 20_000 }); // set out before the next full load
+  await expect(page.locator('#water .stop').first()).toBeVisible({ timeout: seedWait() }); // set out before the next full load
   await page.goto('/plants'); await ready(page);
-  await expect(page.locator('.rows > *')).toHaveCount(12, { timeout: 20_000 });
+  await expect(page.locator('.rows > *')).toHaveCount(12, { timeout: seedWait() });
   await page.locator('#demo-leave').click();
   await expect(page).toHaveURL(/^http:\/\/[^/]+\/(\?left=sample)?$/);
   await page.goto('/plants'); await ready(page);

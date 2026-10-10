@@ -4,6 +4,8 @@ import { inject } from './helpers/inject';
 import { fromAddress, docAddress, limitAddress } from './helpers/address';
 import { ownPages } from './helpers/r63v-own';
 import { textSize, textSizeHeld } from './helpers/text-size';
+import { openDisclosure } from './helpers/disclosure';
+import { allowWrites, writeWait, WEBKIT_MS_PER_REQUEST } from './helpers/pace';
 
 // The grower's own pages, empty, rather than the example collection an empty device opens on them (round sixty-three, V2).
 test.beforeEach(async ({ context }) => { await context.addInitScript(ownPages); });
@@ -464,8 +466,10 @@ test('backup: export a zip, wipe the device, restore it, and the collection is i
     const db = await new Promise<IDBDatabase>((res) => { const r = indexedDB.open('cultifolio'); r.onsuccess = () => res(r.result); });
     const all = (store: string) => new Promise<unknown[]>((res) => { const r = db.transaction(store).objectStore(store).getAll(); r.onsuccess = () => res(r.result); });
     const changes = (await all('changes')) as Array<{ t: string }>;
-    const photos = (await all('photos')) as Array<{ id: string; blob: Blob; thumb: Blob }>;
-    return { changes: changes.map((c) => JSON.stringify(c)).sort(), photos: photos.map((p) => `${p.id}:${p.blob.size}:${p.thumb.size}`).sort() };
+    // Blobs, or their bytes where the browser refuses a Blob in its database (Safari's engine in a private window and in the
+    // test's own contexts): the sizes are the JPEGs' either way (round sixty-five; the all-engines rerun, as the photos test).
+    const photos = (await all('photos')) as Array<{ id: string; blob: Blob; thumb: Blob } | { id: string; full: ArrayBuffer; small: ArrayBuffer }>;
+    return { changes: changes.map((c) => JSON.stringify(c)).sort(), photos: photos.map((p) => ('full' in p ? `${p.id}:${p.full.byteLength}:${p.small.byteLength}` : `${p.id}:${p.blob.size}:${p.thumb.size}`)).sort() };
   });
   const before = await dump();
   expect(before.changes.length).toBeGreaterThan(10);
@@ -900,18 +904,20 @@ test('five new vaults a day from one address: the sixth is refused with a 429 th
 
 test('a number already in use cannot be given to a second plant', async ({ page }) => {
   await page.goto('/plants/new');
+  await ready(page); // a value typed before hydration is dropped (round fifty-nine)
   await page.fill('#species-name', 'Copiapoa cinerea');
   await page.locator('#species-name').blur();
-  await page.locator('details.own summary').click();
+  await openDisclosure(page, 'details.own');
   await page.check('#f-own');
   await page.fill('#f-own-no', '2019-0147');
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/2019-0147$/);
   await expect(page.locator('h1.sci .accno')).toHaveText('2019-0147');
   await page.goto('/plants/new');
+  await ready(page);
   await page.fill('#species-name', 'Welwitschia mirabilis');
   await page.locator('#species-name').blur();
-  await page.locator('details.own summary').click();
+  await openDisclosure(page, 'details.own');
   await page.check('#f-own');
   await page.fill('#f-own-no', '2019-0147');
   await expect(page.locator('#f-own-taken')).toContainText('already used by');
@@ -921,7 +927,7 @@ test('a number already in use cannot be given to a second plant', async ({ page 
   await expect(page.locator('h1.sci')).toContainText('Copiapoa'); // untouched
 });
 
-test('the app shell is installed for offline use: collection pages, a species page once read, and an offline page are all in the cache', async ({ browser }) => {
+test('the app shell is installed for offline use: collection pages, a species page once read, and an offline page are all in the cache', async ({ browser, browserName }) => {
   // Playwright's offline emulation does not reach a service worker's own fetches in Chromium, so this
   // checks what the worker put in the cache, which is what offline navigation is served from.
   const ctx = await browser.newContext();
@@ -956,6 +962,10 @@ test('the app shell is installed for offline use: collection pages, a species pa
   // An old bookmark from before the rename: the worker answers the redirect itself, so the server never sees the record id
   // in the URL and offline it still lands on the section (round twenty, 1). The route below stands in for the server: had
   // the worker let the request through, the page would be this 500, not the places shell.
+  // Not in Safari's engine: there Playwright routes a page's navigation from the page's own inspector, before the worker
+  // is asked, so the stand-in answered "server saw it" for a request the worker never saw (round sixty-five; the
+  // all-engines rerun). The worker's map is the same file in every engine, and Chromium and Firefox check it here.
+  if (browserName === 'webkit') { await ctx.close(); return; }
   let reachedServer = 0;
   await ctx.route(/\/(benches|sowings)(\/|\?|$)|\/(places|plants)\/[^/?]+\/(\?|$)/, (r) => { reachedServer++; return r.fulfill({ status: 500, body: 'server saw it' }); });
   await page.goto('/benches/k1?edit=1');
@@ -1321,7 +1331,10 @@ test('the browser talks to no third-party host while a name is typed, and the er
   await expect(page.locator('.err')).not.toContainText('yet');
 });
 
-test('offline, a plant page not yet cached still opens from the section shell', async ({ browser }) => {
+/** Why the offline navigations below do not run in Safari's engine: a harness limit, not the site's (round sixty-five). */
+const WEBKIT_OFFLINE = "In Playwright's WebKit a navigation the service worker would answer from its cache fails with \"WebKit encountered an internal error\" once the context is offline: Playwright takes WebKit offline from the page's own inspector, which stands in front of the worker (as its routes do, smoke 924). Checked in Chromium and Firefox, and by hand on an iPhone.";
+test('offline, a plant page not yet cached still opens from the section shell', async ({ browser, browserName }) => {
+  test.skip(browserName === 'webkit', WEBKIT_OFFLINE);
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
@@ -1525,6 +1538,12 @@ test('a night under the place\'s floor "reaches the floor", not frost, and a flo
 });
 });
 
+// Once the worker controls the page, Safari's engine sends every request of the page to it first, and a photograph the
+// worker passes on (it answers nothing of another host) goes to the image host from there, past \`page.route\`: the tile
+// asked and said "did not load", and the route never saw the request (round sixty-five; the all-engines rerun, as r62bw's
+// strip in round sixty-four). The test is about what the pages ask for, not the shell.
+test.describe('own pages and outside hosts, without the service worker', () => {
+test.use({ serviceWorkers: 'block' });
 test('pages about your own plants ask no outside host for anything unless the reference photographs are switched on; reference requests carry the corpus id (round twelve, A1 and 7)', async ({ page }) => {
   const outside: string[] = [];
   const api: string[] = [];
@@ -1579,6 +1598,7 @@ test('pages about your own plants ask no outside host for anything unless the re
   await expect.poll(() => outside.some((u) => u === `/plants/${acc} -> https://inaturalist-open-data.s3.amazonaws.com/photos/700/medium.jpg`), { timeout: 10000 }).toBe(true);
   expect(outside.every((u) => u.includes('inaturalist-open-data.s3.amazonaws.com'))).toBe(true); // the front page's and the plant page's requests, and nothing to any other host
   expect(api.some((u) => u.startsWith('/api/dossier') || /welwitschia|5411106/.test(u))).toBe(false); // still no key and no name to this server
+});
 });
 
 test('hovering a species link on a page about your own plants sends nothing; the same link on a species page preloads (round thirteen, 2)', async ({ page }) => {
@@ -1956,7 +1976,8 @@ test('a visitor sees all five places in the top bar, the menu and, since round s
   await expect(page.locator('#tabbar a:visible')).toHaveText(['Species', 'My plants', 'Places', 'Propagation', 'Today']);
 });
 
-test('the collection\'s pages need nothing from the server to open: a plant page loads offline, whatever the units', async ({ browser, baseURL }) => {
+test('the collection\'s pages need nothing from the server to open: a plant page loads offline, whatever the units', async ({ browser, baseURL, browserName }) => {
+  test.skip(browserName === 'webkit', WEBKIT_OFFLINE);
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
@@ -2308,7 +2329,7 @@ test('a species page you grow six of does not scroll sideways on a phone (round 
   await page.locator('details.moredetails > summary').click();
   await page.fill('#f-count', '6');
   await page.getByRole('button', { name: /^Add/ }).click();
-  await expect(page).toHaveURL(/\/plants$/);
+  await expect(page).toHaveURL(/\/plants$/, { timeout: writeWait(5_000, 400) }); // six plants, about 370 requests: some 7 s in Safari's engine (helpers/pace.ts)
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/species/copiapoa-cinerea');
   // three numbers and a count: the rest are one tap away on My plants (round fifty, 3)
@@ -2320,11 +2341,22 @@ test('a species page you grow six of does not scroll sideways on a phone (round 
 });
 
 test('round twenty-three: a name the reference does not hold is added on the second Add and marked; an edit to a hybrid renames and logs it; a removed place says where its plants went and their logs say so; a batch status change is logged', async ({ page }) => {
+  // Some sixty steps over ten pages: Safari's engine on the PC ran out of 30 s at the last of them (round sixty-five; the
+  // all-engines rerun), where Chromium here takes about 9.
+  test.setTimeout(60_000);
   // The name service is not reachable here (no upstream), so a name outside the fixture corpus resolves to nothing: the
   // first Add arms the field and asks, the second keeps exactly what was typed (round twenty-three, 4).
   await page.goto('/plants/new');
+  // In Safari's engine the first Add left the field unarmed: pressed before the page had its handlers, or as the line the
+  // name check writes under the field pushed the button down. Hydrated first, and the check's answer on screen (its pill)
+  // before Add is pressed (round sixty-five; the all-engines rerun).
+  await ready(page);
   await page.fill('#species-name', 'Notaplantia fakeus');
   await page.locator('#species-name').blur();
+  // The check's answer is on screen before Add: its pill, or, when the name service did not answer (as here, with no
+  // upstream), its sentence saying so, which comes without a pill (round sixty-five; the strict run, where waiting for the
+  // pill alone failed two times in five). 15 s, as the import's name checks have.
+  await expect(page.locator('.picker .pill.warn').or(page.getByRole('status').filter({ hasText: 'The name service did not answer' })).first()).toBeVisible({ timeout: 15_000 });
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/new$/);
   await expect(page.locator('.picker .hint', { hasText: 'press Add to keep exactly what you typed' })).toBeVisible();
@@ -2347,6 +2379,7 @@ test('round twenty-three: a name the reference does not hold is added on the sec
 
   // A place inside a place: removing the inner one moves its plant up, says so, and writes the move on the plant's log (round twenty-three, 2)
   await page.goto('/places');
+  await ready(page);
   await page.getByRole('button', { name: 'New place' }).click();
   await page.fill('#loc-name', 'Porch');
   await page.selectOption('#loc-kind', 'outdoor');
@@ -2515,8 +2548,10 @@ test('round twenty-eight: a backup of four hundred plants with long notes is wri
   await page.goto('/backup');
   await page.locator('#bk-file').setInputFiles({ name: 'seed.cultifolio.zip', mimeType: 'application/zip', buffer: seed });
   await expect(page.locator('.preview')).toContainText('400 plants');
+  // Two thousand changes in one write, about 6,000 IndexedDB requests: two minutes at Safari's engine's pace (helpers/pace.ts).
+  allowWrites(6_000 * WEBKIT_MS_PER_REQUEST);
   await page.click('#bk-merge');
-  await expect(page.locator('#bk-done')).toContainText('400 plants');
+  await expect(page.locator('#bk-done')).toContainText('400 plants', { timeout: writeWait(5_000, 6_000) });
   // the backup is written
   const dl = page.waitForEvent('download');
   await page.click('#bk-export');
@@ -2531,8 +2566,10 @@ test('round twenty-eight: a backup of four hundred plants with long notes is wri
   await page.goto('/backup');
   await page.locator('#bk-file').setInputFiles(path);
   await expect(page.locator('.preview')).toContainText('400 plants');
+  // Two thousand changes in one write, about 6,000 IndexedDB requests: two minutes at Safari's engine's pace (helpers/pace.ts).
+  allowWrites(6_000 * WEBKIT_MS_PER_REQUEST);
   await page.click('#bk-merge');
-  await expect(page.locator('#bk-done')).toContainText('400 plants');
+  await expect(page.locator('#bk-done')).toContainText('400 plants', { timeout: writeWait(5_000, 6_000) });
   await page.goto('/plants');
   await expect(page.locator('.seccount').first()).toContainText('400');
   // a plant whose stored acquired date is in the future (an older file) can have its price edited; only a date this edit types is judged (round twenty-eight, 0)
@@ -2834,6 +2871,11 @@ test('round forty-eight: a window opened partway (a letter, ?at=) fills in the r
   await expect(page.locator('.rows .grow').first()).toContainText('Copiapoa');
   await expect(page.locator('.rows .before')).toHaveCount(0); // nothing earlier is left
   await expect(page.locator('.rows h2.letter').first()).toContainText('C');
+  // The chunk brought the phone's strip of photographs into the rows; each tile's photograph loads or fails a moment after
+  // the fill (the browser suite's server asks no image host). Settled first, so the row is read after what the strip did,
+  // not before it: read at once, Chromium passed in the moment before the photograph failed and its credit line went, and
+  // Safari's engine and Firefox read the row 21 px off (round sixty-five; the all-engines rerun).
+  await expect.poll(() => page.evaluate(() => [...document.querySelectorAll('.rows .ftile')].every((t) => !!t.querySelector('.fph') || [...t.querySelectorAll('img')].every((i) => i.complete && i.naturalWidth > 0)))).toBe(true);
   // the row they were looking at settles where it was; polled, not after a fixed 200 ms (round sixty; the harness review, 14)
   await expect.poll(async () => Math.abs((await page.locator('.rows .grow', { hasText: 'Welwitschia' }).boundingBox())!.y - before!.y)).toBeLessThan(4);
 });

@@ -13,6 +13,7 @@ import { test, expect, type Page } from '@playwright/test';
 import zlib from 'node:zlib';
 import { inject, type Row } from './helpers/inject';
 import { ownPages } from './helpers/r63v-own';
+import { allowWrites, seedWait, SEED_REQUESTS, WEBKIT_MS_PER_REQUEST } from './helpers/pace';
 
 // The service worker is not under test here; once it controls a page its fetches pass by `page.route` (flaky in the first
 // deploy's strict run on Windows; round sixty-two).
@@ -54,9 +55,10 @@ test("a batch's edit form does not follow the shared-number link to another batc
 
 test('in the sample collection the front page writes no "this device has plants" hint (A41, 7)', async ({ page }) => {
   test.setTimeout(60_000);
+  allowWrites(1 * SEED_REQUESTS * WEBKIT_MS_PER_REQUEST); // the example set out at Safari's engine's pace (helpers/pace.ts)
   await page.goto('/plants'); await ready(page);
   await page.click('#try-sample');
-  await expect(page.locator('.rows > *')).toHaveCount(12, { timeout: 20_000 });
+  await expect(page.locator('.rows > *')).toHaveCount(12, { timeout: seedWait() });
   expect(await page.evaluate(() => localStorage.getItem('cultifolio.hasMine'))).toBeNull();
   await page.goto('/'); await ready(page);
   await expect(page.getByRole('heading', { name: 'You grow' })).toBeVisible({ timeout: 20_000 }); // the front page read the sample as a grower's

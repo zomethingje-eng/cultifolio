@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { allowWrites, seedWait, SEED_REQUESTS, WEBKIT_MS_PER_REQUEST } from './helpers/pace';
 
 /**
  * Round sixty-four, agent W: what Safari's engine and Firefox met in the first all-engines run, each reproduced here in
@@ -30,6 +31,7 @@ function persistAsks(): void {
 
 test('r64w 1: with the browser still asking whether to keep the data (Firefox), the add form takes its species and the example is set out', async ({ page }) => {
   test.setTimeout(60_000);
+  allowWrites(1 * SEED_REQUESTS * WEBKIT_MS_PER_REQUEST); // the example set out at Safari's engine's pace (helpers/pace.ts)
   await page.addInitScript(persistAsks);
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
   await ready(page);
@@ -39,7 +41,7 @@ test('r64w 1: with the browser still asking whether to keep the data (Firefox), 
   await ready(page);
   await page.click('#try-sample');
   // Base: "Setting out the example collection…" for good.
-  await expect(page.locator('.rows > *')).toHaveCount(12, { timeout: 20_000 });
+  await expect(page.locator('.rows > *')).toHaveCount(12, { timeout: seedWait() });
 });
 
 /** Safari's engine in a Private Browsing window: a put of a value holding a Blob is refused. */

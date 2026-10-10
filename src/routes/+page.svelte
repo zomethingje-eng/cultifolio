@@ -612,7 +612,10 @@
           <span class="fnm"><SpeciesName name={c.name} /></span>
           {#if commonOr(c)}<span class="fcom">{commonOr(c)}</span>{/if}
           <!-- The photograph's source on the tile, its author and licence on the page it opens (round sixty; rule 1, the round forty-two review G). -->
-          {#if !failedTiles.has(c.slug) && tileCredit(c)}<span class="fcred">{tileCredit(c)}</span>{/if}
+          <!-- A photograph that does not load takes its credit with it, but not the line's height: the strip shrank by that line
+               as the photograph failed, and the rows under the reader moved 21 px a moment after a fill had put them back
+               (round sixty-five; smoke 2819 in Safari's engine and Firefox; Chromium passed only by reading before the failure). -->
+          {#if !failedTiles.has(c.slug) && tileCredit(c)}<span class="fcred">{tileCredit(c)}</span>{:else if tileCredit(c)}<span class="fcred" aria-hidden="true">&nbsp;</span>{/if}
         </a>
       {/each}
     </div>
