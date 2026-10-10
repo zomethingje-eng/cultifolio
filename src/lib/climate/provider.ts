@@ -99,7 +99,9 @@ export function makeClimateProvider(o: ProviderOptions): ClimateProvider {
       } else {
         // A refusal is kept apart from an absence: it is marked on the dossier, so the next build asks again, and the page says
         // "not checked" rather than "none on file" (round sixteen, 7).
-        src.extremes = `NASA POWER ${r.status === 'none' ? 'has no series here' : 'did not answer (' + r.detail + ')'}; extremes not derived`;
+        // Worded by what the source did (round sixty-seven; triage-66 S8, R45-11): a refusal as "refused the request", a
+        // failure as "did not answer"; both are kept as not checked.
+        src.extremes = `NASA POWER ${r.status === 'none' ? 'has no series here' : r.status === 'refused' ? 'refused the request (' + r.detail + ')' : 'did not answer (' + r.detail + ')'}; extremes not derived`;
         return { extremes: undefined, status: r.status === 'none' ? 'none' : 'refused' };
       }
     }

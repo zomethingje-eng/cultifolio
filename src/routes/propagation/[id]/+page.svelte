@@ -194,7 +194,7 @@
     if (pmsg) return;
     pottingBusy = true;
     try {
-      await settlePlaces(); // a new place named and not yet added is made, and the seedlings go there
+      await settlePlaces('p-loc'); // this form's own picker (round sixty-seven; triage-66 R12): a new place named and not yet added is made, and the seedlings go there
       const made = await collection.potUp(id, n, { date: pd, locationId: ploc, note: pnote.trim() || null });
       potted = made.map((a) => accNo(a));
       pottedIds = made.map((a) => a.id); // the labels link carries identities, as the plant page's Label does (round fifty-eight; the grower review)
@@ -281,7 +281,14 @@
     if (count !== s.count && count < st.germinated) return `${count} started is fewer than the ${st.germinated} already counted ${upWord}.`;
     return '';
   };
+  /** A Save under way: a second press writes nothing (round sixty-seven; triage-66 R11). */
+  let saveBusy = $state(false);
   async function saveEdit() {
+    if (saveBusy) return;
+    saveBusy = true;
+    try { await saveEditNow(); } catch { /* refused: the page says so from lastWriteError, and the form stays open */ } finally { saveBusy = false; }
+  }
+  async function saveEditNow() {
     if (!s) return;
     const heat = heatCheck(f.bottomHeatC, units.current); // the same check as the new-batch form: 77 does not save as 77 °C here either
     const known = PROP_METHODS.find((x) => x.k === f.method);
@@ -293,7 +300,8 @@
     }
     edMsg = editProblem();
     if (edMsg) return;
-    await settlePlaces();
+    // This form's own picker only (round sixty-seven; triage-66 R12); a place that could not be made says why there, and nothing is saved.
+    try { await settlePlaces('se-loc'); } catch { return; }
     if (!s) return;
     await collection.put('sowing', id, {
       taxonName: f.taxonName.trim() || s.taxonName, cultivar: f.cultivar.trim() || null, method: f.method, sown: f.sown || s.sown, count: Math.max(1, Number(f.count) || s.count),
@@ -423,7 +431,7 @@
       <div class="wide"><span class="lbl">Where</span><LocationPicker bind:value={f.locationId} id="se-loc" label="Where" /></div>
       <label class="wide"><span>Notes</span><textarea id="se-notes" rows="3" bind:value={f.notes}></textarea></label>
       {#if edMsg}<p class="bad small wide" id="se-msg" role="alert" style="margin: 0">{edMsg}</p>{/if}
-      <div class="actions wide"><button class="btn" type="button" onclick={() => (editing = false)}>Cancel</button><button class="btn pri" type="submit">Save</button></div>
+      <div class="actions wide"><button class="btn" type="button" onclick={() => (editing = false)}>Cancel</button><button class="btn pri" type="submit" aria-disabled={saveBusy}>Save</button></div>
     </form>
   {/if}
 

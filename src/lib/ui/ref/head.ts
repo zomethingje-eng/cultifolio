@@ -72,7 +72,8 @@ export function speciesDescription(h: HeadInput, u: Units = METRIC): string {
     // line (round sixty-two; outside review A3). Each figure by its own name; whole parts are left off the end when the line
     // would pass 155 characters, so no figure is cut from its source.
     const night = c.extremes ? `cold floor ${temp(c.extremes.minP01, u, 1)}, 1 night in 100 at a typical spot (NASA POWER)` : `coldest month, mean nightly low ${temp(m[cold].tmin, u, 1)} (CHELSA)`;
-    const wet = `${rain(yr.mm, u)} of rain a year (${yr.cells ? 'median across the range' : 'sum of monthly medians'}, CHELSA)`;
+    // The monthly medians added are the median year's total, and said so (round sixty-seven; triage-66 N11).
+    const wet = yr.cells ? `${rain(yr.mm, u)} of rain a year (median across the range, CHELSA)` : `${rain(yr.mm, u)} of rain in the median year (CHELSA)`;
     const light = dl.length ? `${Math.round(Math.min(...dl))}–${Math.round(Math.max(...dl))} DLI open-sky light (CHELSA)` : '';
     const n = c.records ?? 0;
     const parts = [night, wet, light, `from ${n.toLocaleString('en-US')} in-range record${n === 1 ? '' : 's'}`].filter(Boolean);

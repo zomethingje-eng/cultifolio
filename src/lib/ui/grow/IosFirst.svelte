@@ -8,7 +8,7 @@
   import { onMount } from 'svelte';
   import { page } from '$app/state';
   import { collection } from '$lib/db/collection.svelte';
-  import { inDemo } from '$lib/db/demo';
+  import { PAGE_IN_DEMO } from '$lib/db/demo';
   import { iosInBrowser } from './ios';
   const HIDDEN = 'cultifolio.iosFirstHidden';
   /** Whether the card is showing: the install bar stands down while it is, so the same advice is not given twice. */
@@ -19,7 +19,7 @@
     ios = iosInBrowser();
     try { hidden = sessionStorage.getItem(HIDDEN) === '1'; } catch { /* shown */ }
   });
-  const show = $derived(ios && !hidden && !inDemo() && /^\/plants(\/new|\/import)?\/?$/.test(page.url.pathname) && collection.ready && collection.accessions.length === 0);
+  const show = $derived(ios && !hidden && !PAGE_IN_DEMO && /^\/plants(\/new|\/import)?\/?$/.test(page.url.pathname) && collection.ready && collection.accessions.length === 0);
   $effect(() => { shown = show; });
   function hide() {
     hidden = true;

@@ -39,8 +39,8 @@ export type Stamped = { t: string; kind: string; id: string; field: string; valu
  * with what is parked). `inject` is this with stamps made from a wall and a writer (round sixty-two, at the merge: agent
  * L's plant spec needed given stamps, and kept its own copy of the write).
  */
-export async function injectChanges(page: Page, changes: Stamped[], parked: string[] = [], db = 'cultifolio'): Promise<void> {
-  await page.evaluate(async ({ changes, parked, name }) => {
+export async function injectChanges(page: Page, changes: Stamped[], parked: string[] = [], db = 'cultifolio', keepFold = false): Promise<void> {
+  await page.evaluate(async ({ changes, parked, name, keepFold }) => {
     let d: IDBDatabase | null = null;
     for (let i = 0; i < 100 && !d; i++) {
       const o = await new Promise<IDBDatabase | null>((res) => { const r = indexedDB.open(name); r.onupgradeneeded = () => r.transaction!.abort(); r.onsuccess = () => res(r.result); r.onerror = () => res(null); });
@@ -65,10 +65,63 @@ export async function injectChanges(page: Page, changes: Stamped[], parked: stri
       const had = await get<string[]>(meta, 'parked');
       meta.put([...new Set([...(Array.isArray(had) ? had : []), ...parked])], 'parked');
     }
-    const gen = Number((await get<number>(meta, 'foldGen')) ?? 0) + 1;
-    meta.delete('fold');
-    meta.put(gen, 'foldGen');
+    if (!keepFold) {
+      const gen = Number((await get<number>(meta, 'foldGen')) ?? 0) + 1;
+      meta.delete('fold');
+      meta.put(gen, 'foldGen');
+    }
     await done;
     d.close();
-  }, { changes, parked, name: db });
+  }, { changes, parked, name: db, keepFold });
+}
+
+/**
+ * Changes written as a sync pull stores another device's batch (`storeIn`): into `changes`, each with its arrival row, the
+ * numbers on the ledger, and the fold snapshot KEPT, so the next load reads the snapshot and then these as its tail, in
+ * arrival order. For a test of what a load costs with a tail since its snapshot (round sixty-seven; triage-66 H1). The
+ * page must have saved its snapshot first (`snapshotSaved`); with no page open on the collection, nothing has folded
+ * the log since, so the snapshot and its tail are the whole log.
+ */
+export async function injectTail(page: Page, rows: Row[], wall: number, writer = 'abcdefabcdef0000', db = 'cultifolio'): Promise<string[]> {
+  const changes = rows.map(([kind, id, field, value], i) => ({ t: `${String(wall + i).padStart(13, '0')}-0000-${writer}`, kind, id, field, value }));
+  await injectChanges(page, changes, [], db, true);
+  return changes.map((c) => c.t);
+}
+
+/** Wait until the collection `db` holds a fold snapshot (a load saves one when there is none). */
+export async function snapshotSaved(page: Page, db = 'cultifolio', timeout = 30_000): Promise<void> {
+  await page.waitForFunction(async (name) => {
+    const d = await new Promise<IDBDatabase>((res, rej) => { const r = indexedDB.open(name); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+    try {
+      if (!d.objectStoreNames.contains('meta')) return false;
+      return await new Promise<boolean>((res) => { const r = d.transaction('meta').objectStore('meta').get('fold'); r.onsuccess = () => res(r.result != null); r.onerror = () => res(false); });
+    } finally { d.close(); }
+  }, db, { timeout, polling: 250 });
+}
+
+/**
+ * Wipe the log as `replaceFromStaging`'s wipe does (src/lib/db/vault.ts), in ONE transaction: the changes, the photographs,
+ * the outbox and the arrival order cleared, the fold snapshot dropped and the fold counter moved. The ledger of issued
+ * numbers and the rest of `meta` are kept, as that wipe keeps them.
+ *
+ * Why (round sixty-seven; triage-66 H7, R45-29): two smoke tests cleared `changes` and `photos` by hand and left the
+ * snapshot and the arrival rows, so a load could fold the snapshot of the log that was gone, and a snapshot being written
+ * of it was not refused: the race class this helper's `inject` closed in round sixty-two (A44).
+ */
+export async function wipe(page: Page, db = 'cultifolio'): Promise<void> {
+  await page.evaluate(async (name) => {
+    const d = await new Promise<IDBDatabase>((res, rej) => { const r = indexedDB.open(name); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+    const stores = ['changes', 'photos', 'outbox', 'order', 'meta'].filter((s) => d.objectStoreNames.contains(s));
+    const tx = d.transaction(stores, 'readwrite');
+    const done = new Promise<void>((res, rej) => { tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error ?? new Error('the wipe was aborted')); });
+    for (const s of stores) if (s !== 'meta') tx.objectStore(s).clear();
+    if (stores.includes('meta')) {
+      const meta = tx.objectStore('meta');
+      const gen = await new Promise<number>((res) => { const r = meta.get('foldGen'); r.onsuccess = () => res(Number(r.result ?? 0)); });
+      meta.delete('fold');
+      meta.put(gen + 1, 'foldGen');
+    }
+    await done;
+    d.close();
+  }, db);
 }

@@ -1,7 +1,10 @@
 # Genera taken whole (every accepted species as WCVP lists them; the derivation reads Kew's checklist, not the GBIF backbone), whatever their iNaturalist counts.
 # The collector genera: cacti, mesembs, other succulents, caudiciforms, the winter-growing bulbs.
-# Very large genera (Euphorbia, Senecio, Oxalis, Dioscorea, Peperomia, Hoya, Ceropegia, Aloe, Ornithogalum,
-# Gladiolus, Moraea, Pelargonium) are deliberately not here; their cultivated species come in through the counts.
+# Very large genera (Euphorbia, Senecio, Oxalis, Dioscorea, Peperomia, Hoya, Aloe, Ornithogalum, Gladiolus,
+# Moraea, Pelargonium) are deliberately not here; their cultivated species come in through the counts.
+# Ceropegia is here and taken whole: WCVP sinks Brachystelma and the stapeliads (Stapelia, Huernia, Orbea, Caralluma
+# and their like) into it, so they are its species; the stapeliad genera listed below find nothing of their own
+# (round sixty-seven; triage-66 N12).
 # One genus per line. Edit freely.
 
 # Cactaceae

@@ -8,7 +8,8 @@
  * - a build that recorded other sources than the ones now there: fails (a checkout changed under an old build,
  *   including one restored with old mtimes: contents are compared, not times);
  * - no record of its sources: fails;
- * - a layout closure that reaches `backup` or `grow`: fails, even freshly built;
+ * - a layout closure that reaches a module under src/lib/backup/ or src/lib/ui/grow/ (bar the few the layout draws on
+ *   purpose), in the sources or as a chunk's entry in the build: fails, even freshly built (by path since round sixty-seven);
  * - a fresh build of a clean layout: passes.
  * And the wiring: `npm run build` runs attach-do.mjs after `vite build`, and attach-do.mjs runs the gate, recording first.
  * (Adapted from docs/review-61/tests/harness--deploy-bundle.test.ts, which looked for the gate in package.json's own
@@ -79,13 +80,48 @@ describe('scripts/check-bundle.mjs', () => {
     expect(r.code).toBe(1);
     expect(r.out).toMatch(/build-sources\.json is missing/);
   });
-  it('fails, even freshly built, when the layout reaches the backup module or the grow barrel', () => {
-    for (const bad of ['backup', 'grow']) {
-      manifest(bad);
+  // By module path, not chunk name (round sixty-seven; triage-66 H6, R45-13): the grow barrel was deleted, so no chunk was
+  // named "grow" and that half of the gate could never fail; and a chunk is named after whichever module the bundler picks.
+  it('fails, even freshly built, when the layout imports a module under src/lib/backup/ or src/lib/ui/grow/, directly or through another', () => {
+    manifest('theme');
+    write('src/lib/backup/format.ts', 'export const f = 1;\n');
+    write('src/lib/ui/grow/spend.ts', 'export const s = 1;\n');
+    write('src/lib/ui/grow/GrowLayer.svelte', "<script lang=\"ts\">\n  import { s } from './spend';\n</script>\n");
+    write('src/lib/ui/Bar.svelte', "<script>\n  import { f } from '../backup/format';\n</script>\n");
+    const cases: Array<[layout: string, held: string]> = [
+      ["<script>\n  import { f } from '$lib/backup/format';\n</script>\n<slot />\n", 'src/lib/backup/format.ts'],
+      ["<script lang=\"ts\">\n  import {\n    s\n  } from '$lib/ui/grow/spend';\n</script>\n<slot />\n", 'src/lib/ui/grow/spend.ts'],
+      ["<script>\n  import Bar from '$lib/ui/Bar.svelte';\n</script>\n<slot />\n", 'src/lib/backup/format.ts'],
+      // a module the layout may draw (GrowLayer) is allowed, but what it imports from grow/ is not, unless it is named too
+      ["<script>\n  import GrowLayer from '$lib/ui/grow/GrowLayer.svelte';\n</script>\n<slot />\n", 'src/lib/ui/grow/spend.ts']
+    ];
+    for (const [layout, held] of cases) {
+      write('src/routes/+layout.svelte', layout);
       const r = run('--record');
-      expect(r.code).toBe(1);
-      expect(r.out).toContain(`imports "${bad}"`);
+      expect(r.code, layout).toBe(1);
+      expect(r.out).toContain(`the root layout holds ${held}`);
     }
+  });
+  it('passes a layout that loads them on demand, imports only their types, or draws only the grow modules it names', () => {
+    manifest('theme');
+    write('src/lib/backup/format.ts', 'export type F = 1;\n');
+    write('src/lib/ui/grow/spend.ts', 'export const s = 1;\n');
+    write('src/lib/ui/grow/GrowLayer.svelte', '<p>bar</p>\n');
+    write('src/routes/+layout.svelte', "<script lang=\"ts\">\n  import type { F } from '$lib/backup/format';\n  // import { s } from '$lib/ui/grow/spend';\n  import GrowLayer from '$lib/ui/grow/GrowLayer.svelte';\n  const later = () => import('$lib/ui/grow/spend');\n</script>\n<slot />\n");
+    const r = run('--record');
+    expect(r.out).toMatch(/hold nothing under src\/lib\/backup\/ or src\/lib\/ui\/grow\/ but 1 named module/);
+    expect(r.code).toBe(0);
+  });
+  it('fails when a chunk the layout reaches in the build is a banned module\'s own entry, and no longer by a chunk\'s name', () => {
+    write('.svelte-kit/output/client/.vite/manifest.json', JSON.stringify({
+      '.svelte-kit/generated/client-optimized/nodes/0.js': { file: 'n0.js', name: 'nodes/0', imports: ['_grow.js', 'src/lib/ui/grow/demo-seed.ts'] },
+      '_grow.js': { file: 'grow.js', name: 'grow' }, // a name alone says nothing of what the chunk holds
+      'src/lib/ui/grow/demo-seed.ts': { file: 'ds.js', name: 'demo-seed', src: 'src/lib/ui/grow/demo-seed.ts', isDynamicEntry: true }
+    }));
+    const r = run('--record');
+    expect(r.code).toBe(1);
+    expect(r.out).toContain('the root layout holds src/lib/ui/grow/demo-seed.ts');
+    expect(r.out).not.toContain('"grow"');
   });
 });
 

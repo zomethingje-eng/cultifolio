@@ -13,7 +13,8 @@
   import { today } from '$lib/ui/day.svelte';
   import { collection } from '$lib/db/collection.svelte';
   import { frost } from '$lib/ui/frost.svelte';
-  import { onVaultNotice } from '$lib/db/vault';
+  import { onVaultNotice, vaultWritesInFlight } from '$lib/db/vault';
+  import { onTakeOver } from '$lib/ui/take-over';
   import { afterNavigate, beforeNavigate } from '$app/navigation';
   import { browser, version } from '$app/environment';
   import CompareBar from '$lib/ui/CompareBar.svelte';
@@ -22,10 +23,10 @@
   // grow barrel, which brought every grower feature and the backup module into every page (round sixty-one; the
   // accessibility review, 3).
   import GrowLayer from '$lib/ui/grow/GrowLayer.svelte';
-  import { freshOnRestore, inDemo } from '$lib/db/demo';
+  import { freshOnRestore, PAGE_IN_DEMO } from '$lib/db/demo';
   // The example collection as the answer to an empty grower page (round sixty-three, V2), decided on the page once it has
   // arrived, never on the tap: a tap that went straight in skipped the pages' own "Leave this page?" (the fix pass; R1, 1).
-  import { example, notEnteredWords, openExample } from '$lib/ui/grow/example.svelte';
+  import { addLeavesExample, example, notEnteredWords, openExample } from '$lib/ui/grow/example.svelte';
   import { toast } from '$lib/ui/toast.svelte';
   import ToastBar from '$lib/ui/ToastBar.svelte';
   import { units } from '$lib/ui/units.svelte';
@@ -66,7 +67,7 @@
    * what is typed on it, and not while a restore or an import is in progress; a refusal is said (the fix pass; R1, 1, 2, 7).
    */
   let demoTab = $state(false);
-  onMount(() => { demoTab = inDemo(); });
+  onMount(() => { demoTab = PAGE_IN_DEMO; }); // the page's collection, read as it loaded (round sixty-seven; triage-66 V3)
   async function menuExample() {
     menuOpen = false;
     const r = await openExample('/today');
@@ -77,6 +78,12 @@
   let mainEl = $state<HTMLElement | null>(null);
   /** The routes about the grower's own collection: what they link to says what is grown. */
   const privateRoute = $derived(/^\/(plants|propagation|places|labels|backup|sync|settings|today|frost)(\/|$)/.test(page.url.pathname));
+  // Hover preloading off on these pages everywhere, not only inside <main>: the compare tray, the top bar, the frost and
+  // clock lines and the footer sit outside it, and a hover on the tray's "Compare 2" sent both species to the server before
+  // any click (round sixty-seven; triage-66 P3, S-F6, R45-7). The body's attribute is the one the router reads last.
+  $effect.pre(() => {
+    if (browser) document.body.setAttribute('data-sveltekit-preload-data', privateRoute ? 'off' : 'hover');
+  });
   // How many pages this session has moved through inside the app: the back control goes to the previous one when there is one.
   let hops = 0;
   /** Whether the session's first page has arrived: its arrival is not a move, and focus stays where the browser starts it, so the first Tab reaches the skip link (round fifty-nine). */
@@ -118,6 +125,13 @@
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   }
   let vaultNote = $state<string | null>(null);
+  /** Whether anything was typed, ticked or chosen on this page: a takeover then waits for the next navigation (round sixty-seven; triage-66 P2). */
+  let typedHere = false;
+  if (browser) {
+    const mark = () => { typedHere = true; };
+    addEventListener('input', mark, { capture: true });
+    addEventListener('change', mark, { capture: true });
+  }
   let takingOver = false;
   let reloadOnNext = false;
   const skipTo = (w: ServiceWorker | null) => { if (w) { takingOver = true; w.postMessage('skip'); } };
@@ -204,7 +218,8 @@
       // A new build's worker waits until every tab of the old one has closed, which an installed app never does. So a
       // waiting worker is told to take over on every load (a returning visitor's first page after a deploy is the common
       // case, and the version poll never fires for it), and again when the poll sees a deploy mid-session. The worker keeps
-      // the previous build's cache for one generation, so a tab still on the old build finds its chunks.
+      // the previous build's cache for one generation and reads it for a build file it does not have, so a tab still on
+      // the old build finds its chunks (round sixty-seven; triage-66 P2).
       navigator.serviceWorker.register('/service-worker.js', { type: 'module' }).then((reg) => {
         if (reg.waiting) skipTo(reg.waiting);
         // One conditional GET of the script: the browser's own check after a navigation is not guaranteed on every load. Only
@@ -213,20 +228,24 @@
         if (reg.active && !reg.installing) reg.update().catch(() => {});
         reg.addEventListener('updatefound', () => { const w = reg.installing; w?.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) skipTo(w); }); });
       }).catch((e) => console.warn('service worker not registered; offline use is off', e));
-      // The reload under the new worker happens at once only in the first seconds of a page (nothing is half-done yet);
-      // later it waits for the next navigation, so a half-filled form or an audit in progress is never thrown away.
+      // The reload under the new worker happens at once only in the first seconds of a page, with nothing typed and no
+      // write in flight; otherwise it waits for the next navigation, so a half-filled form or an audit in progress is never thrown away.
       // A worker of the build this page already runs changes nothing on it, and is not reloaded for, and neither is a page
       // no worker served (a first visit came from the server and is this build already; the first worker's `clients.claim()`
       // changes its controller too). In the first all-engines run, first visits in Safari's engine and the second page of a
       // first visit in Firefox reloaded within their first seconds, losing a plant, a place or a note just typed (round
       // sixty-four).
+      // Round sixty-seven (triage-66 P2; R45-5, S-E6): the early reload waits for nothing typed and no vault write in
+      // flight, or it threw away a name typed in the first seconds after a deploy; a tab that did not send `skip` itself (a
+      // second tab) now moves to the new build at its next navigation instead of running the old one for good; and a
+      // worker that does not say its build is not taken for another build. The rule is `onTakeOver`'s.
       const servedByOld = !!navigator.serviceWorker.controller;
       navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (!takingOver || !servedByOld) return;
+        if (!servedByOld) return;
         void buildOf(navigator.serviceWorker.controller).then((v) => {
-          if (v === version) return;
-          if (performance.now() < 4000) location.reload();
-          else reloadOnNext = true;
+          const what = onTakeOver({ servedByOld, askedSkip: takingOver, build: v, version, sinceStart: performance.now(), typed: typedHere || typing(document.activeElement), writing: vaultWritesInFlight() });
+          if (what === 'reload') location.reload();
+          else if (what === 'next') reloadOnNext = true;
         });
       });
     }
@@ -258,7 +277,8 @@
   $effect(() => {
     if (!collection.ready) return;
     // The hint is about the grower's own collection: the sample's twelve plants set it, and the visitor's other tabs drew a grower's tabs (round sixty-one; the records review, 17).
-    if (inDemo()) return;
+    // The page's collection, not the tab's flag: a Leave called off cleared the flag under a page still showing the example (round sixty-seven; triage-66 V3).
+    if (PAGE_IN_DEMO) return;
     // A plant, a batch, or a species followed: the front page's own reading of the hint, and more, so the two never disagree about a grower.
     const grower = collection.accessions.length > 0 || collection.sowings.length > 0 || collection.mySpecies.size > 0;
     try {
@@ -314,7 +334,9 @@
   <a class="iconbtn sync" href="/sync" title={sync.configured ? (sync.busy ?? (sync.offline ? (sync.unreached === 'server' ? 'Sync: the server did not answer; changes are kept here' : 'Sync: offline; changes are kept here') : sync.lastError ? 'Sync: ' + (syncWords(sync.lastError)?.text ?? sync.lastError) : sync.runs ? 'Synced' : 'Sync: not checked yet')) : 'Sync'} aria-label="Sync" class:on={sync.configured} class:busy={!!sync.busy} class:err={!!sync.lastError}>⟳</a>
   <!-- Not on the add page itself: pressed there it threw the half-filled form away for an empty one (round forty-nine, 3).
        It adds what the section is about, and says which (round fifty-eight; the grower review). -->
-  {#if page.url.pathname !== adds.path}<a class="iconbtn" href={adds.href} title={adds.label} aria-label={adds.label}>+</a>{/if}
+  <!-- In the example it leads out of it first, to the same form in the grower's own collection: a first plant added there
+       was the example's, and deleted with it (round sixty-seven; triage-66 V1). -->
+  {#if page.url.pathname !== adds.path}<a class="iconbtn" href={adds.href} title={adds.label} aria-label={adds.label} onclick={(e) => addLeavesExample(e, adds.href)}>+</a>{/if}
 </header>
 {#if menuOpen}
   <div class="scrim" onclick={closeMenu} aria-hidden="true"></div>
@@ -322,7 +344,8 @@
   <nav id="menu" aria-label="Everything" bind:this={menuEl} onkeydown={trapTab}>
     <div class="menuhead"><span class="kick">Cultifolio</span><button class="iconbtn" type="button" aria-label="Close menu" onclick={closeMenu}>×</button></div>
     {#each menu as m, i (i)}
-      {#if m}<a href={m.href} class:on={m.href === '/' ? page.url.pathname === '/' || page.url.pathname.startsWith('/species') : page.url.pathname.startsWith(m.href)} rel={m.href.startsWith('http') ? 'external' : undefined}>{m.label}</a>{:else}<hr />{/if}
+      <!-- The current page said to a screen reader, not only in colour (round sixty-seven; triage-66 P6, R45-25). -->
+      {#if m}{@const on = m.href === '/' ? page.url.pathname === '/' || page.url.pathname.startsWith('/species') : page.url.pathname.startsWith(m.href)}<a href={m.href} class:on aria-current={on ? 'page' : undefined} rel={m.href.startsWith('http') ? 'external' : undefined}>{m.label}</a>{:else}<hr />{/if}
       {#if i === 4 && !demoTab}<button class="menuexample" type="button" id="menu-example" onclick={menuExample}>See the example collection</button>{/if}
     {/each}
   </nav>
@@ -345,7 +368,7 @@
   {@render children()}
 </main>
 
-<CompareBar low={tabAway} />
+<CompareBar low={tabAway} preload={privateRoute ? 'off' : 'hover'} />
 
 <!-- Three lines, about the reader: the sources, every one, then what is kept, then the links (round fifty-eight; it was eight lines on a phone, about the server, and its list left four sources out). -->
 <!-- On a page about your own plants the footer waits for the collection: drawn mid-screen under "Opening…" and then
@@ -428,10 +451,11 @@
   .iconbtn.brand[aria-expanded='true'] { background: var(--sunk); }
   .scrim { position: fixed; inset: 0; z-index: 55; background: rgba(0, 0, 0, 0.18); }
   #menu { position: fixed; z-index: 65; top: 48px; left: max(12px, env(safe-area-inset-left)); width: 240px; background: var(--card); border: 1px solid var(--rule); border-radius: var(--r-lg); box-shadow: var(--sh2); padding: 6px; display: flex; flex-direction: column; }
-  #menu a { display: block; padding: 10px 12px; border-radius: var(--r); color: var(--ink); font-weight: 600; font-size: var(--fs-md); min-height: 40px; }
+  /* A thumb's height, 44 px, as the touch token: the items were 41 px (round sixty-seven; triage-66 P6, R45-25). */
+  #menu a { display: block; padding: 10px 12px; border-radius: var(--r); color: var(--ink); font-weight: 600; font-size: var(--fs-md); min-height: 44px; }
   #menu a:hover { background: var(--sunk); text-decoration: none; }
   /* A link's look for the one item that is a button (it switches the tab into the example before it loads). */
-  #menu .menuexample { display: block; width: 100%; text-align: start; padding: 10px 12px; border: 0; border-radius: var(--r); background: none; color: var(--accent); font: inherit; font-weight: 600; font-size: var(--fs-md); min-height: 40px; cursor: pointer; }
+  #menu .menuexample { display: block; width: 100%; text-align: start; padding: 10px 12px; border: 0; border-radius: var(--r); background: none; color: var(--accent); font: inherit; font-weight: 600; font-size: var(--fs-md); min-height: 44px; cursor: pointer; }
   #menu .menuexample:hover { background: var(--sunk); }
   #menu a.on { color: var(--accent); }
   #menu .menuhead { display: none; align-items: center; justify-content: space-between; padding: 0 4px 4px 12px; }

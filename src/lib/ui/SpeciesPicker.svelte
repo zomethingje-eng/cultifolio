@@ -14,13 +14,16 @@
    * resolved is flagged, with the nearest reference name offered by name.
    */
   import { parseName } from '$core/names';
+  import { version } from '$app/environment';
   import { searchCatalogue, type Found } from '$lib/ui/index.svelte';
   import { pickedName, filesKey, requestName, cultivarRest, searchText, cleanTyped, sameName, droppedByPick } from '$lib/ui/picked-name';
   import SpeciesName from './SpeciesName.svelte';
   import type { NameKind } from '$core/names';
   // `received`: the text as typed, when the last pick wrote a name that left some of it out; the form files it as the
   // name as received (round sixty-two; the grower review, 9).
-  let { value = $bindable(''), taxonKey = $bindable<number | null>(null), cultivar = $bindable<string | null>(null), kind = $bindable<NameKind>('species'), parentage = $bindable<string | null>(null), id = 'species-name', unresolved = $bindable(false), armed = $bindable(false), received = $bindable<string | null>(null) }: { value?: string; taxonKey?: number | null; cultivar?: string | null; kind?: NameKind; parentage?: string | null; id?: string; unresolved?: boolean; armed?: boolean; received?: string | null } = $props();
+  // `reserve`: keep the room the check's words take under the field, so what follows never moves when they arrive
+  // (round sixty-seven; triage-66 P10).
+  let { reserve = false, value = $bindable(''), taxonKey = $bindable<number | null>(null), cultivar = $bindable<string | null>(null), kind = $bindable<NameKind>('species'), parentage = $bindable<string | null>(null), id = 'species-name', unresolved = $bindable(false), armed = $bindable(false), received = $bindable<string | null>(null) }: { reserve?: boolean; value?: string; taxonKey?: number | null; cultivar?: string | null; kind?: NameKind; parentage?: string | null; id?: string; unresolved?: boolean; armed?: boolean; received?: string | null } = $props();
   // `similar`: found by a similar spelling (the server's near pass); `asCultivar`: the genus offered for a genus followed by
   // capitalised words, the rest kept as a cultivar; a key below 1 is a row with no key to file (round sixty-two; A7).
   type Sugg = { key: number; name: string; family?: string; rank?: string; status?: string; local?: boolean; far?: boolean; similar?: boolean; asCultivar?: string };
@@ -39,6 +42,8 @@
   // Why the site did not ask the name service, in the server's own words: a refusal (a 400 for what is typed, a 429, a
   // held 503) is "not asked", never "did not answer" (round sixty-one; round sixty-two: the server review, 1 and 7; A8).
   let nameRefusal = $state<string | null>(null);
+  /** GBIF itself refused this site's request (round sixty-seven; triage-66 S8): said as that, not as "did not answer". */
+  let gbifRefused = $state(false);
   /** The last pick filed no key on purpose (a qualifier, a variety the species does not name): said, and not asked about again (round sixty-two; B3). */
   let keyless = $state(false);
   let nameServiceDown = $state(false); // /api/names refused or unreachable: said under the field (round seventeen, 1)
@@ -49,6 +54,24 @@
   /** The last check read a genus followed by capitalised words as the genus and a cultivar, since no species of that name was found: said once, before Add files it. */
   let readAsCultivar = $state<string | null>(null);
   $effect(() => { if (!value) received = null; });
+  /**
+   * The text this picker last put in the field itself (typed, picked, or rewritten by its check). A value set from outside
+   * (the add form's "Save and add another" clearing it, a link's name) makes every answer still in flight stale: one for
+   * the previous name settled its key onto the emptied field (round sixty-seven; triage-66 P8, R45-25).
+   */
+  let ownValue = value;
+  $effect.pre(() => {
+    if (value === ownValue) return;
+    ownValue = value;
+    reqGen++;
+    clearTimeout(timer);
+    suggestions = [];
+    open = false;
+    hi = -1;
+    resolved = 'unknown';
+    keyless = false;
+    readAsCultivar = null;
+  });
   let root = $state<HTMLDivElement | null>(null);
   const uid = $props.id();
   const listId = `species-menu-${uid}`;
@@ -62,12 +85,15 @@
   // the next asker tries again.
   /** The site did not ask: `message` is its reason. */
   class Refused extends Error {}
+  /** GBIF refused this site's request (round sixty-seven; S8). */
+  class GbifRefused extends Error {}
 
   let lastRows: { q: string; rows: Promise<Row[]> } | null = null;
   function namesFor(q: string): Promise<Row[]> {
     if (lastRows && lastRows.q === q) return lastRows.rows;
     // /api/names proxies GBIF's species/suggest (same JSON shape) from the Worker, so no name you type leaves this site from the browser.
-    const rows = fetch(`/api/names?q=${encodeURIComponent(q)}`).then(async (r) => {
+    // The build in the URL, so the adapter's cache does not answer a new build with the old one's (round sixty-seven; S7).
+    const rows = fetch(`/api/names?q=${encodeURIComponent(q)}&v=${encodeURIComponent(version)}`).then(async (r) => {
       // A call the site refused or held back is said as that, with the server's own reason, not as a silence (round
       // sixty-one; the server review, 4; round sixty-two: the server review, 1 and 7; A8): a 400 is what is typed, a 429
       // this address's part (held or not), a held 503 the site's minute.
@@ -76,6 +102,9 @@
         const said = typeof body?.error === 'string' ? body.error.replace(/^not asked:\s*/i, '').replace(/[.\s]+$/, '') : '';
         if (r.status === 400) throw new Refused('what is typed is not a name it can look up');
         if (r.status === 429 || (r.status === 503 && body?.held === true)) throw new Refused(said || 'this site asked this device to wait');
+        // GBIF itself refused this site's request (its 429 or 403, passed on as a 502 with `refused: true`): a refusal,
+        // never "did not answer" (round sixty-seven; triage-66 S8, R45-11).
+        if (body && (body as { refused?: unknown }).refused === true) throw new GbifRefused("GBIF refused this site's request");
         throw new Error(String(r.status));
       }
       return (await r.json()) as Row[];
@@ -177,6 +206,7 @@
       if (!live()) return;
       nameServiceDown = false;
       nameRefusal = null;
+      gbifRefused = false;
       const all = toRows(rows);
       genusRows = all.filter((x) => x.rank === 'GENUS');
       // A genus followed by capitalised words: only species that begin with what was asked are offered.
@@ -190,7 +220,7 @@
       }
     }, (e: unknown) => {
       // A refusal is said, not shown as an empty list: the grower can still type the name and let the plant page repair the key later (round seventeen, 1).
-      if (live()) { nameServiceDown = true; nameRefusal = e instanceof Refused ? e.message : null; } // offline: local suggestions only, and said
+      if (live()) { nameServiceDown = true; nameRefusal = e instanceof Refused ? e.message : null; gbifRefused = e instanceof GbifRefused; } // offline: local suggestions only, and said
     });
     await Promise.all([indexP, namesP]);
   }
@@ -200,6 +230,7 @@
     // the verification review's search 12).
     const clean = cleanTyped(value);
     if (clean !== value) value = clean;
+    ownValue = value;
     reqGen++;
     taxonKey = null;
     keyless = false;
@@ -219,6 +250,7 @@
     const written = pickedName(value, s);
     received = droppedByPick(value, written);
     value = written;
+    ownValue = written;
     reparse(value);
     readAsCultivar = null;
     taxonKey = key;
@@ -260,6 +292,7 @@
         const refRow = suggestions.find((x) => x.asCultivar && x.rank === 'GENUS');
         if (!genusRow && !refRow) { resolved = 'no'; return; }
         value = `${genusRow?.canonicalName ?? shape.genus} '${shape.rest}'`;
+        ownValue = value;
         reparse(value);
         reqGen++;
         readAsCultivar = shape.genus;
@@ -267,9 +300,10 @@
         keyless = !genusRow;
         resolved = 'yes';
         armed = true;
-      } else resolved = 'no';
+      } else if (!taxonKey) resolved = 'no';
     } catch {
-      if (gen === reqGen) resolved = 'unreached';
+      // A key the reference's own search found meanwhile stands: the name service's silence does not unresolve it.
+      if (gen === reqGen && !taxonKey) resolved = 'unreached';
     }
   }
   /** For the form: resolve now, and say whether the name stands. Awaited before a plant is filed, so a click that outran the blur's check still checks (round twenty-three, 4). */
@@ -299,10 +333,12 @@
     return keyed ? '' : ' · no key filed';
   }
   // The two services' silences, each in its own words: a refusal as "not asked", a failure as "did not answer" (rule 2).
-  const namesSaid = $derived(nameServiceDown ? (nameRefusal ? `The name service was not asked: ${nameRefusal}. ` : 'The name service did not answer. ') : '');
+  const namesSaid = $derived(nameServiceDown ? (gbifRefused ? "GBIF refused this site's request for names. " : nameRefusal ? `The name service was not asked: ${nameRefusal}. ` : 'The name service did not answer. ') : '');
   const refSaid = $derived(refDown === 'limited' ? "The reference's own search was not asked: this site asked this device to wait. " : refDown ? "The reference's own search did not answer. " : '');
   /** The nearest reference name when the typed one resolved to nothing: offered by name, never taken on its own. */
-  const nearest = $derived(resolved === 'no' || resolved === 'unreached' ? (suggestions.find((x) => x.local && !x.far) ?? suggestions.find((x) => x.local)) : undefined);
+  // Never beside a key: a name the reference's own search resolved while the name service failed was offered "Not a
+  // reference name. Did you mean" itself, under its GBIF pill (round sixty-seven; seen in the P10 probe).
+  const nearest = $derived(!taxonKey && (resolved === 'no' || resolved === 'unreached') ? (suggestions.find((x) => x.local && !x.far) ?? suggestions.find((x) => x.local)) : undefined);
   function onBlur(e: FocusEvent) {
     // Focus moving inside the picker (a click on a row) is not a leave.
     if (e.relatedTarget instanceof Node && root?.contains(e.relatedTarget)) return;
@@ -352,7 +388,8 @@
   }
 </script>
 
-<div class="picker" bind:this={root}>
+<div class="picker" class:reserve bind:this={root}>
+  <div class="inputrow">
   <input
     {id}
     type="text"
@@ -371,28 +408,45 @@
     onfocus={() => value && (open = true)}
     onblur={onBlur}
   />
-  {#if taxonKey}<span class="pill ok">GBIF {taxonKey}</span>{:else if keyless}<span class="pill">no key filed</span>{:else if resolved === 'no'}<span class="pill warn">not in the backbone, kept as typed</span>{:else if resolved === 'unreached'}<span class="pill warn">{nameRefusal ? 'name service not asked' : 'name service not reached'}, kept as typed</span>{/if}
-  {#if kind === 'hybrid'}<span class="pill">hybrid{parentage ? '' : ', parentage not stated'}</span>{:else if kind === 'cultivar'}<span class="pill">cultivar</span>{/if}
-  <!-- One line under the field, not three stacked: the service's silence is folded into the line that asks (round sixty; the grower review, 18). -->
-  {#if nearest}<p class="hint" role="status">Not a reference name. Did you mean <button type="button" class="linkish" onclick={() => pick(nearest)}><SpeciesName name={nearest.name} /></button>? Otherwise Add keeps exactly what you typed.</p>
-  {:else if readAsCultivar && armed}<p class="hint" id="{listId}-hint" role="status">No species of that name was found, so it is read as the genus <i>{readAsCultivar}</i> with a cultivar. Press Add to keep it, or change the name.</p>
-  {:else if armed}<p class="hint" id="{listId}-hint" role="status">{namesSaid}{refSaid}Pick a name from the list, or press Add to keep exactly what you typed.</p>
-  {:else if nameServiceDown && refDown}<p class="hint svc" role="status">{namesSaid}{refSaid}A name typed in full is kept as typed and checked later.</p>
-  {:else if nameServiceDown}<p class="hint svc" role="status">{nameRefusal ? `The name service was not asked: ${nameRefusal}. Only` : 'The name service did not answer, so only'} the reference's own species are offered; a name typed in full is kept as typed and checked later.</p>
-  {:else if refDown}<p class="hint svc" role="status">{refDown === 'limited' ? "The reference's own search was not asked: this site asked this device to wait, so" : "The reference's own search did not answer, so"} only the backbone's names are offered.</p>
-  {:else if received}<p class="hint svc" role="status">What you typed, “{received}”, is kept as the name as received.</p>{/if}
   <ul class="menu card" role="listbox" id={listId} aria-label="Suggested names" hidden={!menuOpen}>
     {#each suggestions as s, i (s.key)}
       <!-- "has a species page", not "has a dossier": the glossary's plain words (round fifty-eight; the accessibility review). -->
       <li role="option" id={optionId(i)} aria-selected={i === hi} class:hi={i === hi} tabindex="-1" onmousedown={(e) => e.preventDefault()} onclick={() => pick(s)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(s); } }} onmousemove={() => (hi = i)}><SpeciesName name={s.asCultivar ? `${s.name} '${s.asCultivar}'` : s.name} /> <span class="faint">{s.family ?? ''}{s.rank === 'GENUS' ? ' · genus' : s.rank === 'SUBSPECIES' ? ' · subspecies' : s.rank === 'VARIETY' ? ' · variety' : s.rank === 'FORM' ? ' · form' : ''}{rowNote(s)}</span></li>
     {/each}
   </ul>
+  </div>
+  <!-- The name check's words under the field, in a space kept for them when the form asks (`reserve`): on the add form
+       the pill and the line arrived a second after the field was left and moved "Use my own number" and Add by up to
+       120 px, so a tap begun before the answer landed on nothing (round sixty-seven; triage-66 P10, S-E2, decision D5). -->
+  <div class="status">
+  {#if taxonKey}<span class="pill ok">GBIF {taxonKey}</span>{:else if keyless}<span class="pill">no key filed</span>{:else if resolved === 'no'}<span class="pill warn">not in the backbone{nearest ? '' : ', kept as typed'}</span>{:else if resolved === 'unreached'}<span class="pill warn">{nameRefusal ? 'name service not asked' : 'name service not reached'}{nearest ? '' : ', kept as typed'}</span>{/if}
+  {#if kind === 'hybrid'}<span class="pill">hybrid{parentage ? '' : ', parentage not stated'}</span>{:else if kind === 'cultivar'}<span class="pill">cultivar</span>{/if}
+  <!-- One line under the field, not three stacked: the service's silence is folded into the line that asks (round sixty; the grower review, 18). -->
+  {#if nearest}<p class="hint" role="status">Not a reference name. Did you mean <button type="button" class="linkish" onclick={() => pick(nearest)}><SpeciesName name={nearest.name} /></button>? Otherwise Add keeps exactly what you typed.</p>
+  {:else if readAsCultivar && armed}<p class="hint" id="{listId}-hint" role="status">No species of that name was found, so it is read as the genus <i>{readAsCultivar}</i> with a cultivar. Press Add to keep it, or change the name.</p>
+  {:else if armed}<p class="hint" id="{listId}-hint" role="status">{namesSaid}{refSaid}Pick a name from the list, or press Add to keep exactly what you typed.</p>
+  {:else if nameServiceDown && refDown}<p class="hint svc" role="status">{namesSaid}{refSaid}A name typed in full is kept as typed and checked later.</p>
+  <!-- With a key found, or a pill that already says the name is kept as typed, the line does not say it again: it then fits the room kept for it (round sixty-seven; triage-66 P10). -->
+  {:else if nameServiceDown}<p class="hint svc" role="status">{gbifRefused ? "GBIF refused this site's request for names, so only" : nameRefusal ? `The name service was not asked: ${nameRefusal}. Only` : 'The name service did not answer, so only'} the reference's own species are offered{taxonKey || resolved === 'no' || resolved === 'unreached' ? '' : '; a name typed in full is kept as typed and checked later'}.</p>
+  {:else if refDown}<p class="hint svc" role="status">{refDown === 'limited' ? "The reference's own search was not asked: this site asked this device to wait, so" : "The reference's own search did not answer, so"} only the backbone's names are offered.</p>
+  {:else if received}<p class="hint svc" role="status">What you typed, “{received}”, is kept as the name as received.</p>{/if}
+  </div>
 </div>
 
 <style>
-  .picker { position: relative; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
-  input { flex: 1; min-width: 14rem; padding: 0.5em 0.8em; border: 1px solid var(--rule2); border-radius: var(--r); background: var(--card); }
-  .hint { flex-basis: 100%; margin: 0; font-size: var(--fs-md); color: var(--ink2); }
+  .picker { display: block; }
+  /* The menu hangs from the field itself, not from the words under it. */
+  .inputrow { position: relative; display: flex; }
+  input { flex: 1; min-width: 0; width: 100%; padding: 0.5em 0.8em; border: 1px solid var(--rule2); border-radius: var(--r); background: var(--card); }
+  /* The pills and the line flow as one block under the field. */
+  .status { font-size: var(--fs-md); line-height: 1.4; }
+  .status:has(*) { margin-top: 0.35rem; }
+  .status .pill { margin: 0 0.4em 0.25em 0; vertical-align: baseline; }
+  /* Kept for them on a form whose buttons must not move (\`reserve\`): a pill row and two lines of words, the most the
+     check says on a phone for a name it resolves or does not know; the space is there before the field is left. */
+  .picker.reserve .status { min-height: calc(1.4em * 3 + 0.5em); margin-top: 0.35rem; } /* three lines, one of them with a pill's padding */
+  /* The line runs on after the pills, so a pill and its sentence take the fewest lines. */
+  .hint { display: inline; margin: 0; font-size: var(--fs-md); color: var(--ink2); }
   .hint.svc { color: var(--ink3); }
   .linkish { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-decoration: underline; }
   .menu { position: absolute; top: 100%; left: 0; right: 0; z-index: 5; list-style: none; margin: 0.3rem 0 0; padding: 0.3rem; box-shadow: var(--sh2); max-height: 18rem; overflow: auto; }

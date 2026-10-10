@@ -109,9 +109,10 @@ describe('a name is set back for another genus only as a genus is written (A34, 
 });
 
 describe('review B\'s three live species keep what they show', () => {
-  it('Curio rowleyanus: String-of-Pearls', () => {
+  it('Curio rowleyanus: String-of-pearls', () => {
     const v = [eng('String-Of-Beads Senecio', { source: 'ITIS' }), eng('String-of-Pearls', { source: 'USDA PLANTS' }), eng('String of pearls', { source: 'Wikipedia' }), eng('string of beads', { source: 'Catalogue of Life' })];
-    expect(shown(v, 'Curio rowleyanus')).toBe('String-of-Pearls');
+    // The capital of "Pearls" is read across the hyphens: a source writes it in lower case, and none means it (round sixty-seven; triage-66 N6).
+    expect(shown(v, 'Curio rowleyanus')).toBe('String-of-pearls');
   });
   it('Gonialoe variegata: Partridge Breast Aloe, the Aloe alternatives kept', () => {
     const v = [eng('Partridge Breast Aloe', { source: 'ITIS' }), eng('Tiger Aloe', { source: 'ITIS' }), eng('Kanniedood aloe', { source: 'SANBI' })];

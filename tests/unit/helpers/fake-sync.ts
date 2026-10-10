@@ -45,11 +45,16 @@ export function fakeR2() {
       await tick();
       objs.delete(key);
     },
+    // As R2 lists (round sixty-seven; triage-66 S4, IND-8): at most `limit` keys (1,000 when none is given), in key order,
+    // `truncated` when more follow, and a cursor (here, the last key given) that the next call continues after. It
+    // sliced at the limit and always said `truncated: false`, so a caller that ignored `truncated` passed every test.
     async list(o: { prefix: string; limit?: number; cursor?: string }) {
       lists++;
       await tick();
-      const keys = [...objs.keys()].filter((k) => k.startsWith(o.prefix)).sort().slice(0, o.limit ?? Infinity);
-      return { objects: keys.map((k) => ({ key: k, size: objs.get(k)!.size, uploaded: objs.get(k)!.uploaded })), truncated: false };
+      const all = [...objs.keys()].filter((k) => k.startsWith(o.prefix) && (!o.cursor || k > o.cursor)).sort();
+      const keys = all.slice(0, Math.min(o.limit ?? 1000, 1000));
+      const truncated = all.length > keys.length;
+      return { objects: keys.map((k) => ({ key: k, size: objs.get(k)!.size, uploaded: objs.get(k)!.uploaded })), truncated, ...(truncated ? { cursor: keys[keys.length - 1] } : {}) };
     }
   };
 }

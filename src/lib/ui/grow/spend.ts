@@ -21,8 +21,13 @@ const ONE_WAY: Record<string, string> = { 'USD': '$', 'US$': '$', 'GBP': '£', '
 /** A code in capitals, or one of the common ones in lower case ("12 usd"); "12 per" is no currency. */
 const LOWER = 'usd|gbp|eur|jpy|chf|aud|nzd|cad|brl|inr|zar|sek|nok|dkk|pln|czk|huf|mxn|cny|hkd|sgd';
 const SYM = `US\\$|R\\$|A\\$|NZ\\$|C\\$|[$€£¥₹]|[A-Z]{3}|${LOWER}|Rs\\.?|kr|zł`;
-/** A plain amount: digits with a thousands separator only where exactly three digits follow it ("1,250", "12.000"), then a decimal part of one or two digits written with the other mark ("1.234,56"). */
-const AMOUNT = '\\d{1,3}(?:(?<sep>[,.])\\d{3})(?:\\k<sep>\\d{3})*(?:(?!\\k<sep>)[.,]\\d{1,2})?|\\d{1,6}(?:[.,]\\d{1,2})?';
+/**
+ * A plain amount: digits with a thousands separator only where exactly three digits follow it ("1,250", "12.000", and
+ * a space as French, Swiss and Nordic prices write it, "1 200", a no-break or thin space too: round sixty-seven,
+ * triage-66 R14, the outside review's 25), then a decimal part of one or two digits written with the other mark
+ * ("1.234,56", "1 234,56").
+ */
+const AMOUNT = '\\d{1,3}(?:(?<sep>[,. \\u00a0\\u202f\\u2009])\\d{3})(?:\\k<sep>\\d{3})*(?:(?!\\k<sep>)[.,]\\d{1,2})?|\\d{1,6}(?:[.,]\\d{1,2})?';
 const PLAIN = new RegExp(`^\\s*(${SYM})?\\s*(${AMOUNT})\\s*(${SYM})?\\s*$`, 'u');
 /** "free", "a gift", "gifted": nothing was spent. */
 const FREE = /^\s*(?:free|(?:a\s+)?gift(?:ed)?)\s*$/i;
@@ -37,7 +42,7 @@ export function readPrice(text: string): { v: number; cur: string | null } | nul
   // The mark before the last one or two digits is the decimal point, unless it is the thousands separator already used.
   const sep = m.groups?.sep;
   const decimal = dec && !(sep && raw[raw.length - dec[1].length - 1] === sep) ? dec[1] : null;
-  const whole = (decimal !== null ? raw.slice(0, raw.length - decimal.length - 1) : raw).replace(/[.,]/g, '');
+  const whole = (decimal !== null ? raw.slice(0, raw.length - decimal.length - 1) : raw).replace(/[.,\s]/g, '');
   const code = (m[1] ?? m[4] ?? null)?.replace(/\.$/, '') ?? null;
   const cur = code === null ? null : (ONE_WAY[code.toUpperCase()] ?? (/^[a-z]{3}$/.test(code) ? code.toUpperCase() : code));
   return { v: Number(`${whole}${decimal !== null ? `.${decimal}` : ''}`), cur };

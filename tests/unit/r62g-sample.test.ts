@@ -46,9 +46,12 @@ describe('Leave (A9)', () => {
     fire('pagehide');
     expect([inDemo(), session.m.has('cultifolio.demo.units'), session.m.get('cultifolio.sampleLeft')]).toEqual([false, false, '1']);
     (await vault.openVault()).close();
-    expect(await finishLeaving()).toBe('deleted');
+    expect(await finishLeaving()).toBeNull(); // the example's own page deletes nothing: its collection was read as it loaded (round sixty-seven)
+    vi.resetModules(); // the next page, outside the example
+    const next = await import('$lib/db/demo');
+    expect(await next.finishLeaving()).toBe('deleted');
     expect(await names()).not.toContain('cultifolio-demo');
-    expect(await finishLeaving()).toBeNull(); // once
+    expect(await next.finishLeaving()).toBeNull(); // once
   });
   it('a delete held up by an open connection is said as held up, never as done', async () => {
     session.m.set('cultifolio.demo', '1');
@@ -59,6 +62,7 @@ describe('Leave (A9)', () => {
     const open = await new Promise<IDBDatabase>((res) => { const r = indexedDB.open('cultifolio-demo'); r.onsuccess = () => res(r.result); }); // another tab still holds it, and does not let go
     session.m.delete('cultifolio.demo');
     session.m.set('cultifolio.sampleLeft', '1');
+    vi.resetModules(); // the next page, outside the example
     const { finishLeaving } = await import('$lib/db/demo');
     expect(await finishLeaving(50)).toBe('blocked'); // base: onblocked resolved as if deleted
     open.close();
@@ -67,15 +71,19 @@ describe('Leave (A9)', () => {
     session.m.set('cultifolio.demo', '1');
     vi.resetModules();
     const vault = await import('$lib/db/vault');
-    const { sampleEdits, SEED_TOP } = await import('$lib/db/demo');
+    const { sampleEdits, SEED_MARK } = await import('$lib/db/demo');
     const put = async (t: string, kind: string, id: string, field: string, value: unknown) => vault.appendChanges([{ t, kind, id, field, value } as never]);
     await put('1790000000000-0000-aaaaaaaaaaaa0000', 'accession', 'r1sampleseeds0', 'taxonName', 'Aloe vera');
-    await vault.setMeta(SEED_TOP, '1790000000000-0000-aaaaaaaaaaaa0000');
+    await vault.setMeta(SEED_MARK, await vault.lastArrival()); // the seed's own last arrival number (round sixty-seven; triage-66 V5)
     expect(await sampleEdits()).toBe(0);
     await put('1790000000001-0000-aaaaaaaaaaaa0000', 'accession', 'r1sampleseeds0', 'price', '£4');
     await put('1790000000002-0000-aaaaaaaaaaaa0000', 'accession', 'r9', 'taxonName', 'Lithops lesliei');
     await put('1790000000003-0000-aaaaaaaaaaaa0000', 'accession', 'r9', 'status', 'growing');
     expect(await sampleEdits()).toBe(2);
+    // An edit that arrived after the seed counts whatever its stamp: one stamped before the seed's last (a tab whose
+    // clock is behind, IND-6's edit made while the seed landed) was folded into a boundary read from the stamps.
+    await put('1789999999999-0000-bbbbbbbbbbbb0000', 'location', 'l9', 'name', 'Shelf');
+    expect(await sampleEdits()).toBe(3);
   });
   it('a Leave pressed before the seed\'s stamp is written counts none of the seed\'s timeline lines (round sixty-six; r64f 5)', async () => {
     session.m.set('cultifolio.demo', '1');
@@ -93,6 +101,10 @@ describe('Leave (A9)', () => {
     await put('1790000000000-0004-aaaaaaaaaaaa0000', 'event', 'e1', 't', 'water');
     await put('1790000000000-0005-aaaaaaaaaaaa0000', 'event', 'e2', 'acc', 's1sampleseeds0');
     await put('1790000000000-0006-aaaaaaaaaaaa0000', 'event', 'e2', 't', 'germinate');
+    // The seed's last line, as it always ends: the pot-up of its seed batch, whose plants carry the seed's tag (round sixty-seven).
+    await put('1790000000000-0007-aaaaaaaaaaaa0000', 'event', 'e3', 'acc', 's1sampleseeds0');
+    await put('1790000000000-0008-aaaaaaaaaaaa0000', 'event', 'e3', 't', 'potup');
+    await put('1790000000000-0009-aaaaaaaaaaaa0000', 'event', 'e3', 'plants', ['r2sampleseeds0', 'r3sampleseeds0']);
     expect(await sampleEdits()).toBe(0); // base: 2, and "Leave the example? The 2 records you added…" to a visitor who added none
     // The visitor's own plant and its first line are still theirs.
     await put('1790000000001-0000-aaaaaaaaaaaa0000', 'accession', 'r9', 'taxonName', 'Lithops lesliei');
@@ -103,9 +115,13 @@ describe('Leave (A9)', () => {
     session.m.set('cultifolio.demo', '1');
     session.m.set('cultifolio.demo.labels', '{}');
     vi.resetModules();
-    const { sampleClosedHere, CLOSED_NOTE } = await import('$lib/db/demo');
+    const { sampleClosedHere, CLOSED_NOTE, exampleClosed } = await import('$lib/db/demo');
     sampleClosedHere();
-    expect([session.m.has('cultifolio.demo'), session.m.has('cultifolio.demo.labels'), session.m.get(CLOSED_NOTE), loc.href]).toEqual([false, false, '1', '/']);
+    // The page goes into the closed state at once; the flag and the tab's copies go only when the page really goes, so a
+    // "Leave site?" answered Cancel leaves the page the example's, closed, and nothing of it the grower's (round sixty-seven; IND-1).
+    expect([exampleClosed(), session.m.has('cultifolio.demo'), session.m.has('cultifolio.demo.labels'), session.m.get(CLOSED_NOTE), loc.href]).toEqual([true, true, true, '1', '/?left=sample']);
+    fire('pagehide');
+    expect([session.m.has('cultifolio.demo'), session.m.has('cultifolio.demo.labels')]).toEqual([false, false]);
   });
 });
 
@@ -127,8 +143,10 @@ describe('the compare tray chosen in the sample stays in the sample (A9; the gro
     writeSetting('cultifolio.labelsPicked', 'tab', '["r1"]');
     expect([session.m.get('cultifolio.labelsPicked'), local.m.has('cultifolio.labelsPicked')]).toEqual(['["r1"]', false]);
     session.m.set('cultifolio.demo', '1');
-    expect(readSetting('cultifolio.labelsPicked', 'tab')).toBeNull();
-    writeSetting('cultifolio.labelsPicked', 'tab', '["s1"]');
+    vi.resetModules(); // a page loaded in the example
+    const inSample = await import('$lib/ui/stored');
+    expect(inSample.readSetting('cultifolio.labelsPicked', 'tab')).toBeNull();
+    inSample.writeSetting('cultifolio.labelsPicked', 'tab', '["s1"]');
     expect(session.m.get('cultifolio.demo.labelsPicked')).toBe('["s1"]');
   });
 });

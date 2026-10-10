@@ -62,6 +62,8 @@
   const cardTitles = $derived(CARD_ORDER.filter((t) => cols.some((c) => c.cards.find((x) => x.title === t)?.rows.length)));
   /** Why a column has no climate, as its source did: a refusal said as one (round sixty-two, second pass; the grower review's 2). */
   const climateWhy = (d: D) => detailSentence(climateDetail(d.climate.status === 'refused' ? d.climate.detail : undefined, d.upstream), 'A source did not answer when this page was built').replace('when this page was built', 'when the species page was built');
+  /** A sentence ended once: the climate's words may end their own (round sixty-seven; triage-66 P5, S-F11). */
+  const ended = (t: string) => (/[.!?]$/.test(t) ? t : `${t}.`);
   const climateWord = (d: D) => (d.climate.status === 'ok' ? '' : d.climate.status === 'pending' ? 'Climate pending' : d.climate.status === 'refused' ? `Climate not checked. ${climateWhy(d)}` : 'No habitat climate derived');
   $effect(() => {
     setCrumb([{ label: 'Species', href: '/' }, { label: 'Compare' }]);
@@ -224,7 +226,8 @@
           {#if c.ok && c.d.climate.status === 'ok'}
             <a class="small" href="/species/{c.d.slug}#s-climate">Chart on its page ›</a>
           {:else}
-            <div class="none small muted">{climateWord(c.d)}.</div>
+            <!-- The words end their own sentence: a full stop added here made "built.." (round sixty-seven; triage-66 P5, S-F11). -->
+            <div class="none small muted">{ended(climateWord(c.d))}</div>
           {/if}
         </div>
       {/each}

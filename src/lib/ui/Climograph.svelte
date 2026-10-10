@@ -23,7 +23,7 @@
     // (round sixty-one; visitor 5; round sixty-two, outside review A35: at no decimals it named months the card did not).
     const fmt = (v: number) => temp(v, units.current), fmt1 = (v: number) => temp(v, units.current, 1);
     const hots = tiedMonths(m.map((x) => x.tmax), true, fmt), colds = tiedMonths(m.map((x) => x.tmin), false, fmt1);
-    return `Warmest month${hots.length > 1 ? 's' : ''} ${monthNames(hots)}, mean daily high ${fmt(m[hot].tmax)}; coldest month${colds.length > 1 ? 's' : ''} ${monthNames(colds)}, mean nightly low ${fmt1(m[cold].tmin)}; ${rain(year, units.current)} of rain a year (the twelve monthly medians added). Medians across the range, from CHELSA${climate.extremes ? `; the extremes at the edge from NASA POWER` : ''}. ${calendar}.`;
+    return `Warmest month${hots.length > 1 ? 's' : ''} ${monthNames(hots)}, mean daily high ${fmt(m[hot].tmax)}; coldest month${colds.length > 1 ? 's' : ''} ${monthNames(colds)}, mean nightly low ${fmt1(m[cold].tmin)}; ${rain(year, units.current)} of rain in the median year (the twelve monthly medians added). Medians across the range, from CHELSA${climate.extremes ? `; the extremes at the edge from NASA POWER` : ''}. ${calendar}.`;
   });
   // Drawn at the width it is shown at, so labels keep their size on a phone instead of shrinking with the viewBox.
   let shown = $state(0);

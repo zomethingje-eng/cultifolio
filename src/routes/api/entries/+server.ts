@@ -1,8 +1,12 @@
 import { json, error } from '@sveltejs/kit';
+import { forBuild } from '$lib/server/build';
 import { corpusNow, entriesIn } from '$lib/server/dossiers';
 import { limited } from '$lib/server/sync';
 import { isBucket, bucketWidth } from '$core/bucket';
 import type { RequestHandler } from './$types';
+
+/** How long a device waits after the reference store failed for a bucket (round sixty-seven; S8). */
+const UNREAD_S = 30;
 
 /**
  * GET /api/entries?b=03,1a — the index entries whose slug hashes into those buckets (see $core/bucket), for the pages
@@ -13,8 +17,9 @@ import type { RequestHandler } from './$types';
  * cacheable and kept by the service worker, so it also works in the greenhouse.
  */
 export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddress }) => {
-  // Every request reaches here: a Worker's own answer is not kept by the edge (round sixty corrects the comment that said
-  // it was; the server review, 15). Each is counted; the browser and the service worker keep the answer under the corpus id.
+  // A request the adapter's cache does not answer reaches here and is counted. A repeated URL does not: the adapter keeps
+  // a public answer under its full URL for its lifetime (a day here) before this code runs, which is why the client names
+  // its build in the URL (round sixty-seven; triage-66 S7, S-D5; this said every request reached here).
   const stop = await limited(platform, getClientAddress, 'reference');
   if (stop) return stop;
   const buckets = (url.searchParams.get('b') ?? '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
@@ -36,6 +41,13 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   const asked = (url.searchParams.get('c') ?? '').replace(/[^A-Za-z0-9._-]/g, '').slice(0, 40);
   const current = asked === corpus;
   const out: unknown[] = [];
-  for (const b of [...new Set(buckets)]) out.push(...(await entriesIn(c, platform, fetch, b)));
-  return json(out, { headers: { 'cache-control': current ? 'public, max-age=86400' : 'no-store' } });
+  try {
+    for (const b of [...new Set(buckets)]) out.push(...(await entriesIn(c, platform, fetch, b)));
+  } catch (e) {
+    // The reference store failed: a 503 with its reason and Retry-After (round sixty-seven; triage-66 S8), where it was a
+    // bare 500, so the client can tell a refusal from an absence and wait it out.
+    console.error('entries: a bucket could not be read', e);
+    return json({ error: 'The species entries could not be read just now.', retryAfter: UNREAD_S }, { status: 503, headers: { 'retry-after': String(UNREAD_S), 'cache-control': 'no-store' } });
+  }
+  return json(out, { headers: { 'cache-control': current ? forBuild(url, 'public, max-age=86400') : 'no-store' } }); // and the build (round sixty-seven; S7)
 };

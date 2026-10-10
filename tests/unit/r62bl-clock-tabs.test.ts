@@ -91,18 +91,28 @@ describe('one disagreeing large reading (an intercepting proxy\'s Date)', () => 
     vi.advanceTimersByTime(70_000);
     A.h.trustServerTime(T0 + 70_000, Date.now());
     expect(Math.round(A.h.clockOffsetMs() / DAY)).toBe(3);
+    const stored = () => Math.round((JSON.parse(store.get(OFFSET_KEY) ?? '{}').offset ?? 0) / DAY);
+    // Round sixty-seven (triage-66 R2): a positive correction past two days is not in force while unconfirmed, so a tab
+    // opened now (unconfirmed until its own reading) stamps by the raw clock, behind, which parks nothing. It is kept.
     const B = await openTab('B');
-    expect(Math.round(B.h.clockOffsetMs() / DAY)).toBe(3);
+    expect(B.h.clockOffsetMs()).toBe(0);
+    expect(stored()).toBe(3);
     queue = [];
     vi.advanceTimersByTime(MIN);
     as(A, () => A.h.trustServerTime(T0 + 130_000 + 10 * DAY, Date.now())); // one wrong reading, ten days out: waits for a second
     await deliver([A, B]);
-    const inA = A.h.clockOffsetMs();
-    expect(Math.round(inA / DAY)).toBe(3); // this tab keeps the three days, as the comment says
-    expect(Math.round(B.h.clockOffsetMs() / DAY)).toBe(3); // actual: 0, the other tab is now three days slow
+    // Every tab and a reload stamp alike (the raw clock, while unconfirmed), and the correction stays stored.
+    expect(A.h.clockOffsetMs()).toBe(B.h.clockOffsetMs());
     const C = await openTab('C'); // a reload
-    expect(Math.round(C.h.clockOffsetMs() / DAY)).toBe(3); // actual: 0
-    expect(store.has(OFFSET_KEY)).toBe(true); // actual: removed
+    expect(C.h.clockOffsetMs()).toBe(A.h.clockOffsetMs());
+    expect(stored()).toBe(3); // round sixty-two: was removed
+    // The next run's reading confirms the three days: in force again.
+    vi.advanceTimersByTime(2 * MIN);
+    as(A, () => A.h.trustServerTime(Date.now() + 3 * DAY, Date.now()));
+    expect(Math.round(A.h.clockOffsetMs() / DAY)).toBe(3);
+    await deliver([A, B, C]);
+    expect(Math.round(B.h.clockOffsetMs() / DAY)).toBe(3);
+    expect(Math.round(C.h.clockOffsetMs() / DAY)).toBe(3);
   });
 });
 

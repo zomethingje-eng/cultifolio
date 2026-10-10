@@ -14,10 +14,10 @@
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import { syncWords } from '$lib/ui/sync-words';
   import { heldWords } from '$lib/ui/held-words';
-  import { inDemo } from '$lib/db/demo';
+  import { PAGE_IN_DEMO } from '$lib/db/demo';
 
   /** The sample collection: no sync controls are drawn at all (round sixty-one; decision 10, a guard in the page as in the engine), and the heading stays (the accessibility review's 10). */
-  const demo = inDemo();
+  const demo = PAGE_IN_DEMO; // the page's collection (round sixty-seven; triage-66 V3)
 
   let mode = $state<'idle' | 'create' | 'join'>('idle');
   let freshKey = $state('');

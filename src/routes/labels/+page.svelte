@@ -26,7 +26,8 @@
   const ofPlant = (a: Accession): Item => ({ id: a.id, batch: false, no: accNo(a), taxonName: a.taxonName, cultivar: a.cultivar ?? null, fieldNumber: a.fieldNumber ?? null, parentage: a.parentage ?? null, taxonKey: a.taxonKey ?? null, locationId: a.locationId ?? null, sourceFrom: a.sourceFrom ?? null, when: a.acquired ?? null, count: null, method: null, rec: a });
   const ofBatch = (s: Sowing): Item => ({ id: s.id, batch: true, no: sowNo(s), taxonName: s.taxonName, cultivar: s.cultivar ?? null, fieldNumber: s.fieldNumber ?? null, parentage: s.parentage ?? null, taxonKey: s.taxonKey ?? null, locationId: s.locationId ?? null, sourceFrom: s.sourceFrom ?? null, when: s.sown ?? null, count: s.count ?? null, method: s.method ?? null, rec: s });
   import { setCrumb } from '$lib/ui/crumb.svelte';
-  import { sheetForName, sheetsFor, type Sheet as SpeciesSheet } from '$lib/ui/index.svelte';
+  import { sheetForNameOr, sheetsFor, isUnreached, waitLeft, type Sheet as SpeciesSheet, type Unreached } from '$lib/ui/index.svelte';
+  import { unreachedClause, againWords } from '$lib/ui/reach-words';
   import { slugify, speciesSlug, speciesOf, parseName } from '$core/names';
   import { numberOrNull } from '$core/units';
   import { careLine } from '$core/note';
@@ -122,7 +123,10 @@
       writeSetting(PICKED_KEY, 'tab', null);
       // Only when this very page was reloaded: the document's own navigation is a reload, of this address.
       const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
-      const reloaded = nav?.type === 'reload' && new URL(nav.name).pathname === page.url.pathname && new URL(nav.name).search === page.url.search;
+      // A reload, or a return through history: Safari may restore a tab it discarded, after the app itself was ended, as
+      // `back_forward` rather than `reload` (round sixty-seven; triage-66 P9, S-E8). The key is this tab's and is cleared
+      // on any move inside the app, so a back_forward that finds it is this page coming back.
+      const reloaded = (nav?.type === 'reload' || nav?.type === 'back_forward') && new URL(nav.name).pathname === page.url.pathname && new URL(nav.name).search === page.url.search;
       return reloaded && v && v.at === page.url.search && Array.isArray(v.ids) ? v.ids.filter((x): x is string => typeof x === 'string') : null;
     } catch { return null; }
   })();
@@ -166,9 +170,23 @@
 
   /** A plant's species sheet, by hash bucket: the labels page never names or keys the species it prints. Five Astrophytum labels are one lookup in one cached bucket. */
   async function dossierFor(a: Item): Promise<SpeciesSheet | null | 'unreachable'> {
-    const d = await sheetForName(a.taxonName, a.taxonKey); // read, never written back: printing a label is not an edit (round fifty-eight)
-    return d === null ? 'unreachable' : d === 'none' ? null : d;
+    const d = await sheetForNameOr(a.taxonName, a.taxonKey); // read, never written back: printing a label is not an edit (round fifty-eight)
+    if (isUnreached(d)) { careWhy = d; nowMs = Date.now(); return 'unreachable'; }
+    return d === 'none' ? null : d;
   }
+  /** Why the last care line could not be made, so a refusal is said as one (round sixty-seven; triage-66 S8). */
+  let careWhy = $state<Unreached | null>(null);
+  /** The clock for "Try again" while a Retry-After runs. */
+  let nowMs = $state(Date.now());
+  const careWait = $derived(waitLeft(careWhy, nowMs));
+  $effect(() => {
+    if (!careWhy?.retryAfter) return;
+    const t = setInterval(() => { nowMs = Date.now(); if (!waitLeft(careWhy, nowMs)) clearInterval(t); }, 1000);
+    return () => clearInterval(t);
+  });
+  const careClause = $derived(careWhy ? unreachedClause(careWhy, 'the species sheets', nowMs) : 'the species sheets did not answer');
+  /** The preview cell's few words for a line not made. */
+  const careCell = $derived(careWhy?.kind === 'refused' ? 'the server refused the sheets' : careWhy?.kind === 'limited' ? 'the server refused the sheets for now' : 'the reference was not reached');
   /** Care lines that could not be made because the reference was not reached: said on the sheet and on the page, never printed as if the species had no data (round thirteen, 6). */
   const unchecked = $derived(picked.filter((a) => care[a.id] === null));
   /** Plants whose species' climate was refused when the reference was built: printed as "climate not checked", counted on the page (round fifteen, 5). */
@@ -185,6 +203,8 @@
   const asking = new SvelteSet<string>();
   const pending = $derived(withCare && picked.some((a) => asking.has(a.id)));
   function retryCare() {
+    if (waitLeft(careWhy)) return; // asked sooner, it was refused again at once (R45-11)
+    careWhy = null;
     const again: Record<string, string | null> = { ...care };
     for (const a of unchecked) delete again[a.id];
     care = again;
@@ -283,7 +303,7 @@
         <p class="small muted" role="status" id="lb-convention">{conventionCount === 1 ? 'One care line gives' : `${conventionCount} care lines give`} a group's minimum, marked "convention, no source": the lowest temperature growers conventionally keep that group at indoors, not a figure read from the species' habitat, which has none on file. <a href="/about/how#glossary">Convention</a> is in the glossary.</p>
       {/if}
       {#if withCare && unchecked.length}
-        <div class="notice" id="lb-unchecked" role="status">{unchecked.length === 1 ? 'One care line' : `${unchecked.length} care lines`} <NotChecked inline why="The species reference could not be reached from here." />: the preview marks {unchecked.length === 1 ? 'it' : 'them'}; the printed labels leave {unchecked.length === 1 ? 'it' : 'them'} blank. <button type="button" class="linkish" onclick={retryCare}>Try again</button> before printing.</div>
+        <div class="notice" id="lb-unchecked" role="status">{unchecked.length === 1 ? 'One care line' : `${unchecked.length} care lines`} <NotChecked inline why={`${careClause[0].toUpperCase()}${careClause.slice(1)}.`} />: the preview marks {unchecked.length === 1 ? 'it' : 'them'}; the printed labels leave {unchecked.length === 1 ? 'it' : 'them'} blank. <button type="button" class="linkish" onclick={retryCare} aria-disabled={careWait > 0}>{againWords(careWhy, nowMs).replace('Check again', 'Try again')}</button> before printing.</div>
       {/if}
     </div>
   </div>
@@ -344,7 +364,7 @@
               <div class="no">{a.no}{#if a.fieldNumber}{' '}<span class="fn">{a.fieldNumber}</span>{/if}</div>
               <div class="sci"><SpeciesName name={a.taxonName} />{#if a.cultivar}{' '}<span class="cv">‘{a.cultivar}’</span>{/if}{#if kindOf(a.rec) === 'hybrid' && a.parentage}{' '}<span class="cv">({a.parentage})</span>{/if}</div>
               {#if a.batch && batchLine(a)}<div class="src">{batchLine(a)}</div>{/if}
-              {#if withCare && care[a.id]}<div class="care" class:unchecked={care[a.id] === 'climate not checked' || care[a.id] === 'climate pending'}>{care[a.id]}</div>{:else if withCare && care[a.id] === null}<div class="care unchecked">care line not checked: the reference was not reached</div>{/if}
+              {#if withCare && care[a.id]}<div class="care" class:unchecked={care[a.id] === 'climate not checked' || care[a.id] === 'climate pending'}>{care[a.id]}</div>{:else if withCare && care[a.id] === null}<div class="care unchecked">care line not checked: {careCell}</div>{/if}
               {#if withSource && sourceLine(a)}<div class="src">{sourceLine(a)}</div>{/if}
             </div>
           {/if}

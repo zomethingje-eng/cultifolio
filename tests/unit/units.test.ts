@@ -51,7 +51,7 @@ describe('the sheet in the reader\'s units', () => {
     const us = cultivationSheet({ ...input, units: 'us' });
     const all = us.rows.flatMap((r) => [r.s, r.short ?? '', r.why]).join(' ');
     expect(all).toContain('43.7 °F');
-    expect(all).toMatch(/2\.6 in a year/); // 3×9 + 13×3 = 66 mm
+    expect(all).toMatch(/2\.6 in in the median year/); // 3×9 + 13×3 = 66 mm; the median year's, said so (round sixty-seven; triage-66 N11)
     expect(all).toContain('4.7 in (120 mm)'); // the rule's threshold, checkable
     expect(all.replace(/\(\d+ mm\)|\(0\.5 °C\)|\(\d °C\)/g, '')).not.toMatch(/\d °C|\d mm\b/); // a rule's threshold carries its metric figure in brackets (round sixty: the shift rule's 4 °C)
     const note = generatedNote({ ...input, units: 'us' });

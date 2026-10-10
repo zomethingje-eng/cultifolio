@@ -8,7 +8,11 @@
  *
  * Left out of the fingerprint: `built` and `builtBy` (when, by what), `changed` itself, and each source row's `at` and
  * `detail` (when it was asked, and the build's own note, "carried from build of …"): the row's status stays in, since a
- * source that answered where it had refused is a change the page shows.
+ * source that answered where it had refused is a change the page shows. A row carried from a build before counts as the
+ * status it carries, which is the status the page shows: left out, every switch between an online build and an offline
+ * one (a row asked, then carried) would move the day of every page. The flip that moved days twice was an offline
+ * re-derivation writing "refused" for a source it never asked; it writes "skipped" and carries the row now (round
+ * sixty-seven; triage-66 N10, N4).
  */
 import { md5 } from './md5';
 

@@ -55,6 +55,10 @@ describe('a refusal is said as one on the species page (the grower review\'s 2, 
   it('Wikipedia and OpenAlex skipped by a build are "not asked", not "did not answer"', () => {
     expect(species).not.toContain('Wikipedia did not answer when this page was built');
     expect(species).not.toContain('OpenAlex did not answer when this page was built');
+    // And what is said instead, whole (round sixty-seven; triage-66 P4, R45-13: an absence alone passed with the line gone).
+    expect(species).toContain("<b>{d.upstream['wikipedia']?.status === 'skipped' ? 'Not asked.' : 'Not checked.'}</b> Wikipedia {notAnswered(d.upstream['wikipedia']?.status)} when this page was built. Not a statement that it has no article.");
+    expect(species).toContain("<b>{d.upstream['openalex']?.status === 'skipped' ? 'Not asked.' : 'Not checked.'}</b> OpenAlex {notAnswered(d.upstream['openalex']?.status)} when this page was built. Not a statement that no paper names this species.");
+    expect([notAnswered('skipped'), notAnswered('refused'), notAnswered('error')]).toEqual(['was not asked', 'refused the request', 'did not answer']);
   });
 });
 
@@ -191,7 +195,8 @@ describe('the front page and the species page say what is so (the words review\'
 
 describe('/about/how (the words review\'s 16 to 20, 23, 25, 27; the outside triage\'s smaller notes)', () => {
   it('the common-names rule in order, and true of old dossiers', () => {
-    expect(how).toContain('Names are put in order by a fixed rule: a name GBIF marks preferred first');
+    // The order of names changed in round sixty-seven (triage-66 N3; N's need): sources first, preferred breaks a tie.
+    expect(how).toContain('Names are put in order by a fixed rule: the name more of GBIF\'s sources give first, then a name GBIF marks preferred (a flag one dataset sets, so it only breaks a tie)');
     expect(how).not.toContain('Last, after every other name, go');
     expect(how).toContain('each source a listed spelling names counts once, and a spelling that names none counts as one');
   });
@@ -211,7 +216,8 @@ describe('/about/how (the words review\'s 16 to 20, 23, 25, 27; the outside tria
     expect(how).toContain('Held: a change dated more than five minutes ahead');
   });
   it('the labels page\'s picked plants, the sample with no Web Locks, the brief, no rounds', () => {
-    expect(how).toContain('written when the page is left and read back only when that page is reloaded');
+    // Written when hidden too since round sixty-six, and read back on a return through history since round sixty-seven (triage-66 P4, P9; R45-13).
+    expect(how).toContain('written when the page is hidden or left, forgotten when you move to another page of the app, and read back only when that page is reloaded or brought back through the browser\'s history');
     expect(how).toContain('a browser without Web Locks cannot tell an open sample from a left one');
     expect(how).toContain('GBIF, Kew\'s WCVP, CHELSA, ETOPO, NASA POWER');
     expect(how).not.toContain('sent nowhere unless you turn on sync, and then encrypted with a key only you hold');
@@ -260,7 +266,7 @@ describe("the Climograph's description judges the coldest night's ties at one de
     const { default: Climograph } = await import('$lib/ui/Climograph.svelte');
     const months = Array.from({ length: 12 }, (_, i) => ({ tmax: 22, tmin: 9 + (i % 3), precipMm: 1 }));
     const body = render(Climograph, { props: { climate: { months, p10: months, p90: months, cells: 1 } as never } }).body;
-    expect(/<desc[^>]*>([^<]*)<\/desc>/.exec(body)![1]).toContain('of rain a year (the twelve monthly medians added). Medians across the range');
+    expect(/<desc[^>]*>([^<]*)<\/desc>/.exec(body)![1]).toContain('of rain in the median year (the twelve monthly medians added). Medians across the range'); // round sixty-seven (N11)
   });
 });
 

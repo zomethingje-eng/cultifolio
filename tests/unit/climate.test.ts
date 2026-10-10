@@ -110,7 +110,7 @@ describe('climate provider', () => {
     expect(c.status).toBe('ok');
     if (c.status !== 'ok') return;
     expect(c.extremes).toBeUndefined();
-    expect(c.src.extremes).toContain('did not answer');
+    expect(c.src.extremes).toContain('refused the request'); // NASA POWER's words follow its status (round sixty-seven; triage-66 S8)
     expect(c.extremesStatus).toBe('refused'); // a refusal, kept apart from an absence: the build asks again, the page says "not checked" (round sixteen, 7)
     const withPower = await makeClimateProvider({ grid: memoryGridSource(h, cells), fetcher: fixtureFetcher(powerFixture(powerCell(lat, lon).lat, powerCell(lat, lon).lon, 120)) }).at(lat, lon);
     expect(withPower.status === 'ok' && withPower.extremesStatus).toBe('ok');

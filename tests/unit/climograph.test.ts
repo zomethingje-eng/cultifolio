@@ -121,7 +121,7 @@ describe('the climograph in Fahrenheit and inches', () => {
     expect(c.rain.ticks.map((t) => t.label)).toEqual(['0', '0.5']); // a 6 mm peak is a quarter inch: one half-inch step
     expect(c.alt).toContain('°F');
     expect(c.alt).not.toContain('°C');
-    expect(c.alt).toMatch(/\d in of rain a year/);
+    expect(c.alt).toMatch(/\d in of rain in the median year/); // the median year's total, named as that (round sixty-seven; triage-66 N11)
     expect(c.temp.minAbs!.label).toMatch(/^38\.1° lowest night/); // 3.4 °C
     expect(c.units).toBe('us');
   });

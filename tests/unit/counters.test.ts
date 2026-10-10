@@ -96,7 +96,7 @@ describe('Counters', () => {
     // 21 creations from 21 different /64s of one /48, each under its own address allowance.
     for (let i = 0; i < 21; i++) rs.push(await c.create(`2001:db8:1:${i.toString(16)}::/64`, '2026-09-25', 5, 200, 2000, 0, T0, '2001:db8:1::/48'));
     expect(rs.filter((r) => r === 'ok')).toHaveLength(20);
-    expect(rs[20]).toBe('address');
+    expect(rs[20]).toBe('network'); // said as the network's since round sixty-seven (triage-66 S9): this /64 made none
     await c.refund('2001:db8:1:14::/64', '2026-09-25', '2001:db8:1::/48');
     expect(await c.create('2001:db8:1:15::/64', '2026-09-25', 5, 200, 2000, 0, T0, '2001:db8:1::/48')).toBe('ok');
     expect(await c.create('2001:db8:2:0::/64', '2026-09-25', 5, 200, 2000, 0, T0, '2001:db8:2::/48')).toBe('ok'); // another /48 is not affected

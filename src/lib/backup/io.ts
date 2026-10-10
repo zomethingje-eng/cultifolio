@@ -1,5 +1,5 @@
 /** Browser wiring for backups: the vault in, a download out, and a file back in. */
-import { inDemo } from '$lib/db/demo';
+import { PAGE_IN_DEMO } from '$lib/db/demo';
 import { collection } from '$lib/db/collection.svelte';
 import { getPhotoBlobs, putPhotoBlobs, deletePhotoBlobs, photoBlobIds, getMeta, openStaging } from '$lib/db/vault';
 import { accNo, sowNo } from '$lib/db/types';
@@ -24,12 +24,16 @@ export interface PreparedBackup {
  */
 const APP = 'cultifolio 3 (stored parks)';
 /**
- * The parks a file's restore stores: its list, unless an older build wrote it (a version-1 manifest naming no app, or
- * the old name). Then the list may hold parks of that device's clock alone, which restored here would be kept for good,
- * so it is not read, and its changes are judged here as any change arriving now is (round sixty-two, second pass).
+ * The parks a file's restore stores: its list, whichever build wrote it (round sixty-seven; triage-66 R6, the
+ * self-review's C2). An older build's list (a version-1 manifest naming no app, or "cultifolio 3") may hold parks of that
+ * device's clock alone, and round sixty-two read none of it: then a change every device had parked by its batch's
+ * arrival, a phone three days fast a month ago, was in the past by the time the file was restored, nothing parked it
+ * again, and its fast stamp folded over the grower's later edits. That build judged by its clock alone only changes that
+ * had reached it by sync, after their arrival, so its clock's verdict agreed with the arrival's; and a wrong park is
+ * offered with Apply, which a wrong fold is not.
  */
 export function fileParks(m: { v: number; app?: string; parked?: string[] }): string[] {
-  return m.v === 1 && (m.app === undefined || m.app === 'cultifolio 3') ? [] : (m.parked ?? []);
+  return m.parked ?? [];
 }
 
 /** Build the backup file without downloading it, so the page can say what is not in it first. */
@@ -122,7 +126,7 @@ export interface RestoreReport {
 export async function restoreBackup(o: Opened, mode: 'merge' | 'replace', onProgress?: (done: number, total: number) => void): Promise<RestoreReport> {
   // Refused in code, not only hidden by the page (round sixty-one; review B): restored into the sample, a backup would be
   // deleted with it on leaving, and a replace would stage it beside the grower's own.
-  if (inDemo()) throw new Error(SAMPLE_REFUSAL);
+  if (PAGE_IN_DEMO) throw new Error(SAMPLE_REFUSAL); // the page's collection (round sixty-seven; triage-66 V3)
   if (mode === 'replace') return replaceFromBackup(o, onProgress);
   const changes = o.merge.fresh;
   const have = new Set(await photoBlobIds());
@@ -158,6 +162,9 @@ export async function restoreBackup(o: Opened, mode: 'merge' | 'replace', onProg
   // not merely waiting: a photograph a set-aside batch has yet to complete keeps its pixels for the day it does
   // (round thirty-five, R1-3).
   for (const id of written) if (collection.photoRemoved(id)) { await deletePhotoBlobs(id).catch(() => {}); photos--; }
+  // The fold with the file in it, as the snapshot, off the page's path (round sixty-seven; triage-66 R13). A replace
+  // drops the snapshot with the log, and the load after its reload folds the whole log and writes one.
+  if (changes.length) void collection.saveSnapshot().catch(() => false);
   return { changes: changes.length, photos, photosMissing: o.missingPixels.length, settingsRestored: applyDeviceSettings(o.file.settings) };
 }
 

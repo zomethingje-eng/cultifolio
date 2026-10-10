@@ -11,6 +11,7 @@
   import { DRY_HORIZON_DAYS, wholeDays } from '$lib/export/ics';
   import { accNo } from '$lib/db/types';
   import { tag36 } from '$core/tag';
+  import { PAGE_IN_DEMO } from '$lib/db/demo';
   let msg = $state('');
   const growing = $derived(collection.ready ? collection.accessions.filter((a) => a.status === 'growing') : []);
   /**
@@ -45,7 +46,9 @@
   }
 </script>
 
-{#if growing.length}
+<!-- Not in the example (round sixty-seven; triage-66 V7; R45-3): its file was fourteen real-looking repeating reminders,
+     to 2028, of plants that are not the visitor's, whose only trace of "example" was in the UIDs. -->
+{#if growing.length && !PAGE_IN_DEMO}
   <details class="cal" id="calendar">
     <summary>Watering in your phone's calendar</summary>
     <p>A calendar file with one all-day event per place, and one per plant with a rhythm of its own, repeating at its rhythm from its next due day, each with a reminder at 9 in the morning (some calendars use their own instead). Months a place is kept dry are left out: its repeats stop before them and start again on the first day after, the day Today lists its plants again, for the next {Math.round(DRY_HORIZON_DAYS / 365)} years; download it again after that, or when a rhythm changes. It is made here; the calendar you add it to keeps the place names and rhythms.</p>

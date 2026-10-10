@@ -4,6 +4,7 @@
   import { collection } from '$lib/db/collection.svelte';
   import { getMeta, setMeta, photoBlobIds, storageErrorText } from '$lib/db/vault';
   import { prepareBackup, downloadBackup, openBackup, restoreBackup, type Opened, type PreparedBackup } from '$lib/backup/io';
+  import { ReplaceBegunError } from '$lib/backup/replace';
   import { sync } from '$lib/sync/engine.svelte';
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import { heldWords } from '$lib/ui/held-words';
@@ -105,6 +106,15 @@
       opened = null;
       photoCount = (await photoBlobIds()).length;
     } catch (err) {
+      // A replacement whose switch began: the device now holds part of the file and finishes it at the next open, so the
+      // old collection on screen is only this tab's memory. Said, and the page reloads (round sixty-seven; triage-66 R1).
+      if (err instanceof ReplaceBegunError) {
+        const why = await storageErrorText(err.reason);
+        openErr = `${why ? 'This device ran out of space during the switch. ' : ''}${err.message}.`;
+        opened = null;
+        setTimeout(() => location.reload(), 2500);
+        return;
+      }
       openErr = (await storageErrorText(err)) ?? (err instanceof Error && err.message ? err.message : String(err)); // a full device is named as such (round twenty-nine, 4)
     } finally {
       busy = null;
@@ -154,6 +164,13 @@
 
 <PageHead title="Backup" kick="My plants" places={false} sub="One file holds every record, every change and every photograph, and this device's settings (site, units, label choices), which a restore applies on a device that has none." count={collection.ready ? `${plural(collection.accessions.length, 'plant')} · ${photoCount == null ? '… photos' : plural(photoCount, 'photo')}` : undefined} />
 
+{#if collection.failed}
+  <div class="notice err" role="alert" id="bk-failed">{collection.failed}</div>
+{/if}
+{#if collection.malformed}
+  <!-- Skipped and counted (round sixty-seven; triage-66 R10): the change stays in the log and in a backup, and is not folded. -->
+  <p class="notice" id="bk-malformed">{collection.malformed === 1 ? 'One change' : `${collection.malformed} changes`} in this device's log could not be read and {collection.malformed === 1 ? 'is' : 'are'} not shown. {collection.malformed === 1 ? 'It stays' : 'They stay'} in the log, and in a backup.</p>
+{/if}
 {#if collection.persisted === false}
   <div class="cult warn"><div class="body"><!-- The outcome first, warmly; the browser's rule kept (round sixty; the grower review, §3). --><b>Your plants live only in this browser.</b> Take a backup now and install the app to your home screen so they are safe: a browser can clear storage for sites you rarely open, and has not promised to keep this one's.</div></div>
 {/if}
@@ -169,7 +186,7 @@
     </div>
     {#if shortfall}
       {@const n = shortfall.photosMissing.length}
-      <div class="notice err" id="bk-shortfall">{n} {n === 1 ? 'photograph had' : 'photographs had'} no pixels on this device and {n === 1 ? 'is' : 'are'} not in the file. {n === 1 ? 'Its record is' : 'Their records are'}, and the file says which.{#if sync.configured} Sync may still bring the pixels down; take the backup again afterwards.{/if} <button class="btn" type="button" onclick={() => shortfall && save(shortfall)}>Download it anyway</button></div>
+      <div class="notice err" id="bk-shortfall">{n} {n === 1 ? 'photograph had' : 'photographs had'} no pixels on this device and {n === 1 ? 'is' : 'are'} not in the file. {n === 1 ? 'Its record is' : 'Their records are'}, and the file says which.{#if sync.configured}{' '}Sync may still bring the pixels down; take the backup again afterwards.{/if} <button class="btn" type="button" onclick={() => shortfall && save(shortfall)}>Download it anyway</button></div>
     {/if}
   </div>
 </div>

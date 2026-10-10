@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import { forBuild } from '$lib/server/build';
 import type { RequestHandler } from './$types';
 import { searchAnswer, corpusNow } from '$lib/server/dossiers';
 import { limited } from '$lib/server/sync';
@@ -17,8 +18,8 @@ import { genusOf } from '$core/names';
  * new one and lets the old go). The browser may keep an answer for a day under the corpus id, and `no-store` when asked
  * under another id (round thirteen, 4; round sixteen, 12).
  *
- * A Worker's own response is not kept by the edge on its own (round twelve, 8, for the sheets): every keystroke reached
- * here and counted against the address. So each answer is put in the Worker's cache (the Cache API) for a day, under
+ * A query reached here and counted against the address unless the adapter's own cache held its exact URL (the adapter
+ * keeps a public answer under its full URL; round sixty-seven, triage-66 S7, puts the client's build in that URL). So each answer is put in the Worker's cache (the Cache API) for a day, under
  * the corpus it came from and the query as cleaned, and a second reader typing the same thing is answered from there,
  * uncounted (round sixty; the server review, 15; the corpus review, 17).
  *
@@ -46,13 +47,14 @@ const CACHE_S = 86_400;
 
 export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddress }) => {
   const q = _clean([...(url.searchParams.get('q') ?? '')].slice(0, 200).join(''));
-  if (!/[\p{L}\p{N}]/u.test(q)) return json(url.searchParams.get('shape') === '2' ? { hits: [] } : [], { headers: { 'cache-control': `public, max-age=${CACHE_S}` } });
+  if (!/[\p{L}\p{N}]/u.test(q)) return json(url.searchParams.get('shape') === '2' ? { hits: [] } : [], { headers: { 'cache-control': forBuild(url, `public, max-age=${CACHE_S}`) } });
   const n = Math.min(_MAX_HITS, Math.max(1, Number(url.searchParams.get('n')) || DEFAULT_HITS));
   const asked = (url.searchParams.get('c') ?? '').replace(/[^A-Za-z0-9._-]/g, '').slice(0, 40);
   const c = await corpusNow(platform, fetch);
-  const headers = (corpus: string) => ({ 'cache-control': asked === corpus ? `public, max-age=${CACHE_S}` : 'no-store' });
+  // Kept only under the corpus and the build it was asked under (round sixty-seven; triage-66 S7: `forBuild`).
+  const headers = (corpus: string) => ({ 'cache-control': asked === corpus ? forBuild(url, `public, max-age=${CACHE_S}`) : 'no-store' });
   const edge = platform?.caches?.default;
-  const key = new Request(`https://cache.cultifolio/search5?c=${encodeURIComponent(c.corpus)}&n=${n}&q=${encodeURIComponent(q)}`); // the case kept: an author citation is read by its capitals; search5: answers kept before round sixty-three's similar-spelling rule (N3) are not served
+  const key = new Request(`https://cache.cultifolio/search6?c=${encodeURIComponent(c.corpus)}&n=${n}&q=${encodeURIComponent(q)}`); // the case kept: an author citation is read by its capitals; search6: answers kept before round sixty-seven's reading and order (triage-66 N1, N2, N8) are not served
   const shaped = url.searchParams.get('shape') === '2';
   // `near`: the hits came by a similar spelling, so the picker can say "similar spelling" (round sixty-two; A7, B2).
   // `relaxed.left`: the reading matched and left these typed words out (an author, a cultivar, "sp."), where a relaxed

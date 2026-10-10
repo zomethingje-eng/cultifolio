@@ -16,7 +16,7 @@
  * Leave clears it. Nothing here writes a cookie; a store that also keeps a cookie (the units, the hemisphere) asks
  * `sampleTab()` first and writes none from the sample.
  */
-import { inDemo } from '$lib/db/demo';
+import { PAGE_IN_DEMO } from '$lib/db/demo';
 
 export type Scope = 'device' | 'collection' | 'tab';
 /** The prefix of a sample tab's own copies (sessionStorage). */
@@ -25,13 +25,18 @@ export const SAMPLE_PREFIX = 'cultifolio.demo.';
 /** A sample tab's copy of a key: `cultifolio.units` is `cultifolio.demo.units`. */
 const sampleKey = (key: string) => SAMPLE_PREFIX + key.replace(/^cultifolio\./, '');
 
-/** Whether this tab is the sample collection's: its settings are its own. */
-export const sampleTab = (): boolean => inDemo();
+/**
+ * Whether this page is the sample collection's: its settings are its own. The page's collection, read once as it loaded,
+ * never the tab's flag of the moment (round sixty-seven; triage-66 V3; IND-1, R45-17): a Leave clears the flag before the
+ * next page loads, and a Leave called off, or a tab sent home and answered Cancel, wrote the example's place, site and
+ * units over the grower's own.
+ */
+export const sampleTab = (): boolean => PAGE_IN_DEMO;
 
 export function readSetting(key: string, scope: Scope): string | null {
   try {
-    if (scope === 'tab') return typeof sessionStorage === 'undefined' ? null : sessionStorage.getItem(inDemo() ? sampleKey(key) : key);
-    if (inDemo()) {
+    if (scope === 'tab') return typeof sessionStorage === 'undefined' ? null : sessionStorage.getItem(sampleTab() ? sampleKey(key) : key);
+    if (sampleTab()) {
       const own = sessionStorage.getItem(sampleKey(key));
       if (own !== null || scope === 'collection') return own;
     }
@@ -45,8 +50,8 @@ export function readSetting(key: string, scope: Scope): string | null {
 export function writeSetting(key: string, scope: Scope, value: string | null): boolean {
   try {
     // 'device' and 'collection' write the same way (the scope decides what the sample reads); 'tab' is this tab's only.
-    const store = inDemo() || scope === 'tab' ? sessionStorage : localStorage;
-    const k = inDemo() ? sampleKey(key) : key;
+    const store = sampleTab() || scope === 'tab' ? sessionStorage : localStorage;
+    const k = sampleTab() ? sampleKey(key) : key;
     if (value === null) store.removeItem(k);
     else store.setItem(k, value);
     return true;

@@ -406,7 +406,9 @@ export function indexMaps(index: IndexEntry[]): IndexMaps {
     const g = genusOf(e.name);
     const xs = byGenus.get(g);
     if (xs) xs.push(e); else byGenus.set(g, [e]);
-    for (const syn of e.syn ?? []) { const k = syn.toLowerCase(); if (!bySynonym.has(k)) bySynonym.set(k, { entry: e, matched: syn }); }
+    // Every older name of species rank too, past the six `syn` shows (round sixty-seven; triage-66 N1): an address under
+    // "Ferocactus glaucescens" is Bisnaga glaucescens from the index, without asking the backbone.
+    for (const syn of [...(e.syn ?? []), ...(e.older ?? [])]) { const k = syn.toLowerCase(); if (!bySynonym.has(k)) bySynonym.set(k, { entry: e, matched: syn }); }
   }
   for (const xs of byGenus.values()) xs.sort((a, b) => a.name.localeCompare(b.name));
   maps.set(index, (m = { byKey, byGenus, bySynonym }));

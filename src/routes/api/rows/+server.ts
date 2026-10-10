@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import { forBuild } from '$lib/server/build';
 import type { RequestHandler } from './$types';
 import { catalogueRows, byOf, chipOf } from '$lib/server/catalogue';
 
@@ -16,5 +17,5 @@ export const GET: RequestHandler = async ({ url, platform, fetch }) => {
   const at = Math.max(0, Math.min(cat.rows.length, Math.floor(Number(url.searchParams.get('at')) || 0)));
   const n = Math.min(_MAX_ROWS, Math.max(1, Math.floor(Number(url.searchParams.get('n')) || 160)));
   const asked = (url.searchParams.get('c') ?? '').replace(/[^A-Za-z0-9._-]/g, '').slice(0, 40);
-  return json({ at, count: cat.rows.length, rows: cat.rows.slice(at, at + n) }, { headers: { 'cache-control': asked === corpus ? 'public, max-age=86400' : 'no-store' } });
+  return json({ at, count: cat.rows.length, rows: cat.rows.slice(at, at + n) }, { headers: { 'cache-control': asked === corpus ? forBuild(url, 'public, max-age=86400') : 'no-store' } }); // and the build (round sixty-seven; S7)
 };

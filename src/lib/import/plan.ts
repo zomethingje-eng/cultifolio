@@ -52,6 +52,18 @@ export interface ImportRow {
   partDone?: number;
   /** The record id a Cultifolio plants.csv gives in its id column: the same plant, when a live plant here has it. */
   recordId?: string | null;
+  /**
+   * The line's own number went to its first plant, here already (a line partly added): the rest are numbered on in the
+   * sheet's pattern, and the line is not said as renumbered (round sixty-seven; triage-66 R5).
+   */
+  numberUsed?: boolean;
+  /**
+   * An unnumbered line whose name, date acquired and source match a plant an earlier import added from a line this sheet
+   * no longer has: most likely that line, changed since (round sixty-seven; triage-66 R3). Said, and added unless dropped.
+   */
+  changed?: boolean;
+  /** Dropped in an earlier pass of this same sheet: left out of later passes, and counted (round sixty-seven; triage-66 R4). */
+  droppedBefore?: boolean;
 }
 
 export const blankRow = (key: string, line: number, name: string): ImportRow => ({ key, line, name, cultivar: null, fieldNumber: null, qty: 1, number: null, placePath: null, placeId: null, acquired: null, source: null, notes: null, price: null, nameKind: null, parentage: null, nameAsReceived: null, provenance: null, status: 'growing', lot: null, form: null, problems: [], drop: false, originalName: name });
@@ -107,8 +119,20 @@ export function markImported(rows: ImportRow[], has: (key: string) => boolean, i
     const missing = keys.filter((k) => !has(k));
     if (!missing.length) return { ...r, done: true, drop: true };
     if (missing.length === keys.length) return r;
-    return { ...r, importKeys: missing, qty: missing.length, partDone: keys.length - missing.length, number: has(keys[0]) ? null : r.number };
+    // The line's own number went to its first plant: kept on the row for the sheet's pattern, marked as used, so the rest
+    // are numbered on in that pattern and not in this collection's scheme (round sixty-seven; triage-66 R5).
+    return { ...r, importKeys: missing, qty: missing.length, partDone: keys.length - missing.length, ...(has(keys[0]) && r.number ? { numberUsed: true } : {}) };
   });
+}
+
+/**
+ * The lines the grower dropped in an earlier pass of this same sheet, by their import keys (`dropped`), are settled: left
+ * out of this pass and counted (round sixty-seven; triage-66 R4). A dropped line has no plant here, so its keys are not
+ * here either, and read afresh in the next pass it came back as a line to add.
+ */
+export function markDroppedBefore(rows: ImportRow[], dropped: ReadonlySet<string>): ImportRow[] {
+  if (!dropped.size) return rows;
+  return rows.map((r) => (!r.done && r.importKeys?.length && r.importKeys.every((k) => dropped.has(k)) ? { ...r, droppedBefore: true, drop: true } : r));
 }
 
 /**
@@ -116,15 +140,16 @@ export function markImported(rows: ImportRow[], has: (key: string) => boolean, i
  * lines that look already imported are kept (said, and overridable), and of the rest the first `max` are read; the
  * others wait for the next pass, which reads the same file again and finds these here.
  */
-export function passOf(rows: ImportRow[], max: number): { rows: ImportRow[]; done: number; later: number } {
+export function passOf(rows: ImportRow[], max: number): { rows: ImportRow[]; done: number; later: number; droppedBefore: number } {
   const out: ImportRow[] = [];
-  let done = 0, taken = 0, later = 0;
+  let done = 0, taken = 0, later = 0, droppedBefore = 0;
   for (const r of rows) {
     if (r.done) { done++; continue; }
+    if (r.droppedBefore) { droppedBefore++; continue; } // round sixty-seven; triage-66 R4
     if (r.already && r.drop) { out.push(r); continue; }
     if (taken < max) { out.push(r); taken++; } else later++;
   }
-  return { rows: out, done, later };
+  return { rows: out, done, later, droppedBefore };
 }
 
 export interface NumberPlan {
@@ -209,7 +234,7 @@ export function planNumbers(rows: ImportRow[], taken: Iterable<string>, scheme: 
   const keptBy = new Map<string, number>();
   const here = new Set(used);
   for (const r of live) {
-    const g = r.number?.trim() || null;
+    const g = r.numberUsed ? null : r.number?.trim() || null;
     if (g && !used.has(g) && !isTaken(g)) { used.add(g); keeps.add(r.key); keptBy.set(g, r.line); byRow.set(r.key, { numbers: [g], kept: true, given: g }); }
   }
   const order = [...live.filter((r) => keeps.has(r.key)), ...live.filter((r) => !keeps.has(r.key))].map((r) => r.key);
@@ -244,6 +269,9 @@ export function planNumbers(rows: ImportRow[], taken: Iterable<string>, scheme: 
     const from = patTop;
     let id: string;
     do {
+      // A sheet numbered past the safe integers (9007199254740993) counted in floats, and `++patTop` stopped moving: the
+      // tab hung (round sixty-seven; triage-66 R3, the outside review's 15). Past that, this collection's rule numbers it.
+      if (!Number.isSafeInteger(patTop + 1)) return null;
       const n = String(++patTop);
       if (pat.width && n.length > pat.width) return null;
       id = inPattern(pat.prefix, pat.width, Number(n));
@@ -255,12 +283,15 @@ export function planNumbers(rows: ImportRow[], taken: Iterable<string>, scheme: 
   let extrasOn = 0;
   for (const r of live) {
     const year = yearOf(r.acquired) ?? r.numberYear ?? thisYear;
-    const plan = byRow.get(r.key) ?? { numbers: [], kept: false, given: r.number?.trim() || null };
+    // A line partly added already used its own number (`numberUsed`): the rest are numbered in the sheet's pattern, and
+    // the line is not said as renumbered (round sixty-seven; triage-66 R5).
+    const plan = byRow.get(r.key) ?? { numbers: [], kept: false, given: r.numberUsed ? null : r.number?.trim() || null };
+    const inSheet = !!plan.given || !!r.numberUsed;
     // Every plant of a line that gave a number, kept or renumbered, is numbered in the sheet's pattern when it has one: a
     // kept line's further plants took this collection's scheme while a renumbered line's took the sheet's, two schemes in
     // one import (the fix pass, R2 6). A line with no number keeps this collection's rule.
     while (plan.numbers.length < r.qty) {
-      const n = plan.given ? nextInSheet() : null;
+      const n = inSheet ? nextInSheet() : null;
       if (n && plan.numbers.length) extrasOn++;
       plan.numbers.push(n ?? next(year));
     }
@@ -276,22 +307,51 @@ export function planNumbers(rows: ImportRow[], taken: Iterable<string>, scheme: 
 
 /**
  * Rows whose number a plant here already holds under the same name: said as "looks already imported" (round sixty-one;
- * the grower review, 6). Since round sixty-two this is only that warning: the import keys (`markImported`) decide what a
- * first run added, and a line they settle is left alone. A plant with no import key (added by hand, or by an import
- * before round sixty-two) is the only evidence there is, so the line is skipped unless the grower adds it anyway. A plant
- * that carries another line's import key came from another line (a second sheet that starts its numbering again, "7
- * Lithops lesliei", or a line since edited), so the line is said and kept, under the next free number, for the grower to
- * drop if it is the same plant (A18). `held` lists the live plants that carry a number.
+ * the grower review, 6), and dropped unless the grower adds them anyway (round sixty-seven; triage-66 R3). The import
+ * keys (`markImported`) decide what a first run added, and a line they settle is left alone; this catches a line whose
+ * key changed (a sheet saved again, a cell edited) and a plant with no key (added by hand, or by an import before round
+ * sixty-two). A second sheet that starts its numbering again ("7 Lithops lesliei") is the case "Add anyway" is for.
+ * `held` lists the plants here that carry a number, removed ones included.
  */
 export function markAlreadyImported(rows: ImportRow[], held: (no: string) => Array<{ taxonName: string; cultivar?: string | null; importKey?: string | null }>): ImportRow[] {
   return rows.map((r) => {
     const g = r.number?.trim();
-    if (!g || r.done || r.partDone) return r;
-    const p = parseName(r.name);
-    const cv = (r.cultivar ?? p.cultivar ?? '').toLowerCase();
-    const same = held(g).filter((a) => a.taxonName.toLowerCase() === p.scientific.toLowerCase() && (a.cultivar ?? '').toLowerCase() === cv);
+    if (!g || r.done || r.partDone || r.droppedBefore) return r;
+    const same = held(g).filter((a) => sameName(r, a));
     if (!same.length) return r;
-    return { ...r, already: true, drop: same.some((a) => !a.importKey) };
+    // Dropped, whatever the plant's import key (round sixty-seven; triage-66 R3, the outside review's 15): a sheet edited
+    // or saved again keyed its lines anew, kept them, and CF-001 came back as CF-004. "Add anyway" keeps them.
+    return { ...r, already: true, drop: true };
+  });
+}
+
+/** The line names the plant's species and cultivar, as the import files them. */
+function sameName(r: ImportRow, a: { taxonName: string; cultivar?: string | null }): boolean {
+  const p = parseName(r.name);
+  const cv = (r.cultivar ?? p.cultivar ?? '').toLowerCase();
+  return a.taxonName.toLowerCase() === p.scientific.toLowerCase() && (a.cultivar ?? '').toLowerCase() === cv;
+}
+/** A number as compared for "looks already imported": its case folded and the leading zeros of its digits dropped, as a spreadsheet saving 0012 writes 12. */
+export const numberKey = (no: string): string => no.trim().toLowerCase().replace(/\d+/g, (d) => d.replace(/^0+(?=\d)/, ''));
+
+/**
+ * Unnumbered lines that look already imported, changed since (round sixty-seven; triage-66 R3, the outside review's 15):
+ * the line's name, date acquired and source match a plant here that an earlier import added from a line this sheet no
+ * longer makes (its import key is none of `sheetKeys`). A note edited, or a column the key reads changed, gave the line
+ * a new key and it was offered again with no word. Said, and added unless dropped: a second plant of one name, bought on
+ * one day from one source, is common. Each plant here explains one line at most.
+ */
+export function markChanged(rows: ImportRow[], plants: Array<{ taxonName: string; cultivar?: string | null; acquired?: string | null; sourceFrom?: string | null; importKey?: string | null }>, sheetKeys: ReadonlySet<string>): ImportRow[] {
+  const free = plants.filter((a) => a.importKey && !sheetKeys.has(a.importKey));
+  if (!free.length) return rows;
+  const used = new Set<number>();
+  const fold = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
+  return rows.map((r) => {
+    if (r.number?.trim() || r.done || r.partDone || r.already || r.droppedBefore) return r;
+    const i = free.findIndex((a, k) => !used.has(k) && sameName(r, a) && fold(a.acquired) === fold(r.acquired) && fold(a.sourceFrom) === fold(r.source));
+    if (i < 0) return r;
+    used.add(i);
+    return { ...r, changed: true };
   });
 }
 

@@ -23,6 +23,8 @@ describe('the group is said as the table listing it, everywhere (A4)', () => {
     // Renders "Grouped as a cactus or succulent, by its genus (archetype table)." above the card whose "Group." line
     // says "Listed under the genus Copiapoa in the archetype table".
     expect(code('src/routes/species/[slug]/+page.svelte')).not.toContain('by its {sheet.arch.tier} (archetype table)');
+    // And the line it says instead, whole (round sixty-seven; triage-66 P4, R45-13).
+    expect(code('src/routes/species/[slug]/+page.svelte')).toContain("<p class=\"small archline\">Grouped as {aLabel(sheet.arch.arch.lab)}, {sheet.arch.why}.");
   });
 });
 
@@ -35,6 +37,8 @@ describe('a month\'s mean of its lows is named as the labels name it (A3, visito
   });
   it('the Climograph\'s description does not call a sum of monthly medians a median', () => {
     expect(code('src/lib/ui/Climograph.svelte')).not.toContain('of rain a year. Medians across the range');
+    // And what it says instead, whole (round sixty-seven; triage-66 P4, R45-13).
+    expect(code('src/lib/ui/Climograph.svelte')).toContain('of rain in the median year (the twelve monthly medians added). Medians across the range, from CHELSA'); // round sixty-seven (N11)
   });
 });
 

@@ -6,6 +6,8 @@
    */
   import { toast } from '$lib/ui/toast.svelte';
   import { collection } from '$lib/db/collection.svelte';
+  import { PAGE_IN_DEMO } from '$lib/db/demo';
+  import { addLeavesExample } from './example.svelte';
   let open = $state(false);
   let btn = $state<HTMLButtonElement | null>(null);
   let busy = $state(false);
@@ -38,11 +40,13 @@
 
 <svelte:window onclick={(e) => { if (open && !(e.target as Element).closest('.plantsmenu')) close(); }} />
 <div class="plantsmenu">
-  <button class="btn dots" type="button" id="plants-menu-btn" bind:this={btn} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? 'plants-menu' : undefined} aria-label="More: import, download as a spreadsheet" title="Import, download as a spreadsheet" onclick={() => { if (!busy) open = !open; }} aria-disabled={busy}>···</button>
+  <button class="btn dots" type="button" id="plants-menu-btn" bind:this={btn} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? 'plants-menu' : undefined} aria-label={PAGE_IN_DEMO ? 'More: import your own list' : 'More: import, download as a spreadsheet'} title={PAGE_IN_DEMO ? 'Import your own list' : 'Import, download as a spreadsheet'} onclick={() => { if (!busy) open = !open; }} aria-disabled={busy}>···</button>
   {#if open}
     <div class="menu" id="plants-menu" role="menu" tabindex="-1" aria-label="More for My plants" use:first onkeydown={keys}>
-      <a role="menuitem" href="/plants/import" onclick={() => close()}>Import from a list or a spreadsheet</a>
-      <button role="menuitem" type="button" id="plants-sheet" onclick={sheet} aria-disabled={empty}>Download as a spreadsheet{#if empty}<span class="why">{collection.ready ? ': no plants yet' : ': your collection is still opening'}</span>{/if}</button>
+      <!-- In the example, an import is the grower's own and leads out of it first, as every add does; and the example
+           offers no spreadsheet of plants that are not the visitor's (round sixty-seven; triage-66 V1, V7; R45-3). -->
+      <a role="menuitem" href="/plants/import" onclick={(e) => { close(); addLeavesExample(e, '/plants/import'); }}>{PAGE_IN_DEMO ? 'Import your own list (leaves the example)' : 'Import from a list or a spreadsheet'}</a>
+      {#if !PAGE_IN_DEMO}<button role="menuitem" type="button" id="plants-sheet" onclick={sheet} aria-disabled={empty}>Download as a spreadsheet{#if empty}<span class="why">{collection.ready ? ': no plants yet' : ': your collection is still opening'}</span>{/if}</button>{/if}
     </div>
   {/if}
 </div>

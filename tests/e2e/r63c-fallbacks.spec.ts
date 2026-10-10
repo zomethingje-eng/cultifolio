@@ -20,7 +20,7 @@ test('a species page from a dossier with no median keeps "sum of monthly medians
   await ready(page);
   await expect(page.locator('.glance .card .lab', { hasText: /^Rain a year \(sum of monthly medians\)$/ })).toHaveCount(1);
   await expect(page.locator('.glance .card .lab', { hasText: /median across the range/ })).toHaveCount(0);
-  await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', /of rain a year \(sum of monthly medians, CHELSA\)/);
+  await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', /of rain in the median year \(CHELSA\)/);
 });
 
 test('compare: two dossiers with no median compare their monthly medians added, under that name', async ({ page }) => {

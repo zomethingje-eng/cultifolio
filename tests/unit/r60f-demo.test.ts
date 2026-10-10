@@ -34,7 +34,9 @@ vi.mock('$lib/db/vault', () => {
   m.dropFold = async () => {};
   m.parkStamps = async (st: string[]) => { const had = (mem.meta.get('parked') as string[] | undefined) ?? []; const out = [...new Set([...had, ...st])]; mem.meta.set('parked', out); return out; };
   m.lastArrival = async () => 0;
-  m.arrivalsAfter = async () => ({ changes: [...mem.changes], seq: 0, gen: 0 });
+  // Arrival numbers as the order of the in-memory log, from 1 (round sixty-seven: the seed's mark is the arrival number of its own last change).
+  m.arrivalsAfter = async (seq = 0) => ({ changes: mem.changes.slice(seq), seq: mem.changes.length, gen: 0 });
+  m.arrivalsOf = async (ts: string[]) => new Map(ts.map((t) => [t, mem.changes.findIndex((c) => c.t === t) + 1] as [string, number]).filter(([, n]) => n > 0));
   m.changeKeys = async () => mem.changes.map((c) => c.t);
   if (!m.changesByKeys) m.changesByKeys = async (ts: string[]) => mem.changes.filter((c) => ts.includes(c.t));
   if (!m.updateMeta) m.updateMeta = async (k: string, fn: (had: unknown) => unknown) => { const next = fn(mem.meta.get(k)); mem.meta.set(k, next); return next; };
@@ -43,18 +45,27 @@ vi.mock('$lib/db/vault', () => {
   return m;
 });
 
-const { collection } = await import('$lib/db/collection.svelte');
-const { seedDemo, SAMPLE, POTTED, SEEDED } = await import('$lib/ui/grow/demo-seed');
+const { SAMPLE, POTTED, SEEDED } = await import('$lib/ui/grow/demo-seed');
+/** A page, loaded in the sample or out of it: which collection a page shows is read once, as it loads (round sixty-seven; triage-66 V3). */
+async function pageIn(sample: boolean) {
+  if (sample) store.set('cultifolio.demo', '1'); else store.delete('cultifolio.demo');
+  vi.resetModules();
+  const { collection } = await import('$lib/db/collection.svelte');
+  const { seedDemo } = await import('$lib/ui/grow/demo-seed');
+  return { collection, seedDemo };
+}
+let { collection, seedDemo } = await pageIn(false);
 
 describe('the sample collection seed', () => {
   it('writes nothing outside the sample: a grower\'s own collection is never seeded', async () => {
-    store.delete('cultifolio.demo');
+    expect(await seedDemo()).toBe(false);
+    store.set('cultifolio.demo', '1'); // the tab's flag set under a page that loaded outside it: still the grower's page
     expect(await seedDemo()).toBe(false);
     expect(mem.changes).toHaveLength(0);
     expect(mem.meta.has(SEEDED)).toBe(false);
   });
   it('writes nothing into a collection that already has a plant', async () => {
-    store.set('cultifolio.demo', '1');
+    ({ collection, seedDemo } = await pageIn(true));
     await collection.load();
     const a = await collection.addAccession({ taxonName: 'Aloe polyphylla', provenance: 'unknown' });
     const before = mem.changes.length;
@@ -63,7 +74,6 @@ describe('the sample collection seed', () => {
     await collection.remove('accession', a.id);
   });
   it('fills an empty sample once: twelve plants in a greenhouse with two benches and on a windowsill, a seed batch with counts and a pot-up, waterings, a flowering, notes', async () => {
-    store.set('cultifolio.demo', '1');
     expect(collection.accessions).toHaveLength(0);
     expect(await seedDemo()).toBe(true);
     expect(mem.meta.get(SEEDED)).toBe(true);

@@ -1,4 +1,5 @@
 import { json, error } from '@sveltejs/kit';
+import { forBuild } from '$lib/server/build';
 import { sheetsIn, SheetsUnreadable } from '$lib/server/sheets';
 import { corpusNow } from '$lib/server/dossiers';
 import { limited } from '$lib/server/sync';
@@ -17,6 +18,8 @@ import type { RequestHandler } from './$types';
  * make the Worker derive when nothing is cached.
  */
 const MAX_PER_REQUEST = 4;
+/** How long a device waits after the reference store failed for a bucket (round sixty-seven; S8). */
+const UNREAD_S = 30;
 
 export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddress }) => {
   const buckets = [...new Set((url.searchParams.get('b') ?? '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean))].sort();
@@ -56,8 +59,12 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
       // missing from the reference (round sixty-two; the corpus review of round sixty, 13).
       // Its Retry-After is how long this isolate keeps the refusal, half a minute at most (round sixty-two, second pass; the
       // server review, 6), where it was a fixed minute.
-      if (e instanceof SheetsUnreadable) return json({ error: 'The species sheets could not all be read just now.' }, { status: 503, headers: { 'retry-after': String(e.retryAfter), 'cache-control': 'no-store' } });
-      throw e;
+      // Round sixty-seven (triage-66 S8): every refusal here carries its reason and Retry-After in the body as well as the
+      // header, as a 429 from the rate limit does (`{ error, retryAfter }`), so the client can say which it was and wait it
+      // out; a bucket store that threw is the same 503, where it was a bare 500.
+      if (e instanceof SheetsUnreadable) return json({ error: 'The species sheets could not all be read just now.', retryAfter: e.retryAfter }, { status: 503, headers: { 'retry-after': String(e.retryAfter), 'cache-control': 'no-store' } });
+      console.error('sheets: a bucket could not be read', e);
+      return json({ error: 'The species sheets could not be read just now.', retryAfter: UNREAD_S }, { status: 503, headers: { 'retry-after': String(UNREAD_S), 'cache-control': 'no-store' } });
     }
     out.push(sheets);
     if (edge && current) {
@@ -66,5 +73,5 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
       platform?.context?.waitUntil?.(put);
     }
   }
-  return json(out.flat(), { headers: { 'cache-control': current ? headers['cache-control'] : 'no-store' } });
+  return json(out.flat(), { headers: { 'cache-control': current ? forBuild(url, headers['cache-control']) : 'no-store' } }); // and the build (round sixty-seven; S7)
 };

@@ -18,6 +18,10 @@
  *                                                                # previous build too, so the run is the files and the grid, an hour rather than a day. The
  *                                                                # one exception is the occurrence search for species the download left to the API path
  *                                                                # (bulk/api-path.txt): a dossier keeps only open records, so those are fetched again.
+ *   npx tsx scripts/build-dossiers.ts --keys keys.txt --grid climate --bulk bulk
+ *                                                                # the species of a list rebuilt online by backbone key (one key a line, a name after it
+ *                                                                # optional), whatever is on disk; the rest kept. The run fails, and lists them in
+ *                                                                # drops.txt, when a species lost every photograph or a source turned refused.
  *   npx tsx scripts/build-dossiers.ts names.txt --rederive     # rebuild range, records, centre and climate under the current rules (bulk files
  *                                                                # and the local grid; only the backbone is asked), carrying photos, summary,
  *                                                                # identifiers and literature from each species' previous build. About a second a species.
@@ -57,12 +61,12 @@ import { createHash } from 'node:crypto';
 import { buildDossier, NETWORK_EXTRAS, photosFromMedia, mergeGbifPhotos, type SkippableSource } from '../src/lib/dossier/build';
 import { mendGbifThumb } from '../src/lib/dossier/md5';
 import { heroOf } from '../src/lib/dossier/dedupe';
-import { englishNames, generaOf, type VernacularName } from '../src/lib/dossier/index-entry';
+import { englishNames, generaOf, olderNamesOf, type VernacularName } from '../src/lib/dossier/index-entry';
 import * as gbif from '../src/lib/dossier/sources/gbif';
 import { literature } from '../src/lib/dossier/sources/openalex';
 import * as inat from '../src/lib/dossier/sources/inat';
 import * as wm from '../src/lib/dossier/sources/wikimedia';
-import { genusOf, slugify, canonicalSynonym } from '../src/lib/core/names';
+import { genusOf, slugify } from '../src/lib/core/names';
 import { makeFetcher, fixtureFetcher } from '../src/lib/dossier/fetch';
 import { dossierPath, DOSSIER_V, parseDossier, unchain } from '../src/lib/dossier/schema';
 import { sheetOf, type Sheet } from '../src/lib/dossier/sheet';
@@ -82,6 +86,8 @@ import { loadWcvp, loadOccurrences, wantedKeys } from './bulk-load';
 import { refetchNames, vernacularMark } from './names-step';
 import { stampOnBuild, restamp, dayNumber, type Changed } from '../src/lib/dossier/changed';
 import { tileCreditOf } from '../src/lib/ui/ref/head';
+import { dropsBetween } from '../src/lib/dossier/drops';
+import { offlineFetcher, carryRederivedRows } from '../src/lib/dossier/rederive';
 
 /** The substance fingerprint's hash: node's own, for nine thousand files (round sixty-three; src/lib/dossier/changed.ts). */
 const sha1 = (s: string) => createHash('sha1').update(s).digest('hex');
@@ -95,7 +101,13 @@ const quick = args.includes('--quick');
 const offline = args.includes('--offline');
 const rederive = args.includes('--rederive') || offline;
 const fill = (() => { const i = args.indexOf('--fill'); return i >= 0 ? args[i + 1] : undefined; })();
-const force = args.includes('--force') || rederive;
+/**
+ * `--keys <file>`: the species of a list rebuilt online by backbone key, one key a line, a name after it optional ("9476326"
+ * or "9476326 Aeonium tabulaeforme"); every listed one is rebuilt whatever is on disk, and the rest are kept (round
+ * sixty-seven; triage-66 N4: the 164 species an offline re-derivation left without photographs or with a refusal).
+ */
+const keysFile = (() => { const i = args.indexOf('--keys'); return i >= 0 ? args[i + 1] : undefined; })();
+const force = args.includes('--force') || rederive || !!keysFile;
 const skip: SkippableSource[] = rederive ? [...NETWORK_EXTRAS] : (() => { const i = args.indexOf('--skip'); return i >= 0 ? (args[i + 1] ?? '').split(',').filter((x): x is SkippableSource => (NETWORK_EXTRAS as string[]).includes(x)) : []; })();
 const gridDir = (() => { const i = args.indexOf('--grid'); return i >= 0 ? args[i + 1] : undefined; })();
 const bulkDir = (() => { const i = args.indexOf('--bulk'); return i >= 0 ? args[i + 1] : undefined; })();
@@ -115,6 +127,13 @@ function readPrev(key: number): Dossier | null {
   return null;
 }
 
+/** The keys bulk/api-path.txt lists ("<key>\t<records>" a line): the species the download left to the API path. */
+function readApiPath(dir: string): Set<number> {
+  const p = `${dir}/api-path.txt`;
+  if (!existsSync(p)) return new Set();
+  return new Set(readFileSync(p, 'utf8').split(/\r?\n/).map((l) => Number(l.split('\t')[0])).filter((k) => Number.isInteger(k) && k > 0));
+}
+
 function diskPowerCache(dir: string): PowerCache {
   mkdirSync(dir, { recursive: true });
   return {
@@ -128,7 +147,7 @@ function diskPowerCache(dir: string): PowerCache {
   };
 }
 
-type IndexEntry = { key: number; slug: string; name: string; family?: string; common?: string; commons?: string[]; origin: string[]; thumb?: string; credit?: string; photos: number; open: number; climate: string; near?: number[]; syn?: string[]; changed?: number };
+type IndexEntry = { key: number; slug: string; name: string; family?: string; common?: string; commons?: string[]; origin: string[]; thumb?: string; credit?: string; photos: number; open: number; climate: string; near?: number[]; syn?: string[]; older?: string[]; changed?: number };
 type Dossierish = { key: number; slug: string; name: { scientific: string; family?: string; status?: string; vernacular: VernacularName[]; synonyms?: string[] }; distribution: { native: Array<{ name: string }> }; photos: Array<{ id: string; url: string; thumb: string; captive?: boolean; attribution: string; licence?: string }>; occurrences: { nOpenInRange: number; nRestrictedInRange?: number; nOutsideRange?: number }; climate: { status: string; months?: Array<{ tmax: number; tmin: number; precipMm: number }> }; changed?: Changed };
 /**
  * Each species' English vernacular names, kept from its dossier while the index is made: the common name is chosen by
@@ -154,17 +173,15 @@ function nameEntries(index: IndexEntry[]): void {
 function indexEntry(d: Dossierish): IndexEntry & { status?: string } {
   const hero = heroOf(d.photos);
   vernOf.set(d.key, d.name.vernacular.filter((v) => v.lang === 'eng'));
-  // Older names, as binomials, other-genus ones first (the ones a label most often carries), six at most, so the
-  // search and the picker find a species under a name it no longer has (round thirty-one, 3).
-  const accepted = d.name.scientific;
-  const genus = accepted.split(' ')[0];
-  const syn = [...new Set((d.name.synonyms ?? []).map(canonicalSynonym).filter((x): x is string => !!x && x !== accepted))].sort((a, b) => Number(a.startsWith(genus + ' ')) - Number(b.startsWith(genus + ' '))).slice(0, 6);
+  // Older names: six shown, the rest of species rank searched (`olderNamesOf`; round sixty-seven, N1).
+  const genus = d.name.scientific.split(' ')[0];
+  const { syn, older } = olderNamesOf(d.name.scientific, d.name.synonyms ?? []);
   // The thumbnail in the form GBIF's cache still answers, whatever form the dossier holds (the Worker mends a dossier's as it reads it; the index carries no key to mend by, so it is mended here: round thirty-two, 1).
   // Its credit, licence first, so a tile names the photographer and not only the host; and the day the dossier last
   // changed in substance, for the sitemap (round sixty-three; REVIEW-TRIAGE-61's deferred list).
   const credit = hero ? tileCreditOf(hero as Parameters<typeof tileCreditOf>[0]) : null;
   const changed = dayNumber(d.changed?.on);
-  return { status: d.name.status, key: d.key, slug: d.slug, name: d.name.scientific, family: d.name.family, ...englishNames(d.name.vernacular, { genus }), origin: d.distribution.native.map((n) => n.name), thumb: hero ? mendGbifThumb(hero.thumb, hero.id, hero.url) : undefined, ...(credit ? { credit } : {}), photos: d.photos.length, open: d.occurrences.nOpenInRange, climate: d.climate.status, ...(syn.length ? { syn } : {}), ...(changed ? { changed } : {}) };
+  return { status: d.name.status, key: d.key, slug: d.slug, name: d.name.scientific, family: d.name.family, ...englishNames(d.name.vernacular, { genus }), origin: d.distribution.native.map((n) => n.name), thumb: hero ? mendGbifThumb(hero.thumb, hero.id, hero.url) : undefined, ...(credit ? { credit } : {}), photos: d.photos.length, open: d.occurrences.nOpenInRange, climate: d.climate.status, ...(syn.length ? { syn } : {}), ...(older.length ? { older } : {}), ...(changed ? { changed } : {}) };
 }
 
 /** Every dossier on disk, as index entries. The corpus is the files; the index is derived from them. */
@@ -320,7 +337,8 @@ async function fillPhotos(): Promise<void> {
   for (const f of files) {
     const d = JSON.parse(readFileSync(`${dir}/${f}`, 'utf8')) as D;
     const settled = (k: string) => ['ok', 'none'].includes(d.upstream?.[k]?.status ?? '');
-    const wildDone = settled('inat.photos.wild') || (d.upstream?.['inat.photos.wild']?.detail ?? '').startsWith('not asked');
+    // A "not asked: already from the GBIF download" stands only while those photographs are here (round sixty-seven; triage-66 N4).
+    const wildDone = settled('inat.photos.wild') || ((d.upstream?.['inat.photos.wild']?.detail ?? '').startsWith('not asked') && d.photos.some((p) => p.src === 'gbif' && !p.captive));
     if (!wildDone || !settled('inat.photos.cultivated')) todo.push({ path: `${dir}/${f}`, d });
   }
   console.log(`${files.length} dossiers on disk; ${todo.length} without iNaturalist photographs…`);
@@ -688,7 +706,7 @@ async function main() {
     jobs.push({ name: 'Copiapoa cinerea', fetcher: fixtureFetcher(copiapoa()) });
     jobs.push({ name: 'Refusia testii', fetcher: fixtureFetcher(refused()) });
   } else {
-    const file = args.find((a) => !a.startsWith('--'));
+    const file = keysFile ?? args.find((a) => !a.startsWith('--'));
     if (!file || !existsSync(file)) {
       console.error('usage: tsx scripts/build-dossiers.ts <names.txt> [--upload] [--quick]');
       process.exit(2);
@@ -703,7 +721,11 @@ async function main() {
       : readFileSync(file, 'utf8').split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
     const parsed = lines.map((line) => {
       const m = /^(\d+)\s+([^\t]+)/.exec(line);
-      return m ? { name: m[2].trim(), key: Number(m[1]) } : { name: line.split('\t')[0].trim(), key: undefined };
+      if (m) return { name: m[2].trim(), key: Number(m[1]) };
+      // A key alone (a --keys list): the name is the previous dossier's, for the log and the WCVP genera.
+      const k = /^(\d+)\s*$/.exec(line);
+      if (k) return { name: readPrev(Number(k[1]))?.name.scientific ?? `key ${k[1]}`, key: Number(k[1]) };
+      return { name: line.split('\t')[0].trim(), key: undefined };
     });
     const seenLine = new Set<string>();
     const unique = parsed.filter((p) => {
@@ -718,30 +740,21 @@ async function main() {
     if (offline) {
       // No upstream is asked. The one request the bulk fetcher makes on its own, /species/{key} for a name's authorship,
       // is answered from the previous dossier; NASA POWER is allowed through because the extremes cache is on disk and
-      // a cell not yet cached is better fetched than refused. Everything else is refused as offline, and says so.
+      // a cell not yet cached is better fetched than refused. Everything else is not asked, and says so.
       // One more exception: an occurrence search that reaches this fetcher has fallen through the bulk fetcher, which
       // means the download holds nothing for the species. That is the case for every species the download request left
       // to the API path (more records than the cut, listed in bulk/api-path.txt), and a dossier holds only its open
       // records, so there is nothing on disk to re-derive the climate from: the API is asked for those, and only those.
-      const net = makeFetcher();
-      f = async <T = unknown>(url: string, opts?: Parameters<typeof net>[1]) => {
-        const host = new URL(url).host;
-        if (host === 'power.larc.nasa.gov') return net<T>(url, opts);
-        if (/\/occurrence\/search\?taxonKey=\d+&hasCoordinate=true/.test(url)) return net<T>(url, opts);
-        const m = /\/species\/(\d+)$/.exec(url);
-        if (m) {
-          const prev = readPrev(Number(m[1]));
-          if (prev) return { status: 'ok' as const, data: { key: prev.key, canonicalName: prev.name.scientific, scientificName: prev.name.scientific, authorship: prev.name.authorship ?? undefined } as unknown as T };
-        }
-        return { status: 'refused' as const, detail: `${host} not asked: offline re-derivation` };
-      };
+      // Not asked, never "refused": nothing refused the site, and 44 pages said it had (round sixty-seven; triage-66 N4).
+      f = offlineFetcher(makeFetcher(), (key) => { const prev = readPrev(key); return prev ? { key: prev.key, scientific: prev.name.scientific, authorship: prev.name.authorship } : null; });
     }
     if (bulkDir) {
       console.log(`Loading bulk files from ${bulkDir}/…`);
       const [wcvp, loaded] = await Promise.all([loadWcvp(bulkDir, names), loadOccurrences(bulkDir, 2000, wantedKeys(bulkDir, names))]);
       if (!wcvp) console.log('  no WCVP files: distributions will come from the API');
       if (!loaded && !existsSync(`${bulkDir}/occurrence.zip`) && !existsSync(`${bulkDir}/occurrence.csv`)) console.log('  no occurrence.zip: occurrences will come from the API');
-      const bf = bulkFetcher(f, { wcvp: wcvp ?? undefined, occ: loaded?.occ, media: loaded?.media ?? undefined });
+      const apiPath = readApiPath(bulkDir);
+      const bf = bulkFetcher(f, { wcvp: wcvp ?? undefined, occ: loaded?.occ, media: loaded?.media ?? undefined, apiPath });
       mediaFromFiles = !!loaded?.media;
       // The download's photographs are files, not a network extra: a re-derivation reads them and merges them in.
       if (mediaFromFiles) skip.splice(0, skip.length, ...skip.filter((x) => x !== 'gbif.media'));
@@ -762,6 +775,7 @@ async function main() {
   if (onDisk.length) console.log(`  ${onDisk.length} dossiers already on disk${force ? ' (rebuilding all)' : ' (clean ones kept)'}`);
   let built = 0, keptN = 0;
   const thisRun = new Map<number, IndexEntry>();
+  const drops: string[] = [];
   for (const j of jobs) {
     const t0 = Date.now();
     if (!force) {
@@ -850,9 +864,13 @@ async function main() {
       // occurrence or distribution source refused this build, the previous build's answer (same dossier version) stands,
       // with every one of those upstream records saying so. Never piecemeal: a range from one build and records from another
       // would be a page no build made.
-      const coreRefused = ['gbif.occurrences', 'wcvp.distribution'].filter((k) => ['refused', 'error'].includes(d.upstream[k]?.status ?? ''));
+      // A source this build did not ask (an offline re-derivation) is carried the same way, in a re-derivation too: its
+      // range and climate were lost on 44 species, whose pages then said the source had refused (round sixty-seven;
+      // triage-66 N4).
+      const coreRefused = ['gbif.occurrences', 'wcvp.distribution'].filter((k) => ['refused', 'error'].includes(d.upstream[k]?.status ?? '') || d.upstream[k]?.status === 'skipped');
+      const coreNotAsked = coreRefused.length > 0 && coreRefused.every((k) => d.upstream[k]?.status === 'skipped');
       const prevCoreOk = ['gbif.occurrences', 'wcvp.distribution'].every((k) => ['ok', 'none'].includes(prev.upstream?.[k]?.status ?? ''));
-      if (coreRefused.length && prevCoreOk && prev.v === d.v && !rederive) {
+      if (coreRefused.length && prevCoreOk && prev.v === d.v && (!rederive || coreNotAsked)) {
         d.distribution = prev.distribution;
         d.occurrences = prev.occurrences;
         d.centroid = prev.centroid;
@@ -877,11 +895,15 @@ async function main() {
         d.summary = prev.summary;
         d.ids = { ...prev.ids, gbif: d.ids.gbif };
         d.links = { ...prev.links, gbif: d.links.gbif };
-        for (const k of Object.keys(prev.upstream ?? {})) if (d.upstream[k]?.status === 'skipped' && prev.upstream[k]) d.upstream[k] = { ...prev.upstream[k], detail: carried(prev.upstream[k]) };
+        // Never a row of the one derivation, and never "already from the GBIF download" without those photographs
+        // (`carryRederivedRows`; round sixty-seven, triage-66 N4: 120 species carried it with none).
+        carryRederivedRows(prev, d, carried);
       }
     }
     // The day the page last changed in substance: the previous file's when this build changed nothing it shows, else this
     // build's (round sixty-three; src/lib/dossier/changed.ts), so a refresh that changes nothing does not move the sitemap.
+    // What this build lost that the last had: the run fails at its end, so the corpus is read before it is uploaded (round sixty-seven; triage-66 N4).
+    if (prevFile) for (const why of dropsBetween(prevFile, d)) drops.push(`${d.name.scientific} [${d.key}]: ${why}`);
     d.changed = stampOnBuild(d, prevFile, sha1);
     mkdirSync(path.slice(0, path.lastIndexOf('/')), { recursive: true });
     writeFileSync(path, JSON.stringify(d));
@@ -907,6 +929,12 @@ async function main() {
   writeFileSync(`${idxDir}/report.txt`, report.join('\n'));
   console.log(`\n${built} built, ${keptN} kept of ${jobs.length}; index now ${index.length} species → ${idxDir}/ (index.json and report.txt alongside; run --index for the sheets, the products and the manifest before the copy up)`);
   if (bulkStats) console.log(`bulk: ${bulkStats.wcvp} distributions, ${bulkStats.occ} occurrence sets and ${bulkStats.media} photograph sets from the files, ${bulkStats.through} requests to the APIs`);
+  if (drops.length) {
+    writeFileSync('drops.txt', drops.join('\n') + '\n');
+    const species = new Set(drops.map((x) => x.replace(/\]:.*$/, ''))).size;
+    console.error(`\n${species} species lost what the build before had (photographs dropped to none, or a source turned refused or failed) → drops.txt. Read it before any upload:\n${drops.slice(0, 20).map((x) => `  ${x}`).join('\n')}${drops.length > 20 ? '\n  …' : ''}`);
+    process.exitCode = 1;
+  } else if (existsSync('drops.txt')) unlinkSync('drops.txt');
 }
 
 main().catch((e) => {

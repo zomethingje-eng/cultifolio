@@ -4,14 +4,15 @@
   import { page } from '$app/state';
   import { onMount } from 'svelte';
   /** The phone's tab bar has stepped out of the way: the pill follows it down (round fifty-eight; the grower review). */
-  let { low = false }: { low?: boolean } = $props();
+  let { low = false, preload = 'hover' }: { low?: boolean; preload?: 'off' | 'hover' } = $props();
   onMount(() => compare.load());
   const onComparePage = $derived(page.url.pathname === '/compare');
 </script>
 
 {#if compare.picks.length && !onComparePage}
   <!-- Above 700 px: the tray, one line of names and the way to the page. -->
-  <div class="tray" role="region" aria-label="Compare tray" data-cover="bottom">
+  <!-- Not preloaded on hover on a private page: the tray's link names the species (round sixty-seven; triage-66 P3, S-F6). -->
+  <div class="tray" role="region" aria-label="Compare tray" data-cover="bottom" data-sveltekit-preload-data={preload}>
     <span class="lab">Compare</span>
     {#each compare.picks as p (p.slug)}
       <span class="pick"><i>{p.name}</i><button type="button" aria-label="Remove {p.name} from compare" onclick={() => compare.remove(p.slug)}>×</button></span>
@@ -21,7 +22,7 @@
   </div>
   <!-- On a phone: a pill at the bottom right, above the tab bar, to the compare page; the × clears. The tray took a third
        of the fixed height on a species page with two compared (round fifty-eight; the grower review). -->
-  <div class="cmppill" class:low role="region" aria-label="Compare" data-cover="bottom" data-away={low ? 'true' : undefined}>
+  <div class="cmppill" class:low role="region" aria-label="Compare" data-cover="bottom" data-away={low ? 'true' : undefined} data-sveltekit-preload-data={preload}>
     <a class="go" href={compare.picks.length >= 2 ? compare.href : '/compare'} aria-label={compare.picks.length >= 2 ? `Compare ${compare.picks.length} species` : `Compare 1, pick one more: ${compare.picks[0].name} is picked`}>Compare {compare.picks.length}{#if compare.picks.length < 2}<span class="more">, pick one more</span>{/if} <span aria-hidden="true">›</span></a>
     <button class="x" type="button" aria-label="Clear the compare tray" onclick={() => compare.clear()}>×</button>
   </div>

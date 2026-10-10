@@ -52,7 +52,8 @@ self.addEventListener('install', (e) => {
   );
   // No skipWaiting by itself: the new worker waits until every page of the old build is gone. An open page that learns
   // of the deploy from the version poll sends 'skip' (below) and reloads under this worker; the old build's cache is
-  // kept for one generation so a tab that has not reloaded yet still finds the chunks it lazily imports.
+  // kept for one generation, and read by the fetch handler, so a tab that has not reloaded yet still finds the chunks it
+  // lazily imports (round sixty-seven; triage-66 P2).
 });
 
 self.addEventListener('message', (e) => {
@@ -78,6 +79,17 @@ self.addEventListener('activate', (e) => {
   );
 });
 
+/** Where the build's hashed files live: a path under it is a build file of some build. */
+const IMMUTABLE = '/_app/immutable/';
+/** A copy of a build file in any cache this worker keeps: this build's, the previous build's, never the corpus answers'. */
+async function oldCopy(request: Request): Promise<Response | undefined> {
+  for (const k of await caches.keys()) {
+    if (!k.startsWith('cultifolio-') || k === CORPUS_CACHE) continue;
+    const hit = await (await caches.open(k)).match(request);
+    if (hit) return hit;
+  }
+  return undefined;
+}
 const isShell = (path: string) => SHELLS.includes(path) || /^\/(plants|places|propagation)\/[^/]+$/.test(path);
 /**
  * The two sections renamed in round nineteen. The server answers the old paths with a 301, but a private page's URL must not
@@ -118,6 +130,15 @@ self.addEventListener('fetch', (e) => {
         if (r.ok && r.type === 'basic') e.waitUntil(cache.put(request, r.clone()).catch(() => {}));
         return r;
       }
+      // A file of another build (its names are hashed, so it is never this build's): a tab still running the previous
+      // build after a takeover asks for its own chunks, a dynamic import (the spreadsheet, the example's seed, the share
+      // card) among them. The previous build's cache is kept for exactly this and was never read: the request went to the
+      // network, and failed offline or once the old files were gone (round sixty-seven; triage-66 P2, S-E7).
+      if (url.pathname.startsWith(IMMUTABLE)) {
+        const kept = await oldCopy(request);
+        if (kept) return kept;
+        return fetch(request);
+      }
       if (request.mode === 'navigate') {
         // The path is normalised once, doubled slashes collapsed and a trailing one stripped, before anything is matched:
         // `/plants/r1/` and `/benches//x` are shells only in that form, and un-normalised they would go to the server
@@ -156,7 +177,12 @@ self.addEventListener('fetch', (e) => {
       // asks the server nothing more about them, online or off, and a corpus refresh (an upload, no deploy) is a new URL (round twelve, 7).
       if (url.pathname.startsWith('/api/dossier/') || url.pathname.startsWith('/api/entries') || url.pathname.startsWith('/api/sheets')) {
         const corpusCache = await caches.open(CORPUS_CACHE);
-        const hit = url.searchParams.get('c') ? ((await corpusCache.match(request)) ?? (await cache.match(request))) : undefined;
+        // Kept by corpus, not by build: the page names its build in the URL (`v=`, round sixty-seven; triage-66 S7) for
+        // the adapter's cache at the edge, and a deploy must not leave the greenhouse without the buckets this device has.
+        const kept = new URL(request.url);
+        kept.searchParams.delete('v');
+        const keyOf = new Request(kept.href);
+        const hit = url.searchParams.get('c') ? ((await corpusCache.match(keyOf)) ?? (await cache.match(request))) : undefined;
         if (hit) return hit;
         try {
           const r = await fetch(request);
@@ -169,7 +195,7 @@ self.addEventListener('fetch', (e) => {
             e.waitUntil((async () => {
               // The first answer under a corpus id in this worker's life drops the answers under any other: they are a different URL and would never be asked for again.
               if (c && !prunedTo.has(c)) { prunedTo.add(c); for (const k of await corpusCache.keys()) if (new URL(k.url).searchParams.get('c') !== c) await corpusCache.delete(k); }
-              await corpusCache.put(request, r.clone());
+              await corpusCache.put(keyOf, r.clone());
             })().catch(() => {}));
           }
           return r;

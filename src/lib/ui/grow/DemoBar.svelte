@@ -13,44 +13,48 @@
    */
   import { onMount } from 'svelte';
   import { page } from '$app/state';
-  import { CLOSED_NOTE, LEFT_PARAM, dropLeftoverSample, finishLeaving, inDemo, keepSampleOpen, leaveDemo, markLeftByAddress, sampleEdits } from '$lib/db/demo';
-  import { example } from './example.svelte';
+  import { CLOSED_NOTE, LEFT_PARAM, PAGE_IN_DEMO, clearExampleCopies, deleteLeftoverSample, dropLeftoverSample, finishLeaving, keepSampleOpen, markLeftByAddress, onExampleClosed } from '$lib/db/demo';
+  import { example, enterExample, hadOwn, leaveExample, notEnteredWords } from './example.svelte';
   import { replaceState } from '$app/navigation';
   import { toast } from '$lib/ui/toast.svelte';
-  let leaving = $state(false);
-  let on = $state(false);
+  /** The page shows the example: decided once, as the page loaded (round sixty-seven; triage-66 V3). */
+  const on = PAGE_IN_DEMO;
   /**
-   * The words for a grower who looked in from the menu: "your own starts when you add a plant" is a visitor's, and their
-   * own collection is waiting as they left it (round sixty-three, V2). Read from the front page's hint, which the layout
-   * keeps true of the own collection and never writes from the example.
+   * The words for a grower who looked in from the menu: their own collection is waiting as they left it (round
+   * sixty-three, V2). Noted as the example was opened, by the same test as an empty page's (round sixty-seven; triage-66
+   * V4, S-A11): the front page's hint counts no places, and a grower with only places was told their own had not begun.
    */
   let hasOwn = $state(false);
+  /** The example was closed under this page by another tab (round sixty-seven; triage-66 V3): said here, with the way home. */
+  let closedHere = $state(false);
   onMount(() => {
-    on = inDemo();
     if (!on) {
       delete document.documentElement.dataset.demo;
+      clearExampleCopies();
       // Sent home because the sample was closed in another tab: said here, plainly (round sixty-one; the records review, 13).
       try { if (sessionStorage.getItem(CLOSED_NOTE) === '1') { sessionStorage.removeItem(CLOSED_NOTE); toast.show('The example collection was closed in another tab. This is your own collection.', 8000); } } catch { /* nothing to say */ }
       // The first page after Leave deletes the sample; a delete that is held up or refused is said, never taken as done (round sixty-two; A9).
       // The address a Leave opened this page at says so (`?left=sample`, read by app.html's first script); taken off it here,
       // so a reload or a link copied from it is an ordinary visit (round sixty-two, the first deploy).
       // The tab is marked as out of the example by the address too, so an empty Today does not open it again (round sixty-three, V2).
-      if (page.url.searchParams.get(LEFT_PARAM) === 'sample') { markLeftByAddress(); const u = new URL(page.url); u.searchParams.delete(LEFT_PARAM); setTimeout(() => { try { replaceState(u, page.state); } catch { /* the router not up yet: the address keeps it, harmlessly */ } }, 0); }
+      if (page.url.searchParams.get(LEFT_PARAM) === 'sample') { markLeftByAddress(); setTimeout(() => { try { const u = new URL(location.href); u.searchParams.delete(LEFT_PARAM); replaceState(u, page.state); } catch { /* the router not up yet: the address keeps it, harmlessly */ } }, 0); } // read when it runs: a page that takes its own parameter off (Places' `name`) does so beside it (round sixty-seven)
       void finishLeaving().then((left) => {
         if (left === 'blocked') toast.show('The example collection is still open in another tab, so it is not deleted yet: it goes when that tab is closed.', 10000);
         else if (left === 'failed') toast.show('The example collection could not be deleted: the browser refused. It is tried again the next time a page opens here.', 10000);
-        else if (left === null) void dropLeftoverSample();
+        // A leftover with records the visitor made is kept and offered back once (round sixty-seven; triage-66 V2).
+        else if (left === null) void dropLeftoverSample((n) => (example.leftover = n));
       });
       return;
     }
     document.documentElement.dataset.demo = '1'; // a browser that ran no inline script still shows the bar
     const stop = keepSampleOpen();
-    try { hasOwn = localStorage.getItem('cultifolio.hasMine') === '1'; } catch { /* a visitor's words */ }
+    const unclosed = onExampleClosed(() => (closedHere = true));
+    hasOwn = hadOwn();
     // Shared with the pages, which say "Setting out the example collection" rather than draw their empty state under it (round sixty-three, V2).
     example.seeding = true;
     // The seed is loaded only in the sample: a visitor's page carries none of it (round sixty-one; the accessibility review, 3).
     void import('./demo-seed').then((m) => m.seedDemo()).catch(() => false).finally(() => (example.seeding = false));
-    return stop;
+    return () => { stop(); unclosed(); };
   });
   const locked = $derived(/^\/(sync|backup|settings)(\/|$)/.test(page.url.pathname));
   const what = $derived(page.url.pathname.startsWith('/sync') ? 'sync' : page.url.pathname.startsWith('/backup') ? 'backup' : 'settings');
@@ -60,31 +64,41 @@
     document.body.classList.add('demo-locked');
     return () => document.body.classList.remove('demo-locked');
   });
-  /**
-   * Leave asks first when the visitor added or changed records here, saying how many (round sixty-two; A9); then the tab
-   * navigates, and the next page deletes the sample. A page's own "Leave site?" answered Cancel keeps the tab as it was,
-   * so the button comes back at once, not 4 seconds later under "Leaving…" (round sixty-two, second pass; the
-   * verification grower review, 4).
-   */
-  async function leave(to = '/') {
-    const n = await sampleEdits();
-    if (n && !confirm(`Leave the example collection? The ${n === 1 ? 'record you added or changed here is' : `${n} records you added or changed here are`} deleted with it.`)) return;
-    leaving = true;
-    // To the front page, or the add form, in the visitor's own collection; never back to the page that opened the
-    // example, which would open it again (round sixty-three, V2).
-    leaveDemo(to, () => (leaving = false));
+  /** The leftover's offer, answered (triage-66 V2): into it, or deleted, and either way the offer goes. */
+  let offerMsg = $state('');
+  function openLeftover() {
+    const r = enterExample('/today');
+    if (r !== true) offerMsg = notEnteredWords(r);
+  }
+  async function deleteLeftover() {
+    const r = await deleteLeftoverSample();
+    example.leftover = 0;
+    toast.show(r === 'deleted' ? 'The example collection you left is deleted.' : r === 'blocked' ? 'The example collection is open in another tab, so it is not deleted.' : 'The example collection could not be deleted: the browser refused.', 8000);
   }
 </script>
 
 <!-- What the example is for, in the words the owner agreed (round sixty-three, V2): the bar, not a page, says why a
-     visitor is looking at plants that are not theirs. -->
+     visitor is looking at plants that are not theirs, and that nothing added here is kept (round sixty-seven; triage-66 V1). -->
 <div class="demobar" id="demobar" role="region" aria-label="Example collection">
-  <span><b>An example collection,</b> so you can see what this page does. {hasOwn ? 'Your own plants are kept apart, as you left them.' : 'Your own starts when you add a plant.'} <span class="sr" role="status">{example.seeding ? 'Setting it out…' : ''}</span></span>
-  <span class="demoacts">
-    {#if !hasOwn}<button class="btn small pri" type="button" id="demo-add" onclick={() => leave('/plants/new')} disabled={leaving}>Add your first plant</button>{/if}
-    <button class="btn small" type="button" id="demo-leave" onclick={() => leave('/')} disabled={leaving}>{leaving ? 'Leaving…' : 'Leave the example'}</button>
-  </span>
+  {#if closedHere}
+    <span role="alert"><b>The example collection was closed in another tab.</b> Nothing more is saved on this page; what you typed is still here to copy.</span>
+    <span class="demoacts"><a class="btn small pri" href="/?left=sample" id="demo-home" data-sveltekit-reload>Go to my own collection</a></span>
+  {:else}
+    <span><b>An example collection,</b> so you can see what this page does. Nothing added here is kept: leaving deletes it.{hasOwn ? ' Your own collection is kept apart, as you left it.' : ''} <span class="sr" role="status">{example.seeding ? 'Setting it out…' : ''}</span></span>
+    <span class="demoacts">
+      {#if !hasOwn}<button class="btn small pri" type="button" id="demo-add" onclick={() => leaveExample('/plants/new')} disabled={example.leaving}>Add your first plant</button>{/if}
+      <button class="btn small" type="button" id="demo-leave" onclick={() => leaveExample('/')} disabled={example.leaving}>{example.leaving ? 'Leaving…' : 'Leave the example'}</button>
+    </span>
+  {/if}
 </div>
+{#if !on && example.leftover > 0}
+  <!-- A leftover example with the visitor's records in it, kept and offered back once (round sixty-seven; triage-66 V2; R45-2). -->
+  <div class="leftover" id="example-left" role="region" aria-label="Example collection left open">
+    <p>You left an example collection with {example.leftover === 1 ? '1 record' : `${example.leftover} records`} you added or changed there.</p>
+    <p class="demoacts"><button class="btn small pri" type="button" id="example-left-open" onclick={openLeftover}>Open it</button><button class="btn small" type="button" id="example-left-delete" onclick={deleteLeftover}>Delete it</button></p>
+    {#if offerMsg}<p class="small" role="status">{offerMsg}</p>{/if}
+  </div>
+{/if}
 {#if locked}
   <div class="demolock" id="demo-locked">
     <p><b>{what === 'sync' ? 'Sync is off in the example collection.' : what === 'backup' ? 'Backup and restore are off in the example collection.' : 'Settings are off in the example collection.'}</b> {what === 'sync' ? 'Setting up sync here would send the example to a vault on the server.' : what === 'backup' ? 'A file restored here would go into the example, and be deleted with it when you leave.' : 'Units, appearance and your site are this device\'s, and the example leaves them as they are.'} Leave the example to use {what === 'sync' ? 'sync' : what === 'backup' ? 'backups' : 'Settings'} with your own plants.</p>
@@ -100,11 +114,14 @@
   .demoacts { display: flex; flex-wrap: wrap; gap: 8px; flex: none; max-width: 100%; }
   .demolock { margin: 16px 0; padding: 12px 14px; background: var(--card); border-radius: var(--r); box-shadow: var(--sh); font-size: var(--fs-md); }
   .demolock p { margin: 0; }
+  .leftover { margin: 12px 0 0; padding: 8px 12px; border: 1px solid var(--accent); border-radius: var(--r); background: var(--card); font-size: var(--fs-md); display: grid; gap: 8px; }
+  .leftover p { margin: 0; }
+  .leftover .btn { min-height: var(--tap); }
   /* Shown only in the sample's tab, which app.html marks before the first paint. */
   :global(html:not([data-demo])) .demobar, :global(html:not([data-demo])) .demolock { display: none; }
   /* The sync, backup and settings pages' own controls are put away while the sample is open; the line above says why.
      The page's head stays, so the page keeps its heading (round sixty-one; the accessibility review, 10). */
   :global(html[data-demo] #main:has(> .demolock) > :not(.demobar):not(.demolock):not(.toast):not(.install):not(.phead):not(.toastregion)),
   :global(body.demo-locked #main > :not(.demobar):not(.demolock):not(.toast):not(.install):not(.phead):not(.toastregion)) { display: none !important; }
-  @media print { .demobar, .demolock { display: none !important; } }
+  @media print { .demobar, .demolock, .leftover { display: none !important; } }
 </style>

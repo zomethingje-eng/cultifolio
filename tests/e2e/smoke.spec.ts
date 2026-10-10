@@ -1,6 +1,6 @@
 import { zipSync, strToU8 } from 'fflate';
 import { test, expect } from '@playwright/test';
-import { inject } from './helpers/inject';
+import { inject, wipe } from './helpers/inject';
 import { fromAddress, docAddress, limitAddress } from './helpers/address';
 import { ownPages } from './helpers/r63v-own';
 import { textSize, textSizeHeld } from './helpers/text-size';
@@ -500,11 +500,9 @@ test('backup: export a zip, wipe the device, restore it, and the collection is i
   await expect(page.locator('#bk-done')).toContainText(/site/);
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('cultifolio.frost.site') ?? 'null'))).toMatchObject({ lat: 40.38, lon: -80.05 });
   // wipe: replace with the file is the wipe-and-restore path, but first prove a real wipe loses everything
-  await page.evaluate(async () => {
-    const db = await new Promise<IDBDatabase>((res) => { const r = indexedDB.open('cultifolio'); r.onsuccess = () => res(r.result); });
-    await Promise.all(['changes', 'photos'].map((s) => new Promise<void>((res) => { const r = db.transaction(s, 'readwrite').objectStore(s).clear(); r.onsuccess = () => res(); })));
-    localStorage.removeItem('cultifolio.frost.site');
-  });
+  // Through the helper, which drops the snapshot and the arrival rows with the log (round sixty-seven; triage-66 H7).
+  await wipe(page);
+  await page.evaluate(() => localStorage.removeItem('cultifolio.frost.site'));
   await page.goto('/plants');
   await expect(page.locator('a.accrow')).toHaveCount(0);
   // restore by merge into the empty device
@@ -620,8 +618,10 @@ test('labels: pick plants, choose a sheet, print at true size with a code that o
   // the care line arrives from the dossier for the species with climate
   await expect(page.locator('.page .label .care', { hasText: 'cooler six months Nov–Apr · floor 6.5 °C (1 in 100, NASA POWER) · open sky 30–65 DLI' })).toHaveCount(1); // the same rules and the same month formatter as the sheet
   // and it was asked for by hash bucket only: no key, no slug, no species name left the browser (round ten, 1)
-  expect(asked.filter((u) => u.startsWith('/api/sheets')).sort()).toEqual(['/api/sheets?b=03&c=fixture&n=32', '/api/sheets?b=1c&c=fixture&n=32']); // one request a bucket (its edge-cache key), with the corpus id and the count hashed by (round fifty-four, 3)
-  for (const u of asked) { expect(u).not.toMatch(/dossier|index|copiapoa|welwitschia|5384013/); expect(u).toMatch(/^\/api\/(corpus|(sheets|entries)\?b=([01][0-9a-f],?)+&c=fixture&n=32)$/); }
+  // Each also names the build (`v=`, round sixty-seven; triage-66 S7): a version, never a name, so it is left out here.
+  const noBuild = (u: string) => u.replace(/&v=[^&]*$/, '');
+  expect(asked.filter((u) => u.startsWith('/api/sheets')).map(noBuild).sort()).toEqual(['/api/sheets?b=03&c=fixture&n=32', '/api/sheets?b=1c&c=fixture&n=32']); // one request a bucket (its edge-cache key), with the corpus id and the count hashed by (round fifty-four, 3)
+  for (const u of asked) { expect(u).not.toMatch(/dossier|index|copiapoa|welwitschia|5384013/); expect(noBuild(u)).toMatch(/^\/api\/(corpus|(sheets|entries)\?b=([01][0-9a-f],?)+&c=fixture&n=32)$/); }
   // the page size follows the sheet
   await page.selectOption('#lb-sheet', 'L7160');
   await expect(page.locator('.page').first()).toHaveCSS('width', /793|794/); // 210 mm
@@ -649,7 +649,7 @@ test('first run: the front page explains itself once, and stops once there is a 
   const html = await (await page.request.get('/')).text();
   expect(html).toContain('id="welcome"');
   await page.goto('/');
-  await expect(page.locator('#welcome')).toContainText('Grow some of these');
+  await expect(page.locator('#welcome')).toContainText('Grow cacti, succulents or bulbs?'); // the welcome's lead says what the site is on a phone (round sixty-seven; triage-66 V9)
   await page.getByRole('button', { name: 'Not now' }).click();
   await expect(page.locator('#welcome')).toHaveCount(0);
   await page.reload();
@@ -898,7 +898,10 @@ test('five new vaults a day from one address: the sixth is refused with a 429 th
   const sixth = await make(ip, vault());
   expect(sixth.status()).toBe(429);
   expect(((await sixth.json()) as { error: string }).error).toBe('too many new vaults from this address today');
-  expect(sixth.headers()['retry-after']).toBe('3600');
+  // To midnight UTC, when the day's count starts again (round sixty-seven; triage-66 S9): an hour was refused again until then.
+  const now = Date.now();
+  const toMidnight = Math.ceil((Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), new Date(now).getUTCDate() + 1) - now) / 1000);
+  expect(Math.abs(Number(sixth.headers()['retry-after']) - toMidnight)).toBeLessThanOrEqual(5);
   // a vault already made is opened from the same address: nothing new is counted
   const again = await make(ip, first);
   expect(again.status()).toBe(200);
@@ -969,7 +972,8 @@ test('the app shell is installed for offline use: collection pages, a species pa
   // the worker let the request through, the page would be this 500, not the places shell.
   // Not in Safari's engine: there Playwright routes a page's navigation from the page's own inspector, before the worker
   // is asked, so the stand-in answered "server saw it" for a request the worker never saw (round sixty-five; the
-  // all-engines rerun). The worker's map is the same file in every engine, and Chromium and Firefox check it here.
+  // all-engines rerun). The worker's map is the same file in every engine, and Chromium and Firefox check it here; Safari's
+  // engine checks it in r67h-offline.spec.ts 3, through a proxy rather than a route (round sixty-seven; triage-66 H2).
   if (browserName === 'webkit') { await ctx.close(); return; }
   let reachedServer = 0;
   await ctx.route(/\/(benches|sowings)(\/|\?|$)|\/(places|plants)\/[^/?]+\/(\?|$)/, (r) => { reachedServer++; return r.fulfill({ status: 500, body: 'server saw it' }); });
@@ -1336,8 +1340,10 @@ test('the browser talks to no third-party host while a name is typed, and the er
   await expect(page.locator('.err')).not.toContainText('yet');
 });
 
-/** Why the offline navigations below do not run in Safari's engine: a harness limit, not the site's (round sixty-five). */
-const WEBKIT_OFFLINE = "In Playwright's WebKit a navigation the service worker would answer from its cache fails with \"WebKit encountered an internal error\" once the context is offline: Playwright takes WebKit offline from the page's own inspector, which stands in front of the worker (as its routes do, smoke 924). Checked in Chromium and Firefox, and by hand on an iPhone.";
+/** Why the offline navigations below do not run in Safari's engine: a harness limit, not the site's (round sixty-five). Their
+ *  WebKit runs are r67h-offline.spec.ts, which takes the network away behind the worker instead; the claim that this was
+ *  checked by hand on an iPhone had no record, and is gone (round sixty-seven; triage-66 H2, S-E10). */
+const WEBKIT_OFFLINE = "In Playwright's WebKit a navigation the service worker would answer from its cache fails with \"WebKit encountered an internal error\" once the context is offline: Playwright takes WebKit offline from the page's own inspector, which stands in front of the worker (as its routes do, smoke 924). Checked here in Chromium and Firefox; in Safari's engine, r67h-offline.spec.ts takes the network away behind the worker instead.";
 test('offline, a plant page not yet cached still opens from the section shell', async ({ browser, browserName }) => {
   test.skip(browserName === 'webkit', WEBKIT_OFFLINE);
   const ctx = await browser.newContext();
@@ -1639,7 +1645,8 @@ test('a label whose species could not be reached says so, and the sheet is not p
   await expect(page.locator('#lb-unchecked')).toContainText('One care line not checked');
   await expect(page.locator('#lb-unchecked .nc .tok')).toBeVisible();
   await expect(page.locator('#lb-print')).toHaveText('Print 1 label');
-  await expect(page.locator('.page .label .care.unchecked')).toHaveText('care line not checked: the reference was not reached');
+  // A 429 is the server refusing for now, said as that (round sixty-seven; triage-66 S8, R45-11).
+  await expect(page.locator('.page .label .care.unchecked')).toHaveText('care line not checked: the server refused the sheets for now');
   await expect(page.locator('#lb-print')).toBeEnabled();
   await page.context().unroute('**/api/sheets**');
   await page.locator('#lb-unchecked').getByRole('button', { name: 'Try again' }).click();
@@ -2567,10 +2574,7 @@ test('round twenty-eight: a backup of four hundred plants with long notes is wri
   const path = (await file.path())!;
   await expect(page.locator('.secrule .n', { hasText: 'last today' })).toBeVisible();
   // wiped, then read back
-  await page.evaluate(async () => {
-    const db = await new Promise<IDBDatabase>((res) => { const r = indexedDB.open('cultifolio'); r.onsuccess = () => res(r.result); });
-    await Promise.all(['changes', 'photos'].map((s) => new Promise<void>((res) => { const r = db.transaction(s, 'readwrite').objectStore(s).clear(); r.onsuccess = () => res(); })));
-  });
+  await wipe(page); // the snapshot and the arrival rows go with the log (round sixty-seven; triage-66 H7)
   await page.goto('/backup');
   await page.locator('#bk-file').setInputFiles(path);
   await expect(page.locator('.preview')).toContainText('400 plants');

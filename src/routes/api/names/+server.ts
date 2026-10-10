@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import { forBuild } from '$lib/server/build';
 import type { RequestHandler } from './$types';
 import { limited, upstreamCall, heldBack, clientIp } from '$lib/server/sync';
 
@@ -37,7 +38,7 @@ const bad = (why: string) => json({ error: why }, { status: 502, headers: { 'cac
 
 export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddress }) => {
   const q = _readName([...(url.searchParams.get('q') ?? '')].slice(0, 200).join(''));
-  if (q.length < 3) return json([], { headers: { 'cache-control': 'public, max-age=86400' } });
+  if (q.length < 3) return json([], { headers: { 'cache-control': forBuild(url, 'public, max-age=86400') } });
   if (!_NAME_QUERY.test(q)) return json({ error: 'a name is letters and their marks, spaces, full stops, apostrophes, hyphens, & and ×' }, { status: 400, headers: { 'cache-control': 'no-store' } });
   // Plants only (higherTaxonKey 6 is Plantae in the backbone): unfiltered, "gaster" answered twelve weevils, fishes and
   // fungi and no Gasteria, since the suggest ranks across every kingdom and the picker shows the first twelve (round twenty-eight, deploy).
@@ -47,7 +48,11 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   const cache = platform?.caches?.default;
   // A cache that fails to answer is a lookup, not a 500 (round sixty; the server review, 12), as the page cache's is.
   const hit = await cache?.match(cacheKey).catch(() => undefined);
-  if (hit) return new Response(hit.body, hit); // a copy: the cached response's own headers are immutable, and the hook adds two (round seventeen, 1)
+  if (hit) {
+    const copy = new Response(hit.body, hit); // a copy: the cached response's own headers are immutable, and the hook adds two (round seventeen, 1)
+    copy.headers.set('cache-control', forBuild(url, 'public, max-age=86400')); // kept by the adapter only under this build (round sixty-seven; S7)
+    return copy;
+  }
   const stop = await limited(platform, getClientAddress, 'names');
   if (stop) return stop;
   // The site's own minute of calls to GBIF, for every address together, and this address's part of it (round sixty-one; the server review, 4): a held call says so (`held: true`), never that GBIF did not answer.
@@ -58,6 +63,13 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
     res = await fetch(upstream, { headers: { accept: 'application/json', 'user-agent': 'Cultifolio/3.0 (https://cultifolio.com)' } });
   } catch {
     return bad('backbone unreachable');
+  }
+  // GBIF's 429 or 403 refused this site's request, said as that, never as "did not answer" (round sixty-seven; triage-66
+  // S8, R45-11): `refused: true`, GBIF's status and its Retry-After when it gave one.
+  if (res.status === 429 || res.status === 403) {
+    const wait = Number(res.headers.get('retry-after'));
+    const retryAfter = Number.isFinite(wait) && wait > 0 ? Math.min(3600, Math.ceil(wait)) : null;
+    return json({ error: "GBIF refused this site's request", refused: true, service: 'gbif', status: res.status, ...(retryAfter ? { retryAfter } : {}) }, { status: 502, headers: { 'cache-control': 'no-store', ...(retryAfter ? { 'retry-after': String(retryAfter) } : {}) } });
   }
   if (!res.ok) return bad(`backbone ${res.status}`);
   let rows: unknown;
@@ -70,5 +82,7 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   const out = (rows as Row[]).map((r) => Object.fromEntries(FIELDS.filter((k) => r && typeof r === 'object' && r[k] != null).map((k) => [k, r[k]])));
   const reply = json(out, { headers: { 'cache-control': 'public, max-age=86400' } });
   if (cache) platform?.context?.waitUntil?.(cache.put(cacheKey, reply.clone()).catch(() => {}));
+  // The Worker's own copy is kept a day under its private key; the answer is kept by the adapter only under this build (round sixty-seven; S7).
+  reply.headers.set('cache-control', forBuild(url, 'public, max-age=86400'));
   return reply;
 };

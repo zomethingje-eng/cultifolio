@@ -50,9 +50,9 @@
  */
 import { DurableObject } from 'cloudflare:workers';
 import { NET_FACTOR, UPSTREAM_ADDRESS_PART, UPSTREAM_RESERVE_PART, UPSTREAM_RESERVE_EACH } from './caps';
-import { unnamedGenerations, receipt, STRAY_MS, PointerUnreadable } from './photogen';
+import { unnamedGenerations, receipt, repoint, STRAY_MS, PointerUnreadable } from './photogen';
 
-export type Creation = 'ok' | 'address' | 'day' | 'total' | 'unavailable';
+export type Creation = 'ok' | 'address' | 'network' | 'day' | 'total' | 'unavailable';
 const DAY_MS = 86_400_000;
 /** The next UTC midnight after `now`: the alarm runs there, so "older than two days" is counted in whole UTC days from a fixed point (round twenty-three, 8). */
 /** A /48's allowance of new vaults a day, as a multiple of one address's (caps.ts since round sixty-two). */
@@ -75,7 +75,9 @@ export class Counters extends DurableObject {
     if (got.get('all') == null && seed == null) return 'unavailable'; // not yet seeded and the count before this object could not be read: wait, do not start from zero
     const nAll = got.get('all') ?? seed ?? 0;
     if (nIp >= perAddress) return 'address';
-    if (kNet && nNet >= perAddress * NET_FACTOR) return 'address';
+    // The /48's own count, said as the network's: a /64 that made no vault was told "this address" (round sixty-seven;
+    // triage-66 S9, S-D7).
+    if (kNet && nNet >= perAddress * NET_FACTOR) return 'network';
     if (nAll >= max) return 'total';
     if (nDay >= perDay) return 'day';
     await this.ctx.storage.put({ [kIp]: nIp + 1, all: nAll, ...(kNet ? { [kNet]: nNet + 1 } : {}) });
@@ -314,19 +316,81 @@ export class Counters extends DurableObject {
    * fifty-nine; two reviews: twenty concurrent first uploads counted one vault twenty times, which could close sync to
    * everyone). Past `max` the vault is refused, as a creation is; past `perDay`, until midnight. `seed` as for `create`.
    */
-  async fill(vault: string, max: number, seed: number | null = 0, day: string | null = null, perDay = Infinity, now = Date.now()): Promise<'counted' | 'already' | 'total' | 'day' | 'unavailable'> {
+  async fill(vault: string, max: number, seed: number | null = 0, day: string | null = null, perDay = Infinity, now = Date.now(), net: string | null = null, perNet = Infinity): Promise<'counted' | 'already' | 'total' | 'day' | 'network' | 'unavailable'> {
     const k = `f:${vault}`, kDay = day ? `day:${day}` : null;
-    const got = await this.ctx.storage.get<unknown>([k, 'all', ...(kDay ? [kDay] : [])]);
+    // The network of the upload that takes the place (an IPv4 /24 or an IPv6 /48), counted per day too (round sixty-seven;
+    // triage-66 S5, S-D3): forty addresses of one /26, or ten /48s, spent the whole day's places and closed sync to every
+    // new grower until midnight, and ten days of it to everyone for good.
+    const kNet = day && net ? `pn:${net}:${day}` : null;
+    const got = await this.ctx.storage.get<unknown>([k, 'all', ...(kDay ? [kDay] : []), ...(kNet ? [kNet] : [])]);
     if (got.get(k) != null) return 'already';
     if (got.get('all') == null && seed == null) return 'unavailable';
     const n = (got.get('all') as number | undefined) ?? seed ?? 0;
     if (n >= max) return 'total';
     const nDay = kDay ? ((got.get(kDay) as number | undefined) ?? 0) : 0;
     if (kDay && nDay >= perDay) return 'day';
-    // `w`: the day of the vault's last upload, for the 90-day reclaim (round sixty-one).
-    await this.ctx.storage.put({ all: n + 1, [k]: { d: day, w: day ?? dayOf(now) } satisfies Place, ...(kDay ? { [kDay]: nDay + 1 } : {}) });
+    const nNet = kNet ? ((got.get(kNet) as number | undefined) ?? 0) : 0;
+    if (kNet && nNet >= perNet) return 'network';
+    // `w`: the day of the vault's last upload, for the 90-day reclaim (round sixty-one); `n`, the network counted, so a
+    // place given back (`unfill`) is given back to it too.
+    await this.ctx.storage.put({ all: n + 1, [k]: { d: day, w: day ?? dayOf(now), ...(kNet ? { n: net } : {}) } satisfies Place, ...(kDay ? { [kDay]: nDay + 1 } : {}), ...(kNet ? { [kNet]: nNet + 1 } : {}) });
     await this.wake(now);
+    if (kDay && day && Number.isFinite(perDay) && nDay + 1 >= Math.ceil(perDay / 2)) await this.halfSpent(day, nDay + 1, perDay, now);
     return 'counted';
+  }
+  /**
+   * The day's places are half spent: recorded once a day (`o:<day>`), with when, the count, and the networks that took
+   * the most places that day, for the operator to read (round sixty-seven; triage-66 S5): in this object's storage, and
+   * mirrored to KV as `ops:vaults:<day>` (`npx wrangler kv key get`, docs/DEPLOY.md), kept to the end of the next day as
+   * the address keys are. An attack on the day's places is then seen while there is still half a day to act.
+   */
+  private async halfSpent(day: string, count: number, perDay: number, now: number): Promise<void> {
+    const ko = `o:${day}`;
+    if ((await this.ctx.storage.get<unknown>([ko])).get(ko) != null) return;
+    const nets: Array<[string, number]> = [];
+    for (const [key, v] of await this.ctx.storage.list<number>({ prefix: 'pn:' })) if (key.endsWith(`:${day}`) && typeof v === 'number') nets.push([key.slice(3, -(day.length + 1)), v]);
+    nets.sort((a, b) => b[1] - a[1]);
+    const record = { at: now, count, perDay, networks: Object.fromEntries(nets.slice(0, 20)) };
+    await this.ctx.storage.put({ [ko]: record });
+    console.warn(`counters: half of the day's ${perDay} new-vault places are taken (${count}); see ops:vaults:${day}`);
+    await this.mirror(`ops:vaults:${day}`, record, Math.floor(Date.parse(day + 'T00:00:00Z') / 1000) + 2 * 86400);
+  }
+  /** Best-effort copy of an operator's record into KV, where `wrangler kv key get` reads it; without KV (tests), nothing. */
+  private async mirror(key: string, value: unknown, expiration: number): Promise<void> {
+    const kv = (this.env as { QUEUE?: KVNamespace } | undefined)?.QUEUE;
+    if (!kv?.put) return;
+    await kv.put(key, JSON.stringify(value), { expiration }).catch(() => {});
+  }
+  /**
+   * A fault the Worker wants the operator to hear of, counted by kind for the UTC day (`e:<day>` → { kind: count }), kept
+   * a week and mirrored to KV as `ops:faults:<day>` (round sixty-seven; triage-66 S2): Workers Logs is off, so a log line
+   * is seen only by a live tail. A kind is a short word from a fixed list (sync.ts `FAULTS`): no address, path or id.
+   */
+  async fault(kind: string, now = Date.now()): Promise<void> {
+    if (!/^[a-z]{1,16}$/.test(kind)) return;
+    const day = dayOf(now), k = `e:${day}`;
+    const had = (await this.ctx.storage.get<Record<string, number>>([k])).get(k);
+    const out = { ...(had && typeof had === 'object' ? had : {}), [kind]: ((had && typeof had === 'object' ? had[kind] : 0) ?? 0) + 1 };
+    await this.ctx.storage.put({ [k]: out });
+    await this.wake(now);
+    await this.mirror(`ops:faults:${day}`, out, Math.floor(Date.parse(day + 'T00:00:00Z') / 1000) + FAULT_DAYS * 86400);
+  }
+  /**
+   * A vault's listings of its log this hour (round sixty-seven; triage-66 S6): `listAsk` says whether one more may be made
+   * (the pages already made this hour under `budget`), and `listed` charges the pages a listing made. One key (`l`), the
+   * hour and its count; an hour that has passed starts again from nothing.
+   */
+  async listAsk(budget: number, now = Date.now()): Promise<{ ok: true } | { ok: false; retryAfter: number }> {
+    const hour = Math.floor(now / 3_600_000);
+    const l = (await this.ctx.storage.get<{ h: number; n: number }>(['l'])).get('l');
+    const spent = l && l.h === hour ? l.n : 0;
+    if (spent >= budget) return { ok: false, retryAfter: Math.max(1, Math.ceil(((hour + 1) * 3_600_000 - now) / 1000)) };
+    return { ok: true };
+  }
+  async listed(pages: number, now = Date.now()): Promise<void> {
+    const hour = Math.floor(now / 3_600_000);
+    const l = (await this.ctx.storage.get<{ h: number; n: number }>(['l'])).get('l');
+    await this.ctx.storage.put({ l: { h: hour, n: (l && l.h === hour ? l.n : 0) + Math.max(0, pages) } });
   }
   /**
    * A vault that already took a place uploads again (asked once a day per isolate): its last upload's day is kept, and a
@@ -380,9 +444,14 @@ export class Counters extends DurableObject {
     if (was == null) return false;
     const counted = place(was).d;
     const kDay = counted ? `day:${counted}` : null;
-    const nDay = kDay ? ((await this.ctx.storage.get<number>([kDay])).get(kDay) ?? 0) : 0;
+    // And the network's count for that day (round sixty-seven; S5).
+    const net = place(was).n;
+    const kNet = counted && net ? `pn:${net}:${counted}` : null;
+    const counts = await this.ctx.storage.get<number>([...(kDay ? [kDay] : []), ...(kNet ? [kNet] : [])]);
+    const nDay = kDay ? (counts.get(kDay) ?? 0) : 0;
+    const nNet = kNet ? (counts.get(kNet) ?? 0) : 0;
     await this.ctx.storage.delete([k]);
-    await this.ctx.storage.put({ all: Math.max(0, ((got.get('all') as number | undefined) ?? 0) - 1), ...(kDay && nDay > 0 ? { [kDay]: nDay - 1 } : {}) });
+    await this.ctx.storage.put({ all: Math.max(0, ((got.get('all') as number | undefined) ?? 0) - 1), ...(kDay && nDay > 0 ? { [kDay]: nDay - 1 } : {}), ...(kNet && nNet > 0 ? { [kNet]: nNet - 1 } : {}) });
     return true;
   }
   /** The running totals, for a look from the outside. */
@@ -441,6 +510,11 @@ export class Counters extends DurableObject {
       'ip:': (k) => !keep.has(k.slice(k.lastIndexOf(':') + 1)),
       'net:': (k) => !keep.has(k.slice(k.lastIndexOf(':') + 1)),
       'day:': (k) => !keep.has(k.slice(4)),
+      // The day's places per network and the half-spent record (round sixty-seven; S5): kept as the address keys are.
+      'pn:': (k) => !keep.has(k.slice(k.lastIndexOf(':') + 1)),
+      'o:': (k) => !keep.has(k.slice(2)),
+      // The day's fault counts, by kind alone, a week (round sixty-seven; S2).
+      'e:': (k) => k.slice(2) < dayOf(now - (FAULT_DAYS - 1) * DAY_MS),
       'd:': (k) => !keep.has(k.slice(2)),
       'g:': (_, d) => !keep.has(d as string),
       'c:': (_, c) => !c || !keep.has((c as Claim).day),
@@ -522,6 +596,7 @@ export class Counters extends DurableObject {
         }
       } catch (e) {
         console.error("counters: a vault's meta could not be marked reclaimed; its place is kept until the next sweep", e);
+        await this.fault('reclaim', now).catch(() => {});
       }
     }
     return out;
@@ -583,6 +658,8 @@ export class Counters extends DurableObject {
       if (still.d === day) continue; // this night is counted already (a run again a second later)
       if (nights >= MARK_FAULT_NIGHTS) {
         console.error(`counters: the photograph ${k.slice(2)} could not be read by the sweep on ${nights} nights; its mark is dropped, and anything unnamed goes at its next touch`);
+        // Counted in the "vaults" object, by kind alone (round sixty-seven; S2): the log line above reaches only a live tail.
+        await this.faultThere('sweep', now);
         await this.ctx.storage.delete([k]);
       } else await this.ctx.storage.put({ [k]: { at, n: nights + 1, d: day } satisfies Mark });
     }
@@ -606,11 +683,16 @@ export class Counters extends DurableObject {
       // A pointer that cannot be read throws (round sixty-three; R3 2): it is not known what it names, so nothing goes.
       const found = await unnamedGenerations(r2, name, now);
       if (!found) return 'done'; // no pointer: the first generation is the photograph, and nothing else was ever stored
+      // The pointer is written back under its own etag before anything goes (round sixty-seven; triage-66 S3, S-D2): an
+      // upload whose pointer write stalled past its hold then fails its condition, where it landed after this delete and
+      // named a generation that was gone. A pointer that moved since it was read is judged again at the next run.
+      if (found.old.length && !(await repoint(r2, name, found.ref))) return 'keep';
       for (const key of found.old) {
         if (!(await this.renew(name, h.token, clock()))) return 'keep';
         await this.strayOff(r2, key, now);
       }
-      return found.young ? 'keep' : 'done';
+      // The mark stays until a listing that reached the end finds nothing unnamed (round sixty-seven; S4, IND-8).
+      return found.young || !found.complete ? 'keep' : 'done';
     } catch (e) {
       if (e instanceof PointerUnreadable) console.error("counters: a photograph's pointer could not be read; nothing of it is removed, and its mark is kept for the next run", e);
       else console.error("counters: a photograph's unnamed generations could not be swept; its mark is kept for the next run", e);
@@ -627,6 +709,12 @@ export class Counters extends DurableObject {
    * so the next run finds nothing left and ends it. The meta's snapshot of the bytes is not written here: it lags by
    * design (`flushMeta`) and is put right by the next listing.
    */
+  /** Count a fault in the object named "vaults", through the binding (a vault's object is not that one). */
+  private async faultThere(kind: string, now: number): Promise<void> {
+    const ns = (this.env as { COUNTERS?: { idFromName(n: string): unknown; get(id: unknown): { fault?(k: string, n: number): Promise<void> } } } | undefined)?.COUNTERS;
+    if (!ns) return;
+    try { await ns.get(ns.idFromName('vaults')).fault?.(kind, now); } catch { /* best-effort */ }
+  }
   private async strayOff(r2: R2Bucket, key: string, now: number): Promise<void> {
     const o = await r2.head(key);
     if (!o) return;
@@ -698,8 +786,8 @@ type Claim = { at: number; day: string };
  * place taken again after a reclaim) and the day of its last upload (round sixty-one). Before, the value was the counted
  * day alone, or 1; `place` reads all three.
  */
-type Place = { d: string | null; w: string | null };
-const place = (v: unknown): Place => (v && typeof v === 'object' ? { d: (v as Place).d ?? null, w: (v as Place).w ?? null } : { d: typeof v === 'string' ? v : null, w: null });
+type Place = { d: string | null; w: string | null; n?: string | null };
+const place = (v: unknown): Place => (v && typeof v === 'object' ? { d: (v as Place).d ?? null, w: (v as Place).w ?? null, n: typeof (v as Place).n === 'string' ? (v as Place).n : null } : { d: typeof v === 'string' ? v : null, w: null, n: null });
 const dayOf = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 /** A row's day when it is no longer believed: never today, so the next take lists (round sixty-one). */
 const STALE_DAY = 'stale';
@@ -719,4 +807,6 @@ export const LEASE_MS = 10 * 60_000;
 /** How long a photograph's name may be held: far past a head, a delete and a give. */
 export const HOLD_MS = 60_000;
 /** The keys the midnight sweep looks at; the alarm is set again only while one of them remains (`u:`, the photographs marked for the sweep of unnamed bytes, since round sixty-three). */
-const SWEPT = ['ip:', 'net:', 'day:', 'd:', 'g:', 'p:', 'h:', 'c:', 'f:', 'u:'];
+const SWEPT = ['ip:', 'net:', 'day:', 'pn:', 'o:', 'e:', 'd:', 'g:', 'p:', 'h:', 'c:', 'f:', 'u:'];
+/** Days a fault count is kept (round sixty-seven; S2). */
+export const FAULT_DAYS = 7;

@@ -57,10 +57,12 @@ describe('R2 2: the cells\' median is interpolated, and nothing says it is a tot
   it('four cells at 100, 200, 600 and 900 mm: the median is 400 mm, which no cell has', () => {
     expect(quantile([100, 200, 600, 900], 0.5)).toBe(400);
   });
-  it('the code\'s own words no longer claim "a year cells actually have" of the median', () => {
-    expect(code('src/lib/climate/year-rain.ts')).not.toContain('cells actually have');
-    expect(code('src/lib/climate/year-rain.ts')).toContain('halfway between the two middle totals when the cells are even in number');
-    expect(code('src/lib/climate/provider.ts')).toContain('not a total any cell has');
+  // Round sixty-seven (triage-66 P4; R45-13): this asserted the code's comments; it now asserts the words a person reads,
+  // whole, on /about/how, where the median is said.
+  it('/about/how says the median as the code takes it, halfway between the two middle totals, and never as a total cells have', () => {
+    const how = code('src/routes/about/how/+page.svelte').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ');
+    expect(how).toContain("the rain a year, the median of the range's grid cells' own yearly totals (each cell's twelve months added first, then the middle of those totals taken, or the halfway point between the two middle totals when the cells are even in number;");
+    expect(how).not.toMatch(/cells actually have/);
   });
 });
 

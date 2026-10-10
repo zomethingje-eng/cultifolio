@@ -47,8 +47,11 @@ export default defineConfig({
   // navigation). One retry tells that apart from a real failure without hiding one: a test that fails twice is reported.
   retries: 1,
   // A test that passes only on its retry is a flake, and a flake can be a real intermittent fault (smoke 2781's scroll was
-  // one): under CI_STRICT=1 it fails the run. The strict run is the one before a deploy (round sixty-two; the harness review's 4).
-  failOnFlakyTests: !!process.env.CI_STRICT,
+  // one): it fails the run. Until round sixty-seven only the run before a deploy was strict (CI_STRICT=1, scripts/predeploy.mjs),
+  // so a plain `npx playwright test` that needed a retry exited 0 and read as a pass; now every run is strict, and the retry
+  // only says which kind of failure it was (round sixty-seven; triage-66 H10, R45-29). predeploy still sets CI_STRICT and
+  // passes --fail-on-flaky-tests, so it stays strict whatever this line says.
+  failOnFlakyTests: true,
   // A server already up is reused only when asked (PW_REUSE=1): otherwise its state would not be reset (round twenty-two, 10).
   // Ready means answered, not listening: wrangler dev opens its port before its Worker can answer and holds the first
   // requests until it can. With `port` the run began at the open port, and the first page of a spec with no warm-up of its

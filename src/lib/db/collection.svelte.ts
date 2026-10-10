@@ -34,7 +34,7 @@ import { apply, diff, readChanges, changeError, isComplete, isHeld, REQUIRED_FIE
 import { nextAccession, DEFAULT_SCHEME, type NumberingScheme } from '$core/accession';
 import { allChanges, appendChanges, appendChangesClaiming, onOtherTabWrite, deviceId, requestPersistence, getMeta, putPhotoBlobs, getPhotoBlobs, deletePhotoBlobs, holdVault, readFold, writeFold, touchFold, updateMeta, parkStamps, foldGen, lastArrival, arrivalsAfter, arrivalsOf, changesByKeys, changesOf, type FoldSnapshot, type NumberKind, type VaultNotice } from './vault';
 import { version as buildVersion } from '$app/environment';
-import { inDemo } from './demo';
+import { askToKeep } from '$lib/ui/keep-ask';
 import type { Accession, PlantEvent, Taxon, Location, Sowing, Provenance, Photo } from './types';
 import { PROP_METHODS, accNo, sowNo, NUMBERING_SETTING, EVENT_LABEL } from './types';
 import { fieldWords } from '$lib/ui/held-words';
@@ -52,19 +52,6 @@ const numberField = (c: Change): NumberKind | null => (c.kind === 'accession' &&
 /** The records whose notes carry a base, and the two field names: a plant's and a batch's notes, a species' own notes. */
 type NotesKind = 'accession' | 'sowing' | 'taxon';
 const NOTES_PAIR: Record<string, [string, string]> = { accession: ['notes', 'notesBase'], sowing: ['notes', 'notesBase'], taxon: ['myNotes', 'myNotesBase'] };
-
-/** When a load last asked the browser to keep this site's storage; a load asks again only a month on (round sixty-four). */
-const PERSIST_ASKED = 'cultifolio.persistAskedAt';
-function askDue(): boolean {
-  try {
-    const at = Number(localStorage.getItem(PERSIST_ASKED) ?? 0);
-    if (Date.now() - at < 30 * 86_400_000) return false;
-    localStorage.setItem(PERSIST_ASKED, String(Date.now()));
-    return true;
-  } catch {
-    return true; // no storage: asked, as before
-  }
-}
 
 class Collection {
   ready = $state(false);
@@ -276,9 +263,22 @@ class Collection {
     this.photosUnverified = new Set(await updateMeta<string[]>('photosUnverified', (had) => (had ?? []).filter((x) => !gone.has(x))));
   }
 
+  /**
+   * Why the collection could not be opened, as a sentence, or null (round sixty-seven; triage-66 R10, the outside
+   * review's 23): with the browser's storage refused (a private window that keeps nothing, site data blocked), the load
+   * rejected and Today and the example's offer stayed at "Opening…" for good. They show this instead.
+   */
+  failed = $state<string | null>(null);
   load(): Promise<void> {
     if (!this.loading)
-      this.loading = (async () => {
+      this.loading = this.loadNow().catch(async (e) => {
+        this.failed = (await storageErrorText(e).catch(() => null)) ?? `This browser refused to open the storage the collection is kept in, so it cannot be shown or changed here. Storage may be blocked for this site, or this window may keep nothing (${e instanceof Error ? e.message || e.name : String(e)}).`;
+        throw e;
+      });
+    return this.loading;
+  }
+  private loadNow(): Promise<void> {
+    return (async () => {
         const dev = await deviceId();
         this.deviceId = dev;
         // Each tab is its own writer: two tabs of one browser share the device but not a clock, and two clocks stamping the
@@ -323,13 +323,13 @@ class Collection {
         // the question came to a visitor on an empty Today or My plants, and in the example, before anything was theirs to
         // keep (the first plant is asked for by GrowLayer, once).
         let answered = false;
-        // And at most once a month on a load: Firefox puts the question to the person every time it is asked, and a grower
-        // who let it stand was asked on every page (round sixty-four, the lead's decision on the Firefox run); Safari and
-        // Chrome answer by themselves and may grant it later, so it is still asked again, a month on.
-        const ask = this.state.size > 0 && !inDemo() && askDue();
-        void requestPersistence((now) => { if (!answered && this.persisted === null) this.persisted = now; }, ask).then((ok) => { answered = true; this.persisted = ok; });
+        // And at most once a month, through the one door every ask goes through (round sixty-seven; contract C4, triage-66
+        // P1): Firefox puts the question to the person every time it is asked, and the load's ask and the first plant's
+        // each kept their own rule, so a grower who let it stand was asked on every page. The door writes the time before
+        // the browser is asked and asks nothing in the example; null is "not asked".
+        void requestPersistence(undefined, false).then((now) => { if (!answered) this.persisted = now; }, () => {});
+        if (this.state.size > 0) void askToKeep('load').then((ok) => { if (ok !== null) { answered = true; this.persisted = ok; } }, () => {});
       })();
-    return this.loading;
   }
 
   /**
@@ -342,6 +342,10 @@ class Collection {
     return isScheme(s) ? s : DEFAULT_SCHEME;
   }
 
+  /** How many records the fold holds, removed ones included: the example's "empty" test (round sixty-seven; triage-66 V4). */
+  get recordCount(): number {
+    return this.state.size;
+  }
   /** Whether the log holds a record with this identity, live or deleted. */
   exists(kind: Kind, id: string): boolean {
     return this.state.has(recKey(kind, id));
@@ -356,6 +360,15 @@ class Collection {
   private accessionsSorted = $derived.by(() => this.live<Accession>('accession').sort((a, b) => byNumberNewest(accNo(a), accNo(b)))); // digit runs as numbers: A95, A94, A77, A9 (round sixty-three; the round-sixty grower review, 10)
   get accessions(): Accession[] {
     return this.accessionsSorted;
+  }
+  /**
+   * Every plant record here, removed ones included: what an import asks of "already here", since a plant removed after an
+   * import was added back by the next run (round sixty-seven; triage-66 R3, the outside review's 15).
+   */
+  allAccessions(): Accession[] {
+    const out: Accession[] = [];
+    for (const r of this.kinds.accession.values()) if (isComplete(r)) out.push(r as unknown as Accession);
+    return out;
   }
   /** By identity, or, failing that, by the number people see (URLs and QR codes carry the identity; people type numbers). */
   accession(idOrNo: string): Accession | undefined {
@@ -395,6 +408,7 @@ class Collection {
     await this.readParked();
     this.loaded = { from: 'log', changes: changes.length };
     this.lastSeq = seq;
+    this.builtGen = gen;
     await this.readLedger();
     this.checkClock();
     this.foldWrite = this.saveFold(seq, gen);
@@ -450,6 +464,8 @@ class Collection {
     this.heldWaiting = n;
   }
   private clearFold(): void {
+    this.malformedSeen = new Set();
+    this.malformed = 0;
     this.state.clear();
     for (const m of Object.values(this.kinds)) m.clear();
     this.seen = new Map();
@@ -461,8 +477,28 @@ class Collection {
     this.heldField = new Map();
     this.heldWaiting = 0;
   }
+  /**
+   * Changes in the log this build cannot fold at all (no kind it knows, a reserved field, no stamp), skipped and counted
+   * (round sixty-seven; triage-66 R10, the self-review's E15): one such change, put there by a bug or by hand, threw in
+   * the fold, and every page stayed at "Opening your collection…" for good. Every intake (sync, a backup, a merge, a
+   * local write) refuses one before it is stored; this is the log as it is. By the change's own text, so a fold read
+   * twice counts it once. While there are any, no snapshot is written, so every load reads and counts them.
+   */
+  private malformedSeen = new Set<string>();
+  malformed = $state(0);
   /** Fold `changes` onto the state that is: what comes back held goes in the inventory; what was held and is applied leaves it. */
   private applyHere(changes: Change[]): void {
+    for (const c of changes) {
+      if (!changeError(c, true)) continue;
+      changes = changes.filter((x) => {
+        if (!changeError(x, true)) return true;
+        try { this.malformedSeen.add(JSON.stringify(x)); } catch { this.malformedSeen.add(String(this.malformedSeen.size)); }
+        return false;
+      });
+      this.malformed = this.malformedSeen.size;
+      console.warn(`${this.malformed} change${this.malformed === 1 ? '' : 's'} in the log could not be read and ${this.malformed === 1 ? 'was' : 'were'} skipped`);
+      break;
+    }
     const held = apply(this.state, changes, this.seen, this.hold());
     for (const c of changes) { this.heldStamps.delete(c.t); this.heldField.delete(c.t); }
     for (const c of held) { this.heldStamps.add(c.t); this.heldField.set(c.t, recKey(c.kind, c.id) + '\0' + c.field); }
@@ -527,6 +563,7 @@ class Collection {
     await this.readParked();
     this.loaded = { from: 'log', changes: changes.length };
     this.lastSeq = seq;
+    this.builtGen = gen;
     this.foldWrite = this.saveFold(seq, gen);
     return changes;
   }
@@ -562,6 +599,7 @@ class Collection {
     await this.readParked();
     this.loaded = { from: 'snapshot', changes: tail.changes.length, snapshot: f.changes };
     this.lastSeq = tail.seq;
+    this.builtGen = gen;
     // A tail that has grown long is folded into a fresh snapshot, under the number of the tail it folded: written under the
     // old one, every later load folded the same tail again and rewrote the whole snapshot (round fifty-five, 2; both reviewers).
     if (tail.changes.length >= FOLD_REFRESH) this.foldWrite = this.saveFold(tail.seq, gen, f.changes + tail.changes.length);
@@ -578,11 +616,24 @@ class Collection {
   }
   /** The last snapshot write, for the sync page's account and the tests; resolves false when the vault refused it or there was nothing to write. */
   private foldWrite: Promise<boolean> | null = null;
+  /** The vault's fold counter the fold in memory was built against (at the load, or the last rebuild): a snapshot is written only against it. */
+  private builtGen = 0;
+  /**
+   * Write the fold as it is now as the snapshot, off the page's path (round sixty-seven; triage-66 R13, V5): after an
+   * import, a merge from a backup and the example's seed, so the next load reads the snapshot and the few changes after
+   * it, not every change since the last snapshot one by one (a load wrote a fresh one only past 1,000). Refused, and
+   * false, when the log changed under the fold since it was built (the vault's counter moved).
+   */
+  saveSnapshot(): Promise<boolean> {
+    if (!this.ready) return Promise.resolve(false);
+    return (this.foldWrite = this.saveFold(this.lastSeq, this.builtGen));
+  }
   get snapshotWritten(): Promise<boolean> {
     return this.foldWrite ?? Promise.resolve(false);
   }
   /** Write the fold as it is to the vault, against the arrival number and the counter read before it was built; refused by the vault if the log changed under it. */
   private async saveFold(seq: number, gen: number, folded = this.applied.size): Promise<boolean> {
+    if (this.malformedSeen.size) return false; // every load reads the log, and counts what it skipped (round sixty-seven; triage-66 R10)
     try {
       // Copies: the store clones at its put, after an await, and a fold in between mutates records in place (the second reviewer's finding 15).
       const records = [...this.state.values()].map((r) => ({ ...r }));
@@ -718,7 +769,13 @@ class Collection {
   /** A plant's (or batch's) events, newest first, one number repair said once (`onceEach`; round sixty-three). */
   events(acc: string): PlantEvent[] {
     const list = this.eventsByAcc.get(acc);
-    return list ? onceEach(list) : [];
+    if (!list) return [];
+    const once = onceEach(list);
+    const sib = renumberSiblings(once);
+    if (!sib) return once;
+    const r = this.state.get(recKey('accession', acc)) ?? this.state.get(recKey('sowing', acc));
+    const now = r ? (r.kind === 'sowing' ? sowNo(r as unknown as Sowing) : accNo(r as unknown as Accession)) : null;
+    return now === null ? once : once.filter((e) => !sib.has(e) || sib.get(e)!.to === now || sib.get(e)!.chained);
   }
   /**
    * The other lines saying the same number repair as the event `id` (`onceEach`), removed or not as asked: a line shown
@@ -757,7 +814,7 @@ class Collection {
   async recordedTimes(stamps: string[]): Promise<Map<string, number>> {
     const marked = stamps.filter(isPastStamp);
     if (!marked.length) return new Map();
-    return new Map((await changesByKeys(marked)).filter((c) => isRecordedTime(c.w)).map((c) => [c.t, c.w as number]));
+    return new Map((await changesByKeys(marked)).filter((c) => isRecordedTime(c.w, c.t)).map((c) => [c.t, c.w as number])); // within sane bounds (round sixty-seven; triage-66 R9)
   }
   private taxaLive = $derived.by(() => this.live<Taxon>('taxon'));
   get taxa(): Taxon[] {
@@ -983,7 +1040,7 @@ class Collection {
   }
   /** A new place. Its identity is minted, never derived from the name: two shelves called "Shelf 1" in different rooms are two places. */
   async addLocation(l: Omit<Location, 'id'> & { id?: string }): Promise<Location> {
-    if (l.parentId && !this.location(l.parentId)) throw new Error('That parent place does not exist.');
+    if (l.parentId && !this.location(l.parentId)) throw new Error('The place it was to go inside is no longer here (removed in another tab, or by sync). Choose another.'); // said in the picker (round sixty-seven; triage-66 R12)
     const id = l.id ?? 'l' + this.eventId().slice(1);
     const rec: Location = { ...l, id };
     await this.put('location', id, rec as unknown as Record<string, unknown>);
@@ -1202,7 +1259,11 @@ class Collection {
   }
   /** Store the pixels first, then the record: a record without pixels is worse than pixels without a record. */
   async addPhoto(p: Omit<Photo, 'id'> & { blob: Blob; thumb: Blob }): Promise<Photo> {
-    const id = 'p' + this.eventId().slice(1);
+    // The time it was made, then 16 random base-36 characters, never the counter and the device (round sixty-seven;
+    // triage-66 S10, S-D10): a holder of the vault's token reads every batch's device and hour from the listing, and could
+    // guess an id of time and device, which made the server's two photograph faults of round sixty-six practical. The
+    // time stays first, so `madeOn` still reads the day from it; the server takes the old ids as before.
+    const id = 'p' + hlcDecode(this.tick()).wall.toString(36) + Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => (b % 36).toString(36)).join('');
     const { blob, thumb, ...meta } = p;
     const rec: Photo = { ...meta, id };
     // Held as one unit: a vault reload between the pixels and the record would leave pixels no record names.
@@ -1394,8 +1455,8 @@ class Collection {
    * 'import' (a backup file: not an edit, but the server has never seen
    * it, so it is pushed too), 'server' (came down through sync: already there).
    */
-  private async commit(changes: Change[], source: 'local' | 'import' | 'server' = 'local', requireKey?: string): Promise<void> {
-    if (!changes.length) return;
+  private async commit(changes: Change[], source: 'local' | 'import' | 'server' = 'local', requireKey?: string, opts: { meta?: Record<string, unknown>; markLast?: string } = {}): Promise<void> {
+    if (!changes.length && !opts.meta && !opts.markLast) return;
     const own = source !== 'server';
     // The grower's own writes are checked as a pull or a file is: a value of a type its field never takes (a form's
     // "1e999", which is Infinity) is refused here, with the reason, rather than stored and refused by every other device
@@ -1406,16 +1467,13 @@ class Collection {
       this.stampPast(changes);
     }
     // The vault first. If it refuses (a full phone), nothing is applied, the page keeps showing what is stored, and the error is kept for the page to show.
+    let advance = () => {};
     try {
       // Only what the vault kept is applied: a change it declined (another under the same stamp already stored and ranking
       // higher) is not shown here either, so the screen and the disk agree without a reload (round sixteen, 4).
-      const stored = await appendChanges(changes, source === 'server', source === 'local', requireKey);
+      const stored = await appendChanges(changes, source === 'server', source === 'local', requireKey, opts);
       changes = stored.kept;
-      // The frontier moves over this write only when its rows follow the frontier with no gap: a gap is another tab's row
-      // this tab has not folded, and moving past it lost that row until a reload (round fifty-five, 1; both reviewers' first
-      // finding). Otherwise the catch-up reads from the frontier, folds the other tab's rows and skips this tab's own.
-      if (stored.first && stored.first === this.lastSeq + 1) this.lastSeq = stored.seq;
-      else if (stored.first > this.lastSeq + 1) queueMicrotask(() => void this.catchUp().catch(() => {}));
+      advance = () => this.advanceOver(stored);
       // A photograph's removal seen from anywhere (here, a pull, a file) is noted at once, whatever the record folds to:
       // the server may drop the bytes on a peer's say-so, and a later revival (an Undo, an edit made offline elsewhere)
       // then needs the pixels sent again from whoever kept them. The engine checks each noted photograph against the
@@ -1438,10 +1496,22 @@ class Collection {
       throw e;
     }
     if (own) this.lastWriteError = null;
-    if (!changes.length) return;
     this.foldSome(changes);
+    advance(); // after the fold, so a snapshot written meanwhile never claims a row its records do not hold yet (round sixty-seven)
+    if (!changes.length) return;
     this.checkClock(); // the line under the top bar follows a write, not only a load (round sixty; the first outside review's 17)
     if (source !== 'server') for (const fn of this.listeners) fn(changes);
+  }
+  /**
+   * The frontier moves over a write of this tab's only when its rows follow the frontier with no gap: a gap is another
+   * tab's row this tab has not folded, and moving past it lost that row until a reload (round fifty-five, 1; both
+   * reviewers' first finding). Otherwise the catch-up reads from the frontier, folds the other tab's rows and skips this
+   * tab's own. A claim (a write that mints numbers) moves it too since round sixty-seven (triage-66 R13): it did not, and
+   * the next write re-read every change since the load.
+   */
+  private advanceOver(stored: { seq: number; first: number }): void {
+    if (stored.first && stored.first === this.lastSeq + 1) this.lastSeq = stored.seq;
+    else if (stored.first > this.lastSeq + 1) queueMicrotask(() => void this.catchUp().catch(() => {}));
   }
 
   /** Called after every write the server has not seen (local edits and imports, not pulls); sync uses it to schedule a push. */
@@ -1520,7 +1590,7 @@ class Collection {
    * between any two left a move with no line or a line with no move. Each entry of `also` is another record's fields;
    * each of `events` a line on the timeline.
    */
-  async putWith(kind: Kind, id: string, fields: Record<string, unknown>, events: Array<Omit<PlantEvent, 'id'>> = [], also: Array<{ kind: Kind; id: string; fields: Record<string, unknown> }> = []): Promise<void> {
+  async putWith(kind: Kind, id: string, fields: Record<string, unknown>, events: Array<Omit<PlantEvent, 'id'>> = [], also: Array<{ kind: Kind; id: string; fields: Record<string, unknown> }> = [], opts: { meta?: Record<string, unknown>; markLast?: string } = {}): Promise<void> {
     const changes = this.putChanges(kind, id, fields);
     for (const o of also) {
       // A record removed in the same commit, as `remove` and `removeEvents` write it: `diff` passes over `_` fields, so
@@ -1535,7 +1605,9 @@ class Collection {
       const eid = this.eventId();
       changes.push(...diff('event', eid, { ...e, id: eid } as unknown as Record<string, unknown>, undefined, this.tick));
     }
-    await this.commit(changes);
+    // Contract C1 (round sixty-seven): `opts.meta` and `opts.markLast` are written in the vault's transaction with the
+    // changes, so the example's seed and its marks land together or not at all (triage-66 V5).
+    await this.commit(changes, 'local', undefined, opts);
   }
   private putChanges(kind: Kind, id: string, fields: Record<string, unknown>): Change[] {
     const current = this.state.get(recKey(kind, id));
@@ -1707,6 +1779,7 @@ class Collection {
   private async claimNow<T>(kind: NumberKind, build: (issued: Set<string>) => { changes: Change[]; result: T }): Promise<T> {
     let made: Change[] = [];
     let out: T;
+    let stored: { seq: number; first: number } | null = null;
     try {
       out = await appendChangesClaiming(kind, this.takenNumbers(kind), (issued) => {
         const b = build(issued);
@@ -1714,7 +1787,7 @@ class Collection {
         if (bad) throw new Error(bad);
         made = this.stampPast(b.changes);
         return b;
-      });
+      }, (s) => (stored = s));
     } catch (e) {
       this.lastWriteError = await writeErrorText(e);
       throw e;
@@ -1722,6 +1795,8 @@ class Collection {
     this.lastWriteError = null;
     for (const c of made) { const k = numberField(c); if (k && typeof c.value === 'string') this.ledger[k].add(c.value); }
     this.foldSome(made);
+    const st = stored as { seq: number; first: number } | null; // set in the vault's callback, which the narrowing does not see
+    if (st) this.advanceOver(st); // as `commit` does (round sixty-seven; triage-66 R13)
     for (const fn of this.listeners) fn(made);
     return out;
   }
@@ -1921,8 +1996,12 @@ class Collection {
         const no = kind === 'accession' ? accNo(r as Accession) : sowNo(r as Sowing);
         byNo.set(no, [...(byNo.get(no) ?? []), r]);
       }
-      // From the log alone, never this device's ledger: every device must derive the same repair from the same merged log (round eight, 5).
+      // From the log alone, never this device's ledger: every device must derive the same repair from the same merged log
+      // (round eight, 5). Every number the log ever gave, not only the numbers records hold now (round sixty-seven;
+      // triage-66 R8, the outside review's 19): two devices that renumbered one record offline, to 0009 and to 0008, left
+      // the record on one and the other number free again, and the next repair gave it out a second time.
       const taken = this.takenNumbers(kind, false);
+      for (const n of await this.numbersInLog(kind)) taken.add(n);
       for (const no of [...byNo.keys()].sort()) {
         if (scope && !scope[kind].has(no)) continue;
         const recs = byNo.get(no)!;
@@ -1973,6 +2052,12 @@ class Collection {
     return renumbered;
   }
 
+  /** Every number the log gives a record of this kind, in any change, current or since replaced: read for the grower's "Renumber now" only, which is rare. */
+  private async numbersInLog(kind: NumberKind): Promise<Set<string>> {
+    const out = new Set<string>();
+    for (const c of await allChanges()) if (numberField(c) === kind && typeof c.value === 'string') out.add(c.value);
+    return out;
+  }
   /** The wall of a record's latest folded stamp read from a clock (not marked), or `fallback`: what a repair placed past a marked stamp is dated by (round sixty-two; the clock review's 7). */
   private lastClockStamp(kind: Kind, id: string, fallback: number): number {
     const pre = recKey(kind, id) + '\0';
@@ -1998,6 +2083,35 @@ function markedPast(base: { wall: number; count: number }, count: number, device
 
 /** Whether a line is a note the app wrote for a change of number ("Renumbered from …"): the repair's, or a return's. */
 const isRenumberNote = (e: PlantEvent): boolean => e.t === 'note' && typeof e.note === 'string' && e.note.startsWith('Renumbered from ');
+const RENUMBER = /^Renumbered from (.+?) to (.+?)(?:: | when it was brought back)/;
+/**
+ * The number repairs of one record that share their "from" with another (round sixty-seven; triage-66 R8, the outside
+ * review's 19): two devices renumbered the record offline, one to 0009 and one to 0008, and the record shows the one
+ * number whose change won. The note whose "to" is that number stands; a sibling whose "to" is not current is hidden, as
+ * it says something that did not happen, unless a later repair numbered on from it (`chained`). Null when the record has
+ * no such siblings, which is nearly always.
+ */
+const siblingsOf = new WeakMap<PlantEvent[], Map<PlantEvent, { to: string; chained: boolean }> | null>();
+/** Read once per list, as `onceEach` is: the lists are replaced, never changed in place. */
+function renumberSiblings(list: PlantEvent[]): Map<PlantEvent, { to: string; chained: boolean }> | null {
+  if (siblingsOf.has(list)) return siblingsOf.get(list)!;
+  const out = findSiblings(list);
+  siblingsOf.set(list, out);
+  return out;
+}
+function findSiblings(list: PlantEvent[]): Map<PlantEvent, { to: string; chained: boolean }> | null {
+  let n = 0;
+  for (const e of list) if (isRenumberNote(e)) n++;
+  if (n < 2) return null;
+  const parsed = new Map<PlantEvent, { from: string; to: string }>();
+  for (const e of list) { const m = isRenumberNote(e) ? RENUMBER.exec(e.note!) : null; if (m) parsed.set(e, { from: m[1], to: m[2] }); }
+  const byFrom = new Map<string, number>();
+  const froms = new Set<string>();
+  for (const p of parsed.values()) { byFrom.set(p.from, (byFrom.get(p.from) ?? 0) + 1); froms.add(p.from); }
+  const out = new Map<PlantEvent, { to: string; chained: boolean }>();
+  for (const [e, p] of parsed) if ((byFrom.get(p.from) ?? 0) > 1) out.set(e, { to: p.to, chained: froms.has(p.to) });
+  return out.size ? out : null;
+}
 const collapsed = new WeakMap<PlantEvent[], PlantEvent[]>();
 /**
  * A record's lines with each number repair said once (round sixty-three; round sixty-two's section 11). Two devices of

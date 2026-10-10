@@ -162,7 +162,7 @@ export function readChanges(rows: unknown): { changes: Change[]; dropped: string
     if (e) dropped.push(`change ${i}: ${e}`);
     // A recorded time this build cannot read is left off and the change kept: it is information only, and a change is
     // never refused or set aside for it (round sixty-three).
-    else if ('w' in (c as object) && !isRecordedTime((c as Change).w)) { const { w: _w, ...rest } = c as Change; void _w; kept.push(rest); }
+    else if ('w' in (c as object) && !isRecordedTime((c as Change).w, (c as Change).t)) { const { w: _w, ...rest } = c as Change; void _w; kept.push(rest); }
     else kept.push(c as Change);
   }
   return { changes: kept, dropped };

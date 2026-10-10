@@ -70,7 +70,7 @@ describe('each place the year\'s rain is shown names which figure it is', () => 
   const head = (annualRain?: { p50?: number }) => speciesDescription({ name: { scientific: 'Aloe testii' }, climate: { status: 'ok', months, records: 40, extremes: null, annualRain }, native: 1, photos: 0, summary: false });
   it('the link preview: the median when the dossier has it, the old label when not', () => {
     expect(head({ p50: 214 })).toContain('214 mm of rain a year (median across the range, CHELSA)'); // base: 165 mm, sum of monthly medians
-    expect(head()).toContain('165 mm of rain a year (sum of monthly medians, CHELSA)');
+    expect(head()).toContain('165 mm of rain in the median year (CHELSA)'); // round sixty-seven (N11): the monthly medians added are the median year's total
   });
   it('the glance card, the compare row and the species page carry both names and the median', () => {
     const glance = code('src/lib/ui/ref/Glance.svelte');
@@ -87,7 +87,7 @@ describe('each place the year\'s rain is shown names which figure it is', () => 
   });
   it("the chart's alternative names its total as the bars' own", () => {
     const g = climograph({ months, p10: months, p90: months, cells: 3 });
-    expect(g.alt).toContain('165 mm of rain a year (the twelve monthly medians added)');
+    expect(g.alt).toContain('165 mm of rain in the median year (the twelve monthly medians added)'); // round sixty-seven (N11)
   });
   it('the export carries the cells\' percentiles and median after the columns it had', () => {
     const index = JSON.parse(readFileSync('fixtures/dossiers/index.json', 'utf8'));

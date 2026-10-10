@@ -28,7 +28,8 @@
   import PlantsMenu from '$lib/ui/grow/PlantsMenu.svelte'; // round sixty, agent F: import, the sample, selection, Wanted and spending
   import PlantsEmpty from '$lib/ui/grow/PlantsEmpty.svelte';
   import TrySample from '$lib/ui/grow/TrySample.svelte'; // round sixty-three, V2: the example at the head of the empty page
-  import { example } from '$lib/ui/grow/example.svelte';
+  import { addLeavesExample, example } from '$lib/ui/grow/example.svelte';
+  import { PAGE_IN_DEMO } from '$lib/db/demo';
   import SelectMode from '$lib/ui/grow/SelectMode.svelte';
   import PlantsFoot from '$lib/ui/grow/PlantsFoot.svelte';
   import { photoDue, photoDueDays } from '$lib/ui/photo-due';
@@ -227,7 +228,7 @@
      open took (round sixty-six; the all-engines run, smoke 2527, a minute in Safari's engine on the PC; rule 2). -->
 <PageHead compact title="My plants" sub="Your plants, each under its own number, kept on this device." count={!collection.ready || !collection.accessions.length ? undefined : `${collection.accessions.filter((a) => a.status === 'growing').length} growing`}>
   <!-- The + in the top bar is the phone's add button; the head keeps its one line (round fifty, 4). -->
-  <a class="btn pri wideonly" href="/plants/new">Add a plant</a>
+  <a class="btn pri wideonly" href="/plants/new" onclick={(e) => addLeavesExample(e, '/plants/new')}>Add a plant</a>
   <PlantsMenu />
 </PageHead>
 
@@ -256,6 +257,9 @@
 {/if}
 {#if opened && storageLow && !storageNoticeHidden}
   <div class="notice" id="storage-notice">This browser's storage is nearly full{collection.persisted === false ? ', and it has not promised to keep this site\'s data' : ''}: it may clear photographs to make room. <a href="/backup">Back up now</a>. <button class="linkish" type="button" onclick={hideStorageNotice}>Hide for now</button></div>
+{:else if opened && PAGE_IN_DEMO}
+  <!-- The example is backed up nowhere and has no backup to offer: it is deleted on Leave (round sixty-seven; triage-66 V7; R45-3). -->
+  <p class="small muted keepline" id="storage-notice">The example collection is kept nowhere: it is deleted when you leave it.</p>
 {:else if opened && collection.persisted === false && !sync.configured}
   <p class="small muted keepline" id="storage-notice">Kept in this browser only: <a href="/backup">back up</a> or install the app.</p>
 {/if}
@@ -275,8 +279,8 @@
     <TrySample />
     <ol class="steps">
       <!-- To the add form: an empty Places opens the example by itself, and this step is for the grower's own place (round sixty-three, V2). -->
-      <li><a href="/places#add"><span class="n">1</span><span class="t">Where you grow</span><span class="w">{collection.locations.length ? `${collection.locations.length === 1 ? 'one place' : `${collection.locations.length} places`} so far; add another` : 'add your bench or windowsill'}</span></a></li>
-      <li><a href="/plants/new"><span class="n">2</span><span class="t">Your first plant</span><span class="w">its name, where it came from and where it lives</span></a></li>
+      <li><a href="/places#add" onclick={(e) => addLeavesExample(e, '/places#add')}><span class="n">1</span><span class="t">Where you grow</span><span class="w">{collection.locations.length ? `${collection.locations.length === 1 ? 'one place' : `${collection.locations.length} places`} so far; add another` : 'add your bench or windowsill'}</span></a></li>
+      <li><a href="/plants/new" onclick={(e) => addLeavesExample(e, '/plants/new')}><span class="n">2</span><span class="t">Your first plant</span><span class="w">its name, where it came from and where it lives</span></a></li>
       <li><a href="/settings#site"><span class="n">3</span><span class="t">Your location for the frost watch</span><span class="w">{site.current ? `set${site.current.name ? `: ${site.current.name}` : ''}` : 'the frost watch reads its forecast there, and the months follow its hemisphere'}</span></a></li>
     </ol>
     <p class="muted small">Your plants are recorded on this device and nowhere else until you choose to sync. Moving from another device? <a href="/backup">Restore a backup</a>.</p>

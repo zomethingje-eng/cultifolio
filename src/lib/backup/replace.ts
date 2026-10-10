@@ -7,7 +7,7 @@
 import type { Change } from '$core/log';
 import type { StagedReplacement, PhotoBlobs } from '$lib/db/vault';
 import { photosWithoutPixels, type ReadBackup } from './backup';
-import { inDemo } from '$lib/db/demo';
+import { PAGE_IN_DEMO } from '$lib/db/demo';
 
 export interface ReplaceOpts {
   /** Runs after the replacement is fully staged and just before the live vault is wiped (turning sync off, say). */
@@ -18,6 +18,18 @@ export interface ReplaceOpts {
 /** The file's changes: the replacement is exactly the file's log. */
 export function replacementChanges(file: ReadBackup): Change[] {
   return [...file.changes];
+}
+
+/**
+ * The switch began and did not finish (round sixty-seven; triage-66 R1, the self-review's C1): the live vault holds part
+ * of the file and refuses writes until the next open finishes the copy. The page says so and reloads, rather than show
+ * the old collection, which then lives only in the tab's memory, as if nothing had happened.
+ */
+export class ReplaceBegunError extends Error {
+  constructor(readonly reason: unknown) {
+    super('The replacement had begun when it was stopped. It finishes when there is room: free some space if the device is full. The page now reloads');
+    this.name = 'ReplaceBegunError';
+  }
 }
 
 export interface ReplaceResult {
@@ -40,7 +52,7 @@ export async function replaceThroughStaging(file: ReadBackup, open: () => Promis
   if (file.unreadable.length) throw new Error(`${file.unreadable.length} ${file.unreadable.length === 1 ? 'change' : 'changes'} in that file cannot be read by this version (${file.unreadable[0]}), and a replacement would lose ${file.unreadable.length === 1 ? 'it' : 'them'} for good. Merge instead, which leaves ${file.unreadable.length === 1 ? 'it' : 'them'} in the file, or replace from a newer version of the app; this device is unchanged.`);
   // The staging database is never opened from the sample collection (round sixty-one; review B): it is one name for the
   // device, and a replace staged from the sample would sit beside, and could be promoted into, the grower's own.
-  if (inDemo()) throw new Error('A replacement cannot be staged in the example collection; leave the example first. Nothing was changed.');
+  if (PAGE_IN_DEMO) throw new Error('A replacement cannot be staged in the example collection; leave the example first. Nothing was changed.');
   const changes = replacementChanges(file);
   const stage = await open();
   let switching = false;
@@ -66,6 +78,6 @@ export async function replaceThroughStaging(file: ReadBackup, open: () => Promis
     return { changes: changes.length, photos, photosMissing: photosWithoutPixels(file).length };
   } catch (e) {
     if (!switching) await stage.discard().catch(() => {});
-    throw e;
+    throw switching ? new ReplaceBegunError(e) : e;
   }
 }

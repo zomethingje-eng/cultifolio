@@ -31,7 +31,7 @@ describe('the link preview and the one-line forms (A3, visitor-words 3 and 4)', 
     const d = head(ex);
     expect(d).not.toMatch(/in the wild/);
     expect(d.startsWith('Copiapoa cinerea habitat: cold floor 6.5 °C, 1 night in 100 at a typical spot (NASA POWER)')).toBe(true);
-    expect(d).toMatch(/sum of monthly medians/);
+    expect(d).toMatch(/of rain in the median year \(CHELSA\)/); // the monthly medians added are the median year's total, said as that (round sixty-seven; triage-66 N11)
     expect(d.length).toBeLessThanOrEqual(155);
     expect(d.endsWith('.')).toBe(true); // whole parts left off, never a figure cut from its source
   });

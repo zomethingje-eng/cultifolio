@@ -12,6 +12,11 @@
   import { toast } from '$lib/ui/toast.svelte';
   // An empty collection's Places opens the example collection, or offers it (round sixty-three, V2).
   import ExampleOffer from '$lib/ui/grow/ExampleOffer.svelte';
+  // In the example a new place is the grower's own: "New place" leads out of it first, and a form opened there says
+  // where the place would go (round sixty-seven; triage-66 V1).
+  import ExampleAddLine from '$lib/ui/grow/ExampleAddLine.svelte';
+  import { addLeavesExample } from '$lib/ui/grow/example.svelte';
+  import { PAGE_IN_DEMO } from '$lib/db/demo';
   onMount(() => collection.load());
   let adding = $state(false);
   // The top bar's "+" on this section lands on /places#add: the form opens with its first field focused, and the hash is
@@ -24,7 +29,11 @@
       if (location.hash === '#add') setTimeout(() => { try { replaceState(location.pathname + location.search, page.state); } catch { /* the router not up yet: the hash stays, harmlessly (round sixty-three) */ } }, 0);
     };
     const onHash = () => { if (location.hash === '#add') open(); };
+    // A name carried from the example's form by "Keep it as my own" (`?name=`), taken off the address once read.
+    const carried = page.url.searchParams.get('name');
+    if (carried && !name) { name = carried; setTimeout(() => { try { const u = new URL(location.href); u.searchParams.delete('name'); replaceState(u.pathname + u.search + u.hash, page.state); } catch { /* the router not up yet */ } }, 0); }
     const onTap = (e: MouseEvent) => {
+      if (PAGE_IN_DEMO) return; // in the example the "+" leads out of it first (`addLeavesExample`), and opens nothing here
       const a = (e.target as Element | null)?.closest?.('a[href="/places#add"]');
       if (!a || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
       e.preventDefault();
@@ -79,7 +88,13 @@
     kindMsg = kind ? '' : 'Say what kind of place it is.';
     if (!kind) { document.getElementById('loc-kind')?.focus(); return; }
     const added = name.trim();
-    await collection.addLocation({ name: added, type: kind, parentId: parent });
+    try {
+      await collection.addLocation({ name: added, type: kind, parentId: parent });
+    } catch (e) {
+      // Refused (a full device; the example closed in another tab): said under the form, and what was typed stays (round sixty-seven; triage-66 V3).
+      addedMsg = `${added} was not added: ${(collection.lastWriteError ?? (e instanceof Error ? e.message : String(e))).replace(/\.$/, '')}.`;
+      return;
+    }
     name = '';
     if (another) {
       addedMsg = `${added} added${parent ? ` inside ${collection.locationName(parent)}` : ''}. Name the next.`;
@@ -93,10 +108,11 @@
 <svelte:head><title>Places · Cultifolio</title></svelte:head>
 
 <PageHead compact title="Places" sub="Where your plants live: a greenhouse, a bench, a shelf or a windowsill; conditions set on a place apply to everything inside it." count="{rows.length} place{rows.length === 1 ? '' : 's'}{unplaced ? ` · ${unplaced} unplaced` : ''}">
-  <button class="btn pri" onclick={() => (adding = !adding)}>New place</button>
+  <button class="btn pri" onclick={(e) => { if (!addLeavesExample(e, '/places#add')) adding = !adding; }}>New place</button>
 </PageHead>
 
 {#if adding}
+  <ExampleAddLine what="place" keep={() => (name.trim() ? `/places?name=${encodeURIComponent(name.trim())}#add` : '/places#add')} />
   <form class="cult form" onsubmit={(e) => { e.preventDefault(); add((e.submitter as HTMLElement | null)?.id === 'loc-another'); }}>
     <!-- Each field with a visible name over it: a placeholder was the name's only one, and the place above had none (round fifty-eight; the accessibility review). -->
     <label class="fl"><span class="eyebrow">Name of the new place</span><input id="loc-name" type="text" placeholder="e.g. Greenhouse, Bench 1" bind:value={name} /></label>

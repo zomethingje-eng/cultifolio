@@ -15,11 +15,10 @@
  */
 import { test, type BrowserContext, type Page } from '@playwright/test';
 
-/** 198.51.100.62 and .63 are written by hand in r62s-server.spec.ts and agent S's second-pass r62bs-server.spec.ts: never
- *  handed out here, so a vault this helper makes is never counted against theirs (until they take theirs from `docAddress`). */
-const RESERVED = new Set([62, 63]);
-/** .1 to .199 for the specs that make a vault or two; .200 to .254 for the limit's own test alone. */
-const HOSTS = Array.from({ length: 199 }, (_, i) => i + 1).filter((h) => !RESERVED.has(h));
+/** .1 to .199 for the specs that make a vault or two; .200 to .254 for the limit's own test alone. Every spec takes its
+ *  address from here: the two server specs' fixed .62 and .63, and the gap kept for them, are gone (round sixty-seven;
+ *  triage-66 H9, IND-9). */
+const HOSTS = Array.from({ length: 199 }, (_, i) => i + 1);
 const LIMIT_HOSTS = Array.from({ length: 55 }, (_, i) => i + 200);
 
 function runSalt(): number {

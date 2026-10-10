@@ -67,7 +67,7 @@ describe('the species page head (round sixty; the self-review 14, product 6)', (
   it('with a climate: the figures, each with its source, and never the Wikipedia lead or advice', () => {
     expect(speciesTitle(cinerea)).toBe('Copiapoa cinerea: habitat rain, cold nights and light');
     const d = speciesDescription(cinerea);
-    expect(d).toBe('Copiapoa cinerea habitat: cold floor 6.5 °C, 1 night in 100 at a typical spot (NASA POWER); 60 mm of rain a year (sum of monthly medians, CHELSA).'); // round sixty-two: never "in the wild" (A3); whole parts left off past 155
+    expect(d).toBe('Copiapoa cinerea habitat: cold floor 6.5 °C, 1 night in 100 at a typical spot (NASA POWER); 60 mm of rain in the median year (CHELSA).'); // round sixty-seven (N11): the median year's total named as that; round sixty-two: never "in the wild" (A3); whole parts left off past 155
     expect(d.length).toBeLessThanOrEqual(155);
     expect(d).not.toMatch(/cultivation|suggests|wants|tolerates/);
     // The reader's units, as the page renders them.

@@ -16,7 +16,7 @@ const species = Array.from({ length: 200 }, (_, i) => `genus-sp${i}`);
 const slug = species.find((s) => bucketOf(s, 32) !== bucketOf(s, 64))!;
 
 function server(url: string): Response {
-  asked.push(url);
+  asked.push(url.replace(/&v=[^&]*/, '')); // the build every request names (round sixty-seven; triage-66 S7) is not what these tests read
   const u = new URL(url, 'http://x');
   if (u.pathname === '/api/corpus') {
     if (corpusFails > 0) { corpusFails--; throw new TypeError('Failed to fetch'); }
@@ -49,7 +49,8 @@ describe('the client under a changed bucket count', () => {
     const { entriesFor } = await import('$lib/ui/index.svelte');
     const got = await entriesFor([slug]);
     expect(got?.has(slug)).toBe(true);
-    const entries = asked.filter((u) => u.startsWith('/api/entries'));
+    // The build each request names (`v=`, round sixty-seven; triage-66 S7) is left out of the comparison.
+    const entries = asked.filter((u) => u.startsWith('/api/entries')).map((u) => u.replace(/&v=[^&]*$/, ''));
     expect(entries[0]).toBe(`/api/entries?b=${bucketOf(slug, 32)}&c=A&n=32`); // one captured pair, never the 32-bucket name with n=64
     expect(entries[entries.length - 1]).toBe(`/api/entries?b=${bucketOf(slug, 64)}&c=B&n=64`);
   });
@@ -64,7 +65,7 @@ describe('the client under a changed bucket count', () => {
     asked.length = 0;
     const again = await m.entriesFor([slug]);
     expect(again?.has(slug)).toBe(true);
-    expect(asked).toContain(`/api/entries?b=${bucketOf(slug, 32)}&c=A&n=32`); // a request under the new layout, not the B/64 bucket read from the page's cache
+    expect(asked.map((u) => u.replace(/&v=[^&]*$/, ''))).toContain(`/api/entries?b=${bucketOf(slug, 32)}&c=A&n=32`); // a request under the new layout, not the B/64 bucket read from the page's cache
   });
   it('a corpus read that failed is not kept: the next ask reads again', async () => {
     corpusFails = 1;

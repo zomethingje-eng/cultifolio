@@ -7,7 +7,7 @@
  * refusal is never kept: the next open asks again. A forecast whose alerts the
  * NWS did not answer is kept five minutes, not thirty.
  */
-import { browser } from '$app/environment';
+import { browser, version } from '$app/environment';
 import type { Units } from '$core/units';
 
 export const FORECAST_TTL_MS = 30 * 60_000;
@@ -23,7 +23,7 @@ const KEY = 'cultifolio.forecast';
  * `held`: the site held the call back (its calls to the forecast services were used up for the minute), so the source
  * was not asked (round sixty-one), and `retryAfter` when to ask again (seconds; round sixty-two).
  */
-export type ForecastAnswer<T> = { ok: true; body: T; at: number } | { ok: false; status: number; held?: boolean; reserve?: boolean; retryAfter?: number };
+export type ForecastAnswer<T> = { ok: true; body: T; at: number } | { ok: false; status: number; held?: boolean; reserve?: boolean; refused?: boolean; retryAfter?: number };
 
 /**
  * When a page should ask again after this answer, in ms, or null when it waits for its next opening: a call the site
@@ -88,17 +88,23 @@ async function fetchForecast<T = unknown>(lat: number, lon: number, units: Units
   // Ten seconds, then the check did not happen, which is said: a request that hung held the watch's one read for good
   // and the line under the top bar said nothing (round fifty-eight; the client review).
   const signal = typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal ? AbortSignal.timeout(10_000) : undefined;
-  const r = await fetch(`/api/forecast?lat=${la}&lon=${lo}${alt != null ? `&alt=${alt}` : ''}&units=${units}`, { signal });
+  // The build in the URL, so the adapter's cache does not answer a new build with the old one's verdict (round sixty-seven; S7).
+  const r = await fetch(`/api/forecast?lat=${la}&lon=${lo}${alt != null ? `&alt=${alt}` : ''}&units=${units}&v=${encodeURIComponent(version)}`, { signal });
   if (!r.ok) {
     // The server says when it held the call back itself; any other refusal is said by its status alone (round sixty-one).
     // The reserve's refusal has its own words: the share is not spent, its last quarter is kept for networks that have not called (round sixty-three).
-    const said = r.status === 503 || r.status === 429 ? await r.json().then((b: unknown) => b as { held?: unknown; reserve?: unknown } | null, () => null) : null;
+    // MET Norway's own refusal of this site's request (its 429 or 403) comes as a 502 with `refused: true` (round sixty-seven;
+    // triage-66 S8), said as a refusal.
+    const said = r.status === 503 || r.status === 429 || r.status === 502 ? await r.json().then((b: unknown) => b as { held?: unknown; reserve?: unknown; refused?: unknown } | null, () => null) : null;
     const held = said?.held === true;
     const wait = Number(r.headers.get('retry-after'));
+    if (r.status === 502 && said?.refused === true) return { ok: false, status: r.status, refused: true, ...(wait > 0 ? { retryAfter: wait } : {}) };
     return held ? { ok: false, status: r.status, held, ...(said?.reserve === true ? { reserve: true } : {}), ...(wait > 0 ? { retryAfter: wait } : {}) } : { ok: false, status: r.status };
   }
   const body = (await r.json()) as T;
-  writeCache(k, body, (body as { alertsStatus?: unknown } | null)?.alertsStatus === 'refused' ? REFUSED_TTL_MS : FORECAST_TTL_MS);
+  // Five minutes for alerts the NWS refused or did not answer (two statuses since round sixty-seven; S8), as the server keeps them.
+  const alerts = (body as { alertsStatus?: unknown } | null)?.alertsStatus;
+  writeCache(k, body, alerts === 'refused' || alerts === 'unanswered' ? REFUSED_TTL_MS : FORECAST_TTL_MS);
   return { ok: true, body: clockTime(body) as T, at: Date.now() };
 }
 
@@ -164,10 +170,12 @@ export function clockTime<T>(body: T, zone?: string): T {
  * The sentence for a forecast that was not had. A refusal of ours (a bad altitude, a rate limit) is said as ours; only
  * a failure of the source is blamed on the source. Never a status code, never "no frost".
  */
-export function forecastRefusal(status: number | null | { status: number; held?: boolean; reserve?: boolean }, what: 'Forecast' | 'Frost' = 'Forecast'): string {
+export function forecastRefusal(status: number | null | { status: number; held?: boolean; reserve?: boolean; refused?: boolean }, what: 'Forecast' | 'Frost' = 'Forecast'): string {
   // The answer itself may be passed, so a call the site held back is said as that: not asked, not "could not be reached"
   // (round sixty-one; the server review, 4: rule 2). A bare status reads as before.
   const held = typeof status === 'object' && status != null && status.held === true;
+  // MET Norway refused this site's request (round sixty-seven; triage-66 S8): a refusal, never "could not be reached".
+  if (typeof status === 'object' && status != null && (status as { refused?: boolean }).refused === true) return `${what} not checked: MET Norway refused this site's request, so this is not an all-clear. It is asked again when this page is next opened.`;
   const reserve = typeof status === 'object' && status != null && status.reserve === true;
   if (typeof status === 'object' && status != null) status = status.status;
   if (held && status === 503 && reserve) return `${what} not checked: the rest of this site's calls to the forecast services this minute are kept for visitors on networks that have not called yet, so they were not asked. This is not an all-clear; it is asked again in a few minutes.`;

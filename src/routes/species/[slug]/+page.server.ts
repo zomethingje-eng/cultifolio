@@ -1,6 +1,6 @@
 import { error, redirect } from '@sveltejs/kit';
 import { getDossier, resolveSlug, corpusNow, getGenus, indexMaps, searchAnswer } from '$lib/server/dossiers';
-import { synonymOf, synonymInIndex, nameFromSlug } from '$lib/server/synonyms';
+import { synonymAsk, synonymInIndex, nameFromSlug } from '$lib/server/synonyms';
 import generaList from '../../../../scripts/specialist-genera.txt?raw';
 /** The genera the species list takes whole (the file the derivation reads), for the 404 to say so. */
 const WHOLE_GENERA = new Set(generaList.split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#')));
@@ -45,13 +45,16 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
     let syn = await synonymInIndex(platform, fetch, params.slug, c); // the page's corpus (round sixty; A27)
     let unchecked = false;
     let heldBack = false; // the site held its call to GBIF back: not asked, never "did not answer" (round sixty-one)
+    let gbifRefused = false; // GBIF refused this site's request: said as a refusal (round sixty-seven; S8)
     if (!syn) {
       const stop = await limited(platform, getClientAddress, 'match');
       if (stop) error(429, { message: 'Too many unknown species addresses from this address; wait a few minutes and try again.' });
-      const asked = await synonymOf(platform, fetch, params.slug, c, clientIp(getClientAddress)); // the reader's part of GBIF's share as well as the site's (round sixty-two; the server review's 3, outside review A29)
-      unchecked = asked === 'unchecked' || asked === 'held';
+      // `synonymAsk` tells GBIF's own refusal of this site's request apart (round sixty-seven; triage-66 S8, R45-11).
+      const asked = await synonymAsk(platform, fetch, params.slug, c, clientIp(getClientAddress)); // the reader's part of GBIF's share as well as the site's (round sixty-two; the server review's 3, outside review A29)
+      unchecked = asked === 'unchecked' || asked === 'held' || asked === 'refused';
       heldBack = asked === 'held';
-      syn = asked === 'unchecked' || asked === 'held' ? null : asked;
+      gbifRefused = asked === 'refused';
+      syn = asked === 'unchecked' || asked === 'held' || asked === 'refused' ? null : asked;
     }
     if (syn?.slug) {
       setHeaders({ 'cache-control': 'public, max-age=86400' });
@@ -77,7 +80,7 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
     // A held call is "not asked", a silence "not checked" (round sixty-two; visitor-words 12, rule 2). "The calls this site
     // allows" covers the site's share and this address's part of it alike.
     // Each said in the order it happened, the held call with GBIF as its subject (round sixty-two; the words review's 15).
-    error(404, { message: unchecked ? `No species page for “${params.slug}”. ${heldBack ? "GBIF was not asked whether it is an older name for a species that is here: this site held its call to GBIF back for this minute" : "Whether it is an older name for a species that is here was not checked: GBIF's name service did not answer"}` : `No species page for “${params.slug}”`, species });
+    error(404, { message: unchecked ? `No species page for “${params.slug}”. ${heldBack ? "GBIF was not asked whether it is an older name for a species that is here: this site held its call to GBIF back for this minute" : gbifRefused ? "Whether it is an older name for a species that is here was not checked: GBIF refused this site's request" : "Whether it is an older name for a species that is here was not checked: GBIF's name service did not answer"}` : `No species page for “${params.slug}”`, species });
   }
   // The dossier and the genus record are two objects in the bucket, read together, since the genus is known from the
   // index before the dossier arrives; read one after the other they were two round trips on every page (round forty-three, 2).

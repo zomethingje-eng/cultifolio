@@ -33,7 +33,9 @@ describe('/api/forecast', () => {
         throw new Error('net');
       },
       async () => new Response('', { status: 500 }),
-      async () => new Response('', { status: 429 }),
+      // MET's 429 and 403 are refusals of this site's request, said as such since round sixty-seven (triage-66 S8;
+      // tests/unit/r67s-server.test.ts), not "did not answer".
+      async () => new Response('', { status: 502 }),
       async () => new Response('<html>maintenance</html>', { status: 200, headers: { 'content-type': 'text/html' } })
     ]) {
       const r = await call(upstream);

@@ -58,7 +58,10 @@ describe('Today\'s words (the verification review\'s words 6 and 7)', () => {
   });
   it('"Use my location" starts its sentence with a capital, and the Settings link is not offered in the sample', () => {
     expect(today).not.toMatch(/No site set\. <button[^>]*>\{locating \? 'Locating…' : 'use my location'\}/);
-    expect(today).toMatch(/No site set\. <button[^>]*>\{locating \? 'Locating…' : 'Use my location'\}<\/button>\{#if !inDemo\(\)\} or <a href="\/settings#site">/);
+    // Round sixty-seven (triage-66 V8): the example has no site of its own and none is made up for it, so in the example
+    // the line says so, with neither "Use my location" nor the Settings link; outside it, both, as before (and no block
+    // before "or" to drop its space: triage-66 P5).
+    expect(today).toMatch(/\{#if PAGE_IN_DEMO\}\s*<p class="small muted froststrip" id="frost-example">The example collection has no site of its own[^<]*<\/p>\s*\{:else\}\s*<p class="small muted froststrip">No site set\. <button[^>]*>\{locating \? 'Locating…' : 'Use my location'\}<\/button> or <a href="\/settings#site">/);
   });
   it('the front page\'s one plant to water is named by its number, not "this one"', () => {
     const line = code('src/lib/ui/Today.svelte');

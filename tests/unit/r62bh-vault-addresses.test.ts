@@ -15,14 +15,6 @@ const specs = readdirSync(dir).filter((f) => f.endsWith('.spec.ts'));
 /** A click on `#sync-start` (not a check that it is absent), or a creation posted straight to the API. */
 const MAKES = /click\('#sync-start'\)|create: true/;
 const HELPER = /\b(fromAddress|docAddress|limitAddress)\(/;
-/**
- * r62s-server.spec.ts and r62bs-server.spec.ts (agent S's; the second only once S's second pass is merged) send
- * 198.51.100.62 and .63 by hand, one vault a run each; the helper never hands those addresses out. The change to take
- * them from `docAddress()` is in the harness's second-pass report under "Needs from others"; once it is made, these
- * entries go.
- */
-const KNOWN = new Set(['r62s-server.spec.ts', 'r62bs-server.spec.ts']);
-
 /** Each top-level `test(` block of a spec, by its title, with its source. */
 function blocks(src: string): { title: string; body: string }[] {
   const starts = [...src.matchAll(/^test(?:\.\w+)?\((['"`])(.*?)\1/gm)].map((m) => ({ at: m.index!, title: m[2] }));
@@ -39,14 +31,17 @@ describe('every e2e test that makes a vault sends an address of its own (round s
     it(`${f}: each vault it makes is made from a documentation address`, () => {
       const src = readFileSync(join(dir, f), 'utf8');
       const bare = blocks(src).filter((b) => MAKES.test(b.body) && !HELPER.test(b.body));
-      if (KNOWN.has(f)) {
-        // until it moves to the helper: at least not 127.0.0.1's
-        for (const b of bare) expect(b.body, b.title).toMatch(/'cf-connecting-ip': '198\.51\.100\.\d+'/);
-        return;
-      }
       expect(bare.map((b) => b.title)).toEqual([]);
     });
   }
+
+  // No exemptions any more (round sixty-seven; triage-66 H9, IND-9): the two server specs sent .62 and .63 by hand, one
+  // vault a run each, and a reused server refused Firefox's creation with 429. A fixed address written into a spec is
+  // what that was, so none may be.
+  it('no spec writes a documentation address by hand', () => {
+    const fixed = specs.filter((f) => /['"`]198\.51\.100\.\d+['"`]/.test(readFileSync(join(dir, f), 'utf8')));
+    expect(fixed).toEqual([]);
+  });
 
   it('only the limit\'s own test spends an address\'s five, and it takes the address kept for it', () => {
     const smoke = readFileSync(join(dir, 'smoke.spec.ts'), 'utf8');

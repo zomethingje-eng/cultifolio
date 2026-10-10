@@ -400,6 +400,12 @@ export interface BulkSources {
   wcvp?: WcvpIndex;
   occ?: OccIndex;
   media?: MediaIndex;
+  /**
+   * The species the download request left to the API path (bulk/api-path.txt): the download holds no record of theirs, so
+   * its having no photograph of them says nothing, and their media requests go through (round sixty-seven; triage-66 N4:
+   * 120 such species lost every photograph to an offline re-derivation that read "none" from the files).
+   */
+  apiPath?: ReadonlySet<number>;
 }
 
 /**
@@ -432,7 +438,7 @@ export function bulkFetcher(base: JsonFetcher, src: BulkSources, stats = { wcvp:
         stats.wcvp++;
         return { status: 'ok', data: { results: got.rows, kew: got.kew } as unknown as T };
       }
-    } else if (src.media && (m = RE_MEDIA.exec(url))) {
+    } else if (src.media && (m = RE_MEDIA.exec(url)) && !src.apiPath?.has(Number(m[1]))) {
       const key = Number(m[1]);
       const page = src.media.page(key);
       if (page) {

@@ -11,8 +11,8 @@
  * are the ones the collection's own add, pot-up and follow functions write, built here with their numbers and ids.
  */
 import { collection } from '$lib/db/collection.svelte';
-import { changeKeys, getMeta, setMeta } from '$lib/db/vault';
-import { inDemo, SEED_TOP } from '$lib/db/demo';
+import { setMeta, updateMeta } from '$lib/db/vault';
+import { PAGE_IN_DEMO, SEED_MARK, exampleClosed, seedState } from '$lib/db/demo';
 import { localDate } from '$core/dates';
 import { nextAccession, type NumberingScheme } from '$core/accession';
 import { speciesOf, speciesSlug } from '$core/names';
@@ -102,34 +102,62 @@ export function sampleRecords(scheme: NumberingScheme, wall: number = Date.now()
 }
 
 /**
- * Fill the sample's database once. Refuses outside the sample (this must never write to a grower's own collection), and
- * on a sample that already holds plants or was seeded before (a visitor who removed every plant keeps an empty sample).
+ * Fill the sample's database once. Refuses outside the sample (this must never write to a grower's own collection: the
+ * page's collection, read as it loaded, decides, as the vault's database does), and on a sample that already holds
+ * anything or was seeded before (a visitor who removed every plant keeps an empty sample).
  */
 export async function seedDemo(): Promise<boolean> {
-  if (!inDemo()) return false;
+  if (!PAGE_IN_DEMO || exampleClosed()) return false;
   await collection.load();
-  if (!inDemo()) return false;
+  if (exampleClosed()) return false;
   // One tab at a time, the check and the seed together (round sixty-three, the fix pass; R1, 8): two tabs opening the
-  // example at once (Safari reopening several on Today) could both find it empty, and the seeded mark written first left
-  // an empty example for good when the page was reloaded before the seed's one commit landed. Under the lock the mark is
-  // written after the commit, so a seed cut off is done again on the next load. A browser without Web Locks keeps the
-  // older order: the mark first, so a second tab does not seed it twice.
+  // example at once (Safari reopening several on Today) could both find it empty.
   const locks = typeof navigator !== 'undefined' ? (navigator as Navigator & { locks?: LockManager }).locks : undefined;
-  if (!locks) return seedOnce(true);
-  return locks.request(SEED_LOCK, () => seedOnce(false));
+  if (!locks) return claimed(() => seedOnce());
+  return locks.request(SEED_LOCK, () => seedOnce());
 }
 /** The lock the seed is set out under, held by one tab at a time. */
 export const SEED_LOCK = 'cultifolio-sample-seed';
-async function seedOnce(markFirst: boolean): Promise<boolean> {
-  // The mark, or plants already (a seed whose commit landed before a reload took the mark's write; this tab's collection was read at its own load).
-  if ((await getMeta<boolean>(SEEDED)) || collection.accessions.length) return false;
-  if (markFirst) await setMeta(SEEDED, true);
+/** The meta key a tab without Web Locks claims the seed under, with the time: one tab sets it out, and a claim a reload cut off lapses. */
+const CLAIM = 'demoSeeding';
+const CLAIM_MS = 60_000;
+/**
+ * Without Web Locks, the check and the seed are claimed in one transaction instead (round sixty-seven; triage-66 V5;
+ * IND-6): the seeded mark was written before the commit, and a commit refused (a full phone) left an empty example
+ * marked as set out, for good. Now a seed that fails gives its claim back and is tried again on the next load, and one cut
+ * off by a reload is tried again once its claim has lapsed.
+ */
+async function claimed(seed: () => Promise<boolean>): Promise<boolean> {
+  const me = `${Date.now()}:${Math.random().toString(36).slice(2)}`;
+  const now = Date.now();
+  const got = await updateMeta<string | null>(CLAIM, (had) => {
+    const at = typeof had === 'string' ? Number(had.split(':')[0]) : NaN;
+    return had && Number.isFinite(at) && now - at < CLAIM_MS && now >= at ? had : me;
+  });
+  if (got !== me) return false; // another tab is setting it out
+  try {
+    return await seed();
+  } finally {
+    await setMeta(CLAIM, null).catch(() => {});
+  }
+}
+async function seedOnce(): Promise<boolean> {
+  // The seed's changes in the log, its mark missing (a reload between an older build's commit and its mark), are marked
+  // now, and the example is never set out twice, even when the visitor removed all its plants; nor over a plant of the
+  // visitor's own (round sixty-seven; triage-66 V5; S-A7, K2). Read from the log, not the seeded flag alone: a flag
+  // written before a commit that failed (a browser without Web Locks, a full phone) left an empty example for good.
+  const state = await seedState(SEEDED);
+  if (state === 'marked' || state === 'repaired' || (state === 'other' && collection.accessions.length)) return false;
   const { recs, events } = sampleRecords(collection.scheme);
   const [first, ...rest] = recs;
-  await collection.putWith(first.kind, first.id, first.fields, events, rest);
-  if (!markFirst) await setMeta(SEEDED, true);
-  // The seed's last stamp: what comes after it is the visitor's own, which Leave counts and asks about (round sixty-two; A9).
-  const top = (await changeKeys().catch(() => [] as string[])).reduce((a, b) => (b > a ? b : a), '');
-  if (top) await setMeta(SEED_TOP, top);
+  // One commit for the seed, its seeded mark and its own last arrival number, the boundary Leave counts the visitor's
+  // records after (round sixty-seven; triage-66 V5; IND-6, R45-16): written apart, a reload between them left a seeded
+  // example with no boundary, and a boundary read from the log a moment later took in an edit made meanwhile.
+  await collection.putWith(first.kind, first.id, first.fields, events, rest, { meta: { [SEEDED]: true }, markLast: SEED_MARK });
+  // A collection that could not write the mark in the commit has it found from the seed's own changes (`seedState`).
+  await seedState(SEEDED).catch(() => null);
+  // The fold's snapshot is written after the seed, so every later page of the example reads it rather than the seed's
+  // changes one by one (round sixty-seven; triage-66 V5; S-E1: 432 requests, seven seconds a page in Safari's engine).
+  void collection.rebuild().catch(() => {});
   return true;
 }

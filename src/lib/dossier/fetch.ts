@@ -9,7 +9,13 @@ export type FetchResult<T> =
   | { status: 'ok'; data: T }
   | { status: 'none' }
   | { status: 'refused'; detail: string }
-  | { status: 'error'; detail: string };
+  | { status: 'error'; detail: string }
+  /**
+   * Not asked: the builder held the call back (an offline re-derivation), so nothing was refused and nothing is known
+   * either way. Recorded as `skipped` and said "not asked"; it was `refused` before, and 44 pages said a source had
+   * refused that was never asked (round sixty-seven; triage-66 N4, S-B4).
+   */
+  | { status: 'skipped'; detail: string };
 
 export interface FetchOptions {
   headers?: Record<string, string>;
@@ -170,7 +176,9 @@ export function makeFetcher(fetchImpl: typeof fetch = fetch): JsonFetcher {
       return { status: 'ok', data };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      if (/abort/i.test(msg)) return { status: 'refused', detail: `${host} timeout` };
+      // A timeout is the source not answering in time, not a refusal: recorded as an error, so the page says "did not
+      // answer" (round sixty-seven; triage-66 S8, R45-11: it was recorded as refused).
+      if (/abort|timeout/i.test(msg)) return { status: 'error', detail: `${host} timeout` };
       // A dropped connection ("fetch failed") is usually momentary: one more try after a pause.
       if ((opts.attempt ?? 0) < 1) {
         clearTimeout(timer);

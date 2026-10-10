@@ -46,6 +46,12 @@ export function enginesNamed(setting: string | undefined, argv: readonly string[
  * - A layout-shift reading (`PerformanceObserver` of `layout-shift`): the Layout Instability API is Chromium's; WebKit and
  *   Firefox report no entries, so a shift check there reads 0 and proves nothing.
  * - `page.pdf()`: Chromium only.
+ *
+ * Each kind has a form every engine runs (round sixty-seven; triage-66 H3, R45-28), in tests/e2e/r67h-engines.spec.ts: the
+ * accessibility tree by `toMatchAriaSnapshot`, 200% text by the root's font size (helpers/text-size.ts `rootText`), layout
+ * shift by element positions read every frame (helpers/positions.ts), the dark theme on paper by `emulateMedia` alone; and
+ * the CPU-throttled numbering race by the collection opened late (smoke's "with the collection slow to open"). Offline
+ * in Safari's engine is r67h-offline.spec.ts. The tests below stay Chromium's, reading what only Chromium can.
  */
 export const CHROMIUM_ONLY_TITLES: ReadonlyArray<readonly [title: string, reason: string]> = [
   ['r61a a11y-perf 5:', 'a CDP CPU throttle and a layout-shift reading'],

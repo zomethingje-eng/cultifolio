@@ -62,7 +62,8 @@ let mono: { dev: number; perf: number } | null = null;
  *
  * What it does, and all it does: the engine is asked for a reading at once (`onReadingWanted`), and the next reading
  * either confirms the correction (it agrees within the half minute: nothing is refolded) or replaces it (one refold).
- * It changes nothing else. Stamps and local dates are still read from the correction in force (`nowMs`); the hold and
+ * A positive correction past two days is not in force while unsure (`inForce`; round sixty-seven, triage-66 R2).
+ * Nothing else changes. Stamps and local dates are still read from the correction in force (`nowMs`); the hold and
  * the far-ahead rules are judged by that same clock; whether a park judged by the clock alone is made is still
  * `clockChecked()` (a reading under a week old, not dated after the clock), which being unconfirmed does not change.
  * This device's own edits are never held or parked by its own clock, confirmed or not (`isParked`, `isHeld` in log.ts).
@@ -167,7 +168,7 @@ function follow(): void {
     return; /* no monotonic clock after all */
   }
   if (Math.abs(drift) <= TRUST_SERVER_PAST_MS) return;
-  const was = offsetMs;
+  const was = inForce();
   let d = drift;
   if (d < 0 && jumped > 0) {
     const undo = Math.min(-d, jumped);
@@ -190,7 +191,7 @@ function follow(): void {
   mono = monoNow();
   unsure = true;
   store();
-  tellLater(offsetMs !== was ? offsetMs : null);
+  tellLater(inForce() !== was ? inForce() : null);
 }
 /**
  * Another tab wrote the correction: this tab takes it as written (round sixty-two, second pass; the data review's 2 and
@@ -201,10 +202,10 @@ function follow(): void {
  * when the correction or whether it is checked changed.
  */
 function adoptStored(): void {
-  const was = offsetMs, wasChecked = checkedNow();
+  const was = inForce(), wasChecked = checkedNow();
   offsetMs = 0; confirmedAt = 0; serverAt = 0; mono = null; pending = null; jumped = 0; unsure = false;
   readStored(true);
-  if (offsetMs !== was || checkedNow() !== wasChecked) for (const l of listeners) l(offsetMs);
+  if (inForce() !== was || checkedNow() !== wasChecked) for (const l of listeners) l(inForce());
 }
 readStored();
 // Another tab's correction reaches this one: a tab already open went on stamping by the old offset until its own next sync (round fifty-two, 1).
@@ -220,7 +221,17 @@ try {
  * that same wrong clock, so the device that was wrong saw nothing wrong. The server's `Date` header is read on every
  * sync; a device that never syncs keeps its own clock, which is all it has. The correction is kept across loads.
  */
-export const nowMs = () => { follow(); return Date.now() + offsetMs; };
+export const nowMs = () => { follow(); return Date.now() + inForce(); };
+/**
+ * The correction in force: the stored one, except a positive one past the two days a single reading may move the clock,
+ * which applies only once a reading here has confirmed it (round sixty-seven; triage-66 R2, the outside review's 14). A
+ * slow clock set right while the tab was closed kept its three days and stamped every edit three days ahead, and their
+ * arrival parked them on every device. Until a reading the device stamps by its raw clock, so its errors land behind,
+ * which parks nothing.
+ */
+function inForce(): number {
+  return unsure && offsetMs > TRUST_SERVER_TWICE_PAST_MS ? 0 : offsetMs;
+}
 /** Called when the correction changes (a reading here, or another tab's): the clock that mints stamps restarts from the corrected time. */
 export function onClockOffsetChange(l: (offset: number) => void): () => void {
   listeners.add(l);
@@ -233,7 +244,7 @@ export function onClockOffsetChange(l: (offset: number) => void): () => void {
  * threshold. Returns the offset in force.
  */
 export function trustServerTime(serverMs: number, localMs = Date.now()): number {
-  if (!Number.isFinite(serverMs) || serverMs <= 0) return offsetMs;
+  if (!Number.isFinite(serverMs) || serverMs <= 0) return inForce();
   follow(); // a move of the device clock since the last reading is followed first, so the reading is met by the correction in force
   const delta = serverMs - localMs;
   const far = Math.abs(delta) > TRUST_SERVER_PAST_MS;
@@ -250,16 +261,17 @@ export function trustServerTime(serverMs: number, localMs = Date.now()): number 
         // since moved, and a park judged by it would be kept (round sixty-one; the clock review's 7: 72 stamps in the
         // fuzz were parked by peers while their writer, three days fast, still counted its clock as checked).
         pending = { delta, at: localMs };
-        const wasChecked = clockChecked();
+        const wasChecked = clockChecked(), wasForce = inForce();
         if (Math.abs(delta - offsetMs) > TRUST_SERVER_TWICE_PAST_MS) confirmedAt = 0;
-        // The correction itself stays in force and stored, unconfirmed: a disagreeing reading replaces it once a second
-        // agrees, and never deletes it (round sixty-two, second pass; the data review's 3).
+        // The correction itself stays stored, unconfirmed: a disagreeing reading replaces it once a second agrees, and
+        // never deletes it (round sixty-two, second pass; the data review's 3). A positive one past two days is not in
+        // force meanwhile (round sixty-seven; triage-66 R2).
         unsure = true;
         store();
-        if (wasChecked && !clockChecked()) for (const l of listeners) l(offsetMs);
-        return offsetMs;
+        if ((wasChecked && !clockChecked()) || inForce() !== wasForce) for (const l of listeners) l(inForce());
+        return inForce();
       }
-      if (localMs - seen.at < TRUST_AGREE_GAP_MS) return offsetMs; // the same run, or one straight after: not a second reading yet
+      if (localMs - seen.at < TRUST_AGREE_GAP_MS) return inForce(); // the same run, or one straight after: not a second reading yet
       next = delta;
     } else next = delta;
   }
@@ -268,14 +280,15 @@ export function trustServerTime(serverMs: number, localMs = Date.now()): number 
   confirmedAt = localMs;
   serverAt = serverMs;
   mono = monoNow();
+  const was = inForce();
   unsure = false; // met by a reading: confirmed, or replaced by it (round sixty-two)
   jumped = 0;
-  const was = offsetMs;
   offsetMs = next;
   store();
   // A clock confirmed for the first time is told too: what the fold held or folded against an unchecked clock is
-  // judged again, so a change far ahead of a clock now known to be right is parked (round fifty-nine).
-  if (next !== was || !wasChecked) for (const l of listeners) l(offsetMs);
+  // judged again, so a change far ahead of a clock now known to be right is parked (round fifty-nine). So is a large
+  // correction a reading confirms, which comes into force only now (round sixty-seven; triage-66 R2).
+  if (offsetMs !== was || !wasChecked) for (const l of listeners) l(offsetMs);
   return offsetMs;
 }
 /**
@@ -304,8 +317,8 @@ function trustedAge(age: number): boolean {
 function notAfterClock(age: number): boolean {
   return age > -5 * 60_000;
 }
-/** The current correction, for the clock warning to say how far off the device is. */
-export const clockOffsetMs = () => { follow(); return offsetMs; };
+/** The correction in force (`inForce`), for the clock warning to say how far off the device is, and for the snapshot's key. */
+export const clockOffsetMs = () => { follow(); return inForce(); };
 /** Whether the correction in force waits for a reading to confirm it (`unsure`; round sixty-two). */
 export const clockUnsure = () => { follow(); return unsure; };
 /** Called when this tab wants a reading of the server's clock at once: the device clock moved under it (round sixty-two). */
@@ -315,7 +328,7 @@ export function onReadingWanted(w: () => void): () => void {
 }
 /** Stop syncing: no server to confirm a correction against, so none is kept (round fifty-two, 1). */
 export function clearClockOffset(): void {
-  const was = offsetMs;
+  const was = inForce();
   offsetMs = 0;
   pending = null;
   confirmedAt = 0;

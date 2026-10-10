@@ -55,6 +55,9 @@ vi.mock('$lib/db/vault', () => {
   return m;
 });
 
+// Round sixty-seven (contract C4): the load asks through the one door, `askToKeep`; the vault's call only reads.
+vi.mock('$lib/ui/keep-ask', () => ({ askToKeep: (reason: string) => { asks.push(reason === 'load'); return new Promise<boolean>((ok) => (answer = ok)); } }));
+
 describe("the collection's load and the browser's promise to keep the data", () => {
   it('on an empty device nothing is asked: what the browser has promised is read, and the collection opens', async () => {
     const { collection } = await import('$lib/db/collection.svelte');
@@ -71,7 +74,7 @@ describe("the collection's load and the browser's promise to keep the data", () 
     const opened = await Promise.race([collection.load().then(() => 'opened'), new Promise((r) => setTimeout(() => r('still waiting on the browser'), 1000))]);
     expect(opened).toBe('opened');
     expect(collection.ready).toBe(true);
-    expect(asks).toEqual([false, true]);
+    expect(asks).toEqual([false, false, true]); // the first load's read, this load's read, and its one ask
     expect(collection.persisted).toBe(false); // not promised yet: the pages say "kept in this browser only" meanwhile
     // a plant can be added with the question still open
     const a = await collection.addAccession({ taxonName: 'Lithops lesliei', status: 'growing' });

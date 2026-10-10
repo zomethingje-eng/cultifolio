@@ -14,7 +14,8 @@
   import { accNo, sowNo, PROP_METHODS, kindOf } from '$lib/db/types';
   import { onMount, tick } from 'svelte';
   import { frost } from '$lib/ui/frost.svelte';
-  import { sheetsFor, type Sheet } from '$lib/ui/index.svelte';
+  import { sheetsOr, isUnreached, type Sheet, type Unreached } from '$lib/ui/index.svelte';
+  import { unreachedClause } from '$lib/ui/reach-words';
   import { growingYear, forReader } from '$core/sheet';
   import { speciesSlug } from '$core/names';
   import { localDate } from '$core/dates';
@@ -23,6 +24,7 @@
   import { getMeta } from '$lib/db/vault';
   import { sync } from '$lib/sync/engine.svelte';
   import { prefs } from '$lib/ui/prefs.svelte';
+  import { PAGE_IN_DEMO } from '$lib/db/demo';
   import { photoDue, photoDueDays } from '$lib/ui/photo-due';
   import { today as day } from '$lib/ui/day.svelte';
   /** Where the lines are shown: the front page carries them all; the Today tab shows the frost and the watering in full above, so those two lines are left to it (round fifty-three, 3). */
@@ -65,13 +67,18 @@
    */
   let sheets = $state<Map<string, Sheet> | null>(null);
   let sheetsSettled = $state(false); // the button waits for the sheets, as the Today tab's do: its count must not change under a reading eye (round fifty-five, 5)
-  /** The sheets did not answer: no plant on the line is set apart for its habitat's rest, and the line says so, never "none resting" (round sixty-two; rule 2, the grower review, 1). */
-  let sheetsFailed = $state(false);
+  /**
+   * The sheets gave no answer: no plant on the line is set apart for its habitat's rest, and the line says so, never "none
+   * resting" (round sixty-two; rule 2, the grower review, 1). Kept as why, so a refusal is said as one (round sixty-seven;
+   * triage-66 S8, IND-7).
+   */
+  let sheetsWhy = $state<Unreached | null>(null);
+  const sheetsFailed = $derived(!!sheetsWhy);
   $effect(() => {
     const slugs = [...new Set(dry.filter((a) => kindOf(a) === 'species').map((a) => speciesSlug(a.taxonName)))];
-    if (!slugs.length) { sheets = null; sheetsSettled = true; sheetsFailed = false; return; }
+    if (!slugs.length) { sheets = null; sheetsSettled = true; sheetsWhy = null; return; }
     sheetsSettled = false;
-    void sheetsFor(slugs).then((m) => { if (m) sheets = m; sheetsFailed = !m; }, () => { sheetsFailed = true; }).finally(() => { sheetsSettled = true; });
+    void sheetsOr(slugs).then((m) => { if (isUnreached(m)) sheetsWhy = m; else { sheets = m; sheetsWhy = null; } }, () => { sheetsWhy = { failed: true, kind: 'unreachable', status: null, reason: null, retryAfter: null, at: Date.now() }; }).finally(() => { sheetsSettled = true; });
   });
   /** Each resting plant with the rule that rests it: the rain rule's season, or under 120 mm a year the temperature rule's cooler six months, worded apart as the Today tab words them (round fifty-nine). */
   const restingBy = $derived.by(() => {
@@ -134,6 +141,9 @@
   /** Where the collection stands outside this device: a backup's age, sync's state, and what is waiting (round forty-nine, 3; round twenty-seven). Said once, as a fact, not a nag: hidden once the grower has asked to. */
   const keeping = $derived.by(() => {
     if (!collection.ready || !growing.length) return null;
+    // The example is backed up and synced nowhere, and is deleted on Leave: said so, in place of a backup's age it cannot
+    // have (round sixty-seven; triage-66 V7; R45-3: "no backup yet, not synced" over plants that are not the visitor's).
+    if (PAGE_IN_DEMO) return { text: 'The example collection is kept nowhere: it is deleted when you leave it.', tone: 'muted' };
     const backup = lastBackup ? `backup ${daysBetween(lastBackup.slice(0, 10)) === 0 ? 'today' : `${daysBetween(lastBackup.slice(0, 10))} d ago`}` : 'no backup yet';
     const synced = sync.configured ? (sync.lastSync ? `synced ${daysBetween(sync.lastSync.slice(0, 10)) === 0 ? 'today' : `${daysBetween(sync.lastSync.slice(0, 10))} d ago`}` : 'sync set up, not yet synced') : 'not synced';
     const waiting = collection.incomplete ? `, ${collection.incomplete} record${collection.incomplete === 1 ? '' : 's'} waiting` : '';
@@ -160,8 +170,9 @@
     const cool = `in ${its} habitat's warmer six months (a year of under ${ruleRain(120, units.current)} of rain, read by temperature)`;
     const rain = `in ${its} habitat's dry season`;
     const where = rules.size === 2 ? `${rain} or ${cool}` : rules.has('cool') ? cool : rain;
-    // The sheets did not answer: said, so no line reads as "none of them resting" (round sixty-two; rule 2).
-    const unread = sheetsFailed && !resting.length && dry.some((a) => kindOf(a) === 'species') ? '; resting months not checked: the species sheets did not answer' : '';
+    // The sheets gave no answer: said, so no line reads as "none of them resting" (round sixty-two; rule 2), and a refusal
+    // as a refusal (round sixty-seven; triage-66 S8).
+    const unread = sheetsWhy && !resting.length && dry.some((a) => kindOf(a) === 'species') ? `; resting months not checked: ${unreachedClause(sheetsWhy, 'the species sheets')}` : '';
     return parts.join(', and ') + (resting.length ? `; ${resting.length === dry.length ? (dry.length === 1 ? 'it is' : 'all of them are') : `${resting.length} of them ${resting.length === 1 ? 'is' : 'are'}`} ${where}` : '') + unread + '.';
   });
   type Line = { href: string; tone: string; text: string; water?: boolean; keeping?: boolean };
@@ -172,7 +183,7 @@
       unseen.length ? { href: '/places', tone: 'warn', text: `${unseen.length} plant${unseen.length === 1 ? '' : 's'} missed at the last audit or not seen for ninety days${unseen.length <= 3 ? ': ' + unseen.map(accNo).join(', ') : ''}.` } : null,
       sowings.length ? { href: '/propagation', tone: 'ok', text: `${sowings.length} propagation batch${sowings.length === 1 ? '' : 'es'} in the tray, the oldest ${sowNo(sowings[0])} (${plantLabel(sowings[0])}) ${PROP_METHODS.find((x) => x.k === sowings[0].method)?.veg ? 'started' : 'sown'} ${sowings[0].sown}.` } : null,
       unphotographed.length && growing.length ? { href: '/plants?show=nophoto', tone: 'muted', text: `${unphotographed.length} of ${growing.length} plants without a photograph in the last twelve months${unphotographed.length <= 3 ? ': ' + unphotographed.map(accNo).join(', ') : ''}.` } : null,
-      keeping && !prefs.hideKeeping ? { href: sync.configured ? '/sync' : '/backup', tone: keeping.tone, text: keeping.text, keeping: true } : null
+      keeping && !prefs.hideKeeping ? { href: PAGE_IN_DEMO ? '' : sync.configured ? '/sync' : '/backup', tone: keeping.tone, text: keeping.text, keeping: true } : null
     ] as Array<Line | null>).filter((x): x is Line => !!x)
   );
 </script>
@@ -192,13 +203,15 @@
           {/if}
         </div>
       {:else if l.keeping}
-        <div class="line {l.tone} withact"><a href={l.href}>{l.text}</a><button class="btn small" type="button" onclick={() => (prefs.hideKeeping = true)} title="Hide this line; Settings brings it back">Hide</button></div>
+        <div class="line {l.tone} withact">{#if l.href}<a href={l.href}>{l.text}</a>{:else}<span>{l.text}</span>{/if}<button class="btn small" type="button" onclick={() => (prefs.hideKeeping = true)} title="Hide this line; Settings brings it back">Hide</button></div>
       {:else}
         <a class="line {l.tone}" href={l.href}>{l.text}</a>
       {/if}
     {/each}
-    {#if !hasSite && where === 'home'}<span class="small muted">Frost watch needs a site: <button class="linkish" type="button" onclick={locate} disabled={locating}>{locating ? 'Locating…' : 'use my location'}</button> or <a href="/settings#site">set one in Settings</a>.{#if locateMsg}{' '}{locateMsg}{/if}</span>{/if}
+    {#if !hasSite && where === 'home' && PAGE_IN_DEMO}<span class="small muted">The example collection has no site of its own, so the frost watch reads no forecast here; once you leave the example, set yours on Today or in Settings.</span>{:else if !hasSite && where === 'home'}<span class="small muted">Frost watch needs a site: <button class="linkish" type="button" onclick={locate} disabled={locating}>{locating ? 'Locating…' : 'use my location'}</button> or <a href="/settings#site">set one in Settings</a>.{#if locateMsg}{' '}{locateMsg}{/if}</span>{/if}
   </div>
+{:else if collection.ready && !hasSite && growing.length && where === 'home' && PAGE_IN_DEMO}
+  <p class="small muted todaynote">The example collection has no site of its own, so the frost watch reads no forecast here; once you leave the example, set yours on Today or in Settings.</p>
 {:else if collection.ready && !hasSite && growing.length && where === 'home'}
   <p class="small muted todaynote">Frost watch needs a site: <button class="linkish" type="button" onclick={locate} disabled={locating}>{locating ? 'Locating…' : 'use my location'}</button> or <a href="/settings#site">set one in Settings</a>, and the forecast shows here when it turns.{#if locateMsg}{' '}{locateMsg}{/if}</p>
 {/if}

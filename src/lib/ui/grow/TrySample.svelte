@@ -5,12 +5,12 @@
    * database of its own, chosen at page load and deleted whole on leaving; nothing of it reaches the grower's own
    * collection, a backup or sync. At the head of the empty My plants page, where it opens the example on that page.
    */
-  import { inDemo } from '$lib/db/demo';
+  import { PAGE_IN_DEMO } from '$lib/db/demo';
   import { enterExample, notEnteredWords, type NotEntered } from './example.svelte';
   let { note = true, to = '/plants' }: { note?: boolean; to?: string } = $props();
   let demo = $state(false);
   let refused = $state<NotEntered | null>(null);
-  $effect(() => { demo = inDemo(); });
+  $effect(() => { demo = PAGE_IN_DEMO; }); // the page's collection, not the tab's flag of the moment (round sixty-seven; triage-66 V3)
 </script>
 
 {#if !demo}

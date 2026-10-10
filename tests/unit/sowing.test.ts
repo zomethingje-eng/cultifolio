@@ -199,7 +199,7 @@ describe('places', () => {
     await expect(collection.moveLocation(house.id, s1.id)).rejects.toThrow(/inside itself/); // under its own child
     await collection.moveLocation(s2.id, house.id); // a real move is fine
     expect(collection.children(house.id)).toHaveLength(2);
-    await expect(collection.addLocation({ name: 'Orphan', parentId: 'nope' })).rejects.toThrow(/does not exist/);
+    await expect(collection.addLocation({ name: 'Orphan', parentId: 'nope' })).rejects.toThrow(/no longer here/); // said in the picker since round sixty-seven (triage-66 R12)
   });
   it('a loop in the log (two devices moving places into each other offline) is cut at its lowest id, which needs a home', async () => {
     await collection.ingest([

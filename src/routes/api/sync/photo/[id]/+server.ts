@@ -1,7 +1,7 @@
 import { json, error } from '@sveltejs/kit';
 import { STATUS } from '$lib/sync/limits';
 import type { RequestHandler } from './$types';
-import { store, vaultId, authed, photoKey, photoObjectKey, storeOnce, deleteCounted, readBody, admitVault, unadmit, refusal, PhotoBusy, MAX_PHOTO_BYTES, limited, quotaOf, dropProof, removedAt } from '$lib/server/sync';
+import { store, vaultId, authed, photoKey, photoObjectAt, pointerUnread, storeOnce, deleteCounted, readBody, admitVault, unadmit, refusal, PhotoBusy, MAX_PHOTO_BYTES, limited, quotaOf, dropProof, removedAt } from '$lib/server/sync';
 
 export const GET: RequestHandler = async ({ request, url, params, platform, getClientAddress }) => {
   const r2 = store(platform);
@@ -9,8 +9,10 @@ export const GET: RequestHandler = async ({ request, url, params, platform, getC
   if (stop) return stop;
   const id = vaultId(url.searchParams.get('vault'));
   await authed(r2, id, request);
-  // Through the name's pointer: the generation it holds now, or nothing once removed (round sixty-two; decision 7).
-  const at = await photoObjectKey(r2, photoKey(id, params.id));
+  // Through the name's pointer: the generation it holds now, or nothing once removed (round sixty-two; decision 7). A
+  // pointer that could not be read is 503 with Retry-After, never "no such photo" (round sixty-seven; triage-66 S1).
+  const { key: at, unreadable } = await photoObjectAt(r2, photoKey(id, params.id));
+  if (unreadable) return pointerUnread();
   const o = at ? await r2.get(at) : null;
   if (!o) return new Response('no such photo', { status: 404 });
   return new Response(o.body, { headers: { 'content-type': 'application/octet-stream', 'cache-control': 'private, max-age=31536000, immutable' } });
@@ -58,7 +60,8 @@ export const HEAD: RequestHandler = async ({ request, url, params, platform, get
   if (stop) return stop;
   const id = vaultId(url.searchParams.get('vault'));
   await authed(r2, id, request);
-  const at = await photoObjectKey(r2, photoKey(id, params.id));
+  const { key: at, unreadable } = await photoObjectAt(r2, photoKey(id, params.id));
+  if (unreadable) return pointerUnread(true); // a fault, not an absence: the device asks again, and does not push the photograph again (round sixty-seven; S1)
   return new Response(null, { status: at && (await r2.head(at)) ? 200 : 404 });
 };
 

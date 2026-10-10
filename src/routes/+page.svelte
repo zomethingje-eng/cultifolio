@@ -28,8 +28,8 @@
   import { units } from '$lib/ui/units.svelte';
   import { cultivationSheet } from '$core/sheet';
   import { climograph } from '$climate/climograph';
-  import { inDemo } from '$lib/db/demo';
-  import { enterExample, notEnteredWords, type NotEntered } from '$lib/ui/grow/example.svelte';
+  import { PAGE_IN_DEMO } from '$lib/db/demo';
+  import { addLeavesExample, enterExample, notEnteredWords, type NotEntered } from '$lib/ui/grow/example.svelte';
   let { data } = $props();
   /**
    * One featured species' figures, for "This is what a species page with a habitat climate shows" under the visitor's heading (round sixty;
@@ -348,7 +348,7 @@
   });
   $effect(() => {
     if (!collection.ready) return;
-    if (inDemo()) return; // the hint is the grower's own collection's, never the sample's (round sixty-one; the records review, 17)
+    if (PAGE_IN_DEMO) return; // the hint is the grower's own collection's, never the sample's (round sixty-one; the records review, 17); the page's collection, not the tab's flag (round sixty-seven; triage-66 V3)
     try {
       if (hasMine) localStorage.setItem(HINT, '1');
       else localStorage.removeItem(HINT);
@@ -659,7 +659,7 @@
   </div>
 {:else if yourView}
   <PageHead title="Species" compact sub="The species you grow, want, or are reading up on; the whole reference is one switch away." count="{grownN} you grow{followingN ? ` · ${followingN} following` : ''}">
-    <a class="btn pri headadd" href="/plants/new">Add a plant</a>
+    <a class="btn pri headadd" href="/plants/new" onclick={(e) => addLeavesExample(e, '/plants/new')}>Add a plant</a>
   </PageHead>
 
   <!-- The box above Today, focused on a desktop: a returning grower's first act is "find 2026-0013" (round forty-one, R11).
@@ -724,7 +724,7 @@
        shows it: one species' figures and its chart, as its page shows them (round sixty; visitor 1, the self-review's
        experience item 1). To a grower it is the catalogue's head, as before. -->
   <PageHead title={visitor ? 'Cultifolio' : 'Species'} kick={visitor ? 'Species reference' : 'Cultifolio'} compact count="{fmtN(data.total)} species · {fmtN(data.withClimate)} with habitat climate{ownedN ? ` · ${ownedN} you grow` : ''}">
-    {#if !visitor}<a class="btn pri headadd" href="/plants/new">Add a plant</a>{/if}
+    {#if !visitor}<a class="btn pri headadd" href="/plants/new" onclick={(e) => addLeavesExample(e, '/plants/new')}>Add a plant</a>{/if}
   </PageHead>
   {#if visitor}
     <ul class="pitch">
@@ -746,12 +746,16 @@
          It opens on Today, the page that shows most of what the record does at once (round sixty-three, V2). What a grower
          gets is said in a few words, each a page the app has (round sixty-three, V3: a visitor "isn't given the knowledge
          of the app's capabilities"); short, so the first screen still holds a whole row on a phone (V4). -->
-    <p class="welcome" id="welcome"><span><b>Grow some of these?</b> Keep their record on this device: watering read against each species' habitat season, places, seed batches, frost warnings, labels. <button class="linkish trysample" type="button" id="try-sample-home" onclick={() => { const r = enterExample('/today'); exampleRefused = r === true ? null : r; }}>See the example collection</button>, <a href="/plants/new">add your first plant</a> or <a href="/backup">restore a backup</a>.</span><button class="linkish dismiss" type="button" onclick={dismissWelcome} aria-label="Not now" title="Not now">×</button></p>
+    <p class="welcome" id="welcome"><span><b>Grow cacti, succulents or bulbs?</b> Keep their record on this device: watering read against each species' habitat season, places, seed batches, frost warnings, labels. <button class="linkish trysample" type="button" id="try-sample-home" onclick={() => { const r = enterExample('/today'); exampleRefused = r === true ? null : r; }}>See the example collection</button>, <a href="/plants/new" onclick={(e) => addLeavesExample(e, '/plants/new')}>add your first plant</a> or <a href="/backup">restore a backup</a>.</span><button class="linkish dismiss" type="button" onclick={dismissWelcome} aria-label="Not now" title="Not now">×</button></p>
     {#if exampleRefused}<p class="small" role="status" id="try-sample-home-refused">{notEnteredWords(exampleRefused)}</p>{/if}
-  {:else if collection.ready && !hasMine && !collection.accessions.length && !searchMode}
+  {/if}
+  {#if visitor && !searchMode}
     <!-- "Not now" hides the welcome for good; the way in stays, in one line, or a visitor who comes back has to find /plants/new by the tab bar (round forty-one, R9). -->
     <!-- No "nothing leaves it": the about page lists what does (round sixty; words 17). -->
-    <p class="welcome quiet" id="welcome-after"><a href="/plants/new">Keep a record of your plants</a>; it stays on this device unless you turn on sync.</p>
+    <!-- Drawn from the server for every visitor and shown by the dismissal's flag before the first paint, as the welcome is
+         hidden by it: drawn once the collection had opened, it pushed the rows down 49 px at 750 ms on every load of a
+         returning visitor's front page (round sixty-seven; triage-66 V10; R45-8). -->
+    <p class="welcome quiet" class:shown={welcomeHidden} id="welcome-after"><a href="/plants/new" onclick={(e) => addLeavesExample(e, '/plants/new')}>Keep a record of your plants</a>; it stays on this device unless you turn on sync.</p>
   {/if}
 
   {#if visitor && data.featured.length && !searchMode}
@@ -781,9 +785,9 @@
         </nav>
         <!-- Links between addresses, so the current one is the page, not "true" (round fifty-eight; the accessibility review). -->
         <nav class="chiprow" aria-label="Filter by climate">
-          <a class="chipbtn" class:on={chip === 'all'} aria-current={chip === 'all' ? 'page' : undefined} href="?by={data.by}" aria-label="All, {fmtN(data.total)}" data-sveltekit-noscroll>All<span class="n">{fmtN(data.total)}</span></a>
-          <a class="chipbtn" class:on={chip === 'climate'} aria-current={chip === 'climate' ? 'page' : undefined} href="?by={data.by}&chip=climate" aria-label="Climate known, {fmtN(data.withClimate)}" data-sveltekit-noscroll>Climate known<span class="n">{fmtN(data.withClimate)}</span></a>
-          <a class="chipbtn" class:on={chip === 'noclimate'} aria-current={chip === 'noclimate' ? 'page' : undefined} href="?by={data.by}&chip=noclimate" aria-label="Without climate, {fmtN(data.total - data.withClimate)}" data-sveltekit-noscroll>Without climate<span class="n">{fmtN(data.total - data.withClimate)}</span></a>
+          <a class="chipbtn" class:on={chip === 'all'} aria-current={chip === 'all' ? 'page' : undefined} href="?by={data.by}" data-sveltekit-noscroll>All<span class="sep0">{', '}</span><span class="n">{fmtN(data.total)}</span></a>
+          <a class="chipbtn" class:on={chip === 'climate'} aria-current={chip === 'climate' ? 'page' : undefined} href="?by={data.by}&chip=climate" data-sveltekit-noscroll>Climate known<span class="sep0">{', '}</span><span class="n">{fmtN(data.withClimate)}</span></a>
+          <a class="chipbtn" class:on={chip === 'noclimate'} aria-current={chip === 'noclimate' ? 'page' : undefined} href="?by={data.by}&chip=noclimate" data-sveltekit-noscroll>Without climate<span class="sep0">{', '}</span><span class="n">{fmtN(data.total - data.withClimate)}</span></a>
         </nav>
         <!-- Kept in place with no index to show (regions), so the toolbar does not change shape (round sixty; visitor 16). -->
         <button class="btn small azbtn" class:noaz={data.letters.length <= 1} type="button" onclick={showLetters} aria-label="A–Z, show the letter index" aria-hidden={data.letters.length <= 1 ? 'true' : undefined} tabindex={data.letters.length <= 1 ? -1 : undefined} disabled={data.letters.length <= 1}>A–Z</button>
@@ -903,7 +907,8 @@
   @media (max-width: 900px) { .tools { flex-basis: 100%; } }
   .azbtn.noaz { visibility: hidden; }
   .relaxed { margin: 8px 0 0; }
-  .ftile .fcred, .tile .cred { display: block; font-size: var(--fs-xs); color: var(--ink3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Two lines, cut after the second: on one line the licence that leads the credit was cut at 200% text ("Photo: CC …"; round sixty-seven, triage-66 N13, R45-12). */
+  .ftile .fcred, .tile .cred { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; font-size: var(--fs-xs); color: var(--ink3); overflow: hidden; overflow-wrap: anywhere; }
   .ftile .fcred { padding: 0 9px 8px; margin-top: -4px; }
   .tile .cred { margin-top: 2px; }
   /* the grower's main switch: yours or everything; it leads the tool row on both views */
@@ -917,7 +922,8 @@
   /* A button in the sentence, read and tapped as its links are (round sixty). */
   /* A link's weight and colour, not a pill: the pill's padding took a line on a phone and pushed the first catalogue row under the tab bar (round fifty, 1; the merge of round sixty-one). */
   .welcome .linkish.trysample { color: var(--accent); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; margin: 0; padding: 0; font-size: inherit; display: inline; min-height: 0; }
-  .welcome.quiet { color: var(--ink3); font-size: var(--fs-md); }
+  .welcome.quiet { color: var(--ink3); font-size: var(--fs-md); display: none; }
+  :global(html[data-welcomed]) .welcome.quiet, .welcome.quiet.shown { display: flex; }
   /* dismissed on this device: hidden before first paint, by the flag app.html sets, until the state catches up at mount */
   :global(html[data-welcomed]) .welcome:not(.quiet) { display: none; }
   .linkish { background: none; border: 0; padding: 0 4px; font: inherit; font-size: var(--fs-md); color: var(--accent); cursor: pointer; text-decoration: underline; }

@@ -42,7 +42,9 @@ vi.mock('$lib/db/vault', () => {
   m.dropFold = async () => {};
   m.parkStamps = async (st: string[]) => { const had = (mem.meta.get('parked') as string[] | undefined) ?? []; const out = [...new Set([...had, ...st])]; mem.meta.set('parked', out); return out; };
   m.lastArrival = async () => 0;
-  m.arrivalsAfter = async () => ({ changes: [...mem.changes], seq: 0, gen: 0 });
+  // Arrival numbers as the order of the in-memory log, from 1 (round sixty-seven: the seed's mark is the arrival number of its own last change).
+  m.arrivalsAfter = async (seq = 0) => ({ changes: mem.changes.slice(seq), seq: mem.changes.length, gen: 0 });
+  m.arrivalsOf = async (ts: string[]) => new Map(ts.map((t) => [t, mem.changes.findIndex((c) => c.t === t) + 1] as [string, number]).filter(([, n]) => n > 0));
   m.changeKeys = async () => mem.changes.map((c) => c.t);
   if (!m.changesByKeys) m.changesByKeys = async (ts: string[]) => mem.changes.filter((c) => ts.includes(c.t));
   if (!m.updateMeta) m.updateMeta = async (k: string, fn: (had: unknown) => unknown) => { const next = fn(mem.meta.get(k)); mem.meta.set(k, next); return next; };
@@ -51,7 +53,8 @@ vi.mock('$lib/db/vault', () => {
   return m;
 });
 
-
+// The page loads in the example: which collection a page shows is read once, as it loads (round sixty-seven; triage-66 V3).
+store.set('cultifolio.demo', '1');
 const { collection } = await import('$lib/db/collection.svelte');
 const { seedDemo, SEEDED, SEED_LOCK } = await import('$lib/ui/grow/demo-seed');
 

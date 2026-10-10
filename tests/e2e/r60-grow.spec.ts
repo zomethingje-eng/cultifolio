@@ -370,7 +370,7 @@ test('r60 11: the sample collection opens in a database of its own, shows its fi
   await ready(page);
   await expect(page.getByRole('heading', { name: 'Nothing here yet' })).toBeVisible();
   await page.click('#try-sample');
-  await expect(page.locator('.demobar')).toContainText('An example collection, so you can see what this page does. Your own starts when you add a plant.') // round sixty-three, V2;
+  await expect(page.locator('.demobar')).toContainText('An example collection, so you can see what this page does. Nothing added here is kept: leaving deletes it.') // round sixty-three, V2; round sixty-seven, triage-66 V1
   await expect(page.locator('.rows > *')).toHaveCount(12, { timeout: seedWait() });
   await expect(page.locator('#try-sample')).toHaveCount(0);
   await page.goto('/today');

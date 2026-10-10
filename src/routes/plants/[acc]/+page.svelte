@@ -20,7 +20,8 @@
   import { slugify, speciesOf, speciesSlug, parseName } from '$core/names';
   import SpeciesPicker from '$lib/ui/SpeciesPicker.svelte';
   import { setCrumb } from '$lib/ui/crumb.svelte';
-  import { entriesFor, sheetForName } from '$lib/ui/index.svelte';
+  import { entriesFor, sheetForNameOr, isUnreached, type Unreached } from '$lib/ui/index.svelte';
+  import { unreachedClause } from '$lib/ui/reach-words';
   import ReplacedNotes from '$lib/ui/ReplacedNotes.svelte';
   import type { Sheet } from '$lib/ui/index.svelte';
   import { cultivationSheet, runs, forReader, tiedMonths, monthNames } from '$core/sheet';
@@ -106,6 +107,10 @@
   const speciesHref = $derived(dossier?.slug ?? (a ? speciesSlug(a.taxonName) : ''));
   /** What the reference said about this plant's species: still being asked, could not be reached (a different fact from absent), not there, or read. */
   let ref = $state<'loading' | 'unreachable' | 'none' | 'ok'>('loading');
+  /** Why the reference gave no answer, so a refusal or a limit is said as one, never as silence (round sixty-seven; triage-66 S8, R45-11). */
+  let refWhy = $state<Unreached | null>(null);
+  /** The reason as a sentence's start, or null for no answer at all, which keeps its own words. */
+  const refused = $derived(refWhy && refWhy.kind !== 'unreachable' ? (() => { const c = unreachedClause(refWhy, 'the species reference'); return c.charAt(0).toUpperCase() + c.slice(1); })() : null);
   const kind = $derived(a ? kindOf(a) : 'species');
   /** A hybrid's parents, each with a species page when the corpus has one. */
   let parentLinks = $state<Array<{ name: string; slug: string | null }>>([]);
@@ -128,8 +133,10 @@
       // A wrong key would have put another species' habitat under this plant, so the sheet is found by the name. The key
       // the reference gives is kept here, not written: a page that opens does not write to the log (round fifty-eight;
       // rule 5), and a key that differs is said below with a button to take it.
-      const d = await sheetForName(name, key);
+      const got = await sheetForNameOr(name, key);
       if (seq !== asked) return;
+      refWhy = isUnreached(got) ? got : null;
+      const d = isUnreached(got) ? null : got;
       refKey = d && d !== 'none' && typeof d.key === 'number' ? d.key : null;
       dossier = d === 'none' ? null : d;
       ref = d === 'none' ? 'none' : d ? 'ok' : 'unreachable';
@@ -210,13 +217,26 @@
   /* ---- move ---- */
   let moving = $state(false);
   let moveTo = $state<string | null>(null);
+  /** A Move under way: a second press waits for nothing and writes nothing (round sixty-seven; triage-66 R11: two presses wrote two moves and two lines). */
+  let moveBusy = $state(false);
   async function doMove() {
-    await settlePlaces(); // a new place still being written, or named and not added: moved to it, not left where it was
-    if (!a || (moveTo ?? null) === (a.locationId ?? null)) { moving = false; return; }
-    const to = moveTo ?? null;
-    const { undo } = await collection.movePlantsUndoable([id], to); // the place and the line in one commit (round forty-nine, 1), with the way back (round fifty-one, 4)
-    moving = false;
-    toast.show(to ? `Moved to ${collection.locationName(to)}` : 'Place cleared', 8000, { label: 'Undo', run: () => { void undo().then(() => toast.show('Undone: back where it was.')); } });
+    if (moveBusy) return;
+    moveBusy = true;
+    try {
+      // This panel's own picker only: the Edit form's unsaved new place is not made by a Move (round sixty-seven; triage-66 R12).
+      // A new place still being written, or named and not added: moved to it, not left where it was. One that could not be
+      // made says why in the picker, and nothing is moved.
+      try { await settlePlaces('mv-loc'); } catch { return; }
+      if (!a || (moveTo ?? null) === (a.locationId ?? null)) { moving = false; return; }
+      const to = moveTo ?? null;
+      const { undo } = await collection.movePlantsUndoable([id], to); // the place and the line in one commit (round forty-nine, 1), with the way back (round fifty-one, 4)
+      moving = false;
+      toast.show(to ? `Moved to ${collection.locationName(to)}` : 'Place cleared', 8000, { label: 'Undo', run: () => { void undo().then(() => toast.show('Undone: back where it was.'), () => toast.show('The Undo was not saved; the plant is where it was moved.')); } });
+    } catch {
+      /* the write was refused: the page says so from lastWriteError, and the panel stays open to try again */
+    } finally {
+      moveBusy = false;
+    }
   }
   const daysAgo = (d: string | null | undefined) => (d ? daysBetween(d) : null);
   const lastOf = (t: string) => events.find((e) => e.t === t)?.d ?? null;
@@ -355,7 +375,14 @@
   function guardUnload(e: BeforeUnloadEvent) {
     if (formDirty()) e.preventDefault();
   }
+  /** A Save under way: a second press writes nothing (round sixty-seven; triage-66 R11). */
+  let saveBusy = $state(false);
   async function saveEdit() {
+    if (saveBusy) return;
+    saveBusy = true;
+    try { await saveEditNow(); } catch { /* refused: the page says so from lastWriteError, and the form stays open */ } finally { saveBusy = false; }
+  }
+  async function saveEditNow() {
     if (!a) return;
     // A date after today is a typo, and the number a plant carries is minted for its acquisition year (round twenty-six, 3).
     // Only a date this edit typed is judged: a plant whose stored date is already in the future (an older file) can still have its price or place edited, and the date corrected when the grower gets to it (round twenty-eight, 0).
@@ -365,7 +392,8 @@
     const wd = f.waterDays.trim() === '' ? null : Number(f.waterDays);
     edWaterMsg = wd != null && (Number.isNaN(wd) || wd < 1 || wd > 365) ? `${f.waterDays.trim()} is not a number of days from 1 to 365; leave it blank to follow its place.` : '';
     if (edWaterMsg) { document.getElementById('ed-waterdays')?.focus(); return; }
-    await settlePlaces();
+    // This form's own picker only (round sixty-seven; triage-66 R12); a place that could not be made says why there, and nothing is saved.
+    try { await settlePlaces('ed-loc'); } catch { return; }
     if (!a) return;
     const moved = (f.locationId ?? null) !== (a.locationId ?? null);
     // The name as the add form files it: a hybrid is filed under its genus (or nothogenus) with the cross as parentage and
@@ -431,7 +459,13 @@
       // the status it had (round sixty; the grower review, 12: three steps to discover before).
       const was = a?.status ?? 'growing';
       const line = await collection.addEventWith(ev, 'accession', id, { status: 'dead' });
-      deathUndo = { label: 'Undo', run: () => { void collection.put('accession', id, { status: was }).then(() => collection.removeEvents([line.id])).then(() => toast.show(`Undone: ${was === 'archived' ? 'archived' : 'growing'} again, the death line removed.`)); } };
+      // One commit, as Archive's Undo is: the status back and the line removed together, and only while the plant is still
+      // dead (round sixty-seven; triage-66 R7, the self-review's C6). A failure is said.
+      deathUndo = { label: 'Undo', run: () => {
+        if (collection.accession(id)?.status !== 'dead') { toast.show('Not undone: the plant has been changed since.'); return; }
+        void collection.putWith('accession', id, { status: was }, [], [{ kind: 'event', id: line.id, fields: { _deleted: true } }])
+          .then(() => toast.show(`Undone: ${was === 'archived' ? 'archived' : 'growing'} again, the death line removed.`), () => toast.show('The Undo was not saved: the plant is still marked dead.'));
+      } };
     } else await collection.addEvent(ev);
     enote = '';
     eused = '';
@@ -605,7 +639,7 @@
         {#if a.sowingId}{' · '}raised from <a class="mono" href={sowing ? batchHref(sowing) : `/propagation/${a.sowingId}`}>{sowing ? sowNo(sowing) : a.sowingId}</a>{#if sowing && sowing.parentAcc}{@const pa = collection.accession(sowing.parentAcc)} (from <a class="mono" href={pa ? plantHref(pa) : `/plants/${sowing.parentAcc}`}>{pa ? accNo(pa) : sowing.parentAcc}</a>){/if}{/if}
         {#if a.locationId && collection.placeOf(a.locationId)}{' · '}at <a class="place" href="/places/{collection.placeOf(a.locationId)}">{collection.locationName(a.locationId)}</a>{:else if a.locationId}{' · '}<span class="place">its place was removed; no place now</span>{/if}
         <!-- An answer is said as an answer, a silence as a silence (rule 2; round sixty-two, the grower review's 9): "none" is the reference holding no such name; "not checked" is the reference not reached. -->
-        {#if !a.taxonKey && kind !== 'hybrid' && ref === 'none'}{' · '}<span id="name-not-in-reference">Name not in the reference</span>{:else if !a.taxonKey && kind !== 'hybrid' && ref === 'unreachable'}{' · '}<NotChecked inline what="Name" why="The species reference could not be reached from here just now, so whether it holds this name is not known. It is asked again when this page opens." />{/if}
+        {#if !a.taxonKey && kind !== 'hybrid' && ref === 'none'}{' · '}<span id="name-not-in-reference">Name not in the reference</span>{:else if !a.taxonKey && kind !== 'hybrid' && ref === 'unreachable'}{' · '}<NotChecked inline what="Name" why={`${refused ?? 'The species reference could not be reached from here just now'}, so whether it holds this name is not known. It is asked again when this page opens.`} />{/if}
       </p>
       {#if kind === 'hybrid'}
         <p class="vern parentage">{#if parentLinks.length}{#each parentLinks as pl, i}{#if i}{' × '}{/if}{#if pl.slug}<a href="/species/{pl.slug}"><SpeciesName name={pl.name} /></a>{:else}<SpeciesName name={pl.name} />{/if}{/each}{:else}A hybrid; parentage not stated. <button class="linkish" type="button" onclick={startEdit}>Add it</button> if you know it.{/if}</p>
@@ -653,7 +687,7 @@
       <!-- The plant's own watering rhythm, over its place's: blank follows the place, and the placeholder says what that is (round fifty-eight; the grower review). -->
       <label><span>Water about every</span><span class="unitfield"><input id="ed-waterdays" type="text" inputmode="numeric" bind:value={f.waterDays} placeholder="{inheritedRhythm} ({cond?.waterDays ? 'its place' : 'the default'})" oninput={() => (edWaterMsg = '')} aria-invalid={!!edWaterMsg} aria-describedby={edWaterMsg ? 'ed-water-bad' : undefined} /> days</span>{#if edWaterMsg}<span class="bad small" id="ed-water-bad">{edWaterMsg}</span>{/if}</label>
       <div class="wide"><span class="lbl">Place</span><LocationPicker bind:value={f.locationId} id="ed-loc" label="Place" /></div>
-      <div class="actions wide"><button class="btn" type="button" onclick={() => { editing = false; edDateMsg = ''; edWaterMsg = ''; }}>Cancel</button><button class="btn pri" type="submit">Save</button></div>
+      <div class="actions wide"><button class="btn" type="button" onclick={() => { editing = false; edDateMsg = ''; edWaterMsg = ''; }}>Cancel</button><button class="btn pri" type="submit" aria-disabled={saveBusy}>Save</button></div>
     </form>
   {/if}
 
@@ -681,7 +715,7 @@
   {#if moving && a.status !== 'dead'}
     <div class="cult evform">
       <div class="sum">Move to <span class="hint">records a move on the timeline</span></div>
-      <div class="fields"><LocationPicker bind:value={moveTo} id="mv-loc" label="Move to" /><div class="actions"><button class="btn" type="button" onclick={() => (moving = false)}>Cancel</button><button class="btn pri" type="button" onclick={doMove}>Move</button></div></div>
+      <div class="fields"><LocationPicker bind:value={moveTo} id="mv-loc" label="Move to" /><div class="actions"><button class="btn" type="button" onclick={() => (moving = false)}>Cancel</button><button class="btn pri" type="button" onclick={doMove} aria-disabled={moveBusy}>Move</button></div></div>
     </div>
   {/if}
 
@@ -803,7 +837,7 @@
   <details class="hab" id="habitat">
     <summary class="secrule"><h2>{#if compared}Compare: <SpeciesName name={compared} />, habitat vs this place{:else}Habitat vs this place{/if}</h2><div class="line"></div><span class="n">{a.locationId && collection.placeOf(a.locationId) ? collection.locationName(a.locationId) : ''}</span></summary>
     <div class="cards">
-      <div class="card"><div class="lab">Habitat rain season</div><div class="val" style="font-family: var(--ui); font-size: var(--fs-lg); font-weight: 700">{#if !season && dossier?.climate.status === 'refused'}<NotChecked what="Climate" why={detailSentence(dossier.climate.detail, 'A source did not answer when the species page was built').replace('when this page was built', 'when the species page was built')} />{:else}{season ? season.label : dossier?.climate.status === 'pending' ? 'Climate pending' : dossier ? 'No habitat climate' : ref === 'unreachable' ? 'Reference not reached' : ref === 'none' ? (kind === 'hybrid' ? 'A hybrid' : 'No species page') : '…'}{/if}</div><div class="sub">{#if season}{season.note} <a href="/species/{speciesHref}#s-cultivation">The sheet</a>.{:else if dossier?.climate.status === 'refused'}No season is read from an answer that was not given.{:else if dossier?.climate.status === 'pending'}The habitat climate for this species has not been derived yet.{:else if dossier}Nothing to read a season from{dossier.climate.status === 'none' && dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}.{:else if ref === 'unreachable'}The species reference could not be reached from here; nothing is known either way.{:else if ref === 'none'}{kind === 'hybrid' ? (parentLinks.some((p) => p.slug) ? 'No habitat of its own; its parents have species pages.' : 'No habitat of its own.') : 'Not in the reference.'}{:else}reading the species page{/if}</div></div>
+      <div class="card"><div class="lab">Habitat rain season</div><div class="val" style="font-family: var(--ui); font-size: var(--fs-lg); font-weight: 700">{#if !season && dossier?.climate.status === 'refused'}<NotChecked what="Climate" why={detailSentence(dossier.climate.detail, 'A source did not answer when the species page was built').replace('when this page was built', 'when the species page was built')} />{:else}{season ? season.label : dossier?.climate.status === 'pending' ? 'Climate pending' : dossier ? 'No habitat climate' : ref === 'unreachable' ? (refused ? 'Reference refused' : 'Reference not reached') : ref === 'none' ? (kind === 'hybrid' ? 'A hybrid' : 'No species page') : '…'}{/if}</div><div class="sub">{#if season}{season.note} <a href="/species/{speciesHref}#s-cultivation">The sheet</a>.{:else if dossier?.climate.status === 'refused'}No season is read from an answer that was not given.{:else if dossier?.climate.status === 'pending'}The habitat climate for this species has not been derived yet.{:else if dossier}Nothing to read a season from{dossier.climate.status === 'none' && dossier.climate.detail ? `: ${dossier.climate.detail}` : ''}.{:else if ref === 'unreachable'}{refused ?? 'The species reference could not be reached from here'}; nothing is known either way.{:else if ref === 'none'}{kind === 'hybrid' ? (parentLinks.some((p) => p.slug) ? 'No habitat of its own; its parents have species pages.' : 'No habitat of its own.') : 'Not in the reference.'}{:else}reading the species page{/if}</div></div>
     </div>
     {#if habitat && a.locationId}
     <div class="factgrid hvh">

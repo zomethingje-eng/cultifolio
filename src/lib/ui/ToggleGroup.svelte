@@ -30,6 +30,8 @@
   <!-- A count beside a label is its own word to a screen reader: the name was "No photo in 12 months7" and "Due3", the
        count run into the label, since the two are drawn apart by a margin and not a space (round sixty-three; U4). -->
   {#each options as o (o.value)}
-    <button type="button" class={chips ? 'chipbtn' : undefined} class:on={o.value === value} aria-pressed={o.value === value} aria-label={o.n != null ? `${o.label}, ${o.n}` : undefined} id={o.id} title={o.title} {disabled} onclick={() => choose(o.value)}>{o.label}{#if o.n != null}<span class="n">{o.n}</span>{/if}</button>
+    <!-- The name from the content, a hidden comma between the two: an aria-label "All, 4" on a chip that reads "All4" was a
+         name that does not match its text (axe's label-content-name-mismatch; round sixty-seven; triage-66 P6, R45-25). -->
+    <button type="button" class={chips ? 'chipbtn' : undefined} class:on={o.value === value} aria-pressed={o.value === value} id={o.id} title={o.title} {disabled} onclick={() => choose(o.value)}>{o.label}{#if o.n != null}<span class="sep0">{', '}</span><span class="n">{o.n}</span>{/if}</button>
   {/each}
 </div>

@@ -382,21 +382,26 @@ describe('decision 6: the refusal is kept in the sync record', () => {
 
 describe('decision 10: no sync in the sample collection, whatever the page shows', () => {
   it('setup refuses and a run asks the server nothing', async () => {
+    // Which collection a page shows is read once, as it loads (round sixty-seven; triage-66 V3): each page here is
+    // booted with the tab's flag as it will read it.
     const r2 = fakeR2();
     const memA = newMem('aaaaaaaaaaaa');
-    const A = await boot(memA, r2);
     ss.set('cultifolio.demo', '1');
+    const A = await boot(memA, r2);
     await expect(A.sync.setup(KEY, 'create')).rejects.toThrow(/example collection/);
     expect(A.calls).toEqual([]);
     expect(memA.meta.get('sync')).toBeUndefined();
     // a device that had a key before the tab entered the sample: its run does nothing while the sample is open
     ss.delete('cultifolio.demo');
-    await A.sync.setup(KEY, 'create');
+    const own = await boot(memA, r2);
+    await own.sync.setup(KEY, 'create');
     ss.set('cultifolio.demo', '1');
-    await A.collection.addAccession({ taxonName: 'Lithops', acc: 'A-1' });
-    const b0 = A.calls.length;
-    await A.sync.run();
-    expect(A.calls.slice(b0)).toEqual([]);
+    const B = await boot(memA, r2);
+    await B.collection.addAccession({ taxonName: 'Lithops', acc: 'A-1' });
+    const b0 = B.calls.length;
+    await B.sync.run();
+    expect(B.calls.slice(b0)).toEqual([]);
+    ss.delete('cultifolio.demo');
   });
 });
 

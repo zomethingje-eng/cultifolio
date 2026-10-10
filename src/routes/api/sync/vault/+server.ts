@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { STATUS } from '$lib/sync/limits';
 import type { RequestHandler } from './$types';
-import { store, vaultId, vaultIdFor, ensureVault, authed, readMeta, recount, vaultBytes, allowCreation, refundCreation, creationCeilings, clientIp, limited, readBody, quotaOf, RecountCrossed } from '$lib/server/sync';
+import { store, vaultId, vaultIdFor, ensureVault, authed, readMeta, recount, vaultBytes, allowCreation, refundCreation, creationCeilings, clientIp, limited, readBody, quotaOf, RecountCrossed, untilMidnight } from '$lib/server/sync';
 
 /** The most a creation body may be: its three fields are under two hundred bytes. */
 const MAX_VAULT_BODY = 1024;
@@ -45,8 +45,13 @@ export const POST: RequestHandler = async ({ request, platform, getClientAddress
     // page shows as it is, never a 500: 429 for the address's own limit, 503 with a sentence that says which shared ceiling, the day's or the total, and what still works.
     // `clientIp`, not the raw callback: a local runtime can give no address at all, and `addressKey(null)` was a 500 on every creation under `wrangler dev` (round twenty-one, R1-1).
     const may = await allowCreation(platform?.env?.QUEUE, clientIp(getClientAddress), now, creationCeilings(platform?.env as Record<string, unknown> | undefined), platform?.env?.COUNTERS);
-    if (may === 'address') return json({ error: 'too many new vaults from this address today' }, { status: STATUS.rateLimited, headers: { 'retry-after': '3600', 'cache-control': 'no-store' } });
-    if (may === 'day') return json({ error: 'Sync has taken all the new vaults it can today. Your collection stays on this device; try again tomorrow.' }, { status: STATUS.ceilings, headers: { 'retry-after': '3600', 'cache-control': 'no-store' } });
+    // The counts are kept by the UTC day, so each of these waits until midnight UTC: an hour's Retry-After was refused again
+    // until then. The /48's own count is said as the network's, since this address may have made none (round sixty-seven;
+    // triage-66 S9, S-D7).
+    const midnight = String(untilMidnight(now));
+    if (may === 'address') return json({ error: 'too many new vaults from this address today', retryAfter: Number(midnight) }, { status: STATUS.rateLimited, headers: { 'retry-after': midnight, 'cache-control': 'no-store' } });
+    if (may === 'network') return json({ error: 'too many new vaults from this network today', retryAfter: Number(midnight) }, { status: STATUS.rateLimited, headers: { 'retry-after': midnight, 'cache-control': 'no-store' } });
+    if (may === 'day') return json({ error: 'Sync has taken all the new vaults it can today. Your collection stays on this device; try again tomorrow.', retryAfter: Number(midnight) }, { status: STATUS.ceilings, headers: { 'retry-after': midnight, 'cache-control': 'no-store' } });
     if (may === 'unavailable') return json({ error: 'Sync could not count new vaults just now. Your collection stays on this device; try again in a minute.' }, { status: STATUS.ceilings, headers: { 'retry-after': '60', 'cache-control': 'no-store' } });
     if (may === 'total') return json({ error: 'Sync is not taking new vaults for now. Your collection stays on this device; joining an existing vault still works.' }, { status: STATUS.ceilings, headers: { 'retry-after': '86400', 'cache-control': 'no-store' } });
   }

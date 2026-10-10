@@ -16,8 +16,9 @@ describe('N1: a vernacular value with commas is a list of names, each its own na
   it('split on commas, with or without a space, trimmed, each a name of the same source', () => {
     expect(names([eng('Sago palm, King sago, Sago cycad, Japanese sago palm', { source: 'Checklist of Vascular Plants in Korea' })], 'Cycas revoluta'))
       .toEqual({ common: 'Sago palm', commons: ['King sago', 'Sago cycad', 'Japanese sago palm'] }); // base: one name, "Sago palm, King sago, ..."
+    // "Kaki", one word no source gives alone, goes after the fuller names (round sixty-seven; triage-66 N7).
     expect(names([eng('Kaki,Japanese Persimmon, Oriental Persimmon, Sharon Fruit', { source: 'TAXREF' })], 'Diospyros kaki'))
-      .toEqual({ common: 'Kaki', commons: ['Japanese Persimmon', 'Oriental Persimmon', 'Sharon Fruit'] });
+      .toEqual({ common: 'Japanese Persimmon', commons: ['Oriental Persimmon', 'Sharon Fruit', 'Kaki'] });
     expect(names([eng('Lory bush, Lasiandra, Princess flower, Pleroma, Purple glory tree')], 'Pleroma urvilleanum').common).toBe('Lory bush');
   });
   it('empty parts are dropped, and a part given twice in one value is one name', () => {
@@ -29,12 +30,12 @@ describe('N1: a vernacular value with commas is a list of names, each its own na
     expect(shown([eng('Heather, Ling', { source: 'TAXREF' }), eng('Heather', { source: 'TAXREF' }), eng('Ling', { source: 'EUNIS' })], 'Calluna vulgaris')).toBe('Ling');
     // A row with no named source is one source, once per name: "Heather" twice in one value is still one.
     expect(shown([eng('Ling'), eng('Heather, heather')], 'Calluna vulgaris')).toBe('Ling');
-    // A counted row's count goes with each of its names (once each), so "Heather" has three and "Ling" two.
-    expect(shown([eng('Ling', { sources: 2 }), eng('Heather, Ling-heather', { sources: 3 })], 'Calluna vulgaris')).toBe('Heather');
+    // A counted row's count goes with each of its names (once each), so "Scotch heather" has three and "Ling" two.
+    expect(shown([eng('Ling', { sources: 2 }), eng('Scotch heather, Ling-heather', { sources: 3 })], 'Calluna vulgaris')).toBe('Scotch heather');
   });
   it('the parts keep their place in GBIF\'s order (a part listed before another name goes before it on a tie)', () => {
-    expect(names([eng('Bell heather'), eng('Heather, Ling')], 'Calluna vulgaris')).toEqual({ common: 'Bell heather', commons: ['Heather', 'Ling'] });
-    expect(names([eng('Heather, Ling'), eng('Bell heather')], 'Calluna vulgaris')).toEqual({ common: 'Heather', commons: ['Ling', 'Bell heather'] });
+    expect(names([eng('Bell heather'), eng('Scotch heather, Ling heather')], 'Calluna vulgaris')).toEqual({ common: 'Bell heather', commons: ['Scotch heather', 'Ling heather'] });
+    expect(names([eng('Scotch heather, Ling heather'), eng('Bell heather')], 'Calluna vulgaris')).toEqual({ common: 'Scotch heather', commons: ['Ling heather', 'Bell heather'] });
   });
   it('the parts are read by the rest of the rule: a part naming another genus is set back like any name', () => {
     expect(names([eng('Osteospermum, Cape daisy')], 'Dimorphotheca jucunda')).toEqual({ common: 'Cape daisy', commons: ['Osteospermum'] });
@@ -61,7 +62,8 @@ describe('N2: a bare genus word is the headline only when there is nothing fulle
     eng('Medicinal aloe', { source: 'e' })
   ];
   it('Aloe vera: "Barbados aloe", the best of the longer names; "Aloe" stays among the names', () => {
-    expect(names(ALOE_VERA, 'Aloe vera')).toEqual({ common: 'Barbados aloe', commons: ['True aloe', 'Curaçao aloe', 'West Indian aloe', 'Aloe vera', 'Medicinal aloe', 'Aloe'] }); // base: "Aloe"
+    // "Aloe vera", the species' own binomial, is set back after "Aloe" (round sixty-seven; triage-66 N3).
+    expect(names(ALOE_VERA, 'Aloe vera')).toEqual({ common: 'Barbados aloe', commons: ['True aloe', 'Curaçao aloe', 'West Indian aloe', 'Medicinal aloe', 'Aloe', 'Aloe vera'] }); // base: "Aloe"
     // Without the corpus's genera (a caller with no index), the species' own genus is still known.
     expect(englishNames(ALOE_VERA, { genus: 'Aloe vera' }).common).toBe('Barbados aloe');
   });

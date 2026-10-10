@@ -6,6 +6,7 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 import { createHash } from 'node:crypto';
+import { docAddress } from './helpers/address';
 import { ownPages } from './helpers/r63v-own';
 
 const B32 = 'ABCDEFGHJKMNPQRSTVWXYZ23456789';
@@ -18,8 +19,9 @@ test('a removed photograph: its receipt refuses a stranger, its owner stores it 
   const id = vaultIdFor(token);
   const auth = { authorization: `Bearer ${token}` };
   // From a documentation address of its own (wrangler dev takes the header as the client's address), so this spec does not
-  // spend the smoke tests' five new vaults a day from 127.0.0.1 (round sixty-two, at the merge).
-  expect((await request.post('/api/sync/vault', { headers: { 'cf-connecting-ip': '198.51.100.62' }, data: { id, token, create: true } })).status()).toBe(200);
+  // spend the smoke tests' five new vaults a day from 127.0.0.1 (round sixty-two, at the merge); the helper's, not a fixed
+  // one, so a reused server does not refuse it on the next run (round sixty-seven; triage-66 H9, IND-9).
+  expect((await request.post('/api/sync/vault', { headers: { 'cf-connecting-ip': docAddress() }, data: { id, token, create: true } })).status()).toBe(200);
   const url = `/api/sync/photo/p000r62s?vault=${id}`;
   const put = (drop: string, bytes: number[]) => request.put(url, { headers: { ...auth, 'x-photo-drop': drop, 'content-type': 'application/octet-stream' }, data: Buffer.from(bytes) });
   const get = async () => { const r = await request.get(url, { headers: auth }); return r.status() === 200 ? [...(await r.body())] : r.status(); };

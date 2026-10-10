@@ -96,7 +96,7 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   const f = o.fetcher;
   const now = () => (o.now ? o.now() : new Date()).toISOString();
   const upstream: Record<string, Upstream> = {};
-  const mark = (src: string, r: { status: 'ok' | 'none' | 'refused' | 'error'; detail?: string }) => {
+  const mark = (src: string, r: { status: 'ok' | 'none' | 'refused' | 'error' | 'skipped'; detail?: string }) => {
     upstream[src] = { status: r.status, at: now(), detail: r.status === 'ok' || r.status === 'none' ? undefined : r.detail };
   };
 
@@ -299,6 +299,10 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   // before (`detailSentence`, `climateDetail`), so both read the same (round sixty-three; review-60 visitor-words 16).
   if (occ.status === 'refused' || occ.status === 'error') climate = { status: 'refused', detail: `the occurrence source ${occ.status === 'refused' ? 'refused the request' : 'did not answer'} when this page was built` };
   else if (dist.status === 'refused' || dist.status === 'error') climate = { status: 'refused', detail: `the distribution source ${dist.status === 'refused' ? 'refused the request' : 'did not answer'} when this page was built, so the range could not be verified` };
+  // A source the build did not ask (an offline re-derivation) refused nothing: the climate waits for a build that asks,
+  // and the builder carries the previous build's range and climate where it has them (round sixty-seven; triage-66 N4).
+  else if (occ.status === 'skipped') climate = { status: 'pending', detail: 'the occurrence source was not asked when this page was built' };
+  else if (dist.status === 'skipped') climate = { status: 'pending', detail: 'the distribution source was not asked when this page was built, so the range could not be verified' };
   // No verified native range means no way to tell a habitat record from a garden one, so no habitat climate: the map stays, the advice does not.
   else if (ambiguous) climate = { status: 'none', detail: `native range not verified: ${ambiguous}` };
   else if (!verified || !boxes.length) climate = { status: 'none', detail: !verified ? 'native range not verified: no WCVP distribution with native status for this name, so records cannot be told from cultivation and no habitat climate is derived' : 'native range is stated at country level only, with no region boxes to test records against' };

@@ -343,7 +343,7 @@ describe('the counter objects', () => {
     const c2 = countersNs(); const v2 = c2.get('vaults'); let ok6 = 0;
     for (let n = 0; n < 10; n++) for (let s = 0; s < 20; s++) if ((await v2.create(`2001:db8:${n}:${s}::/64`, day, 5, 200, 2000, 0, Date.now(), `2001:db8:${n}::/48`)) === 'ok') ok6++;
     expect(ok6).toBe(200); // each /48 makes four times one address's allowance
-    expect(await v2.create('2001:db8:0:99::/64', day, 5, 200, 2000, 0, Date.now(), '2001:db8:0::/48')).toBe('address');
+    expect(await v2.create('2001:db8:0:99::/64', day, 5, 200, 2000, 0, Date.now(), '2001:db8:0::/48')).toBe('network'); // the /48's own count, said as the network's (round sixty-seven; triage-66 S9)
     expect(await v2.create('2001:db8:99:0::/64', day, 5, 200, 2000, 0, Date.now(), '2001:db8:99::/48')).toBe('ok');
   });
 });

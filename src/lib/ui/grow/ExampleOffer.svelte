@@ -13,10 +13,10 @@
    */
   import type { Snippet } from 'svelte';
   import { page } from '$app/state';
-  import { inDemo } from '$lib/db/demo';
+  import { PAGE_IN_DEMO } from '$lib/db/demo';
   import { example, entersHere, enterExample, notEnteredWords, ownEmpty, type NotEntered } from './example.svelte';
   let { what, hold = false, children }: { what: 'today' | 'places' | 'propagation'; /** the page asked for something else first (the add form): not entered by itself */ hold?: boolean; children: Snippet } = $props();
-  const demo = inDemo();
+  const demo = PAGE_IN_DEMO; // the page's collection, read as it loaded (round sixty-seven; triage-66 V3)
   /**
    * Decided once, when the layout has read both the collection and sync's key (`example.settled`; the page draws this
    * only once the collection is open, and the key is read a moment later): a device with sync set up is a grower's, and

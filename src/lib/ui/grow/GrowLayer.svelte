@@ -9,9 +9,10 @@
   import { collection } from '$lib/db/collection.svelte';
   import { sync } from '$lib/sync/engine.svelte';
   import { getMeta } from '$lib/db/vault';
-  import { inDemo } from '$lib/db/demo';
+  import { PAGE_IN_DEMO } from '$lib/db/demo'; // the page's collection, read as it loaded: a Leave called off cleared the tab's flag under a page still showing the example (round sixty-seven; triage-66 V3)
   import { readSetting, writeSetting } from '$lib/ui/stored';
   import { toast } from '$lib/ui/toast.svelte';
+  import { askToKeep } from '$lib/ui/keep-ask';
   import DemoBar from './DemoBar.svelte';
 
   const PERSIST = 'cultifolio.persistAfterFirst';
@@ -23,13 +24,16 @@
   let asked = false;
   /** The browser's answer, waiting to be said: it is said once the page has settled, and only then counted as said. */
   let answer = $state<boolean | null>(null);
+  // Through the one door every ask takes (round sixty-seven; triage-66 P1): the month since the last ask, whichever page
+  // asked, written before the browser is called. Firefox answers only when the person does, for good if the question is
+  // dismissed, and this ask, gated only by the "answer said" key below, came back on every full page load. Null is "not
+  // asked": nothing to say.
   $effect(() => {
-    if (!collection.ready || n < 1 || asked || inDemo()) return;
+    if (!collection.ready || n < 1 || asked || PAGE_IN_DEMO) return;
     asked = true;
     if (readSetting(PERSIST, 'device') === '1') return;
-    const st = typeof navigator !== 'undefined' ? navigator.storage : undefined;
-    if (!st?.persist) return;
-    void st.persist().then((ok) => {
+    void askToKeep('first').then((ok) => {
+      if (ok === null) return;
       collection.persisted = ok;
       answer = ok;
     }, () => {});
@@ -48,12 +52,12 @@
   let hidden = $state(false);
   $effect(() => {
     void page.url.pathname; // read again on each page: a backup taken a page ago puts the line away
-    if (!collection.ready || n < 5 || inDemo()) return;
+    if (!collection.ready || n < 5 || PAGE_IN_DEMO) return;
     try { hidden = sessionStorage.getItem(NUDGE_HIDDEN) === '1'; } catch { /* shown */ }
     void getMeta<string>('lastBackup').then((v) => (lastBackup = v ?? null), () => (lastBackup = null));
   });
   const where = $derived(/^\/(plants|today)(\/|$)/.test(page.url.pathname) && page.url.pathname !== '/plants/import');
-  const nudge = $derived(where && n >= 5 && lastBackup === null && !sync.configured && !hidden && !inDemo());
+  const nudge = $derived(where && n >= 5 && lastBackup === null && !sync.configured && !hidden && !PAGE_IN_DEMO);
   function hide() {
     hidden = true;
     try { sessionStorage.setItem(NUDGE_HIDDEN, '1'); } catch { /* fine */ }

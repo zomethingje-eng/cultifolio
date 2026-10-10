@@ -18,6 +18,8 @@
   import { sheetForName } from '$lib/ui/index.svelte';
   import { PROP_METHODS, kindOf, type Accession, type PropMethod, type Provenance } from '$lib/db/types';
   import { setCrumb } from '$lib/ui/crumb.svelte';
+  import ExampleAddLine from '$lib/ui/grow/ExampleAddLine.svelte';
+  import { CLOSED_WORDS } from '$lib/db/demo';
 
   let name = $state('');
   let taxonKey = $state<number | null>(null);
@@ -161,7 +163,7 @@
     }
     busy = true;
     try {
-      await settlePlaces(); // a new place named in the picker and not yet added is made, and the batch goes there
+      await settlePlaces('s-loc'); // this form's own picker (round sixty-seven; triage-66 R12): a new place named in the picker and not yet added is made, and the batch goes there
       const p = parseName(name);
       const taxonName = p.scientific;
       const slug = speciesSlug(taxonName);
@@ -204,12 +206,15 @@
 <svelte:window onbeforeunload={guardUnload} />
 
 {#if collection.lastWriteError}
-  <div class="notice err" role="alert" id="write-error">This change was not saved: {collection.lastWriteError}. Free space or <a href="/backup">back up now</a>.</div>
+  <!-- The example closed in another tab is not a full phone, and is not told to free space (round sixty-seven; triage-66 V3). -->
+  <div class="notice err" role="alert" id="write-error">This change was not saved: {collection.lastWriteError.replace(/\.$/, '')}.{#if collection.lastWriteError !== CLOSED_WORDS}{' '}Free space or <a href="/backup">back up now</a>.{/if}</div>
 {/if}
 <form class="form" novalidate onsubmit={save}>
   <PageHead title={m.veg ? 'Start a propagation' : 'Sow seed'} kick="Propagation" places={false}>
     {#snippet subline()}Batch <span class="accno">{nextNo}</span>. Plants potted up from it are numbered then, not now.{/snippet}
   </PageHead>
+  <!-- In the example: the batch joins it and goes with it; "Keep it as my own" leaves with the species (round sixty-seven; triage-66 V1). -->
+  <ExampleAddLine what="batch" keep={() => { const sp = name.trim(); return sp ? `/propagation/new?species=${encodeURIComponent(sp)}${taxonKey ? `&key=${taxonKey}` : ''}` : '/propagation/new'; }} />
   <div class="cult sheet">
 
   <label class="field"><span>Method</span>

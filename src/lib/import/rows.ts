@@ -1,8 +1,8 @@
 /** Pasted lines and sheet rows as the one shape the review list and the commit read (round sixty). */
 import type { AccStatus, NameKind, Provenance } from '$lib/db/types';
-import { cellText, readDate, readRow, unmappedColumns, type DateOrder, type Mapping } from './csv';
+import { cellText, readDate, readRow, unmappedColumns, type DateOrder, type Field, type Mapping } from './csv';
 import type { PastedLine } from './paste';
-import { blankRow, keyLines, type ImportRow } from './plan';
+import { blankRow, keyLines, numberKey, type ImportRow } from './plan';
 
 /**
  * A name cell as the reference and the collection read it (round sixty-two, second pass; the verification grower
@@ -38,6 +38,33 @@ export function rowsFromPaste(lines: PastedLine[], common: { placeId: string | n
   }));
 }
 
+/**
+ * A date as the import key reads it: a whole date by its year and its day and month in either order, so neither the
+ * sheet's way of writing it (2024-05-01, or 01/05/2024 as a spreadsheet saves it) nor the grower's day-first or
+ * month-first answer, which a later run may not give again, changes the key (round sixty-seven; triage-66 R3). A date
+ * read at a lesser precision is that reading; one not read at all is its text.
+ */
+function dateKey(cell: string, read: string | null): string {
+  const full = read && /^(\d{4})-(\d{2})-(\d{2})$/.exec(read);
+  if (full) return `${full[1]}|${[full[2], full[3]].sort().join('|')}`;
+  const loose = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/.exec(cell.trim());
+  if (loose) return `${loose[3]}|${[loose[1].padStart(2, '0'), loose[2].padStart(2, '0')].sort().join('|')}`;
+  return read ?? cell.trim();
+}
+
+/**
+ * A sheet line's import key cells: its fields as the import reads them through the mapping, in one fixed order, and not
+ * the raw cells (round sixty-seven; triage-66 R3, the self-review's C3 and the outside review's 15). A spreadsheet saving
+ * the sheet again rewrote 2024-05-01 as 01/05/2024 and 0012 as 12, and a column added to tick lines done changed every
+ * line: a second run added every plant again. So the date is the date read, in either order (`dateKey`; its text only when it is not read), a
+ * number's digits lose their leading zeros, the name is the name read (Genus and Species joined), and a column no field
+ * takes is left out. The quantity is not a cell: it is how many keys the line makes (`keyLines`).
+ */
+function keyCells(name: string, v: Partial<Record<Field, string>>, acquired: string): string[] {
+  const t = (f: Field) => (v[f] ?? '').trim();
+  return [cleanName(name), t('cultivar'), numberKey(t('number')), t('place'), acquired, t('source'), t('fieldNumber'), t('notes'), t('price'), t('kind'), t('parentage'), t('nameAsReceived'), t('provenance'), t('status'), t('lot'), t('form')];
+}
+
 const PROV: Provenance[] = ['wild', 'f1', 'fn', 'veg', 'unknown'];
 const STATUS: AccStatus[] = ['growing', 'archived', 'dead'];
 const KINDS: NameKind[] = ['species', 'cultivar', 'hybrid'];
@@ -69,6 +96,7 @@ export function rowsFromSheet(rows: string[][], m: Mapping, header: boolean, tod
   let repeatedHeader = 0;
   const head = header ? (rows[0] ?? []).map((c) => cellText(c).toLowerCase()) : null;
   const extra = opts.extra ?? unmappedColumns(rows, m, header).extra;
+  /** Each line's fields as read, for its import key (`keyCells`). */
   const cellsOf: string[][] = [];
   // A Cultifolio plants.csv names each plant's record in its id column: read back into the collection that wrote it, a
   // line whose plant is here is that plant (round sixty-two).
@@ -101,8 +129,10 @@ export function rowsFromSheet(rows: string[][], m: Mapping, header: boolean, tod
       if (n >= 1 && n <= QTY_MAX) r.qty = n;
       else { r.problems.push(`"${q}" was not read as a number of plants (1 to ${QTY_MAX}): one plant, and the text is in the notes`); addNote(r, `Qty: ${q}`); }
     }
+    let acquiredKey = '';
     if (v.acquired) {
       const d = readDate(v.acquired, today, opts.dateOrder ?? null);
+      acquiredKey = dateKey(v.acquired, d.d);
       r.acquired = d.d;
       if (!d.d) {
         // The text the sheet gave is kept, and the plant is numbered for the year it names, not this one (round sixty-one; the grower review, 4).
@@ -124,9 +154,10 @@ export function rowsFromSheet(rows: string[][], m: Mapping, header: boolean, tod
     // Every column no field takes, in the notes as "Locality: Totoral, Chile": nothing in the sheet is dropped unseen.
     for (const c of extra) { const t = cellText(cells[c.i]); if (t) addNote(r, `${c.name}: ${t}`); }
     out.push(r);
-    cellsOf.push(cells);
+    cellsOf.push(keyCells(name, v, acquiredKey));
   });
-  // The plants each line makes, by the line's own cells: what a second run of the same sheet finds here (round sixty-two).
+  // The plants each line makes, by the line's fields as read: what a second run of the same sheet finds here (round sixty-two;
+  // round sixty-seven, triage-66 R3).
   const keys = keyLines(out.map((r, i) => ({ cells: cellsOf[i], qty: r.qty })));
   out.forEach((r, i) => { r.importKeys = keys[i]; });
   return { rows: out, noName, repeatedHeader };

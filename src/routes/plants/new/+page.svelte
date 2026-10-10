@@ -19,6 +19,8 @@
   import { plantLabel } from '$lib/ui/plant-label';
   import { plantHref } from '$lib/db/links';
   import { readSetting, writeSetting } from '$lib/ui/stored';
+  import ExampleAddLine from '$lib/ui/grow/ExampleAddLine.svelte';
+  import { CLOSED_WORDS } from '$lib/db/demo';
   /** The reference's key for a species-rank name when the reference answers; otherwise the key as given (the plant page repairs it later). */
   async function checkedKey(sp: string | null, k: number): Promise<number> {
     if (!sp || speciesOf(sp) !== sp) return k;
@@ -110,12 +112,27 @@
   // The toast sits above the pinned action bar on this page, not on it: after "Save and add another" it covered the buttons for eight seconds (round fifty-one, 4).
   // By the bar's measured height, one row of buttons or two: "Add as typed" wrapped the bar to two rows and the toast covered "Save and add another" (round sixty; the grower review, 3).
   let actsEl = $state<HTMLElement | null>(null);
+  /**
+   * The bar sits in the page's flow, not pinned, when pinned it would take more than a quarter of the screen: at 320 px with
+   * 200% text its three buttons wrapped to 226 px and, with the tab bar, held half of a 640 px screen over the form. The
+   * theme's `max-height: 30em` rule catches a browser's own text size and zoom, not text enlarged by the page's root size or
+   * a narrow screen's wrapping, so the bar's own height decides (round sixty-seven; triage-66 P6, S-F12).
+   */
+  let actsLoose = $state(false);
   $effect(() => {
     document.body.classList.add('stickyacts');
     const el = actsEl;
-    const ro = el ? new ResizeObserver(() => document.body.style.setProperty('--acts-h', `${Math.ceil(el.getBoundingClientRect().height)}px`)) : null;
+    const fit = () => {
+      if (!el) return;
+      const h = Math.ceil(el.getBoundingClientRect().height);
+      document.body.style.setProperty('--acts-h', `${h}px`);
+      actsLoose = h > innerHeight * 0.25;
+      document.body.classList.toggle('stickyacts', !actsLoose); // the toast stands clear of a pinned bar only
+    };
+    const ro = el ? new ResizeObserver(fit) : null;
     if (el) ro!.observe(el);
-    return () => { ro?.disconnect(); document.body.classList.remove('stickyacts'); document.body.style.removeProperty('--acts-h'); };
+    addEventListener('resize', fit);
+    return () => { ro?.disconnect(); removeEventListener('resize', fit); document.body.classList.remove('stickyacts'); document.body.style.removeProperty('--acts-h'); };
   });
   /** What the Add button is doing, said in a status line beside it: the button itself was a live region, so every relabel was announced from a button (round sixty; the accessibility review, 12). */
   const addStatus = $derived(checking ? 'Checking the name against the reference…' : busy ? 'Adding…' : '');
@@ -147,7 +164,7 @@
     busy = true;
     const wanted = countN;
     try {
-      await settlePlaces(); // a new place named in the picker and not yet added is made, and the plant goes there
+      await settlePlaces('f-loc'); // this form's own picker (round sixty-seven; triage-66 R12): a new place named in the picker and not yet added is made, and the plant goes there
       const p = parseName(name);
       const taxonName = p.scientific;
       if (p.qualifier) taxonKey = null; // a key would say the plant is that species, which "cf." says it may not be
@@ -209,16 +226,18 @@
 {#if collection.lastWriteError}
   {@const numberClash = /already used/.test(collection.lastWriteError)}
   <!-- Worded by cause: a number already used is not a full phone (round sixteen, 14) -->
-  <div class="notice err" role="alert" id="write-error">{countN > 1 ? 'None of the plants was saved' : 'This change was not saved'}: {collection.lastWriteError}{#if !numberClash}{' '}Free space or <a href="/backup">back up now</a>.{/if}</div>
+  <div class="notice err" role="alert" id="write-error">{countN > 1 ? 'None of the plants was saved' : 'This change was not saved'}: {collection.lastWriteError}{#if collection.lastWriteError === CLOSED_WORDS}.<!-- the example closed in another tab: not a full phone (round sixty-seven; triage-66 V3) -->{:else if !numberClash}{' '}Free space or <a href="/backup">back up now</a>.{/if}</div>
 {/if}
 <form class="form" onsubmit={save}>
   <PageHead title="Add a plant" kick="My plants" places={false}>
     {#snippet subline()}{#if countN > 1}{#if useOwnNumber && ownNumber.trim()}The first will be numbered <span class="accno">{ownNumber.trim()}</span>, the rest from <span class="accno">{nextNo}</span>.{:else}They will be numbered from <span class="accno">{nextNo}</span>, one each.{/if}{:else}It will be numbered <span class="accno">{useOwnNumber && ownNumber ? ownNumber : nextNo}</span>.{/if} A number is never reused; its year is the year acquired.{/snippet}
   </PageHead>
+  <!-- In the example: the plant joins it and goes with it; "Keep it as my own" leaves with the species (round sixty-seven; triage-66 V1). -->
+  <ExampleAddLine what="plant" keep={() => { const sp = name.trim(); return sp ? `/plants/new?species=${encodeURIComponent(sp)}${taxonKey ? `&key=${taxonKey}` : ''}` : '/plants/new'; }} />
   <div class="cult sheet">
 
   <!-- One hint line under the field; the ways to write a cultivar or a cross are one tap away, not a fourth paragraph (round sixty; the grower review, 18). -->
-  <label class="field"><span>Species</span><SpeciesPicker bind:value={name} bind:taxonKey bind:cultivar bind:kind bind:parentage bind:unresolved={nameUnresolved} bind:armed={nameArmed} bind:received={pickReceived} bind:this={picker} /></label>
+  <label class="field"><span>Species</span><SpeciesPicker reserve bind:value={name} bind:taxonKey bind:cultivar bind:kind bind:parentage bind:unresolved={nameUnresolved} bind:armed={nameArmed} bind:received={pickReceived} bind:this={picker} /></label>
   <details class="namehelp"><summary class="faint">How to write cultivars and hybrids</summary><p class="faint small">A cultivar after its species (<i>Haworthia truncata</i> 'Lime Green'); a hybrid as the cross (<i>Ariocarpus retusus</i> × <i>trigonus</i>), or the genus and the name (<i>Echeveria</i> 'Blue Curls') when the parents are not known.</p></details>
   {#if kind === 'hybrid'}
     <label class="field"><span>Parentage <span class="faint">(if known)</span></span><input id="f-parentage" type="text" bind:value={parentage} placeholder="Seed parent × pollen parent" /><span class="faint small">The plant is filed under the genus; its parents' species pages carry the biology. A hybrid has no habitat of its own, so the climate-derived cultivation rows do not apply to it.</span></label>
@@ -280,7 +299,7 @@
   <!-- Pinned on a phone, so Add is under the thumb however long the form; "Add as typed" is the second press for a name the reference does not know (round forty-nine, 3). -->
   <!-- Add is first in the markup, so Enter (the phone's Go) is Add, not "Save and add another"; the order on screen is set by CSS (round fifty-one, 4). -->
   <!-- The second press keeps the count in its words: "Add as typed" read as one plant when ten were asked for, and growers set the count back to one (round fifty-eight; the grower review). -->
-  <div class="actions sticky" bind:this={actsEl}>
+  <div class="actions sticky" class:loose={actsLoose} bind:this={actsEl}>
     <span class="sr" role="status">{addStatus}</span>
     <button class="btn pri add" type="submit" onclick={() => (addAnother = false)} disabled={!name.trim() || busy || checking || ownTaken}>{checking ? 'Checking the name…' : busy ? 'Adding…' : nameArmed ? `Add${countN > 1 ? ` ${countN}` : ''} as typed` : `Add${countN > 1 ? ` ${countN} plants` : ''}`}</button>
     <a class="btn cancel" href="/plants">Cancel</a>
@@ -307,6 +326,7 @@
   .actions.sticky .cancel { order: 1; } .actions.sticky .another { order: 2; } .actions.sticky .add { order: 3; }
   @media (max-width: 640px) { .actions.sticky .btn { min-height: 44px; } } /* the pinned bar is the thumb's target: 44px, as the grower review asks of every tap (round fifty-eight; the grower review) */
   @media (max-width: 700px) { .actions.sticky { position: sticky; bottom: calc(56px + env(safe-area-inset-bottom)); background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(8px); padding: 10px 0; margin: 8px 0 0; z-index: 5; } }
+  .actions.sticky.loose { position: static; }
   .own { margin-top: 8px; }
   .own summary { cursor: pointer; font-size: var(--fs-md); }
   .ownrow { display: flex; align-items: flex-end; gap: 8px 14px; margin-top: 8px; flex-wrap: wrap; }

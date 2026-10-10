@@ -46,9 +46,10 @@ export function nearKeys(q: string): string[] {
 }
 
 /** Every word of an entry the search reads, as `prepare` splits them (the rank markers in older names included: a superset loses nothing). */
-export interface Wordy { name: string; common?: string; commons?: string[]; family?: string; origin?: string[]; syn?: string[] }
+export interface Wordy { name: string; common?: string; commons?: string[]; family?: string; origin?: string[]; syn?: string[]; older?: string[] }
 export function entryWords(e: Wordy): string[] {
-  return [...words(e.name), ...words(e.common ?? ''), ...(e.commons ?? []).flatMap(words), ...words(e.family ?? ''), ...(e.origin ?? []).flatMap(words), ...(e.syn ?? []).flatMap(words)];
+  // Every older name of species rank too, past the six the entry shows (round sixty-seven; triage-66 N1).
+  return [...words(e.name), ...words(e.common ?? ''), ...(e.commons ?? []).flatMap(words), ...words(e.family ?? ''), ...(e.origin ?? []).flatMap(words), ...(e.syn ?? []).flatMap(words), ...(e.older ?? []).flatMap(words)];
 }
 
 /** How many posting files a corpus of `n` species is split into: sixty-four up to about ten thousand, doubling past that, as the buckets do. */

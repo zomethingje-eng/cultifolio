@@ -105,7 +105,7 @@ async function current(): Promise<void> {
  */
 function stillToWrite(rows: ImportRow[], plan: NumberPlan, result: ImportResult): { rows: ImportRow[]; plan: NumberPlan } {
   const here = new Set<string>();
-  for (const a of collection.accessions) if (a.importKey) here.add(a.importKey);
+  for (const a of collection.allAccessions()) if (a.importKey) here.add(a.importKey); // removed plants too (round sixty-seven; triage-66 R3)
   if (!here.size) return { rows, plan };
   const byRow = new Map(plan.byRow);
   const out: ImportRow[] = [];
@@ -131,6 +131,9 @@ export function commitImport(rows: ImportRow[], checks: Map<string, NameCheck>, 
     try { await current(); } catch { /* the fold as it is: the vault still refuses a number taken */ }
     const still = stillToWrite(rows, plan, found);
     const res = await commitNow(still.rows, checks, still.plan, opts);
+    // The fold with the import in it, as the snapshot, off the page's path: the next load read every imported change one
+    // request at a time (round sixty-seven; triage-66 R13, the self-review's E1).
+    if (res.added.length) void collection.saveSnapshot().catch(() => false);
     res.alreadyHere = found.alreadyHere;
     res.doneKeys.push(...found.doneKeys); // a line wholly here is done: after a stop, it is not offered again
     res.ms = Math.round(performance.now() - t0);

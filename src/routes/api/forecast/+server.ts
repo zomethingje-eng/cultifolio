@@ -1,4 +1,5 @@
 import { parseUnits } from '$core/units';
+import { forBuild } from '$lib/server/build';
 import { json, error } from '@sveltejs/kit';
 import { metUrl, reduceMet, nwsAlertsUrl, reduceNws, isUS, frostRisk, type MetResponse } from '$lib/weather/forecast';
 import { USER_AGENT } from '$dossier/fetch';
@@ -25,8 +26,20 @@ import type { RequestHandler } from './$types';
 const REFUSED_TTL_S = 300;
 /** How long any other answer is kept (seconds). */
 const TTL_S = 3600;
-const ttlOf = (status: string | undefined) => (status === 'refused' ? REFUSED_TTL_S : TTL_S);
+const ttlOf = (status: string | undefined) => (status === 'refused' || status === 'unanswered' ? REFUSED_TTL_S : TTL_S);
 const notAnswered = () => json({ error: 'forecast source did not answer' }, { status: 502, headers: { 'cache-control': 'no-store' } });
+/** A source's 429 or 403: it refused this site's request, which is said as a refusal (round sixty-seven; triage-66 S8). */
+export const _refusedBySource = (status: number) => status === 429 || status === 403;
+/**
+ * MET Norway refused this site's request (its 429 or 403): 502 as before, said as a refusal, never as "did not answer"
+ * (round sixty-seven; triage-66 S8, R45-11): `refused: true`, the source's status, and its Retry-After when it gave one,
+ * so a page can say "MET Norway refused this site's request" and wait it out.
+ */
+const refusedBy = (r: Response) => {
+  const wait = Number(r.headers.get('retry-after'));
+  const retryAfter = Number.isFinite(wait) && wait > 0 ? Math.min(3600, Math.ceil(wait)) : null;
+  return json({ error: "MET Norway refused this site's request", refused: true, service: 'met', status: r.status, ...(retryAfter ? { retryAfter } : {}) }, { status: 502, headers: { 'cache-control': 'no-store', ...(retryAfter ? { 'retry-after': String(retryAfter) } : {}) } });
+};
 
 export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddress }) => {
   // Absent or blank is not zero: Number('') is 0, and 0,0 is a real place in the Gulf of Guinea that MET would answer for.
@@ -49,8 +62,12 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   // back to a request for that URL, which is what happened to the live check after round nineteen (round twenty-one, 5).
   const cacheKey = new Request(`https://cache.cultifolio/forecast?lat=${la}&lon=${lo}&alt=${alt ?? ''}`);
   const cache = platform?.caches?.default;
-  type Cached = { lat: number; lon: number; forecast: ReturnType<typeof reduceMet>; alerts: ReturnType<typeof reduceNws>; alertsStatus: 'ok' | 'none' | 'refused' | 'n/a'; attribution: string[] };
-  const withRisk = (c: Cached, cc: string) => json({ ...c, risk: frostRisk(c.forecast, c.alerts, units) }, { headers: { 'cache-control': cc } });
+  // `refused`: the NWS refused this site's request (its 429 or 403); `unanswered`: it did not answer (unreachable, a
+  // timeout, another status, a body that is not alerts). Both were 'refused' before round sixty-seven (triage-66 S8, R45-11).
+  type Cached = { lat: number; lon: number; forecast: ReturnType<typeof reduceMet>; alerts: ReturnType<typeof reduceNws>; alertsStatus: 'ok' | 'none' | 'refused' | 'unanswered' | 'n/a'; attribution: string[] };
+  // Kept by the adapter's cache and the browser only under the build the request names (round sixty-seven; triage-66 S7):
+  // the verdict's words are this build's.
+  const withRisk = (c: Cached, cc: string) => json({ ...c, risk: frostRisk(c.forecast, c.alerts, units) }, { headers: { 'cache-control': forBuild(url, cc) } });
   // A cache that fails to answer is a forecast asked for, not a 500 (round sixty; the server review, 12).
   const hit = cache ? await cache.match(cacheKey).catch(() => undefined) : undefined;
   if (hit) {
@@ -88,6 +105,7 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   let forecast: ReturnType<typeof reduceMet>;
   try {
     const metRes = await fetch(metUrl(la, lo, alt ? Number(alt) : undefined), { headers });
+    if (_refusedBySource(metRes.status)) return refusedBy(metRes);
     if (!metRes.ok) return notAnswered();
     forecast = reduceMet((await metRes.json()) as MetResponse, lo, new Date().toISOString(), metRes.headers.get('expires') ?? undefined);
   } catch {
@@ -104,13 +122,13 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
       if (r.ok) {
         alerts = reduceNws(await r.json());
         alertsStatus = alerts.length ? 'ok' : 'none';
-      } else alertsStatus = 'refused';
+      } else alertsStatus = _refusedBySource(r.status) ? 'refused' : 'unanswered';
     } catch {
-      alertsStatus = 'refused';
+      alertsStatus = 'unanswered';
     }
   }
   const raw: Cached = { lat: la, lon: lo, forecast, alerts, alertsStatus, attribution: ['Forecast data from MET Norway (CC BY 4.0)', ...(us ? ['Alerts: NOAA National Weather Service'] : [])] };
   // The lifetimes are written out (REFUSED_TTL_S and TTL_S) so the about pages' check reads them from the put.
-  if (cache && platform?.context) platform.context.waitUntil(cache.put(cacheKey, json(raw, { headers: { 'cache-control': alertsStatus === 'refused' ? 'public, max-age=300' : 'public, max-age=3600' } })).catch(() => {}));
+  if (cache && platform?.context) platform.context.waitUntil(cache.put(cacheKey, json(raw, { headers: { 'cache-control': alertsStatus === 'refused' || alertsStatus === 'unanswered' ? 'public, max-age=300' : 'public, max-age=3600' } })).catch(() => {}));
   return withRisk(raw, `public, max-age=${ttlOf(alertsStatus)}`);
 };

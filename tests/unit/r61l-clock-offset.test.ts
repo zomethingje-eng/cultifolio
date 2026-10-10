@@ -66,18 +66,25 @@ async function slowAndCorrected(T0: number) {
 describe('a correction outlives the clock change it corrected', () => {
   // Round sixty-two (decision 5; B9, A17): changed. A reload cannot tell a slow clock set right from three days passed
   // (round sixty-one guessed the first, and so lapsed a correction that was still right), so the stored correction is
-  // kept, unconfirmed, and a reading is asked for at load; the first reading replaces it with one refold. Offline, edits
-  // made before that reading are stamped by the correction, and their arrival parks them, listed with "Apply all from
-  // this device" on the Sync page (/about/formats says so).
-  it('the grower sets a three-days-slow clock right and reopens the app offline: the stored correction is kept, unconfirmed, until the first reading replaces it', async () => {
+  // kept, unconfirmed, and a reading is asked for at load; the first reading replaces it with one refold. Since round
+  // sixty-seven (triage-66 R2) a positive correction past two days is not in force until that reading, so edits made
+  // offline before it are stamped by the raw clock and park nothing.
+  it('the grower sets a three-days-slow clock right and reopens the app offline: the stored correction is kept, unconfirmed and (past two days) not in force, until the first reading replaces it', async () => {
     const T0 = Date.now();
     const { p } = await slowAndCorrected(T0);
     const fixedAt = T0 + 20 * MIN;
     vi.setSystemTime(fixedAt); // the clock set right (forward three days); no sync yet (a greenhouse, no signal)
     let b = await boot();
     await b.store.collection.load();
-    expect(Math.round(b.hlc.clockOffsetMs() / DAY)).toBe(3);
+    // Kept, stored, unconfirmed; but a positive correction past two days is not in force until a reading (round
+    // sixty-seven; triage-66 R2): an edit made offline now is stamped by the raw clock, which is right, and parks nothing.
+    expect(Math.round(JSON.parse(ls.get('cultifolio.clockOffsetMs') ?? '{}').offset / DAY)).toBe(3);
+    expect(b.hlc.clockOffsetMs()).toBe(0);
     expect(b.hlc.clockUnsure()).toBe(true);
+    await b.store.collection.put('accession', p.id, { notes: 'offline' });
+    const offline = (await b.vault.allChanges()).find((c) => c.value === 'offline')!;
+    expect(Math.abs(Number(offline.t.slice(0, 13)) - fixedAt)).toBeLessThan(MIN);
+    expect(isParked(offline.t, { now: fixedAt + 30 * MIN, arrival: fixedAt + 30 * MIN, clockChecked: true })).toBe(false);
     b.hlc.trustServerTime(fixedAt, Date.now()); // online again: the reading says the clock is right
     expect(b.hlc.clockOffsetMs()).toBe(0);
     b = await boot();

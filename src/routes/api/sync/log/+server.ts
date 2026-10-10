@@ -7,7 +7,8 @@ import { PUSH_HEADERS, STATUS } from '$lib/sync/limits';
  * Batches that arrived at or after ?since=<ms> (less a minute of overlap), oldest arrival first.
  * When the page is cut short the reply carries `next: { at, key }`; the next page is asked for with
  * ?after=<at>:<key> (strictly after that pair, no overlap). A request without `after` behaves as it always has.
- * One request walks the vault's prefix once, bounded (see `MAX_LIST_PAGES`); 429 with Retry-After past the rate limit.
+ * One request walks the vault's prefix once, bounded (see `MAX_LIST_PAGES`); 429 with Retry-After past the rate limit, and
+ * 503 with Retry-After past the vault's hour of listings (`LIST_PAGES_PER_HOUR`, round sixty-seven).
  */
 export const GET: RequestHandler = async ({ request, url, platform, getClientAddress }) => {
   const r2 = store(platform);
@@ -17,7 +18,14 @@ export const GET: RequestHandler = async ({ request, url, platform, getClientAdd
   await authed(r2, id, request);
   const since = url.searchParams.get('since');
   const after = parseAfter(url.searchParams.get('after'));
-  return json(await listBatches(r2, id, since == null || since === '' ? null : Number(since), 500, after), { headers: { 'cache-control': 'no-store' } });
+  try {
+    // Counted against the vault's hour of listings (round sixty-seven; triage-66 S6): past it, 503 with Retry-After.
+    return json(await listBatches(r2, id, since == null || since === '' ? null : Number(since), 500, after, quotaOf(platform, getClientAddress)), { headers: { 'cache-control': 'no-store' } });
+  } catch (e) {
+    const answer = refusal(e);
+    if (answer) return answer;
+    throw e;
+  }
 };
 
 /**

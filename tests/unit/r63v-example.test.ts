@@ -12,7 +12,7 @@ const session = mk(), local = mk();
 const loc = { href: 'http://x/today', reload: () => {} };
 const had = { ss: Object.getOwnPropertyDescriptor(globalThis, 'sessionStorage'), ls: Object.getOwnPropertyDescriptor(globalThis, 'localStorage'), loc: Object.getOwnPropertyDescriptor(globalThis, 'location'), add: Object.getOwnPropertyDescriptor(globalThis, 'addEventListener') };
 /** The collection as the pages read it: open or not, and what it holds. */
-const col = { ready: false, accessions: [] as unknown[], sowings: [] as unknown[], locations: [] as unknown[], mySpecies: new Map<string, unknown>(), heldWaiting: 0, parkedRecords: 0 };
+const col = { ready: false, accessions: [] as unknown[], sowings: [] as unknown[], locations: [] as unknown[], taxa: [] as unknown[], mySpecies: new Map<string, unknown>(), heldWaiting: 0, parkedRecords: 0 };
 vi.mock('$lib/db/collection.svelte', () => ({ collection: col }));
 vi.mock('$app/environment', () => ({ browser: true, dev: false, building: false, version: 'test' }));
 const syncState = { configured: false, busy: null as string | null };
@@ -20,7 +20,8 @@ vi.mock('$lib/sync/engine.svelte', () => ({ sync: syncState }));
 vi.mock('$app/navigation', () => ({ goto: async () => {} }));
 beforeEach(() => {
   session.m.clear(); local.m.clear(); loc.href = 'http://x/today';
-  Object.assign(col, { ready: false, accessions: [], sowings: [], locations: [], mySpecies: new Map() });
+  Object.assign(col, { ready: false, accessions: [], sowings: [], locations: [], taxa: [], mySpecies: new Map() });
+  vi.resetModules(); // each test a page of its own: which collection a page shows is read as it loads (round sixty-seven; triage-66 V3)
   Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, value: session.s });
   Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: local.s });
   Object.defineProperty(globalThis, 'location', { configurable: true, value: loc });
@@ -43,7 +44,7 @@ describe('the tab that left the example is marked, so an empty page never opens 
     session.m.set('cultifolio.demo', '1');
     const { sampleClosedHere, markLeftByAddress, leftHere, OUT } = await import('$lib/db/demo');
     sampleClosedHere();
-    expect(loc.href).toBe('/');
+    expect(loc.href).toBe('/?left=sample'); // the address says it too, for the next page's first script (round sixty-seven; triage-66 V3)
     expect(leftHere()).toBe(true);
     session.m.delete(OUT);
     markLeftByAddress();
@@ -75,9 +76,9 @@ describe('who is taken into the example', () => {
     col.sowings = [{}];
     expect(entersHere()).toBe(false); // a batch is a collection
     col.sowings = [];
-    col.mySpecies = new Map([['x', {}]]);
+    col.taxa = [{ followed: true }];
     expect(entersHere()).toBe(false); // so is a species followed
-    col.mySpecies = new Map();
+    col.taxa = [];
     col.locations = [{}];
     expect(entersHere()).toBe(false); // and so is a place: a grower who began with their benches (round sixty-three, V2)
     col.locations = [];

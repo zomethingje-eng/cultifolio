@@ -80,7 +80,7 @@ describe('the growing year', () => {
     expect(y.spread).toBe(true);
     const { rows } = cultivationSheet({ scientific: 'Dioscorea elephantipes', family: 'Dioscoreaceae', months: karoo, lat: -33 });
     // What the rule reads: no short rainy season, not "no rainy season" (round sixty; the round forty-two review).
-    expect(rows.find((r) => r.k === 'Its year')!.s).toMatch(/The rain rule reads no short rainy season: 70% of the year's rain \(\d+ mm of \d+ mm\) takes \d+ months/);
+    expect(rows.find((r) => r.k === 'Its year')!.s).toMatch(/The rain rule reads no short rainy season: 70% of the median year's rain \(\d+ mm of \d+ mm\) takes \d+ months/);
   });
   it('a sharp rainy season under a flat temperature curve is said to be sharp, and the rule infers nothing from it', () => {
     const y = growingYear(equatorial, 1)!;
@@ -101,7 +101,7 @@ describe('the sheet', () => {
     const { rows, arch } = cultivationSheet({ scientific: 'Tylecodon pearsonii', family: 'Crassulaceae', months: namaqua, lat: -30, extremes: { minAbs: 1.2, minP01: 4.1, maxP99: 38, frostDaysPerYear: 0, years: 44 } });
     expect(arch?.arch.key).toBe('arid');
     const year = rows.find((r) => r.k === 'Its year')!;
-    expect(year.s).toContain('The rain rule reads a winter growing season: 70% of the year\'s rain (136 mm of 194 mm) falls in May to August');
+    expect(year.s).toContain('The rain rule reads a winter growing season: 70% of the median year\'s rain (136 mm of 194 mm) falls in May to August');
     expect(year.s).toContain("Months are the habitat's, southern hemisphere; shifted six months for a northern-hemisphere collection: November to February.");
     expect(year.hab).toBe(true);
     const light = rows.find((r) => r.k === 'Light')!;

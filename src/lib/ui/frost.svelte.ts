@@ -42,7 +42,8 @@ class FrostWatch {
       let risk: Risk | null = null, unchecked: string | null = null, at = 0, held = false, refused = false;
       try {
         const r = await getForecast<{ risk: Risk; alertsStatus?: string }>(s.lat, s.lon, units.current);
-        if (r.ok) { risk = r.body.risk; at = r.at; refused = r.body.alertsStatus === 'refused'; }
+        // The NWS refused, or did not answer (two statuses since round sixty-seven; triage-66 S8): read again after five minutes either way.
+        if (r.ok) { risk = r.body.risk; at = r.at; refused = r.body.alertsStatus === 'refused' || r.body.alertsStatus === 'unanswered'; }
         else { unchecked = forecastRefusal(r, 'Frost'); held = r.held === true; }
       } catch {
         unchecked = forecastRefusal(null, 'Frost');

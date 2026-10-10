@@ -30,6 +30,7 @@
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import { cultivationSheet, CARD_ORDER } from '$core/sheet';
   import { collection } from '$lib/db/collection.svelte';
+  import { addLeavesExample } from '$lib/ui/grow/example.svelte'; // in the example, an add leads out of it first (round sixty-seven; triage-66 V1)
   import { slugify, genusOf, speciesSlug, canonicalSynonym, parseName } from '$core/names';
   import { unitName } from '$core/regions';
   import { onMount } from 'svelte';
@@ -308,7 +309,8 @@
   <a class="reltile" href="/species/{c.slug}">
     <!-- Hidden on a failure heard before hydration too, and credited: the tile names its photograph's source, and the species
          page it opens names the author and licence (round sixty; visitor 4, rule 1, the round forty-two review G). -->
-    {#if c.thumb}<img src={c.thumb} alt={c.name} loading="lazy" use:failedBeforeHydration={(im) => (im.style.visibility = 'hidden')} />{/if}<!-- no photograph, no empty square (round sixty-two; outside review A35) -->
+    <!-- Its credit is hidden with it: no credit stands under a photograph that did not load (round sixty-seven; triage-66 P7). -->
+    {#if c.thumb}<img src={c.thumb} alt={c.name} loading="lazy" use:failedBeforeHydration={(im) => { im.style.visibility = 'hidden'; const rc = im.parentElement?.querySelector<HTMLElement>('.rc'); if (rc) rc.style.visibility = 'hidden'; }} />{/if}<!-- no photograph, no empty square (round sixty-two; outside review A35) -->
     <span class="rn"><SpeciesName name={c.name} /></span>
     <span class="rf">{c.common ?? c.family ?? ''}</span>
     {#if c.thumb && tileCredit(c)}<span class="rc">{tileCredit(c)}</span>{/if}
@@ -349,7 +351,9 @@
   <div class="top" class:withhero={!!hero}>
   {#if hero && heroFailed}
     <!-- The one placeholder, in the photograph's own box, so nothing below moves; the credit and its page stay (round sixty; visitor 12). -->
-    <div class="hero photo failed"><Placeholder name={d.name.scientific} family={d.name.family ?? ''} caption="photograph did not load" /><a class="cred" href={hero.page ?? hero.url} rel="noopener">Its page{hero.attribution?.trim() ? ` · ${hero.attribution}` : ''}</a></div>
+    <!-- No credit over a photograph that is not there: the author's line and licence laid over the placeholder read as the
+         credit of what was shown. The way to the photograph stays (round sixty-seven; triage-66 P7, S-A incidental). -->
+    <div class="hero photo failed"><Placeholder name={d.name.scientific} family={d.name.family ?? ''} caption="photograph did not load" /><a class="cred" href={hero.page ?? hero.url} rel="noopener">The photograph's own page</a></div>
   {:else if hero}
     <!-- The box is a fixed 150 px band on a phone, so the page lays out once and does not shift down when the photograph lands (round forty-two, 1). -->
     <div class="hero photo">
@@ -383,7 +387,7 @@
     </div>
     <!-- One primary action, the grower's own numbers beside it, and the other four verbs as a quieter row: five equal buttons were a bar nobody could read (round fifty, 3). -->
     <div class="acts">
-      <a class="btn pri" href="/plants/new?species={encodeURIComponent(d.name.scientific)}&key={d.key}">Add one to my plants</a>
+      <a class="btn pri" href="/plants/new?species={encodeURIComponent(d.name.scientific)}&key={d.key}" onclick={(e) => addLeavesExample(e, `/plants/new?species=${encodeURIComponent(d.name.scientific)}&key=${d.key}`)}>Add one to my plants</a>
       {#if mine.length}
         <span class="vern mine">{#each mine.slice(0, 3) as a (a.id)}<a class="accno" href={plantHref(a)} title={a.status !== 'growing' ? a.status : 'yours'}>{accNo(a)}</a>{/each}{#if mine.length > 3}<span class="more">+{mine.length - 3}</span>{/if}</span>
       {/if}
@@ -403,7 +407,10 @@
   {#if stripPhotos.length}
     <!-- A few of the photographs under the name card, on a phone too: the grid was three and a half thousand pixels down (round fifty-eight; the first-impression review). Each opens its credit and licence in the Photographs section. -->
     <a class="thumbstrip" href="#{myPhotos.length ? 's-photos-open' : 's-photos'}" aria-label="{photos.length} photograph{photos.length === 1 ? '' : 's'} of {d.name.scientific}, with their credits">
-      {#each stripPhotos as p (p.src + p.id)}<img src={p.thumb} alt="{d.name.scientific}, photograph {p.attribution}" title={p.attribution} loading="lazy" width="72" height="72" onerror={(e) => (e.currentTarget as HTMLImageElement).remove()} />{/each}
+      <!-- A photograph that fails keeps its square, empty, and loses its credit: removed, it moved "At a glance" up by 28 to
+           51 px (a layout shift of 0.17 on a phone), and a failure before hydration drew the broken-image glyph (round
+           sixty-seven; triage-66 P7, R45-8). -->
+      {#each stripPhotos as p (p.src + p.id)}<span class="tb"><img src={p.thumb} alt="{d.name.scientific}, photograph {p.attribution}" title={p.attribution} loading="lazy" width="72" height="72" use:failedBeforeHydration={(im) => { im.style.visibility = 'hidden'; im.removeAttribute('title'); }} /></span>{/each}
       <span class="more">{photos.length} photograph{photos.length === 1 ? '' : 's'} ›</span>
     </a>
   {/if}
@@ -447,9 +454,12 @@
     <h2 class="sec" id="s-genus">About the genus · <i>{genusName}</i></h2>
     <div class="sumbody"><p>{genusExcerpt?.text}{#if genusExcerpt?.more}{' '}<a class="more" href={data.genusRecord.summary.url} rel="noopener">More on Wikipedia ›</a>{/if}</p></div>
     <p class="small muted">Quoted from <a href={data.genusRecord.summary.url} rel="noopener">Wikipedia, "{data.genusRecord.summary.title}"</a>, {data.genusRecord.summary.licence}.</p>
-  {:else if data.genusRecord?.status === 'refused'}
+  {:else if data.genusRecord && ['refused', 'error', 'skipped'].includes(data.genusRecord.status as string)}
+    <!-- The build wrote 'refused' for a refusal and for an error alike, and the detail says which ("refused: …" or
+         "error: …"); this said every one as "did not answer" (round sixty-seven; triage-66 P5, S-F10). -->
+    {@const gst = (data.genusRecord.status as string) === 'error' || /^error\b/.test(data.genusRecord.detail ?? '') ? 'error' : (data.genusRecord.status as string) === 'skipped' ? 'skipped' : 'refused'}
     <h2 class="sec" id="s-genus">About the genus · <i>{genusName}</i></h2>
-    <div class="notice"><b>Not checked.</b> Wikipedia did not answer for the genus when this was built. Not a statement that it has no article.</div>
+    <div class="notice"><b>{gst === 'skipped' ? 'Not asked.' : 'Not checked.'}</b> Wikipedia {notAnswered(gst)} for the genus when this page was built. Not a statement that it has no article.</div>
   {/if}
 
 
@@ -705,7 +715,8 @@
   .reltile img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; background: var(--sunk); }
   .reltile .rn { display: block; padding: 7px 9px 0; font-family: var(--serif); font-style: italic; font-size: var(--fs-md); line-height: 1.25; font-weight: 600; }
   .reltile .rf { display: block; padding: 3px 9px 9px; font-size: var(--fs-xs); letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink3); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .reltile .rc { display: block; padding: 0 9px 8px; margin-top: -5px; font-size: var(--fs-xs); color: var(--ink3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Two lines, cut after the second, so the licence that leads the credit is never cut at 200% text (round sixty-seven, triage-66 N13, R45-12). */
+  .reltile .rc { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; padding: 0 9px 8px; margin-top: -5px; font-size: var(--fs-xs); color: var(--ink3); overflow: hidden; overflow-wrap: anywhere; }
   .reltile.more { display: flex; align-items: center; justify-content: center; font-weight: 600; color: var(--accent); }
   @media (min-width: 860px) {
     /* The first screen answers: the photograph beside the name and the actions, the four figures and the note under them. */
@@ -748,7 +759,8 @@
   .sheet .rowk:first-child { margin-top: 0; }
   .sheet p { margin: 0 0 6px; }
   .thumbstrip { display: flex; align-items: center; gap: 6px; margin: 10px 0 0; overflow-x: auto; text-decoration: none; color: var(--ink2); scrollbar-width: none; }
-  .thumbstrip img { width: 72px; height: 72px; object-fit: cover; border-radius: var(--r); flex: none; background: var(--sunk); }
+  .thumbstrip .tb { width: 72px; height: 72px; border-radius: var(--r); flex: none; background: var(--sunk); overflow: hidden; }
+  .thumbstrip img { display: block; width: 72px; height: 72px; object-fit: cover; border-radius: var(--r); flex: none; background: var(--sunk); }
   .thumbstrip .more { flex: none; font-size: var(--fs-md); padding: 0 6px; }
   .names { margin: 0 0 8px; }
   .archline { margin: 0 0 10px; color: var(--ink2); }

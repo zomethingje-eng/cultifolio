@@ -107,7 +107,7 @@ test('r64f 4: a second worker of the build the page runs takes over without relo
   expect(await page.evaluate(() => (window as unknown as { __r64f?: number }).__r64f)).toBe(1);
 });
 
-test('r64f 5: nothing kept, nothing asked: a visitor on My plants and in the example is not asked to keep data; the first plant is, and every load after it', async ({ page, context }) => {
+test('r64f 5: nothing kept, nothing asked: a visitor on My plants and in the example is not asked to keep data; the first plant is, and a load after it within the month is not', async ({ page, context }) => {
   allowWrites(1 * SEED_REQUESTS * WEBKIT_MS_PER_REQUEST); // the example set out at Safari's engine's pace (helpers/pace.ts)
   // Every call to persist() on this page; persisted() (which asks nothing) is free. In Firefox each call is a question
   // put to the person, so a visitor with nothing of their own met it on their first page (round sixty-four).
@@ -142,11 +142,14 @@ test('r64f 5: nothing kept, nothing asked: a visitor on My plants and in the exa
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   await expect.poll(asked).toBe(1);
   await expect.poll(() => page.evaluate(() => localStorage.getItem('cultifolio.persistAfterFirst'))).toBe('1'); // its answer said, so not asked again
-  // A page loaded with a plant kept asks, as it always has: Safari and Chromium answer it by themselves.
+  // A page loaded with a plant kept does not ask again within the month: every ask goes through one gate, written before
+  // the browser is called, and a Firefox question left standing came back on every load (round sixty-seven; triage-66 P1).
+  expect(await page.evaluate(() => localStorage.getItem('cultifolio.persistAskedAt'))).not.toBeNull();
   await page.goto('/plants');
   await ready(page);
   await expect(page.locator('.rows > *')).toHaveCount(1);
-  await expect.poll(asked).toBe(1);
+  await page.waitForTimeout(1500); // a negative: only a pause can show that no ask followed
+  expect(await asked()).toBe(0);
 });
 
 test('r64f 6: a plant\'s Edit opened and left untouched asks nothing on leaving; one field changed, it asks', async ({ page, context }) => {

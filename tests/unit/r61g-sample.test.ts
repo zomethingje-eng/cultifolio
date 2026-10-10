@@ -37,7 +37,8 @@ vi.mock('$lib/db/vault', () => {
   m.dropFold = async () => {};
   m.parkStamps = async (st: string[]) => st;
   m.lastArrival = async () => 0;
-  m.arrivalsAfter = async () => ({ changes: [...mem.changes], seq: 0, gen: 0 });
+  m.arrivalsAfter = async (seq = 0) => ({ changes: mem.changes.slice(seq), seq: mem.changes.length, gen: 0 });
+  m.arrivalsOf = async (ts: string[]) => new Map(ts.map((t) => [t, mem.changes.findIndex((c) => c.t === t) + 1] as [string, number]).filter(([, n]) => n > 0));
   m.changeKeys = async () => mem.changes.map((c) => c.t);
   m.changesByKeys = async (ts: string[]) => mem.changes.filter((c) => ts.includes(c.t));
   m.updateMeta = async (k: string, fn: (had: unknown) => unknown) => { const next = fn(mem.meta.get(k)); mem.meta.set(k, next); return next; };
@@ -48,23 +49,33 @@ vi.mock('$lib/db/vault', () => {
   return m;
 });
 
-const { readSetting, writeSetting } = await import('$lib/ui/stored');
-const { units } = await import('$lib/ui/units.svelte');
-const { site } = await import('$lib/ui/site.svelte');
-const { prefs } = await import('$lib/ui/prefs.svelte');
+/**
+ * A page, loaded in the sample or out of it: the settings' scope is the page's collection, read once as it loads, not the
+ * tab's flag of the moment (round sixty-seven; triage-66 V3). Each test's page is loaded afresh.
+ */
+async function pageIn(sample: boolean) {
+  if (sample) session.m.set('cultifolio.demo', '1'); else session.m.delete('cultifolio.demo');
+  vi.resetModules();
+  const { readSetting, writeSetting } = await import('$lib/ui/stored');
+  const { units } = await import('$lib/ui/units.svelte');
+  const { site } = await import('$lib/ui/site.svelte');
+  const { prefs } = await import('$lib/ui/prefs.svelte');
+  return { readSetting, writeSetting, units, site, prefs };
+}
 
 beforeEach(() => { session.m.clear(); local.m.clear(); cookies.length = 0; });
 
 describe('settings by scope (B\'s suggestion; the grower review, 14)', () => {
-  it('outside the sample, a setting is the device\'s localStorage under its own key', () => {
+  it('outside the sample, a setting is the device\'s localStorage under its own key', async () => {
+    const { readSetting, writeSetting } = await pageIn(false);
     expect(writeSetting('cultifolio.labels', 'device', '{"sheetK":"5167"}')).toBe(true);
     expect(local.m.get('cultifolio.labels')).toBe('{"sheetK":"5167"}');
     expect(readSetting('cultifolio.labels', 'device')).toBe('{"sheetK":"5167"}');
   });
-  it('in the sample, a write is the tab\'s own; a device setting is read from the device until the tab sets its own; a collection setting never is', () => {
+  it('in the sample, a write is the tab\'s own; a device setting is read from the device until the tab sets its own; a collection setting never is', async () => {
     local.m.set('cultifolio.labels', '{"sheetK":"5167"}');
     local.m.set('cultifolio.frost.site', '{"lat":51.5,"lon":-0.1}');
-    session.m.set('cultifolio.demo', '1');
+    const { readSetting, writeSetting } = await pageIn(true);
     expect(readSetting('cultifolio.labels', 'device')).toBe('{"sheetK":"5167"}');
     expect(readSetting('cultifolio.frost.site', 'collection')).toBeNull();
     writeSetting('cultifolio.labels', 'device', '{"sheetK":"L7160"}');
@@ -72,20 +83,20 @@ describe('settings by scope (B\'s suggestion; the grower review, 14)', () => {
     expect(session.m.get('cultifolio.demo.labels')).toBe('{"sheetK":"L7160"}');
     expect(readSetting('cultifolio.labels', 'device')).toBe('{"sheetK":"L7160"}');
   });
-  it('units chosen in the sample write no cookie: the grower\'s own pages keep theirs', () => {
-    session.m.set('cultifolio.demo', '1');
+  it('units chosen in the sample write no cookie: the grower\'s own pages keep theirs', async () => {
+    const { units } = await pageIn(true);
     units.set('us');
     expect(cookies).toEqual([]);
     expect(session.m.get('cultifolio.demo.units')).toBe('us');
     units.seed('metric');
     expect(units.current).toBe('us');
-    session.m.delete('cultifolio.demo');
-    units.set('metric');
+    const own = (await pageIn(false)).units;
+    own.set('metric');
     expect(cookies.join()).toMatch(/cultifolio\.units=metric/);
   });
-  it('a frost site set in the sample is not the grower\'s, and writes no hemisphere cookie', () => {
+  it('a frost site set in the sample is not the grower\'s, and writes no hemisphere cookie', async () => {
     local.m.set('cultifolio.frost.site', '{"lat":51.5,"lon":-0.1}');
-    session.m.set('cultifolio.demo', '1');
+    const { site } = await pageIn(true);
     site.loaded = false;
     site.load();
     expect(site.current).toBeNull();
@@ -93,8 +104,8 @@ describe('settings by scope (B\'s suggestion; the grower review, 14)', () => {
     expect(local.m.get('cultifolio.frost.site')).toBe('{"lat":51.5,"lon":-0.1}');
     expect(cookies).toEqual([]);
   });
-  it('preferences changed in the sample stay in the tab', () => {
-    session.m.set('cultifolio.demo', '1');
+  it('preferences changed in the sample stay in the tab', async () => {
+    const { prefs } = await pageIn(true);
     prefs.loaded = false;
     prefs.load();
     prefs.set({ referencePhotos: true });
@@ -105,7 +116,7 @@ describe('settings by scope (B\'s suggestion; the grower review, 14)', () => {
 
 describe('the sample is set out in one commit (the accessibility review, 4)', () => {
   it('twelve plants, the places, the batch, the lines and the Wanted species land in one write', async () => {
-    session.m.set('cultifolio.demo', '1');
+    await pageIn(true);
     const { seedDemo } = await import('$lib/ui/grow/demo-seed');
     const { collection } = await import('$lib/db/collection.svelte');
     const before = mem.appends;
@@ -119,7 +130,7 @@ describe('the sample is set out in one commit (the accessibility review, 4)', ()
 
 describe('a restore refuses to start in the sample (review B)', () => {
   it('merge and replace are refused before anything is read or staged', async () => {
-    session.m.set('cultifolio.demo', '1');
+    await pageIn(true);
     const { restoreBackup } = await import('$lib/backup/io');
     const { replaceThroughStaging } = await import('$lib/backup/replace');
     await expect(restoreBackup({} as never, 'merge')).rejects.toThrow(/off in the example collection/);

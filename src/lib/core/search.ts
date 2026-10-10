@@ -7,9 +7,10 @@
  * letter) against the start of a word of a name (never of a family or a
  * place: round sixty-three, N3), so "Conophitum" still finds
  * Conophytum; the relaxed pass is only ever a fallback, so a correct spelling
- * never sees near misses beside its hits. Ranking: name matches before
- * common-name, family or origin matches; among names, the genus first;
- * then alphabetical.
+ * never sees near misses beside its hits. Ranking (`group`, `closeness`):
+ * a name typed as a name, the genus first; an older name typed as one; one
+ * common name holding every word; then the other matches; within each, the
+ * nearest, an exact name, whole words and the headline before the alphabet.
  */
 export interface Searchable {
   name: string;
@@ -20,6 +21,8 @@ export interface Searchable {
   origin?: string[];
   /** Older names for the same species, as binomials: a label's "Haworthia attenuata" finds Haworthiopsis attenuata (round thirty-one, 3). */
   syn?: string[];
+  /** Every other older name of species rank, past the six of `syn`, searched as they are (round sixty-seven; triage-66 N1). */
+  older?: string[];
 }
 
 const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -58,9 +61,19 @@ export interface Prepared<T> {
    * sixty-three, N3: "aloe" was one letter from the start of "Algeria", and "Aloe Verra" answered Drimia noctiflora).
    */
   placeWords: string[];
-  /** The common names' words alone: the first reading of a query is whole, against these (round sixty-two; B2). */
+  /** The common names' words alone. */
   commonWords: string[];
-  /** Each older name's words, kept apart: the words of a query that fall to the synonyms must all sit in one of them. */
+  /**
+   * Each common name's words, kept apart, the headline's first when there is one: a query's words that fall to the common
+   * names must all sit in one of them (round sixty-seven; triage-66 N2: "snake plant" answered Yarrow first, by its
+   * "Snake's grass" and its "Nosebleed plant").
+   */
+  commonNames: string[][];
+  /** Whether `commonNames[0]` is the headline (`common`). */
+  headed: boolean;
+  /** Every word of the entry (name, common names, places, older names), for the order's whole-word test. */
+  wordSet: ReadonlySet<string>;
+  /** Each older name's words (`syn`, then `older`), kept apart: the words of a query that fall to the synonyms must all sit in one of them. */
   synWords: string[][];
   sortKey: string;
 }
@@ -238,7 +251,8 @@ export function wholeReading(q: string): string[] | null {
   const all = [...new Set(kept.flatMap(words).filter((w) => !RANK_MARKERS.has(w) && (!OPEN.has(w) || used.has(w))))];
   return all.length && all.some((w) => !used.has(w)) ? all : null;
 }
-const inCommon = (p: Prepared<unknown>, ws: string[]) => ws.every((x) => p.commonWords.some((w) => w.startsWith(x)));
+/** Whether one common name holds every word, each beginning a word of it (round sixty-seven; triage-66 N2: never words of two names). */
+const inCommon = (p: Prepared<unknown>, ws: string[], match: (q: string, w: string) => boolean = (x, w) => w.startsWith(x)) => p.commonNames.some((cn) => ws.every((x) => cn.some((w) => match(x, w))));
 
 /**
  * The shape of a genus followed by capitalised words: an unquoted cultivar ("Haworthia Big Band", "Crassula Gollum",
@@ -318,6 +332,8 @@ export function nearAnswer(q: string, hits: Searchable[]): boolean {
   return hits.length > 0 && !hasExact(prepare(hits), q);
 }
 
+/** Small words that never end a name's first two words. */
+const RETRY_SMALL: ReadonlySet<string> = new Set(['a', 'an', 'and', 'at', 'by', 'de', 'del', 'des', 'du', 'for', 'in', 'la', 'le', 'of', 'on', 'or', 'the', 'to', 'with']);
 /**
  * The query retried when nothing matches it: its first two words before any rank marker, "sp." or quoted cultivar
  * ("Copiapoa cinerea var. columna-alba" is "Copiapoa cinerea", "Echeveria cv. Perle" and "Echeveria 'Perle von Nurnberg'"
@@ -343,6 +359,9 @@ export function relaxedQuery(q: string): string | null {
     return kept.length >= 2;
   });
   if (!kept.length) return null;
+  // Not a common name cut after a small word: "Lily of St. James" was retried as "Lily of" and answered every lily, and
+  // "Rose of Jericho" as "Rose of" (round sixty-seven; triage-66 N8, S-B10).
+  if (kept.length === 2 && RETRY_SMALL.has(bare(kept[1]))) return null;
   const relaxed = kept.join(' ');
   // Not a single letter ("E. cv. Perle" retried as "E" and answered every genus beginning with it): a genus abbreviation
   // is a name only with its epithet (round sixty-one; the corpus review, 8).
@@ -352,43 +371,142 @@ export function relaxedQuery(q: string): string | null {
 }
 
 export function prepare<T extends Searchable>(items: T[]): Prepared<T>[] {
-  return items.map((item) => ({
-    item,
-    nameWords: words(item.name),
-    placeWords: [...words(item.family ?? ''), ...(item.origin ?? []).flatMap(words)],
-    commonWords: [...words(item.common ?? ''), ...(item.commons ?? []).flatMap(words)],
-    synWords: (item.syn ?? []).map((x) => words(x).filter((w) => !RANK_MARKERS.has(w))),
-    sortKey: fold(item.name)
-  }));
+  return items.map((item) => {
+    const commonNames = [...(item.common ? [words(item.common)] : []), ...(item.commons ?? []).map(words)].filter((ws) => ws.length);
+    const nameWords = words(item.name);
+    const placeWords = [...words(item.family ?? ''), ...(item.origin ?? []).flatMap(words)];
+    const commonWords = commonNames.flat();
+    const synWords = [...(item.syn ?? []), ...(item.older ?? [])].map((x) => words(x).filter((w) => !RANK_MARKERS.has(w)));
+    return {
+      item,
+      nameWords,
+      placeWords,
+      commonWords,
+      commonNames,
+      headed: !!item.common && commonNames.length > 0 && commonNames[0].length > 0,
+      synWords,
+      wordSet: new Set([...nameWords, ...commonWords, ...placeWords, ...synWords.flat()]),
+      sortKey: fold(item.name)
+    };
+  });
 }
 
 /**
  * Rank: 0 every query word starts a name word, the first one the genus; 1 name words only; 2 mixed; 3 other fields
  * only. A query word not in the name or the other fields may come from an older name, but every such word must come
  * from the same older name: "aloe margaritifera" found Tulista pumila through two of its synonyms, Aloe x and
- * Haworthia margaritifera, which is a name nobody wrote (round thirty-three, 13). A family or a place is matched as
- * typed whatever `match` forgives: a similar spelling is a typing error in a name, and read against names only (round
- * sixty-three, N3: "Aloe Verra" answered Drimia noctiflora, "aloe" one letter from its range's "Algeria" and "verra" one
- * from its older name's "Vera-duthiea").
+ * Haworthia margaritifera, which is a name nobody wrote (round thirty-three, 13). So too the words that fall to the
+ * common names come from one common name, never two (round sixty-seven; triage-66 N2: "natal plum" was answered by a
+ * place's "Natal" and Plumbago, "snake plant" by two of Yarrow's names). A family or a place is matched as typed whatever
+ * `match` forgives: a similar spelling is a typing error in a name, and read against names only (round sixty-three, N3:
+ * "Aloe Verra" answered Drimia noctiflora, "aloe" one letter from its range's "Algeria" and "verra" one from its older
+ * name's "Vera-duthiea").
  */
 function rank(p: Prepared<unknown>, qs: string[], match: (q: string, w: string) => boolean): number | null {
-  let inName = 0, inOther = 0, genus = false;
-  const fromSyn: string[] = [];
+  let inName = 0, genus = false;
+  let left: string[] | null = null; // the words neither the name nor a place takes
   for (const q of qs) {
-    const n = p.nameWords.some((w) => match(q, w));
-    const o = !n && (p.commonWords.some((w) => match(q, w)) || p.placeWords.some((w) => w.startsWith(q)));
-    if (n) inName++;
-    else if (o) inOther++;
-    else if (!p.synWords.some((g) => g.some((w) => match(q, w)))) return null; // no word of the entry can take q: no older name can either, so stop here (round fifty-eight)
-    else fromSyn.push(q);
-    if (n && match(q, p.nameWords[0])) genus = true;
+    let n = false;
+    for (const w of p.nameWords) if (match(q, w)) { n = true; break; }
+    if (n) {
+      inName++;
+      if (match(q, p.nameWords[0])) genus = true;
+      continue;
+    }
+    let place = false;
+    for (const w of p.placeWords) if (w.startsWith(q)) { place = true; break; }
+    if (place) continue;
+    // No word of the entry can take q: stop here (round fifty-eight).
+    if (!someWord(p.commonWords, q, match) && !p.synWords.some((g) => someWord(g, q, match))) return null;
+    (left ??= []).push(q);
   }
-  if (fromSyn.length) {
-    if (!p.synWords.some((g) => fromSyn.every((q) => g.some((w) => match(q, w))))) return null;
-    inOther += fromSyn.length;
+  const found = inName === qs.length ? (genus ? 0 : 1) : inName ? 2 : 3;
+  if (!left) return found;
+  // The words the common names take, all from one of them; what is left, from one older name.
+  if (oneOlder(p, left, match)) return found;
+  for (const cn of p.commonNames) {
+    const rest = left.filter((q) => !someWord(cn, q, match));
+    if (!rest.length || oneOlder(p, rest, match)) return found;
   }
-  if (inOther === 0) return genus ? 0 : 1;
-  return inName ? 2 : 3;
+  return null;
+}
+function someWord(ws: string[], q: string, match: (q: string, w: string) => boolean): boolean {
+  for (const w of ws) if (match(q, w)) return true;
+  return false;
+}
+function oneOlder(p: Prepared<unknown>, qs: string[], match: (q: string, w: string) => boolean): boolean {
+  for (const g of p.synWords) if (qs.every((q) => someWord(g, q, match))) return true;
+  return false;
+}
+
+/**
+ * The order of a reading's hits (round sixty-seven; triage-66 N2, N8). First the name typed as a name (rank 0: every
+ * word in the name, the genus first); then an older name typed as one (every word in one older name, its genus first:
+ * "Opuntia longispina" is Airampoa corrugata before the species with a variety of that name); then the common names,
+ * each read whole (one name holds every word: "cape aloe" is Aloe ferox, "Cape aloe", before an aloe of the Cape
+ * Provinces); then the other ranks. Within a group: a near hit by its distance from what was typed, the nearest first
+ * ("Ceropegia pica" is C. picta before C. dicapuae); then a name that is exactly the query, the headline first ("onion"
+ * is Allium cepa, "Onion", before Albuca's "Sea-onion"; "fig" is Ficus carica, "Fig"); then a hit whose every word is
+ * a whole word typed; then one whose headline holds every word; then the alphabet.
+ */
+const Group = { Name: 0, Older: 1, Common: 2, NameWords: 3, Mixed: 4, Other: 5 } as const;
+function group(p: Prepared<unknown>, qs: string[], r: number, match: (q: string, w: string) => boolean): number {
+  if (r === 0) return Group.Name;
+  // A binomial at least, every word but the last written in full: "coco plum" is no older name "Cocos plumosa" typed,
+  // and Chrysobalanus icaco, "Coco plum", comes first; one word is no older name typed either ("cactus" is not every
+  // species once a Linnaean Cactus, nor "mango" Garcinia mangostana, once Mangostana garcinia).
+  if (qs.length >= 2) for (const g of p.synWords) {
+    if (!g.length || !match(qs[0], g[0])) continue;
+    let ok = true;
+    for (let i = 0; i < qs.length && ok; i++) ok = i < qs.length - 1 ? g.includes(qs[i]) : someWord(g, qs[i], match);
+    if (ok) return Group.Older;
+  }
+  for (const cn of p.commonNames) if (holds(cn, qs, match)) return Group.Common;
+  return r === 1 ? Group.NameWords : r === 2 ? Group.Mixed : Group.Other;
+}
+/** Whether a name's words hold every query word. */
+function holds(ws: string[], qs: string[], match: (q: string, w: string) => boolean): boolean {
+  for (const q of qs) if (!someWord(ws, q, match)) return false;
+  return true;
+}
+function same(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+const prefix = (q: string, w: string) => w.startsWith(q);
+/**
+ * The order within a group, smallest first: an exact name, the headline's first; a hit of whole words; and, among the
+ * common names' hits, the headline holding every word. A name typed as a name is never put after another for its
+ * common name ("c" is Conophytum before Copiapoa, whatever their headlines).
+ */
+function closeness(p: Prepared<unknown>, qs: string[], g: number): number {
+  const common = g === Group.Common;
+  if (common && p.headed && same(p.commonNames[0], qs)) return 0;
+  if (same(p.nameWords, qs)) return 1;
+  for (const cn of p.commonNames) if (same(cn, qs)) return 1;
+  for (const s of p.synWords) if (same(s, qs)) return 1;
+  let whole = true;
+  for (const q of qs) if (!p.wordSet.has(q)) { whole = false; break; }
+  if (whole) return 2;
+  if (common && p.headed && holds(p.commonNames[0], qs, prefix)) return 3;
+  return 4;
+}
+/** Edit distance, stopped past `cap`. */
+function distance(a: string, b: string, cap = 9): number {
+  if (Math.abs(a.length - b.length) > cap) return cap + 1;
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return Math.min(prev[b.length], cap + 1);
+}
+/** How far a near hit is from what was typed: per query word, its distance from the nearest whole word of a name (round sixty-seven; triage-66 N8, S-B12). */
+function farness(p: Prepared<unknown>, qs: string[]): number {
+  const all = [...p.nameWords, ...p.commonWords, ...p.synWords.flat()];
+  return qs.reduce((n, q) => n + (all.length ? Math.min(...all.map((w) => distance(q, w))) : 0), 0);
 }
 
 /**
@@ -422,8 +540,9 @@ export function search<T extends Searchable>(prepared: Prepared<T>[], q: string,
   const qs = rankedWords(q);
   if (!qs.length) return [];
   const exact = (x: string, w: string) => w.startsWith(x);
-  // The first reading: the whole query against the common names, when the botanical reading would drop words (round
-  // sixty-two; B2). Every entry it finds has every typed word in its common names, and is ranked as the words rank it.
+  // The whole query against each common name, when the botanical reading would drop words (round sixty-two; B2): every
+  // entry it finds has every typed word in one of its common names (round sixty-seven; triage-66 N2). Otherwise the
+  // common names are read whole within the one reading, after a name typed as a name (`group`).
   const whole = wholeReading(q);
   if (whole) {
     const common = collect(prepared.filter((p) => inCommon(p, whole)), whole, exact);
@@ -435,17 +554,19 @@ export function search<T extends Searchable>(prepared: Prepared<T>[], q: string,
   // A capitalised word after the first of a genus-shaped query is a similar spelling only of a whole word (`capitalWords`).
   const strict = capitalWords(q);
   const near = strict ? (x: string, w: string) => (strict.has(x) ? w.startsWith(x) || (x.length >= 4 && edit1(x, w)) : nearPrefix(x, w)) : nearPrefix;
-  if (!hits.length && qs.some((x) => x.length >= 4)) hits = collect(prepared, qs, near);
+  if (!hits.length && qs.some((x) => x.length >= 4)) hits = collect(prepared, qs, near, true);
   // The near match too without the marker: "copiapoa cinera var" found the species before the marker was a word (round thirty-eight, R1-10).
-  if (!hits.length && trailingMarker && qs.slice(0, -1).some((x) => x.length >= 4)) hits = collect(prepared, qs.slice(0, -1), near);
+  if (!hits.length && trailingMarker && qs.slice(0, -1).some((x) => x.length >= 4)) hits = collect(prepared, qs.slice(0, -1), near, true);
   return hits.slice(0, limit).map((h) => h.p.item);
 }
 
-function collect<T>(prepared: Prepared<T>[], qs: string[], match: (q: string, w: string) => boolean) {
-  const hits: Array<{ p: Prepared<T>; r: number }> = [];
+function collect<T>(prepared: Prepared<T>[], qs: string[], match: (q: string, w: string) => boolean, near = false) {
+  const hits: Array<{ p: Prepared<T>; g: number; d: number; c: number }> = [];
   for (const p of prepared) {
     const r = rank(p, qs, match);
-    if (r != null) hits.push({ p, r });
+    if (r == null) continue;
+    const g = group(p, qs, r, match);
+    hits.push({ p, g, d: near ? farness(p, qs) : 0, c: closeness(p, qs, g) });
   }
-  return hits.sort((a, b) => a.r - b.r || (a.p.sortKey < b.p.sortKey ? -1 : a.p.sortKey > b.p.sortKey ? 1 : 0));
+  return hits.sort((a, b) => a.g - b.g || a.d - b.d || a.c - b.c || (a.p.sortKey < b.p.sortKey ? -1 : a.p.sortKey > b.p.sortKey ? 1 : 0));
 }

@@ -160,11 +160,15 @@ describe('import keys: a second run adds only what the first did not (the record
     expect([again.done, again.rows.length]).toEqual([1, 1]); // base: both lines skipped, or both added
     expect(collection.accessions).toHaveLength(2);
   });
-  it('a second sheet that starts its numbering again: "7 Lithops lesliei" is another plant, not skipped', async () => {
-    const { collection, run } = await fresh();
+  it('a second sheet that starts its numbering again: "7 Lithops lesliei" starts dropped, and "Add anyway" adds it as another plant', async () => {
+    const { collection, run, review, commitImport } = await fresh();
     await run(sheetOf('number,species,source\n7,Lithops lesliei,Bob\n'));
-    const second = await run(sheetOf('number,species,source\n7,Lithops lesliei,Mesa Garden\n'));
-    expect(second.rows.map((r) => [r.already, r.drop])).toEqual([[true, false]]); // said, and kept: base dropped it
+    const second = review(sheetOf('number,species,source\n7,Lithops lesliei,Mesa Garden\n'));
+    // Round sixty-seven (triage-66 R3, the outside review's 15): a line whose number and name match a plant here starts
+    // dropped whatever the plant's import key; round sixty-two kept it, and an edited sheet's CF-001 came back as CF-004.
+    expect(second.rows.map((r) => [r.already, r.drop])).toEqual([[true, true]]);
+    const kept = second.rows.map((r) => ({ ...r, drop: false })); // "Add anyway"
+    await commitImport(kept, new Map(), planNumbers(kept, collection.accessions.map((a) => a.acc!), collection.scheme, 2026, (n) => collection.isNumberTaken(n)), { makePlaces: false });
     expect(collection.accessions.map((a) => a.acc).sort()).toEqual(['7', '8']); // numbered on in the sheet's own numbering since round sixty-three (L3); 2026-0001 before
   });
   it('a backup\'s own plants.csv read back into its collection is every plant here already, by its record id', async () => {
@@ -200,7 +204,7 @@ describe('import keys: a second run adds only what the first did not (the record
     const keys = sheetOf(sheet)[0].importKeys!;
     await collection.addAccession({ taxonName: 'Copiapoa cinerea', acc: '2024-0001', acquired: '2024', importKey: keys[0] });
     const again = await run(sheetOf(sheet));
-    expect(again.rows.map((r) => [r.qty, r.partDone, r.number, r.drop])).toEqual([[2, 1, null, false]]); // base: the whole row "already imported"
+    expect(again.rows.map((r) => [r.qty, r.partDone, r.numberUsed, r.drop])).toEqual([[2, 1, true, false]]); // base: the whole row "already imported"; the line's own number is marked used, not dropped from the row (round sixty-seven; triage-66 R5)
     expect(collection.accessions.map((a) => [a.acc, a.importKey]).sort()).toEqual([['2024-0001', keys[0]], ['2024-0002', keys[1]], ['2024-0003', keys[2]]]);
   });
   it('the key is the line\'s cells: case, spaces, a guard apostrophe and empty cells at the end do not change it', () => {

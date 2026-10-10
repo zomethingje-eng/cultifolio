@@ -30,7 +30,7 @@ function block(file: string, signature: string): string {
   return text.slice(at, end + indent.length + 2);
 }
 
-const RECORDED = { rules: 7, hash: '685626fd8eba464d5927b91ba3af936a' }; // round sixty-two: 7, a stored park of a marked stamp is not read (the clock review's 8); the hash takes in the blocks A42 named; re-recorded at the merge for vault.ts's ledger read once and the field list's importKey (an unknown field was always accepted, so no fold changes); re-recorded in the second pass for the push's parked verdicts and the batch's `parked` (a fold of a given log, parked set and clock is unchanged: the behaviour hash holds); re-recorded in round sixty-three for the recorded time beside the stamp (`w`), which no fold reads, and the vault's keeping of the earliest one (agent L; the behaviour hash holds); re-recorded at the merge for the vault's and engine's refusal words, sample to example (no fold changes); re-recorded in round sixty-four for the load no longer waiting on the browser's answer to persist(), and not asking it with nothing to keep (agent F; no fold changes); re-recorded in round sixty-four for the all-engines fixes (the persistence ask not waited for, photographs kept as bytes where a Blob is refused): no fold reads either, and the behaviour hash holds
+const RECORDED = { rules: 7, hash: '985a1f8db4922b794473bf27ca41e5c1' }; // round sixty-two: 7, a stored park of a marked stamp is not read (the clock review's 8); the hash takes in the blocks A42 named; re-recorded at the merge for vault.ts's ledger read once and the field list's importKey (an unknown field was always accepted, so no fold changes); re-recorded in the second pass for the push's parked verdicts and the batch's `parked` (a fold of a given log, parked set and clock is unchanged: the behaviour hash holds); re-recorded in round sixty-three for the recorded time beside the stamp (`w`), which no fold reads, and the vault's keeping of the earliest one (agent L; the behaviour hash holds); re-recorded at the merge for the vault's and engine's refusal words, sample to example (no fold changes); re-recorded in round sixty-four for the load no longer waiting on the browser's answer to persist(), and not asking it with nothing to keep (agent F; no fold changes); re-recorded in round sixty-four for the all-engines fixes (the persistence ask not waited for, photographs kept as bytes where a Blob is refused): no fold reads either, and the behaviour hash holds; re-recorded in round sixty-seven for the clock in force (R2), a malformed change skipped (R10), the vault's seed meta, range tail read and pending-switch refusal (C1, C2, R1, R13), `w`'s bounds (R9) and the example closed under a page (V3): no fold of a readable log changes, and the behaviour hash holds
 
 describe('the fold rules number (round fifty-seven)', () => {
   it('moves whenever the fold\'s source does', () => {
@@ -170,6 +170,87 @@ describe('the fold of a fixed set of logs, clocks and arrivals (round sixty-two)
       const all = [await outcome('unchecked', false, false), await outcome('checked', true, false), await outcome('arrivals', true, true)];
       const hash = md5(JSON.stringify(all));
       if (hash !== RECORDED_FOLDS) expect.fail(`The fold of the fixed logs came out as ${hash}, recorded ${RECORDED_FOLDS}. If the fold's rules changed, bump FOLD_RULES and record the hash; the outcome was ${JSON.stringify(all)}`);
+    } finally {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    }
+  }, 300_000);
+});
+
+/*
+ * The parks' own behaviour (round sixty-seven; triage-66 H8, R45-29). The guard above passed with any of these changed:
+ * the backup's `fileParks` keeping an older build's clock-only parks, `stillWaiting` always true, `applyParked` not
+ * applying a parked restore, and `parkedFor` offering the earliest parked value of a field. Each shapes what a grower is
+ * shown or what a restore stores, so each is hashed here, under its own recorded value: the hash above stays as it was,
+ * and a change to either says which half moved.
+ */
+const RECORDED_PARKS = '8e7b91d8fd5a019c14d26b1a08278b70'; // round sixty-seven, under FOLD_RULES 7; re-recorded at the merge for R6 alone: a round-sixty-one file's parks are read as parks (the `files` part moved, `before` and `after` are as recorded)
+
+describe('what the parks offer, apply and keep (round sixty-seven; triage-66 H8)', () => {
+  it('comes out as recorded', async () => {
+    const DAY = 86_400_000;
+    const T0 = Date.UTC(2026, 9, 4, 12, 0, 0);
+    const store = new Map<string, string>();
+    vi.stubGlobal('localStorage', { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v), removeItem: (k: string) => void store.delete(k) });
+    vi.stubGlobal('performance', { now: () => Date.now() - T0 });
+    vi.useFakeTimers({ toFake: ['Date'], now: T0 });
+    try {
+      const hlc0 = await import('$core/hlc');
+      const OWN = 'aaaaaaaaaaaa0000', PEER = 'bbbbbbbbbbbb0000';
+      const st = (ms: number, n: number, dev: string) => hlc0.hlcEncode({ wall: T0 + ms, count: n, device: dev });
+      const rec = (id: string, t0: number, dev: string, fields: Record<string, unknown>): Change[] => Object.entries(fields).map(([field, value], i) => ({ t: st(t0, i, dev), kind: 'accession', id, field, value }));
+      const heldPrice = st(3600_000, 0, PEER);
+      const log: Change[] = [
+        // A held change (an hour ahead) that an edit here has been stamped past, and one nothing has: `stillWaiting`
+        // counts the second alone.
+        ...rec('h1', -DAY, PEER, { taxonName: 'Copiapoa cinerea', status: 'growing', acc: '2026-0011' }),
+        { t: heldPrice, kind: 'accession', id: 'h1', field: 'price', value: 'an hour ahead: held, then overridden' },
+        { t: hlc0.hlcPast(heldPrice, OWN), kind: 'accession', id: 'h1', field: 'price', value: 'mine, placed past the held price' },
+        { t: st(3600_000, 1, PEER), kind: 'accession', id: 'h1', field: 'notes', value: 'an hour ahead: held, still waiting' },
+        // Two parked values of one field: `parkedFor` offers the later.
+        ...rec('k1', -DAY + 10, PEER, { taxonName: 'Lithops lesliei', status: 'growing', acc: '2026-0012' }),
+        { t: st(7 * DAY, 0, PEER), kind: 'accession', id: 'k1', field: 'notes', value: 'seven days ahead: the earlier park' },
+        { t: st(8 * DAY, 0, PEER), kind: 'accession', id: 'k1', field: 'notes', value: 'eight days ahead: the later park' },
+        // A removed plant whose restore is parked: `applyParked` restores it.
+        ...rec('r1', -DAY + 20, PEER, { taxonName: 'Haworthia retusa', status: 'growing', acc: '2026-0013' }),
+        { t: st(-1000, 0, PEER), kind: 'accession', id: 'r1', field: '_deleted', value: true },
+        { t: st(6 * DAY, 0, PEER), kind: 'accession', id: 'r1', field: '_deleted', value: false }
+      ];
+      G.__foldMem = { device: 'aaaaaaaaaaaa', changes: new Map(log.map((c) => [c.t, structuredClone(c)])), meta: new Map<string, unknown>([['parked', []], ['parkedDone', []]]) };
+      store.clear();
+      vi.resetModules();
+      const hlc = await import('$core/hlc');
+      hlc.trustServerTime(T0, T0);
+      const { collection } = await import('$lib/db/collection.svelte');
+      await collection.load();
+      const { isParked } = await import('$core/log');
+      const hold = { now: hlc.nowMs(), except: collection.device, arrival: T0, parked: collection.storedParks, clockChecked: hlc.clockChecked() };
+      if (await collection.markParked(log.filter((c) => isParked(c.t, hold) && !collection.storedParks.has(c.t)))) await collection.rebuild();
+      const ids = ['h1', 'k1', 'r1'];
+      // Read as text when shown: the records are live objects, and a later apply would change what an earlier reading holds.
+      // An edit made here is stamped by this tab's own tag, drawn at random per load, so the tag is left out.
+      const show = () => JSON.parse(JSON.stringify({
+        records: ids.map((id) => collection.accession(id) ?? collection.removedAccession(id) ?? null),
+        offered: ids.map((id) => collection.parkedFor('accession', id).map((c) => [c.field, c.value])),
+        held: collection.heldWaiting
+      }).replace(/(-aaaaaaaaaaaa)(?!0000)[0-9a-z]{4}/g, '$1tab0'));
+      const before = show();
+      await collection.applyParked('accession', 'r1');
+      await collection.applyParked('accession', 'k1');
+      const after = show();
+      // A backup's parks, by the build that wrote the file: an older build's list is not read (it may hold parks of that
+      // device's clock alone); a list written since round sixty-two's second pass is.
+      const { fileParks } = await import('$lib/backup/io');
+      const files = [
+        fileParks({ v: 1, parked: ['p'] }),
+        fileParks({ v: 1, app: 'cultifolio 3', parked: ['p'] }),
+        fileParks({ v: 1, app: 'cultifolio 3 (stored parks)', parked: ['p'] }),
+        fileParks({ v: 2, app: 'cultifolio 3 (stored parks)', parked: ['p'] }),
+        fileParks({ v: 2, parked: ['p'] })
+      ];
+      const all = { before, after, files };
+      const hash = md5(JSON.stringify(all));
+      if (hash !== RECORDED_PARKS) expect.fail(`The parks came out as ${hash}, recorded ${RECORDED_PARKS}. If the fold's rules changed, bump FOLD_RULES and record the hash; the outcome was ${JSON.stringify(all)}`);
     } finally {
       vi.useRealTimers();
       vi.unstubAllGlobals();

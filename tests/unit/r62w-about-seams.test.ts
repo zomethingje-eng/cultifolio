@@ -133,30 +133,61 @@ describe('storage keys, by the store each is kept in, both ways', () => {
 
 /* ---- IndexedDB, cache storage, lock and channel names ---- */
 describe('IndexedDB, cache, lock and channel names, both ways', () => {
-  /** Each name the code gives the browser, from the call that gives it, as the page writes it (a template's fixed part). */
+  type Kind = 'idb' | 'cache' | 'lock' | 'channel';
+  /**
+   * A call whose name is one the code reads back rather than gives: the worker's look through the caches it keeps for an
+   * old build's file opens each name `caches.keys()` lists (round sixty-seven; triage-66 P2). Named here, file and
+   * argument, so no other call is let through.
+   */
+  const READ_BACK = new Set(['src/service-worker.ts: k']);
+  /**
+   * Each name the code gives the browser, from the call that gives it, as the page writes it (a template's fixed part),
+   * with the kind of store the call names. Round sixty-seven (triage-66 P4; R45-13): an argument holding `name` or `n`
+   * was skipped unread, which no call needed; every argument is now read or named above.
+   */
   const inCode = () => {
-    const names = new Set<string>();
+    const names = new Map<string, Kind>();
     const fixed = (expr: string) => /['"`](cultifolio[\w-]*:?)/.exec(expr)?.[1] ?? null;
     for (const f of source) {
       const s = raw(f);
       const consts = new Map<string, string>();
       for (const m of s.matchAll(/const\s+([A-Z_][A-Z0-9_]*)\s*=\s*([^;\n]+)/g)) consts.set(m[1], m[2]);
       const resolve = (arg: string) => { const a = arg.trim(); return consts.get(a) ?? a; };
-      for (const m of s.matchAll(/(?:caches\.open|locks\.request|new BroadcastChannel|openDB<\w+>|openDB|deleteDatabase|deleteDB)\(\s*([^,)]+)/g)) {
-        const e = resolve(m[1]);
+      for (const m of s.matchAll(/(caches\.open|locks\.request|new BroadcastChannel|openDB<\w+>|openDB|deleteDatabase|deleteDB)\(\s*([^,)]+)/g)) {
+        const kind: Kind = m[1] === 'caches.open' ? 'cache' : m[1] === 'locks.request' ? 'lock' : m[1] === 'new BroadcastChannel' ? 'channel' : 'idb';
+        if (READ_BACK.has(`${f}: ${m[2].trim()}`)) continue;
+        const e = resolve(m[2]);
         // The vault's database is chosen by a flag: both of its names, and the sample's staging copy follows the template.
-        for (const lit of e.matchAll(/['"`](cultifolio[\w-]*:?)(?=['"`$])/g)) names.add(lit[1]);
-        if (/\$\{DB_NAME\}-vault/.test(e)) { names.add('cultifolio-vault'); names.add('cultifolio-demo-vault'); }
-        if (!fixed(e) && !/DB_NAME/.test(e) && !/\bname\b|\bn\b/.test(e)) names.add(`?${e}`);
+        for (const lit of e.matchAll(/['"`](cultifolio[\w-]*:?)(?=['"`$])/g)) names.set(lit[1], kind);
+        const vaultChannel = /^`\$\{DB_NAME\}-vault`$/.test(e.trim());
+        if (vaultChannel) { names.set('cultifolio-vault', 'channel'); names.set('cultifolio-demo-vault', 'channel'); }
+        if (!fixed(e) && !vaultChannel) names.set(`?${f}: ${e}`, kind);
       }
     }
     return names;
   };
-  it('every name the code gives is on /about/how or /about/formats', () => {
+  /** A name on the page as a whole name, never inside a longer one: `cultifolio` is not "in" `cultifolio-corpus`. */
+  const whole = (text: string, n: string) => new RegExp(`(?<![\\w./-])${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}${n.endsWith('-') || n.endsWith(':') ? '' : '(?![\\w-])'}`).test(text);
+  /** The part of /about/how's key list that says each kind of store, from its opening words to the next part's. */
+  const part = (from: string, to: string) => { const a = how.indexOf(from); const b = how.indexOf(to, a + 1); expect(a, from).toBeGreaterThan(-1); expect(b, to).toBeGreaterThan(a); return how.slice(a, b); };
+  const parts = (): Record<Kind, string> => ({
+    idb: part('in IndexedDB, the collection itself', 'in the cache storage'),
+    cache: part('in the cache storage', "in the browser's own HTTP cache"),
+    lock: part('names the browser holds for coordination', 'And one path does reach the server'),
+    channel: part('names the browser holds for coordination', 'And one path does reach the server')
+  });
+  it('every call names its store by a name the walk could read', () => {
     const names = inCode();
     expect(names.size).toBeGreaterThan(6);
-    expect([...names].filter((n) => n.startsWith('?')).sort()).toEqual([]); // every call's name was read
-    expect([...names].filter((n) => !pages.includes(n)).sort()).toEqual([]);
+    expect([...names.keys()].filter((n) => n.startsWith('?')).sort()).toEqual([]); // every call's name was read
+  });
+  it('every name the code gives is named, whole, in the part of /about/how about its kind of store', () => {
+    const names = inCode();
+    expect(whole('(cultifolio-corpus)', 'cultifolio')).toBe(false); // a longer name does not count
+    expect(whole('(cultifolio; cultifolio-demo)', 'cultifolio')).toBe(true);
+    // The sample's locks and channel are said on formats too, where what they do is; /about/how names them in its list.
+    const p = parts();
+    expect([...names].filter(([n, k]) => !whole(p[k], n)).map(([n, k]) => `${k}: ${n}`).sort()).toEqual([]);
   });
   it('every such name the pages give is one the code uses', () => {
     const names = inCode();

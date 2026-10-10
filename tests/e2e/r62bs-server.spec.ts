@@ -5,6 +5,7 @@
  */
 import { test, expect } from '@playwright/test';
 import { createHash } from 'node:crypto';
+import { docAddress } from './helpers/address';
 
 const B32 = 'ABCDEFGHJKMNPQRSTVWXYZ23456789';
 const vaultIdFor = (token: string) => { const d = createHash('sha256').update('id:' + token).digest(); let s = ''; for (let i = 0; i < 26; i++) s += B32[d[i] % B32.length]; return s; };
@@ -14,7 +15,7 @@ test('a claim on a first generation names it in a pointer; the photograph reads,
   const token = createHash('sha256').update(`r62bs ${Date.now()} ${Math.random()}`).digest('hex');
   const id = vaultIdFor(token);
   const auth = { authorization: `Bearer ${token}` };
-  expect((await request.post('/api/sync/vault', { headers: { 'cf-connecting-ip': '198.51.100.63' }, data: { id, token, create: true } })).status()).toBe(200);
+  expect((await request.post('/api/sync/vault', { headers: { 'cf-connecting-ip': docAddress() }, data: { id, token, create: true } })).status()).toBe(200);
   const url = `/api/sync/photo/p00r62bs?vault=${id}`;
   const put = (bytes: number[]) => request.put(url, { headers: { ...auth, 'x-photo-drop': OWNER, 'content-type': 'application/octet-stream' }, data: Buffer.from(bytes) });
   const get = async () => { const r = await request.get(url, { headers: auth }); return r.status() === 200 ? [...(await r.body())] : r.status(); };

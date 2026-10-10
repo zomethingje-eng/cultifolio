@@ -51,29 +51,31 @@ async function fileFrom(app: string | undefined) {
   return { blob: new Blob(built.parts as BlobPart[], { type: 'application/zip' }), ahead };
 }
 
-describe('a backup from a build before round sixty-two: its parks are not stored', () => {
-  it('merge: the change is judged here (held, the clock not confirmed), and nothing is stored as parked', { timeout: 120_000 }, async () => {
+// Round sixty-seven (triage-66 R6, the self-review's C2): reversed. An older build's list is read as parks: its clock-only
+// parks were of changes that had arrived by sync, where the clock's verdict and the arrival's agree, and not reading it
+// folded a change every device had parked over the grower's later edits. A wrong park is offered with Apply.
+describe('a backup from a build before round sixty-two: its parks are read as parks (round sixty-seven)', () => {
+  it('merge: the listed change is stored as parked', { timeout: 120_000 }, async () => {
     const { blob, ahead } = await fileFrom('cultifolio 3');
     const b = await boot();
     await b.store.collection.load();
     const io = await import('$lib/backup/io');
     await io.restoreBackup(await io.openBackup(new File([blob], 'old.cultifolio.zip')), 'merge');
-    expect((await b.vault.getMeta<string[]>('parked')) ?? []).toEqual([]);
-    expect(b.store.collection.heldList()).toContain(ahead.t);
+    expect((await b.vault.getMeta<string[]>('parked')) ?? []).toEqual([ahead.t]);
   });
-  it('replace: nothing is stored as parked', { timeout: 120_000 }, async () => {
-    const { blob } = await fileFrom(undefined);
+  it('replace: the listed change is stored as parked', { timeout: 120_000 }, async () => {
+    const { blob, ahead } = await fileFrom(undefined);
     let b = await boot();
     await b.store.collection.load();
     const io = await import('$lib/backup/io');
     await io.restoreBackup(await io.openBackup(new File([blob], 'old.cultifolio.zip')), 'replace');
     b = await boot();
-    expect((await b.vault.getMeta<string[]>('parked')) ?? []).toEqual([]);
+    expect((await b.vault.getMeta<string[]>('parked')) ?? []).toEqual([ahead.t]);
   });
   it('a file of this build keeps its verdicts: merge stores the park', { timeout: 120_000 }, async () => {
     const io = await import('$lib/backup/io');
-    expect(io.fileParks({ v: 1, app: 'cultifolio 3', parked: ['x'] })).toEqual([]);
-    expect(io.fileParks({ v: 1, parked: ['x'] })).toEqual([]);
+    expect(io.fileParks({ v: 1, app: 'cultifolio 3', parked: ['x'] })).toEqual(['x']);
+    expect(io.fileParks({ v: 1, parked: ['x'] })).toEqual(['x']);
     expect(io.fileParks({ v: 2, app: 'cultifolio 3', parked: ['x'] })).toEqual(['x']); // version 2 is this round's
     const { blob, ahead } = await fileFrom('cultifolio 3 (stored parks)');
     const b = await boot();

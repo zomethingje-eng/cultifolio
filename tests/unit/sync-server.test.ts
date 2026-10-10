@@ -357,23 +357,24 @@ describe('the live byte counter in KV', () => {
     expect(await vaultBytes(r2 as never, kv as never, 'v', m, T0 + 86_400_000, true)).toBe(12); // vault open: forced
   });
   it('an address has a day\'s allowance across its vaults: 429 with Retry-After to midnight UTC, nothing stored', async () => {
+    // Photographs: a log batch of 16 KB or less is not counted against the day since round sixty-seven (triage-66 S9).
     const r2 = fakeR2();
     const kv = fakeKV();
     kv.m.set('ipbytes:1.2.3.4:2026-09-20', String(MAX_IP_BYTES_PER_DAY - 5));
-    await storeCounted(r2 as never, 'v', meta(), 'vault/v/log/a.bin', new Uint8Array(5), undefined, {}, q(kv));
+    await storeCounted(r2 as never, 'v', meta(), 'vault/v/photo/p000001.bin', new Uint8Array(5), undefined, {}, q(kv));
     expect(kv.m.get('ipbytes:1.2.3.4:2026-09-20')).toBe(String(MAX_IP_BYTES_PER_DAY));
     // the key expires at a fixed moment, the midnight that ends the next day, not a TTL each write renews (round twenty-four, 6)
     expect(kv.opts.get('ipbytes:1.2.3.4:2026-09-20')).toEqual({ expiration: Date.parse('2026-09-22T00:00:00Z') / 1000 });
-    const p = storeCounted(r2 as never, 'w', meta(), 'vault/w/log/a.bin', new Uint8Array(1), undefined, {}, q(kv));
+    const p = storeCounted(r2 as never, 'w', meta(), 'vault/w/photo/p000001.bin', new Uint8Array(1), undefined, {}, q(kv));
     await expect(p).rejects.toBeInstanceOf(DayQuota);
     const res = (await p.then(() => null, (e: DayQuota) => e))!.response();
     expect(res.status).toBe(429);
     expect(res.headers.get('retry-after')).toBe(String(12 * 3600));
     expect(res.headers.get('cache-control')).toBe('no-store');
     expect(await res.json()).toMatchObject({ error: expect.stringMatching(/allowance/), bytes: MAX_IP_BYTES_PER_DAY, limit: MAX_IP_BYTES_PER_DAY });
-    expect(r2.objs.has('vault/w/log/a.bin')).toBe(false);
+    expect(r2.objs.has('vault/w/photo/p000001.bin')).toBe(false);
     // Another address is unaffected.
-    await storeCounted(r2 as never, 'w', meta(), 'vault/w/log/a.bin', new Uint8Array(1), undefined, {}, q(kv, '5.6.7.8'));
+    await storeCounted(r2 as never, 'w', meta(), 'vault/w/photo/p000001.bin', new Uint8Array(1), undefined, {}, q(kv, '5.6.7.8'));
   });
   it('a listing walks at most MAX_LIST_PAGES pages: a vault past that is refused with 503, not listed short', async () => {
     const r2 = fakeR2();

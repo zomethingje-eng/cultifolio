@@ -30,20 +30,28 @@
   // One write at a time: "Add place" pressed twice, or the form's own button pressed while the place is written, waits
   // for the same place rather than making a second (round sixty-six).
   let making: Promise<void> | null = null;
+  /** Why the place was not made, shown in the picker (round sixty-seven; triage-66 R12, the outside review's 18: Add did nothing, with no word). */
+  let err = $state('');
   function create(): Promise<void> {
     if (making) return making;
     if (!newName.trim()) return Promise.resolve();
+    err = '';
     making = (async () => {
-      const loc = await collection.addLocation({ name: newName.trim(), type: newKind, parentId: newParent });
-      value = loc.id;
-      adding = false;
-      newName = '';
+      try {
+        const loc = await collection.addLocation({ name: newName.trim(), type: newKind, parentId: newParent });
+        value = loc.id;
+        adding = false;
+        newName = '';
+      } catch (e) {
+        err = (e instanceof Error && e.message) || collection.lastWriteError || 'It could not be saved.';
+        throw e; // the form that waited for it stops, rather than save without its place
+      }
     })().finally(() => (making = null));
     return making;
   }
   /** What the form's own button waits for (`settlePlaces`): the place being written, or the one named and not yet added. */
   const settle = () => making ?? (adding && newName.trim() ? create() : Promise.resolve());
-  $effect(() => holdPlacePicker(settle));
+  $effect(() => holdPlacePicker(id, settle));
 </script>
 
 <div class="picker">
@@ -65,13 +73,15 @@
         {#each flat as f}<option value={f.id}>{f.label}</option>{/each}
       </select></label>
       <p class="small muted path">{newParent ? `${collection.locationName(newParent)} › ` : ''}{newName.trim() || '…'}</p>
-      <div class="row"><button class="btn small" type="button" onclick={() => (adding = false)}>Cancel</button><button class="btn small pri" type="button" onclick={create} disabled={!newName.trim()}>Add place</button></div>
+      {#if err}<p class="small bad" role="alert" id="{id}-err">The place was not made. {err}</p>{/if}
+      <div class="row"><button class="btn small" type="button" onclick={() => { adding = false; err = ''; }}>Cancel</button><button class="btn small pri" type="button" onclick={() => void create().catch(() => {})} disabled={!newName.trim()}>Add place</button></div>
     </div>
   {/if}
 </div>
 
 <style>
   .path { margin: 2px 0 0; }
+  .bad { color: var(--bad); margin: 0; }
   .picker { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
   select, input { padding: 0.5em 0.8em; min-height: var(--tap); border: 1px solid var(--field-edge); border-radius: var(--r); background: var(--card); } /* an edge at 3:1 (round fifty-nine) */
   .picker > select { flex: 1; min-width: 12rem; }

@@ -62,6 +62,15 @@ export async function synonymInIndex(platform: Platform, fetch: Fetch, slug: str
  * sixty-two; the self-review's triage, agent S's need).
  */
 export async function synonymOf(platform: Platform, fetch: Fetch, slug: string, held: Loaded | undefined, ip: string | null): Promise<SynonymAnswer | null | 'unchecked' | 'held'> {
+  const a = await synonymAsk(platform, fetch, slug, held, ip);
+  return a === 'refused' ? 'unchecked' : a;
+}
+/**
+ * `synonymOf`, with GBIF's own refusal of this site's request (its 429 or 403) as `'refused'`, which the 404 says as
+ * that, never as "GBIF's name service did not answer" (round sixty-seven; triage-66 S8, R45-11). `synonymOf` keeps its
+ * answers (a refusal is `'unchecked'` there) for a caller that does not word the two apart.
+ */
+export async function synonymAsk(platform: Platform, fetch: Fetch, slug: string, held: Loaded | undefined, ip: string | null): Promise<SynonymAnswer | null | 'unchecked' | 'held' | 'refused'> {
   const name = nameFromSlug(slug);
   if (!name || !/^[A-Z][a-z]+ [a-z]/.test(name)) return null; // a binomial at least: a bare genus is not a species address
   const cacheKey = new Request(`https://cache.cultifolio/match?name=${encodeURIComponent(name.toLowerCase())}`);
@@ -75,6 +84,7 @@ export async function synonymOf(platform: Platform, fetch: Fetch, slug: string, 
     if (!(await upstreamCall(platform, ['gbif'], ip)).ok) return 'held'; // held back by the site, said as that (round sixty-one; the server review, 4)
     try {
       const r = await fetch(`${MATCH}?kingdom=Plantae&strict=false&name=${encodeURIComponent(name)}`, { headers: { accept: 'application/json', 'user-agent': 'Cultifolio/3.0 (https://cultifolio.com)' } });
+      if (r.status === 429 || r.status === 403) return 'refused';
       if (!r.ok) return 'unchecked';
       body = (await r.json()) as Record<string, unknown>;
       if (cache) platform?.context?.waitUntil?.(cache.put(cacheKey, new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json', 'cache-control': 'public, max-age=86400' } })).catch(() => {}));

@@ -12,7 +12,7 @@
  */
 import { it, expect, vi, beforeEach, afterEach, describe } from 'vitest';
 
-const col = { ready: true, accessions: [] as unknown[], sowings: [] as unknown[], locations: [] as unknown[], mySpecies: new Map<string, unknown>(), heldWaiting: 0, parkedRecords: 0 };
+const col = { ready: true, accessions: [] as unknown[], sowings: [] as unknown[], locations: [] as unknown[], taxa: [] as unknown[], mySpecies: new Map<string, unknown>(), heldWaiting: 0, parkedRecords: 0, recordCount: 0 };
 vi.mock('$lib/db/collection.svelte', () => ({ collection: col }));
 vi.mock('$app/environment', () => ({ browser: true, dev: false, building: false, version: 'test' }));
 const syncState = { configured: false, busy: null as string | null };
@@ -45,7 +45,7 @@ const def = (k: string, value: unknown) => Object.defineProperty(globalThis, k, 
 
 beforeEach(async () => {
   ss.clear(); ls.clear(); asked = []; reloads = 0; onNavigate = 'go'; router.stays = false; router.asked = [];
-  Object.assign(col, { ready: true, accessions: [], sowings: [], locations: [], mySpecies: new Map(), heldWaiting: 0, parkedRecords: 0 });
+  Object.assign(col, { ready: true, accessions: [], sowings: [], locations: [], taxa: [], mySpecies: new Map(), heldWaiting: 0, parkedRecords: 0, recordCount: 0 });
   Object.assign(syncState, { configured: false, busy: null });
   loc.pathname = '/plants/new';
   win = new EventTarget();

@@ -26,7 +26,9 @@ async function ask(nwsOk: boolean, hit?: Response) {
 describe('a forecast whose NWS alerts were refused', () => {
   it('is kept five minutes at the edge and in the browser, not an hour', async () => {
     const { r, body, puts } = await ask(false);
-    expect(body.alertsStatus).toBe('refused');
+    // The NWS's 503 is its not answering, recorded apart from a refusal since round sixty-seven (triage-66 S8), and kept
+    // the same five minutes.
+    expect(body.alertsStatus).toBe('unanswered');
     expect([r.headers.get('cache-control'), puts]).toEqual(['public, max-age=300', [{ cc: 'public, max-age=300' }]]);
   });
   it('read back from the edge, the browser is told only what is left of the five minutes', async () => {

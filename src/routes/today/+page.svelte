@@ -28,10 +28,11 @@
   import { wateredHere, type Watered } from '$lib/ui/watered.svelte';
   import { toast } from '$lib/ui/toast.svelte';
   import { today as day } from '$lib/ui/day.svelte';
-  import { sheetsFor, type Sheet } from '$lib/ui/index.svelte';
+  import { sheetsOr, isUnreached, waitLeft, type Sheet, type Unreached } from '$lib/ui/index.svelte';
+  import { unreachedClause, againWords } from '$lib/ui/reach-words';
   import { growingYear, forReader } from '$core/sheet';
   import { speciesSlug } from '$core/names';
-  import { inDemo } from '$lib/db/demo';
+  import { PAGE_IN_DEMO } from '$lib/db/demo';
   // An empty collection's Today opens the example collection, or offers it (round sixty-three, V2).
   import ExampleOffer from '$lib/ui/grow/ExampleOffer.svelte';
   import { example } from '$lib/ui/grow/example.svelte';
@@ -108,6 +109,22 @@
    * rule 2; the grower review, 1, the accessibility review, 2, the outside review's A6).
    */
   let sheetsFailed = $state(false);
+  /** Why the sheets gave no answer, so a refusal or a limit is said as one, not as silence (round sixty-seven; triage-66 S8, IND-7). */
+  let sheetsWhy = $state<Unreached | null>(null);
+  /** The clock for "Check again" while a Retry-After runs: ticks each second only then (round sixty-seven; triage-66 S8). */
+  let nowMs = $state(Date.now());
+  const sheetsWait = $derived(waitLeft(sheetsWhy, nowMs));
+  $effect(() => {
+    if (!sheetsWhy?.retryAfter) return;
+    const t = setInterval(() => { nowMs = Date.now(); if (!waitLeft(sheetsWhy, nowMs)) clearInterval(t); }, 1000);
+    return () => clearInterval(t);
+  });
+  /** "Check again", only once the server's Retry-After is over: asked sooner, it was refused again at once (R45-11). */
+  function checkAgain() {
+    if (!sheetsSettled || waitLeft(sheetsWhy)) return;
+    sheetsTry++;
+  }
+  const sheetsClause = $derived(sheetsWhy ? unreachedClause(sheetsWhy, 'the species sheets', nowMs) : 'the species sheets did not answer');
   /** A first read still running after five seconds says so: "Reading…" for ten or twenty seconds read as a page that had stopped (round sixty-two; the accessibility review, 2). */
   let sheetsSlow = $state(false);
   /** How long a read is waited for before it is taken as not answered: past the reference's own ten-second limit, so this only catches a read that limit did not end (round sixty-two). */
@@ -125,17 +142,17 @@
     const gen = ++sheetsGen;
     let done = false;
     const slow = setTimeout(() => { if (!done && gen === sheetsGen) sheetsSlow = true; }, 5_000);
-    const settle = (m: Map<string, Sheet> | null) => {
+    const settle = (m: Map<string, Sheet> | Unreached | null) => {
       if (done || gen !== sheetsGen) return; // a read overtaken by a newer one, or one already taken as not answered
       done = true;
       holdFocus();
       clearTimeout(slow); clearTimeout(cap);
-      if (m) { slugs.forEach((x) => sheetsAsked.add(x)); sheets = m; sheetsFailed = false; }
-      else sheetsFailed = true; // the slugs stay unasked: the next look asks again (round sixty-two; A6)
+      if (m && !isUnreached(m)) { slugs.forEach((x) => sheetsAsked.add(x)); sheets = m; sheetsFailed = false; sheetsWhy = null; }
+      else { sheetsFailed = true; sheetsWhy = m ?? null; nowMs = Date.now(); } // the slugs stay unasked: the next look asks again (round sixty-two; A6)
       sheetsSlow = false; sheetsSettled = true; sheetsOnce = true;
     };
     const cap = setTimeout(() => settle(null), SHEETS_WAIT_MS);
-    void sheetsFor(slugs).then(settle, () => settle(null));
+    void sheetsOr(slugs).then(settle, () => settle(null));
   });
   /**
    * "Check again" sits in the line it takes away: when the sheets answer, focus on it goes to its stop's heading (else the
@@ -352,7 +369,10 @@
     <div class="secrule"><h2 id="water-h" tabindex="-1">By place</h2><div class="line"></div></div>
     <!-- The stops wait for the species sheets as their buttons did: a stop drawn before them reflowed as its resting plants
          moved to their own row, and the page shifted under the reader (round sixty-one; the accessibility review, 5). -->
-    {#if !collection.ready || (growing.length && !sheetsOnce)}
+    {#if collection.failed}
+      <!-- A browser that refuses the collection's storage is said, not left opening (round sixty-seven; triage-66 R10, R45-23). -->
+      <div class="notice err" role="alert" id="today-failed">{collection.failed}</div>
+    {:else if !collection.ready || (growing.length && !sheetsOnce)}
       <p class="small muted">{collection.ready ? (sheetsSlow ? 'Still reading the species sheets…' : 'Reading the species sheets…') : 'Opening the collection…'}</p>
     {:else if !growing.length}
       <ExampleOffer what="today"><div class="emptybox"><p class="muted" style="margin: 0">No growing plants yet. <a href="/plants/new">Add one</a> and this page says what it needs.</p></div></ExampleOffer>
@@ -371,7 +391,7 @@
           {@const total = s.overdue.length + s.unknown.length}
           <li class="stop" id="stop-{s.key}" style="--depth: {s.depth}{s.watered?.height ? `; min-height: ${s.watered.height}px` : ''}">
             <div class="head">
-              <h3 tabindex="-1">{#if s.place}<a href="/places/{s.place.id}">{s.place.name}</a>{:else}No place{/if} <span class="muted small">{s.n} growing{s.place && collection.children(s.place.id).length ? ' here and inside' : ''}</span></h3>
+              <h3 tabindex="-1">{#if s.place}<a href="/places/{s.place.id}">{s.place.name}</a>{:else}No place{/if}<span class="sr">,</span> <span class="muted small">{s.n} growing{s.place && collection.children(s.place.id).length ? ' here and inside' : ''}</span></h3>
               <!-- Water while something is ticked; with nothing ticked, words, not a disabled "Water 0 of 3"; and the done mark only once nothing ticked is left anywhere on the stop (round fifty-eight; round sixty). -->
               {#if total && n}
                 <!-- While the sheets are read again, the reason is said beside the button, not only on hover (round sixty-one; the accessibility review, 13). -->
@@ -385,7 +405,7 @@
             </div>
             {#if restUnread(s)}
               <!-- Drawn with the stops, after the first read's hold, so nothing moves once they are shown; one line a stop, not one a plant (round sixty-two; rule 2, A6). -->
-              <p class="row restnc"><NotChecked what="Resting months" why="The species sheets did not answer, so no plant here is set apart for its habitat's rest." /><span>: the species sheets did not answer. Every plant past its rhythm is listed.</span> <button class="linkish" type="button" onclick={() => sheetsTry++} aria-disabled={!sheetsSettled}>Check again</button></p>
+              <p class="row restnc"><NotChecked what="Resting months" why={`${sheetsClause[0].toUpperCase()}${sheetsClause.slice(1)}, so no plant here is set apart for its habitat's rest.`} /><span>: {sheetsClause}. Every plant past its rhythm is listed.</span> <button class="linkish" type="button" onclick={checkAgain} aria-disabled={!sheetsSettled || sheetsWait > 0}>{againWords(sheetsWhy, nowMs)}</button></p>
             {/if}
             {#if s.watered}
               <!-- The plants just watered stay on the stop, so it keeps its height and the next stop does not move under the finger; the Undo is here and only here. -->
@@ -434,7 +454,13 @@
     <div class="secrule"><h2 id="frost-h">Frost watch</h2><div class="line"></div></div>
     {#if !site.current && site.loaded}
       <!-- One tap from here, as the front page's line offers: in the sample Settings is shut, and "Set your site in Settings" led nowhere (round sixty-two; the grower review, 11); so in the sample the link is not offered (the verification review's words 7). -->
-      <p class="small muted froststrip">No site set. <button class="linkish" type="button" onclick={locate} aria-disabled={locating}>{locating ? 'Locating…' : 'Use my location'}</button>{#if !inDemo()} or <a href="/settings#site">set your site in Settings</a>{/if}, and its forecast appears here, on the front page and under the top bar when it turns{#if watched.length}; places with coordinates are watched on their own pages either way{/if}.</p>
+      <!-- The example has no site of its own, and none is made up for it: a real place would be a forecast for a place
+           nobody chose (round sixty-seven; triage-66 V8). It says so, and where the visitor's own is set once they leave. -->
+      {#if PAGE_IN_DEMO}
+        <p class="small muted froststrip" id="frost-example">The example collection has no site of its own, so the frost watch reads no forecast here. Once you leave the example, set your site on Today with Use my location, or in Settings, and its forecast appears on Today, on the front page and under the top bar when it turns.</p>
+      {:else}
+        <p class="small muted froststrip">No site set. <button class="linkish" type="button" onclick={locate} aria-disabled={locating}>{locating ? 'Locating…' : 'Use my location'}</button> or <a href="/settings#site">set your site in Settings</a>, and its forecast appears here, on the front page and under the top bar when it turns{#if watched.length}; places with coordinates are watched on their own pages either way{/if}.</p>
+      {/if}
     {/if}
     {#if locateMsg}<p class="small muted">{locateMsg}</p>{/if}
     {#if err}<div class="notice" role="status">{err}</div>{/if}
@@ -460,6 +486,8 @@
         {#if data.alerts.length}
           <ul class="alerts">{#each data.alerts as a}<li><strong>{a.event}</strong>{a.headline ? `: ${a.headline}` : ''}</li>{/each}</ul>
         {:else if data.alertsStatus === 'refused'}
+          <p class="small"><NotChecked what="Alerts" why="The National Weather Service refused this site's request; the forecast above stands on its own." /></p>
+        {:else if data.alertsStatus === 'unanswered'}
           <p class="small"><NotChecked what="Alerts" why="The National Weather Service did not answer; the forecast above stands on its own." /></p>
         {:else if data.alertsStatus === 'none'}
           <p class="small muted">No frost or freeze alert in force (NOAA/NWS).</p>
@@ -515,7 +543,8 @@
   .chip i { color: var(--ink2); }
   .chip.tick a { display: inline-flex; flex-wrap: wrap; align-items: center; column-gap: 0.3em; min-width: 0; }
   .chip b, .chip .muted { white-space: nowrap; }
-  .chip i { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; min-width: 0; }
+  /* Room for the italic's overhang inside the clipped box: "Lithops lesliei" drew as "Lithops leslie" with its last letter cut (round sixty-seven; triage-66 P6, S-F13). */
+  .chip i { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; min-width: 0; padding-inline-end: 0.15em; }
   /* A done chip's parts wrap inside it, as a ticked chip's do: at 320 px with 200% text "Conophytum minimum ✓" pushed the page 4 px sideways (round sixty-two; the accessibility review, 9). */
   .row.done a.chip { display: inline-flex; flex-wrap: wrap; column-gap: 0.3em; row-gap: 0; padding: 4px 10px; } /* a chip, not the row's plain link (`.row > a`), which drew it inline and let the name run past the screen */
   .restnc { border-left-color: var(--warm); }

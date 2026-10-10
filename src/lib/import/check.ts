@@ -18,7 +18,7 @@ export type NameCheck =
   /** A cross is filed under its genus, as the add form files it; there is no species to check. */
   | { s: 'hybrid' };
 
-type Entry = { slug: string; name: string; key: number; syn?: string[] };
+type Entry = { slug: string; name: string; key: number; syn?: string[]; older?: string[] };
 export interface Lookup {
   entries(slugs: string[]): Promise<Map<string, Entry> | null>;
   search(q: string): Promise<Entry[] | { limited: number } | null>;
@@ -86,7 +86,8 @@ export function readSearch(scientific: string, rankSpecies: boolean, hits: Entry
   const want = speciesOf(scientific).toLowerCase();
   const exact = hits.find((h) => h.name.toLowerCase() === want);
   if (exact) return { s: 'found', slug: exact.slug, refName: exact.name, key: rankSpecies ? exact.key : null };
-  const older = hits.find((h) => (h.syn ?? []).some((n) => n.toLowerCase() === want));
+  // Every older name the index searches, past the six it shows (round sixty-seven; triage-66 N1): "Ferocactus glaucescens" was filed "not in the reference".
+  const older = hits.find((h) => [...(h.syn ?? []), ...(h.older ?? [])].some((n) => n.toLowerCase() === want));
   if (older) return { s: 'near', suggestion: older.name, key: older.key, why: 'older name' };
   const genus = want.split(' ')[0];
   const close = hits.find((h) => h.name.toLowerCase().split(' ')[0] === genus && editDistance(h.name.toLowerCase(), want) <= 2);

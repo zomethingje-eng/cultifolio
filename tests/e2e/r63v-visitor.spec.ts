@@ -168,7 +168,7 @@ test('r63v V2: a grower with plants is never taken into the example, and can loo
   await page.getByRole('button', { name: 'Menu' }).click();
   await page.locator('#menu-example').click();
   await inExample(page, '/today');
-  await expect(page.locator('#demobar')).toContainText('Your own plants are kept apart, as you left them.');
+  await expect(page.locator('#demobar')).toContainText('Your own collection is kept apart, as you left it.'); // round sixty-seven; triage-66 V4, from the same test as an empty page
   await expect(page.locator('#demo-add')).toHaveCount(0);
   await expect(page.locator('#water .stop').first()).toBeVisible({ timeout: seedWait() }); // set out before the next full load
   await page.goto('/plants'); await ready(page);

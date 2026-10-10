@@ -5,7 +5,8 @@
  */
 import { openDB, deleteDB, type IDBPDatabase, type DBSchema, type IDBPTransaction } from 'idb';
 import type { Change } from '$core/log';
-import { sampleClosedHere, inDemo, DEMO_DB } from './demo';
+import { sampleClosedHere, PAGE_IN_DEMO, DEMO_DB, exampleClosed, markExampleClosed, CLOSED_WORDS } from './demo';
+import { storageErrorText as quotaText } from './storage-error';
 
 /** The pixels for one photo record; metadata is in the change log. */
 export interface PhotoBlobs {
@@ -44,9 +45,10 @@ interface VaultDB extends DBSchema {
 /**
  * The vault's database. A sample collection lives in a database of its own (round sixty; the product review's 3): a
  * visitor can try Today, a plant page and labels on plants that are not theirs, and leaving the sample deletes it
- * whole, with nothing written to the grower's own log and nothing synced. `inDemo()` is read once per page life.
+ * whole, with nothing written to the grower's own log and nothing synced. The page's collection is read once per page
+ * life (`PAGE_IN_DEMO`), and every scope reads the same reading (round sixty-seven; triage-66 V3).
  */
-const DB_NAME = inDemo() ? DEMO_DB : 'cultifolio'; // demo.ts's one reading of the flag and its one name (round sixty-two, second pass; the self-review's N7)
+const DB_NAME = PAGE_IN_DEMO ? DEMO_DB : 'cultifolio'; // demo.ts's one reading of the flag and its one name (round sixty-two, second pass; the self-review's N7)
 /** Where a replacement (restore from backup, "replace" mode) is written in full before the live vault is touched. */
 const STAGING_NAME = DB_NAME === 'cultifolio' ? 'cultifolio-staging' : `${DB_NAME}-staging`; // the grower's keeps its name, so a replace cut off before this build still finishes (round sixty-one; review B)
 /**
@@ -118,6 +120,7 @@ const vaultNotice: { text: string | null } = { text: null };
 const listeners = new Set<(text: string | null) => void>();
 export function onVaultNotice(fn: (text: string | null) => void): () => void {
   listeners.add(fn);
+  if (vaultNotice.text) fn(vaultNotice.text); // said before the page listened (a replacement that could not finish at open; round sixty-seven)
   return () => listeners.delete(fn);
 }
 function notify(text: string | null) {
@@ -138,6 +141,10 @@ function upgrade(db: IDBPDatabase<VaultDB>, oldV: number) {
 }
 
 export function openVault(): Promise<IDBPDatabase<VaultDB>> {
+  // An example closed under this page (another tab's Leave, its database deleted) is never opened again by it: the page
+  // re-created the database Leave had just deleted, and saved a plant into it that the next load deleted (round
+  // sixty-seven; triage-66 V3; IND-1, S-A3). The page says why with these words, and keeps what was typed on screen.
+  if (DB_NAME === DEMO_DB && exampleClosed()) return Promise.reject(new Error(CLOSED_WORDS));
   if (!dbp)
     dbp = openDB<VaultDB>(DB_NAME, DB_V, {
       upgrade,
@@ -148,6 +155,7 @@ export function openVault(): Promise<IDBPDatabase<VaultDB>> {
       // This tab is the old one: let go of the vault so the new tab can upgrade it, then reload into the new code, once
       // the writes in flight have landed (close() lets open transactions finish) or five seconds have passed.
       blocking(_cur, _next, ev) {
+        if (DB_NAME === DEMO_DB) markExampleClosed(); // first: nothing reopens it from here on (round sixty-seven; triage-66 V3)
         (ev.target as IDBDatabase | null)?.close();
         dbp = null;
         // The sample's database is deleted whole when another tab leaves the sample: say that, not "updated" (round sixty-one; the records review, 13).
@@ -163,8 +171,13 @@ export function openVault(): Promise<IDBPDatabase<VaultDB>> {
         notify("The browser closed this page's storage; reload the page.");
       }
     }).then(async (db) => {
-      // A replace that was cut off between the wipe and the copy: finish it before anything reads the vault.
-      if (await db.get('meta', STAGING_PENDING)) await writing(() => replaceFromStaging(db));
+      // A replace that was cut off between the wipe and the copy: finish it before anything reads the vault. One that
+      // cannot finish now (the device is still full) leaves the collection openable, the reason said and writes refused
+      // until it does (`storeIn`); it rejected every open, and the collection never opened (round sixty-seven; triage-66
+      // R1, the self-review's C1).
+      if (await db.get('meta', STAGING_PENDING)) {
+        try { await writing(() => replaceFromStaging(db)); } catch (e) { notify(await pendingText(e)); }
+      }
       return db;
     });
   return dbp;
@@ -204,6 +217,9 @@ function openStagingDb(): Promise<IDBPDatabase<VaultDB>> {
 /** A fresh, empty staging database (any leftover from an earlier attempt is deleted first). */
 export async function openStaging(): Promise<StagedReplacement> {
   if (DB_NAME !== 'cultifolio') throw new Error('A replacement cannot be staged in the example collection; leave the example first. Nothing was changed.'); // a guard in code, not only the locked page (round sixty-one; review B)
+  // The staging copy a switch still needs is never deleted: it is then the collection's only copy, and a second Replace
+  // that stopped before its own switch emptied the collection (round sixty-seven; triage-66 R1, the self-review's C1).
+  if (await (await openVault()).get('meta', STAGING_PENDING)) throw new ReplacePendingError();
   await deleteDB(STAGING_NAME);
   let db: IDBPDatabase<VaultDB> | null = await openStagingDb();
   const need = () => {
@@ -278,7 +294,7 @@ async function copyStagingIn(live: IDBPDatabase<VaultDB>): Promise<void> {
     const changes = await stage.getAll('changes');
     if (changes.length) {
       // Through storeIn, so the numbers a restored collection carries go on the ledger like any other write (round twelve, 6).
-      await storeIn(live.transaction(['changes', 'outbox', 'meta', 'order'], 'readwrite'), changes, false);
+      await storeIn(live.transaction(['changes', 'outbox', 'meta', 'order'], 'readwrite'), changes, false, {}, false, undefined, {}, { copying: true });
     }
     // The parked set is the file's: the device's own named changes the wiped log no longer has (round fifty-eight).
     await live.put('meta', ((await stage.get('meta', 'parked')) as string[] | undefined) ?? [], 'parked');
@@ -347,8 +363,48 @@ export class StoppedError extends Error {
     super('syncing was stopped on this device while this run was under way');
   }
 }
-async function storeIn(tx: Tx, changes: Change[], fromServer: boolean, extra: Partial<Record<NumberKind, Set<string>>> = {}, strict = false, requireKey?: string, ledger: Partial<Record<NumberKind, Set<string>>> = {}): Promise<Stored> {
+/**
+ * A replacement from a backup has begun and is not finished (`STAGING_PENDING`): the live log is being made the file's,
+ * and the next open finishes it, wiping the live stores first, so a change written meanwhile would be lost without a word
+ * (round sixty-seven; triage-66 R1, the self-review's C1). Refused, and said.
+ */
+export class ReplacePendingError extends Error {
+  constructor() {
+    super('A replacement from a backup has begun on this device and is not finished: it finishes when there is room. Free some space, then reload the page. Nothing can be saved until then');
+  }
+}
+/** The notice for a replacement that could not finish when the vault opened: the reason, and what the page does meanwhile. */
+async function pendingText(e: unknown): Promise<string> {
+  const full = !!(await quotaText(e).catch(() => null));
+  const why = full ? 'this device is out of space' : e instanceof Error && e.message ? e.message.replace(/\.$/, '') : 'the copy was refused';
+  return `A replacement from a backup began on this device and could not finish: ${why}. It finishes when there is room: free some space, then reload the page. Until then the collection shows what was copied so far, and nothing can be saved.`;
+}
+/** What a write may carry besides its changes, in its own transaction (round sixty-seven; contract C1, triage-66 R1). */
+export interface StoreOpts {
+  /** The replacement's own copy, which runs while the flag is up. */
+  copying?: boolean;
+  /** Meta records written in the same transaction as the changes. */
+  meta?: Record<string, unknown>;
+  /** A meta key that receives, in the same transaction, the arrival number of the last change the write stored (the last arrival in the vault when it stored none). */
+  markLast?: string;
+}
+/**
+ * The example writes no outbox rows: syncing is refused there, and the rows were a third of every write's requests
+ * (round sixty-seven; contract C2, triage-66 R13).
+ */
+const NO_OUTBOX = DB_NAME === DEMO_DB;
+async function storeIn(tx: Tx, changes: Change[], fromServer: boolean, extra: Partial<Record<NumberKind, Set<string>>> = {}, strict = false, requireKey?: string, ledger: Partial<Record<NumberKind, Set<string>>> = {}, opts: StoreOpts = {}): Promise<Stored> {
   const ch = tx.objectStore('changes'), ob = tx.objectStore('outbox'), meta = tx.objectStore('meta');
+  // A transaction aborted before the write below awaits its end (a read refused first) is the caller's error, thrown
+  // from the read: its end is not a second, unhandled one (round sixty-seven; the self-review's E14).
+  tx.done.catch(() => {});
+  // Nothing is written while a replacement is being finished, read inside this very transaction (round sixty-seven;
+  // triage-66 R1): the next open wipes the live stores and copies the file in again.
+  if (!opts.copying && (await meta.get(STAGING_PENDING))) {
+    tx.abort();
+    await tx.done.catch(() => {});
+    throw new ReplacePendingError();
+  }
   // A write for a sync run happens only while the stored sync record still carries that run's key, checked inside this
   // very transaction: another tab's "Stop syncing" or new vault between a check and a write can no longer let a batch of
   // the old vault into the new log (round seventeen, A1).
@@ -416,7 +472,14 @@ async function storeIn(tx: Tx, changes: Change[], fromServer: boolean, extra: Pa
   }
   const order = tx.objectStore('order');
   const rows = arrived.map((c) => order.add({ t: c.t }));
-  const puts: Promise<unknown>[] = [...kept.map((c) => (strict ? ch.add(c) : ch.put(c))), ...(fromServer ? [] : kept.map((c) => ob.put({ t: c.t }))), ...rows];
+  const puts: Promise<unknown>[] = [...kept.map((c) => (strict ? ch.add(c) : ch.put(c))), ...(fromServer || NO_OUTBOX ? [] : kept.map((c) => ob.put({ t: c.t }))), ...rows];
+  // Contract C1 (round sixty-seven): the caller's meta records, and the arrival number of this write's last change, in
+  // this same transaction, so the example's seed and its marks land together or not at all (triage-66 V5).
+  for (const [k, v] of Object.entries(opts.meta ?? {})) puts.push(meta.put(v, k));
+  if (opts.markLast) {
+    const key = opts.markLast;
+    puts.push(rows.length ? rows[rows.length - 1].then((n) => meta.put(Number(n), key)) : order.openKeyCursor(null, 'prev').then((cur) => meta.put(cur ? Number(cur.key) : 0, key)));
+  }
   // The ledger is read once per transaction (a caller that minted passes the copy it read) and written back only when
   // this write adds a number to it: an import read and rewrote the whole ledger twice per line, and slowed from 33 lines
   // a second to 5 over 2,000 (round sixty-two; agent G, outside review A's decision 3).
@@ -436,11 +499,11 @@ const sameChange = (a: Change, b: Change) => a.kind === b.kind && a.id === b.id 
 const rank = (c: Change) => `${c.kind}\0${c.id}\0${c.field}\0${JSON.stringify(c.value ?? null)}`;
 
 /** Append changes; unless they came from the server (`fromServer`), they also go in the outbox to be pushed. One transaction, so the two stores cannot disagree. */
-export async function appendChanges(changes: Change[], fromServer = false, strict = false, requireKey?: string): Promise<Stored> {
-  if (!changes.length) return { kept: [], replaced: [], seq: 0, first: 0 };
+export async function appendChanges(changes: Change[], fromServer = false, strict = false, requireKey?: string, opts: Pick<StoreOpts, 'meta' | 'markLast'> = {}): Promise<Stored> {
+  if (!changes.length && !opts.meta && !opts.markLast) return { kept: [], replaced: [], seq: 0, first: 0 };
   const out = await writing(async () => {
     const db = await openVault();
-    return storeIn(db.transaction(STORES, 'readwrite'), changes, fromServer, {}, strict, requireKey);
+    return storeIn(db.transaction(STORES, 'readwrite'), changes, fromServer, {}, strict, requireKey, {}, opts);
   });
   announce(out.replaced.length ? 'refold' : 'written');
   return out;
@@ -454,7 +517,7 @@ export async function appendChanges(changes: Change[], fromServer = false, stric
  * A `build` that throws (a number the grower typed is already taken) stores
  * nothing.
  */
-export async function appendChangesClaiming<T>(kind: NumberKind, known: Set<string>, build: (issued: Set<string>) => { changes: Change[]; result: T }): Promise<T> {
+export async function appendChangesClaiming<T>(kind: NumberKind, known: Set<string>, build: (issued: Set<string>) => { changes: Change[]; result: T }, stored?: (s: Stored) => void): Promise<T> {
   const out = await writing(async () => {
     const db = await openVault();
     const tx = db.transaction(STORES, 'readwrite');
@@ -470,7 +533,11 @@ export async function appendChangesClaiming<T>(kind: NumberKind, known: Set<stri
       tx.abort();
       throw e;
     }
-    await storeIn(tx, built.changes, false, {}, false, undefined, { [kind]: ledger });
+    // What the write stored is told (`stored`), so the tab moves its frontier over its own rows as `commit` does: the next
+    // ordinary write re-read every change since the load, one request each (round sixty-seven; triage-66 R13, the
+    // self-review's E5).
+    const s = await storeIn(tx, built.changes, false, {}, false, undefined, { [kind]: ledger });
+    stored?.(s);
     return built.result;
   });
   announce();
@@ -805,14 +872,50 @@ export async function lastArrival(): Promise<number> {
  * A row whose change has since left the log is skipped.
  */
 export async function arrivalsAfter(seq: number): Promise<{ changes: Change[]; seq: number; gen: number }> {
+  const { rows, gen, last } = await tailAfter(seq);
+  return { changes: rows.map((r) => r.c), seq: last, gen };
+}
+/**
+ * Contract C1 (round sixty-seven): every change that arrived after `seq`, with its arrival number, in arrival order: what
+ * the example's Leave counts as the visitor's own (V's `sampleEdits`, after the seed's `markLast`).
+ */
+export async function arrivalSeqsAfter(seq: number): Promise<Array<{ seq: number; t: string; kind: string; id: string; field: string; value: unknown }>> {
+  return (await tailAfter(seq)).rows.map(({ n, c }) => ({ seq: n, t: c.t, kind: c.kind, id: c.id, field: c.field, value: c.value }));
+}
+/** A tail this long, or longer, is read change by change only when its stamps are scattered over a log much larger than it. */
+const TAIL_BY_KEY = 200;
+/**
+ * The tail's changes in one bounded range read, not one `get` per change (round sixty-seven; triage-66 R13, the
+ * self-review's E1, IND): the example's 431 seed changes were 432 requests on every page load, about seven seconds at
+ * WebKit-on-Windows' pace, and a load after an import read every imported change one at a time. The stamps the tail names
+ * are read as the one key range from the lowest to the highest, filtered by the tail's own set and put back in arrival
+ * order. When that range holds many more changes than the tail (a pull brought a few old stamps into a large log), a
+ * short tail is read change by change instead, as before; a long one still takes the range, which is no more than a
+ * whole-log fold reads.
+ */
+async function tailAfter(seq: number): Promise<{ rows: Array<{ n: number; c: Change }>; gen: number; last: number }> {
   const db = await openVault();
   const tx = db.transaction(['order', 'changes', 'meta']);
-  const gen = Number((await tx.objectStore('meta').get(FOLD_GEN)) ?? 0);
-  const rows = await tx.objectStore('order').getAll(IDBKeyRange.lowerBound(seq, true));
-  const keys = await tx.objectStore('order').getAllKeys(IDBKeyRange.lowerBound(seq, true));
+  const after = IDBKeyRange.lowerBound(seq, true);
+  const [gen, rows, keys] = await Promise.all([tx.objectStore('meta').get(FOLD_GEN), tx.objectStore('order').getAll(after), tx.objectStore('order').getAllKeys(after)]);
+  const last = keys.length ? Number(keys[keys.length - 1]) : seq;
+  const out: Array<{ n: number; c: Change }> = [];
+  if (!rows.length) return { rows: out, gen: Number(gen ?? 0), last };
   const ch = tx.objectStore('changes');
-  const got = await Promise.all(rows.map((r) => ch.get(r.t)));
-  return { changes: got.filter((c): c is Change => !!c), seq: keys.length ? Number(keys[keys.length - 1]) : seq, gen };
+  const ts = rows.map((r) => r.t);
+  const sorted = [...new Set(ts)].sort();
+  const range = IDBKeyRange.bound(sorted[0], sorted[sorted.length - 1]);
+  const spread = sorted.length > 1 ? await ch.count(range) : 1;
+  let byT: Map<string, Change>;
+  if (sorted.length < TAIL_BY_KEY && spread > sorted.length * 4 + 64) {
+    const got = await Promise.all(sorted.map((t) => ch.get(t)));
+    byT = new Map(got.filter((c): c is Change => !!c).map((c) => [c.t, c]));
+  } else {
+    const want = new Set(sorted);
+    byT = new Map(((await ch.getAll(range)) as Change[]).filter((c) => want.has(c.t)).map((c) => [c.t, c]));
+  }
+  for (let i = 0; i < rows.length; i++) { const c = byT.get(rows[i].t); if (c) out.push({ n: Number(keys[i]), c }); }
+  return { rows: out, gen: Number(gen ?? 0), last };
 }
 /**
  * The order in which these stamps reached this device (their rows in the order of arrival), for the few a caller asks

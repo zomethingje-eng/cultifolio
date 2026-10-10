@@ -199,7 +199,7 @@ export async function occurrences(f: JsonFetcher, key: number, pages = 3): Promi
       `${GBIF}/occurrence/search?taxonKey=${key}&hasCoordinate=true&hasGeospatialIssue=false&occurrenceStatus=PRESENT` +
       `&limit=300&offset=${p * 300}`;
     const r = await f<OccPage>(url);
-    if (r.status === 'refused' || r.status === 'error') return { status: r.status, detail: `${r.detail}${out.length ? ` (after ${out.length} records: partial, not used)` : ''}` };
+    if (r.status === 'refused' || r.status === 'error' || r.status === 'skipped') return { status: r.status, detail: `${r.detail}${out.length ? ` (after ${out.length} records: partial, not used)` : ''}` };
     if (r.status !== 'ok') break;
     out.push(...r.data.results);
     if (r.data.endOfRecords) break;

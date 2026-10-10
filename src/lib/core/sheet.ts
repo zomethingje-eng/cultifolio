@@ -172,7 +172,7 @@ export const forReader = (year: Year, readerLat: number | null | undefined) => (
 /**
  * The growing year: what two fixed rules read from the rain and temperature
  * curves of the median year. The rain rule: the wet season is the smallest
- * set of months carrying 70% of the year's rain; a wet season cooler than the
+ * set of months carrying 70% of the median year's rain; a wet season cooler than the
  * year's mean is called winter, warmer summer. Eight or more wet months is no
  * season; so is a flat temperature curve (under 4 °C of range), whatever the
  * rain does; under 120 mm a year there is no rainy season to read at all, and
@@ -314,6 +314,9 @@ export function cultivationSheet(input: SheetInput): { rows: Row[]; arch: ArchGu
   const year = m ? growingYear(m, input.lat) : null;
   const dlis = m ? m.map((x) => x.dli).filter((x): x is number => x != null) : [];
   const ENV = 'median year across the grid cells of the range, CHELSA';
+  // The median year's total said as that in every sentence, the long one of the season reading too: it said "a year"
+  // beside the top card's other figure, the cells' own median (round sixty-seven; triage-66 N11, S-F3).
+  const ENV_YEAR = 'across the grid cells of the range, CHELSA';
 
   /* ---- its year ---- */
   if (m && year) {
@@ -340,28 +343,28 @@ export function cultivationSheet(input: SheetInput): { rows: Row[]; arch: ArchGu
     // The reader's months first, the habitat's once in brackets: one hemisphere per sentence (round fifty-eight).
     const yours = year.shiftable ? `${reader}${reader !== at ? ` (${at} at the habitat)` : ''}` : `${at} (the habitat's months, not shifted)`;
     if (year.none) {
-      s = `Rain at the habitat is ${RAIN(year.annualMm)} a year (${ENV}). Under ${ruleRain(120, U)} the rain rule reads no rainy season, and the growing-season rule infers nothing from it. The temperature curve moves ${DT(year.rangeT)} between the warmest and coldest month and the coolest six months are within a degree of the warmest six, so the temperature rule names no cooler half either.`;
+      s = `Rain at the habitat is ${RAIN(year.annualMm)} in the median year (${ENV_YEAR}). Under ${ruleRain(120, U)} the rain rule reads no rainy season, and the growing-season rule infers nothing from it. The temperature curve moves ${DT(year.rangeT)} between the warmest and coldest month and the coolest six months are within a degree of the warmest six, so the temperature rule names no cooler half either.`;
       short = `Rain rule: no rainy season to read (${RAIN(year.annualMm)} in the median year); the temperature curve is flat (${DT(year.rangeT)} of range), so no cooler half is named.`;
       lead = `${RAIN(year.annualMm)} of rain in the median year, under the rule's ${ruleRain(120, U)}, and an even temperature: no season to read.`;
     } else if (year.fog) {
-      s = `Rain at the habitat is ${RAIN(year.annualMm)} a year (${ENV}). Under ${ruleRain(120, U)} the rain rule reads no rainy season, and the growing-season rule infers nothing from it. The temperature rule reads the cooler six months as ${at}. ${hemi}`;
+      s = `Rain at the habitat is ${RAIN(year.annualMm)} in the median year (${ENV_YEAR}). Under ${ruleRain(120, U)} the rain rule reads no rainy season, and the growing-season rule infers nothing from it. The temperature rule reads the cooler six months as ${at}. ${hemi}`;
       short = `Rain rule: no rainy season to read (${RAIN(year.annualMm)} in the median year); the temperature rule's cooler six months are ${forYou}.`;
       lead = `${RAIN(year.annualMm)} of rain in the median year, under the rule's ${ruleRain(120, U)}, so no rainy season is read; the cooler six months are ${yours}.`;
     } else if (year.spread) {
       // What the rule reads: the rain is spread, so no short rainy season; eight wet months can still be a long one (round sixty; the round forty-two review).
-      s = `The rain rule reads no short rainy season: 70% of the year's rain (${RAIN(year.wetMm)} of ${RAIN(year.annualMm)}) takes ${year.growMonths.length} months, ${at}. Mean temperature moves ${DT(year.rangeT)} between the warmest and coldest month. ${hemi}`;
+      s = `The rain rule reads no short rainy season: 70% of the median year's rain (${RAIN(year.wetMm)} of ${RAIN(year.annualMm)}) takes ${year.growMonths.length} months, ${at}. Mean temperature moves ${DT(year.rangeT)} between the warmest and coldest month. ${hemi}`;
       short = `Rain rule: rain spread over ${year.growMonths.length} months, so no short rainy season (${forYou}).`;
       lead = `Rain spread over ${year.growMonths.length} months: no short rainy season; ${RAIN(year.annualMm)} in the median year.`;
     } else if (year.flat) {
-      s = `The rain rule reads a sharp season: 70% of the year's rain (${RAIN(year.wetMm)} of ${RAIN(year.annualMm)}) falls in ${at}. The temperature curve is flat, ${DT(year.rangeT)} between the warmest and coldest month, so the growing-season rule does not infer a growing season from it. ${hemi}`;
+      s = `The rain rule reads a sharp season: 70% of the median year's rain (${RAIN(year.wetMm)} of ${RAIN(year.annualMm)}) falls in ${at}. The temperature curve is flat, ${DT(year.rangeT)} between the warmest and coldest month, so the growing-season rule does not infer a growing season from it. ${hemi}`;
       short = `Rain rule: a sharp rainy season, ${forYou}; the temperature curve is flat (${DT(year.rangeT)} of range), so no growing season is inferred.`;
       lead = `A sharp rainy season, ${yours}, in a year of even temperature.`;
     } else if (year.grow === 'even') {
-      s = `The rain rule reads a rainy season with no name: 70% of the year's rain (${RAIN(year.wetMm)} of ${RAIN(year.annualMm)}) falls in ${at}, whose mean temperature, ${T1(year.wetT)}, is within ${U === 'us' ? 'a degree Fahrenheit (half a degree Celsius)' : 'half a degree'} of the year's, ${T1(year.meanT)}, so it is neither the cooler nor the warmer part of the year. ${hemi}`;
+      s = `The rain rule reads a rainy season with no name: 70% of the median year's rain (${RAIN(year.wetMm)} of ${RAIN(year.annualMm)}) falls in ${at}, whose mean temperature, ${T1(year.wetT)}, is within ${U === 'us' ? 'a degree Fahrenheit (half a degree Celsius)' : 'half a degree'} of the year's, ${T1(year.meanT)}, so it is neither the cooler nor the warmer part of the year. ${hemi}`;
       short = `Rain rule: a rainy season, ${forYou}, at the year's mean temperature, so called neither winter nor summer.`;
       lead = `A rainy season, ${yours}, neither the cool nor the warm half of the year.`;
     } else {
-      s = `The rain rule reads a ${year.grow} growing season: 70% of the year's rain (${RAIN(year.wetMm)} of ${RAIN(year.annualMm)}) falls in ${at}, ${year.grow === 'winter' ? 'cooler' : 'warmer'} than the year (wet-season mean ${T1(year.wetT)} against a yearly mean of ${T1(year.meanT)}). ${hemi}`;
+      s = `The rain rule reads a ${year.grow} growing season: 70% of the median year's rain (${RAIN(year.wetMm)} of ${RAIN(year.annualMm)}) falls in ${at}, ${year.grow === 'winter' ? 'cooler' : 'warmer'} than the year (wet-season mean ${T1(year.wetT)} against a yearly mean of ${T1(year.meanT)}). ${hemi}`;
       // The habitat's months once, and only when they differ from the reader's (round sixty; words 7).
       short = `Rain rule: a ${year.grow} growing season, ${forYou}${year.shiftable && reader !== at ? ` (${at} at the habitat, ${home})` : ''}.`;
       lead = `Wet ${year.grow === 'winter' ? 'winters' : 'summers'}: the rain comes ${yours}, read as a ${year.grow} growing season.`;

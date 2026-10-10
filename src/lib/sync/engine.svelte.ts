@@ -44,7 +44,7 @@ import { deriveKeys, sealJson, openJson, seal, open, packPhoto, unpackPhoto, par
 import { MAX_BATCH_BYTES, MAX_PHOTO_BYTES, SEAL_OVERHEAD, OVERLAP_MS, CURSOR_SLACK_MS, PUSH_HEADERS, PHOTO_DROP_HEADER, PHOTO_REMOVED_AT_HEADER, SYNC_HEADER, batchName, listAfter, logBatch, BATCH_VERSIONS } from './limits';
 import { readChanges, isHeld, isParked, dueAt, hlcWall, PARK_MS, type Change } from '$core/log';
 import { hlcCompare, isHlc, MAX_AHEAD_MS, nowMs, trustServerTime, clockOffsetMs, clearClockOffset, onClockOffsetChange, onReadingWanted, clockChecked, isPastStamp } from '$core/hlc';
-import { inDemo } from '$lib/db/demo';
+import { PAGE_IN_DEMO } from '$lib/db/demo';
 import { version as BUILD } from '$app/environment';
 
 interface SyncMeta {
@@ -314,7 +314,7 @@ class Sync {
   async setup(vaultKey: string, mode: 'create' | 'join' = 'create'): Promise<void> {
     // Not in the sample collection, whatever the page shows: a vault set up there would send the sample to the server
     // (round sixty-one; decision 10, a guard in the code and not only the page's CSS).
-    if (inDemo()) throw new Error('Sync is off in the example collection. Leave the example to sync your own plants.');
+    if (PAGE_IN_DEMO) throw new Error('Sync is off in the example collection. Leave the example to sync your own plants.'); // the page's collection, read as it loaded (round sixty-seven; triage-66 V3)
     const key = parseVaultKey(vaultKey);
     if (!key) throw new Error('That is not a sync key.'); // the glossary's word, as the sync page says it (round fifty-eight; the accessibility review)
     const keys = await deriveKeys(key);
@@ -556,7 +556,7 @@ class Sync {
    */
   async run(): Promise<void> {
     if (!this.configured || !this.keys || !this.meta || this.busy) return;
-    if (inDemo()) return; // never in the sample collection (round sixty-one; decision 10)
+    if (PAGE_IN_DEMO) return; // never in the sample collection (round sixty-one; decision 10); the page's, not the tab's flag (round sixty-seven; triage-66 V3)
     const locks = this.locks;
     if (!locks) return this.runNow();
     // Named by the vault: a run of a vault this tab has since left (after "Stop syncing" and a new key) can still be
@@ -587,7 +587,7 @@ class Sync {
 
   private async runNow(): Promise<void> {
     if (!this.configured || !this.keys || !this.meta || this.busy) return;
-    if (inDemo()) return;
+    if (PAGE_IN_DEMO) return;
     // The generation this run belongs to: "Stop syncing" or a new vault during the run makes it stale, and a stale run
     // leaves the status, the busy flag and the run count to the vault that replaced it (round sixteen, 2).
     const g = this.gen;
@@ -685,6 +685,20 @@ class Sync {
     if (left <= 0) { this.clearRefusal(m); return; }
     const e = new Error(this.refusal.text);
     (e as Error & { retryAfterMs?: number }).retryAfterMs = left;
+    throw e;
+  }
+
+  /**
+   * A listing the server held back (503: the vault's hour of listings is spent, round sixty-seven; triage-66 S6), said in
+   * the server's own sentence, and the run asked again after its Retry-After, at most an hour on. Uploads are not held
+   * back by it: it is the listing that waits.
+   */
+  private async listingWait(r: Response): Promise<never> {
+    let text = '';
+    try { const body = (await r.clone().json()) as { error?: string; message?: string }; text = body.error || body.message || ''; } catch { /* the platform's own 503 */ }
+    const secs = Math.max(5, Math.min(3600, Number(r.headers.get('retry-after')) || 300));
+    const e = new Error(text || `pull failed: ${r.status}`);
+    (e as Error & { retryAfterMs?: number }).retryAfterMs = secs * 1000;
     throw e;
   }
 
@@ -1040,6 +1054,7 @@ class Sync {
       const q = `since=${m.since || ''}` + (after ? `&after=${listAfter(after.at, after.key)}` : '');
       const r = await syncFetch(`${this.base}/api/sync/log?vault=${this.k(m).id}&${q}`, { headers: this.h(m) });
       if (r.status === 429) this.limited(r);
+      if (r.status === 503) await this.listingWait(r);
       if (!r.ok) throw new Error(`pull failed: ${r.status}`);
       const { batches, more, next } = (await r.json()) as { batches: Array<{ key: string; at: number }>; more: boolean; next?: { at: number; key: string } };
       // The clock the arrivals are judged against is the server's own, from the answer's Date header, not this device's:
@@ -1148,6 +1163,9 @@ class Sync {
       const r = await syncFetch(`${this.base}/api/sync/photo/${p.id}?vault=${this.k(m).id}`, { headers: this.h(m) }, PHOTO_MS);
       if (r.status === 404) continue; // not uploaded from its device yet
       if (r.status === 429) this.limited(r);
+      // Being stored or removed by another device this moment, or its record on the server could not be read: asked again
+      // next run, and the vault's other photographs still come (round sixty-seven; triage-66 S1).
+      if (r.status === 503) continue;
       if (!r.ok) throw new Error(`photo ${p.id}: ${r.status}`);
       const bytes = new Uint8Array(await r.arrayBuffer()); // read whole before it is judged: a dropped connection stops the run and it is fetched again
       let pixels: { full: Uint8Array; thumb: Uint8Array } | null = null;
