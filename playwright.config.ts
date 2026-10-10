@@ -49,7 +49,11 @@ export default defineConfig({
   // requests until it can. With `port` the run began at the open port, and the first page of a spec with no warm-up of its
   // own paid the server's start inside its 30 s (r61a a11y-perf 2, flaky on the PC, where that start is slow). With `url`
   // Playwright waits for the front page's answer, up to `timeout`, before any worker starts (round sixty-three; harness H3).
-  webServer: { command: `npm run build && node scripts/dev/fresh-state.mjs && npx wrangler dev --port ${PORT} --var E2E_OFFLINE:1`, url: `http://127.0.0.1:${PORT}/`, reuseExistingServer: !!process.env.PW_REUSE, timeout: 180000 },
+  // The budget covers the build too, since the server's command builds first: on the owner's PC the build alone went from
+  // under a minute to over two (clearing the old output took 42 to 54 s), and 180 s ran out before the server answered
+  // (round sixty-four, the PC's runs). Ten minutes is a budget for a slow disk, not a wait: the run starts the moment the
+  // front page answers.
+  webServer: { command: `npm run build && node scripts/dev/fresh-state.mjs && npx wrangler dev --port ${PORT} --var E2E_OFFLINE:1`, url: `http://127.0.0.1:${PORT}/`, reuseExistingServer: !!process.env.PW_REUSE, timeout: 600000 },
   // en-GB: the tests read metric figures; an en-US browser would be served Fahrenheit and inches on its first visit (by design).
   use: { baseURL: `http://127.0.0.1:${PORT}`, locale: 'en-GB' },
   projects
