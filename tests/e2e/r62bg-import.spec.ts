@@ -29,7 +29,7 @@ async function accessions(page: Page) {
   });
 }
 
-test('r62bg 1: a Leave answered Cancel is called off: the button comes back at once, and a reload stays in the sample (triage-outside 1; A9)', async ({ page }) => {
+test('r62bg 1: a Leave answered Cancel is called off: the button comes back at once, and a reload stays in the sample (triage-outside 1; A9)', async ({ page, browserName }) => {
   test.setTimeout(120_000);
   await page.goto('/plants'); await ready(page);
   await page.click('#try-sample');
@@ -43,8 +43,10 @@ test('r62bg 1: a Leave answered Cancel is called off: the button comes back at o
   page.once('dialog', (d) => { asked = d.type(); void d.dismiss(); });
   await page.getByRole('button', { name: 'Leave the example' }).click();
   await expect.poll(() => asked).toBe('beforeunload');
-  // At once, not after 4 s under "Leaving…" (base: disabled and "Leaving…" for 4 s).
-  await expect(page.getByRole('button', { name: 'Leave the example' })).toBeEnabled({ timeout: 1500 });
+  // At once, not after 4 s under "Leaving…" (base: disabled and "Leaving…" for 4 s), where the browser says the Cancel
+  // (Chromium's `navigateerror`); Safari's engine did not, and another engine is given the page's 3 s for a "Leave site?" that
+  // is still showing (`leaveDemo`; round sixty-four, the all-engines run).
+  await expect(page.getByRole('button', { name: 'Leave the example' })).toBeEnabled({ timeout: browserName === 'chromium' ? 1500 : 4500 });
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.locator('main')).toContainText('12');
   expect(await page.evaluate(() => sessionStorage.getItem('cultifolio.demo'))).toBe('1');

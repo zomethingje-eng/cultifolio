@@ -385,7 +385,11 @@ test('photos: taken on the device, resized, stored, captioned, made the cover, s
   // resized: the stored width is the long edge cap
   const dims = await page.evaluate(async () => {
     const db = await new Promise<IDBDatabase>((res, rej) => { const r = indexedDB.open('cultifolio'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
-    const all = await new Promise<Array<{ blob: Blob; thumb: Blob }>>((res, rej) => { const r = db.transaction('photos').objectStore('photos').getAll(); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+    // Blobs, or their bytes where the browser refuses a Blob in its database (Safari's engine in a private window and in
+    // the test's own contexts; round sixty-four, the all-engines run).
+    type Kept = { blob: Blob; thumb: Blob } | { full: ArrayBuffer; small: ArrayBuffer; fullType: string; smallType: string };
+    const kept = await new Promise<Kept[]>((res, rej) => { const r = db.transaction('photos').objectStore('photos').getAll(); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+    const all = kept.map((p) => ('full' in p ? { blob: new Blob([p.full], { type: p.fullType }), thumb: new Blob([p.small], { type: p.smallType }) } : p));
     const size = (b: Blob) => new Promise<[number, number]>((res) => { const i = new Image(); i.onload = () => res([i.naturalWidth, i.naturalHeight]); i.src = URL.createObjectURL(b); });
     return { n: all.length, full: await size(all[0].blob), thumb: await size(all[0].thumb), type: all[0].blob.type };
   });
@@ -1445,6 +1449,9 @@ test('a forecast source that does not answer is "not checked" in a plain notice 
 });
 });
 
+// The service worker answers these requests itself once it controls the page, and only Chromium lets a route see a worker's own fetch (the config's worker network events): in Firefox the route never saw them and the real server answered. The test is about the pages' words, not the shell (round sixty-four; the Firefox run).
+test.describe('a place\'s forecast, routed without the service worker', () => {
+test.use({ serviceWorkers: 'block' });
 test('a night under the place\'s floor "reaches the floor", not frost, and a floor not reached keeps a frost night\'s own level; a warning is said whatever the floor; alerts that were not checked are said not to have been (round twelve, 9)', async ({ page }) => {
   const mild = [{ date: '2026-11-02', tmin: 8, tmax: 15, precipMm: 0, steps: 24 }, { date: '2026-11-03', tmin: 9, tmax: 14, precipMm: 0, steps: 24 }];
   const frosty = [{ date: '2026-11-02', tmin: -2, tmax: 9, precipMm: 0, steps: 24 }, { date: '2026-11-03', tmin: 4, tmax: 12, precipMm: 0, steps: 24 }];
@@ -1515,6 +1522,7 @@ test('a night under the place\'s floor "reaches the floor", not frost, and a flo
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   await expect(page.locator('.notice')).toContainText('Warning in force.');
   await expect(page.locator('.pill', { hasText: 'weather warning' })).toBeVisible();
+});
 });
 
 test('pages about your own plants ask no outside host for anything unless the reference photographs are switched on; reference requests carry the corpus id (round twelve, A1 and 7)', async ({ page }) => {
@@ -1594,6 +1602,9 @@ test('hovering a species link on a page about your own plants sends nothing; the
   await expect.poll(() => data.some((u) => u.includes('/species/welwitschia-mirabilis')), { timeout: 5000 }).toBe(true);
 });
 
+// The service worker answers these requests itself once it controls the page, and only Chromium lets a route see a worker's own fetch (the config's worker network events): in Firefox the route never saw them and the real server answered. The test is about the pages' words, not the shell (round sixty-four; the Firefox run).
+test.describe('a label\'s sheet, routed without the service worker', () => {
+test.use({ serviceWorkers: 'block' });
 test('a label whose species could not be reached says so, and the sheet is not printed as if the species had no figures (round thirteen, 6)', async ({ page }) => {
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
   await page.getByRole('button', { name: /^Add/ }).click();
@@ -1631,6 +1642,7 @@ test('a label whose species could not be reached says so, and the sheet is not p
   await expect(page.locator('#lb-print')).toBeEnabled();
   await expect(page.locator('.page .label .care', { hasText: '(1 in 100, NASA POWER)' })).toHaveCount(1);
   await expect(page.locator('#lb-unchecked')).toHaveCount(0);
+});
 });
 
 test('a returning grower never sees the catalogue or "You grow 0" while the collection opens; a first visit sees the catalogue at once', async ({ page }) => {
@@ -1717,10 +1729,12 @@ test('the species page answers in the first screen and relates the species by ge
 });
 
 test('compare: three species side by side, a refusal named in every empty cell, the tray remembered in this browser', async ({ page }) => {
-  await page.goto('/species/copiapoa-cinerea');
+  // Each page hydrated before its button is pressed: a press on the server's HTML has no handler (round sixty-four; in
+  // the Firefox run the second press did nothing).
+  await page.goto('/species/copiapoa-cinerea'); await ready(page);
   await page.getByRole('button', { name: 'Compare', exact: true }).click();
   await expect(page.locator('.tray')).toContainText('pick one more');
-  await page.goto('/species/refusia-testii');
+  await page.goto('/species/refusia-testii'); await ready(page);
   await page.getByRole('button', { name: 'Compare', exact: true }).click();
   await page.locator('.tray a', { hasText: 'Compare 2' }).click();
   await expect(page).toHaveURL(/\/compare\?s=copiapoa-cinerea,refusia-testii$/);
@@ -1742,7 +1756,7 @@ test('the share card is a PNG with the figures and the link drawn in, and is off
   await page.addInitScript(() => { Object.defineProperty(navigator, 'share', { value: undefined, configurable: true }); Object.defineProperty(navigator, 'canShare', { value: undefined, configurable: true }); });
   await page.goto('/species/refusia-testii');
   await expect(page.getByRole('button', { name: 'Share card' })).toHaveCount(0);
-  await page.goto('/species/copiapoa-cinerea');
+  await page.goto('/species/copiapoa-cinerea'); await ready(page); // hydrated: a press on the server's HTML has no handler (round sixty-four)
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Share card' }).click()]);
   expect(dl.suggestedFilename()).toBe('copiapoa-cinerea-climate.png');
   const path = await dl.path();
@@ -2008,11 +2022,15 @@ test('the batch page checks what it is told: no count above the seeds sown or be
   await expect(rows).toHaveCount(before - 1);
 });
 
-test('the front page offline asks for the catalogue once and offers a retry, never a loop', async ({ browser }) => {
-  const ctx = await browser.newContext();
+test('the front page offline asks for the catalogue once and offers a retry, never a loop', async ({ browser, browserName }) => {
+  // Only Chromium lets a route see a service worker's own fetch (the config's worker network events): in Firefox the worker
+  // fetched the bucket past the route, the server answered, and "not reached" could never be said. There the page's own
+  // fetches are the whole test, without the worker (round sixty-four; the Firefox run).
+  const withWorker = browserName === 'chromium';
+  const ctx = await browser.newContext(withWorker ? {} : { serviceWorkers: 'block' });
   const page = await ctx.newPage();
   await page.goto('/');
-  await page.evaluate(() => navigator.serviceWorker.ready);
+  if (withWorker) await page.evaluate(() => navigator.serviceWorker.ready);
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
@@ -2250,6 +2268,9 @@ test('the hemisphere cookie rides only on species and compare pages, never on sy
   expect(species.map((c) => c.name)).toContain('cultifolio.hemi');
 });
 
+// The service worker answers these requests itself once it controls the page, and only Chromium lets a route see a worker's own fetch (the config's worker network events): in Firefox the route never saw them and the real server answered. The test is about the pages' words, not the shell (round sixty-four; the Firefox run).
+test.describe('a slow sheet, routed without the service worker', () => {
+test.use({ serviceWorkers: 'block' });
 test('a place chosen on the add form while the reference is still answering is kept, not overwritten by the last-used default (round seventeen, A3)', async ({ page }) => {
   await page.goto('/places');
   for (const n of ['Greenhouse', 'Cold frame']) {
@@ -2279,6 +2300,7 @@ test('a place chosen on the add form while the reference is still answering is k
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   await expect(page.locator('main')).toContainText('Cold frame');
+});
 });
 
 test('a species page you grow six of does not scroll sideways on a phone (round seventeen, 11)', async ({ page }) => {
@@ -2771,7 +2793,7 @@ test('round forty-two: the home page preloads the first featured tile and precon
 
 test('round forty-six: a client-side navigation to a species page whose HTML the Worker holds gets its data, not the held HTML (3)', async ({ page }) => {
   await page.goto('/species/copiapoa-cinerea'); // the HTML is held for a minute now
-  await page.goto('/');
+  await page.goto('/'); await ready(page); // hydrated: a word typed into the server's HTML is dropped (round sixty-four)
   await page.fill('.searchbar', 'copiapoa cin');
   await page.locator('.hitrow', { hasText: 'Copiapoa cinerea' }).first().click(); // a client-side navigation: the data request goes under the page's URL
   await expect(page).toHaveURL(/\/species\/copiapoa-cinerea$/);

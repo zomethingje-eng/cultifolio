@@ -340,7 +340,11 @@
   let edWaterMsg = $state('');
   /** The rhythm this plant follows when it sets none: its place's, inherited down the tree, else 21 days (round fifty-eight; the grower review). */
   const inheritedRhythm = $derived(a ? collection.rhythm({ ...a, waterDays: null }) : 21);
-  const formDirty = () => editing || (editingNotes && notesDraft.trim() !== (notesBase ?? '').trim()) || (editingMy && myNotesDraft.trim() !== myNotesOpen.trim());
+  // The record's form asks only when a field differs from how it opened, as the notes and the species page's editor do: an
+  // Edit opened and left untouched asked "What you typed here will be lost" with nothing typed, and a reload or an address
+  // typed asked the browser's "Leave site?" (round sixty-four; the Firefox run, whose goto from an untouched form was refused).
+  const edChanged = () => (Object.keys(f) as Array<keyof typeof f>).some((k) => f[k] !== fOpen[k]);
+  const formDirty = () => (editing && edChanged()) || (editingNotes && notesDraft.trim() !== (notesBase ?? '').trim()) || (editingMy && myNotesDraft.trim() !== myNotesOpen.trim());
   // A half-done form is not lost to a tab-bar tap or a reload without asking (round fifty-two, 4; the Add form has had this since round forty-nine).
   beforeNavigate((nav) => {
     if (!formDirty() || nav.type === 'leave' || nav.willUnload) return;

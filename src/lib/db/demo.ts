@@ -206,7 +206,10 @@ export function leaveDemo(to = '/', onStay?: () => void): () => void {
   // the tab's storage set just above can reach a new page late (the race below), the address cannot.
   location.href = `${to}${to.includes('?') ? '&' : '?'}left=sample`;
   // Chromium asks "Leave site?" inside the line above and says a Cancel as `navigateerror` before it returns; a browser without the Navigation API is given 3 seconds.
-  if (!nav) timers.push(setTimeout(() => { if (prompted && showing()) stay(); }, 3000));
+  // So is one with it that does not say a Cancel that way: in Safari's engine the button stayed "Leaving…" past the 1.5 s
+  // the browser test allows, so it waited for the 10 s below (round sixty-four; the all-engines run). The address carries
+  // `left=sample` whatever this decides, so a page that does go still leaves the sample.
+  timers.push(setTimeout(() => { if (prompted && showing()) stay(); }, 3000));
   timers.push(setTimeout(() => { if (showing()) stay(); }, 10_000));
   return stay;
 }

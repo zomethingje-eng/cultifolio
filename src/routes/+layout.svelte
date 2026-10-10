@@ -15,7 +15,7 @@
   import { frost } from '$lib/ui/frost.svelte';
   import { onVaultNotice } from '$lib/db/vault';
   import { afterNavigate, beforeNavigate } from '$app/navigation';
-  import { browser } from '$app/environment';
+  import { browser, version } from '$app/environment';
   import CompareBar from '$lib/ui/CompareBar.svelte';
   import InstallBar from '$lib/ui/InstallBar.svelte';
   // Round sixty, agent F: the sample's banner, persist after the first plant, the backup nudge. By its own path, not the
@@ -121,6 +121,16 @@
   let takingOver = false;
   let reloadOnNext = false;
   const skipTo = (w: ServiceWorker | null) => { if (w) { takingOver = true; w.postMessage('skip'); } };
+  /** The build a worker serves, asked of the worker itself; null from one too old to say, or one that does not answer in a second. */
+  function buildOf(w: ServiceWorker | null): Promise<string | null> {
+    if (!w) return Promise.resolve(null);
+    return new Promise((done) => {
+      const ch = new MessageChannel();
+      const t = setTimeout(() => done(null), 1000);
+      ch.port1.onmessage = (e) => { clearTimeout(t); done(typeof e.data === 'string' ? e.data : null); };
+      try { w.postMessage('version', [ch.port2]); } catch { clearTimeout(t); done(null); }
+    });
+  }
   $effect(() => {
     if (!updated.current || !browser || !('serviceWorker' in navigator)) return;
     navigator.serviceWorker.getRegistration().then(async (reg) => {
@@ -197,15 +207,27 @@
       // the previous build's cache for one generation, so a tab still on the old build finds its chunks.
       navigator.serviceWorker.register('/service-worker.js', { type: 'module' }).then((reg) => {
         if (reg.waiting) skipTo(reg.waiting);
-        reg.update().catch(() => {}); // one conditional GET of the script: the browser's own check after a navigation is not guaranteed on every load
+        // One conditional GET of the script: the browser's own check after a navigation is not guaranteed on every load. Only
+        // with a worker in charge and none installing: on a first install it can only make a second copy of the same build,
+        // which the next page takes over (round sixty-four; the Firefox run, where the second page reloaded itself).
+        if (reg.active && !reg.installing) reg.update().catch(() => {});
         reg.addEventListener('updatefound', () => { const w = reg.installing; w?.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) skipTo(w); }); });
       }).catch((e) => console.warn('service worker not registered; offline use is off', e));
       // The reload under the new worker happens at once only in the first seconds of a page (nothing is half-done yet);
       // later it waits for the next navigation, so a half-filled form or an audit in progress is never thrown away.
+      // A worker of the build this page already runs changes nothing on it, and is not reloaded for, and neither is a page
+      // no worker served (a first visit came from the server and is this build already; the first worker's `clients.claim()`
+      // changes its controller too). In the first all-engines run, first visits in Safari's engine and the second page of a
+      // first visit in Firefox reloaded within their first seconds, losing a plant, a place or a note just typed (round
+      // sixty-four).
+      const servedByOld = !!navigator.serviceWorker.controller;
       navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (!takingOver) return;
-        if (performance.now() < 4000) location.reload();
-        else reloadOnNext = true;
+        if (!takingOver || !servedByOld) return;
+        void buildOf(navigator.serviceWorker.controller).then((v) => {
+          if (v === version) return;
+          if (performance.now() < 4000) location.reload();
+          else reloadOnNext = true;
+        });
       });
     }
     onVaultNotice((t) => (vaultNote = t));

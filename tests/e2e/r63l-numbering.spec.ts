@@ -37,6 +37,9 @@ test('r63l numbering: renumbered lines follow the sheet, the list orders numbers
 
   await page.goto('/plants?show=all');
   await ready(page);
+  // The list is drawn from the collection after hydration: read at once, it was not always drawn yet, and A95 was not in
+  // it (-1, Chromium, once on the PC; round sixty-four, the all-engines run). Eight plants: the three and the five.
+  await expect(page.locator('.rows > *')).toHaveCount(8);
   const nos = await page.locator('.rows .accno').allTextContents();
   const a = (n: string) => nos.indexOf(n);
   expect(a('A95')).toBeGreaterThanOrEqual(0);

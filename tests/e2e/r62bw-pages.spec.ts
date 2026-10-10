@@ -28,7 +28,9 @@ async function liveHome(page: Page) {
 
 for (const [width, height] of [[1280, 800], [1440, 900], [1024, 768]] as const) {
   test.describe(`desktop, ${width} × ${height}`, () => {
-    test.use({ viewport: { width, height }, locale: 'en-GB' });
+    // The service worker is not under test here, and once it controls the page Safari's engine fetches the photographs
+    // past `page.route`, so they never loaded (round sixty-four; the all-engines run; r61w-pages blocks it for the same).
+    test.use({ viewport: { width, height }, locale: 'en-GB', serviceWorkers: 'block' });
 
     test('the search and a whole catalogue row are on the first screen, the chips with the rows, the feature after them', async ({ page }) => {
       await liveHome(page);

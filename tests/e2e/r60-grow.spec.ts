@@ -67,8 +67,10 @@ async function plant(p: Page, name: string, opts: { place?: string | null; price
   await ready(p);
   await p.fill('#species-name', name);
   await p.locator('#species-name').blur();
-  // The form starts on the last place used (round fifty-eight): null asks for no place.
-  if (opts.place === null) await p.selectOption('#f-loc', { label: 'No place' });
+  // The form starts on the last place used (round fifty-eight): null asks for no place. Chosen once the collection has
+  // opened with its places, when that start is set; "No place" chosen before it was overwritten (round sixty-four; 1 run
+  // in 7 of r60 4 here).
+  if (opts.place === null) { await expect(p.locator('#f-loc option')).not.toHaveCount(1); await p.selectOption('#f-loc', { label: 'No place' }); }
   else if (opts.place) {
     const v = await p.locator('#f-loc option', { hasText: opts.place }).getAttribute('value');
     await p.selectOption('#f-loc', v!);
@@ -442,7 +444,10 @@ test('r60 13: on an iPhone in Safari, the Home Screen card comes before the firs
   await home.close();
 });
 
-test('r60 14: after the first plant the browser is asked once to keep the data, and its answer is said once', async ({ page }) => {
+test('r60 14: after the first plant the browser is asked once to keep the data, and its answer is said once', async ({ page, context, browserName }) => {
+  // Firefox puts the question to the person and answers only when they do; nobody answers it in a test, so the person's
+  // "Allow" is given beforehand, as the permission it records (round sixty-four; the Firefox run, where no answer came).
+  if (browserName === 'firefox') await context.grantPermissions(['persistent-storage']);
   // Every toast shown, across page loads, in the order shown, with the page it was shown on; and every call to the
   // browser's persist() still unanswered, so a negative can wait for the answers instead of a fixed pause (round
   // sixty-one; docs/review-60/harness.md 18: under load the toast was said on the add form a moment before the

@@ -34,6 +34,7 @@ import { apply, diff, readChanges, changeError, isComplete, isHeld, REQUIRED_FIE
 import { nextAccession, DEFAULT_SCHEME, type NumberingScheme } from '$core/accession';
 import { allChanges, appendChanges, appendChangesClaiming, onOtherTabWrite, deviceId, requestPersistence, getMeta, putPhotoBlobs, getPhotoBlobs, deletePhotoBlobs, holdVault, readFold, writeFold, touchFold, updateMeta, parkStamps, foldGen, lastArrival, arrivalsAfter, arrivalsOf, changesByKeys, changesOf, type FoldSnapshot, type NumberKind, type VaultNotice } from './vault';
 import { version as buildVersion } from '$app/environment';
+import { inDemo } from './demo';
 import type { Accession, PlantEvent, Taxon, Location, Sowing, Provenance, Photo } from './types';
 import { PROP_METHODS, accNo, sowNo, NUMBERING_SETTING, EVENT_LABEL } from './types';
 import { fieldWords } from '$lib/ui/held-words';
@@ -51,6 +52,19 @@ const numberField = (c: Change): NumberKind | null => (c.kind === 'accession' &&
 /** The records whose notes carry a base, and the two field names: a plant's and a batch's notes, a species' own notes. */
 type NotesKind = 'accession' | 'sowing' | 'taxon';
 const NOTES_PAIR: Record<string, [string, string]> = { accession: ['notes', 'notesBase'], sowing: ['notes', 'notesBase'], taxon: ['myNotes', 'myNotesBase'] };
+
+/** When a load last asked the browser to keep this site's storage; a load asks again only a month on (round sixty-four). */
+const PERSIST_ASKED = 'cultifolio.persistAskedAt';
+function askDue(): boolean {
+  try {
+    const at = Number(localStorage.getItem(PERSIST_ASKED) ?? 0);
+    if (Date.now() - at < 30 * 86_400_000) return false;
+    localStorage.setItem(PERSIST_ASKED, String(Date.now()));
+    return true;
+  } catch {
+    return true; // no storage: asked, as before
+  }
+}
 
 class Collection {
   ready = $state(false);
@@ -302,7 +316,18 @@ class Collection {
         if (heard === 'replaced') { if (typeof location !== 'undefined') location.reload(); }
         else if (heard === 'refold') void this.rebuild().catch(() => {});
         else if (heard === 'written') void this.catchUp().catch(() => {});
-        this.persisted = await requestPersistence();
+        // Asked, not waited for: Firefox puts the question to the person and answers only when they do, and every page that
+        // waits for the load (the add form's species, a place's edit form, the example, sync, the frost watch) waited with
+        // it, for good if the question was dismissed (round sixty-four; the Firefox run). Until the answer, `persisted` is
+        // what the browser has already promised, read without asking. Asked only when there is something to keep: in Firefox
+        // the question came to a visitor on an empty Today or My plants, and in the example, before anything was theirs to
+        // keep (the first plant is asked for by GrowLayer, once).
+        let answered = false;
+        // And at most once a month on a load: Firefox puts the question to the person every time it is asked, and a grower
+        // who let it stand was asked on every page (round sixty-four, the lead's decision on the Firefox run); Safari and
+        // Chrome answer by themselves and may grant it later, so it is still asked again, a month on.
+        const ask = this.state.size > 0 && !inDemo() && askDue();
+        void requestPersistence((now) => { if (!answered && this.persisted === null) this.persisted = now; }, ask).then((ok) => { answered = true; this.persisted = ok; });
       })();
     return this.loading;
   }

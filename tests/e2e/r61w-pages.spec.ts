@@ -83,6 +83,9 @@ test.describe('phone', () => {
     await expect(page).toHaveURL(/\/plants\/2026-0042$/);
     // and the species page's "your plants" chips go by id while the number is shared
     await page.goto('/species/copiapoa-cinerea'); await ready(page);
+    // The chips are drawn once the collection is open, after hydration: read at once, Safari's engine had none yet
+    // (round sixty-four; the all-engines run).
+    await expect(page.locator('.idcard .mine a.accno')).toHaveCount(2);
     const hrefs = await page.locator('.idcard .mine a.accno').evaluateAll((as) => as.map((a) => a.getAttribute('href')));
     expect(hrefs.sort()).toEqual(['/plants/r-two-a', '/plants/r-two-b']);
   });

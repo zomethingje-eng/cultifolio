@@ -5,9 +5,6 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 import { inject as sharedInject } from './helpers/inject';
-import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 
 test.use({ locale: 'en-GB' });
 test.describe.configure({ timeout: 240_000 });
@@ -77,13 +74,11 @@ test('r62g 3: a sheet of 2,003 lines whose first 2,000 look already here offers 
   await inject(page, rows, Date.now() - 3_600_000);
   const lines = ['number,species'];
   for (let i = 1; i <= 2003; i++) lines.push(`2026-${String(i).padStart(4, '0')},Copiapoa cinerea`);
-  const dir = mkdtempSync(join(tmpdir(), 'r62g-imp-'));
-  const f = join(dir, 'big.csv');
-  writeFileSync(f, lines.join('\n'));
   await page.goto('/plants/import'); await ready(page);
   await page.locator('#imp-mode-csv').click();
-  await page.locator('#imp-file').setInputFiles(f);
-  rmSync(dir, { recursive: true, force: true });
+  // The file's bytes, not a file on disk: Safari's engine on Windows kept the file open, and the temporary folder's removal
+  // failed with EPERM (round sixty-four; the all-engines run).
+  await page.locator('#imp-file').setInputFiles({ name: 'big.csv', mimeType: 'text/csv', buffer: Buffer.from(lines.join('\n')) });
   await page.locator('#imp-check').click({ timeout: 120_000 }); // the page folds 2,000 plants first: slow on a shared machine
   await page.locator('#imp-review-h').waitFor({ timeout: 120_000 });
   await expect(page.locator('#imp-add')).toContainText('Add 3 plants'); // base: "Add 0 plants", and the rest never reached

@@ -13,11 +13,24 @@ export interface PhotoBlobs {
   blob: Blob;
   thumb: Blob;
 }
+/**
+ * The same pixels as bytes, as the photos store keeps them where the browser refuses a Blob in its database: Safari's
+ * engine in a Private Browsing window ("Error preparing Blob/File data to be stored in object store"), where a photograph
+ * could not be added at all (round sixty-four; the all-engines run, smoke "photos"). Read back as Blobs; the JPEGs are
+ * the same bytes either way.
+ */
+interface PhotoBytes {
+  id: string;
+  full: ArrayBuffer;
+  small: ArrayBuffer;
+  fullType: string;
+  smallType: string;
+}
 
 interface VaultDB extends DBSchema {
   changes: { key: string; value: Change; indexes: { byRecord: [string, string] } };
   meta: { key: string; value: unknown };
-  photos: { key: string; value: PhotoBlobs };
+  photos: { key: string; value: PhotoBlobs | PhotoBytes };
   /** HLCs of changes the server has not acknowledged: every local edit, import and restore lands here; a pull does not. */
   outbox: { key: string; value: { t: string } };
   /**
@@ -199,7 +212,7 @@ export async function openStaging(): Promise<StagedReplacement> {
   };
   return {
     async putPhoto(p) {
-      await writing(() => need().put('photos', p));
+      await writing(() => putPhotoIn(need(), p));
     },
     async appendChanges(changes) {
       if (!changes.length) return;
@@ -599,9 +612,17 @@ export async function deviceId(): Promise<string> {
   return id;
 }
 
-/** Ask the browser not to evict us. Safari clears unused sites' storage after 7 days unless installed or persisted. */
-export async function requestPersistence(): Promise<boolean> {
+/**
+ * Ask the browser not to evict us. Safari clears unused sites' storage after 7 days unless installed or persisted.
+ * Firefox does not answer by itself: it asks the person, and the promise waits for their answer, however long that is
+ * (for good, if the question is dismissed). `known` is told what the browser has already promised, read without asking,
+ * so a page can say it while the question is open (round sixty-four; the Firefox run, where every page that waited for
+ * this answer never opened). With `ask` false nothing is asked: the answer is what the browser has already promised.
+ */
+export async function requestPersistence(known?: (persisted: boolean) => void, ask = true): Promise<boolean> {
   try {
+    if (!ask) return navigator.storage?.persisted ? await navigator.storage.persisted() : false;
+    if (known && navigator.storage?.persisted) void navigator.storage.persisted().then(known, () => {});
     if (navigator.storage?.persist) return await navigator.storage.persist();
   } catch {
     /* ignore */
@@ -609,13 +630,38 @@ export async function requestPersistence(): Promise<boolean> {
   return false;
 }
 
+/** Set once a Blob was refused and the same photograph stored as bytes: the rest of this page's photographs go as bytes. */
+let blobsRefused = false;
+async function asBytes(p: PhotoBlobs): Promise<PhotoBytes> {
+  const [full, small] = await Promise.all([p.blob.arrayBuffer(), p.thumb.arrayBuffer()]);
+  return { id: p.id, full, small, fullType: p.blob.type, smallType: p.thumb.type };
+}
+const asBlobs = (p: PhotoBlobs | PhotoBytes): PhotoBlobs =>
+  'full' in p ? { id: p.id, blob: new Blob([p.full], { type: p.fullType }), thumb: new Blob([p.small], { type: p.smallType }) } : p;
+/**
+ * A photograph into a photos store: as Blobs, or as bytes where the browser refuses Blobs there. Only a refusal the bytes
+ * then get past switches to bytes; a write that fails both ways (a full disk) is the first error, as it always was. The
+ * bytes are read before the write's transaction opens, which would otherwise close while they are read.
+ */
+async function putPhotoIn(db: IDBPDatabase<VaultDB>, p: PhotoBlobs): Promise<void> {
+  if (blobsRefused) { await db.put('photos', await asBytes(p)); return; }
+  try {
+    await db.put('photos', p);
+  } catch (e) {
+    const bytes = await asBytes(p);
+    try { await db.put('photos', bytes); } catch { throw e; }
+    blobsRefused = true;
+  }
+}
+
 export async function putPhotoBlobs(p: PhotoBlobs): Promise<void> {
-  await writing(async () => (await openVault()).put('photos', p));
+  await writing(async () => putPhotoIn(await openVault(), p));
 }
 
 export async function getPhotoBlobs(id: string): Promise<PhotoBlobs | undefined> {
   const db = await openVault();
-  return db.get('photos', id);
+  const p = await db.get('photos', id);
+  return p && asBlobs(p);
 }
 
 export async function deletePhotoBlobs(id: string): Promise<void> {

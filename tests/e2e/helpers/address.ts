@@ -38,9 +38,17 @@ export function docAddress(): string {
   return `198.51.100.${HOSTS[(runSalt() + n) % HOSTS.length]}`;
 }
 
-/** The address for the one test that spends a whole day's five on purpose: never one `docAddress` gives. */
+/** The projects of playwright.config.ts, in its order: each has its own limit address in a run (`limitAddress`). */
+const PROJECTS = ['chromium', 'phone', 'webkit', 'phone-webkit', 'firefox'];
+/**
+ * The address for the one test that spends a whole day's five on purpose: never one `docAddress` gives, and one of its
+ * own for each project of the run. One address for the whole run let the first engine's run of the test spend the five
+ * and the next engine's first vault be refused (round sixty-four; the Firefox run, 429 on its first vault). The five
+ * projects sit eleven apart in the fifty-five.
+ */
 export function limitAddress(): string {
-  return `198.51.100.${LIMIT_HOSTS[runSalt() % LIMIT_HOSTS.length]}`;
+  const p = PROJECTS.indexOf(test.info().project.name);
+  return `198.51.100.${LIMIT_HOSTS[(runSalt() + 11 * Math.max(0, p)) % LIMIT_HOSTS.length]}`;
 }
 
 /**

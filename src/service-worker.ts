@@ -57,6 +57,9 @@ self.addEventListener('install', (e) => {
 
 self.addEventListener('message', (e) => {
   if (e.data === 'skip') self.skipWaiting();
+  // Which build this worker serves, for a page deciding whether a takeover changes anything it shows (round sixty-four;
+  // the Firefox run, where a second worker of the very build the page ran took over and the page reloaded under the grower).
+  else if (e.data === 'version') e.ports[0]?.postMessage(version);
 });
 
 self.addEventListener('activate', (e) => {
