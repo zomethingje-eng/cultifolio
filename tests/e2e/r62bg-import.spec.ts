@@ -16,7 +16,7 @@ async function ready(p: Page) { await p.locator('html[data-ready]').waitFor({ st
 async function sheet(page: Page, text: string) {
   await page.goto('/plants/import'); await ready(page);
   await page.locator('#imp-mode-csv').click();
-  await page.locator('#imp-csv-paste-box summary').click();
+  await openDisclosure(page, '#imp-csv-paste-box');
   await page.fill('#imp-csv-text', text);
   await page.locator('#imp-csv-read').click();
 }

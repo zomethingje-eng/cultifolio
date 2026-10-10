@@ -301,7 +301,12 @@ test('r61a a11y 2: after Today\'s "Water N here" focus is on the stop\'s Undo, n
 
 test('r61a a11y 2: the menu\'s Download returns focus to the menu button, and Wanted Save to its Edit', async ({ page }) => {
   await seeded(page, [...plants(2), ['taxon', 'welwitschia-mirabilis-x', 'name', 'Lithops lesliei'], ['taxon', 'welwitschia-mirabilis-x', 'followed', true]]);
+  // The plants listed before the menu is opened: in Safari's engine on the PC the menu opened while the collection was still
+  // opening, when its Download has nothing to make yet and does nothing, so no download came, both times (round sixty-six;
+  // the all-engines run). The item now says the collection is still opening (r66y 2).
+  await expect(page.locator('a.accrow')).toHaveCount(2);
   await page.locator('#plants-menu-btn').click();
+  await expect(page.locator('#plants-sheet')).not.toHaveAttribute('aria-disabled', 'true');
   const dl = page.waitForEvent('download');
   await page.locator('#plants-sheet').focus();
   await page.keyboard.press('Enter');

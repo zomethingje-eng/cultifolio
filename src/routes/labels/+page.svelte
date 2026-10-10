@@ -126,10 +126,16 @@
       return reloaded && v && v.at === page.url.search && Array.isArray(v.ids) ? v.ids.filter((x): x is string => typeof x === 'string') : null;
     } catch { return null; }
   })();
+  // Written when the page is hidden too: Safari on an iPhone gives no `pagehide` to a tab it discards in the background,
+  // and reloads it when the grower comes back, so a pick made before switching to another app was lost (round sixty-six;
+  // the all-engines run's look at r62g 9, from WebKit's page lifecycle). Leaving the page inside the app forgets the copy
+  // written then, so a later visit from the menu still starts afresh.
   $effect(() => {
     const keep = () => { if (collection.ready) writeSetting(PICKED_KEY, 'tab', JSON.stringify({ at: page.url.search, ids: [...chosen] })); };
+    const hidden = () => { if (document.visibilityState === 'hidden') keep(); };
     window.addEventListener('pagehide', keep);
-    return () => window.removeEventListener('pagehide', keep);
+    document.addEventListener('visibilitychange', hidden);
+    return () => { window.removeEventListener('pagehide', keep); document.removeEventListener('visibilitychange', hidden); writeSetting(PICKED_KEY, 'tab', null); };
   });
   // Saved when the grower changes a choice, not on the first run, which is the page starting with what it read (round sixty-one; the grower review, 1).
   let saveArmed = false;
@@ -282,8 +288,13 @@
     </div>
   </div>
 
-  <div class="secrule"><h2>Plants</h2><div class="line"></div>{#if !noPlants}<span class="n">{picked.filter((x) => !x.batch).length} of {all.filter((x) => !x.batch).length} picked</span>{/if}</div>
-  {#if noPlants}
+  <div class="secrule"><h2>Plants</h2><div class="line"></div>{#if collection.ready && !noPlants}<span class="n">{picked.filter((x) => !x.batch).length} of {all.filter((x) => !x.batch).length} picked</span>{/if}</div>
+  {#if !collection.ready}
+    <!-- Until the collection has opened, the page says so: it said "No plant is growing" and "0 of 0 picked", and "Pick
+         all shown" picked nothing, then the list arrived and the pick was gone (round sixty-six; the all-engines run,
+         r62g 9, where Safari's engine on the PC opened the collection after the grower had picked; rule 2). -->
+    <div class="cult picklist" id="lb-opening"><p class="none">Opening your collection…</p></div>
+  {:else if noPlants}
     <!-- Nothing on file is said, with the way to fix it, not shown as an empty filter and an empty list (round fifty-eight; the grower review). -->
     <div class="cult picklist" id="lb-noplants"><p class="none">No plants yet. <a href="/plants/new">Add a plant</a> and its label can be printed here.</p></div>
   {:else}

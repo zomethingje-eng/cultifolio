@@ -4,6 +4,7 @@
  * (docs/review-61/tests/records--r61-import.spec.ts) as tests 1 to 3, and the grower review's test 2.
  */
 import { test, expect, type Page } from '@playwright/test';
+import { openDisclosure } from './helpers/disclosure';
 import { inject as sharedInject } from './helpers/inject';
 import { allowWrites, seedWait, writeWait, SEED_REQUESTS, WEBKIT_MS_PER_REQUEST } from './helpers/pace';
 
@@ -27,7 +28,7 @@ async function filed(page: Page) {
 async function sheet(page: Page, text: string) {
   await page.goto('/plants/import'); await ready(page);
   await page.locator('#imp-mode-csv').click();
-  await page.locator('#imp-csv-paste-box summary').click();
+  await openDisclosure(page, '#imp-csv-paste-box');
   await page.fill('#imp-csv-text', text);
   await page.locator('#imp-csv-read').click();
 }
@@ -186,15 +187,23 @@ test('r62g 9: the labels page remembers the plants picked across a reload (the g
   await page.click('#imp-check');
   await page.click('#imp-add');
   await expect(page.locator('#imp-done')).toContainText('26 plants added', { timeout: writeWait(5_000, 1_500) }); // about 1,500 requests: 30 s at Safari's engine's pace (helpers/pace.ts)
+  // The page's own plants listed before anything is picked or read: "Pick all shown" pressed while the collection was still
+  // opening picked nothing, in Safari's engine on the PC both times and in Firefox once (round sixty-six; the all-engines
+  // run). The page now says "Opening your collection…" until then (r66y 1). Opening reads the import's few hundred
+  // changes one by one after its snapshot: about 500 requests at Safari's engine's pace (helpers/pace.ts).
+  const listed = () => expect(page.locator('.pick')).toHaveCount(26, { timeout: writeWait(10_000, 500) });
   await page.goto('/labels'); await ready(page);
+  await listed();
   await expect(page.locator('#lb-print')).toHaveText('Print 0 labels'); // more than a sheet or two: none picked by default
   await page.fill('#lb-q', 'cinerea');
   await page.click('#lb-pick-plants');
   await expect(page.locator('#lb-print')).toHaveText('Print 3 labels');
   await page.reload(); await ready(page);
+  await listed();
   await expect(page.locator('#lb-print')).toHaveText('Print 3 labels'); // base: "Print 0 labels"
   // A reload only: coming to the page again afresh starts from its default (round sixty-two, at the merge).
   await page.goto('/plants'); await ready(page);
   await page.goto('/labels'); await ready(page);
+  await listed(); // "Print 0 labels" holds before the collection opens too: read once it has
   await expect(page.locator('#lb-print')).toHaveText('Print 0 labels');
 });

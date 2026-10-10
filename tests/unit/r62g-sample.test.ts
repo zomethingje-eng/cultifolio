@@ -77,6 +77,28 @@ describe('Leave (A9)', () => {
     await put('1790000000003-0000-aaaaaaaaaaaa0000', 'accession', 'r9', 'status', 'growing');
     expect(await sampleEdits()).toBe(2);
   });
+  it('a Leave pressed before the seed\'s stamp is written counts none of the seed\'s timeline lines (round sixty-six; r64f 5)', async () => {
+    session.m.set('cultifolio.demo', '1');
+    const { IDBFactory } = await import('fake-indexeddb');
+    globalThis.indexedDB = new IDBFactory(); // a sample of its own, not the one the test above wrote
+    vi.resetModules();
+    const vault = await import('$lib/db/vault');
+    const { sampleEdits } = await import('$lib/db/demo');
+    const put = async (t: string, kind: string, id: string, field: string, value: unknown) => vault.appendChanges([{ t, kind, id, field, value } as never]);
+    // The seed's one commit: a plant, a place, a taxon and two lines on the plant's and the batch's timelines; no stamp yet.
+    await put('1790000000000-0000-aaaaaaaaaaaa0000', 'accession', 'r1sampleseeds0', 'taxonName', 'Aloe vera');
+    await put('1790000000000-0001-aaaaaaaaaaaa0000', 'location', 'l1sampleseeds0', 'name', 'Bench 1');
+    await put('1790000000000-0002-aaaaaaaaaaaa0000', 'taxon', 'aloe-vera', 'name', 'Aloe vera');
+    await put('1790000000000-0003-aaaaaaaaaaaa0000', 'event', 'e1', 'acc', 'r1sampleseeds0');
+    await put('1790000000000-0004-aaaaaaaaaaaa0000', 'event', 'e1', 't', 'water');
+    await put('1790000000000-0005-aaaaaaaaaaaa0000', 'event', 'e2', 'acc', 's1sampleseeds0');
+    await put('1790000000000-0006-aaaaaaaaaaaa0000', 'event', 'e2', 't', 'germinate');
+    expect(await sampleEdits()).toBe(0); // base: 2, and "Leave the example? The 2 records you added…" to a visitor who added none
+    // The visitor's own plant and its first line are still theirs.
+    await put('1790000000001-0000-aaaaaaaaaaaa0000', 'accession', 'r9', 'taxonName', 'Lithops lesliei');
+    await put('1790000000001-0001-aaaaaaaaaaaa0000', 'event', 'e9', 'acc', 'r9');
+    expect(await sampleEdits()).toBe(2);
+  });
   it('"closed in another tab" is one function: the flag and the tab\'s copies go, the next page says why', async () => {
     session.m.set('cultifolio.demo', '1');
     session.m.set('cultifolio.demo.labels', '{}');

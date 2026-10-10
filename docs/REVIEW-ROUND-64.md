@@ -87,3 +87,33 @@ After the deploy (Worker `8a3fae20-297b-4c1c-a40f-e10f95866014`), the owner ran 
 - **Races:** r60 1 and r61h wait for the name checks to end; smoke 2322 waits for the page and the name check; smoke 901 and r62bg 5 open the "Use my own number" disclosure only while it is shut (`tests/e2e/helpers/disclosure.ts`).
 - **Not explained:** two Firefox flakes (an import of 4 plants and a new place, each over 5 s once).
 
+## 7. The third run (round sixty-six)
+
+Round sixty-five went up as Worker `4205c5e7-dde9-42a3-8299-b71f526552a3`; the deploy's own checks passed, the live check 18 of 18. The third run in WebKit, phone-webkit and Firefox: 619 passed, 6 failed (all WebKit), 4 flaky, 12 skipped, in 28.6 minutes. Agent Y read every failure.
+
+**Five real faults, in every engine:**
+- **The species field called a reference name "Not a reference name".** When the reference's search answered after the field's own check, the field said "Did you mean Copiapoa cinerea?" of Copiapoa cinerea, and a field left within 180 ms never gave the name its key. The late answer now settles the name.
+- **Labels lost the picked plants when Safari reloaded a tab it had dropped in the background.** The picks were saved only on `pagehide`, which such a tab never gets. They are now also saved when the page is hidden, and forgotten when the grower leaves the page within the app. This is inferred from WebKit's page lifecycle, not seen on a phone.
+- **Labels said "No plant is growing" while the collection was still opening,** and "Pick all shown" did nothing then. It now says the collection is opening.
+- **My plants said "0 growing" while the collection was opening.** It now shows no count until it has.
+- **The menu said "Download as a spreadsheet: no plants yet" while the collection was opening.** It now says the collection is still opening.
+
+Each has a test in `r66y-engines` that fails on the base build in Chromium.
+
+**Two more, found by the round's own strict Chromium runs (each failed once):**
+- **Leave, pressed as the example's plants appeared, asked whether to delete "records you added or changed here" of a visitor who had added none.** The seed writes its last stamp a moment after its plants; until then Leave counted the seed's own timeline lines as the visitor's, and a press in that moment met the question (Playwright answers Cancel, so the test stayed on My plants). A reload in that moment left the stamp unwritten for good. Without the stamp, a line on a seed plant's or the seed batch's timeline is now the seed's. The cost: in a sample whose stamp was cut off, a visitor's own watering of a seed plant is not counted either, so Leave may not ask about it. A unit test in `r62g-sample` counts 2 on the base build and 0 with the fix.
+- **A new place named in a place picker went unused when the form's own button was pressed before "Add place" finished, or without it (smoke 306).** Move pressed just after "Add place" read the picker while the new place was still being written, closed the panel, and moved nothing; the place appeared a moment later. Typing the name and pressing Move without "Add place" did the same, as did Add, Save and Pot up on the forms that hold a picker. Each of those buttons now finishes the picker's new place first and uses it, and a place being written is made once whatever is pressed. The plants import's picker is left: it is read when the pasted rows are, not at a save. r66y 6 and 7 fail on the base build.
+
+**Not explained:** r62bg 3 failed once in Chromium as smoke 901 and r62bg 5 did in WebKit: the import's "Or paste the sheet's text" took focus and stayed shut for 180 s. A probe found nothing that moves the summary after the switch to CSV, and nothing in the app closes a disclosure. Every test that opens that box now uses the round sixty-five helper, which presses the summary only while it is shut.
+
+**One test assumption:** r62w's phone first-screen tests block the service worker, which in WebKit fetches photographs past `page.route`.
+
+**Races and pace:**
+- r61a a11y 2, smoke 3099 and smoke 3259 now wait for what the page must show.
+- smoke 1698, smoke 536 and r60 12 wait for the name check's answer before pressing Add.
+- smoke 2535 waits for the 4,018 requests that opening the collection after two restores takes at WebKit's pace on the PC.
+
+**Left as decisions:**
+- **Add moves as the name check answers:** 30 px on a phone, up to 175 px for a hybrid. A press made just as the check answers can miss Add. Reserving the line's room would stop that, but it is a layout change.
+- **Opening the collection reads the changes since its last snapshot one request at a time** (`vault.ts`). That is the first read to batch if Safari on the iPhone also proves slow.
+

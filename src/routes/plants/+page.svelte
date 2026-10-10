@@ -223,7 +223,9 @@
 <!-- No count over an empty list: "0 growing · 0 plant numbers" said nothing the steps below do not (round fifty-eight; the grower review). -->
 <!-- "plant numbers", not "numbers given": the glossary's plain words (round fifty-eight; the accessibility review). -->
 <!-- "N growing" alone: "31 growing · 41 plant numbers" left the grower wondering why the two differ (round sixty; the grower review, 16). -->
-<PageHead compact title="My plants" sub="Your plants, each under its own number, kept on this device." count={collection.ready && !collection.accessions.length ? undefined : `${collection.accessions.filter((a) => a.status === 'growing').length} growing`}>
+<!-- And no count while the collection is still opening: "0 growing" stood over "Opening your collection…" for as long as the
+     open took (round sixty-six; the all-engines run, smoke 2527, a minute in Safari's engine on the PC; rule 2). -->
+<PageHead compact title="My plants" sub="Your plants, each under its own number, kept on this device." count={!collection.ready || !collection.accessions.length ? undefined : `${collection.accessions.filter((a) => a.status === 'growing').length} growing`}>
   <!-- The + in the top bar is the phone's add button; the head keeps its one line (round fifty, 4). -->
   <a class="btn pri wideonly" href="/plants/new">Add a plant</a>
   <PlantsMenu />

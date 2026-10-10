@@ -64,7 +64,10 @@ test.describe('the species notes draft (A13)', () => {
 });
 
 test.describe('phone, 390 × 844', () => {
-  test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, locale: 'en-GB' });
+  // The service worker blocked: in Safari's engine a page the worker controls sends its photographs past `page.route`
+  // (round sixty-five, smoke 1528), so the strip's first three asked the real host and "did not load", and the wait for
+  // them ran out, both times (round sixty-six; the all-engines run). Nothing here is about the worker.
+  test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, locale: 'en-GB', serviceWorkers: 'block' });
 
   test('the first screen holds the search, every grouping control and one whole catalogue row, with a live-shaped corpus (A10, B1)', async ({ page }) => {
     await servePhotos(page);

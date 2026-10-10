@@ -12,6 +12,7 @@
   import { collection } from '$lib/db/collection.svelte';
   import { today as day } from '$lib/ui/day.svelte';
   import SpeciesPicker from '$lib/ui/SpeciesPicker.svelte';
+  import { settlePlaces } from '$lib/ui/places-pending';
   import LocationPicker from '$lib/ui/LocationPicker.svelte';
   import { parseName, slugify, type NameKind, speciesSlug, speciesOf } from '$core/names';
   import { sheetForName } from '$lib/ui/index.svelte';
@@ -160,6 +161,7 @@
     }
     busy = true;
     try {
+      await settlePlaces(); // a new place named in the picker and not yet added is made, and the batch goes there
       const p = parseName(name);
       const taxonName = p.scientific;
       const slug = speciesSlug(taxonName);

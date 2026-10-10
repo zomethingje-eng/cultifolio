@@ -10,6 +10,7 @@
   import { collection } from '$lib/db/collection.svelte';
   import { today as day } from '$lib/ui/day.svelte';
   import SpeciesPicker from '$lib/ui/SpeciesPicker.svelte';
+  import { settlePlaces } from '$lib/ui/places-pending';
   import LocationPicker from '$lib/ui/LocationPicker.svelte';
   import { parseName, slugify, type NameKind, speciesSlug, speciesOf } from '$core/names';
   import { numberOrNull } from '$core/units';
@@ -146,6 +147,7 @@
     busy = true;
     const wanted = countN;
     try {
+      await settlePlaces(); // a new place named in the picker and not yet added is made, and the plant goes there
       const p = parseName(name);
       const taxonName = p.scientific;
       if (p.qualifier) taxonKey = null; // a key would say the plant is that species, which "cf." says it may not be

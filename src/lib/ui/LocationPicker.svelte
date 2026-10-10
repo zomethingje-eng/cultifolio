@@ -2,6 +2,7 @@
   /** Pick a location node from the tree, or make a new one in place. */
   import { collection } from '$lib/db/collection.svelte';
   import { LOCATION_KINDS, type LocationKind } from '$lib/db/types';
+  import { holdPlacePicker } from './places-pending';
   // `lastUsed`: the place the form pre-filled from the last one used; while it is still the one picked, the field says so (round fifty-eight; the grower review).
   let { value = $bindable<string | null>(null), id = 'loc', label = 'Location', lastUsed = null }: { value?: string | null; id?: string; label?: string; lastUsed?: string | null } = $props();
   let adding = $state(false);
@@ -26,13 +27,23 @@
     return out;
   });
 
-  async function create() {
-    if (!newName.trim()) return;
-    const loc = await collection.addLocation({ name: newName.trim(), type: newKind, parentId: newParent });
-    value = loc.id;
-    adding = false;
-    newName = '';
+  // One write at a time: "Add place" pressed twice, or the form's own button pressed while the place is written, waits
+  // for the same place rather than making a second (round sixty-six).
+  let making: Promise<void> | null = null;
+  function create(): Promise<void> {
+    if (making) return making;
+    if (!newName.trim()) return Promise.resolve();
+    making = (async () => {
+      const loc = await collection.addLocation({ name: newName.trim(), type: newKind, parentId: newParent });
+      value = loc.id;
+      adding = false;
+      newName = '';
+    })().finally(() => (making = null));
+    return making;
   }
+  /** What the form's own button waits for (`settlePlaces`): the place being written, or the one named and not yet added. */
+  const settle = () => making ?? (adding && newName.trim() ? create() : Promise.resolve());
+  $effect(() => holdPlacePicker(settle));
 </script>
 
 <div class="picker">

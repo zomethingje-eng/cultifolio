@@ -157,6 +157,15 @@
       const offered = !relaxed || (relaxed.trim().split(/\s+/).length === 2 && !!species && sameName(words(relaxed), species));
       local = (offered ? hits : []).map((e) => ({ key: e.key, name: e.name, family: e.family, local: true, similar, far: !e.name.toLowerCase().startsWith(typedGenus.slice(0, Math.min(4, typedGenus.length))) }));
       show();
+      // The reference answered after the field's check had concluded (a leave, or Enter, before this answer, with the name
+      // service silent), or after the grower had left the field (a leave within the search's 180 ms, whose check this
+      // search made stale): a name typed in full that the reference holds is resolved by it now, as the check would have.
+      // Otherwise the field said "Not a reference name. Did you mean Copiapoa cinerea?" of Copiapoa cinerea, or nothing,
+      // and the line arriving moved Add under the press (round sixty-six; the all-engines run, r60 12 in Firefox; rule 2).
+      if (!taxonKey && !keyless && (resolved === 'no' || resolved === 'unreached' || (resolved === 'unknown' && !root?.contains(document.activeElement)))) {
+        const exact = local.find((s) => !s.similar && sameName(s.name, p.scientific));
+        if (exact) { taxonKey = exact.key; resolved = 'yes'; }
+      }
     });
     // Rows the name service answered: the species part asked; for a genus followed by capitalised words with no species
     // of that name in the answer, the genus asked too, for the genus row's key.

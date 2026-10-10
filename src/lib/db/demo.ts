@@ -94,6 +94,8 @@ function clearFlag(): void {
 const LEFT = 'cultifolio.sampleLeft';
 /** The meta key under which the sample keeps the last stamp it was set out with: what came after is the visitor's. */
 export const SEED_TOP = 'demoSeedTop';
+/** The tail of every id the seed gives its records (demo-seed.ts). */
+export const SEED_TAG = 'sampleseeds0';
 
 /**
  * The sample was closed in another tab: this tab goes to the grower's own collection, and its next page says why. One
@@ -110,16 +112,24 @@ export function sampleClosedHere(): void {
 /**
  * How many records the visitor added or changed in the sample since it was set out: Leave asks before deleting them
  * (round sixty-two; A9). Read from the sample's own log: every record a change after the seed's last stamp touched. A
- * sample set out before round sixty-two has no such stamp, and counts the records not of the seed.
+ * sample set out before round sixty-two, or one whose stamp is not yet written, counts the records not of the seed.
  */
 export async function sampleEdits(): Promise<number> {
   if (!inDemo()) return 0;
   try {
     const { allChanges, getMeta } = await import('./vault');
     const top = await getMeta<string>(SEED_TOP);
+    const changes = await allChanges();
+    if (top) return new Set(changes.filter((c) => c.t > top).map((c) => `${c.kind}:${c.id}`)).size;
+    // No stamp: the seed's commit has landed and its stamp is a moment behind (a Leave pressed as the plants appear,
+    // round sixty-six; r64f 5 in Chromium), or a reload cut it off. A line on the timeline of a seed plant or the seed
+    // batch is then the seed's own: counted as the visitor's, it put "40 records you added" to a visitor who added none.
+    const ofSeed = new Set<string>();
+    for (const c of changes) if (c.kind === 'event' && c.field === 'acc' && typeof c.value === 'string' && c.value.endsWith(SEED_TAG)) ofSeed.add(c.id);
     const touched = new Set<string>();
-    for (const c of await allChanges()) {
-      if (top ? c.t > top : c.kind !== 'taxon' && c.kind !== 'setting' && !c.id.endsWith('sampleseeds0')) touched.add(`${c.kind}:${c.id}`);
+    for (const c of changes) {
+      if (c.kind === 'taxon' || c.kind === 'setting' || c.id.endsWith(SEED_TAG) || (c.kind === 'event' && ofSeed.has(c.id))) continue;
+      touched.add(`${c.kind}:${c.id}`);
     }
     return touched.size;
   } catch {

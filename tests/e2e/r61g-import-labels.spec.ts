@@ -3,6 +3,7 @@
  * browser. Adopts the grower review's labels spec (docs/review-60/tests/grower--labels.spec.ts) as tests 1 and 2.
  */
 import { test, expect, type Page } from '@playwright/test';
+import { openDisclosure } from './helpers/disclosure';
 import { framesSettled } from './helpers/settled';
 import { allowWrites, inWebKit, seedWait, writeWait, SEED_REQUESTS, WEBKIT_MS_PER_REQUEST } from './helpers/pace';
 
@@ -75,7 +76,7 @@ test('r61g 4: a sheet\'s unmatched columns are listed and kept, its dates asked 
   await page.goto('/plants/import');
   await ready(page);
   await page.click('#imp-mode-csv');
-  await page.locator('#imp-csv-paste-box > summary').click();
+  await openDisclosure(page, '#imp-csv-paste-box');
   await page.fill('#imp-csv-text', lines.join('\n'));
   await page.click('#imp-csv-read');
   await expect(page.locator('#imp-unmapped')).toContainText('Not matched to a field: Locality');
@@ -101,7 +102,7 @@ test('r61g 4: a sheet\'s unmatched columns are listed and kept, its dates asked 
   await page.goto('/plants/import');
   await ready(page);
   await page.click('#imp-mode-csv');
-  await page.locator('#imp-csv-paste-box > summary').click();
+  await openDisclosure(page, '#imp-csv-paste-box');
   await page.fill('#imp-csv-text', lines.join('\n'));
   await page.click('#imp-csv-read');
   await page.click('#imp-check');

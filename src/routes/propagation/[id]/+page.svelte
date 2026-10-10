@@ -15,6 +15,7 @@
   import { collection } from '$lib/db/collection.svelte';
   import WaitingRecord from '$lib/ui/WaitingRecord.svelte';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
+  import { settlePlaces } from '$lib/ui/places-pending';
   import LocationPicker from '$lib/ui/LocationPicker.svelte';
   import { slugify, speciesSlug } from '$core/names';
   import { EVENT_LABEL, PROP_METHODS, kindOf, type PropMethod, type Provenance } from '$lib/db/types';
@@ -193,6 +194,7 @@
     if (pmsg) return;
     pottingBusy = true;
     try {
+      await settlePlaces(); // a new place named and not yet added is made, and the seedlings go there
       const made = await collection.potUp(id, n, { date: pd, locationId: ploc, note: pnote.trim() || null });
       potted = made.map((a) => accNo(a));
       pottedIds = made.map((a) => a.id); // the labels link carries identities, as the plant page's Label does (round fifty-eight; the grower review)
@@ -291,6 +293,8 @@
     }
     edMsg = editProblem();
     if (edMsg) return;
+    await settlePlaces();
+    if (!s) return;
     await collection.put('sowing', id, {
       taxonName: f.taxonName.trim() || s.taxonName, cultivar: f.cultivar.trim() || null, method: f.method, sown: f.sown || s.sown, count: Math.max(1, Number(f.count) || s.count),
       // The seed fields are kept whatever the method: a batch switched to cuttings by mistake keeps its seed source, lot and

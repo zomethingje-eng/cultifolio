@@ -540,6 +540,11 @@ test('a hybrid is filed under its genus with its parents linked; a cultivar keep
   await page.locator('#species-name').blur();
   await expect(page.locator('.picker .pill', { hasText: 'hybrid' })).toBeVisible();
   await expect(page.locator('#f-parentage')).toHaveValue('Copiapoa cinerea × Copiapoa gigantea');
+  // The name service's answer on screen before Add: the genus's key, or the line under the field saying the service did not
+  // answer (as here, with no upstream; it comes after any pill the check writes). Both move Add down, and in Firefox on the
+  // PC Add was pressed and let go as they arrived, so the press missed it (round sixty-six; the all-engines run, where the
+  // page showed the line and an untouched Add; round sixty-five's smoke 2322 the same in Safari's engine).
+  await expect(page.locator('.picker .pill.ok').or(page.locator('.picker .hint.svc')).first()).toBeVisible({ timeout: 15_000 });
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   const hyb = page.url().split('/').pop()!;
@@ -1700,6 +1705,9 @@ test('at 390 px every tap target is a finger wide: top-bar icons, breadcrumb, se
   const SEL = 'a.btn, button.btn, #tabbar a, .chipbtn, #topbar .iconbtn, .crumb a, nav.tabs a, .rm, footer.credits a';
   const sample = () => page.evaluate((sel) => [...document.querySelectorAll(sel)].map((e) => { const r = e.getBoundingClientRect(); return { t: (e.textContent ?? e.getAttribute('aria-label') ?? '').trim().slice(0, 20), h: Math.round(r.height), w: Math.round(r.width) }; }).filter((x) => x.h > 0 && (x.h < 40 || x.w < 40)), SEL);
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  // The link's key checked before Add: at 390 px its pill wraps under the field and moves Add 30 px down, and in Safari's
+  // engine on the PC the press was made as it moved and missed (round sixty-six; the all-engines run, a flake).
+  await expect(page.locator('.picker .pill.ok')).toHaveText('GBIF 5384013', { timeout: 15_000 });
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   await page.getByRole('button', { name: 'Water', exact: true }).click();
@@ -2570,8 +2578,12 @@ test('round twenty-eight: a backup of four hundred plants with long notes is wri
   allowWrites(6_000 * WEBKIT_MS_PER_REQUEST);
   await page.click('#bk-merge');
   await expect(page.locator('#bk-done')).toContainText('400 plants', { timeout: writeWait(5_000, 6_000) });
+  // Opening the collection then reads the two restores' 4,000 arrivals one change at a time after the snapshot (4,018
+  // requests, counted in Chromium): over a minute at Safari's engine's pace, where the page said "Opening your
+  // collection…" past the 10 s, both times (round sixty-six; the all-engines run; helpers/pace.ts).
+  allowWrites(4_000 * WEBKIT_MS_PER_REQUEST);
   await page.goto('/plants');
-  await expect(page.locator('.seccount').first()).toContainText('400');
+  await expect(page.locator('.seccount').first()).toContainText('400', { timeout: writeWait(10_000, 4_000) });
   // a plant whose stored acquired date is in the future (an older file) can have its price edited; only a date this edit types is judged (round twenty-eight, 0)
   await page.goto('/plants/2025-0400');
   await more(page, 'Edit');
@@ -3105,6 +3117,12 @@ test('round fifty-one: a move into a place has an Undo that puts the plant back 
   await expect(page.locator('.tree .row', { hasText: 'Cold frame' })).toBeVisible();
   // Enter in a field submits the primary action: the page moves to the plant, not back to an emptied form
   await page.goto('/plants/new?species=Welwitschia%20mirabilis&key=5411106');
+  // The species from the link in the field, and Add able to be pressed, before Enter: the form fills the name once the
+  // collection has opened, and Enter in a field does nothing while Add is disabled. Safari's engine on the PC opened the
+  // collection after Enter, both times (round sixty-six; the all-engines run).
+  await expect(page.locator('#species-name')).toHaveValue('Welwitschia mirabilis');
+  await expect(page.locator('.picker .pill.ok')).toHaveText('GBIF 5411106', { timeout: 15_000 });
+  await expect(page.getByRole('button', { name: /^Add/ })).toBeEnabled();
   await page.locator('details.moredetails > summary').click();
   await page.locator('#f-field').fill('WM 1');
   await page.locator('#f-field').press('Enter');
@@ -3300,9 +3318,12 @@ test('round fifty-four: a Today page left open overnight dates the morning\'s wa
   // a watering dated ahead of today is its own row on Today, not "no watering recorded": watered under a clock fifty days on, read under one twelve hours behind it (a phone whose day turned early; the line is twelve hours ahead, within the hold)
   await page.evaluate(() => localStorage.setItem('__shift', String(50 * 86_400_000)));
   await page.goto(`/plants/${second}`);
-  await page.getByRole('button', { name: 'Water', exact: true }).click();
-  await expect(page.locator('.tlrow', { hasText: 'Watered' }).first()).toBeVisible();
   const aheadDay = await page.evaluate(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; });
+  await page.getByRole('button', { name: 'Water', exact: true }).click();
+  // This watering's own line, not the morning's from twenty-four days before, which was already there: the page was left
+  // before the write had landed, in Safari's engine on the PC both times, and Today never saw it (round sixty-six; the
+  // all-engines run).
+  await expect(page.locator('.tlrow', { hasText: 'Watered' }).first()).toContainText(aheadDay);
   // the clock set back to just before that day began: the line's date is ahead by a day, its stamp by a few hours, within the hold
   const back = await page.evaluate(() => new Date().getHours() + 1);
   await page.evaluate((h) => localStorage.setItem('__shift', String(50 * 86_400_000 - h * 3_600_000)), back);

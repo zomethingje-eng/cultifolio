@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import QRCode from 'qrcode';
 import { test, expect, type Page } from '@playwright/test';
+import { openDisclosure } from './helpers/disclosure';
 import { ownPages } from './helpers/r63v-own';
 import { allowWrites, seedWait, SEED_REQUESTS, WEBKIT_MS_PER_REQUEST } from './helpers/pace';
 
@@ -72,6 +73,12 @@ async function plant(p: Page, name: string, opts: { place?: string | null; price
   await ready(p);
   await p.fill('#species-name', name);
   await p.locator('#species-name').blur();
+  // The name check's answer on screen before Add (every name these tests type is the reference's: its key's pill). The
+  // check writes a pill and a line under the field, which move Add; in Firefox on the PC Add was pressed and let go as they
+  // arrived, the press missed, and neither the plant's page nor the second Add's question ever came (r60 12, round
+  // sixty-six; the all-engines run). The line that came then, "Not a reference name. Did you mean Copiapoa cinerea?", was
+  // the field's own fault, now fixed (r66y 3).
+  await expect(p.locator('.picker .pill.ok')).toContainText('GBIF', { timeout: 15_000 });
   // The form starts on the last place used (round fifty-eight): null asks for no place. Chosen once the collection has
   // opened with its places, when that start is set; "No place" chosen before it was overwritten (round sixty-four; 1 run
   // in 7 of r60 4 here).
@@ -154,7 +161,7 @@ test('r60 3: a pasted sheet with a BOM and semicolons makes its places when aske
   await page.goto('/plants/import');
   await ready(page);
   await page.click('#imp-mode-csv');
-  await page.locator('#imp-csv-paste-box > summary').click();
+  await openDisclosure(page, '#imp-csv-paste-box');
   const y = year();
   await page.fill('#imp-csv-text', `﻿number;species;location;acquired;price;notes\n${y}-0001;Welwitschia mirabilis;Greenhouse › Bench 9;2025-03-01;£30;"=SUM(1,2)"\n;Copiapoa humilis;Greenhouse › Bench 9;09/03/2024;12;`);
   await page.click('#imp-csv-read');

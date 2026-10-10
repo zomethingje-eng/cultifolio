@@ -19,7 +19,9 @@
     else if (e.key === 'Escape') { e.preventDefault(); close(true); }
     else if (e.key === 'Tab') close();
   }
-  /** Nothing to download yet: the item stays focusable and says so, as the menu pattern asks (round sixty-one; the accessibility review, 11). */
+  /** Nothing to download yet: the item stays focusable and says so, as the menu pattern asks (round sixty-one; the accessibility review, 11).
+   *  While the collection is still opening it says that, not "no plants yet", which it said of a collection not yet read
+   *  (round sixty-six; the all-engines run, r61a a11y 2, where Safari's engine on the PC opened it after the menu; rule 2). */
   const empty = $derived(!collection.ready || !collection.accessions.length);
   async function sheet() {
     if (busy || empty) return;
@@ -40,7 +42,7 @@
   {#if open}
     <div class="menu" id="plants-menu" role="menu" tabindex="-1" aria-label="More for My plants" use:first onkeydown={keys}>
       <a role="menuitem" href="/plants/import" onclick={() => close()}>Import from a list or a spreadsheet</a>
-      <button role="menuitem" type="button" id="plants-sheet" onclick={sheet} aria-disabled={empty}>Download as a spreadsheet{#if empty}<span class="why">: no plants yet</span>{/if}</button>
+      <button role="menuitem" type="button" id="plants-sheet" onclick={sheet} aria-disabled={empty}>Download as a spreadsheet{#if empty}<span class="why">{collection.ready ? ': no plants yet' : ': your collection is still opening'}</span>{/if}</button>
     </div>
   {/if}
 </div>

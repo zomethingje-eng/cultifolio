@@ -14,6 +14,7 @@
   import { collection } from '$lib/db/collection.svelte';
   import WaitingRecord from '$lib/ui/WaitingRecord.svelte';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
+  import { settlePlaces } from '$lib/ui/places-pending';
   import LocationPicker from '$lib/ui/LocationPicker.svelte';
   import type { Provenance, PlantEvent } from '$lib/db/types';
   import { slugify, speciesOf, speciesSlug, parseName } from '$core/names';
@@ -210,6 +211,7 @@
   let moving = $state(false);
   let moveTo = $state<string | null>(null);
   async function doMove() {
+    await settlePlaces(); // a new place still being written, or named and not added: moved to it, not left where it was
     if (!a || (moveTo ?? null) === (a.locationId ?? null)) { moving = false; return; }
     const to = moveTo ?? null;
     const { undo } = await collection.movePlantsUndoable([id], to); // the place and the line in one commit (round forty-nine, 1), with the way back (round fifty-one, 4)
@@ -363,6 +365,8 @@
     const wd = f.waterDays.trim() === '' ? null : Number(f.waterDays);
     edWaterMsg = wd != null && (Number.isNaN(wd) || wd < 1 || wd > 365) ? `${f.waterDays.trim()} is not a number of days from 1 to 365; leave it blank to follow its place.` : '';
     if (edWaterMsg) { document.getElementById('ed-waterdays')?.focus(); return; }
+    await settlePlaces();
+    if (!a) return;
     const moved = (f.locationId ?? null) !== (a.locationId ?? null);
     // The name as the add form files it: a hybrid is filed under its genus (or nothogenus) with the cross as parentage and
     // no species key, since it has no habitat of its own; an edit into a hybrid must not keep the species' name, key and
