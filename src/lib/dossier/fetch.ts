@@ -6,7 +6,7 @@
  */
 
 export type FetchResult<T> =
-  | { status: 'ok'; data: T }
+  | { status: 'ok'; data: T; detail?: string }
   | { status: 'none' }
   | { status: 'refused'; detail: string }
   | { status: 'error'; detail: string }

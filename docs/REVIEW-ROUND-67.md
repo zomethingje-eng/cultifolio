@@ -193,3 +193,25 @@ All runs were in the sandbox on the merged tree.
   - r62g 8 passed 10 of 10 repeated.
 - **The five tests H wrote ahead of other agents' work** (three budgets, places 7, disclosure 4) pass on the merge.
 - **Not run here:** WebKit and Firefox.
+
+## 9. The deploy and the corpus step (round sixty-eight)
+
+Round sixty-seven went up as commit `42b04d4`, Worker `b16b0ea2-f274-4200-9150-0466ae585892`:
+- the PC's strict run passed 410 of 410 first time;
+- the deploy's unit run passed 2,293, with 8 skipped (the real-corpus route test skips where the sandbox's corpus copy is absent);
+- the live check passed 18 of 18.
+
+**The online rebuild of the 156 species (N4) did not do what it was for.**
+- **Wikidata.** It answered 141 of them with `maxlag` ("Waiting for wdqs1011: 9.2 seconds lagged."). That is MediaWiki asking a batch client to come back once its replicas catch up. The builder took it as the source failing.
+- **iNaturalist.** The taxon id iNaturalist's photographs are asked by comes from Wikidata, so it was lost with it. iNaturalist's own name search found no exact name for 83 of them (Cinnamomum camphora is filed there as Camphora officinarum).
+- **Photographs.** 113 species came out with none, among them Sprekelia formosissima, Hibiscus sabdariffa and Leptospermum laevigatum. Two that had photographs lost them.
+- **The guard held.** The builder's new audit stopped with `drops.txt`, as N4 meant it to, and nothing was uploaded.
+
+**What changed:**
+- **Wikidata is asked again after its maxlag,** after the lag it names and a second (5 to 30 s), up to five times. This is in the corpus script only: the Worker's tail builds answer a visitor and do not wait.
+- **When Wikidata still does not answer,** the previous build's identifiers stand, the iNaturalist taxon id above all, and the record says so.
+- **iNaturalist's name search** now takes a taxon whose search says it matched exactly the name asked, so a name it files under another is found. A neighbour the search ranks first is still not taken.
+
+**Headlines.** Round sixty-seven's merge rule, which showed every compound written open where a source writes it so, produced "Giant Milk Weed", "Velvet Leaf" and "Cross-Berry" on the live index. It now applies only to a name ending in plant, tree, lily, daisy, palm, fern, cactus or orchid ("Zebra plant", "Lawn daisy", "Lily tree"); every other closed compound goes by its sources ("Milkweed", "Nannyberry"). On the corpus that is 427 changed headlines, not 490.
+
+Tests: `tests/unit/r68-builder.test.ts` (7 cases, the guards apart all failing on round sixty-seven), and two more cases in `r67n-names`. Unit tests: 2,307 passed and 1 skipped; svelte-check: 0 errors.

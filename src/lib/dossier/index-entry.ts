@@ -277,6 +277,8 @@ const upperWord = (w: string) => /^[^\p{L}]*\p{Lu}/u.test(w);
  * so "Star of bethlehem" lost the capital "star-of-Bethlehem" gave it, and 71 headlines stayed in Title Case where a
  * lower-case spelling existed.
  */
+/** Head nouns English writes apart in a plant's name (round sixty-seven): a closed form ending in one is shown open where a source writes it open. */
+const CLOSED_HEADS = ['plant', 'tree', 'lily', 'daisy', 'palm', 'fern', 'cactus', 'orchid'];
 export function casedSpelling(spellings: Array<{ spelling: string; from: ReadonlySet<string>; at: number }>): string {
   // The form: written open or closed, then its hyphens, each chosen by its sources (each counted once across the form's
   // spellings), a form without a trailing full stop first, then GBIF's order.
@@ -292,11 +294,17 @@ export function casedSpelling(spellings: Array<{ spelling: string; from: Readonl
       forms.set(k, f);
     }
     const dotted = (f: { spellings: S[] }) => Number(f.spellings.every((s) => /\.\s*$/.test(s.spelling)));
-    // A compound written open before closed, whatever the count: "Zebra plant", not "Zebraplant", where both are given
-    // (round sixty-seven, at the merge). The closed forms are one checklist's house style, copied by the lists that take
-    // from it, so their count outran the open form's and 40 headlines read as one word; a name given only closed stays so.
-    const words = (f: { spellings: S[] }) => f.spellings[0].spelling.trim().split(/[-\s]+/).length;
-    return [...forms.values()].sort((a, b) => dotted(a) - dotted(b) || words(b) - words(a) || b.from.size - a.from.size || a.at - b.at)[0].spellings;
+    // A head noun English writes apart is shown apart where some source writes it so: "Zebra plant", "Lawn daisy", "Lily
+    // tree", not the closed forms one checklist writes ("Zebraplant", "Lawndaisy", "Lilytree") and the lists that copy it
+    // outnumber. Every other closed compound goes by its sources, so "Milkweed", "Velvetleaf" and "Nannyberry" stay whole
+    // (round sixty-seven, after the corpus step: preferring every open form made "Giant Milk Weed" and "Velvet Leaf").
+    const openExists = forms.size > 1 && [...forms.keys()].some((k) => k.includes(' '));
+    const closedHead = (f: { spellings: S[] }) => {
+      if (!openExists) return 0;
+      const last = f.spellings[0].spelling.trim().split(/[-\s]+/).pop()!.toLowerCase();
+      return CLOSED_HEADS.some((h) => last.length > h.length + 1 && last.endsWith(h)) ? 1 : 0;
+    };
+    return [...forms.values()].sort((a, b) => dotted(a) - dotted(b) || closedHead(a) - closedHead(b) || b.from.size - a.from.size || a.at - b.at)[0].spellings;
   };
   const open = pick((s) => s.toLowerCase().replace(/[-\s]+/g, ' ').trim(), spellings);
   const hyphens = pick((s) => s.toLowerCase(), open);

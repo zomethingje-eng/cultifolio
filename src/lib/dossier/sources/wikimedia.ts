@@ -24,6 +24,31 @@ function mwError(data: unknown): string | null {
 }
 
 /**
+ * How long to wait before asking again, in seconds; a test makes it instant. MediaWiki answers a busy moment with HTTP 200
+ * and `maxlag`, "Waiting for wdqs1011: 9.2 seconds lagged.", asking a client to come back when the replicas have caught
+ * up. Taken as the source not answering, it failed Wikidata for 141 of the 156 species of round sixty-seven's online
+ * rebuild, and with it the iNaturalist taxon it names, so the rebuild found no photographs for 113 (round sixty-eight).
+ */
+export const mwWait = {
+  sleep: (s: number) => new Promise<void>((r) => setTimeout(r, s * 1000)),
+  /** Asks of one call. One in the Worker, whose tail builds answer a visitor and cannot sit through a lag; the corpus
+   *  script sets `MAXLAG_TRIES`. */
+  tries: 1
+};
+/** The corpus script's asks of one call: the first and four more, each after the lag it names and a second, 5 to 30 s. */
+export const MAXLAG_TRIES = 5;
+async function mwGet<T>(f: JsonFetcher, url: string): Promise<FetchResult<T>> {
+  for (let i = 0; ; i++) {
+    const r = await f<T>(url);
+    if (r.status !== 'ok') return r;
+    const e = (r.data as { error?: { code?: string; info?: string } })?.error;
+    if (e?.code !== 'maxlag' || i >= mwWait.tries - 1) return r;
+    const lag = Number(/([\d.]+) seconds? lagged/.exec(e.info ?? '')?.[1] ?? 5);
+    await mwWait.sleep(Math.min(30, Math.max(5, Math.ceil(lag) + 1)));
+  }
+}
+
+/**
  * The Wikidata item for a GBIF taxon key, found by the key itself (P846), so
  * the identity can never be another species' from a name search. A name is
  * only used when the key finds nothing, and then only on an exact label match.
@@ -31,7 +56,7 @@ function mwError(data: unknown): string | null {
 export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?: number): Promise<FetchResult<CrossIds>> {
   let id: string | undefined;
   if (gbifKey) {
-    const q = await f<{ query?: { search?: Array<{ title: string }> }; error?: unknown }>(
+    const q = await mwGet<{ query?: { search?: Array<{ title: string }> }; error?: unknown }>(f, 
       `https://www.wikidata.org/w/api.php?action=query&format=json&list=search&srlimit=2&srsearch=${encodeURIComponent(`haswbstatement:P846=${gbifKey}`)}&maxlag=5`
     );
     if (q.status !== 'ok') return q;
@@ -41,7 +66,7 @@ export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?:
     if (hits.length === 1) id = hits[0].title;
   }
   if (!id) {
-    const s = await f<{ search?: Array<{ id: string; label: string; description?: string }>; error?: unknown }>(
+    const s = await mwGet<{ search?: Array<{ id: string; label: string; description?: string }>; error?: unknown }>(f, 
       `https://www.wikidata.org/w/api.php?action=wbsearchentities&format=json&language=en&type=item&limit=5&search=${encodeURIComponent(scientificName)}&maxlag=5`
     );
     if (s.status !== 'ok') return s;
@@ -51,7 +76,7 @@ export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?:
     if (!hit) return { status: 'none' };
     id = hit.id;
   }
-  const e = await f<{ entities: Record<string, { claims: Record<string, Array<{ mainsnak: { datavalue?: { value: unknown } } }>>; sitelinks?: Record<string, { title: string }> }>; error?: unknown }>(
+  const e = await mwGet<{ entities: Record<string, { claims: Record<string, Array<{ mainsnak: { datavalue?: { value: unknown } } }>>; sitelinks?: Record<string, { title: string }> }>; error?: unknown }>(f, 
     `https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&ids=${id}&props=claims|sitelinks&sitefilter=enwiki&maxlag=5`
   );
   if (e.status !== 'ok') return e;
@@ -107,7 +132,7 @@ interface ImageInfo {
 }
 
 export async function commonsPhotos(f: JsonFetcher, category: string, max = 12): Promise<FetchResult<Photo[]>> {
-  const r = await f<{ query?: { pages?: Record<string, { title: string; imageinfo?: ImageInfo[] }> } }>(
+  const r = await mwGet<{ query?: { pages?: Record<string, { title: string; imageinfo?: ImageInfo[] }> } }>(f, 
     `https://commons.wikimedia.org/w/api.php?action=query&format=json&generator=categorymembers&gcmtitle=${encodeURIComponent('Category:' + category)}&gcmtype=file&gcmlimit=${max * 2}` +
       `&prop=imageinfo&iiprop=url|size|extmetadata&iiurlwidth=800&iiextmetadatafilter=LicenseShortName|Artist|Credit|LicenseUrl|Attribution&maxlag=5`
   );

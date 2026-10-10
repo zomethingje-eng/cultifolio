@@ -56,9 +56,12 @@ describe('N5: spellings pool across apostrophes, closed compounds, accents and a
     // Pooled, "Century plant" (two spellings, three sources) outranks "American agave" (two).
     expect(shown([eng('American agave', { source: 'a', alsoFrom: ['b'] }), eng('Century plant', { source: 'c' }), eng('Century-plant', { source: 'd' }), eng('Centuryplant', { source: 'e' })], 'Agave americana')).toBe('Century plant');
   });
-  it('a compound written open is shown over its closed form, however many lists copy the closed one (round sixty-seven, at the merge)', () => {
+  it('a head noun written apart (plant, tree, lily, daisy…) is shown apart over its closed form, however many lists copy the closed one (round sixty-seven)', () => {
     expect(shown([eng('Zebraplant', { source: 'USDA', alsoFrom: ['ITIS', 'CoL'] }), eng('Zebra plant', { source: 'TAXREF' })], 'Aphelandra squarrosa')).toBe('Zebra plant'); // base of the merge: "Zebraplant"
     expect(shown([eng('Lipsticktree', { source: 'USDA', alsoFrom: ['ITIS'] })], 'Bixa orellana')).toBe('Lipsticktree'); // guard: given only closed, shown as given
+    // A closed compound that is not a head noun written apart goes by its sources: "Milkweed", "Nannyberry" (after the corpus step).
+    expect(shown([eng('Giant milkweed', { source: 'a', alsoFrom: ['b', 'c'] }), eng('Giant Milk Weed', { source: 'd' })], 'Calotropis gigantea')).toBe('Giant milkweed');
+    expect(shown([eng('nannyberry', { source: 'a', alsoFrom: ['b', 'c', 'd'] }), eng('nanny-berry', { source: 'e', alsoFrom: ['f'] })], 'Viburnum lentago')).toBe('Nannyberry');
   });
   it('a source giving two spellings of one name counts once for it, and once for the spelling chosen', () => {
     expect(shown([eng('Jade', { source: 'a', alsoFrom: ['b'] }), eng('Money plant', { source: 'c' }), eng('Money-plant', { source: 'c' })], 'Crassula ovata')).toBe('Jade');

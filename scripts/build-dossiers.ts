@@ -88,6 +88,9 @@ import { stampOnBuild, restamp, dayNumber, type Changed } from '../src/lib/dossi
 import { tileCreditOf } from '../src/lib/ui/ref/head';
 import { dropsBetween } from '../src/lib/dossier/drops';
 import { offlineFetcher, carryRederivedRows } from '../src/lib/dossier/rederive';
+import { mwWait, MAXLAG_TRIES } from '../src/lib/dossier/sources/wikimedia';
+// The corpus script waits out Wikidata's maxlag, as MediaWiki asks of a batch client; the Worker does not (round sixty-eight).
+mwWait.tries = MAXLAG_TRIES;
 
 /** The substance fingerprint's hash: node's own, for nine thousand files (round sixty-three; src/lib/dossier/changed.ts). */
 const sha1 = (s: string) => createHash('sha1').update(s).digest('hex');
@@ -800,7 +803,8 @@ async function main() {
         climate,
         skip,
         mediaFirst: mediaFromFiles,
-        taxon: prevTaxon ? { key: prevTaxon.key, name: prevTaxon.name, accepted: prevTaxon.upstream?.['gbif.accepted'], builtOn: prevTaxon.built } : undefined
+        taxon: prevTaxon ? { key: prevTaxon.key, name: prevTaxon.name, accepted: prevTaxon.upstream?.['gbif.accepted'], builtOn: prevTaxon.built } : undefined,
+        prevIds: j.key ? readPrev(j.key)?.ids : undefined // kept when Wikidata does not answer (round sixty-eight)
       });
     } catch (e) {
       const issues = (e as { issues?: Array<{ path?: Array<{ key: unknown }>; message: string }> }).issues;

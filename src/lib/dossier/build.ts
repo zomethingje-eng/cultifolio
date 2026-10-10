@@ -48,6 +48,12 @@ export interface BuildOptions {
    * and the key matches; a build by name always asks the backbone.
    */
   taxon?: { key: number; name: Dossier['name']; accepted?: Upstream; builtOn?: string };
+  /**
+   * The previous build's identifiers for this key. When Wikidata does not answer (its maxlag, a failure), the build keeps
+   * them, above all iNaturalist's taxon id, which the photographs are asked by: a Wikidata outage had cost 113 species
+   * every photograph in round sixty-seven's online rebuild (round sixty-eight). Never used when Wikidata answered.
+   */
+  prevIds?: Dossier['ids'];
 }
 export type SkippableSource = 'openalex' | 'wikidata' | 'wikipedia' | 'inat' | 'commons' | 'gbif.media';
 /** Everything that is not the backbone, the range, the records or the climate: what a re-derivation can carry over from the previous build. */
@@ -97,7 +103,7 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   const now = () => (o.now ? o.now() : new Date()).toISOString();
   const upstream: Record<string, Upstream> = {};
   const mark = (src: string, r: { status: 'ok' | 'none' | 'refused' | 'error' | 'skipped'; detail?: string }) => {
-    upstream[src] = { status: r.status, at: now(), detail: r.status === 'ok' || r.status === 'none' ? undefined : r.detail };
+    upstream[src] = { status: r.status, at: now(), detail: r.status === 'none' ? undefined : r.detail };
   };
 
   /* ---- 1. Taxonomy (load-bearing) ---- */
@@ -325,6 +331,17 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   if (x.status === 'skipped') skipped('wikidata');
   else mark('wikidata', x);
   let enTitle = scientific;
+  if ((x.status === 'error' || x.status === 'refused') && o.prevIds) {
+    // Wikidata did not answer: the previous build's identifiers stand, and the record says so (round sixty-eight).
+    const p = o.prevIds;
+    Object.assign(ids, { wikidata: p.wikidata, powo: p.powo, ipni: p.ipni, inat: p.inat, wfo: p.wfo });
+    if (p.powo) links.powo = `https://powo.science.kew.org/taxon/${p.powo}`;
+    if (p.ipni) links.ipni = `https://www.ipni.org/n/${p.ipni}`;
+    if (p.wfo) links.wfo = `https://www.worldfloraonline.org/taxon/${p.wfo}`;
+    if (p.wikidata) links.wikidata = `https://www.wikidata.org/wiki/${p.wikidata}`;
+    if (p.wikipedia) enTitle = p.wikipedia;
+    if (p.wikidata || p.inat) upstream.wikidata = { ...upstream.wikidata, detail: `${upstream.wikidata.detail ?? ''}; the previous build's identifiers are kept`.replace(/^; /, '') };
+  }
   if (x.status === 'ok') {
     Object.assign(ids, { wikidata: x.data.wikidata, powo: x.data.powo, ipni: x.data.ipni, inat: x.data.inat, wfo: x.data.wfo });
     if (x.data.enTitle) enTitle = x.data.enTitle;

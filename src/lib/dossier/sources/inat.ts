@@ -9,6 +9,8 @@ export interface InatTaxon {
   name: string;
   rank: string;
   observations_count?: number;
+  /** The name the search matched: the taxon's own, or one of its synonyms. */
+  matched_term?: string;
   wikipedia_url?: string;
   default_photo?: { id: number; license_code?: string | null; url: string; attribution: string; original_dimensions?: { width: number; height: number } };
 }
@@ -20,7 +22,12 @@ export async function taxon(f: JsonFetcher, name: string): Promise<FetchResult<I
   // wrong species on a species page is worse than no photo. (iNat resolves accepted synonyms itself:
   // a taxon whose name differs is not a match we can verify here.)
   const exact = r.data.results.find((t) => t.name.toLowerCase() === name.toLowerCase());
-  return exact ? { status: 'ok', data: exact } : { status: 'none' };
+  if (exact) return { status: 'ok', data: exact };
+  // A name iNaturalist files under another (Cinnamomum camphora under Camphora officinarum): only when its search says it
+  // matched exactly this name, at species rank or below, so it is that name's taxon by iNaturalist's own synonymy, never a
+  // neighbour the search ranked first (round sixty-eight).
+  const syn = r.data.results.filter((t) => (t.matched_term ?? '').toLowerCase() === name.toLowerCase() && t.rank !== 'genus');
+  return syn.length === 1 ? { status: 'ok', data: syn[0], detail: `filed by iNaturalist as ${syn[0].name}` } : { status: 'none' };
 }
 
 interface ObsPhoto {
