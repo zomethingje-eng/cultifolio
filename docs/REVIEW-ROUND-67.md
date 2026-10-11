@@ -255,3 +255,21 @@ The rebuild ran as planned and did most of its job. Seventeen species took a nat
 **The photo fill, past its first 2,000 species, was answered by GBIF only after four retries each, about 15 seconds a species.** Nothing was lost, but the rest would take hours. The fill could not be stopped and resumed: a dossier told there was no photograph still had none, so a second fill asked all of it again. A dossier told so by this fill is now passed by (`askedOpen`), and the summary line says how many.
 
 **Not measured.** It is not known how many other species in the corpus Wikidata files under an older name. A dossier whose Wikidata status is "none" is the sign; a count over the 8,947 files on the PC did not finish within the remote shell's limit.
+
+## 12. Wikimedia Commons (round sixty-eight, fourth part)
+
+After the open-licence fill, 3,160 species had no photograph (the index's count). Every one of them recorded Commons as answering "none", and 3,084 of those answers had been carried from the build of 19 September.
+
+**A sample showed the "none" was the builder's.** 100 of the 3,160 were drawn at random and their Commons categories asked from the owner's PC. 15 had files in the category, and none of them passed the builder's filter. The cause is two changes in Commons' answer:
+- every address now carries a tracking query (`?utm_source=commons.wikimedia.org&…`), so the builder's test of the file's extension at the end of the address failed on every file;
+- thumbnails now come from `thumb.wikimedia.org`, at a standard width (960 for the 800 asked; a request for an 800-pixel thumbnail now answers 400).
+
+Across 3,000 of the corpus's dossiers, not one photograph came from Commons. With the test mended, all 15 of the sample's species had openly licensed photographs (114 between them), which suggests about 470 of the 3,160.
+
+**What changed:**
+- **Addresses.** A Commons address loses its query, and a thumbnail is given at `upload.wikimedia.org`. That host serves the same path, and it is the one the page's image policy and the about page name.
+- **Sizes.** The photograph shown is the 960-pixel thumbnail and the tile is the 500-pixel one, both widths on Commons' list; a file narrower than that is shown as it is. The about page says 960 and 500 where it said 800.
+- **A new fill, `--fill commons`,** asks Commons' category for each dossier that has no photograph, under its accepted name. It resumes as `--fill gbif-open` does and writes the index.
+- **Species that already have photographs** gain Commons' photographs at their next build. The fill does not ask for them.
+
+Tests: `tests/unit/r68d-commons.test.ts` (6 cases, all failing on the third part except the guards). Unit tests: 2,333 passed and 1 skipped. svelte-check: 0 errors.
