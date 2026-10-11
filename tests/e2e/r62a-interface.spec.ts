@@ -269,7 +269,11 @@ test('r62a a11y-perf 61-4: Today\'s "Show N more" moves focus to the first chip 
 
 test('r62a A40: Today\'s done row, pruned while focus is on its Undo, leaves focus on the stop\'s heading, or the section\'s', async ({ page }) => {
   test.setTimeout(90_000);
-  await page.clock.install();
+  // From today's noon, not from now: two jumps of eleven minutes taken within twenty-two minutes of midnight crossed into
+  // the next day, Today was drawn again for it, and focus went with the old rows (round sixty-nine: it failed every time
+  // here at ten to midnight UTC, on this round's engine and the deployed one alike, and passed with this at the same hour).
+  const noon = new Date(); noon.setHours(12, 0, 0, 0);
+  await page.clock.install({ time: noon });
   await seeded(page, plants(3, ['gh', 'Greenhouse'], 1, 'Haworthia cooperi'), '/today');
   const stop = page.locator('li.stop', { hasText: 'Greenhouse' });
   await stop.locator('#w-ap3').uncheck({ timeout: 30_000 }); // one left to water: the stop stays when its done row goes

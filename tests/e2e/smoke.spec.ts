@@ -110,7 +110,7 @@ test('the two renamed sections answer at their old paths with a redirect that ke
 });
 
 test('the plant card\'s menu works from the keyboard: arrows move, Tab closes it, Edit lands in the first field; no Photo verb while the tile is showing (round twenty, 10 and 11)', async ({ page }) => {
-  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   await expect(page.locator('.idcard label.tile')).toBeVisible();
@@ -171,7 +171,7 @@ test('unknown species is a 404 with a way forward: what the reference holds of t
 });
 
 test('add a plant, record an event, survive a reload', async ({ page }) => {
-  await page.goto('/plants/new');
+  await page.goto('/plants/new'); await ready(page);
   await page.fill('#species-name', 'Copiapoa cinerea');
   await page.locator('#species-name').blur();
   await page.locator('details.moredetails > summary').click(); // the short form is the species, the place and the date (round forty-nine, 3)
@@ -192,7 +192,7 @@ test('add a plant, record an event, survive a reload', async ({ page }) => {
   await page.goto('/plants');
   await expect(page.getByText('1 of 1')).toBeVisible();
   // numbers are never reused
-  await page.goto('/plants/new');
+  await page.goto('/plants/new'); await ready(page);
   await expect(page.getByText('0002')).toBeVisible();
 });
 
@@ -214,7 +214,7 @@ test('benches: make a place, put a plant there, water the bench, audit it', asyn
   await page.getByRole('button', { name: 'New place' }).click();
   await expect(page.locator('#loc-parent option:checked')).toHaveText('Top level');
   // add a plant on the shelf
-  await page.goto('/plants/new');
+  await page.goto('/plants/new'); await ready(page);
   await page.fill('#species-name', 'Tylecodon pearsonii');
   await page.locator('#species-name').blur();
   const shelfValue = await page.locator('#f-loc option', { hasText: 'Shelf 2' }).getAttribute('value');
@@ -250,7 +250,7 @@ test('benches: make a place, put a plant there, water the bench, audit it', asyn
 });
 
 test('sowings: sow seed, count germination, pot up into numbered plants, propagate from one of them', async ({ page }) => {
-  await page.goto('/propagation/new');
+  await page.goto('/propagation/new'); await ready(page);
   await page.selectOption('#s-method', 'seed');
   await page.fill('#species-name', 'Ariocarpus fissuratus');
   await page.locator('#species-name').blur();
@@ -298,9 +298,9 @@ test('sowings: sow seed, count germination, pot up into numbered plants, propaga
 });
 
 test('a species page hands its name to the add-plant and sow-seed forms', async ({ page }) => {
-  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=7284333');
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=7284333'); await ready(page);
   await expect(page.locator('#species-name')).toHaveValue('Copiapoa cinerea');
-  await page.goto('/propagation/new?species=Copiapoa%20cinerea&key=7284333');
+  await page.goto('/propagation/new?species=Copiapoa%20cinerea&key=7284333'); await ready(page);
   await expect(page.locator('#species-name')).toHaveValue('Copiapoa cinerea');
 });
 
@@ -347,7 +347,7 @@ test('the path species → my plants → bench is prefilled at every step and lo
   await page.locator('.hvh + details.why summary').click(); // the caveat sits one tap away, not beside the figures
   await expect(page.locator('.hvh + details.why')).toContainText('A comparison, not a verdict');
   // the next add-plant form remembers the last place used
-  await page.goto('/plants/new');
+  await page.goto('/plants/new'); await ready(page);
   await expect(page.locator('#f-loc option:checked')).toHaveText('East sill');
   // move it from the quickbar: a new place made inline, the move on the timeline, the bench sees it
   await page.goto(`/plants/${acc}`);
@@ -369,7 +369,7 @@ test('photos: taken on the device, resized, stored, captioned, made the cover, s
   // nothing about the grower's own, and the test never reached its upload when it did not (round sixty-two; outside
   // review B14). The reference's photograph offering "add your own" is r62h-harness.spec.ts's, over a local image; the
   // sentence for one that did not load is "removing asks twice; a species photograph that fails to load...".
-  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   const acc = page.url().split('/').pop()!;
@@ -450,7 +450,7 @@ test('backup: export a zip, wipe the device, restore it, and the collection is i
   await page.selectOption('#loc-kind', 'outdoor');
   await page.getByRole('button', { name: 'Add', exact: true }).click();
   await expect(page.locator('.tree .row', { hasText: 'Back porch' })).toBeVisible();
-  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   const opt = await page.locator('#f-loc option', { hasText: 'Back porch' }).getAttribute('value');
   await page.selectOption('#f-loc', opt!);
   await page.getByRole('button', { name: /^Add/ }).click();
@@ -534,7 +534,7 @@ test('backup: export a zip, wipe the device, restore it, and the collection is i
 
 test('a hybrid is filed under its genus with its parents linked; a cultivar keeps its species', async ({ page }) => {
   // a cross, typed the way a label reads
-  await page.goto('/plants/new');
+  await page.goto('/plants/new'); await ready(page);
   await page.fill('#species-name', "Copiapoa cinerea x C. gigantea 'Test Cross'");
   await page.locator('#species-name').blur();
   await expect(page.locator('.picker .pill', { hasText: 'hybrid' })).toBeVisible();
@@ -562,7 +562,7 @@ test('a hybrid is filed under its genus with its parents linked; a cultivar keep
   await page.goto('/species/copiapoa-cinerea');
   await expect(page.locator('.idcard .mine')).toHaveCount(0);
   // a cultivar of the species does count
-  await page.goto('/plants/new');
+  await page.goto('/plants/new'); await ready(page);
   await page.fill('#species-name', "Copiapoa cinerea 'Silver'");
   await page.locator('#species-name').blur();
   await expect(page.locator('.picker .pill', { hasText: 'cultivar' })).toBeVisible();
@@ -580,7 +580,7 @@ test('a hybrid is filed under its genus with its parents linked; a cultivar keep
 
 test('labels: pick plants, choose a sheet, print at true size with a code that opens the plant', async ({ page }) => {
   for (const n of ['Copiapoa cinerea', 'Welwitschia mirabilis']) {
-    await page.goto('/plants/new');
+    await page.goto('/plants/new'); await ready(page);
     await page.fill('#species-name', n);
     await page.locator('#species-name').blur();
     await page.getByRole('button', { name: /^Add/ }).click();
@@ -691,7 +691,7 @@ test('sync: two devices share one encrypted vault; changes and photos cross both
   await a.selectOption('#loc-kind', 'windowsill');
   await a.getByRole('button', { name: 'Add', exact: true }).click();
   await expect(a.locator('.tree .row', { hasText: 'Kitchen sill' })).toBeVisible();
-  await a.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await a.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(a);
   const opt = await a.locator('#f-loc option', { hasText: 'Kitchen sill' }).getAttribute('value');
   await a.selectOption('#f-loc', opt!);
   await a.getByRole('button', { name: /^Add/ }).click();
@@ -795,7 +795,7 @@ test('sync: an offline edit uploaded late is still discovered, and a backup merg
   const A = await browser.newContext();
   await fromAddress(A); // the vault is made from an address of its own (round sixty-two second pass)
   const a = await A.newPage();
-  await a.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await a.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(a);
   await a.getByRole('button', { name: /^Add/ }).click();
   await expect(a).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   const acc = a.url().split('/').pop()!;
@@ -844,7 +844,7 @@ test('sync: an offline edit uploaded late is still discovered, and a backup merg
   // A third, unsynced device makes its own plant and exports a backup; A merges that file. B must get the plant.
   const C = await browser.newContext();
   const c = await C.newPage();
-  await c.goto('/plants/new?species=Welwitschia%20mirabilis&key=5411106');
+  await c.goto('/plants/new?species=Welwitschia%20mirabilis&key=5411106'); await ready(c);
   await c.getByRole('button', { name: /^Add/ }).click();
   await expect(c).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   await c.goto('/backup');
@@ -1072,14 +1072,14 @@ test('a refused source is a distinct state on every surface: species page, front
   await expect(tile.locator('.fig')).toContainText('climate not checked');
   await expect(tile.locator('.fig')).toHaveAttribute('title', /not checked: a source refused or did not answer/);
   // plant tile
-  await page.goto('/plants/new?species=Refusia%20testii&key=999');
+  await page.goto('/plants/new?species=Refusia%20testii&key=999'); await ready(page);
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   const t = page.locator('.card', { hasText: 'Habitat rain season' });
   await expect(t.locator('.nc .tok')).toHaveText('Climate not checked');
   await expect(t).toContainText('No season is read from an answer that was not given');
   // a pending climate is pending, not absent
-  await page.goto('/plants/new?species=Welwitschia%20mirabilis&key=5411106');
+  await page.goto('/plants/new?species=Welwitschia%20mirabilis&key=5411106'); await ready(page);
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page.locator('.card', { hasText: 'Habitat rain season' })).toContainText('Climate pending');
 });
@@ -1094,7 +1094,7 @@ test('an unreachable reference is "not reached", never "not in the reference"', 
   await page.route('**/api/search**', (r) => r.abort());
   await page.route('**/api/sheets**', (r) => r.abort()); // the plant asks for its species' sheet by hash bucket
   await page.route('**/api/dossier/**', (r) => r.abort());
-  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   const acc = page.url().split('/').pop()!;
@@ -1144,7 +1144,7 @@ const a11yScan = (page: import('@playwright/test').Page) => page.evaluate(() => 
 
 test('every control has a name, headings do not jump, images have alt text, muted ink meets 4.5:1, and µ survives the label style', async ({ page }) => {
   test.setTimeout(90_000);
-  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   const acc = page.url().split('/').pop()!;
@@ -1169,7 +1169,7 @@ test('every control has a name, headings do not jump, images have alt text, mute
   }
   expect(findings).toEqual([]);
   // the sowing page's forms, and the bench edit form's µ
-  await page.goto('/propagation/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.goto('/propagation/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   await page.fill('#s-count', '10'); // a count is never assumed
   await page.getByRole('button', { name: 'Start batch' }).click();
   await expect(page).toHaveURL(/\/propagation\/S\d{4}-\d{3}$/);
@@ -1227,7 +1227,7 @@ test('long and unicode names: nothing overflows at 360 px, the number chip never
   const ctx = await browser.newContext({ viewport: { width: 360, height: 780 } });
   const page = await ctx.newPage();
   const add = async (name: string, field?: string) => {
-    await page.goto('/plants/new');
+    await page.goto('/plants/new'); await ready(page);
     await page.fill('#species-name', name);
     await page.locator('#species-name').blur();
     if (field) { await page.locator('details.moredetails > summary').click(); await page.fill('#f-field', field); }
@@ -1258,7 +1258,7 @@ test('removing asks twice; a species photograph that fails to load leaves the na
   await page.goto('/settings');
   await ready(page);
   await page.check('#pref-refphotos');
-  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   const acc = page.url().split('/').pop()!;
@@ -1309,7 +1309,7 @@ test('removing asks twice; a species photograph that fails to load leaves the na
   await expect(page.locator('#ed-date')).not.toHaveValue('2099-01-01');
   await page.locator('.editform').getByRole('button', { name: 'Cancel' }).click();
   // a future acquisition date is refused before any number is minted (round twenty-six, 3)
-  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   await page.fill('#f-date', '2099-01-01');
   await expect(page.locator('.secsub')).toContainText('2099-0001'); // the preview follows the date
   await page.getByRole('button', { name: /^Add/ }).click();
@@ -1349,7 +1349,7 @@ test('offline, a plant page not yet cached still opens from the section shell', 
   test.skip(browserName === 'webkit', WEBKIT_OFFLINE);
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
-  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   const acc = page.url().split('/').pop()!;
@@ -1369,7 +1369,7 @@ test('offline, a plant page not yet cached still opens from the section shell', 
 });
 
 test('the species field is a combobox: arrows and Enter pick a suggestion; Enter on a half-typed name asks before it files anything', async ({ page }) => {
-  await page.goto('/plants/new');
+  await page.goto('/plants/new'); await ready(page);
   const input = page.locator('#species-name');
   await expect(input).toHaveAttribute('role', 'combobox');
   await input.fill('Copiapoa cin');
@@ -1408,7 +1408,7 @@ test('the species field is a combobox: arrows and Enter pick a suggestion; Enter
   await expect(page.locator('.accrow')).toHaveCount(1);
   await expect(page.getByText('Welwit')).toHaveCount(0);
   // Escape closes the list and Tab leaves without losing what was typed
-  await page.goto('/plants/new');
+  await page.goto('/plants/new'); await ready(page);
   await input.fill('Copiapoa cin');
   await expect(page.locator('.picker [role=option]').first()).toBeVisible();
   await input.press('Escape');
@@ -1419,7 +1419,7 @@ test('the species field is a combobox: arrows and Enter pick a suggestion; Enter
 });
 
 test('a sowing without a count is refused with a sentence; a blank never becomes 20', async ({ page }) => {
-  await page.goto('/propagation/new');
+  await page.goto('/propagation/new'); await ready(page);
   await expect(page.locator('#s-count')).toHaveValue('');
   await page.fill('#species-name', 'Copiapoa cinerea');
   await page.locator('#species-name').blur();
@@ -1562,7 +1562,7 @@ test('pages about your own plants ask no outside host for anything unless the re
   await page.route(/^https?:\/\/(?!localhost|127\.0\.0\.1)/, (r) => { outside.push(new URL(page.url()).pathname + ' -> ' + r.request().url()); r.abort(); });
   page.on('request', (r) => { const u = new URL(r.url()); if (u.pathname.startsWith('/api/')) api.push(u.pathname + u.search); });
   // Welwitschia: its photograph (…/700/medium.jpg) is what an own page would fetch; the public front page shows it only as a small row thumbnail.
-  await page.goto('/plants/new?species=Welwitschia%20mirabilis&key=5411106');
+  await page.goto('/plants/new?species=Welwitschia%20mirabilis&key=5411106'); await ready(page);
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   const acc = page.url().split('/').pop()!;
@@ -1616,7 +1616,7 @@ test('pages about your own plants ask no outside host for anything unless the re
 test('hovering a species link on a page about your own plants sends nothing; the same link on a species page preloads (round thirteen, 2)', async ({ page }) => {
   const data: string[] = [];
   page.context().on('request', (r) => { if (r.url().includes('__data.json')) data.push(new URL(r.url()).pathname); }); // the context sees a preload the worker answered; the page may not
-  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   await page.getByRole('link', { name: 'Species page' }).hover();
@@ -1638,7 +1638,7 @@ test('hovering a species link on a page about your own plants sends nothing; the
 test.describe('a label\'s sheet, routed without the service worker', () => {
 test.use({ serviceWorkers: 'block' });
 test('a label whose species could not be reached says so, and the sheet is not printed as if the species had no figures (round thirteen, 6)', async ({ page }) => {
-  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   await page.context().route('**/api/sheets**', (r) => r.fulfill({ status: 429, contentType: 'application/json', body: '{"error":"wait"}' }));
@@ -1667,7 +1667,7 @@ test('a label whose species could not be reached says so, and the sheet is not p
   await page.fill('#lb-skip', '');
   await expect(page.locator('.page').first().locator('.label').nth(0).locator('.no')).toBeVisible();
   // a species the reference has but with no climate: its care line is empty, and that is an answer, not a wait (round fourteen, 3)
-  await page.goto('/plants/new?species=Welwitschia%20mirabilis&key=5411106');
+  await page.goto('/plants/new?species=Welwitschia%20mirabilis&key=5411106'); await ready(page);
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   await page.goto('/labels');
@@ -1683,7 +1683,7 @@ test('a returning grower never sees the catalogue or "You grow 0" while the coll
   await page.goto('/');
   await expect(page.locator('.chiprow')).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem('cultifolio.hasMine'))).toBeNull();
-  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   await page.goto('/');
@@ -1712,7 +1712,7 @@ test('at 390 px every tap target is a finger wide: top-bar icons, breadcrumb, se
   await page.setViewportSize({ width: 390, height: 844 });
   const SEL = 'a.btn, button.btn, #tabbar a, .chipbtn, #topbar .iconbtn, .crumb a, nav.tabs a, .rm, footer.credits a';
   const sample = () => page.evaluate((sel) => [...document.querySelectorAll(sel)].map((e) => { const r = e.getBoundingClientRect(); return { t: (e.textContent ?? e.getAttribute('aria-label') ?? '').trim().slice(0, 20), h: Math.round(r.height), w: Math.round(r.width) }; }).filter((x) => x.h > 0 && (x.h < 40 || x.w < 40)), SEL);
-  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   // The link's key checked before Add: at 390 px its pill wraps under the field and moves Add 30 px down, and in Safari's
   // engine on the PC the press was made as it moved and missed (round sixty-six; the all-engines run, a flake).
   await expect(page.locator('.picker .pill.ok')).toHaveText('GBIF 5384013', { timeout: 15_000 });
@@ -1742,7 +1742,7 @@ test('search forgives a typing error, ranks the genus first, and the picker does
   await expect(page.locator('.hitrow')).toHaveCount(1);
   await page.fill('.searchbar', 'namibia');
   await expect(page.locator('.hitrow .nm', { hasText: 'Welwitschia' })).toBeVisible();
-  await page.goto('/plants/new');
+  await page.goto('/plants/new'); await ready(page);
   await page.fill('#species-name', 'Copiapao cin');
   await expect(page.getByRole('option', { name: /Copiapoa cinerea/ })).toBeVisible();
 });
@@ -1813,7 +1813,7 @@ test('the share card is a PNG with the figures and the link drawn in, and is off
 });
 
 test('a grower\'s home says what needs them: sowings in the tray and plants without a photograph, each a link', async ({ page }) => {
-  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   // acquired seven months ago: the photograph line counts records older than six months, not a plant filed today (round forty-nine, 3)
   const ago = new Date(); ago.setMonth(ago.getMonth() - 7);
   await page.fill('#f-date', `${ago.getFullYear()}-${String(ago.getMonth() + 1).padStart(2, '0')}-${String(ago.getDate()).padStart(2, '0')}`);
@@ -1916,7 +1916,7 @@ test('settings: numbering is previewed and saved as the vault setting; appearanc
   await expect(page.locator('.accno')).toHaveText('JF-0001');
   await page.getByRole('button', { name: 'Save numbering', exact: true }).click();
   await expect(page.getByText(/the next plant is JF-0001/)).toBeVisible();
-  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/JF-0001$/);
   await page.goto('/settings');
@@ -1980,7 +1980,7 @@ test('a visitor sees all five places in the top bar, the menu and, since round s
   await expect(page.locator('.pill', { hasText: 'open records' })).toHaveCount(0); // the fact strip says it
   await expect(page.locator('.facts')).toContainText('52 open');
   await expect(page.locator('h2.sec#s-glance')).toHaveCount(1); // the heading is there for the section bar and readers; the figures speak for themselves on screen
-  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   await page.goto('/plants');
@@ -1996,7 +1996,7 @@ test('the collection\'s pages need nothing from the server to open: a plant page
   test.skip(browserName === 'webkit', WEBKIT_OFFLINE);
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
-  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   const acc = page.url().split('/').pop()!;
@@ -2014,7 +2014,7 @@ test('the collection\'s pages need nothing from the server to open: a plant page
 });
 
 test('the batch page checks what it is told: no count above the seeds sown or below the last count, no loss or potting beyond the pot, no future dates; a wrong entry can be removed', async ({ page }) => {
-  await page.goto('/propagation/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.goto('/propagation/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   await page.fill('#s-count', '10');
   await page.fill('#s-date', '2099-01-01');
   await page.getByRole('button', { name: 'Start batch' }).click();
@@ -2068,7 +2068,7 @@ test('the front page offline asks for the catalogue once and offers a retry, nev
   const page = await ctx.newPage();
   await page.goto('/');
   if (withWorker) await page.evaluate(() => navigator.serviceWorker.ready);
-  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   // The reference unreachable: the route is on the context, so the worker's own fetch of the bucket fails too (worker network events are on in the config).
@@ -2085,10 +2085,10 @@ test('the front page offline asks for the catalogue once and offers a retry, nev
 });
 
 test('settings previews the next number from the numbers given, and an edited acquisition date follows into the log', async ({ page }) => {
-  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
-  await page.goto('/plants/new?species=Copiapoa%20humilis&key=5384999');
+  await page.goto('/plants/new?species=Copiapoa%20humilis&key=5384999'); await ready(page);
   await addPlant(page);
   await page.goto('/settings');
   await ready(page);
@@ -2122,15 +2122,15 @@ test('keyboard: the menu keeps Tab inside and Escape returns focus; Enter in the
   await page.goBack();
   await expect(page.locator('.searchbar')).toHaveValue('copiapoa hum');
   // Enter in a filled species field does nothing; Add files it
-  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   await page.locator('#species-name').press('Enter');
   await expect(page).toHaveURL(/\/plants\/new/);
 });
 
 test('two tabs adding at once get two numbers, and each tab sees the other\'s plant (round seven, 1)', async ({ page, context }) => {
-  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   const other = await context.newPage();
-  await other.goto('/plants/new?species=Copiapoa%20humilis&key=5384999');
+  await other.goto('/plants/new?species=Copiapoa%20humilis&key=5384999'); await ready(other);
   await expect(page.locator('.accno').first()).toHaveText(`${year()}-0001`);
   await expect(other.locator('.accno').first()).toHaveText(`${year()}-0001`); // both tabs promise the same next number
   await Promise.all([page.getByRole('button', { name: /^Add/ }).click(), other.getByRole('button', { name: /^Add/ }).click()]);
@@ -2144,7 +2144,7 @@ test('two tabs adding at once get two numbers, and each tab sees the other\'s pl
 });
 
 test('editing a plant to another species replaces its habitat figures and links its species page only when the reference has one (round seven, 4 and 9)', async ({ page }) => {
-  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page.locator('.card', { hasText: 'Habitat rain season' })).toContainText('No rainy season');
   await more(page, 'Edit');
@@ -2164,7 +2164,7 @@ test('editing a plant to another species replaces its habitat figures and links 
 });
 
 test('a germination count that potted plants rest on cannot be removed; bottom heat outside a propagator\'s range is refused (round seven, 5 and 14)', async ({ page }) => {
-  await page.goto('/propagation/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.goto('/propagation/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   await page.fill('#s-count', '20');
   await page.fill('#s-heat', '77');
   await page.getByRole('button', { name: 'Start batch' }).click();
@@ -2188,7 +2188,7 @@ test('a germination count that potted plants rest on cannot be removed; bottom h
 });
 
 test('the one search box finds a plant by its number, and the cold floor is one figure everywhere it appears (round seven, 18 and 1)', async ({ page }) => {
-  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   await page.goto('/');
@@ -2205,7 +2205,7 @@ test('the one search box finds a plant by its number, and the cold floor is one 
 
 test('a link that pairs a species with another species\' key is corrected at the form, and the plant page shows the species named (round eleven, 2)', async ({ page }) => {
   // Copiapoa cinerea with Copiapoa humilis's key: the reference's own key for the name is kept, not the one in the link.
-  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384999');
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384999'); await ready(page);
   await expect(page.locator('.pill', { hasText: 'GBIF 5384013' })).toBeVisible();
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
@@ -2214,9 +2214,9 @@ test('a link that pairs a species with another species\' key is corrected at the
   await more(page, 'Edit');
   await expect(page.locator('.pill', { hasText: 'GBIF 5384013' })).toBeVisible(); // the record carries cinerea's key
   // The same at the sowing form; and a name below species rank keeps the key it was given (the reference has none for it).
-  await page.goto('/propagation/new?species=Copiapoa%20cinerea&key=5384999');
+  await page.goto('/propagation/new?species=Copiapoa%20cinerea&key=5384999'); await ready(page);
   await expect(page.locator('.pill', { hasText: 'GBIF 5384013' })).toBeVisible();
-  await page.goto('/plants/new?species=Copiapoa%20cinerea%20subsp.%20test&key=777');
+  await page.goto('/plants/new?species=Copiapoa%20cinerea%20subsp.%20test&key=777'); await ready(page);
   await expect(page.locator('.pill', { hasText: 'GBIF 777' })).toBeVisible();
 });
 
@@ -2256,10 +2256,10 @@ test('two tabs whose clocks read the same millisecond still make two plants: eac
   // Both tabs' clocks stopped at one instant: every stamp either tab makes has the same wall time, so only the writer tag can tell them apart.
   const frozen = Date.parse('2026-09-25T16:30:00.000Z');
   await page.clock.setFixedTime(frozen); // Date.now() stands still; timers still run
-  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   const other = await context.newPage();
   await other.clock.setFixedTime(frozen);
-  await other.goto('/plants/new?species=Welwitschia%20mirabilis&key=5411106');
+  await other.goto('/plants/new?species=Welwitschia%20mirabilis&key=5411106'); await ready(other);
   await expect(page.locator('.accno').first()).toHaveText('2026-0001');
   await expect(other.locator('.accno').first()).toHaveText('2026-0001');
   await Promise.all([page.getByRole('button', { name: /^Add/ }).click(), other.getByRole('button', { name: /^Add/ }).click()]);
@@ -2276,7 +2276,7 @@ test('no page address goes out as a referrer: the policy is on every document an
   // Playwright reports a request's headers as the page framed them, before the browser applies the referrer policy, so the
   // wire itself is not observable here; it was checked once with a logging proxy in front of the server (no Referer on any
   // font, API or data request). What is checked on every run: the policy is declared on the document and on every response.
-  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   expect(await page.evaluate(() => document.querySelector('meta[name="referrer"]')?.getAttribute('content'))).toBe('no-referrer');
   for (const path of ['/plants', '/about/how', '/offline', '/api/corpus']) {
     const r = await page.request.get(path);
@@ -2318,7 +2318,7 @@ test('a place chosen on the add form while the reference is still answering is k
     await expect(page.locator('.tree .row', { hasText: n })).toBeVisible();
   }
   // make Greenhouse the last-used place
-  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   const ghValue = await page.locator('#f-loc option', { hasText: 'Greenhouse' }).getAttribute('value');
   await page.selectOption('#f-loc', ghValue!);
   await page.getByRole('button', { name: /^Add/ }).click();
@@ -2326,7 +2326,7 @@ test('a place chosen on the add form while the reference is still answering is k
   // the reference's answer is slow this time; the grower picks Cold frame before it lands
   await page.context().route(/\/api\/sheets/, async (r) => { await new Promise((res) => setTimeout(res, 1500)); await r.continue(); });
   const slow = page.waitForResponse(/\/api\/sheets/);
-  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   await expect(page.locator('#f-loc')).toHaveValue(ghValue!); // the default, at once
   const cfValue = await page.locator('#f-loc option', { hasText: 'Cold frame' }).getAttribute('value');
   await page.selectOption('#f-loc', cfValue!);
@@ -2341,7 +2341,7 @@ test('a place chosen on the add form while the reference is still answering is k
 });
 
 test('a species page you grow six of does not scroll sideways on a phone (round seventeen, 11)', async ({ page }) => {
-  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   await page.locator('details.moredetails > summary').click();
   await page.fill('#f-count', '6');
   await page.getByRole('button', { name: /^Add/ }).click();
@@ -2362,7 +2362,7 @@ test('round twenty-three: a name the reference does not hold is added on the sec
   test.setTimeout(60_000);
   // The name service is not reachable here (no upstream), so a name outside the fixture corpus resolves to nothing: the
   // first Add arms the field and asks, the second keeps exactly what was typed (round twenty-three, 4).
-  await page.goto('/plants/new');
+  await page.goto('/plants/new'); await ready(page);
   // In Safari's engine the first Add left the field unarmed: pressed before the page had its handlers, or as the line the
   // name check writes under the field pushed the button down. Hydrated first, and the check's answer on screen (its pill)
   // before Add is pressed (round sixty-five; the all-engines rerun).
@@ -2424,7 +2424,7 @@ test('round twenty-three: a name the reference does not hold is added on the sec
   await expect(page.locator('.tlrow', { hasText: 'Cold frame was removed' })).toBeVisible();
 
   // A batch marked failed: the log says so and the page says it happened (round twenty-three, 16)
-  await page.goto('/propagation/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.goto('/propagation/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   await page.fill('#s-count', '6');
   await page.getByRole('button', { name: 'Start batch' }).click();
   await expect(page).toHaveURL(/\/propagation\/S\d{4}-001$/);
@@ -2440,7 +2440,7 @@ test('round twenty-three: a name the reference does not hold is added on the sec
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.locator('.cult .body', { hasText: 'looks etiolated' })).toBeVisible();
   // a second plant: the sort menu shows from two plants on (round fifty-eight)
-  await page.goto('/plants/new?species=Welwitschia%20mirabilis&key=5411106');
+  await page.goto('/plants/new?species=Welwitschia%20mirabilis&key=5411106'); await ready(page);
   await addPlant(page);
   await page.goto('/plants');
   await page.fill('#plants-q', 'etiolated porch');
@@ -2458,7 +2458,7 @@ test('round twenty-three: a name the reference does not hold is added on the sec
 });
 
 test('round twenty-eight: a batch edit saves its medium and container, keeps the seed fields across a method switch, judges its date and count; the field number and the lot travel apart; Mark done asks while plants are in the pot', async ({ page }) => {
-  await page.goto('/propagation/new');
+  await page.goto('/propagation/new'); await ready(page);
   await page.selectOption('#s-method', 'seed');
   await page.fill('#species-name', 'Copiapoa cinerea');
   await page.locator('#species-name').blur();
@@ -2600,7 +2600,7 @@ test('round twenty-eight: a backup of four hundred plants with long notes is wri
 });
 
 test('round twenty-nine: the photo viewer removes the photograph it shows after a date edit re-sorts the set, with Undo; three photographs added at once keep their progress on screen', async ({ page }) => {
-  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   await addPlant(page);
   const acc = page.url().split('/').pop()!;
   await page.setViewportSize({ width: 640, height: 480 });
@@ -2637,7 +2637,7 @@ test('round twenty-nine: the photo viewer removes the photograph it shows after 
 });
 
 test('round twenty-nine: a potting is judged by what was in the pot on its day, a count cannot go if a later potting rested on it, and an edit to the medium alone is not refused for a stored date', async ({ page }) => {
-  await page.goto('/propagation/new');
+  await page.goto('/propagation/new'); await ready(page);
   await page.selectOption('#s-method', 'seed');
   await page.fill('#species-name', 'Copiapoa cinerea');
   await page.locator('#species-name').blur();
@@ -2796,7 +2796,7 @@ test('round forty: a measurement typed in inches is stored in millimetres and re
 });
 
 test('round forty-one: a batch gets a label from its own page, with the sowing line on it (R10)', async ({ page }) => {
-  await page.goto('/propagation/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.goto('/propagation/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   await page.fill('#s-count', '20');
   await page.getByRole('button', { name: 'Start batch' }).click();
   await expect(page).toHaveURL(/\/propagation\/S\d{4}-\d{3}$/);
@@ -2813,7 +2813,7 @@ test('round forty-one, as round fifty-eight has it: the site is a first-visit st
   const steps = page.locator('.firststeps');
   await expect(steps.locator('a', { hasText: 'Your location for the frost watch' })).toHaveAttribute('href', '/settings#site');
   await expect(page.locator('#plants-sort')).toHaveCount(0); // no sort menu over nothing
-  await page.goto('/plants/new');
+  await page.goto('/plants/new'); await ready(page);
   await page.fill('#species-name', 'Copiapoa cinerea');
   await page.locator('#species-name').blur();
   await addPlant(page);
@@ -2958,7 +2958,7 @@ test('round forty-nine: a place takes plants in from a ticked list, in one commi
   await expect(page.locator('.tree .row', { hasText: 'Cold frame' })).toBeVisible();
   const accs: string[] = [];
   for (const n of ['Copiapoa cinerea', 'Welwitschia mirabilis']) {
-    await page.goto('/plants/new');
+    await page.goto('/plants/new'); await ready(page);
     await page.fill('#species-name', n);
     await page.locator('#species-name').blur();
     await addPlant(page);
@@ -3121,7 +3121,7 @@ test('round fifty-one: a move into a place has an Undo that puts the plant back 
   await page.getByRole('button', { name: 'Add', exact: true }).click();
   await expect(page.locator('.tree .row', { hasText: 'Cold frame' })).toBeVisible();
   // Enter in a field submits the primary action: the page moves to the plant, not back to an emptied form
-  await page.goto('/plants/new?species=Welwitschia%20mirabilis&key=5411106');
+  await page.goto('/plants/new?species=Welwitschia%20mirabilis&key=5411106'); await ready(page);
   // The species from the link in the field, and Add able to be pressed, before Enter: the form fills the name once the
   // collection has opened, and Enter in a field does nothing while Add is disabled. Safari's engine on the PC opened the
   // collection after Enter, both times (round sixty-six; the all-engines run).
@@ -3152,7 +3152,7 @@ test('round fifty-two: a device a year ahead is corrected by the server\'s clock
   test.setTimeout(90_000); // three browser contexts and five sync runs: 23 s on a quiet machine, past the 30 s default on a loaded one (round sixty-two; the harness review's 4)
   const shifted = async (ms: number) => { const c = await browser.newContext(); await c.addInitScript((off: number) => { const real = Date.now; const OD = Date; (globalThis as { __shift?: number }).__shift = off; globalThis.Date = class extends OD { constructor(...args: unknown[]) { if (args.length === 0) super(real() + ((globalThis as { __shift?: number }).__shift ?? 0)); else super(...(args as [number])); } static now() { return real() + ((globalThis as { __shift?: number }).__shift ?? 0); } } as DateConstructor; }, ms); return c; };
   const A = await browser.newContext(); await fromAddress(A); const a = await A.newPage(); // the vault from an address of its own (round sixty-two second pass)
-  await a.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await addPlant(a);
+  await a.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(a); await addPlant(a);
   const acc = a.url().split('/').pop()!;
   await a.goto('/sync'); await a.click('#sync-start'); const key = (await a.locator('#vault-key').textContent())!.trim();
   await a.fill('#key-typeback', key.slice(-5).toLowerCase()); await a.click('#sync-create');
@@ -3210,7 +3210,7 @@ test('round fifty-three: the Today tab lists what needs you by place, "no wateri
   await page.getByRole('button', { name: 'Add', exact: true }).click();
   await expect(page.locator('.tree .row', { hasText: 'Bench' })).toBeVisible();
   for (let i = 0; i < 2; i++) {
-    await page.goto('/plants/new?species=Refusia%20testii&key=999');
+    await page.goto('/plants/new?species=Refusia%20testii&key=999'); await ready(page);
     const opt = await page.locator('#f-loc option', { hasText: 'Bench' }).getAttribute('value');
     await page.selectOption('#f-loc', opt!);
     await addPlant(page);
@@ -3267,7 +3267,7 @@ test('round fifty-three: the Today tab lists what needs you by place, "no wateri
 });
 
 test('round fifty-four: the selected segment of "Your species / All" stays readable while hovered, as a phone leaves it after a tap (1)', async ({ page }) => {
-  await page.goto('/plants/new?species=Refusia%20testii&key=999'); await addPlant(page);
+  await page.goto('/plants/new?species=Refusia%20testii&key=999'); await ready(page); await addPlant(page);
   await page.goto('/');
   const all = page.locator('.viewseg button', { hasText: 'All' });
   await all.click();
@@ -3287,7 +3287,7 @@ test('round fifty-four: a Today page left open overnight dates the morning\'s wa
   let asked = 0;
   await page.route(/\/api\/forecast/, (r) => { asked++; void r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(frosty) }); });
   // two plants, no site yet: no bar anywhere
-  for (let i = 0; i < 2; i++) { await page.goto('/plants/new?species=Refusia%20testii&key=999'); await addPlant(page); }
+  for (let i = 0; i < 2; i++) { await page.goto('/plants/new?species=Refusia%20testii&key=999'); await ready(page); await addPlant(page); }
   const second = page.url().split('/').pop()!;
   await page.goto('/plants');
   await expect(page.locator('#frostbar')).toHaveCount(0);
@@ -3352,7 +3352,7 @@ test('round fifty-five: a watered stop keeps its height and the next stop does n
     await expect(page.locator('.tree .row', { hasText: name })).toBeVisible();
   }
   for (const name of ['Bench A', 'Bench A', 'Bench A', 'Bench B', 'Bench B']) {
-    await page.goto('/plants/new?species=Refusia%20testii&key=999');
+    await page.goto('/plants/new?species=Refusia%20testii&key=999'); await ready(page);
     const opt = await page.locator('#f-loc option', { hasText: name }).getAttribute('value');
     await page.selectOption('#f-loc', opt!);
     await addPlant(page);
@@ -3427,7 +3427,7 @@ test('round fifty-eight: a place\'s watering rhythm decides what is due, its dry
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.locator('.factgrid')).toContainText('about every 7 days');
   for (let i = 0; i < 2; i++) {
-    await page.goto('/plants/new?species=Refusia%20testii&key=999');
+    await page.goto('/plants/new?species=Refusia%20testii&key=999'); await ready(page);
     const opt = await page.locator('#f-loc option', { hasText: 'Weekly bench' }).getAttribute('value');
     await page.selectOption('#f-loc', opt!);
     await addPlant(page);
@@ -3594,7 +3594,7 @@ test('round sixty: changes dated ahead of this device\'s clock are said wherever
 });
 
 test('round sixty: a printed page carries the page alone: the install card, the clock and frost bars and the toast are hidden on paper (the self-review\'s 6)', async ({ page }) => {
-  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   await addPlant(page);
   // the second day: the install card shows
   await page.evaluate(() => { localStorage.setItem('cultifolio.visits', '1'); localStorage.setItem('cultifolio.lastVisit', '2000-01-01'); });
@@ -3616,7 +3616,7 @@ test('round sixty: watering by keyboard keeps focus on the button, the toast\'s 
   const C = await browser.newContext({ serviceWorkers: 'block' });
   await C.addInitScript(() => { const real = Date.now; const OD = Date; let shift = 0; try { shift = Number(localStorage.getItem('__shift') ?? 0); } catch { /* none */ } (globalThis as { __shift?: number }).__shift = shift; globalThis.Date = class extends OD { constructor(...args: unknown[]) { if (args.length === 0) super(real() + ((globalThis as { __shift?: number }).__shift ?? 0)); else super(...(args as [number])); } static now() { return real() + ((globalThis as { __shift?: number }).__shift ?? 0); } } as DateConstructor; });
   const page = await C.newPage();
-  for (let i = 0; i < 3; i++) { await page.goto('/plants/new?species=Refusia%20testii&key=999'); await addPlant(page); }
+  for (let i = 0; i < 3; i++) { await page.goto('/plants/new?species=Refusia%20testii&key=999'); await ready(page); await addPlant(page); }
   // the list's Water by keyboard: focus stays on it while it saves and after
   await page.goto('/plants');
   const water = page.locator('.accline').first().getByRole('button', { name: /watered today/ });
@@ -3648,7 +3648,7 @@ test('round sixty: Today with nothing ticked says so, never "Water these 0"; the
   const C = await browser.newContext({ serviceWorkers: 'block' });
   await C.addInitScript(() => { const real = Date.now; const OD = Date; let shift = 0; try { shift = Number(localStorage.getItem('__shift') ?? 0); } catch { /* none */ } (globalThis as { __shift?: number }).__shift = shift; globalThis.Date = class extends OD { constructor(...args: unknown[]) { if (args.length === 0) super(real() + ((globalThis as { __shift?: number }).__shift ?? 0)); else super(...(args as [number])); } static now() { return real() + ((globalThis as { __shift?: number }).__shift ?? 0); } } as DateConstructor; });
   const page = await C.newPage();
-  for (let i = 0; i < 2; i++) { await page.goto('/plants/new?species=Refusia%20testii&key=999'); await addPlant(page); }
+  for (let i = 0; i < 2; i++) { await page.goto('/plants/new?species=Refusia%20testii&key=999'); await ready(page); await addPlant(page); }
   await page.goto('/today');
   await expect(page.locator('#first-weeks')).toContainText('counted from the day it was added'); // the first weeks say what will show here (the grower review, 6)
   await page.evaluate(() => localStorage.setItem('__shift', String(22 * 86_400_000)));
@@ -3678,14 +3678,14 @@ test('round sixty: at 320 px with the browser\'s text at 200%, the phone\'s tab 
   const ctx = await chromium.launchPersistentContext(dir, { baseURL, locale: 'en-GB', viewport: { width: 320, height: 700 }, serviceWorkers: 'block', ...(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {}) });
   try {
     const page = ctx.pages()[0] ?? (await ctx.newPage());
-    await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+    await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
     // The preference first, the layout after: a browser that does not read the profile's text size (the bundled Chromium on
     // Windows, outside review B14) says nothing about the layout at 200%, and is not a failure of it (round sixty-two).
     const text = await textSize(page, 32); // the profile, or CDP where Windows' bundled Chromium ignores it (round sixty-three; harness H4)
     test.skip(text !== '32px', `preference not applied by this browser (its text is ${text}, not 32px)`);
     await addPlant(page);
     const plant = new URL(page.url()).pathname;
-    await page.goto('/propagation/new?species=Copiapoa%20cinerea&key=5384013');
+    await page.goto('/propagation/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
     await page.fill('#s-count', '10');
     await page.getByRole('button', { name: 'Start batch' }).click();
     await expect(page).toHaveURL(/\/propagation\/S\d{4}-\d{3}$/);
@@ -3795,7 +3795,7 @@ test('round sixty: the place form refuses a floor that is not a temperature, and
 });
 
 test('round sixty: a death has an Undo; "Record…", not "Log"; Since watered says today, not 0 d (the grower review, 12 and 16)', async ({ page }) => {
-  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   await addPlant(page);
   await expect(page.getByRole('button', { name: 'Record…', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Water', exact: true }).click();
@@ -3832,7 +3832,7 @@ test('round sixty: places are added one after another with the parent and the ki
   await expect(page.locator('#loc-added')).toContainText('Bench 2 added inside Greenhouse');
   await expect(page.locator('.tree a', { hasText: 'Bench 2' })).toBeVisible();
   // a plant with no place: the line offers a place to pick, and the pick moves it with an Undo
-  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013');
+  await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   await page.selectOption('#f-loc', { label: 'No place' });
   await addPlant(page);
   await page.goto('/places');

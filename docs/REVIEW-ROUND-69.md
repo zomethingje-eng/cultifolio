@@ -211,3 +211,13 @@ The owner's `predeploy --browsers=all` ended with 1,239 passed, 8 failed, 2 pass
 - **The two WebKit tests that passed on a retry** (smoke's backup and batch tests) are not changed. Neither failed twice.
 
 Unit tests: 2,674 passed and 1 skipped. svelte-check: 0 errors.
+
+## 12. The second run on every engine, and a sync page that did not check
+
+The second `--browsers=all` run (deployed regardless; the live check passed) failed on two things.
+
+- **A reloaded sync page in WebKit and Firefox asked the server nothing.** The disclosure test's sync case failed in WebKit, phone WebKit and Firefox, on both tries. A diagnostic run on the owner's machine recorded every request: after the reload the Status card said "Not checked yet … checking now" for twenty seconds and no request was made, and "Sync now" brought the expected error within a second, in both engines, with the test's route set on the page or on the context alike. So the route was never the problem; the run never started. The sync page and the layout both call `sync.init()` on mount, and the second call returned once the first had read the stored record, before the engine was configured, so the layout's first run was never scheduled. `init` now makes a call that overlaps another wait for it. `tests/unit/r69-sync-init.test.ts` makes the two calls as the page and the layout do; it fails on the deployed code (the engine not configured when the second returns). The engine is not in the fold guard's hash. A grower would have met it as a sync page that said "checking now" until the tab lost and regained focus or five minutes passed.
+- **Smoke's labels test passed only on its retry in WebKit.** It typed a name into the add form before the page had hydrated, and the name was dropped. Smoke now waits for the page to be ready after each visit to the add-plant and new-batch forms (81 places), as its other tests already did.
+- **A test that failed near midnight.** r62a's A40 (Today's done row and focus) jumped its clock twice by eleven minutes from the real time. Run within about twenty minutes of midnight, the jumps crossed into the next day and Today was redrawn, taking focus with it: it failed every time here at ten to midnight UTC, on the deployed engine too, and passed earlier in the evening. Its clock now starts at today's noon. Since the browser's day is local, the owner's evening runs in Pittsburgh would meet it at his midnight.
+
+Runs: unit tests 2,676 passed and 1 skipped; svelte-check 0 errors; the full strict Chromium run 447 passed with r62a A40 failing (above, then fixed and passing six of six with the phone) and smoke's hover-preload test passing on its retry (it passed three of three after; not changed).

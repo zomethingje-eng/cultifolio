@@ -220,10 +220,24 @@ class Sync {
   private clockHooked = false;
   private base = '';
 
-  /** Read the stored key, if any, and start listening for local changes. Safe to call more than once. */
+  /**
+   * Read the stored key, if any, and start listening for local changes. Safe to call more than once, and at once: a call
+   * made while another is still reading waits for that one. On the sync page two calls overlap, the page's own and the
+   * layout's, and the second could find the first's meta set while its keys were still being derived and return before
+   * the engine was configured; the layout then never scheduled the first run. In WebKit and Firefox a reloaded sync page
+   * said "checking now" and asked the server nothing for twenty seconds, until "Sync now" was pressed (round sixty-nine,
+   * the owner's run on every engine, recorded request by request); a tab regaining focus, or the five-minute tick, would
+   * have run it.
+   */
   async init(base = ''): Promise<void> {
     this.base = base;
+    if (this.initing) return this.initing;
     if (this.meta) return;
+    this.initing = this.readInit();
+    try { await this.initing; } finally { this.initing = null; }
+  }
+  private initing: Promise<void> | null = null;
+  private async readInit(): Promise<void> {
     // Another tab's correction (a `storage` event) re-judges this tab's holds too (round fifty-two, 1). Once per engine:
     // each init before a vault was set up (the layout, then the sync page) added another (round fifty-eight).
     this.hookClock();
