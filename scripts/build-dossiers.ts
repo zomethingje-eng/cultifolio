@@ -90,7 +90,7 @@ import { tileCreditOf } from '../src/lib/ui/ref/head';
 import { dropsBetween } from '../src/lib/dossier/drops';
 import { offlineFetcher, carryRederivedRows } from '../src/lib/dossier/rederive';
 import { mwWait, MAXLAG_TRIES } from '../src/lib/dossier/sources/wikimedia';
-import { fillOpenGbif } from '../src/lib/dossier/open-gbif-fill';
+import { fillOpenGbif, askedOpen } from '../src/lib/dossier/open-gbif-fill';
 // The corpus script waits out Wikidata's maxlag, as MediaWiki asks of a batch client; the Worker does not (round sixty-eight).
 mwWait.tries = MAXLAG_TRIES;
 
@@ -509,11 +509,13 @@ async function fillOpenGbifPhotos(): Promise<void> {
   const dir = `${outDir}/s/v${DOSSIER_V}`;
   const files = existsSync(dir) ? readdirSync(dir).filter((f) => /^\d+\.json$/.test(f)) : [];
   const f = makeFetcher();
-  let asked = 0, filled = 0, photos = 0, none = 0, failed = 0;
+  let asked = 0, filled = 0, photos = 0, none = 0, failed = 0, before = 0;
   for (const file of files) {
     const path = `${dir}/${file}`;
     const d = JSON.parse(readFileSync(path, 'utf8')) as Pick<Dossier, 'key' | 'photos' | 'upstream'>;
     if (d.photos?.length) continue;
+    // Asked by an earlier fill and told there is none: passed by, so a fill stopped part way resumes where it was.
+    if (askedOpen(d)) { before++; continue; }
     asked++;
     const r = await fillOpenGbif(d, f);
     if ('failed' in r) { failed++; continue; }
@@ -522,7 +524,7 @@ async function fillOpenGbifPhotos(): Promise<void> {
     writeFileSync(path, JSON.stringify(d));
     if (asked % 100 === 0) process.stdout.write(`\r  ${asked} asked, ${filled} given photographs…   `);
   }
-  console.log(`\r  ${asked} dossiers had no photograph: ${filled} were given ${photos} from GBIF's openly licensed records, ${none} have none there, ${failed} not answered (asked again by a later fill).`);
+  console.log(`\r  ${asked} dossiers had no photograph: ${filled} were given ${photos} from GBIF's openly licensed records, ${none} have none there, ${failed} not answered (asked again by a later fill)${before ? `; ${before} passed by, an earlier fill having found none` : ''}.`);
   writeIndexFromDisk();
 }
 

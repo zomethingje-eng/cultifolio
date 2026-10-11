@@ -82,6 +82,14 @@ describe('--fill gbif-open: a species with no photograph is given GBIF\'s openly
     expect(d.photos).toHaveLength(1);
     expect(d.upstream['gbif.media']).toMatchObject({ status: 'ok' });
   });
+  it('a dossier told there is none is passed by the next fill, so a stopped fill resumes (round sixty-eight, third part)', async () => {
+    const { fillOpenGbif, askedOpen } = await import('$dossier/open-gbif-fill');
+    const d = { key: 3, photos: [], upstream: {} as Record<string, { status: string; at: string; detail?: string }> };
+    expect(askedOpen(d as never)).toBe(false);
+    expect(await fillOpenGbif(d as never, fixtureFetcher({ 're:taxonKey=3&': { results: [], endOfRecords: true, count: 0 } }))).toEqual({ none: true });
+    expect(askedOpen(d as never)).toBe(true);
+    expect(askedOpen({ upstream: { 'gbif.media': { status: 'none', at: 'x' } } } as never)).toBe(false); // guard: a build's own "none" is asked again
+  });
   it('a refusal leaves the dossier as it was (guard)', async () => {
     const { fillOpenGbif } = await import('$dossier/open-gbif-fill');
     const d = { key: 1, photos: [], upstream: { 'gbif.media': { status: 'none', at: 'x' } } };

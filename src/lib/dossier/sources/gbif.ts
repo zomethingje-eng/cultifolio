@@ -51,14 +51,32 @@ export interface GbifSpecies {
   classKey?: number;
   phylumKey?: number;
   kingdomKey?: number;
+  /** The name this one was first published under, when it has been moved (Bisnaga glaucescens: Echinocactus glaucescens). */
+  basionymKey?: number;
 }
 
 export const species = (f: JsonFetcher, key: number) => f<GbifSpecies>(`${GBIF}/species/${key}`);
 
-export async function synonyms(f: JsonFetcher, key: number): Promise<FetchResult<string[]>> {
-  const r = await f<{ results: Array<{ scientificName: string }> }>(`${GBIF}/species/${key}/synonyms?limit=50`);
+/** One of GBIF's synonyms as the builder keeps it beside the names: its own record, and the name it was first published under. */
+export type SynonymRow = { key: number; name: string; rank?: string; basionymKey?: number };
+
+export async function synonyms(f: JsonFetcher, key: number): Promise<FetchResult<string[]> & { rows?: SynonymRow[] }> {
+  const r = await f<{ results: Array<{ key?: number; scientificName: string; canonicalName?: string; rank?: string; basionymKey?: number }> }>(`${GBIF}/species/${key}/synonyms?limit=50`);
   if (r.status !== 'ok') return r;
-  return { status: 'ok', data: r.data.results.map((s) => s.scientificName).filter((n): n is string => typeof n === 'string') };
+  const rows: SynonymRow[] = r.data.results.flatMap((s) => (typeof s.key === 'number' && s.canonicalName ? [{ key: s.key, name: s.canonicalName, rank: s.rank, basionymKey: s.basionymKey }] : []));
+  return { status: 'ok', data: r.data.results.map((s) => s.scientificName).filter((n): n is string => typeof n === 'string'), rows };
+}
+
+/**
+ * The older names that share the species' type (round sixty-eight, third part): its basionym, and every synonym published
+ * on that basionym (Bisnaga glaucescens: Echinocactus glaucescens, Ferocactus glaucescens, Parrycactus glaucescens).
+ * They name the same plant moved between genera, so another source's record under one of them is this species'. A
+ * synonym on another type (Neoporteria mammillarioides, lumped into it) is a different plant to some sources, and is
+ * never used to find this one. A species with no basionym recorded has only the synonyms published on itself.
+ */
+export function sameTypeNames(sp: { key: number; basionymKey?: number }, rows: readonly SynonymRow[] = []): SynonymRow[] {
+  const type = sp.basionymKey ?? sp.key;
+  return rows.filter((r) => (r.rank ?? 'SPECIES').toUpperCase() === 'SPECIES' && (r.key === type || r.basionymKey === type));
 }
 
 /** One vernacular name as `vernacular` gives it: an exact spelling in a language, with its own sources. */

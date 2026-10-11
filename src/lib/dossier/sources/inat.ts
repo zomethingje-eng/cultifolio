@@ -30,6 +30,24 @@ export async function taxon(f: JsonFetcher, name: string): Promise<FetchResult<I
   return syn.length === 1 ? { status: 'ok', data: syn[0], detail: `filed by iNaturalist as ${syn[0].name}` } : { status: 'none' };
 }
 
+/**
+ * iNaturalist's taxon for a species it files under an older name with the same type (Bisnaga glaucescens, filed there as
+ * Ferocactus glaucescens; round sixty-eight, third part). Each name is asked as `taxon` asks the accepted one, at most
+ * five, and the answer is taken only when every name that finds a taxon finds the same one. A refusal stops the asking
+ * and is the answer, so a later build asks again.
+ */
+export async function taxonByOlderNames(f: JsonFetcher, names: readonly string[]): Promise<FetchResult<InatTaxon>> {
+  const found = new Map<number, { t: InatTaxon; name: string }>();
+  for (const name of [...new Set(names)].slice(0, 5)) {
+    const r = await taxon(f, name);
+    if (r.status === 'refused' || r.status === 'error') return r;
+    if (r.status === 'ok' && !found.has(r.data.id)) found.set(r.data.id, { t: r.data, name });
+  }
+  if (found.size !== 1) return { status: 'none' };
+  const [{ t, name }] = found.values();
+  return { status: 'ok', data: t, detail: `found under ${name}, an older name with the same type` };
+}
+
 interface ObsPhoto {
   id: number;
   license_code?: string | null;

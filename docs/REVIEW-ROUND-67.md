@@ -234,3 +234,22 @@ Round sixty-eight's corpus step ran clean: the 64 lines of `drops.txt` were all 
 **"snake plant" answered Chelone glabra second,** from "Snakehead" among its common names and "plant" taken from the start of its family, Plantaginaceae. A family now counts only when the word typed is the whole family; origins still match from the start of a word ("mex" finds Mexico).
 
 Tests: `tests/unit/r68b-range-photos-search.test.ts` (8 cases, the guards apart all failing on round sixty-eight's first part).
+
+## 11. The rebuild of the 52 (round sixty-eight, third part)
+
+The rebuild ran as planned and did most of its job. Seventeen species took a native range from Kew under an older name. Among them, Bisnaga glaucescens and Aeonium tabulaeforme now have a habitat climate. Wikidata was lagged again from the 31st species on, and each of those species waited about 35 seconds. Of the 17 lines in `drops.txt`, 16 are that lag; in 14 of them the previous build's identifiers were kept.
+
+**Bisnaga glaucescens lost its 25 photographs.** Wikidata's item for it is Q310510, "Ferocactus glaucescens". It carries the GBIF key of that older name (3959669), not the accepted one (11098779). The previous builds had kept the item's identifiers only because Wikidata had been lagged when they ran. This time Wikidata answered, and it had no item called "Bisnaga glaucescens". The iNaturalist taxon id, which the photographs are asked by, went with it, and iNaturalist's own search has no such name either.
+
+**What changed:**
+- **GBIF's synonyms keep their records.** For each synonym, the builder now keeps GBIF's record and the name it was first published under.
+- **Same-type names.** The builder sets apart the older names that share the species' type: its basionym, and the names published on that basionym. For Bisnaga glaucescens those are Echinocactus, Ferocactus and Parrycactus glaucescens. Neoporteria mammillarioides, lumped into it on another type, is never used.
+- **Wikidata.** When neither the GBIF key nor the name finds an item, Wikidata is asked once, by the GBIF records of those names. The answer is taken only when exactly one item answers and that item carries one of those keys.
+- **iNaturalist.** When iNaturalist's search finds nothing under the current name, it is asked under up to five of those names. The answer is taken only when every name that finds a taxon finds the same one.
+- **The record says so.** Both cases are noted in the record, and `/about/how` says so.
+
+**Tests.** `tests/unit/r68c-same-type.test.ts`: 10 cases, all failing on the second part except the guards. Unit tests: 2,325 passed and 1 skipped. svelte-check: 0 errors.
+
+**The photo fill, past its first 2,000 species, was answered by GBIF only after four retries each, about 15 seconds a species.** Nothing was lost, but the rest would take hours. The fill could not be stopped and resumed: a dossier told there was no photograph still had none, so a second fill asked all of it again. A dossier told so by this fill is now passed by (`askedOpen`), and the summary line says how many.
+
+**Not measured.** It is not known how many other species in the corpus Wikidata files under an older name. A dossier whose Wikidata status is "none" is the sign; a count over the 8,947 files on the PC did not finish within the remote shell's limit.

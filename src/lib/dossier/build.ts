@@ -327,7 +327,9 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   const links: Record<string, string> = { gbif: `https://www.gbif.org/species/${key}` };
   const skip = (k: SkippableSource) => !!o.skip?.includes(k);
   const skipped = (k: string) => (upstream[k] = { status: 'skipped', at: now() });
-  const x = skip('wikidata') ? ({ status: 'skipped' } as const) : await wm.crossIds(f, scientific, key);
+  // The older names with the same type, by which Wikidata and iNaturalist may file the species (round sixty-eight, third part).
+  const sameType = syn.status === 'ok' && 'rows' in syn ? gbif.sameTypeNames({ key, basionymKey: s.basionymKey }, syn.rows) : [];
+  const x = skip('wikidata') ? ({ status: 'skipped' } as const) : await wm.crossIds(f, scientific, key, sameType.map((r) => r.key));
   if (x.status === 'skipped') skipped('wikidata');
   else mark('wikidata', x);
   let enTitle = scientific;
@@ -364,7 +366,8 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   const photos: Photo[] = [];
   let inatId = ids.inat;
   if (!inatId && !skip('inat')) {
-    const t = await inat.taxon(f, scientific);
+    let t = await inat.taxon(f, scientific);
+    if (t.status === 'none' && sameType.length) t = await inat.taxonByOlderNames(f, sameType.map((r) => r.name));
     mark('inat.taxon', t);
     if (t.status === 'ok') inatId = ids.inat = t.data.id;
   }

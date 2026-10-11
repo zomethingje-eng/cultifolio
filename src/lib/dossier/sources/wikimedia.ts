@@ -53,8 +53,9 @@ async function mwGet<T>(f: JsonFetcher, url: string): Promise<FetchResult<T>> {
  * the identity can never be another species' from a name search. A name is
  * only used when the key finds nothing, and then only on an exact label match.
  */
-export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?: number): Promise<FetchResult<CrossIds>> {
+export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?: number, olderKeys: readonly number[] = []): Promise<FetchResult<CrossIds>> {
   let id: string | undefined;
+  let via: string | undefined;
   if (gbifKey) {
     const q = await mwGet<{ query?: { search?: Array<{ title: string }> }; error?: unknown }>(f, 
       `https://www.wikidata.org/w/api.php?action=query&format=json&list=search&srlimit=2&srsearch=${encodeURIComponent(`haswbstatement:P846=${gbifKey}`)}&maxlag=5`
@@ -73,9 +74,23 @@ export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?:
     const err = mwError(s.data);
     if (err) return { status: 'error', detail: `wikidata ${err}` };
     const hit = (s.data.search ?? []).find((x) => x.label.toLowerCase() === scientificName.toLowerCase());
-    if (!hit) return { status: 'none' };
-    id = hit.id;
+    if (hit) id = hit.id;
   }
+  // Wikidata files the species under an older name with the same type (Q310510, Ferocactus glaucescens, for Bisnaga
+  // glaucescens): found by the GBIF record of that name, in one search, and taken only when one item answers (round
+  // sixty-eight, third part). Two items (the basionym kept as an item of its own, say) is no answer.
+  const older = olderKeys.slice(0, 10);
+  if (!id && older.length) {
+    const q = await mwGet<{ query?: { search?: Array<{ title: string }> }; error?: unknown }>(f,
+      `https://www.wikidata.org/w/api.php?action=query&format=json&list=search&srlimit=3&srsearch=${encodeURIComponent(`haswbstatement:${older.map((k) => `P846=${k}`).join('|')}`)}&maxlag=5`
+    );
+    if (q.status !== 'ok') return q;
+    const err = mwError(q.data);
+    if (err) return { status: 'error', detail: `wikidata ${err}` };
+    const hits = q.data.query?.search ?? [];
+    if (hits.length === 1) { id = hits[0].title; via = 'found by the GBIF record of an older name with the same type'; }
+  }
+  if (!id) return { status: 'none' };
   const e = await mwGet<{ entities: Record<string, { claims: Record<string, Array<{ mainsnak: { datavalue?: { value: unknown } } }>>; sitelinks?: Record<string, { title: string }> }>; error?: unknown }>(f, 
     `https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&ids=${id}&props=claims|sitelinks&sitefilter=enwiki&maxlag=5`
   );
@@ -90,10 +105,11 @@ export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?:
   };
   const inatS = str(P.inat);
   const gbifS = str(P.gbif);
-  // Found by name: the item must carry this GBIF key, or it is not this species.
-  if (gbifKey && gbifS && Number(gbifS) !== gbifKey) return { status: 'none' };
+  // Found by name: the item must carry this GBIF key, or it is not this species; found by an older name, that name's key.
+  if (gbifKey && gbifS && Number(gbifS) !== gbifKey && !(via && older.includes(Number(gbifS)))) return { status: 'none' };
   return {
     status: 'ok',
+    ...(via ? { detail: via } : {}),
     data: {
       wikidata: id,
       powo: str(P.powo),

@@ -11,6 +11,12 @@ import { photosFromMedia, mergeGbifPhotos } from './build';
 /** What the fill did for one dossier: photographs added, none there, or the source not answering (the dossier untouched). */
 export type OpenFill = { added: number } | { none: true } | { failed: string };
 
+/** What a dossier records when GBIF has no openly licensed photograph for it: a later fill passes it by, so a stopped fill resumes. */
+export const OPEN_NONE = 'no GBIF record under an open licence has a photograph';
+
+/** Whether this fill has already asked for this dossier and been told there is none. */
+export const askedOpen = (d: Pick<Dossier, 'upstream'>) => d.upstream?.['gbif.media']?.detail === OPEN_NONE;
+
 export async function fillOpenGbif(d: Pick<Dossier, 'key' | 'photos' | 'upstream'>, f: JsonFetcher, now = () => new Date().toISOString()): Promise<OpenFill> {
   const m = await gbif.media(f, d.key);
   if (m.status === 'ok') {
@@ -20,7 +26,7 @@ export async function fillOpenGbif(d: Pick<Dossier, 'key' | 'photos' | 'upstream
     return { added: fresh.length };
   }
   if (m.status === 'none') {
-    d.upstream['gbif.media'] = { status: 'none', at: now(), detail: 'no GBIF record under an open licence has a photograph' };
+    d.upstream['gbif.media'] = { status: 'none', at: now(), detail: OPEN_NONE };
     return { none: true };
   }
   // A refusal or a failure changes nothing on the page: the dossier keeps what it said, and a later fill asks again.
