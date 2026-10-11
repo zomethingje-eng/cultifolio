@@ -55,8 +55,25 @@ describe('Wikidata\'s item filed under an older name with the same type', () => 
     const r = await crossIds(wikidata(['Q310510']), 'Bisnaga glaucescens', 11098779, [3944752, 3959669]);
     expect(r).toMatchObject({ status: 'ok', data: { wikidata: 'Q310510', inat: 274273, enTitle: 'Ferocactus glaucescens' }, detail: 'found by the GBIF record of an older name with the same type' }); // base: none
   });
-  it('two items answering is no answer (guard)', async () => {
-    expect((await crossIds(wikidata(['Q310510', 'Q5000']), 'Bisnaga glaucescens', 11098779, [3944752, 3959669])).status).toBe('none');
+  it('the basionym kept as an item of its own is set aside: the item naming it as its basionym is the one (the owner\'s run)', async () => {
+    const f = fixtureFetcher({
+      [`re:srsearch=haswbstatement%3AP846%3D11098779`]: { query: { search: [] } },
+      [`re:srsearch=haswbstatement%3AP846%3D3944752%7CP846%3D3959669`]: { query: { search: [{ title: 'Q310510' }, { title: 'Q14943671' }] } },
+      [`${W}?action=wbsearchentities`]: { search: [] },
+      [`${W}?action=wbgetentities&format=json&ids=Q310510|Q14943671&props=claims`]: { entities: { Q310510: { claims: { P566: [{ mainsnak: { datavalue: { value: { id: 'Q14943671' } } } }] } }, Q14943671: { claims: {} } } },
+      [`${W}?action=wbgetentities&format=json&ids=Q310510&`]: { entities: { Q310510: { claims: { P846: [{ mainsnak: { datavalue: { value: '3959669' } } }], P3151: [{ mainsnak: { datavalue: { value: '274273' } } }] }, sitelinks: { enwiki: { title: 'Ferocactus glaucescens' } } } } }
+    });
+    const r = await crossIds(f, 'Bisnaga glaucescens', 11098779, [3944752, 3959669]);
+    expect(r).toMatchObject({ status: 'ok', data: { wikidata: 'Q310510', inat: 274273 } }); // base: none, two items
+  });
+  it('two items neither of which is the other\'s basionym is no answer (guard)', async () => {
+    const f = fixtureFetcher({
+      [`re:srsearch=haswbstatement%3AP846%3D11098779`]: { query: { search: [] } },
+      [`re:srsearch=haswbstatement%3AP846%3D3944752%7CP846%3D3959669`]: { query: { search: [{ title: 'Q310510' }, { title: 'Q5000' }] } },
+      [`${W}?action=wbsearchentities`]: { search: [] },
+      [`${W}?action=wbgetentities&format=json&ids=Q310510|Q5000&props=claims`]: { entities: { Q310510: { claims: {} }, Q5000: { claims: {} } } }
+    });
+    expect((await crossIds(f, 'Bisnaga glaucescens', 11098779, [3944752, 3959669])).status).toBe('none');
   });
   it('an item carrying some other GBIF key is not taken (guard)', async () => {
     expect((await crossIds(wikidata(['Q310510'], '42'), 'Bisnaga glaucescens', 11098779, [3944752, 3959669])).status).toBe('none');

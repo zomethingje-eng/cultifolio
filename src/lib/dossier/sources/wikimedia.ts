@@ -15,7 +15,7 @@ export interface CrossIds {
   enTitle?: string;
 }
 
-const P = { gbif: 'P846', powo: 'P5037', ipni: 'P961', inat: 'P3151', wfo: 'P7715', commonsCat: 'P373' };
+const P = { gbif: 'P846', powo: 'P5037', ipni: 'P961', inat: 'P3151', wfo: 'P7715', commonsCat: 'P373', basionym: 'P566' };
 
 /** MediaWiki answers HTTP 200 with an error body (maxlag, bad params); treat that as the source not answering, never as "none". */
 function mwError(data: unknown): string | null {
@@ -78,7 +78,7 @@ export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?:
   }
   // Wikidata files the species under an older name with the same type (Q310510, Ferocactus glaucescens, for Bisnaga
   // glaucescens): found by the GBIF record of that name, in one search, and taken only when one item answers (round
-  // sixty-eight, third part). Two items (the basionym kept as an item of its own, say) is no answer.
+  // sixty-eight, third part). Two items that are not one the other's basionym is no answer.
   const older = olderKeys.slice(0, 10);
   if (!id && older.length) {
     const q = await mwGet<{ query?: { search?: Array<{ title: string }> }; error?: unknown }>(f,
@@ -88,7 +88,21 @@ export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?:
     const err = mwError(q.data);
     if (err) return { status: 'error', detail: `wikidata ${err}` };
     const hits = q.data.query?.search ?? [];
-    if (hits.length === 1) { id = hits[0].title; via = 'found by the GBIF record of an older name with the same type'; }
+    let ids = hits.map((h) => h.title);
+    if (ids.length > 1) {
+      // Wikidata often keeps the basionym as an item of its own (Q14943671, Echinocactus glaucescens), which the item for
+      // the current placement names as its basionym (P566). An item another answer names so is that answer's older name,
+      // not a second species: it is set aside, and what is left must still be one item.
+      const b = await mwGet<{ entities?: Record<string, { claims?: Record<string, Array<{ mainsnak: { datavalue?: { value: unknown } } }>> }>; error?: unknown }>(f,
+        `https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&ids=${ids.join('|')}&props=claims&maxlag=5`
+      );
+      if (b.status !== 'ok') return b;
+      const berr = mwError(b.data);
+      if (berr) return { status: 'error', detail: `wikidata ${berr}` };
+      const named = new Set(ids.flatMap((q) => (b.data.entities?.[q]?.claims?.[P.basionym] ?? []).map((c) => (c.mainsnak.datavalue?.value as { id?: string } | undefined)?.id)));
+      ids = ids.filter((q) => !named.has(q));
+    }
+    if (ids.length === 1) { id = ids[0]; via = 'found by the GBIF record of an older name with the same type'; }
   }
   if (!id) return { status: 'none' };
   const e = await mwGet<{ entities: Record<string, { claims: Record<string, Array<{ mainsnak: { datavalue?: { value: unknown } } }>>; sitelinks?: Record<string, { title: string }> }>; error?: unknown }>(f, 

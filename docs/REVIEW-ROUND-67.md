@@ -250,6 +250,8 @@ The rebuild ran as planned and did most of its job. Seventeen species took a nat
 
 **Tests.** `tests/unit/r68c-same-type.test.ts`: 10 cases, all failing on the second part except the guards. Unit tests: 2,325 passed and 1 skipped. svelte-check: 0 errors.
 
+**The owner's rebuild of Bisnaga glaucescens with this change** brought back its 25 photographs, by iNaturalist's taxon under Ferocactus glaucescens, but not its Wikidata item: the search by the older names' GBIF records found two items, Q310510 (Ferocactus glaucescens) and Q14943671 (Echinocactus glaucescens, the basionym kept as an item of its own), so the page had no Wikipedia summary and no POWO, IPNI or WFO links, which the live page has. Q310510 names Q14943671 as its basionym (P566). An item another answer names so is now set aside, and what is left must still be one item; two items neither of which is the other's basionym are still no answer. Tests: two more cases in `r68c-same-type`. Unit tests: 2,327 passed and 1 skipped.
+
 **The photo fill, past its first 2,000 species, was answered by GBIF only after four retries each, about 15 seconds a species.** Nothing was lost, but the rest would take hours. The fill could not be stopped and resumed: a dossier told there was no photograph still had none, so a second fill asked all of it again. A dossier told so by this fill is now passed by (`askedOpen`), and the summary line says how many.
 
 **Not measured.** It is not known how many other species in the corpus Wikidata files under an older name. A dossier whose Wikidata status is "none" is the sign; a count over the 8,947 files on the PC did not finish within the remote shell's limit.
