@@ -80,7 +80,12 @@ test('the edit form says what a partial date was imported as (records 11); a rem
 
 test('a plant whose missing fields are all parked shows the Parked notice with Apply, and Apply brings it back (clock 3)', async ({ page }) => {
   const thrown: string[] = [];
-  page.on('pageerror', (e) => thrown.push(e.message));
+  // Safari's engine reports a request of this site's own that a navigation cancels (the plant page's /api/sheets, cut
+  // off by the next goto) as a page error, "Fetch API cannot load … due to access control checks", whether or not the
+  // page caught it; that is the engine's word for a cancelled fetch, not a throw of the page's (round sixty-nine;
+  // triage-68 P4, R46-30). Only that message, for this site's own /api/ addresses, is set aside.
+  const cancelled = (m: string) => /^Fetch API cannot load https?:\/\/[^/]+\/api\/\S* due to access control checks\.?$/.test(m);
+  page.on('pageerror', (e) => { if (!cancelled(e.message)) thrown.push(e.message); });
   await page.goto('/plants'); await ready(page);
   const far = Date.now() + 365 * 86_400_000;
   const made = plant('r-fast', far, { acc: '2026-0007', taxonName: 'Copiapoa cinerea', status: 'growing' });

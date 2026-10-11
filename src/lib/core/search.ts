@@ -10,7 +10,9 @@
  * never sees near misses beside its hits. Ranking (`group`, `closeness`):
  * a name typed as a name, the genus first; an older name typed as one; one
  * common name holding every word; then the other matches; within each, the
- * nearest, an exact name, whole words and the headline before the alphabet.
+ * nearest, an exact name, whole words and the headline, and among common
+ * names the name's place, its spelling and the photographs, before the
+ * alphabet (round sixty-nine; triage-68 N2).
  */
 export interface Searchable {
   name: string;
@@ -23,10 +25,23 @@ export interface Searchable {
   syn?: string[];
   /** Every other older name of species rank, past the six of `syn`, searched as they are (round sixty-seven; triage-66 N1). */
   older?: string[];
+  /**
+   * The other spellings of the shown names, searched as a common name is and never shown (round sixty-nine; triage-68
+   * N2): "Bluemink" pooled "Blue mink", and "blue mink" found nothing. Absent in an index built before.
+   */
+  spellings?: string[];
+  /** How many photographs the species has: the last tie-break among common names before the alphabet (round sixty-nine; triage-68 N2). */
+  photos?: number;
 }
 
 const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-const words = (s: string) => fold(s).split(/[^a-z0-9]+/).filter(Boolean);
+/**
+ * Apostrophes are taken out before the split, as `nameKey` takes them out (round sixty-nine; triage-68 N2, R46-4): split
+ * there, "Devil's backbone" was "devil s backbone", and "devils backbone" found it only by a similar spelling, third.
+ * `postings.ts` reads words the same way.
+ */
+export const APOSTROPHES = /['’‘`ʼ]/g;
+const words = (s: string) => fold(s).replace(APOSTROPHES, '').split(/[^a-z0-9]+/).filter(Boolean);
 
 /** Damerau–Levenshtein distance capped at 2, on a prefix of `w` the length of `q` (plus or minus one). */
 function nearPrefix(q: string, w: string): boolean {
@@ -61,7 +76,7 @@ export interface Prepared<T> {
    * sixty-three, N3: "aloe" was one letter from the start of "Algeria", and "Aloe Verra" answered Drimia noctiflora).
    */
   placeWords: string[];
-  /** The family's own words, matched only whole: "plant" is no start of Plantaginaceae (round sixty-eight). */
+  /** The family's own words, matched whole, or from their start by a typed word of `FAMILY_START` letters or more: "plant" is no start of Plantaginaceae (round sixty-eight), "aizoac" is (round sixty-nine). */
   familyWords: string[];
   /** The common names' words alone. */
   commonWords: string[];
@@ -73,10 +88,16 @@ export interface Prepared<T> {
   commonNames: string[][];
   /** Whether `commonNames[0]` is the headline (`common`). */
   headed: boolean;
+  /** Each common name as written, folded, apostrophes out and spaces closed up, in `commonNames`' order: a name written as typed wins a tie ("bleeding heart" is "Bleeding heart" before "Bleeding-heart"). */
+  commonTexts: string[];
   /** Every word of the entry (name, common names, places, older names), for the order's whole-word test. */
   wordSet: ReadonlySet<string>;
   /** Each older name's words (`syn`, then `older`), kept apart: the words of a query that fall to the synonyms must all sit in one of them. */
   synWords: string[][];
+  /** How many of `synWords` are the shown older names (`syn`); the rest are search-only (`older`). */
+  shownSyn: number;
+  /** The species' own epithet, folded: a species that keeps the epithet of an older name typed comes first (round sixty-nine; triage-68 N1). */
+  epithet: string;
   sortKey: string;
 }
 
@@ -372,14 +393,29 @@ export function relaxedQuery(q: string): string | null {
   return a.length === b.length && a.every((w, i) => w === b[i]) ? null : relaxed;
 }
 
+/** A name or a query as written, for the tie-break of a name written as typed: folded, apostrophes out, a trailing full stop off, spaces closed up. */
+const typedText = (s: string) => fold(s).replace(APOSTROPHES, '').replace(/\.+\s*$/, '').replace(/\s+/g, ' ').trim();
+/** An epithet's stem, so a transfer that changed its ending ("variegatus", "variegata") still keeps it, as `index-entry.ts` reads one. */
+const epithetStem = (w: string) => w.replace(/(?:us|um|a|is|e|es|i)$/, '');
+/**
+ * From how many letters a typed word matches a family from its start (round sixty-nine; triage-68 N2, S-F2, R46-4):
+ * whole words only, round sixty-eight's rule, left "aizoac", "asparagac" and "cactace" finding nothing; six letters
+ * keep "plant" (five) out of Plantaginaceae, so "snake plant" is still Dracaena alone.
+ */
+export const FAMILY_START = 6;
+const familyMatch = (familyWords: string[], q: string) => (q.length >= FAMILY_START ? familyWords.some((w) => w.startsWith(q)) : familyWords.includes(q));
+
 export function prepare<T extends Searchable>(items: T[]): Prepared<T>[] {
   return items.map((item) => {
-    const commonNames = [...(item.common ? [words(item.common)] : []), ...(item.commons ?? []).map(words)].filter((ws) => ws.length);
+    // The pooled spellings after every shown name, so a shown name's place comes first (round sixty-nine; triage-68 N2).
+    const texts = [...(item.common ? [item.common] : []), ...(item.commons ?? []), ...(item.spellings ?? [])].filter((t) => words(t).length);
+    const commonNames = texts.map(words);
     const nameWords = words(item.name);
     const familyWords = words(item.family ?? '');
     const placeWords = (item.origin ?? []).flatMap(words);
     const commonWords = commonNames.flat();
     const synWords = [...(item.syn ?? []), ...(item.older ?? [])].map((x) => words(x).filter((w) => !RANK_MARKERS.has(w)));
+    const shownSyn = (item.syn ?? []).length;
     return {
       item,
       nameWords,
@@ -387,8 +423,11 @@ export function prepare<T extends Searchable>(items: T[]): Prepared<T>[] {
       familyWords,
       commonWords,
       commonNames,
-      headed: !!item.common && commonNames.length > 0 && commonNames[0].length > 0,
+      headed: !!item.common && words(item.common).length > 0,
+      commonTexts: texts.map(typedText),
       synWords,
+      shownSyn,
+      epithet: nameWords[1] ?? '',
       wordSet: new Set([...nameWords, ...commonWords, ...familyWords, ...placeWords, ...synWords.flat()]),
       sortKey: fold(item.name)
     };
@@ -420,7 +459,8 @@ function rank(p: Prepared<unknown>, qs: string[], match: (q: string, w: string) 
     let place = false;
     // A family is matched whole, a place from its start: "snake plant" put Chelone glabra second, "snake" from its
     // "Snakehead" and "plant" from the start of Plantaginaceae (round sixty-eight; the owner's check of round sixty-seven).
-    if (p.familyWords.includes(q)) place = true;
+    // A family from its start too once the word has six letters (`FAMILY_START`; round sixty-nine; triage-68 N2).
+    if (familyMatch(p.familyWords, q)) place = true;
     else for (const w of p.placeWords) if (w.startsWith(q)) { place = true; break; }
     if (place) continue;
     // No word of the entry can take q: stop here (round fifty-eight).
@@ -452,9 +492,11 @@ function oneOlder(p: Prepared<unknown>, qs: string[], match: (q: string, w: stri
  * "Opuntia longispina" is Airampoa corrugata before the species with a variety of that name); then the common names,
  * each read whole (one name holds every word: "cape aloe" is Aloe ferox, "Cape aloe", before an aloe of the Cape
  * Provinces); then the other ranks. Within a group: a near hit by its distance from what was typed, the nearest first
- * ("Ceropegia pica" is C. picta before C. dicapuae); then a name that is exactly the query, the headline first ("onion"
+ * ("Ceropegia pica" is C. picta before C. dicapuae); among older names typed, the species that keeps the name's
+ * epithet, then one that shows the name (`olderOrder`); then a name that is exactly the query, the headline first ("onion"
  * is Allium cepa, "Onion", before Albuca's "Sea-onion"; "fig" is Ficus carica, "Fig"); then a hit whose every word is
- * a whole word typed; then one whose headline holds every word; then the alphabet.
+ * a whole word typed; then one whose headline holds every word; among the common names' hits, the name's place among
+ * the species' names, a name written as typed, more photographs (`commonTie`); then the alphabet.
  */
 const Group = { Name: 0, Older: 1, Common: 2, NameWords: 3, Mixed: 4, Other: 5 } as const;
 function group(p: Prepared<unknown>, qs: string[], r: number, match: (q: string, w: string) => boolean): number {
@@ -462,14 +504,35 @@ function group(p: Prepared<unknown>, qs: string[], r: number, match: (q: string,
   // A binomial at least, every word but the last written in full: "coco plum" is no older name "Cocos plumosa" typed,
   // and Chrysobalanus icaco, "Coco plum", comes first; one word is no older name typed either ("cactus" is not every
   // species once a Linnaean Cactus, nor "mango" Garcinia mangostana, once Mangostana garcinia).
-  if (qs.length >= 2) for (const g of p.synWords) {
-    if (!g.length || !match(qs[0], g[0])) continue;
-    let ok = true;
-    for (let i = 0; i < qs.length && ok; i++) ok = i < qs.length - 1 ? g.includes(qs[i]) : someWord(g, qs[i], match);
-    if (ok) return Group.Older;
-  }
+  if (olderTyped(p, qs, match).length) return Group.Older;
   for (const cn of p.commonNames) if (holds(cn, qs, match)) return Group.Common;
   return r === 1 ? Group.NameWords : r === 2 ? Group.Mixed : Group.Other;
+}
+/** The older names (their places in `synWords`) a query of two words or more is typed as: every word but the last in full, the genus first. */
+function olderTyped(p: Prepared<unknown>, qs: string[], match: (q: string, w: string) => boolean): number[] {
+  const out: number[] = [];
+  if (qs.length < 2) return out;
+  p.synWords.forEach((g, at) => {
+    if (!g.length || !match(qs[0], g[0])) return;
+    let ok = true;
+    for (let i = 0; i < qs.length && ok; i++) ok = i < qs.length - 1 ? g.includes(qs[i]) : someWord(g, qs[i], match);
+    if (ok) out.push(at);
+  });
+  return out;
+}
+/**
+ * The order among hits by an older name typed as one (round sixty-nine; triage-68 N1, S-F1, R46-3): first a species
+ * that keeps the typed name's epithet, its ending aside ("Aloe variegata" is Gonialoe variegata before Aloe vera, which
+ * holds the name among its search-only ones; "Aloe varieg", still being typed, too); then, either way, a species that
+ * shows the name before one that holds it only for the search ("Euporteria senilis" is Eriosyce senilis before
+ * Cephalocereus senilis). The species route's redirect reads the same shown-first rule (`indexMaps`). The epithet is
+ * the one typed, not a variety's: "Opuntia longispina" is no Opuntia orbiculata for its variety longispina.
+ */
+function olderOrder(p: Prepared<unknown>, qs: string[], match: (q: string, w: string) => boolean): number {
+  const t = qs[1], e = p.epithet;
+  const keeps = !!e && (epithetStem(e) === epithetStem(t) || (qs.length === 2 && e.startsWith(t)));
+  const shown = olderTyped(p, qs, match).some((at) => at < p.shownSyn);
+  return (keeps ? 0 : 2) + (shown ? 0 : 1);
 }
 /** Whether a name's words hold every query word. */
 function holds(ws: string[], qs: string[], match: (q: string, w: string) => boolean): boolean {
@@ -552,28 +615,45 @@ export function search<T extends Searchable>(prepared: Prepared<T>[], q: string,
   // common names are read whole within the one reading, after a name typed as a name (`group`).
   const whole = wholeReading(q);
   if (whole) {
-    const common = collect(prepared.filter((p) => inCommon(p, whole)), whole, exact);
+    const common = collect(prepared.filter((p) => inCommon(p, whole)), whole, exact, false, typedText(q));
     if (common.length) return common.slice(0, limit).map((h) => h.p.item);
   }
-  let hits = collect(prepared, qs, exact);
+  const typed = typedText(q);
+  let hits = collect(prepared, qs, exact, false, typed);
   const trailingMarker = qs.length > 1 && RANK_MARKERS.has(qs[qs.length - 1]);
-  if (!hits.length && trailingMarker) hits = collect(prepared, qs.slice(0, -1), exact);
+  if (!hits.length && trailingMarker) hits = collect(prepared, qs.slice(0, -1), exact, false, typed);
   // A capitalised word after the first of a genus-shaped query is a similar spelling only of a whole word (`capitalWords`).
   const strict = capitalWords(q);
   const near = strict ? (x: string, w: string) => (strict.has(x) ? w.startsWith(x) || (x.length >= 4 && edit1(x, w)) : nearPrefix(x, w)) : nearPrefix;
-  if (!hits.length && qs.some((x) => x.length >= 4)) hits = collect(prepared, qs, near, true);
+  if (!hits.length && qs.some((x) => x.length >= 4)) hits = collect(prepared, qs, near, true, typed);
   // The near match too without the marker: "copiapoa cinera var" found the species before the marker was a word (round thirty-eight, R1-10).
-  if (!hits.length && trailingMarker && qs.slice(0, -1).some((x) => x.length >= 4)) hits = collect(prepared, qs.slice(0, -1), near, true);
+  if (!hits.length && trailingMarker && qs.slice(0, -1).some((x) => x.length >= 4)) hits = collect(prepared, qs.slice(0, -1), near, true, typed);
   return hits.slice(0, limit).map((h) => h.p.item);
 }
 
-function collect<T>(prepared: Prepared<T>[], qs: string[], match: (q: string, w: string) => boolean, near = false) {
-  const hits: Array<{ p: Prepared<T>; g: number; d: number; c: number }> = [];
+/**
+ * A tie among the common names' hits, broken before the alphabet (round sixty-nine; triage-68 N2, R46-4, S-F4: 70 of the
+ * 4,082 headlines, typed as written, answered another species first, "jade plant" Crassula arborescens before C. ovata):
+ * the place in `[common, ...commons]` of the name that holds the query, the headline first; then a name written as
+ * typed ("bleeding heart" is Lamprocapnos' "Bleeding heart" before Dicentra's "Bleeding-heart", both headlines); then
+ * more photographs. Only among the common names' hits: a name typed as a name keeps the alphabet ("c" is Conophytum
+ * before Copiapoa, whatever their photographs).
+ */
+function commonTie(p: Prepared<unknown>, qs: string[], typed: string): [number, number, number] {
+  let at = p.commonNames.findIndex((cn) => same(cn, qs));
+  if (at < 0) at = p.commonNames.findIndex((cn) => holds(cn, qs, prefix));
+  if (at < 0) at = p.commonNames.length;
+  const asTyped = p.commonTexts.includes(typed) ? 0 : 1;
+  const photos = (p.item as Searchable).photos;
+  return [at, asTyped, -(typeof photos === 'number' ? photos : 0)];
+}
+function collect<T>(prepared: Prepared<T>[], qs: string[], match: (q: string, w: string) => boolean, near = false, typed = '') {
+  const hits: Array<{ p: Prepared<T>; g: number; d: number; o: number; c: number; t: [number, number, number] }> = [];
   for (const p of prepared) {
     const r = rank(p, qs, match);
     if (r == null) continue;
     const g = group(p, qs, r, match);
-    hits.push({ p, g, d: near ? farness(p, qs) : 0, c: closeness(p, qs, g) });
+    hits.push({ p, g, d: near ? farness(p, qs) : 0, o: g === Group.Older ? olderOrder(p, qs, match) : 0, c: closeness(p, qs, g), t: g === Group.Common ? commonTie(p, qs, typed) : [0, 0, 0] });
   }
-  return hits.sort((a, b) => a.g - b.g || a.d - b.d || a.c - b.c || (a.p.sortKey < b.p.sortKey ? -1 : a.p.sortKey > b.p.sortKey ? 1 : 0));
+  return hits.sort((a, b) => a.g - b.g || a.d - b.d || a.o - b.o || a.c - b.c || a.t[0] - b.t[0] || a.t[1] - b.t[1] || a.t[2] - b.t[2] || (a.p.sortKey < b.p.sortKey ? -1 : a.p.sortKey > b.p.sortKey ? 1 : 0));
 }

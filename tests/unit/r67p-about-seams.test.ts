@@ -108,7 +108,7 @@ describe("the browser's HTTP cache of this site's answers", () => {
   });
   it('/about/how says it, whole', () => {
     expect(clause(how, "in the browser's own HTTP cache", '; and, while a page is open')).toBe(
-      "in the browser's own HTTP cache, as for any site, this site's answers under their addresses for as long as each answer says: a catalogue search, the name you typed into the species picker as typed and its species part, a hash group's entries and figure sheets, and a window of the catalogue's rows for a day, a forecast for a rounded site for an hour, or five minutes when the National Weather Service did not answer for its alerts, and a page as rendered for a minute (they are cleared with the browser's own history and cache controls)"
+      "in the browser's own HTTP cache, as for any site, this site's answers under their addresses for as long as each answer says: a catalogue search, the name you typed into the species picker as typed and its species part, a hash group's entries and figure sheets, and a window of the catalogue's rows for a day, a forecast for a rounded site for an hour, or five minutes when the National Weather Service refused or did not answer for its alerts, a page as rendered for a minute, and, with sync on, each sealed batch of your log and each sealed photograph this browser fetched from the vault (encrypted, as the server holds them), for a year, since a sealed object never changes under its name (all of them are cleared with the browser's own history and cache controls)"
     );
   });
 });
@@ -129,10 +129,11 @@ describe('hover preloading on a private page', () => {
 });
 
 describe('the reload under a new version', () => {
+  // Round sixty-nine (triage-68 P2, IND-11): the page the next move reaches reloads once the move has finished.
   it('the rule is the code\'s: four seconds, nothing typed, nothing being written, else the next move', () => {
     expect(EARLY_MS).toBe(4000);
     expect(clause(how, 'a page is reloaded under a new version', ');')).toBe(
-      'a page is reloaded under a new version only when an older version was serving it and the version taking over says it is another, which the page asks the worker itself, inside the browser, so a first visit, a second copy of the same version and a worker that does not say are never reloaded under you; and it is reloaded at once only in its first four seconds, with nothing typed, ticked or chosen on it and nothing being written to your collection, and otherwise at your next move to another page, so nothing you have typed is lost to it'
+      'a page is reloaded under a new version only when an older version was serving it and the version taking over says it is another, which the page asks the worker itself, inside the browser, so a first visit, a second copy of the same version and a worker that does not say are never reloaded under you; and it is reloaded at once only in its first four seconds, with nothing typed, ticked or chosen on it and nothing being written to your collection, and otherwise once your next move to another page has finished, as any move does (a page that asks before you leave it still asks, once), the page it reaches reloading when nothing is typed on it and nothing is being written, so nothing you have typed is lost to it'
     );
   });
   it('the requests a failed move makes: the version file, then the worker', () => {
@@ -165,13 +166,16 @@ describe('the sources, both ways', () => {
   it('"What comes from where" says what Wikidata and Natural Earth supply, whole', () => {
     const where = how.slice(how.indexOf('What comes from where'), how.indexOf('Which species are here'));
     expect(sentence(where, "The species' identifiers in other databases")).toBe(
-      "The species' identifiers in other databases (POWO, IPNI, World Flora Online and iNaturalist), the links to them, and the title of its English Wikipedia article come from Wikidata, from the item that carries the species' GBIF key, or, when no item does, the one whose label is the name exactly."
+      // Round sixty-nine (triage-68 M7, IND-8): a name hit is taken only as the one exact label, proved by its GBIF key or a
+      // same-type older name's, or, with no key, by its taxon name.
+      "The species' identifiers in other databases (POWO, IPNI, World Flora Online and iNaturalist), the links to them, and the title of its English Wikipedia article come from Wikidata, from the item that carries the species' GBIF key, or, when Wikidata finds no item that does, the one item whose label is the name exactly and which carries the species' GBIF key or that of an older name with the same type, or, carrying no GBIF key, gives the name as its taxon name."
     );
     expect(sentence(where, 'The coastlines of the maps')).toBe("The coastlines of the maps on a species page are Natural Earth's (public domain), drawn from files this site serves itself.");
     // What the build does: the item by the GBIF key (P846) first, an exact label only when the key finds none.
     const wm = raw('src/lib/dossier/sources/wikimedia.ts');
     expect(wm).toMatch(/haswbstatement:P846=/);
     expect(wm).toMatch(/x\.label\.toLowerCase\(\) === scientificName\.toLowerCase\(\)/);
+    expect(wm).toMatch(/keys\.some\(\(k\) => k === gbifKey \|\| olderKeys\.includes\(k\)\) : strings\(e\.data, P\.taxonName\)\.some\(\(n\) => n === scientificName\)/);
     expect(raw('src/lib/map/still.ts')).toMatch(/Natural Earth\s*\n?\s*\*?\s*coastlines \(public domain\)/);
   });
 });

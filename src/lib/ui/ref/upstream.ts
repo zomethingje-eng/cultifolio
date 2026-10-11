@@ -13,7 +13,10 @@ export const UPSTREAM_WORD: Record<string, string> = {
   none: 'nothing to report',
   refused: 'refused',
   error: 'failed',
-  skipped: 'not asked'
+  skipped: 'not asked',
+  // Two records answered where the rule takes one (two Wikidata items, two iNaturalist taxa, two Kew entries by older
+  // names), so none was taken: said as such, never as "nothing to report" (round sixty-nine; triage-68 M8, R46-15).
+  ambiguous: 'not taken: two items answered'
 };
 
 /** Each recorded source in plain words, for Provenance's rows (the id stays beside it for anyone checking the file). */

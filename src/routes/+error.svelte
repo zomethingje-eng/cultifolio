@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from '$app/state';
+  import { addLeavesExample } from '$lib/ui/grow/example.svelte'; // the adds below lead out of the example first (round sixty-nine; triage-68 X7; S-C4)
   /**
    * A page whose data could not be read just now (a 503, `unreadable: true`) is not a name the reference lacks: it says
    * so, and that a moment later it may answer (rule 2; round sixty, the round forty-two review A6).
@@ -41,10 +42,10 @@
         <!-- The catalogue's own search, which retries on the first two words when the whole name finds nothing (round sixty). -->
         <p>Did you mean {#each sp.suggest as s, i (s.slug)}{i ? (i === sp.suggest.length - 1 ? ' or ' : ', ') : ''}<a href="/species/{s.slug}"><i>{s.name}</i></a>{/each}?</p>
       {/if}
-      <p>Elsewhere: <a href="https://www.gbif.org/species/search?q={encodeURIComponent(sp.accepted ?? sp.name)}" rel="noopener">GBIF</a> · <a href="https://powo.science.kew.org/results?q={encodeURIComponent(sp.accepted ?? sp.name)}" rel="noopener">POWO (Kew)</a>. You can still <a href="/plants/new?species={encodeURIComponent(sp.accepted ?? sp.name)}">add it as a plant</a>; its record works without a species page.</p>
+      <p>Elsewhere: <a href="https://www.gbif.org/species/search?q={encodeURIComponent(sp.accepted ?? sp.name)}" rel="noopener">GBIF</a> · <a href="https://powo.science.kew.org/results?q={encodeURIComponent(sp.accepted ?? sp.name)}" rel="noopener">POWO (Kew)</a>. You can still <a href="/plants/new?species={encodeURIComponent(sp.accepted ?? sp.name)}" onclick={(e) => addLeavesExample(e, `/plants/new?species=${encodeURIComponent(sp.accepted ?? sp.name)}`)}>add it as a plant</a>; its record works without a species page.</p>
     {:else}
       <!-- "species page", not "dossier" (round fifty-eight; the accessibility review). -->
-      <p>This species has no species page: the reference is built from a fixed list of names, and this one is not on it. You can still <a href="/plants/new">add it as a plant</a>; its record works without a species page.</p>
+      <p>This species has no species page: the reference is built from a fixed list of names, and this one is not on it. You can still <a href="/plants/new" onclick={(e) => addLeavesExample(e, '/plants/new')}>add it as a plant</a>; its record works without a species page.</p>
     {/if}
     <!-- The search the other 404 has, so a misspelt address is one step from the page it meant (round sixty; visitor 14). -->
     <form class="find" action="/" method="get" role="search"><label for="nf-q">Search the species</label><input id="nf-q" class="searchbar" name="q" type="search" value={sp?.name ?? ''} placeholder="A name, a genus, a family or a region" /><button class="btn" type="submit">Search</button></form>

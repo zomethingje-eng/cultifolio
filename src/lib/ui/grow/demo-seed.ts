@@ -11,7 +11,7 @@
  * are the ones the collection's own add, pot-up and follow functions write, built here with their numbers and ids.
  */
 import { collection } from '$lib/db/collection.svelte';
-import { setMeta, updateMeta } from '$lib/db/vault';
+import { updateMeta } from '$lib/db/vault';
 import { PAGE_IN_DEMO, SEED_MARK, exampleClosed, seedState } from '$lib/db/demo';
 import { localDate } from '$core/dates';
 import { nextAccession, type NumberingScheme } from '$core/accession';
@@ -113,7 +113,7 @@ export async function seedDemo(): Promise<boolean> {
   // One tab at a time, the check and the seed together (round sixty-three, the fix pass; R1, 8): two tabs opening the
   // example at once (Safari reopening several on Today) could both find it empty.
   const locks = typeof navigator !== 'undefined' ? (navigator as Navigator & { locks?: LockManager }).locks : undefined;
-  if (!locks) return claimed(() => seedOnce());
+  if (!locks) return claimed((me) => seedOnce({ key: CLAIM, value: me }));
   return locks.request(SEED_LOCK, () => seedOnce());
 }
 /** The lock the seed is set out under, held by one tab at a time. */
@@ -126,8 +126,14 @@ const CLAIM_MS = 60_000;
  * IND-6): the seeded mark was written before the commit, and a commit refused (a full phone) left an empty example
  * marked as set out, for good. Now a seed that fails gives its claim back and is tried again on the next load, and one cut
  * off by a reload is tried again once its claim has lapsed.
+ *
+ * The claim is a fence, not only a flag (round sixty-nine; triage-68 X6; IND-6): a tab suspended past the minute lost its
+ * claim to another, which set the example out, and then woke and appended a second seed (24 plants). The seed's commit
+ * now requires, in its own transaction, that the claim is still this tab's and that no seed is marked (`seedOnce`); a
+ * stale claimant's commit is refused and writes nothing. And the claim is given back only by its owner: the finally
+ * cleared whatever claim was stored, another tab's included.
  */
-async function claimed(seed: () => Promise<boolean>): Promise<boolean> {
+async function claimed(seed: (me: string) => Promise<boolean>): Promise<boolean> {
   const me = `${Date.now()}:${Math.random().toString(36).slice(2)}`;
   const now = Date.now();
   const got = await updateMeta<string | null>(CLAIM, (had) => {
@@ -136,12 +142,12 @@ async function claimed(seed: () => Promise<boolean>): Promise<boolean> {
   });
   if (got !== me) return false; // another tab is setting it out
   try {
-    return await seed();
+    return await seed(me);
   } finally {
-    await setMeta(CLAIM, null).catch(() => {});
+    await updateMeta<string | null>(CLAIM, (had) => (had === me ? null : (had ?? null))).catch(() => {});
   }
 }
-async function seedOnce(): Promise<boolean> {
+async function seedOnce(claim?: { key: string; value: string }): Promise<boolean> {
   // The seed's changes in the log, its mark missing (a reload between an older build's commit and its mark), are marked
   // now, and the example is never set out twice, even when the visitor removed all its plants; nor over a plant of the
   // visitor's own (round sixty-seven; triage-66 V5; S-A7, K2). Read from the log, not the seeded flag alone: a flag
@@ -153,7 +159,16 @@ async function seedOnce(): Promise<boolean> {
   // One commit for the seed, its seeded mark and its own last arrival number, the boundary Leave counts the visitor's
   // records after (round sixty-seven; triage-66 V5; IND-6, R45-16): written apart, a reload between them left a seeded
   // example with no boundary, and a boundary read from the log a moment later took in an edit made meanwhile.
-  await collection.putWith(first.kind, first.id, first.fields, events, rest, { meta: { [SEEDED]: true }, markLast: SEED_MARK });
+  // The example still unseeded (no seed's mark: a flag alone, left by an older build's failed commit, is set out over) and
+  // the claim still this tab's, read in the same transaction (round sixty-nine; triage-68 X6).
+  // Refused (another tab set the example out, or took the claim), nothing was written and nothing is said: it is not the
+  // visitor's change, and nothing of theirs was lost.
+  const put = await collection.putWith(first.kind, first.id, first.fields, events, rest, {
+    meta: { [SEEDED]: true },
+    markLast: SEED_MARK,
+    requireMeta: [{ key: SEED_MARK, absent: true }, ...(claim ? [{ key: claim.key, equals: claim.value }] : [])]
+  });
+  if (!put.ok) return false;
   // A collection that could not write the mark in the commit has it found from the seed's own changes (`seedState`).
   await seedState(SEEDED).catch(() => null);
   // The fold's snapshot is written after the seed, so every later page of the example reads it rather than the seed's

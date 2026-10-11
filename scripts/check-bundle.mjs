@@ -41,6 +41,7 @@ const BANNED = ['src/lib/backup/', 'src/lib/ui/grow/'];
 const LAYOUT_GROW = new Map([
   ['src/lib/ui/grow/GrowLayer.svelte', "the example's bar, the first plant's persist ask and the backup nudge (round sixty)"],
   ['src/lib/ui/grow/DemoBar.svelte', "the example's bar, drawn by GrowLayer on every page while the example is open"],
+  ['src/lib/ui/grow/ExampleChip.svelte', "\"Example\" in the top bar while the page is in the example, markup and style only (round sixty-nine; triage-68 X8)"],
   ['src/lib/ui/grow/example.svelte.ts', 'the example as the answer to an empty grower page, decided by the layout (round sixty-three, V2)'],
   ['src/lib/ui/grow/IosFirst.svelte', "the iPhone's Home Screen advice before the first plant, drawn by the layout's InstallBar (round sixty)"],
   ['src/lib/ui/grow/ios.ts', "whether this is an iPhone browser tab, for InstallBar and IosFirst (round sixty)"]

@@ -12,6 +12,8 @@
   import { onMount } from 'svelte';
   import { prefs } from '$lib/ui/prefs.svelte';
   import { collection } from '$lib/db/collection.svelte';
+  import Opening from '$lib/db/Opening.svelte';
+  import { CLOSED_WORDS } from '$lib/db/demo';
   import WaitingRecord from '$lib/ui/WaitingRecord.svelte';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
   import { settlePlaces } from '$lib/ui/places-pending';
@@ -572,7 +574,7 @@
 <svelte:window onbeforeunload={guardUnload} onkeydown={(e) => { if (e.key === 'Escape' && cardMenu) closeCardMenu(true); }} onclick={(e) => { if (cardMenu && !(e.target as Element).closest('.cardmenu')) closeCardMenu(); }} />
 
 {#if collection.lastWriteError}
-  <div class="notice err" role="alert" id="write-error">This change was not saved: {collection.lastWriteError}. Free space or <a href="/backup">back up now</a>.</div>
+  <div class="notice err" role="alert" id="write-error">This change was not saved: {collection.lastWriteError}.{#if collection.lastWriteError !== CLOSED_WORDS}{' '}Free space or <a href="/backup">back up now</a>.{/if}</div><!-- the example closed in another tab is not a full phone (round sixty-nine; triage-68 X9; S-C5) -->
 {/if}
 {#if a && keyDiffers}
   <div class="notice" id="key-differs">The reference files {a.taxonName} under GBIF key {refKey}; this plant records key {a.taxonKey}, which the reference does not hold under that name. The species shown here is the reference's. <button class="btn" onclick={useReferenceKey}>Use the reference's key</button></div>
@@ -586,7 +588,7 @@
   <!-- The page's shape before the vault opens: the card without a picture, which is what most plants' pages are; one with a photograph grows a hero above it when the record arrives. -->
   <!-- In the loaded page's own order: the id card (the tile, the number as its title and the actions row), then the verb bar. -->
   <div class="skel" aria-busy="true">
-    <div class="idcard flat"><div class="skeltile skelbox"></div><div class="who"><h1 class="sci"><span class="accno big lead">{param}</span><span class="skelname" aria-hidden="true">Species name</span></h1><p class="vern muted">Opening your collection…</p></div><div class="acts"><span class="btn skelbtn">&nbsp;</span><span class="btn skelbtn">&nbsp;</span></div></div>
+    <div class="idcard flat"><div class="skeltile skelbox"></div><div class="who"><h1 class="sci"><span class="accno big lead">{param}</span><span class="skelname" aria-hidden="true">Species name</span></h1><Opening cls="vern muted" /></div><div class="acts"><span class="btn skelbtn">&nbsp;</span><span class="btn skelbtn">&nbsp;</span></div></div>
     <div class="skelverbs"></div>
   </div>
 {:else if choices.length > 1}

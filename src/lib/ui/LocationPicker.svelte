@@ -4,11 +4,24 @@
   import { LOCATION_KINDS, type LocationKind } from '$lib/db/types';
   import { holdPlacePicker } from './places-pending';
   // `lastUsed`: the place the form pre-filled from the last one used; while it is still the one picked, the field says so (round fifty-eight; the grower review).
-  let { value = $bindable<string | null>(null), id = 'loc', label = 'Location', lastUsed = null }: { value?: string | null; id?: string; label?: string; lastUsed?: string | null } = $props();
+  // `typed`: the new place's name while "New…" is open, for the form's test of what leaving would lose; `start`: a new
+  // place to open "New…" with, carried from the example by "Keep it as my own" (round sixty-nine; triage-68 X2, X3).
+  let { value = $bindable<string | null>(null), id = 'loc', label = 'Location', lastUsed = null, typed = $bindable(null), start = null }: { value?: string | null; id?: string; label?: string; lastUsed?: string | null; typed?: { name: string; kind: string } | null; start?: { name: string; kind?: string | null } | null } = $props();
   let adding = $state(false);
   let newName = $state('');
   let newKind = $state<LocationKind>('shelf');
   let newParent = $state<string | null>(null);
+  $effect(() => { typed = adding && newName.trim() ? { name: newName.trim(), kind: newKind } : null; });
+  let started = false;
+  $effect(() => {
+    if (started || !start?.name?.trim()) return;
+    started = true;
+    newName = start.name.trim();
+    const k = LOCATION_KINDS.find((x) => x.k === start.kind);
+    if (k) newKind = k.k;
+    newParent = null;
+    adding = true;
+  });
 
   // The tree depth-first for a <select>, each option its full path ("Greenhouse › Bench 1 › Tray B"): a closed select shows
   // one option, and "› Tray B" alone did not say which greenhouse (round fifty-eight; the grower review).

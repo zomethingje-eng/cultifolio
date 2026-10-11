@@ -9,6 +9,7 @@
  * WebKit. WebKit is not installed where the suite is written; they were run here in Chromium and on the Chromium phone.
  */
 import { test, expect, type Browser, type Page } from '@playwright/test';
+import { controlledBy } from './helpers/controlled';
 import { cuttableNetwork, type Cut } from './helpers/cut';
 
 let net: Cut;
@@ -24,8 +25,7 @@ async function controlled(browser: Browser) {
   return { ctx, page };
 }
 async function workerInControl(page: Page) {
-  await page.evaluate(() => navigator.serviceWorker.ready);
-  await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller), { timeout: 20_000 }).toBe(true);
+  await controlledBy(page); // phone-webkit took more than 20 s to take control (round sixty-nine; R46-30)
   await expect.poll(() => page.evaluate(async () => { const ks = await caches.keys(); for (const k of ks) { const c = await caches.open(k); if (await c.match('/plants')) return true; } return false; }), { timeout: 30_000 }).toBe(true);
 }
 

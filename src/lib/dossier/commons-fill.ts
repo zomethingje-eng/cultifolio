@@ -7,7 +7,7 @@
  */
 import type { JsonFetcher } from './fetch';
 import type { Dossier } from './schema';
-import { commonsPhotos } from './sources/wikimedia';
+import { commonsPhotos } from './sources/commons';
 
 export type CommonsFill = { added: number } | { none: true } | { failed: string };
 
@@ -29,8 +29,9 @@ export const askedCommons = (d: Pick<Dossier, 'upstream'>) => {
 export const COMMONS_FILL_BELOW = 6;
 export const wantsCommons = (d: Pick<Dossier, 'photos' | 'upstream'>) => (d.photos?.length ?? 0) < COMMONS_FILL_BELOW && !askedCommons(d);
 
-export async function fillCommons(d: Pick<Dossier, 'key' | 'photos' | 'upstream'> & { name: { scientific: string } }, f: JsonFetcher, now = () => new Date().toISOString()): Promise<CommonsFill> {
-  const r = await commonsPhotos(f, d.name.scientific, 12);
+export async function fillCommons(d: Pick<Dossier, 'key' | 'photos' | 'upstream'> & { name: { scientific: string; synonyms?: string[] } }, f: JsonFetcher, now = () => new Date().toISOString()): Promise<CommonsFill> {
+  // The species' older names go with it, so a file named under one is the species and one named as another is not (round sixty-nine; triage-68 K1).
+  const r = await commonsPhotos(f, d.name.scientific, 12, { scientific: d.name.scientific, synonyms: d.name.synonyms ?? [] });
   if (r.status === 'ok') {
     const have = new Set((d.photos ?? []).map((p) => p.id));
     const fresh = r.data.filter((p) => !have.has(p.id));

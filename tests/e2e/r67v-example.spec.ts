@@ -53,10 +53,18 @@ test('r67v V3: a second example tab told of another tab\'s Leave, its "Leave sit
   test.setTimeout(120_000);
   await intoExample(page);
   await page.evaluate(() => localStorage.setItem('cultifolio.lastLocation', 'private-real-location'));
-  const [second] = await Promise.all([context.waitForEvent('page'), page.evaluate(() => { window.open('/plants/new'); })]);
+  // The second example tab is set up through the app's own way in, the menu's "See the example collection", not by
+  // `window.open` from the first: that copies the opener's session storage in Chromium, and in Firefox's phone profile
+  // the child had none, so the test stopped at this setup and never reached the closing (round sixty-nine; triage-68 P4,
+  // IND-12, R46-30). The step is asserted before the test goes on.
+  const second = await context.newPage();
   let stay = true;
   second.on('dialog', (d) => (d.type() === 'beforeunload' && stay ? d.dismiss() : d.accept()));
-  await ready(second);
+  await second.goto('/plants'); await ready(second);
+  await second.getByRole('button', { name: 'Menu' }).click();
+  await second.locator('#menu-example').click();
+  await expect(second.locator('html[data-demo]')).toBeAttached({ timeout: 20_000 });
+  await second.goto('/plants/new'); await ready(second);
   await expect(second.locator('html[data-demo]')).toBeAttached();
   await expect(second.locator('#example-add-line')).toContainText('A plant added here joins the example collection and is deleted with it.'); // V1
   await typePlant(second, 'Copiapoa humilis');
@@ -101,7 +109,7 @@ test('r67v V3: a Leave answered Cancel where the browser does not say so writes 
   await expect(page.locator('html[data-demo]')).toBeAttached();
 });
 
-test('r67v V2: an example left by closing its tab, with a plant the visitor added, is kept and offered back once (R45-2)', async ({ page, context }) => {
+test('r67v V2: an example left by closing its tab, with a plant the visitor added, is kept and offered back until answered (R45-2; round sixty-nine X2)', async ({ page, context }) => {
   test.setTimeout(120_000);
   await intoExample(page);
   await page.goto('/plants/new'); await ready(page);
@@ -113,12 +121,19 @@ test('r67v V2: an example left by closing its tab, with a plant the visitor adde
   await next.goto('/'); await ready(next);
   await expect(next.locator('#example-left')).toContainText(/You left an example collection with \d+ records? you added or changed there\./);
   expect(await databases(next)).toContain('cultifolio-demo'); // base: deleted, the plant with it, no question
+  // Offered again until it is answered: an offer closed unanswered is not a decision (round sixty-nine; triage-68 X2,
+  // R46-19: noted as soon as it showed, it was never offered or deleted again). "Not now" answers it.
   const again = await context.newPage();
   await again.goto('/'); await ready(again);
-  await again.waitForTimeout(1500);
-  await expect(again.locator('#example-left')).toHaveCount(0); // once
-  expect(await databases(again)).toContain('cultifolio-demo'); // and still kept
-  await again.close();
+  await expect(again.locator('#example-left')).toContainText(/You left an example collection/);
+  await again.locator('#example-left-later').click();
+  await expect(again.locator('#example-left')).toHaveCount(0);
+  const third = await context.newPage();
+  await third.goto('/'); await ready(third);
+  await third.waitForTimeout(1500);
+  await expect(third.locator('#example-left')).toHaveCount(0); // answered "Not now"
+  expect(await databases(third)).toContain('cultifolio-demo'); // and still kept
+  await again.close(); await third.close();
   await next.locator('#example-left-open').click();
   await expect(next.locator('html[data-demo]')).toBeAttached({ timeout: 20_000 });
   await next.goto('/plants'); await ready(next);
@@ -234,7 +249,7 @@ test('r67v V1: an add form reached inside the example says so, and "Keep it as m
   await page.locator('#species-name').blur();
   page.on('dialog', (d) => d.accept());
   await page.locator('#example-keep').click();
-  await expect(page).toHaveURL(/\/propagation\/new\?species=Astrophytum(\+|%20)asterias/);
+  await expect(page).toHaveURL(/\/propagation\/new$/); // nothing typed in the address: the draft goes by the tab's storage (round sixty-nine; triage-68 X3)
   await ready(page);
   await expect(page.locator('html[data-demo]')).not.toBeAttached();
   await expect(page.locator('#species-name')).toHaveValue('Astrophytum asterias');

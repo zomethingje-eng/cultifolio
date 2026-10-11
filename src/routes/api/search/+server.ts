@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { forBuild } from '$lib/server/build';
+import { workerKey } from '$lib/server/worker-cache';
 import type { RequestHandler } from './$types';
 import { searchAnswer, corpusNow } from '$lib/server/dossiers';
 import { limited } from '$lib/server/sync';
@@ -54,7 +55,10 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   // Kept only under the corpus and the build it was asked under (round sixty-seven; triage-66 S7: `forBuild`).
   const headers = (corpus: string) => ({ 'cache-control': asked === corpus ? forBuild(url, `public, max-age=${CACHE_S}`) : 'no-store' });
   const edge = platform?.caches?.default;
-  const key = new Request(`https://cache.cultifolio/search6?c=${encodeURIComponent(c.corpus)}&n=${n}&q=${encodeURIComponent(q)}`); // the case kept: an author citation is read by its capitals; search6: answers kept before round sixty-seven's reading and order (triage-66 N1, N2, N8) are not served
+  // The case kept: an author citation is read by its capitals. Keyed by the build too (round sixty-nine; triage-68 W3,
+  // S-F6), so a change to the reading or the order is never answered from the last build's copies; the hand-bumped
+  // `search6` prefix it replaces was not bumped for round sixty-eight's family rule.
+  const key = workerKey('search', { c: c.corpus, n, q });
   const shaped = url.searchParams.get('shape') === '2';
   // `near`: the hits came by a similar spelling, so the picker can say "similar spelling" (round sixty-two; A7, B2).
   // `relaxed.left`: the reading matched and left these typed words out (an author, a cultivar, "sp."), where a relaxed

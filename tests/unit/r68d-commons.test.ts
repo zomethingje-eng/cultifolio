@@ -6,7 +6,7 @@
  * 2026-10-11, in part.
  */
 import { describe, it, expect } from 'vitest';
-import { commonsPhotos, commonsUrl } from '$dossier/sources/wikimedia';
+import { commonsPhotos, commonsUrl } from '$dossier/sources/commons';
 import { fixtureFetcher } from '$dossier/fetch';
 import { shownAt } from '$dossier/photo-size';
 import { showable } from '$lib/ui/ref/photos';

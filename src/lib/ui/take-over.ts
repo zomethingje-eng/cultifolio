@@ -36,3 +36,27 @@ export function onTakeOver(o: {
   if (o.sinceStart < EARLY_MS && !o.typed && o.writing === 0) return 'reload';
   return 'next';
 }
+
+/**
+ * What a page waiting for its next navigation (`next` above) does once a move between pages has finished (round
+ * sixty-nine; triage-68 P2, IND-11). The layout cancelled the move in `beforeNavigate` and assigned `location.href` there:
+ * that began a full unload before the page's own leave guard had decided ("Leave this page?"), so the grower was asked
+ * twice, once by the page and once by the browser, and a write in flight met an unload it had not been waited for. Now the
+ * move runs as any other, its guards and all, and the page it arrives on reloads:
+ *
+ * - at once, when nothing is typed there and nothing is being written to the collection;
+ * - after the writes in flight, when some are (`wait`: the caller waits for them, then asks again);
+ * - not at all while something is typed there: the reload waits for the move after that one (`none`, still pending).
+ */
+export type OnArrival = 'none' | 'wait' | 'reload';
+export function onArrival(o: {
+  /** Whether a takeover is waiting for a move (`next`). */
+  pending: boolean;
+  /** Whether anything was typed, ticked or chosen on the page arrived at, or a field that takes typing has focus. */
+  typed: boolean;
+  /** Vault writes in flight (`vaultWritesInFlight()`). */
+  writing: number;
+}): OnArrival {
+  if (!o.pending || o.typed) return 'none';
+  return o.writing > 0 ? 'wait' : 'reload';
+}

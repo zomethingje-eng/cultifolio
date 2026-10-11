@@ -38,9 +38,11 @@ export function fileParks(m: { v: number; app?: string; parked?: string[] }): st
 
 /** Build the backup file without downloading it, so the page can say what is not in it first. */
 export async function prepareBackup(onProgress?: (done: number, total: number) => void): Promise<PreparedBackup> {
-  const changes = await collection.exportChanges();
+  // The rows the fold skips go in the file apart, as `unreadable.json` (round sixty-nine; triage-68 R3, R46-18).
+  const { changes, unreadable } = await collection.exportLog();
   const built = await buildBackup({
     changes,
+    unreadable,
     device: await getMeta<string>('device'),
     app: APP,
     settings: readDeviceSettings(),

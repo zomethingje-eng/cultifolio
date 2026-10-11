@@ -393,14 +393,25 @@ export async function getGenus(platform: Platform, fetch: Fetch, slug: string, h
 }
 
 /** Maps over the index, built once per index load rather than per request: by key, and the species of each genus sorted by name (round fifty-one, 6). */
-type IndexMaps = { byKey: Map<number, IndexEntry>; byGenus: Map<string, IndexEntry[]>; bySynonym: Map<string, { entry: IndexEntry; matched: string }> };
+/**
+ * `bySynonym`: an older name held by one species, in lower case. `ambiguous`: an older name the rule gives no one species,
+ * with every species that holds it, those that show it first (round sixty-nine; triage-68 N1).
+ */
+type IndexMaps = { byKey: Map<number, IndexEntry>; byGenus: Map<string, IndexEntry[]>; bySynonym: Map<string, { entry: IndexEntry; matched: string }>; ambiguous: Map<string, IndexEntry[]> };
 const maps = new WeakMap<IndexEntry[], IndexMaps>();
 export function indexMaps(index: IndexEntry[]): IndexMaps {
   let m = maps.get(index);
   if (m) return m;
   const byKey = new Map<number, IndexEntry>();
   const byGenus = new Map<string, IndexEntry[]>();
-  const bySynonym = new Map<string, { entry: IndexEntry; matched: string }>();
+  const shown = new Map<string, Array<{ entry: IndexEntry; matched: string }>>();
+  const searchOnly = new Map<string, Array<{ entry: IndexEntry; matched: string }>>();
+  const hold = (into: typeof shown, e: IndexEntry, name: string) => {
+    const k = name.toLowerCase();
+    const xs = into.get(k) ?? [];
+    if (!xs.some((x) => x.entry === e)) xs.push({ entry: e, matched: name });
+    into.set(k, xs);
+  };
   for (const e of index) {
     byKey.set(e.key, e);
     const g = genusOf(e.name);
@@ -408,11 +419,40 @@ export function indexMaps(index: IndexEntry[]): IndexMaps {
     if (xs) xs.push(e); else byGenus.set(g, [e]);
     // Every older name of species rank too, past the six `syn` shows (round sixty-seven; triage-66 N1): an address under
     // "Ferocactus glaucescens" is Bisnaga glaucescens from the index, without asking the backbone.
-    for (const syn of [...(e.syn ?? []), ...(e.older ?? [])]) { const k = syn.toLowerCase(); if (!bySynonym.has(k)) bySynonym.set(k, { entry: e, matched: syn }); }
+    for (const syn of e.syn ?? []) hold(shown, e, syn);
+    for (const syn of e.older ?? []) hold(searchOnly, e, syn);
   }
+  const { bySynonym, ambiguous } = synonymMaps(shown, searchOnly);
   for (const xs of byGenus.values()) xs.sort((a, b) => a.name.localeCompare(b.name));
-  maps.set(index, (m = { byKey, byGenus, bySynonym }));
+  maps.set(index, (m = { byKey, byGenus, bySynonym, ambiguous }));
   return m;
+}
+/**
+ * Which species an older name answers (round sixty-nine; triage-68 N1, S-F1, R46-3; rule 3). The species that shows
+ * the name (`syn`) first: one that holds it only for the search (`older`) never takes an address from it. A name two
+ * species show, or that two species hold only for the search, is no one species' name: it does not redirect, and the
+ * species route's 404 names every holder. Before, the first holder in the index's order took it: 522 names of the live
+ * index were older names of two species or more, "Aloe variegata" went to Aloe vera, and "Cereus undulatus" to
+ * Acanthocereus tetragonus, not the dragon fruit that shows it.
+ */
+function synonymMaps(shown: Map<string, Array<{ entry: IndexEntry; matched: string }>>, searchOnly: Map<string, Array<{ entry: IndexEntry; matched: string }>>) {
+  const bySynonym = new Map<string, { entry: IndexEntry; matched: string }>();
+  const ambiguous = new Map<string, IndexEntry[]>();
+  for (const k of new Set([...shown.keys(), ...searchOnly.keys()])) {
+    const s = shown.get(k) ?? [], o = (searchOnly.get(k) ?? []).filter((x) => !s.some((y) => y.entry === x.entry));
+    const by = s.length ? s : o;
+    if (by.length === 1) bySynonym.set(k, by[0]);
+    else ambiguous.set(k, [...s, ...o].map((x) => x.entry));
+  }
+  return { bySynonym, ambiguous };
+}
+/**
+ * The species an older name is held by when the name answers no one of them (`synonymMaps`), those that show it first,
+ * else null: the species route's 404 says the name is an older name of these species of the reference, and names them
+ * (round sixty-nine; triage-68 N1). `name` as written or as read from an address ("Aloe variegata"), in any case.
+ */
+export function ambiguousSynonym(index: IndexEntry[], name: string): IndexEntry[] | null {
+  return indexMaps(index).ambiguous.get(name.trim().replace(/\s+/g, ' ').toLowerCase()) ?? null;
 }
 
 /** The search's prepared structure per index, built at load (round fifty-two, 5). */

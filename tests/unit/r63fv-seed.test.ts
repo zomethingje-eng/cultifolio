@@ -35,6 +35,7 @@ vi.mock('$lib/db/vault', () => {
   // The claiming write of the real vault, over the same in-memory log: `build` sees the numbers the caller knows.
   m.appendChangesClaiming = async (_k: string, known: Set<string>, build: (s: Set<string>) => { changes: Change[]; result: unknown }) => { const b = build(new Set(known)); await m.appendChanges(b.changes); return b.result; };
   m.onOtherTabWrite = () => () => {};
+  m.MetaChangedError = class extends Error {}; // round sixty-nine (triage-68 X6): the seed's refusal, which this stand-in never raises
   // No snapshot in memory: every load folds the whole log, as a first load does (the snapshot is tested on the real vault in fold-snapshot.test.ts).
   m.readFold = async () => undefined;
   m.writeFold = async () => false;

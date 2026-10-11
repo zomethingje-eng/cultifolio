@@ -69,7 +69,8 @@ for (const status of [503, 429]) test(`the picker says the reference search was 
   await page.locator('#species-name').fill('Copiapoa cinerea');
   await expect(page.locator('.picker .hint')).toContainText(/name service/);
   // base: "only the reference's own species are offered", though the reference's search failed too
-  await expect(page.locator('.picker .hint')).toContainText(status === 429 ? "The reference's own search was not asked: this site asked this device to wait." : "The reference's own search did not answer.");
+  // A 503 in the server's own words is its failure, said as that, not as silence (round sixty-nine; triage-68 W6, R46-7).
+  await expect(page.locator('.picker .hint')).toContainText(status === 429 ? "The reference's own search was not asked: this site asked this device to wait." : "The reference's own search could not be read just now.");
   await expect(page.locator('.picker .hint')).not.toContainText("reference's own species are offered");
 });
 

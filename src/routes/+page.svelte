@@ -398,7 +398,8 @@
   let found = $state<Found[]>([]);
   let searching = $state(false);
   /** Why the last search gave nothing usable: not reached, rate-limited (with the wait in seconds), or offline. */
-  let searchFailed = $state<null | { kind: 'unreached' | 'limited' | 'offline'; wait?: number }>(null);
+  // `unread` and `refused`: the server answered that it could not search just now, or refused (round sixty-nine; triage-68 W6, R46-7).
+  let searchFailed = $state<null | { kind: 'unreached' | 'limited' | 'offline' | 'unread' | 'refused'; wait?: number }>(null);
   let searchGen = 0;
   let searchTimer: ReturnType<typeof setTimeout> | undefined;
   let pendingSearch: Promise<unknown> | null = null;
@@ -424,7 +425,7 @@
         if (gen !== searchGen) return;
         searching = false;
         if (r === null) { searchFailed = { kind: typeof navigator !== 'undefined' && navigator.onLine === false ? 'offline' : 'unreached' }; found = []; relaxedFor = null; return; }
-        if (!Array.isArray(r) && 'limited' in r) { searchFailed = { kind: 'limited', wait: r.limited }; found = []; relaxedFor = null; return; }
+        if (!Array.isArray(r) && 'limited' in r) { searchFailed = { kind: r.kind ?? 'limited', wait: r.limited }; found = []; relaxedFor = null; return; }
         searchFailed = null;
         found = hitsOf(r);
         relaxedFor = relaxedOf(r);
@@ -723,7 +724,7 @@
   <!-- To a visitor the head says what this is in three short lines, not a 62-word sentence that read as a disclaimer, and then
        shows it: one species' figures and its chart, as its page shows them (round sixty; visitor 1, the self-review's
        experience item 1). To a grower it is the catalogue's head, as before. -->
-  <PageHead title={visitor ? 'Cultifolio' : 'Species'} kick={visitor ? 'Species reference' : 'Cultifolio'} compact count="{fmtN(data.total)} species · {fmtN(data.withClimate)} with habitat climate{ownedN ? ` · ${ownedN} you grow` : ''}">
+  <PageHead title={visitor ? 'Cultifolio' : 'Species'} kick={visitor ? 'Species reference' : 'Cultifolio'} compact countRow count="{fmtN(data.total)} species · {fmtN(data.withClimate)} with habitat climate{ownedN ? ` · ${ownedN} you grow` : ''}">
     {#if !visitor}<a class="btn pri headadd" href="/plants/new" onclick={(e) => addLeavesExample(e, '/plants/new')}>Add a plant</a>{/if}
   </PageHead>
   {#if visitor}
@@ -809,12 +810,12 @@
   {#if flat}
     {#if q.trim()}{@render plantsFound()}{/if}
     {#if searchFailed}
-      <p class="seccount" style="margin-top: 14px" role="status">{searchFailed.kind === 'offline' ? 'Offline: the catalogue search needs a connection; your own plants are under “Your species”.' : searchFailed.kind === 'limited' ? `Too many searches from this network; try again in ${Math.max(1, Math.ceil((searchFailed.wait ?? 60) / 60))} minute${(searchFailed.wait ?? 60) > 60 ? 's' : ''}.` : 'The catalogue could not be reached.'} <button class="linkish" type="button" onclick={retrySearch}>Try again</button></p>
+      <p class="seccount" style="margin-top: 14px" role="status">{searchFailed.kind === 'offline' ? 'Offline: the catalogue search needs a connection; your own plants are under “Your species”.' : searchFailed.kind === 'limited' ? `Too many searches from this network; try again in ${Math.max(1, Math.ceil((searchFailed.wait ?? 60) / 60))} minute${(searchFailed.wait ?? 60) > 60 ? 's' : ''}.` : searchFailed.kind === 'unread' ? 'The catalogue search could not be read just now.' : searchFailed.kind === 'refused' ? 'The server refused this search just now.' : 'The catalogue could not be reached.'} <button class="linkish" type="button" onclick={retrySearch}>Try again</button></p>
     {:else if searching && !found.length}
       <p class="seccount" style="margin-top: 14px">Searching…</p>
     {:else if !shownFound.length}
       <!-- A way forward, not a dead end: what the reference is, and the record that works without it (round fifty-eight). -->
-      <div class="emptybox"><p class="muted">Nothing in the reference matches “{q.trim()}”{chip !== 'all' && found.length ? ` with the chip on (${fmtN(found.length)} without it)` : ''}. It holds a fixed list of {fmtN(data.total)} species (<a href="/about/how#list">which ones</a>), so a plant you grow may not be on it: you can still <a href="/plants/new?species={encodeURIComponent(q.trim())}">add it as a plant</a>; its record works without a species page.</p></div>
+      <div class="emptybox"><p class="muted">Nothing in the reference matches “{q.trim()}”{chip !== 'all' && found.length ? ` with the chip on (${fmtN(found.length)} without it)` : ''}. It holds a fixed list of {fmtN(data.total)} species (<a href="/about/how#list">which ones</a>), so a plant you grow may not be on it: you can still <a href="/plants/new?species={encodeURIComponent(q.trim())}" onclick={(e) => addLeavesExample(e, `/plants/new?species=${encodeURIComponent(q.trim())}`)}>add it as a plant</a>; its record works without a species page.</p></div>
     {:else}
       <p class="seccount" style="margin: 8px 0" role="status">{fmtN(shownFound.length)} {shownFound.length === 1 ? 'match' : 'matches'} of {fmtN(data.total)}{chip !== 'all' && shownFound.length !== found.length ? ` (${fmtN(found.length - shownFound.length)} more without the chip)` : ''} · Enter opens the first</p>
       <div class="rows hits">

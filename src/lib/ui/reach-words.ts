@@ -29,6 +29,9 @@ export function unreachedClause(u: Unreached, what: string, now = Date.now()): s
     const why = r ? ` (${/^[A-Z][a-z]/.test(r) ? r[0].toLowerCase() + r.slice(1) : r})` : '';
     return `the server refused ${what} just now${why}${after}`;
   }
+  // A failure the server said in its own words, or with a Retry-After, is neither a refusal nor a silence (round
+  // sixty-nine; triage-68 W6, S-E5, R46-7: "the server refused the species sheets just now" was its own 503).
+  if (u.kind === 'unread') return `${what} could not be read just now${after}`;
   return `${what} did not answer`;
 }
 

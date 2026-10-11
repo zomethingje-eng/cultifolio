@@ -6,12 +6,14 @@
  */
 import { mendGbifThumb, mendCommonsThumb } from './md5';
 import { dedupePhotos } from './dedupe';
+import { shownPhotos } from './photo-kind';
 import * as v from 'valibot';
 
 /** v2 (September 2026): the habitat climate is an envelope across every in-range record's cell, not one point. */
 export const DOSSIER_V = 2 as const;
 
-export const UpstreamStatus = v.picklist(['ok', 'none', 'refused', 'error', 'skipped']);
+/** `ambiguous`: two records answered where one is required, so none was taken (round sixty-nine; triage-68 M8). */
+export const UpstreamStatus = v.picklist(['ok', 'none', 'refused', 'error', 'skipped', 'ambiguous']);
 export type UpstreamStatus = v.InferOutput<typeof UpstreamStatus>;
 
 /** Every upstream answers one of: it gave data (ok), it said there is none
@@ -101,7 +103,7 @@ export const Distribution = v.object({
 const Lat = v.pipe(v.number(), v.minValue(-90), v.maxValue(90));
 const Lon = v.pipe(v.number(), v.minValue(-180), v.maxValue(180));
 /** [lat, lon, year|null, country|null, basisOfRecord|null, licence tag]. Open records only, and the schema holds it to that. */
-export const OccPoint = v.tuple([Lat, Lon, v.nullable(v.number()), v.nullable(v.string()), v.nullable(v.string()), v.picklist(['cc0', 'by', 'by-sa'])]);
+export const OccPoint = v.tuple([Lat, Lon, v.nullable(v.number()), v.nullable(v.string()), v.nullable(v.string()), v.picklist(['cc0', 'pd', 'by', 'by-sa'])]);
 
 export const Occurrences = v.object({
   open: v.array(OccPoint),
@@ -208,7 +210,8 @@ export const Photo = v.object({
   thumb: v.string(),
   width: v.optional(v.number()),
   height: v.optional(v.number()),
-  licence: v.picklist(['cc0', 'by', 'by-sa']),
+  /** `pd`, public domain that is not a CC0 waiver, since round sixty-nine (triage-68 K3); a dossier built before tags it `cc0`, and `safeUrls` reads it again. */
+  licence: v.picklist(['cc0', 'pd', 'by', 'by-sa']),
   attribution: v.string(),
   page: v.optional(v.string()),
   captive: v.optional(v.boolean()),
@@ -286,7 +289,9 @@ export function safeUrls(d: Dossier): Dossier {
     ...d,
     climate,
     summary: d.summary ? { ...d.summary, url: webUrl(d.summary.url) ?? '' } : d.summary,
-    photos: dedupePhotos(d.photos.filter((p) => webUrl(p.url) && webUrl(p.thumb)).map((p) => ({ ...p, thumb: mendCommonsThumb(mendGbifThumb(p.thumb, p.id, p.url), p.width), page: webUrl(p.page) }))),
+    // A Commons file that is not a photograph of the species, or whose licence or author the rules do not read, is left
+    // out here, and the rest have Commons' credit cleaned, so the deploy corrects every page (round sixty-nine; triage-68 K1-K3).
+    photos: shownPhotos(dedupePhotos(d.photos.filter((p) => webUrl(p.url) && webUrl(p.thumb)).map((p) => ({ ...p, thumb: mendCommonsThumb(mendGbifThumb(p.thumb, p.id, p.url), p.width), page: webUrl(p.page) }))), d.name),
     // A specimen record under DiSSCo's DOI prefix is not a paper (round thirty-one, 6): dropped here as well as at the build, so dossiers built before the rule show none.
     literature: d.literature.filter((p) => !/^(https?:\/\/doi\.org\/)?10\.3535\//i.test(p.doi ?? '')).map((p) => ({ ...p, url: webUrl(p.url) })),
     links: Object.fromEntries(Object.entries(d.links).filter(([, u]) => webUrl(u))),

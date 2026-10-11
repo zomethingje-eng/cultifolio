@@ -9,6 +9,7 @@
  */
 import { clip } from '$core/text';
 import { licenceLabel, licenceTag, type LicenceTag } from '$core/licence';
+import { splitCommonsCredit } from '$dossier/photo-credit';
 import { temp, rain, METRIC, type Units } from '$core/units';
 import { yearRain } from '$climate/year-rain';
 
@@ -134,8 +135,11 @@ export const TILE_AUTHOR_MAX = 40;
 const INAT_LINE = /^(?:\(c\)|©)?\s*(.+?),\s*(?:some|no) rights reserved(?:\s*\(([^)]*)\))?$/i;
 const VIA_LINE = /^(.+?),\s*([^,]+?),\s*(?:iNaturalist via GBIF|via GBIF|via Wikimedia Commons)$/;
 
-/** A licence as a credit line words it, tagged: spaces made hyphens as `creditParts` does, and Commons' "PD-…" as the build reads it. */
-const lineTag = (t: string) => licenceTag(t.trim().replace(/^Public domain$/i, 'cc0').replace(/^PD.*$/i, 'cc0').replace(/^(cc[\s-].*)$/i, (x) => x.replace(/[\s_]+/g, '-')));
+/**
+ * A licence as a credit line words it, tagged: spaces made hyphens as `creditParts` does, and Commons' "Public domain"
+ * and "PD-…" as public domain, never CC0, which the tile and the hero once called them (round sixty-nine; triage-68 K3).
+ */
+const lineTag = (t: string) => licenceTag(t.trim().replace(/^(?:Public domain|PD\b.*)$/i, 'public domain').replace(/^(cc[\s-].*)$/i, (x) => x.replace(/[\s_]+/g, '-')));
 
 /**
  * The credit a tile gives the index's thumbnail, as the index carries it: the licence, then the author, in the species
@@ -149,8 +153,10 @@ export function tileCreditOf(p: { attribution: string; licence?: LicenceTag | nu
   if (!p) return null;
   const c = creditParts(p);
   if (!c.lic || c.disagree || c.lic === 'restricted' || c.lic === 'licence not stated') return null;
-  const m = INAT_LINE.exec(c.who) ?? VIA_LINE.exec(c.who);
-  // The licence the line names must be the source's own; "author not stated" is said as that, under CC0 only (the build drops it otherwise).
+  // A Commons line is split where its licence reads strictly, since a version list ("CC BY-SA 2.5,2.0,1.0") holds commas (round sixty-nine).
+  const cm = splitCommonsCredit(c.who);
+  const m = cm ? [c.who, cm.author, cm.short] : INAT_LINE.exec(c.who) ?? VIA_LINE.exec(c.who);
+  // The licence the line names must be the source's own; "author not stated" is said as that, under CC0 or public domain only (the build drops it otherwise).
   if (!m || (m[2] && lineTag(m[2]) !== p.licence)) return null;
   let who = m[1].trim();
   if (!who) return null;

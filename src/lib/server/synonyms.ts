@@ -10,6 +10,7 @@
  */
 import { getIndex, indexMaps, type Platform, type Fetch, type Loaded } from './dossiers';
 import { upstreamCall } from './sync';
+import { workerKey } from './worker-cache';
 
 export interface SynonymAnswer {
   /** The name as the backbone matched it. */
@@ -73,7 +74,8 @@ export async function synonymOf(platform: Platform, fetch: Fetch, slug: string, 
 export async function synonymAsk(platform: Platform, fetch: Fetch, slug: string, held: Loaded | undefined, ip: string | null): Promise<SynonymAnswer | null | 'unchecked' | 'held' | 'refused'> {
   const name = nameFromSlug(slug);
   if (!name || !/^[A-Z][a-z]+ [a-z]/.test(name)) return null; // a binomial at least: a bare genus is not a species address
-  const cacheKey = new Request(`https://cache.cultifolio/match?name=${encodeURIComponent(name.toLowerCase())}`);
+  // Keyed by the build (round sixty-nine; triage-68 W3): the answer is GBIF's, but what this build makes of it is its own.
+  const cacheKey = workerKey('match', { name: name.toLowerCase() });
   const cache = platform?.caches?.default;
   let body: Record<string, unknown> | null = null;
   const hit = await cache?.match(cacheKey).catch(() => undefined); // a cache that fails is a lookup, not a 500 (round sixty)

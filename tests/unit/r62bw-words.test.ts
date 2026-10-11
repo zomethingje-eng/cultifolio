@@ -159,7 +159,9 @@ describe('a credit says two licences disagree only when they do (the words revie
   it('spaces or hyphens, the same licence agrees', () => {
     for (const a of ['Jane Doe, CC BY SA 4.0', 'Jane Doe, CC-BY-SA 4.0', 'Jane Doe (cc by sa)']) expect(creditParts({ attribution: a, licence: 'by-sa' }).disagree, a).toBe(false);
     expect(photoCredit({ attribution: 'Jane Doe, CC BY 4.0', licence: 'by' })).toBe('Jane Doe, CC BY 4.0');
-    expect(creditParts({ attribution: 'Jane Doe, public domain', licence: 'cc0' }).disagree).toBe(false);
+    // Public domain is its own tag since round sixty-nine (triage-68 K3): it agrees with "public domain", and a CC0 waiver does not.
+    expect(creditParts({ attribution: 'Jane Doe, public domain', licence: 'pd' }).disagree).toBe(false);
+    expect(creditParts({ attribution: 'Jane Doe, public domain', licence: 'cc0' }).disagree).toBe(true);
   });
   it('another licence still disagrees', () => {
     expect(photoCredit({ attribution: 'Jane Doe, CC BY SA 4.0', licence: 'by' })).toMatch(/the two licences disagree/);

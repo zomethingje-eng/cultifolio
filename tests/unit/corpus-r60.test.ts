@@ -417,7 +417,8 @@ describe('Commons photographs at 800 pixels (round sixty; A7; the self-review, 1
   });
   it('a species page whose lead photograph is from Commons is given data whose lead loads at the thumbnail', async () => {
     const d = JSON.parse(FIXTURE_DOSSIER);
-    d.photos = [{ src: 'commons', id: 'c1', url: ORIG, thumb: THUMB, width: 4000, height: 3000, licence: 'by-sa', attribution: 'A. Grower (CC BY-SA)', page: 'https://commons.wikimedia.org/wiki/File:Copiapoa_cinerea.jpg', captive: false }];
+    // A Commons photograph as the build stores it: its title as the id and its credit in the build's form, which the read checks since round sixty-nine (triage-68 K1, K2).
+    d.photos = [{ src: 'commons', id: 'File:Copiapoa cinerea.jpg', url: ORIG, thumb: THUMB, width: 4000, height: 3000, licence: 'by-sa', attribution: 'A. Grower, CC BY-SA 4.0, via Wikimedia Commons', page: 'https://commons.wikimedia.org/wiki/File:Copiapoa_cinerea.jpg', captive: false }];
     const { plat } = speciesBucket(JSON.stringify(d));
     const { load } = await import('../../src/routes/species/[slug]/+page.server');
     const page = (await load(speciesEvent('copiapoa-cinerea', plat) as never)) as { d: { photos: Array<{ url: string; thumb: string; captive?: boolean }> } };

@@ -50,7 +50,9 @@
   // The reference's own search (/api/search) did not answer, or this site asked this device to wait: said under the field,
   // never silence, and the hint no longer says "only the reference's own species are offered" then (round sixty-two; the
   // self-review's corpus 10g, triage N2; rule 2).
-  let refDown = $state<null | 'unreached' | 'limited'>(null);
+  // Round sixty-nine (triage-68 W6, R46-7): a search the server answered it could not run just now (`unread`), or refused
+  // (`refused`), is said as that; only no answer at all is "did not answer".
+  let refDown = $state<null | 'unreached' | 'limited' | 'unread' | 'refused'>(null);
   /** The last check read a genus followed by capitalised words as the genus and a cultivar, since no species of that name was found: said once, before Add files it. */
   let readAsCultivar = $state<string | null>(null);
   $effect(() => { if (!value) received = null; });
@@ -170,7 +172,7 @@
     const indexP = ((genusOnly && p.kind === 'hybrid') || text.length < 2 ? Promise.resolve([] as Found[]) : searchCatalogue(text, 6)).then((answer) => {
       if (!live()) return;
       // Said, never silence: the reference's search did not answer, or this site asked this device to wait (rule 2).
-      refDown = answer === null ? 'unreached' : !Array.isArray(answer) ? 'limited' : null;
+      refDown = answer === null ? 'unreached' : !Array.isArray(answer) ? (answer.kind ?? 'limited') : null;
       // A hit whose genus is not the one typed came from the one-edit fallback ("polyphylla" → Lupinus polyphyllus): say so.
       // An answer for other words than the name typed is offered only when they are its genus and epithet, the rest left
       // out or retried ("Copiapoa cinerea var. columna-alba", "Copiapoa cinerea Phil."): its rows then file no key for
@@ -334,7 +336,14 @@
   }
   // The two services' silences, each in its own words: a refusal as "not asked", a failure as "did not answer" (rule 2).
   const namesSaid = $derived(nameServiceDown ? (gbifRefused ? "GBIF refused this site's request for names. " : nameRefusal ? `The name service was not asked: ${nameRefusal}. ` : 'The name service did not answer. ') : '');
-  const refSaid = $derived(refDown === 'limited' ? "The reference's own search was not asked: this site asked this device to wait. " : refDown ? "The reference's own search did not answer. " : '');
+  /** Why the reference's own search gave no rows, as a clause with no full stop. */
+  function refWords(d: NonNullable<typeof refDown>): string {
+    if (d === 'limited') return "The reference's own search was not asked: this site asked this device to wait";
+    if (d === 'unread') return "The reference's own search could not be read just now";
+    if (d === 'refused') return "The server refused the reference's own search just now";
+    return "The reference's own search did not answer";
+  }
+  const refSaid = $derived(refDown ? `${refWords(refDown)}. ` : '');
   /** The nearest reference name when the typed one resolved to nothing: offered by name, never taken on its own. */
   // Never beside a key: a name the reference's own search resolved while the name service failed was offered "Not a
   // reference name. Did you mean" itself, under its GBIF pill (round sixty-seven; seen in the P10 probe).
@@ -428,7 +437,7 @@
   {:else if nameServiceDown && refDown}<p class="hint svc" role="status">{namesSaid}{refSaid}A name typed in full is kept as typed and checked later.</p>
   <!-- With a key found, or a pill that already says the name is kept as typed, the line does not say it again: it then fits the room kept for it (round sixty-seven; triage-66 P10). -->
   {:else if nameServiceDown}<p class="hint svc" role="status">{gbifRefused ? "GBIF refused this site's request for names, so only" : nameRefusal ? `The name service was not asked: ${nameRefusal}. Only` : 'The name service did not answer, so only'} the reference's own species are offered{taxonKey || resolved === 'no' || resolved === 'unreached' ? '' : '; a name typed in full is kept as typed and checked later'}.</p>
-  {:else if refDown}<p class="hint svc" role="status">{refDown === 'limited' ? "The reference's own search was not asked: this site asked this device to wait, so" : "The reference's own search did not answer, so"} only the backbone's names are offered.</p>
+  {:else if refDown}<p class="hint svc" role="status">{refWords(refDown)}, so only the backbone's names are offered.</p>
   {:else if received}<p class="hint svc" role="status">What you typed, “{received}”, is kept as the name as received.</p>{/if}
   </div>
 </div>

@@ -1,11 +1,12 @@
 <script lang="ts">
   import { plural } from '$core/words';
   import { onMount } from 'svelte';
-  import { replaceState } from '$app/navigation';
+  import { replaceState, beforeNavigate } from '$app/navigation';
   import { page } from '$app/state';
   import { focusNext } from '$lib/ui/focus';
   import PageHead from '$lib/ui/PageHead.svelte';
   import { collection } from '$lib/db/collection.svelte';
+  import Opening from '$lib/db/Opening.svelte';
   import { LOCATION_KINDS, accNo, type LocationKind, type Location, type Accession } from '$lib/db/types';
   import { plantHref } from '$lib/db/links';
   import { plantLabel } from '$lib/ui/plant-label';
@@ -17,6 +18,7 @@
   import ExampleAddLine from '$lib/ui/grow/ExampleAddLine.svelte';
   import { addLeavesExample } from '$lib/ui/grow/example.svelte';
   import { PAGE_IN_DEMO } from '$lib/db/demo';
+  import { takeDraft, withoutKept, ownPlaceNamed, str, oneOf, type Draft } from '$lib/ui/grow/keep-draft';
   onMount(() => collection.load());
   let adding = $state(false);
   // The top bar's "+" on this section lands on /places#add: the form opens with its first field focused, and the hash is
@@ -29,9 +31,10 @@
       if (location.hash === '#add') setTimeout(() => { try { replaceState(location.pathname + location.search, page.state); } catch { /* the router not up yet: the hash stays, harmlessly (round sixty-three) */ } }, 0);
     };
     const onHash = () => { if (location.hash === '#add') open(); };
-    // A name carried from the example's form by "Keep it as my own" (`?name=`), taken off the address once read.
-    const carried = page.url.searchParams.get('name');
-    if (carried && !name) { name = carried; setTimeout(() => { try { const u = new URL(location.href); u.searchParams.delete('name'); replaceState(u.pathname + u.search + u.hash, page.state); } catch { /* the router not up yet */ } }, 0); }
+    // The form carried from the example by "Keep it as my own": the name, the kind and the place it goes inside, read once
+    // from the tab's storage, never the address (round sixty-nine; triage-68 X3; R46-5).
+    const kept = takeDraft('place', page.url);
+    if (kept) void collection.load().then(() => applyDraft(kept));
     const onTap = (e: MouseEvent) => {
       if (PAGE_IN_DEMO) return; // in the example the "+" leads out of it first (`addLeavesExample`), and opens nothing here
       const a = (e.target as Element | null)?.closest?.('a[href="/places#add"]');
@@ -49,6 +52,31 @@
   let kind = $state<LocationKind | ''>(''); // chosen, never defaulted: a bench filed as a room says "whole room" on every watering line (round twenty-six, 16)
   let kindMsg = $state('');
   let parent = $state<string | null>(null);
+  /**
+   * A place half typed is not lost without a word (round sixty-nine; triage-68 X2; R46-19): the form had no guard, and a
+   * tab move, a reload or another tab's Leave took the name. Set aside while "Keep it as my own" leaves (`leavingWith`).
+   */
+  let leavingWith = $state(false);
+  const dirty = () => adding && !leavingWith && !!(name.trim() || kind);
+  beforeNavigate((nav) => {
+    if (!dirty() || nav.type === 'leave' || nav.willUnload) return;
+    if (!confirm('Leave this page? The place you were adding will be lost.')) nav.cancel();
+  });
+  function guardUnload(e: BeforeUnloadEvent) {
+    if (dirty()) e.preventDefault();
+  }
+  /** The form as it stands, for "Keep it as my own": the place it goes inside is carried by its name. */
+  function draftOf(): Omit<Draft, 'form'> {
+    const inside = parent ? collection.location(parent) : undefined;
+    return { place: inside ? { name: inside.name, kind: inside.type ?? null } : null, fields: { name, kind } };
+  }
+  function applyDraft(d: Draft) {
+    name = str(d.fields.name, name);
+    kind = oneOf<string>(d.fields.kind, LOCATION_KINDS.map((k) => k.k), '') as LocationKind | '';
+    parent = ownPlaceNamed(d.place, collection.locations);
+    adding = true;
+    setTimeout(() => { try { const u = withoutKept(location.href); replaceState(u.pathname + u.search + u.hash, page.state); } catch { /* the router not up yet */ } }, 0);
+  }
 
   type Row = { loc: Location; depth: number; n: number; deepN: number };
   const rows = $derived.by(() => {
@@ -106,13 +134,14 @@
 </script>
 
 <svelte:head><title>Places · Cultifolio</title></svelte:head>
+<svelte:window onbeforeunload={guardUnload} />
 
 <PageHead compact title="Places" sub="Where your plants live: a greenhouse, a bench, a shelf or a windowsill; conditions set on a place apply to everything inside it." count="{rows.length} place{rows.length === 1 ? '' : 's'}{unplaced ? ` · ${unplaced} unplaced` : ''}">
   <button class="btn pri" onclick={(e) => { if (!addLeavesExample(e, '/places#add')) adding = !adding; }}>New place</button>
 </PageHead>
 
 {#if adding}
-  <ExampleAddLine what="place" keep={() => (name.trim() ? `/places?name=${encodeURIComponent(name.trim())}#add` : '/places#add')} />
+  <ExampleAddLine what="place" draft={draftOf} hold={(on) => (leavingWith = on)} />
   <form class="cult form" onsubmit={(e) => { e.preventDefault(); add((e.submitter as HTMLElement | null)?.id === 'loc-another'); }}>
     <!-- Each field with a visible name over it: a placeholder was the name's only one, and the place above had none (round fifty-eight; the accessibility review). -->
     <label class="fl"><span class="eyebrow">Name of the new place</span><input id="loc-name" type="text" placeholder="e.g. Greenhouse, Bench 1" bind:value={name} /></label>
@@ -128,7 +157,7 @@
 {/if}
 
 {#if !collection.ready}
-  <p class="muted">Opening your collection…</p>
+  <Opening />
 {:else}
   {#if !rows.length}
     <!-- Held while the add form is open or asked for (`#add`, read before the page's own mount takes it off the address): a

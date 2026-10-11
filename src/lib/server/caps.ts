@@ -23,3 +23,19 @@ export const NET_FACTOR = 4;
  */
 export const UPSTREAM_RESERVE_PART = 0.25;
 export const UPSTREAM_RESERVE_EACH = 2;
+
+/**
+ * Objects (log batches and photographs) one vault may store in an hour, counted in the vault's own counter object as
+ * its bytes are taken (round sixty-nine; triage-68 W5, R46-24). Nothing counted a vault's writes: a batch of 16 KB or less
+ * is free of the day's byte totals (round sixty-seven, S9), and a photograph of a few bytes spends almost none of them, so
+ * the request windows alone bounded the R2 writes, per address and not per vault. One a second is far past a grower's
+ * pushes; a first push of thousands of photographs is spread over a few hours.
+ */
+export const VAULT_WRITES_PER_HOUR = 3600;
+
+/**
+ * R2 list pages (of 1,000 keys) one walk of a vault's log may make (`walk` in sync.ts, where it is explained), and so what
+ * a listing's ask reserves against the vault's hour of listings (round sixty-nine; triage-68 W2). Here, so the counter
+ * object reserves the same figure the walk is bounded by.
+ */
+export const MAX_LIST_PAGES = 50;

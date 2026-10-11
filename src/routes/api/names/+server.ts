@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { forBuild } from '$lib/server/build';
+import { workerKey } from '$lib/server/worker-cache';
 import type { RequestHandler } from './$types';
 import { limited, upstreamCall, heldBack, clientIp } from '$lib/server/sync';
 
@@ -44,7 +45,9 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   // fungi and no Gasteria, since the suggest ranks across every kingdom and the picker shows the first twelve (round twenty-eight, deploy).
   const upstream = `https://api.gbif.org/v1/species/suggest?datasetKey=d7dddbf4-2cf0-4f39-9b2a-bb099caae36c&higherTaxonKey=${_PLANTAE}&limit=12&q=${encodeURIComponent(q)}`;
   // Folded to lower case: GBIF suggest is itself case-insensitive, so one spelling's answer serves the others. If that ever changes, this key must carry the case.
-  const cacheKey = new Request(`https://cache.cultifolio/names2?q=${encodeURIComponent(q.toLowerCase())}`); // names2: the day of unfiltered answers cached under the old key is not served after the kingdom filter
+  // Keyed by the build (round sixty-nine; triage-68 W3): the answer is GBIF's, read and filtered by this build's rules
+  // (the kingdom filter was one such change, which a hand-bumped `names2` prefix once kept apart).
+  const cacheKey = workerKey('names', { q: q.toLowerCase() });
   const cache = platform?.caches?.default;
   // A cache that fails to answer is a lookup, not a 500 (round sixty; the server review, 12), as the page cache's is.
   const hit = await cache?.match(cacheKey).catch(() => undefined);

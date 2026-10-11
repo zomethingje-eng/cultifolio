@@ -153,7 +153,7 @@ describe('Counters', () => {
     v.storage.fired();
     await v.c.tick(Date.UTC(2026, 8, 27));
     expect(v.storage.alarmAt()).toBeNull();
-    expect([...v.storage.m.keys()].sort()).toEqual(['gen', 'v']);
+    expect([...v.storage.m.keys()].sort()).toEqual(['gen', 'v', 'w']); // `w`: the hour's write count, an hour and a number (round sixty-nine; W5)
   });
   it('the byte totals: a vault\'s is put right by a listing each day and taken in one step; an address\'s is per day and swept (round fifty-eight)', async () => {
     const v = make();

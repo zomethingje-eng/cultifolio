@@ -37,14 +37,14 @@ describe('the tab that left the example is marked, so an empty page never opens 
     const { leaveDemo, leftHere } = await import('$lib/db/demo');
     expect(leftHere()).toBe(false);
     leaveDemo('/');
-    expect(loc.href).toBe('/?left=sample');
+    expect(loc.href).toMatch(/^\/\?left=[a-z0-9]+$/);
     expect(leftHere()).toBe(true);
   });
   it('a close in another tab marks it too, and so does the address a Leave opens', async () => {
     session.m.set('cultifolio.demo', '1');
     const { sampleClosedHere, markLeftByAddress, leftHere, OUT } = await import('$lib/db/demo');
     sampleClosedHere();
-    expect(loc.href).toBe('/?left=sample'); // the address says it too, for the next page's first script (round sixty-seven; triage-66 V3)
+    expect(loc.href).toBe('/'); // home; the tab's note takes it out of the example, and the address marks nothing (round sixty-nine; triage-68 X1)
     expect(leftHere()).toBe(true);
     session.m.delete(OUT);
     markLeftByAddress();

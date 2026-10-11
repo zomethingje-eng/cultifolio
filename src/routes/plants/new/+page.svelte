@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { goto, beforeNavigate } from '$app/navigation';
+  import { goto, beforeNavigate, replaceState } from '$app/navigation';
   import { toast } from '$lib/ui/toast.svelte';
   import PageHead from '$lib/ui/PageHead.svelte';
   import { localDate } from '$core/dates';
@@ -21,6 +21,7 @@
   import { readSetting, writeSetting } from '$lib/ui/stored';
   import ExampleAddLine from '$lib/ui/grow/ExampleAddLine.svelte';
   import { CLOSED_WORDS } from '$lib/db/demo';
+  import { takeDraft, withoutKept, ownPlaceNamed, str, num, bool, oneOf, type Draft, type CarriedPlace } from '$lib/ui/grow/keep-draft';
   /** The reference's key for a species-rank name when the reference answers; otherwise the key as given (the plant page repairs it later). */
   async function checkedKey(sp: string | null, k: number): Promise<number> {
     if (!sp || speciesOf(sp) !== sp) return k;
@@ -29,6 +30,9 @@
   }
   onMount(async () => {
     await collection.load();
+    // Carried from the example by "Keep it as my own": the whole form, read once (round sixty-nine; triage-68 X3).
+    const kept = takeDraft('plant', page.url);
+    if (kept) { applyDraft(kept); return; }
     // Arriving from a species page: /plants/new?species=Copiapoa%20cinerea&key=7284333
     const sp = page.url.searchParams.get('species');
     const k = Number(page.url.searchParams.get('key'));
@@ -53,6 +57,33 @@
   });
   /** The key in the link being checked against the reference; an Add clicked before the answer waits for it rather than filing the plant without its key or asking about a name that came with one (round twenty-three, 4). */
   let keyCheck: Promise<void> | null = null;
+  const PROVENANCES = ['unknown', 'wild', 'f1', 'fn', 'veg'] as const;
+  const FORMS = ['plant', 'seedling', 'seed', 'cutting'] as const;
+  const KINDS = ['species', 'cultivar', 'hybrid'] as const;
+  /** The form as it stands, for "Keep it as my own" (round sixty-nine; triage-68 X3): every field, and the place by name. */
+  function draftOf(): Omit<Draft, 'form'> {
+    const at = locationId ? collection.location(locationId) : undefined;
+    const place: CarriedPlace | null = placeTyped ?? (at ? { name: at.name, kind: at.type ?? null } : null);
+    return { place, fields: { name, taxonKey, cultivar, kind, parentage, nameAsReceived, pickReceived, fieldNumber, provenance, acquired, sourceFrom, price, sourceForm, notes, lastWatered, count, useOwnNumber, ownNumber, moreOpen } };
+  }
+  /** A draft carried from the example, field by field, each only as the type it holds; its place is the grower's own of that name, or a new one to make. */
+  function applyDraft(d: Draft) {
+    const f = d.fields;
+    name = str(f.name, ''); cultivar = typeof f.cultivar === 'string' ? f.cultivar : null; kind = oneOf(f.kind, KINDS, 'species') as NameKind;
+    parentage = typeof f.parentage === 'string' ? f.parentage : null; nameAsReceived = str(f.nameAsReceived, ''); pickReceived = typeof f.pickReceived === 'string' ? f.pickReceived : null;
+    fieldNumber = str(f.fieldNumber, ''); provenance = oneOf(f.provenance, PROVENANCES, 'unknown'); acquired = str(f.acquired, acquired);
+    sourceFrom = str(f.sourceFrom, ''); price = str(f.price, ''); sourceForm = oneOf(f.sourceForm, FORMS, 'plant'); notes = str(f.notes, '');
+    lastWatered = str(f.lastWatered, ''); count = num(f.count, 1); useOwnNumber = bool(f.useOwnNumber, false); ownNumber = str(f.ownNumber, ''); moreOpen = bool(f.moreOpen, false);
+    const own = ownPlaceNamed(d.place, collection.locations);
+    if (own) locationId = own; else startPlace = d.place;
+    setTimeout(() => { try { replaceState(withoutKept(location.href), page.state); } catch { /* the router not up yet: the address keeps it, and the draft is gone */ } }, 0);
+    const k = num(f.taxonKey, null);
+    if (k && name) keyCheck = checkedKey(name, k).then((checked) => { if (name === str(f.name, '')) taxonKey = checked; });
+  }
+  /** The new place named in the picker and not yet added: typed, so leaving would lose it (round sixty-nine; triage-68 X2). */
+  let placeTyped = $state<{ name: string; kind: string } | null>(null);
+  /** A place carried from the example that the grower does not have: the picker opens "New…" with it. */
+  let startPlace = $state<CarriedPlace | null>(null);
   $effect(() => {
     setCrumb([{ label: 'My plants', href: '/plants' }, { label: 'Add a plant' }]);
     return () => setCrumb([]);
@@ -98,7 +129,7 @@
   /** "Save and add another" keeps the form open with the place, the date, the source and the provenance; the name and what belongs to the one plant are cleared (round forty-nine, 3). */
   let addAnother = $state(false);
   /** Whether the form has anything typed that leaving would lose; a save clears it before the page moves on. */
-  const dirty = $derived(!!(name.trim() || nameAsReceived.trim() || fieldNumber.trim() || notes.trim() || sourceFrom.trim() || price.trim() || (count ?? 1) !== 1 || provenance !== 'unknown' || acquired !== acquiredDefault || !!lastWatered));
+  const dirty = $derived(!!(name.trim() || nameAsReceived.trim() || fieldNumber.trim() || notes.trim() || sourceFrom.trim() || price.trim() || (count ?? 1) !== 1 || provenance !== 'unknown' || acquired !== acquiredDefault || !!lastWatered || placeTyped));
   let saved = $state(false);
   beforeNavigate((nav) => {
     // An in-app move away from a half-filled form asks first (a tab-bar tap, the back button); a full unload is asked about below (round forty-nine, 3; round fifty-one, 4).
@@ -232,8 +263,8 @@
   <PageHead title="Add a plant" kick="My plants" places={false}>
     {#snippet subline()}{#if countN > 1}{#if useOwnNumber && ownNumber.trim()}The first will be numbered <span class="accno">{ownNumber.trim()}</span>, the rest from <span class="accno">{nextNo}</span>.{:else}They will be numbered from <span class="accno">{nextNo}</span>, one each.{/if}{:else}It will be numbered <span class="accno">{useOwnNumber && ownNumber ? ownNumber : nextNo}</span>.{/if} A number is never reused; its year is the year acquired.{/snippet}
   </PageHead>
-  <!-- In the example: the plant joins it and goes with it; "Keep it as my own" leaves with the species (round sixty-seven; triage-66 V1). -->
-  <ExampleAddLine what="plant" keep={() => { const sp = name.trim(); return sp ? `/plants/new?species=${encodeURIComponent(sp)}${taxonKey ? `&key=${taxonKey}` : ''}` : '/plants/new'; }} />
+  <!-- In the example: the plant joins it and goes with it; "Keep it as my own" leaves with everything typed, the place included, and no "Leave site?" (round sixty-seven; triage-66 V1; round sixty-nine, triage-68 X3). -->
+  <ExampleAddLine what="plant" draft={draftOf} hold={(on) => (saved = on)} />
   <div class="cult sheet">
 
   <!-- One hint line under the field; the ways to write a cultivar or a cross are one tap away, not a fourth paragraph (round sixty; the grower review, 18). -->
@@ -244,7 +275,7 @@
   {/if}
 
   <div class="two">
-    <div class="field"><span>Place</span><LocationPicker bind:value={locationId} id="f-loc" label="Place" lastUsed={lastUsedLoc} /></div>
+    <div class="field"><span>Place</span><LocationPicker bind:value={locationId} id="f-loc" label="Place" lastUsed={lastUsedLoc} bind:typed={placeTyped} start={startPlace} /></div>
     <label class="field"><span>Acquired</span><input id="f-date" type="date" bind:value={acquired} oninput={() => (dateMsg = '')} aria-invalid={!!dateMsg} aria-describedby={dateMsg ? 'f-date-bad' : undefined} />{#if dateMsg}<span class="bad small" id="f-date-bad">{dateMsg}</span>{/if}</label>
   </div>
 

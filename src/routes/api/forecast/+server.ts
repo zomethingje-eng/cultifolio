@@ -1,5 +1,6 @@
 import { parseUnits } from '$core/units';
 import { forBuild } from '$lib/server/build';
+import { workerKey } from '$lib/server/worker-cache';
 import { json, error } from '@sveltejs/kit';
 import { metUrl, reduceMet, nwsAlertsUrl, reduceNws, isUS, frostRisk, type MetResponse } from '$lib/weather/forecast';
 import { USER_AGENT } from '$dossier/fetch';
@@ -60,7 +61,8 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
     lo = Math.round(lon * 100) / 100;
   // On a private host, as the names route: a key that is also a real URL of this site is a raw object the edge can hand
   // back to a request for that URL, which is what happened to the live check after round nineteen (round twenty-one, 5).
-  const cacheKey = new Request(`https://cache.cultifolio/forecast?lat=${la}&lon=${lo}&alt=${alt ?? ''}`);
+  // And keyed by the build (round sixty-nine; triage-68 W3): the reduced forecast and its alert statuses are this build's.
+  const cacheKey = workerKey('forecast', { lat: la, lon: lo, alt: alt ?? '' });
   const cache = platform?.caches?.default;
   // `refused`: the NWS refused this site's request (its 429 or 403); `unanswered`: it did not answer (unreachable, a
   // timeout, another status, a body that is not alerts). Both were 'refused' before round sixty-seven (triage-66 S8, R45-11).

@@ -7,10 +7,16 @@
    */
   /** `compact`: on a phone the head is one line, the title with the count beside it; the kicker and the sentence are for wider screens, where there is room (round fifty, 1). A list page's first screen is for its list. */
   /** `keepSub`: the sentence stays on a phone too, for a page whose sentence is what a stranger needs (the front page to a visitor; round fifty-eight). */
-  let { title, sub, subline, count, places = true, kick = 'Cultifolio', compact = false, keepSub = false, children }: { title: string; sub?: string; subline?: import('svelte').Snippet; count?: string; places?: boolean; kick?: string; compact?: boolean; keepSub?: boolean; children?: import('svelte').Snippet } = $props();
+  /**
+   * `countRow`: on a phone the count has a row of its own under the title, never beside it. Beside it, whether it fitted
+   * on the title's line depended on the face it was set in, so a count that fitted in the fallback face and not in the
+   * web face (the fixture's "3 species · 3 with habitat climate" in Firefox) moved the page by a line when the fonts
+   * arrived (round sixty-nine; triage-68 P4, IND-13). The live count is long enough to sit under the title either way.
+   */
+  let { title, sub, subline, count, places = true, kick = 'Cultifolio', compact = false, keepSub = false, countRow = false, children }: { title: string; sub?: string; subline?: import('svelte').Snippet; count?: string; places?: boolean; kick?: string; compact?: boolean; keepSub?: boolean; countRow?: boolean; children?: import('svelte').Snippet } = $props();
 </script>
 
-<header class="phead" class:compact class:keepsub={keepSub}>
+<header class="phead" class:compact class:keepsub={keepSub} class:countrow={countRow}>
   <div class="kick">{kick}</div>
   <div class="titlerow">
     <h1 class="q">{title}</h1>
@@ -40,6 +46,7 @@
     .phead.compact .inlinecount { display: inline; font-size: var(--fs-sm); white-space: normal; min-width: 0; }
     .phead.compact .acts { margin-left: auto; flex: none; }
     .phead.compact .titlerow h1 { white-space: nowrap; }
+    .phead.compact.countrow .inlinecount { flex-basis: 100%; }
     /* With an action beside the title there is no room for the count on the line: it goes under, small (round fifty, 4). */
     .phead.compact .titlerow:has(.acts > :global(:not(.wideonly))) .inlinecount { display: none; }
     .phead.compact:has(.titlerow .acts > :global(:not(.wideonly))) .fullcount { display: block; margin-top: 2px; }

@@ -13,9 +13,9 @@
   import { today } from '$lib/ui/day.svelte';
   import { collection } from '$lib/db/collection.svelte';
   import { frost } from '$lib/ui/frost.svelte';
-  import { onVaultNotice, vaultWritesInFlight } from '$lib/db/vault';
-  import { onTakeOver } from '$lib/ui/take-over';
-  import { afterNavigate, beforeNavigate } from '$app/navigation';
+  import { onVaultNotice, vaultWritesInFlight, whenVaultIdle } from '$lib/db/vault';
+  import { onTakeOver, onArrival } from '$lib/ui/take-over';
+  import { afterNavigate } from '$app/navigation';
   import { browser, version } from '$app/environment';
   import CompareBar from '$lib/ui/CompareBar.svelte';
   import InstallBar from '$lib/ui/InstallBar.svelte';
@@ -23,6 +23,7 @@
   // grow barrel, which brought every grower feature and the backup module into every page (round sixty-one; the
   // accessibility review, 3).
   import GrowLayer from '$lib/ui/grow/GrowLayer.svelte';
+  import ExampleChip from '$lib/ui/grow/ExampleChip.svelte'; // "Example" in the top bar while the page is in the example (round sixty-nine; triage-68 X8; R46-26)
   import { freshOnRestore, PAGE_IN_DEMO } from '$lib/db/demo';
   // The example collection as the answer to an empty grower page (round sixty-three, V2), decided on the page once it has
   // arrived, never on the tap: a tap that went straight in skipped the pages' own "Leave this page?" (the fix pass; R1, 1).
@@ -154,9 +155,22 @@
       if (reg.waiting) skipTo(reg.waiting);
     });
   });
-  beforeNavigate((nav) => {
-    // The new build takes over at a page boundary: a full load of the destination, never a reload of a page being worked on.
-    if (reloadOnNext && nav.to && nav.type !== 'leave') { nav.cancel(); location.href = nav.to.url.href; }
+  // The new build takes over at a page boundary, never by reloading a page being worked on. Not in `beforeNavigate` any
+  // more: cancelling the move there and assigning `location.href` began a full unload before the page's own leave guard
+  // had decided, so a half-filled form asked twice (its "Leave this page?" and the browser's), and a write in flight met
+  // an unload nobody waited for. The move now finishes as any other, guards and all, and the page it arrives on reloads
+  // when nothing is typed there, after any write in flight (round sixty-nine; triage-68 P2, IND-11; the rule is `onArrival`'s).
+  afterNavigate(async (nav) => {
+    // A new page starts untyped (a jump within the page keeps what was typed on it); reset here, once the move has
+    // happened, not before it, since a page's guard can keep the grower on the form.
+    // (`url` read with care: the framework hands an `after` callback a `from` whose url is null after some moves, such
+    // as a plant page's Apply, which threw here.)
+    if (nav.to?.url && nav.from?.url && nav.to.url.pathname !== nav.from.url.pathname) typedHere = false;
+    if (!reloadOnNext || nav.type === 'enter') return;
+    const now = () => onArrival({ pending: reloadOnNext, typed: typedHere || typing(document.activeElement), writing: vaultWritesInFlight() });
+    let what = now();
+    if (what === 'wait') { await whenVaultIdle(5000); what = now(); }
+    if (what === 'reload') location.reload();
   });
   // The phone's tab bar steps out of the way while the reader scrolls down a page and comes back on the way up or at the
   // page's end: a species page with two compared had 212 of 844 px fixed. Never while a text field has focus (the bar is
@@ -326,6 +340,7 @@
       {/each}
     </ol>
   </nav>
+  <ExampleChip />
   <!-- The five places, from every page, in the bar that is always there; the phone has them in the tab bar instead. The
        current one says so to a screen reader, not only in colour (round fifty-eight; the accessibility review). -->
   <nav class="seg topseg" aria-label="Main">

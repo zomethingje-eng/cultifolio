@@ -5,7 +5,7 @@
   import PageHead from '$lib/ui/PageHead.svelte';
   import { localDate } from '$core/dates';
   import { temp, tempUnit, cToF, bottomHeat as heatCheck, numberOrNull } from '$core/units';
-  import { goto, beforeNavigate } from '$app/navigation';
+  import { goto, beforeNavigate, replaceState } from '$app/navigation';
   import { accNo, sowNo } from '$lib/db/types';
   import { page } from '$app/state';
   import { onMount } from 'svelte';
@@ -20,6 +20,7 @@
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import ExampleAddLine from '$lib/ui/grow/ExampleAddLine.svelte';
   import { CLOSED_WORDS } from '$lib/db/demo';
+  import { takeDraft, withoutKept, ownPlaceNamed, str, num, bool, oneOf, type Draft, type CarriedPlace } from '$lib/ui/grow/keep-draft';
 
   let name = $state('');
   let taxonKey = $state<number | null>(null);
@@ -51,7 +52,11 @@
   let notes = $state('');
   let busy = $state(false);
   let saved = $state(false);
-  const formDirty = () => !saved && !busy && !!(name.trim() || count != null || sourceFrom.trim() || notes.trim());
+  /** The new place named in the picker and not yet added counts as typed (round sixty-nine; triage-68 X2). */
+  let placeTyped = $state<{ name: string; kind: string } | null>(null);
+  /** A place carried from the example that the grower does not have: the picker opens "New…" with it (triage-68 X3). */
+  let startPlace = $state<CarriedPlace | null>(null);
+  const formDirty = () => !saved && !busy && !!(name.trim() || count != null || sourceFrom.trim() || notes.trim() || placeTyped);
   // A half-done form is not lost to a tab-bar tap or a reload without asking (round fifty-two, 4; the Add form has had this since round forty-nine).
   beforeNavigate((nav) => {
     if (!formDirty() || nav.type === 'leave' || nav.willUnload) return;
@@ -101,8 +106,33 @@
     const s = await sheetForName(sp, k);
     return s && s !== 'none' ? s.key : k;
   }
+  const METHODS = PROP_METHODS.map((x) => x.k);
+  const SEED_PROV = ['unknown', 'wild', 'f1', 'fn'] as const;
+  /** The form as it stands, for "Keep it as my own" (round sixty-nine; triage-68 X3): every field but the parent plant, which is the example's, and the place by name. */
+  function draftOf(): Omit<Draft, 'form'> {
+    const at = locationId ? collection.location(locationId) : undefined;
+    const place: CarriedPlace | null = placeTyped ?? (at ? { name: at.name, kind: at.type ?? null } : null);
+    return { place, fields: { name, taxonKey, cultivar, kind, parentage, method, sown, count, sourceFrom, sourceRef, fieldNumber, provenance, medium, container, treatment, bottomHeat, covered, notes } };
+  }
+  /** A draft carried from the example, field by field, each only as the type it holds. */
+  function applyDraft(d: Draft) {
+    const f = d.fields;
+    name = str(f.name, ''); cultivar = typeof f.cultivar === 'string' ? f.cultivar : null; kind = oneOf(f.kind, ['species', 'cultivar', 'hybrid'] as const, 'species');
+    parentage = typeof f.parentage === 'string' ? f.parentage : null; method = oneOf(f.method, METHODS, 'seed'); sown = str(f.sown, sown);
+    count = num(f.count, null); sourceFrom = str(f.sourceFrom, ''); sourceRef = str(f.sourceRef, ''); fieldNumber = str(f.fieldNumber, '');
+    provenance = oneOf(f.provenance, SEED_PROV, 'unknown'); medium = str(f.medium, ''); container = str(f.container, ''); treatment = str(f.treatment, '');
+    bottomHeat = typeof f.bottomHeat === 'number' || typeof f.bottomHeat === 'string' ? f.bottomHeat : ''; covered = bool(f.covered, false); notes = str(f.notes, '');
+    const own = ownPlaceNamed(d.place, collection.locations);
+    if (own) locationId = own; else startPlace = d.place;
+    setTimeout(() => { try { replaceState(withoutKept(location.href), page.state); } catch { /* the router not up yet: the address keeps it, and the draft is gone */ } }, 0);
+    const k = num(f.taxonKey, null);
+    if (k && name) void checkedKey(name, k).then((checked) => { if (name === str(f.name, '')) taxonKey = checked; });
+  }
   onMount(async () => {
     await collection.load();
+    // Carried from the example by "Keep it as my own": the whole form, read once (round sixty-nine; triage-68 X3).
+    const kept = takeDraft('batch', page.url);
+    if (kept) { applyDraft(kept); return; }
     // /propagation/new?species=…&key=… from a species page
     const sp = page.url.searchParams.get('species');
     const k = Number(page.url.searchParams.get('key'));
@@ -213,8 +243,8 @@
   <PageHead title={m.veg ? 'Start a propagation' : 'Sow seed'} kick="Propagation" places={false}>
     {#snippet subline()}Batch <span class="accno">{nextNo}</span>. Plants potted up from it are numbered then, not now.{/snippet}
   </PageHead>
-  <!-- In the example: the batch joins it and goes with it; "Keep it as my own" leaves with the species (round sixty-seven; triage-66 V1). -->
-  <ExampleAddLine what="batch" keep={() => { const sp = name.trim(); return sp ? `/propagation/new?species=${encodeURIComponent(sp)}${taxonKey ? `&key=${taxonKey}` : ''}` : '/propagation/new'; }} />
+  <!-- In the example: the batch joins it and goes with it; "Keep it as my own" leaves with everything typed, the place included, and no "Leave site?" (round sixty-seven; triage-66 V1; round sixty-nine, triage-68 X3). -->
+  <ExampleAddLine what="batch" draft={draftOf} hold={(on) => (saved = on)} />
   <div class="cult sheet">
 
   <label class="field"><span>Method</span>
@@ -272,7 +302,7 @@
   </div>
   <label class="check"><input id="s-covered" type="checkbox" bind:checked={covered} /> Covered (bag, lid, propagator)</label>
 
-  <div class="field"><span>Where</span><LocationPicker bind:value={locationId} id="s-loc" label="Where" lastUsed={lastUsedLoc} /></div>
+  <div class="field"><span>Where</span><LocationPicker bind:value={locationId} id="s-loc" label="Where" lastUsed={lastUsedLoc} bind:typed={placeTyped} start={startPlace} /></div>
   <label class="field"><span>Notes</span><textarea id="s-notes" rows="3" bind:value={notes}></textarea></label>
   </div>
 

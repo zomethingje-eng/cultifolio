@@ -9,6 +9,9 @@ import { GET as corpusGET } from '../../src/routes/api/corpus/+server';
 import { GET as entriesGET } from '../../src/routes/api/entries/+server';
 import { resetRateLimits, RATE } from '$lib/server/sync';
 import { bucketOf } from '$core/bucket';
+import { version } from '$app/environment';
+/** The Worker cache's key for a bucket: on its private host, under the build and the corpus (round sixty-nine; triage-68 W3). */
+const sheetKey = (b: string, c: string) => `https://cache.cultifolio/sheets?v=${encodeURIComponent(version)}&b=${b}&c=${c}`;
 
 type Cache = { match: (r: Request) => Promise<Response | undefined>; put: (r: Request, res: Response) => Promise<void> };
 function memCache(): Cache & { store: Map<string, Response>; puts: string[] } {
@@ -43,10 +46,10 @@ describe('/api/sheets', () => {
     expect(r.status).toBe(200);
     const sheets = (await r.json()) as Array<{ slug: string }>;
     expect(sheets.map((s) => s.slug)).toContain('copiapoa-cinerea');
-    expect(cache.puts).toEqual([`http://x/api/sheets?b=${b}&c=fixture`]);
+    expect(cache.puts).toEqual([sheetKey(b, 'fixture')]);
     // the same bucket asked for again, in another grouping or order, is answered from the entry and nothing is derived
     const other = [...Array(32).keys()].map((i) => i.toString(16).padStart(2, '0')).find((x) => x !== b)!;
-    cache.store.set(`http://x/api/sheets?b=${other}&c=fixture`, new Response('[]', { headers: { 'content-type': 'application/json' } }));
+    cache.store.set(sheetKey(other, 'fixture'), new Response('[]', { headers: { 'content-type': 'application/json' } }));
     const again = await call(`b=${other},${b}&c=fixture`, { cache });
     expect(((await again.json()) as unknown[]).length).toBe(sheets.length);
     expect(cache.puts).toHaveLength(1);
@@ -79,7 +82,7 @@ describe('/api/sheets', () => {
     }
     const stop = await call(`b=${all[0]}&c=over`, { cache, ip: '9.9.9.9' });
     expect(stop.status).toBe(429);
-    cache.store.set(`http://x/api/sheets?b=${all[0]}&c=fixture`, new Response('[]', { headers: { 'content-type': 'application/json' } }));
+    cache.store.set(sheetKey(all[0], 'fixture'), new Response('[]', { headers: { 'content-type': 'application/json' } }));
     const hit = await call(`b=${all[0]}&c=fixture`, { cache, ip: '9.9.9.9' });
     expect(hit.status).toBe(200);
   });

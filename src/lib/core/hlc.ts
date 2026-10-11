@@ -31,7 +31,9 @@ export const TRUST_AGREE_TOL_MS = 5 * 60_000;
  * A correction not confirmed by a reading for this long no longer counts as confirmed (`clockChecked`): a park judged by
  * it alone is not made. The correction itself stays in force (round sixty-two; the clock review's 4 and 5, the outside
  * reviews' A17 and B9): no amount of elapsed time makes a correction wrong, since a slow clock does not catch up by
- * waiting, and dropping it put a device ten minutes slow on two clocks by turns and refolded the log at each turn.
+ * waiting, and dropping it put a device ten minutes slow on two clocks by turns and refolded the log at each turn. The
+ * one exception is a positive correction past two days at a load, or after a move of the device clock past it, which
+ * waits for a reading out of force (`awaiting`).
  */
 export const TRUST_EXPIRES_MS = 7 * 86_400_000;
 /** Where the correction is kept between loads, so the first edit of a tab is stamped right, not only the ones after its first pull (round fifty-one, 1). The pending reading is kept too, so one sync per page load still gets a device corrected (round fifty-two, 1). */
@@ -41,9 +43,11 @@ const PENDING_KEY = 'cultifolio.clockPending';
 /**
  * `jumped` and `unsure`: see the variables of those names (round sixty-two, second pass; the data review's 1 and 2). A
  * record with `confirmedAt` 0 is a correction in force that no reading confirms now (one large reading disagreed with
- * it): it is kept, so every tab and the next load stamp alike until a second reading decides (the data review's 3).
+ * it): it is kept, in force, so every tab and the next load stamp alike until a second reading decides (the data
+ * review's 3), but for a positive one past two days, which a load keeps out of force until a reading (`awaiting`).
  */
-type Stored = { offset: number; confirmedAt: number; serverAt?: number; jumped?: number; unsure?: boolean };
+/** `out`: see `awaiting`; a record written before round sixty-nine has none, and its `unsure` stood for it. */
+type Stored = { offset: number; confirmedAt: number; serverAt?: number; jumped?: number; unsure?: boolean; out?: boolean };
 let offsetMs = 0;
 /** When a reading last confirmed the offset in force, by the device clock (moved with the device clock when this tab follows a change of it). */
 let confirmedAt = 0;
@@ -62,13 +66,24 @@ let mono: { dev: number; perf: number } | null = null;
  *
  * What it does, and all it does: the engine is asked for a reading at once (`onReadingWanted`), and the next reading
  * either confirms the correction (it agrees within the half minute: nothing is refolded) or replaces it (one refold).
- * A positive correction past two days is not in force while unsure (`inForce`; round sixty-seven, triage-66 R2).
- * Nothing else changes. Stamps and local dates are still read from the correction in force (`nowMs`); the hold and
- * the far-ahead rules are judged by that same clock; whether a park judged by the clock alone is made is still
- * `clockChecked()` (a reading under a week old, not dated after the clock), which being unconfirmed does not change.
- * This device's own edits are never held or parked by its own clock, confirmed or not (`isParked`, `isHeld` in log.ts).
+ * Stamps and local dates are still read from the correction in force (`nowMs`); the hold and the far-ahead rules are
+ * judged by that same clock. This device's own edits are never held or parked by its own clock, confirmed or not
+ * (`isParked`, `isHeld` in log.ts). Whether a large positive correction is in force is `awaiting`'s, not this.
  */
 let unsure = false;
+/**
+ * Whether a positive correction past two days waits for a reading here before it is in force (`inForce`; round
+ * sixty-seven, triage-66 R2; round sixty-nine, triage-68 R2). A slow clock set right while the tab was closed kept its
+ * three days and stamped every edit three days ahead, and their arrival parked them on every device. So it waits:
+ *  - from a load, which cannot tell a clock set right while closed from one still slow;
+ *  - from a move of the device clock forward by at least the correction, which may be the clock set right during a sleep.
+ * A reading here ends the wait, confirming the correction or replacing it. A reading that disagrees does not start one:
+ * a confirmed correction is never taken out of force on one reading (R46-17, the self-review's D2: a reading 45 s off a
+ * three-day correction put the clock three days back at once), and a sleep shorter than the correction leaves it in force.
+ * While it waits, the clock in force is not a checked one (`checkedNow`): a peer's change far ahead of it is held, not
+ * parked, and an edit here is stamped past a held change up to the stored correction's reach (`latestNowMs`).
+ */
+let awaiting = false;
 /**
  * The moves forward of the device clock the correction was kept across since the last reading (sleeps, or the clock set
  * forward), summed, in ms: a move back undoes them first, as far as they go (`follow`). Kept with the correction in
@@ -96,6 +111,7 @@ function readStored(adopt = false): void {
         offsetMs = v.offset; confirmedAt = c; serverAt = c ? at : 0; mono = monoNow();
         jumped = Number.isFinite(v.jumped) && (v.jumped as number) > 0 ? (v.jumped as number) : 0;
         unsure = adopt ? !!v.unsure : true;
+        awaiting = adopt ? (typeof v.out === 'boolean' ? v.out : !!v.unsure) : true;
       } else localStorage.removeItem(OFFSET_KEY);
     }
     const p = localStorage.getItem(PENDING_KEY);
@@ -115,6 +131,7 @@ function store(): void {
       const v: Stored = { offset: offsetMs, confirmedAt, serverAt };
       if (jumped) v.jumped = jumped;
       if (unsure) v.unsure = true;
+      if (awaiting || unsure) v.out = awaiting; // said either way while unsure, so another tab takes this tab's clock in force
       localStorage.setItem(OFFSET_KEY, JSON.stringify(v));
     } else localStorage.removeItem(OFFSET_KEY);
     if (pending) localStorage.setItem(PENDING_KEY, JSON.stringify(pending));
@@ -153,7 +170,9 @@ function tellLater(offset: number | null): void {
  *    exactly as long as the correction, to the half minute, is the one case this reads wrong, and stamps behind);
  *  - forwards otherwise: a sleep on a platform whose monotonic clock pauses, or the clock set forward. The two cannot be
  *    told apart here, so the correction is kept (a sleep leaves it right) and the move is added to `jumped`. Kept, a
- *    clock set forward stamps ahead by the move plus any positive correction until a reading.
+ *    clock set forward stamps ahead by the move plus any positive correction until a reading. A move past a positive
+ *    correction of more than two days may be that clock set right during a sleep: the correction then waits for a
+ *    reading out of force (`awaiting`; round sixty-nine, triage-68 R2), and a shorter move leaves it in force.
  * After any counted move the reference is read afresh, the correction is unconfirmed (`unsure`), it is stored, and a
  * reading is asked for at once. No amount of time passing changes it: the round-sixty-one lapse when a slow clock
  * "reached" its reading's server time dropped a correction that was still right (B9: six minutes slow across midnight
@@ -180,7 +199,12 @@ function follow(): void {
   let f = 0; // the part of the move the correction follows
   if (d < 0 && offsetMs < 0) f = Math.max(d, offsetMs);
   else if (d > 0 && offsetMs > 0 && Math.abs(d - offsetMs) <= TRUST_SERVER_PAST_MS) f = d;
-  else if (d > 0) jumped += d;
+  else if (d > 0) {
+    jumped += d;
+    // A move at least as large as the correction may be the clock set right during a sleep: a large one waits for a
+    // reading. A shorter one is a sleep, and the correction stays in force (round sixty-nine; triage-68 R2, R46-17).
+    if (offsetMs > TRUST_SERVER_TWICE_PAST_MS && d > offsetMs) awaiting = true;
+  }
   if (f) {
     offsetMs -= f;
     if (Math.abs(offsetMs) <= TRUST_SERVER_PAST_MS / 2) offsetMs = 0; // the clocks now agree, as a reading would say
@@ -203,7 +227,7 @@ function follow(): void {
  */
 function adoptStored(): void {
   const was = inForce(), wasChecked = checkedNow();
-  offsetMs = 0; confirmedAt = 0; serverAt = 0; mono = null; pending = null; jumped = 0; unsure = false;
+  offsetMs = 0; confirmedAt = 0; serverAt = 0; mono = null; pending = null; jumped = 0; unsure = false; awaiting = false;
   readStored(true);
   if (inForce() !== was || checkedNow() !== wasChecked) for (const l of listeners) l(inForce());
 }
@@ -223,15 +247,20 @@ try {
  */
 export const nowMs = () => { follow(); return Date.now() + inForce(); };
 /**
- * The correction in force: the stored one, except a positive one past the two days a single reading may move the clock,
- * which applies only once a reading here has confirmed it (round sixty-seven; triage-66 R2, the outside review's 14). A
- * slow clock set right while the tab was closed kept its three days and stamped every edit three days ahead, and their
- * arrival parked them on every device. Until a reading the device stamps by its raw clock, so its errors land behind,
- * which parks nothing.
+ * The correction in force: the stored one, except a positive one past the two days a single reading may move the clock
+ * while it waits for a reading here (`awaiting`; round sixty-seven, triage-66 R2, the outside review's 14). Meanwhile
+ * the device stamps by its raw clock, so its errors land behind, which parks nothing.
  */
 function inForce(): number {
-  return unsure && offsetMs > TRUST_SERVER_TWICE_PAST_MS ? 0 : offsetMs;
+  return awaiting && offsetMs > TRUST_SERVER_TWICE_PAST_MS ? 0 : offsetMs;
 }
+/**
+ * The latest the real time may be, by what this device knows: the corrected clock, or the device clock plus a stored
+ * correction not in force while it waits (round sixty-nine; triage-68 R2, R46-17). An edit here is stamped past a held
+ * change to its field within a day of this (`FOLLOW_HELD_MS` in the collection): a peer's move made twelve hours ago is
+ * held by a clock three days slow, and an edit stamped behind it lost to it once the correction came into force.
+ */
+export const latestNowMs = () => { follow(); return Date.now() + Math.max(inForce(), offsetMs); };
 /** Called when the correction changes (a reading here, or another tab's): the clock that mints stamps restarts from the corrected time. */
 export function onClockOffsetChange(l: (offset: number) => void): () => void {
   listeners.add(l);
@@ -263,9 +292,9 @@ export function trustServerTime(serverMs: number, localMs = Date.now()): number 
         pending = { delta, at: localMs };
         const wasChecked = clockChecked(), wasForce = inForce();
         if (Math.abs(delta - offsetMs) > TRUST_SERVER_TWICE_PAST_MS) confirmedAt = 0;
-        // The correction itself stays stored, unconfirmed: a disagreeing reading replaces it once a second agrees, and
-        // never deletes it (round sixty-two, second pass; the data review's 3). A positive one past two days is not in
-        // force meanwhile (round sixty-seven; triage-66 R2).
+        // The correction itself stays stored, unconfirmed, and in force: a disagreeing reading replaces it once a second
+        // agrees, and never deletes it (round sixty-two, second pass; the data review's 3), nor takes it out of force
+        // (round sixty-nine; triage-68 R2: round sixty-seven put a device three days slow back on its raw clock here).
         unsure = true;
         store();
         if ((wasChecked && !clockChecked()) || inForce() !== wasForce) for (const l of listeners) l(inForce());
@@ -282,6 +311,7 @@ export function trustServerTime(serverMs: number, localMs = Date.now()): number 
   mono = monoNow();
   const was = inForce();
   unsure = false; // met by a reading: confirmed, or replaced by it (round sixty-two)
+  awaiting = false;
   jumped = 0;
   offsetMs = next;
   store();
@@ -300,9 +330,23 @@ export function clockChecked(): boolean {
   follow();
   return checkedNow();
 }
-/** `clockChecked` as the state stands, with no move followed first. */
+/**
+ * `clockChecked` as the state stands, with no move followed first. Not while a large correction waits out of force
+ * (`awaiting`): the clock in force is then the raw one, which no reading confirmed, and a peer's change far past it is
+ * held for this load rather than parked (round sixty-nine; triage-68 R2, R46-17: a peer's plant added six hours ago was
+ * parked by the clock alone on a device three days slow, and listed with Apply as from a device whose clock was wrong).
+ */
 function checkedNow(): boolean {
-  return confirmedAt > 0 && trustedAge(Date.now() - confirmedAt);
+  return confirmedAt > 0 && trustedAge(Date.now() - confirmedAt) && inForce() === offsetMs;
+}
+/**
+ * The stored correction and whether a reading under a week old confirms it, whether or not it is in force (round
+ * sixty-nine; triage-68 R2, R46-17): the fold snapshot's key. Keyed by the clock in force, a snapshot written once the
+ * three days were confirmed never matched a load, which waits for a reading, so every load folded the whole log.
+ */
+export function clockStored(): { offset: number; checked: boolean } {
+  follow();
+  return { offset: offsetMs, checked: confirmedAt > 0 && trustedAge(Date.now() - confirmedAt) };
 }
 /**
  * Whether a server reading this old still confirms the clock. Never one dated after now: the clock was set back since,
@@ -317,7 +361,7 @@ function trustedAge(age: number): boolean {
 function notAfterClock(age: number): boolean {
   return age > -5 * 60_000;
 }
-/** The correction in force (`inForce`), for the clock warning to say how far off the device is, and for the snapshot's key. */
+/** The correction in force (`inForce`), for the clock warning to say how far off the device is. The snapshot is keyed by the stored one (`clockStored`; round sixty-nine). */
 export const clockOffsetMs = () => { follow(); return inForce(); };
 /** Whether the correction in force waits for a reading to confirm it (`unsure`; round sixty-two). */
 export const clockUnsure = () => { follow(); return unsure; };
@@ -335,6 +379,7 @@ export function clearClockOffset(): void {
   serverAt = 0;
   mono = null;
   unsure = false;
+  awaiting = false;
   jumped = 0;
   store();
   if (was) for (const l of listeners) l(0);

@@ -24,7 +24,7 @@
   import { parseCsv, detectHeader, guessMapping, unmappedColumns, ambiguousDates, FIELDS, FIELD_LABEL, type Mapping, type Field } from '$lib/import/csv';
   import { rowsFromPaste, rowsFromSheet } from '$lib/import/rows';
   import { checkNames, checkKey, nameVerdict, type NameCheck, type Lookup } from '$lib/import/check';
-  import { planNumbers, placesToMake, resolvePlace, splitPath, markAlreadyImported, markImported, markDroppedBefore, markChanged, numberKey, passOf, loosePaths, asPath, useSpecies, type ImportRow, type NumberPlan } from '$lib/import/plan';
+  import { planNumbers, placesToMake, resolvePlace, splitPath, markSheet, numberKey, passOf, loosePaths, asPath, useSpecies, type ImportRow, type NumberPlan } from '$lib/import/plan';
   import { settlePlaces } from '$lib/ui/places-pending';
   import type { Accession } from '$lib/db/types';
   import { commitImport, numbersSaid, type ImportResult } from '$lib/import/commit';
@@ -182,16 +182,17 @@
     // Removed plants count, as live ones do: a plant removed after an import is not added back by the next run (round
     // sixty-seven; triage-66 R3, the outside review's 15). A number is compared with its leading zeros dropped, as a
     // spreadsheet saving the sheet again writes it.
+    // The plant itself is given by its key, so a key of round sixty-seven's rule is checked against its date and notes
+    // (round sixty-nine; triage-68 R1).
     const all = collection.allAccessions();
-    const here = new Set<string>();
+    const here = new Map<string, Accession>();
     const byNo = new Map<string, Accession[]>();
     for (const a of all) {
-      if (a.importKey) here.add(a.importKey);
+      if (a.importKey) here.set(a.importKey, a);
       const k = numberKey(accNo(a));
       (byNo.get(k) ?? byNo.set(k, []).get(k)!).push(a);
     }
-    const sheetKeys = new Set(next.flatMap((r) => r.importKeys ?? []));
-    const marked = markChanged(markAlreadyImported(markDroppedBefore(markImported(next, (k) => here.has(k), (id) => collection.exists('accession', id)), droppedKeys), (no) => byNo.get(numberKey(no)) ?? []), all, sheetKeys);
+    const marked = markSheet(next, { has: (k) => here.get(k), isHere: (id) => collection.exists('accession', id), dropped: droppedKeys, held: (no) => byNo.get(numberKey(no)) ?? [], plants: all });
     // The ledger is read before the rows are set, so the review and its numbering sentence are drawn together and nothing
     // above the place box moves under a tap as the plan arrives (round sixty-three, the strict run).
     ledger = (await getMeta<string[]>('issued:accession').catch(() => undefined)) ?? [];
@@ -453,7 +454,7 @@
       {#if laterN}<span id="imp-later">{MAX_ROWS} lines are read at a time: add these, then press Check names again for the next {laterN === 1 ? 'line' : `${laterN} lines`} of this sheet.</span>{/if}
     </p>
     {#if rereadMsg}<p class="small notice" id="imp-reread">{rereadMsg}</p>{/if}
-    {#if alreadyRows.length}<p class="small notice" id="imp-already">{alreadyRows.length === 1 ? 'One line looks' : `${alreadyRows.length} lines look`} already imported: {alreadyRows.length === 1 ? 'its number is' : 'their numbers are'} held here by a plant of the same name, so {alreadyRows.length === 1 ? 'it is' : 'they are'} skipped unless you add {alreadyRows.length === 1 ? 'it' : 'them'}. {#if alreadyRows.some((r) => r.drop)}<button class="linkish" type="button" id="imp-keep-already" onclick={keepAlready}>Add {alreadyRows.length === 1 ? 'it' : 'them'} anyway, under new numbers</button>{/if}</p>{/if}
+    {#if alreadyRows.length}<p class="small notice" id="imp-already">{alreadyRows.length === 1 ? 'One line looks' : `${alreadyRows.length} lines look`} already imported: {alreadyRows.length === 1 ? 'its number is' : 'their numbers are'} held here by a plant{alreadyRows.every((r) => !r.alreadyAs) ? ' of the same name' : ''}, so {alreadyRows.length === 1 ? 'it is' : 'they are'} skipped unless you add {alreadyRows.length === 1 ? 'it' : 'them'}. {#if alreadyRows.some((r) => r.drop)}<button class="linkish" type="button" id="imp-keep-already" onclick={keepAlready}>Add {alreadyRows.length === 1 ? 'it' : 'them'} anyway, under new numbers</button>{/if}</p>{/if}
     {#if changedRows.length}<p class="small notice" id="imp-changed">{changedRows.length === 1 ? 'One line looks' : `${changedRows.length} lines look`} already imported, changed: a plant here has the same name, date acquired and source, from a line of an earlier import that this sheet no longer has ({changedRows.slice(0, 6).map((r) => `line ${r.line}`).join(', ')}{changedRows.length > 6 ? ', …' : ''}). {changedRows.length === 1 ? 'It is' : 'They are'} added unless dropped. {#if changedRows.some((r) => !r.drop)}<button class="linkish" type="button" id="imp-drop-changed" onclick={dropChanged}>Drop {changedRows.length === 1 ? 'it' : 'them'}</button>{/if}</p>{/if}
     {#if hereRenumbered.length}<p class="small" id="imp-renumbered">{hereRenumbered.length === 1 ? 'One number given is' : `${hereRenumbered.length} numbers given are`} already used here: {hereRenumbered.length === 1 ? 'that plant gets' : 'those plants get'} the next free number ({hereRenumbered.slice(0, 6).map((x) => `${x.given} → ${x.got}`).join(', ')}{hereRenumbered.length > 6 ? ', …' : ''}).</p>{/if}
     {#if inFileRenumbered.length}<p class="small" id="imp-dupes">{inFileRenumbered.length === 1 ? 'One number is' : `${inFileRenumbered.length} numbers are`} given twice in this sheet: the first line keeps it, and the later one gets the next free number ({inFileRenumbered.slice(0, 6).map((x) => `line ${x.line}, as on line ${x.inFile}: ${x.given} → ${x.got}`).join('; ')}{inFileRenumbered.length > 6 ? '; …' : ''}).</p>{/if}
@@ -487,7 +488,7 @@
                 {#if r.source && (mode === 'csv' || r.source !== source.trim())}<span class="muted">from {r.source}</span>{/if}
                 {#if r.price}<span class="muted">{r.price}</span>{/if}
                 {#if r.notes}<span class="muted note" title={r.notes}>{r.notes.length > 60 ? `${r.notes.slice(0, 60)}…` : r.notes}</span>{/if}
-                {#if r.already}<span class="warn">looks already imported: its number is held here by a plant of the same name</span>{/if}
+                {#if r.already}<span class="warn">looks already imported: its number is held here by {r.alreadyAs ?? 'a plant of the same name'}</span>{/if}
                 {#if r.changed}<span class="warn">looks already imported, changed: a plant here has the same name, date acquired and source</span>{/if}
                 {#if r.partDone}<span class="warn">{r.partDone === 1 ? 'one plant' : `${r.partDone} plants`} of this line {r.partDone === 1 ? 'is' : 'are'} here already, from an import cut off partway: {r.qty === 1 ? 'the other is' : `the other ${r.qty} are`} added</span>{/if}
                 {#if !c}<span class="muted">checking…</span>

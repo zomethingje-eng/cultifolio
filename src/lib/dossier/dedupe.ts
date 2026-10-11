@@ -23,8 +23,22 @@ export function dedupePhotos(photos: Photo[]): Photo[] {
 /** Whether a photograph's address is an animated GIF: one such hero was four megabytes on the front page (round thirty-five, R2-7). */
 export const isGif = (url: string): boolean => /\.gif(\?|$)/i.test(url);
 
-/** The photograph to show first: a wild one over a cultivated one, and a still image over a GIF when there is one. */
-export function heroOf<T extends { url: string; captive?: boolean }>(photos: T[]): T | undefined {
-  const wild = photos.filter((p) => !p.captive);
-  return wild.find((p) => !isGif(p.url)) ?? photos.find((p) => !isGif(p.url)) ?? wild[0] ?? photos[0];
+/**
+ * A photograph's place in the order the lead is chosen by: iNaturalist's wild, then GBIF's, then iNaturalist's
+ * cultivated, then Commons'. A Commons or GBIF file carries no cultivated flag, and reading the absence as wild let a
+ * Commons file lead over every cultivated photograph of the dossier's own, though many are taken in botanic gardens; a
+ * Commons file now leads only a dossier with no photograph from iNaturalist or GBIF (round sixty-nine; triage-68 K5,
+ * S-B2, R46-16). A photograph with no source named is read by its flag, as before.
+ */
+export function leadRank(p: { src?: string; captive?: boolean }): number {
+  if (p.src === 'commons') return 3;
+  if (p.captive) return 2;
+  return p.src === 'inat' ? 0 : 1;
+}
+
+/** The photograph to show first: by `leadRank`, the first of the best rank, and a still image over a GIF when there is one. */
+export function heroOf<T extends { url: string; captive?: boolean; src?: string }>(photos: readonly T[]): T | undefined {
+  const still = photos.filter((p) => !isGif(p.url));
+  const pick = (xs: readonly T[]) => xs.reduce<T | undefined>((best, p) => (!best || leadRank(p) < leadRank(best) ? p : best), undefined);
+  return pick(still) ?? pick(photos);
 }

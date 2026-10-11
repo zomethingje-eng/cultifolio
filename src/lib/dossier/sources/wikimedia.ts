@@ -1,7 +1,4 @@
-import type { JsonFetcher, FetchResult } from '../fetch';
-import { licenceTag, isOpen } from '$core/licence';
-import type { Photo } from '../schema';
-import { mendCommonsThumb } from '../md5';
+import type { JsonFetcher, FetchResult, SourceResult } from '../fetch';
 
 /* ---------- Wikidata (CC0): cross-identifiers ---------- */
 
@@ -16,10 +13,10 @@ export interface CrossIds {
   enTitle?: string;
 }
 
-const P = { gbif: 'P846', powo: 'P5037', ipni: 'P961', inat: 'P3151', wfo: 'P7715', commonsCat: 'P373', basionym: 'P566' };
+const P = { gbif: 'P846', powo: 'P5037', ipni: 'P961', inat: 'P3151', wfo: 'P7715', commonsCat: 'P373', basionym: 'P566', taxonName: 'P225' };
 
 /** MediaWiki answers HTTP 200 with an error body (maxlag, bad params); treat that as the source not answering, never as "none". */
-function mwError(data: unknown): string | null {
+export function mwError(data: unknown): string | null {
   const e = (data as { error?: { code?: string; info?: string } })?.error;
   return e ? `${e.code ?? 'error'}: ${e.info ?? ''}`.trim() : null;
 }
@@ -32,13 +29,13 @@ function mwError(data: unknown): string | null {
  */
 export const mwWait = {
   sleep: (s: number) => new Promise<void>((r) => setTimeout(r, s * 1000)),
-  /** Asks of one call. One in the Worker, whose tail builds answer a visitor and cannot sit through a lag; the corpus
-   *  script sets `MAXLAG_TRIES`. */
+  /** Asks of one call: one unless the corpus script sets `MAXLAG_TRIES` (`startCorpusRun`). No Worker route builds a
+   *  dossier, so one ask only governs tests and a lag spell (round sixty-nine; triage-68 M10, S-A7). */
   tries: 1
 };
 /** The corpus script's asks of one call: the first and four more, each after the lag it names and a second, 5 to 30 s. */
 export const MAXLAG_TRIES = 5;
-async function mwGet<T>(f: JsonFetcher, url: string): Promise<FetchResult<T>> {
+export async function mwGet<T>(f: JsonFetcher, url: string): Promise<FetchResult<T>> {
   for (let i = 0; ; i++) {
     const r = await f<T>(url);
     if (r.status !== 'ok') return r;
@@ -50,97 +47,150 @@ async function mwGet<T>(f: JsonFetcher, url: string): Promise<FetchResult<T>> {
 }
 
 /**
- * The Wikidata item for a GBIF taxon key, found by the key itself (P846), so
- * the identity can never be another species' from a name search. A name is
- * only used when the key finds nothing, and then only on an exact label match.
+ * A lag spell (round sixty-nine; triage-68 M10, S-A7): after `LAG_SPELL` species in a row whose Wikidata row ended lagged,
+ * the corpus script stops waiting, one ask a call, so each species fails at once and keeps the previous build's
+ * identifiers; the first species Wikidata answers again ends the spell. Five asks of 5 to 30 s each, at about 35 s a
+ * species, would have taken some 87 hours over the corpus.
  */
-export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?: number, olderKeys: readonly number[] = []): Promise<FetchResult<CrossIds>> {
-  let id: string | undefined;
-  let via: string | undefined;
-  if (gbifKey) {
-    const q = await mwGet<{ query?: { search?: Array<{ title: string }> }; error?: unknown }>(f, 
-      `https://www.wikidata.org/w/api.php?action=query&format=json&list=search&srlimit=2&srsearch=${encodeURIComponent(`haswbstatement:P846=${gbifKey}`)}&maxlag=5`
-    );
-    if (q.status !== 'ok') return q;
-    const err = mwError(q.data);
-    if (err) return { status: 'error', detail: `wikidata ${err}` };
-    const hits = q.data.query?.search ?? [];
-    if (hits.length === 1) id = hits[0].title;
-  }
-  if (!id) {
-    const s = await mwGet<{ search?: Array<{ id: string; label: string; description?: string }>; error?: unknown }>(f, 
-      `https://www.wikidata.org/w/api.php?action=wbsearchentities&format=json&language=en&type=item&limit=5&search=${encodeURIComponent(scientificName)}&maxlag=5`
-    );
-    if (s.status !== 'ok') return s;
-    const err = mwError(s.data);
-    if (err) return { status: 'error', detail: `wikidata ${err}` };
-    const hit = (s.data.search ?? []).find((x) => x.label.toLowerCase() === scientificName.toLowerCase());
-    if (hit) id = hit.id;
-  }
-  // Wikidata files the species under an older name with the same type (Q310510, Ferocactus glaucescens, for Bisnaga
-  // glaucescens): found by the GBIF record of that name, in one search, and taken only when one item answers (round
-  // sixty-eight, third part). Two items that are not one the other's basionym is no answer.
-  const older = olderKeys.slice(0, 10);
-  if (!id && older.length) {
-    const q = await mwGet<{ query?: { search?: Array<{ title: string }> }; error?: unknown }>(f,
-      `https://www.wikidata.org/w/api.php?action=query&format=json&list=search&srlimit=3&srsearch=${encodeURIComponent(`haswbstatement:${older.map((k) => `P846=${k}`).join('|')}`)}&maxlag=5`
-    );
-    if (q.status !== 'ok') return q;
-    const err = mwError(q.data);
-    if (err) return { status: 'error', detail: `wikidata ${err}` };
-    const hits = q.data.query?.search ?? [];
-    let ids = hits.map((h) => h.title);
-    if (ids.length > 1) {
-      // Wikidata often keeps the basionym as an item of its own (Q14943671, Echinocactus glaucescens), which the item for
-      // the current placement names as its basionym (P566). An item another answer names so is that answer's older name,
-      // not a second species: it is set aside, and what is left must still be one item.
-      const b = await mwGet<{ entities?: Record<string, { claims?: Record<string, Array<{ mainsnak: { datavalue?: { value: unknown } } }>> }>; error?: unknown }>(f,
-        `https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&ids=${ids.join('|')}&props=claims&maxlag=5`
-      );
-      if (b.status !== 'ok') return b;
-      const berr = mwError(b.data);
-      if (berr) return { status: 'error', detail: `wikidata ${berr}` };
-      const named = new Set(ids.flatMap((q) => (b.data.entities?.[q]?.claims?.[P.basionym] ?? []).map((c) => (c.mainsnak.datavalue?.value as { id?: string } | undefined)?.id)));
-      ids = ids.filter((q) => !named.has(q));
+export const LAG_SPELL = 10;
+export function lagSpell(tries = MAXLAG_TRIES) {
+  let run = 0;
+  return {
+    /** Called after each species with its Wikidata row; a species that did not ask Wikidata leaves the count as it was. */
+    after(row?: { status?: string; detail?: string }): void {
+      if (!row || row.status === 'skipped') return;
+      run = row.status === 'error' && /maxlag/.test(row.detail ?? '') ? run + 1 : 0;
+      mwWait.tries = run >= LAG_SPELL ? 1 : tries;
+    },
+    get run() {
+      return run;
     }
-    if (ids.length === 1) { id = ids[0]; via = 'found by the GBIF record of an older name with the same type'; }
-  }
-  if (!id) return { status: 'none' };
-  const e = await mwGet<{ entities: Record<string, { claims: Record<string, Array<{ mainsnak: { datavalue?: { value: unknown } } }>>; sitelinks?: Record<string, { title: string }> }>; error?: unknown }>(f, 
+  };
+}
+
+type Claims = Record<string, Array<{ mainsnak: { datavalue?: { value: unknown } } }>>;
+type Entity = { claims?: Claims; sitelinks?: Record<string, { title: string }> };
+const strings = (ent: Entity, p: string) => (ent.claims?.[p] ?? []).map((c) => c.mainsnak?.datavalue?.value).filter((v): v is string => typeof v === 'string');
+
+async function entityOf(f: JsonFetcher, id: string): Promise<FetchResult<Entity | null>> {
+  const e = await mwGet<{ entities?: Record<string, Entity>; error?: unknown }>(f,
     `https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&ids=${id}&props=claims|sitelinks&sitefilter=enwiki&maxlag=5`
   );
   if (e.status !== 'ok') return e;
   const err = mwError(e.data);
   if (err) return { status: 'error', detail: `wikidata ${err}` };
-  const ent = e.data.entities?.[id];
-  if (!ent) return { status: 'none' };
-  const str = (p: string) => {
-    const v = ent.claims?.[p]?.[0]?.mainsnak?.datavalue?.value;
-    return typeof v === 'string' ? v : undefined;
-  };
+  return { status: 'ok', data: e.data.entities?.[id] ?? null };
+}
+
+function crossOf(id: string, ent: Entity): CrossIds {
+  const str = (p: string) => strings(ent, p)[0];
   const inatS = str(P.inat);
   const gbifS = str(P.gbif);
-  // Found by name: the item must carry this GBIF key, or it is not this species; found by an older name, that name's key.
-  if (gbifKey && gbifS && Number(gbifS) !== gbifKey && !(via && older.includes(Number(gbifS)))) return { status: 'none' };
-  return {
-    status: 'ok',
-    ...(via ? { detail: via } : {}),
-    data: {
-      wikidata: id,
-      powo: str(P.powo),
-      ipni: str(P.ipni),
-      wfo: str(P.wfo),
-      inat: inatS ? Number(inatS) : undefined,
-      gbif: gbifS ? Number(gbifS) : undefined,
-      commonsCategory: str(P.commonsCat),
-      enTitle: ent.sitelinks?.enwiki?.title
+  return { wikidata: id, powo: str(P.powo), ipni: str(P.ipni), wfo: str(P.wfo), inat: inatS ? Number(inatS) : undefined, gbif: gbifS ? Number(gbifS) : undefined, commonsCategory: str(P.commonsCat), enTitle: ent.sitelinks?.enwiki?.title };
+}
+
+/**
+ * The Wikidata item for a GBIF taxon key, found by the key itself (P846), so the identity can never be another species'
+ * from a name search. When no item carries the key:
+ *   - by name: taken only when one item's label is the name exactly, and that item proves it: its P846 is the species'
+ *     key or a same-type older name's, or, carrying no P846, its taxon name (P225) is the name (round sixty-nine;
+ *     triage-68 M7, IND-8: the first exact label was taken, and an item with no P846 passed unchecked);
+ *   - by the GBIF records of the older names with the same type, in one search (round sixty-eight, third part), asking
+ *     for one more item than there are keys, so a search that could hold more is never read as holding all (R46-16).
+ * Two items left standing is `ambiguous`, "not taken: two items answered", never "none"; an answer by an older name
+ * names it (triage-68 M8, R46-15).
+ */
+export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?: number, olderNames: ReadonlyArray<number | { key: number; name: string }> = []): Promise<SourceResult<CrossIds>> {
+  const older = olderNames.slice(0, 10).map((o) => (typeof o === 'number' ? { key: o, name: '' } : o));
+  const olderKeys = older.map((o) => o.key);
+  const mw = <T,>(url: string) => mwGet<T & { error?: unknown }>(f, url);
+  const failed = (data: unknown) => { const err = mwError(data); return err ? ({ status: 'error', detail: `wikidata ${err}` } as const) : null; };
+  if (gbifKey) {
+    const q = await mw<{ query?: { search?: Array<{ title: string }> } }>(`https://www.wikidata.org/w/api.php?action=query&format=json&list=search&srlimit=2&srsearch=${encodeURIComponent(`haswbstatement:P846=${gbifKey}`)}&maxlag=5`);
+    if (q.status !== 'ok') return q;
+    const bad = failed(q.data);
+    if (bad) return bad;
+    const hits = q.data.query?.search ?? [];
+    if (hits.length === 1) {
+      const e = await entityOf(f, hits[0].title);
+      if (e.status !== 'ok') return e;
+      if (!e.data) return { status: 'none' };
+      return { status: 'ok', data: crossOf(hits[0].title, e.data) };
     }
-  };
+  }
+  const notes: string[] = [];
+  let twoByName: string | undefined;
+  {
+    const s = await mw<{ search?: Array<{ id: string; label: string }> }>(`https://www.wikidata.org/w/api.php?action=wbsearchentities&format=json&language=en&type=item&limit=5&search=${encodeURIComponent(scientificName)}&maxlag=5`);
+    if (s.status !== 'ok') return s;
+    const bad = failed(s.data);
+    if (bad) return bad;
+    const exact = [...new Set((s.data.search ?? []).filter((x) => x.label.toLowerCase() === scientificName.toLowerCase()).map((x) => x.id))];
+    if (exact.length > 1) twoByName = `not taken: two items answered to the label ${scientificName} (${exact.join(', ')})`;
+    else if (exact.length === 1) {
+      const e = await entityOf(f, exact[0]);
+      if (e.status !== 'ok') return e;
+      if (e.data) {
+        const keys = strings(e.data, P.gbif).map(Number);
+        const proven = keys.length ? keys.some((k) => k === gbifKey || olderKeys.includes(k)) : strings(e.data, P.taxonName).some((n) => n === scientificName);
+        if (proven) return { status: 'ok', data: crossOf(exact[0], e.data) };
+        notes.push(`not taken: the item labelled ${scientificName}, ${exact[0]}, ${keys.length ? `carries GBIF key ${keys.join(', ')}` : 'carries no GBIF key, and its taxon name is not this one'}`);
+      }
+    }
+  }
+  // Wikidata files the species under an older name with the same type (Q310510, Ferocactus glaucescens, for Bisnaga
+  // glaucescens): found by the GBIF record of that name, in one search, and taken only when one item answers (round
+  // sixty-eight, third part). Two items that are not one the other's basionym is no answer.
+  if (older.length) {
+    const q = await mw<{ query?: { search?: Array<{ title: string }> } }>(`https://www.wikidata.org/w/api.php?action=query&format=json&list=search&srlimit=${older.length + 1}&srsearch=${encodeURIComponent(`haswbstatement:${olderKeys.map((k) => `P846=${k}`).join('|')}`)}&maxlag=5`);
+    if (q.status !== 'ok') return q;
+    const bad = failed(q.data);
+    if (bad) return bad;
+    let ids = (q.data.query?.search ?? []).map((h) => h.title);
+    if (ids.length > 1) {
+      // Wikidata often keeps the basionym as an item of its own (Q14943671, Echinocactus glaucescens), which the item for
+      // the current placement names as its basionym (P566). An item another answer names so is that answer's older name,
+      // not a second species: it is set aside, and what is left must still be one item.
+      const b = await mw<{ entities?: Record<string, Entity> }>(`https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&ids=${ids.join('|')}&props=claims&maxlag=5`);
+      if (b.status !== 'ok') return b;
+      const berr = failed(b.data);
+      if (berr) return berr;
+      const named = new Set(ids.flatMap((q) => (b.data.entities?.[q]?.claims?.[P.basionym] ?? []).map((c) => (c.mainsnak.datavalue?.value as { id?: string } | undefined)?.id)));
+      ids = ids.filter((q) => !named.has(q));
+    }
+    if (ids.length > 1) return { status: 'ambiguous', detail: `not taken: two items answered to the older names' GBIF records (${ids.join(', ')})` };
+    if (ids.length === 1) {
+      const e = await entityOf(f, ids[0]);
+      if (e.status !== 'ok') return e;
+      if (e.data) {
+        const keys = strings(e.data, P.gbif).map(Number);
+        // Found by an older name, the item must carry that name's key, or this species' own.
+        const by = older.find((o) => keys.includes(o.key));
+        if (by || !keys.length || keys.includes(gbifKey ?? NaN)) {
+          const named = by?.name ? `the GBIF record of ${by.name}, an older name with the same type` : 'the GBIF record of an older name with the same type';
+          return { status: 'ok', detail: `found by ${named}`, data: crossOf(ids[0], e.data) };
+        }
+        notes.push(`not taken: ${ids[0]}, found by an older name's GBIF record, carries GBIF key ${keys.join(', ')}`);
+      }
+    }
+  }
+  if (twoByName) return { status: 'ambiguous', detail: twoByName };
+  return notes.length ? { status: 'none', detail: notes.join('; ') } : { status: 'none' };
 }
 
 /* ---------- Wikipedia (CC BY-SA): the lead paragraph, kept segregated ---------- */
 
-export async function summary(f: JsonFetcher, title: string): Promise<FetchResult<{ text: string; url: string; title: string }>> {
+/** A Wikipedia title as compared: lower case, underscores read as spaces. */
+const titleKey = (t: string) => t.replace(/_/g, ' ').trim().toLowerCase();
+
+/**
+ * The lead of the English Wikipedia article. `accept` names the titles that are this species' article: the Wikidata
+ * item's own sitelink, the species' name and its older names. Wikipedia follows a redirect without saying so, and with
+ * no sitelink the name was asked: Weingartia pulchra's redirect gave Weingartia canigueralii's article, another species
+ * with its own page here, and Kopsia fruticosa's gave the genus's. A final title outside `accept` is not this species'
+ * article, and the answer is "none: Wikipedia redirects X to Y" (round sixty-nine; triage-68 M3, R46-12).
+ */
+export async function summary(f: JsonFetcher, title: string, accept?: readonly string[]): Promise<SourceResult<{ text: string; url: string; title: string }>> {
   const r = await f<{ extract?: string; content_urls?: { desktop?: { page?: string } }; title?: string; type?: string }>(
     `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, '_'))}`
   );
@@ -148,77 +198,26 @@ export async function summary(f: JsonFetcher, title: string): Promise<FetchResul
   if (r.data.type === 'https://mediawiki.org/wiki/HyperSwitch/errors/not_found') return { status: 'none' };
   if (typeof r.data.type === 'string' && /error/i.test(r.data.type)) return { status: 'error', detail: `wikipedia ${r.data.type}` };
   if (!r.data.extract || r.data.type === 'disambiguation') return { status: 'none' };
-  return { status: 'ok', data: { text: r.data.extract.slice(0, 1500), url: r.data.content_urls?.desktop?.page ?? `https://en.wikipedia.org/wiki/${encodeURIComponent(title)}`, title: r.data.title ?? title } };
+  const got = (r.data.title ?? title).replace(/_/g, ' ');
+  if (accept && !accept.some((a) => titleKey(a) === titleKey(got))) return { status: 'none', detail: redirected(title, got) };
+  return { status: 'ok', data: { text: r.data.extract.slice(0, 1500), url: r.data.content_urls?.desktop?.page ?? `https://en.wikipedia.org/wiki/${encodeURIComponent(title)}`, title: got } };
 }
 
-/* ---------- Wikimedia Commons: per-file licence via extmetadata ---------- */
-
-interface ImageInfo {
-  url: string;
-  thumburl?: string;
-  width?: number;
-  height?: number;
-  descriptionurl?: string;
-  extmetadata?: Record<string, { value: string }>;
-}
+/** The record of a summary set aside because Wikipedia's article is under another title. */
+export const redirected = (asked: string, got: string) => `Wikipedia redirects ${asked.replace(/_/g, ' ')} to ${got}`;
 
 /**
- * A Commons address as the page loads it (round sixty-eight, fourth part). Commons now answers `imageinfo` with a
- * tracking query on every address (`?utm_source=commons.wikimedia.org&…`) and its thumbnails on `thumb.wikimedia.org`,
- * at a standard width (960, not the 800 asked). The builder tested the file's extension at the end of the address, so
- * every file failed it, and not one Commons photograph reached the corpus. The query is dropped, and a thumbnail is
- * given at `upload.wikimedia.org`, which serves the same path and is the host the site's policy and the about page name.
+ * Whether a stored summary's title is one this species may quote: its name, or one of its older names (the binomial of
+ * each of GBIF's synonyms as stored, author left off), or a title the caller has confirmed as the item's sitelink.
+ * `--fill summaries` reads it offline (round sixty-nine; triage-68 M3).
  */
-export function commonsUrl(u: string): string {
-  const x = new URL(u);
-  x.search = '';
-  x.hash = '';
-  if (x.host === 'thumb.wikimedia.org') x.host = 'upload.wikimedia.org';
-  return x.toString();
-}
-/** The widths Commons makes thumbnails at that the page uses: 960 for the photograph shown, 500 for a tile (as iNaturalist's large and medium). Commons refuses a width off its list (800 answers 400). */
-export const COMMONS_SHOWN = 960;
-export const COMMONS_TILE = 500;
-
-export async function commonsPhotos(f: JsonFetcher, category: string, max = 12): Promise<FetchResult<Photo[]>> {
-  const r = await mwGet<{ query?: { pages?: Record<string, { title: string; imageinfo?: ImageInfo[] }> } }>(f, 
-    `https://commons.wikimedia.org/w/api.php?action=query&format=json&generator=categorymembers&gcmtitle=${encodeURIComponent('Category:' + category)}&gcmtype=file&gcmlimit=${max * 2}` +
-      `&prop=imageinfo&iiprop=url|size|extmetadata&iiurlwidth=${COMMONS_SHOWN}&iiextmetadatafilter=LicenseShortName|Artist|Credit|LicenseUrl|Attribution&maxlag=5`
-  );
-  if (r.status !== 'ok') return r;
-  const err = mwError(r.data);
-  if (err) return { status: 'error', detail: `commons ${err}` };
-  const pages = Object.values(r.data.query?.pages ?? {});
-  const out: Photo[] = [];
-  for (const p of pages) {
-    const ii = p.imageinfo?.[0];
-    if (!ii) continue;
-    const original = commonsUrl(ii.url);
-    if (!/\.(jpe?g|png|webp)$/i.test(new URL(original).pathname)) continue;
-    const meta = ii.extmetadata ?? {};
-    const lic = meta.LicenseShortName?.value ?? '';
-    const tag = licenceTag(lic.replace(/^Public domain$/i, 'cc0').replace(/^PD.*$/i, 'cc0'));
-    if (!isOpen(tag) || (tag !== 'cc0' && tag !== 'by' && tag !== 'by-sa')) continue;
-    const artist = (meta.Artist?.value ?? meta.Credit?.value ?? '').replace(/<[^>]+>/g, '').trim();
-    if (!artist && tag !== 'cc0') continue; // CC BY and CC BY-SA require the author's name; a file without one is not published (round sixteen, 3)
-    out.push({
-      src: 'commons',
-      id: p.title,
-      // The 960-pixel thumbnail is the photograph shown, never the original (often several megabytes); a file narrower
-      // than that has no thumbnail and is shown as it is. The tile is Commons' 500-pixel one, from the same path.
-      ...(() => {
-        const shown = ii.thumburl ? commonsUrl(ii.thumburl) : original;
-        const isThumb = /\/thumb\/.+\/\d+px-[^/]+$/.test(new URL(shown).pathname);
-        const tile = isThumb && (ii.width ?? 0) > COMMONS_TILE ? shown.replace(/\/\d+px-([^/]+)$/, `/${COMMONS_TILE}px-$1`) : mendCommonsThumb(shown, ii.width);
-        return { url: shown, thumb: tile };
-      })(),
-      width: ii.width ?? undefined,
-      height: ii.height ?? undefined,
-      licence: tag,
-      attribution: `${artist || 'author not stated'}, ${lic}, via Wikimedia Commons`,
-      page: ii.descriptionurl ?? undefined
-    });
-    if (out.length >= max) break;
-  }
-  return out.length ? { status: 'ok', data: out } : { status: 'none' };
+export function summaryTitleFits(title: string, name: string, synonyms: readonly string[], sitelink?: string): boolean {
+  const t = titleKey(title);
+  if (t === titleKey(name) || (sitelink && t === titleKey(sitelink))) return true;
+  return synonyms.some((s) => {
+    const w = s.replace(/×\s*/g, '').split(/\s+/);
+    // A subspecies or variety is not a species' name: its first two words are another species' (Rebutia canigueralii subsp. pulchra).
+    if (/^(subsp|ssp|var|subvar|f|fo|forma|nothosubsp|nothovar)\.?$/.test(w[2] ?? '')) return false;
+    return titleKey(w.slice(0, 2).join(' ')) === t;
+  });
 }

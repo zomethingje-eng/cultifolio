@@ -73,7 +73,7 @@ describe('Wikidata\'s item filed under an older name with the same type', () => 
       [`${W}?action=wbsearchentities`]: { search: [] },
       [`${W}?action=wbgetentities&format=json&ids=Q310510|Q5000&props=claims`]: { entities: { Q310510: { claims: {} }, Q5000: { claims: {} } } }
     });
-    expect((await crossIds(f, 'Bisnaga glaucescens', 11098779, [3944752, 3959669])).status).toBe('none');
+    expect((await crossIds(f, 'Bisnaga glaucescens', 11098779, [3944752, 3959669])).status).toBe('ambiguous'); // round sixty-nine: said as two answers (triage-68 M8)
   });
   it('an item carrying some other GBIF key is not taken (guard)', async () => {
     expect((await crossIds(wikidata(['Q310510'], '42'), 'Bisnaga glaucescens', 11098779, [3944752, 3959669])).status).toBe('none');
@@ -91,7 +91,7 @@ describe('iNaturalist\'s taxon under an older name with the same type', () => {
   });
   it('two taxa is no answer, and a refusal is the answer (guard)', async () => {
     const two = inat({ 're:q=Ferocactus%20glaucescens': { results: [{ id: 1, name: 'Ferocactus glaucescens', rank: 'species' }] }, 're:q=Echinocactus%20glaucescens': { results: [{ id: 2, name: 'Echinocactus glaucescens', rank: 'species' }] } });
-    expect((await taxonByOlderNames(two, ['Echinocactus glaucescens', 'Ferocactus glaucescens'])).status).toBe('none');
+    expect((await taxonByOlderNames(two, ['Echinocactus glaucescens', 'Ferocactus glaucescens'])).status).toBe('ambiguous'); // round sixty-nine (triage-68 M8)
     expect(await taxonByOlderNames(fixtureFetcher({}, { status: 'refused', detail: 'api.inaturalist.org 429' }), ['Ferocactus glaucescens'])).toEqual({ status: 'refused', detail: 'api.inaturalist.org 429' });
   });
 });
@@ -116,6 +116,6 @@ describe('the build: a species Wikidata files under its basionym keeps its photo
     if (!r.ok) return;
     expect(r.dossier.ids).toMatchObject({ wikidata: 'Q5168360', inat: 135254 }); // base: no item, no taxon
     expect(r.dossier.photos.length).toBeGreaterThan(0); // base: none
-    expect(r.dossier.upstream.wikidata).toMatchObject({ status: 'ok', detail: 'found by the GBIF record of an older name with the same type' });
+    expect(r.dossier.upstream.wikidata).toMatchObject({ status: 'ok', detail: 'found by the GBIF record of Echinocactus cinereus, an older name with the same type' }); // round sixty-nine: the older name is named (triage-68 M8)
   });
 });

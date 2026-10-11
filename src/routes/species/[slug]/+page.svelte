@@ -283,6 +283,8 @@
     const st = d.upstream['wcvp.distribution']?.status;
     if (st === 'none') return 'No published distribution for this name.';
     if (st === 'refused' || st === 'error' || !st) return `Not checked: the distribution source ${notAnswered(st)} when this page was built.`;
+    // Kew holds no entry under this name and its older names lead to more than one: nothing taken (round sixty-nine; triage-68 M2, M8).
+    if (st === 'ambiguous') return `Not taken: ${d.upstream['wcvp.distribution']?.detail ?? 'Kew holds no entry under this name, and its older names lead to more than one entry'}.`;
     if (d.distribution.ambiguous) return `WCVP holds more than one name spelt this way (${d.distribution.ambiguous}); no native region is read from it.`;
     return d.distribution.introduced.length || d.distribution.extinct?.length ? 'WCVP lists no region where it is native; the regions it does list are named here.' : 'WCVP lists no native region for this name.';
   });
@@ -396,7 +398,7 @@
       {/if}
     </div>
     <div class="acts acts2">
-      <a class="btn" href="/propagation/new?species={encodeURIComponent(d.name.scientific)}&key={d.key}">Sow seed</a>
+      <a class="btn" href="/propagation/new?species={encodeURIComponent(d.name.scientific)}&key={d.key}" onclick={(e) => addLeavesExample(e, `/propagation/new?species=${encodeURIComponent(d.name.scientific)}&key=${d.key}`)}>Sow seed</a><!-- leads out of the example first (round sixty-nine; triage-68 X7; S-C4) -->
       <FollowButton slug={d.slug} name={d.name.scientific} gbifKey={d.key} />
       <CompareButton slug={d.slug} name={d.name.scientific} />
       {#if d.climate.status === 'ok'}<ShareCard input={{ units: u, name: d.name.scientific, family: d.name.family, origin: d.distribution.native.map((r) => r.name), slug: d.slug, cells: d.climate.cells, south: sheet.year?.south, climate: { months: d.climate.months, p10: d.climate.p10, p90: d.climate.p90, cells: d.climate.cells, extremes: d.climate.extremes ?? null }, extremesStatus: d.climate.extremesStatus ?? null, annualRain: d.climate.annualRain ?? null }} />{/if}
@@ -580,7 +582,7 @@
     <div class:wide={longRange}><b>Native</b>{#if d.distribution.native.length}{d.distribution.native.map((r) => unitName(r.name)).join(', ')}{#if d.distribution.verified === false}<span class="small muted"> · stated native by a national checklist, not by WCVP: unverified</span>{/if}{:else if d.distribution.reported?.length}<span class="muted">Not verified.</span><span class="small muted"> Reported present (native status not stated): {d.distribution.reported.map((r) => r.name).join(', ')}</span>{:else}{distWords}{/if}{#if d.distribution.introduced.length}<span class="small muted"> · introduced: {d.distribution.introduced.map((r) => r.name).join(', ')}</span>{/if}</div>
     {#if d.centroid}<div class:wide={longRange}><b>Map marker</b>{d.centroid.lat}, {d.centroid.lon}<span class="small muted">{' · '}in the densest population, {d.centroid.n} records ({Math.round(d.centroid.share * 100)}% of those in range)</span></div>{/if}
     <!-- A range Kew files under another of the species' names says which (round sixty-eight). -->
-    {#if d.distribution.native.length && /under the name /.test(d.distribution.source)}<div class="wide"><b>Range source</b>{d.distribution.source}<span class="small muted"> · Kew holds no entry under this page's name; the range is its entry for that name, the one the species' older names lead to</span></div>{/if}
+    {#if d.distribution.native.length && /under the name |, reached by /.test(d.distribution.source)}<div class="wide"><b>Range source</b>{d.distribution.source}<span class="small muted"> · Kew holds no entry under this page's name; the range is the one Kew entry the species' older names lead to, reached by the older name named here, whose author agrees with Kew's</span></div>{/if}
     {#if d.distribution.extinct?.length}<div><b>Extinct in</b>{d.distribution.extinct.map((r) => r.name).join(', ')}<span class="small muted"> · recorded as extinct by WCVP: history, not habitat; no records are tested against these regions</span></div>{/if}
     {#if d.distribution.kew?.lifeform || d.distribution.kew?.climate}<div class="wide"><b>Kew's description</b>{[d.distribution.kew.lifeform, d.distribution.kew.climate].filter(Boolean).map((t) => `“${t}”`).join(' · ')}<span class="small muted">{' · '}quoted from WCVP, RBG Kew (CC BY 4.0); not derived here</span></div>{/if}
     {#if d.distribution.ambiguous}<div class="wide"><b>Name not resolved</b>{d.distribution.ambiguous}<span class="small muted"> · WCVP lists this name more than once and authorship did not decide, so no range is attached and nothing is derived from records</span></div>{/if}

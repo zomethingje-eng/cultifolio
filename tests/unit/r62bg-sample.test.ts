@@ -90,7 +90,7 @@ describe('a Leave that goes still leaves', () => {
     const { leaveDemo } = await import('$lib/db/demo');
     const stayed = vi.fn();
     leaveDemo('/', stayed);
-    expect(loc.href).toBe('/?left=sample');
+    expect(loc.href).toMatch(/^\/\?left=[a-z0-9]+$/); // Leave's own token (round sixty-nine; triage-68 X1)
     beforeunload();
     page.dispatchEvent(new Event('pagehide'));
     expect([session.m.get('cultifolio.demo'), session.m.get('cultifolio.sampleLeft')]).toEqual([undefined, '1']);

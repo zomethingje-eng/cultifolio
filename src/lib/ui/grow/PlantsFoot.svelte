@@ -12,6 +12,9 @@
   import { focusNext } from '$lib/ui/focus';
   import { readWanted, writeWanted } from './wanted';
   import { spendOf, spendWords } from './spend';
+  import { addLeavesExample } from './example.svelte';
+  /** "Got it" leads to the add form with the species; in the example it leads out first, as every add does (round sixty-nine; triage-68 X7; S-C4, R46-27). The seed follows Aloe polyphylla, so the line is there. */
+  const gotIt = (name: string, key?: number | null) => `/plants/new?species=${encodeURIComponent(name)}${key ? `&key=${key}` : ''}`;
   const wanted = $derived(collection.ready ? [...collection.mySpecies.values()].filter((s) => s.followed && !s.grown).sort((a, b) => a.name.localeCompare(b.name)) : []);
   let editing = $state<string | null>(null);
   let note = $state('');
@@ -56,7 +59,7 @@
             {#if w.note || w.price}<span class="muted">{[w.note, w.price ? `price seen ${w.price}` : ''].filter(Boolean).join(' · ')}</span>{/if}
             {#if otherNotes(collection.taxon(s.slug)?.myNotes)}<span class="muted spnote">{otherNotes(collection.taxon(s.slug)?.myNotes)}</span>{/if}
             <!-- Named from its own words, then the species, so a voice saying "Add a note" finds it (round sixty-one; the accessibility review, 14); it says whether its form is open (11). -->
-            <span class="acts"><button class="linkish" type="button" id="wedit-{s.slug}" onclick={() => (editing === s.slug ? done(s.slug) : edit(s.slug))} aria-expanded={editing === s.slug} aria-controls={editing === s.slug ? `wform-${s.slug}` : undefined} aria-label="{w.note || w.price ? 'Edit the note' : 'Add a note'} for {s.name}">{w.note || w.price ? 'Edit' : 'Add a note'}</button> <a class="linkish" href="/plants/new?species={encodeURIComponent(s.name)}{s.gbifKey ? `&key=${s.gbifKey}` : ''}">Got it</a></span>
+            <span class="acts"><button class="linkish" type="button" id="wedit-{s.slug}" onclick={() => (editing === s.slug ? done(s.slug) : edit(s.slug))} aria-expanded={editing === s.slug} aria-controls={editing === s.slug ? `wform-${s.slug}` : undefined} aria-label="{w.note || w.price ? 'Edit the note' : 'Add a note'} for {s.name}">{w.note || w.price ? 'Edit' : 'Add a note'}</button> <a class="linkish" href={gotIt(s.name, s.gbifKey)} onclick={(e) => addLeavesExample(e, gotIt(s.name, s.gbifKey))}>Got it</a></span>
           </div>
           {#if editing === s.slug}
             <form class="wform" id="wform-{s.slug}" onsubmit={(e) => { e.preventDefault(); void save(s.slug, s.name); }}>

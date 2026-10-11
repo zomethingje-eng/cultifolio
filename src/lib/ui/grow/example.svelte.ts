@@ -17,6 +17,7 @@ import { collection } from '$lib/db/collection.svelte';
 import { PAGE_IN_DEMO, enterDemo, inDemo, leaveDemo, leftHere, sampleEdits } from '$lib/db/demo';
 import { readSetting } from '$lib/ui/stored';
 import { sync } from '$lib/sync/engine.svelte';
+import { replaceWaiting } from '$lib/db/vault';
 
 /**
  * The grower's own collection holds nothing: its log folds to no record at all, live or removed, and no frost site is set
@@ -27,10 +28,16 @@ import { sync } from '$lib/sync/engine.svelte';
  * set up, which is a grower's device whose records may still be on their way (round sixty-three, the fix pass; R1, 2 and
  * 5). Meaningful only once the collection is open and sync's key has been read (`example.settled`), and only outside the
  * example, where the site read is the grower's own.
+ *
+ * Nor is a device empty whose replacement from a backup is waiting to finish (round sixty-nine; triage-68 X4; S-C3): its
+ * live log is wiped and the whole collection waits in the staging database for room, so the example opened over it,
+ * dropped the vault's notice saying why, and wrote some 150 changes on a device that was out of space. Nor one whose log
+ * holds changes this build could not read (`malformed`, round sixty-seven R10): it has something in it.
  */
 export function ownEmpty(): boolean {
   return records() === 0 && !siteSet()
-    && collection.heldWaiting === 0 && collection.parkedRecords === 0 && !sync.configured;
+    && collection.heldWaiting === 0 && collection.parkedRecords === 0 && !sync.configured
+    && !replaceWaiting() && !(collection as typeof collection & { malformed?: number }).malformed;
 }
 /**
  * How many records the fold holds, removed ones included. `recordCount` is the collection's own count (round
@@ -96,11 +103,37 @@ export function notEnteredWords(why: NotEntered): string {
  */
 export function enterExample(to: string): true | NotEntered {
   if (working()) return 'busy';
+  if (settledNow()) return into(to);
+  // Pressed while the collection is still opening (round sixty-nine; triage-68 X5; IND-7): the bar's words wait for the
+  // settled test, and the page says "Opening the example collection" meanwhile. The note's slot is written now, which
+  // also asks the tab's storage whether it takes the flag, so a refusal is still said at the press.
+  try { sessionStorage.setItem(OWN_NOTE, '?'); } catch { return 'refused'; }
+  example.entering = true;
+  void whenSettled().then(() => {
+    if (!example.entering) return;
+    if (working() || into(to) !== true) example.entering = false;
+  });
+  return true;
+}
+function into(to: string): true | NotEntered {
   noteOwn();
   example.entering = true;
   if (enterDemo(to, () => (example.entering = false))) return true;
   example.entering = false;
   return 'refused';
+}
+/** The layout has read the collection and sync's key: "empty" means something. */
+function settledNow(): boolean {
+  return collection.ready && example.settled;
+}
+/** Settled, or `ms` gone by first (a collection that never opens): false then, and the note says "not known". */
+async function whenSettled(ms = 10_000): Promise<boolean> {
+  const end = Date.now() + ms;
+  while (!settledNow()) {
+    if (Date.now() > end) return false;
+    await new Promise((r) => setTimeout(r, 25));
+  }
+  return true;
 }
 
 /**
@@ -123,23 +156,24 @@ export async function openExample(to: string): Promise<true | NotEntered | 'stay
  * triage-66 V4; S-A11): read here, outside the example, by the same test as the page's "empty", and kept with the
  * example's own copies (`cultifolio.demo.own`), which Leave clears. The bar read the layout's hint, which counts plants,
  * batches and followed species only, and told a grower with places "Your own starts when you add a plant".
+ *
+ * Only the settled test says "none" (round sixty-nine; triage-68 X5; IND-7): a collection still opening is not known,
+ * and the hint, which counts no places, is taken as a yes but never as a no. '?' is "not known".
  */
 export const OWN_NOTE = 'cultifolio.demo.own';
 function noteOwn(): void {
-  let own: boolean;
-  if (collection.ready && example.settled) own = !ownEmpty();
-  else { try { own = localStorage.getItem('cultifolio.hasMine') === '1'; } catch { own = false; } }
-  try { sessionStorage.setItem(OWN_NOTE, own ? '1' : '0'); } catch { /* the bar then reads the hint */ }
+  const own = settledNow() ? (ownEmpty() ? '0' : '1') : hintSaysOwn() ? '1' : '?';
+  try { sessionStorage.setItem(OWN_NOTE, own); } catch { /* the bar then reads the hint */ }
 }
-/** In the example: whether the grower has a collection of their own, as noted when they opened it. */
-export function hadOwn(): boolean {
-  try {
-    const v = sessionStorage.getItem(OWN_NOTE);
-    if (v !== null) return v === '1';
-    return localStorage.getItem('cultifolio.hasMine') === '1';
-  } catch {
-    return false;
-  }
+function hintSaysOwn(): boolean {
+  try { return localStorage.getItem('cultifolio.hasMine') === '1'; } catch { return false; }
+}
+/** In the example: whether the grower has a collection of their own, as noted when they opened it; null when not known. */
+export function hadOwn(): boolean | null {
+  let v: string | null = null;
+  try { v = sessionStorage.getItem(OWN_NOTE); } catch { /* not known */ }
+  if (v === '1' || v === '0') return v === '1';
+  return hintSaysOwn() ? true : null;
 }
 
 /**
@@ -148,12 +182,12 @@ export function hadOwn(): boolean {
  * then the tab navigates, and the next page deletes the example. False when the visitor answered no. A page's own "Leave
  * site?" answered Cancel keeps the tab as it was, and `example.leaving` comes back at once.
  */
-export async function leaveExample(to = '/'): Promise<boolean> {
+export async function leaveExample(to = '/', onStay?: () => void): Promise<boolean> {
   if (example.leaving) return false;
   const n = await sampleEdits();
   if (n && !confirm(`Leave the example collection? The ${n === 1 ? 'record you added or changed here is' : `${n} records you added or changed here are`} deleted with it.`)) return false;
   example.leaving = true;
-  leaveDemo(to, () => (example.leaving = false));
+  leaveDemo(to, () => { example.leaving = false; onStay?.(); });
   return true;
 }
 /**

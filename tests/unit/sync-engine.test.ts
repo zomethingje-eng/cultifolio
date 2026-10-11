@@ -1134,14 +1134,38 @@ describe('what the server refuses from this device does not stop it receiving', 
     const memB = newMem('bbbbbbbbbbbb');
     const B = await boot(memB, r2);
     await B.collection.addAccession({ taxonName: 'Lithops', acc: 'B-1' });
-    // Wedge a change with a name the server will not take.
+    // Wedge a change the server will not take: every batch it is the newest change of is refused (a stand-in; since round
+    // sixty-nine a change whose stamp no name can be made from is not sent at all, next test).
+    const t = hlcEncode({ wall: Date.now() + 400 * 86_400_000, count: 0, device: 'bbbbbbbbbbbb' });
+    memB.changes.set(t, { t, kind: 'accession', id: 'r9', field: 'notes', value: 'x' });
+    memB.outbox.add(t);
+    const hour = String(Math.floor(hlcWall(t) / 3600_000) * 3600_000).padStart(13, '0');
+    const real = globalThis.fetch;
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      if (init?.method === 'POST' && String(input).includes('/api/sync/log') && new Headers(init.headers).get('x-batch')?.startsWith(hour)) return new Response('{"message":"refused"}', { status: 400 });
+      return real(input, init);
+    }) as typeof fetch;
+    try {
+      await B.sync.setup(KEY, 'create');
+    } finally {
+      globalThis.fetch = real;
+    }
+    expect(B.sync.refused).toHaveLength(1);
+    expect(memB.outbox.has(t)).toBe(true);
+    expect(memB.outbox.size).toBe(1); // everything else went
+    expect(B.calls.filter((c) => c === 'GET /api/sync/log').length).toBeGreaterThan(0);
+  });
+  it('round sixty-nine (triage-68 R3, R46-18): a change no build can fold is not sent, and stays in the outbox and the log; nothing is refused', async () => {
+    const r2 = fakeR2();
+    const memB = newMem('bbbbbbbbbbbb');
+    const B = await boot(memB, r2);
+    await B.collection.addAccession({ taxonName: 'Lithops', acc: 'B-1' });
     memB.changes.set('bogus', { t: 'bogus', kind: 'accession', id: 'r9', field: 'notes', value: 'x' });
     memB.outbox.add('bogus');
     await B.sync.setup(KEY, 'create');
-    expect(B.sync.refused).toHaveLength(1);
-    expect(memB.outbox.has('bogus')).toBe(true);
-    expect(memB.outbox.size).toBe(1); // everything else went
-    expect(B.calls.filter((c) => c === 'GET /api/sync/log').length).toBeGreaterThan(0);
+    expect(B.sync.refused).toHaveLength(0);
+    expect([...memB.outbox]).toEqual(['bogus']);
+    expect(memB.changes.has('bogus')).toBe(true);
   });
 });
 

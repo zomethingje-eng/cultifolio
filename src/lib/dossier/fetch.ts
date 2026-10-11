@@ -1,8 +1,8 @@
 /**
- * One fetch layer for every upstream, usable from Node (offline corpus build)
- * and from the Worker (tail builds). It tells the builder the difference
- * between "the source answered with nothing" and "the source would not
- * answer" — the distinction the whole dossier design rests on.
+ * One fetch layer for every upstream, used by the corpus script (scripts/build-dossiers.ts) and its tests. It tells the
+ * builder the difference between "the source answered with nothing" and "the source would not answer": the distinction
+ * the whole dossier design rests on. No Worker route builds a dossier: the Worker serves the corpus (round sixty-nine;
+ * triage-68 M10, S-A7).
  */
 
 export type FetchResult<T> =
@@ -16,6 +16,13 @@ export type FetchResult<T> =
    * refused that was never asked (round sixty-seven; triage-66 N4, S-B4).
    */
   | { status: 'skipped'; detail: string };
+
+/**
+ * What a source's matching step answers: a fetch's answer, a settled "none" that may say why (a Wikipedia redirect to
+ * another title, older names not asked), or `ambiguous`, two records answering where one is required, said on the page as
+ * "not taken: two items answered" and never as "none" (round sixty-nine; triage-68 M8, R46-15).
+ */
+export type SourceResult<T> = Exclude<FetchResult<T>, { status: 'none' }> | { status: 'none'; detail?: string } | { status: 'ambiguous'; detail: string };
 
 export interface FetchOptions {
   headers?: Record<string, string>;

@@ -46,15 +46,21 @@ describe('sheetsOr and entriesOr: why there is no answer', () => {
     expect(ix.waitLeft(m, m.at + 31_000)).toBe(0);
     expect(await ix.sheetsFor(['copiapoa-cinerea'])).toBeNull();
   });
-  it('a 503 with a reason is "refused"; a bare body still is', async () => {
+  // Round sixty-nine (triage-68 W6, S-E5, R46-7): the server's own 503 is a failure, "unread", not a refusal; a 5xx with
+  // nothing of the server's own is no answer; a 403 is a refusal. This test said 'refused' for both 503s.
+  it('a 503 with a reason is "unread"; a bare 5xx is "unreachable"; a 403 is "refused"', async () => {
     sheetsAnswer = { status: 503, body: { error: 'The species sheets could not all be read just now.', retryAfter: 12 }, headers: { 'retry-after': '12' } };
     let ix = await fresh();
     let m = await ix.sheetsOr(['copiapoa-cinerea']);
-    expect(ix.isUnreached(m) && [m.kind, m.reason, m.retryAfter]).toEqual(['refused', 'The species sheets could not all be read just now.', 12]);
+    expect(ix.isUnreached(m) && [m.kind, m.reason, m.retryAfter]).toEqual(['unread', 'The species sheets could not all be read just now.', 12]);
     sheetsAnswer = { status: 503, body: 'busy' };
     ix = await fresh();
     m = await ix.sheetsOr(['copiapoa-cinerea']);
-    expect(ix.isUnreached(m) && [m.kind, m.reason, m.retryAfter]).toEqual(['refused', null, null]);
+    expect(ix.isUnreached(m) && [m.kind, m.reason, m.retryAfter]).toEqual(['unreachable', null, null]);
+    sheetsAnswer = { status: 403, body: { error: 'Not for this site.' } };
+    ix = await fresh();
+    m = await ix.sheetsOr(['copiapoa-cinerea']);
+    expect(ix.isUnreached(m) && [m.kind, m.reason]).toEqual(['refused', 'Not for this site.']);
   });
   it('no answer at all is "unreachable"', async () => {
     entriesAnswer = 'offline';
@@ -88,10 +94,11 @@ describe('the words: a refusal as a refusal, a limit as a limit, only silence as
   it('each kind', async () => {
     const { unreachedClause, againWords } = await import('$lib/ui/reach-words');
     const at = Date.now();
-    const u = (kind: 'refused' | 'limited' | 'unreachable', reason: string | null, retryAfter: number | null) => ({ failed: true as const, kind, status: null, reason, retryAfter, at });
+    const u = (kind: 'refused' | 'limited' | 'unread' | 'unreachable', reason: string | null, retryAfter: number | null) => ({ failed: true as const, kind, status: null, reason, retryAfter, at });
     expect(unreachedClause(u('limited', 'too many requests from this address; wait and try again', 30), 'the species sheets', at)).toBe('the server refused the species sheets for now: this address has asked too often; it can be asked again in 30 s');
     expect(unreachedClause(u('limited', 'too many requests from this network; wait and try again', 120), 'the species sheets', at)).toBe('the server refused the species sheets for now: this network has asked too often; it can be asked again in 2 min');
-    expect(unreachedClause(u('refused', 'The species sheets could not all be read just now.', null), 'the species sheets', at)).toBe('the server refused the species sheets just now (the species sheets could not all be read just now)');
+    expect(unreachedClause(u('refused', 'Not for this site.', null), 'the species sheets', at)).toBe('the server refused the species sheets just now (not for this site)');
+    expect(unreachedClause(u('unread', 'The species sheets could not all be read just now.', 30), 'the species sheets', at)).toBe('the species sheets could not be read just now; it can be asked again in 30 s');
     expect(unreachedClause(u('unreachable', null, null), 'the species sheets', at)).toBe('the species sheets did not answer');
     expect(againWords(u('limited', null, 30), at)).toBe('Check again in 30 s');
     expect(againWords(u('limited', null, 30), at + 30_000)).toBe('Check again');

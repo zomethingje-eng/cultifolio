@@ -41,7 +41,7 @@
 {:else}
   <div class="empty card">
     <p class="k">No openly licensed photograph yet</p>
-    <p class="muted">Photographs shown here must be CC0, CC BY or CC BY-SA so they can be shown to everyone. A photograph you add to your own plant stays on your device and in your sync; it is never shown here.</p>
+    <p class="muted">Photographs shown here must be CC0, public domain, CC BY or CC BY-SA so they can be shown to everyone. A photograph you add to your own plant stays on your device and in your sync; it is never shown here.</p>
   </div>
 {/if}
 

@@ -42,7 +42,7 @@ import { storageErrorText } from '$lib/db/storage-error';
 import { StoppedError, getMeta, setMeta, setMetaIfKey, getPhotoBlobs, putPhotoBlobs, deletePhotoBlobs, photoBlobIds, outboxKeys, outboxAck, outboxFill, outboxClear, changesByKeys, appendChanges, onOtherTabWrite, announceSyncForgotten } from '$lib/db/vault';
 import { deriveKeys, sealJson, openJson, seal, open, packPhoto, unpackPhoto, parseVaultKey, batchFingerprint, dropProof, sha256hex, type VaultKeys } from './crypto';
 import { MAX_BATCH_BYTES, MAX_PHOTO_BYTES, SEAL_OVERHEAD, OVERLAP_MS, CURSOR_SLACK_MS, PUSH_HEADERS, PHOTO_DROP_HEADER, PHOTO_REMOVED_AT_HEADER, SYNC_HEADER, batchName, listAfter, logBatch, BATCH_VERSIONS } from './limits';
-import { readChanges, isHeld, isParked, dueAt, hlcWall, PARK_MS, type Change } from '$core/log';
+import { changeError, readChanges, isHeld, isParked, dueAt, hlcWall, PARK_MS, type Change } from '$core/log';
 import { hlcCompare, isHlc, MAX_AHEAD_MS, nowMs, trustServerTime, clockOffsetMs, clearClockOffset, onClockOffsetChange, onReadingWanted, clockChecked, isPastStamp } from '$core/hlc';
 import { PAGE_IN_DEMO } from '$lib/db/demo';
 import { version as BUILD } from '$app/environment';
@@ -386,10 +386,14 @@ class Sync {
     this.pending = (await outboxKeys()).length;
   }
 
-  /** The outbox, as changes, in HLC order. */
+  /**
+   * The outbox, as changes, in HLC order. A change this build cannot fold (`changeError`'s shape) is not sent: in a batch
+   * it set the whole batch aside on every peer (round sixty-nine; triage-68 R3, R46-18). It stays in the log and the
+   * outbox, for a build that reads it (a newer build's kind, written here before a rollback).
+   */
   private async toPush(): Promise<Change[]> {
     const ts = (await outboxKeys()).sort(hlcCompare);
-    return changesByKeys(ts);
+    return (await changesByKeys(ts)).filter((c) => !changeError(c, true));
   }
 
   /**

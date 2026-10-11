@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildBackup, readBackup, previewMerge, summarise, plantsCsv, batchesCsv, eventsCsv, photoBytesError, photosWithoutPixels } from '$lib/backup/backup';
-import { zipSync } from 'fflate';
+import { zipSync, strToU8 } from 'fflate';
 import { materialise, live, type Change, type Record_ } from '$core/log';
 import type { Accession, Sowing, PlantEvent } from '$lib/db/types';
 
@@ -333,10 +333,19 @@ describe('a zip made to inflate past what a backup can hold is refused at its ta
 
 describe('a backup is checked before anything is stored', () => {
   const jpeg = (n: number) => new Uint8Array([0xff, 0xd8, 0xff, 0xe0, ...new Array(n).fill(0)]);
-  it('a change whose timestamp is not an HLC is refused with its position', async () => {
+  // Round sixty-nine (triage-68 R3, R46-18): such a change is left out of the merge and named, by its position, and the
+  // rest of the file reads; a backup made with one in the log carries it apart, in unreadable.json. A file none of whose
+  // changes can be read is still refused.
+  it('a change whose timestamp is not an HLC is left out and named with its position', async () => {
     const bad = [...log, { t: '~', kind: 'accession', id: '2026-0001', field: 'notes', value: 'wins forever' }];
     const { bytes } = await buildBackup({ changes: bad as Change[], readPhoto: async () => null });
-    await expect(readBackup(bytes)).rejects.toThrow(/Change 23 .*bad timestamp/);
+    const read = await readBackup(bytes);
+    expect(read.changes).toHaveLength(log.length);
+    expect(read.unreadable).toEqual([expect.stringMatching(/^unreadable\.json row 1: bad timestamp/)]);
+    const old = zipSync({ 'manifest.json': strToU8(JSON.stringify({ format: 'cultifolio-backup', v: 1, exported: 'x', counts: { changes: 0, accessions: 0, events: 0, locations: 0, sowings: 0, taxa: 0, photos: 0, photoBytes: 0 } })), 'changes.json': strToU8(JSON.stringify(bad)) });
+    expect((await readBackup(old)).unreadable).toEqual([expect.stringMatching(/^change 23: bad timestamp/)]);
+    const none = zipSync({ 'manifest.json': strToU8(JSON.stringify({ format: 'cultifolio-backup', v: 1, exported: 'x', counts: { changes: 0, accessions: 0, events: 0, locations: 0, sowings: 0, taxa: 0, photos: 0, photoBytes: 0 } })), 'changes.json': strToU8(JSON.stringify([bad.at(-1)])) });
+    await expect(readBackup(none)).rejects.toThrow(/Change 1 .*bad timestamp/);
   });
   it('photo entries must be JPEGs under the sync limit, with sane names', async () => {
     expect(photoBytesError(jpeg(10), jpeg(2))).toBeNull();

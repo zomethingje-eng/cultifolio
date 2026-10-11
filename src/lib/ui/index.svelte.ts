@@ -86,12 +86,17 @@ const timed = (url: string) => fetch(url, { signal: AbortSignal.timeout(10_000) 
  * Why a bucket request brought no answer, said as what happened (round sixty-seven; triage-66 S8, IND-7, R45-11). A
  * refusal or a limit was turned into null, and every page said it as "did not answer"; "Check again" was refused again at
  * once. `kind`:
- * - 'refused': the server answered and declined (a 503 for a bucket it could not read whole, any other error status);
+ * - 'refused': the server answered and declined (a 403, or another 4xx);
  * - 'limited': this address or network has used its allowance for now (429);
- * - 'unreachable': no answer at all (offline, a timeout, the bucket count changing twice under the request).
+ * - 'unread': the server answered that it could not read what was asked just now (a 5xx that says so in its own words
+ *   or with a Retry-After, such as the 503 for a bucket it could not read whole), which is a failure, not a refusal;
+ * - 'unreachable': no answer at all (offline, a timeout, the bucket count changing twice under the request, or a 5xx
+ *   with no word of the server's own, such as a platform's 502 page).
  * `reason` is the server's own short sentence, when it gave one; `retryAfter` the seconds it asked for, when it did.
+ * Round sixty-nine (triage-68 W6; S-E5, R46-7): every non-429 error was 'refused', so the server's own "could not be
+ * read just now" 503 and a platform's 500, 502 or 504 read as "the server refused the species sheets".
  */
-export type Unreached = { failed: true; kind: 'refused' | 'limited' | 'unreachable'; status: number | null; reason: string | null; retryAfter: number | null; at: number };
+export type Unreached = { failed: true; kind: 'refused' | 'limited' | 'unread' | 'unreachable'; status: number | null; reason: string | null; retryAfter: number | null; at: number };
 export const isUnreached = (x: unknown): x is Unreached => !!x && typeof x === 'object' && (x as Unreached).failed === true;
 const unreachable = (): Unreached => ({ failed: true, kind: 'unreachable', status: null, reason: null, retryAfter: null, at: Date.now() });
 /** The failure a non-ok answer says: its status, the server's sentence (plain text, one line, cut) and its Retry-After. */
@@ -103,7 +108,18 @@ async function refusalOf(r: Response): Promise<Unreached> {
     const said = typeof j?.error === 'string' ? j.error : typeof j?.message === 'string' ? j.message : null;
     reason = said ? said.replace(/[\u0000-\u001f<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160) || null : null;
   } catch { /* no body that says why */ }
-  return { failed: true, kind: r.status === 429 ? 'limited' : 'refused', status: r.status, reason, retryAfter: Number.isFinite(ra) && ra > 0 ? Math.min(3600, Math.ceil(ra)) : null, at: Date.now() };
+  const retryAfter = Number.isFinite(ra) && ra > 0 ? Math.min(3600, Math.ceil(ra)) : null;
+  return { failed: true, kind: failureKind(r.status, reason !== null, retryAfter !== null), status: r.status, reason, retryAfter, at: Date.now() };
+}
+/**
+ * What an error status says (round sixty-nine; triage-68 W6, S-E5, R46-7): a 429 is a limit and any other 4xx a refusal;
+ * a 5xx is a failure, said as "could not be read just now" when the server said so (its own sentence or a Retry-After)
+ * and as "did not answer" when nothing of the server's own came back.
+ */
+export function failureKind(status: number, said: boolean, retryAfter: boolean): Unreached['kind'] {
+  if (status === 429) return 'limited';
+  if (status < 500) return 'refused';
+  return said || retryAfter ? 'unread' : 'unreachable';
 }
 /** Seconds still to wait before asking again after a failure, by its Retry-After; 0 when it named none or the time is past. */
 export function waitLeft(u: Unreached | null | undefined, now = Date.now()): number {
@@ -119,7 +135,7 @@ async function bucketAnswer<T>(r: Response | null): Promise<Bucket<T>> {
 }
 /** The worst of several failures, for one sentence: a refusal over a limit over no answer, and the longest wait. */
 function worst(fails: Unreached[]): Unreached {
-  const rank = { refused: 2, limited: 1, unreachable: 0 } as const;
+  const rank = { refused: 3, limited: 2, unread: 1, unreachable: 0 } as const;
   const top = [...fails].sort((a, b) => rank[b.kind] - rank[a.kind])[0];
   const wait = Math.max(0, ...fails.map((f) => waitLeft(f)));
   return { ...top, retryAfter: wait || top.retryAfter, at: wait ? Date.now() : top.at };
@@ -173,7 +189,15 @@ export type Found = IndexEntry;
  * browser whole. Null when the reference could not be reached (a different fact from "nothing matches"). What is sent
  * is the text in a public catalogue's search box, listed on /about/how; a plant's record never is.
  */
-export async function searchCatalogue(q: string, n = 60): Promise<(Found[] & { relaxed?: { query: string; left?: string }; near?: boolean }) | { limited: number } | null> {
+/**
+ * A search that brought no hits says why: `limited` is the seconds to wait before asking again, and `kind` why there is
+ * a wait: absent for this address's allowance (429), `refused` for another refusal (a 403), `unread` for a server that
+ * answered it could not search just now (a 5xx in its own words or with a Retry-After). A 5xx with nothing of the
+ * server's own is null, "did not answer", as no answer is (round sixty-nine; triage-68 W6, R46-7: the picker said a
+ * search 503 "did not answer").
+ */
+export type SearchStop = { limited: number; kind?: 'refused' | 'unread' };
+export async function searchCatalogue(q: string, n = 60): Promise<(Found[] & { relaxed?: { query: string; left?: string }; near?: boolean }) | SearchStop | null> {
   // Cut by code point, as the server's `_clean` does: a cut through an emoji's surrogate pair made `encodeURIComponent`
   // throw, and the page said the reference could not be reached (round sixty-one; the corpus review, 12).
   const text = [...q.trim()].slice(0, 80).join('');
@@ -182,7 +206,11 @@ export async function searchCatalogue(q: string, n = 60): Promise<(Found[] & { r
     const r = await withCorpus(`/api/search?q=${encodeURIComponent(text)}&n=${n}`).then(timed);
     if (r.status === 400) return []; // not a search (nothing the index has words in): nothing matches
     if (r.status === 429) return { limited: Math.max(1, Number(r.headers.get('retry-after')) || 60) }; // the address's allowance is spent: a wait, not "not reached" (round forty, R1-3)
-    if (!r.ok) return null;
+    if (!r.ok) {
+      const u = await refusalOf(r);
+      if (u.kind === 'unreachable') return null;
+      return { limited: u.retryAfter ?? 60, kind: u.kind === 'refused' ? 'refused' : 'unread' };
+    }
     const hits = (await r.json()) as Found[];
     // The server answered other words than those typed (its retry on the first two, or a reading that dropped an author, a
     // quoted cultivar or "sp."): the header names them, so the page can say "Showing results for …" (round sixty; round

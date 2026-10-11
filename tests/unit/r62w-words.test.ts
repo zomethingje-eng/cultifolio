@@ -169,7 +169,8 @@ describe('the species page, compare and the 404 (A13, A21, A33, A35, visitor-wor
   it('Provenance gives no "asked" date for a source not asked, and its footer names "not asked"', () => {
     const p = code('src/lib/ui/Provenance.svelte');
     expect(p).toMatch(/u\.status !== 'skipped'/);
-    expect(p).toMatch(/refused, failed, or not been asked/); // round sixty-two, second pass: the words review's 12, every pill named
+    // Round sixty-nine (triage-68 M8): the list gains the `ambiguous` status, "answered twice where one answer is taken".
+    expect(p).toMatch(/refused, failed, not been asked, or answered twice where one answer is taken/); // round sixty-two, second pass: the words review's 12, every pill named
   });
 });
 

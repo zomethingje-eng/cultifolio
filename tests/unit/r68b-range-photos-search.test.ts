@@ -17,10 +17,10 @@ const ds = (id: string, l3: string, area: string): WcvpDist => ({ id, l3, area, 
 function kew(): WcvpIndex {
   const k = new WcvpIndex();
   const all = () => true;
-  k.addName(nm('fg', 'Ferocactus glaucescens'), all);
-  k.addName(nm('at', 'Aeonium tabuliforme'), all);
-  k.addName(nm('x1', 'Mammillaria twin'), all);
-  k.addName(nm('x2', 'Coryphantha twin'), all);
+  k.addName(nm('fg', 'Ferocactus glaucescens', 'Accepted', 'fg', '(DC.) Britton & Rose'), all);
+  k.addName(nm('at', 'Aeonium tabuliforme', 'Accepted', 'at', '(Haw.) Webb & Berthel.'), all);
+  k.addName(nm('x1', 'Mammillaria twin', 'Accepted', 'x1', 'A.'), all);
+  k.addName(nm('x2', 'Coryphantha twin', 'Accepted', 'x2', 'B.'), all);
   k.addDist(ds('fg', 'MXE', 'Mexico Northeast'));
   k.addDist(ds('at', 'CNY', 'Canary Is.'));
   k.addDist(ds('x1', 'MXC', 'Mexico Central'));
@@ -31,20 +31,21 @@ function kew(): WcvpIndex {
 describe('a range Kew files under one of the species\' older names', () => {
   it('is found, and says the name it came under', () => {
     const got = kew().viaOlderNames([{ name: 'Echinocactus glaucescens' }, { name: 'Ferocactus glaucescens', authorship: '(DC.) Britton & Rose' }]);
-    expect(got?.via).toBe('Ferocactus glaucescens');
-    expect(got?.rows.map((r) => r.locationId)).toEqual(['TDWG:MXE']);
+    // Since round sixty-nine the record names the older name with its author, and Kew's entry with its own (triage-68 M2).
+    expect(got && 'via' in got ? [got.via, got.entry.name] : null).toEqual(['Ferocactus glaucescens (DC.) Britton & Rose', 'Ferocactus glaucescens']);
+    expect(got && 'rows' in got ? got.rows.map((r) => r.locationId) : null).toEqual(['TDWG:MXE']);
   });
   it('is not taken when the older names lead to two accepted entries (guard)', () => {
-    expect(kew().viaOlderNames([{ name: 'Mammillaria twin' }, { name: 'Coryphantha twin' }])).toBeNull();
+    expect(kew().viaOlderNames([{ name: 'Mammillaria twin', authorship: 'A.' }, { name: 'Coryphantha twin', authorship: 'B.' }])).toMatchObject({ ambiguous: expect.stringMatching(/lead to 2 Kew entries/) });
   });
   it('reaches the build through the bulk fetcher: the distribution names Kew\'s entry', async () => {
     const base = fixtureFetcher({
-      [`${GBIF}/species/9476326/synonyms`]: { results: [{ canonicalName: 'Sempervivum tabulaeforme' }, { canonicalName: 'Aeonium tabuliforme', authorship: '(Haw.) Webb & Berthel.' }] },
+      [`${GBIF}/species/9476326/synonyms`]: { results: [{ key: 1, canonicalName: 'Sempervivum tabulaeforme', authorship: 'Haw.' }, { key: 2, canonicalName: 'Aeonium tabuliforme', authorship: '(Haw.) Webb & Berthel.' }] },
       [`${GBIF}/species/9476326`]: { key: 9476326, canonicalName: 'Aeonium tabulaeforme', authorship: '(Haw.) Webb & Berthel.' }
     });
     const f = bulkFetcher(base, { wcvp: kew() });
     const r = await distributions(f as JsonFetcher, 9476326);
-    expect(r).toMatchObject({ status: 'ok', data: { wcvp: true, via: 'Aeonium tabuliforme' } }); // base: national checklists, no range
+    expect(r).toMatchObject({ status: 'ok', data: { wcvp: true, entry: 'Aeonium tabuliforme (Haw.) Webb & Berthel.', via: 'Aeonium tabuliforme (Haw.) Webb & Berthel.' } }); // base: national checklists, no range
     if (r.status === 'ok') expect(r.data.rows.map((x) => x.locationId)).toEqual(['TDWG:CNY']);
   });
 });

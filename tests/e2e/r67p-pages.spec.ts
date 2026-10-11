@@ -25,8 +25,14 @@ test('r67p P1: a "keep data" question never answered is put once over six page l
   await ctx.addInitScript(firefoxPersist);
   const page = await ctx.newPage();
   await page.goto('/plants'); await ready(page);
+  // The empty page's collection has opened before the plant is written: in Safari's engine, which answers an IndexedDB
+  // request about every 16 ms, the first load was still reading when the plant landed, saw it, and asked, writing the
+  // month's time; the count below then started after the month's one ask and found none (expected 1, received 0). And
+  // whatever that first page did is cleared with the count, so the six loads below start from no ask at all (round
+  // sixty-nine; triage-68 P4, IND's WebKit failure).
+  await expect(page.locator('main')).not.toContainText('Opening your collection', { timeout: 20_000 });
   await inject(page, plant('rQ1', '2026-0001', 'Copiapoa cinerea'), Date.now() - 86_400_000);
-  await page.evaluate(() => localStorage.removeItem('__asks'));
+  await page.evaluate(() => { localStorage.removeItem('__asks'); localStorage.removeItem('cultifolio.persistAskedAt'); });
   for (const path of ['/plants', '/today', '/', '/plants', '/places', '/plants/rQ1']) {
     await page.goto(path); await ready(page);
     await page.waitForTimeout(1200);

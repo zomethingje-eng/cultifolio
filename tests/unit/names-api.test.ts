@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { version } from '$app/environment';
 import { GET, _PLANTAE as PLANTAE, _NAME_QUERY as NAME_QUERY } from '../../src/routes/api/names/+server';
 import { resetRateLimits, RATE } from '$lib/server/sync';
 
@@ -57,7 +58,7 @@ describe('/api/names', () => {
     const b = await call('COPIAPOA', upstream, { cache });
     expect(await b.json()).toEqual([{ key: 1, canonicalName: 'Copiapoa' }, {}, {}]);
     expect(asked).toEqual(['Copiapoa']);
-    expect([...cache.store.keys()]).toEqual(['https://cache.cultifolio/names2?q=copiapoa']);
+    expect([...cache.store.keys()]).toEqual([`https://cache.cultifolio/names?v=${encodeURIComponent(version)}&q=copiapoa`]); // under the build (round sixty-nine; triage-68 W3)
   });
   it('the query must look like a name: letters of any script, spaces, periods, apostrophes, hyphens and ×; anything else is 400 and never reaches GBIF', async () => {
     for (const good of ['Copiapoa cinerea var. columna-alba', "Echinopsis 'Flying Saucer'", 'Ariocarpus × Lophophora', 'Ægagropila', 'Ботаника', '日本の植物']) expect(NAME_QUERY.test(good)).toBe(true);

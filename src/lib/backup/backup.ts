@@ -5,7 +5,7 @@
  */
 import { Zip, ZipPassThrough, ZipDeflate, unzipSync, strToU8, strFromU8 } from 'fflate';
 import * as v from 'valibot';
-import { materialise, apply, live, known, readChanges, isComplete, type Change, type Record_ } from '$core/log';
+import { materialise, apply, live, known, readChanges, changeError, isComplete, type Change, type Record_ } from '$core/log';
 import { kindOf, accNo, sowNo, EVENT_LABEL, MEASURES, type Accession, type Photo, type Sowing, type PlantEvent } from '$lib/db/types';
 import { MAX_PHOTO_BYTES, SEAL_OVERHEAD } from '$lib/sync/limits';
 import { isPastStamp } from '$core/hlc';
@@ -21,19 +21,35 @@ export function photoBytesError(full: Uint8Array, thumb: Uint8Array): string | n
 }
 
 /**
- * Every row the fold can take; a row it cannot take is left out
- * and named in `unreadable` rather than refusing the file (round twenty-nine, 2). A file with no readable change at all
- * is refused, since there is nothing to restore.
+ * Every row the fold can take; a row it cannot take is left out and named in `unreadable` rather than refusing the file
+ * (round twenty-nine, 2), and kept as it is in `skipped`. Since round sixty-nine (triage-68 R3, the self-review's D3,
+ * R46-18) that includes a row whose shape the fold cannot take (an unknown kind, a broken stamp, a reserved field), as
+ * the fold skips one in the log: a backup of a log holding one was refused whole ("Change 4 in that backup cannot be
+ * read"), so it looked good when made and held nothing that could be restored. A list none of whose rows can be read is
+ * still refused, since it is damaged or not a backup.
  */
-function checkRows(rows: unknown[]): { changes: Change[]; unreadable: string[] } {
-  let read: ReturnType<typeof readChanges>;
-  try {
-    read = readChanges(rows);
-  } catch (e) {
-    const m = /^change (\d+): (.*)$/.exec(e instanceof Error ? e.message : String(e));
-    throw new Error(m ? `Change ${Number(m[1]) + 1} in that backup cannot be read (${m[2]}); the file may be damaged or from a newer version.` : String(e));
-  }
-  return { changes: read.changes, unreadable: read.dropped.map((d) => d.replace(/^change (\d+):/, (_, n) => `change ${Number(n) + 1}:`)) };
+function checkRows(rows: unknown[]): { changes: Change[]; unreadable: string[]; skipped: unknown[] } {
+  const ok: unknown[] = [];
+  const at: number[] = [];
+  const unreadable: string[] = [];
+  const skipped: unknown[] = [];
+  rows.forEach((r, i) => {
+    const shape = changeError(r, true); // a row it passes is a `ChangeRow`
+    if (shape) { unreadable.push(`change ${i + 1}: ${shape}`); skipped.push(r); } else { ok.push(v.parse(ChangeRow, r)); at.push(i); }
+  });
+  if (rows.length && !ok.length) throw new Error(`Change 1 in that backup cannot be read (${unreadable[0].replace(/^change 1: /, '')}); the file may be damaged or from a newer version.`);
+  const read = readChanges(ok);
+  // Named by their place in the file's own list, as the rows set apart above are.
+  const dropped = read.dropped.map((d) => d.replace(/^change (\d+):/, (_, n) => `change ${at[Number(n)] + 1}:`));
+  return { changes: read.changes, unreadable: [...unreadable, ...dropped], skipped };
+}
+/** The rows of a backup's `unreadable.json`: what the exporting device's fold skipped, named and kept as they are. */
+function unreadableRows(bytes: Uint8Array | undefined): { unreadable: string[]; skipped: unknown[] } {
+  if (!bytes) return { unreadable: [], skipped: [] };
+  let rows: unknown;
+  try { rows = JSON.parse(strFromU8(bytes)); } catch { rows = null; }
+  if (!Array.isArray(rows)) return { unreadable: ['unreadable.json: not a list this version reads'], skipped: [] };
+  return { unreadable: rows.map((r, i) => `unreadable.json row ${i + 1}: ${changeError(r, true) ?? 'skipped by the device that made the file'}`), skipped: rows };
 }
 
 export interface PhotoBytes {
@@ -59,11 +75,14 @@ export interface BuildOpts {
   parked?: Iterable<string>;
   /** Called once per live photo record; return null when the pixels are missing (the record still travels, and the manifest names it under `photosMissing`). */
   readPhoto: (id: string) => Promise<PhotoBytes | null>;
+  /** Rows of the log the fold skips (`changeError`'s shape), carried as they are in `unreadable.json` (round sixty-nine; triage-68 R3). */
+  unreadable?: unknown[];
   onProgress?: (done: number, total: number) => void;
 }
 
-/** Counts from a change log, for the manifest and for the import preview. */
+/** Counts from a change log, for the manifest and for the import preview; a change the fold skips is left out, as the fold leaves it (round sixty-nine; triage-68 R3). */
 export function summarise(changes: Change[]) {
+  changes = foldable(changes);
   const { state } = materialise(changes);
   const n = (kind: Record_['kind']) => live(state, kind).length;
   return { changes: changes.length, accessions: n('accession'), events: n('event'), locations: n('location'), sowings: n('sowing'), taxa: n('taxon'), photos: n('photo'), state };
@@ -117,11 +136,11 @@ export async function buildBackup(o: BuildOpts): Promise<BuiltBackup> {
     } else photosMissing.push(p.id);
     o.onProgress?.(++done, photos.length);
   }
-  const inLog = new Set(o.changes.map((c) => c.t));
+  const inLog = new Set(foldable(o.changes).map((c) => c.t));
   const parked = [...new Set(o.parked ?? [])].filter((t) => inLog.has(t)).sort();
   const manifest: Manifest = {
     format: BACKUP_FORMAT,
-    v: o.changes.some((c) => isRecordedTime(c.w)) ? BACKUP_V : o.changes.some((c) => isPastStamp(c.t)) ? 2 : 1, // 3 with a recorded time, which a round-sixty-two build would drop (round sixty-three); 2 only with a marked stamp, which an older build would misread (round sixty-two; outside review B8)
+    v: foldable(o.changes).some((c) => isRecordedTime(c.w)) ? BACKUP_V : o.changes.some((c) => isPastStamp(c.t)) ? 2 : 1, // 3 with a recorded time, which a round-sixty-two build would drop (round sixty-three); 2 only with a marked stamp, which an older build would misread (round sixty-two; outside review B8)
     app: o.app,
     exported: new Date().toISOString(),
     device: o.device,
@@ -130,7 +149,9 @@ export async function buildBackup(o: BuildOpts): Promise<BuiltBackup> {
     ...(parked.length ? { parked } : {})
   };
   entry('manifest.json', strToU8(JSON.stringify(manifest, null, 1)), true);
-  entry('changes.json', strToU8(JSON.stringify(o.changes)), true);
+  entry('changes.json', strToU8(JSON.stringify(foldable(o.changes))), true);
+  const unreadable = [...(o.unreadable ?? []), ...o.changes.filter((c) => changeError(c, true))];
+  if (unreadable.length) entry('unreadable.json', strToU8(JSON.stringify(unreadable)), true);
   if (o.settings && Object.keys(o.settings).length) entry('device.json', strToU8(JSON.stringify(o.settings, null, 1)), true);
   entry('plants.csv', strToU8(plantsCsv(live<Accession & Record_>(s.state, 'accession'), s.state)), true);
   entry('batches.csv', strToU8(batchesCsv(live<Sowing & Record_>(s.state, 'sowing'), s.state)), true);
@@ -153,8 +174,10 @@ export async function buildBackup(o: BuildOpts): Promise<BuiltBackup> {
 export interface ReadBackup {
   manifest: Manifest;
   changes: Change[];
-  /** Rows of `changes.json` that could not be read and were left out, each named ("change 15: price of a accession must be a string, not [1]"). */
+  /** Rows of `changes.json` that could not be read and were left out, each named ("change 15: price of a accession must be a string, not [1]"), and the rows of `unreadable.json`. */
   unreadable: string[];
+  /** The rows of `changes.json` whose shape this version cannot read, and those of `unreadable.json`, as they are: a backup made from this file's log carries them on (round sixty-nine; triage-68 R3). */
+  skipped: unknown[];
   /** The exporting device's settings (`device.json`), when the file has them. */
   settings: DeviceSettings | null;
   /** Photo ids whose pixels are in the file. */
@@ -173,7 +196,7 @@ export function photosWithoutPixels(file: Pick<ReadBackup, 'changes' | 'photoIds
 }
 
 /** The entries a backup carries and nothing else: the three JSON files, the two sheets, a photograph or its thumbnail. */
-const KNOWN_ENTRY = /^(manifest\.json|changes\.json|device\.json|plants\.csv|batches\.csv|events\.csv|photos\/[^\0]{1,200}\.jpg)$/; // a photo entry's name is judged below, so an impossible one is refused and said rather than skipped
+const KNOWN_ENTRY = /^(manifest\.json|changes\.json|unreadable\.json|device\.json|plants\.csv|batches\.csv|events\.csv|photos\/[^\0]{1,200}\.jpg)$/; // a photo entry's name is judged below, so an impossible one is refused and said rather than skipped
 /** The most any one entry may inflate to: a photograph is bounded by the sync limit, and a log of a million changes is well under this. */
 export const MAX_ENTRY_BYTES = 256 * 1024 * 1024;
 /** The most changes.json may inflate to: a log of a million changes is about a hundred megabytes. */
@@ -216,6 +239,7 @@ export async function readBackup(bytes: Uint8Array): Promise<ReadBackup> {
         if (f.name === 'plants.csv' || f.name === 'batches.csv' || f.name === 'events.csv') return false;
         if (f.name === 'changes.json') return f.originalSize <= MAX_CHANGES_BYTES;
         if (f.name === 'manifest.json' || f.name === 'device.json') return f.originalSize <= MAX_SMALL_ENTRY_BYTES;
+        if (f.name === 'unreadable.json') return f.originalSize <= MAX_CHANGES_BYTES;
         // A stored entry is copied by its compressed size, whatever it declares as its original: a table of contents whose
         // entries all point at one stored block and each declare a byte of content passed the sum and cost a copy of the
         // block apiece (round thirty-seven, R1-5). The larger of the two counts, and a stored entry whose two sizes differ
@@ -236,8 +260,11 @@ export async function readBackup(bytes: Uint8Array): Promise<ReadBackup> {
   const m = v.safeParse(Manifest, JSON.parse(strFromU8(files['manifest.json'])));
   if (!m.success) throw new Error('The backup manifest is not in a shape this version understands.');
   if (m.output.v > BACKUP_V) throw new Error(`This backup was written by a newer Cultifolio (format ${m.output.v}); update the app to restore it.`);
-  const rows = v.safeParse(v.array(ChangeRow), JSON.parse(strFromU8(files['changes.json'])));
-  if (!rows.success) throw new Error('The change log in that backup does not parse.');
+  // Each row on its own (`checkRows`): one row of a kind this version does not know refused the whole file (round
+  // sixty-nine; triage-68 R3).
+  let rows: unknown;
+  try { rows = JSON.parse(strFromU8(files['changes.json'])); } catch { rows = null; }
+  if (!Array.isArray(rows)) throw new Error('The change log in that backup does not parse.');
   const photoIds = Object.keys(files)
     .filter((k) => k.startsWith('photos/') && k.endsWith('.jpg') && !k.endsWith('.t.jpg'))
     .map((k) => k.slice('photos/'.length, -'.jpg'.length))
@@ -256,9 +283,13 @@ export async function readBackup(bytes: Uint8Array): Promise<ReadBackup> {
       /* a device.json that does not parse is left out; the records still restore */
     }
   }
+  const read = checkRows(rows);
+  const apart = unreadableRows(files['unreadable.json']);
   return {
     manifest: m.output,
-    ...checkRows(rows.output),
+    changes: read.changes,
+    unreadable: [...read.unreadable, ...apart.unreadable],
+    skipped: [...read.skipped, ...apart.skipped],
     settings,
     photoIds,
     readPhoto: (id) => (files[photoPath(id)] && files[thumbPath(id)] ? { id, full: files[photoPath(id)], thumb: files[thumbPath(id)] } : null)
@@ -267,6 +298,10 @@ export async function readBackup(bytes: Uint8Array): Promise<ReadBackup> {
 
 /** What restoring would do against the current log: new changes, and records that would appear or change. */
 export function previewMerge(current: Change[], incoming: Change[]) {
+  // What the fold skips is left out on both sides, as the fold leaves it: a reserved field here threw, and no backup could
+  // be opened on this device (round sixty-nine; triage-68 R3, the self-review's D3, R46-18).
+  current = foldable(current);
+  incoming = foldable(incoming);
   const have = new Set(current.map((c) => c.t));
   const fresh = incoming.filter((c) => !have.has(c.t));
   // One fold, not two: the device's log is folded once and the file's new changes are folded on top of it, which is what
@@ -333,6 +368,11 @@ export function previewMerge(current: Change[], incoming: Change[]) {
   }
   sharedNumbers.sort((a, b) => a.no.localeCompare(b.no) || Number(b.here) - Number(a.here));
   return { fresh, added, changed, unchanged: after.size - added - changed, addedByKind, addedDeleted, addedWaiting, waitingNames, addedOnRemoved, addedOnRemovedByKind, sharedNumbers };
+}
+
+/** The changes the fold can take (`changeError`'s shape, as `applyHere` skips): the same list when every one can be. */
+function foldable(changes: Change[]): Change[] {
+  return changes.every((c) => !changeError(c, true)) ? changes : changes.filter((c) => !changeError(c, true));
 }
 
 const csvCell = (x: unknown) => {

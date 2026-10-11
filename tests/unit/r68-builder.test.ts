@@ -51,13 +51,13 @@ describe('when Wikidata does not answer, the previous build\'s identifiers stand
     const table = copiapoa() as Record<string, unknown>;
     for (const k of Object.keys(table)) if (k.startsWith('https://www.wikidata.org/')) table[k] = lagged;
     table['https://api.inaturalist.org/v1/taxa?q='] = { results: [] }; // iNaturalist's name search finds nothing exact
-    const r = await buildDossier('Copiapoa cinerea', opts(fixtureFetcher(table), { prevIds: { gbif: 3943541, wikidata: 'Q5168360', inat: 135254, wikipedia: 'Copiapoa cinerea' } }));
+    const r = await buildDossier('Copiapoa cinerea', opts(fixtureFetcher(table), { prevIds: { gbif: 3943541, wikidata: 'Q5168360', inat: 135254, wikipedia: 'Copiapoa cinerea' }, prevIdsOn: '2026-10-01' }));
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.dossier.ids.inat).toBe(135254);
     expect(r.dossier.photos.length).toBeGreaterThan(0); // base: none
     expect(r.dossier.upstream.wikidata).toMatchObject({ status: 'error' });
-    expect(r.dossier.upstream.wikidata.detail).toMatch(/the previous build's identifiers are kept$/);
+    expect(r.dossier.upstream.wikidata.detail).toMatch(/the identifiers of the build of 2026-10-01 are kept$/); // round sixty-nine: the build that read them is named
   });
   it('without a previous build the failure stands, and nothing is invented (guard)', async () => {
     mwWait.sleep = async () => {};
@@ -77,6 +77,7 @@ describe('iNaturalist\'s name search: a name it files under another', () => {
   });
   it('a neighbour the search ranked first, or two taxa claiming the name, is not (guard)', async () => {
     expect((await taxon(answer([{ id: 2, name: 'Albuca namaquensis', rank: 'species', matched_term: 'Albuca namaquensis' }]), 'Albuca nana')).status).toBe('none');
-    expect((await taxon(answer([{ id: 3, name: 'A b', rank: 'species', matched_term: 'X y' }, { id: 4, name: 'C d', rank: 'species', matched_term: 'X y' }]), 'X y')).status).toBe('none');
+    // Two taxa are two answers, said as such since round sixty-nine (triage-68 M8), never taken.
+    expect((await taxon(answer([{ id: 3, name: 'A b', rank: 'species', matched_term: 'X y' }, { id: 4, name: 'C d', rank: 'species', matched_term: 'X y' }]), 'X y')).status).toBe('ambiguous');
   });
 });

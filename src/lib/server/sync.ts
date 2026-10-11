@@ -38,7 +38,7 @@
  */
 import { error, json } from '@sveltejs/kit';
 import { tokenHash, sha256hex } from '$lib/sync/crypto';
-import { NET_FACTOR, UPSTREAM_ADDRESS_PART } from './caps';
+import { NET_FACTOR, UPSTREAM_ADDRESS_PART, MAX_LIST_PAGES, VAULT_WRITES_PER_HOUR } from './caps';
 import { type PhotoRef, refKey, genKey, photoRef, unnamedGenerations, receipt, repoint } from './photogen';
 export { MAX_BATCH_BYTES, MAX_PHOTO_BYTES } from '$lib/sync/limits';
 
@@ -500,7 +500,7 @@ export { OVERLAP_MS };
  * as a marker object beside it), so the list starts at the cursor and costs
  * one page per pull whatever the vault's size (round twelve, 10).
  */
-export const MAX_LIST_PAGES = 50;
+export { MAX_LIST_PAGES }; // in caps.ts since round sixty-nine, so the counter object reserves the same figure (triage-68 W2)
 
 /** Walk one prefix, at most `MAX_LIST_PAGES` pages; false when the prefix goes on past the bound. `pages` counts the list calls made. */
 async function walk(r2: R2Bucket, prefix: string, each: (o: R2Object) => void, pages = { n: 0 }): Promise<boolean> {
@@ -520,7 +520,8 @@ async function walk(r2: R2Bucket, prefix: string, each: (o: R2Object) => void, p
  * triage-66 S6, S-D4). Every `GET /api/sync/log` walks the whole log, whatever its cursor, so a holder of a token who grew
  * a vault to fifty thousand tiny batches made every pull cost fifty Class A operations, at up to 600 pulls per ten
  * minutes per address, and nothing bounded the addresses. Counted in the vault's own counter object, the cost is bounded
- * per vault (about 29,000 list calls a day at most), and so by the ceiling of 2,000 vaults. A vault of a few thousand
+ * per vault (about 29,000 list calls a day at most; since round sixty-nine each walk's pages are reserved when it is
+ * asked, so walks in flight at once are counted too), and so by the ceiling of 2,000 vaults. A vault of a few thousand
  * batches lists in a few pages, so its devices may pull hundreds of times an hour; joining a vault of fifty thousand,
  * five hundred batches a page, walks it a hundred times, and is spread over a few hours.
  *
@@ -543,6 +544,22 @@ export class ListingsSpent extends Error {
 }
 
 /**
+ * A vault past its hour of writes (round sixty-nine; triage-68 W5, R46-24): `VAULT_WRITES_PER_HOUR` objects stored in the
+ * hour, counted in the vault's counter object as their bytes are taken. 503 with Retry-After to the next hour and a
+ * sentence that says it is a refusal; the device keeps every change and asks again then (it reads a wait of a minute or
+ * more as the vault's uploads refused for that long, and shows the sentence).
+ */
+export class WritesSpent extends Error {
+  readonly status = 503;
+  constructor(public readonly retryAfter: number) {
+    super("this vault's writes for the hour are used up");
+  }
+  response(): Response {
+    return new Response(JSON.stringify({ error: `Uploading is refused for now: this vault stored as many objects as the site takes in an hour (${VAULT_WRITES_PER_HOUR.toLocaleString('en-GB')}). Nothing is lost: your changes stay on this device, which sends them again within the hour.`, retryAfter: this.retryAfter }), { status: STATUS.ceilings, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', 'retry-after': String(this.retryAfter) } });
+  }
+}
+
+/**
  * Every batch that arrived at or after (cursor − overlap), oldest arrival
  * first, then by key. With `after`, everything strictly after that
  * (arrival, key) pair and no overlap: the next page of the same run. When a
@@ -554,18 +571,20 @@ export async function listBatches(r2: R2Bucket, id: string, sinceMs: number | nu
   const prefix = `vault/${id}/log/`;
   const from = after ? after.at : sinceMs == null ? 0 : Math.max(0, sinceMs - OVERLAP_MS);
   const all: BatchRef[] = [];
-  // The vault's hour of listings, in its counter object (round sixty-seven; S6): asked before the walk, charged with the
-  // pages the walk made after it. A counter that cannot be asked lets the listing go: receiving is never refused for the
-  // counter's fault, and the request windows still bound it per address.
+  // The vault's hour of listings, in its counter object (round sixty-seven; S6): a walk's most pages are reserved when it
+  // is asked, and what it did not use is given back after it (round sixty-nine; triage-68 W2: charged only after the
+  // walk, every pull asked while walks were in flight passed). A counter that cannot be asked lets the listing go:
+  // receiving is never refused for the counter's fault, and the request windows still bound it per address. A settle
+  // that fails leaves the reservation counted, which errs towards the bound.
   const ns = quota?.counters;
   const o = ns ? ns.get(ns.idFromName(`bytes:${id}`)) : null;
   const now = quota?.now ?? Date.now();
-  let budgeted = false;
+  let budget: { reserved: number; hour?: number } | null = null;
   if (o?.listAsk && o.listed) {
     let a: Awaited<ReturnType<NonNullable<typeof o.listAsk>>> | null = null;
-    try { a = await o.listAsk(LIST_PAGES_PER_HOUR, now); } catch (e) { console.error("sync: a vault's listings could not be counted; this one goes on", e); await noteFault(ns, 'listing'); }
+    try { a = await o.listAsk(LIST_PAGES_PER_HOUR, now, MAX_LIST_PAGES); } catch (e) { console.error("sync: a vault's listings could not be counted; this one goes on", e); await noteFault(ns, 'listing'); }
     if (a && !a.ok) throw new ListingsSpent(a.retryAfter);
-    budgeted = !!a;
+    if (a) budget = { reserved: a.reserved ?? 0, hour: a.hour };
   }
   const pages = { n: 0 };
   let whole: boolean;
@@ -578,7 +597,7 @@ export async function listBatches(r2: R2Bucket, id: string, sinceMs: number | nu
       all.push(ref);
     }, pages);
   } finally {
-    if (budgeted) await o!.listed!(pages.n, now).catch(async () => { await noteFault(ns, 'listing'); });
+    if (budget) await o!.listed!(pages.n, quota?.now ?? Date.now(), budget.reserved, budget.hour).catch(async () => { await noteFault(ns, 'listing'); });
   }
   if (!whole) error(STATUS.ceilings, `this vault holds more than ${MAX_LIST_PAGES * 1000} batches, which is past what one listing can walk`);
   all.sort(refCompare);
@@ -818,7 +837,7 @@ async function storeCountedNow(r2: R2Bucket, id: string, meta: VaultMeta, key: s
   if (objs) {
     // The address's day, then the vault, each checked and taken in one step in its own object.
     const ip = objs.address ? await objs.address.take('address', body.length, MAX_IP_BYTES_PER_DAY, today, null, now) : { ok: true, before: 0 };
-    if ('recount' in ip || !ip.ok) throw new DayQuota('before' in ip ? ip.before : 0, MAX_IP_BYTES_PER_DAY, untilMidnight(now));
+    if (!('ok' in ip) || !ip.ok) throw new DayQuota('before' in ip ? ip.before : 0, MAX_IP_BYTES_PER_DAY, untilMidnight(now));
     // And an IPv6 address's /48, at four times one address's allowance, as every other /48 count is: a host holding a /48
     // had 65,536 /64s, each a fresh day's allowance (round sixty-three; S5, left in round fifty-nine).
     const giveAddress = () => Promise.all([objs.address ? objs.address.give('address', body.length, today) : 0, objs.net ? objs.net.give('address', body.length, today) : 0]);
@@ -826,7 +845,7 @@ async function storeCountedNow(r2: R2Bucket, id: string, meta: VaultMeta, key: s
       let n: Awaited<ReturnType<typeof objs.net.take>>;
       try { n = await objs.net.take('address', body.length, MAX_IP_BYTES_PER_DAY * NET_FACTOR, today, null, now); }
       catch (e) { await objs.address?.give('address', body.length, today).catch(() => 0); throw e; }
-      if ('recount' in n || !n.ok) {
+      if (!('ok' in n) || !n.ok) {
         await objs.address?.give('address', body.length, today).catch(() => 0);
         throw new DayQuota('before' in n ? n.before : 0, MAX_IP_BYTES_PER_DAY * NET_FACTOR, untilMidnight(now), 'network');
       }
@@ -848,12 +867,14 @@ async function storeCountedNow(r2: R2Bucket, id: string, meta: VaultMeta, key: s
         v = await objs.vault.take('vault', body.length, MAX_BYTES, today, listed, now, g.gen);
       }
       if ('recount' in v) throw new RecountCrossed();
+      // The vault's hour of writes is spent (round sixty-nine; triage-68 W5): nothing was taken, and the address's bytes go back below.
+      if ('spent' in v) throw new WritesSpent(v.retryAfter);
     } catch (e) {
       // The address's bytes go back whatever stopped the vault's step (a listing that threw): they stayed counted till midnight (round fifty-nine).
       await giveAddress().catch(() => 0);
       throw e;
     }
-    if ('recount' in v || !v.ok) {
+    if ('recount' in v || 'spent' in v || !v.ok) {
       await giveAddress().catch(() => 0);
       throw new VaultFull('before' in v ? v.before : 0, MAX_BYTES);
     }
@@ -1027,12 +1048,18 @@ export async function storeOnce(r2: R2Bucket, id: string, meta: VaultMeta, key: 
   // the hold: a holder of the token alone who guessed an id could stream such PUTs and keep the name held, so the
   // grower's removal always waited (round sixty-seven; triage-66 S10, S-D10). One with the proof is judged under the
   // hold, since it claims the name.
+  //
+  // Round sixty-nine (triage-68 W4; S-E4, R46-23): any PUT whose proof does not match the stored one claims nothing, so
+  // it is answered before the hold whatever its bytes. The token alone could GET the ciphertext and PUT it back with any
+  // proof: the same bytes passed the check above, took the hold for the whole run, and the grower's removal meanwhile
+  // met "busy". And a first store of a removed name without its removal's proof is refused before the hold too, where it
+  // took the hold only to be told 403.
   const pre = await photoRef(r2, key);
   if (pre.key && !pre.unreadable) {
     const o = await r2.head(pre.key);
     const md: Partial<Record<string, string>> = o?.customMetadata ?? {};
-    if (o && md.sha !== sha && !(extra.drop && md.drop === extra.drop)) return 'different';
-  }
+    if (o && !(extra.drop && md.drop === extra.drop)) return md.sha === sha ? 'same' : 'different';
+  } else if (!pre.unreadable && pre.removed?.drop && pre.removed.drop !== extra.drop) throw new PhotoRemoved();
   // A claim whenever the proof matches, whatever the answer (round sixty-two; A23): a re-sealed Undo makes different
   // bytes, was answered 409 with no claim, and a removal asked for before it then deleted it.
   const r = await withHold(quota, id, key, runPhoto, () => proved);
@@ -1179,7 +1206,7 @@ export type CountersNs = {
     refund(address: string, day: string, net?: string | null): Promise<void>;
     fill?(vault: string, max: number, seed?: number | null, day?: string | null, perDay?: number, now?: number, net?: string | null, perNet?: number): Promise<'counted' | 'already' | 'total' | 'day' | 'network' | 'unavailable'>;
     unfill?(vault: string): Promise<boolean>;
-    take?(kind: 'vault' | 'address', n: number, limit: number, day: string, base?: number | null, now?: number, gen?: number | null): Promise<{ ok: boolean; before: number; lease?: string } | { recount: true }>;
+    take?(kind: 'vault' | 'address', n: number, limit: number, day: string, base?: number | null, now?: number, gen?: number | null, writes?: number): Promise<{ ok: boolean; before: number; lease?: string } | { recount: true } | { spent: true; retryAfter: number }>;
     give?(kind: 'vault' | 'address', n: number, day: string, token?: string | null): Promise<number>;
     release?(lease: string, landed: boolean): Promise<void>;
     setBytes?(bytes: number, day: string, gen?: number | null, now?: number): Promise<number | null>;
@@ -1194,8 +1221,8 @@ export type CountersNs = {
     markUnnamed?(name: string, now?: number): Promise<void>;
     upstream?(services: string[], share: number, address?: string | null, net?: string | null, now?: number): Promise<UpstreamAnswer>;
     fault?(kind: string, now?: number): Promise<void>;
-    listAsk?(budget: number, now?: number): Promise<{ ok: true } | { ok: false; retryAfter: number }>;
-    listed?(pages: number, now?: number): Promise<void>;
+    listAsk?(budget: number, now?: number, reserve?: number): Promise<{ ok: true; hour?: number; reserved?: number } | { ok: false; retryAfter: number }>;
+    listed?(pages: number, now?: number, reserved?: number, hour?: number): Promise<void>;
   };
 };
 /**
@@ -1279,10 +1306,13 @@ export class VaultsClosed extends Error {
   response(): Response {
     const text = this.reclaimed
       ? 'Sync is full for now. This vault had no upload for 90 days, so its place was given back. What it holds stays on the server, and every device can still receive from it, but only an upload takes a place again: receiving does not. Your changes stay on this device, which asks again within the hour.'
+      // The device asks again within the hour (the engine keeps a wait of an hour at most), not tomorrow, and is let in
+      // after midnight UTC; a network's own part is that network's, so another one (home Wi-Fi, say) may be let in now
+      // (round sixty-nine; triage-68 W6, S-E6, R46-25).
       : this.which === 'day'
-      ? 'Sync has taken all the new vaults it can today, and this vault holds nothing yet. Your collection stays on this device; it will try again tomorrow.'
+      ? 'Sync has taken all the new vaults it can today, and this vault holds nothing yet. Your collection stays on this device, which tries again within the hour; new vaults are let in again after midnight UTC.'
       : this.which === 'network'
-      ? 'Sync has taken all the new vaults it takes from this network today, and this vault holds nothing yet. Your collection stays on this device; it will try again tomorrow.'
+      ? 'Sync has taken all the new vaults it takes from this network today, and this vault holds nothing yet. Another network, such as home Wi-Fi, may be let in now. Your collection stays on this device, which tries again within the hour; this network is let in again after midnight UTC.'
       : 'Sync is not taking new vaults for now, and this vault holds nothing yet. Your collection stays on this device.';
     // A reclaimed vault is asked about again within the hour, as its sentence says (round sixty-two); the engine keeps at
     // most an hour in any case.
@@ -1476,9 +1506,9 @@ export async function unadmit(r2: R2Bucket, id: string, meta: VaultMeta, quota?:
   }
 }
 
-/** The answer for a refusal a store or a listing can throw (full, the day's bytes, a ceiling, an unchecked place, a busy name, a crossed recount, a removed photograph's name, a vault's hour of listings spent), or null for anything else. */
+/** The answer for a refusal a store or a listing can throw (full, the day's bytes, a ceiling, an unchecked place, a busy name, a crossed recount, a removed photograph's name, a vault's hour of listings or of writes spent), or null for anything else. */
 export function refusal(e: unknown): Response | null {
-  return e instanceof VaultFull || e instanceof DayQuota || e instanceof VaultsClosed || e instanceof VaultUnchecked || e instanceof PhotoBusy || e instanceof RecountCrossed || e instanceof PhotoRemoved || e instanceof ListingsSpent ? e.response() : null;
+  return e instanceof VaultFull || e instanceof DayQuota || e instanceof VaultsClosed || e instanceof VaultUnchecked || e instanceof PhotoBusy || e instanceof RecountCrossed || e instanceof PhotoRemoved || e instanceof ListingsSpent || e instanceof WritesSpent ? e.response() : null;
 }
 
 /** A creation counted by the object and then not made (the vault write threw): the count goes back, so a grower retrying through an R2 blip is not told they made too many (round twenty-two, 1). Best-effort. */

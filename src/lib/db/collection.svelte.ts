@@ -13,7 +13,7 @@ export const DUE_DAYS = 21;
 /** A load that folded this many changes on top of the snapshot writes a fresh one, so the next load reads little again (round fifty-three, 1). */
 export const FOLD_REFRESH = 1000;
 import { yearOf } from '$core/year';
-import { Clock, hlcDecode, hlcEncode, hlcCompare, hlcAfter, hlcPast, isPastStamp, nowMs, clockOffsetMs, clockChecked, MAX_AHEAD_MS, PAST_BIT } from '$core/hlc';
+import { Clock, hlcDecode, hlcEncode, hlcCompare, hlcAfter, hlcPast, isPastStamp, nowMs, latestNowMs, clockStored, clockChecked, MAX_AHEAD_MS, PAST_BIT } from '$core/hlc';
 
 /**
  * A failed write as a sentence the pages can show. Chromium's QuotaExceededError has an empty message, and the pages
@@ -23,6 +23,13 @@ import { Clock, hlcDecode, hlcEncode, hlcCompare, hlcAfter, hlcPast, isPastStamp
 async function writeErrorText(e: unknown): Promise<string> {
   return (await storageErrorText(e)) ?? (e instanceof Error ? e.message || e.name || 'The change could not be saved.' : String(e) || 'The change could not be saved.');
 }
+/**
+ * What `putWith` did (round sixty-nine, for triage-68 X6): written, or refused because a meta record was not as
+ * `requireMeta` required (`refused`, its key), with nothing written and nothing shown.
+ */
+export type PutResult = { ok: true } | { ok: false; refused: string };
+/** The vault's `MetaRefusedError`, told by its name: a test that stands the vault in has no such class. */
+const metaRefused = (e: unknown): e is Error & { key: string } => e instanceof Error && e.name === 'MetaRefusedError' && typeof (e as { key?: unknown }).key === 'string';
 /** How far ahead of the corrected clock a held stamp may be for a local edit to its field to be stamped just past it (round fifty-one, 1). */
 export const FOLLOW_HELD_MS = 86_400_000;
 import { tag36 } from '$core/tag';
@@ -32,7 +39,7 @@ import { storageErrorText } from './storage-error';
 import { replacedNotes as replacedNotesIn, type ReplacedNotes } from '$core/notes';
 import { apply, diff, readChanges, changeError, isComplete, isHeld, REQUIRED_FIELDS, KINDS, FOLD_RULES, key as recKey, type Change, type Kind, type Record_, type State, type Hold, hlcWall } from '$core/log';
 import { nextAccession, DEFAULT_SCHEME, type NumberingScheme } from '$core/accession';
-import { allChanges, appendChanges, appendChangesClaiming, onOtherTabWrite, deviceId, requestPersistence, getMeta, putPhotoBlobs, getPhotoBlobs, deletePhotoBlobs, holdVault, readFold, writeFold, touchFold, updateMeta, parkStamps, foldGen, lastArrival, arrivalsAfter, arrivalsOf, changesByKeys, changesOf, type FoldSnapshot, type NumberKind, type VaultNotice } from './vault';
+import { allChanges, appendChanges, appendChangesClaiming, onOtherTabWrite, deviceId, requestPersistence, getMeta, putPhotoBlobs, getPhotoBlobs, deletePhotoBlobs, holdVault, readFold, writeFold, touchFold, updateMeta, parkStamps, foldGen, lastArrival, arrivalsAfter, arrivalsOf, changesByKeys, changesOf, type MetaCondition, type FoldSnapshot, type NumberKind, type VaultNotice } from './vault';
 import { version as buildVersion } from '$app/environment';
 import { askToKeep } from '$lib/ui/keep-ask';
 import type { Accession, PlantEvent, Taxon, Location, Sowing, Provenance, Photo } from './types';
@@ -549,7 +556,11 @@ class Collection {
     const seq = await lastArrival(); // before anything is read: a change stored after this number is folded again next time, which is harmless; one stored before it is in what is read
     const had = await readFold().catch(() => undefined);
     const f = had?.fold;
-    const usable = !!f && f.rules === FOLD_RULES && f.device === this.deviceId && f.offset === clockOffsetMs() && (f.checked ?? false) === clockChecked() && had.gen === gen && Array.isArray(f.records) && Array.isArray(f.seen) && Array.isArray(f.born) && Array.isArray(f.parents) && Array.isArray(f.held);
+    // Keyed by the stored correction and whether a reading confirms it, not by the clock in force (round sixty-nine;
+    // triage-68 R2, R46-17): a load waits for a reading before a large correction is in force, and a snapshot keyed by
+    // the clock in force was never read on a device still days slow, so every load folded the whole log.
+    const clock = clockStored();
+    const usable = !!f && f.rules === FOLD_RULES && f.device === this.deviceId && f.offset === clock.offset && (f.checked ?? false) === clock.checked && had.gen === gen && Array.isArray(f.records) && Array.isArray(f.seen) && Array.isArray(f.born) && Array.isArray(f.parents) && Array.isArray(f.held);
     if (f && usable) {
       try {
         const got = await this.fromFold(f, gen);
@@ -648,7 +659,8 @@ class Collection {
       // The inventory: the held stamps, and the ones this fold parked by its clock alone, which are not stored (rule 5) and
       // are judged again at the next load (round sixty-one).
       const held = [...this.heldStamps, ...[...this.parkedStamps].filter((t) => !this.storedParked.has(t))];
-      return await writeFold({ rules: FOLD_RULES, build: buildVersion, device: this.deviceId, offset: clockOffsetMs(), checked: clockChecked(), seq, records, seen, born, parents, held, last, changes: folded }, gen);
+      const clock = clockStored(); // the snapshot's key (`foldFromVault`)
+      return await writeFold({ rules: FOLD_RULES, build: buildVersion, device: this.deviceId, offset: clock.offset, checked: clock.checked, seq, records, seen, born, parents, held, last, changes: folded }, gen);
     } catch {
       return false; // a snapshot that could not be written is a slower load next time, nothing more
     }
@@ -775,7 +787,27 @@ class Collection {
     if (!sib) return once;
     const r = this.state.get(recKey('accession', acc)) ?? this.state.get(recKey('sowing', acc));
     const now = r ? (r.kind === 'sowing' ? sowNo(r as unknown as Sowing) : accNo(r as unknown as Accession)) : null;
-    return now === null ? once : once.filter((e) => !sib.has(e) || sib.get(e)!.to === now || sib.get(e)!.chained);
+    if (now === null) return once;
+    const shown = new Set<PlantEvent>();
+    const groups = new Map<string, PlantEvent[]>();
+    for (const [e, x] of sib) (groups.get(x.from) ?? groups.set(x.from, []).get(x.from)!).push(e);
+    for (const list of groups.values()) {
+      const current = list.filter((e) => sib.get(e)!.to === now);
+      // The number changed by hand since, no repair's "to" is the number now, and every note was hidden (round sixty-nine;
+      // triage-68 R6, the self-review's D5). The repair that happened is the one whose number change won the field
+      // before the hand change: the latest, which its note's first stamp says (`born`), as it sits beside that change.
+      for (const e of current.length ? current : [this.latestRepair(list)]) shown.add(e);
+    }
+    return once.filter((e) => !sib.has(e) || shown.has(e) || sib.get(e)!.chained);
+  }
+  /**
+   * Of repair notes sharing a "from", the one whose repair's number change was the latest. A repair writes its number
+   * change and its note in one commit, under one writer and one wall, the change first (`repairNumbers`), so their order
+   * is their notes' first stamps' order.
+   */
+  private latestRepair(list: PlantEvent[]): PlantEvent {
+    const first = (e: PlantEvent) => this.born.get(recKey('event', e.id)) ?? '';
+    return list.reduce((a, b) => (hlcCompare(first(b), first(a)) > 0 ? b : a));
   }
   /**
    * The other lines saying the same number repair as the event `id` (`onceEach`), removed or not as asked: a line shown
@@ -1455,7 +1487,7 @@ class Collection {
    * 'import' (a backup file: not an edit, but the server has never seen
    * it, so it is pushed too), 'server' (came down through sync: already there).
    */
-  private async commit(changes: Change[], source: 'local' | 'import' | 'server' = 'local', requireKey?: string, opts: { meta?: Record<string, unknown>; markLast?: string } = {}): Promise<void> {
+  private async commit(changes: Change[], source: 'local' | 'import' | 'server' = 'local', requireKey?: string, opts: { meta?: Record<string, unknown>; markLast?: string; requireMeta?: MetaCondition[] } = {}): Promise<void> {
     if (!changes.length && !opts.meta && !opts.markLast) return;
     const own = source !== 'server';
     // The grower's own writes are checked as a pull or a file is: a value of a type its field never takes (a form's
@@ -1492,7 +1524,8 @@ class Collection {
     } catch (e) {
       // Said on the record pages as "this change was not saved" only when it was the grower's change, or their file's: a
       // batch from sync that could not be stored is the sync page's to report, and it is fetched again (round fifty-eight).
-      if (own) this.lastWriteError = await writeErrorText(e);
+      // A write its caller made conditional, and refused for it, is the caller's to read (`putWith`), not a failure.
+      if (own && !metaRefused(e)) this.lastWriteError = await writeErrorText(e);
       throw e;
     }
     if (own) this.lastWriteError = null;
@@ -1563,9 +1596,12 @@ class Collection {
       // But only past one within a day of the corrected clock (a clock a few hours wrong): a stamp years ahead is a broken
       // clock's, not an edit to defer to, and stamping past it would carry the bad clock to this device and to every
       // device that then held this edit too (round fifty-one, 1). Such an edit is stamped at real time and shows
-      // everywhere at once; the held change, when it comes due, is the last word then.
+      // everywhere at once; the held change, when it comes due, is the last word then. The day is counted from the
+      // latest the real time may be (`latestNowMs`): while a large correction waits for a reading, a peer's change from
+      // twelve hours ago is days past the raw clock, and the grower's later edit lost to it once the correction came into
+      // force (round sixty-nine; triage-68 R2, R46-17).
       const heldT = this.seen.get(k + '\0held\0' + c.field);
-      if (heldT !== undefined && hlcWall(heldT) <= nowMs() + FOLLOW_HELD_MS && (prev === undefined || hlcCompare(heldT, prev) > 0)) prev = heldT;
+      if (heldT !== undefined && hlcWall(heldT) <= latestNowMs() + FOLLOW_HELD_MS && (prev === undefined || hlcCompare(heldT, prev) > 0)) prev = heldT;
       // The edit always takes the field (round sixty; three reviews: an edit stored and never shown). Rounds fifty-one and
       // fifty-two stamped at real time when the field's stamp was a day or more ahead, so that a corrected device would
       // not carry its old fast clock on; but a clock set BACK makes a right stamp look ahead too, and the edit was stored
@@ -1588,9 +1624,12 @@ class Collection {
    * A record edit, the lines it stands for and the other records it touches, in one commit (round fifty-one, 3): the
    * plant edit form wrote the place, then the move line, then the rename note, then the acquired line, and a page closed
    * between any two left a move with no line or a line with no move. Each entry of `also` is another record's fields;
-   * each of `events` a line on the timeline.
+   * each of `events` a line on the timeline. With `opts.requireMeta` the write is made only while those meta records
+   * are as given, read in its own transaction, and it resolves to a `PutResult` (round sixty-nine, for triage-68 X6).
    */
-  async putWith(kind: Kind, id: string, fields: Record<string, unknown>, events: Array<Omit<PlantEvent, 'id'>> = [], also: Array<{ kind: Kind; id: string; fields: Record<string, unknown> }> = [], opts: { meta?: Record<string, unknown>; markLast?: string } = {}): Promise<void> {
+  putWith(kind: Kind, id: string, fields: Record<string, unknown>, events?: Array<Omit<PlantEvent, 'id'>>, also?: Array<{ kind: Kind; id: string; fields: Record<string, unknown> }>, opts?: { meta?: Record<string, unknown>; markLast?: string }): Promise<void>;
+  putWith(kind: Kind, id: string, fields: Record<string, unknown>, events: Array<Omit<PlantEvent, 'id'>>, also: Array<{ kind: Kind; id: string; fields: Record<string, unknown> }>, opts: { meta?: Record<string, unknown>; markLast?: string; requireMeta: MetaCondition[] }): Promise<PutResult>;
+  async putWith(kind: Kind, id: string, fields: Record<string, unknown>, events: Array<Omit<PlantEvent, 'id'>> = [], also: Array<{ kind: Kind; id: string; fields: Record<string, unknown> }> = [], opts: { meta?: Record<string, unknown>; markLast?: string; requireMeta?: MetaCondition[] } = {}): Promise<PutResult | void> {
     const changes = this.putChanges(kind, id, fields);
     for (const o of also) {
       // A record removed in the same commit, as `remove` and `removeEvents` write it: `diff` passes over `_` fields, so
@@ -1606,8 +1645,16 @@ class Collection {
       changes.push(...diff('event', eid, { ...e, id: eid } as unknown as Record<string, unknown>, undefined, this.tick));
     }
     // Contract C1 (round sixty-seven): `opts.meta` and `opts.markLast` are written in the vault's transaction with the
-    // changes, so the example's seed and its marks land together or not at all (triage-66 V5).
-    await this.commit(changes, 'local', undefined, opts);
+    // changes, so the example's seed and its marks land together or not at all (triage-66 V5). `opts.requireMeta` is read
+    // in that transaction too (round sixty-nine, for triage-68 X6): when one is not as required, nothing is written or
+    // shown, and the result says which.
+    try {
+      await this.commit(changes, 'local', undefined, opts);
+    } catch (e) {
+      if (metaRefused(e)) return { ok: false, refused: e.key };
+      throw e;
+    }
+    return { ok: true };
   }
   private putChanges(kind: Kind, id: string, fields: Record<string, unknown>): Change[] {
     const current = this.state.get(recKey(kind, id));
@@ -2066,9 +2113,20 @@ class Collection {
     return best || fallback;
   }
 
-  /** Everything, for export and for sync. */
+  /**
+   * Every change this build can fold, for a backup's preview and a sheet. A change the fold skips (`changeError`'s shape:
+   * `malformed`) is left out: a backup could not be made or opened for one (round sixty-nine; triage-68 R3, the
+   * self-review's D3, R46-18). `exportLog` gives them apart, for the backup that carries them.
+   */
   async exportChanges(): Promise<Change[]> {
-    return allChanges();
+    return (await this.exportLog()).changes;
+  }
+  /** The log in two parts: the changes this build can fold, and the rows it cannot, as stored (round sixty-nine; triage-68 R3). */
+  async exportLog(): Promise<{ changes: Change[]; unreadable: unknown[] }> {
+    const changes: Change[] = [];
+    const unreadable: unknown[] = [];
+    for (const c of await allChanges()) (changeError(c, true) ? unreadable : changes).push(c);
+    return { changes, unreadable };
   }
 }
 
@@ -2091,15 +2149,15 @@ const RENUMBER = /^Renumbered from (.+?) to (.+?)(?:: | when it was brought back
  * it says something that did not happen, unless a later repair numbered on from it (`chained`). Null when the record has
  * no such siblings, which is nearly always.
  */
-const siblingsOf = new WeakMap<PlantEvent[], Map<PlantEvent, { to: string; chained: boolean }> | null>();
+const siblingsOf = new WeakMap<PlantEvent[], Map<PlantEvent, { from: string; to: string; chained: boolean }> | null>();
 /** Read once per list, as `onceEach` is: the lists are replaced, never changed in place. */
-function renumberSiblings(list: PlantEvent[]): Map<PlantEvent, { to: string; chained: boolean }> | null {
+function renumberSiblings(list: PlantEvent[]): Map<PlantEvent, { from: string; to: string; chained: boolean }> | null {
   if (siblingsOf.has(list)) return siblingsOf.get(list)!;
   const out = findSiblings(list);
   siblingsOf.set(list, out);
   return out;
 }
-function findSiblings(list: PlantEvent[]): Map<PlantEvent, { to: string; chained: boolean }> | null {
+function findSiblings(list: PlantEvent[]): Map<PlantEvent, { from: string; to: string; chained: boolean }> | null {
   let n = 0;
   for (const e of list) if (isRenumberNote(e)) n++;
   if (n < 2) return null;
@@ -2108,8 +2166,8 @@ function findSiblings(list: PlantEvent[]): Map<PlantEvent, { to: string; chained
   const byFrom = new Map<string, number>();
   const froms = new Set<string>();
   for (const p of parsed.values()) { byFrom.set(p.from, (byFrom.get(p.from) ?? 0) + 1); froms.add(p.from); }
-  const out = new Map<PlantEvent, { to: string; chained: boolean }>();
-  for (const [e, p] of parsed) if ((byFrom.get(p.from) ?? 0) > 1) out.set(e, { to: p.to, chained: froms.has(p.to) });
+  const out = new Map<PlantEvent, { from: string; to: string; chained: boolean }>();
+  for (const [e, p] of parsed) if ((byFrom.get(p.from) ?? 0) > 1) out.set(e, { from: p.from, to: p.to, chained: froms.has(p.to) });
   return out.size ? out : null;
 }
 const collapsed = new WeakMap<PlantEvent[], PlantEvent[]>();

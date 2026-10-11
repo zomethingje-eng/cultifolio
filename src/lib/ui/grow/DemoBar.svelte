@@ -13,7 +13,7 @@
    */
   import { onMount } from 'svelte';
   import { page } from '$app/state';
-  import { CLOSED_NOTE, LEFT_PARAM, PAGE_IN_DEMO, clearExampleCopies, deleteLeftoverSample, dropLeftoverSample, finishLeaving, keepSampleOpen, markLeftByAddress, onExampleClosed } from '$lib/db/demo';
+  import { CLOSED_NOTE, LEFT_PARAM, PAGE_IN_DEMO, clearExampleCopies, deleteLeftoverSample, dropLeftoverSample, finishLeaving, keepSampleOpen, LEFTOVER_DAYS, leftoverLater, markLeftByAddress, onExampleClosed } from '$lib/db/demo';
   import { example, enterExample, hadOwn, leaveExample, notEnteredWords } from './example.svelte';
   import { replaceState } from '$app/navigation';
   import { toast } from '$lib/ui/toast.svelte';
@@ -23,8 +23,9 @@
    * The words for a grower who looked in from the menu: their own collection is waiting as they left it (round
    * sixty-three, V2). Noted as the example was opened, by the same test as an empty page's (round sixty-seven; triage-66
    * V4, S-A11): the front page's hint counts no places, and a grower with only places was told their own had not begun.
+   * Null when it was not known as the example opened (round sixty-nine; triage-68 X5): the bar then says neither.
    */
-  let hasOwn = $state(false);
+  let hasOwn = $state<boolean | null>(false);
   /** The example was closed under this page by another tab (round sixty-seven; triage-66 V3): said here, with the way home. */
   let closedHere = $state(false);
   onMount(() => {
@@ -34,10 +35,10 @@
       // Sent home because the sample was closed in another tab: said here, plainly (round sixty-one; the records review, 13).
       try { if (sessionStorage.getItem(CLOSED_NOTE) === '1') { sessionStorage.removeItem(CLOSED_NOTE); toast.show('The example collection was closed in another tab. This is your own collection.', 8000); } } catch { /* nothing to say */ }
       // The first page after Leave deletes the sample; a delete that is held up or refused is said, never taken as done (round sixty-two; A9).
-      // The address a Leave opened this page at says so (`?left=sample`, read by app.html's first script); taken off it here,
+      // The address a Leave opened this page at says so (`?left=` and Leave's token, read by app.html's first script); taken off it here,
       // so a reload or a link copied from it is an ordinary visit (round sixty-two, the first deploy).
       // The tab is marked as out of the example by the address too, so an empty Today does not open it again (round sixty-three, V2).
-      if (page.url.searchParams.get(LEFT_PARAM) === 'sample') { markLeftByAddress(); setTimeout(() => { try { const u = new URL(location.href); u.searchParams.delete(LEFT_PARAM); replaceState(u, page.state); } catch { /* the router not up yet: the address keeps it, harmlessly */ } }, 0); } // read when it runs: a page that takes its own parameter off (Places' `name`) does so beside it (round sixty-seven)
+      if (page.url.searchParams.has(LEFT_PARAM)) { markLeftByAddress(); setTimeout(() => { try { const u = new URL(location.href); u.searchParams.delete(LEFT_PARAM); replaceState(u, page.state); } catch { /* the router not up yet: the address keeps it, harmlessly */ } }, 0); } // read when it runs: a page that takes its own parameter off (Places' `name`) does so beside it (round sixty-seven)
       void finishLeaving().then((left) => {
         if (left === 'blocked') toast.show('The example collection is still open in another tab, so it is not deleted yet: it goes when that tab is closed.', 10000);
         else if (left === 'failed') toast.show('The example collection could not be deleted: the browser refused. It is tried again the next time a page opens here.', 10000);
@@ -64,7 +65,7 @@
     document.body.classList.add('demo-locked');
     return () => document.body.classList.remove('demo-locked');
   });
-  /** The leftover's offer, answered (triage-66 V2): into it, or deleted, and either way the offer goes. */
+  /** The leftover's offer, answered (triage-66 V2): into it, deleted, or put off, and the offer goes. */
   let offerMsg = $state('');
   function openLeftover() {
     const r = enterExample('/today');
@@ -75,6 +76,11 @@
     example.leftover = 0;
     toast.show(r === 'deleted' ? 'The example collection you left is deleted.' : r === 'blocked' ? 'The example collection is open in another tab, so it is not deleted.' : 'The example collection could not be deleted: the browser refused.', 8000);
   }
+  /** "Not now": noted as answered, so it is not offered again until it changes (round sixty-nine; triage-68 X2). */
+  async function laterLeftover() {
+    example.leftover = 0;
+    await leftoverLater();
+  }
 </script>
 
 <!-- What the example is for, in the words the owner agreed (round sixty-three, V2): the bar, not a page, says why a
@@ -82,11 +88,12 @@
 <div class="demobar" id="demobar" role="region" aria-label="Example collection">
   {#if closedHere}
     <span role="alert"><b>The example collection was closed in another tab.</b> Nothing more is saved on this page; what you typed is still here to copy.</span>
-    <span class="demoacts"><a class="btn small pri" href="/?left=sample" id="demo-home" data-sveltekit-reload>Go to my own collection</a></span>
+    <!-- To `/`: the tab's note takes it out of the example; an address that marked a delete deleted an example opened afterwards in another tab (round sixty-nine; triage-68 X1, S-C1). -->
+    <span class="demoacts"><a class="btn small pri" href="/" id="demo-home" data-sveltekit-reload>Go to my own collection</a></span>
   {:else}
     <span><b>An example collection,</b> so you can see what this page does. Nothing added here is kept: leaving deletes it.{hasOwn ? ' Your own collection is kept apart, as you left it.' : ''} <span class="sr" role="status">{example.seeding ? 'Setting it out…' : ''}</span></span>
     <span class="demoacts">
-      {#if !hasOwn}<button class="btn small pri" type="button" id="demo-add" onclick={() => leaveExample('/plants/new')} disabled={example.leaving}>Add your first plant</button>{/if}
+      {#if hasOwn === false}<button class="btn small pri" type="button" id="demo-add" onclick={() => leaveExample('/plants/new')} disabled={example.leaving}>Add your first plant</button>{/if}
       <button class="btn small" type="button" id="demo-leave" onclick={() => leaveExample('/')} disabled={example.leaving}>{example.leaving ? 'Leaving…' : 'Leave the example'}</button>
     </span>
   {/if}
@@ -94,8 +101,8 @@
 {#if !on && example.leftover > 0}
   <!-- A leftover example with the visitor's records in it, kept and offered back once (round sixty-seven; triage-66 V2; R45-2). -->
   <div class="leftover" id="example-left" role="region" aria-label="Example collection left open">
-    <p>You left an example collection with {example.leftover === 1 ? '1 record' : `${example.leftover} records`} you added or changed there.</p>
-    <p class="demoacts"><button class="btn small pri" type="button" id="example-left-open" onclick={openLeftover}>Open it</button><button class="btn small" type="button" id="example-left-delete" onclick={deleteLeftover}>Delete it</button></p>
+    <p>You left an example collection with {example.leftover === 1 ? '1 record' : `${example.leftover} records`} you added or changed there. Untouched for {LEFTOVER_DAYS} days, it is deleted.</p>
+    <p class="demoacts"><button class="btn small pri" type="button" id="example-left-open" onclick={openLeftover}>Open it</button><button class="btn small" type="button" id="example-left-delete" onclick={deleteLeftover}>Delete it</button><button class="btn small" type="button" id="example-left-later" onclick={laterLeftover}>Not now</button></p>
     {#if offerMsg}<p class="small" role="status">{offerMsg}</p>{/if}
   </div>
 {/if}

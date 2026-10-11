@@ -101,10 +101,14 @@ describe('one disagreeing large reading (an intercepting proxy\'s Date)', () => 
     vi.advanceTimersByTime(MIN);
     as(A, () => A.h.trustServerTime(T0 + 130_000 + 10 * DAY, Date.now())); // one wrong reading, ten days out: waits for a second
     await deliver([A, B]);
-    // Every tab and a reload stamp alike (the raw clock, while unconfirmed), and the correction stays stored.
+    // Every open tab stamps alike, and the correction stays stored. Round sixty-nine (triage-68 R2, R46-17): one reading
+    // does not take a confirmed correction out of force, so the tabs stay on the three days (round sixty-seven put them
+    // back on the raw clock), and B takes A's clock in force from the record. A reload waits for a reading of its own, as
+    // every load does with a large correction (round sixty-seven; triage-66 R2).
+    expect(Math.round(A.h.clockOffsetMs() / DAY)).toBe(3);
     expect(A.h.clockOffsetMs()).toBe(B.h.clockOffsetMs());
     const C = await openTab('C'); // a reload
-    expect(C.h.clockOffsetMs()).toBe(A.h.clockOffsetMs());
+    expect(C.h.clockOffsetMs()).toBe(0);
     expect(stored()).toBe(3); // round sixty-two: was removed
     // The next run's reading confirms the three days: in force again.
     vi.advanceTimersByTime(2 * MIN);

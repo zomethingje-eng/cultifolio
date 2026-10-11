@@ -13,6 +13,8 @@
   import { onMount } from 'svelte';
   import { prefs } from '$lib/ui/prefs.svelte';
   import { collection } from '$lib/db/collection.svelte';
+  import Opening from '$lib/db/Opening.svelte';
+  import { CLOSED_WORDS } from '$lib/db/demo';
   import WaitingRecord from '$lib/ui/WaitingRecord.svelte';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
   import { settlePlaces } from '$lib/ui/places-pending';
@@ -351,7 +353,7 @@
 <svelte:head><title>{s ? `${sowNo(s)} ${s.taxonName}` : param} · Cultifolio</title></svelte:head>
 
 {#if collection.lastWriteError}
-  <div class="notice err" role="alert" id="write-error">This change was not saved: {collection.lastWriteError}. Free space or <a href="/backup">back up now</a>.</div>
+  <div class="notice err" role="alert" id="write-error">This change was not saved: {collection.lastWriteError}.{#if collection.lastWriteError !== CLOSED_WORDS}{' '}Free space or <a href="/backup">back up now</a>.{/if}</div><!-- the example closed in another tab is not a full phone (round sixty-nine; triage-68 X9; S-C5) -->
 {/if}
 {#if s && sharedWith.length}
   <!-- The other batch is a link by its identity (round sixty). -->
@@ -359,7 +361,7 @@
   <div class="notice" id="shared-number">{#if plan?.keeper === s.id}{#if othersIds.length === 1}Another batch, {@render others()}, has{:else}{othersIds.length} other batches ({@render others()}) have{/if} the number {sowNo(s)} too: two devices gave it out while offline, or a file was merged in. This batch was recorded first and keeps it; renumbering gives {othersIds.length === 1 ? 'the other' : 'the others'} the next free number, with a note saying so.{:else}This batch shares the number {sowNo(s)} with {@render others()}, recorded before it: two devices gave it out while offline, or a file was merged in. Renumbering gives this batch the next free number, with a note saying so.{/if} <button class="btn" onclick={renumberShared} disabled={renumbering}>Renumber now</button></div>
 {/if}
 {#if !collection.ready}
-  <p class="muted">Opening your collection…</p>
+  <Opening />
 {:else if choices.length > 1}
   <h1 class="q" style="margin-top: 24px">{param}</h1>
   <p class="muted" id="number-chooser-why">{choices.length} batches have the number {param}: two devices gave it out while offline, or a file was merged in. Open the one you mean; its page offers to renumber it.</p>

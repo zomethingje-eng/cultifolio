@@ -92,7 +92,7 @@ describe('an add inside the example leads out of it first (V1)', () => {
     const e = new Event('click', { cancelable: true });
     expect(addLeavesExample(e, '/places#add')).toBe(true);
     expect(e.defaultPrevented).toBe(true);
-    await vi.waitFor(() => expect(asked).toEqual(['/places?left=sample#add']));
+    await vi.waitFor(() => expect(asked).toEqual([expect.stringMatching(/^\/places\?left=[a-z0-9]+#add$/)]));
     expect(example.leaving).toBe(true);
   });
   it('with records of the visitor\'s in it, it asks first, as Leave does; answered no, nothing happens', async () => {

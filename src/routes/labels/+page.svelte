@@ -17,6 +17,7 @@
   import { page } from '$app/state';
   import QRCode from 'qrcode';
   import { collection } from '$lib/db/collection.svelte';
+  import Opening from '$lib/db/Opening.svelte';
   import { kindOf, sowNo, type Accession, type Sowing } from '$lib/db/types';
   /**
    * What a label is printed for: a plant, or a propagation batch (round forty-one, R10). A seed sower labels trays
@@ -33,6 +34,7 @@
   import { careLine } from '$core/note';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
   import PlantName from '$lib/ui/PlantName.svelte';
+  import { addLeavesExample } from '$lib/ui/grow/example.svelte'; // the add below leads out of the example first (round sixty-nine; triage-68 X7; S-C4)
   import { plantQrUrl } from '$lib/ui/grow/qr'; // round sixty, agent F: the species in the code's fragment; by its own path, not the grow barrel (round sixty-one; the accessibility review, 3)
 
   /** Sheet geometry in mm. Avery numbers are the common US and A4 stocks; the strip is for cutting by hand. */
@@ -186,7 +188,8 @@
   });
   const careClause = $derived(careWhy ? unreachedClause(careWhy, 'the species sheets', nowMs) : 'the species sheets did not answer');
   /** The preview cell's few words for a line not made. */
-  const careCell = $derived(careWhy?.kind === 'refused' ? 'the server refused the sheets' : careWhy?.kind === 'limited' ? 'the server refused the sheets for now' : 'the reference was not reached');
+  // A sheet the server answered it could not read just now is neither a refusal nor silence (round sixty-nine; triage-68 W6).
+  const careCell = $derived(careWhy?.kind === 'refused' ? 'the server refused the sheets' : careWhy?.kind === 'limited' ? 'the server refused the sheets for now' : careWhy?.kind === 'unread' ? 'the sheets could not be read just now' : 'the reference was not reached');
   /** Care lines that could not be made because the reference was not reached: said on the sheet and on the page, never printed as if the species had no data (round thirteen, 6). */
   const unchecked = $derived(picked.filter((a) => care[a.id] === null));
   /** Plants whose species' climate was refused when the reference was built: printed as "climate not checked", counted on the page (round fifteen, 5). */
@@ -313,10 +316,10 @@
     <!-- Until the collection has opened, the page says so: it said "No plant is growing" and "0 of 0 picked", and "Pick
          all shown" picked nothing, then the list arrived and the pick was gone (round sixty-six; the all-engines run,
          r62g 9, where Safari's engine on the PC opened the collection after the grower had picked; rule 2). -->
-    <div class="cult picklist" id="lb-opening"><p class="none">Opening your collection…</p></div>
+    <div class="cult picklist" id="lb-opening"><Opening cls="none" /></div>
   {:else if noPlants}
     <!-- Nothing on file is said, with the way to fix it, not shown as an empty filter and an empty list (round fifty-eight; the grower review). -->
-    <div class="cult picklist" id="lb-noplants"><p class="none">No plants yet. <a href="/plants/new">Add a plant</a> and its label can be printed here.</p></div>
+    <div class="cult picklist" id="lb-noplants"><p class="none">No plants yet. <a href="/plants/new" onclick={(e) => addLeavesExample(e, '/plants/new')}>Add a plant</a> and its label can be printed here.</p></div>
   {:else}
   <div class="toolrow" style="position: static">
     <input id="lb-q" class="searchbar" type="search" placeholder="Filter by name, number, field number…" aria-label="Filter plants" bind:value={q} />

@@ -110,7 +110,7 @@ describe('the commit (C1) and the browser without Web Locks', () => {
         scheme: { mode: 'year', width: 4 },
         accessions: [],
         load: async () => {},
-        putWith: async (...a: unknown[]) => { calls.push(a); if (failing) { failing = false; throw new Error('QuotaExceededError'); } },
+        putWith: async (...a: unknown[]) => { calls.push(a); if (failing) { failing = false; throw new Error('QuotaExceededError'); } return { ok: true }; }, // R's `PutResult` since the merge of round sixty-nine
         rebuild: async () => { rebuilt.n++; }
       }
     }));
@@ -123,7 +123,7 @@ describe('the commit (C1) and the browser without Web Locks', () => {
     const { SEED_MARK } = await import('$lib/db/demo');
     expect(await seedDemo()).toBe(true);
     expect(calls).toHaveLength(1);
-    expect(calls[0][5]).toEqual({ meta: { [SEEDED]: true }, markLast: SEED_MARK }); // base: no sixth argument; the mark and stamp were two later writes
+    expect(calls[0][5]).toEqual({ meta: { [SEEDED]: true }, markLast: SEED_MARK, requireMeta: [{ key: SEED_MARK, absent: true }] }); // base: no sixth argument; the mark and stamp were two later writes; the condition, round sixty-nine (triage-68 X6, in R's `requireMeta` form at the merge: with Web Locks there is no claim to check)
     expect(rebuilt.n).toBe(1); // base: no snapshot after the seed (S-E1)
   });
   it('without Web Locks a seed whose commit fails leaves nothing marked, and the next load sets it out', async () => {

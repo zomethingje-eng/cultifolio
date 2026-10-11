@@ -11,7 +11,7 @@
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
-import { englishNames, generaOf, olderNamesOf, type IndexEntry } from '$dossier/index-entry';
+import { englishNames, indexNames, generaOf, olderNamesOf, type IndexEntry } from '$dossier/index-entry';
 import { buildProducts } from '$dossier/products';
 import { manifestPath, productPath, type Manifest } from '$dossier/manifest';
 import { prepare, search } from '$core/search';
@@ -36,7 +36,8 @@ beforeAll(() => {
     const d = JSON.parse(readFileSync(`${C}/${e.key}.json`, 'utf8')) as { name: { scientific: string; vernacular?: Parameters<typeof englishNames>[0]; synonyms?: string[] } };
     const { syn, older } = olderNamesOf(d.name.scientific, d.name.synonyms ?? []);
     const { common: _c, commons: _cs, syn: _s, ...rest } = e;
-    return { ...rest, ...englishNames(d.name.vernacular ?? [], { genus: e.name, genera }), ...(syn.length ? { syn } : {}), ...(older.length ? { older } : {}) } as IndexEntry;
+    // `indexNames`, as `--index` writes them from round sixty-nine: the pooled spellings too (triage-68 N2).
+    return { ...rest, ...indexNames(d.name.vernacular ?? [], { genus: e.name, genera }), ...(syn.length ? { syn } : {}), ...(older.length ? { older } : {}) } as IndexEntry;
   });
   text = JSON.stringify(index);
   ({ manifest, files } = buildProducts(index, text, () => new Map()));
@@ -67,11 +68,29 @@ describe.skipIf(!have)('the search route over the real corpus, rebuilt with this
     expect(await first('Ferocactus glaucescens')).toBe('Bisnaga glaucescens');
     expect(await first('Mammillaria conoidea')).toBe('Cochemiea conoidea');
     expect(await first('Neolloydia conoidea')).toBe('Cochemiea conoidea');
-    expect(await first('Opuntia longispina')).toBe('Airampoa corrugata');
+    // Two species hold "Opuntia longispina" (Haworth's, under Airampoa corrugata, and Pfeiffer's homonym, under Opuntia
+    // orbiculata), and only O. orbiculata shows it: the species that shows the name comes first (round sixty-nine;
+    // triage-68 N1). Both are answered.
+    const longispina = (await ask('Opuntia longispina')).hits.map((h) => h.name);
+    expect(longispina[0]).toBe('Opuntia orbiculata');
+    expect(longispina).toContain('Airampoa corrugata');
     // Still searched and never shown: the entry shows six.
     const e = index.find((x) => x.name === 'Bisnaga glaucescens')!;
     expect(e.syn!.length).toBeLessThanOrEqual(6);
     expect([...(e.syn ?? []), ...(e.older ?? [])]).toContain('Ferocactus glaucescens');
+  }, 120_000);
+
+  it('round sixty-nine (triage-68 N1, N2): ties, apostrophes, pooled spellings, families typed in part, older names', async () => {
+    expect(await first('jade plant')).toBe('Crassula ovata');
+    expect(await first('hen and chicks')).toBe('Sempervivum tectorum');
+    expect(await first('bleeding heart')).toBe('Lamprocapnos spectabilis');
+    expect(await first('devils backbone')).toBe('Kalanchoe daigremontiana');
+    expect(await first('blue mink')).toBe('Ageratum houstonianum');
+    expect(await first('corn cockle')).toBe('Agrostemma githago');
+    expect(await first('Aloe variegata')).toBe('Gonialoe variegata');
+    expect(await first('Mammillaria sulcata')).toBe('Coryphantha sulcata');
+    for (const q of ['cactace', 'aizoac', 'asparagac']) expect((await ask(q)).hits.length).toBeGreaterThan(0);
+    expect((await ask('snake plant', 20)).hits.map((h) => h.name)).toEqual(['Dracaena trifasciata']);
   }, 120_000);
 
   it('reads a common name whole against one name, never words of two names or a place (N2)', async () => {

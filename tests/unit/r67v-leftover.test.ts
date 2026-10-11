@@ -28,7 +28,9 @@ afterEach(() => {
   for (const [k, d] of [['sessionStorage', had.ss], ['navigator', had.nav], ['location', had.loc]] as const) { if (d) Object.defineProperty(globalThis, k, d); else delete (globalThis as Record<string, unknown>)[k]; }
 });
 type C = { t: string; kind: string; id: string; field: string; value: unknown };
-const ch = (n: number, kind: string, id: string, field: string, value: unknown): C => ({ t: `17900000000${String(n).padStart(2, '0')}-0000-aaaaaaaaaaaa0000`, kind, id, field, value });
+/** Stamped a day ago, so a leftover here is never past its age (round sixty-nine; triage-68 X2: deleted after 30 days). */
+const DAY_AGO = Date.now() - 86_400_000;
+const ch = (n: number, kind: string, id: string, field: string, value: unknown): C => ({ t: `${DAY_AGO + n}-0000-aaaaaaaaaaaa0000`, kind, id, field, value });
 const seed: C[] = [ch(0, 'accession', 'r1sampleseeds0', 'taxonName', 'Copiapoa cinerea'), ch(1, 'event', 'e1', 'acc', 's1sampleseeds0'), ch(2, 'event', 'e1', 't', 'potup'), ch(3, 'event', 'e1', 'plants', ['r2sampleseeds0'])];
 /** An example tab's page writes its database, then goes (its tab closed): `visitor` changes after the seed, marked or not. */
 async function leftBehind(visitor: C[], marked = true) {
@@ -52,8 +54,12 @@ describe('a leftover example (V2; R45-2)', () => {
     expect(await demo.dropLeftoverSample((n) => offered.push(n))).toBe(false);
     expect(await exists()).toBe(true); // base: deleted, the visitor's plant with it, no question
     expect(offered).toEqual([2]);
+    // Unanswered (the tab closed): offered again on the next page, not noted as made (round sixty-nine; triage-68 X2, R46-19).
     expect(await demo.dropLeftoverSample((n) => offered.push(n))).toBe(false);
-    expect(offered).toEqual([2]); // once
+    expect(offered).toEqual([2, 2]); // base: [2], and never again
+    await demo.leftoverLater(); // "Not now"
+    expect(await demo.dropLeftoverSample((n) => offered.push(n))).toBe(false);
+    expect(offered).toEqual([2, 2]); // answered: not again
     expect(await exists()).toBe(true);
   });
   it('with an edit to a seed plant, its marks cut off: counted from the seed\'s own changes', async () => {

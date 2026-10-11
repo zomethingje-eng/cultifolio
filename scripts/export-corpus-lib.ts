@@ -181,7 +181,7 @@ The bundle carries data from the sources below unchanged or lightly reshaped. Ea
 | \`climate.months\`, \`climate.p10\`, \`climate.p90\`, \`climate.annualRain\` and \`climate.csv\` | CHELSA V2.1 (Karger et al.), read at every cell holding an in-range record | CC0 1.0 |
 | \`climate.extremes\` | NASA POWER daily data | Public domain (United States Government) |
 | \`summary.text\` | Wikipedia, the article named in \`summary.url\` | CC BY-SA 4.0. Reuse of the text carries share-alike. Delete the \`summary\` field for a bundle free of it. |
-| \`photos\` (URL, credit, licence; no image files) | iNaturalist and Wikimedia Commons, per photo | The licence named on each record: CC0, CC BY or CC BY-SA. The image itself is the photographer's and is not redistributed here. |
+| \`photos\` (URL, credit, licence; no image files) | iNaturalist, GBIF and Wikimedia Commons, per photo | The licence named on each record: CC0, public domain (\`pd\`, not a CC0 waiver), CC BY or CC BY-SA. The image itself is the photographer's and is not redistributed here. |
 | \`literature\` | OpenAlex | CC0 1.0 |
 
 ## Citations

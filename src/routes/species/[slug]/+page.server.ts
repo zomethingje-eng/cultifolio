@@ -1,5 +1,5 @@
 import { error, redirect } from '@sveltejs/kit';
-import { getDossier, resolveSlug, corpusNow, getGenus, indexMaps, searchAnswer } from '$lib/server/dossiers';
+import { getDossier, resolveSlug, corpusNow, getGenus, indexMaps, searchAnswer, ambiguousSynonym } from '$lib/server/dossiers';
 import { synonymAsk, synonymInIndex, nameFromSlug } from '$lib/server/synonyms';
 import generaList from '../../../../scripts/specialist-genera.txt?raw';
 /** The genera the species list takes whole (the file the derivation reads), for the 404 to say so. */
@@ -36,6 +36,19 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
     if (/^[a-z]+$/.test(params.slug)) {
       const g = params.slug[0].toUpperCase() + params.slug.slice(1);
       if (indexMaps(c.idx).byGenus.get(g)?.length) redirect(302, `/?by=genus&open=${slugify(g)}`);
+    }
+    // An older name of two species or more of the reference answers neither (rule 3), and GBIF is not asked: the 404 says
+    // so and names them (round sixty-nine; triage-68 N1, S-F1, R46-3: "Cotyledon mammillaris" went to Adromischus
+    // filicaulis, the first holder in the index's order, and the page said GBIF accepted it as that species).
+    const asName = nameFromSlug(params.slug);
+    const holders = asName ? ambiguousSynonym(c.idx, asName) : null;
+    if (holders) {
+      setHeaders({ 'cache-control': 'public, max-age=300' });
+      const g = asName.split(' ')[0];
+      const list = holders.map((e) => e.name);
+      const named = list.length === 2 ? list.join(' and ') : `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}`;
+      const count = ['two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'][list.length - 2] ?? String(list.length);
+      error(404, { message: `${asName} is an older name of ${count} species of the reference, ${named}, so this address leads to neither`, species: { name: asName, genus: g, inGenus: indexMaps(c.idx).byGenus.get(g)?.length ?? 0, wholeGenus: WHOLE_GENERA.has(g), suggest: holders.map((e) => ({ slug: e.slug, name: e.name })) } });
     }
     // An old name: the index's own synonym lists first (no request), then the backbone is asked whether it is a synonym,
     // and the page moves to the accepted species when the reference holds it, saying so; otherwise the 404 says what the

@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { version } from '$app/environment';
 import * as sync from '$lib/server/sync';
-import { storeOnce, deleteCounted, readMeta, writeMeta, resetRateLimits, resetMetaFlush, listBatches, MAX_LIST_PAGES, PhotoBusy, storeCounted, DayQuota } from '$lib/server/sync';
+import { storeOnce, deleteCounted, readMeta, writeMeta, resetRateLimits, resetMetaFlush, listBatches, PhotoBusy, storeCounted, DayQuota } from '$lib/server/sync';
 import { Counters } from '$lib/server/counters';
 import { unnamedGenerations, photoRef } from '$lib/server/photogen';
 import { fakeKV, fakeR2, countersNs, type FakeR2 } from './helpers/fake-sync';
@@ -210,7 +210,7 @@ describe('S5: new vault places per network, and the half-ceiling record (S-D3; D
       if ((await c.create(`2001:db8:${net}:${host}::/64`, day, 5, 200, 2000, 0, D0, `2001:db8:${net}::/48`)) !== 'ok') continue;
       if ((await c.fill(`ATTACK-${net}-${host}-${v}`, 2000, 0, day, 200, D0, `2001:db8:${net}::/48`, sync.MAX_NEW_VAULTS_PER_NETWORK_PER_DAY)) === 'counted') vaults++;
     }
-    expect(vaults).toBe(10 * sync.MAX_NEW_VAULTS_PER_NETWORK_PER_DAY);
+    expect(vaults).toBe(10 * 10);
     expect(await c.fill('HONEST0', 2000, 0, day, 200, D0, '198.51.100.0/24', sync.MAX_NEW_VAULTS_PER_NETWORK_PER_DAY)).toBe('counted');
     // A network past its part is told so, until midnight.
     expect(await c.fill('ATTACK-more', 2000, 0, day, 200, D0, '2001:db8:0::/48', sync.MAX_NEW_VAULTS_PER_NETWORK_PER_DAY)).toBe('network');
@@ -222,11 +222,14 @@ describe('S5: new vault places per network, and the half-ceiling record (S-D3; D
     expect(s.m.has(`o:${day}`)).toBe(false);
     expect([...s.m.keys()].some((k) => k.startsWith('pn:'))).toBe(false);
   });
-  it('a first upload past its network\'s part is refused 503 with the network\'s sentence and Retry-After to midnight', async () => {
+  // Bounded by the figure written out, with a time limit: a loop to the constant hung for 900 s when the limit was lifted
+  // to Infinity, where it should fail (round sixty-nine; R46-31).
+  it('a first upload past its network\'s part is refused 503 with the network\'s sentence and Retry-After to midnight', { timeout: 10_000 }, async () => {
     const r2 = casR2(); const ns = countersNs();
     const now = Date.UTC(2026, 9, 10, 18);
     const v = ns.raw('vaults').c;
-    for (let i = 0; i < sync.MAX_NEW_VAULTS_PER_NETWORK_PER_DAY; i++) await v.fill(`X${i}`, 2000, 0, '2026-10-10', 200, now, '203.0.113.0/24', sync.MAX_NEW_VAULTS_PER_NETWORK_PER_DAY);
+    expect(sync.MAX_NEW_VAULTS_PER_NETWORK_PER_DAY).toBe(10);
+    for (let i = 0; i < 10; i++) await v.fill(`X${i}`, 2000, 0, '2026-10-10', 200, now, '203.0.113.0/24', sync.MAX_NEW_VAULTS_PER_NETWORK_PER_DAY);
     await writeMeta(r2 as never, ID, { tokenHash: 'h', created: 'c', entitlement: 'open', bytes: 0, filled: false });
     const e = await sync.admitVault(r2 as never, ID, await meta(r2), q(ns, now, '203.0.113.9')).catch((x) => x);
     const res = sync.refusal(e)!;
@@ -257,7 +260,8 @@ describe('S6: a per-vault budget on whole-log listings (S-D4; D2)', () => {
     const res = sync.refusal(refused)!;
     expect(res.status).toBe(503);
     expect(Number(res.headers.get('retry-after'))).toBe(45 * 60);
-    expect(lists).toBeLessThanOrEqual(sync.LIST_PAGES_PER_HOUR + MAX_LIST_PAGES);
+    // The hour's pages written out, not read from the constant, so raising it fails here (round sixty-nine; R46-31).
+    expect(lists).toBeLessThanOrEqual(1200 + 50);
     // A refused pull costs no list call; the next hour lists again.
     const before = lists;
     await listBatches(r2 as never, ID, Date.now(), 500, null, q(ns, now + 1000)).catch(() => null);

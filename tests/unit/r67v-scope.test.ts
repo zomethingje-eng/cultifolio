@@ -90,7 +90,7 @@ describe('the closed state (V3; IND-1, S-A3)', () => {
     const del = indexedDB.deleteDatabase('cultifolio-demo');
     await new Promise<void>((r) => { del.onsuccess = () => r(); });
     expect(demo.exampleClosed()).toBe(true);
-    expect(loc.href).toBe('/?left=sample'); // asked to go home
+    expect(loc.href).toBe('/'); // asked to go home, at an address that marks nothing (round sixty-nine; triage-68 X1)
     // "Leave site?" answered Cancel: the page stays. The flag and the example's copies are still the tab's until it goes.
     expect(session.m.get('cultifolio.demo')).toBe('1');
     expect(session.m.get('cultifolio.sampleClosed')).toBe('1'); // the next page's first script takes the flag off by this
@@ -107,7 +107,7 @@ describe('the closed state (V3; IND-1, S-A3)', () => {
     set('location', { get href() { return real.href; }, set href(v: string) { asked.push(v); real.href = v; }, reload: real.reload });
     demo.sampleClosedHere(); // the channel's "closed"
     demo.sampleClosedHere(); // then the database's versionchange
-    expect(asked).toEqual(['/?left=sample']);
+    expect(asked).toEqual(['/']);
     expect(demo.exampleClosed()).toBe(true);
   });
   it('the lock goes as the example closes, not with the page, so the leaving tab\'s delete is not held up', async () => {
@@ -130,11 +130,11 @@ describe('the closed state (V3; IND-1, S-A3)', () => {
 });
 
 describe('the address a Leave opens (V1)', () => {
-  it('keeps a fragment after the query: the "+" on Places leads to /places?left=sample#add', async () => {
+  it('keeps a fragment after the query: the "+" on Places leads to /places?left=<token>#add', async () => {
     const { leftAddress } = await import('$lib/db/demo');
-    expect(leftAddress('/')).toBe('/?left=sample');
-    expect(leftAddress('/places#add')).toBe('/places?left=sample#add');
-    expect(leftAddress('/places?name=Shelf#add')).toBe('/places?name=Shelf&left=sample#add');
-    expect(leftAddress('/plants/new?species=Copiapoa%20cinerea&key=5384013')).toBe('/plants/new?species=Copiapoa%20cinerea&key=5384013&left=sample');
+    expect(leftAddress('/', 'k1')).toBe('/?left=k1');
+    expect(leftAddress('/places#add', 'k1')).toBe('/places?left=k1#add');
+    expect(leftAddress('/places?kept=1#add', 'k1')).toBe('/places?kept=1&left=k1#add');
+    expect(leftAddress('/plants/new?species=Copiapoa%20cinerea&key=5384013', 'k1')).toBe('/plants/new?species=Copiapoa%20cinerea&key=5384013&left=k1');
   });
 });

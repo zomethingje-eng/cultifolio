@@ -7,7 +7,8 @@
   // plain words with its id beside it, and the climate's reason read as its source did (round sixty-two; the grower
   // review's 2, the words review's 12).
   const detail = (src: string, d: string | undefined) => (src === 'climate' ? climateDetail(d, dossier.upstream) : d);
-  const tone = (s: string) => (s === 'ok' ? 'ok' : s === 'none' ? '' : s === 'skipped' ? '' : 'warn');
+  // Two answers where one is taken is a settled answer, not a failure: no warning tone (round sixty-nine; triage-68 M8).
+  const tone = (s: string) => (s === 'ok' ? 'ok' : s === 'none' || s === 'skipped' || s === 'ambiguous' ? '' : 'warn');
 </script>
 
 <details class="prov">
@@ -18,7 +19,7 @@
     {/each}
   </div>
   <!-- Not "this build", which reads as the app's version: the build of this page (round fifty-eight; the accessibility review). -->
-  <p class="faint small">Every source is recorded as having answered, reported nothing, refused, failed, or not been asked, and, for a source asked when this page was built, when: the figures are as the source held them that day; a row carried from an earlier build of the page names that build instead. Only “nothing to report” is ever shown as an absence. {#if dossier.occurrences.datasets.length}Records came from {dossier.occurrences.datasets.length} datasets via GBIF.org; each carries its own licence.{/if}</p>
+  <p class="faint small">Every source is recorded as having answered, reported nothing, refused, failed, not been asked, or answered twice where one answer is taken (“not taken: two items answered”), and, for a source asked when this page was built, when: the figures are as the source held them that day; a row carried from an earlier build of the page names that build instead. Only “nothing to report” is ever shown as an absence. {#if dossier.occurrences.datasets.length}Records came from {dossier.occurrences.datasets.length} datasets via GBIF.org; each carries its own licence.{/if}</p>
 </details>
 
 <style>

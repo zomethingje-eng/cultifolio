@@ -30,12 +30,13 @@
   import { today as day } from '$lib/ui/day.svelte';
   import { sheetsOr, isUnreached, waitLeft, type Sheet, type Unreached } from '$lib/ui/index.svelte';
   import { unreachedClause, againWords } from '$lib/ui/reach-words';
+  import { alertsUnchecked, alertsWhy } from '$lib/ui/alert-words';
   import { growingYear, forReader } from '$core/sheet';
   import { speciesSlug } from '$core/names';
   import { PAGE_IN_DEMO } from '$lib/db/demo';
   // An empty collection's Today opens the example collection, or offers it (round sixty-three, V2).
   import ExampleOffer from '$lib/ui/grow/ExampleOffer.svelte';
-  import { example } from '$lib/ui/grow/example.svelte';
+  import { addLeavesExample, example } from '$lib/ui/grow/example.svelte';
   import type { Forecast, Alert } from '$lib/weather/forecast';
   type Payload = { lat: number; lon: number; forecast: Forecast; alerts: Alert[]; alertsStatus: string; risk: { level: string; text: string }; attribution: string[] };
   let data = $state<Payload | null>(null);
@@ -375,7 +376,7 @@
     {:else if !collection.ready || (growing.length && !sheetsOnce)}
       <p class="small muted">{collection.ready ? (sheetsSlow ? 'Still reading the species sheets…' : 'Reading the species sheets…') : 'Opening the collection…'}</p>
     {:else if !growing.length}
-      <ExampleOffer what="today"><div class="emptybox"><p class="muted" style="margin: 0">No growing plants yet. <a href="/plants/new">Add one</a> and this page says what it needs.</p></div></ExampleOffer>
+      <ExampleOffer what="today"><div class="emptybox"><p class="muted" style="margin: 0">No growing plants yet. <a href="/plants/new" onclick={(e) => addLeavesExample(e, '/plants/new')}>Add one</a> and this page says what it needs.</p></div></ExampleOffer>
     {:else if !stops.length}
       <!-- What is true: no record meets the checks; not that every plant was watered. The outcome first, the rule one tap away (round sixty; the grower review, §3). -->
       <p class="small" id="nothing"><b>All caught up.</b> Nothing is past its watering rhythm.{#if nextDue}{' '}The next to come due is <a href={plantHref(nextDue.a)}>{accNo(nextDue.a)} {plantLabel(nextDue.a)}</a>, in {nextDue.days === 1 ? '1 day' : `${nextDue.days} days`}.{/if}</p>
@@ -470,7 +471,9 @@
       {@const loud = data.risk.level !== 'none'}
       {#if loud}<div class="risk card {data.risk.level}">{data.risk.text}</div>{/if}
       <details class="nights" class:strip={!loud} open={loud}>
-        <summary>{#if loud}The next {data.forecast.days.length} nights{:else}<span class="risk none">{data.risk.text}</span>{/if}</summary>
+        <!-- The folded strip says the alerts were not checked too, not only the nights inside it: a clear night's line with
+             the NWS silent read as an all-clear until it was opened (round sixty-nine; triage-68 P1, R46-6). -->
+        <summary>{#if loud}The next {data.forecast.days.length} nights{:else}<span class="risk none">{data.risk.text}</span>{#if alertsUnchecked(data.alertsStatus)}<span class="unchecked">{' '}Alerts not checked.</span>{/if}{/if}</summary>
         <!-- Reachable and scrollable by keyboard, and named (round fifty-eight; the accessibility review). -->
         <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
         <div class="scroll-x" tabindex="0" role="region" aria-label="Forecast nights">
@@ -485,10 +488,10 @@
         </div>
         {#if data.alerts.length}
           <ul class="alerts">{#each data.alerts as a}<li><strong>{a.event}</strong>{a.headline ? `: ${a.headline}` : ''}</li>{/each}</ul>
-        {:else if data.alertsStatus === 'refused'}
-          <p class="small"><NotChecked what="Alerts" why="The National Weather Service refused this site's request; the forecast above stands on its own." /></p>
-        {:else if data.alertsStatus === 'unanswered'}
-          <p class="small"><NotChecked what="Alerts" why="The National Weather Service did not answer; the forecast above stands on its own." /></p>
+        {:else if alertsUnchecked(data.alertsStatus)}
+          <!-- Each in its own words, from the one reading the place page uses too (round sixty-nine; triage-68 P1). -->
+          {@const why = alertsWhy(data.alertsStatus)}
+          <p class="small"><NotChecked what="Alerts" why="{why.charAt(0).toUpperCase()}{why.slice(1)}; the forecast above stands on its own." /></p>
         {:else if data.alertsStatus === 'none'}
           <p class="small muted">No frost or freeze alert in force (NOAA/NWS).</p>
         {/if}
@@ -560,6 +563,7 @@
   .howdecides p { margin: 4px 0 0; }
   .nights.strip > summary { font-weight: 400; color: var(--ink2); }
   .risk.none { padding: 0; }
+  .nights.strip .unchecked { color: var(--warm-ink); font-weight: 600; }
   .chip.off { opacity: 0.55; }
   .chip.off b { text-decoration: line-through; }
   .donemark { cursor: default; background: var(--accent-soft, var(--sunk)); border-color: transparent; color: var(--accent); }

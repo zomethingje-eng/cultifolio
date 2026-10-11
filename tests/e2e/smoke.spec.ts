@@ -1,5 +1,6 @@
 import { zipSync, strToU8 } from 'fflate';
 import { test, expect } from '@playwright/test';
+import { controlledBy } from './helpers/controlled';
 import { inject, wipe } from './helpers/inject';
 import { fromAddress, docAddress, limitAddress } from './helpers/address';
 import { ownPages } from './helpers/r63v-own';
@@ -2000,7 +2001,7 @@ test('the collection\'s pages need nothing from the server to open: a plant page
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   const acc = page.url().split('/').pop()!;
   await page.goto('/plants'); // lets the service worker install and precache the shells
-  await page.waitForFunction(() => navigator.serviceWorker.controller != null, null, { timeout: 15000 });
+  await controlledBy(page); // in control before going offline: a fixed 15 s ran out in Firefox (round sixty-nine; R46-30)
   await ctx.addCookies([{ name: 'cultifolio.units', value: 'us', url: baseURL! }]);
   await ctx.setOffline(true);
   await page.goto(`/plants/${acc}`);

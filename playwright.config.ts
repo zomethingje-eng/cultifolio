@@ -9,6 +9,10 @@ process.env.PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS = '1';
 // or the last run's vaults and counts are carried into this one (round sixty-two; the harness review's 9; each vault-making spec
 // now sends its own documentation address, tests/e2e/helpers/address.ts, so the per-address ceiling is no longer what that meets).
 const PORT = Number(process.env.PW_PORT ?? 4173);
+// wrangler dev's devtools port is set apart with the server's: left at its default 9229, a second suite on the same
+// machine (PW_PORT=4196) or a debugger already there met it, and the second server did not start (round sixty-nine;
+// triage-68 P5, R46-31). PW_INSPECTOR_PORT names another; by default it is the server's port plus 5000.
+const INSPECTOR_PORT = Number(process.env.PW_INSPECTOR_PORT ?? PORT + 5000);
 // One mark per run, set here before the workers start (they inherit it): tests/e2e/helpers/address.ts moves the
 // documentation addresses that vault-making specs send by it, so a reused server sees new ones next run (round sixty-two second pass).
 process.env.CULTIFOLIO_E2E_RUN ??= `${Date.now()}-${process.pid}`;
@@ -61,7 +65,7 @@ export default defineConfig({
   // under a minute to over two (clearing the old output took 42 to 54 s), and 180 s ran out before the server answered
   // (round sixty-four, the PC's runs). Ten minutes is a budget for a slow disk, not a wait: the run starts the moment the
   // front page answers.
-  webServer: { command: `npm run build && node scripts/dev/fresh-state.mjs && npx wrangler dev --port ${PORT} --var E2E_OFFLINE:1`, url: `http://127.0.0.1:${PORT}/`, reuseExistingServer: !!process.env.PW_REUSE, timeout: 600000 },
+  webServer: { command: `npm run build && node scripts/dev/fresh-state.mjs && npx wrangler dev --port ${PORT} --inspector-port ${INSPECTOR_PORT} --var E2E_OFFLINE:1`, url: `http://127.0.0.1:${PORT}/`, reuseExistingServer: !!process.env.PW_REUSE, timeout: 600000 },
   // en-GB: the tests read metric figures; an en-US browser would be served Fahrenheit and inches on its first visit (by design).
   use: { baseURL: `http://127.0.0.1:${PORT}`, locale: 'en-GB' },
   projects

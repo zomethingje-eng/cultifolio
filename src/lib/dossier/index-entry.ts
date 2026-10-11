@@ -7,6 +7,12 @@ export interface IndexEntry {
   common?: string;
   /** Every other English common name the species has (round sixty; the product review, 6), searched as `common` is. Absent in an index built before; none is then searched beyond `common`. */
   commons?: string[];
+  /**
+   * The other spellings of the shown names, where the search reads their words otherwise ("Blue mink" beside the shown
+   * "Bluemink"): searched as a common name is, never shown (round sixty-nine; triage-68 N2, R46-4). Absent in an index
+   * built before, and where there is none; the search then reads the shown names alone, as before.
+   */
+  spellings?: string[];
   origin?: string[];
   thumb?: string;
   /** The thumbnail's credit, licence first, as a tile shows it after "Photo: " (`tileCreditOf`; round sixty-three). Absent in an index built before, or when the credit cannot be said short and true; the tile then names the source. */
@@ -34,6 +40,7 @@ export interface NameScope {
 }
 
 import { canonicalSynonym } from '../core/names';
+import { words as searchWords } from '../core/postings';
 
 /**
  * A species' older names as the index carries them (round thirty-one, 3): as binomials (or a variety or subspecies), other-genus
@@ -86,7 +93,10 @@ const tokensOf = (s: string) => s.split(/[\s-]+/).filter(Boolean);
  * fixed list, written here and on /about/how; any other genus as a name's last word sets the name back (round sixty-two;
  * the verification review's search 16).
  */
-export const ENGLISH_USE: ReadonlySet<string> = new Set(['agave', 'aloe', 'amaryllis', 'cereus', 'crocus', 'haworthia', 'iris', 'lotus', 'mimosa', 'yucca']); // lotus and mimosa: Nelumbo nucifera's and Leucaena's English names in the live index (round sixty-two, after --names)
+// anemone, aralia, geranium, acacia, verbena and petunia: "Tree anemone", "Ming aralia", "Rose geranium", "Sweet acacia"
+// were set back behind a misspelling ("Tree-anomone") or a name no grower uses (round sixty-nine; triage-68 N2, S-F3).
+// Chrysanthemum and hibiscus stay off: "Max chrysanthemum" would head Leucanthemum maximum over "Shasta daisy".
+export const ENGLISH_USE: ReadonlySet<string> = new Set(['acacia', 'agave', 'aloe', 'amaryllis', 'anemone', 'aralia', 'cereus', 'crocus', 'geranium', 'haworthia', 'iris', 'lotus', 'mimosa', 'petunia', 'verbena', 'yucca']); // lotus and mimosa: Nelumbo nucifera's and Leucaena's English names in the live index (round sixty-two, after --names)
 /** An epithet's stem, so a genus transfer that changed its ending ("dichotoma", "dichotomum") still reads as one epithet. */
 const stem = (w: string) => foldWord(w).replace(/(?:us|um|a|is|e|es|i)$/, '');
 
@@ -190,7 +200,7 @@ export function bareGenus(spelling: string, scope: NameScope = {}): boolean {
  *   4. Then a name GBIF marks preferred, which only breaks a tie.
  *   5. Then GBIF's order (a list's names in their place in it).
  * Of a name's spellings, one without a trailing full stop is shown before one with it, then the one more sources give,
- * then the one GBIF lists first.
+ * then, on a tie, one written open before one written closed (round sixty-nine; triage-68 N2), then the one GBIF lists first.
  * Its capitals are read word by word across every spelling of the name (`casedSpelling`). Preferred flags and source
  * counts exist only for names fetched since round sixty-two's `--names` step; for the rest, every spelling row counts as
  * one source. The first letter is shown as a capital, and every name stays in the answer, so every alternative stays
@@ -262,13 +272,41 @@ export function englishNames(vernacular: VernacularName[], scope: NameScope = {}
   return names.length > 1 ? { common: names[0], commons: names.slice(1) } : { common: names[0] };
 }
 
+/**
+ * A species' English names as the index carries them (round sixty-nine; triage-68 N2, R46-4): `englishNames`' choice,
+ * and `spellings`, every other spelling a source gives of a shown name whose words the search reads otherwise. Spellings
+ * of one name are pooled into the one shown (`nameKey`), so "Blue mink", "Porcelain flower" and "Velvet leaf" were in
+ * no field of the index when "Bluemink", "Porcelainflower" and "Velvetleaf" were shown, and the search could not find
+ * them. The index builder calls this; the species page calls `englishNames`, and never shows a spelling.
+ */
+export function indexNames(vernacular: VernacularName[], scope: NameScope = {}): { common?: string; commons?: string[]; spellings?: string[] } {
+  const names = englishNames(vernacular, scope);
+  const spellings = pooledSpellings(vernacular, [names.common, ...(names.commons ?? [])].filter((x): x is string => !!x));
+  return spellings.length ? { ...names, spellings } : names;
+}
+/** The English spellings of `vernacular` whose search words are those of no name in `shown` nor of an earlier spelling, in GBIF's order. */
+export function pooledSpellings(vernacular: VernacularName[], shown: string[]): string[] {
+  const seen = new Set(shown.map((n) => searchWords(n).join(' ')));
+  const out: string[] = [];
+  for (const v of vernacular) {
+    if (v.lang !== 'eng' || typeof v.name !== 'string') continue;
+    for (const name of namesOf(v.name)) {
+      const k = searchWords(name).join(' ');
+      if (!k || seen.has(k)) continue;
+      seen.add(k);
+      out.push(name);
+    }
+  }
+  return out;
+}
+
 /** A word as the capitals rule compares it: folded, apostrophes off. */
 const caseKey = (w: string) => foldWord(w).replace(/['’‘`ʼ]/g, '');
 const upperWord = (w: string) => /^[^\p{L}]*\p{Lu}/u.test(w);
 /**
  * Which spelling of one name to show, and with which capitals (round sixty-seven; triage-66 N6, S-B7, R45-9). The form
  * (its letters, hyphens and spaces): one without a trailing full stop before one with it, then the one more sources
- * give, then GBIF's order. Then its capitals, word by word past the first, read
+ * give, then one written open (in more words) before one written closed (round sixty-nine; triage-68 N2), then GBIF's order. Then its capitals, word by word past the first, read
  * across every spelling of the name, whatever its hyphens: a capital a source gave on purpose (one in a spelling that
  * leaves another word in lower case, a word such as "of" or "the" apart, as "star-of-Bethlehem" or "herb Robert") is
  * kept or given; a capital no source meant is taken off where some source writes the word in lower case ("Mexican
@@ -283,7 +321,7 @@ export function casedSpelling(spellings: Array<{ spelling: string; from: Readonl
   // The form: written open or closed, then its hyphens, each chosen by its sources (each counted once across the form's
   // spellings), a form without a trailing full stop first, then GBIF's order.
   type S = { spelling: string; from: ReadonlySet<string>; at: number };
-  const pick = (key: (s: string) => string, of: S[]) => {
+  const pick = (key: (s: string) => string, of: S[], openFirst = false) => {
     const forms = new Map<string, { spellings: S[]; from: Set<string>; at: number }>();
     for (const s of of) {
       const k = key(s.spelling);
@@ -304,9 +342,12 @@ export function casedSpelling(spellings: Array<{ spelling: string; from: Readonl
       const last = f.spellings[0].spelling.trim().split(/[-\s]+/).pop()!.toLowerCase();
       return CLOSED_HEADS.some((h) => last.length > h.length + 1 && last.endsWith(h)) ? 1 : 0;
     };
-    return [...forms.values()].sort((a, b) => dotted(a) - dotted(b) || closedHead(a) - closedHead(b) || b.from.size - a.from.size || a.at - b.at)[0].spellings;
+    // On a tie of sources, the open form before the closed one: "Swamp mahogany", not "Swampmahogany" by GBIF's order
+    // (round sixty-nine; triage-68 N2, R46-4). Where the sources differ, they decide, so "Milkweed" stays whole.
+    const parts = (f: { spellings: S[] }) => (openFirst ? tokensOf(f.spellings[0].spelling).length : 0);
+    return [...forms.values()].sort((a, b) => dotted(a) - dotted(b) || closedHead(a) - closedHead(b) || b.from.size - a.from.size || parts(b) - parts(a) || a.at - b.at)[0].spellings;
   };
-  const open = pick((s) => s.toLowerCase().replace(/[-\s]+/g, ' ').trim(), spellings);
+  const open = pick((s) => s.toLowerCase().replace(/[-\s]+/g, ' ').trim(), spellings, true);
   const hyphens = pick((s) => s.toLowerCase(), open);
   const meant = new Set<string>();
   const lower = new Set<string>();

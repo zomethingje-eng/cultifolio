@@ -12,6 +12,7 @@
   import { goto, beforeNavigate } from '$app/navigation';
   import { onMount } from 'svelte';
   import { collection } from '$lib/db/collection.svelte';
+  import Opening from '$lib/db/Opening.svelte';
   import WaitingRecord from '$lib/ui/WaitingRecord.svelte';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
   import { LOCATION_KINDS, type LocationKind } from '$lib/db/types';
@@ -23,6 +24,8 @@
   import { plantHref } from '$lib/db/links';
   import { monthRuns } from '$lib/ui/today-words';
   import { DUE_DAYS } from '$lib/db/collection.svelte';
+  import { alertsUnchecked as uncheckedOf, alertsWhy } from '$lib/ui/alert-words';
+  import { addLeavesExample } from '$lib/ui/grow/example.svelte'; // the adds below lead out of the example first (round sixty-nine; triage-68 X7; R46-27)
   onMount(async () => {
     site.load(); // the frost watch falls back to the grower's site (round fifty-eight; the grower review)
     await collection.load();
@@ -275,7 +278,7 @@
   const nothingRecorded = $derived(cond.floorC == null && dli == null && !lastWater && !lastAudit && !cond.waterDays && !cond.dryMonths?.length);
 
   /* ---- frost watch for outdoor / unheated places with coordinates ---- */
-  type ForecastAnswer = { forecast: Forecast; alerts: Alert[]; alertsStatus?: 'ok' | 'none' | 'refused' | 'n/a'; risk: { level: string; text: string }; attribution: string[] };
+  type ForecastAnswer = { forecast: Forecast; alerts: Alert[]; alertsStatus?: 'ok' | 'none' | 'refused' | 'unanswered' | 'n/a'; risk: { level: string; text: string }; attribution: string[] };
   /** The forecast, with the conditions it was asked for: an answer is shown only while those are still the place's (round thirteen, B1). */
   let got = $state<{ key: string; answer: ForecastAnswer } | null>(null);
   let forecastErr = $state('');
@@ -337,7 +340,10 @@
     const above = `Outside stays above the ${F} floor for the ${forecast.forecast.hoursCovered} hours of forecast.`;
     return forecast.risk.level === 'none' ? { level: 'none', text: above } : { level: forecast.risk.level, text: `${forecast.risk.text} ${above}` };
   });
-  const alertsUnchecked = $derived(forecast?.alertsStatus === 'refused'); // the forecast route no longer answers 'held' for alerts: an NWS call always takes MET's share too (round sixty-two second pass; the server review's 4)
+  // The forecast route no longer answers 'held' for alerts: an NWS call always takes MET's share too (round sixty-two
+  // second pass; the server review's 4). A refusal and no answer are both "not checked", each said in its own words: only
+  // `refused` was read, and an NWS that did not answer gave "All clear." (round sixty-nine; triage-68 P1, R46-6).
+  const alertsUnchecked = $derived(uncheckedOf(forecast?.alertsStatus));
 
   let confirmRemove = $state(false);
   async function remove() {
@@ -354,7 +360,7 @@
 <svelte:window onbeforeunload={guardUnload} />
 
 {#if !collection.ready}
-  <p class="muted">Opening your collection…</p>
+  <Opening />
 {:else if !loc}
   {#if waiting}<h1 class="q" style="margin-top: 24px">Not whole</h1><WaitingRecord kind="location" label="This place" {waiting} /><p class="muted"><a href="/places">All places</a>.</p>{:else}<h1 class="q" style="margin-top: 24px">Not here</h1><p class="muted">No place with that id on this device. <a href="/places">All places</a>.</p>{/if}
 {:else}
@@ -420,13 +426,13 @@
       <!-- The plants here, in My plants' select mode, for what this row does not do (move, archive, labels): the list's own place filter (round sixty-one; decision 12, the grower review). -->
       <a class="btn" id="select-these" href="/plants?place={encodeURIComponent(id)}&select=1">Select these</a>
     {:else}
-      <a class="btn pri" href="/plants/new?loc={id}">Add a plant here</a>
+      <a class="btn pri" href="/plants/new?loc={id}" onclick={(e) => addLeavesExample(e, `/plants/new?loc=${id}`)}>Add a plant here</a>
     {/if}
   </div>
   <div class="quickbar words">
-    {#if deep.length}<a class="btn" href="/plants/new?loc={id}">Add a plant here</a>{/if}
+    {#if deep.length}<a class="btn" href="/plants/new?loc={id}" onclick={(e) => addLeavesExample(e, `/plants/new?loc=${id}`)}>Add a plant here</a>{/if}
     {#if movable.length}<button class="btn" type="button" onclick={startMove} disabled={movingIn}>Move plants here</button>{/if}
-    <a class="btn" href="/propagation/new?loc={id}">Start a batch here</a>
+    <a class="btn" href="/propagation/new?loc={id}" onclick={(e) => addLeavesExample(e, `/propagation/new?loc=${id}`)}>Start a batch here</a>
     <a class="btn" href="/labels?loc={id}">Labels</a>
     <button class="btn" type="button" onclick={startEdit}>Edit</button>
   </div>
@@ -467,7 +473,7 @@
     {#if forecastErr}<div class="notice">{forecastErr}</div>
     {:else if !forecast}<p class="muted">Fetching the forecast…</p>
     {:else}
-      <div class="notice {effectiveRisk?.level === 'none' ? 'ok' : effectiveRisk?.level === 'cold' ? '' : 'err'}"><b>{effectiveRisk?.level === 'none' ? (alertsUnchecked ? 'Forecast clear.' : 'All clear.') : effectiveRisk?.level === 'cold' ? 'Cold night coming.' : effectiveRisk?.level === 'floor' ? 'Below the floor.' : effectiveRisk?.level === 'warning' ? 'Warning in force.' : 'Frost forecast.'}</b> {effectiveRisk?.text}{#if alertsUnchecked}{' '}Alerts not checked: the National Weather Service did not answer, and this is not a statement that no alert is in force.{/if}</div>
+      <div class="notice {effectiveRisk?.level === 'none' ? 'ok' : effectiveRisk?.level === 'cold' ? '' : 'err'}"><b>{effectiveRisk?.level === 'none' ? (alertsUnchecked ? 'Forecast clear.' : 'All clear.') : effectiveRisk?.level === 'cold' ? 'Cold night coming.' : effectiveRisk?.level === 'floor' ? 'Below the floor.' : effectiveRisk?.level === 'warning' ? 'Warning in force.' : 'Frost forecast.'}</b> {effectiveRisk?.text}{#if alertsUnchecked}{' '}Alerts not checked: {alertsWhy(forecast?.alertsStatus)}, and this is not a statement that no alert is in force.{/if}</div>
       <p class="small muted">{forecast.attribution.join(' · ')}. <a href="/today#frost">Full forecast</a>.</p>
     {/if}
   {:else if cond.indoor !== true && !nothingRecorded}
@@ -497,7 +503,7 @@
 
   <div class="secrule"><h2>{auditing ? 'Audit: tick what you can see' : `Plants${kids.length ? ' (including places inside)' : ''}`}</h2><div class="line"></div><span class="n">{deep.length}</span></div>
   {#if !deep.length}
-    <div class="cult"><div class="none">Nothing here yet. <a href="/plants/new?loc={id}">Add a plant here</a>, <a href="/propagation/new?loc={id}">start a batch here</a>, or move plants in with the button above.</div></div>
+    <div class="cult"><div class="none">Nothing here yet. <a href="/plants/new?loc={id}" onclick={(e) => addLeavesExample(e, `/plants/new?loc=${id}`)}>Add a plant here</a>, <a href="/propagation/new?loc={id}" onclick={(e) => addLeavesExample(e, `/propagation/new?loc=${id}`)}>start a batch here</a>, or move plants in with the button above.</div></div>
   {:else}
     <div class="rows" class:auditrows={auditing}>
       {#each deep as a (a.id)}

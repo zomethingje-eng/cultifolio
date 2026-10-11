@@ -66,7 +66,10 @@ describe('about pages against the code', () => {
     expect(formats).toMatch(/more than five minutes after the device's own clock/);
     const col = readFileSync('src/lib/db/collection.svelte.ts', 'utf8');
     expect(col).toMatch(/f\.checked/);
-    expect(formats).toMatch(/with the clock confirmed where it is now not/);
+    // Round sixty-nine (triage-68 R2): the key is the stored correction and whether a reading confirms it, not the clock in
+    // force (`clockStored`), and the page says so in R's words.
+    expect(col).toMatch(/const clock = clockStored\(\);/);
+    expect(formats).toMatch(/under another stored clock correction, or with that correction confirmed by a reading where it is now not/);
   });
 
   it("formats' rank markers are the search's", () => {

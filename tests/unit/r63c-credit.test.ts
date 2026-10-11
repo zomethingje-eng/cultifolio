@@ -16,7 +16,9 @@ describe("a tile's credit from the index", () => {
     expect(tileCreditOf({ attribution: 'Jane Doe, CC BY, iNaturalist via GBIF', licence: 'by' })).toBe('CC BY, Jane Doe');
     expect(tileCreditOf({ attribution: 'Museum, Herbarium, CC BY, via GBIF', licence: 'by' })).toBe('CC BY, Museum, Herbarium');
     expect(tileCreditOf({ attribution: 'J. Smith, CC BY-SA 4.0, via Wikimedia Commons', licence: 'by-sa' })).toBe('CC BY-SA, J. Smith');
-    expect(tileCreditOf({ attribution: 'J. Smith, PD-self, via Wikimedia Commons', licence: 'cc0' })).toBe('CC0, J. Smith');
+    // Public domain is its own tag since round sixty-nine (triage-68 K3): a "PD-self" line tagged CC0 disagrees, and the tile names the source.
+    expect(tileCreditOf({ attribution: 'J. Smith, PD-self, via Wikimedia Commons', licence: 'pd' })).toBe('Public domain, J. Smith');
+    expect(tileCreditOf({ attribution: 'J. Smith, PD-self, via Wikimedia Commons', licence: 'cc0' })).toBeNull();
     expect(tileCreditOf({ attribution: 'author not stated, CC0, via Wikimedia Commons', licence: 'cc0' })).toBe('CC0, author not stated');
   });
   it('never a wrong licence: a line naming another licence, no licence, or a form the build does not write gives none, and the tile names the source', () => {

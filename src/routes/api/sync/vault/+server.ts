@@ -47,11 +47,12 @@ export const POST: RequestHandler = async ({ request, platform, getClientAddress
     const may = await allowCreation(platform?.env?.QUEUE, clientIp(getClientAddress), now, creationCeilings(platform?.env as Record<string, unknown> | undefined), platform?.env?.COUNTERS);
     // The counts are kept by the UTC day, so each of these waits until midnight UTC: an hour's Retry-After was refused again
     // until then. The /48's own count is said as the network's, since this address may have made none (round sixty-seven;
-    // triage-66 S9, S-D7).
+    // triage-66 S9, S-D7). Said as midnight UTC, not "tomorrow": the count starts again at midnight UTC, which in the
+    // Americas falls in the evening, not at the grower's own midnight (round sixty-nine; triage-68 W6, S-E6).
     const midnight = String(untilMidnight(now));
     if (may === 'address') return json({ error: 'too many new vaults from this address today', retryAfter: Number(midnight) }, { status: STATUS.rateLimited, headers: { 'retry-after': midnight, 'cache-control': 'no-store' } });
     if (may === 'network') return json({ error: 'too many new vaults from this network today', retryAfter: Number(midnight) }, { status: STATUS.rateLimited, headers: { 'retry-after': midnight, 'cache-control': 'no-store' } });
-    if (may === 'day') return json({ error: 'Sync has taken all the new vaults it can today. Your collection stays on this device; try again tomorrow.', retryAfter: Number(midnight) }, { status: STATUS.ceilings, headers: { 'retry-after': midnight, 'cache-control': 'no-store' } });
+    if (may === 'day') return json({ error: 'Sync has taken all the new vaults it can today. Your collection stays on this device; try again after midnight UTC.', retryAfter: Number(midnight) }, { status: STATUS.ceilings, headers: { 'retry-after': midnight, 'cache-control': 'no-store' } });
     if (may === 'unavailable') return json({ error: 'Sync could not count new vaults just now. Your collection stays on this device; try again in a minute.' }, { status: STATUS.ceilings, headers: { 'retry-after': '60', 'cache-control': 'no-store' } });
     if (may === 'total') return json({ error: 'Sync is not taking new vaults for now. Your collection stays on this device; joining an existing vault still works.' }, { status: STATUS.ceilings, headers: { 'retry-after': '86400', 'cache-control': 'no-store' } });
   }

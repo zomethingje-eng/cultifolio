@@ -49,7 +49,7 @@
  * `allowCreation` is used, which is bounding, not accounting.
  */
 import { DurableObject } from 'cloudflare:workers';
-import { NET_FACTOR, UPSTREAM_ADDRESS_PART, UPSTREAM_RESERVE_PART, UPSTREAM_RESERVE_EACH } from './caps';
+import { NET_FACTOR, UPSTREAM_ADDRESS_PART, UPSTREAM_RESERVE_PART, UPSTREAM_RESERVE_EACH, VAULT_WRITES_PER_HOUR, MAX_LIST_PAGES } from './caps';
 import { unnamedGenerations, receipt, repoint, STRAY_MS, PointerUnreadable } from './photogen';
 
 export type Creation = 'ok' | 'address' | 'network' | 'day' | 'total' | 'unavailable';
@@ -91,9 +91,16 @@ export class Counters extends DurableObject {
    * landing or a removal crossed is refused, and the caller lists again). A vault's take holds a lease (`p:<id>`), which
    * the caller gives back with `release`. An address's object keeps one total per UTC day (`d:<day>`) and sweeps the
    * others at midnight, as the creation counts are swept.
+   *
+   * A vault's take also counts the object against the vault's hour of writes (`w`, the hour and its count; round
+   * sixty-nine, triage-68 W5): past `writes`, nothing is taken and the answer is `spent`, with the seconds to the next hour.
    */
-  async take(kind: 'vault' | 'address', n: number, limit: number, day: string, base: number | null = null, now = Date.now(), gen: number | null = null): Promise<{ ok: boolean; before: number; lease?: string } | { recount: true }> {
+  async take(kind: 'vault' | 'address', n: number, limit: number, day: string, base: number | null = null, now = Date.now(), gen: number | null = null, writes = VAULT_WRITES_PER_HOUR): Promise<{ ok: boolean; before: number; lease?: string } | { recount: true } | { spent: true; retryAfter: number }> {
     if (kind === 'vault') {
+      const hour = Math.floor(now / HOUR_MS);
+      const w = (await this.ctx.storage.get<Hourly>(['w'])).get('w');
+      const wrote = w && w.h === hour ? w.n : 0;
+      if (wrote >= writes) return { spent: true, retryAfter: toNextHour(now) };
       // The leases first: one that lapsed marks the row stale, and the row is read after (round sixty-one; B14).
       const leases = await this.leases(now);
       const got = await this.ctx.storage.get<unknown>(['v', 'gen']);
@@ -114,7 +121,7 @@ export class Counters extends DurableObject {
       // The reservation is counted in the total at once and held as a lease of its own until the upload lands or fails,
       // or ten minutes pass: a listing made meanwhile cannot see it, and a recount adds the live leases to what it lists.
       const lease = `${now.toString(36)}-${crypto.randomUUID()}`;
-      await this.ctx.storage.put({ v: { bytes: before + n, day, rc } satisfies Row, [`p:${lease}`]: { n, at: now } satisfies Lease });
+      await this.ctx.storage.put({ v: { bytes: before + n, day, rc } satisfies Row, [`p:${lease}`]: { n, at: now } satisfies Lease, w: { h: hour, n: wrote + 1 } satisfies Hourly });
       await this.wake(now);
       return { ok: true, before, lease };
     }
@@ -331,9 +338,13 @@ export class Counters extends DurableObject {
     if (kDay && nDay >= perDay) return 'day';
     const nNet = kNet ? ((got.get(kNet) as number | undefined) ?? 0) : 0;
     if (kNet && nNet >= perNet) return 'network';
-    // `w`: the day of the vault's last upload, for the 90-day reclaim (round sixty-one); `n`, the network counted, so a
-    // place given back (`unfill`) is given back to it too.
-    await this.ctx.storage.put({ all: n + 1, [k]: { d: day, w: day ?? dayOf(now), ...(kNet ? { n: net } : {}) } satisfies Place, ...(kDay ? { [kDay]: nDay + 1 } : {}), ...(kNet ? { [kNet]: nNet + 1 } : {}) });
+    // `w`: the day of the vault's last upload, for the 90-day reclaim (round sixty-one). The network counted is kept apart,
+    // under a day-dated key (`fn:<vault>:<day>`) swept with the address keys, so a place given back (`unfill`) on its day
+    // is given back to the network too. It was kept on the place itself, which lives as long as the vault is used: the
+    // server held each vault's id beside its owner's /24 or /48 for good, where /about/how says every address key goes
+    // within two days (round sixty-nine; triage-68 W1, S-E1).
+    const kFn = kNet ? `fn:${vault}:${day}` : null;
+    await this.ctx.storage.put({ all: n + 1, [k]: { d: day, w: day ?? dayOf(now) } satisfies Place, ...(kDay ? { [kDay]: nDay + 1 } : {}), ...(kNet ? { [kNet]: nNet + 1 } : {}), ...(kFn ? { [kFn]: net } : {}) });
     await this.wake(now);
     if (kDay && day && Number.isFinite(perDay) && nDay + 1 >= Math.ceil(perDay / 2)) await this.halfSpent(day, nDay + 1, perDay, now);
     return 'counted';
@@ -377,20 +388,33 @@ export class Counters extends DurableObject {
   }
   /**
    * A vault's listings of its log this hour (round sixty-seven; triage-66 S6): `listAsk` says whether one more may be made
-   * (the pages already made this hour under `budget`), and `listed` charges the pages a listing made. One key (`l`), the
+   * (the pages already counted this hour under `budget`), and `listed` settles the pages a listing made. One key (`l`), the
    * hour and its count; an hour that has passed starts again from nothing.
+   *
+   * Round sixty-nine (triage-68 W2; S-E2, IND-10, R46-22): the ask reserves `reserve` pages (a walk's most) in the same
+   * step, and `listed` gives back what the walk did not use. The pages were charged only after each walk, so every pull
+   * asked while walks were in flight passed: 100 at once on a vault of 49,000 batches made 4,900 list calls against the
+   * hour's 1,200, and 30 asks at 1,199 all passed. Now the hour's count includes every walk under way, so it passes
+   * `budget` by at most one walk's pages less one.
    */
-  async listAsk(budget: number, now = Date.now()): Promise<{ ok: true } | { ok: false; retryAfter: number }> {
-    const hour = Math.floor(now / 3_600_000);
-    const l = (await this.ctx.storage.get<{ h: number; n: number }>(['l'])).get('l');
+  async listAsk(budget: number, now = Date.now(), reserve = MAX_LIST_PAGES): Promise<{ ok: true; hour: number; reserved: number } | { ok: false; retryAfter: number }> {
+    const hour = Math.floor(now / HOUR_MS);
+    const l = (await this.ctx.storage.get<Hourly>(['l'])).get('l');
     const spent = l && l.h === hour ? l.n : 0;
-    if (spent >= budget) return { ok: false, retryAfter: Math.max(1, Math.ceil(((hour + 1) * 3_600_000 - now) / 1000)) };
-    return { ok: true };
+    if (spent >= budget) return { ok: false, retryAfter: toNextHour(now) };
+    const reserved = Math.max(0, reserve);
+    await this.ctx.storage.put({ l: { h: hour, n: spent + reserved } satisfies Hourly });
+    return { ok: true, hour, reserved };
   }
-  async listed(pages: number, now = Date.now()): Promise<void> {
-    const hour = Math.floor(now / 3_600_000);
-    const l = (await this.ctx.storage.get<{ h: number; n: number }>(['l'])).get('l');
-    await this.ctx.storage.put({ l: { h: hour, n: (l && l.h === hour ? l.n : 0) + Math.max(0, pages) } });
+  /**
+   * A walk's pages, settled against what its ask reserved in `hour`. A walk that ends in a later hour settles nothing: its
+   * hour's count went with that hour, and its pages were counted there as reserved.
+   */
+  async listed(pages: number, now = Date.now(), reserved = MAX_LIST_PAGES, hour = Math.floor(now / HOUR_MS)): Promise<void> {
+    if (hour !== Math.floor(now / HOUR_MS)) return;
+    const l = (await this.ctx.storage.get<Hourly>(['l'])).get('l');
+    const had = l && l.h === hour ? l.n : 0;
+    await this.ctx.storage.put({ l: { h: hour, n: Math.max(0, had - Math.max(0, reserved) + Math.max(0, pages)) } satisfies Hourly });
   }
   /**
    * A vault that already took a place uploads again (asked once a day per isolate): its last upload's day is kept, and a
@@ -412,7 +436,7 @@ export class Counters extends DurableObject {
     if (had != null) {
       const p = place(had);
       if (p.w !== day) {
-        await this.ctx.storage.put({ [k]: { ...p, w: day } satisfies Place });
+        await this.ctx.storage.put({ [k]: placed(p.d, day, p.n) });
         await this.wake(now);
       }
       return 'already';
@@ -444,13 +468,16 @@ export class Counters extends DurableObject {
     if (was == null) return false;
     const counted = place(was).d;
     const kDay = counted ? `day:${counted}` : null;
-    // And the network's count for that day (round sixty-seven; S5).
-    const net = place(was).n;
+    // And the network's count for that day (round sixty-seven; S5), read from its day-dated key (round sixty-nine; W1), or
+    // from a place written before this round.
+    const kFn = counted ? `fn:${vault}:${counted}` : null;
+    const fn = kFn ? (await this.ctx.storage.get<unknown>([kFn])).get(kFn) : null;
+    const net = typeof fn === 'string' ? fn : place(was).n;
     const kNet = counted && net ? `pn:${net}:${counted}` : null;
     const counts = await this.ctx.storage.get<number>([...(kDay ? [kDay] : []), ...(kNet ? [kNet] : [])]);
     const nDay = kDay ? (counts.get(kDay) ?? 0) : 0;
     const nNet = kNet ? (counts.get(kNet) ?? 0) : 0;
-    await this.ctx.storage.delete([k]);
+    await this.ctx.storage.delete([k, ...(kFn ? [kFn] : [])]);
     await this.ctx.storage.put({ all: Math.max(0, ((got.get('all') as number | undefined) ?? 0) - 1), ...(kDay && nDay > 0 ? { [kDay]: nDay - 1 } : {}), ...(kNet && nNet > 0 ? { [kNet]: nNet - 1 } : {}) });
     return true;
   }
@@ -512,6 +539,8 @@ export class Counters extends DurableObject {
       'day:': (k) => !keep.has(k.slice(4)),
       // The day's places per network and the half-spent record (round sixty-seven; S5): kept as the address keys are.
       'pn:': (k) => !keep.has(k.slice(k.lastIndexOf(':') + 1)),
+      // The network a place was counted to, for `unfill` on its day (round sixty-nine; W1): kept as the address keys are.
+      'fn:': (k) => !keep.has(k.slice(k.lastIndexOf(':') + 1)),
       'o:': (k) => !keep.has(k.slice(2)),
       // The day's fault counts, by kind alone, a week (round sixty-seven; S2).
       'e:': (k) => k.slice(2) < dayOf(now - (FAULT_DAYS - 1) * DAY_MS),
@@ -538,7 +567,7 @@ export class Counters extends DurableObject {
         for (const [k, v] of page) {
           last = k;
           if (judge[prefix](k, v)) gone.push(k);
-          else if (prefix === 'f:' && place(v).w == null) started[k] = { ...place(v), w: today };
+          else if (prefix === 'f:' && mendable(place(v), keep)) started[k] = mend(place(v), today, keep);
         }
         if (prefix === 'f:' && gone.length) gone = await this.marked(gone, now);
         // A short page is the prefix's end; a stand-in that ignores `startAfter` hands back the same page, which ends it too.
@@ -552,7 +581,11 @@ export class Counters extends DurableObject {
             const now2 = new Map<string, unknown>();
             for (let i = 0; i < keys.length; i += BATCH) for (const [k, v] of await s.get<unknown>(keys.slice(i, i + BATCH))) now2.set(k, v);
             gone = gone.filter((k) => now2.has(k) && judge[prefix](k, now2.get(k)));
-            for (const k of Object.keys(started)) if (!now2.has(k) || place(now2.get(k)).w != null) delete started[k];
+            for (const k of Object.keys(started)) {
+              const p = now2.has(k) ? place(now2.get(k)) : null;
+              if (p && mendable(p, keep)) started[k] = mend(p, today, keep);
+              else delete started[k];
+            }
           }
           for (let i = 0; i < gone.length; i += BATCH) await s.delete(gone.slice(i, i + BATCH));
           const out: Record<string, unknown> = { ...started };
@@ -768,6 +801,11 @@ async function markStale(s: Store): Promise<void> {
   const row = (await s.get<Row>(['v'])).get('v');
   if (row && row.day !== STALE_DAY) await s.put({ v: { ...row, day: STALE_DAY } satisfies Row });
 }
+/** An hour's count (`l`, a vault's listed pages; `w`, its writes): the hour (ms / 3,600,000) and the count in it. */
+type Hourly = { h: number; n: number };
+const HOUR_MS = 3_600_000;
+/** Seconds from `now` to the next whole hour, at least one. */
+const toNextHour = (now: number) => Math.max(1, Math.ceil(((Math.floor(now / HOUR_MS) + 1) * HOUR_MS - now) / 1000));
 /** A vault's running total: its bytes, the UTC day it was last put right from a listing, and when (ms; absent on a row from before round sixty). */
 type Row = { bytes: number; day: string; rc?: number };
 /** An upload in flight: its bytes and when it was taken. */
@@ -784,10 +822,21 @@ type Claim = { at: number; day: string };
 /**
  * A vault's place under the ceiling in all: the day it was counted under the day's ceiling (null when it was not, as a
  * place taken again after a reclaim) and the day of its last upload (round sixty-one). Before, the value was the counted
- * day alone, or 1; `place` reads all three.
+ * day alone, or 1; `place` reads all three. `n`, the network counted, is on places written in rounds sixty-seven and
+ * sixty-eight only: since round sixty-nine it is under `fn:<vault>:<day>`, and the sweep takes it off older places once
+ * their day has gone (triage-68 W1).
  */
 type Place = { d: string | null; w: string | null; n?: string | null };
 const place = (v: unknown): Place => (v && typeof v === 'object' ? { d: (v as Place).d ?? null, w: (v as Place).w ?? null, n: typeof (v as Place).n === 'string' ? (v as Place).n : null } : { d: typeof v === 'string' ? v : null, w: null, n: null });
+/** A place as written since round sixty-nine: no network on it, unless one from before is still needed on its day. */
+const placed = (d: string | null, w: string | null, n?: string | null): Place => ({ d, w, ...(n ? { n } : {}) });
+/**
+ * A place the sweep writes again: one with no last upload's day yet (its 90 days start now), or one written before round
+ * sixty-nine that still names its network past the days `unfill` could need it (triage-68 W1: the network went only with
+ * the place, at the 90-day reclaim).
+ */
+const mendable = (p: Place, keep: Set<string>) => p.w == null || (p.n != null && !(p.d != null && keep.has(p.d)));
+const mend = (p: Place, today: string, keep: Set<string>): Place => placed(p.d, p.w ?? today, p.d != null && keep.has(p.d) ? p.n : null);
 const dayOf = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 /** A row's day when it is no longer believed: never today, so the next take lists (round sixty-one). */
 const STALE_DAY = 'stale';
@@ -807,6 +856,6 @@ export const LEASE_MS = 10 * 60_000;
 /** How long a photograph's name may be held: far past a head, a delete and a give. */
 export const HOLD_MS = 60_000;
 /** The keys the midnight sweep looks at; the alarm is set again only while one of them remains (`u:`, the photographs marked for the sweep of unnamed bytes, since round sixty-three). */
-const SWEPT = ['ip:', 'net:', 'day:', 'pn:', 'o:', 'e:', 'd:', 'g:', 'p:', 'h:', 'c:', 'f:', 'u:'];
+const SWEPT = ['ip:', 'net:', 'day:', 'pn:', 'fn:', 'o:', 'e:', 'd:', 'g:', 'p:', 'h:', 'c:', 'f:', 'u:'];
 /** Days a fault count is kept (round sixty-seven; S2). */
 export const FAULT_DAYS = 7;

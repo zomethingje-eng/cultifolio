@@ -20,11 +20,11 @@
  * ranking then judges; it never loses one. The candidates for a query are the intersection, over its words, of each
  * word's postings (an entry must match every word), so "cop cin" ranks the few entries under both keys.
  */
-import { RANK_MARKERS, queryTokens, wholeReading } from './search';
+import { APOSTROPHES, RANK_MARKERS, queryTokens, wholeReading } from './search';
 
 const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-/** A text's words as the postings read them: folded, split on anything but a letter or digit. */
-export const words = (s: string) => fold(s).split(/[^a-z0-9]+/).filter(Boolean);
+/** A text's words as the postings read them: folded, apostrophes out, split on anything but a letter or digit, as the search reads them (round sixty-nine; triage-68 N2). */
+export const words = (s: string) => fold(s).replace(APOSTROPHES, '').split(/[^a-z0-9]+/).filter(Boolean);
 
 /** The keys an entry's word is posted under. */
 export function wordKeys(w: string): string[] {
@@ -46,10 +46,11 @@ export function nearKeys(q: string): string[] {
 }
 
 /** Every word of an entry the search reads, as `prepare` splits them (the rank markers in older names included: a superset loses nothing). */
-export interface Wordy { name: string; common?: string; commons?: string[]; family?: string; origin?: string[]; syn?: string[]; older?: string[] }
+export interface Wordy { name: string; common?: string; commons?: string[]; spellings?: string[]; family?: string; origin?: string[]; syn?: string[]; older?: string[] }
 export function entryWords(e: Wordy): string[] {
-  // Every older name of species rank too, past the six the entry shows (round sixty-seven; triage-66 N1).
-  return [...words(e.name), ...words(e.common ?? ''), ...(e.commons ?? []).flatMap(words), ...words(e.family ?? ''), ...(e.origin ?? []).flatMap(words), ...(e.syn ?? []).flatMap(words), ...(e.older ?? []).flatMap(words)];
+  // Every older name of species rank too, past the six the entry shows (round sixty-seven; triage-66 N1), and every
+  // pooled spelling of a shown name (round sixty-nine; triage-68 N2).
+  return [...words(e.name), ...words(e.common ?? ''), ...(e.commons ?? []).flatMap(words), ...(e.spellings ?? []).flatMap(words), ...words(e.family ?? ''), ...(e.origin ?? []).flatMap(words), ...(e.syn ?? []).flatMap(words), ...(e.older ?? []).flatMap(words)];
 }
 
 /** How many posting files a corpus of `n` species is split into: sixty-four up to about ten thousand, doubling past that, as the buckets do. */

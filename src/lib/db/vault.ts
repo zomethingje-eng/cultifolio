@@ -4,7 +4,7 @@
  * changes through the same door local edits use.
  */
 import { openDB, deleteDB, type IDBPDatabase, type DBSchema, type IDBPTransaction } from 'idb';
-import type { Change } from '$core/log';
+import { changeError, type Change } from '$core/log';
 import { sampleClosedHere, PAGE_IN_DEMO, DEMO_DB, exampleClosed, markExampleClosed, CLOSED_WORDS } from './demo';
 import { storageErrorText as quotaText } from './storage-error';
 
@@ -176,7 +176,13 @@ export function openVault(): Promise<IDBPDatabase<VaultDB>> {
       // until it does (`storeIn`); it rejected every open, and the collection never opened (round sixty-seven; triage-66
       // R1, the self-review's C1).
       if (await db.get('meta', STAGING_PENDING)) {
-        try { await writing(() => replaceFromStaging(db)); } catch (e) { notify(await pendingText(e)); }
+        try {
+          await writing(() => replaceFromStaging(db));
+          // Every other tab still shows the old collection, and its writes went into the new log as half records, its new
+          // plant numbered from the old state (round sixty-nine; triage-68 R4, R46-21): told, they reload onto this one.
+          announce('replaced');
+          replaceWaitingSeen = false;
+        } catch (e) { replaceWaitingSeen = true; notify(await pendingText(e)); }
       }
       return db;
     });
@@ -311,6 +317,7 @@ async function copyStagingIn(live: IDBPDatabase<VaultDB>): Promise<void> {
       if (p) await live.put('photos', p);
     }
     await live.delete('meta', STAGING_PENDING);
+    replaceWaitingSeen = false;
   } finally {
     stage.close();
   }
@@ -379,6 +386,43 @@ async function pendingText(e: unknown): Promise<string> {
   const why = full ? 'this device is out of space' : e instanceof Error && e.message ? e.message.replace(/\.$/, '') : 'the copy was refused';
   return `A replacement from a backup began on this device and could not finish: ${why}. It finishes when there is room: free some space, then reload the page. Until then the collection shows what was copied so far, and nothing can be saved.`;
 }
+/**
+ * A condition on a meta record, checked inside the write's own transaction (`StoreOpts.requireMeta`; round sixty-nine,
+ * for triage-68 X6): `absent`, the record is missing or null; else `equals`, it holds this value (compared as JSON);
+ * with neither, the record must be present.
+ */
+export interface MetaCondition { key: string; equals?: unknown; absent?: true }
+/**
+ * A write refused because a meta condition did not hold (`StoreOpts.requireMeta`): nothing was written, the transaction
+ * was aborted. Not a failed write to say to the grower: the caller asked for it, and reads `key` to know which.
+ */
+export class MetaRefusedError extends Error {
+  constructor(readonly key: string) {
+    super(`the write was not made: the record "${key}" is not as the write required`);
+    this.name = 'MetaRefusedError';
+  }
+}
+/** Whether a meta record meets the condition. */
+function metaHolds(had: unknown, c: MetaCondition): boolean {
+  const missing = had === undefined || had === null;
+  if (c.absent) return missing;
+  if ('equals' in c) return !missing && JSON.stringify(had) === JSON.stringify(c.equals);
+  return !missing;
+}
+/** A replacement from a backup was found waiting as the vault opened, and could not finish then (round sixty-nine; triage-68 X4). */
+let replaceWaitingSeen = false;
+/**
+ * The same, read without a request, for a test that must answer at once (the example's "empty", `ownEmpty`): true from
+ * the moment this tab's vault found a replacement it could not finish, until one finishes (round sixty-nine; triage-68
+ * X4; S-C3: the example opened over a collection waiting in the staging database for room).
+ */
+export function replaceWaiting(): boolean {
+  return replaceWaitingSeen;
+}
+/** Whether a replacement from a backup has begun and is not finished on this device (`STAGING_PENDING`): the collection is then the file's, part copied, and writes are refused until the copy ends (round sixty-nine, for triage-68 X4: a pending replacement is not an empty collection). */
+export async function replacePending(): Promise<boolean> {
+  return !!(await (await openVault()).get('meta', STAGING_PENDING));
+}
 /** What a write may carry besides its changes, in its own transaction (round sixty-seven; contract C1, triage-66 R1). */
 export interface StoreOpts {
   /** The replacement's own copy, which runs while the flag is up. */
@@ -387,6 +431,13 @@ export interface StoreOpts {
   meta?: Record<string, unknown>;
   /** A meta key that receives, in the same transaction, the arrival number of the last change the write stored (the last arrival in the vault when it stored none). */
   markLast?: string;
+  /**
+   * Meta records that must be as given for the write to be made, read in its own transaction (round sixty-nine, for
+   * triage-68 X6: the example's seed is appended only while this tab's claim stands and no seed is marked, so a tab
+   * whose claim lapsed and was taken cannot seed a second time). One that is not: nothing is written, and the write
+   * throws `MetaRefusedError`.
+   */
+  requireMeta?: MetaCondition[];
 }
 /**
  * The example writes no outbox rows: syncing is refused there, and the rows were a third of every write's requests
@@ -415,6 +466,12 @@ async function storeIn(tx: Tx, changes: Change[], fromServer: boolean, extra: Pa
       await tx.done.catch(() => {}); // the abort is the point; its rejection is not an error to surface
       throw new StoppedError();
     }
+  }
+  for (const c of opts.requireMeta ?? []) {
+    if (metaHolds(await meta.get(c.key), c)) continue;
+    tx.abort();
+    await tx.done.catch(() => {});
+    throw new MetaRefusedError(c.key);
   }
   // Two changes under one stamp should not exist; when they do (a stamp minted twice by a bug, a file edited by hand), the store keeps one of them, and the same one on
   // every device: not whichever arrived first but the one that ranks higher by content, so devices that met the two in
@@ -499,7 +556,7 @@ const sameChange = (a: Change, b: Change) => a.kind === b.kind && a.id === b.id 
 const rank = (c: Change) => `${c.kind}\0${c.id}\0${c.field}\0${JSON.stringify(c.value ?? null)}`;
 
 /** Append changes; unless they came from the server (`fromServer`), they also go in the outbox to be pushed. One transaction, so the two stores cannot disagree. */
-export async function appendChanges(changes: Change[], fromServer = false, strict = false, requireKey?: string, opts: Pick<StoreOpts, 'meta' | 'markLast'> = {}): Promise<Stored> {
+export async function appendChanges(changes: Change[], fromServer = false, strict = false, requireKey?: string, opts: Pick<StoreOpts, 'meta' | 'markLast' | 'requireMeta'> = {}): Promise<Stored> {
   if (!changes.length && !opts.meta && !opts.markLast) return { kept: [], replaced: [], seq: 0, first: 0 };
   const out = await writing(async () => {
     const db = await openVault();
@@ -607,7 +664,10 @@ export async function outboxFill(): Promise<number> {
   return writing(async () => {
     const db = await openVault();
     const tx = db.transaction(['changes', 'outbox'], 'readwrite');
-    const ts = await tx.objectStore('changes').getAllKeys();
+    // A change this build cannot fold (`changeError`'s shape: a newer build's kind, a reserved field, a broken stamp) stays
+    // in the log and out of the outbox: pushed, it set aside the batch it rode in, with up to 2,000 good changes, on every
+    // peer, for good (round sixty-nine; triage-68 R3, the self-review's D3, R46-18). A backup carries it (`unreadable.json`).
+    const ts = (await tx.objectStore('changes').getAll()).filter((c) => !changeError(c, true)).map((c) => c.t);
     const ob = tx.objectStore('outbox');
     await Promise.all([...ts.map((t) => ob.put({ t })), tx.done]);
     return ts.length;
@@ -680,21 +740,20 @@ export async function deviceId(): Promise<string> {
 }
 
 /**
- * Ask the browser not to evict us. Safari clears unused sites' storage after 7 days unless installed or persisted.
- * Firefox does not answer by itself: it asks the person, and the promise waits for their answer, however long that is
- * (for good, if the question is dismissed). `known` is told what the browser has already promised, read without asking,
- * so a page can say it while the question is open (round sixty-four; the Firefox run, where every page that waited for
- * this answer never opened). With `ask` false nothing is asked: the answer is what the browser has already promised.
+ * What the browser has already promised about keeping this site's storage, read without asking. The one ask is
+ * `keep-ask.ts`'s gate (a month between asks, never for a visitor or in the example); this function asked too when
+ * `ask` was left at its default, a second door past the gate that no page used (round sixty-nine; triage-68 P5, R46-31,
+ * S-E's P1 note). `known` and `ask` are kept so no caller changes; neither asks any more.
  */
-export async function requestPersistence(known?: (persisted: boolean) => void, ask = true): Promise<boolean> {
+export async function requestPersistence(known?: (persisted: boolean) => void, ask = false): Promise<boolean> {
+  void ask;
   try {
-    if (!ask) return navigator.storage?.persisted ? await navigator.storage.persisted() : false;
-    if (known && navigator.storage?.persisted) void navigator.storage.persisted().then(known, () => {});
-    if (navigator.storage?.persist) return await navigator.storage.persist();
+    const now = navigator.storage?.persisted ? await navigator.storage.persisted() : false;
+    known?.(now);
+    return now;
   } catch {
-    /* ignore */
+    return false;
   }
-  return false;
 }
 
 /** Set once a Blob was refused and the same photograph stored as bytes: the rest of this page's photographs go as bytes. */
@@ -902,7 +961,11 @@ async function tailAfter(seq: number): Promise<{ rows: Array<{ n: number; c: Cha
   const out: Array<{ n: number; c: Change }> = [];
   if (!rows.length) return { rows: out, gen: Number(gen ?? 0), last };
   const ch = tx.objectStore('changes');
-  const ts = rows.map((r) => r.t);
+  // A row whose stamp is not a string (a change written by hand or by a bug, with a number for its stamp) is left out:
+  // sorted with the strings, it made a range whose bounds IndexedDB refuses, and every catch-up of every tab failed for
+  // good (round sixty-nine; triage-68 R5, R46-29). Such a change is no change the fold can take (`changeError`).
+  const ts = rows.map((r) => r.t).filter((t): t is string => typeof t === 'string');
+  if (!ts.length) return { rows: out, gen: Number(gen ?? 0), last };
   const sorted = [...new Set(ts)].sort();
   const range = IDBKeyRange.bound(sorted[0], sorted[sorted.length - 1]);
   const spread = sorted.length > 1 ? await ch.count(range) : 1;

@@ -1,5 +1,6 @@
 import { json, error } from '@sveltejs/kit';
 import { forBuild } from '$lib/server/build';
+import { workerKey } from '$lib/server/worker-cache';
 import { sheetsIn, SheetsUnreadable } from '$lib/server/sheets';
 import { corpusNow } from '$lib/server/dossiers';
 import { limited } from '$lib/server/sync';
@@ -40,7 +41,9 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
   if (buckets.length > MAX_PER_REQUEST || buckets.some((b) => !isBucket(b, count))) error(400, `buckets are ${bucketWidth(count)} hex digits, 0 to ${(count - 1).toString(16)}, at most ${MAX_PER_REQUEST} per request`);
   const current = asked === corpus;
   const edge = platform?.caches?.default;
-  const keyOf = (b: string) => new Request(`${url.origin}/api/sheets?b=${b}&c=${corpus}`);
+  // Keyed by the build as well as the corpus, on the Worker cache's private host (round sixty-nine; triage-68 W3): a sheet
+  // is derived by this build's rules, and the key was also an address of the site, which the adapter's cache could answer.
+  const keyOf = (b: string) => workerKey('sheets', { b, c: corpus });
   const headers = { 'content-type': 'application/json', 'cache-control': 'public, max-age=86400' };
   const out: unknown[][] = [];
   for (const b of buckets) {

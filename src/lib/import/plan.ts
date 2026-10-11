@@ -64,7 +64,39 @@ export interface ImportRow {
   changed?: boolean;
   /** Dropped in an earlier pass of this same sheet: left out of later passes, and counted (round sixty-seven; triage-66 R4). */
   droppedBefore?: boolean;
+  /** Other keys a plant of this line may have been filed under, tried after its own (`keySheet`; round sixty-nine, triage-68 R1). */
+  keyAlts?: KeyAlt[];
+  /** The keys here that `markImported` took for this line's plants through `keyAlts`: this sheet makes them still (`markChanged`). */
+  matchedKeys?: string[];
+  /** Its number is held here by a plant of another name, "Lithops lesleii" for "Lithops lesliei": that name (round sixty-nine; triage-68 R1, R46-20). */
+  alreadyAs?: string;
 }
+
+/**
+ * Another key a plant of a line may have been filed under (round sixty-nine; triage-68 R1). `markImported` takes a plant
+ * here by it, after the line's own key, only when the plant agrees with the line where the key cannot tell.
+ */
+export interface KeyAlt {
+  /** The key without its "#n": any plant filed under it may be this line's, as lines above it may have moved. */
+  hash: string;
+  /** The plant's date acquired must be one of these: a round-sixty-seven key, which gave 2024-01-05 and 2024-05-01 one key. */
+  dates?: Array<string | null>;
+  /** Each must be in the plant's notes: the columns no field takes, which a round-sixty-seven key left out, when another line of the sheet shares the key. */
+  extras?: string[];
+}
+/** A line's other key cells, as the sheet reader gives them to `keySheet`. */
+export interface AltCells {
+  cells: string[];
+  /** Round sixty-seven's key ("i"), not this round's ("j"). */
+  v67?: boolean;
+  /** Taken only when no other line of the sheet has these cells. */
+  onlyIfUnique?: boolean;
+  dates?: Array<string | null>;
+  extras?: string[];
+}
+/** What `markImported` knows of a plant here by its import key: true, or the plant, which lets an older key be checked. */
+export type HerePlant = { acquired?: string | null; notes?: string | null };
+export type HasKey = (key: string) => boolean | HerePlant | null | undefined;
 
 export const blankRow = (key: string, line: number, name: string): ImportRow => ({ key, line, name, cultivar: null, fieldNumber: null, qty: 1, number: null, placePath: null, placeId: null, acquired: null, source: null, notes: null, price: null, nameKind: null, parentage: null, nameAsReceived: null, provenance: null, status: 'growing', lot: null, form: null, problems: [], drop: false, originalName: name });
 
@@ -73,9 +105,10 @@ export const blankRow = (key: string, line: number, name: string): ImportRow => 
  * import reads it (trimmed, the backup's guard apostrophe off), its spaces closed up and its case folded, the empty cells
  * at the end left off (a spreadsheet saving the sheet again may drop them), hashed (53 bits, cyrb53). Nothing of the
  * text is kept, and the same line always gives the same key, whatever its number, its name after the review, or where it
- * sits in the sheet.
+ * sits in the sheet. `v` is the key's version: "i" for a paste and for round sixty-seven's sheet keys, "j" for a sheet
+ * line keyed by its exact day and its notes (round sixty-nine; triage-68 R1), so no key of one rule is read by the other.
  */
-export function lineHash(cells: string[]): string {
+export function lineHash(cells: string[], v = 'i'): string {
   const norm = cells.map((c) => (c ?? '').replace(/^'(?='*\s*[=+\-@])/, '').normalize('NFKC').replace(/\s+/g, ' ').trim().toLowerCase());
   while (norm.length && !norm[norm.length - 1]) norm.pop();
   const str = norm.join('\u001f');
@@ -87,7 +120,7 @@ export function lineHash(cells: string[]): string {
   }
   h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
   h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
-  return 'i' + (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+  return v + (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
 }
 
 /**
@@ -95,10 +128,10 @@ export function lineHash(cells: string[]): string {
  * the identical lines before it make ("i3k9…#1" to "#3" for a Qty of 3; a second identical line goes on at "#4"), so two
  * identical lines are two plants, and a line cut off after its first plant is known by its second.
  */
-export function keyLines(lines: Array<{ cells: string[]; qty: number }>): string[][] {
+export function keyLines(lines: Array<{ cells: string[]; qty: number }>, v = 'i'): string[][] {
   const seen = new Map<string, number>();
   return lines.map((l) => {
-    const h = lineHash(l.cells);
+    const h = lineHash(l.cells, v);
     const from = seen.get(h) ?? 0;
     seen.set(h, from + l.qty);
     return Array.from({ length: l.qty }, (_, i) => `${h}#${from + i + 1}`);
@@ -106,22 +139,82 @@ export function keyLines(lines: Array<{ cells: string[]; qty: number }>): string
 }
 
 /**
- * The lines a first run already added, by the import keys on the live plants here (`has`): a line whose every plant is
- * here is done, and left out; a line some of whose plants are here offers only the rest, under new numbers, its own
- * number having gone to the first (round sixty-two; the records review, 1, the grower review, 3, A18, B6).
+ * A sheet's import keys (round sixty-nine; triage-68 R1): each line's own, version "j" (`keyLines`), and the other keys
+ * a plant of it may have been filed under (`AltCells`), each as a hash. An alternative that another line of the sheet
+ * also has is ambiguous: dropped when it must be unique, and checked against the plant's notes when it names the
+ * columns no field takes.
  */
-export function markImported(rows: ImportRow[], has: (key: string) => boolean, isHere: (recordId: string) => boolean = () => false): ImportRow[] {
+export function keySheet(lines: Array<{ cells: string[]; qty: number; alts: AltCells[] }>): Array<{ keys: string[]; alts: KeyAlt[] }> {
+  const keys = keyLines(lines, 'j');
+  const own = lines.map((l) => lineHash(l.cells, 'j'));
+  const hashed = lines.map((l) => l.alts.map((a) => ({ a, hash: lineHash(a.cells, a.v67 ? 'i' : 'j') })));
+  // The lines (by their own key) that have each key, as their own or as another.
+  const holders = new Map<string, Set<string>>();
+  const hold = (h: string, o: string) => (holders.get(h) ?? holders.set(h, new Set()).get(h)!).add(o);
+  own.forEach((o) => hold(o, o));
+  hashed.forEach((hs, i) => hs.forEach(({ hash }) => hold(hash, own[i])));
+  return lines.map((_, i) => {
+    const alts: KeyAlt[] = [];
+    for (const { a, hash } of hashed[i]) {
+      if (hash === own[i] || alts.some((x) => x.hash === hash)) continue;
+      const unique = holders.get(hash)!.size === 1;
+      if (a.onlyIfUnique && !unique) continue;
+      alts.push({ hash, ...(a.dates ? { dates: a.dates } : {}), ...(!unique && a.extras?.length ? { extras: a.extras } : {}) });
+    }
+    return { keys: keys[i], alts };
+  });
+}
+
+/** How many numbers past the last key found are tried for a key's "#n" before giving up: lines dropped in a run leave gaps. */
+const PROBE_GAP = 64;
+/** The plant agrees with the line where the other key cannot tell (`KeyAlt`); a key whose plant is not given is taken only when nothing needs checking. */
+function fits(a: KeyAlt, p: ReturnType<HasKey>): boolean {
+  if (!a.dates && !a.extras) return true;
+  if (!p || typeof p !== 'object') return false;
+  if (a.dates && !a.dates.includes(p.acquired ?? null)) return false;
+  return !a.extras || a.extras.every((x) => (p.notes ?? '').includes(x));
+}
+
+/**
+ * The lines a first run already added, by the import keys on the plants here (`has`, removed plants included): a line
+ * whose every plant is here is done, and left out; a line some of whose plants are here offers only the rest, under new
+ * numbers, its own number having gone to the first (round sixty-two; the records review, 1, the grower review, 3, A18,
+ * B6). A plant is found by the line's own key first, then by its other keys (`keyAlts`; round sixty-nine, triage-68 R1),
+ * each plant here taken for one line at most.
+ */
+export function markImported(rows: ImportRow[], has: HasKey, isHere: (recordId: string) => boolean = () => false): ImportRow[] {
+  const taken = new Set<string>();
+  for (const r of rows) for (const k of r.importKeys ?? []) if (has(k)) taken.add(k);
+  const filed = new Map<string, string[]>();
+  /** The keys here under one hash, "#1" on, read once. */
+  const filedUnder = (h: string): string[] => {
+    let ks = filed.get(h);
+    if (!ks) {
+      ks = [];
+      for (let n = 1, miss = 0; miss < PROBE_GAP; n++) { if (has(`${h}#${n}`)) { ks.push(`${h}#${n}`); miss = 0; } else miss++; }
+      filed.set(h, ks);
+    }
+    return ks;
+  };
+  const other = (alts: KeyAlt[]): string | null => {
+    for (const a of alts) for (const k of filedUnder(a.hash)) if (!taken.has(k) && fits(a, has(k))) { taken.add(k); return k; }
+    return null;
+  };
   return rows.map((r) => {
     // A backup's own plants.csv read back into the collection that wrote it: each line names its plant's record.
     if (r.recordId && isHere(r.recordId)) return { ...r, done: true, drop: true };
     const keys = r.importKeys;
     if (!keys?.length) return r;
-    const missing = keys.filter((k) => !has(k));
-    if (!missing.length) return { ...r, done: true, drop: true };
+    const here = keys.map((k) => !!has(k));
+    const matchedKeys: string[] = [];
+    if (r.keyAlts?.length) for (let i = 0; i < keys.length; i++) if (!here[i]) { const k = other(r.keyAlts); if (k) { here[i] = true; matchedKeys.push(k); } }
+    const m = matchedKeys.length ? { matchedKeys } : {};
+    const missing = keys.filter((_, i) => !here[i]);
+    if (!missing.length) return { ...r, ...m, done: true, drop: true };
     if (missing.length === keys.length) return r;
     // The line's own number went to its first plant: kept on the row for the sheet's pattern, marked as used, so the rest
     // are numbered on in that pattern and not in this collection's scheme (round sixty-seven; triage-66 R5).
-    return { ...r, importKeys: missing, qty: missing.length, partDone: keys.length - missing.length, ...(has(keys[0]) && r.number ? { numberUsed: true } : {}) };
+    return { ...r, ...m, importKeys: missing, qty: missing.length, partDone: keys.length - missing.length, ...(here[0] && r.number ? { numberUsed: true } : {}) };
   });
 }
 
@@ -306,23 +399,40 @@ export function planNumbers(rows: ImportRow[], taken: Iterable<string>, scheme: 
 }
 
 /**
- * Rows whose number a plant here already holds under the same name: said as "looks already imported" (round sixty-one;
- * the grower review, 6), and dropped unless the grower adds them anyway (round sixty-seven; triage-66 R3). The import
- * keys (`markImported`) decide what a first run added, and a line they settle is left alone; this catches a line whose
- * key changed (a sheet saved again, a cell edited) and a plant with no key (added by hand, or by an import before round
- * sixty-two). A second sheet that starts its numbering again ("7 Lithops lesliei") is the case "Add anyway" is for.
- * `held` lists the plants here that carry a number, removed ones included.
+ * Rows whose number a plant here already holds: said as "looks already imported" (round sixty-one; the grower review,
+ * 6), and dropped unless the grower adds them anyway (round sixty-seven; triage-66 R3). The import keys (`markImported`)
+ * decide what a first run added, and a line they settle is left alone; this catches a line whose key changed (a sheet
+ * saved again, a cell edited) and a plant with no key (added by hand, or by an import before round sixty-two). A plant an
+ * import filed matches on its number alone (round sixty-nine; triage-68 R1, R46-20): a line whose name was corrected
+ * since ("Lithops lesleii" to "Lithops lesliei") was added again under a new number. That plant's name is said on the
+ * row (`alreadyAs`). A plant added by hand matches only under the same species and cultivar, as before: a sheet's 0010
+ * that a hand-added Aloe vera holds is another plant, renumbered and said. A second sheet that starts its numbering again
+ * ("7 Lithops lesliei") is the case "Add anyway" is for. `held` lists the plants here that carry a number, removed ones
+ * included.
  */
 export function markAlreadyImported(rows: ImportRow[], held: (no: string) => Array<{ taxonName: string; cultivar?: string | null; importKey?: string | null }>): ImportRow[] {
   return rows.map((r) => {
     const g = r.number?.trim();
     if (!g || r.done || r.partDone || r.droppedBefore) return r;
-    const same = held(g).filter((a) => sameName(r, a));
-    if (!same.length) return r;
+    const plants = held(g);
+    const same = plants.some((a) => sameName(r, a));
+    const filed = same ? null : plants.find((a) => a.importKey);
+    if (!same && !filed) return r;
     // Dropped, whatever the plant's import key (round sixty-seven; triage-66 R3, the outside review's 15): a sheet edited
     // or saved again keyed its lines anew, kept them, and CF-001 came back as CF-004. "Add anyway" keeps them.
-    return { ...r, already: true, drop: true };
+    return { ...r, already: true, drop: true, ...(filed ? { alreadyAs: `${filed.taxonName}${filed.cultivar ? ` '${filed.cultivar}'` : ''}` } : {}) };
   });
+}
+
+/**
+ * Every mark a sheet's lines get against the plants here, in order (round sixty-nine; triage-68 R1): done by the import
+ * keys, dropped in an earlier pass, numbered as a plant here, and changed since. A plant found by another of a line's
+ * keys is one this sheet still makes, so it explains no other line as changed.
+ */
+export function markSheet(rows: ImportRow[], here: { has: HasKey; isHere?: (recordId: string) => boolean; dropped: ReadonlySet<string>; held: Parameters<typeof markAlreadyImported>[1]; plants: Parameters<typeof markChanged>[1] }): ImportRow[] {
+  const imported = markDroppedBefore(markImported(rows, here.has, here.isHere), here.dropped);
+  const sheetKeys = new Set([...rows.flatMap((r) => r.importKeys ?? []), ...imported.flatMap((r) => r.matchedKeys ?? [])]);
+  return markChanged(markAlreadyImported(imported, here.held), here.plants, sheetKeys);
 }
 
 /** The line names the plant's species and cultivar, as the import files them. */

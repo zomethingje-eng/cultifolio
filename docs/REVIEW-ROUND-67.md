@@ -88,9 +88,9 @@ The owner's instruction was to fix everything worth fixing. The six worked in co
 ## 3. The server
 
 - **Workers Logs (S2): already off where it matters.**
-  - The self-review's top finding (S-F1) read `observability: enabled` in the sandbox's copy of `wrangler.jsonc`, which is the repository's.
+  - The self-review's top finding (S-F1) read `observability: enabled` in the sandbox's copy of `wrangler.jsonc`.
   - The owner's own `wrangler.jsonc`, which every deploy is made from and which is never committed, has had it off. So production kept no request log, and `/about/how` was true of the site.
-  - The repository's copy is stale on this line and is left as it is: the owner does not commit that file.
+  - The repository's copy has it off too: `wrangler.jsonc` line 9 reads `"observability": { "enabled": false }`. This list said until round sixty-nine that the repository's copy was stale on this line and had it on; that was wrong, in the safe direction (round sixty-nine; triage-68, the documents; S-E's eighth sentence).
   - A seam test now reads the `wrangler.jsonc` of the checkout it runs in and fails if observability or its invocation logs are on, so a deploy from a checkout with them on stops at the unit tests.
   - Faults are counted by kind in the counter object, kept a week, so the server still knows when something fails.
 - **Photographs (S1, S3, S4, S10).**

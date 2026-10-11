@@ -17,6 +17,7 @@
 import type { JsonFetcher, FetchResult, FetchOptions } from './fetch';
 import { licenceTag, isOpen } from '$core/licence';
 import type { GbifDistribution, GbifOccurrence, OccPage, GbifSpecies, KewDescription } from './sources/gbif';
+import { synonyms as readSynonyms } from './sources/gbif';
 
 /* ------------------------------------------------------------------ WCVP */
 
@@ -60,40 +61,85 @@ export const parseWcvpDist = (h: string[], line: string): WcvpDist => {
 };
 
 /**
- * The part of WCVP a build needs: for each wanted name, its accepted record and
- * that record's distribution. Built in two streaming passes by the script
- * (names first, then distributions filtered to the accepted ids), so the
- * 300 MB names file is never held in memory.
+ * A name as both indexes compare it: lower case, with the hybrid sign and the space after it taken out. WCVP writes
+ * "Lantana × strigocamara" and GBIF's canonical name "Lantana strigocamara", so every nothospecies missed Kew's own entry
+ * and fell through to its older names, where one of them found another plant's range (round sixty-nine; triage-68 M2,
+ * S-A1, R46-11).
  */
+export const wcvpKey = (name: string) => name.toLowerCase().replace(/×\s*/g, '').replace(/\s+/g, ' ').trim();
+
 /** Authorship, loosely: letters only, lower-cased, so "(Phil.) Britton & Rose" and "(Phil.)Britton&Rose" agree. */
 const authorKey = (a?: string) => (a ?? '').toLowerCase().replace(/[^a-z]/g, '');
+/** An author citation without its ex-authors, which a citation may leave out (ICN Art. 46.4): "Lippold ex Otto & Dietr." is "Otto & Dietr.". */
+const withoutEx = (a: string) => a.replace(/\(([^)]*\bex\s+)?([^)]*)\)/, '($2)').replace(/^(\([^)]*\)\s*)?.*?\bex\s+/, '$1');
+/**
+ * Whether an older name's author and a WCVP row's agree: both stated, and the same once read loosely, with or without
+ * ex-authors. A name stated by neither, or by one only, does not agree: "Lantana mutabilis" by Lippold is not Kew's
+ * "Lantana mutabilis Salisb.", whatever the number of rows (round sixty-nine; triage-68 M2).
+ */
+export function authorsAgree(a?: string, b?: string): boolean {
+  if (!authorKey(a) || !authorKey(b)) return false;
+  return authorKey(a) === authorKey(b) || authorKey(withoutEx(a!)) === authorKey(withoutEx(b!));
+}
 
+/** Kew's range for one accepted entry: rows in the shape gbif.distributions() reads (none when Kew states none), its descriptions, and the entry. */
+export type WcvpRange = { rows: GbifDistribution[]; kew: KewDescription; entry: WcvpName };
+/** An entry's name as the record cites it, with its authors: "Erythrina afra Thunb.". */
+export const entryLabel = (n: WcvpName) => `${n.name}${n.authors ? ` ${n.authors}` : ''}`;
+
+/**
+ * The part of WCVP a build needs: for each wanted name, its accepted record and that record's distribution. Built in two
+ * streaming passes by the script (names first, then distributions filtered to the accepted ids), so the 300 MB names
+ * file is never held in memory.
+ */
 export class WcvpIndex {
-  private byName = new Map<string, WcvpName[]>(); // lower-cased taxon_name → rows (several when homonyms)
+  private byName = new Map<string, WcvpName[]>(); // `wcvpKey` of taxon_name → rows (several when homonyms)
   private byId = new Map<string, WcvpName>(); // every accepted row
   private acceptedByName: Map<string, WcvpName[]> | null = null; // built on first use from byId
   private dist = new Map<string, WcvpDist[]>(); // accepted plant_name_id → rows
+  /** The accepted ids the second pass keeps rows for: an entry outside them has a range this index never read. */
+  private loaded = new Set<string>();
 
   /** First pass: keep every row whose name is wanted, and every accepted row (small: ~350k) so synonyms can resolve. */
   addName(n: WcvpName, wanted: (name: string) => boolean): void {
     if (n.status === 'Accepted') this.byId.set(n.id, n);
-    if (wanted(n.name)) {
-      const k = n.name.toLowerCase();
+    const k = wcvpKey(n.name);
+    // Asked with the hybrid sign taken out, so "× Gasteraloe beguinii" is wanted by its genus and not by "×".
+    if (wanted(n.name.replace(/×\s*/g, '').trim())) {
       const arr = this.byName.get(k) ?? [];
       arr.push(n);
       this.byName.set(k, arr);
+      this.loaded.add(n.acceptedId);
     }
   }
   /** The accepted ids the second pass must keep: those of every wanted name, and of every accepted name a wanted synonym points at. */
   acceptedIds(): Set<string> {
-    const s = new Set<string>();
-    for (const arr of this.byName.values()) for (const n of arr) s.add(n.acceptedId);
-    return s;
+    return new Set(this.loaded);
   }
   addDist(d: WcvpDist): void {
     const arr = this.dist.get(d.id) ?? [];
     arr.push(d);
     this.dist.set(d.id, arr);
+  }
+  /** Every WCVP row under a name: the wanted ones, or else the accepted rows of any genus. */
+  private rowsOf(name: string): WcvpName[] | undefined {
+    const k = wcvpKey(name);
+    const rows = this.byName.get(k);
+    if (rows?.length) return rows;
+    if (!this.acceptedByName) {
+      this.acceptedByName = new Map();
+      for (const n of this.byId.values()) {
+        const kk = wcvpKey(n.name);
+        const arr = this.acceptedByName.get(kk) ?? [];
+        arr.push(n);
+        this.acceptedByName.set(kk, arr);
+      }
+    }
+    return this.acceptedByName.get(k);
+  }
+  /** Whether Kew holds any row at all under this name: only when it holds none is the name looked up under older names. */
+  holds(name: string): boolean {
+    return !!this.rowsOf(name)?.length;
   }
   /**
    * Resolve a name (as GBIF gives it, canonical) to its accepted WCVP record.
@@ -103,20 +149,7 @@ export class WcvpIndex {
    * target of a synonym the backbone followed) is found among the accepted rows.
    */
   accepted(name: string, authorship?: string): WcvpName | 'ambiguous' | undefined {
-    const k = name.toLowerCase();
-    let rows = this.byName.get(k);
-    if (!rows?.length) {
-      if (!this.acceptedByName) {
-        this.acceptedByName = new Map();
-        for (const n of this.byId.values()) {
-          const kk = n.name.toLowerCase();
-          const arr = this.acceptedByName.get(kk) ?? [];
-          arr.push(n);
-          this.acceptedByName.set(kk, arr);
-        }
-      }
-      rows = this.acceptedByName.get(k);
-    }
+    const rows = this.rowsOf(name);
     if (!rows?.length) return undefined;
     // Among homonyms the backbone's authorship decides first: Aloe alba X (accepted) and Aloe alba Y (a synonym of another
     // species) are two plants, and a caller asking for Y must not be given X's range because X is the accepted one.
@@ -136,41 +169,60 @@ export class WcvpIndex {
     const n = pick[0];
     return n.status === 'Accepted' ? n : (this.byId.get(n.acceptedId) ?? n);
   }
-  /** Distribution rows in the shape gbif.distributions() returns, so build.ts needs no new branch; null when unknown or ambiguous. */
-  distributions(name: string, authorship?: string): { rows: GbifDistribution[]; kew: KewDescription } | 'ambiguous' | null {
-    const a = this.accepted(name, authorship);
-    if (!a) return null;
-    if (a === 'ambiguous') return 'ambiguous';
-    const rows = this.dist.get(a.id);
-    if (!rows?.length) return null;
+  /** One accepted entry's range, read by its id (IND-9: never looked up again by name); null when this index did not read it. */
+  rangeOf(entry: WcvpName): WcvpRange | null {
+    if (!this.loaded.has(entry.id)) return null;
+    const rows = (this.dist.get(entry.id) ?? []).filter((d) => !d.doubtful);
     return {
-      rows: rows
-        .filter((d) => !d.doubtful)
-        .map((d) => ({ locationId: `TDWG:${d.l3}`, locality: d.area, establishmentMeans: d.introduced ? 'INTRODUCED' : d.extinct ? 'EXTINCT' : 'NATIVE', status: d.extinct ? 'extinct' : undefined, source: 'World Checklist of Vascular Plants (WCVP), RBG Kew' })),
-      kew: { lifeform: a.lifeform, climate: a.climate }
+      rows: rows.map((d) => ({ locationId: `TDWG:${d.l3}`, locality: d.area, establishmentMeans: d.introduced ? 'INTRODUCED' : d.extinct ? 'EXTINCT' : 'NATIVE', status: d.extinct ? 'extinct' : undefined, source: 'World Checklist of Vascular Plants (WCVP), RBG Kew' })),
+      kew: { lifeform: entry.lifeform, climate: entry.climate },
+      entry
     };
   }
   /**
-   * When Kew holds no entry under the backbone's name, its range under one of the species' older names (round
-   * sixty-eight): GBIF's Bisnaga glaucescens is Ferocactus glaucescens at Kew, and its Aeonium tabulaeforme is spelt
-   * tabuliforme there, so both pages had no range and no habitat climate. Taken only when the older names lead to exactly
-   * one accepted Kew entry that has a range, so no range is attached to another plant; `via` names the one it came under.
+   * Distribution rows in the shape gbif.distributions() returns, so build.ts needs no new branch: null when the name is
+   * unknown or its entry's range was not read, 'ambiguous' for unresolved homonyms, and rows (none when Kew holds the
+   * entry with no range: Lantana × strigocamara, a garden hybrid; round sixty-nine, triage-68 M2) otherwise.
    */
-  viaOlderNames(older: Array<{ name: string; authorship?: string }>): { rows: GbifDistribution[]; kew: KewDescription; via: string } | null {
-    const hits = new Map<string, string>(); // accepted id → the older name it was reached by
+  distributions(name: string, authorship?: string): WcvpRange | 'ambiguous' | null {
+    const a = this.accepted(name, authorship);
+    if (!a) return null;
+    if (a === 'ambiguous') return 'ambiguous';
+    return this.rangeOf(a);
+  }
+  /**
+   * When Kew holds no row at all under the backbone's name, its range under one of the species' older names (round
+   * sixty-eight): GBIF's Bisnaga glaucescens is Ferocactus glaucescens at Kew, and its Aeonium tabulaeforme is spelt
+   * tabuliforme there. Round sixty-nine (triage-68 M2, S-A1, IND-9, R46-11) closed the path by which Lantana
+   * × strigocamara took the range of Lantana camara subsp. aculeata:
+   *   - an older name counts only where its author agrees with the WCVP row's, however many rows there are;
+   *   - a pro parte synonym is skipped (part of it is another plant);
+   *   - every accepted entry reached counts, with a range or without, and exactly one is required, at species rank;
+   *   - one older name that leads to two entries is no answer;
+   *   - the range is read by the entry's id, and the record names the entry and the older name it was reached by:
+   *     "Erythrina afra Thunb.", reached by "Erythrina fissa C.Presl".
+   * Same-type names are not required: Erythrina caffra reaches Kew's E. afra only through heterotypic names (S-A1).
+   */
+  viaOlderNames(older: ReadonlyArray<{ name: string; authorship?: string; status?: string }>): (WcvpRange & { via: string }) | { ambiguous: string } | null {
+    const hits = new Map<string, { entry: WcvpName; via: string }>(); // accepted id → the entry, and the older name it was reached by
     for (const o of older) {
-      const a = this.accepted(o.name, o.authorship);
-      if (!a || a === 'ambiguous') {
-        if (a === 'ambiguous') return null; // a homonym among the older names: not resolved here either
-        continue;
+      if (/pro.?parte/i.test(o.status ?? '')) continue;
+      const agree = (this.rowsOf(o.name) ?? []).filter((r) => authorsAgree(o.authorship, r.authors));
+      const via = `${o.name} ${o.authorship}`;
+      const ends = new Map<string, WcvpName>();
+      for (const r of agree) {
+        const e = r.status === 'Accepted' ? r : this.byId.get(r.acceptedId);
+        if (e) ends.set(e.id, e);
       }
-      if (a.status !== 'Accepted' || !this.dist.get(a.id)?.length) continue;
-      if (!hits.has(a.id)) hits.set(a.id, a.name);
+      // One older name Kew holds twice, by the same author, under two entries: not resolved here, so nothing is taken.
+      if (ends.size > 1) return { ambiguous: `Kew holds the older name ${via} under ${ends.size} entries (${[...ends.values()].map(entryLabel).join('; ')})` };
+      for (const e of ends.values()) if (!hits.has(e.id)) hits.set(e.id, { entry: e, via });
     }
-    if (hits.size !== 1) return null;
-    const [via] = [...hits.values()];
-    const got = this.distributions(via);
-    return got && got !== 'ambiguous' ? { ...got, via } : null;
+    if (hits.size > 1) return { ambiguous: `the older names lead to ${hits.size} Kew entries (${[...hits.values()].map((h) => `${entryLabel(h.entry)}, reached by ${h.via}`).join('; ')})` };
+    const [hit] = hits.values();
+    if (!hit || !/^species$/i.test(hit.entry.rank)) return null;
+    const got = this.rangeOf(hit.entry);
+    return got?.rows.length ? { ...got, via: hit.via } : null;
   }
   get size(): number {
     return this.byName.size;
@@ -415,6 +467,7 @@ export class MediaIndex {
 
 const RE_SPECIES = /\/species\/(\d+)$/;
 const RE_DIST = /\/species\/(\d+)\/distributions/;
+const RE_SYN = /\/species\/(\d+)\/synonyms\?/;
 const RE_OCC = /\/occurrence\/search\?taxonKey=(\d+)&hasCoordinate=true/;
 const RE_MEDIA = /\/occurrence\/search\?taxonKey=(\d+)&mediaType=StillImage/;
 
@@ -441,8 +494,22 @@ export function bulkFetcher(base: JsonFetcher, src: BulkSources, stats = { wcvp:
   // below decide that, so each answer is built in the shape the matching adapter asks for and cast `as unknown as T` at
   // this one boundary; the adapters' tests, run through this fetcher, are what keep the shapes honest.
   const names = new Map<number, { name: string; authorship?: string }>(); // key → canonical name and authorship, learned from /species/{key} on the way past
+  // The builder's own reading of GBIF's synonyms, page by page as it asked them, for the species being built (one at a
+  // time): the older-name fallback reads the same list, through the same function, and asks GBIF nothing again (round
+  // sixty-nine; triage-68 M4, S-A3: the two asks could have disagreed, one refused and one answered).
+  let synOf = 0;
+  const synPages = new Map<string, FetchResult<unknown>>();
   const f = async <T = unknown>(url: string, opts?: FetchOptions): Promise<FetchResult<T>> => {
     let m: RegExpExecArray | null;
+    if ((m = RE_SYN.exec(url))) {
+      if (Number(m[1]) !== synOf) { synOf = Number(m[1]); synPages.clear(); }
+      const held = synPages.get(url);
+      if (held) return held as FetchResult<T>;
+      stats.through++;
+      const r = await base<T>(url, opts);
+      synPages.set(url, r);
+      return r;
+    }
     if (src.wcvp && (m = RE_DIST.exec(url))) {
       const key = Number(m[1]);
       let sp = names.get(key);
@@ -458,16 +525,22 @@ export function bulkFetcher(base: JsonFetcher, src: BulkSources, stats = { wcvp:
       }
       if (got) {
         stats.wcvp++;
+        // Kew holds the name and states no range for it: that is the answer, never a reason to look under older names (round sixty-nine; triage-68 M2).
+        if (!got.rows.length) return { status: 'ok', data: { results: [], held: entryLabel(got.entry), kew: got.kew } as unknown as T };
         return { status: 'ok', data: { results: got.rows, kew: got.kew } as unknown as T };
       }
-      // No entry under the backbone's name: one of its older names may be Kew's (round sixty-eight).
-      if (sp) {
-        const syn = await base<{ results: Array<{ canonicalName?: string; authorship?: string }> }>(url.replace(/\/distributions.*$/, '/synonyms?limit=50'));
-        const older = syn.status === 'ok' ? syn.data.results.filter((x) => x.canonicalName).map((x) => ({ name: x.canonicalName!, authorship: x.authorship })) : [];
-        const via = src.wcvp.viaOlderNames(older);
+      // No row at all under the backbone's name: one of its older names may be Kew's (round sixty-eight), read from the
+      // builder's own paged list; a list refused, failed or cut short is no answer, and nothing is taken (triage-68 M4).
+      if (sp && !src.wcvp.holds(sp.name)) {
+        const syn = await readSynonyms(f, key);
+        const via = syn.status === 'ok' && !syn.truncated ? src.wcvp.viaOlderNames(syn.rows ?? []) : null;
+        if (via && 'ambiguous' in via) {
+          stats.wcvp++;
+          return { status: 'ok', data: { results: [], olderAmbiguous: via.ambiguous } as unknown as T };
+        }
         if (via) {
           stats.wcvp++;
-          return { status: 'ok', data: { results: via.rows, kew: via.kew, via: via.via } as unknown as T };
+          return { status: 'ok', data: { results: via.rows, kew: via.kew, entry: entryLabel(via.entry), via: via.via } as unknown as T };
         }
       }
     } else if (src.media && (m = RE_MEDIA.exec(url)) && !src.apiPath?.has(Number(m[1]))) {

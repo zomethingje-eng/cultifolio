@@ -5,6 +5,7 @@
   import PageHead from '$lib/ui/PageHead.svelte';
   import ToggleGroup from '$lib/ui/ToggleGroup.svelte';
   import { collection } from '$lib/db/collection.svelte';
+  import Opening from '$lib/db/Opening.svelte';
   import { PROP_METHODS } from '$lib/db/types';
   import { plantHref, batchHref } from '$lib/db/links';
   import PlantName from '$lib/ui/PlantName.svelte';
@@ -41,7 +42,7 @@
 </PageHead>
 
 {#if !collection.ready}
-  <p class="muted">Opening your collection…</p>
+  <Opening />
 {:else}
   <!-- The one toggle group, as chips, with a name for the group (round fifty-eight; the accessibility review). -->
   <ToggleGroup chips label="Which batches" bind:value={show} options={[{ value: 'active', label: 'In progress', n: collection.sowings.filter((s) => s.status === 'active').length }, { value: 'all', label: 'All', n: collection.sowings.length }]} />

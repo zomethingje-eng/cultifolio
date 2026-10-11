@@ -1,4 +1,4 @@
-import type { JsonFetcher, FetchResult } from '../fetch';
+import type { JsonFetcher, FetchResult, SourceResult } from '../fetch';
 import { licenceTag, isOpen, type LicenceTag } from '$core/licence';
 
 export const GBIF = 'https://api.gbif.org/v1';
@@ -57,14 +57,45 @@ export interface GbifSpecies {
 
 export const species = (f: JsonFetcher, key: number) => f<GbifSpecies>(`${GBIF}/species/${key}`);
 
-/** One of GBIF's synonyms as the builder keeps it beside the names: its own record, and the name it was first published under. */
-export type SynonymRow = { key: number; name: string; rank?: string; basionymKey?: number };
+/**
+ * One of GBIF's synonyms as the builder keeps it beside the names: its own record, the name it was first published under,
+ * its author (Kew's range under an older name is taken only when the authors agree) and GBIF's status for it (a pro
+ * parte synonym is skipped there: round sixty-nine; triage-68 M2).
+ */
+export type SynonymRow = { key: number; name: string; rank?: string; basionymKey?: number; authorship?: string; status?: string };
+/** GBIF's synonyms of a species: the names as written, the rows, and `truncated` (the rows read) when the list ran past the pages asked. */
+export type Synonyms = FetchResult<string[]> & { rows?: SynonymRow[]; truncated?: number };
+/** How many synonyms are asked for at a time, and how many pages at most: past them, the list is recorded truncated. */
+export const SYNONYM_PAGE = 100;
+export const SYNONYM_PAGES = 10;
 
-export async function synonyms(f: JsonFetcher, key: number): Promise<FetchResult<string[]> & { rows?: SynonymRow[] }> {
-  const r = await f<{ results: Array<{ key?: number; scientificName: string; canonicalName?: string; rank?: string; basionymKey?: number }> }>(`${GBIF}/species/${key}/synonyms?limit=50`);
-  if (r.status !== 'ok') return r;
-  const rows: SynonymRow[] = r.data.results.flatMap((s) => (typeof s.key === 'number' && s.canonicalName ? [{ key: s.key, name: s.canonicalName, rank: s.rank, basionymKey: s.basionymKey }] : []));
-  return { status: 'ok', data: r.data.results.map((s) => s.scientificName).filter((n): n is string => typeof n === 'string'), rows };
+type SynonymAnswer = { key?: number; scientificName: string; canonicalName?: string; rank?: string; basionymKey?: number; authorship?: string; taxonomicStatus?: string };
+
+/**
+ * GBIF's synonyms, page by page until it says `endOfRecords` (round sixty-nine; triage-68 M4, S-A3, IND-2). One page of
+ * fifty was read as the whole list: Portulaca oleracea has 65, and Portulaca retusa and P. terraereginae, past the
+ * fiftieth, were found by no search; the "exactly one" and "same type" rules were judged on part of the list. Past
+ * `SYNONYM_PAGES` pages the rows read are kept and the answer carries `truncated`, which the build records and which
+ * counts as no answer for the older-name fallbacks; a page refused after the first is a refusal, never a shorter list
+ * taken as the whole. The builder and the bulk fetcher both read the list here, so the two cannot disagree.
+ */
+export async function synonyms(f: JsonFetcher, key: number): Promise<Synonyms> {
+  const raw: SynonymAnswer[] = [];
+  let ended = false;
+  for (let p = 0; p < SYNONYM_PAGES && !ended; p++) {
+    const r = await f<{ results: SynonymAnswer[]; endOfRecords?: boolean }>(`${GBIF}/species/${key}/synonyms?limit=${SYNONYM_PAGE}&offset=${raw.length}`);
+    if (r.status !== 'ok') {
+      if (p > 0 && r.status === 'none') { ended = true; break; } // nothing past the end
+      return r;
+    }
+    const got = Array.isArray(r.data.results) ? r.data.results : [];
+    raw.push(...got);
+    // An answer that does not say it ended, but has no rows, has ended: nothing past it can be asked for.
+    ended = r.data.endOfRecords !== false || !got.length;
+  }
+  const rows: SynonymRow[] = raw.flatMap((s) => (typeof s.key === 'number' && s.canonicalName ? [{ key: s.key, name: s.canonicalName, rank: s.rank, basionymKey: s.basionymKey, ...(s.authorship ? { authorship: s.authorship } : {}), ...(s.taxonomicStatus ? { status: s.taxonomicStatus } : {}) }] : []));
+  const data = raw.map((s) => s.scientificName).filter((n): n is string => typeof n === 'string');
+  return ended ? { status: 'ok', data, rows } : { status: 'ok', data, rows, truncated: raw.length };
 }
 
 /**
@@ -157,13 +188,33 @@ export interface KewDescription {
  */
 export const CULTIVATED_RE = /introduced|naturali[sz]ed|cultivated|invasive|managed/i;
 
-/** WCVP rows as republished through GBIF (the checklist Kew's POWO runs on), or served from Kew's own files by the bulk path. */
-export async function distributions(f: JsonFetcher, key: number): Promise<FetchResult<{ rows: GbifDistribution[]; wcvp: boolean; kew?: KewDescription; ambiguous?: string; via?: string }>> {
-  const r = await f<{ results: GbifDistribution[]; kew?: KewDescription; ambiguous?: string; via?: string }>(`${GBIF}/species/${key}/distributions?limit=200`);
+/** What the distribution step read: the rows, whether they are Kew's, and what the record says of how Kew's entry was found. */
+export interface DistributionAnswer {
+  rows: GbifDistribution[];
+  wcvp: boolean;
+  kew?: KewDescription;
+  /** WCVP lists the name more than once and authorship did not decide. */
+  ambiguous?: string;
+  /** Kew's entry under an older name, with its authors ("Erythrina afra Thunb."), and the older name it was reached by ("Erythrina fissa C.Presl"). */
+  entry?: string;
+  via?: string;
+  /** Kew holds the name ("Lantana × strigocamara R.W.Sanders") and states no range for it. */
+  held?: string;
+}
+
+/**
+ * WCVP rows as republished through GBIF (the checklist Kew's POWO runs on), or served from Kew's own files by the bulk
+ * path. The bulk path's two answers that are not rows are said as they are (round sixty-nine; triage-68 M2, M8): Kew
+ * holding the name with no range is Kew's answer, with no rows; older names that lead to two Kew entries are `ambiguous`.
+ */
+export async function distributions(f: JsonFetcher, key: number): Promise<SourceResult<DistributionAnswer>> {
+  const r = await f<{ results: GbifDistribution[]; kew?: KewDescription; ambiguous?: string; entry?: string; via?: string; held?: string; olderAmbiguous?: string }>(`${GBIF}/species/${key}/distributions?limit=200`);
   if (r.status !== 'ok') return r;
   if (r.data.ambiguous) return { status: 'ok', data: { rows: [], wcvp: false, ambiguous: r.data.ambiguous } };
+  if (r.data.olderAmbiguous) return { status: 'ambiguous', detail: `Kew holds no entry under this name, and ${r.data.olderAmbiguous}: not taken` };
+  if (r.data.held) return { status: 'ok', data: { rows: [], wcvp: true, kew: r.data.kew, held: r.data.held } };
   const wcvp = r.data.results.filter((d) => /wcvp|world checklist|plants of the world|kew/i.test(d.source ?? ''));
-  if (wcvp.length) return { status: 'ok', data: { rows: wcvp, wcvp: true, kew: r.data.kew, via: r.data.via } };
+  if (wcvp.length) return { status: 'ok', data: { rows: wcvp, wcvp: true, kew: r.data.kew, ...(r.data.via ? { entry: r.data.entry, via: r.data.via } : {}) } };
   // No WCVP entry: fall back to whatever national checklists GBIF holds, one row per country and status.
   const seen = new Map<string, GbifDistribution>();
   for (const d of r.data.results) {
@@ -241,7 +292,9 @@ export async function media(f: JsonFetcher, key: number): Promise<FetchResult<Oc
   // Only records under an open licence (GBIF's CC0 and CC BY; it files CC BY-SA under CC BY): most observation photographs
   // are CC BY-NC, and the first 100 records with an image, read whatever their licence, held no open photograph for 104
   // of the species round sixty-seven's rebuild left without one, Sprekelia formosissima among them (round sixty-eight).
-  // Each photograph's own licence is still read below: a record's licence is not its photograph's.
+  // Each photograph's own licence is still read below: a record's licence is not its photograph's, and a photograph that
+  // states none is not published under its record's (round sixty-nine; triage-68 M1, S-B6: an ALA sighting's photograph
+  // went out as "Michael Sim, CC BY, via GBIF" on the record's licence). The download path reads the same way (bulk.ts).
   const r = await f<OccPage>(`${GBIF}/occurrence/search?taxonKey=${key}&mediaType=StillImage&license=CC0_1_0&license=CC_BY_4_0&basisOfRecord=HUMAN_OBSERVATION&basisOfRecord=OBSERVATION&basisOfRecord=MACHINE_OBSERVATION&limit=100`);
   if (r.status !== 'ok') return r;
   const out: OccMedia[] = [];
@@ -249,13 +302,16 @@ export async function media(f: JsonFetcher, key: number): Promise<FetchResult<Oc
     // iNaturalist images reach GBIF through a CC-BY-NC dataset; the per-photo licence is what counts, and it is on the media object.
     for (const m of o.media ?? []) {
       if (!m.identifier || (m.type && !/still/i.test(m.type))) continue;
-      const tag = licenceTag(m.license ?? o.license);
+      const tag = licenceTag(m.license);
       if (!isOpen(tag)) continue;
       out.push({ id: `${o.key}:${out.length}`, url: m.identifier, licence: tag!, creator: m.creator, rightsHolder: m.rightsHolder, page: m.references ?? `https://www.gbif.org/occurrence/${o.key}`, datasetKey: o.datasetKey });
     }
   }
   return out.length ? { status: 'ok', data: out } : { status: 'none' };
 }
+
+/** One occurrence record with its media, as GBIF serves it: `--fill gbif-licence` reads each stored photograph's own licence from it. */
+export const occurrence = (f: JsonFetcher, key: number) => f<GbifOccurrence>(`${GBIF}/occurrence/${key}`);
 
 export async function suggest(f: JsonFetcher, q: string): Promise<FetchResult<Array<{ key: number; scientificName: string; rank: string; status?: string; family?: string }>>> {
   const r = await f<Array<{ key: number; scientificName: string; rank: string; status?: string; family?: string }>>(

@@ -1,7 +1,7 @@
 /**
- * The dossier builder. Runs unchanged in Node (offline corpus) and in the
- * Worker (tail builds). Every upstream's answer is recorded as ok / none /
- * refused / error, and only "none" may ever be rendered as an absence.
+ * The dossier builder, run by the corpus script (scripts/build-dossiers.ts); no Worker route builds a dossier (round
+ * sixty-nine; triage-68 M10, S-A7). Every upstream's answer is recorded as ok / none / refused / error / skipped /
+ * ambiguous, and only "none" may ever be rendered as an absence.
  *
  * The builder never publishes a dossier if the taxonomy step failed; every
  * other section degrades independently and says so.
@@ -9,11 +9,12 @@
 import { gbifThumb } from './md5';
 import { dedupePhotos } from './dedupe';
 export { dedupePhotos, inatPhotoId } from './dedupe';
-import type { JsonFetcher } from './fetch';
+import type { JsonFetcher, SourceResult } from './fetch';
 import * as gbif from './sources/gbif';
 import { CULTIVATED_RE, type OccMedia } from './sources/gbif';
 import * as inat from './sources/inat';
 import * as wm from './sources/wikimedia';
+import * as commons from './sources/commons';
 import { literature } from './sources/openalex';
 import { tdwgCode, tdwgLabel, TDWG3 } from './tdwg';
 import { licenceTag, isOpen, licenceLabel } from '$core/licence';
@@ -54,7 +55,19 @@ export interface BuildOptions {
    * every photograph in round sixty-seven's online rebuild (round sixty-eight). Never used when Wikidata answered.
    */
   prevIds?: Dossier['ids'];
+  /**
+   * The day (YYYY-MM-DD) of the build that read `prevIds` from Wikidata: the record names it, and identifiers older than
+   * `CARRY_DAYS` are not carried (round sixty-nine; triage-68 M5, M8, S-A6, R46-13). Without it nothing is carried.
+   */
+  prevIdsOn?: string;
+  /**
+   * Whether the reference holds a name as another of its species (the previous index, by name): iNaturalist's taxon of
+   * that name is never taken for this one (round sixty-nine; triage-68 M6, R46-14).
+   */
+  heldElsewhere?: (name: string) => boolean;
 }
+/** How long the previous build's identifiers may be carried through Wikidata not answering, in days (triage-68 M5). */
+export const CARRY_DAYS = 90;
 export type SkippableSource = 'openalex' | 'wikidata' | 'wikipedia' | 'inat' | 'commons' | 'gbif.media';
 /** Everything that is not the backbone, the range, the records or the climate: what a re-derivation can carry over from the previous build. */
 export const NETWORK_EXTRAS: SkippableSource[] = ['wikidata', 'wikipedia', 'inat', 'commons', 'gbif.media', 'openalex'];
@@ -62,6 +75,12 @@ export const NETWORK_EXTRAS: SkippableSource[] = ['wikidata', 'wikipedia', 'inat
 export type BuildResult = { ok: true; dossier: Dossier } | { ok: false; reason: 'name-unresolved' | 'higher-rank-only' | 'backbone-refused'; detail?: string };
 
 const u = <T,>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
+
+/** A name search's answer after an id check that dropped an inactive id: both are said, the check first. */
+function mergeNotes(before: Upstream | undefined, r: { status: Upstream['status']; detail?: string }): { status: Upstream['status']; detail?: string } {
+  if (!before?.detail || before.status !== 'none') return r;
+  return { ...r, detail: [before.detail, r.detail].filter(Boolean).join('; ') };
+}
 
 const countryNames = typeof Intl !== 'undefined' && 'DisplayNames' in Intl ? new Intl.DisplayNames(['en'], { type: 'region' }) : null;
 const countryName = (iso?: string): string | undefined => {
@@ -81,7 +100,7 @@ const countryName = (iso?: string): string | undefined => {
 export function photosFromMedia(rows: OccMedia[]): Photo[] {
   // A photograph under CC BY or CC BY-SA without an author cannot be credited as its licence requires, so it is not
   // published; CC0 asks for no name (round sixteen, 3).
-  return rows.filter((im) => im.creator || im.rightsHolder || im.licence === 'cc0').slice(0, 24).map((im) => {
+  return rows.filter((im) => im.creator || im.rightsHolder || im.licence === 'cc0' || im.licence === 'pd').slice(0, 24).map((im) => {
     const inat = /^https:\/\/inaturalist-open-data\.s3\.amazonaws\.com\/photos\/\d+\/original\.(\w+)$/.exec(im.url);
     const thumb = inat ? im.url.replace(/original\.(\w+)$/, 'medium.$1') : gbifThumb(im.id.split(':')[0], im.url);
     return { src: 'gbif', id: im.id, url: im.url, thumb, licence: im.licence as Photo['licence'], attribution: `${im.creator || im.rightsHolder || 'author not stated'}, ${licenceLabel(im.licence as Photo['licence'])}, ${inat ? 'iNaturalist via GBIF' : 'via GBIF'}`, page: im.page };
@@ -98,12 +117,30 @@ export function mergeGbifPhotos(prev: Photo[], fresh: Photo[]): Photo[] {
 }
 
 
+/**
+ * The range's source as the page's "Range source" row says it. Kew's entry under an older name names the entry and the
+ * older name it was reached by, never the accepted name alone, which no name of the species ever was (round sixty-nine;
+ * triage-68 M2, S-A1: "under the name Lantana camara subsp. aculeata"); Kew holding the name with no range says so.
+ */
+export function rangeSource(dist: SourceResult<gbif.DistributionAnswer>): string {
+  if (dist.status === 'ambiguous') return 'WCVP (Govaerts, RBG Kew): not taken, the older names lead to more than one entry';
+  if (dist.status !== 'ok') return 'not available';
+  if (dist.data.ambiguous) return 'WCVP (Govaerts, RBG Kew): homonyms, unresolved';
+  if (dist.data.held) return `WCVP (Govaerts, RBG Kew): Kew holds ${dist.data.held}, with no native range`;
+  if (!dist.data.wcvp) return 'national checklists via GBIF (presence reported, native status not stated; no WCVP entry for this name)';
+  return dist.data.via ? `WCVP (Govaerts, RBG Kew): Kew's entry ${dist.data.entry}, reached by ${dist.data.via}` : 'WCVP (Govaerts, RBG Kew) via GBIF';
+}
+
+/** Whole days from a YYYY-MM-DD to an ISO time; NaN when the day does not read. */
+const daysSince = (day: string | undefined, at: string) => (day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? (Date.parse(at) - Date.parse(`${day}T00:00:00Z`)) / 86_400_000 : NaN);
+
 export async function buildDossier(nameOrKey: string | number, o: BuildOptions): Promise<BuildResult> {
   const f = o.fetcher;
   const now = () => (o.now ? o.now() : new Date()).toISOString();
   const upstream: Record<string, Upstream> = {};
-  const mark = (src: string, r: { status: 'ok' | 'none' | 'refused' | 'error' | 'skipped'; detail?: string }) => {
-    upstream[src] = { status: r.status, at: now(), detail: r.status === 'none' ? undefined : r.detail };
+  // A "none" keeps its reason only where the source gave one (a Wikipedia redirect, older names not asked): round sixty-nine; triage-68 M3, M8.
+  const mark = (src: string, r: { status: Upstream['status']; detail?: string }) => {
+    upstream[src] = { status: r.status, at: now(), detail: r.detail || undefined };
   };
 
   /* ---- 1. Taxonomy (load-bearing) ---- */
@@ -179,11 +216,20 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     mark('gbif.vernacular', vern);
     // A list GBIF pages past the build's limit is kept as far as it was read, and said (round sixty-two; agent Q, corpus 7).
     if (vern.status === 'ok' && vern.truncated) upstream['gbif.vernacular'] = { status: 'ok', at: now(), detail: `truncated: the first ${vern.truncated} rows only` };
+    if (syn.status === 'ok' && syn.truncated) upstream['gbif.synonyms'] = { status: 'ok', at: now(), detail: `truncated: the first ${syn.truncated} rows only` };
   }
+  // The older names the fallbacks may ask under: none when GBIF's list was refused, failed or cut short, and the records
+  // say the older names were not asked rather than "nothing to report" (round sixty-nine; triage-68 M4, M8, S-A6).
+  const synRows = syn.status === 'ok' && !syn.truncated && 'rows' in syn ? (syn.rows ?? []) : null;
+  const synWhy = syn.status !== 'ok' ? (syn.status === 'skipped' ? 'not asked' : syn.status) : syn.truncated ? `truncated at ${syn.truncated} rows` : 'carried without their records';
+  const olderNotAsked = synRows ? undefined : `older names not asked: GBIF synonyms ${synWhy}`;
 
   /* ---- 2. Distribution (WCVP via GBIF) ---- */
   const dist = await gbif.distributions(f, key);
   mark('wcvp.distribution', dist);
+  // Kew's entry reached by an older name names both (round sixty-nine; triage-68 M2, M8): "Kew's entry Erythrina afra Thunb., reached by Erythrina fissa C.Presl".
+  if (dist.status === 'ok' && dist.data.via) upstream['wcvp.distribution'].detail = `Kew's entry ${dist.data.entry}, reached by ${dist.data.via}`;
+  else if (dist.status === 'ok' && dist.data.held) upstream['wcvp.distribution'].detail = `Kew holds this name (${dist.data.held}), with no native range`;
   const native: Dossier['distribution']['native'] = [];
   const introduced: Dossier['distribution']['native'] = [];
   const reported: Dossier['distribution']['native'] = [];
@@ -311,6 +357,8 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   else if (dist.status === 'skipped') climate = { status: 'pending', detail: 'the distribution source was not asked when this page was built, so the range could not be verified' };
   // No verified native range means no way to tell a habitat record from a garden one, so no habitat climate: the map stays, the advice does not.
   else if (ambiguous) climate = { status: 'none', detail: `native range not verified: ${ambiguous}` };
+  else if (dist.status === 'ambiguous') climate = { status: 'none', detail: `native range not verified: ${dist.detail}` };
+  else if (dist.status === 'ok' && dist.data.held) climate = { status: 'none', detail: 'native range not verified: Kew holds this name with no native range, so records cannot be told from cultivation and no habitat climate is derived' };
   else if (!verified || !boxes.length) climate = { status: 'none', detail: !verified ? 'native range not verified: no WCVP distribution with native status for this name, so records cannot be told from cultivation and no habitat climate is derived' : 'native range is stated at country level only, with no region boxes to test records against' };
   else if (forClimate.length) climate = await (o.climate ?? noClimate).envelope(forClimate);
   else if (allPts.length) climate = { status: 'none', detail: `${allPts.length} in-range record${allPts.length === 1 ? '' : 's'}, none placed to within 10 km` };
@@ -320,7 +368,10 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   if (climate.status === 'pending') upstream.climate = { status: 'skipped', at: now(), detail: climate.detail };
   else mark('climate', climate.status === 'ok' ? { status: 'ok' } : { status: climate.status, detail: climate.detail });
   // The daily extremes are their own upstream: a refusal here is a reason to build again, which `climate: ok` alone would hide (round sixteen, 7).
-  if (climate.status === 'ok' && climate.extremesStatus) upstream['climate.extremes'] = { status: climate.extremesStatus === 'refused' ? 'refused' : climate.extremesStatus === 'skipped' ? 'skipped' : climate.extremesStatus === 'none' ? 'none' : 'ok', at: now(), ...(climate.src.extremes ? { detail: climate.src.extremes } : {}) };
+  // A failure is recorded as `error`, not `refused` (round sixty-nine; triage-68 W6, S-E7): the climate keeps one status for
+  // both, which the page says as "not checked", and the provider's words say which it was ("did not answer" for a timeout
+  // or a 5xx, "refused the request" for a refusal), so the record is read from them.
+  if (climate.status === 'ok' && climate.extremesStatus) upstream['climate.extremes'] = { status: climate.extremesStatus === 'refused' ? (/^NASA POWER did not answer\b/.test(climate.src.extremes ?? '') ? 'error' : 'refused') : climate.extremesStatus === 'skipped' ? 'skipped' : climate.extremesStatus === 'none' ? 'none' : 'ok', at: now(), ...(climate.src.extremes ? { detail: climate.src.extremes } : {}) };
 
   /* ---- 5. Identifiers, summary ---- */
   const ids: Dossier['ids'] = { gbif: key };
@@ -328,22 +379,15 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   const skip = (k: SkippableSource) => !!o.skip?.includes(k);
   const skipped = (k: string) => (upstream[k] = { status: 'skipped', at: now() });
   // The older names with the same type, by which Wikidata and iNaturalist may file the species (round sixty-eight, third part).
-  const sameType = syn.status === 'ok' && 'rows' in syn ? gbif.sameTypeNames({ key, basionymKey: s.basionymKey }, syn.rows) : [];
-  const x = skip('wikidata') ? ({ status: 'skipped' } as const) : await wm.crossIds(f, scientific, key, sameType.map((r) => r.key));
+  const sameType = synRows ? gbif.sameTypeNames({ key, basionymKey: s.basionymKey }, synRows) : [];
+  const x = skip('wikidata') ? ({ status: 'skipped' } as const) : await wm.crossIds(f, scientific, key, sameType.map((r) => ({ key: r.key, name: r.name })));
   if (x.status === 'skipped') skipped('wikidata');
-  else mark('wikidata', x);
+  else mark('wikidata', x.status === 'none' && olderNotAsked && !x.detail ? { status: 'none', detail: olderNotAsked } : x);
   let enTitle = scientific;
-  if ((x.status === 'error' || x.status === 'refused') && o.prevIds) {
-    // Wikidata did not answer: the previous build's identifiers stand, and the record says so (round sixty-eight).
-    const p = o.prevIds;
-    Object.assign(ids, { wikidata: p.wikidata, powo: p.powo, ipni: p.ipni, inat: p.inat, wfo: p.wfo });
-    if (p.powo) links.powo = `https://powo.science.kew.org/taxon/${p.powo}`;
-    if (p.ipni) links.ipni = `https://www.ipni.org/n/${p.ipni}`;
-    if (p.wfo) links.wfo = `https://www.worldfloraonline.org/taxon/${p.wfo}`;
-    if (p.wikidata) links.wikidata = `https://www.wikidata.org/wiki/${p.wikidata}`;
-    if (p.wikipedia) enTitle = p.wikipedia;
-    if (p.wikidata || p.inat) upstream.wikidata = { ...upstream.wikidata, detail: `${upstream.wikidata.detail ?? ''}; the previous build's identifiers are kept`.replace(/^; /, '') };
-  }
+  // The titles that are this species' article: the item's sitelink (or, when Wikidata did not answer, the title the
+  // previous build kept, itself checked), the name and the older names (round sixty-nine; triage-68 M3).
+  const titles = [scientific, ...(synRows ?? []).filter((r) => (r.rank ?? 'SPECIES').toUpperCase() === 'SPECIES').map((r) => r.name)];
+  if ((x.status === 'error' || x.status === 'refused') && o.prevIds) keepPrevIds(o.prevIds);
   if (x.status === 'ok') {
     Object.assign(ids, { wikidata: x.data.wikidata, powo: x.data.powo, ipni: x.data.ipni, inat: x.data.inat, wfo: x.data.wfo });
     if (x.data.enTitle) enTitle = x.data.enTitle;
@@ -352,8 +396,27 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     if (x.data.wfo) links.wfo = `https://www.worldfloraonline.org/taxon/${x.data.wfo}`;
     links.wikidata = `https://www.wikidata.org/wiki/${x.data.wikidata}`;
   }
+  /**
+   * Wikidata did not answer: the identifiers of the build that last read them stand, and the record names that build;
+   * past `CARRY_DAYS`, or with no day known, they are not carried (round sixty-eight; round sixty-nine, triage-68 M5, M8).
+   */
+  function keepPrevIds(p: NonNullable<BuildOptions['prevIds']>) {
+    if (!p.wikidata && !p.inat) return;
+    const age = daysSince(o.prevIdsOn, now());
+    if (!(age <= CARRY_DAYS)) {
+      upstream.wikidata = { ...upstream.wikidata, detail: `${upstream.wikidata.detail ?? ''}; the previous identifiers are not kept: ${o.prevIdsOn ? `read by the build of ${o.prevIdsOn}, more than ${CARRY_DAYS} days ago` : 'the build that read them is not known'}`.replace(/^; /, '') };
+      return;
+    }
+    Object.assign(ids, { wikidata: p.wikidata, powo: p.powo, ipni: p.ipni, inat: p.inat, wfo: p.wfo });
+    if (p.powo) links.powo = `https://powo.science.kew.org/taxon/${p.powo}`;
+    if (p.ipni) links.ipni = `https://www.ipni.org/n/${p.ipni}`;
+    if (p.wfo) links.wfo = `https://www.worldfloraonline.org/taxon/${p.wfo}`;
+    if (p.wikidata) links.wikidata = `https://www.wikidata.org/wiki/${p.wikidata}`;
+    if (p.wikipedia) enTitle = p.wikipedia;
+    upstream.wikidata = { ...upstream.wikidata, detail: `${upstream.wikidata.detail ?? ''}; the identifiers of the build of ${o.prevIdsOn} are kept`.replace(/^; /, '') };
+  }
   let summary: Dossier['summary'];
-  const w = skip('wikipedia') ? ({ status: 'skipped' } as const) : await wm.summary(f, enTitle);
+  const w = skip('wikipedia') ? ({ status: 'skipped' } as const) : await wm.summary(f, enTitle, [enTitle, ...titles]);
   if (w.status === 'skipped') skipped('wikipedia');
   else mark('wikipedia', w);
   if (w.status === 'ok') {
@@ -362,14 +425,39 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     links.wikipedia = w.data.url;
   }
 
-  /* ---- 6. Photographs: iNat (open licences only), then Commons, then GBIF media ---- */
+  /* ---- 6. Photographs: iNat (open licences only), then GBIF media, then Commons ---- */
   const photos: Photo[] = [];
   let inatId = ids.inat;
+  if (inatId && !skip('inat')) inatId = await checkedInatId(inatId);
   if (!inatId && !skip('inat')) {
-    let t = await inat.taxon(f, scientific);
-    if (t.status === 'none' && sameType.length) t = await inat.taxonByOlderNames(f, sameType.map((r) => r.name));
-    mark('inat.taxon', t);
+    let t: SourceResult<inat.InatTaxon> = await inat.taxon(f, scientific, o.heldElsewhere);
+    if (t.status === 'none' && sameType.length) t = await inat.taxonByOlderNames(f, sameType.map((r) => r.name), { accepted: scientific, heldElsewhere: o.heldElsewhere });
+    else if (t.status === 'none' && olderNotAsked && !t.detail) t = { status: 'none', detail: olderNotAsked };
+    mark('inat.taxon', mergeNotes(upstream['inat.taxon'], t));
     if (t.status === 'ok') inatId = ids.inat = t.data.id;
+  }
+  /**
+   * An iNaturalist id from Wikidata or carried from the previous build, checked with iNaturalist itself (round sixty-nine;
+   * triage-68 M5, R46-13): an inactive id is followed to the one current taxon it names, or dropped so the name search
+   * runs. A check refused or failed keeps the id, and says it was not checked.
+   */
+  async function checkedInatId(id: number): Promise<number | undefined> {
+    const c = await inat.checkIds(f, [id]);
+    if (c.status !== 'ok') {
+      upstream['inat.taxon'] = { status: c.status, at: now(), detail: `iNaturalist taxon ${id} not checked${'detail' in c && c.detail ? `: ${c.detail}` : ''}` };
+      return id;
+    }
+    const got = c.data.get(id);
+    if (got?.active) return id;
+    const was = `iNaturalist's taxon ${id}${got?.name ? ` (${got.name})` : ''} is inactive`;
+    if (got?.current) {
+      upstream['inat.taxon'] = { status: 'ok', at: now(), detail: `${was}; followed to its current taxon ${got.current}` };
+      ids.inat = got.current;
+      return got.current;
+    }
+    upstream['inat.taxon'] = { status: 'none', at: now(), detail: `${was}, with no single current taxon; asked by name` };
+    ids.inat = undefined;
+    return undefined;
   }
   if (skip('inat')) {
     if (!inatId) skipped('inat.taxon'); // not asked either: a rederive carries the previous answer forward only for keys marked skipped
@@ -384,18 +472,22 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     mark('inat.photos.cultivated', cult);
     if (cult.status === 'ok') photos.push(...cult.data);
   }
-  if (skip('commons')) skipped('commons');
-  else if (!o.quick && photos.length < 12) {
-    const cat = x.status === 'ok' && x.data.commonsCategory ? x.data.commonsCategory : scientific;
-    const c = await wm.commonsPhotos(f, cat, 12);
-    mark('commons', c);
-    if (c.status === 'ok') photos.push(...c.data);
-  }
+  // GBIF's media before Commons, and only the photographs of the species' own sources count towards "fewer than six":
+  // Commons was asked first, so a few of its files kept GBIF's observation photographs out and led the page (round
+  // sixty-nine; triage-68 K5, S-B2, R46-16).
   if (skip('gbif.media')) skipped('gbif.media');
   else if (!o.quick && (o.mediaFirst || photos.length < 6)) {
     const m = await gbif.media(f, key);
     mark('gbif.media', m);
     if (m.status === 'ok') photos.push(...photosFromMedia(m.data));
+  }
+  if (skip('commons')) skipped('commons');
+  else if (!o.quick && photos.length < 12) {
+    const cat = x.status === 'ok' && x.data.commonsCategory ? x.data.commonsCategory : scientific;
+    // The species' own and older names, by which a file named as another species is left out (triage-68 K1).
+    const c = await commons.commonsPhotos(f, cat, 12, { scientific, synonyms: syn.status === 'ok' ? syn.data : [] });
+    mark('commons', c);
+    if (c.status === 'ok') photos.push(...c.data);
   }
 
   const photosOut = dedupePhotos(photos);
@@ -434,7 +526,7 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     },
     ids,
     summary,
-    distribution: { native, introduced, reported: reported.length ? reported : undefined, extinct: extinct.length ? extinct : undefined, kew, ambiguous, source: dist.status !== 'ok' ? 'not available' : ambiguous ? 'WCVP (Govaerts, RBG Kew): homonyms, unresolved' : fromWcvp ? (dist.status === 'ok' && dist.data.via ? `WCVP (Govaerts, RBG Kew), under the name ${dist.data.via}` : 'WCVP (Govaerts, RBG Kew) via GBIF') : 'national checklists via GBIF (presence reported, native status not stated; no WCVP entry for this name)', boxes, verified },
+    distribution: { native, introduced, reported: reported.length ? reported : undefined, extinct: extinct.length ? extinct : undefined, kew, ambiguous, source: rangeSource(dist), boxes, verified },
     occurrences: {
       open,
       nOpenInRange: open.length,

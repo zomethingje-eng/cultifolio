@@ -93,8 +93,10 @@ for (const how of ['aborted', 'answering 503'] as const) {
     // One line on the stop, with the stops, so nothing moves after them; the plants are all listed, with the Water button.
     await expect(stop.locator('.restnc')).toHaveCount(1);
     await expect(stop.locator('.restnc')).toContainText('Resting months not checked');
-    // A 503 is the server refusing, said as that; only no answer is "did not answer" (round sixty-seven; triage-66 S8).
-    await expect(stop.locator('.restnc')).toContainText(how === 'aborted' ? NOT_CHECKED : 'the server refused the species sheets just now. Every plant past its rhythm is listed');
+    // A bare 503, with no reason and no Retry-After, is a server that did not answer, as no answer is; a refusal is a 429
+    // or 403, and a 503 that says why "could not be read just now" (round sixty-nine; triage-68 W6, R46-7: round
+    // sixty-seven read every 5xx as a refusal).
+    await expect(stop.locator('.restnc')).toContainText(NOT_CHECKED);
     await expect(stop.getByRole('button', { name: 'Water 4 here' })).toBeVisible();
     const before = asked;
     expect(before).toBeGreaterThan(0);

@@ -12,6 +12,13 @@ export const srcsetOf = (url: string, sizes: PhotoSize[]): string | undefined =>
   // gets no srcset, since one address at two declared widths downloads the original either way (round thirty-five, R1-13).
   if (INAT.test(url)) return sizes.map((s) => `${photoAt(url, s)} ${WIDTH[s]}w`).join(', ');
   if (GBIF.test(url)) return sizes.map((s) => `${photoAt(url, s)} ${PX[s]}w`).join(', ');
+  // A Commons thumbnail at Commons' own widths, never wider than the one the dossier keeps: the lead's 960 gives
+  // 500w and 960w (round sixty-nine; triage-68 K4, R46-9). An original upload has no widths to offer, and gets none.
+  const w = commonsWidth(url);
+  if (w) {
+    const ws = [...new Set(sizes.map((s) => Math.min(w, COMMONS_PX[s])))];
+    return ws.length > 1 ? ws.map((x) => `${atCommonsWidth(url, x)} ${x}w`).join(', ') : undefined;
+  }
   return undefined;
 };
 const WIDTH: Record<PhotoSize, number> = { square: 75, small: 240, medium: 500, large: 1024 };
@@ -24,8 +31,21 @@ export function photoAt(url: string, size: PhotoSize): string {
   const m = INAT.exec(url);
   if (m) return `${m[1]}${size}${m[3]}`;
   if (GBIF.test(url)) return url.replace(/fit-in\/\d+x\//, `fit-in/${PX[size]}x/`);
-  return url;
+  // A Commons thumbnail at the width the slot needs, from Commons' standard list, and never wider than the one kept:
+  // 40- and 56-pixel rows fetched the 500-pixel tile (round sixty-nine; triage-68 K4, R46-9). An original is left as it is.
+  const w = commonsWidth(url);
+  return w ? atCommonsWidth(url, Math.min(w, COMMONS_PX[size])) : url;
 }
+
+/**
+ * The widths Commons makes thumbnails at that a slot here asks for (all on Commons' standard list; it refuses others):
+ * 120 for a row or a genus thumbnail, 250 for a front-page tile, 500 for a phone's lead or a gallery tile, 960 for the lead.
+ */
+const COMMONS_PX: Record<PhotoSize, number> = { square: 120, small: 250, medium: 500, large: 960 };
+/** A Commons thumbnail's width, from its name (`…/thumb/a/ab/F.jpg/960px-F.jpg`); null for an original upload or another host. */
+const commonsWidth = (url: string): number | null => (COMMONS_THUMB.test(url) ? Number(/\/(\d+)px-[^/?#]+$/.exec(url)![1]) : null);
+/** The same thumbnail at another width: only the width in its last part changes, so Commons' own name for a long file is kept. */
+const atCommonsWidth = (url: string, w: number): string => url.replace(/\/\d+px-([^/?#]+)$/, `/${w}px-$1`);
 
 /**
  * The origins a page's photographs come from, each once, for a `preconnect` in the head: the first-screen photograph is
@@ -51,11 +71,18 @@ const COMMONS_THUMB = /^https:\/\/upload\.wikimedia\.org\/[^?#]+\/thumb\/[^?#]+\
  * reached GBIF from another dataset keeps that dataset's address as its original, and the species page fetched its
  * lead photograph from there: a host nobody was told about (round fifty-nine; outside review). A Commons photograph
  * is shown at the 960-pixel thumbnail the dossier keeps (800 until round sixty-eight; Commons now refuses widths off its list), never the original: an original is often several
- * megabytes, and a link preview's crawler drops an image that large (round sixty; the self-review, 13; A7). Commons
- * makes its thumbnails at one width each, so the page asks for that one size (no srcset).
+ * megabytes, and a link preview's crawler drops an image that large (round sixty; the self-review, 13; A7). Its
+ * smaller sizes come from `photoAt` and `srcsetOf`, at Commons' standard widths (round sixty-nine).
  */
-export const shownAt = (p: { url: string; thumb?: string }): string => {
+export const shownAt = (p: { url: string; thumb?: string; width?: number | null }): string => {
   if (INAT.test(p.url) || GBIF.test(p.url)) return p.url;
-  if (COMMONS.test(p.url)) return !COMMONS_THUMB.test(p.url) && p.thumb && (COMMONS.test(p.thumb) || GBIF.test(p.thumb)) ? p.thumb : p.url;
+  if (COMMONS.test(p.url)) return !COMMONS_THUMB.test(p.url) && !midWidth(p.width) && p.thumb && (COMMONS.test(p.thumb) || GBIF.test(p.thumb)) ? p.thumb : p.url;
   return p.thumb ?? p.url;
 };
+
+/**
+ * An upload between 501 and 960 pixels wide, which Commons gives no smaller 960-pixel thumbnail of: it leads at its own
+ * width, not stretched from its 500-pixel tile (Nepenthes dubia's lead; round sixty-nine; triage-68 K4, R46-9). It is no
+ * larger than the 960 a wider file is shown at, and PNG, whose originals are heavy, is no longer taken (K1).
+ */
+const midWidth = (w: number | null | undefined): boolean => !!w && w > 500 && w <= 960;

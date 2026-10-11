@@ -36,7 +36,7 @@ describe('Leave (A9)', () => {
     await vault.setMeta('device', 'demodemodemo');
     const { leaveDemo, inDemo, finishLeaving } = await import('$lib/db/demo');
     leaveDemo('/');
-    expect(loc.href).toBe('/?left=sample'); // the address says it, for the next page's first script (round sixty-two, the first deploy)
+    expect(loc.href).toMatch(/^\/\?left=[a-z0-9]+$/); // the address says it, for the next page's first script (round sixty-two, the first deploy), with Leave's own token (round sixty-nine)
     // Until the page goes the database is in place and open; the flag is already off and the next page told, so the next
     // page cannot read them late (the first deploy's race); a Leave called off puts them back (r62bg-sample).
     expect([inDemo(), session.m.get('cultifolio.sampleLeft'), session.m.get('cultifolio.demo.units')]).toEqual([false, '1', 'us']);
@@ -119,7 +119,7 @@ describe('Leave (A9)', () => {
     sampleClosedHere();
     // The page goes into the closed state at once; the flag and the tab's copies go only when the page really goes, so a
     // "Leave site?" answered Cancel leaves the page the example's, closed, and nothing of it the grower's (round sixty-seven; IND-1).
-    expect([exampleClosed(), session.m.has('cultifolio.demo'), session.m.has('cultifolio.demo.labels'), session.m.get(CLOSED_NOTE), loc.href]).toEqual([true, true, true, '1', '/?left=sample']);
+    expect([exampleClosed(), session.m.has('cultifolio.demo'), session.m.has('cultifolio.demo.labels'), session.m.get(CLOSED_NOTE), loc.href]).toEqual([true, true, true, '1', '/']);
     fire('pagehide');
     expect([session.m.has('cultifolio.demo'), session.m.has('cultifolio.demo.labels')]).toEqual([false, false]);
   });

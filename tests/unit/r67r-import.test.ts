@@ -158,12 +158,18 @@ describe('removed plants count (R3)', () => {
 });
 
 describe('a date in the key does not hang on the day-first answer (R3)', () => {
-  it('09/03/2024 read day first, left as written, or saved as 2024-03-09 keys one line', () => {
+  // Round sixty-nine (triage-68 R1): 2024-03-09 is keyed by its exact day now, and the ambiguous cell by either order;
+  // each finds the plant the other filed, through the line's other keys.
+  it('09/03/2024 read day first, left as written, or saved as 2024-03-09 finds one plant', () => {
     const a = read('species,acquired\nCopiapoa cinerea,09/03/2024\n', 'dmy');
     const b = read('species,acquired\nCopiapoa cinerea,09/03/2024\n', null);
     const c = read('species,acquired\nCopiapoa cinerea,2024-03-09\n', null);
     expect(b[0].importKeys).toEqual(a[0].importKeys);
-    expect(c[0].importKeys).toEqual(a[0].importKeys);
-    expect(read('species,acquired\nCopiapoa cinerea,2024-03-10\n', null)[0].importKeys).not.toEqual(a[0].importKeys);
+    for (const [x, y] of [[a, c], [c, a], [b, c], [c, b]]) {
+      const here = new Set(x[0].importKeys);
+      expect(markImported(y, (k) => here.has(k))[0].done).toBe(true);
+    }
+    const other = read('species,acquired\nCopiapoa cinerea,2024-03-10\n', null);
+    expect(markImported(other, (k) => new Set(a[0].importKeys).has(k))[0].done).toBeUndefined();
   });
 });

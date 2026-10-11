@@ -80,6 +80,7 @@ export function onExampleClosed(f: () => void): () => void {
  */
 export function enterDemo(to = '/today', onStay?: () => void): boolean {
   try { sessionStorage.setItem(KEY, '1'); } catch { return false; }
+  noteGeneration();
   // A note of an earlier close not yet said would take the new flag off at the next page's first script (app.html).
   try { sessionStorage.removeItem(CLOSED_NOTE); } catch { /* none to take off */ }
   if (typeof addEventListener !== 'function') { location.href = to; return true; } // no page to stay (a test without one)
@@ -113,7 +114,9 @@ export function enterDemo(to = '/today', onStay?: () => void): boolean {
  */
 export function freshOnRestore(): () => void {
   const opened = PAGE_IN_DEMO; // the collection this page shows, against where the tab now goes (round sixty-seven; triage-66 V3)
-  const f = (e: Event) => { if ((e as PageTransitionEvent).persisted && inDemo() !== opened) location.reload(); };
+  // Or an example page whose example another tab left meanwhile (round sixty-nine; triage-68 X2, R46-19): reloaded, its
+  // first script (app.html) opens the grower's own collection and the page says why.
+  const f = (e: Event) => { if ((e as PageTransitionEvent).persisted && (inDemo() !== opened || (opened && generationStale()))) location.reload(); };
   addEventListener('pageshow', f);
   return () => removeEventListener('pageshow', f);
 }
@@ -147,8 +150,41 @@ function clearFlag(): void {
     for (let i = sessionStorage.length - 1; i >= 0; i--) { const k = sessionStorage.key(i); if (k?.startsWith(`${KEY}.`)) sessionStorage.removeItem(k); }
   } catch { /* the flag goes with the tab anyway */ }
 }
+/**
+ * The example's generation (round sixty-nine; triage-68 X2; R46-19, R46-28). Every Leave, and every delete of the
+ * example's database, writes a new one in the browser's local storage, which every tab shares; a tab notes the one it
+ * opened the example under in its own session storage. A tab that was away when another tab left (another site in it,
+ * the back-forward cache, a tab the browser discarded) heard nothing on the channel, and on its next load opened a new,
+ * empty example and set it out again. Its first script (app.html) now compares the two before the page is drawn, and
+ * when they differ opens the grower's own collection and says why. No note (a tab of an older build) reads as none.
+ */
+export const GEN = 'cultifolio.sampleGen';
+export const TAB_GEN = 'cultifolio.demo.gen';
+function generation(): string {
+  try { return localStorage.getItem(GEN) ?? ''; } catch { return ''; }
+}
+function noteGeneration(): void {
+  try { sessionStorage.setItem(TAB_GEN, generation()); } catch { /* read as none, as app.html reads it */ }
+}
+/** A new generation: a tab in the example under an older one opens the grower's own collection on its next load. */
+export function newGeneration(): void {
+  try { localStorage.setItem(GEN, `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`); } catch { /* the channel and the database still tell the live tabs */ }
+}
+/** This tab's example is older than the last Leave, by the same test as app.html's. */
+export function generationStale(): boolean {
+  try { return (sessionStorage.getItem(TAB_GEN) ?? '') !== generation(); } catch { return false; }
+}
 /** Set as a sample tab goes on Leave, so the next page deletes the sample and says how that went. */
 const LEFT = 'cultifolio.sampleLeft';
+/**
+ * Leave's one-use token (round sixty-nine; triage-68 X1; S-C1): Leave writes it in the tab's session storage and the
+ * address carries it (`?left=<token>`), and app.html marks the delete only when the two match, taking the token off as
+ * it reads it. The address marked a delete in any tab that had ever been out of the example (a tab sent home, a Leave
+ * called off), so a copied link or the closed bar's own "Go to my own collection" deleted an example opened afterwards
+ * in another tab, with the visitor's records, and asked nothing. A Leave called off keeps the token: only that Leave's
+ * own address carries it, and the address is what reaches the next page whatever Leave's own timers did (r62g 8).
+ */
+export const LEAVING = 'cultifolio.sampleLeaving';
 /** The meta key under which a sample of round sixty-two to sixty-six kept the last stamp it was set out with; no longer read, the seed's arrival number is (`SEED_MARK`). */
 export const SEED_TOP = 'demoSeedTop';
 /**
@@ -214,8 +250,14 @@ export function sampleClosedHere(): void {
   try { sessionStorage.setItem(CLOSED_NOTE, '1'); } catch { /* said nowhere, then */ }
   if (typeof addEventListener === 'function') addEventListener('pagehide', clearFlag, { once: true });
   else clearFlag(); // no page to hide (a test): it goes now
-  location.href = `/?${LEFT_PARAM}=sample`;
+  // A page where something was typed stays as it is, closed, with the bar's way home (round sixty-nine; triage-68 X2,
+  // X9; S-C5, R46-19): Places' form, a batch's page, Today and the Wanted notes have no "Leave site?", and the text was
+  // gone the moment another tab left. To `/`, not an address that marks anything: the note above takes the flag off.
+  if (!typedHere) location.href = '/';
 }
+/** Something was typed or chosen on this page (any field's `input`), heard from the page's first moment in the example. */
+let typedHere = false;
+const heardInput = () => { typedHere = true; };
 
 /**
  * The example's log, in arrival order, from inside the example: through its vault (round sixty-seven; triage-66 V5).
@@ -268,6 +310,7 @@ export async function seedState(seededKey: string): Promise<'marked' | 'repaired
 /** This tab is going on Leave: the flag and the tab's copies go, the sample's other tabs are told, and the next page deletes it. */
 function leaving(): void {
   clearFlag();
+  newGeneration();
   markOut();
   try { sessionStorage.setItem(LEFT, '1'); } catch { /* the leftover is then deleted on a later load */ }
   tellOthers();
@@ -282,11 +325,13 @@ function tellOthers(): void {
  * `pagehide` runs, so it opened in the sample again with the sample kept. The tab's own copies of the settings go at
  * `pagehide` still, when the page is really going (a Leave called off keeps them), and the next page reads none of them.
  */
-/** The address the first page after a Leave is opened at carries `left=sample`; the page takes it off its address once read. */
+/** The address the first page after a Leave is opened at carries `left=` and Leave's token; the page takes it off its address once read. */
 export const LEFT_PARAM = 'left';
-function readyToLeave(): void {
-  try { sessionStorage.removeItem(KEY); sessionStorage.setItem(LEFT, '1'); } catch { /* the leftover is then deleted on a later load */ }
+function readyToLeave(): string {
+  const token = `${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
+  try { sessionStorage.removeItem(KEY); sessionStorage.setItem(LEFT, '1'); sessionStorage.setItem(LEAVING, token); } catch { /* the leftover is then deleted on a later load */ }
   markOut(); // kept by a Leave called off too: it is read only outside the sample, where a later Leave would set it again
+  return token;
 }
 /** The first page after a Leave marks the tab as out of the sample by its address too, which reaches it whatever the storage race `leaveDemo` describes (round sixty-three, V2). */
 export function markLeftByAddress(): void {
@@ -311,11 +356,11 @@ function stayInSample(): void {
  * site?" and is still showing 3 seconds later; or, in any browser, it is still showing 10 seconds later. A navigation
  * slower than that lands in the sample, which is still whole; Leave is pressed again.
  */
-/** `to` with `left=sample` in its query, before any `#`: `/places#add` is `/places?left=sample#add` (round sixty-seven; triage-66 V1, the top bar's "+" on Places). */
-export function leftAddress(to: string): string {
+/** `to` with `left=<token>` in its query, before any `#`: `/places#add` is `/places?left=<token>#add` (round sixty-seven; triage-66 V1, the top bar's "+" on Places; the token, round sixty-nine, triage-68 X1). */
+export function leftAddress(to: string, token = 'sample'): string {
   const at = to.indexOf('#');
   const path = at < 0 ? to : to.slice(0, at);
-  return `${path}${path.includes('?') ? '&' : '?'}${LEFT_PARAM}=sample${at < 0 ? '' : to.slice(at)}`;
+  return `${path}${path.includes('?') ? '&' : '?'}${LEFT_PARAM}=${encodeURIComponent(token)}${at < 0 ? '' : to.slice(at)}`;
 }
 export function leaveDemo(to = '/', onStay?: () => void): () => void {
   if (typeof addEventListener !== 'function') { leaving(); location.href = to; return () => {}; } // no page to hide (a test): leave now
@@ -328,6 +373,7 @@ export function leaveDemo(to = '/', onStay?: () => void): () => void {
     if (!armed) return;
     disarm();
     clearFlag();
+    newGeneration(); // a tab away now (another site, the back-forward cache, discarded) opens the grower's own when it comes back (triage-68 X2)
     tellOthers();
     // Brought back from the back-forward cache after it left: it is no longer the sample's tab, so it loads afresh.
     addEventListener('pageshow', (e) => { if ((e as PageTransitionEvent).persisted) location.reload(); }, { once: true });
@@ -345,14 +391,14 @@ export function leaveDemo(to = '/', onStay?: () => void): () => void {
   addEventListener('pagehide', hide);
   addEventListener('beforeunload', asked);
   try { nav?.addEventListener('navigateerror', stay); } catch { /* no Navigation API: the timers below */ }
-  readyToLeave();
-  // The address says it too (`left=sample`), and the next page's first script reads it before anything else (app.html):
-  // the tab's storage set just above can reach a new page late (the race below), the address cannot.
-  location.href = leftAddress(to);
+  const token = readyToLeave();
+  // The address says it too (`left=<token>`), and the next page's first script reads it before anything else (app.html):
+  // the tab's storage set just above can be undone by the timers below while the page still goes (r62g 8), the address cannot.
+  location.href = leftAddress(to, token);
   // Chromium asks "Leave site?" inside the line above and says a Cancel as `navigateerror` before it returns; a browser without the Navigation API is given 3 seconds.
   // So is one with it that does not say a Cancel that way: in Safari's engine the button stayed "Leaving…" past the 1.5 s
   // the browser test allows, so it waited for the 10 s below (round sixty-four; the all-engines run). The address carries
-  // `left=sample` whatever this decides, so a page that does go still leaves the sample.
+  // `left=` and the token whatever this decides, so a page that does go still leaves the sample.
   timers.push(setTimeout(() => { if (prompted && showing()) stay(); }, 3000));
   timers.push(setTimeout(() => { if (showing()) stay(); }, 10_000));
   return stay;
@@ -380,7 +426,8 @@ function deleteSample(waitMs: number): Promise<'deleted' | 'blocked' | 'failed'>
  * Null when this page does not follow a Leave.
  *
  * Only for a tab that was leaving, and only under the open lock (round sixty-seven; triage-66 V6; S-A5). The mark
- * `sampleLeft` is set by Leave itself (`readyToLeave`), never by the address: `?left=sample` from a copied link, a
+ * `sampleLeft` is set by Leave itself (`readyToLeave`), and by the address only with Leave's one-use token from this same
+ * tab (app.html; round sixty-nine, triage-68 X1): `?left=` from a copied link, a
  * bookmark or the history takes a tab out of the example, and deletes nothing. And no tab may hold the example open: a
  * copied link opened beside an example tab deleted that tab's database, the visitor's records with it, with no question
  * asked. The tabs Leave told let go of the lock at once (`markExampleClosed`), or as they close; until then the delete
@@ -389,6 +436,7 @@ function deleteSample(waitMs: number): Promise<'deleted' | 'blocked' | 'failed'>
 export async function finishLeaving(waitMs = 10_000): Promise<'deleted' | 'blocked' | 'failed' | null> {
   if (PAGE_IN_DEMO) return null;
   try { if (sessionStorage.getItem(LEFT) !== '1') return null; sessionStorage.removeItem(LEFT); } catch { return null; }
+  newGeneration(); // the example is going: no tab away now opens it again on its own (triage-68 X2)
   const locks = typeof navigator !== 'undefined' ? (navigator as Navigator & { locks?: LockManager }).locks : undefined;
   if (!locks) return deleteSample(waitMs); // no locks: the browser's own hold on an open database is all there is
   return new Promise((done) => {
@@ -420,11 +468,18 @@ export function keepSampleOpen(): () => void {
     chan = new BroadcastChannel(LIFE);
     chan.onmessage = (e) => { if (e.data === 'closed') sampleClosedHere(); };
   } catch { /* no channel: the vault's own reload catches it */ }
-  return () => { chan?.close(); release(); };
+  // A new generation written by another tab says it too, in a browser without the channel (round sixty-nine; triage-68 X2).
+  const onStorage = (e: Event) => { if ((e as StorageEvent).key === GEN && generationStale()) sampleClosedHere(); };
+  try { addEventListener('input', heardInput, true); addEventListener('storage', onStorage); } catch { /* no page (a test) */ }
+  return () => { chan?.close(); release(); try { removeEventListener('input', heardInput, true); removeEventListener('storage', onStorage); } catch { /* none */ } };
 }
 
-/** What a leftover example holds that its visitor made: the records they added or changed, and whether that was already offered back. */
-type Leftover = { edits: number; last: number; offered: boolean };
+/** What a leftover example holds that its visitor made: the records they added or changed, whether that was already offered back, and when its newest change was made (ms; 0 when none is dated). */
+type Leftover = { edits: number; last: number; offered: boolean; newest: number };
+/** A leftover untouched this long is deleted, the visitor's records with it (round sixty-nine; triage-68 X2; R46-19). */
+export const LEFTOVER_DAYS = 30;
+/** The time a change was made, from its stamp's wall time; 0 for a stamp that is not one. */
+const madeAt = (t: unknown) => (typeof t === 'string' && /^\d{13}-/.test(t) ? Number(t.slice(0, 13)) : 0);
 /**
  * The leftover example's log read from outside it, straight from its database (the page's vault is the grower's), in
  * one read-only transaction, never creating it: a database that is not there is not made by the asking. Null when it
@@ -442,7 +497,7 @@ function readLeftover(): Promise<Leftover | null> {
       db.onversionchange = () => db.close(); // never holds up a delete or a newer build
       const finish = (v: Leftover | null) => { db.close(); done(v); };
       const stores = ['order', 'changes', 'meta'].filter((s) => db.objectStoreNames.contains(s));
-      if (stores.length < 3) { finish({ edits: 0, last: 0, offered: false }); return; } // no order of arrival kept: nothing to tell apart
+      if (stores.length < 3) { finish({ edits: 0, last: 0, offered: false, newest: 0 }); return; } // no order of arrival kept: nothing to tell apart
       try {
         const tx = db.transaction(stores, 'readonly');
         const order = tx.objectStore('order'), changes = tx.objectStore('changes'), meta = tx.objectStore('meta');
@@ -458,7 +513,8 @@ function readLeftover(): Promise<Leftover | null> {
           (got.rows ?? []).forEach((row, i) => { const c = byT.get(row?.t); if (c) log.push({ ...c, seq: Number((got.keys ?? [])[i]) }); });
           const last = log.length ? log[log.length - 1].seq : 0;
           const mark = typeof got.mark === 'number' ? got.mark : (seedLast(log)?.seq ?? 0);
-          finish({ edits: recordsTouched(log.filter((c) => c.seq > mark)), last, offered: typeof got.offered === 'number' && got.offered >= last });
+          const newest = log.reduce((n, c) => Math.max(n, madeAt(c.t)), 0);
+          finish({ edits: recordsTouched(log.filter((c) => c.seq > mark)), last, offered: typeof got.offered === 'number' && got.offered >= last, newest });
         };
         tx.onerror = tx.onabort = () => finish(null);
       } catch {
@@ -467,7 +523,7 @@ function readLeftover(): Promise<Leftover | null> {
     };
   });
 }
-/** Note in the leftover that its offer was made for what it holds now, so it is made once (triage-66 V2). */
+/** Note in the leftover that its offer was answered for what it holds now, so it is not made again (triage-66 V2). */
 function noteOffered(last: number): Promise<void> {
   return new Promise((done) => {
     let r: IDBOpenDBRequest;
@@ -496,7 +552,7 @@ function noteOffered(last: number): Promise<void> {
  * deleted a first plant typed into the example with no question, where Leave asks. One with nothing of the visitor's in
  * it is deleted, so the next "See the example collection" starts fresh.
  */
-export async function dropLeftoverSample(offer?: (edits: number) => void): Promise<boolean> {
+export async function dropLeftoverSample(offer?: (edits: number) => void, now = Date.now()): Promise<boolean> {
   if (PAGE_IN_DEMO || typeof navigator === 'undefined' || !navigator.locks) return false;
   try {
     const known = typeof indexedDB.databases === 'function' ? (await indexedDB.databases()).some((d) => d.name === DEMO_DB) : true;
@@ -505,19 +561,31 @@ export async function dropLeftoverSample(offer?: (edits: number) => void): Promi
       if (!lock) return false; // a sample tab is open
       const held = await readLeftover();
       if (!held) return false; // not read: kept, and tried again on a later load
-      if (held.edits > 0) {
-        if (!held.offered) { await noteOffered(held.last); offer?.(held.edits); }
+      // Noted only when answered (round sixty-nine; triage-68 X2; R46-19): it was noted as it was shown, so a tab closed
+      // without an answer kept the leftover for good, never offered or deleted again. Past its age it goes, answered or not.
+      const stale = held.newest > 0 && now - held.newest > LEFTOVER_DAYS * 86_400_000;
+      if (held.edits > 0 && !stale) {
+        if (!held.offered) { offeredFor = held.last; offer?.(held.edits); }
         return false;
       }
+      // A tab away in one with the visitor's records opens the grower's own, not a fresh example (triage-68 X2); one with
+      // nothing of theirs comes back as a fresh example, as it was, and a tab entering just now is not sent home by it.
+      if (held.edits > 0) newGeneration();
       return (await deleteSample(10_000)) === 'deleted'; // blocked or failed is not done: tried again on a later load
     });
   } catch {
     return false;
   }
 }
+/** The leftover's offer as made on this page: the arrival it was made for, noted when it is answered. */
+let offeredFor = 0;
+/** The leftover's offer answered "Not now": not made again until the leftover changes, and deleted at its age (triage-68 X2). */
+export async function leftoverLater(): Promise<void> {
+  if (offeredFor) await noteOffered(offeredFor);
+}
 /** The leftover's "Delete it": deleted under the open lock, so never from under a tab that has it open again. */
 export async function deleteLeftoverSample(): Promise<'deleted' | 'blocked' | 'failed'> {
   const locks = typeof navigator !== 'undefined' ? (navigator as Navigator & { locks?: LockManager }).locks : undefined;
-  if (!locks) return deleteSample(10_000);
-  return locks.request(OPEN_LOCK, { ifAvailable: true }, async (lock) => (lock ? deleteSample(10_000) : 'blocked'));
+  if (!locks) { newGeneration(); return deleteSample(10_000); }
+  return locks.request(OPEN_LOCK, { ifAvailable: true }, async (lock) => { if (!lock) return 'blocked'; newGeneration(); return deleteSample(10_000); });
 }

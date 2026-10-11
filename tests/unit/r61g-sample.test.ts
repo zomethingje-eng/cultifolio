@@ -143,7 +143,7 @@ describe('a restore refuses to start in the sample (review B)', () => {
 describe('the bar is drawn before the first paint (the accessibility review, 3 and 4)', () => {
   it('app.html marks the sample\'s tab from the flag before paint, and the layout imports the grow layer by its own path', () => {
     const html = readFileSync('src/app.html', 'utf8');
-    expect(html).toMatch(/sessionStorage\.getItem\('cultifolio\.demo'\)==='1'\)\{d\.demo='1'/);
+    expect(html).toMatch(/s\.getItem\('cultifolio\.demo'\)==='1'\)\{d\.demo='1'/); // the tab's storage as `s` (round sixty-nine)
     const layout = readFileSync('src/routes/+layout.svelte', 'utf8');
     expect(layout).not.toMatch(/from '\$lib\/ui\/grow'/);
     expect(layout).toMatch(/import GrowLayer from '\$lib\/ui\/grow\/GrowLayer\.svelte'/);

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { sync } from '$lib/sync/engine.svelte';
   import { collection } from '$lib/db/collection.svelte';
+  import Opening from '$lib/db/Opening.svelte';
   import StateNote from '$lib/ui/StateNote.svelte';
   import { localDate, daysBetween } from '$core/dates';
   import { accNo, sowNo, type Accession } from '$lib/db/types';
@@ -29,7 +30,7 @@
   import PlantsEmpty from '$lib/ui/grow/PlantsEmpty.svelte';
   import TrySample from '$lib/ui/grow/TrySample.svelte'; // round sixty-three, V2: the example at the head of the empty page
   import { addLeavesExample, example } from '$lib/ui/grow/example.svelte';
-  import { PAGE_IN_DEMO } from '$lib/db/demo';
+  import { CLOSED_WORDS, PAGE_IN_DEMO } from '$lib/db/demo';
   import SelectMode from '$lib/ui/grow/SelectMode.svelte';
   import PlantsFoot from '$lib/ui/grow/PlantsFoot.svelte';
   import { photoDue, photoDueDays } from '$lib/ui/photo-due';
@@ -253,9 +254,9 @@
 
 <HeldNote />
 {#if collection.lastWriteError}
-  <div class="notice err" role="alert" id="write-error">This change was not saved: {collection.lastWriteError}. Free space or <a href="/backup">back up now</a>.</div>
+  <div class="notice err" role="alert" id="write-error">This change was not saved: {collection.lastWriteError}.{#if collection.lastWriteError !== CLOSED_WORDS}{' '}Free space or <a href="/backup">back up now</a>.{/if}</div><!-- the example closed in another tab is not a full phone (round sixty-nine; triage-68 X9; S-C5) -->
 {/if}
-{#if opened && storageLow && !storageNoticeHidden}
+{#if opened && storageLow && !storageNoticeHidden && !PAGE_IN_DEMO}<!-- not in the example, where Backup is shut and nothing is kept (round sixty-nine; triage-68 X9; S-C5) -->
   <div class="notice" id="storage-notice">This browser's storage is nearly full{collection.persisted === false ? ', and it has not promised to keep this site\'s data' : ''}: it may clear photographs to make room. <a href="/backup">Back up now</a>. <button class="linkish" type="button" onclick={hideStorageNotice}>Hide for now</button></div>
 {:else if opened && PAGE_IN_DEMO}
   <!-- The example is backed up nowhere and has no backup to offer: it is deleted on Leave (round sixty-seven; triage-66 V7; R45-3). -->
@@ -267,7 +268,7 @@
 {#if collection.incomplete}<StateNote word="{collection.incomplete} waiting" id="incomplete-notice">{collection.incomplete} {collection.incomplete === 1 ? 'record waits' : 'records wait'} for a field this device does not have ({#if sync.quarantined.length}a sync bundle from a newer version of the app, which could not be read here; see <a href="/sync">Sync</a>{:else}a file that never had it, or a sync bundle from a newer version of the app that has not arrived{/if}), and {collection.incomplete === 1 ? 'is' : 'are'} not shown until it comes; a plant's own page, by its number, says which field. <a href="/about/how#glossary">Glossary</a>.</StateNote>{/if}
 
 {#if !opened}
-  <p class="muted">Opening your collection…</p>
+  <Opening />
 {:else if !collection.accessions.length && example.seeding}
   <!-- The example being set out: said, not "Nothing here yet" under it (round sixty-three, V2). -->
   <p class="muted" role="status" id="example-opening">Setting out the example collection…</p>

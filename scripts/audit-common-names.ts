@@ -27,7 +27,7 @@
  * an index built under an older rule. The index built after the `--names` step reads the dossiers' own flags.
  */
 import { readFileSync, existsSync } from 'node:fs';
-import { englishNames, generaOf, bareGenus, nameKey, genericNoun, namesOf, nameFlags, olderNamesOf, type VernacularName } from '../src/lib/dossier/index-entry';
+import { englishNames, indexNames, generaOf, bareGenus, nameKey, genericNoun, namesOf, nameFlags, olderNamesOf, type VernacularName } from '../src/lib/dossier/index-entry';
 import { indexDrops } from '../src/lib/dossier/drops';
 
 export type AuditEntry = { name: string; common?: string; commons?: string[]; key?: number; photos?: number; climate?: string };
@@ -109,18 +109,25 @@ export interface DossierAudit {
   shownChanged: number;
   /** Older names the search reads beyond the six shown, and the species that have any. */
   older: { names: number; species: number };
+  /** Pooled spellings the search reads and the page never shows (`indexNames`), and the species that have any (round sixty-nine; triage-68 N2). */
+  spellings: { names: number; species: number; sample: string[] };
   /** Shown names the audit flags, by flag, with a sample each. */
   flags: Record<string, { n: number; sample: string[] }>;
   /** An evenly spread sample of the changed headlines, "Genus species: before -> after (cause)". */
   sample: string[];
 }
+/** The genus words round sixty-nine allowed as English nouns (triage-68 N2), for the cause of a changed headline. */
+const N2_NOUNS = new Set(['acacia', 'anemone', 'aralia', 'geranium', 'petunia', 'verbena']);
+const lastWord = (s: string) => (s.trim().split(/[\s-]+/).pop() ?? '').toLowerCase();
+const words = (s: string) => s.trim().split(/[\s-]+/).filter(Boolean).length;
 const spread = <T>(xs: T[], n: number) => (xs.length <= n ? xs : Array.from({ length: n }, (_, i) => xs[Math.floor((i * xs.length) / n)]));
 /** Why a headline changed, the first cause that explains it. */
 function causeOf(before: string | undefined, after: string | undefined, sci: string, v: VernacularName[], scope: { genus: string; genera: Set<string> }): string {
   const o = before ?? '';
   if (!before) return 'a headline where there was none';
   if (!after) return 'no headline now';
-  if (nameKey(o) === nameKey(after)) return o.toLowerCase() === after.toLowerCase() ? 'capitals (N6)' : 'spelling of the same name (N5, N6)';
+  if (nameKey(o) === nameKey(after)) return o.toLowerCase() === after.toLowerCase() ? 'capitals (N6)' : words(after) > words(o) ? 'the open spelling on a tie (triage-68 N2)' : 'spelling of the same name (N5, N6)';
+  if (N2_NOUNS.has(lastWord(after))) return 'a genus English uses as a noun (triage-68 N2)';
   if (genericNoun(o)) return 'a generic noun set back (N3)';
   if (nameKey(o) === nameKey(sci.split(' ').slice(0, 2).join(' '))) return 'the species\' own binomial set back (N3)';
   if (!/[\s-]/.test(o.trim()) && !v.some((x) => x.lang === 'eng' && typeof x.name === 'string' && namesOf(x.name).length === 1 && nameKey(x.name) === nameKey(o))) return 'one word given only in a list (N7)';
@@ -133,7 +140,8 @@ export function auditDossiers(index: Array<AuditEntry & { key: number }>, dossie
   const causes: Record<string, number> = {};
   const changes: string[] = [];
   const flags: Record<string, { n: number; sample: string[] }> = {};
-  let shownChanged = 0, olderNames = 0, olderSpecies = 0, species = 0;
+  let shownChanged = 0, olderNames = 0, olderSpecies = 0, species = 0, spellingNames = 0, spellingSpecies = 0;
+  const spellingSample: string[] = [];
   for (const e of index) {
     const d = dossierOf(e.key);
     if (!d) continue;
@@ -159,8 +167,10 @@ export function auditDossiers(index: Array<AuditEntry & { key: number }>, dossie
     }
     const { older } = olderNamesOf(d.name.scientific, d.name.synonyms ?? []);
     if (older.length) { olderSpecies++; olderNames += older.length; }
+    const sp = indexNames(v, scope).spellings ?? [];
+    if (sp.length) { spellingSpecies++; spellingNames += sp.length; if (spellingSample.length < 12) spellingSample.push(`${e.name}: ${sp.map((x) => `"${x}"`).join(', ')}`); }
   }
-  return { species, changed: changes.length, causes, shownChanged, older: { names: olderNames, species: olderSpecies }, flags, sample: spread(changes, sampleSize) };
+  return { species, changed: changes.length, causes, shownChanged, older: { names: olderNames, species: olderSpecies }, spellings: { names: spellingNames, species: spellingSpecies, sample: spellingSample }, flags, sample: spread(changes, sampleSize) };
 }
 
 /**
@@ -196,6 +206,7 @@ async function main(): Promise<void> {
     console.log(`${a.species} species; the rules of this checkout change ${a.changed} headlines and the names under ${a.shownChanged} titles.`);
     for (const [c, k] of Object.entries(a.causes).sort((x, y) => y[1] - x[1])) console.log(`  ${k}  ${c}`);
     console.log(`The search reads ${a.older.names} older names beyond the six shown, of ${a.older.species} species.`);
+    console.log(`The search reads ${a.spellings.names} pooled spellings never shown, of ${a.spellings.species} species: ${a.spellings.sample.join('; ')}`);
     for (const [f, x] of Object.entries(a.flags)) console.log(`${x.n} shown names flagged ${f} (shown as the source wrote them): ${x.sample.join('; ')}`);
     console.log(`A sample of ${a.sample.length}, before -> after:`);
     for (const s of a.sample) console.log(`  ${s}`);
