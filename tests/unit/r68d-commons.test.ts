@@ -84,3 +84,19 @@ describe('a Commons tile kept as the original upload (the owner\'s fill: 166 of 
     expect(safeUrls(d as never).photos[0].thumb).toBe('https://upload.wikimedia.org/wikipedia/commons/thumb/f/f6/Nepenthes_tenuis1.jpg/500px-Nepenthes_tenuis1.jpg');
   });
 });
+
+describe('--fill commons asks for species with fewer than six photographs (the owner\'s question)', () => {
+  const ph = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `i${i}`, src: 'inat', url: `https://inaturalist-open-data.s3.amazonaws.com/photos/${i}/large.jpg`, thumb: '', captive: false }));
+  it('asks for one with a few, not for one with six or more (guard), and not again for one it has given photographs (guard)', async () => {
+    const { wantsCommons } = await import('$dossier/commons-fill');
+    expect(wantsCommons({ photos: ph(3), upstream: { commons: { status: 'none', at: 'x', detail: 'carried from build of 2026-09-19 (rederive)' } } } as never)).toBe(true); // base: only a dossier with none was asked
+    expect(wantsCommons({ photos: ph(6), upstream: {} } as never)).toBe(false);
+    expect(wantsCommons({ photos: ph(4), upstream: { commons: { status: 'ok', at: 'x', detail: 'Category:Crassula socialis' } } } as never)).toBe(false);
+  });
+  it('adds Commons\' photographs after the ones the dossier has, so its lead photograph stays', async () => {
+    const { fillCommons } = await import('$dossier/commons-fill');
+    const d = { key: 5689989, name: { scientific: 'Crassula socialis' }, photos: ph(2) as Array<{ id: string }>, upstream: {} as Record<string, unknown> };
+    expect(await fillCommons(d as never, fixtureFetcher({ 'https://commons.wikimedia.org/w/api.php': file({}) }))).toEqual({ added: 1 });
+    expect(d.photos.map((p) => p.id)).toEqual(['i0', 'i1', 'File:Crassula socialis - Kaisaniemi, Helsinki.JPG']);
+  });
+});

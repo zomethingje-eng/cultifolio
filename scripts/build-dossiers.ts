@@ -46,7 +46,7 @@
  *                                                                # ("unknown", "Wikimedia Commons", "iNaturalist user"); no API calls; then --index
  *   npx tsx scripts/build-dossiers.ts --fill gbif --bulk bulk    # photographs from the download's multimedia.txt into every dossier on disk; no API calls
  *   npx tsx scripts/build-dossiers.ts --fill gbif-open          # photographs for every dossier that has none, from GBIF's records under an open licence (one API call each)
- *   npx tsx scripts/build-dossiers.ts --fill commons            # photographs for every dossier that has none, from Wikimedia Commons' category for the species (one API call each)
+ *   npx tsx scripts/build-dossiers.ts --fill commons            # photographs for every dossier that has fewer than six, from Wikimedia Commons' category for the species (one API call each)
  *   npx tsx scripts/build-dossiers.ts --fill genus               # "About the genus": one Wikipedia lead per genus in the index, to s/v<N>/g/<slug>.json
  *   npx tsx scripts/build-dossiers.ts --names                   # GBIF's vernacular names asked afresh for every dossier on disk (one paced call
  *                                                                # each, about 9,000), only each dossier's vernacular block rewritten, so the
@@ -92,7 +92,7 @@ import { dropsBetween } from '../src/lib/dossier/drops';
 import { offlineFetcher, carryRederivedRows } from '../src/lib/dossier/rederive';
 import { mwWait, MAXLAG_TRIES } from '../src/lib/dossier/sources/wikimedia';
 import { fillOpenGbif, askedOpen } from '../src/lib/dossier/open-gbif-fill';
-import { fillCommons, askedCommons } from '../src/lib/dossier/commons-fill';
+import { fillCommons, askedCommons, wantsCommons } from '../src/lib/dossier/commons-fill';
 // The corpus script waits out Wikidata's maxlag, as MediaWiki asks of a batch client; the Worker does not (round sixty-eight).
 mwWait.tries = MAXLAG_TRIES;
 
@@ -531,7 +531,7 @@ async function fillOpenGbifPhotos(): Promise<void> {
 }
 
 /**
- * `--fill commons`: photographs for every dossier on disk that has none, from Wikimedia Commons' category for the species
+ * `--fill commons`: photographs for every dossier on disk that has fewer than six, from Wikimedia Commons' category for the species
  * (round sixty-eight, fourth part; `commons-fill.ts`). Resumable as `--fill gbif-open` is. Then the index, as a build writes it.
  */
 async function fillCommonsPhotos(): Promise<void> {
@@ -542,8 +542,7 @@ async function fillCommonsPhotos(): Promise<void> {
   for (const file of files) {
     const path = `${dir}/${file}`;
     const d = JSON.parse(readFileSync(path, 'utf8')) as Pick<Dossier, 'key' | 'photos' | 'upstream'> & { name: { scientific: string } };
-    if (d.photos?.length) continue;
-    if (askedCommons(d)) { before++; continue; }
+    if (!wantsCommons(d)) { if (askedCommons(d) && !(d.photos?.length)) before++; continue; }
     asked++;
     const r = await fillCommons(d, f);
     if ('failed' in r) { failed++; continue; }
@@ -552,7 +551,7 @@ async function fillCommonsPhotos(): Promise<void> {
     writeFileSync(path, JSON.stringify(d));
     if (asked % 100 === 0) process.stdout.write(`\r  ${asked} asked, ${filled} given photographs…   `);
   }
-  console.log(`\r  ${asked} dossiers had no photograph: ${filled} were given ${photos} from Wikimedia Commons, ${none} have none there, ${failed} not answered (asked again by a later fill)${before ? `; ${before} passed by, an earlier fill having found none` : ''}.`);
+  console.log(`\r  ${asked} dossiers had fewer than six photographs: ${filled} were given ${photos} from Wikimedia Commons, ${none} have none there, ${failed} not answered (asked again by a later fill)${before ? `; ${before} passed by, an earlier fill having found none` : ''}.`);
   writeIndexFromDisk();
 }
 
