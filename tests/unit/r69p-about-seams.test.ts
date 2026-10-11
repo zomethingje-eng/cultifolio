@@ -157,7 +157,8 @@ describe("/about/formats on the server's sweep and listings, and the example (S-
   it('the seventh night is counted as a fault, and no log keeps it', () => {
     expect(MARK_FAULT_NIGHTS).toBe(7);
     expect(raw('src/lib/server/counters.ts')).toMatch(/await this\.faultThere\('sweep', now\);/);
-    expect(raw('wrangler.jsonc')).toMatch(/"observability": \{ "enabled": false \}/);
+    // Read whatever the checkout's own config's layout: the owner's copy writes it over three lines, tab-indented.
+    expect(raw('wrangler.jsonc')).toMatch(/"observability"\s*:\s*\{\s*"enabled"\s*:\s*false\s*\}/);
     expect(formats).toContain("after seven such nights its mark is dropped and the night is counted among the server's faults, by kind alone (Cloudflare's request logs are off, so no log keeps its name)");
     expect(formats).not.toContain("written to the server's log");
     expect(how).toContain("Cloudflare's own request logs (Workers Logs) are off.");

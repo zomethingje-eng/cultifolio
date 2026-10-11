@@ -1,25 +1,22 @@
 /**
  * A documentation address of its own for every spec that makes a vault (round sixty-two second pass; the machine's
- * limit). The server allows five new vaults a day from one address (`allowCreation` in src/lib/server/sync.ts), and
- * every request of a run came from 127.0.0.1: the full suite, run twice in a day against the same state, met that
- * limit and failed tests that had nothing to do with it. Here each call gives the next address of 198.51.100.0/24
- * (TEST-NET-2, RFC 5737: never a real host), and `fromAddress` sends it as `cf-connecting-ip`, which wrangler dev, like
- * Cloudflare's edge, takes as the client's address. The one test of the limit itself (smoke, "five new vaults a
- * day…") takes its address from `limitAddress`, a part of the range `docAddress` never hands out, so its five can
- * never be met by a test that makes one vault, in this run or a later one against the same server.
+ * limit), sent by `fromAddress` as `cf-connecting-ip`, which wrangler dev, like Cloudflare's edge, takes as the client's
+ * address.
  *
- * Distinct within a run: the n-th call in a worker gives n * workers + its parallel slot, so two workers never meet
- * below 198 calls. Spread across runs: the config sets CULTIFOLIO_E2E_RUN once per run, before the workers start, and
- * its hash moves the whole sequence, so a hand-started server reused without `fresh-state.mjs` sees other addresses on
- * the next run (the webServer resets the state anyway).
+ * Each call is an IPv6 network of its own (round sixty-nine, the owner's run on every engine). Until then every address
+ * was one of 198.51.100.0/24, and since round sixty-seven a network may place ten new vaults a day
+ * (`MAX_NEW_VAULTS_PER_NETWORK_PER_DAY`, counted by /24 or /48): the five projects of a full run share one server, so
+ * Firefox, run last, found the day's ten spent and every sync it started stayed unsynced. And the n-th call of a worker
+ * was taken from a count kept in the worker's memory, which a worker restarted after a failure starts again from nought,
+ * so an address could be handed out twice and reach its own five. Now a call is a random /48 of 3fff::/20, the IPv6
+ * documentation prefix (RFC 9637: never a real host), 2^28 of them: two calls of a run share one by a chance of a few
+ * in a million, and two would still be under every limit.
+ *
+ * The one test of the per-address limit (smoke, "five new vaults a day…") takes its address from `limitAddress`, in
+ * 2001:db8::/32 (RFC 3849), which `docAddress` never hands out, so its five are never met by a test that makes one vault.
  */
 import { test, type BrowserContext, type Page } from '@playwright/test';
-
-/** .1 to .199 for the specs that make a vault or two; .200 to .254 for the limit's own test alone. Every spec takes its
- *  address from here: the two server specs' fixed .62 and .63, and the gap kept for them, are gone (round sixty-seven;
- *  triage-66 H9, IND-9). */
-const HOSTS = Array.from({ length: 199 }, (_, i) => i + 1);
-const LIMIT_HOSTS = Array.from({ length: 55 }, (_, i) => i + 200);
+import { randomInt } from 'node:crypto';
 
 function runSalt(): number {
   const run = process.env.CULTIFOLIO_E2E_RUN ?? '';
@@ -28,26 +25,23 @@ function runSalt(): number {
   return h;
 }
 
-let taken = 0;
-/** The next documentation address for this worker: distinct from every other call in this run (see above). */
+const hex = (n: number) => n.toString(16);
+/** A documentation address on a /48 of its own: 3fff:0xxx:yyyy::1, its /48 drawn at random (see above). */
 export function docAddress(): string {
-  const info = test.info();
-  const workers = Math.max(1, info.config.workers);
-  const n = taken++ * workers + info.parallelIndex;
-  return `198.51.100.${HOSTS[(runSalt() + n) % HOSTS.length]}`;
+  return `3fff:${hex(randomInt(0x1000))}:${hex(randomInt(0x10000))}::1`;
 }
 
 /** The projects of playwright.config.ts, in its order: each has its own limit address in a run (`limitAddress`). */
 const PROJECTS = ['chromium', 'phone', 'webkit', 'phone-webkit', 'firefox'];
 /**
- * The address for the one test that spends a whole day's five on purpose: never one `docAddress` gives, and one of its
- * own for each project of the run. One address for the whole run let the first engine's run of the test spend the five
- * and the next engine's first vault be refused (round sixty-four; the Firefox run, 429 on its first vault). The five
- * projects sit eleven apart in the fifty-five.
+ * The address for the one test that spends a whole day's five on purpose: never one `docAddress` gives, and a /48 of its
+ * own for each project of the run, moved by the run's salt so a server reused on a later run sees another. One address
+ * for the whole run let the first engine's run of the test spend the five and the next engine's first vault be refused
+ * (round sixty-four; the Firefox run, 429 on its first vault).
  */
 export function limitAddress(): string {
-  const p = PROJECTS.indexOf(test.info().project.name);
-  return `198.51.100.${LIMIT_HOSTS[(runSalt() + 11 * Math.max(0, p)) % LIMIT_HOSTS.length]}`;
+  const p = Math.max(0, PROJECTS.indexOf(test.info().project.name));
+  return `2001:db8:${hex((runSalt() + p) & 0xffff)}::1`;
 }
 
 /**

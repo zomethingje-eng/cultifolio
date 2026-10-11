@@ -804,7 +804,7 @@ test('sync: an offline edit uploaded late is still discovered, and a backup merg
   const key = (await a.locator('#vault-key').textContent())!.trim();
   await a.fill('#key-typeback', key.slice(-5)); // the last group typed back, not a box ticked (round forty-one, R9)
   await a.click('#sync-create');
-  await expect(a.locator('.card', { hasText: 'Status' })).toContainText('Synced');
+  await expect(a.locator('.card', { hasText: 'Status' })).toContainText('Synced', { timeout: 20_000 }); // 22 changes on a loaded server took past the 5 s default once (round sixty-nine)
   const B = await browser.newContext();
   const b = await B.newPage();
   await b.goto('/sync');
