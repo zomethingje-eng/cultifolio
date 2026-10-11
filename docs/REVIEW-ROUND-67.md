@@ -273,3 +273,7 @@ Across 3,000 of the corpus's dossiers, not one photograph came from Commons. Wit
 - **Species that already have photographs** gain Commons' photographs at their next build. The fill does not ask for them.
 
 Tests: `tests/unit/r68d-commons.test.ts` (6 cases, all failing on the third part except the guards). Unit tests: 2,333 passed and 1 skipped. svelte-check: 0 errors.
+
+**The owner's run of the fill.** 3,160 species were asked: 619 were given 2,795 photographs and 2,541 have none on Commons. That is more than the sample's estimate of about 470. There were no failures. The corpus was uploaded and the live check passed.
+
+**Checked on the live site afterwards.** For Crassula socialis, Nepenthes dubia and Uncarina roeoesliana, every photograph and tile address answered 200 image/jpeg, and the page's image policy allows `upload.wikimedia.org`. But 166 of the 619 had a tile that was the original upload. Commons has no 960-pixel thumbnail for a file narrower than that, so the builder kept the original for both, and some tiles reached half a megabyte (Nepenthes dubia: 543 kB at 555 pixels). `mendCommonsThumb` now gives such a tile as Commons' 500-pixel thumbnail (131 kB) whenever the original is wider than 500. It is applied where a dossier or the index is read, as `mendGbifThumb` is, so the pages are put right by the deploy and the tiles by `--index` and an upload, with no rebuild. Tests: four more cases in `r68d-commons`. Unit tests: 2,337 passed and 1 skipped.

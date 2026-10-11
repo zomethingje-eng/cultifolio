@@ -4,7 +4,7 @@
  * the document, and a shape change is a version bump — the schema is what
  * makes forgetting impossible: a dossier that does not parse is not served.
  */
-import { mendGbifThumb } from './md5';
+import { mendGbifThumb, mendCommonsThumb } from './md5';
 import { dedupePhotos } from './dedupe';
 import * as v from 'valibot';
 
@@ -286,7 +286,7 @@ export function safeUrls(d: Dossier): Dossier {
     ...d,
     climate,
     summary: d.summary ? { ...d.summary, url: webUrl(d.summary.url) ?? '' } : d.summary,
-    photos: dedupePhotos(d.photos.filter((p) => webUrl(p.url) && webUrl(p.thumb)).map((p) => ({ ...p, thumb: mendGbifThumb(p.thumb, p.id, p.url), page: webUrl(p.page) }))),
+    photos: dedupePhotos(d.photos.filter((p) => webUrl(p.url) && webUrl(p.thumb)).map((p) => ({ ...p, thumb: mendCommonsThumb(mendGbifThumb(p.thumb, p.id, p.url), p.width), page: webUrl(p.page) }))),
     // A specimen record under DiSSCo's DOI prefix is not a paper (round thirty-one, 6): dropped here as well as at the build, so dossiers built before the rule show none.
     literature: d.literature.filter((p) => !/^(https?:\/\/doi\.org\/)?10\.3535\//i.test(p.doi ?? '')).map((p) => ({ ...p, url: webUrl(p.url) })),
     links: Object.fromEntries(Object.entries(d.links).filter(([, u]) => webUrl(u))),

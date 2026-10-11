@@ -10,6 +10,7 @@ import { commonsPhotos, commonsUrl } from '$dossier/sources/wikimedia';
 import { fixtureFetcher } from '$dossier/fetch';
 import { shownAt } from '$dossier/photo-size';
 import { showable } from '$lib/ui/ref/photos';
+import { mendCommonsThumb } from '$dossier/md5';
 
 const Q = '?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=';
 const PATH = 'wikipedia/commons/f/fb/Crassula_socialis_-_Kaisaniemi%2C_Helsinki.JPG';
@@ -58,5 +59,28 @@ describe('--fill commons', () => {
     expect(d.upstream.commons.detail).toBe('carried from build of 2026-09-19 (rederive)');
     expect(await fillCommons(d as never, fixtureFetcher({ 'https://commons.wikimedia.org/w/api.php': { query: { pages: {} } } }))).toEqual({ none: true });
     expect(askedCommons(d as never)).toBe(true);
+  });
+});
+
+describe('a Commons tile kept as the original upload (the owner\'s fill: 166 of 619)', () => {
+  const ORIG = 'https://upload.wikimedia.org/wikipedia/commons/f/f6/Nepenthes_tenuis1.jpg';
+  it('is Commons\' 500-pixel thumbnail when the original is wider than that', () => {
+    expect(mendCommonsThumb(ORIG, 555)).toBe('https://upload.wikimedia.org/wikipedia/commons/thumb/f/f6/Nepenthes_tenuis1.jpg/500px-Nepenthes_tenuis1.jpg'); // base: the 543 kB original
+  });
+  it('a narrower original, a thumbnail already, or another host is left as it is (guard)', () => {
+    expect(mendCommonsThumb(ORIG, 432)).toBe(ORIG);
+    expect(mendCommonsThumb(ORIG, undefined)).toBe(ORIG);
+    const t = 'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f6/Nepenthes_tenuis1.jpg/500px-Nepenthes_tenuis1.jpg';
+    expect(mendCommonsThumb(t, 4000)).toBe(t);
+    expect(mendCommonsThumb('https://inaturalist-open-data.s3.amazonaws.com/photos/1/medium.jpg', 2048)).toBe('https://inaturalist-open-data.s3.amazonaws.com/photos/1/medium.jpg');
+  });
+  it('a new build gives such a file its 500-pixel tile, and shows the original', async () => {
+    const r = await commonsPhotos(fixtureFetcher({ 'https://commons.wikimedia.org/w/api.php': file({ width: 555, height: 694, thumburl: `https://upload.wikimedia.org/${PATH}${Q}original` }) }), 'Crassula socialis');
+    expect(r.status === 'ok' && r.data[0]).toMatchObject({ url: `https://upload.wikimedia.org/${PATH}`, thumb: `https://upload.wikimedia.org/${PATH.replace('commons/f/fb/', 'commons/thumb/f/fb/')}/500px-${PATH.split('/').pop()}` });
+  });
+  it('the Worker\'s read of a dossier mends a stored one', async () => {
+    const { safeUrls } = await import('$dossier/schema');
+    const d = { climate: { status: 'none' }, summary: undefined, literature: [], links: {}, upstream: {}, photos: [{ src: 'commons', id: 'File:Nepenthes tenuis1.jpg', url: ORIG, thumb: ORIG, width: 555, height: 694, licence: 'by', attribution: 'A, CC BY 4.0, via Wikimedia Commons' }] };
+    expect(safeUrls(d as never).photos[0].thumb).toBe('https://upload.wikimedia.org/wikipedia/commons/thumb/f/f6/Nepenthes_tenuis1.jpg/500px-Nepenthes_tenuis1.jpg');
   });
 });

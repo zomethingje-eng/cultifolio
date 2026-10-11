@@ -66,3 +66,19 @@ export function mendGbifThumb(thumb: string, id: string, url: string): string {
   }
   return gbifThumb(key, decoded === url ? url : decoded);
 }
+
+/** Commons' tile width (as in `sources/wikimedia.ts`, kept here so the Worker's read of a dossier needs nothing from a source). */
+const COMMONS_TILE_W = 500;
+const COMMONS_ORIGINAL = /^https:\/\/upload\.wikimedia\.org\/wikipedia\/commons\/([0-9a-f])\/([0-9a-f]{2})\/([^/?#]+\.(?:jpe?g|png|webp))$/i;
+/**
+ * A Commons tile kept as the original upload, turned into Commons' 500-pixel thumbnail when the original is wider than
+ * that (round sixty-eight, fourth part). A file narrower than Commons' 960-pixel thumbnail has none at that width, so the
+ * builder kept the original for both, and 166 of the 619 species the Commons fill gave photographs had a tile of up to
+ * half a megabyte (Nepenthes dubia: 543 kB at 555 pixels, 131 kB at 500). Applied where a dossier or the index is read,
+ * as `mendGbifThumb` is, so the corpus needs no rebuild; anything else is left as it is.
+ */
+export function mendCommonsThumb(thumb: string, width?: number | null): string {
+  const m = COMMONS_ORIGINAL.exec(thumb);
+  if (!m || !width || width <= COMMONS_TILE_W) return thumb;
+  return `https://upload.wikimedia.org/wikipedia/commons/thumb/${m[1]}/${m[2]}/${m[3]}/${COMMONS_TILE_W}px-${m[3]}`;
+}

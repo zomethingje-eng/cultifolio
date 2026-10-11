@@ -1,6 +1,7 @@
 import type { JsonFetcher, FetchResult } from '../fetch';
 import { licenceTag, isOpen } from '$core/licence';
 import type { Photo } from '../schema';
+import { mendCommonsThumb } from '../md5';
 
 /* ---------- Wikidata (CC0): cross-identifiers ---------- */
 
@@ -208,7 +209,7 @@ export async function commonsPhotos(f: JsonFetcher, category: string, max = 12):
       ...(() => {
         const shown = ii.thumburl ? commonsUrl(ii.thumburl) : original;
         const isThumb = /\/thumb\/.+\/\d+px-[^/]+$/.test(new URL(shown).pathname);
-        const tile = isThumb && (ii.width ?? 0) > COMMONS_TILE ? shown.replace(/\/\d+px-([^/]+)$/, `/${COMMONS_TILE}px-$1`) : shown;
+        const tile = isThumb && (ii.width ?? 0) > COMMONS_TILE ? shown.replace(/\/\d+px-([^/]+)$/, `/${COMMONS_TILE}px-$1`) : mendCommonsThumb(shown, ii.width);
         return { url: shown, thumb: tile };
       })(),
       width: ii.width ?? undefined,
