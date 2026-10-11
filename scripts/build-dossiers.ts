@@ -45,6 +45,7 @@
  *   npx tsx scripts/build-dossiers.ts --prune-uncredited        # drops every published photograph under CC BY or CC BY-SA that names no author
  *                                                                # ("unknown", "Wikimedia Commons", "iNaturalist user"); no API calls; then --index
  *   npx tsx scripts/build-dossiers.ts --fill gbif --bulk bulk    # photographs from the download's multimedia.txt into every dossier on disk; no API calls
+ *   npx tsx scripts/build-dossiers.ts --fill gbif-open          # photographs for every dossier that has none, from GBIF's records under an open licence (one API call each)
  *   npx tsx scripts/build-dossiers.ts --fill genus               # "About the genus": one Wikipedia lead per genus in the index, to s/v<N>/g/<slug>.json
  *   npx tsx scripts/build-dossiers.ts --names                   # GBIF's vernacular names asked afresh for every dossier on disk (one paced call
  *                                                                # each, about 9,000), only each dossier's vernacular block rewritten, so the
@@ -89,6 +90,7 @@ import { tileCreditOf } from '../src/lib/ui/ref/head';
 import { dropsBetween } from '../src/lib/dossier/drops';
 import { offlineFetcher, carryRederivedRows } from '../src/lib/dossier/rederive';
 import { mwWait, MAXLAG_TRIES } from '../src/lib/dossier/sources/wikimedia';
+import { fillOpenGbif } from '../src/lib/dossier/open-gbif-fill';
 // The corpus script waits out Wikidata's maxlag, as MediaWiki asks of a batch client; the Worker does not (round sixty-eight).
 mwWait.tries = MAXLAG_TRIES;
 
@@ -499,6 +501,31 @@ function pruneUncredited(): void {
   console.log(`${dropped} uncredited photograph${dropped === 1 ? '' : 's'} removed, ${reworded} CC0 credit${reworded === 1 ? '' : 's'} reworded, ${reopened} photo source${reopened === 1 ? '' : 's'} reopened for the next fill, across ${touched} dossier${touched === 1 ? '' : 's'} of ${files.length}; now run --index and upload`);
 }
 
+/**
+ * `--fill gbif-open`: photographs for every dossier on disk that has none, from GBIF's records under an open licence (one
+ * API request a species; round sixty-eight). Then the index is written, as the other fills do.
+ */
+async function fillOpenGbifPhotos(): Promise<void> {
+  const dir = `${outDir}/s/v${DOSSIER_V}`;
+  const files = existsSync(dir) ? readdirSync(dir).filter((f) => /^\d+\.json$/.test(f)) : [];
+  const f = makeFetcher();
+  let asked = 0, filled = 0, photos = 0, none = 0, failed = 0;
+  for (const file of files) {
+    const path = `${dir}/${file}`;
+    const d = JSON.parse(readFileSync(path, 'utf8')) as Pick<Dossier, 'key' | 'photos' | 'upstream'>;
+    if (d.photos?.length) continue;
+    asked++;
+    const r = await fillOpenGbif(d, f);
+    if ('failed' in r) { failed++; continue; }
+    if ('none' in r) none++;
+    else if (r.added) { filled++; photos += r.added; }
+    writeFileSync(path, JSON.stringify(d));
+    if (asked % 100 === 0) process.stdout.write(`\r  ${asked} asked, ${filled} given photographs…   `);
+  }
+  console.log(`\r  ${asked} dossiers had no photograph: ${filled} were given ${photos} from GBIF's openly licensed records, ${none} have none there, ${failed} not answered (asked again by a later fill).`);
+  writeIndexFromDisk();
+}
+
 async function fillGbifPhotos(): Promise<void> {
   if (!bulkDir) {
     console.error('--fill gbif needs --bulk <dir> with occurrence.zip from a DWCA download');
@@ -681,8 +708,9 @@ async function main() {
   if (fill === 'openalex') return fillLiterature();
   if (fill === 'inat') return fillPhotos();
   if (fill === 'gbif') return fillGbifPhotos();
+  if (fill === 'gbif-open') return fillOpenGbifPhotos();
   if (fill === 'genus') return fillGenera();
-  if (fill) throw new Error(`--fill ${fill}: openalex, inat, gbif or genus`);
+  if (fill) throw new Error(`--fill ${fill}: openalex, inat, gbif, gbif-open or genus`);
   if (args.includes('--names')) return fillNames();
   let climate: ClimateProvider | undefined;
   if (gridDir) {
@@ -753,7 +781,10 @@ async function main() {
     }
     if (bulkDir) {
       console.log(`Loading bulk files from ${bulkDir}/…`);
-      const [wcvp, loaded] = await Promise.all([loadWcvp(bulkDir, names), loadOccurrences(bulkDir, 2000, wantedKeys(bulkDir, names))]);
+      // The genera of each species' older names too, so a range Kew files under another name can be found (round
+      // sixty-eight: Bisnaga glaucescens is Ferocactus glaucescens at Kew, Aeonium tabulaeforme is spelt tabuliforme).
+      const olderGenera = unique.flatMap((p) => (p.key ? readPrev(p.key)?.name.synonyms ?? [] : []).map((x) => x.split(' ').slice(0, 2).join(' ')));
+      const [wcvp, loaded] = await Promise.all([loadWcvp(bulkDir, [...names, ...olderGenera]), loadOccurrences(bulkDir, 2000, wantedKeys(bulkDir, names))]);
       if (!wcvp) console.log('  no WCVP files: distributions will come from the API');
       if (!loaded && !existsSync(`${bulkDir}/occurrence.zip`) && !existsSync(`${bulkDir}/occurrence.csv`)) console.log('  no occurrence.zip: occurrences will come from the API');
       const apiPath = readApiPath(bulkDir);

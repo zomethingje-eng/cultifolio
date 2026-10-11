@@ -140,12 +140,12 @@ export interface KewDescription {
 export const CULTIVATED_RE = /introduced|naturali[sz]ed|cultivated|invasive|managed/i;
 
 /** WCVP rows as republished through GBIF (the checklist Kew's POWO runs on), or served from Kew's own files by the bulk path. */
-export async function distributions(f: JsonFetcher, key: number): Promise<FetchResult<{ rows: GbifDistribution[]; wcvp: boolean; kew?: KewDescription; ambiguous?: string }>> {
-  const r = await f<{ results: GbifDistribution[]; kew?: KewDescription; ambiguous?: string }>(`${GBIF}/species/${key}/distributions?limit=200`);
+export async function distributions(f: JsonFetcher, key: number): Promise<FetchResult<{ rows: GbifDistribution[]; wcvp: boolean; kew?: KewDescription; ambiguous?: string; via?: string }>> {
+  const r = await f<{ results: GbifDistribution[]; kew?: KewDescription; ambiguous?: string; via?: string }>(`${GBIF}/species/${key}/distributions?limit=200`);
   if (r.status !== 'ok') return r;
   if (r.data.ambiguous) return { status: 'ok', data: { rows: [], wcvp: false, ambiguous: r.data.ambiguous } };
   const wcvp = r.data.results.filter((d) => /wcvp|world checklist|plants of the world|kew/i.test(d.source ?? ''));
-  if (wcvp.length) return { status: 'ok', data: { rows: wcvp, wcvp: true, kew: r.data.kew } };
+  if (wcvp.length) return { status: 'ok', data: { rows: wcvp, wcvp: true, kew: r.data.kew, via: r.data.via } };
   // No WCVP entry: fall back to whatever national checklists GBIF holds, one row per country and status.
   const seen = new Map<string, GbifDistribution>();
   for (const d of r.data.results) {
@@ -220,7 +220,11 @@ export interface OccMedia {
 /** Still images attached to occurrences, already filtered to open licences. */
 export async function media(f: JsonFetcher, key: number): Promise<FetchResult<OccMedia[]>> {
   // Not preserved specimens: a herbarium sheet's scan is not a photograph of the plant growing (round thirty, R2-12); the bulk path already leaves them out.
-  const r = await f<OccPage>(`${GBIF}/occurrence/search?taxonKey=${key}&mediaType=StillImage&basisOfRecord=HUMAN_OBSERVATION&basisOfRecord=OBSERVATION&basisOfRecord=MACHINE_OBSERVATION&limit=100`);
+  // Only records under an open licence (GBIF's CC0 and CC BY; it files CC BY-SA under CC BY): most observation photographs
+  // are CC BY-NC, and the first 100 records with an image, read whatever their licence, held no open photograph for 104
+  // of the species round sixty-seven's rebuild left without one, Sprekelia formosissima among them (round sixty-eight).
+  // Each photograph's own licence is still read below: a record's licence is not its photograph's.
+  const r = await f<OccPage>(`${GBIF}/occurrence/search?taxonKey=${key}&mediaType=StillImage&license=CC0_1_0&license=CC_BY_4_0&basisOfRecord=HUMAN_OBSERVATION&basisOfRecord=OBSERVATION&basisOfRecord=MACHINE_OBSERVATION&limit=100`);
   if (r.status !== 'ok') return r;
   const out: OccMedia[] = [];
   for (const o of r.data.results) {

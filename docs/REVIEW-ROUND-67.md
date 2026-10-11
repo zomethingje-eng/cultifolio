@@ -215,3 +215,22 @@ Round sixty-seven went up as commit `42b04d4`, Worker `b16b0ea2-f274-4200-9150-0
 **Headlines.** Round sixty-seven's merge rule, which showed every compound written open where a source writes it so, produced "Giant Milk Weed", "Velvet Leaf" and "Cross-Berry" on the live index. It now applies only to a name ending in plant, tree, lily, daisy, palm, fern, cactus or orchid ("Zebra plant", "Lawn daisy", "Lily tree"); every other closed compound goes by its sources ("Milkweed", "Nannyberry"). On the corpus that is 427 changed headlines, not 490.
 
 Tests: `tests/unit/r68-builder.test.ts` (7 cases, the guards apart all failing on round sixty-seven), and two more cases in `r67n-names`. Unit tests: 2,307 passed and 1 skipped; svelte-check: 0 errors.
+
+## 10. The owner's checks of the live site (round sixty-eight, second part)
+
+Round sixty-eight's corpus step ran clean: the 64 lines of `drops.txt` were all Wikidata turning to an error with the previous identifiers kept, every one of the 44 false refusals was answered, 50 species gained photographs and 104 still had none, and 427 headlines changed. It was uploaded. The owner's checks of the live site then found three things.
+
+**Bisnaga glaucescens and Aeonium tabulaeforme had no native range, so no habitat climate.** Both pages had photographs (25 and 32) and both said "No habitat climate". Kew's WCVP files the first as Ferocactus glaucescens and spells the second "tabuliforme"; the builder asked WCVP by GBIF's accepted name only and fell back to national checklists, which have nothing for either. On the PC's corpus 52 species have no native range.
+- **What changed:** when WCVP has no entry for the accepted name, the bulk fetcher reads GBIF's synonyms for the species and asks WCVP by each. The range is taken only when those names lead to exactly one accepted WCVP entry with a range; two (a homonym) is no answer.
+- **The record says so:** the distribution source reads "WCVP (Govaerts, RBG Kew), under the name Ferocactus glaucescens", and the plant page shows that as a "Range source" row.
+- **The corpus script** loads the WCVP entries for the previous build's synonyms as well as the names asked, so the lookup needs no second pass over the archive.
+- `docs/review-68/range-keys.txt` lists the 52 for a rebuild.
+
+**3,429 of the 8,947 species have no photograph.** GBIF's occurrence search was asked for photographs whatever their licence, and for most species the first 100 records are iNaturalist's, almost all CC BY-NC, which the site does not show.
+- **What changed:** the request now names `license=CC0_1_0&license=CC_BY_4_0`, so the 100 records read are ones the site can use.
+- **A new fill, `--fill gbif-open`,** asks GBIF once for each dossier on disk that has no photograph, adds what it finds, records the request in `upstream['gbif.media']`, and writes the index. A refusal or failure leaves the dossier as it was, to be asked again by a later fill.
+- How many it finds is not known until it runs; the count is printed.
+
+**"snake plant" answered Chelone glabra second,** from "Snakehead" among its common names and "plant" taken from the start of its family, Plantaginaceae. A family now counts only when the word typed is the whole family; origins still match from the start of a word ("mex" finds Mexico).
+
+Tests: `tests/unit/r68b-range-photos-search.test.ts` (8 cases, the guards apart all failing on round sixty-eight's first part).

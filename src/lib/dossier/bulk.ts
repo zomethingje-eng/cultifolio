@@ -150,6 +150,28 @@ export class WcvpIndex {
       kew: { lifeform: a.lifeform, climate: a.climate }
     };
   }
+  /**
+   * When Kew holds no entry under the backbone's name, its range under one of the species' older names (round
+   * sixty-eight): GBIF's Bisnaga glaucescens is Ferocactus glaucescens at Kew, and its Aeonium tabulaeforme is spelt
+   * tabuliforme there, so both pages had no range and no habitat climate. Taken only when the older names lead to exactly
+   * one accepted Kew entry that has a range, so no range is attached to another plant; `via` names the one it came under.
+   */
+  viaOlderNames(older: Array<{ name: string; authorship?: string }>): { rows: GbifDistribution[]; kew: KewDescription; via: string } | null {
+    const hits = new Map<string, string>(); // accepted id → the older name it was reached by
+    for (const o of older) {
+      const a = this.accepted(o.name, o.authorship);
+      if (!a || a === 'ambiguous') {
+        if (a === 'ambiguous') return null; // a homonym among the older names: not resolved here either
+        continue;
+      }
+      if (a.status !== 'Accepted' || !this.dist.get(a.id)?.length) continue;
+      if (!hits.has(a.id)) hits.set(a.id, a.name);
+    }
+    if (hits.size !== 1) return null;
+    const [via] = [...hits.values()];
+    const got = this.distributions(via);
+    return got && got !== 'ambiguous' ? { ...got, via } : null;
+  }
   get size(): number {
     return this.byName.size;
   }
@@ -437,6 +459,16 @@ export function bulkFetcher(base: JsonFetcher, src: BulkSources, stats = { wcvp:
       if (got) {
         stats.wcvp++;
         return { status: 'ok', data: { results: got.rows, kew: got.kew } as unknown as T };
+      }
+      // No entry under the backbone's name: one of its older names may be Kew's (round sixty-eight).
+      if (sp) {
+        const syn = await base<{ results: Array<{ canonicalName?: string; authorship?: string }> }>(url.replace(/\/distributions.*$/, '/synonyms?limit=50'));
+        const older = syn.status === 'ok' ? syn.data.results.filter((x) => x.canonicalName).map((x) => ({ name: x.canonicalName!, authorship: x.authorship })) : [];
+        const via = src.wcvp.viaOlderNames(older);
+        if (via) {
+          stats.wcvp++;
+          return { status: 'ok', data: { results: via.rows, kew: via.kew, via: via.via } as unknown as T };
+        }
       }
     } else if (src.media && (m = RE_MEDIA.exec(url)) && !src.apiPath?.has(Number(m[1]))) {
       const key = Number(m[1]);

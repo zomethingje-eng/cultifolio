@@ -61,6 +61,8 @@ export interface Prepared<T> {
    * sixty-three, N3: "aloe" was one letter from the start of "Algeria", and "Aloe Verra" answered Drimia noctiflora).
    */
   placeWords: string[];
+  /** The family's own words, matched only whole: "plant" is no start of Plantaginaceae (round sixty-eight). */
+  familyWords: string[];
   /** The common names' words alone. */
   commonWords: string[];
   /**
@@ -374,18 +376,20 @@ export function prepare<T extends Searchable>(items: T[]): Prepared<T>[] {
   return items.map((item) => {
     const commonNames = [...(item.common ? [words(item.common)] : []), ...(item.commons ?? []).map(words)].filter((ws) => ws.length);
     const nameWords = words(item.name);
-    const placeWords = [...words(item.family ?? ''), ...(item.origin ?? []).flatMap(words)];
+    const familyWords = words(item.family ?? '');
+    const placeWords = (item.origin ?? []).flatMap(words);
     const commonWords = commonNames.flat();
     const synWords = [...(item.syn ?? []), ...(item.older ?? [])].map((x) => words(x).filter((w) => !RANK_MARKERS.has(w)));
     return {
       item,
       nameWords,
       placeWords,
+      familyWords,
       commonWords,
       commonNames,
       headed: !!item.common && commonNames.length > 0 && commonNames[0].length > 0,
       synWords,
-      wordSet: new Set([...nameWords, ...commonWords, ...placeWords, ...synWords.flat()]),
+      wordSet: new Set([...nameWords, ...commonWords, ...familyWords, ...placeWords, ...synWords.flat()]),
       sortKey: fold(item.name)
     };
   });
@@ -414,7 +418,10 @@ function rank(p: Prepared<unknown>, qs: string[], match: (q: string, w: string) 
       continue;
     }
     let place = false;
-    for (const w of p.placeWords) if (w.startsWith(q)) { place = true; break; }
+    // A family is matched whole, a place from its start: "snake plant" put Chelone glabra second, "snake" from its
+    // "Snakehead" and "plant" from the start of Plantaginaceae (round sixty-eight; the owner's check of round sixty-seven).
+    if (p.familyWords.includes(q)) place = true;
+    else for (const w of p.placeWords) if (w.startsWith(q)) { place = true; break; }
     if (place) continue;
     // No word of the entry can take q: stop here (round fifty-eight).
     if (!someWord(p.commonWords, q, match) && !p.synWords.some((g) => someWord(g, q, match))) return null;

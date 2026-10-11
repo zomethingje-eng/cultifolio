@@ -431,7 +431,7 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     },
     ids,
     summary,
-    distribution: { native, introduced, reported: reported.length ? reported : undefined, extinct: extinct.length ? extinct : undefined, kew, ambiguous, source: dist.status !== 'ok' ? 'not available' : ambiguous ? 'WCVP (Govaerts, RBG Kew): homonyms, unresolved' : fromWcvp ? 'WCVP (Govaerts, RBG Kew) via GBIF' : 'national checklists via GBIF (presence reported, native status not stated; no WCVP entry for this name)', boxes, verified },
+    distribution: { native, introduced, reported: reported.length ? reported : undefined, extinct: extinct.length ? extinct : undefined, kew, ambiguous, source: dist.status !== 'ok' ? 'not available' : ambiguous ? 'WCVP (Govaerts, RBG Kew): homonyms, unresolved' : fromWcvp ? (dist.status === 'ok' && dist.data.via ? `WCVP (Govaerts, RBG Kew), under the name ${dist.data.via}` : 'WCVP (Govaerts, RBG Kew) via GBIF') : 'national checklists via GBIF (presence reported, native status not stated; no WCVP entry for this name)', boxes, verified },
     occurrences: {
       open,
       nOpenInRange: open.length,
