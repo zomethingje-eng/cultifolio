@@ -416,7 +416,7 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     upstream.wikidata = { ...upstream.wikidata, detail: `${upstream.wikidata.detail ?? ''}; the identifiers of the build of ${o.prevIdsOn} are kept`.replace(/^; /, '') };
   }
   let summary: Dossier['summary'];
-  const w = skip('wikipedia') ? ({ status: 'skipped' } as const) : await wm.summary(f, enTitle, [enTitle, ...titles]);
+  const w = skip('wikipedia') ? ({ status: 'skipped' } as const) : await wm.summary(f, enTitle, [enTitle, ...titles], { name: scientific, synonyms: titles.slice(1) });
   if (w.status === 'skipped') skipped('wikipedia');
   else mark('wikipedia', w);
   if (w.status === 'ok') {

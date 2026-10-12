@@ -161,7 +161,14 @@ describe('GBIF\'s media before Commons, and Commons not counted towards "fewer t
 });
 
 describe('--fill summaries (M3, R46-12)', () => {
-  const sum = (title: string) => ({ text: 't', source: 'wikipedia', url: `https://en.wikipedia.org/wiki/${title}`, licence: 'CC BY-SA 4.0', title });
+  // Leads as Wikipedia gives them, in part (round sixty-nine: the fill reads the lead too, so a fixture's lead is a real one).
+  const LEADS: Record<string, string> = {
+    'Weingartia canigueralii': 'Weingartia canigueralii is a species of cactus native to Bolivia.',
+    Kopsia: 'Kopsia is a genus of plants in the family Apocynaceae first described as a genus in 1823.',
+    Saguaro: 'The saguaro is a tree-like cactus species in the monotypic genus Carnegiea.',
+    'Copiapoa cinerea': 'Copiapoa cinerea is a species of flowering plant in the family Cactaceae.'
+  };
+  const sum = (title: string) => ({ text: LEADS[title] ?? 't', source: 'wikipedia', url: `https://en.wikipedia.org/wiki/${title}`, licence: 'CC BY-SA 4.0', title });
   const dossier = (name: string, title: string, wikidata?: string, synonyms: string[] = []) => ({ name: { scientific: name, synonyms }, ids: { gbif: 1, ...(wikidata ? { wikidata } : {}), wikipedia: title }, links: { wikipedia: 'x' }, summary: sum(title), upstream: { wikipedia: { status: 'ok', at: 'x' } as { status: string; at: string; detail?: string } } });
   it('drops the summaries a redirect brought, keeps the species\' own, and asks Wikidata only for titles it cannot settle', async () => {
     const docs: Record<string, unknown> = {

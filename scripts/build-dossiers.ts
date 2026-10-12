@@ -582,7 +582,10 @@ async function fillInatIdsStep(): Promise<void> {
 /** `--fill summaries` (round sixty-nine; triage-68 M3, R46-12): stored summaries a redirect brought from another title dropped; then the index. */
 async function fillSummaries(): Promise<void> {
   const c = await checkSummaries(diskStore(), args.includes('--offline') ? null : makeFetcher());
-  console.log(`  ${c.kept + c.confirmed} summaries are this species' article (${c.confirmed} confirmed as the Wikidata item's sitelink); ${c.dropped} dropped${c.unchecked ? `; ${c.unchecked} not checked, Wikidata not answering (run again)` : ''}${c.lines.length ? `:\n${c.lines.map((l) => `    ${l}`).join('\n')}` : '.'}`);
+  console.log(`  ${c.kept + c.confirmed + c.byLead} summaries are this species' article (${c.confirmed} confirmed as the Wikidata item's sitelink, ${c.byLead} by their lead under another title); ${c.dropped} dropped${c.unchecked ? `; ${c.unchecked} not checked, Wikidata or Wikipedia not answering (run again)` : ''}${c.lines.length ? `:\n${c.lines.map((l) => `    ${l}`).join('\n')}` : '.'}`);
+  // Round sixty-nine, the owner's first run: 108 dropped by title alone, most of them this species' own article. Those
+  // set aside are asked again, and taken back when the lead is this species' (`redirectIsThisSpecies`).
+  if (c.restored) console.log(`  ${c.restored} set aside earlier taken back, the lead being this species':\n${c.restoredLines.map((l) => `    ${l}`).join('\n')}`);
   writeIndexFromDisk();
 }
 

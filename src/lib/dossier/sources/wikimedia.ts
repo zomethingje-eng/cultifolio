@@ -190,7 +190,7 @@ const titleKey = (t: string) => t.replace(/_/g, ' ').trim().toLowerCase();
  * with its own page here, and Kopsia fruticosa's gave the genus's. A final title outside `accept` is not this species'
  * article, and the answer is "none: Wikipedia redirects X to Y" (round sixty-nine; triage-68 M3, R46-12).
  */
-export async function summary(f: JsonFetcher, title: string, accept?: readonly string[]): Promise<SourceResult<{ text: string; url: string; title: string }>> {
+export async function summary(f: JsonFetcher, title: string, accept?: readonly string[], who?: { name: string; synonyms: readonly string[] }): Promise<SourceResult<{ text: string; url: string; title: string }>> {
   const r = await f<{ extract?: string; content_urls?: { desktop?: { page?: string } }; title?: string; type?: string }>(
     `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, '_'))}`
   );
@@ -199,8 +199,67 @@ export async function summary(f: JsonFetcher, title: string, accept?: readonly s
   if (typeof r.data.type === 'string' && /error/i.test(r.data.type)) return { status: 'error', detail: `wikipedia ${r.data.type}` };
   if (!r.data.extract || r.data.type === 'disambiguation') return { status: 'none' };
   const got = (r.data.title ?? title).replace(/_/g, ' ');
-  if (accept && !accept.some((a) => titleKey(a) === titleKey(got))) return { status: 'none', detail: redirected(title, got) };
-  return { status: 'ok', data: { text: r.data.extract.slice(0, 1500), url: r.data.content_urls?.desktop?.page ?? `https://en.wikipedia.org/wiki/${encodeURIComponent(title)}`, title: got } };
+  // Under another title, the lead may still be this species' article: a genus of one species, a crop's common name, the
+  // species placed in another genus (`redirectIsThisSpecies`; round sixty-nine, the owner's fill). Said so in the record.
+  let detail: string | undefined;
+  if (accept && !accept.some((a) => titleKey(a) === titleKey(got))) {
+    if (!who || !redirectIsThisSpecies(got, r.data.extract, who.name, who.synonyms)) return { status: 'none', detail: redirected(title, got) };
+    detail = `${redirected(title, got)}, whose lead is this species'`;
+  }
+  return { status: 'ok', ...(detail ? { detail } : {}), data: { text: r.data.extract.slice(0, 1500), url: r.data.content_urls?.desktop?.page ?? `https://en.wikipedia.org/wiki/${encodeURIComponent(title)}`, title: got } };
+}
+
+/** The binomials a species may be quoted under: its name and its older names at species rank, authors left off. */
+function speciesBinomials(name: string, synonyms: readonly string[]): string[] {
+  const out = [name.replace(/×\s*/g, '')];
+  for (const s of synonyms) {
+    const w = s.replace(/×\s*/g, '').split(/\s+/);
+    if (/^(subsp|ssp|var|subvar|f|fo|forma|nothosubsp|nothovar)\.?$/.test(w[2] ?? '')) continue;
+    if (w.length >= 2) out.push(`${w[0]} ${w[1]}`);
+  }
+  return out;
+}
+/** Two epithets that are one with another spelling or gender ending: scaphirostrus and scaphirostris, nudicaule and nudicaulis, luciae and lucieae. */
+function sameEpithet(a: string, b: string): boolean {
+  const stem = (e: string) => e.toLowerCase().replace(/(us|um|a|is|e|er|ii|i)$/, '');
+  if (stem(a) === stem(b)) return true;
+  // One or two letters apart, for a word of seven letters or more (stolonifer and stoloniferus are a stem apart).
+  const [x, y] = [a.toLowerCase(), b.toLowerCase()];
+  if (Math.min(x.length, y.length) < 6) return false;
+  const d: number[][] = Array.from({ length: x.length + 1 }, (_, i) => Array.from({ length: y.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)));
+  for (let i = 1; i <= x.length; i++) for (let j = 1; j <= y.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (x[i - 1] === y[j - 1] ? 0 : 1));
+  return d[x.length][y.length] <= 2;
+}
+const BINOMIAL = /^([A-Z][a-z-]+) ([a-z-]+)$/;
+
+/**
+ * Whether the lead Wikipedia gave under another title is still this species' article (round sixty-nine, the owner's
+ * `--fill summaries`: 108 summaries dropped by title alone, and about nine in ten were this species' own article: the
+ * page of a genus of one species, "Welwitschia"; a crop's, "Apple", "Coconut"; the species placed in another genus,
+ * "Huernia zebrina" for Ceropegia zebrina; another spelling, "Ariocarpus scaphirostris"). Taken, when the title is
+ *   - two words: the same epithet, in this genus (another spelling) or another (the same type placed elsewhere). Another
+ *     epithet in one of this species' genera is another species, or this one lumped into it: Weingartia canigueralii for
+ *     Weingartia pulchra. Another epithet in another genus, or a common name ("Date palm"), only when its lead names
+ *     this species.
+ *   - one word or more than two: when the lead names this species or an older name of it, or a near spelling of one in the same
+ *     genus ("The sole species is Harpephyllum afrum"); and otherwise only when the lead is not a genus's or a group's
+ *     ("Kopsia is a genus…", "a common name for several species"), so a crop's page by its common name stands.
+ */
+export function redirectIsThisSpecies(got: string, text: string, name: string, synonyms: readonly string[]): boolean {
+  const ours = speciesBinomials(name, synonyms).map((b) => BINOMIAL.exec(b)).filter((m): m is RegExpExecArray => !!m);
+  const named = [...text.matchAll(/\b([A-Z][a-z-]+) ([a-z-]{3,})\b/g)];
+  const namesUs = named.some((n) => ours.some((m) => m[1] === n[1] && (m[2] === n[2] || sameEpithet(m[2], n[2]))));
+  const title = BINOMIAL.exec(got.replace(/_/g, ' ').trim());
+  if (title) {
+    if (ours.some((m) => sameEpithet(m[2], title[2]))) return true;
+    // Another species of one of this species' genera, whatever its lead says; in another genus (or a two-word common
+    // name, "Date palm"), only when its lead names this species.
+    if (ours.some((m) => m[1] === title[1])) return false;
+    return namesUs;
+  }
+  if (namesUs) return true;
+  if (!text.trim()) return false; // no lead to read: nothing says it is this species'
+  return !/\b(is|was|are) an? (small |large |monotypic )?genus\b|\bgenus of\b|\bseveral species\b|\bcommon name (for|of|used)\b|\bgroup of\b/i.test(text);
 }
 
 /** The record of a summary set aside because Wikipedia's article is under another title. */

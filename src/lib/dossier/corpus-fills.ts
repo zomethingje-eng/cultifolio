@@ -12,7 +12,7 @@ import type { DossierStore } from './corpus-run';
 import * as gbif from './sources/gbif';
 import { licenceTag, isOpen } from '$core/licence';
 import { checkIds } from './sources/inat';
-import { mwGet, mwError, summaryTitleFits, redirected } from './sources/wikimedia';
+import { mwGet, mwError, summaryTitleFits, redirected, redirectIsThisSpecies, summary as wikiSummary } from './sources/wikimedia';
 
 type Up = Record<string, { status: string; at?: string; detail?: string }>;
 const day = (now: string) => now.slice(0, 10);
@@ -122,7 +122,7 @@ export async function fillInatIds(store: DossierStore, f: JsonFetcher, now = () 
 /* ---------------------------------------------------------------- --fill summaries */
 
 type SumDossier = Pick<Dossier, 'ids' | 'links' | 'upstream' | 'summary'> & { name: { scientific: string; synonyms: string[] } };
-export type SummaryCounts = { kept: number; dropped: number; confirmed: number; unchecked: number; lines: string[] };
+export type SummaryCounts = { kept: number; dropped: number; confirmed: number; unchecked: number; lines: string[]; byLead: number; restored: number; restoredLines: string[] };
 
 /**
  * Stored summaries whose title is not this species' article (round sixty-nine; triage-68 M3, R46-12): Weingartia pulchra
@@ -133,14 +133,23 @@ export type SummaryCounts = { kept: number; dropped: number; confirmed: number; 
  * as they are, counted as not checked.
  */
 export async function checkSummaries(store: DossierStore, f: JsonFetcher | null, now = () => new Date().toISOString()): Promise<SummaryCounts> {
-  const c: SummaryCounts = { kept: 0, dropped: 0, confirmed: 0, unchecked: 0, lines: [] };
+  const c: SummaryCounts = { kept: 0, dropped: 0, confirmed: 0, unchecked: 0, lines: [], byLead: 0, restored: 0, restoredLines: [] };
   const toConfirm: Array<{ file: string; q: string }> = [];
+  const toRestore: Array<{ file: string; asked: string }> = [];
   for (const file of store.files()) {
     const d = store.read<SumDossier>(file);
-    if (!d.summary) continue;
+    if (!d.summary) {
+      // Set aside by this fill's first rule, the title alone (round sixty-nine): asked again, and taken if its lead is this species'.
+      const was = /^Wikipedia redirects (.+) to (.+)$/.exec(d.upstream?.wikipedia?.status === 'none' ? (d.upstream.wikipedia.detail ?? '') : '');
+      if (was && f) toRestore.push({ file, asked: was[1] });
+      continue;
+    }
     if (summaryTitleFits(d.summary.title, d.name.scientific, d.name.synonyms ?? [])) { c.kept++; continue; }
-    // With an item, the title may be its sitelink: asked of Wikidata, or, with no fetcher (--offline), left and counted unchecked.
-    if (d.ids?.wikidata) { if (f) toConfirm.push({ file, q: d.ids.wikidata }); else c.unchecked++; }
+    // With an item, the title may be its sitelink: asked of Wikidata first. Otherwise, or offline, the lead decides
+    // (`redirectIsThisSpecies`); offline, a lead that does not settle it leaves the summary unchecked.
+    if (d.ids?.wikidata && f) { toConfirm.push({ file, q: d.ids.wikidata }); continue; }
+    if (byLead(d)) { c.byLead++; continue; }
+    if (d.ids?.wikidata) c.unchecked++;
     else drop(file, d, d.name.scientific);
   }
   for (let i = 0; i < toConfirm.length; i += 50) {
@@ -151,10 +160,26 @@ export async function checkSummaries(store: DossierStore, f: JsonFetcher | null,
       const d = store.read<SumDossier>(file);
       const link = r.data.entities?.[q]?.sitelinks?.enwiki?.title;
       if (link && summaryTitleFits(d.summary!.title, d.name.scientific, d.name.synonyms ?? [], link)) { c.confirmed++; continue; }
+      if (byLead(d)) { c.byLead++; continue; }
       drop(file, d, link ?? d.name.scientific);
     }
   }
+  for (const { file, asked } of toRestore) {
+    const d = store.read<SumDossier>(file);
+    const r = await wikiSummary(f!, asked, [asked], { name: d.name.scientific, synonyms: d.name.synonyms ?? [] });
+    if (r.status !== 'ok') { if (r.status !== 'none') c.unchecked++; continue; }
+    d.summary = { text: r.data.text, source: 'wikipedia', url: r.data.url, licence: 'CC BY-SA 4.0', title: r.data.title };
+    d.ids.wikipedia = r.data.title;
+    d.links.wikipedia = r.data.url;
+    d.upstream.wikipedia = { status: 'ok', at: now(), detail: r.detail };
+    store.write(file, d);
+    c.restored++;
+    c.restoredLines.push(`${d.name.scientific}: ${r.detail ?? r.data.title}`);
+  }
   return c;
+  function byLead(d: SumDossier): boolean {
+    return redirectIsThisSpecies(d.summary!.title, d.summary!.text ?? '', d.name.scientific, d.name.synonyms ?? []);
+  }
   function drop(file: string, d: SumDossier, asked: string) {
     const why = redirected(asked, d.summary!.title);
     c.lines.push(`${d.name.scientific}: ${why}`);
