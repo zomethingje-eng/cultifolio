@@ -207,7 +207,8 @@ describe('Wikidata by name: one exact label, and proof it is this plant (M7)', (
     [`${W}?action=wbgetentities`]: { entities: entity }
   });
   it('two items with the label is two answers, not the first', async () => {
-    const f = byName([{ id: 'Q1', label: 'Aus bus' }, { id: 'Q2', label: 'Aus bus' }], { Q1: { claims: {} } });
+    const taxon = { claims: { P225: [{ mainsnak: { datavalue: { value: 'Aus bus' } } }] } };
+    const f = byName([{ id: 'Q1', label: 'Aus bus' }, { id: 'Q2', label: 'Aus bus' }], { Q1: taxon, Q2: taxon });
     expect(await crossIds(f, 'Aus bus', 77)).toMatchObject({ status: 'ambiguous', detail: 'not taken: two items answered to the label Aus bus (Q1, Q2)' }); // base: Q1
   });
   it('an item with no GBIF key is taken only when its taxon name is the name', async () => {

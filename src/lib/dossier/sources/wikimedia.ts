@@ -100,6 +100,22 @@ function crossOf(id: string, ent: Entity): CrossIds {
  * Two items left standing is `ambiguous`, "not taken: two items answered", never "none"; an answer by an older name
  * names it (triage-68 M8, R46-15).
  */
+/**
+ * Whether one of an item's GBIF keys is GBIF's record of this name or of a synonym of this species: its canonical name
+ * is the name, in the plant kingdom, or its accepted key is this species'. `data` says which, for the record; null
+ * when none is. A GBIF that does not answer is the answer, so the step is asked again, never decided without it.
+ */
+async function sameNameRecord(f: JsonFetcher, keys: readonly number[], name: string, gbifKey?: number): Promise<FetchResult<string | null>> {
+  for (const k of keys.slice(0, 3)) {
+    const r = await f<{ canonicalName?: string; scientificName?: string; kingdom?: string; acceptedKey?: number }>(`https://api.gbif.org/v1/species/${k}`);
+    if (r.status === 'none') continue;
+    if (r.status !== 'ok') return r;
+    if (gbifKey && r.data.acceptedKey === gbifKey) return { status: 'ok', data: `${k} is GBIF's record of ${r.data.scientificName ?? 'a synonym'}, a synonym of this species` };
+    if ((r.data.canonicalName ?? '').toLowerCase() === name.toLowerCase() && (r.data.kingdom ?? 'Plantae') === 'Plantae') return { status: 'ok', data: `${k} is GBIF's record of ${r.data.scientificName ?? name}, the same name` };
+  }
+  return { status: 'ok', data: null };
+}
+
 export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?: number, olderNames: ReadonlyArray<number | { key: number; name: string }> = []): Promise<SourceResult<CrossIds>> {
   const older = olderNames.slice(0, 10).map((o) => (typeof o === 'number' ? { key: o, name: '' } : o));
   const olderKeys = older.map((o) => o.key);
@@ -126,17 +142,34 @@ export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?:
     const bad = failed(s.data);
     if (bad) return bad;
     const exact = [...new Set((s.data.search ?? []).filter((x) => x.label.toLowerCase() === scientificName.toLowerCase()).map((x) => x.id))];
-    if (exact.length > 1) twoByName = `not taken: two items answered to the label ${scientificName} (${exact.join(', ')})`;
-    else if (exact.length === 1) {
-      const e = await entityOf(f, exact[0]);
+    // Each item with the label is read, and only a taxon's counts (a print or a painting of the plant carries its label
+    // too: Q52515621 for Oxalis corniculata). Of the taxa, the ones whose identity is shown are taken, and only one.
+    const proven: Array<{ id: string; e: Entity; detail?: string }> = [];
+    for (const id of exact) {
+      const e = await entityOf(f, id);
       if (e.status !== 'ok') return e;
-      if (e.data) {
-        const keys = strings(e.data, P.gbif).map(Number);
-        const proven = keys.length ? keys.some((k) => k === gbifKey || olderKeys.includes(k)) : strings(e.data, P.taxonName).some((n) => n === scientificName);
-        if (proven) return { status: 'ok', data: crossOf(exact[0], e.data) };
-        notes.push(`not taken: the item labelled ${scientificName}, ${exact[0]}, ${keys.length ? `carries GBIF key ${keys.join(', ')}` : 'carries no GBIF key, and its taxon name is not this one'}`);
+      if (!e.data) continue;
+      const names = strings(e.data, P.taxonName);
+      const keys = strings(e.data, P.gbif).map(Number);
+      const isTaxon = names.length > 0 || keys.length > 0 || strings(e.data, 'P31').includes('Q16521');
+      if (!isTaxon) continue;
+      if (keys.some((k) => k === gbifKey || olderKeys.includes(k))) { proven.push({ id, e: e.data }); continue; }
+      if (!keys.length) {
+        if (names.some((n) => n === scientificName)) proven.push({ id, e: e.data });
+        else notes.push(`not taken: the item labelled ${scientificName}, ${id}, carries no GBIF key, and its taxon name is not this one`);
+        continue;
       }
+      // Its GBIF key is another record: taken when GBIF says that record is this name (another author's, or an older
+      // record of it: Q146400 carries 2932865, "Solanum nigrum Forssk.", for Solanum nigrum L.) or is a synonym of this
+      // species. Round sixty-nine, the owner's rebuild: nine species lost their item, Solanum nigrum and Prunus
+      // armeniaca among them, to the rule that asked for the key alone.
+      const same = await sameNameRecord(f, keys, scientificName, gbifKey);
+      if (same.status !== 'ok') return same;
+      if (same.data) proven.push({ id, e: e.data, detail: `found by its label; its GBIF key ${same.data}` });
+      else notes.push(`not taken: the item labelled ${scientificName}, ${id}, carries GBIF key ${keys.join(', ')}, GBIF's record of another name`);
     }
+    if (proven.length > 1) twoByName = `not taken: two items answered to the label ${scientificName} (${proven.map((p) => p.id).join(', ')})`;
+    else if (proven.length === 1) return { status: 'ok', ...(proven[0].detail ? { detail: proven[0].detail } : {}), data: crossOf(proven[0].id, proven[0].e) };
   }
   // Wikidata files the species under an older name with the same type (Q310510, Ferocactus glaucescens, for Bisnaga
   // glaucescens): found by the GBIF record of that name, in one search, and taken only when one item answers (round

@@ -167,15 +167,19 @@ describe('the sources, both ways', () => {
     const where = how.slice(how.indexOf('What comes from where'), how.indexOf('Which species are here'));
     expect(sentence(where, "The species' identifiers in other databases")).toBe(
       // Round sixty-nine (triage-68 M7, IND-8): a name hit is taken only as the one exact label, proved by its GBIF key or a
-      // same-type older name's, or, with no key, by its taxon name.
-      "The species' identifiers in other databases (POWO, IPNI, World Flora Online and iNaturalist), the links to them, and the title of its English Wikipedia article come from Wikidata, from the item that carries the species' GBIF key, or, when Wikidata finds no item that does, the one item whose label is the name exactly and which carries the species' GBIF key or that of an older name with the same type, or, carrying no GBIF key, gives the name as its taxon name."
+      // same-type older name's, or, with no key, by its taxon name. The owner's rebuild: a key whose GBIF record is the same
+      // name or a synonym of the species proves it too (Solanum nigrum's item carries "Solanum nigrum Forssk.").
+      "The species' identifiers in other databases (POWO, IPNI, World Flora Online and iNaturalist), the links to them, and the title of its English Wikipedia article come from Wikidata, from the item that carries the species' GBIF key, or, when Wikidata finds no item that does, the one taxon whose label is the name exactly and which carries the species' GBIF key or that of an older name with the same type, or a GBIF key whose record GBIF gives under the same name (another author's, or an older record) or as a synonym of the species, or, carrying no GBIF key, gives the name as its taxon name; an item with the label that is not a taxon (a print of the plant) is passed over, and two taxa that qualify are no answer."
     );
     expect(sentence(where, 'The coastlines of the maps')).toBe("The coastlines of the maps on a species page are Natural Earth's (public domain), drawn from files this site serves itself.");
     // What the build does: the item by the GBIF key (P846) first, an exact label only when the key finds none.
     const wm = raw('src/lib/dossier/sources/wikimedia.ts');
     expect(wm).toMatch(/haswbstatement:P846=/);
     expect(wm).toMatch(/x\.label\.toLowerCase\(\) === scientificName\.toLowerCase\(\)/);
-    expect(wm).toMatch(/keys\.some\(\(k\) => k === gbifKey \|\| olderKeys\.includes\(k\)\) : strings\(e\.data, P\.taxonName\)\.some\(\(n\) => n === scientificName\)/);
+    expect(wm).toMatch(/keys\.some\(\(k\) => k === gbifKey \|\| olderKeys\.includes\(k\)\)/);
+    expect(wm).toMatch(/names\.some\(\(n\) => n === scientificName\)/);
+    expect(wm).toMatch(/r\.data\.acceptedKey === gbifKey/);
+    expect(wm).toMatch(/canonicalName \?\? ''\)\.toLowerCase\(\) === name\.toLowerCase\(\)/);
     expect(raw('src/lib/map/still.ts')).toMatch(/Natural Earth\s*\n?\s*\*?\s*coastlines \(public domain\)/);
   });
 });
