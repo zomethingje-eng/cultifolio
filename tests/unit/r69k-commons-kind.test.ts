@@ -107,3 +107,25 @@ describe('--fill commons reads the species\' older names', () => {
     expect(d.photos.map((p) => p.id)).toEqual(['File:Brachystelma attenuatum 2.jpg']);
   });
 });
+
+/**
+ * Round sixty-nine, the owner's index: of 22 Commons files left out as "named as another species", 12 were the species
+ * under a misspelt epithet. Each "shown" case FAILED on the deployed round sixty-nine; each "left out" case is a guard.
+ */
+describe('a misspelt epithet is the species\' own', () => {
+  const SHOWN: Array<[string, string]> = [
+    ['Othonna cakilefolia', 'File:Othonna cakilifolia 77773164.jpg'],
+    ['Lachenalia arbuthnotiae', 'File:Lachenalia arbuthonotiae KirstenboschBotGard09292010B.jpg'],
+    ['Lachenalia purpureocaerulea', 'File:Lachenalia purpureo-caerulea1a.UME.jpg'],
+    ['Eriosyce andreaeana', 'File:Eriosyce andreana.jpg'],
+    ['Schwantesia ruedebuschii', 'File:Schwantesia nuedebuschii 0zz.jpg']
+  ];
+  for (const [sp, title] of SHOWN) it(`shows ${title} under ${sp}`, () => expect(read(sp, [title])).toEqual([title]));
+  const LEFT: Array<[string, string]> = [
+    ['Nepenthes robcantleyi', 'File:Nepenthes truncata 2011 Chelsea Flower Show.jpg'],
+    ['Colchicum raddeanum', 'File:Aragats, colchicum bifolium - panoramio.jpg'],
+    ['Conophytum minimum', 'File:Conophytum minutum 1.jpg'], // two letters apart: another species
+    ['Haworthia rossouwii', 'File:Haworthia serrata 1e.jpg']
+  ];
+  for (const [sp, title] of LEFT) it(`leaves out ${title} under ${sp} (guard)`, () => expect(read(sp, [title])).toEqual([]));
+});

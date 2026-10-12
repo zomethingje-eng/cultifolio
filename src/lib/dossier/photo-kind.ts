@@ -67,10 +67,29 @@ function namesAnother(title: string, names: Binomial[]): boolean {
     for (const m of title.matchAll(new RegExp(`(?:^|[^A-Za-z])${genusRe(g)}\\s+(?:×\\s*|x\\s+)?([a-z][a-z-]{2,})`, 'g'))) {
       const e = m[1].replace(/-+$/, '');
       if (NOT_EPITHET.has(e) || mine.has(`${g.toLowerCase()} ${stem(e)}`)) continue;
+      if (names.some((b) => b.genus === g && misspelt(e, b.epithet))) continue;
       return true;
     }
   }
   return false;
+}
+
+/**
+ * An epithet as its uploader misspelt it, read as the species' own (round sixty-nine, the owner's index: 22 files of
+ * ten species were left out as "another species", and 12 of them were the species, the other ten rightly left out: Othonna cakilifolia for cakilefolia,
+ * Lachenalia arbuthonotiae, purpureo-caerulea, Eriosyce andreana, Schwantesia nuedebuschii). Hyphens are not read and
+ * "ae" is read as "e"; then the two may be one letter apart, for an epithet of seven letters or more. Two letters apart
+ * is another species often enough (Conophytum minimum and minutum), so it stays another.
+ */
+function misspelt(a: string, b: string): boolean {
+  const norm = (e: string) => e.toLowerCase().replace(/-/g, '').replace(/ae/g, 'e');
+  const [x, y] = [norm(a), norm(b)];
+  if (x === y) return true;
+  if (Math.min(x.length, y.length) < 7 || Math.abs(x.length - y.length) > 1) return false;
+  let i = 0;
+  while (i < x.length && i < y.length && x[i] === y[i]) i++;
+  // One letter changed, added or left out: what follows it is the same.
+  return x.slice(i + 1) === y.slice(i + 1) || x.slice(i) === y.slice(i + 1) || x.slice(i + 1) === y.slice(i);
 }
 
 /** A hybrid's sign, or " x " between two names, left once the species' own name is set aside (so Lantana ×strigocamara's files stay). */
