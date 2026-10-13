@@ -33,9 +33,12 @@ test('r67p P1: a "keep data" question never answered is put once over six page l
   await expect(page.locator('main')).not.toContainText('Opening your collection', { timeout: 20_000 });
   await inject(page, plant('rQ1', '2026-0001', 'Copiapoa cinerea'), Date.now() - 86_400_000);
   await page.evaluate(() => { localStorage.removeItem('__asks'); localStorage.removeItem('cultifolio.persistAskedAt'); });
+  // Each page is waited on until its collection is read (the layout's `data-collection`), not for a fixed 1.2 s: under a
+  // loaded WebKit run no page finished reading in that time, nothing was asked, and the count was 0 against 1 (round
+  // seventy; triage-69 P3, R47-20). The load's ask is made as the read ends, so it is counted by then.
   for (const path of ['/plants', '/today', '/', '/plants', '/places', '/plants/rQ1']) {
     await page.goto(path); await ready(page);
-    await page.waitForTimeout(1200);
+    await page.locator('html[data-collection="open"]').waitFor({ state: 'attached', timeout: 30_000 });
   }
   const asks = (await page.evaluate(() => localStorage.getItem('__asks') ?? '')).split(';').filter(Boolean);
   expect(asks.length, asks.join(' ')).toBe(1); // the base asked on every load: 7

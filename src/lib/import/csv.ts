@@ -204,6 +204,13 @@ export interface ReadDate {
   ambiguous?: boolean;
   /** The year an unread cell names, when it names one: its plant is numbered for that year, not this one (a read date carries its own). */
   year?: number;
+  /**
+   * A cell left because its two-digit year could be written first or last ("05/01/24", a spreadsheet's short date): its
+   * readings with the year last, day first and month first, each a date that can be, and one when the two agree or only
+   * one can be (round seventy; triage-69 R3, the self-review's D3). The sheet's order reads it by one of them; the import
+   * key tries each.
+   */
+  yearLast?: string[];
 }
 
 /**
@@ -215,7 +222,10 @@ export interface ReadDate {
  *   choice (`order`), or left (null), never guessed row by row;
  * - a two-digit year is read with a day-month order only ("30/09/09"), as 20YY, and only when 20YY has come: "15/06/27"
  *   could be 1927 or 2027, so it is left (round sixty-two; A20, the records review, 14). When the first number could be
- *   a year too ("24-03-09", "24/03/09", "24.03.09"), it could be written year first, so it is left;
+ *   a year too ("24-03-09", "24/03/09", "24.03.09"), it could be written year first, so it is left unless the sheet's
+ *   choice says its dates are written day first or month first, both of which put the year last: LibreOffice saves a
+ *   date as 05/01/24 or 01/05/24 by its language, and a sheet saved again by it read none of its dates (round seventy;
+ *   triage-69 R3, the self-review's D3);
  * - a time after a date ("09/03/2024 10:15", as a spreadsheet writes a date and time) is not part of the date;
  * - a 0 day or month is no date, and "2019.5" is a number, not May 2019.
  * A date in the future or before 1900 is not read. What is not read is said, and the sheet's text goes to the notes.
@@ -277,7 +287,11 @@ export function readDate(cell: string, today: string, order: DateOrder = null): 
       // and month after it) could be written year first, with any separator, so it is left, as dashes always were.
       const yf = m[1].length === 2 ? twoDigit(m[1]) : null;
       const asYearFirst = yf !== null && b <= 12 && +m[4] >= 1 && +m[4] <= 31 && full(yf, b, +m[4]).d !== null;
-      if (m[2] === '-' || asYearFirst) return not(`"${t}" could be written year first or year last, so it was not read`);
+      if ((m[2] === '-' || asYearFirst) && !order) {
+        const yl = twoDigit(m[4]);
+        const last = yl === null || a === 0 || b === 0 ? [] : [...new Set([full(yl, b, a).d, full(yl, a, b).d].filter((x): x is string => !!x))];
+        return not(`"${t}" could be written year first or year last, so it was not read`, last.length ? { yearLast: last } : {});
+      }
     }
     const y = m[4].length === 4 ? +m[4] : twoDigit(m[4]);
     if (y === null) return century(m[4]);
@@ -308,7 +322,9 @@ export function ambiguousDates(rows: string[][], m: Mapping, header: boolean, to
     const c = cellText(r[i]);
     if (!c) return;
     const d = readDate(c, today);
-    if (d.ambiguous) { n++; first ??= c; return; }
+    // A short date whose year could be first or last, and whose day and month read either way with it last (round
+    // seventy; triage-69 R3): the choice reads it, so it is asked about as 09/03/2024 is.
+    if (d.ambiguous || (d.yearLast?.length ?? 0) > 1) { n++; first ??= c; return; }
     const x = d.d ? /^(\d{1,2})[-/.](\d{1,2})[-/.](?:\d{4}|\d{2})(?:\s|$)/.exec(c) : null;
     if (!x) return;
     const by = +x[1] > 12 ? dayFirst : +x[2] > 12 ? monthFirst : null;

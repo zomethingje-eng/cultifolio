@@ -78,6 +78,12 @@ export interface Prepared<T> {
   placeWords: string[];
   /** The family's own words, matched whole, or from their start by a typed word of `FAMILY_START` letters or more: "plant" is no start of Plantaginaceae (round sixty-eight), "aizoac" is (round sixty-nine). */
   familyWords: string[];
+  /**
+   * Every genus of the reference, folded, shared by every entry prepared together: a typed word that is one is never the
+   * start of a family (round seventy; triage-69 N2, S-F6). The whole index's, from `prepare`'s caller where only some
+   * entries are prepared (the server's postings); otherwise the genera of the entries prepared.
+   */
+  genera: ReadonlySet<string>;
   /** The common names' words alone. */
   commonWords: string[];
   /**
@@ -403,9 +409,23 @@ const epithetStem = (w: string) => w.replace(/(?:us|um|a|is|e|es|i)$/, '');
  * keep "plant" (five) out of Plantaginaceae, so "snake plant" is still Dracaena alone.
  */
 export const FAMILY_START = 6;
-const familyMatch = (familyWords: string[], q: string) => (q.length >= FAMILY_START ? familyWords.some((w) => w.startsWith(q)) : familyWords.includes(q));
+/**
+ * A family is matched from its start only by a word that is neither a genus of the reference nor a whole word of the
+ * entry's name (round seventy; triage-69 N2, S-F6): 81 genera of the live index begin their family's name (Crassula,
+ * Euphorbia, Protea, Bursera, Strelitzia, Commelina, Dioscorea, Verbena, Zingiber, …), so "Crassula elegans" answered
+ * Echeveria elegans, Echeveria harmsii and Sedum acre after the species, "Bursera" three Boswellia, and the headline
+ * "Giant Crassula" Aeonium undulatum. Of 1,109 queries made of those genera, their species and their headlines, 73
+ * answer otherwise in their first five. Matched whole, a family is a family whatever the word.
+ */
+const familyMatch = (p: Prepared<unknown>, q: string) => (q.length >= FAMILY_START && !p.genera.has(q) && !p.nameWords.includes(q) ? p.familyWords.some((w) => w.startsWith(q)) : p.familyWords.includes(q));
+/** Every genus of a list of entries, folded as the search reads a word: what `prepare` reads a family's start against. Exported for the server, which prepares only some of the index for a request. */
+export function searchGenera(items: Iterable<Pick<Searchable, 'name'>>): Set<string> {
+  const out = new Set<string>();
+  for (const e of items) { const g = words(e.name)[0]; if (g) out.add(g); }
+  return out;
+}
 
-export function prepare<T extends Searchable>(items: T[]): Prepared<T>[] {
+export function prepare<T extends Searchable>(items: T[], genera: ReadonlySet<string> = searchGenera(items)): Prepared<T>[] {
   return items.map((item) => {
     // The pooled spellings after every shown name, so a shown name's place comes first (round sixty-nine; triage-68 N2).
     const texts = [...(item.common ? [item.common] : []), ...(item.commons ?? []), ...(item.spellings ?? [])].filter((t) => words(t).length);
@@ -421,6 +441,7 @@ export function prepare<T extends Searchable>(items: T[]): Prepared<T>[] {
       nameWords,
       placeWords,
       familyWords,
+      genera,
       commonWords,
       commonNames,
       headed: !!item.common && words(item.common).length > 0,
@@ -460,7 +481,8 @@ function rank(p: Prepared<unknown>, qs: string[], match: (q: string, w: string) 
     // A family is matched whole, a place from its start: "snake plant" put Chelone glabra second, "snake" from its
     // "Snakehead" and "plant" from the start of Plantaginaceae (round sixty-eight; the owner's check of round sixty-seven).
     // A family from its start too once the word has six letters (`FAMILY_START`; round sixty-nine; triage-68 N2).
-    if (familyMatch(p.familyWords, q)) place = true;
+    // Not by a genus of the reference or a word of the entry's own name (`familyMatch`; round seventy, triage-69 N2).
+    if (familyMatch(p, q)) place = true;
     else for (const w of p.placeWords) if (w.startsWith(q)) { place = true; break; }
     if (place) continue;
     // No word of the entry can take q: stop here (round fifty-eight).
@@ -492,11 +514,12 @@ function oneOlder(p: Prepared<unknown>, qs: string[], match: (q: string, w: stri
  * "Opuntia longispina" is Airampoa corrugata before the species with a variety of that name); then the common names,
  * each read whole (one name holds every word: "cape aloe" is Aloe ferox, "Cape aloe", before an aloe of the Cape
  * Provinces); then the other ranks. Within a group: a near hit by its distance from what was typed, the nearest first
- * ("Ceropegia pica" is C. picta before C. dicapuae); among older names typed, the species that keeps the name's
- * epithet, then one that shows the name (`olderOrder`); then a name that is exactly the query, the headline first ("onion"
- * is Allium cepa, "Onion", before Albuca's "Sea-onion"; "fig" is Ficus carica, "Fig"); then a hit whose every word is
- * a whole word typed; then one whose headline holds every word; among the common names' hits, the name's place among
- * the species' names, a name written as typed, more photographs (`commonTie`); then the alphabet.
+ * ("Ceropegia pica" is C. picta before C. dicapuae); among older names typed, a species that holds the name exactly,
+ * then the one that keeps the name's epithet, then one that shows the name itself (`olderOrder`); then a name that is
+ * exactly the query, the headline first ("onion" is Allium cepa, "Onion", before Albuca's "Sea-onion"; "fig" is Ficus
+ * carica, "Fig"); then a hit whose every word is a whole word typed; then one whose headline holds every word; among
+ * the common names' hits, the name's place among the species' names, a name written as typed, more photographs
+ * (`commonTie`); then the alphabet.
  */
 const Group = { Name: 0, Older: 1, Common: 2, NameWords: 3, Mixed: 4, Other: 5 } as const;
 function group(p: Prepared<unknown>, qs: string[], r: number, match: (q: string, w: string) => boolean): number {
@@ -525,14 +548,24 @@ function olderTyped(p: Prepared<unknown>, qs: string[], match: (q: string, w: st
  * that keeps the typed name's epithet, its ending aside ("Aloe variegata" is Gonialoe variegata before Aloe vera, which
  * holds the name among its search-only ones; "Aloe varieg", still being typed, too); then, either way, a species that
  * shows the name before one that holds it only for the search ("Euporteria senilis" is Eriosyce senilis before
- * Cephalocereus senilis). The species route's redirect reads the same shown-first rule (`indexMaps`). The epithet is
- * the one typed, not a variety's: "Opuntia longispina" is no Opuntia orbiculata for its variety longispina.
+ * Cephalocereus senilis). The epithet is the one typed, not a variety's: "Opuntia longispina" is no Opuntia orbiculata
+ * for its variety longispina. Since round seventy a name two species hold redirects to neither (`indexMaps`), and the
+ * species route's 404 names them in this order.
  */
 function olderOrder(p: Prepared<unknown>, qs: string[], match: (q: string, w: string) => boolean): number {
   const t = qs[1], e = p.epithet;
   const keeps = !!e && (epithetStem(e) === epithetStem(t) || (qs.length === 2 && e.startsWith(t)));
-  const shown = olderTyped(p, qs, match).some((at) => at < p.shownSyn);
-  return (keeps ? 0 : 2) + (shown ? 0 : 1);
+  // A species that holds the typed name exactly comes first, and "shows the name" counts only the name itself shown, never
+  // a variety of it (round seventy; triage-69 N2, S-F2): "Cornus mascula" put Cornus officinalis, which shows "Cornus
+  // mascula var. japonica", before Cornus mas, which holds the name. Of the 37,037 binomial older names of the live index
+  // typed exactly, 162 put first a species that holds no such name; 136 now find a holder first, and the other 26 are
+  // answered by a name typed as a name ("Nepenthes mira" by Nepenthes mirabilis, "Stramonium datura" by Datura
+  // stramonium, the tautonyms by their genus), as they should be. A name still being typed ("Opuntia longisp") is no
+  // one's exactly; a shown name of the typed length counts as shown, a shown variety does not.
+  const typedAt = olderTyped(p, qs, match);
+  const exact = typedAt.some((at) => same(p.synWords[at], qs));
+  const shown = typedAt.some((at) => at < p.shownSyn && p.synWords[at].length === qs.length);
+  return (exact ? 0 : 4) + (keeps ? 0 : 2) + (shown ? 0 : 1);
 }
 /** Whether a name's words hold every query word. */
 function holds(ws: string[], qs: string[], match: (q: string, w: string) => boolean): boolean {

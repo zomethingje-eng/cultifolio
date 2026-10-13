@@ -10,6 +10,8 @@
  *   - Wikidata, Wikipedia, iNaturalist's taxon or WCVP's range answering ok before and nothing (or two answers) now;
  *   - photographs falling by more than half;
  *   - the previous build's identifiers kept for a second build in a row (Wikidata lagged twice).
+ * Round seventy's second pass (triage-69 B6, R47-5): a Wikidata item that changed, and an IPNI identifier that newly
+ * disagrees with the POWO one.
  */
 type Row = { status?: string; detail?: string } | undefined;
 export interface Dossierish {
@@ -33,9 +35,25 @@ function photoDrops(had: number, has: number): string[] {
   return has * 2 < had ? [`photographs fell by more than half (${had} before, ${has} now)`] : [];
 }
 
+/**
+ * An IPNI identifier that is not the number in the POWO identifier, which is an IPNI address too (round seventy, second
+ * pass; triage-69 B6, R47-5): one of them is another name's, as on Convolvulus cneorum (IPNI 266048-1, Spruner ex Nyman's;
+ * POWO 266046-1, Linnaeus's). Null when they agree or either is missing.
+ */
+export function ipniPowoDisagree(ids?: Record<string, unknown>): string | null {
+  const ipni = typeof ids?.ipni === 'string' ? ids.ipni : undefined;
+  const powo = typeof ids?.powo === 'string' ? /names:([\w-]+)$/.exec(ids.powo)?.[1] : undefined;
+  return ipni && powo && ipni !== powo ? `IPNI ${ipni} is not POWO's ${powo}` : null;
+}
+
 function lostParts(prev: Dossierish, next: Dossierish): string[] {
   const out: string[] = [];
   for (const k of IDS) if (prev.ids?.[k] != null && next.ids?.[k] == null) out.push(`identifier ${k} lost (${String(prev.ids[k])} before)`);
+  // A changed item is a changed set of identifiers, which the drops audit never read (R47-5: Prunus persica's item was
+  // Amygdalus persica's, Oenothera fruticosa's Kneiffia fruticosa's).
+  if (prev.ids?.wikidata != null && next.ids?.wikidata != null && prev.ids.wikidata !== next.ids.wikidata) out.push(`identifier wikidata changed (${String(prev.ids.wikidata)} before, ${String(next.ids.wikidata)} now)`);
+  const disagree = ipniPowoDisagree(next.ids);
+  if (disagree && disagree !== ipniPowoDisagree(prev.ids)) out.push(disagree);
   if (prev.summary && !next.summary) out.push('Wikipedia summary lost');
   const native = (d: Dossierish) => d.distribution?.native?.length ?? 0;
   if (native(prev) > 0 && native(next) === 0) out.push(`native range lost (${native(prev)} regions before)`);

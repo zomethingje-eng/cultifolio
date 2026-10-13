@@ -20,6 +20,7 @@ import { parseDossier } from '$lib/dossier/schema';
 import { photoAt, srcsetOf, shownAt, type PhotoSize } from '$lib/dossier/photo-size';
 import { GEN_LIST_PAGES } from '$lib/server/photogen';
 import { MARK_FAULT_NIGHTS } from '$lib/server/counters';
+import { said, claim, numberWord, spanWords } from '../about-pages';
 
 const raw = (f: string) => readFileSync(f, 'utf8');
 const text = (f: string) => raw(f).replace(/<[^>]+>/g, '').replace(/\s+/g, ' ');
@@ -85,21 +86,8 @@ describe('the photographs a page loads are on the image policy (R46-31)', () => 
   });
 });
 
-describe('the Commons sizes /about/how names are the widths the code asks for (R46-31; S-E 3)', () => {
-  const commons = read.photos.filter((p) => p.src === 'commons').flatMap(addresses).filter((u) => u.startsWith('https://upload.wikimedia.org/'));
-  const widths = new Set(commons.map((u) => /\/(\d+)px-[^/]+$/.exec(u)?.[1]).filter((w): w is string => !!w).map(Number));
-  const said = clause(how, 'Wikimedia Commons (upload.wikimedia.org, ', ') and,');
-  it('each width the code makes is named, and no other', () => {
-    expect(widths.size).toBeGreaterThan(0);
-    const named = new Set([...said.matchAll(/(\d+)(?:-| |-pixel)/g)].map((m) => Number(m[1])).filter((n) => n >= 40));
-    expect([...named].sort((a, b) => a - b)).toEqual([...widths].sort((a, b) => a - b));
-  });
-  it('a file shown at its own size is said', () => {
-    const own = commons.some((u) => !/\/\d+px-[^/]+$/.test(u));
-    expect(own).toBe(true);
-    expect(said).toMatch(/at a file's own size when it is narrower/);
-  });
-});
+// The Commons sizes, slot by slot, and an original's own width: read by the new method in r70p-about-rules.test.ts
+// (round seventy; triage-69 P2, R47-13). C7 gave a small original a thumbnail, so this file's "own size" case no longer exists.
 
 describe("the Worker's own cache keys carry the app's version, as /about/how says (S-E 2, R46-8; with W3)", () => {
   /** The five copies the Worker keeps under keys of its own, and where each key is made. */
@@ -127,9 +115,16 @@ describe('the cached 404 and 302 of a species address (R46-8)', () => {
     expect(server).toMatch(/setHeaders\(\{ 'cache-control': 'public, max-age=86400' \}\);\n\s*redirect\(302, `\/species\/\$\{syn\.slug\}/);
     expect(server).toMatch(/setHeaders\(\{ 'cache-control': unchecked \? 'no-store' : 'public, max-age=300' \}\);/);
   });
-  it('both lists say them, each with its lifetime', () => {
-    expect([...how.matchAll(/(?:"no species page"|"not found")[^;]*?for five minutes/g)].length).toBeGreaterThanOrEqual(2);
-    expect([...how.matchAll(/older name(?:, as its move| to its species| ?'s redirect)[^;]*?for a day|(?:move|redirect)[^;]*?for a day[^;]*?older name|redirect from an older name[^;]*?for a day/g)].length).toBeGreaterThanOrEqual(2);
+  it('both lists say them, each with its lifetime (read by the method of round seventy, tests/about-pages.ts)', () => {
+    const short = said('how', 'It keeps a forecast for a rounded site for an hour');
+    expect(spanWords(claim(short, /a species address the reference does not hold, answered "not found", for (five minutes|an hour|a day)/)), short.where).toBe(300_000);
+    expect(spanWords(claim(short, /the redirect from an older name to its species' page for (a day|an hour)/))).toBe(86_400_000);
+    expect(short.text).toMatch(/not at all when GBIF could not be asked or a species' record could not be read/);
+    const full = said('how', "Cloudflare's edge, in front of the server, keeps copies of public answers");
+    expect(claim(full, /for five minutes \((public, max-age=\d+)/)).toBe('public, max-age=300');
+    expect(claim(full, /older name to its species' page for a day \((public, max-age=\d+)\)/), full.where).toBe('public, max-age=86400');
+    expect(full.text).toMatch(/not kept when GBIF could not be asked or a species' record could not be read/);
+    expect(raw('src/routes/species/[slug]/+page.server.ts')).toMatch(/setHeaders\(\{ 'cache-control': records\.every\(Boolean\) \? 'public, max-age=300' : 'no-store' \}\);/);
   });
 });
 
@@ -151,20 +146,23 @@ describe("the browser's year-long cache of the sealed batches and photographs (S
 
 describe("/about/formats on the server's sweep and listings, and the example (S-E 5 to 7, R46-10)", () => {
   it('the generations are listed five pages of a thousand at one look', () => {
-    expect(GEN_LIST_PAGES).toBe(5);
-    expect(formats).toContain('The generations are listed a thousand at a time, at most five thousand at one look, and the mark stays until a listing that reached the end finds nothing unnamed, so a photograph with more is looked at again the next midnight.');
+    const s = said('formats', 'The generations are listed a thousand at a time');
+    expect(numberWord(claim(s, /at most (\w+) thousand at one look/)), s.where).toBe(GEN_LIST_PAGES);
+    expect(s.text).toMatch(/the mark stays until a listing that reached the end finds nothing unnamed/);
   });
   it('the seventh night is counted as a fault, and no log keeps it', () => {
-    expect(MARK_FAULT_NIGHTS).toBe(7);
+    const s = said('formats', 'A photograph the sweep cannot read');
+    expect(numberWord(claim(s, /after (\w+) such nights its mark is dropped/)), s.where).toBe(MARK_FAULT_NIGHTS);
     expect(raw('src/lib/server/counters.ts')).toMatch(/await this\.faultThere\('sweep', now\);/);
-    // Read whatever the checkout's own config's layout: the owner's copy writes it over three lines, tab-indented.
     expect(raw('wrangler.jsonc')).toMatch(/"observability"\s*:\s*\{\s*"enabled"\s*:\s*false\s*\}/);
-    expect(formats).toContain("after seven such nights its mark is dropped and the night is counted among the server's faults, by kind alone (Cloudflare's request logs are off, so no log keeps its name)");
-    expect(formats).not.toContain("written to the server's log");
-    expect(how).toContain("Cloudflare's own request logs (Workers Logs) are off.");
+    expect(s.text).toMatch(/by kind alone \(Cloudflare's request logs are off, so no log keeps its name\)/);
+    expect(said('how', "The server's faults").text).toMatch(/Cloudflare's own request logs \(Workers Logs\) are off\./);
   });
-  it('the example is set out in one commit, not "one change"', () => {
-    expect(formats).toContain('It is set out in one commit (one transaction of the database, holding every change of the example), by one tab at a time');
-    expect(formats).not.toMatch(/set out in one change/);
+  it('the example is set out in one commit, refused over anything of yours', () => {
+    const s = said('formats', 'It is set out in one commit');
+    expect(claim(s, /^It is set out in (one commit) \(one transaction of the database/), s.where).toBe('one commit');
+    expect(s.text).toMatch(/when its log already holds anything of yours \(read in that same transaction\)/);
+    const seed = raw('src/lib/ui/grow/demo-seed.ts');
+    expect(seed).toMatch(/requireEmpty/);
   });
 });

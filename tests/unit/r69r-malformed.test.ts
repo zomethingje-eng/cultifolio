@@ -69,13 +69,17 @@ describe('a backup of a log holding a change the fold skips', () => {
     const opened = await a.io.openBackup(new File(file.parts as BlobPart[], 'x.cultifolio.zip'));
     expect(opened.merge.addedByKind).toEqual({ accession: 1 });
   });
-  it('Replace from such a file is refused, naming the change, and the device is unchanged', async () => {
+  // Round seventy (triage-69 R6, R47-15): such a row is no longer lost by a replacement, which keeps it as it is in the
+  // log, so Replace from such a file is not refused; a row with no stamp to keep it under still is (r70r-backup-unreadable).
+  it('Replace from such a file keeps the change as it is, and the device is the file', async () => {
     const a = await boot();
     await a.vault.appendChanges([...plant, BAD['an unknown kind']], true);
     await a.collection.load();
     const prepared = await a.io.prepareBackup();
     const opened = await a.io.openBackup(new File([prepared.blob], prepared.name));
-    await expect(a.io.restoreBackup(opened, 'replace')).rejects.toThrow(/unreadable\.json row 1: unknown kind "harvest"/);
+    expect(opened.unreadableHere).toEqual([]);
+    await a.io.restoreBackup(opened, 'replace');
+    expect((await a.vault.allChanges()).filter((c) => (c as { kind: string }).kind === 'harvest')).toEqual([BAD['an unknown kind']]);
   });
 });
 

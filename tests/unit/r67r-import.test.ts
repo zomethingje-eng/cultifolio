@@ -164,7 +164,9 @@ describe('a date in the key does not hang on the day-first answer (R3)', () => {
     const a = read('species,acquired\nCopiapoa cinerea,09/03/2024\n', 'dmy');
     const b = read('species,acquired\nCopiapoa cinerea,09/03/2024\n', null);
     const c = read('species,acquired\nCopiapoa cinerea,2024-03-09\n', null);
-    expect(b[0].importKeys).toEqual(a[0].importKeys);
+    // Round seventy (triage-69 R7, R47-16): a cell the grower answered is keyed by the day the answer reads, so the answered
+    // and the unanswered keys differ; each still finds the plant of 2024-03-09.
+    expect(b[0].importKeys).not.toEqual(a[0].importKeys);
     for (const [x, y] of [[a, c], [c, a], [b, c], [c, b]]) {
       const here = new Set(x[0].importKeys);
       expect(markImported(y, (k) => here.has(k))[0].done).toBe(true);

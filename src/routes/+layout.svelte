@@ -34,6 +34,8 @@
   import { prefs } from '$lib/ui/prefs.svelte';
   import { METRIC } from '$core/units';
   import { keepFocusClear } from '$lib/ui/focus';
+  import { keepOnFirstPlant } from '$lib/ui/keep-ask';
+  import { readSetting } from '$lib/ui/stored';
   import { syncWords } from '$lib/ui/sync-words';
   let { children } = $props();
   // Seed before anything renders. A server-rendered page carries the reader's units in its data (from the cookie or the
@@ -209,6 +211,13 @@
   // Hydrated: the end-to-end tests wait for this before typing into a bound field, since a value typed into the
   // server's HTML is dropped when the field hydrates and a click before then has no handler (round fifty-nine; a slow Windows run).
   onMount(() => { document.documentElement.dataset.ready = '1'; });
+  // The collection read: the end-to-end tests wait for this, not a fixed pause, before they count what a load did (the
+  // "keep data" question's ask, round seventy; triage-69 P3, R47-20: under a loaded WebKit run no page finished reading
+  // within the 1.2 s each was given, and nothing was asked).
+  $effect(() => { if (collection.ready) document.documentElement.dataset.collection = 'open'; });
+  // The "keep data" question asked from the first plant's commit as well as from a load (keep-ask.ts, `keepOnFirstPlant`),
+  // while GrowLayer has not said an answer on this device; GrowLayer says it, as before.
+  onMount(() => keepOnFirstPlant(collection, () => readSetting('cultifolio.persistAfterFirst', 'device') === '1'));
   // The server's placeholder for a page drawn only here ("Opening your plants…", app.html) goes once the app is drawn;
   // CSS already hides it then, and this is for a browser without :has() (round sixty; the accessibility review, 7).
   onMount(() => document.getElementById('shell')?.remove());

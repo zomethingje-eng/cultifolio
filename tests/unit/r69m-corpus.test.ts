@@ -178,11 +178,20 @@ describe('--fill summaries (M3, R46-12)', () => {
       'c.json': dossier('Copiapoa cinerea', 'Copiapoa cinerea', 'Q3')
     };
     const asked: string[] = [];
-    const f = (async (url: string) => { asked.push(url); return { status: 'ok', data: { entities: { Q1: { sitelinks: {} }, Q2: { sitelinks: { enwiki: { title: 'Saguaro' } } } } } }; }) as unknown as JsonFetcher;
+    // Round seventy (A1): a title the item's sitelink does not settle is asked of Wikipedia again as the build asks it,
+    // so Wikipedia answers here too, with the redirects it gave.
+    const redirects: Record<string, string> = { 'Weingartia_pulchra': 'Weingartia canigueralii', 'Kopsia_fruticosa': 'Kopsia' };
+    const f = (async (url: string) => {
+      asked.push(url);
+      const t = /page\/summary\/(.+)$/.exec(url)?.[1];
+      if (t) return redirects[t] ? { status: 'ok', data: { type: 'standard', title: redirects[t], extract: LEADS[redirects[t]] } } : { status: 'none' };
+      if (url.includes('titles=')) return { status: 'ok', data: { entities: { '-1': { missing: '' } } } };
+      return { status: 'ok', data: { entities: { Q1: { sitelinks: {} }, Q2: { sitelinks: { enwiki: { title: 'Saguaro' } } } } } };
+    }) as unknown as JsonFetcher;
     const c = await checkSummaries(store(docs), f, () => '2026-10-12T00:00:00Z');
     expect(c).toMatchObject({ kept: 1, confirmed: 1, dropped: 2 });
-    expect(asked).toHaveLength(1);
     expect(asked[0]).toContain('ids=Q1|Q2&');
+    expect(asked.filter((u) => /Saguaro|Copiapoa/.test(u))).toEqual([]);
     const w = docs['w.json'] as ReturnType<typeof dossier>;
     expect(w.summary).toBeUndefined();
     expect(w.upstream.wikipedia).toEqual({ status: 'none', at: '2026-10-12T00:00:00Z', detail: 'Wikipedia redirects Weingartia pulchra to Weingartia canigueralii' });
@@ -208,12 +217,15 @@ describe('--list-rebuild (M2, M4)', () => {
 });
 
 describe('--fill summaries --offline (M3)', () => {
-  it('drops what the file settles, and leaves a title that may be the item\'s sitelink unchecked', async () => {
+  // Round seventy (A1): offline only the name is read. A title it does not settle may still be proved online (Kopsia's
+  // by Kew's count of the genus, Saguaro's as the item's sitelink), so nothing is dropped offline.
+  it('drops nothing, and leaves a title the name does not settle unchecked', async () => {
     const docs: Record<string, unknown> = {
       'k.json': { name: { scientific: 'Kopsia fruticosa', synonyms: [] }, ids: { gbif: 1, wikipedia: 'Kopsia' }, links: {}, summary: { title: 'Kopsia' }, upstream: {} },
       's.json': { name: { scientific: 'Carnegiea gigantea', synonyms: [] }, ids: { gbif: 2, wikidata: 'Q2', wikipedia: 'Saguaro' }, links: {}, summary: { title: 'Saguaro' }, upstream: {} }
     };
-    expect(await checkSummaries(store(docs), null)).toMatchObject({ dropped: 1, unchecked: 1 });
+    expect(await checkSummaries(store(docs), null)).toMatchObject({ dropped: 0, unchecked: 2 });
+    expect((docs['k.json'] as { summary?: unknown }).summary).toBeDefined();
     expect((docs['s.json'] as { summary?: unknown }).summary).toBeDefined();
   });
 });

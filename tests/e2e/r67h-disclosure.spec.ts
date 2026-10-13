@@ -57,13 +57,22 @@ test('r67h disclosure 4: "Use my own number" and Add stay put while the name che
   await page.setViewportSize({ width: 390, height: 664 });
   await page.goto('/plants/new'); await ready(page);
   await page.fill('#species-name', 'Copiapoa cinerea');
+  // The page's typefaces in before the recording starts (round seventy; triage-69 P3, R47-20: flaky in phone-WebKit). The
+  // move this test is about is the name check's; a face landing in the window moves every line by its own metrics, and
+  // that is r63u-fonts' to judge. Measured in Chromium at 390 px, with the two answers in all four orders, nothing moved;
+  // what the WebKit failure was is recorded below for the owner's run.
+  const fontsAtStart = await page.evaluate(async () => { const before = document.fonts.status; await document.fonts.ready; return before; });
   await startPositions(page, ['details.own > summary', 'form button[type="submit"]']);
   await page.locator('#species-name').blur();
   // Long enough for both answers and what they draw.
   await page.waitForTimeout(2_500);
   const { moves, frames } = await positionMoves(page);
   expect(frames, 'frames were read').toBeGreaterThan(10);
-  expect(moves).toEqual([]);
+  // What a failure needs to be read where only WebKit fails: the words under the field, the room kept for them and the
+  // room they took, and the fonts' state when the recording began.
+  const room = await page.evaluate(() => { const st = document.querySelector('.picker .status') as HTMLElement | null; return st ? { words: st.innerText.replace(/\s+/g, ' ').trim(), height: Math.round(st.getBoundingClientRect().height), kept: getComputedStyle(st).minHeight } : null; });
+  if (moves.length) test.info().annotations.push({ type: 'moves', description: JSON.stringify({ moves, room, fontsAtStart }) });
+  expect(moves, JSON.stringify({ room, fontsAtStart })).toEqual([]);
   // and a press now still opens it
   oneTap(await pressOnce(page, 'details.own'));
 });

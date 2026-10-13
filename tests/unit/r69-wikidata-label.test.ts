@@ -21,7 +21,8 @@ const wd = (label: string, hits: string[], items: Record<string, unknown>, gbif:
   're:list=search&srlimit=2&srsearch=haswbstatement': { query: { search: [] } },
   [`${W}?action=wbsearchentities`]: { search: hits.map((id) => ({ id, label })) },
   ...Object.fromEntries(Object.entries(items).map(([id, e]) => [`re:wbgetentities&format=json&ids=${id}&`, { entities: { [id]: e } }])),
-  ...gbif
+  ...gbif,
+  're:datasetKey=f382f0ce': { results: [] } // round seventy: Kew's IPNI, asked of GBIF's copy of WCVP when no item is proved; none in these cases
 });
 
 describe('an item found by its label, carrying another GBIF record', () => {

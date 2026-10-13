@@ -24,7 +24,7 @@
   import { plantHref } from '$lib/db/links';
   import { monthRuns } from '$lib/ui/today-words';
   import { DUE_DAYS } from '$lib/db/collection.svelte';
-  import { alertsUnchecked as uncheckedOf, alertsWhy } from '$lib/ui/alert-words';
+  import { alertsUnchecked as uncheckedOf, alertsWhy, alertsRead, NO_ALERTS_SERVICE } from '$lib/ui/alert-words';
   import { addLeavesExample } from '$lib/ui/grow/example.svelte'; // the adds below lead out of the example first (round sixty-nine; triage-68 X7; R46-27)
   onMount(async () => {
     site.load(); // the frost watch falls back to the grower's site (round fifty-eight; the grower review)
@@ -344,6 +344,9 @@
   // second pass; the server review's 4). A refusal and no answer are both "not checked", each said in its own words: only
   // `refused` was read, and an NWS that did not answer gave "All clear." (round sixty-nine; triage-68 P1, R46-6).
   const alertsUnchecked = $derived(uncheckedOf(forecast?.alertsStatus));
+  // "All clear." and "frost: clear" only where the alerts were read: a place no alerts service covers, or one not asked,
+  // says the forecast is clear and that no alerts are read there (round seventy; triage-69 P4, R47-12).
+  const alertsSeen = $derived(alertsRead(forecast?.alertsStatus));
 
   let confirmRemove = $state(false);
   async function remove() {
@@ -375,7 +378,7 @@
       <div class="pills">
         {#if cond.floorC != null}<span class="pill c">{cond.floorHeld ? 'held at' : 'floor'} {temp(cond.floorC, units.current, 1)}</span>{/if}
         {#if dli != null}<span class="pill w">DLI {dli.toFixed(0)}</span>{/if}
-        {#if watchable && effectiveRisk}<span class="pill {effectiveRisk.level === 'none' ? 'a' : effectiveRisk.level === 'cold' ? 'w' : 'b'}">{effectiveRisk.level === 'none' ? (alertsUnchecked ? 'forecast clear; alerts not checked' : 'frost: clear') : effectiveRisk.level === 'cold' ? 'cold night coming' : effectiveRisk.level === 'floor' ? 'reaches the floor' : effectiveRisk.level === 'warning' ? 'weather warning' : 'frost forecast'}</span>{/if}
+        {#if watchable && effectiveRisk}<span class="pill {effectiveRisk.level === 'none' ? 'a' : effectiveRisk.level === 'cold' ? 'w' : 'b'}">{effectiveRisk.level === 'none' ? (alertsUnchecked ? 'forecast clear; alerts not checked' : alertsSeen ? 'frost: clear' : 'forecast clear') : effectiveRisk.level === 'cold' ? 'cold night coming' : effectiveRisk.level === 'floor' ? 'reaches the floor' : effectiveRisk.level === 'warning' ? 'weather warning' : 'frost forecast'}</span>{/if}
         <!-- The due count where it is seen whatever is recorded: it was only in the Last watered card, absent until a first watering (round fifty-nine). -->
         {#if dueHere}<span class="pill w">{dueHere} due</span>{/if}
         {#if unseen && deep.length}<span class="pill w">{unseen} not seen{missedNow === unseen ? ' at the last audit' : ' in 90 d'}</span>{/if}
@@ -473,7 +476,7 @@
     {#if forecastErr}<div class="notice">{forecastErr}</div>
     {:else if !forecast}<p class="muted">Fetching the forecast…</p>
     {:else}
-      <div class="notice {effectiveRisk?.level === 'none' ? 'ok' : effectiveRisk?.level === 'cold' ? '' : 'err'}"><b>{effectiveRisk?.level === 'none' ? (alertsUnchecked ? 'Forecast clear.' : 'All clear.') : effectiveRisk?.level === 'cold' ? 'Cold night coming.' : effectiveRisk?.level === 'floor' ? 'Below the floor.' : effectiveRisk?.level === 'warning' ? 'Warning in force.' : 'Frost forecast.'}</b> {effectiveRisk?.text}{#if alertsUnchecked}{' '}Alerts not checked: {alertsWhy(forecast?.alertsStatus)}, and this is not a statement that no alert is in force.{/if}</div>
+      <div class="notice {effectiveRisk?.level === 'none' ? 'ok' : effectiveRisk?.level === 'cold' ? '' : 'err'}"><b>{effectiveRisk?.level === 'none' ? (alertsSeen ? 'All clear.' : 'Forecast clear.') : effectiveRisk?.level === 'cold' ? 'Cold night coming.' : effectiveRisk?.level === 'floor' ? 'Below the floor.' : effectiveRisk?.level === 'warning' ? 'Warning in force.' : 'Frost forecast.'}</b> {effectiveRisk?.text}{#if alertsUnchecked}{' '}Alerts not checked: {alertsWhy(forecast?.alertsStatus)}, and this is not a statement that no alert is in force.{:else if !alertsSeen && effectiveRisk?.level === 'none'}{' '}{NO_ALERTS_SERVICE}{/if}</div>
       <p class="small muted">{forecast.attribution.join(' · ')}. <a href="/today#frost">Full forecast</a>.</p>
     {/if}
   {:else if cond.indoor !== true && !nothingRecorded}

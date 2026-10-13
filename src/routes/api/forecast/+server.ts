@@ -2,7 +2,7 @@ import { parseUnits } from '$core/units';
 import { forBuild } from '$lib/server/build';
 import { workerKey } from '$lib/server/worker-cache';
 import { json, error } from '@sveltejs/kit';
-import { metUrl, reduceMet, nwsAlertsUrl, reduceNws, isUS, frostRisk, type MetResponse } from '$lib/weather/forecast';
+import { metUrl, reduceMet, nwsAlertsUrl, reduceNws, isUS, nwsOutOfBounds, frostRisk, type MetResponse } from '$lib/weather/forecast';
 import { USER_AGENT } from '$dossier/fetch';
 import { limited, upstreamCall, heldBack, clientIp } from '$lib/server/sync';
 import type { RequestHandler } from './$types';
@@ -124,12 +124,18 @@ export const GET: RequestHandler = async ({ url, platform, fetch, getClientAddre
       if (r.ok) {
         alerts = reduceNws(await r.json());
         alertsStatus = alerts.length ? 'ok' : 'none';
+      } else if (r.status === 400 && nwsOutOfBounds(r.status, await r.json().catch(() => null))) {
+        // A point inside a box but outside the NWS's area (Toronto, Monterrey): it answered that it has no alerts for the
+        // point, which is no alerts service here, said as that, never as an NWS that did not answer (round seventy;
+        // triage-69 P4, R47-12).
+        alertsStatus = 'n/a';
       } else alertsStatus = _refusedBySource(r.status) ? 'refused' : 'unanswered';
     } catch {
       alertsStatus = 'unanswered';
     }
   }
-  const raw: Cached = { lat: la, lon: lo, forecast, alerts, alertsStatus, attribution: ['Forecast data from MET Norway (CC BY 4.0)', ...(us ? ['Alerts: NOAA National Weather Service'] : [])] };
+  // The NWS is credited only where its answer is read (round seventy): a point it does not cover carries no alerts of its.
+  const raw: Cached = { lat: la, lon: lo, forecast, alerts, alertsStatus, attribution: ['Forecast data from MET Norway (CC BY 4.0)', ...(us && alertsStatus !== 'n/a' ? ['Alerts: NOAA National Weather Service'] : [])] };
   // The lifetimes are written out (REFUSED_TTL_S and TTL_S) so the about pages' check reads them from the put.
   if (cache && platform?.context) platform.context.waitUntil(cache.put(cacheKey, json(raw, { headers: { 'cache-control': alertsStatus === 'refused' || alertsStatus === 'unanswered' ? 'public, max-age=300' : 'public, max-age=3600' } })).catch(() => {}));
   return withRisk(raw, `public, max-age=${ttlOf(alertsStatus)}`);

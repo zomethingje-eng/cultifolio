@@ -106,8 +106,18 @@ export async function deleteCounted(r2: R2Bucket, id: string, meta: VaultMeta, k
     const at = ref.key ?? left;
     return { ref, left, o: at ? await r2.head(at) : null };
   };
-  const first = (await look()).o;
+  const pre = await look();
+  const first = pre.o;
   if (first && !proved(first)) return 'noproof';
+  // Nothing there to remove: the hold is taken only with the proof the receipt keeps, which the device whose removal was
+  // cut off still carries (round seventy; triage-69 W3, S-E3). A removed photograph's name was held by any DELETE, proof
+  // or none, while the hold listed its generations, and the grower's own revival meanwhile was told "busy": the W4
+  // denial of round sixty-nine, by the other route. Unnamed generations are still swept by the vault's alarm, and a
+  // pointer that could not be read is still a wait, never "nothing there".
+  if (!first) {
+    if (pre.ref.unreadable) return new PhotoBusy(PHOTO_BUSY_S);
+    if (!(photo && pre.ref.removed?.drop && proof && proof === pre.ref.removed.drop)) return false;
+  }
   // The look, the proof, the delete and the give back are one step for this name: a removal that looked at one upload
   // and then deleted the next one (a photograph revived on another device in between) lost it for good (round sixty;
   // the self-review, P3; two outside reviews, A12 and B5). An upload of the same name waits for it, and it for an upload.
@@ -483,7 +493,7 @@ export function parseAfter(raw: string | null): After | null {
 
 const refCompare = (a: BatchRef, b: BatchRef) => a.at - b.at || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
 
-import { OVERLAP_MS, PUSH_HEADERS, BATCH_NAME, STATUS, PHOTO_DROP_HEADER } from '$lib/sync/limits';
+import { OVERLAP_MS, PUSH_HEADERS, BATCH_NAME, STATUS, PHOTO_DROP_HEADER, SMALL_BATCH_BYTES } from '$lib/sync/limits';
 export { OVERLAP_MS };
 
 /**
@@ -517,7 +527,7 @@ async function walk(r2: R2Bucket, prefix: string, each: (o: R2Object) => void, p
 
 /**
  * R2 list calls (pages of a thousand batches) one vault's listings of its log may make in an hour (round sixty-seven;
- * triage-66 S6, S-D4). Every `GET /api/sync/log` walks the whole log, whatever its cursor, so a holder of a token who grew
+ * triage-66 S6, S-D4), counted over any sixty minutes since round seventy (triage-69 W4, S-E7), not the clock hour. Every `GET /api/sync/log` walks the whole log, whatever its cursor, so a holder of a token who grew
  * a vault to fifty thousand tiny batches made every pull cost fifty Class A operations, at up to 600 pulls per ten
  * minutes per address, and nothing bounded the addresses. Counted in the vault's own counter object, the cost is bounded
  * per vault (about 29,000 list calls a day at most; since round sixty-nine each walk's pages are reserved when it is
@@ -532,7 +542,7 @@ async function walk(r2: R2Bucket, prefix: string, each: (o: R2Object) => void, p
  */
 export const LIST_PAGES_PER_HOUR = 1200;
 
-/** A vault past its hour's listings: 503 with Retry-After to the next hour and a sentence (round sixty-seven; S6). */
+/** A vault past its hour's listings: 503 with a sentence and a Retry-After to when the last sixty minutes' count falls under it (round sixty-seven; S6; round seventy, W4). */
 export class ListingsSpent extends Error {
   readonly status = 503;
   constructor(public readonly retryAfter: number) {
@@ -544,18 +554,23 @@ export class ListingsSpent extends Error {
 }
 
 /**
- * A vault past its hour of writes (round sixty-nine; triage-68 W5, R46-24): `VAULT_WRITES_PER_HOUR` objects stored in the
+ * A vault past its hour of writes (round sixty-nine; triage-68 W5, R46-24): `VAULT_WRITES_PER_HOUR` photographs, or as many log batches, stored in the
  * hour, counted in the vault's counter object as their bytes are taken. 503 with Retry-After to the next hour and a
  * sentence that says it is a refusal; the device keeps every change and asks again then (it reads a wait of a minute or
  * more as the vault's uploads refused for that long, and shows the sentence).
  */
 export class WritesSpent extends Error {
   readonly status = 503;
-  constructor(public readonly retryAfter: number) {
+  /** `of`: what the spent hour counts, photographs or log batches, each with an hour of its own (round seventy; triage-69 W6, R47-18). */
+  constructor(public readonly retryAfter: number, public readonly of: 'log' | 'photo' = 'log') {
     super("this vault's writes for the hour are used up");
   }
   response(): Response {
-    return new Response(JSON.stringify({ error: `Uploading is refused for now: this vault stored as many objects as the site takes in an hour (${VAULT_WRITES_PER_HOUR.toLocaleString('en-GB')}). Nothing is lost: your changes stay on this device, which sends them again within the hour.`, retryAfter: this.retryAfter }), { status: STATUS.ceilings, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', 'retry-after': String(this.retryAfter) } });
+    const most = VAULT_WRITES_PER_HOUR.toLocaleString('en-GB');
+    const error = this.of === 'photo'
+      ? `Uploading photographs is refused for now: this vault stored as many photographs as the site takes in an hour (${most}). Nothing is lost: they stay on this device, which sends them again within the hour, and changes to your records still go.`
+      : `Uploading is refused for now: this vault stored as many sync bundles of changes as the site takes in an hour (${most}). Nothing is lost: your changes stay on this device, which sends them again within the hour.`;
+    return new Response(JSON.stringify({ error, what: this.of, retryAfter: this.retryAfter }), { status: STATUS.ceilings, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', 'retry-after': String(this.retryAfter) } });
   }
 }
 
@@ -575,16 +590,17 @@ export async function listBatches(r2: R2Bucket, id: string, sinceMs: number | nu
   // is asked, and what it did not use is given back after it (round sixty-nine; triage-68 W2: charged only after the
   // walk, every pull asked while walks were in flight passed). A counter that cannot be asked lets the listing go:
   // receiving is never refused for the counter's fault, and the request windows still bound it per address. A settle
-  // that fails leaves the reservation counted, which errs towards the bound.
+  // that fails, or never runs (a pull cancelled mid-walk), leaves the reservation counted for a minute, then it lapses
+  // (round seventy; triage-69 W6, R47-18: it was counted for the hour).
   const ns = quota?.counters;
   const o = ns ? ns.get(ns.idFromName(`bytes:${id}`)) : null;
   const now = quota?.now ?? Date.now();
-  let budget: { reserved: number; hour?: number } | null = null;
+  let budget: { reserved: number; minute?: number; id?: string } | null = null;
   if (o?.listAsk && o.listed) {
     let a: Awaited<ReturnType<NonNullable<typeof o.listAsk>>> | null = null;
     try { a = await o.listAsk(LIST_PAGES_PER_HOUR, now, MAX_LIST_PAGES); } catch (e) { console.error("sync: a vault's listings could not be counted; this one goes on", e); await noteFault(ns, 'listing'); }
     if (a && !a.ok) throw new ListingsSpent(a.retryAfter);
-    if (a) budget = { reserved: a.reserved ?? 0, hour: a.hour };
+    if (a) budget = { reserved: a.reserved ?? 0, minute: a.minute, id: a.id };
   }
   const pages = { n: 0 };
   let whole: boolean;
@@ -597,7 +613,7 @@ export async function listBatches(r2: R2Bucket, id: string, sinceMs: number | nu
       all.push(ref);
     }, pages);
   } finally {
-    if (budget) await o!.listed!(pages.n, quota?.now ?? Date.now(), budget.reserved, budget.hour).catch(async () => { await noteFault(ns, 'listing'); });
+    if (budget) await o!.listed!(pages.n, quota?.now ?? Date.now(), budget.reserved, budget.minute, budget.id).catch(async () => { await noteFault(ns, 'listing'); });
   }
   if (!whole) error(STATUS.ceilings, `this vault holds more than ${MAX_LIST_PAGES * 1000} batches, which is past what one listing can walk`);
   all.sort(refCompare);
@@ -762,8 +778,8 @@ function byteObjects(quota: Quota | undefined, id: string, daily = true) {
   if (!vault.take || !vault.give || !vault.release || !vault.setBytes || !vault.bytesToday || !vault.generation || !address.take || !address.give) return null;
   return { vault: vault as Required<typeof vault>, address: daily ? (address as Required<typeof address>) : null, net: daily && net?.take && net.give ? (net as Required<typeof net>) : null };
 }
-/** A log batch this size or smaller is not counted against its address's and network's day totals (round sixty-seven; S9). */
-export const SMALL_BATCH_BYTES = 16 * 1024;
+/** A log batch this size or smaller is not counted against its address's and network's day totals (round sixty-seven; S9). In limits.ts since round seventy, which the engine reads too. */
+export { SMALL_BATCH_BYTES };
 
 /** The meta snapshot is rewritten at most once per this many bytes of growth per vault, or per this many seconds per isolate: R2 allows about one write a second to a key. */
 export const META_FLUSH_BYTES = 16 * 1024 * 1024;
@@ -852,7 +868,9 @@ async function storeCountedNow(r2: R2Bucket, id: string, meta: VaultMeta, key: s
     }
     let v: Awaited<ReturnType<typeof objs.vault.take>>;
     try {
-      v = await objs.vault.take('vault', body.length, MAX_BYTES, today, null, now);
+      // Photographs and log batches each have the hour's writes of their own (round seventy; triage-69 W6, R47-18).
+      const of = key.includes('/photo/') ? 'photo' : 'log';
+      v = await objs.vault.take('vault', body.length, MAX_BYTES, today, null, now, null, VAULT_WRITES_PER_HOUR, of);
       // A day's first upload passes a listing, with the generation read before it: a landing or a removal that crossed
       // the listing has it refused, and it is listed again, once (round sixty; B7); the second listing is checked too,
       // and a second crossing asks the device to try again (round sixty-one; B11).
@@ -862,13 +880,13 @@ async function storeCountedNow(r2: R2Bucket, id: string, meta: VaultMeta, key: s
         // 5: up to four whole-vault listings were made and thrown away). The live upload is often a first upload of the day
         // that has just put today's total right, so the take is asked again without one; if it still needs a listing,
         // the device asks again shortly.
-        if (g.busy) { v = await objs.vault.take('vault', body.length, MAX_BYTES, today, null, now); continue; }
+        if (g.busy) { v = await objs.vault.take('vault', body.length, MAX_BYTES, today, null, now, null, VAULT_WRITES_PER_HOUR, of); continue; }
         const listed = await recount(r2, id, meta);
-        v = await objs.vault.take('vault', body.length, MAX_BYTES, today, listed, now, g.gen);
+        v = await objs.vault.take('vault', body.length, MAX_BYTES, today, listed, now, g.gen, VAULT_WRITES_PER_HOUR, of);
       }
       if ('recount' in v) throw new RecountCrossed();
       // The vault's hour of writes is spent (round sixty-nine; triage-68 W5): nothing was taken, and the address's bytes go back below.
-      if ('spent' in v) throw new WritesSpent(v.retryAfter);
+      if ('spent' in v) throw new WritesSpent(v.retryAfter, of);
     } catch (e) {
       // The address's bytes go back whatever stopped the vault's step (a listing that threw): they stayed counted till midnight (round fifty-nine).
       await giveAddress().catch(() => 0);
@@ -1206,7 +1224,7 @@ export type CountersNs = {
     refund(address: string, day: string, net?: string | null): Promise<void>;
     fill?(vault: string, max: number, seed?: number | null, day?: string | null, perDay?: number, now?: number, net?: string | null, perNet?: number): Promise<'counted' | 'already' | 'total' | 'day' | 'network' | 'unavailable'>;
     unfill?(vault: string): Promise<boolean>;
-    take?(kind: 'vault' | 'address', n: number, limit: number, day: string, base?: number | null, now?: number, gen?: number | null, writes?: number): Promise<{ ok: boolean; before: number; lease?: string } | { recount: true } | { spent: true; retryAfter: number }>;
+    take?(kind: 'vault' | 'address', n: number, limit: number, day: string, base?: number | null, now?: number, gen?: number | null, writes?: number, of?: 'log' | 'photo'): Promise<{ ok: boolean; before: number; lease?: string } | { recount: true } | { spent: true; retryAfter: number }>;
     give?(kind: 'vault' | 'address', n: number, day: string, token?: string | null): Promise<number>;
     release?(lease: string, landed: boolean): Promise<void>;
     setBytes?(bytes: number, day: string, gen?: number | null, now?: number): Promise<number | null>;
@@ -1221,8 +1239,8 @@ export type CountersNs = {
     markUnnamed?(name: string, now?: number): Promise<void>;
     upstream?(services: string[], share: number, address?: string | null, net?: string | null, now?: number): Promise<UpstreamAnswer>;
     fault?(kind: string, now?: number): Promise<void>;
-    listAsk?(budget: number, now?: number, reserve?: number): Promise<{ ok: true; hour?: number; reserved?: number } | { ok: false; retryAfter: number }>;
-    listed?(pages: number, now?: number, reserved?: number, hour?: number): Promise<void>;
+    listAsk?(budget: number, now?: number, reserve?: number): Promise<{ ok: true; minute?: number; reserved?: number; id?: string } | { ok: false; retryAfter: number }>;
+    listed?(pages: number, now?: number, reserved?: number, minute?: number, id?: string): Promise<void>;
   };
 };
 /**

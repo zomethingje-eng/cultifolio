@@ -23,16 +23,20 @@ describe('a date is keyed by its exact day (S-D1, IND-5)', () => {
     const second = markImported(read('species,acquired,source\nLithops lesliei,2024-01-05,Mesa Garden\nLithops lesliei,2024-05-01,Mesa Garden\n'), (k) => here.has(k));
     expect(second.map((r) => [r.acquired, !!r.done, r.drop])).toEqual([['2024-01-05', false, false], ['2024-05-01', true, true]]);
   });
-  it('an ambiguous cell finds its plant whichever way it is answered, and a re-saved exact day finds it too', () => {
+  // Round seventy (triage-69 R7, R47-16): a cell the grower answered is keyed by the day the answer reads: answered day
+  // first and month first, 05/01/2024 is two days and two keys (it was one, and took one plant for the other).
+  it('an ambiguous cell answered is keyed by its answer, and a re-saved exact day finds it', () => {
     const dmy = read('species,acquired\nAloe vera,05/01/2024\n', 'dmy');
     const mdy = read('species,acquired\nAloe vera,05/01/2024\n', 'mdy');
-    expect(mdy[0].importKeys).toEqual(dmy[0].importKeys);
+    expect(mdy[0].importKeys).not.toEqual(dmy[0].importKeys);
     const iso = read('species,acquired\nAloe vera,2024-05-01\n', null);
     expect(markImported(iso, (k) => keysOf(mdy).has(k))[0].done).toBe(true);
   });
-  it('an ambiguous cell finds a plant filed under either of its readings; an exact day only its own', () => {
+  it('an ambiguous cell finds a plant filed under the reading it is answered by, or either left unanswered; an exact day only its own', () => {
     const here = keysOf(read('species,acquired\nAloe vera,2024-01-05\n'));
-    expect(markImported(read('species,acquired\nAloe vera,05/01/2024\n', 'mdy'), (k) => here.has(k))[0].done).toBe(true);
+    expect(markImported(read('species,acquired\nAloe vera,05/01/2024\n', 'dmy'), (k) => here.has(k))[0].done).toBe(true);
+    expect(markImported(read('species,acquired\nAloe vera,05/01/2024\n', null), (k) => here.has(k))[0].done).toBe(true);
+    expect(markImported(read('species,acquired\nAloe vera,05/01/2024\n', 'mdy'), (k) => here.has(k))[0].done).toBeUndefined(); // R7
     expect(markImported(read('species,acquired\nAloe vera,2024-05-01\n'), (k) => here.has(k))[0].done).toBeUndefined();
   });
 });
@@ -41,7 +45,8 @@ describe('a date re-saved with a two-digit year (R46-20)', () => {
   it('base: 2024-05-01 saved again as 5/1/24 and left as written finds its plant', () => {
     const here = keysOf(read('species,acquired\nAloe vera,2024-05-01\n'));
     expect(markImported(read('species,acquired\nAloe vera,5/1/24\n', null), (k) => here.has(k))[0].done).toBe(true);
-    expect(markImported(read('species,acquired\nAloe vera,5/1/24\n', 'dmy'), (k) => here.has(k))[0].done).toBe(true);
+    expect(markImported(read('species,acquired\nAloe vera,5/1/24\n', 'mdy'), (k) => here.has(k))[0].done).toBe(true);
+    expect(markImported(read('species,acquired\nAloe vera,5/1/24\n', 'dmy'), (k) => here.has(k))[0].done).toBeUndefined(); // answered as 5 January: R7
   });
 });
 

@@ -47,6 +47,22 @@ let closed = false;
 const onClose = new Set<() => void>();
 /** The page's hold on the "an example is open" lock, let go when the example closes under it. */
 let releaseOpen: (() => void) | null = null;
+/**
+ * The hold app.html's first script takes on the "an example is open" lock as an example page loads, before anything
+ * else runs (round seventy; triage-69 X1; S-D1): `r` lets it go once granted, `done` says it is to be let go (read when
+ * the grant comes after), `failed` that the browser refused the request. The bar takes it over (`keepSampleOpen`).
+ */
+type EarlyHold = { r: (() => void) | null; done: boolean; failed: boolean };
+function earlyHold(): EarlyHold | null {
+  const h = (globalThis as { __sampleOpen?: EarlyHold }).__sampleOpen;
+  return h && typeof h === 'object' ? h : null;
+}
+/** Let go of the first script's hold, now or as soon as it is granted. */
+function letGoEarly(h: EarlyHold): void {
+  h.done = true;
+  try { h.r?.(); } catch { /* nothing held */ }
+  h.r = null;
+}
 /** The example was closed under this page: nothing more is written from it. */
 export function exampleClosed(): boolean {
   return closed;
@@ -55,9 +71,12 @@ export function exampleClosed(): boolean {
 export function markExampleClosed(): void {
   if (closed) return;
   closed = true;
-  // The lock goes now, not with the page: the tab that left deletes the database under it (`finishLeaving`).
+  // The lock goes now, not with the page: the tab that left deletes the database under it (`finishLeaving`). So does
+  // the first script's hold when the bar has not taken it over yet (round seventy; triage-69 X1).
   try { releaseOpen?.(); } catch { /* nothing held */ }
   releaseOpen = null;
+  const early = earlyHold();
+  if (early) letGoEarly(early);
   for (const f of [...onClose]) { try { f(); } catch { /* one listener's fault is not the others' */ } }
 }
 /** Called once when the example closes under this page; returns the way to stop listening. */
@@ -454,15 +473,30 @@ export async function finishLeaving(waitMs = 10_000): Promise<'deleted' | 'block
  * the grower's own collection and say so there. Returns the way to stop listening. The lock is let go as soon as the
  * example closes under the page, not when the page goes (round sixty-seven; triage-66 V3): a tab whose "Leave site?" was
  * answered Cancel stays, closed, and must not hold the delete up.
+ *
+ * The hold is the one app.html's first script took as the page loaded, taken over here rather than asked for again
+ * (round seventy; triage-69 X1; S-D1): a reloading example tab held nothing until its bar was drawn, and a page outside
+ * the example that loaded meanwhile read its example as left and deleted it. Taken over, not let go once a second is
+ * held: a second request waits behind a delete already queued (`finishLeaving`), which waits behind the first, and
+ * neither would ever be granted. Only a page whose first script took none (a browser that refused it, an older page)
+ * asks here. And a Leave in another tab between that script and this moment, whose word on the channel came before this
+ * page listened, is read from the generation, as the first script reads it.
  */
 export function keepSampleOpen(): () => void {
   let release: () => void = () => {};
-  try {
-    void navigator.locks?.request(OPEN_LOCK, { mode: 'shared' }, () => new Promise<void>((r) => {
-      release = r;
-      if (closed) r(); else releaseOpen = r;
-    }));
-  } catch { /* no locks: a leftover is then never deleted from under an open tab, as below */ }
+  const early = earlyHold();
+  if (early && !early.failed) {
+    (globalThis as { __sampleOpen?: EarlyHold }).__sampleOpen = undefined;
+    release = () => letGoEarly(early);
+    if (closed) release(); else releaseOpen = release;
+  } else {
+    try {
+      void navigator.locks?.request(OPEN_LOCK, { mode: 'shared' }, () => new Promise<void>((r) => {
+        release = r;
+        if (closed) r(); else releaseOpen = r;
+      }));
+    } catch { /* no locks: a leftover is then never deleted from under an open tab, as below */ }
+  }
   let chan: BroadcastChannel | null = null;
   try {
     chan = new BroadcastChannel(LIFE);
@@ -471,6 +505,7 @@ export function keepSampleOpen(): () => void {
   // A new generation written by another tab says it too, in a browser without the channel (round sixty-nine; triage-68 X2).
   const onStorage = (e: Event) => { if ((e as StorageEvent).key === GEN && generationStale()) sampleClosedHere(); };
   try { addEventListener('input', heardInput, true); addEventListener('storage', onStorage); } catch { /* no page (a test) */ }
+  if (PAGE_IN_DEMO && generationStale()) sampleClosedHere();
   return () => { chan?.close(); release(); try { removeEventListener('input', heardInput, true); removeEventListener('storage', onStorage); } catch { /* none */ } };
 }
 

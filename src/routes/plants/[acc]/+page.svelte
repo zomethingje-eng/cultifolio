@@ -673,7 +673,7 @@
 
   {#if editing}
     <form class="cult editform" onsubmit={(e) => { e.preventDefault(); saveEdit(); }}>
-      <label><span>Species</span><SpeciesPicker bind:value={f.taxonName} bind:taxonKey={edKey} id="ed-name" /></label>
+      <label class="wide"><span>Species</span><SpeciesPicker reserve bind:value={f.taxonName} bind:taxonKey={edKey} id="ed-name" /></label>
       <label><span>Cultivar</span><input id="ed-cv" type="text" bind:value={f.cultivar} /></label>
       <!-- "this version of the app", not "this build", here and under Provenance (round fifty-eight; the accessibility review). -->
       <label><span>What it is</span><select id="ed-kind" bind:value={f.nameKind}>{#if !['species', 'cultivar', 'hybrid'].includes(f.nameKind)}<option value={f.nameKind}>{f.nameKind} (a kind this version of the app does not know)</option>{/if}<option value="species">A species</option><option value="cultivar">A cultivar of that species</option><option value="hybrid">A hybrid (filed under the genus)</option></select></label>

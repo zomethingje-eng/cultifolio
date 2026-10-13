@@ -46,7 +46,8 @@ describe('WCVP index', () => {
     expect(w.distributions('Homonymus example')).toBe('ambiguous');
     const mill = w.distributions('Homonymus example', 'Mill.');
     expect(mill && mill !== 'ambiguous' ? mill.rows[0].locationId : null).toBe('TDWG:CAL');
-    expect(w.distributions('Homonymus example', 'Nobody')).toBe('ambiguous');
+    // Round seventy (triage-69 B4): rows of the name by other authors are other names, not this one's; before, 'ambiguous'.
+    expect(w.distributions('Homonymus example', 'Nobody')).toBeNull();
   });
   it('a region where WCVP says the plant is extinct is marked so, never plain native', () => {
     const w = new WcvpIndex();
@@ -270,7 +271,8 @@ describe('a build through the bulk path', () => {
       return fixtureFetcher(table)(url, o);
     };
     const w = new WcvpIndex();
-    w.addName(parseWcvpName(NAMES_H, row('77', 'Accepted', 'Copiapoa cinerea', '77')), () => true);
+    // Kew's row by the backbone's author (round seventy, triage-69 B4: a row by another author is another name).
+    w.addName(parseWcvpName(NAMES_H, row('77', 'Accepted', 'Copiapoa cinerea', '77').replace(/Schönland/g, '(Phil.) Britton & Rose')), () => true);
     w.addDist(parseWcvpDist(DIST_H, '77|8|SOUTHERN AMERICA|85|Southern South America|CLN|Chile North|0|0|0'));
     const occ = new OccIndex();
     // fifty points along the Atacama coast, open licence, plus one planted specimen that must be ignored

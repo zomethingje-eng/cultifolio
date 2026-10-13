@@ -86,3 +86,34 @@ export const shownAt = (p: { url: string; thumb?: string; width?: number | null 
  * larger than the 960 a wider file is shown at, and PNG, whose originals are heavy, is no longer taken (K1).
  */
 const midWidth = (w: number | null | undefined): boolean => !!w && w > 500 && w <= 960;
+
+/** A Commons original upload's address: `…/commons/a/ab/File.jpg`, with no width in it. */
+const COMMONS_ORIGINAL_URL = /^https:\/\/upload\.wikimedia\.org\/wikipedia\/commons\/([0-9a-f])\/([0-9a-f]{2})\/([^/?#]+)$/;
+/** Commons' thumbnail of an original at a width from its list, from the same path. */
+const commonsThumbOf = (m: RegExpExecArray, w: number) => `https://upload.wikimedia.org/wikipedia/commons/thumb/${m[1]}/${m[2]}/${m[3]}/${w}px-${m[3]}`;
+
+/**
+ * A tile for a Commons original no wider than 500 pixels (round seventy, second pass; REVIEW-TRIAGE-69 C7, R47-9: 47
+ * index tiles were originals, and a 40-pixel row loaded the whole file): Commons' largest width below the original's
+ * own, 250 or 120, so `photoAt` gives every smaller slot a thumbnail of its size. An original of 120 pixels or less is
+ * no larger than any slot and is kept; so is one whose width was not kept, which cannot be asked of Commons safely (it
+ * refuses a width larger than the file).
+ */
+export function commonsTileOf(thumb: string, width?: number | null): string {
+  const m = COMMONS_ORIGINAL_URL.exec(thumb);
+  if (!m || !width) return thumb;
+  const w = [500, 250, 120].find((x) => x < width);
+  return w ? commonsThumbOf(m, w) : thumb;
+}
+
+/**
+ * The address of a photograph for a slot, knowing its width: a Commons original wider than the slot is asked of Commons
+ * at the slot's width, never loaded whole into a smaller slot (C7, R47-9); otherwise `photoAt` of what `shownAt` gives.
+ * For the species page's lead, whose phone source asked `photoAt(shownAt(hero), 'medium')` of an original 501 to 960
+ * pixels wide and so loaded the original into a 500-pixel slot.
+ */
+export function photoOf(p: { url: string; thumb?: string; width?: number | null }, size: PhotoSize): string {
+  const m = COMMONS_ORIGINAL_URL.exec(p.url);
+  if (m && p.width) return COMMONS_PX[size] < p.width ? commonsThumbOf(m, COMMONS_PX[size]) : p.url;
+  return photoAt(shownAt(p), size);
+}

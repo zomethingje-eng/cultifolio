@@ -20,7 +20,7 @@
   import { setCrumb } from '$lib/ui/crumb.svelte';
   import ExampleAddLine from '$lib/ui/grow/ExampleAddLine.svelte';
   import { CLOSED_WORDS } from '$lib/db/demo';
-  import { takeDraft, withoutKept, ownPlaceNamed, str, num, bool, oneOf, type Draft, type CarriedPlace } from '$lib/ui/grow/keep-draft';
+  import { takeDraft, withoutKept, ownPlaceNamed, carriedPlace, startPlace as startFrom, str, num, bool, oneOf, type Draft, type StartPlace } from '$lib/ui/grow/keep-draft';
 
   let name = $state('');
   let taxonKey = $state<number | null>(null);
@@ -53,9 +53,9 @@
   let busy = $state(false);
   let saved = $state(false);
   /** The new place named in the picker and not yet added counts as typed (round sixty-nine; triage-68 X2). */
-  let placeTyped = $state<{ name: string; kind: string } | null>(null);
+  let placeTyped = $state<{ name: string; kind: string; inside: { name: string; kind: string | null } | null } | null>(null);
   /** A place carried from the example that the grower does not have: the picker opens "New…" with it (triage-68 X3). */
-  let startPlace = $state<CarriedPlace | null>(null);
+  let startPlace = $state<StartPlace | null>(null);
   const formDirty = () => !saved && !busy && !!(name.trim() || count != null || sourceFrom.trim() || notes.trim() || placeTyped);
   // A half-done form is not lost to a tab-bar tap or a reload without asking (round fifty-two, 4; the Add form has had this since round forty-nine).
   beforeNavigate((nav) => {
@@ -110,8 +110,8 @@
   const SEED_PROV = ['unknown', 'wild', 'f1', 'fn'] as const;
   /** The form as it stands, for "Keep it as my own" (round sixty-nine; triage-68 X3): every field but the parent plant, which is the example's, and the place by name. */
   function draftOf(): Omit<Draft, 'form'> {
-    const at = locationId ? collection.location(locationId) : undefined;
-    const place: CarriedPlace | null = placeTyped ?? (at ? { name: at.name, kind: at.type ?? null } : null);
+    // With the place it sits inside, by name and kind (round seventy; triage-69 X2; S-D7a, IND-7).
+    const place = carriedPlace(placeTyped ?? (locationId ? collection.location(locationId) : undefined), (id) => collection.location(id));
     return { place, fields: { name, taxonKey, cultivar, kind, parentage, method, sown, count, sourceFrom, sourceRef, fieldNumber, provenance, medium, container, treatment, bottomHeat, covered, notes } };
   }
   /** A draft carried from the example, field by field, each only as the type it holds. */
@@ -123,7 +123,7 @@
     provenance = oneOf(f.provenance, SEED_PROV, 'unknown'); medium = str(f.medium, ''); container = str(f.container, ''); treatment = str(f.treatment, '');
     bottomHeat = typeof f.bottomHeat === 'number' || typeof f.bottomHeat === 'string' ? f.bottomHeat : ''; covered = bool(f.covered, false); notes = str(f.notes, '');
     const own = ownPlaceNamed(d.place, collection.locations);
-    if (own) locationId = own; else startPlace = d.place;
+    if (own) locationId = own; else startPlace = startFrom(d.place, collection.locations);
     setTimeout(() => { try { replaceState(withoutKept(location.href), page.state); } catch { /* the router not up yet: the address keeps it, and the draft is gone */ } }, 0);
     const k = num(f.taxonKey, null);
     if (k && name) void checkedKey(name, k).then((checked) => { if (name === str(f.name, '')) taxonKey = checked; });
@@ -265,7 +265,8 @@
     </div>
   {/if}
 
-  <label class="field"><span>Species</span><SpeciesPicker bind:value={name} bind:taxonKey bind:cultivar bind:kind bind:parentage />
+  <!-- `reserve`: the name check's words arrive in room kept for them, so "Start batch" below does not move under a press (round seventy; P's need 2, as the add form since round sixty-seven, triage-66 P10). -->
+  <label class="field"><span>Species</span><SpeciesPicker reserve bind:value={name} bind:taxonKey bind:cultivar bind:kind bind:parentage />
     <span class="faint small">A species, a cultivar (<i>Haworthia truncata</i> 'Lime Green'), or a hybrid: write the cross (<i>Ariocarpus retusus</i> × <i>trigonus</i>), or the genus and the name (<i>Echeveria</i> 'Blue Curls') when the parents are not known.</span></label>
   {#if kind === 'hybrid'}
     <label class="field"><span>Parentage <span class="faint">(if known)</span></span><input id="s-parentage" type="text" bind:value={parentage} placeholder="Seed parent × pollen parent" /><span class="faint small">The plant is filed under the genus; its parents' species pages carry the biology. A hybrid has no habitat of its own, so the climate-derived cultivation rows do not apply to it.</span></label>

@@ -42,8 +42,14 @@ const projects: PlaywrightTestProject[] = [
 // about 90 requests, six plants 370, an import of five 310. So an assertion that follows a write waits 10 s there, not
 // 5, and a test has 60 s; the writes of hundreds of plants and the example collection say their own (helpers/pace.ts).
 const WEBKIT_PACE = { timeout: 60_000, expect: { timeout: 10_000 } };
-if (engines.has('webkit')) projects.push({ name: 'webkit', grepInvert: [PHONE_ONLY, CHROMIUM_ONLY], use: { browserName: 'webkit' }, ...WEBKIT_PACE });
-if (engines.has('phone-webkit')) projects.push({ name: 'phone-webkit', grep: PHONE, grepInvert: CHROMIUM_ONLY, use: { ...iPhone }, ...WEBKIT_PACE });
+// A WebKit test that fails keeps its trace (round seventy; triage-69 P1, IND-8): WebKit runs only on the owner's PC, and
+// a failure there that passes on its retry could be read only from its own run. Each action's DOM before and after and
+// the point it pressed are kept; the screencast is not, as it slows the engine whose timing is in question. Only a
+// failed attempt's trace is kept (test-results/<test>/trace.zip; `npx playwright show-trace` opens it); PW_WEBKIT_TRACE
+// names another mode (`on`, `on-first-retry`, `off`).
+const WEBKIT_TRACE = { mode: (process.env.PW_WEBKIT_TRACE ?? 'retain-on-failure') as 'on' | 'off' | 'retain-on-failure' | 'on-first-retry', screenshots: false, snapshots: true, sources: false };
+if (engines.has('webkit')) projects.push({ name: 'webkit', grepInvert: [PHONE_ONLY, CHROMIUM_ONLY], use: { browserName: 'webkit', trace: WEBKIT_TRACE }, ...WEBKIT_PACE });
+if (engines.has('phone-webkit')) projects.push({ name: 'phone-webkit', grep: PHONE, grepInvert: CHROMIUM_ONLY, use: { ...iPhone, trace: WEBKIT_TRACE }, ...WEBKIT_PACE });
 if (engines.has('firefox')) projects.push({ name: 'firefox', grepInvert: [PHONE_ONLY, CHROMIUM_ONLY], use: { browserName: 'firefox' } });
 export default defineConfig({
   testDir: 'tests/e2e',

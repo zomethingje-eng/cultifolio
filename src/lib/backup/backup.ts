@@ -21,35 +21,51 @@ export function photoBytesError(full: Uint8Array, thumb: Uint8Array): string | n
 }
 
 /**
- * Every row the fold can take; a row it cannot take is left out and named in `unreadable` rather than refusing the file
- * (round twenty-nine, 2), and kept as it is in `skipped`. Since round sixty-nine (triage-68 R3, the self-review's D3,
- * R46-18) that includes a row whose shape the fold cannot take (an unknown kind, a broken stamp, a reserved field), as
- * the fold skips one in the log: a backup of a log holding one was refused whole ("Change 4 in that backup cannot be
- * read"), so it looked good when made and held nothing that could be restored. A list none of whose rows can be read is
- * still refused, since it is damaged or not a backup.
+ * A row this version cannot read is kept as it is by a restore, appended to the log, when it has a stamp to be stored
+ * under; the fold skips it as it skips the device's own (round seventy; triage-69 R6, R47-15). One with none cannot be
+ * kept, and is left out and named.
  */
-function checkRows(rows: unknown[]): { changes: Change[]; unreadable: string[]; skipped: unknown[] } {
+export const keepable = (r: unknown): boolean => !!r && typeof r === 'object' && typeof (r as { t?: unknown }).t === 'string' && (r as { t: string }).t.length > 0;
+type Rows = { changes: Change[]; unreadable: string[]; skipped: unknown[]; leftOut: string[] };
+/**
+ * Every row the fold can take; a row it cannot take is named in `unreadable` rather than refusing the file (round
+ * twenty-nine, 2). Since round sixty-nine (triage-68 R3, the self-review's D3, R46-18) that includes a row whose shape
+ * the fold cannot take (an unknown kind, a broken stamp, a reserved field), as the fold skips one in the log: a backup of
+ * a log holding one was refused whole ("Change 4 in that backup cannot be read"), so it looked good when made and held
+ * nothing that could be restored. Such a row is kept as it is in `skipped` when it has a stamp (`keepable`), and a
+ * restore appends it to the log; a row with none, or with a value its field never takes, is `leftOut` (round seventy;
+ * triage-69 R6). A list none of whose rows can be read is still refused, since it is damaged or not a backup.
+ */
+function checkRows(rows: unknown[], name: (i: number) => string, refuseEmpty: boolean): Rows {
   const ok: unknown[] = [];
   const at: number[] = [];
   const unreadable: string[] = [];
   const skipped: unknown[] = [];
+  const leftOut: string[] = [];
   rows.forEach((r, i) => {
     const shape = changeError(r, true); // a row it passes is a `ChangeRow`
-    if (shape) { unreadable.push(`change ${i + 1}: ${shape}`); skipped.push(r); } else { ok.push(v.parse(ChangeRow, r)); at.push(i); }
+    if (!shape) { ok.push(v.parse(ChangeRow, r)); at.push(i); return; }
+    const said = `${name(i)}: ${shape}`;
+    unreadable.push(said);
+    if (keepable(r)) skipped.push(r); else leftOut.push(said);
   });
-  if (rows.length && !ok.length) throw new Error(`Change 1 in that backup cannot be read (${unreadable[0].replace(/^change 1: /, '')}); the file may be damaged or from a newer version.`);
+  if (refuseEmpty && rows.length && !ok.length) throw new Error(`Change 1 in that backup cannot be read (${unreadable[0].replace(/^change 1: /, '')}); the file may be damaged or from a newer version.`);
   const read = readChanges(ok);
   // Named by their place in the file's own list, as the rows set apart above are.
-  const dropped = read.dropped.map((d) => d.replace(/^change (\d+):/, (_, n) => `change ${at[Number(n)] + 1}:`));
-  return { changes: read.changes, unreadable: [...unreadable, ...dropped], skipped };
+  const dropped = read.dropped.map((d) => d.replace(/^change (\d+):/, (_, n) => `${name(at[Number(n)])}:`));
+  return { changes: read.changes, unreadable: [...unreadable, ...dropped], skipped, leftOut: [...leftOut, ...dropped] };
 }
-/** The rows of a backup's `unreadable.json`: what the exporting device's fold skipped, named and kept as they are. */
-function unreadableRows(bytes: Uint8Array | undefined): { unreadable: string[]; skipped: unknown[] } {
-  if (!bytes) return { unreadable: [], skipped: [] };
+/**
+ * The rows of a backup's `unreadable.json`, what the exporting device's fold skipped: read back as changes where this
+ * version can read them (a newer kind it now knows), kept as they are where not (round seventy; triage-69 R6, R47-15:
+ * every row was set apart, so a version that could read one still left it out, and a restore lost it for good).
+ */
+function unreadableRows(bytes: Uint8Array | undefined): Rows {
+  if (!bytes) return { changes: [], unreadable: [], skipped: [], leftOut: [] };
   let rows: unknown;
   try { rows = JSON.parse(strFromU8(bytes)); } catch { rows = null; }
-  if (!Array.isArray(rows)) return { unreadable: ['unreadable.json: not a list this version reads'], skipped: [] };
-  return { unreadable: rows.map((r, i) => `unreadable.json row ${i + 1}: ${changeError(r, true) ?? 'skipped by the device that made the file'}`), skipped: rows };
+  if (!Array.isArray(rows)) return { changes: [], unreadable: ['unreadable.json: not a list this version reads'], skipped: [], leftOut: ['unreadable.json: not a list this version reads'] };
+  return checkRows(rows, (i) => `unreadable.json row ${i + 1}`, false);
 }
 
 export interface PhotoBytes {
@@ -174,10 +190,16 @@ export async function buildBackup(o: BuildOpts): Promise<BuiltBackup> {
 export interface ReadBackup {
   manifest: Manifest;
   changes: Change[];
-  /** Rows of `changes.json` that could not be read and were left out, each named ("change 15: price of a accession must be a string, not [1]"), and the rows of `unreadable.json`. */
+  /** Every row of either list that is not read as a change, each named ("change 15: price of a accession must be a string, not [1]", "unreadable.json row 1: unknown kind …"), kept as it is or left out. */
   unreadable: string[];
-  /** The rows of `changes.json` whose shape this version cannot read, and those of `unreadable.json`, as they are: a backup made from this file's log carries them on (round sixty-nine; triage-68 R3). */
+  /**
+   * The rows of either list whose shape this version cannot read, as they are, each with a stamp (`keepable`): Merge and
+   * Replace append them to the log, which the fold skips, and a backup made from it carries them on (round sixty-nine,
+   * triage-68 R3; round seventy, triage-69 R6). The readable rows of `unreadable.json` are in `changes`.
+   */
   skipped: unknown[];
+  /** The rows neither read nor kept, each named: one with no stamp to keep it under, or a value its field never takes. Replace is refused while there are any; Merge leaves them in the file. */
+  leftOut: string[];
   /** The exporting device's settings (`device.json`), when the file has them. */
   settings: DeviceSettings | null;
   /** Photo ids whose pixels are in the file. */
@@ -283,13 +305,20 @@ export async function readBackup(bytes: Uint8Array): Promise<ReadBackup> {
       /* a device.json that does not parse is left out; the records still restore */
     }
   }
-  const read = checkRows(rows);
+  const read = checkRows(rows, (i) => `change ${i + 1}`, true);
   const apart = unreadableRows(files['unreadable.json']);
+  const have = new Set(read.changes.map((c) => c.t));
+  const stamps = (x: unknown) => (x as { t: string }).t;
+  const changes = [...read.changes, ...apart.changes.filter((c) => !have.has(c.t))];
+  for (const c of changes) have.add(c.t);
+  const skipped: unknown[] = [];
+  for (const r of [...read.skipped, ...apart.skipped]) if (!have.has(stamps(r))) { have.add(stamps(r)); skipped.push(r); }
   return {
     manifest: m.output,
-    changes: read.changes,
+    changes,
     unreadable: [...read.unreadable, ...apart.unreadable],
-    skipped: [...read.skipped, ...apart.skipped],
+    skipped,
+    leftOut: [...read.leftOut, ...apart.leftOut],
     settings,
     photoIds,
     readPhoto: (id) => (files[photoPath(id)] && files[thumbPath(id)] ? { id, full: files[photoPath(id)], thumb: files[thumbPath(id)] } : null)

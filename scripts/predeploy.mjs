@@ -74,6 +74,9 @@ if (run.error) {
 // A run stopped by a signal has no status: that is not a pass either.
 const status = run.status ?? 1;
 console.log(status === 0 ? 'predeploy: every test passed first time; the deploy may go ahead' : `predeploy: the strict run failed (exit ${status}); do not deploy`);
+// A WebKit test that failed kept its trace, and smoke's two traced Saves their record (round seventy; triage-69 P1, IND-8):
+// the run is on the owner's PC only, so where to find them is said, for sending back.
+if (status !== 0 && engines.includes('webkit')) console.log("predeploy: each failed WebKit test kept its trace (trace.zip) in its folder under test-results/, and smoke's species-change and 400-plant Saves a save-trace.json beside it; npx playwright show-trace <that trace.zip> opens one");
 process.exit(status);
 
 /** The engines beyond Chromium a run names, as playwright.config.ts reads them (tests/e2e/helpers/engines.ts `enginesNamed`;

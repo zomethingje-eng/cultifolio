@@ -4,14 +4,18 @@
    * that identity on this device, and the address carries the species and the printed name in its fragment, which never
    * reached the server. The name is shown as the label printed it, as text; the species page is offered when the
    * reference has it (asked by hash group, as the plants list asks), so the link is never to a page that is not there.
+   * "add one to my plants" leads out of the example first, as every add does (round seventy; triage-69 X4; S-D7b): from
+   * a label opened in an example tab it opened the example's own add form, and the plant was the example's.
    */
   import { onMount } from 'svelte';
   import { entriesFor } from '$lib/ui/index.svelte';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
   import { labelFromHash } from './qr';
   import { shownLabel } from './foreign-label';
+  import { addLeavesExample } from './example.svelte';
   let label = $state<{ slug: string | null; name: string | null }>({ slug: null, name: null });
   let entry = $state<{ name: string; slug: string } | null | 'unreached' | 'none'>(null);
+  const addHref = $derived(entry && typeof entry === 'object' ? `/plants/new?species=${encodeURIComponent(entry.name)}` : '/plants/new');
   onMount(() => {
     label = shownLabel(labelFromHash(location.hash));
     const want = label.slug;
@@ -25,7 +29,7 @@
     <p><b>This label is from someone's collection{label.name ? ':' : '.'}</b>{#if label.name}{' '}<SpeciesName name={label.name} />{/if}</p>
     <p class="muted">Their plant is kept on their own device, not here.</p>
     {#if entry && typeof entry === 'object'}
-      <p><a href="/species/{entry.slug}" id="foreign-species">The species page for <SpeciesName name={entry.name} /></a> · <a href="/plants/new?species={encodeURIComponent(entry.name)}">add one to my plants</a></p>
+      <p><a href="/species/{entry.slug}" id="foreign-species">The species page for <SpeciesName name={entry.name} /></a> · <a href={addHref} id="foreign-add" onclick={(e) => addLeavesExample(e, addHref)}>add one to my plants</a></p>
     {:else if entry === 'none'}
       <p>Its species has no page in the reference yet.</p>
     {:else if entry === 'unreached'}

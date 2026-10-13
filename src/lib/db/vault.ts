@@ -438,6 +438,12 @@ export interface StoreOpts {
    * throws `MetaRefusedError`.
    */
   requireMeta?: MetaCondition[];
+  /**
+   * The log must hold no change for the write to be made, read in its own transaction (round seventy, for triage-69 X3;
+   * S-D6: the example's seed is set out only into an empty log). One that holds any: nothing is written, and the write
+   * throws `MetaRefusedError('changes')`.
+   */
+  requireEmpty?: boolean;
 }
 /**
  * The example writes no outbox rows: syncing is refused there, and the rows were a third of every write's requests
@@ -472,6 +478,11 @@ async function storeIn(tx: Tx, changes: Change[], fromServer: boolean, extra: Pa
     tx.abort();
     await tx.done.catch(() => {});
     throw new MetaRefusedError(c.key);
+  }
+  if (opts.requireEmpty && (await ch.count()) > 0) {
+    tx.abort();
+    await tx.done.catch(() => {});
+    throw new MetaRefusedError('changes');
   }
   // Two changes under one stamp should not exist; when they do (a stamp minted twice by a bug, a file edited by hand), the store keeps one of them, and the same one on
   // every device: not whichever arrived first but the one that ranks higher by content, so devices that met the two in
@@ -556,7 +567,7 @@ const sameChange = (a: Change, b: Change) => a.kind === b.kind && a.id === b.id 
 const rank = (c: Change) => `${c.kind}\0${c.id}\0${c.field}\0${JSON.stringify(c.value ?? null)}`;
 
 /** Append changes; unless they came from the server (`fromServer`), they also go in the outbox to be pushed. One transaction, so the two stores cannot disagree. */
-export async function appendChanges(changes: Change[], fromServer = false, strict = false, requireKey?: string, opts: Pick<StoreOpts, 'meta' | 'markLast' | 'requireMeta'> = {}): Promise<Stored> {
+export async function appendChanges(changes: Change[], fromServer = false, strict = false, requireKey?: string, opts: Pick<StoreOpts, 'meta' | 'markLast' | 'requireMeta' | 'requireEmpty'> = {}): Promise<Stored> {
   if (!changes.length && !opts.meta && !opts.markLast) return { kept: [], replaced: [], seq: 0, first: 0 };
   const out = await writing(async () => {
     const db = await openVault();
@@ -826,6 +837,12 @@ export interface FoldSnapshot {
   offset: number;
   /** Whether the clock had been confirmed by a sync server when this was folded: the park rule reads it (round sixty). Absent in older snapshots, which are under older rules anyway. */
   checked?: boolean;
+  /**
+   * The wall of the latest stamp it folded that a clock could hold (a peer's, not made past another): read only by a clock
+   * that holds none of it, so a load from it is the whole log's fold under the clock in force at that load (round seventy;
+   * triage-69 R1, IND-5). Absent in older snapshots, which are under older rules anyway.
+   */
+  reach?: number;
   /** The last arrival number it covers. */
   seq: number;
   records: unknown[];

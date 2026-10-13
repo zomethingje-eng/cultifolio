@@ -11,6 +11,7 @@
 import { getIndex, indexMaps, type Platform, type Fetch, type Loaded } from './dossiers';
 import { upstreamCall } from './sync';
 import { workerKey } from './worker-cache';
+import { canonicalSynonym } from '$core/names';
 
 export interface SynonymAnswer {
   /** The name as the backbone matched it. */
@@ -46,7 +47,12 @@ export async function synonymInIndex(platform: Platform, fetch: Fetch, slug: str
   if (!name || !/^[A-Z][a-z]+ [a-z]/.test(name)) return null;
   const want = name.toLowerCase();
   const index = held?.idx ?? (await getIndex(platform, fetch)); // the request's own corpus, as the page's (round sixty; A27)
-  const hit = indexMaps(index).bySynonym.get(want); // one map per index, not a scan of every synonym per unknown address (round fifty-one, 6)
+  // The address's slug first, as it is: the maps hold every older name under its slug too, so `arbutus-uva-ursi` is
+  // Arbutus uva-ursi, where `nameFromSlug` reads "Arbutus uva ursi", which no species holds (round seventy; triage-69 N3,
+  // S-F3). Then the name read from it, as before. One map per index, not a scan of every synonym per unknown address
+  // (round fifty-one, 6).
+  const maps = indexMaps(index);
+  const hit = maps.bySynonym.get(slug.trim().toLowerCase()) ?? maps.bySynonym.get(want);
   if (!hit) return null;
   return { matched: hit.matched, acceptedKey: hit.entry.key, acceptedName: hit.entry.name, slug: hit.entry.slug };
 }
@@ -110,4 +116,37 @@ export async function synonymAsk(platform: Platform, fetch: Fetch, slug: string,
   const keys = [body.acceptedUsageKey, typeof body.speciesKey === 'number' ? body.speciesKey : null].filter((k): k is number => typeof k === 'number');
   const entry = index.find((e) => keys.includes(e.key));
   return { matched, acceptedKey: body.acceptedUsageKey, acceptedName, slug: entry?.slug ?? null };
+}
+
+/**
+ * The authors under which a species' stored synonyms (the dossier's `name.synonyms`, GBIF's with their authorship) hold
+ * an older name (round seventy; triage-69 F1): "Echeveria farinosa Lindl." gives "Lindl." for "Echeveria farinosa". Each
+ * author once, in the record's order; empty where the record holds the name with no author, or not at all. Nothing is
+ * guessed: the text after the name is the record's, as it stands.
+ */
+export function authorsOf(name: string, synonyms: readonly string[]): string[] {
+  const want = name.trim().replace(/\s+/g, ' ').toLowerCase();
+  const out: string[] = [];
+  for (const s of synonyms) {
+    const t = s.trim().replace(/\s+/g, ' ');
+    if (canonicalSynonym(t)?.toLowerCase() !== want) continue;
+    // The record's text past the name: a variety's rank and epithet are part of the name, so only a binomial's own record
+    // matches a binomial, and the rest is its author.
+    // One author written twice with other spacing ("(Jacq.) Ker Gawl." and "(Jacq.) KerGawl.") is said once, as first written.
+    const author = t.slice(want.length).trim();
+    if (t.slice(0, want.length).toLowerCase() === want && author && !out.some((a) => a.replace(/\s+/g, '') === author.replace(/\s+/g, ''))) out.push(author);
+  }
+  return out;
+}
+
+/**
+ * The 404's sentence for an older name two species or more of the reference hold (round sixty-nine; triage-68 N1; round
+ * seventy: triage-69 F1, N2, S-F1, S-F7): each holder named with the author under which it holds the name where its
+ * record has one ("Echeveria farinosa Lindl., now Dudleya farinosa"), and without one where it has none; "neither" for
+ * two, "none of them" for three or more ("Eugenia malaccensis … leads to neither" named three).
+ */
+export function sharedNameMessage(name: string, holders: ReadonlyArray<{ name: string; authors: readonly string[] }>): string {
+  const count = ['two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'][holders.length - 2] ?? String(holders.length);
+  const each = holders.map((h) => `${h.authors.length ? h.authors.map((a) => `${name} ${a}`).join(' and ') : name}, now ${h.name}`);
+  return `${name} is an older name of ${count} species of the reference, so this address leads to ${holders.length === 2 ? 'neither' : 'none of them'}: ${each.join('; ')}`;
 }

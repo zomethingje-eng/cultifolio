@@ -62,15 +62,39 @@ function dateKey67(cell: string, read: string | null): string {
  * line's own key.
  * A date read at a lesser precision is that reading; one not read at all is its text.
  */
-function dateKey(cell: string, read: string | null, today: string): { key: string; others: string[]; ambiguous: boolean; swaps: boolean } {
+function dateKey(cell: string, read: string | null, today: string): { key: string; others: string[]; ambiguous: boolean; swaps: boolean; yearLast?: boolean; either?: string } {
   const asked = readDate(cell, today, null);
   const two = (x: string) => x.padStart(2, '0');
   const sorted = (y: string | number, a: string, b: string) => `~${y}|${[two(a), two(b)].sort().join('|')}`;
+  // A cell that reads either way round, answered by the sheet's choice (round seventy; triage-69 R7, R47-16): keyed by
+  // the day the answer reads, not "~", so 05/01/2024 and 01/05/2024 on a sheet answered day first are two plants, and a
+  // day-first 01/05/2024 is not taken for a plant of 2024-01-05. The "~" form, under which an unanswered run filed its
+  // plant, is tried only for a plant whose date is that day or none (`either`, checked in `keyCellsOf`).
+  const twoWays = asked.ambiguous || (asked.yearLast?.length ?? 0) > 1;
+  if (twoWays && read && /^\d{4}-\d{2}-\d{2}$/.test(read)) {
+    const [y, mo, da] = read.split('-');
+    return { key: read, others: asked.yearLast ? [cell.trim()] : [], ambiguous: false, swaps: true, yearLast: !!asked.yearLast, either: sorted(y, mo, da) };
+  }
   if (asked.ambiguous) {
     // Either reading, as a plant filed from the same line written 2024-03-09 or 2024-09-03 has it.
     const m = /^(\d{1,2})\D(\d{1,2})\D/.exec(cell.trim())!;
     const y = asked.year!;
     return { key: sorted(y, m[1], m[2]), others: [`${y}-${two(m[2])}-${two(m[1])}`, `${y}-${two(m[1])}-${two(m[2])}`], ambiguous: true, swaps: true };
+  }
+  if (asked.yearLast?.length) {
+    // A short date whose two-digit year could be first or last, as LibreOffice saves a date ("05/01/24"; round seventy,
+    // triage-69 R3, the self-review's D3): keyed as its readings with the year last, whatever the sheet's choice, so a
+    // plant filed from the same line written 2024-05-01, 2024-01-05 or 05/01/2024 is found. Read either way, as an
+    // ambiguous cell is; read one way only, by that day. Its text, round sixty-nine's key for it, is tried too.
+    const [one, two_] = asked.yearLast;
+    const text = cell.trim();
+    if (two_) {
+      const [y, mo, da] = one.split('-');
+      return { key: sorted(y, mo, da), others: [one, two_, text], ambiguous: true, swaps: true, yearLast: true };
+    }
+    const [y, mo, da] = one.split('-');
+    const swaps = mo !== da && +mo <= 12 && +da <= 12;
+    return { key: one, others: [...(swaps ? [sorted(y, mo, da)] : []), text], ambiguous: false, swaps, yearLast: true };
   }
   const full = read && /^(\d{4})-(\d{2})-(\d{2})$/.exec(read);
   const swaps = !!full && full[2] !== full[3] && +full[2] <= 12 && +full[3] <= 12;
@@ -82,9 +106,17 @@ function priceKey(text: string): string {
   const p = text ? readPrice(text) : null;
   return p ? `${p.v}${p.cur ? ` ${p.cur}` : ''}` : text;
 }
+/**
+ * A price with a currency as its amount alone, the key of the same price written without one, or null (round seventy;
+ * triage-69 R3, the self-review's D3): a spreadsheet's currency format saves 12.50 again as £12.50.
+ */
+function bareKey(text: string): string | null {
+  const p = text ? readPrice(text) : null;
+  return p && p.cur ? `${p.v}` : null;
+}
 
 /** A sheet line's fields as read, for its import keys: everything the plant is filed with. */
-interface KeyParts { name: string; v: Partial<Record<Field, string>>; date: string; notes: string }
+interface KeyParts { name: string; v: Partial<Record<Field, string>>; date: string; notes: string; price?: string }
 
 /**
  * A sheet line's import key cells: its fields as the import reads them through the mapping, in one fixed order, and not
@@ -97,7 +129,7 @@ interface KeyParts { name: string; v: Partial<Record<Field, string>>; date: stri
  */
 function keyCells(p: KeyParts): string[] {
   const t = (f: Field) => (p.v[f] ?? '').trim();
-  return [cleanName(p.name), t('cultivar'), numberKey(t('number')), t('place'), p.date, t('source'), t('fieldNumber'), p.notes, priceKey(t('price')), t('kind'), t('parentage'), t('nameAsReceived'), t('provenance'), t('status'), t('lot'), t('form')];
+  return [cleanName(p.name), t('cultivar'), numberKey(t('number')), t('place'), p.date, t('source'), t('fieldNumber'), p.notes, p.price ?? priceKey(t('price')), t('kind'), t('parentage'), t('nameAsReceived'), t('provenance'), t('status'), t('lot'), t('form')];
 }
 /** Round sixty-seven's key cells, for its plants only (`dateKey67`): the notes column alone, and the price as written. */
 function keyCells67(name: string, v: Partial<Record<Field, string>>, acquired: string): string[] {
@@ -137,7 +169,7 @@ export function rowsFromSheet(rows: string[][], m: Mapping, header: boolean, tod
   const head = header ? (rows[0] ?? []).map((c) => cellText(c).toLowerCase()) : null;
   const extra = opts.extra ?? unmappedColumns(rows, m, header).extra;
   /** Each line's import key cells, and the other keys a plant of it may have been filed under (`keyCellsOf`). */
-  const cellsOf: Array<{ cells: string[]; alts: AltCells[] }> = [];
+  const cellsOf: Array<{ cells: string[]; alts: AltCells[]; bare?: string[] }> = [];
   // A Cultifolio plants.csv names each plant's record in its id column: read back into the collection that wrote it, a
   // line whose plant is here is that plant (round sixty-two).
   const idCol = head ? head.findIndex((h) => h === 'id') : -1;
@@ -198,7 +230,7 @@ export function rowsFromSheet(rows: string[][], m: Mapping, header: boolean, tod
   // The plants each line makes, by the line's fields as read: what a second run of the same sheet finds here (round sixty-two;
   // round sixty-seven, triage-66 R3; round sixty-nine, triage-68 R1).
   const keys = keySheet(out.map((r, i) => ({ ...cellsOf[i], qty: r.qty })));
-  out.forEach((r, i) => { r.importKeys = keys[i].keys; if (keys[i].alts.length) r.keyAlts = keys[i].alts; });
+  out.forEach((r, i) => { r.importKeys = keys[i].keys; if (keys[i].alts.length) r.keyAlts = keys[i].alts; if (keys[i].bare) r.importKeysBare = keys[i].bare; });
   return { rows: out, noName, repeatedHeader };
 }
 
@@ -210,14 +242,23 @@ export function rowsFromSheet(rows: string[][], m: Mapping, header: boolean, tod
  * - round sixty-seven's key (`keyCells67`), checked against the plant: its date acquired when that key gave two days one
  *   key, and its notes when another line shares the key, so an old key never takes another day's or another column's plant.
  */
-function keyCellsOf(name: string, v: Partial<Record<Field, string>>, acquired: string | null, extras: string[], today: string): { cells: string[]; alts: AltCells[] } {
-  const d = v.acquired ? dateKey(v.acquired, acquired, today) : { key: '', others: [], ambiguous: false, swaps: false };
+function keyCellsOf(name: string, v: Partial<Record<Field, string>>, acquired: string | null, extras: string[], today: string): { cells: string[]; alts: AltCells[]; bare?: string[] } {
+  const d: ReturnType<typeof dateKey> = v.acquired ? dateKey(v.acquired, acquired, today) : { key: '', others: [], ambiguous: false, swaps: false };
   const notes = (n: string[]) => [v.notes ?? '', ...n].filter((x) => x.trim()).join('\n');
-  const at = (date: string, n: string[]) => keyCells({ name, v, date, notes: notes(n) });
-  const alts: AltCells[] = d.others.map((o) => ({ cells: at(o, extras) }));
-  if (extras.length) for (const o of [d.key, ...d.others]) alts.push({ cells: at(o, []), onlyIfUnique: true });
-  // Round sixty-seven's key gave 2024-01-05 and 2024-05-01 one key: a plant it filed is taken only on its own date.
-  const dates = d.swaps && !d.ambiguous ? [acquired] : undefined;
-  alts.push({ cells: keyCells67(name, v, v.acquired ? dateKey67(v.acquired, acquired) : ''), v67: true, ...(dates ? { dates } : {}), ...(extras.length ? { extras } : {}) });
-  return { cells: at(d.key, extras), alts };
+  const at = (date: string, n: string[], price?: string) => keyCells({ name, v, date, notes: notes(n), price });
+  // The price as read and, when it has a currency, as its amount alone (round seventy; triage-69 R3).
+  const bare = bareKey((v.price ?? '').trim());
+  const prices: Array<string | undefined> = [undefined, ...(bare ? [bare] : [])];
+  const alts: AltCells[] = [];
+  for (const p of prices) for (const o of p === undefined ? d.others : [d.key, ...d.others]) alts.push({ cells: at(o, extras, p) });
+  // An answered cell's "~" form: a plant an unanswered run filed under it, with no date or this one (round seventy; R7).
+  if (d.either) for (const p of prices) alts.push({ cells: at(d.either, extras, p), dates: [acquired, null] });
+  if (extras.length) for (const p of prices) for (const o of [d.key, ...d.others]) alts.push({ cells: at(o, [], p), onlyIfUnique: true });
+  // Round sixty-seven's key gave 2024-01-05 and 2024-05-01 one key: a plant it filed is taken only on its own date. It
+  // read no short date whose year could be first or last, so its key for one is the cell's text.
+  // An answered cell's (R7): its day, or none, as an unanswered run filed it.
+  const dates = d.either ? [acquired, null] : d.swaps && !d.ambiguous ? [acquired] : undefined;
+  alts.push({ cells: keyCells67(name, v, v.acquired ? dateKey67(v.acquired, d.yearLast ? null : acquired) : ''), v67: true, ...(dates ? { dates } : {}), ...(extras.length ? { extras } : {}) });
+  // The line without the columns no field takes, kept beside its key (`importKeyBare`; round seventy, R7).
+  return { cells: at(d.key, extras), alts, ...(extras.length ? { bare: at(d.key, []) } : {}) };
 }

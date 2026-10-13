@@ -22,7 +22,7 @@
   import CompareButton from '$lib/ui/CompareButton.svelte';
   import ShareCard from '$lib/ui/ShareCard.svelte';
   import { isDatasetDoi } from '$dossier/sources/openalex';
-  import { photoAt, srcsetOf, photoHosts, shownAt } from '$dossier/photo-size';
+  import { photoAt, photoOf, srcsetOf, photoHosts, shownAt } from '$dossier/photo-size';
   import { heroOf } from '$dossier/dedupe';
   import { showable, photoSourceGaps } from '$lib/ui/ref/photos';
   import { notAnswered, climateDetail } from '$lib/ui/ref/upstream';
@@ -312,7 +312,8 @@
     <!-- Hidden on a failure heard before hydration too, and credited: the tile names its photograph's source, and the species
          page it opens names the author and licence (round sixty; visitor 4, rule 1, the round forty-two review G). -->
     <!-- Its credit is hidden with it: no credit stands under a photograph that did not load (round sixty-seven; triage-66 P7). -->
-    {#if c.thumb}<img src={c.thumb} alt={c.name} loading="lazy" use:failedBeforeHydration={(im) => { im.style.visibility = 'hidden'; const rc = im.parentElement?.querySelector<HTMLElement>('.rc'); if (rc) rc.style.visibility = 'hidden'; }} />{/if}<!-- no photograph, no empty square (round sixty-two; outside review A35) -->
+    <!-- The small size, as the front page's tiles load it (round seventy; triage-69 C5, S-C14). -->
+    {#if c.thumb}<img src={photoAt(c.thumb, 'small')} alt={c.name} loading="lazy" use:failedBeforeHydration={(im) => { im.style.visibility = 'hidden'; const rc = im.parentElement?.querySelector<HTMLElement>('.rc'); if (rc) rc.style.visibility = 'hidden'; }} />{/if}<!-- no photograph, no empty square (round sixty-two; outside review A35) -->
     <span class="rn"><SpeciesName name={c.name} /></span>
     <span class="rf">{c.common ?? c.family ?? ''}</span>
     {#if c.thumb && tileCredit(c)}<span class="rc">{tileCredit(c)}</span>{/if}
@@ -335,8 +336,8 @@
     <!-- The photograph is the largest paint on a phone and lives on a third party's host. Preloaded from the head, one size by
          surface (the 500 px file under 640 px, the 1024 px file above), so the handshake and the download start with the
          stylesheet, not when the parser reaches the image (round forty-two, 1). The hosts are preconnected for the rest. -->
-    <link rel="preload" as="image" href={photoAt(heroSrc!, 'medium')} media="(max-width: 640px)" fetchpriority="high" />
-    <link rel="preload" as="image" href={photoAt(heroSrc!, 'large')} imagesrcset={srcsetOf(heroSrc!, ['medium', 'large'])} imagesizes="480px" media="(min-width: 641px)" fetchpriority="high" />
+    <link rel="preload" as="image" href={photoOf(hero, 'medium')} media="(max-width: 640px)" fetchpriority="high" />
+    <link rel="preload" as="image" href={photoOf(hero, 'large')} imagesrcset={srcsetOf(heroSrc!, ['medium', 'large'])} imagesizes="480px" media="(min-width: 641px)" fetchpriority="high" />
     {#each photoHosts([heroSrc]) as h (h)}<link rel="preconnect" href={h} />{/each}
   {/if}
   <link rel="canonical" href="https://cultifolio.com/species/{d.slug}" />
@@ -347,7 +348,11 @@
 <svelte:window onbeforeunload={guardUnload} />
 
 <article class="species">
-  {#if data.was}
+  {#if data.was && data.wasShared?.length}
+    <!-- A name other species of the reference hold too is no one species' name: the line names them, and never says the
+         backbone accepts this species as it (round seventy; triage-69 F1, S-F1). -->
+    <p class="notice" id="was-synonym"><b>{data.was}</b> is {data.wasVariety ? 'an older name of a variety of this species' : data.wasOfOlder ? 'a variety under an older name of this species' : 'an older name of this species'}, and the reference holds it for {data.wasShared.length === 1 ? 'another species' : `${data.wasShared.length} other species`} too, {#each data.wasShared as o, i (o.slug)}{i ? (i === data.wasShared.length - 1 ? ' and ' : ', ') : ''}<a href="/species/{o.slug}"><i>{o.name}</i></a>{/each}, so it names no one species here.</p>
+  {:else if data.was}
     <p class="notice" id="was-synonym"><b>{data.was}</b> is {data.wasVariety ? 'an older name of a variety of this species' : data.wasOfOlder ? 'a variety under an older name of this species' : 'a synonym'}: the GBIF backbone accepts {data.wasVariety || data.wasOfOlder ? 'it under' : 'this species as'} <i>{d.name.scientific}</i>, and the reference files it under that name.</p>
   {/if}
   <div class="top" class:withhero={!!hero}>
@@ -361,7 +366,7 @@
     <div class="hero photo">
       <!-- One size by surface, not by pixel density (round thirty-five, R2-7): under 640 px the 500 px file fills a 150 px band cropped to cover,
            and a phone's density promoted it to the 1024 px one, three times the bytes for a crop that showed a third of it (round forty-two, 1). -->
-      <a href={hero.page ?? hero.url} rel="noopener"><picture><source media="(max-width: 640px)" srcset={photoAt(heroSrc!, 'medium')} /><img src={photoAt(heroSrc!, 'large')} srcset={srcsetOf(heroSrc!, ['medium', 'large'])} sizes="480px" alt={heroAlt} loading="eager" fetchpriority="high" use:failedBeforeHydration={() => (heroFailed = true)} /></picture></a>
+      <a href={hero.page ?? hero.url} rel="noopener"><picture><source media="(max-width: 640px)" srcset={photoOf(hero, 'medium')} /><img src={photoOf(hero, 'large')} srcset={srcsetOf(heroSrc!, ['medium', 'large'])} sizes="480px" alt={heroAlt} loading="eager" fetchpriority="high" use:failedBeforeHydration={() => (heroFailed = true)} /></picture></a>
       <!-- Licence first, then the author's line: on a phone the two are two lines, so a long author name never cuts the
            licence to an ellipsis (round sixty-two; outside review A12); a licence the author's line contradicts is said. -->
       <a class="cred" href={hero.page ?? hero.url} rel="noopener">{#if heroCredit.lic}<span class="lic">{heroCredit.lic}{heroCredit.disagree ? '; the author\'s line names another licence' : ''}</span>{/if}<span class="by">{hero.attribution}{hero.captive === true ? ' · in cultivation' : hero.captive === false ? ' · observed growing wild' : ''}{hero.observedOn ? ' · ' + hero.observedOn : ''}</span></a>
@@ -412,7 +417,8 @@
       <!-- A photograph that fails keeps its square, empty, and loses its credit: removed, it moved "At a glance" up by 28 to
            51 px (a layout shift of 0.17 on a phone), and a failure before hydration drew the broken-image glyph (round
            sixty-seven; triage-66 P7, R45-8). -->
-      {#each stripPhotos as p (p.src + p.id)}<span class="tb"><img src={p.thumb} alt="{d.name.scientific}, photograph {p.attribution}" title={p.attribution} loading="lazy" width="72" height="72" use:failedBeforeHydration={(im) => { im.style.visibility = 'hidden'; im.removeAttribute('title'); }} /></span>{/each}
+      <!-- The small size for a 72-pixel box, as every other small tile loads (round seventy; triage-69 C5, S-C14): the 500-pixel Commons tile was loaded. -->
+      {#each stripPhotos as p (p.src + p.id)}<span class="tb"><img src={photoAt(p.thumb, 'small')} alt="{d.name.scientific}, photograph {p.attribution}" title={p.attribution} loading="lazy" width="72" height="72" use:failedBeforeHydration={(im) => { im.style.visibility = 'hidden'; im.removeAttribute('title'); }} /></span>{/each}
       <span class="more">{photos.length} photograph{photos.length === 1 ? '' : 's'} ›</span>
     </a>
   {/if}

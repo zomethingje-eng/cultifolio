@@ -44,6 +44,11 @@ export interface ImportRow {
   already?: boolean;
   /** The import key of each plant this line still makes, in order (`keyLines`): one per plant, so `qty` is its length. */
   importKeys?: string[];
+  /**
+   * The keys of the same plants without the columns no field takes, when the line has any: stored beside the import key
+   * (`importKeyBare`), so a run of the sheet that has lost such a column finds them (round seventy; triage-69 R7, R47-16).
+   */
+  importKeysBare?: string[];
   /** The name as the sheet gave it, before the review changed it ("Use it", an edit): kept as the name as received when the name filed differs (round sixty-two; the records review, 2). */
   originalName?: string;
   /** Every plant this line makes is here already, by its import key: a first run added it (round sixty-two). */
@@ -83,6 +88,12 @@ export interface KeyAlt {
   dates?: Array<string | null>;
   /** Each must be in the plant's notes: the columns no field takes, which a round-sixty-seven key left out, when another line of the sheet shares the key. */
   extras?: string[];
+  /**
+   * The other lines of the sheet that have this key too, by their own key's hash: it is taken only when each of them is
+   * found by its own key, so of a pair one line unmatched takes the plant and two never take one (round seventy;
+   * triage-69 R7, R47-16: the key without the columns no field takes was dropped whenever two lines shared it).
+   */
+  others?: string[];
 }
 /** A line's other key cells, as the sheet reader gives them to `keySheet`. */
 export interface AltCells {
@@ -144,8 +155,10 @@ export function keyLines(lines: Array<{ cells: string[]; qty: number }>, v = 'i'
  * also has is ambiguous: dropped when it must be unique, and checked against the plant's notes when it names the
  * columns no field takes.
  */
-export function keySheet(lines: Array<{ cells: string[]; qty: number; alts: AltCells[] }>): Array<{ keys: string[]; alts: KeyAlt[] }> {
+export function keySheet(lines: Array<{ cells: string[]; qty: number; alts: AltCells[]; bare?: string[] }>): Array<{ keys: string[]; alts: KeyAlt[]; bare?: string[] }> {
   const keys = keyLines(lines, 'j');
+  // Each plant's key without the columns no field takes, numbered among the lines that share it as `keyLines` numbers.
+  const bareKeys = keyLines(lines.map((l) => ({ cells: l.bare ?? l.cells, qty: l.qty })), 'j');
   const own = lines.map((l) => lineHash(l.cells, 'j'));
   const hashed = lines.map((l) => l.alts.map((a) => ({ a, hash: lineHash(a.cells, a.v67 ? 'i' : 'j') })));
   // The lines (by their own key) that have each key, as their own or as another.
@@ -158,10 +171,10 @@ export function keySheet(lines: Array<{ cells: string[]; qty: number; alts: AltC
     for (const { a, hash } of hashed[i]) {
       if (hash === own[i] || alts.some((x) => x.hash === hash)) continue;
       const unique = holders.get(hash)!.size === 1;
-      if (a.onlyIfUnique && !unique) continue;
-      alts.push({ hash, ...(a.dates ? { dates: a.dates } : {}), ...(!unique && a.extras?.length ? { extras: a.extras } : {}) });
+      const others = a.onlyIfUnique && !unique ? [...holders.get(hash)!].filter((o) => o !== own[i]) : null;
+      alts.push({ hash, ...(a.dates ? { dates: a.dates } : {}), ...(!unique && a.extras?.length ? { extras: a.extras } : {}), ...(others ? { others } : {}) });
     }
-    return { keys: keys[i], alts };
+    return { keys: keys[i], alts, ...(lines[i].bare ? { bare: bareKeys[i] } : {}) };
   });
 }
 
@@ -185,6 +198,9 @@ function fits(a: KeyAlt, p: ReturnType<HasKey>): boolean {
 export function markImported(rows: ImportRow[], has: HasKey, isHere: (recordId: string) => boolean = () => false): ImportRow[] {
   const taken = new Set<string>();
   for (const r of rows) for (const k of r.importKeys ?? []) if (has(k)) taken.add(k);
+  // The lines found whole by their own keys, by their own key's hash (`KeyAlt.others`; round seventy, R7).
+  const whole = new Set<string>();
+  for (const r of rows) if (r.importKeys?.length && r.importKeys.every((k) => taken.has(k))) whole.add(r.importKeys[0].replace(/#\d+$/, ''));
   const filed = new Map<string, string[]>();
   /** The keys here under one hash, "#1" on, read once. */
   const filedUnder = (h: string): string[] => {
@@ -197,7 +213,10 @@ export function markImported(rows: ImportRow[], has: HasKey, isHere: (recordId: 
     return ks;
   };
   const other = (alts: KeyAlt[]): string | null => {
-    for (const a of alts) for (const k of filedUnder(a.hash)) if (!taken.has(k) && fits(a, has(k))) { taken.add(k); return k; }
+    for (const a of alts) {
+      if (a.others && !a.others.every((o) => whole.has(o))) continue;
+      for (const k of filedUnder(a.hash)) if (!taken.has(k) && fits(a, has(k))) { taken.add(k); return k; }
+    }
     return null;
   };
   return rows.map((r) => {
@@ -430,7 +449,12 @@ export function markAlreadyImported(rows: ImportRow[], held: (no: string) => Arr
  * keys is one this sheet still makes, so it explains no other line as changed.
  */
 export function markSheet(rows: ImportRow[], here: { has: HasKey; isHere?: (recordId: string) => boolean; dropped: ReadonlySet<string>; held: Parameters<typeof markAlreadyImported>[1]; plants: Parameters<typeof markChanged>[1] }): ImportRow[] {
-  const imported = markDroppedBefore(markImported(rows, here.has, here.isHere), here.dropped);
+  // A plant is found by the key it was filed under without the columns no field takes too (`importKeyBare`): a run of the
+  // sheet that has lost such a column keys its line so (round seventy; triage-69 R7, R47-16).
+  const bare = new Map<string, (typeof here.plants)[number]>();
+  for (const a of here.plants) if (typeof a.importKeyBare === 'string') bare.set(a.importKeyBare, a);
+  const has: HasKey = bare.size ? (k) => here.has(k) || (bare.get(k) as ReturnType<HasKey>) : here.has;
+  const imported = markDroppedBefore(markImported(rows, has, here.isHere), here.dropped);
   const sheetKeys = new Set([...rows.flatMap((r) => r.importKeys ?? []), ...imported.flatMap((r) => r.matchedKeys ?? [])]);
   return markChanged(markAlreadyImported(imported, here.held), here.plants, sheetKeys);
 }
@@ -451,8 +475,8 @@ export const numberKey = (no: string): string => no.trim().toLowerCase().replace
  * a new key and it was offered again with no word. Said, and added unless dropped: a second plant of one name, bought on
  * one day from one source, is common. Each plant here explains one line at most.
  */
-export function markChanged(rows: ImportRow[], plants: Array<{ taxonName: string; cultivar?: string | null; acquired?: string | null; sourceFrom?: string | null; importKey?: string | null }>, sheetKeys: ReadonlySet<string>): ImportRow[] {
-  const free = plants.filter((a) => a.importKey && !sheetKeys.has(a.importKey));
+export function markChanged(rows: ImportRow[], plants: Array<{ taxonName: string; cultivar?: string | null; acquired?: string | null; sourceFrom?: string | null; importKey?: string | null; importKeyBare?: string | null }>, sheetKeys: ReadonlySet<string>): ImportRow[] {
+  const free = plants.filter((a) => a.importKey && !sheetKeys.has(a.importKey) && !(a.importKeyBare && sheetKeys.has(a.importKeyBare)));
   if (!free.length) return rows;
   const used = new Set<number>();
   const fold = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();

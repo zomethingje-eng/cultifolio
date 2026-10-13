@@ -200,7 +200,9 @@ export function bareGenus(spelling: string, scope: NameScope = {}): boolean {
  *   4. Then a name GBIF marks preferred, which only breaks a tie.
  *   5. Then GBIF's order (a list's names in their place in it).
  * Of a name's spellings, one without a trailing full stop is shown before one with it, then the one more sources give,
- * then, on a tie, one written open before one written closed (round sixty-nine; triage-68 N2), then the one GBIF lists first.
+ * then, on a tie, one a botanical source gives before one only a source outside botany gives (`OUTSIDE_BOTANY`), then
+ * the one the species' botanical sources write more often across all its names (round seventy; triage-69 N4), then one
+ * written open before one written closed (round sixty-nine; triage-68 N2), then the one GBIF lists first.
  * Its capitals are read word by word across every spelling of the name (`casedSpelling`). Preferred flags and source
  * counts exist only for names fetched since round sixty-two's `--names` step; for the rest, every spelling row counts as
  * one source. The first letter is shown as a capital, and every name stays in the answer, so every alternative stays
@@ -209,6 +211,9 @@ export function bareGenus(spelling: string, scope: NameScope = {}): boolean {
 export function englishNames(vernacular: VernacularName[], scope: NameScope = {}): { common?: string; commons?: string[] } {
   type Spelling = { from: Set<string>; at: number };
   const groups = new Map<string, { at: number; spellings: Map<string, Spelling>; from: Set<string>; preferred: boolean; alone: boolean }>();
+  // Every English name the species' sources give, as words, with its sources: how they write a word across all its names
+  // decides a tie between spellings of one (round seventy; triage-69 N4).
+  const across: Array<{ words: string[]; from: ReadonlySet<string> }> = [];
   let seq = 0; // each name's place in GBIF's order, a list's names each in its own (round sixty-three, N1)
   vernacular.forEach((v, i) => {
     if (v.lang !== 'eng' || typeof v.name !== 'string') return;
@@ -222,6 +227,7 @@ export function englishNames(vernacular: VernacularName[], scope: NameScope = {}
     const names = namesOf(v.name);
     for (const name of names) {
       const at = seq++;
+      across.push({ words: spellingWords(name), from: own });
       const k = nameKey(name);
       if (!k) continue;
       const g = groups.get(k) ?? { at, spellings: new Map(), from: new Set<string>(), preferred: false, alone: false };
@@ -259,7 +265,7 @@ export function englishNames(vernacular: VernacularName[], scope: NameScope = {}
     return ws.length === 2 && other(ws[0]) && !!epithet && stem(ws[1]) === stem(epithet);
   };
   const named = [...groups.values()].map((g) => {
-    const spelling = casedSpelling([...g.spellings].map(([s, c]) => ({ spelling: s, from: c.from, at: c.at })));
+    const spelling = casedSpelling([...g.spellings].map(([s, c]) => ({ spelling: s, from: c.from, at: c.at })), across);
     const back = setBack(spelling);
     // A single word that names no species: a bare genus word, a generic noun, or a word only ever given inside a list.
     const single = bareGenus(spelling, scope) || genericNoun(spelling) || (!g.alone && tokensOf(spelling).length === 1);
@@ -300,6 +306,31 @@ export function pooledSpellings(vernacular: VernacularName[], shown: string[]): 
   return out;
 }
 
+/**
+ * Sources outside botany, whose spelling of a plant's name never decides a tie (round seventy; triage-69 N4, S-F8): the
+ * World Register of Marine Species gave Madia elegans "Showy tar weed". The reference holds land plants. A fixed list,
+ * written here and on /about/how.
+ */
+export const OUTSIDE_BOTANY: ReadonlySet<string> = new Set(['World Register of Marine Species']);
+/** How many of a name's sources are botanical: a source `englishNames` names (`s:` and its name) outside botany is not counted. */
+const botanicalCount = (from: ReadonlySet<string>) => { let n = 0; for (const x of from) if (!(x.startsWith('s:') && OUTSIDE_BOTANY.has(x.slice(2)))) n++; return n; };
+/** A spelling's words for comparing how sources write them: folded, apostrophes off, split on spaces and hyphens. */
+const spellingWords = (s: string) => tokensOf(s).map(caseKey).filter(Boolean);
+/**
+ * For each form of one name (its words), how many botanical sources write its own words, the ones not every form shares,
+ * in any of the species' names (round seventy; triage-69 N4): of "showy tarweed" and "showy tar weed", the sources whose
+ * names hold "tarweed", against those whose names hold "tar" and "weed". Each source counted once.
+ */
+function commoner(forms: string[][], across: ReadonlyArray<{ words: string[]; from: ReadonlySet<string> }>): number[] {
+  const shared = (w: string) => forms.every((f) => f.includes(w));
+  return forms.map((f) => {
+    const own = f.filter((w) => !shared(w));
+    if (!own.length) return 0;
+    const by = new Set<string>();
+    for (const n of across) if (own.every((w) => n.words.includes(w))) for (const x of n.from) by.add(x);
+    return botanicalCount(by);
+  });
+}
 /** A word as the capitals rule compares it: folded, apostrophes off. */
 const caseKey = (w: string) => foldWord(w).replace(/['’‘`ʼ]/g, '');
 const upperWord = (w: string) => /^[^\p{L}]*\p{Lu}/u.test(w);
@@ -317,7 +348,7 @@ const upperWord = (w: string) => /^[^\p{L}]*\p{Lu}/u.test(w);
  */
 /** Head nouns English writes apart in a plant's name (round sixty-seven): a closed form ending in one is shown open where a source writes it open. */
 const CLOSED_HEADS = ['plant', 'tree', 'lily', 'daisy', 'palm', 'fern', 'cactus', 'orchid'];
-export function casedSpelling(spellings: Array<{ spelling: string; from: ReadonlySet<string>; at: number }>): string {
+export function casedSpelling(spellings: Array<{ spelling: string; from: ReadonlySet<string>; at: number }>, across: ReadonlyArray<{ words: string[]; from: ReadonlySet<string> }> = []): string {
   // The form: written open or closed, then its hyphens, each chosen by its sources (each counted once across the form's
   // spellings), a form without a trailing full stop first, then GBIF's order.
   type S = { spelling: string; from: ReadonlySet<string>; at: number };
@@ -345,7 +376,23 @@ export function casedSpelling(spellings: Array<{ spelling: string; from: Readonl
     // On a tie of sources, the open form before the closed one: "Swamp mahogany", not "Swampmahogany" by GBIF's order
     // (round sixty-nine; triage-68 N2, R46-4). Where the sources differ, they decide, so "Milkweed" stays whole.
     const parts = (f: { spellings: S[] }) => (openFirst ? tokensOf(f.spellings[0].spelling).length : 0);
-    return [...forms.values()].sort((a, b) => dotted(a) - dotted(b) || closedHead(a) - closedHead(b) || b.from.size - a.from.size || parts(b) - parts(a) || a.at - b.at)[0].spellings;
+    // On a tie of sources (round seventy; triage-69 N4, S-F8: "Showy tar weed", the World Register of Marine Species'
+    // spelling, headed Madia elegans over Catalogue of Life's "showy tarweed" by the open-on-tie rule):
+    //   a source outside botany does not decide: a form only such a source gives comes after one a botanical source gives;
+    //   then the form the species' botanical sources write more often across all its names (`commoner`): "tarweed" is
+    //   how they write the word in "Elegant Tarweed" and "autumn showy tarweed" too, "Selfheal" in "Common selfheal";
+    //   then round sixty-nine's open form before the closed one ("Swamp-mahogany"), then GBIF's order.
+    // Measured over the 4,082 headlines of the corpus behind the live index: 11 change, Madia elegans by the first rule
+    // and ten by the second. A form some source writes in lower case, as a rule here before the open form, changed 44
+    // more, most of them to one checklist's hyphens ("Sand-lettuce", "Coral-bean") and some for the worse ("Northern
+    // rata" for "Northern rātā", "Spotted joepyeweed"), so it is not a rule: lower case decides only a word's capitals,
+    // where some source writes the word so (below).
+    const all = [...forms.values()];
+    const support = commoner(all.map((f) => spellingWords(f.spellings[0].spelling)), across);
+    const place = new Map(all.map((f, i) => [f, i]));
+    const outside = (f: { from: ReadonlySet<string> }) => (botanicalCount(f.from) ? 0 : 1);
+    const commonest = (f: (typeof all)[number]) => support[place.get(f)!];
+    return all.sort((a, b) => dotted(a) - dotted(b) || closedHead(a) - closedHead(b) || b.from.size - a.from.size || outside(a) - outside(b) || commonest(b) - commonest(a) || parts(b) - parts(a) || a.at - b.at)[0].spellings;
   };
   const open = pick((s) => s.toLowerCase().replace(/[-\s]+/g, ' ').trim(), spellings, true);
   const hyphens = pick((s) => s.toLowerCase(), open);
@@ -361,9 +408,10 @@ export function casedSpelling(spellings: Array<{ spelling: string; from: Readonl
     });
   }
   // Of the form's case variants, the one with the fewest capitals no source meant (and none inside a word, "Hawai'I"),
-  // then the most sources, then GBIF's order.
+  // then the most sources, one a botanical source gives before one only a source outside botany gives (round seventy;
+  // triage-69 N4), then GBIF's order.
   const faults = (s: string) => tokensOf(s).reduce((n, w, i) => n + (i > 0 && upperWord(w) !== meant.has(caseKey(w)) ? 1 : 0) + (/\p{L}[^\s-]*\p{Lu}/u.test(w.replace(/^[^\p{L}]+/u, '')) ? 1 : 0), 0);
-  const chosen = [...hyphens].sort((a, b) => faults(a.spelling) - faults(b.spelling) || b.from.size - a.from.size || a.at - b.at)[0].spelling;
+  const chosen = [...hyphens].sort((a, b) => faults(a.spelling) - faults(b.spelling) || b.from.size - a.from.size || Number(!botanicalCount(a.from)) - Number(!botanicalCount(b.from)) || a.at - b.at)[0].spelling;
   let i = 0;
   return chosen.replace(/[^\s-]+/g, (w) => {
     if (i++ === 0) return w;

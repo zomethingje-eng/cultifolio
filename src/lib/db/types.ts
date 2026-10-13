@@ -55,6 +55,11 @@ export interface Accession {
    * (round sixty-two; the records review, 1, the grower review, 3, A18, B6). Never shown; null for a plant not imported.
    */
   importKey?: string | null;
+  /**
+   * On a plant whose sheet line had columns no field takes: the same key read without them, so a run of the sheet that has
+   * lost those columns finds the plant (round seventy; triage-69 R7, R47-16). Never shown; absent otherwise.
+   */
+  importKeyBare?: string | null;
 }
 
 /**

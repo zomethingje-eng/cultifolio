@@ -55,7 +55,8 @@ describe('a slow clock set right while the tab is closed (R2)', () => {
   });
   it('still slow after the reload: raw clock until a reading confirms the three days, which comes into force then, told once', async () => {
     await corrected(T, 3 * DAY);
-    vi.advanceTimersByTime(3600_000); // closed for an hour, still slow
+    // Closed four days, still slow. Round seventy (triage-69 R5, R47-14): a load waits only when the device clock moved at least the correction since the reading, so closed an hour, it now stays in force.
+    vi.advanceTimersByTime(4 * DAY);
     const h = await fresh();
     expect(h.nowMs()).toBe(Date.now()); // behind: parks nothing
     const told: number[] = [];

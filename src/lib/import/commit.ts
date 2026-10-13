@@ -248,6 +248,8 @@ function plantsOf(r: ImportRow, rec: ReturnType<typeof recordOf>, nos: Array<str
   const keys = r.importKeys ?? [];
   return Array.from({ length: r.qty }, (_, i) => {
     const own: Partial<Accession> = { acc: nos[i] ?? null, importKey: keys[i] ?? null };
+    // Beside it, the key without the columns no field takes, when the line has any (round seventy; triage-69 R7).
+    if (r.importKeysBare?.[i]) Object.assign(own, { importKeyBare: r.importKeysBare[i] });
     if (i > 0 && rec.price) {
       const line = nos[0] ? `Bought with ${nos[0]}, whose record holds the price.` : 'Bought with the first plant of its line, whose record holds the price.';
       Object.assign(own, { price: null, notes: rec.notes ? `${rec.notes}${/\n$/.test(rec.notes) ? '' : '\n'}${line}` : line });

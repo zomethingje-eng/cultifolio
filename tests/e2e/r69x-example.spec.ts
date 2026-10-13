@@ -41,7 +41,7 @@ test('r69x X3: "Keep it as my own" carries every field and the place, with no "L
   await page.locator('#f-loc').selectOption({ label: bench }); // one of the example's places
   await page.locator('details.moredetails > summary').click();
   await page.fill('#f-from', 'Mesa Garden');
-  await page.fill('#f-price', '42');
+  await page.fill('#f-price', '42.50');
   await page.fill('#f-watered', '2026-01-02');
   await page.fill('#f-notes', 'Visitor note to retain');
   const seen = dialogs(page);
@@ -52,10 +52,13 @@ test('r69x X3: "Keep it as my own" carries every field and the place, with no "L
   await ready(page);
   await expect(page).toHaveURL(/\/plants\/new$/);
   expect(seen).not.toContain('beforeunload'); // base: "Leave site?" after a button that promised to keep it
-  for (const a of addresses) for (const v of ['Mesa', '42', 'Visitor', 'Copiapoa']) expect(a).not.toContain(v);
+  // The query and fragment as typed things could reach them, Leave's token taken off (round seventy; triage-69 X4;
+  // S-D7c): the whole address held the port (4204) and, one run in two hundred, a token holding "42".
+  const typedIn = (a: string) => { const u = new URL(a); u.searchParams.delete('left'); return decodeURIComponent(`${u.pathname}${u.search}${u.hash}`); };
+  for (const a of addresses) for (const v of ['Mesa', '42.50', 'Visitor', 'Copiapoa']) expect(typedIn(a)).not.toContain(v);
   await expect(page.locator('#species-name')).toHaveValue('Copiapoa cinerea');
   await expect(page.locator('#f-from')).toHaveValue('Mesa Garden'); // base: empty
-  await expect(page.locator('#f-price')).toHaveValue('42');
+  await expect(page.locator('#f-price')).toHaveValue('42.50');
   await expect(page.locator('#f-watered')).toHaveValue('2026-01-02');
   await expect(page.locator('#f-notes')).toHaveValue('Visitor note to retain');
   await expect(page.locator('#f-loc-new-name')).toHaveValue('Bench 1'); // not one of the grower's places: "New…" holds it

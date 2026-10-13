@@ -7,6 +7,7 @@ import { describe, it, expect } from 'vitest';
 import { commonsPhotos } from '$dossier/sources/commons';
 import { fixtureFetcher } from '$dossier/fetch';
 import { safeUrls } from '$dossier/schema';
+import { heldNamesOf, type HeldNames } from '$dossier/photo-kind';
 
 const answer = (files: Array<{ title: string; cats?: string; width?: number }>) => ({
   query: {
@@ -24,8 +25,8 @@ const ask = async (files: Array<{ title: string; cats?: string }>, scientific: s
   return r.status === 'ok' ? r.data.map((p) => p.id) : [];
 };
 /** A dossier as stored, read as the Worker reads it. */
-const read = (scientific: string, ids: string[], synonyms: string[] = []) =>
-  safeUrls({ name: { scientific, synonyms, vernacular: [], status: 'accepted' }, climate: { status: 'none' }, literature: [], links: {}, upstream: {}, photos: ids.map((id) => ({ src: 'commons', id, url: `https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/x.jpg/960px-${encodeURIComponent(id)}`, thumb: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/x.jpg/500px-x.jpg', width: 3000, height: 2000, licence: 'by-sa', attribution: 'A. Grower, CC BY-SA 4.0, via Wikimedia Commons' })) } as never).photos.map((p) => p.id);
+const read = (scientific: string, ids: string[], synonyms: string[] = [], held?: HeldNames) =>
+  safeUrls({ name: { scientific, synonyms, vernacular: [], status: 'accepted' }, climate: { status: 'none' }, literature: [], links: {}, upstream: {}, photos: ids.map((id) => ({ src: 'commons', id, url: `https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/x.jpg/960px-${encodeURIComponent(id)}`, thumb: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/x.jpg/500px-x.jpg', width: 3000, height: 2000, licence: 'by-sa', attribution: 'A. Grower, CC BY-SA 4.0, via Wikimedia Commons' })) } as never, held).photos.map((p) => p.id);
 
 /** Each case: the species, its older names, the title. */
 const BAD: Array<[string, string, string[]?]> = [
@@ -111,6 +112,8 @@ describe('--fill commons reads the species\' older names', () => {
 /**
  * Round sixty-nine, the owner's index: of 22 Commons files left out as "named as another species", 12 were the species
  * under a misspelt epithet. Each "shown" case FAILED on the deployed round sixty-nine; each "left out" case is a guard.
+ * Since round seventy (REVIEW-TRIAGE-69 C1) a slip is read as the species' only with the reference's names, which say the
+ * slip is no other species' name: here an index holding the species alone.
  */
 describe('a misspelt epithet is the species\' own', () => {
   const SHOWN: Array<[string, string]> = [
@@ -120,7 +123,7 @@ describe('a misspelt epithet is the species\' own', () => {
     ['Eriosyce andreaeana', 'File:Eriosyce andreana.jpg'],
     ['Schwantesia ruedebuschii', 'File:Schwantesia nuedebuschii 0zz.jpg']
   ];
-  for (const [sp, title] of SHOWN) it(`shows ${title} under ${sp}`, () => expect(read(sp, [title])).toEqual([title]));
+  for (const [sp, title] of SHOWN) it(`shows ${title} under ${sp}`, () => expect(read(sp, [title], [], heldNamesOf([{ key: 1, name: sp }]))).toEqual([title]));
   const LEFT: Array<[string, string]> = [
     ['Nepenthes robcantleyi', 'File:Nepenthes truncata 2011 Chelsea Flower Show.jpg'],
     ['Colchicum raddeanum', 'File:Aragats, colchicum bifolium - panoramio.jpg'],

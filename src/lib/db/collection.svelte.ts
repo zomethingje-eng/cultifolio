@@ -37,7 +37,7 @@ import { isRecordedTime } from '$core/when';
 import { byNumberNewest } from './number-order';
 import { storageErrorText } from './storage-error';
 import { replacedNotes as replacedNotesIn, type ReplacedNotes } from '$core/notes';
-import { apply, diff, readChanges, changeError, isComplete, isHeld, REQUIRED_FIELDS, KINDS, FOLD_RULES, key as recKey, type Change, type Kind, type Record_, type State, type Hold, hlcWall } from '$core/log';
+import { apply, diff, readChanges, changeError, isComplete, isHeld, REQUIRED_FIELDS, FIELD_TYPES, KINDS, FOLD_RULES, key as recKey, type Change, type Kind, type Record_, type State, type Hold, hlcWall } from '$core/log';
 import { nextAccession, DEFAULT_SCHEME, type NumberingScheme } from '$core/accession';
 import { allChanges, appendChanges, appendChangesClaiming, onOtherTabWrite, deviceId, requestPersistence, getMeta, putPhotoBlobs, getPhotoBlobs, deletePhotoBlobs, holdVault, readFold, writeFold, touchFold, updateMeta, parkStamps, foldGen, lastArrival, arrivalsAfter, arrivalsOf, changesByKeys, changesOf, type MetaCondition, type FoldSnapshot, type NumberKind, type VaultNotice } from './vault';
 import { version as buildVersion } from '$app/environment';
@@ -430,6 +430,9 @@ class Collection {
    * snapshot; a test holds the fold's source to the rules number, round
    * fifty-seven); it is another device's; the clock
    * correction has changed since (every hold was judged by the old clock);
+   * it folded a change the clock in force now would hold (`foldReach`: a
+   * load that waits for a reading holds by the raw clock; round seventy,
+   * triage-69 R1, IND-5);
    * the log was replaced, or a stored change displaced, or a stamp parked
    * (the vault drops it in that very transaction, and refuses a snapshot that
    * began before, and a load that finds the counter moved under it folds the
@@ -559,8 +562,11 @@ class Collection {
     // Keyed by the stored correction and whether a reading confirms it, not by the clock in force (round sixty-nine;
     // triage-68 R2, R46-17): a load waits for a reading before a large correction is in force, and a snapshot keyed by
     // the clock in force was never read on a device still days slow, so every load folded the whole log.
+    // And by the clock the fold holds by now (round seventy; triage-69 R1, IND-5): a snapshot holds what its fold did not
+    // hold, and a clock in force since put back (a load that waits for a reading, which stamps and holds by the raw clock)
+    // would hold some of it. Such a snapshot is not read: the log is folded, so dropping it never changes the collection.
     const clock = clockStored();
-    const usable = !!f && f.rules === FOLD_RULES && f.device === this.deviceId && f.offset === clock.offset && (f.checked ?? false) === clock.checked && had.gen === gen && Array.isArray(f.records) && Array.isArray(f.seen) && Array.isArray(f.born) && Array.isArray(f.parents) && Array.isArray(f.held);
+    const usable = !!f && f.rules === FOLD_RULES && f.device === this.deviceId && f.offset === clock.offset && (f.checked ?? false) === clock.checked && typeof f.reach === 'number' && f.reach <= nowMs() + MAX_AHEAD_MS && had.gen === gen && Array.isArray(f.records) && Array.isArray(f.seen) && Array.isArray(f.born) && Array.isArray(f.parents) && Array.isArray(f.held);
     if (f && usable) {
       try {
         const got = await this.fromFold(f, gen);
@@ -642,6 +648,24 @@ class Collection {
   get snapshotWritten(): Promise<boolean> {
     return this.foldWrite ?? Promise.resolve(false);
   }
+  /**
+   * The wall of the latest stamp the fold took that a clock could hold (round seventy; triage-69 R1, IND-5): a peer's, not
+   * one made past another (`isPastStamp`), which are never held, and not this device's, which the hold excepts. A
+   * snapshot is read only by a clock that holds none of what it folded (`foldFromVault`), so a load from it and a fold of
+   * the whole log come out the same under any clock: a stamp the snapshot holds is judged again at each load. Only the
+   * stamps each field and the record's removal came to count: one that lost its field to a later stamp changes nothing,
+   * held or not. 0 when there is none.
+   */
+  private foldReach(): number {
+    let reach = 0;
+    for (const [k, t] of this.seen) {
+      if (k.includes('\0held\0') || typeof t !== 'string' || t.length <= 18 || t[13] !== '-') continue; // a removal's '1' and '0' sit beside the stamps
+      if (isPastStamp(t) || t.slice(t.lastIndexOf('-') + 1).startsWith(this.deviceId)) continue; // this device's: as `isHeld` reads the writer
+      const w = hlcWall(t);
+      if (w > reach) reach = w;
+    }
+    return reach;
+  }
   /** Write the fold as it is to the vault, against the arrival number and the counter read before it was built; refused by the vault if the log changed under it. */
   private async saveFold(seq: number, gen: number, folded = this.applied.size): Promise<boolean> {
     if (this.malformedSeen.size) return false; // every load reads the log, and counts what it skipped (round sixty-seven; triage-66 R10)
@@ -660,7 +684,7 @@ class Collection {
       // are judged again at the next load (round sixty-one).
       const held = [...this.heldStamps, ...[...this.parkedStamps].filter((t) => !this.storedParked.has(t))];
       const clock = clockStored(); // the snapshot's key (`foldFromVault`)
-      return await writeFold({ rules: FOLD_RULES, build: buildVersion, device: this.deviceId, offset: clock.offset, checked: clock.checked, seq, records, seen, born, parents, held, last, changes: folded }, gen);
+      return await writeFold({ rules: FOLD_RULES, build: buildVersion, device: this.deviceId, offset: clock.offset, checked: clock.checked, reach: this.foldReach(), seq, records, seen, born, parents, held, last, changes: folded }, gen);
     } catch {
       return false; // a snapshot that could not be written is a slower load next time, nothing more
     }
@@ -1487,7 +1511,7 @@ class Collection {
    * 'import' (a backup file: not an edit, but the server has never seen
    * it, so it is pushed too), 'server' (came down through sync: already there).
    */
-  private async commit(changes: Change[], source: 'local' | 'import' | 'server' = 'local', requireKey?: string, opts: { meta?: Record<string, unknown>; markLast?: string; requireMeta?: MetaCondition[] } = {}): Promise<void> {
+  private async commit(changes: Change[], source: 'local' | 'import' | 'server' = 'local', requireKey?: string, opts: { meta?: Record<string, unknown>; markLast?: string; requireMeta?: MetaCondition[]; requireEmpty?: boolean } = {}): Promise<void> {
     if (!changes.length && !opts.meta && !opts.markLast) return;
     const own = source !== 'server';
     // The grower's own writes are checked as a pull or a file is: a value of a type its field never takes (a form's
@@ -1600,8 +1624,15 @@ class Collection {
       // latest the real time may be (`latestNowMs`): while a large correction waits for a reading, a peer's change from
       // twelve hours ago is days past the raw clock, and the grower's later edit lost to it once the correction came into
       // force (round sixty-nine; triage-68 R2, R46-17).
-      const heldT = this.seen.get(k + '\0held\0' + c.field);
-      if (heldT !== undefined && hlcWall(heldT) <= latestNowMs() + FOLLOW_HELD_MS && (prev === undefined || hlcCompare(heldT, prev) > 0)) prev = heldT;
+      // Every held stamp of the record the change could lose to, not of its own field alone (round seventy; triage-69 R2,
+      // the self-review's D2): whether a record is removed is decided against the latest edit to any of its fields, so a
+      // removal follows a held edit to any of them, each within the day, and an edit follows a held removal, which would
+      // otherwise take the edit with the plant once it folded.
+      const reach = latestNowMs() + FOLLOW_HELD_MS;
+      for (const f of c.field === '_deleted' ? fieldsOf(c.kind, this.state.get(k)) : [c.field, '_deleted']) {
+        const heldT = this.seen.get(k + '\0held\0' + f);
+        if (heldT !== undefined && hlcWall(heldT) <= reach && (prev === undefined || hlcCompare(heldT, prev) > 0)) prev = heldT;
+      }
       // The edit always takes the field (round sixty; three reviews: an edit stored and never shown). Rounds fifty-one and
       // fifty-two stamped at real time when the field's stamp was a day or more ahead, so that a corrected device would
       // not carry its old fast clock on; but a clock set BACK makes a right stamp look ahead too, and the edit was stored
@@ -1628,8 +1659,8 @@ class Collection {
    * are as given, read in its own transaction, and it resolves to a `PutResult` (round sixty-nine, for triage-68 X6).
    */
   putWith(kind: Kind, id: string, fields: Record<string, unknown>, events?: Array<Omit<PlantEvent, 'id'>>, also?: Array<{ kind: Kind; id: string; fields: Record<string, unknown> }>, opts?: { meta?: Record<string, unknown>; markLast?: string }): Promise<void>;
-  putWith(kind: Kind, id: string, fields: Record<string, unknown>, events: Array<Omit<PlantEvent, 'id'>>, also: Array<{ kind: Kind; id: string; fields: Record<string, unknown> }>, opts: { meta?: Record<string, unknown>; markLast?: string; requireMeta: MetaCondition[] }): Promise<PutResult>;
-  async putWith(kind: Kind, id: string, fields: Record<string, unknown>, events: Array<Omit<PlantEvent, 'id'>> = [], also: Array<{ kind: Kind; id: string; fields: Record<string, unknown> }> = [], opts: { meta?: Record<string, unknown>; markLast?: string; requireMeta?: MetaCondition[] } = {}): Promise<PutResult | void> {
+  putWith(kind: Kind, id: string, fields: Record<string, unknown>, events: Array<Omit<PlantEvent, 'id'>>, also: Array<{ kind: Kind; id: string; fields: Record<string, unknown> }>, opts: { meta?: Record<string, unknown>; markLast?: string; requireMeta: MetaCondition[]; requireEmpty?: boolean }): Promise<PutResult>;
+  async putWith(kind: Kind, id: string, fields: Record<string, unknown>, events: Array<Omit<PlantEvent, 'id'>> = [], also: Array<{ kind: Kind; id: string; fields: Record<string, unknown> }> = [], opts: { meta?: Record<string, unknown>; markLast?: string; requireMeta?: MetaCondition[]; requireEmpty?: boolean } = {}): Promise<PutResult | void> {
     const changes = this.putChanges(kind, id, fields);
     for (const o of also) {
       // A record removed in the same commit, as `remove` and `removeEvents` write it: `diff` passes over `_` fields, so
@@ -1957,6 +1988,23 @@ class Collection {
     // number is shared and offers "Renumber now" (round fifty-nine; the round forty-one and independent reviews).
   }
 
+  /**
+   * Rows of a backup this version cannot read, appended to the log as they are (round seventy; triage-69 R6, R47-15):
+   * the fold skips and counts them, as it does the device's own (`malformed`), a backup carries them apart, and a version
+   * that reads them folds them. Only rows with a stamp to be stored under; none goes in the outbox, as the push leaves
+   * such a change out, and none under a stamp the log already holds, which it would displace. Returns how many it wrote.
+   */
+  async keepUnreadable(rows: unknown[]): Promise<number> {
+    let keep = rows.filter((r) => !!r && typeof r === 'object' && typeof (r as { t?: unknown }).t === 'string' && (r as { t: string }).t.length > 0 && !!changeError(r, true)) as Change[];
+    if (!keep.length) return 0;
+    const here = new Set((await changesByKeys(keep.map((c) => c.t))).map((c) => c.t));
+    keep = keep.filter((c) => !here.has(c.t));
+    if (!keep.length) return 0;
+    const stored = await appendChanges(keep, true);
+    if (stored.replaced.length) await this.rebuild();
+    else { this.applyHere(stored.kept); this.advanceOver(stored); }
+    return stored.kept.length;
+  }
   /** The texts of a plant's or batch's notes an edit replaced without having seen them, read from the log (src/lib/core/notes.ts). */
   async replacedNotes(kind: NotesKind, id: string): Promise<ReplacedNotes[]> {
     // What the fold has not applied (a peer's change held for its clock, or parked) has replaced nothing on screen yet (round fifty-nine).
@@ -2128,6 +2176,16 @@ class Collection {
     for (const c of await allChanges()) (changeError(c, true) ? unreadable : changes).push(c);
     return { changes, unreadable };
   }
+}
+
+/**
+ * Every field a record of the kind may hold a held change to: the fields this build knows for the kind, the record's own
+ * (a newer build's field it carries), and the removal itself (round seventy; triage-69 R2, for `stampPast`).
+ */
+function fieldsOf(kind: Kind, rec: Record_ | undefined): string[] {
+  const out = new Set(['_deleted', ...Object.keys(FIELD_TYPES[kind] ?? {})]);
+  if (rec) for (const f of Object.keys(rec)) if (f !== 'id' && f !== 'kind' && f !== '_t') out.add(f);
+  return [...out];
 }
 
 /**

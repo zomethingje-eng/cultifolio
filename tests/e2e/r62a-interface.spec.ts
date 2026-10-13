@@ -142,7 +142,11 @@ async function hiddenTicks(page: Page): Promise<string[]> {
   await page.locator('.selrow').first().waitFor();
   const hidden: string[] = [];
   for (let i = 0; i < 14; i++) {
-    await page.keyboard.press('Tab'); await page.waitForTimeout(150);
+    // Measured once the app has moved the page: `keepFocusClear` scrolls a focused control clear of the bars one animation
+    // frame after the focus, and two frames from here are after it, however slow the engine. A fixed 150 ms was shorter
+    // than that frame in a loaded WebKit run, which measured the tick before the scroll (round seventy; triage-69 P3, R47-20).
+    await page.keyboard.press('Tab');
+    await page.evaluate(() => new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
     const r = await page.evaluate(() => {
       const el = document.activeElement as HTMLElement; if (!el.matches('.selrow input')) return null;
       const b = el.closest('label')!.getBoundingClientRect();

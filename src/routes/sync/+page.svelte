@@ -195,8 +195,8 @@
   {#if errWords?.detail}<details class="tech" id="sync-error-detail"><summary>What the sync reported</summary><p class="mono small">{errWords.detail}</p></details>{/if}
   <!-- The server's own sentence when it refuses this vault's uploads, and when this device asks again; receiving carries on (round sixty; three reviews). -->
   {#if sync.refusal}
-    <!-- When the server said to, or within the hour: the device never waits longer (round sixty-one; decision 6). The refusal is kept with the sync record, so a reload or another tab waits too. -->
-    <p class="notice warn" id="sync-refusal" role="status">{sentence(sync.refusal.text)} This device asks again {when(sync.refusal.until)}, when the server said to or within the hour. Your changes are kept here meanwhile, and changes from your other devices still come in.</p>
+    <!-- When the server said to, or within the hour: the device never waits longer (round sixty-one; decision 6). The refusal is kept with the sync record, so a reload or another tab waits too. The day's upload allowance is waited out to the server's time, at most a day (round seventy; triage-69 W2), so "within the hour" is not said of it. -->
+    <p class="notice warn" id="sync-refusal" role="status">{sentence(sync.refusal.text)} This device asks again {when(sync.refusal.until)}, {sync.refusal.day ? 'when the server said to' : 'when the server said to or within the hour'}. Your changes are kept here meanwhile, and changes from your other devices still come in.</p>
   {/if}
   {#if sync.vaultFull}
     <p class="notice bad" id="vault-full">Your vault is full ({mb(sync.vaultFull.bytes)} of {mb(sync.vaultFull.limit)} MB). Removing photographs frees only their own bytes, once the removal is ten minutes old; the sync bundles of changes stay for good, since the log is the collection. Back up, then set up a new vault for the collection to carry on syncing. Changes made here are kept on this device and sent once there is room; receiving carries on.</p>

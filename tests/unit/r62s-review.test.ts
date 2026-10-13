@@ -61,8 +61,15 @@ describe('photo removal: the upload side is not fenced (residual, read with the 
     go();
     expect(await up).toBe('stored');
     expect(first).toBe(false);
+    // Round seventy (triage-69 W3, S-E3): the first DELETE found nothing there and took no hold, so the upload's unhold
+    // finds its own token and its claim stands: a removal made before it is answered "a newer upload is kept" (409), as
+    // for any first upload that lands after the removal, and the photograph goes once the claim is two days old. Before,
+    // the DELETE's hold was what left the upload without a claim.
     const again = await deleteCounted(r2 as never, ID, await meta(r2), photo(1), { kv: fakeKV() as never, ip: '1.2.3.4', counters, now: T + 3 * MIN }, PROOF.drop, R);
-    expect([again, r2.objs.has(photo(1))]).toEqual([true, false]);
+    expect([again, r2.objs.has(photo(1))]).toEqual(['newer', true]);
+    await counters.raw(`bytes:${ID}`).c.sweep(T + 3 * DAY); // the claim goes with its day keys
+    const later = await deleteCounted(r2 as never, ID, await meta(r2), photo(1), { kv: fakeKV() as never, ip: '1.2.3.4', counters, now: T + 3 * DAY + 4 * MIN }, PROOF.drop, R);
+    expect([later, r2.objs.has(photo(1))]).toEqual([true, false]);
   });
 });
 
@@ -96,6 +103,9 @@ describe('photo removal: the proof is checked again inside the hold', () => {
       await storeOnce(r2 as never, ID, await meta(r2), photo(1), new Uint8Array(20), PROOF, { kv: fakeKV() as never, ip: '1.2.3.4', counters, now: T });
     };
     const r = await deleteCounted(r2 as never, ID, await meta(r2), photo(1), { kv: fakeKV() as never, ip: '5.6.7.8', counters, now: T + 1_000 }, 'a'.repeat(64), null);
-    expect([r, r2.objs.has(photo(1))]).toEqual(['noproof', true]);
+    // Round seventy (triage-69 W3, S-E3): a DELETE that finds nothing there and carries no receipt's proof takes no hold
+    // and is answered at once (404), where it went on to the hold and was refused inside it (403). Either way it removes
+    // nothing, which is what this guards.
+    expect([r, r2.objs.has(photo(1))]).toEqual([false, true]);
   });
 });

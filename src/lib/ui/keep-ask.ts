@@ -30,10 +30,17 @@ const AHEAD_MS = 86_400_000;
 
 /** Whether this page has asked already: the gate when storage refuses the time, and a second ask on one page in any case. */
 let askedHere = false;
+/**
+ * The answer to this page's ask for the first plant, when it asked for that reason: GrowLayer, which says the answer, asks
+ * again for the first plant once the plant's page is drawn, and is handed this same answer rather than null, so an ask
+ * made from the plant's commit is still said (round seventy; triage-69 P3, R47-20). Nothing is asked twice.
+ */
+let firstAsk: Promise<boolean> | null = null;
 
 /** For tests: forget this page's ask. */
 export function forgetPageAsk(): void {
   askedHere = false;
+  firstAsk = null;
 }
 
 /** Whether an ask is due now by the stored time. A storage that throws counts as due once per page. */
@@ -54,8 +61,9 @@ function due(now: number): boolean {
  * `reason` says who asks: the collection's load ('load') or the first plant ('first'); both obey the same month.
  */
 export function askToKeep(reason: 'load' | 'first'): Promise<boolean | null> {
-  void reason; // one rule for both: the reason is for a reader of the call, not a second gate
-  if (askedHere) return Promise.resolve(null);
+  // One rule for both: the reason is no second gate. A second ask for the first plant on a page that has asked for it
+  // already is answered with that ask's answer, and asks nothing.
+  if (askedHere) return reason === 'first' && firstAsk ? firstAsk : Promise.resolve(null);
   if (PAGE_IN_DEMO) return Promise.resolve(null);
   const st = typeof navigator !== 'undefined' ? navigator.storage : undefined;
   if (!st?.persist) return Promise.resolve(null);
@@ -64,9 +72,30 @@ export function askToKeep(reason: 'load' | 'first'): Promise<boolean | null> {
   askedHere = true;
   // Written before the browser is called: the call may never return (round sixty-seven; triage-66 P1).
   try { localStorage.setItem(PERSIST_ASKED, String(now)); } catch { /* the page's own flag still holds it to one ask */ }
+  let answer: Promise<boolean>;
   try {
-    return st.persist().then((ok) => !!ok, () => false);
+    answer = st.persist().then((ok) => !!ok, () => false);
   } catch {
-    return Promise.resolve(false);
+    answer = Promise.resolve(false);
   }
+  if (reason === 'first') firstAsk = answer;
+  return answer;
+}
+
+/** What `keepOnFirstPlant` reads of the collection: its plants, and its writes as they are committed. */
+export type CommitSource = { accessions: ReadonlyArray<unknown>; onLocalChange(fn: (changes: Array<{ kind: string }>) => void): () => void };
+
+/**
+ * Ask from the first plant's commit, not only once a page has read the collection (round seventy; triage-69 P3, R47-20).
+ * The load's ask waits for the collection to be read, and GrowLayer's for a page to be drawn with the plant; on a slow
+ * phone, or under a loaded test run in Safari's engine and Firefox, a grower who moved on within a second was never asked
+ * at all. Now the commit that writes a plant asks, on the page that wrote it, while no answer has been said on this device
+ * (`answerSaid`, GrowLayer's key), through the same door and the same month. Returns the listener's remover.
+ */
+export function keepOnFirstPlant(c: CommitSource, answerSaid: () => boolean): () => void {
+  return c.onLocalChange((changes) => {
+    if (!changes.some((x) => x.kind === 'accession') || c.accessions.length < 1) return;
+    if (answerSaid()) return;
+    void askToKeep('first').catch(() => {});
+  });
 }

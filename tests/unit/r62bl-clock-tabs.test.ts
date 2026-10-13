@@ -92,10 +92,11 @@ describe('one disagreeing large reading (an intercepting proxy\'s Date)', () => 
     A.h.trustServerTime(T0 + 70_000, Date.now());
     expect(Math.round(A.h.clockOffsetMs() / DAY)).toBe(3);
     const stored = () => Math.round((JSON.parse(store.get(OFFSET_KEY) ?? '{}').offset ?? 0) / DAY);
-    // Round sixty-seven (triage-66 R2): a positive correction past two days is not in force while unconfirmed, so a tab
-    // opened now (unconfirmed until its own reading) stamps by the raw clock, behind, which parks nothing. It is kept.
+    // Round sixty-seven (triage-66 R2) held a positive correction past two days out of force at every load. Since round
+    // seventy (triage-69 R5, R47-14) a load waits only when the device clock has moved at least the correction since the
+    // reading: a tab opened a minute after it is on the three days. It is kept.
     const B = await openTab('B');
-    expect(B.h.clockOffsetMs()).toBe(0);
+    expect(B.h.clockOffsetMs()).toBe(3 * DAY);
     expect(stored()).toBe(3);
     queue = [];
     vi.advanceTimersByTime(MIN);
@@ -107,7 +108,7 @@ describe('one disagreeing large reading (an intercepting proxy\'s Date)', () => 
     // every load does with a large correction (round sixty-seven; triage-66 R2).
     expect(Math.round(A.h.clockOffsetMs() / DAY)).toBe(3);
     expect(A.h.clockOffsetMs()).toBe(B.h.clockOffsetMs());
-    const C = await openTab('C'); // a reload
+    const C = await openTab('C'); // a reload: no reading confirms the correction now, so it waits for one
     expect(C.h.clockOffsetMs()).toBe(0);
     expect(stored()).toBe(3); // round sixty-two: was removed
     // The next run's reading confirms the three days: in force again.

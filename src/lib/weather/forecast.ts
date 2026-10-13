@@ -147,7 +147,29 @@ export function reduceNws(res: { features?: Array<{ properties?: Record<string, 
   return out;
 }
 
-export const isUS = (lat: number, lon: number) => (lat > 24 && lat < 50 && lon > -125 && lon < -66) || (lat > 51 && lat < 72 && lon > -170 && lon < -130) || (lat > 18 && lat < 23 && lon > -161 && lon < -154);
+/**
+ * Whether a point is asked of the National Weather Service for alerts: the boxes of the places it covers. The contiguous
+ * states, Alaska and Hawaii since round fifteen; since round seventy (triage-69 P4, R47-12) also Puerto Rico and the US
+ * Virgin Islands, Guam and the Northern Mariana Islands, American Samoa, and the Aleutians west of 170° W, across the
+ * antimeridian to Attu: the NWS answers alerts for each (checked 2026-10-12: San Juan, Charlotte Amalie, Hagåtña, Saipan,
+ * Pago Pago, Amchitka at 173.2° E and Atka at 173.2° W all 200), and a place there was told "All clear." with nothing asked.
+ * A box is wider than the land it holds: Toronto and Monterrey are inside the first. The NWS answers such a point 400
+ * "out of bounds", which the route reads as no alerts service for the point, not as one that did not answer (`nwsOutOfBounds`).
+ */
+export const isUS = (lat: number, lon: number) =>
+  (lat > 24 && lat < 50 && lon > -125 && lon < -66) || // the contiguous states
+  (lat > 51 && lat < 72 && lon > -170 && lon < -130) || // Alaska
+  (lat > 51 && lat < 55.5 && (lon <= -170 || lon >= 172)) || // the Aleutians west of 170° W, across the antimeridian to Attu
+  (lat > 18 && lat < 23 && lon > -161 && lon < -154) || // Hawaii
+  (lat > 17.5 && lat < 18.8 && lon > -68 && lon < -64.4) || // Puerto Rico and the US Virgin Islands
+  (lat > 13 && lat < 21 && lon > 144.4 && lon < 146.2) || // Guam and the Northern Mariana Islands
+  (lat > -14.8 && lat < -10.9 && lon > -171.2 && lon < -168); // American Samoa
+
+/** The NWS's answer for a point it does not cover: a 400 whose detail says the point is out of bounds (checked 2026-10-12, Toronto). */
+export function nwsOutOfBounds(status: number, body: unknown): boolean {
+  const detail = body && typeof body === 'object' ? (body as { detail?: unknown }).detail : undefined;
+  return status === 400 && typeof detail === 'string' && /out of bounds/i.test(detail);
+}
 
 const WEEKDAY = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const localHM = (ms: number, offsetH: number) => new Date(ms + offsetH * 3600_000).toISOString().slice(11, 16);

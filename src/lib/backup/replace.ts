@@ -6,7 +6,7 @@
  */
 import type { Change } from '$core/log';
 import type { StagedReplacement, PhotoBlobs } from '$lib/db/vault';
-import { photosWithoutPixels, type ReadBackup } from './backup';
+import { photosWithoutPixels, keepable, type ReadBackup } from './backup';
 import { PAGE_IN_DEMO } from '$lib/db/demo';
 
 export interface ReplaceOpts {
@@ -18,6 +18,13 @@ export interface ReplaceOpts {
 /** The file's changes: the replacement is exactly the file's log. */
 export function replacementChanges(file: ReadBackup): Change[] {
   return [...file.changes];
+}
+/**
+ * The file's rows this version cannot read, as they are, staged with its changes: the replacement keeps them in its
+ * log, which the fold skips, so a later version reads them (round seventy; triage-69 R6, R47-15).
+ */
+export function replacementKept(file: ReadBackup): unknown[] {
+  return (file.skipped ?? []).filter(keepable);
 }
 
 /**
@@ -48,12 +55,14 @@ export interface ReplaceResult {
 export async function replaceThroughStaging(file: ReadBackup, open: () => Promise<StagedReplacement>, opts: ReplaceOpts = {}): Promise<ReplaceResult> {
   // A change this build cannot read is left out of a merge and stays in the file; a replacement is the file and nothing
   // else, so the same change would be gone from the device for good, and a backup from a newer build is the file most
-  // likely to hold one (round forty-nine, 1; round thirty-five, R1). Refused, with the first such change named.
-  if (file.unreadable.length) throw new Error(`${file.unreadable.length} ${file.unreadable.length === 1 ? 'change' : 'changes'} in that file cannot be read by this version (${file.unreadable[0]}), and a replacement would lose ${file.unreadable.length === 1 ? 'it' : 'them'} for good. Merge instead, which leaves ${file.unreadable.length === 1 ? 'it' : 'them'} in the file, or replace from a newer version of the app; this device is unchanged.`);
+  // likely to hold one (round forty-nine, 1; round thirty-five, R1). Refused, with the first such change named. Since
+  // round seventy (triage-69 R6, R47-15) only a row that cannot be kept as it is: one with a stamp is staged as it is.
+  const lost = file.leftOut ?? [];
+  if (lost.length) throw new Error(`${lost.length} ${lost.length === 1 ? 'change' : 'changes'} in that file cannot be read by this version (${lost[0]}), and a replacement would lose ${lost.length === 1 ? 'it' : 'them'} for good. Merge instead, which leaves ${lost.length === 1 ? 'it' : 'them'} in the file, or replace from a newer version of the app; this device is unchanged.`);
   // The staging database is never opened from the sample collection (round sixty-one; review B): it is one name for the
   // device, and a replace staged from the sample would sit beside, and could be promoted into, the grower's own.
   if (PAGE_IN_DEMO) throw new Error('A replacement cannot be staged in the example collection; leave the example first. Nothing was changed.');
-  const changes = replacementChanges(file);
+  const changes = [...replacementChanges(file), ...(replacementKept(file) as Change[])];
   const stage = await open();
   let switching = false;
   try {

@@ -122,6 +122,7 @@ describe('GBIF\'s synonyms are read to the end of the list (M4)', () => {
     for (const k of Object.keys(table)) if (k.startsWith(W)) delete table[k];
     table[`re:list=search&srlimit=2`] = { query: { search: [] } };
     table[`${W}?action=wbsearchentities`] = { search: [] };
+    table['re:datasetKey=f382f0ce'] = { results: [] }; // round seventy: Kew's IPNI asked of GBIF's copy of WCVP when no item is found; none
     const base = fixtureFetcher(table);
     const syn = paged(big);
     const r = await buildDossier('Copiapoa cinerea', opts((async (url: string) => (url.includes('/synonyms') ? syn(url) : base(url))) as unknown as JsonFetcher));
@@ -135,6 +136,7 @@ describe('GBIF\'s synonyms are read to the end of the list (M4)', () => {
     for (const k of Object.keys(table)) if (k.startsWith(W)) delete table[k];
     table[`re:list=search&srlimit=2`] = { query: { search: [] } };
     table[`${W}?action=wbsearchentities`] = { search: [] };
+    table['re:datasetKey=f382f0ce'] = { results: [] }; // round seventy: Kew's IPNI asked of GBIF's copy of WCVP when no item is found; none
     table['https://api.inaturalist.org/v1/taxa?q='] = { results: [] };
     const r = await buildDossier('Copiapoa cinerea', opts(fixtureFetcher(table)));
     if (!r.ok) throw new Error('no dossier');
@@ -203,6 +205,7 @@ describe('iNaturalist under an older name: only this species\' own taxon (M6)', 
 describe('Wikidata by name: one exact label, and proof it is this plant (M7)', () => {
   const byName = (search: unknown[], entity: Record<string, unknown>) => fixtureFetcher({
     [`re:list=search&srlimit=2`]: { query: { search: [] } },
+    're:datasetKey=f382f0ce': { results: [] }, // round seventy: Kew's IPNI asked of GBIF's copy of WCVP when no item is found; none
     [`${W}?action=wbsearchentities`]: { search },
     [`${W}?action=wbgetentities`]: { entities: entity }
   });

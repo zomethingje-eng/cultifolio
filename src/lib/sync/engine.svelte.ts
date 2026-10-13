@@ -41,7 +41,7 @@ import { collection } from '$lib/db/collection.svelte';
 import { storageErrorText } from '$lib/db/storage-error';
 import { StoppedError, getMeta, setMeta, setMetaIfKey, getPhotoBlobs, putPhotoBlobs, deletePhotoBlobs, photoBlobIds, outboxKeys, outboxAck, outboxFill, outboxClear, changesByKeys, appendChanges, onOtherTabWrite, announceSyncForgotten } from '$lib/db/vault';
 import { deriveKeys, sealJson, openJson, seal, open, packPhoto, unpackPhoto, parseVaultKey, batchFingerprint, dropProof, sha256hex, type VaultKeys } from './crypto';
-import { MAX_BATCH_BYTES, MAX_PHOTO_BYTES, SEAL_OVERHEAD, OVERLAP_MS, CURSOR_SLACK_MS, PUSH_HEADERS, PHOTO_DROP_HEADER, PHOTO_REMOVED_AT_HEADER, SYNC_HEADER, batchName, listAfter, logBatch, BATCH_VERSIONS } from './limits';
+import { MAX_BATCH_BYTES, MAX_PHOTO_BYTES, SMALL_BATCH_BYTES, SEAL_OVERHEAD, OVERLAP_MS, CURSOR_SLACK_MS, PUSH_HEADERS, PHOTO_DROP_HEADER, PHOTO_REMOVED_AT_HEADER, SYNC_HEADER, batchName, listAfter, logBatch, BATCH_VERSIONS } from './limits';
 import { changeError, readChanges, isHeld, isParked, dueAt, hlcWall, PARK_MS, type Change } from '$core/log';
 import { hlcCompare, isHlc, MAX_AHEAD_MS, nowMs, trustServerTime, clockOffsetMs, clearClockOffset, onClockOffsetChange, onReadingWanted, clockChecked, isPastStamp } from '$core/hlc';
 import { PAGE_IN_DEMO } from '$lib/db/demo';
@@ -77,7 +77,7 @@ interface SyncMeta {
    * again: kept here, so a reload or another tab of this device respects it, not only the tab that was told (round
    * sixty-one; decision 6). Never more than an hour ahead.
    */
-  refusal?: { text: string; until: number };
+  refusal?: { text: string; until: number; /** the day's upload allowance (a 429 to midnight UTC): kept up to a day, not an hour (round seventy; triage-69 W2) */ day?: true; /** the vault's hour of photographs spent: holds photographs alone (round seventy; triage-69 W6) */ photos?: true };
   /**
    * For each batch this device pushed and has not yet seen listed, the latest wall time among its stamps read from a
    * clock (a stamp made past another, `isPastStamp`, is left out: it is never parked). The listing gives the batch's
@@ -121,6 +121,25 @@ async function syncFetch(url: string, init: RequestInit = {}, ms = 30_000): Prom
 /** The record as this build reads it, its lists present even when an older one stored none (round fifty-seven; read the same way at init and in a run's reload, round fifty-nine). */
 const withDefaults = (m: SyncMeta): SyncMeta => ({ ...m, have: Array.isArray(m.have) ? m.have : [], photosPushed: Array.isArray(m.photosPushed) ? m.photosPushed : [] });
 const PHOTO_MS = 180_000;
+/** How far ahead a refusal of this vault's uploads is kept: an hour (round sixty-one; decision 6), and the day's upload allowance a day (round seventy; triage-69 W2). */
+const REFUSAL_MS = 3600_000;
+const REFUSAL_DAY_MS = 86_400_000;
+/** When a run that did not reach the server is tried again: the minute the sync page's card names (round seventy; triage-69 W6, R47-11). */
+const NOT_REACHED_MS = 60_000;
+/**
+ * The server's reason for a 429, as it words it ("too many requests from this address", "the upload allowance for this
+ * address is used up for today"), without its "wait and try again", which the page says in its own words; empty when it
+ * gave none (the platform's own 429).
+ */
+async function reasonOf(r: Response): Promise<string> {
+  try {
+    const b = (await r.clone().json()) as { error?: unknown; message?: unknown };
+    const t = typeof b?.error === 'string' ? b.error : typeof b?.message === 'string' ? b.message : '';
+    return t.replace(/;\s*wait and try again\.?$/i, '').replace(/[.\s]+$/, '').trim();
+  } catch {
+    return '';
+  }
+}
 const BATCH_MS = 120_000;
 /**
  * Where a batch may be cut: never between a notes change and the `notesBase` that follows it for the same record, since
@@ -183,7 +202,7 @@ class Sync {
    * site's ceiling of vaults is answered 503 with a sentence and a Retry-After, and the sync page shows both rather than
    * "push failed: 503" (round sixty; three reviews). Receiving carries on meanwhile.
    */
-  refusal = $state<{ text: string; until: number } | null>(null);
+  refusal = $state<{ text: string; until: number; day?: true; photos?: true } | null>(null);
   /** The last run could not reach the server at all (no network), as opposed to the server answering with a refusal: the page says offline, and that the changes are kept (round twenty-four, 9). */
   offline = $state(false);
   /** With `offline`: the browser says it has no network ('offline'), or it has one and the server did not answer at all ('server'); the page words them apart (round twenty-five, 15). */
@@ -258,6 +277,11 @@ class Sync {
       this.hook();
       await this.scanClock();
       await this.countPending();
+      // Whoever configures the engine starts its first run (round seventy; triage-69 W1, S-E1). Only the layout's own
+      // mount scheduled one, so a tab open before another tab set sync up, moved to /sync by its own link (no new mount),
+      // was configured by the page's init and ran nothing: "checking now", and no request until focus or the
+      // five-minute tick. The layout's schedule after it only moves the same timer.
+      this.schedule(1500);
     }
   }
 
@@ -630,7 +654,8 @@ class Sync {
       const got = await this.pull(m);
       // A removal folded by this pull may have revived under an edit made here, with the pixels here: the photographs
       // noted by the pull are checked and sent in the same run, not the next (round fifty-two, 2).
-      if (collection.unverifiedPhotos().length && !this.vaultFull) await this.push(m);
+      // Not after a refusal or a wait the push met: nothing is sent to be refused again (round seventy; triage-69 W2).
+      if (collection.unverifiedPhotos().length && !this.vaultFull && !wait) await this.push(m);
       m.lastSync = new Date().toISOString();
       this.warnClock(collection.ownLatest()); // judged again after what the run folded
       this.offline = false;
@@ -648,6 +673,10 @@ class Sync {
         this.lastError = (await storageErrorText(e)) ?? (e instanceof Error ? e.message || e.name || 'the run stopped' : String(e));
         const wait = (e as { retryAfterMs?: number })?.retryAfterMs;
         if (wait) this.schedule(wait);
+        // The server not reached: the card says "it will check again in a minute", and now it does (round seventy;
+        // triage-69 W6, R47-11: nothing was scheduled, and nothing was asked for 90 s and more). Offline, the browser's
+        // `online` event asks instead.
+        else if (this.unreached === 'server') this.schedule(NOT_REACHED_MS);
       }
       throw e;
     } finally {
@@ -658,7 +687,6 @@ class Sync {
     }
   }
 
-  /** A 429 from the server: not a refusal of the item, a request to come back later. The run stops and is rescheduled for then. */
   /**
    * The server refusing this vault's uploads for a while (503: the site is past its ceiling of vaults, or could not count
    * this one just now), with its own sentence and a time to ask again. Said on the sync page as the server said it; the
@@ -667,24 +695,53 @@ class Sync {
    */
   private async refusedBy(m: SyncMeta, r: Response): Promise<never> {
     let text = '';
-    try { const body = (await r.clone().json()) as { error?: string; message?: string }; text = body.error || body.message || ''; } catch { /* a 503 with no sentence (the platform's own) */ }
+    let photos = false;
+    try { const body = (await r.clone().json()) as { error?: string; message?: string; what?: string }; text = body.error || body.message || ''; photos = body.what === 'photo'; } catch { /* a 503 with no sentence (the platform's own) */ }
     const secs = Math.max(5, Math.min(3600, Number(r.headers.get('retry-after')) || 300));
     // A wait of a minute or more is the vault refused for a while: kept in the sync record, so a reload or another tab
     // asks no sooner (round sixty-one; decision 6: it lived in one tab's memory). A shorter one (a photograph held by
     // another device a moment, a recount that crossed a landing) is no refusal: the run is simply tried again then.
     if (secs >= 60) {
-      this.refusal = { text: text || 'The sync server is not taking uploads from this vault just now.', until: Date.now() + secs * 1000 };
+      // The vault's hour of photographs spent holds photographs alone; its records still go (round seventy; triage-69 W6, R47-18).
+      this.refusal = { text: text || 'The sync server is not taking uploads from this vault just now.', until: Date.now() + secs * 1000, ...(photos ? { photos: true as const } : {}) };
       if (this.meta === m) { m.refusal = { ...this.refusal }; await this.save(m).catch(() => {}); }
     }
     const e = new Error(text || `the sync server asked this device to wait ${secs} s`);
     (e as Error & { retryAfterMs?: number }).retryAfterMs = secs * 1000;
     throw e;
   }
-  /** The refusal as the sync record keeps it, if it still stands, and never more than an hour ahead of this clock. */
+  /**
+   * A 429 on an upload (round seventy; triage-69 W2, S-E2): the server refused it, for the reason it gives. The day's
+   * upload allowance (`DayQuota`) is answered so with a Retry-After to midnight UTC; the engine capped every 429's wait
+   * at ten minutes and kept it nowhere, so all day long each run sent one whole photograph (its body read in full before
+   * the address's day is checked) to be refused again, and the page said the server was busy. A wait of a minute or more
+   * is now kept as the refusal of this vault's uploads, as `refusedBy` keeps a 503's, and the day's allowance to the time
+   * the server gives, at most a day ahead: no photograph, nor any batch the day counts, is sent before then, by any tab,
+   * after a reload too. A record's small batch still goes, since the day does not count it. Receiving carries on.
+   */
+  private async uploadLimited(m: SyncMeta, r: Response): Promise<never> {
+    const why = await reasonOf(r);
+    // The day's allowance is the 429 that carries the day's figures (`DayQuota`: its bytes and its limit); a request
+    // window's carries none, and is a wait of ten minutes at most, kept an hour at most like any other refusal.
+    const day = await r.clone().json().then((b: unknown) => typeof (b as { limit?: unknown } | null)?.limit === 'number', () => false);
+    const secs = Math.max(5, Math.min((day ? REFUSAL_DAY_MS : REFUSAL_MS) / 1000, Number(r.headers.get('retry-after')) || 60));
+    if (secs < 60) return this.limited(r, why);
+    const text = `The server refused uploads from this device for now${why ? `: ${why}` : ''}.`;
+    this.refusal = { text, until: Date.now() + secs * 1000, ...(day ? { day: true as const } : {}) };
+    if (this.meta === m) { m.refusal = { ...this.refusal }; await this.save(m).catch(() => {}); }
+    const e = new Error(text);
+    (e as Error & { retryAfterMs?: number }).retryAfterMs = secs * 1000;
+    throw e;
+  }
+  /**
+   * The refusal as the sync record keeps it, if it still stands, and never more than an hour ahead of this clock; the
+   * day's upload allowance, never more than a day ahead (round seventy; triage-69 W2).
+   */
   private readRefusal(m: SyncMeta): void {
     const r = m.refusal;
     if (r && typeof r.until === 'number' && r.until > Date.now()) {
-      this.refusal = { text: String(r.text ?? ''), until: Math.min(r.until, Date.now() + 3600_000) };
+      const day = r.day === true;
+      this.refusal = { text: String(r.text ?? ''), until: Math.min(r.until, Date.now() + (day ? REFUSAL_DAY_MS : REFUSAL_MS)), ...(day ? { day: true as const } : {}), ...(r.photos === true ? { photos: true as const } : {}) };
       // The cap is written back, so it holds: after the clock went back a day, each read capped it at "an hour from now"
       // again and uploads waited a day and an hour (round sixty-two; the server review's 5).
       if (r.until > this.refusal.until) r.until = this.refusal.until;
@@ -695,12 +752,18 @@ class Sync {
     this.refusal = null;
     if (m.refusal) delete m.refusal;
   }
-  /** Uploads wait while the server's refusal stands: no batch or photograph is sent to be refused again. */
-  private waitRefusal(m: SyncMeta): void {
+  /**
+   * Uploads wait while the server's refusal stands: no batch or photograph is sent to be refused again. The day's upload
+   * allowance holds only what the day counts, photographs and log batches over `SMALL_BATCH_BYTES` (round seventy;
+   * triage-69 W2): a record's small batch is not counted against it and still goes, so this returns true then, unless
+   * `day` asks for the wait itself (the push, once its small batches are sent).
+   */
+  private waitRefusal(m: SyncMeta, day = false): boolean {
     this.readRefusal(m);
-    if (!this.refusal) return;
+    if (!this.refusal) return false;
     const left = this.refusal.until - Date.now();
-    if (left <= 0) { this.clearRefusal(m); return; }
+    if (left <= 0) { this.clearRefusal(m); return false; }
+    if ((this.refusal.day || this.refusal.photos) && !day) return true; // and the vault's hour of photographs, which holds photographs alone (round seventy; W6)
     const e = new Error(this.refusal.text);
     (e as Error & { retryAfterMs?: number }).retryAfterMs = left;
     throw e;
@@ -720,9 +783,15 @@ class Sync {
     throw e;
   }
 
-  private limited(r: Response): never {
+  /**
+   * A 429 from the server: not a refusal of the item, a request to come back later. The run stops and is rescheduled for
+   * then. Said as the refusal it is, with the server's reason where it gives one (round seventy; triage-69 W2, S-E2: the
+   * reason was thrown away, and the page read "the server is busy").
+   */
+  private async limited(r: Response, said?: string): Promise<never> {
+    const why = said ?? (await reasonOf(r));
     const secs = Math.max(5, Math.min(600, Number(r.headers.get('retry-after')) || 60));
-    const e = new Error(`the server asked this device to wait ${secs} s before syncing again`);
+    const e = new Error(why ? `the server refused this device for ${secs} s: ${why}` : `the server asked this device to wait ${secs} s before syncing again`);
     (e as Error & { retryAfterMs?: number }).retryAfterMs = secs * 1000;
     throw e;
   }
@@ -746,7 +815,7 @@ class Sync {
   }
 
   private async push(m: SyncMeta): Promise<void> {
-    this.waitRefusal(m);
+    const photosHeld = this.waitRefusal(m);
     // A change stored as parked (one parked in an old vault and sent to a new one, a file's merged with its park) is sent
     // with its verdict (`pushBatch`), so every device parks it alike and offers Apply (round sixty-two, second pass; the
     // data review's 5: left out, a record whose own fields were parked reached a joining device as waiting for a newer
@@ -765,6 +834,9 @@ class Sync {
       await this.save(m);
       if (this.vaultFull) return;
     }
+    // The day's allowance or the hour's photographs spent: the batches above went (the small ones, for the day's); the
+    // photographs wait, and the run says why (round seventy).
+    if (photosHeld) this.waitRefusal(m, true);
     // A vault that was full is probed by the next photo too: with nothing in the outbox no batch is ever sent to clear the
     // flag, and once room is made the photo would otherwise wait until the grower edits something (round fifteen, 8).
     const probing = !!this.vaultFull;
@@ -801,7 +873,7 @@ class Sync {
         return;
       }
       if (r.ok) { m.photosPushed.push(id); this.clearRefusal(m); if (probing) this.setFull(m, null); }
-      else if (r.status === 429) this.limited(r);
+      else if (r.status === 429) await this.uploadLimited(m, r);
       else if (r.status === 503) await this.refusedBy(m, r);
       else if (r.status === 409 && (await this.serverHolds(m, id, packed))) m.photosPushed.push(id); // our own earlier send whose answer was lost: sealed again with a fresh nonce, so the bytes differ, the pixels do not
       else if (r.status >= 400 && r.status < 500 && r.status !== 401 && r.status !== 403) this.note(m, 'refused', id, `photo refused: ${r.status}`);
@@ -836,6 +908,8 @@ class Sync {
       const mid = cutBefore(batch, Math.ceil(batch.length / 2));
       return (await this.pushBatch(m, batch.slice(0, mid))) + (await this.pushBatch(m, batch.slice(mid)));
     }
+    // A batch the day counts waits out the day's upload allowance with the photographs; a small one goes (round seventy).
+    if (body.length > SMALL_BATCH_BYTES && m.refusal?.day && m.refusal.until > Date.now()) return 0;
     const headers: Record<string, string> = { ...this.h(m), [PUSH_HEADERS.batch]: key, [PUSH_HEADERS.plain]: plain };
     headers[PUSH_HEADERS.device] = collection.device || 'dev'; // the name's own device part
     const r = await syncFetch(`${this.base}/api/sync/log?vault=${this.k(m).id}`, { method: 'POST', headers, body: body as BodyInit }, BATCH_MS);
@@ -845,7 +919,8 @@ class Sync {
       // these same changes (round sixteen, 2; round seventeen, A1).
       await outboxAck(batch.map((c) => c.t), m.key);
       this.setFull(m, null);
-      this.clearRefusal(m);
+      // A small batch is not counted against the day's allowance, so its taking says nothing of it (round seventy).
+      if (!(m.refusal?.day && body.length <= SMALL_BATCH_BYTES) && !m.refusal?.photos) this.clearRefusal(m);
       if (!m.have.includes(key)) m.have.push(key);
       (m.haveAt ??= {})[key] = Date.now(); // its arrival, near enough: the server's clock and this one agree to the minute the overlap allows
       // The latest stamp in it that a clock gave, for the listing to judge against the batch's arrival (round sixty-one).
@@ -859,7 +934,7 @@ class Sync {
       this.setFull(m, full);
       return 0;
     }
-    if (r.status === 429) this.limited(r);
+    if (r.status === 429) await this.uploadLimited(m, r);
     if (r.status === 503) await this.refusedBy(m, r);
     if ((r.status === 400 || r.status === 409 || r.status === 413) && mayResplit && batch.length > 1) {
       const mid = cutBefore(batch, Math.ceil(batch.length / 2)); // never between a notes change and its base (round twenty-nine, 9)
@@ -943,7 +1018,7 @@ class Sync {
         if (e instanceof StoppedError || this.meta !== m) throw e;
         continue; // not reached this time: asked again next run
       }
-      if (res.status === 429) this.limited(res);
+      if (res.status === 429) await this.limited(res);
       if (res.status === 404) { delete m.ownJudge![key]; continue; } // nothing there to judge
       if (!res.ok) continue;
       const bytes = new Uint8Array(await res.arrayBuffer());
@@ -985,7 +1060,7 @@ class Sync {
       this.step(m, 'Checking this device\'s own changes against when they reached the server…');
       const q = 'since=' + (after ? `&after=${listAfter(after.at, after.key)}` : '');
       const r = await syncFetch(`${this.base}/api/sync/log?vault=${this.k(m).id}&${q}`, { headers: this.h(m) });
-      if (r.status === 429) this.limited(r);
+      if (r.status === 429) await this.limited(r);
       if (!r.ok) return; // tried again next run
       const { batches, more, next } = (await r.json()) as { batches: Array<{ key: string; at: number }>; more: boolean; next?: { at: number; key: string } };
       for (const b of batches) if (this.ownToJudge(m, b.key, b.at)) (m.ownJudge ??= {})[b.key] = b.at;
@@ -1005,7 +1080,7 @@ class Sync {
    */
   private async takeBatch(m: SyncMeta, key: string, arrival?: number): Promise<boolean> {
     const res = await syncFetch(`${this.base}/api/sync/log/${key}?vault=${this.k(m).id}`, { headers: this.h(m) }, BATCH_MS);
-    if (res.status === 429) this.limited(res);
+    if (res.status === 429) await this.limited(res);
     if (!res.ok) throw new Error(`batch ${key}: ${res.status}`);
     const bytes = new Uint8Array(await res.arrayBuffer());
     let changes: Change[] | null = null;
@@ -1071,7 +1146,7 @@ class Sync {
       // `since` goes with every page so a server that does not know `after` still answers the old way.
       const q = `since=${m.since || ''}` + (after ? `&after=${listAfter(after.at, after.key)}` : '');
       const r = await syncFetch(`${this.base}/api/sync/log?vault=${this.k(m).id}&${q}`, { headers: this.h(m) });
-      if (r.status === 429) this.limited(r);
+      if (r.status === 429) await this.limited(r);
       if (r.status === 503) await this.listingWait(r);
       if (!r.ok) throw new Error(`pull failed: ${r.status}`);
       const { batches, more, next } = (await r.json()) as { batches: Array<{ key: string; at: number }>; more: boolean; next?: { at: number; key: string } };
@@ -1180,7 +1255,7 @@ class Sync {
       if (setAside) { m.quarantined = m.quarantined!.filter((q) => q.key !== p.id); this.quarantined = [...m.quarantined]; } // another build's: read again; set aside afresh below if still unreadable
       const r = await syncFetch(`${this.base}/api/sync/photo/${p.id}?vault=${this.k(m).id}`, { headers: this.h(m) }, PHOTO_MS);
       if (r.status === 404) continue; // not uploaded from its device yet
-      if (r.status === 429) this.limited(r);
+      if (r.status === 429) await this.limited(r);
       // Being stored or removed by another device this moment, or its record on the server could not be read: asked again
       // next run, and the vault's other photographs still come (round sixty-seven; triage-66 S1).
       if (r.status === 503) continue;
@@ -1226,7 +1301,7 @@ class Sync {
       }
       if (!have.has(id)) { done.push(id); continue; } // live, no pixels here: another device's to send
       const r = await syncFetch(`${this.base}/api/sync/photo/${id}?vault=${this.k(m).id}`, { method: 'HEAD', headers: this.h(m) });
-      if (r.status === 429) this.limited(r);
+      if (r.status === 429) await this.limited(r);
       if (r.status === 404) { m.photosPushed = m.photosPushed.filter((x) => x !== id); m.photosDropped = (m.photosDropped ?? []).filter((x) => x !== id); done.push(id); }
       else if (r.ok) done.push(id);
       // any other answer: asked again next run
@@ -1273,7 +1348,7 @@ class Sync {
       // With the removal's own time, so the server can tell a removal made before a newer upload of this photograph from
       // another device, and leave the newer one (round sixty; the stale DELETE in both outside reviews).
       const r = await syncFetch(`${this.base}/api/sync/photo/${id}?vault=${this.k(m).id}`, { method: 'DELETE', headers: { ...this.h(m), [PHOTO_DROP_HEADER]: await dropProof(this.k(m), id), [PHOTO_REMOVED_AT_HEADER]: String(Math.round(at)) } });
-      if (r.status === 429) this.limited(r);
+      if (r.status === 429) await this.limited(r);
       if (this.meta !== m) throw stopped();
       if (r.status === 503) continue; // the photograph is being stored or removed elsewhere this moment: asked again next run, nothing to report
       if (r.status === 409) {

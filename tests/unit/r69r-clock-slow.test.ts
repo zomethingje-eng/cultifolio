@@ -50,11 +50,14 @@ const settle = async () => { for (let i = 0; i < 5; i++) await Promise.resolve()
 
 /** The device three days slow, confirmed by two readings two minutes apart; returns the module set. */
 async function confirmedSlow() {
-  vi.useFakeTimers({ toFake: ['Date', 'performance'], now: T - SLOW });
+  // Confirmed four days before T, the tab open since (round seventy; triage-69 R5, R47-14): a load waits for a reading
+  // only when the device clock has moved at least the correction since the reading that confirmed it.
+  vi.useFakeTimers({ toFake: ['Date', 'performance'], now: T - 4 * DAY - SLOW });
   const b = await boot();
-  b.hlc.trustServerTime(T, Date.now());
+  b.hlc.trustServerTime(T - 4 * DAY, Date.now());
   vi.advanceTimersByTime(2 * MIN);
-  b.hlc.trustServerTime(T + 2 * MIN, Date.now());
+  b.hlc.trustServerTime(T - 4 * DAY + 2 * MIN, Date.now());
+  vi.advanceTimersByTime(4 * DAY - 2 * MIN);
   expect(b.hlc.clockOffsetMs()).toBe(SLOW);
   return b;
 }
@@ -137,11 +140,14 @@ describe('at a load, the correction waits; peers\' changes are held, not parked;
 });
 
 describe('the snapshot is keyed by the stored correction (step 4)', () => {
+  // Round seventy (triage-69 R1, IND-5): the plant's stamps were a day old, which the waiting clock, three days slow,
+  // holds; the snapshot showed the plant and a fold of the whole log held it. A snapshot is now read only by a clock that
+  // holds nothing it folded (r70r-snapshot-clock), so the plant here is four days old, as step 4 meant.
   it('base: a snapshot written once the three days were confirmed is read by the next load, which waits for a reading', async () => {
     const b = await confirmedSlow();
     await b.vault.appendChanges([
-      { t: stamp(T - DAY, 0), kind: 'accession', id: 'p1', field: 'taxonName', value: 'Lithops lesliei' },
-      { t: stamp(T - DAY, 1), kind: 'accession', id: 'p1', field: 'status', value: 'growing' }
+      { t: stamp(T - 4 * DAY, 0), kind: 'accession', id: 'p1', field: 'taxonName', value: 'Lithops lesliei' },
+      { t: stamp(T - 4 * DAY, 1), kind: 'accession', id: 'p1', field: 'status', value: 'growing' }
     ], true);
     await b.collection.load();
     expect(await b.collection.snapshotWritten).toBe(true);

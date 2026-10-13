@@ -40,8 +40,13 @@ const PROJECTS = ['chromium', 'phone', 'webkit', 'phone-webkit', 'firefox'];
  * (round sixty-four; the Firefox run, 429 on its first vault).
  */
 export function limitAddress(): string {
-  const p = Math.max(0, PROJECTS.indexOf(test.info().project.name));
-  return `2001:db8:${hex((runSalt() + p) & 0xffff)}::1`;
+  const info = test.info();
+  const p = Math.max(0, PROJECTS.indexOf(info.project.name));
+  // And one for each attempt and each repeat (round seventy; triage-69 P3, R47-19): the address depended on the project and
+  // the run alone, so a retry, or `--repeat-each`, came back to an address whose five were already spent, and under
+  // `retries: 1` any passing failure of the first attempt became a certain one. Eight slots a project (an attempt each,
+  // and Playwright retries far fewer times), and a block of 64 for each repeat.
+  return `2001:db8:${hex((runSalt() + p + 8 * (info.retry % 8) + 64 * info.repeatEachIndex) & 0xffff)}::1`;
 }
 
 /**

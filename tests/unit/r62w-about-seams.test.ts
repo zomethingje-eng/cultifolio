@@ -14,6 +14,10 @@
  * - three semantic fixtures run through the code as it is: a marked change, a plant that reached this device after a
  *   removal although made before it, and a removal with no order history. If the clock or records code changes what
  *   these do, the expectation here is updated with the page.
+ *
+ * Round seventy (triage-69 P2): the restore fixtures read their sentences by the new method (tests/about-pages.ts), and
+ * the 173 collector genera moved to r70p-about-seams.test.ts. The rest of this file reads code and page both ways, or
+ * is about sentences that change this round (sync's limits, the clock), and is replaced at the merge's second pass.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
@@ -22,6 +26,7 @@ import { RATE, UPSTREAM_ADDRESS_PART, RECOUNT_MS, RECOUNT_RETRY_S } from '$lib/s
 import { NET_FACTOR, RECLAIM_DAYS } from '$lib/server/counters';
 import { PARK_MS, isHeld, isParked, type Change } from '$core/log';
 import { MAX_AHEAD_MS, TRUST_SERVER_PAST_MS, TRUST_SERVER_TWICE_PAST_MS, hlcPast, isPastStamp, hlcEncode } from '$core/hlc';
+import { said, claim, numberWord, spanWords } from '../about-pages';
 
 const raw = (f: string) => readFileSync(f, 'utf8');
 const text = (f: string) => raw(f).replace(/<[^>]+>/g, '').replace(/\s+/g, ' ');
@@ -286,43 +291,44 @@ describe('the figures the pages state are the constants', () => {
       expect(Object.values(minutes).filter((w) => !kept.includes(w) && part.includes(w)), part).toEqual([]);
     }
   });
+  // Round seventy (triage-69 P2): each figure is read out of its sentence (tests/about-pages.ts) and compared with the
+  // constant the code uses, rather than a fragment built from the constant and looked for anywhere on the page.
   it('600 calls a minute per service, a tenth per address, four tenths per /48', () => {
+    const s = said('how', 'The server also caps how often it asks the weather services and GBIF');
     expect(RATE.upstream.windowMs).toBe(60_000);
-    expect(how).toContain(`a share of ${RATE.upstream.limit} calls a minute`);
-    expect(how).toContain(`may take ${tenths[UPSTREAM_ADDRESS_PART]} of a share in a minute`);
-    expect(how).toContain(`an IPv6 /48 ${tenths[Math.round(UPSTREAM_ADDRESS_PART * NET_FACTOR * 10) / 10]}`);
+    expect(numberWord(claim(s, /has a share of ([\d,]+) calls a minute/)), s.where).toBe(RATE.upstream.limit);
+    expect(tenths[UPSTREAM_ADDRESS_PART]).toBe(claim(s, /may take (a tenth|\w+ tenths) of a share in a minute/));
+    expect(tenths[Math.round(UPSTREAM_ADDRESS_PART * NET_FACTOR * 10) / 10]).toBe(claim(s, /an IPv6 \/48 (a tenth|\w+ tenths)/));
   });
   it('90 days without an upload gives a place back', () => {
-    expect(formats).toContain(`A vault with no upload for ${RECLAIM_DAYS} days gives its place back`);
+    const s = said('formats', 'A vault with no upload for');
+    expect(Number(claim(s, /no upload for (\d+) days/)), s.where).toBe(RECLAIM_DAYS);
   });
   it('a crossed recount waits 30 s', () => {
-    expect(formats).toContain(`Retry-After: ${RECOUNT_RETRY_S}`);
+    const s = said('formats', 'It is kept only if no upload landed and no removal was made while it was being taken');
+    expect(Number(claim(s, /Retry-After: (\d+)/)), s.where).toBe(RECOUNT_RETRY_S);
   });
   it('an hour: the recount on open, the refusal cap and the 409', () => {
-    expect(RECOUNT_MS).toBe(3_600_000);
-    expect(formats).toContain('on an open at most once an hour');
+    expect(spanWords(claim(said('formats', 'A listing of the vault puts its total right'), /on an open at most once (an hour|a day)/))).toBe(RECOUNT_MS);
     const engine = raw('src/lib/sync/engine.svelte.ts');
+    const refusal = said('formats', 'A device given that answer keeps receiving');
+    expect(claim(refusal, /until the Retry-After has passed or (within the hour), whichever comes first/), refusal.where).toBe('within the hour');
     expect(engine).toMatch(/Math\.min\(3600, Number\(r\.headers\.get\('retry-after'\)\) \|\| 300\)/);
-    expect(formats).toContain('or within the hour, whichever comes first');
-    expect(formats).toContain('A 503 with no Retry-After is taken as five minutes');
+    expect(spanWords(claim(said('formats', 'A 503 with no Retry-After is taken as'), /is taken as (five minutes|\w+ minutes|an hour)/)) / 1000).toBe(300);
     expect(engine).toMatch(/ASK_409_MS = 3600_000/);
-    expect(formats).toContain('at most once an hour (the time it was last answered');
+    expect(spanWords(claim(said('formats', 'A device answered 409 does not take the removal as done'), /at most once (an hour|a day)/))).toBe(3_600_000);
   });
   it('two days: parking, and a correction that needs two readings', () => {
-    expect(PARK_MS).toBe(2 * 86_400_000);
-    expect(formats).toContain('stamped more than two days past the arrival of the log batch'); // "log batch": round sixty-two, second pass (the words review's 22)
-    expect(TRUST_SERVER_TWICE_PAST_MS).toBe(2 * 86_400_000);
-    expect(formats).toContain('a correction of two days or more is taken only when two readings');
+    const park = said('formats', 'A change stamped more than two days past the arrival of the log batch');
+    expect(spanWords(claim(park, /stamped more than (\w+ days) past the arrival of the log batch/)), park.where).toBe(PARK_MS);
+    const two = said('formats', "That clock is the device's corrected by the server's");
+    expect(spanWords(claim(two, /a correction of (\w+ days) or more is taken only when two readings/)), two.where).toBe(TRUST_SERVER_TWICE_PAST_MS);
   });
   it('five minutes ahead, and half a minute of disagreement', () => {
-    expect(MAX_AHEAD_MS).toBe(5 * 60_000);
-    expect(formats).toContain('stamped more than five minutes ahead');
-    expect(TRUST_SERVER_PAST_MS).toBe(30_000);
-    expect(formats).toContain('by more than half a minute');
-  });
-  it('173 collector genera, as the file lists them', () => {
-    const n = new Set(raw('scripts/specialist-genera.txt').split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'))).size;
-    expect(how).toContain(`of ${n} collector genera`);
+    const ahead = said('formats', 'A change stamped more than five minutes ahead');
+    expect(spanWords(claim(ahead, /stamped more than (\w+ minutes) ahead/)), ahead.where).toBe(MAX_AHEAD_MS);
+    const two = said('formats', "That clock is the device's corrected by the server's");
+    expect(spanWords(claim(two, /disagrees with it by more than (half a minute|\w+ seconds)/))).toBe(TRUST_SERVER_PAST_MS);
   });
   it('the waiting counts are said where they are shown', () => {
     const shown = source.filter((f) => /<HeldNote\b/.test(raw(f))).map((f) => f.replace(/^src\/routes|\/\+page\.svelte$/g, '')).sort();
@@ -411,8 +417,11 @@ describe('semantic fixtures: what the code does is what formats says', () => {
     await c.remove('accession', mine.id);
     await c.ingest(peerPlant(Date.now() - 10 * 60_000, 'rpeer', '2026-0007'), 'server'); // stamped ten minutes before the removal
     expect(await c.restore('accession', mine.id)).toEqual({ from: '2026-0007', to: '2026-0008' });
-    expect(formats).toContain('yields its number only to a record that reached this device while it was removed, judged by the order in which changes arrived here and never by two devices\' clocks, whenever that record was made');
-    expect(formats).not.toMatch(/a record created after the removal/);
+    // Round seventy (triage-69 P2): the sentence is read for its claim, not pinned whole (tests/about-pages.ts).
+    const s = said('formats', 'A removed plant or batch brought back');
+    expect(claim(s, /yields its number only to (a record that reached this device while it was removed)/), s.where).toBeTruthy();
+    expect(s.text).toMatch(/judged by the order in which changes arrived here and never by two devices' clocks, whenever that record was made/);
+    expect(s.text).toMatch(/the one coming back then takes the next free number/);
   });
   // Round sixty-two (A22; the clock and records agent L): the order unknown, the record that stayed keeps the number and
   // the one coming back is renumbered with a note; before, nothing was judged and the number was left shared.
@@ -424,8 +433,9 @@ describe('semantic fixtures: what the code does is what formats says', () => {
     expect(await c.restore('accession', mine.id)).toEqual({ from: '2026-0007', to: '2026-0008', unknown: true });
     expect(c.withNumber('accession', '2026-0007').map((a) => a.id)).toEqual(['rpeer']);
     expect(c.accession(mine.id)?.acc).toBe('2026-0008');
-    expect(formats).toContain('When neither the removal nor the other record has a place, which came first is not known: the record that stayed keeps the number');
-    expect(formats).toContain('the one coming back takes the next free number, with a note and a message saying the order is not known');
-    expect(formats).not.toContain('the two are listed under it as above until the grower renumbers one');
+    const s = said('formats', 'When neither the removal nor the other record has a place');
+    expect(claim(s, /which came first is (not known)/), s.where).toBe('not known');
+    expect(s.text).toMatch(/the record that stayed keeps the number/);
+    expect(s.text).toMatch(/the one coming back takes the next free number, with a note and a message saying the order is not known/);
   });
 });

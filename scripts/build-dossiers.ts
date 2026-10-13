@@ -52,10 +52,18 @@
  *   npx tsx scripts/build-dossiers.ts --fill gbif-licence       # every stored GBIF photograph not on iNaturalist's hosts read again from its occurrence record (one call a
  *                                                                # record); one whose media item states no open licence of its own is dropped; resumable; then the index
  *   npx tsx scripts/build-dossiers.ts --fill inat-ids           # every stored iNaturalist id checked with iNaturalist (thirty a call); an inactive one followed to its
- *                                                                # current taxon, or dropped to be asked by name; its photograph sets opened for the next --fill inat
- *   npx tsx scripts/build-dossiers.ts --fill summaries          # stored Wikipedia summaries whose title is not the name, an older name or the item's sitelink dropped
- *                                                                # ("Wikipedia redirects X to Y"); offline but for one Wikidata call per fifty titles it cannot settle
+ *                                                                # current taxon only when that taxon's name is the species' or a same-type name (GBIF asked for
+ *                                                                # those) held by no other species, and every follow of an earlier run read again so; a taxon
+ *                                                                # refused loses its id, link and photographs and the name is searched without it; an id with no
+ *                                                                # single successor dropped to be asked by name; photograph sets opened for the next --fill inat
+ *   npx tsx scripts/build-dossiers.ts --fill wikidata           # every Wikidata item that does not carry its species' own GBIF key (read fifty a call), and every
+ *                                                                # item refused by the label rule, proved again (IPNI first; GBIF for the rest): an item that stands
+ *                                                                # says how; one refused, replaced or newly found is left as it is and listed in rebuild-wd.txt for --keys
+ *   npx tsx scripts/build-dossiers.ts --fill summaries          # every stored summary under another title proved again, or dropped; those set aside asked again
+ *   npx tsx scripts/build-dossiers.ts --fill commons-kind       # Commons' categories for every stored Commons photograph, fifty files a request, kept with it; then the index
  *   npx tsx scripts/build-dossiers.ts --list-rebuild            # rebuild-keys.txt: the species to rebuild with --keys (ranges under an older name; 50 synonyms stored)
+ *   npx tsx scripts/build-dossiers.ts --list-rebuild --bulk bulk # and, from Kew's files, the species whose Kew entry was another author's name or is held under
+ *                                                                # another spelling of the epithet (round seventy)
  *   npx tsx scripts/build-dossiers.ts --fill genus               # "About the genus": one Wikipedia lead per genus in the index, to s/v<N>/g/<slug>.json
  *   npx tsx scripts/build-dossiers.ts --names                   # GBIF's vernacular names asked afresh for every dossier on disk (one paced call
  *                                                                # each, about 9,000), only each dossier's vernacular block rewritten, so the
@@ -72,7 +80,8 @@ import { createHash } from 'node:crypto';
 import { buildDossier, NETWORK_EXTRAS, photosFromMedia, mergeGbifPhotos, type SkippableSource } from '../src/lib/dossier/build';
 import { mendGbifThumb, mendCommonsThumb } from '../src/lib/dossier/md5';
 import { heroOf } from '../src/lib/dossier/dedupe';
-import { shownPhotos } from '../src/lib/dossier/photo-kind';
+import { shownPhotos, heldNamesOf, type HeldNames } from '../src/lib/dossier/photo-kind';
+import { fillCommonsKindAll } from '../src/lib/dossier/commons-fill';
 import { uncreditedPhoto } from '../src/lib/dossier/photo-credit';
 import { englishNames, indexNames, generaOf, olderNamesOf, type VernacularName } from '../src/lib/dossier/index-entry';
 import * as gbif from '../src/lib/dossier/sources/gbif';
@@ -100,9 +109,11 @@ import { refetchNames, vernacularMark } from './names-step';
 import { stampOnBuild, restamp, dayNumber, type Changed } from '../src/lib/dossier/changed';
 import { tileCreditOf } from '../src/lib/ui/ref/head';
 import { dropsBetween } from '../src/lib/dossier/drops';
+import { referenceOf } from '../src/lib/dossier/reference';
+import { ownNames } from '../src/lib/dossier/own-names';
 import { offlineFetcher, carryRederivedRows } from '../src/lib/dossier/rederive';
 import { startCorpusRun, prevIdsFor, heldElsewhereIn, fillOpenGbifAll, fillCommonsAll, type DossierStore } from '../src/lib/dossier/corpus-run';
-import { fillGbifLicenceAll, fillInatIds, checkSummaries, rebuildList } from '../src/lib/dossier/corpus-fills';
+import { fillGbifLicenceAll, fillInatIds, fillWikidata, inatTaxonRow, checkSummaries, rebuildList, kewRebuildList } from '../src/lib/dossier/corpus-fills';
 // The corpus script waits out Wikidata's maxlag, as MediaWiki asks of a batch client (round sixty-eight), and after a lag
 // spell stops waiting until Wikidata answers again (round sixty-nine; triage-68 M10): `lag.after` is told each species' row.
 const lag = startCorpusRun();
@@ -188,22 +199,30 @@ function nameEntries(index: IndexEntry[]): void {
     index[i] = o as unknown as IndexEntry;
   });
 }
-function indexEntry(d: Dossierish): IndexEntry & { status?: string } {
-  // The photographs a page shows, by the Worker's rule: a Commons file that is not a photograph of the species, or whose
-  // licence or author is not read, neither leads a tile nor is counted (round sixty-nine; triage-68 K1-K3, K5).
-  const shown = shownPhotos(d.photos, { scientific: d.name.scientific, synonyms: d.name.synonyms ?? [] });
+/**
+ * The photographs a page shows, by the Worker's rule: a Commons file that is not a photograph of the species, or whose
+ * licence or author is not read, neither leads a tile nor is counted (round sixty-nine; triage-68 K1-K3, K5). Read with
+ * the reference's names, as the Worker reads a dossier (`heldNamesOf` of the index), so the tile, its credit and the count
+ * are the page's (round seventy, a need of C; REVIEW-TRIAGE-69 C1, C4).
+ */
+function photoFields(d: Pick<Dossierish, 'key' | 'name' | 'photos'>, held?: HeldNames | null) {
+  const shown = shownPhotos(d.photos, { scientific: d.name.scientific, synonyms: d.name.synonyms ?? [], key: d.key, held });
   const hero = heroOf(shown);
+  // The thumbnail in the form GBIF's cache still answers, whatever form the dossier holds (the Worker mends a dossier's as it reads it; the index carries no key to mend by, so it is mended here: round thirty-two, 1).
+  // Its credit, licence first, so a tile names the photographer and not only the host (round sixty-three; REVIEW-TRIAGE-61's deferred list).
+  const credit = hero ? tileCreditOf(hero as Parameters<typeof tileCreditOf>[0]) : null;
+  return { thumb: hero ? mendCommonsThumb(mendGbifThumb(hero.thumb, hero.id, hero.url), hero.width) : undefined, credit, photos: shown.length };
+}
+function indexEntry(d: Dossierish, held?: HeldNames | null): IndexEntry & { status?: string } {
+  const { thumb, credit, photos } = photoFields(d, held);
   vernOf.set(d.key, d.name.vernacular.filter((v) => v.lang === 'eng'));
   // Older names: six shown, the rest of species rank searched (`olderNamesOf`; round sixty-seven, N1).
   const genus = d.name.scientific.split(' ')[0];
   const { syn, older } = olderNamesOf(d.name.scientific, d.name.synonyms ?? []);
-  // The thumbnail in the form GBIF's cache still answers, whatever form the dossier holds (the Worker mends a dossier's as it reads it; the index carries no key to mend by, so it is mended here: round thirty-two, 1).
-  // Its credit, licence first, so a tile names the photographer and not only the host; and the day the dossier last
-  // changed in substance, for the sitemap (round sixty-three; REVIEW-TRIAGE-61's deferred list).
-  const credit = hero ? tileCreditOf(hero as Parameters<typeof tileCreditOf>[0]) : null;
+  // The day the dossier last changed in substance, for the sitemap (round sixty-three).
   const changed = dayNumber(d.changed?.on);
   // The names with the other spellings the search alone reads (`indexNames`; round sixty-nine; triage-68 N2, S-F2).
-  return { status: d.name.status, key: d.key, slug: d.slug, name: d.name.scientific, family: d.name.family, ...indexNames(d.name.vernacular, { genus }), origin: d.distribution.native.map((n) => n.name), thumb: hero ? mendCommonsThumb(mendGbifThumb(hero.thumb, hero.id, hero.url), hero.width) : undefined, ...(credit ? { credit } : {}), photos: shown.length, open: d.occurrences.nOpenInRange, climate: d.climate.status, ...(syn.length ? { syn } : {}), ...(older.length ? { older } : {}), ...(changed ? { changed } : {}) };
+  return { status: d.name.status, key: d.key, slug: d.slug, name: d.name.scientific, family: d.name.family, ...indexNames(d.name.vernacular, { genus }), origin: d.distribution.native.map((n) => n.name), thumb, ...(credit ? { credit } : {}), photos, open: d.occurrences.nOpenInRange, climate: d.climate.status, ...(syn.length ? { syn } : {}), ...(older.length ? { older } : {}), ...(changed ? { changed } : {}) };
 }
 
 /** Every dossier on disk, as index entries. The corpus is the files; the index is derived from them. */
@@ -219,6 +238,8 @@ function scanDossiers(stamp = false): Array<IndexEntry & { status?: string }> {
   if (!existsSync(dir)) return [];
   const out: Array<IndexEntry & { status?: string }> = [];
   const withClimate: Array<{ key: number; months: Array<{ tmax: number; tmin: number; precipMm: number }> }> = [];
+  // Each entry's dossier, as far as its photographs are read: the reference's names are known only once every entry is.
+  const forPhotos: Array<Pick<Dossierish, 'key' | 'name' | 'photos'>> = [];
   let stamped = 0;
   notAccepted = [];
   for (const f of readdirSync(dir)) {
@@ -228,12 +249,23 @@ function scanDossiers(stamp = false): Array<IndexEntry & { status?: string }> {
       const st = stamp ? restamp(d, today(), sha1) : null;
       if (st) { d.changed = st; writeFileSync(`${dir}/${f}`, JSON.stringify(d)); stamped++; }
       out.push(indexEntry(d));
+      forPhotos.push({ key: d.key, name: d.name, photos: d.photos });
       if (d.climate.status === 'ok' && d.climate.months?.length === 12) withClimate.push({ key: d.key, months: d.climate.months });
       if (d.name.status && d.name.status !== 'accepted') notAccepted.push({ key: d.key, name: d.name.scientific, status: d.name.status, records: d.occurrences.nOpenInRange + (d.occurrences.nRestrictedInRange ?? 0) + (d.occurrences.nOutsideRange ?? 0) });
     } catch {
       /* a half-written file from a killed run: rebuilt when its name comes round */
     }
   }
+  // The second phase: each entry's tile, credit and count read again with the reference's names, as the Worker reads a
+  // page (round seventy, a need of C; REVIEW-TRIAGE-69 C1 with C4), so an uploader's slip the page shows is shown here too.
+  const held = heldNamesOf(out);
+  out.forEach((e, i) => {
+    const p = photoFields(forPhotos[i], held);
+    e.thumb = p.thumb;
+    e.photos = p.photos;
+    if (p.credit) e.credit = p.credit;
+    else delete e.credit;
+  });
   if (stamped) console.log(`  ${stamped} dossier${stamped === 1 ? '' : 's'} changed since ${stamped === 1 ? 'its' : 'their'} last stamp (or never stamped): the day each last changed written into the file, for the sitemap`);
   // "Grows like": the six nearest habitat climates per species, by the distance in src/lib/core/near.ts, into the index.
   if (withClimate.length > 1) {
@@ -354,28 +386,35 @@ async function fillLiterature(): Promise<void> {
 async function fillPhotos(): Promise<void> {
   const dir = `${outDir}/s/v${DOSSIER_V}`;
   const files = existsSync(dir) ? readdirSync(dir).filter((f) => /^\d+\.json$/.test(f)) : [];
-  type D = { key: number; name: { scientific: string }; ids: { inat?: number }; links: Record<string, string>; photos: Array<{ src: string; captive?: boolean }>; upstream: Record<string, { status: string; at?: string; detail?: string }> };
+  type D = { key: number; name: { scientific: string; family?: string; synonyms?: string[] }; ids: { inat?: number }; links: Record<string, string>; photos: Array<{ src: string; captive?: boolean }>; upstream: Record<string, { status: string; at?: string; detail?: string }> };
   const todo: Array<{ path: string; d: D }> = [];
+  const entries: Array<{ key: number; name: string; family?: string }> = [];
   // The reference's species by name: iNaturalist's taxon filed under another species of it is never taken (round sixty-nine; triage-68 M6).
   const byName = new Map<string, number>();
   for (const f of files) {
     const d = JSON.parse(readFileSync(`${dir}/${f}`, 'utf8')) as D;
     byName.set(d.name.scientific.toLowerCase(), d.key);
+    entries.push({ key: d.key, name: d.name.scientific, family: d.name.family });
     const settled = (k: string) => ['ok', 'none'].includes(d.upstream?.[k]?.status ?? '');
     // A "not asked: already from the GBIF download" stands only while those photographs are here (round sixty-seven; triage-66 N4).
     const wildDone = settled('inat.photos.wild') || ((d.upstream?.['inat.photos.wild']?.detail ?? '').startsWith('not asked') && d.photos.some((p) => p.src === 'gbif' && !p.captive));
     if (!wildDone || !settled('inat.photos.cultivated')) todo.push({ path: `${dir}/${f}`, d });
   }
   console.log(`${files.length} dossiers on disk; ${todo.length} without iNaturalist photographs…`);
+  const reference = referenceOf(entries);
   const f = makeFetcher();
   let done = 0;
   const t0 = Date.now();
   for (const { path, d } of todo) {
     let id = d.ids.inat;
     if (!id) {
-      const t = await inat.taxon(f, d.name.scientific, heldElsewhereIn(byName, d.key));
+      // Asked as the build asks it (`taxonFor`; round seventy, second pass, triage-69 B5, B7), with the own names the
+      // dossier holds: a taxon GBIF holds as another species of this reference is not taken.
+      const heldElsewhere = heldElsewhereIn(byName, d.key);
+      const t = await inat.taxonFor(f, { scientific: d.name.scientific, key: d.key, family: d.name.family, own: ownNames({ scientific: d.name.scientific, synonyms: d.name.synonyms ?? [], heldElsewhere }), sameType: [], heldElsewhere, reference });
       if (t.status === 'refused') return stop(t.detail);
-      d.upstream['inat.taxon'] = { status: t.status, at: new Date().toISOString(), detail: 'detail' in t ? t.detail : undefined };
+      // What `--fill inat-ids` said of an id it dropped stays before the name search's answer (`inatTaxonRow`; round seventy, S-B7).
+      d.upstream['inat.taxon'] = inatTaxonRow(d.upstream['inat.taxon'], t, new Date().toISOString());
       if (t.status === 'error') {
         // Not "no taxon of this name": the lookup broke. Recorded; the next fill asks again.
         d.upstream['inat.photos.wild'] = { status: 'error', at: new Date().toISOString(), detail: t.detail };
@@ -541,8 +580,25 @@ async function fillOpenGbifPhotos(): Promise<void> {
  * (round sixty-eight, fourth part; `commons-fill.ts`). Resumable as `--fill gbif-open` is. Then the index, as a build writes it.
  */
 async function fillCommonsPhotos(): Promise<void> {
-  const c = await fillCommonsAll(diskStore(), makeFetcher(), (n) => { if (n.asked % 100 === 0) process.stdout.write(`\r  ${n.asked} asked, ${n.filled} given photographs…   `); });
+  const c = await fillCommonsAll(diskStore(), makeFetcher(), (n) => { if (n.asked % 100 === 0) process.stdout.write(`\r  ${n.asked} asked, ${n.filled} given photographs…   `); }, indexHeld());
   console.log(`\r  ${c.asked} dossiers had fewer than six photographs: ${c.filled} were given ${c.photos} from Wikimedia Commons, ${c.none} have none there, ${c.failed} not answered (asked again by a later fill)${c.before ? `; ${c.before} passed by, an earlier fill having found none` : ''}.`);
+  writeIndexFromDisk();
+}
+
+/** The reference's names from the index on disk (`heldNamesOf`), for the fills that read Commons' titles; null with no index. */
+function indexHeld(): HeldNames | null {
+  const idx = `${outDir}/s/v${DOSSIER_V}/index.json`;
+  return existsSync(idx) ? heldNamesOf(JSON.parse(readFileSync(idx, 'utf8'))) : null;
+}
+
+/**
+ * `--fill commons-kind` (round seventy; REVIEW-TRIAGE-69 C2): Commons' categories (and a struck-out name) for every stored
+ * Commons photograph, fifty files a request, kept with it, so the kind rule reads them; resumable; then the index.
+ */
+async function fillCommonsKindStep(): Promise<void> {
+  const c = await fillCommonsKindAll(diskStore(), makeFetcher(), indexHeld(), (n) => process.stdout.write(`\r  ${n.requests} requests, ${n.read} files read…   `));
+  console.log(`\r  ${c.files} Commons photographs: ${c.before} had their categories; ${c.asked} asked in ${c.requests} requests, ${c.read} answered${c.missing ? ` (${c.missing} no longer on Commons)` : ''}; ${c.dossiers} dossiers written; ${c.hidden} photographs now left out${c.lines.length ? `:\n${c.lines.map((l) => `    ${l}`).join('\n')}` : '.'}`);
+  if (c.unchecked) console.log(`  ${c.unchecked} not checked${c.refused ? ` (Commons refused: ${c.refused})` : ''}; run --fill commons-kind again: it picks up where it stopped.`);
   writeIndexFromDisk();
 }
 
@@ -570,28 +626,69 @@ async function fillGbifLicencePhotos(): Promise<void> {
   writeIndexFromDisk();
 }
 
-/** `--fill inat-ids` (round sixty-nine; triage-68 M5, R46-13): every stored iNaturalist id checked, thirty a request; then the index. */
+/**
+ * `--fill inat-ids` (round sixty-nine; triage-68 M5, R46-13; round seventy, triage-69 B1): every stored iNaturalist id
+ * checked, thirty a request, inactive ids followed only by the build's rule and earlier follows read again by it; each
+ * change printed; then the index.
+ */
 async function fillInatIdsStep(): Promise<void> {
   console.log('Checking every stored iNaturalist taxon id with iNaturalist…');
   const c = await fillInatIds(diskStore(), makeFetcher());
-  console.log(`  ${c.checked} ids checked: ${c.followed} inactive ids followed to their current taxon, ${c.dropped} inactive with no single current taxon dropped (asked by name next). Now run --fill inat.`);
-  if (c.failed) console.log(`  iNaturalist did not answer (${c.failed}); run --fill inat-ids again.`);
+  console.log(`  ${c.checked} ids checked: ${c.followed} inactive ids followed to their current taxon, ${c.refused} whose taxon is not this species' (the id, its link and its photographs dropped, the name asked), ${c.kept} earlier follows read again and kept, ${c.dropped} inactive with no single current taxon dropped (asked by name next)${c.lines.length ? `:\n${c.lines.map((l) => `    ${l}`).join('\n')}` : '.'}\n  Now run --fill inat.`);
+  if (c.failed) console.log(`  iNaturalist or GBIF did not answer (${c.failed}); run --fill inat-ids again: what was changed stands, and it takes up the rest.`);
   writeIndexFromDisk();
 }
 
-/** `--fill summaries` (round sixty-nine; triage-68 M3, R46-12): stored summaries a redirect brought from another title dropped; then the index. */
+/**
+ * `--fill wikidata` (round seventy; triage-69 B2, section 6 step 4): the items taken without the species' own GBIF key
+ * proved again; those the rule changes are listed in rebuild-wd.txt for `--keys`, and left as they are until then.
+ */
+async function fillWikidataStep(): Promise<void> {
+  console.log('Reading every Wikidata item of the corpus for its GBIF key, and proving again those that do not carry their species\' own…');
+  const c = await fillWikidata(diskStore(), makeFetcher());
+  console.log(`  ${c.read} items read: ${c.byKey} carry their species' GBIF key; ${c.stands} proved again by the rule; ${c.changed} changed by it, left as they are and listed${c.before ? `; ${c.before} proved again by an earlier run, passed by` : ''}${c.lines.length ? `:\n${c.lines.map((l) => `    ${l}`).join('\n')}` : '.'}`);
+  // An IPNI identifier that is not POWO's number: one of the two is another name's (triage-69 B6, R47-5), to be read by hand.
+  if (c.disagree.length) {
+    writeFileSync('ipni-powo.txt', c.disagree.join('\n') + '\n');
+    console.log(`  ${c.disagree.length} dossiers whose IPNI identifier is not the number in their POWO one → ipni-powo.txt`);
+  }
+  if (c.rebuild.length) {
+    writeFileSync('rebuild-wd.txt', c.rebuild.join('\n') + '\n');
+    console.log(`  ${c.rebuild.length} species → rebuild-wd.txt; run --keys rebuild-wd.txt --grid climate --bulk bulk, and read drops.txt`);
+  }
+  if (c.failed) console.log(`  ${c.failed}: run --fill wikidata again; what was proved stands, and rebuild-wd.txt is written again in full by the run that ends.`);
+  writeIndexFromDisk();
+}
+
+/** `--fill summaries` (round sixty-nine; triage-68 M3, R46-12; round seventy, triage-69 A1): every stored summary under another title proved again by `summary-proof.ts`, or dropped; those set aside asked again; then the index. */
 async function fillSummaries(): Promise<void> {
   const c = await checkSummaries(diskStore(), args.includes('--offline') ? null : makeFetcher());
-  console.log(`  ${c.kept + c.confirmed + c.byLead} summaries are this species' article (${c.confirmed} confirmed as the Wikidata item's sitelink, ${c.byLead} by their lead under another title); ${c.dropped} dropped${c.unchecked ? `; ${c.unchecked} not checked, Wikidata or Wikipedia not answering (run again)` : ''}${c.lines.length ? `:\n${c.lines.map((l) => `    ${l}`).join('\n')}` : '.'}`);
-  // Round sixty-nine, the owner's first run: 108 dropped by title alone, most of them this species' own article. Those
-  // set aside are asked again, and taken back when the lead is this species' (`redirectIsThisSpecies`).
-  if (c.restored) console.log(`  ${c.restored} set aside earlier taken back, the lead being this species':\n${c.restoredLines.map((l) => `    ${l}`).join('\n')}`);
+  console.log(`  ${c.kept + c.confirmed} summaries are this species' article (${c.kept} by name, with no redirect; ${c.confirmed} proved under another title: ${Object.entries(c.proofs).map(([k, n]) => `${n} ${k}`).join(', ') || 'none'}); ${c.dropped} dropped${c.unchecked ? `; ${c.unchecked} not checked, Wikipedia, Wikidata or GBIF not answering (run again)` : ''}${c.lines.length ? `:\n${c.lines.map((l) => `    ${l}`).join('\n')}` : '.'}`);
+  // Round seventy (A1): the lead proves nothing; each record names its proof, and each record changed is listed.
+  if (c.changed) console.log(`  ${c.changed} records now name another proof:\n${c.changedLines.map((l) => `    ${l}`).join('\n')}`);
+  if (c.restored) console.log(`  ${c.restored} set aside earlier taken back on a proof:\n${c.restoredLines.map((l) => `    ${l}`).join('\n')}`);
   writeIndexFromDisk();
 }
 
-/** `--list-rebuild` (round sixty-nine; triage-68 M2, M4): the species for `--keys`, into rebuild-keys.txt. */
-function listRebuild(): void {
+/**
+ * `--list-rebuild` (round sixty-nine; triage-68 M2, M4): the species for `--keys`, into rebuild-keys.txt. With `--bulk`,
+ * Kew's files are read too, and the species whose Kew entry the author and spelling rule reads differently are added
+ * (round seventy; triage-69 B4).
+ */
+async function listRebuild(): Promise<void> {
   const lines = rebuildList(diskStore());
+  if (bulkDir) {
+    const store = diskStore();
+    const names = store.files().flatMap((file) => { try { const d = store.read<Dossier>(file); return [d.name.scientific, ...(d.name.synonyms ?? []).map((x) => x.split(' ').slice(0, 2).join(' '))]; } catch { return []; } });
+    const wcvp = await loadWcvp(bulkDir, names);
+    if (!wcvp) console.log(`  no WCVP files in ${bulkDir}: Kew's rows are not read, and the list holds only the reasons above`);
+    else {
+      const kew = kewRebuildList(store, wcvp);
+      const listed = new Set(lines.map((l) => l.split(' ')[0]));
+      for (const l of kew) if (!listed.has(l.split(' ')[0])) lines.push(l);
+      console.log(`  ${kew.length} species whose Kew entry the author and spelling rule reads differently`);
+    }
+  }
   writeFileSync('rebuild-keys.txt', lines.join('\n') + (lines.length ? '\n' : ''));
   console.log(`  ${lines.length} species to rebuild → rebuild-keys.txt; run --keys rebuild-keys.txt --grid climate --bulk bulk`);
 }
@@ -782,9 +879,11 @@ async function main() {
   if (fill === 'commons') return fillCommonsPhotos();
   if (fill === 'gbif-licence') return fillGbifLicencePhotos();
   if (fill === 'inat-ids') return fillInatIdsStep();
+  if (fill === 'wikidata') return fillWikidataStep();
   if (fill === 'summaries') return fillSummaries();
+  if (fill === 'commons-kind') return fillCommonsKindStep();
   if (fill === 'genus') return fillGenera();
-  if (fill) throw new Error(`--fill ${fill}: openalex, inat, inat-ids, gbif, gbif-open, gbif-licence, commons, summaries or genus`);
+  if (fill) throw new Error(`--fill ${fill}: openalex, inat, inat-ids, wikidata, gbif, gbif-open, gbif-licence, commons, commons-kind, summaries or genus`);
   if (args.includes('--list-rebuild')) return listRebuild();
   if (args.includes('--names')) return fillNames();
   let climate: ClimateProvider | undefined;
@@ -881,6 +980,9 @@ async function main() {
   // Existing dossiers by name, so a clean one is kept rather than rebuilt (unless --force).
   const onDisk = fixtures ? [] : scanDossiers();
   const existing = new Map<string, number>(onDisk.map((e) => [e.name.toLowerCase(), e.key]));
+  const reference = referenceOf(onDisk);
+  // The reference's names, so a slip in a Commons title is read as the Worker reads it (round seventy, a need of C; C1).
+  const held = onDisk.length ? heldNamesOf(onDisk) : null;
   // The previous build of each species, read once a species, and the index's names: what its build is given (round sixty-nine; triage-68 M5, M6).
   const prevOf = (key?: number) => (key ? readPrev(key) : null);
   if (onDisk.length) console.log(`  ${onDisk.length} dossiers already on disk${force ? ' (rebuilding all)' : ' (clean ones kept)'}`);
@@ -914,7 +1016,10 @@ async function main() {
         taxon: prevTaxon ? { key: prevTaxon.key, name: prevTaxon.name, accepted: prevTaxon.upstream?.['gbif.accepted'], builtOn: prevTaxon.built } : undefined,
         // Kept when Wikidata does not answer, with the day they were read (round sixty-eight; round sixty-nine, triage-68 M5).
         ...prevIdsFor(prevOf(j.key)),
-        heldElsewhere: heldElsewhereIn(existing, j.key ?? existing.get(j.name.toLowerCase()))
+        heldElsewhere: heldElsewhereIn(existing, j.key ?? existing.get(j.name.toLowerCase())),
+        // The reference's species, so an iNaturalist taxon GBIF holds as another of them is not taken (round seventy; triage-69 B5).
+        reference,
+        held
       });
     } catch (e) {
       const issues = (e as { issues?: Array<{ path?: Array<{ key: unknown }>; message: string }> }).issues;
@@ -969,6 +1074,9 @@ async function main() {
         carry(src, () => {
           const theirs = (prev.photos ?? []).filter(is);
           if (!theirs.length || d.photos.some(is)) return false;
+          // Never another taxon's: a build that took a different iNaturalist taxon from the last (a follow the rule now
+          // refuses: Pinguicula chilensis' 816267) does not carry that taxon's photographs (round seventy; triage-69 B1).
+          if (src.startsWith('inat') && d.ids.inat && prev.ids?.inat && d.ids.inat !== prev.ids.inat) return false;
           d.photos = [...d.photos, ...theirs];
           if (src.startsWith('inat') && prev.ids?.inat) {
             d.ids.inat = prev.ids.inat;
@@ -1030,7 +1138,7 @@ async function main() {
     const inRange = d.occurrences.nOpenInRange + d.occurrences.nRestrictedInRange;
     const disagree = !inRange && d.occurrences.nOutsideRange >= 20 ? ` — range disagrees with records: all ${d.occurrences.nOutsideRange} outside it` : '';
     say(`✓ ${d.name.scientific} [${d.key}] ${d.photos.length} photos, ${d.occurrences.nOpenInRange} open/${d.occurrences.nRestrictedInRange} restricted in range, climate ${d.climate.status}${disagree}${refusedSrcs.length ? ' — refused: ' + refusedSrcs.join(', ') : ''} (${Date.now() - t0} ms)`);
-    thisRun.set(d.key, indexEntry(d));
+    thisRun.set(d.key, indexEntry(d, held));
     built++;
     if (upload) execSync(`npx wrangler r2 object put cultifolio/${dossierPath(d.key)} --file="${path}" --content-type=application/json`, { stdio: 'inherit' });
   }

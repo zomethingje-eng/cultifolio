@@ -1,6 +1,6 @@
 import { error, redirect } from '@sveltejs/kit';
-import { getDossier, resolveSlug, corpusNow, getGenus, indexMaps, searchAnswer, ambiguousSynonym } from '$lib/server/dossiers';
-import { synonymAsk, synonymInIndex, nameFromSlug } from '$lib/server/synonyms';
+import { getDossier, resolveSlug, corpusNow, getGenus, indexMaps, searchAnswer, ambiguousSynonym, sharedOlderName } from '$lib/server/dossiers';
+import { synonymAsk, synonymInIndex, nameFromSlug, authorsOf, sharedNameMessage } from '$lib/server/synonyms';
 import generaList from '../../../../scripts/specialist-genera.txt?raw';
 /** The genera the species list takes whole (the file the derivation reads), for the 404 to say so. */
 const WHOLE_GENERA = new Set(generaList.split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#')));
@@ -37,18 +37,21 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
       const g = params.slug[0].toUpperCase() + params.slug.slice(1);
       if (indexMaps(c.idx).byGenus.get(g)?.length) redirect(302, `/?by=genus&open=${slugify(g)}`);
     }
-    // An older name of two species or more of the reference answers neither (rule 3), and GBIF is not asked: the 404 says
-    // so and names them (round sixty-nine; triage-68 N1, S-F1, R46-3: "Cotyledon mammillaris" went to Adromischus
-    // filicaulis, the first holder in the index's order, and the page said GBIF accepted it as that species).
-    const asName = nameFromSlug(params.slug);
-    const holders = asName ? ambiguousSynonym(c.idx, asName) : null;
+    // An older name of two species or more of the reference answers none of them (rule 3), and GBIF is not asked: the
+    // 404 says so and names them (round sixty-nine; triage-68 N1, S-F1, R46-3: "Cotyledon mammillaris" went to
+    // Adromischus filicaulis, the first holder in the index's order, and the page said GBIF accepted it as that species).
+    // Whichever of them shows it (round seventy; triage-69 F1): looked up by the address's slug, so a hyphenated name is
+    // found as written (N3), and each holder named with the author under which its record holds the name, read from its
+    // dossier's stored synonyms, or with none where the record has none or could not be read.
+    const holders = ambiguousSynonym(c.idx, params.slug);
     if (holders) {
-      setHeaders({ 'cache-control': 'public, max-age=300' });
+      const asName = sharedOlderName(c.idx, params.slug) ?? nameFromSlug(params.slug);
+      const records = await Promise.all(holders.map((e) => getDossier(platform, fetch, e.key, c).catch(() => null)));
+      // A record not read is the next visit's to read again: kept by no one (rule 2), where a full answer is kept five minutes.
+      setHeaders({ 'cache-control': records.every(Boolean) ? 'public, max-age=300' : 'no-store' });
       const g = asName.split(' ')[0];
-      const list = holders.map((e) => e.name);
-      const named = list.length === 2 ? list.join(' and ') : `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}`;
-      const count = ['two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'][list.length - 2] ?? String(list.length);
-      error(404, { message: `${asName} is an older name of ${count} species of the reference, ${named}, so this address leads to neither`, species: { name: asName, genus: g, inGenus: indexMaps(c.idx).byGenus.get(g)?.length ?? 0, wholeGenus: WHOLE_GENERA.has(g), suggest: holders.map((e) => ({ slug: e.slug, name: e.name })) } });
+      const message = sharedNameMessage(asName, holders.map((e, i) => ({ name: e.name, authors: authorsOf(asName, records[i]?.name.synonyms ?? []) })));
+      error(404, { message, species: { name: asName, genus: g, inGenus: indexMaps(c.idx).byGenus.get(g)?.length ?? 0, wholeGenus: WHOLE_GENERA.has(g), suggest: holders.map((e) => ({ slug: e.slug, name: e.name })) } });
     }
     // An old name: the index's own synonym lists first (no request), then the backbone is asked whether it is a synonym,
     // and the page moves to the accepted species when the reference holds it, saying so; otherwise the 404 says what the
@@ -150,11 +153,19 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   // because the record lists Haworthia attenuata and not that variety of it (round thirty-seven, R1-8). What the line
   // may say is what the record holds: the binomial is an older name of this species, and the address named a variety of it.
   const ofOlder = !!wasPlain && !ownNames.has(wasPlain) && !asVariety && wasPlain.split(' ').length > 2 && ownNames.has(binomialOf(wasPlain));
+  // "The GBIF backbone accepts this species as" is said only of a name this species alone holds (round seventy; triage-69
+  // F1, S-F1): of a name other species of the reference hold too, GBIF accepts no one species as it, and the line names
+  // the others instead. No redirect sends a shared name here; a link written by hand, or a redirect a browser kept from
+  // before, can. The name itself is looked up: a variety GBIF places under this species is GBIF's answer for that variety.
+  const shownWas = was && /^[\p{L}\p{M} .'\-×]{3,80}$/u.test(was) && (ownNames.has(wasPlain) || asVariety || ofOlder) ? was : null;
+  const sharedWith = shownWas ? (ambiguousSynonym(index, shownWas) ?? []).filter((e) => e.key !== key).map((e) => ({ slug: e.slug, name: e.name })) : [];
   return {
     /** English common names, the index's choice first (round sixty-one; decision 7). */
     commonNames: [names.common, ...(names.commons ?? [])].filter((x): x is string => !!x).slice(0, 4),
     /** The old name this page was reached by, when the address was a synonym the backbone resolved (round thirty, R2-8). */
-    was: was && /^[\p{L}\p{M} .'\-×]{3,80}$/u.test(was) && (ownNames.has(wasPlain) || asVariety || ofOlder) ? was : null,
+    was: shownWas,
+    /** The other species of the reference that hold the old name too: the line then says so, and never that GBIF accepts this species as it (round seventy; triage-69 F1). */
+    wasShared: sharedWith,
     /** The old name is the binomial of a variety the backbone places under this species, not of the species itself. */
     wasVariety: asVariety,
     /** The old name is a variety of a binomial the record lists as an older name of this species. */

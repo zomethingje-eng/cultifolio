@@ -74,6 +74,12 @@ describe('the sample collection seed', () => {
     await collection.remove('accession', a.id);
   });
   it('fills an empty sample once: twelve plants in a greenhouse with two benches and on a windowsill, a seed batch with counts and a pot-up, waterings, a flowering, notes', async () => {
+    // An empty log: the plant added and removed above is the visitor's, and since round seventy (triage-69 X3) nothing
+    // is set out over a log with anything in it.
+    mem.changes.length = 0;
+    mem.meta.clear();
+    ({ collection, seedDemo } = await pageIn(true));
+    await collection.load();
     expect(collection.accessions).toHaveLength(0);
     expect(await seedDemo()).toBe(true);
     expect(mem.meta.get(SEEDED)).toBe(true);

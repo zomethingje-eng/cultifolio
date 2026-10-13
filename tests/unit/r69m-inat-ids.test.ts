@@ -19,7 +19,11 @@ const TAXA: Record<number, { id: number; name: string; rank: string; is_active: 
   119671: { id: 119671, name: 'Erythrina caffra', rank: 'species', is_active: false, current_synonymous_taxon_ids: [1588191] },
   276548: { id: 276548, name: 'Chrysalidocarpus lutescens', rank: 'species', is_active: true, current_synonymous_taxon_ids: null },
   135254: { id: 135254, name: 'Copiapoa cinerea', rank: 'species', is_active: true, current_synonymous_taxon_ids: null },
-  700: { id: 700, name: 'Aus split', rank: 'species', is_active: false, current_synonymous_taxon_ids: [701, 702] }
+  700: { id: 700, name: 'Aus split', rank: 'species', is_active: false, current_synonymous_taxon_ids: [701, 702] },
+  // Round seventy (triage-69 B1): a follow is taken only when the current taxon's name is the species' own or a same-type
+  // name. These two stand in for an id iNaturalist replaced by another taxon of the same name.
+  900: { id: 900, name: 'Copiapoa cinerea', rank: 'species', is_active: false, current_synonymous_taxon_ids: [135254] },
+  901: { id: 901, name: 'Copiapoa cinerea', rank: 'species', is_active: false, current_synonymous_taxon_ids: [135254] }
 };
 function taxa(asked: string[] = []): JsonFetcher {
   return (async (url: string) => {
@@ -57,14 +61,15 @@ function copiapoaWith(inatId: number): Record<string, unknown> {
 describe('the build checks the id Wikidata gives', () => {
   it('an inactive id is followed to its current taxon, whose photographs are asked for', async () => {
     const asked: string[] = [];
-    const base = fixtureFetcher(copiapoaWith(133599), { status: 'ok', data: { results: [] } } as never);
+    // Round seventy: the follow is taken only to the species' own name; before, 133599 (Dypsis lutescens) to 276548.
+    const base = fixtureFetcher(copiapoaWith(900), { status: 'ok', data: { results: [] } } as never);
     const ids = taxa();
     const f = (async (url: string) => { asked.push(url); return /\/taxa\/\d/.test(url) ? ids(url) : base(url); }) as unknown as JsonFetcher;
     const r = await buildDossier('Copiapoa cinerea', opts(f));
     if (!r.ok) throw new Error('no dossier');
-    expect(r.dossier.ids.inat).toBe(276548); // base: 133599, with no photographs
-    expect(asked.some((u) => u.includes('observations?taxon_id=276548'))).toBe(true);
-    expect(r.dossier.upstream['inat.taxon']).toMatchObject({ status: 'ok', detail: "iNaturalist's taxon 133599 (Dypsis lutescens) is inactive; followed to its current taxon 276548" });
+    expect(r.dossier.ids.inat).toBe(135254); // base: 900, with no photographs
+    expect(asked.some((u) => u.includes('observations?taxon_id=135254'))).toBe(true);
+    expect(r.dossier.upstream['inat.taxon']).toMatchObject({ status: 'ok', detail: "iNaturalist's taxon 900 (Copiapoa cinerea) is inactive; followed to its current taxon 135254 (Copiapoa cinerea)" });
   });
   it('an inactive id with no single successor is dropped, and the name asked', async () => {
     const asked: string[] = [];
@@ -110,21 +115,23 @@ describe('the previous build\'s identifiers carry the day they were read (M5, M8
     const base = fixtureFetcher(table());
     const ids = taxa();
     const f = (async (url: string) => (/\/taxa\/\d/.test(url) ? ids(url) : base(url))) as unknown as JsonFetcher;
-    const r = await buildDossier('Copiapoa cinerea', opts(f, { prevIds: { ...prevIds, inat: 119671 }, prevIdsOn: '2026-10-01' }));
-    expect(r.ok && r.dossier.ids.inat).toBe(1588191); // base: 119671
+    const r = await buildDossier('Copiapoa cinerea', opts(f, { prevIds: { ...prevIds, inat: 901 }, prevIdsOn: '2026-10-01' }));
+    expect(r.ok && r.dossier.ids.inat).toBe(135254); // base: 901 (round seventy: 901 stands in for 119671, whose taxon is not Copiapoa's)
   });
 });
 
 describe('--fill inat-ids', () => {
   const store = (docs: Record<string, unknown>) => ({ files: () => Object.keys(docs), read: <T,>(k: string) => structuredClone(docs[k]) as T, write: (k: string, d: unknown) => { docs[k] = d; } });
-  const dossier = (inat: number) => ({ ids: { gbif: 1, inat }, links: { inat: `https://www.inaturalist.org/taxa/${inat}` }, upstream: { 'inat.photos.wild': { status: 'ok', at: 'x' }, 'inat.photos.cultivated': { status: 'none', at: 'x' } } });
+  // Round seventy: the fill reads the species' name, and asks GBIF for its same-type names (none here).
+  const dossier = (inat: number, key = 1, scientific = 'Copiapoa cinerea') => ({ key, name: { scientific }, ids: { gbif: key, inat }, links: { inat: `https://www.inaturalist.org/taxa/${inat}` }, photos: [], upstream: { 'inat.photos.wild': { status: 'ok', at: 'x' }, 'inat.photos.cultivated': { status: 'none', at: 'x' } } });
+  const withGbif = (f: JsonFetcher): JsonFetcher => (async (url: string) => (url.startsWith('https://api.gbif.org/') ? { status: 'ok', data: /synonyms/.test(url) ? { results: [], endOfRecords: true } : { key: 1 } } : f(url))) as unknown as JsonFetcher;
   it('follows an inactive id, and opens the photograph sets for --fill inat', async () => {
-    const docs: Record<string, unknown> = { '1.json': dossier(119671), '2.json': dossier(276548), '3.json': dossier(700) };
-    const c = await fillInatIds(store(docs), taxa(), () => '2026-10-12T00:00:00Z');
-    expect(c).toEqual({ checked: 3, followed: 1, dropped: 1 });
+    const docs: Record<string, unknown> = { '1.json': dossier(900), '2.json': dossier(276548, 2, 'Chrysalidocarpus lutescens'), '3.json': dossier(700, 3, 'Aus split') };
+    const c = await fillInatIds(store(docs), withGbif(taxa()), () => '2026-10-12T00:00:00Z');
+    expect(c).toMatchObject({ checked: 3, followed: 1, dropped: 1 });
     const one = docs['1.json'] as ReturnType<typeof dossier>;
-    expect(one.ids.inat).toBe(1588191);
-    expect(one.links.inat).toBe('https://www.inaturalist.org/taxa/1588191');
+    expect(one.ids.inat).toBe(135254);
+    expect(one.links.inat).toBe('https://www.inaturalist.org/taxa/135254');
     expect(one.upstream['inat.photos.wild'].status).toBe('skipped');
     expect((docs['3.json'] as ReturnType<typeof dossier>).ids.inat).toBeUndefined();
     expect((docs['2.json'] as ReturnType<typeof dossier>).upstream['inat.photos.wild'].status).toBe('ok'); // guard: an active id is left alone

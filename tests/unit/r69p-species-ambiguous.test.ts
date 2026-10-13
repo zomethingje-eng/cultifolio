@@ -2,6 +2,10 @@
  * Round sixty-nine, triage-68 N1 (S-F1, R46-3), the species route: an address under an older name two species of the
  * reference hold answers neither, and its 404 names both, without asking GBIF; an address under a name one species
  * shows goes there. FAILED on the base (Cotyledon mammillaris went to Adromischus filicaulis, Aloe variegata to Aloe vera).
+ *
+ * Round seventy (triage-69 F1, S-F1): a name two species hold answers neither, whichever shows it, so Aloe variegata is
+ * now a 404 too; the 404 names each holder in the search's order, with the author its record gives where the record is
+ * read (here no record is, and each is named without one). The cases are changed so.
  */
 import { describe, it, expect } from 'vitest';
 import { load } from '../../src/routes/species/[slug]/+page.server';
@@ -26,12 +30,12 @@ describe('N1: the species route under an older name', () => {
   it('Cotyledon mammillaris is a 404 that names both Adromischus, and GBIF is not asked', async () => {
     const e = await caught(load(event('cotyledon-mammillaris')));
     expect(e.status).toBe(404);
-    expect(e.body?.message).toBe('Cotyledon mammillaris is an older name of two species of the reference, Adromischus filicaulis and Adromischus mammillaris, so this address leads to neither');
-    expect(e.body?.species?.suggest?.map((s) => s.slug)).toEqual(['adromischus-filicaulis', 'adromischus-mammillaris']);
+    expect(e.body?.message).toBe('Cotyledon mammillaris is an older name of two species of the reference, so this address leads to neither: Cotyledon mammillaris, now Adromischus mammillaris; Cotyledon mammillaris, now Adromischus filicaulis');
+    expect(e.body?.species?.suggest?.map((s) => s.slug)).toEqual(['adromischus-mammillaris', 'adromischus-filicaulis']);
   });
-  it('Aloe variegata goes to Gonialoe variegata, which shows it', async () => {
+  it('Aloe variegata, shown by Gonialoe variegata and held for the search by Aloe vera, is a 404 too (round seventy)', async () => {
     const e = await caught(load(event('aloe-variegata')));
-    expect(e.status).toBe(302);
-    expect(e.location).toBe('/species/gonialoe-variegata?was=Aloe%20variegata');
+    expect(e.status).toBe(404);
+    expect(e.body?.species?.suggest?.map((s) => s.slug)).toEqual(['gonialoe-variegata', 'aloe-vera']);
   });
 });

@@ -1,5 +1,6 @@
 import type { JsonFetcher, FetchResult, SourceResult } from '../fetch';
 import { licenceTag, isOpen, type LicenceTag } from '$core/licence';
+import { sameNameAuthor } from '../authors';
 
 export const GBIF = 'https://api.gbif.org/v1';
 
@@ -200,6 +201,8 @@ export interface DistributionAnswer {
   via?: string;
   /** Kew holds the name ("Lantana × strigocamara R.W.Sanders") and states no range for it. */
   held?: string;
+  /** Kew holds the species' words only under another author, which is another name (round seventy; triage-69 B4). */
+  otherAuthor?: string;
 }
 
 /**
@@ -208,20 +211,53 @@ export interface DistributionAnswer {
  * holding the name with no range is Kew's answer, with no rows; older names that lead to two Kew entries are `ambiguous`.
  */
 export async function distributions(f: JsonFetcher, key: number): Promise<SourceResult<DistributionAnswer>> {
-  const r = await f<{ results: GbifDistribution[]; kew?: KewDescription; ambiguous?: string; entry?: string; via?: string; held?: string; olderAmbiguous?: string }>(`${GBIF}/species/${key}/distributions?limit=200`);
+  const r = await f<{ results: GbifDistribution[]; kew?: KewDescription; ambiguous?: string; entry?: string; via?: string; held?: string; olderAmbiguous?: string; otherAuthor?: string }>(`${GBIF}/species/${key}/distributions?limit=200`);
   if (r.status !== 'ok') return r;
+  // Kew's rows of the species' words by another author, which are another name (round seventy; triage-69 B4): said in the record.
+  const other = r.data.otherAuthor ? { otherAuthor: r.data.otherAuthor } : {};
   if (r.data.ambiguous) return { status: 'ok', data: { rows: [], wcvp: false, ambiguous: r.data.ambiguous } };
-  if (r.data.olderAmbiguous) return { status: 'ambiguous', detail: `Kew holds no entry under this name, and ${r.data.olderAmbiguous}: not taken` };
+  if (r.data.olderAmbiguous) return { status: 'ambiguous', detail: `${r.data.otherAuthor ? `${r.data.otherAuthor}; ` : 'Kew holds no entry under this name, and '}${r.data.olderAmbiguous}: not taken` };
   if (r.data.held) return { status: 'ok', data: { rows: [], wcvp: true, kew: r.data.kew, held: r.data.held } };
-  const wcvp = r.data.results.filter((d) => /wcvp|world checklist|plants of the world|kew/i.test(d.source ?? ''));
-  if (wcvp.length) return { status: 'ok', data: { rows: wcvp, wcvp: true, kew: r.data.kew, ...(r.data.via ? { entry: r.data.entry, via: r.data.via } : {}) } };
+  const wcvp = (r.data.results ?? []).filter(isWcvpRow);
+  if (wcvp.length) return { status: 'ok', data: { rows: wcvp, wcvp: true, kew: r.data.kew, ...(r.data.via ? { entry: r.data.entry, via: r.data.via } : {}), ...other } };
   // No WCVP entry: fall back to whatever national checklists GBIF holds, one row per country and status.
   const seen = new Map<string, GbifDistribution>();
-  for (const d of r.data.results) {
+  for (const d of r.data.results ?? []) {
     const k = `${d.country ?? d.locality ?? '?'}|${CULTIVATED_RE.test(`${d.establishmentMeans ?? ''} ${d.status ?? ''}`) ? 'i' : 'n'}`;
     if (!seen.has(k)) seen.set(k, d);
   }
-  return seen.size ? { status: 'ok', data: { rows: [...seen.values()], wcvp: false } } : { status: 'none' };
+  return seen.size ? { status: 'ok', data: { rows: [...seen.values()], wcvp: false, ...other } } : r.data.otherAuthor ? { status: 'none', detail: r.data.otherAuthor } : { status: 'none' };
+}
+
+/** A distribution row from Kew's WCVP, as GBIF republishes it or the bulk path serves it. */
+export const isWcvpRow = (d: GbifDistribution) => /wcvp|world checklist|plants of the world|kew/i.test(d.source ?? '');
+
+/** GBIF's copy of Kew's World Checklist of Vascular Plants (the dataset the API path's ranges come from). */
+export const WCVP_DATASET = 'f382f0ce-323a-4091-bb9f-add557f3a9a2';
+
+/**
+ * Kew's identifiers for the species' own name (round seventy; triage-69 B2, S-B2, IND-3): the rows of GBIF's copy of WCVP
+ * under exactly its words (`/species?datasetKey=…&name=`, one request), misapplied names aside, whose publishing author
+ * is the backbone's (`sameNameAuthor`), or, with none, the one row Kew accepts, as the bulk path reads Kew's files
+ * (`WcvpIndex.ownRows`); each with the IPNI identifier of its POWO address. `label` cites the name as Kew does ("Agave
+ * variegata Jacobi"); `ids` is empty when Kew holds the words only under other authors and accepts none of them, or not
+ * at all, and then nothing can be checked against Kew. A refusal is the answer.
+ */
+export async function kewIpni(f: JsonFetcher, name: string, authorship?: string): Promise<FetchResult<{ ids: string[]; label?: string; others?: Array<{ id: string; label: string }> }>> {
+  const r = await f<{ results?: Array<{ key: number; scientificName: string; canonicalName?: string; authorship?: string; taxonomicStatus?: string; references?: string }> }>(`${GBIF}/species?datasetKey=${WCVP_DATASET}&name=${encodeURIComponent(name)}&limit=50`);
+  if (r.status === 'none') return { status: 'ok', data: { ids: [] } };
+  if (r.status !== 'ok') return r;
+  const words = (r.data.results ?? []).filter((x) => (x.canonicalName ?? '').toLowerCase() === name.toLowerCase() && !/misapplied/i.test(x.taxonomicStatus ?? ''));
+  const own = words.filter((x) => sameNameAuthor(authorship, x.authorship));
+  // With no row by the backbone's author, the one entry Kew accepts under the words, as the bulk path reads Kew's files.
+  const accepted = words.filter((x) => /^accepted$/i.test(x.taxonomicStatus ?? ''));
+  const rows = own.length ? own : authorship?.trim() && accepted.length === 1 ? accepted : [];
+  const ipni = (x: { references?: string }) => /urn:lsid:ipni\.org:names:([\w-]+)$/.exec(x.references ?? '')?.[1];
+  const ids = [...new Set(rows.flatMap((x) => ipni(x) ?? []))];
+  // The words' other rows, another author's names (round seventy, second pass; triage-69 B6, R47-5): an item that carries
+  // one of their identifiers is that homonym's item (Albuca longifolia's 527398-1 is Baker's).
+  const others = words.filter((x) => !rows.includes(x)).flatMap((x) => { const id = ipni(x); return id && !ids.includes(id) ? [{ id, label: x.scientificName }] : []; });
+  return { status: 'ok', data: { ids, ...(rows.length ? { label: rows[0].scientificName } : {}), ...(others.length ? { others } : {}) } };
 }
 
 export interface GbifOccurrence {
@@ -284,6 +320,8 @@ export interface OccMedia {
   rightsHolder?: string;
   page?: string;
   datasetKey?: string;
+  /** The record is a preserved specimen (its basisOfRecord): a herbarium sheet or a museum's fruit, which ranks below Commons as a lead (round seventy, a need of C; REVIEW-TRIAGE-69 C7, R47-10). */
+  specimen?: boolean;
 }
 
 /** Still images attached to occurrences, already filtered to open licences. */
@@ -304,7 +342,7 @@ export async function media(f: JsonFetcher, key: number): Promise<FetchResult<Oc
       if (!m.identifier || (m.type && !/still/i.test(m.type))) continue;
       const tag = licenceTag(m.license);
       if (!isOpen(tag)) continue;
-      out.push({ id: `${o.key}:${out.length}`, url: m.identifier, licence: tag!, creator: m.creator, rightsHolder: m.rightsHolder, page: m.references ?? `https://www.gbif.org/occurrence/${o.key}`, datasetKey: o.datasetKey });
+      out.push({ id: `${o.key}:${out.length}`, url: m.identifier, licence: tag!, creator: m.creator, rightsHolder: m.rightsHolder, page: m.references ?? `https://www.gbif.org/occurrence/${o.key}`, datasetKey: o.datasetKey, ...(o.basisOfRecord === 'PRESERVED_SPECIMEN' ? { specimen: true } : {}) });
     }
   }
   return out.length ? { status: 'ok', data: out } : { status: 'none' };

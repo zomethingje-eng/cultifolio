@@ -4,11 +4,12 @@
  * scripts/build-dossiers.ts writes, served as assets), then the fixture
  * corpus compiled into the build (so tests work with nothing else present).
  */
-import { genusOf } from '$core/names';
-import { prepare, search, hasExact, rankedWords, relaxedQuery, type Prepared } from '$core/search';
+import { genusOf, slugify } from '$core/names';
+import { prepare, search, hasExact, rankedWords, relaxedQuery, searchGenera, type Prepared } from '$core/search';
 import { queryPlan, candidates, postingFileOf } from '$core/postings';
 import { bucketOf, BUCKETS } from '$core/bucket';
 import { parseDossier, dossierPath, genusPath, GenusRecord, DOSSIER_V, type Dossier } from '$dossier/schema';
+import { heldNamesOf } from '$dossier/photo-kind';
 import { manifestPath, productPath, isManifest, SHORT_HITS, type Manifest } from '$dossier/manifest';
 import * as v from 'valibot';
 import { error, isHttpError } from '@sveltejs/kit';
@@ -338,12 +339,15 @@ function trim(keep: string): void {
  */
 export async function getDossier(platform: Platform, fetch: Fetch, key: number, held?: Loaded): Promise<Dossier | null> {
   const c = held ?? (await loadIndex(platform, fetch));
+  // The reference's names, read from the index (memoised by the index array), so an uploader's slip in a Commons title is
+  // read as the index reads it when it is written (round seventy, a need of C; REVIEW-TRIAGE-69 C1, C4).
+  const names = heldNamesOf(c.idx);
   const store = platform?.env?.STORE;
   if (store) {
     const obj = await store.get(dossierPath(key));
     if (obj) {
       try {
-        return parseDossier(await obj.json());
+        return parseDossier(await obj.json(), names);
       } catch (e) {
         // A stored dossier that no longer parses is not served; it is rebuilt.
         console.warn(`dossier ${key} failed schema`, e);
@@ -354,7 +358,7 @@ export async function getDossier(platform: Platform, fetch: Fetch, key: number, 
   const stat = c.fromStore ? null : await staticJson<unknown>(fetch, dossierPath(key));
   if (stat) {
     try {
-      return parseDossier(stat);
+      return parseDossier(stat, names);
     } catch (e) {
       console.warn(`static dossier ${key} failed schema`, e);
     }
@@ -394,23 +398,26 @@ export async function getGenus(platform: Platform, fetch: Fetch, slug: string, h
 
 /** Maps over the index, built once per index load rather than per request: by key, and the species of each genus sorted by name (round fifty-one, 6). */
 /**
- * `bySynonym`: an older name held by one species, in lower case. `ambiguous`: an older name the rule gives no one species,
- * with every species that holds it, those that show it first (round sixty-nine; triage-68 N1).
+ * `bySynonym`: an older name held by one species, in lower case, and under its slug as well. `ambiguous`: an older name
+ * two species or more hold, with every species that holds it, under both keys too; `sharedName`, the name as an entry
+ * writes it, under both (round sixty-nine; triage-68 N1; round seventy; triage-69 F1, N3).
  */
-type IndexMaps = { byKey: Map<number, IndexEntry>; byGenus: Map<string, IndexEntry[]>; bySynonym: Map<string, { entry: IndexEntry; matched: string }>; ambiguous: Map<string, IndexEntry[]> };
+type IndexMaps = { byKey: Map<number, IndexEntry>; byGenus: Map<string, IndexEntry[]>; bySynonym: Map<string, { entry: IndexEntry; matched: string }>; ambiguous: Map<string, IndexEntry[]>; sharedName: Map<string, string> };
 const maps = new WeakMap<IndexEntry[], IndexMaps>();
 export function indexMaps(index: IndexEntry[]): IndexMaps {
   let m = maps.get(index);
   if (m) return m;
   const byKey = new Map<number, IndexEntry>();
   const byGenus = new Map<string, IndexEntry[]>();
-  const shown = new Map<string, Array<{ entry: IndexEntry; matched: string }>>();
-  const searchOnly = new Map<string, Array<{ entry: IndexEntry; matched: string }>>();
-  const hold = (into: typeof shown, e: IndexEntry, name: string) => {
-    const k = name.toLowerCase();
-    const xs = into.get(k) ?? [];
+  // Each older name's holders, under its name in lower case and under its slug: "Arbutus uva-ursi" is
+  // `arbutus-uva-ursi` at an address, which `nameFromSlug` reads as "Arbutus uva ursi", a name no species holds (round
+  // seventy; triage-69 N3, S-F3: 230 hyphenated older names of one species each were 404s). Keyed by the slug, two
+  // spellings an address cannot tell apart are one name, and their holders are counted together.
+  const held = new Map<string, Array<{ entry: IndexEntry; matched: string }>>();
+  const hold = (k: string, e: IndexEntry, name: string) => {
+    const xs = held.get(k) ?? [];
     if (!xs.some((x) => x.entry === e)) xs.push({ entry: e, matched: name });
-    into.set(k, xs);
+    held.set(k, xs);
   };
   for (const e of index) {
     byKey.set(e.key, e);
@@ -419,40 +426,56 @@ export function indexMaps(index: IndexEntry[]): IndexMaps {
     if (xs) xs.push(e); else byGenus.set(g, [e]);
     // Every older name of species rank too, past the six `syn` shows (round sixty-seven; triage-66 N1): an address under
     // "Ferocactus glaucescens" is Bisnaga glaucescens from the index, without asking the backbone.
-    for (const syn of e.syn ?? []) hold(shown, e, syn);
-    for (const syn of e.older ?? []) hold(searchOnly, e, syn);
+    for (const syn of [...(e.syn ?? []), ...(e.older ?? [])]) {
+      hold(syn.toLowerCase(), e, syn);
+      const slug = slugify(syn);
+      if (slug) hold(slug, e, syn);
+    }
   }
-  const { bySynonym, ambiguous } = synonymMaps(shown, searchOnly);
+  const { bySynonym, ambiguous, sharedName } = synonymMaps(held);
   for (const xs of byGenus.values()) xs.sort((a, b) => a.name.localeCompare(b.name));
-  maps.set(index, (m = { byKey, byGenus, bySynonym, ambiguous }));
+  maps.set(index, (m = { byKey, byGenus, bySynonym, ambiguous, sharedName }));
   return m;
 }
 /**
- * Which species an older name answers (round sixty-nine; triage-68 N1, S-F1, R46-3; rule 3). The species that shows
- * the name (`syn`) first: one that holds it only for the search (`older`) never takes an address from it. A name two
- * species show, or that two species hold only for the search, is no one species' name: it does not redirect, and the
- * species route's 404 names every holder. Before, the first holder in the index's order took it: 522 names of the live
- * index were older names of two species or more, "Aloe variegata" went to Aloe vera, and "Cereus undulatus" to
- * Acanthocereus tetragonus, not the dragon fruit that shows it.
+ * Which species an older name answers (round seventy; triage-69 F1, S-F1; rule 3): the one species that holds it, among
+ * the six it shows or for the search alone. A name two species or more hold is no one species' name, whichever shows
+ * it: it does not redirect, and the species route's 404 names every holder. Round sixty-nine sent a name one species
+ * showed and another held only for the search to the one that showed it, and which one showed it was an accident of
+ * `olderNamesOf` (the first six, other genera first), not of taxonomy: 215 live names redirected so, and
+ * `/species/echeveria-farinosa` went to Dudleya pulverulenta, saying GBIF accepted it as that species, while GBIF holds
+ * Echeveria farinosa Lindl. as Dudleya farinosa and Echeveria farinosa Van Houtte as D. pulverulenta.
  */
-function synonymMaps(shown: Map<string, Array<{ entry: IndexEntry; matched: string }>>, searchOnly: Map<string, Array<{ entry: IndexEntry; matched: string }>>) {
+function synonymMaps(held: Map<string, Array<{ entry: IndexEntry; matched: string }>>) {
   const bySynonym = new Map<string, { entry: IndexEntry; matched: string }>();
   const ambiguous = new Map<string, IndexEntry[]>();
-  for (const k of new Set([...shown.keys(), ...searchOnly.keys()])) {
-    const s = shown.get(k) ?? [], o = (searchOnly.get(k) ?? []).filter((x) => !s.some((y) => y.entry === x.entry));
-    const by = s.length ? s : o;
-    if (by.length === 1) bySynonym.set(k, by[0]);
-    else ambiguous.set(k, [...s, ...o].map((x) => x.entry));
+  const sharedName = new Map<string, string>();
+  for (const [k, by] of held) {
+    if (by.length === 1) { bySynonym.set(k, by[0]); continue; }
+    ambiguous.set(k, by.map((x) => x.entry));
+    sharedName.set(k, by[0].matched);
   }
-  return { bySynonym, ambiguous };
+  return { bySynonym, ambiguous, sharedName };
 }
+/** An older name as the maps key it: a slug as it is, a name in lower case with its spaces closed up. */
+const synonymKey = (nameOrSlug: string) => nameOrSlug.trim().replace(/\s+/g, ' ').toLowerCase();
 /**
- * The species an older name is held by when the name answers no one of them (`synonymMaps`), those that show it first,
- * else null: the species route's 404 says the name is an older name of these species of the reference, and names them
- * (round sixty-nine; triage-68 N1). `name` as written or as read from an address ("Aloe variegata"), in any case.
+ * The species an older name is held by when it answers no one of them (`synonymMaps`), in the order the search gives
+ * them for the name typed (the species that holds it exactly and keeps its epithet first, then one that shows it, then
+ * the alphabet), else null: the species route's 404 says the name is an older name of these species of the reference,
+ * and names them (round sixty-nine; triage-68 N1; round seventy: triage-69 F1). `name` as written or as an address's
+ * slug ("Aloe variegata", `aloe-variegata`, `arbutus-uva-ursi`), in any case.
  */
 export function ambiguousSynonym(index: IndexEntry[], name: string): IndexEntry[] | null {
-  return indexMaps(index).ambiguous.get(name.trim().replace(/\s+/g, ' ').toLowerCase()) ?? null;
+  const holders = indexMaps(index).ambiguous.get(synonymKey(name));
+  if (!holders) return null;
+  const shared = indexMaps(index).sharedName.get(synonymKey(name)) ?? name;
+  const order = search(prepare(holders), shared);
+  return [...order, ...holders.filter((e) => !order.includes(e))];
+}
+/** The older name two species or more hold, as an entry writes it ("Arbutus uva-ursi" for `arbutus-uva-ursi`), else null. */
+export function sharedOlderName(index: IndexEntry[], name: string): string | null {
+  return indexMaps(index).sharedName.get(synonymKey(name)) ?? null;
 }
 
 /** The search's prepared structure per index, built at load (round fifty-two, 5). */
@@ -547,7 +570,7 @@ async function searchOnce(c: Loaded, platform: Platform, fetch: Fetch, q: string
   // are charged as it is (round fifty-nine; the corpus reviews: 127 to 309 ms each under the ordinary search allowance).
   const cands = candidates(plan.exact, posting);
   if (heavy(cands.length)) { const stop = await charge(); if (stop) return { stop }; }
-  const exactHits = exactPass(entries(cands), q, n);
+  const exactHits = exactPass(entries(cands), q, n, generaOfIndex(c.idx));
   if (exactHits) return { hits: exactHits, corpus };
   if (!plan.near) return { hits: [], corpus };
   if (!(await read(plan.near))) return whole();
@@ -555,10 +578,20 @@ async function searchOnce(c: Loaded, platform: Platform, fetch: Fetch, q: string
   // exact pass ranked its own, and was never charged (round sixty; the corpus review, 6; A26).
   const near = candidates(plan.near, posting);
   if (heavy(near.length)) { const stop = await charge(); if (stop) return { stop }; }
-  return { hits: search(prepare(entries(near)), q, n), corpus };
+  return { hits: search(prepare(entries(near), generaOfIndex(c.idx)), q, n), corpus };
 }
-function exactPass(cands: IndexEntry[], q: string, n: number): IndexEntry[] | null {
-  const pe = prepare(cands);
+/**
+ * The genera of the whole index, once per index: the candidates of a request are prepared with them, so a typed genus
+ * is never the start of a family however few of its species the postings drew (round seventy; triage-69 N2, S-F6).
+ */
+const indexGenera = new WeakMap<IndexEntry[], Set<string>>();
+function generaOfIndex(index: IndexEntry[]): Set<string> {
+  let g = indexGenera.get(index);
+  if (!g) indexGenera.set(index, (g = searchGenera(index)));
+  return g;
+}
+function exactPass(cands: IndexEntry[], q: string, n: number, genera: ReadonlySet<string>): IndexEntry[] | null {
+  const pe = prepare(cands, genera);
   return hasExact(pe, q) ? search(pe, q, n) : null;
 }
 /** The whole index prepared for one request, under a manifest, when a posting file is missing; not kept (round fifty-four, 3). */

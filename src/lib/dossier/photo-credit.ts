@@ -37,19 +37,41 @@ export function decodeEntities(s: string): string {
 const NOT_AUTHOR = /^(?:own work\b.*|see (?:above|below)|unknown\b.*|author unknown|anonymous|not stated|author not stated|n\/?a|none|\(talk\)|derivative work\b.*|transferred from\b.*|(?:https?:\/\/|www\.)\S*)?$/i;
 
 /**
- * The author a Commons `Artist` field names, or null: tags stripped (a line break kept as one), entities decoded, the
- * first line, whitespace made single. "No machine-readable author provided. X assumed (based on copyright claims)." is
- * Commons' way of naming X, and "This photo has been taken by X and released under…" names X (S-B4, R46-2).
+ * What a credit line carries around its author, cleaned from it keeping the person (round seventy; REVIEW-TRIAGE-69 C3,
+ * S-C8): a wiki signature's talk link and time ("Guérin Nicolas (messages) 19:48, 25 September 2008 (UTC)"), "Uploaded
+ * by …" ("Dwight Sipler [2]Uploaded by uleli"), a footnote mark ("Marco Schmidt [1]") and an e-mail address, which is
+ * not published ("manfred.sause@volloeko.de" alone leaves no author).
+ */
+const TALK = /\s*\(\s*(?:talk|messages?|discussion|disc\.?|diskussion|discussione|discusión|discussão|overleg|dyskusja|обсуждение)(?:[\s·•|,][^)]*)?\)/gi;
+const SIGNED = /\s*\d{1,2}:\d{2},?\s+\d{1,2}\.?\s+[\p{L}]+\.?\s+\d{4}(?:\s*\((?:UTC|CES?T|MES?Z)\))?/giu;
+const UPLOADED = /\s*\(?\s*uploaded by\b.*$/i;
+const FOOTNOTE = /\s*\[\d+\]/g;
+const MAIL = /\s*[<(]?\s*(?:mailto:)?[\w.+-]+@[\w-]+(?:\.[\w-]+)+\s*[>)]?/g;
+/** A template's words left unfilled: "(MiNombre" is Commons' {{Information}} example "MyName" in Spanish, and names no one (Agave cocui; S-C8). */
+const UNFILLED = /^\(?\s*(?:my ?name|mi ?nombre|tu ?nombre|your ?(?:real |user ?)?name|user ?name|nom ?d?'?utilisateur|mon ?nom|dein ?name|ihr ?name|mein ?name|il ?(?:tuo|mio) ?nome|seu ?nome|meu ?nome|\{\{\{[^}]*\}\}\})\s*\)?$/i;
+
+/**
+ * The author a Commons `Artist` field names, or null: `<sup>` and `<small>` (where Commons puts a signature's talk link
+ * and time, and "Uploaded by") dropped, the other tags stripped (a line break kept as one, any other tag read as a space, so a talk
+ * link is not run into the name), entities decoded, the first line, whitespace made single. "No machine-readable author
+ * provided. X assumed (based on copyright claims)." is Commons' way of naming X, "This photo has been taken by X and
+ * released under…", "Taken by X." and "Photograph by: X" name X (S-B4, R46-2; R47-10), and "The original uploader was X at French Wikipedia." names
+ * X (S-C8). The same rule reads a stored credit, which keeps the text with its tags already stripped.
  */
 export function commonsAuthor(raw: string | null | undefined): string | null {
-  const text = decodeEntities(String(raw ?? '').replace(/<br\s*\/?>|<\/(?:p|div|li|tr)>/gi, '\n').replace(/<[^>]+>/g, ''));
-  let s = text.split(/\r?\n/).map((x) => x.replace(/\s+/g, ' ').trim()).find(Boolean) ?? '';
+  const html = String(raw ?? '').replace(/<(sup|small)\b[^>]*>[\s\S]*?<\/\1>/gi, ' ');
+  const text = decodeEntities(html.replace(/<br\s*\/?>|<\/(?:p|div|li|tr)>/gi, '\n').replace(/<[^>]+>/g, ' '));
+  let s = text.split(/\r?\n/).map((x) => x.replace(/\s+/g, ' ').replace(/\(\s+/g, '(').replace(/\s+([),.;])/g, '$1').trim()).find(Boolean) ?? '';
   const assumed = /^No machine-readable author provided\.\s*(.+?)\s+assumed\b/i.exec(s);
   if (assumed) s = assumed[1];
   else if (/^No machine-readable author/i.test(s)) return null;
-  const taken = /^this (?:photo(?:graph)?|image|picture|file)(?: was| has been| is)? (?:taken|made|created) by (.+?)(?: and (?:released|licensed|published)\b.*|\.)?$/i.exec(s);
+  const taken = /^this (?:photo(?:graph)?|image|picture|file)(?: was| has been| is)? (?:taken|made|created) by (.+?)(?: and (?:released|licensed|published)\b.*|\.)?$/i.exec(s) ?? /^(?:(?:photo(?:graph)?|picture|image)(?: taken)?|taken) by:?\s+(.+?)\.?$/i.exec(s);
   if (taken) s = taken[1];
+  const uploader = /^(?:the )?original uploader was (.+?) at (?:the )?\S*(?: \S+)? ?wiki(?:pedia|media|books|source)?\b.*$/i.exec(s);
+  if (uploader) s = uploader[1];
+  s = s.replace(UPLOADED, '').replace(SIGNED, '').replace(TALK, '').replace(FOOTNOTE, '').replace(MAIL, ' ').replace(/\s+/g, ' ').replace(/[\s,;]+$/, '').trim();
   s = s.replace(/\s*\(talk\)$/i, '').trim();
+  if (UNFILLED.test(s)) return null;
   return NOT_AUTHOR.test(s) ? null : s;
 }
 
@@ -93,8 +115,9 @@ export function readCommonsPhoto<P extends Stored>(p: P): P | null {
 /**
  * Whether `--prune-uncredited` removes a stored photograph: under CC BY or CC BY-SA, with the build's fallback words for
  * an author ("unknown", "author not stated" and the like), or a Commons file whose author is not one by the rule above
- * ("Own work", "See above", "Unknown author", a bare "(talk)", an address). One predicate for the prune and the read,
- * so the corpus and the pages agree (round sixty-nine; triage-68 K2).
+ * ("Own work", "See above", "Unknown author", a bare "(talk)", an address, an e-mail address alone, an unfilled template
+ * such as "(MiNombre"). One predicate for the prune and the read, so the corpus and the pages agree (round sixty-nine;
+ * triage-68 K2; round seventy, REVIEW-TRIAGE-69 C3).
  */
 export function uncreditedPhoto(p: { src?: string; licence: string; attribution: string }): boolean {
   if (p.licence === 'cc0' || p.licence === 'pd') return false;

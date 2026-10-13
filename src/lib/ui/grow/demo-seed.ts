@@ -11,7 +11,7 @@
  * are the ones the collection's own add, pot-up and follow functions write, built here with their numbers and ids.
  */
 import { collection } from '$lib/db/collection.svelte';
-import { updateMeta } from '$lib/db/vault';
+import { updateMeta, type MetaCondition } from '$lib/db/vault';
 import { PAGE_IN_DEMO, SEED_MARK, exampleClosed, seedState } from '$lib/db/demo';
 import { localDate } from '$core/dates';
 import { nextAccession, type NumberingScheme } from '$core/accession';
@@ -105,17 +105,31 @@ export function sampleRecords(scheme: NumberingScheme, wall: number = Date.now()
  * Fill the sample's database once. Refuses outside the sample (this must never write to a grower's own collection: the
  * page's collection, read as it loaded, decides, as the vault's database does), and on a sample that already holds
  * anything or was seeded before (a visitor who removed every plant keeps an empty sample).
+ *
+ * `held` is called when the example is not set out because it already holds records of the visitor's (round seventy;
+ * triage-69 X3; S-D6), for the bar to say so: the visitor otherwise sees an example with nothing of its own in it.
  */
-export async function seedDemo(): Promise<boolean> {
+export async function seedDemo(held?: () => void): Promise<boolean> {
   if (!PAGE_IN_DEMO || exampleClosed()) return false;
   await collection.load();
   if (exampleClosed()) return false;
   // One tab at a time, the check and the seed together (round sixty-three, the fix pass; R1, 8): two tabs opening the
   // example at once (Safari reopening several on Today) could both find it empty.
   const locks = typeof navigator !== 'undefined' ? (navigator as Navigator & { locks?: LockManager }).locks : undefined;
-  if (!locks) return claimed((me) => seedOnce({ key: CLAIM, value: me }));
-  return locks.request(SEED_LOCK, () => seedOnce());
+  if (!locks) return claimed((me) => seedOnce({ key: CLAIM, value: me }, held));
+  return locks.request(SEED_LOCK, () => seedOnce(undefined, held));
 }
+/**
+ * The example's log is empty, read in the seed's own transaction (round seventy; triage-69 X3; S-D6). Without Web Locks
+ * a tab could find it empty, be suspended within its claim's minute, and wake to set the seed out over a plant the
+ * visitor had added meanwhile in another tab: the two shared a number, the seed's mark fell after the visitor's plant,
+ * and Leave deleted it without asking. The vault's `requireEmpty` reads the log itself (a need for R's `vault.ts`, round
+ * seventy, applied); the numbers ledger is read as well: any plant or batch the visitor adds writes its number there
+ * in its own commit, and a log with neither ledger has no plant or batch in it.
+ */
+const EMPTY: MetaCondition[] = [{ key: 'issued:accession', absent: true }, { key: 'issued:sowing', absent: true }];
+/** The vault's own test of an empty log, in the same transaction (the need for R): passed through `putWith`'s options to the vault's `StoreOpts`. */
+const EMPTY_LOG = { requireEmpty: true };
 /** The lock the seed is set out under, held by one tab at a time. */
 export const SEED_LOCK = 'cultifolio-sample-seed';
 /** The meta key a tab without Web Locks claims the seed under, with the time: one tab sets it out, and a claim a reload cut off lapses. */
@@ -147,13 +161,16 @@ async function claimed(seed: (me: string) => Promise<boolean>): Promise<boolean>
     await updateMeta<string | null>(CLAIM, (had) => (had === me ? null : (had ?? null))).catch(() => {});
   }
 }
-async function seedOnce(claim?: { key: string; value: string }): Promise<boolean> {
+async function seedOnce(claim?: { key: string; value: string }, held?: () => void): Promise<boolean> {
   // The seed's changes in the log, its mark missing (a reload between an older build's commit and its mark), are marked
   // now, and the example is never set out twice, even when the visitor removed all its plants; nor over a plant of the
   // visitor's own (round sixty-seven; triage-66 V5; S-A7, K2). Read from the log, not the seeded flag alone: a flag
   // written before a commit that failed (a browser without Web Locks, a full phone) left an empty example for good.
   const state = await seedState(SEEDED);
-  if (state === 'marked' || state === 'repaired' || (state === 'other' && collection.accessions.length)) return false;
+  if (state === 'marked' || state === 'repaired') return false;
+  // A log with anything in it, none of it the seed's, is the visitor's: not set out over, whatever it holds (round
+  // seventy; triage-69 X3). It was set out over a place or a followed species, and those counted as the seed's.
+  if (state === 'other') { held?.(); return false; }
   const { recs, events } = sampleRecords(collection.scheme);
   const [first, ...rest] = recs;
   // One commit for the seed, its seeded mark and its own last arrival number, the boundary Leave counts the visitor's
@@ -163,12 +180,18 @@ async function seedOnce(claim?: { key: string; value: string }): Promise<boolean
   // the claim still this tab's, read in the same transaction (round sixty-nine; triage-68 X6).
   // Refused (another tab set the example out, or took the claim), nothing was written and nothing is said: it is not the
   // visitor's change, and nothing of theirs was lost.
+  // And the log still empty, read in that transaction too (round seventy; triage-69 X3): refused so, the visitor's
+  // records are in it, and the bar says why the example has none of its own.
   const put = await collection.putWith(first.kind, first.id, first.fields, events, rest, {
     meta: { [SEEDED]: true },
     markLast: SEED_MARK,
-    requireMeta: [{ key: SEED_MARK, absent: true }, ...(claim ? [{ key: claim.key, equals: claim.value }] : [])]
+    requireMeta: [{ key: SEED_MARK, absent: true }, ...EMPTY, ...(claim ? [{ key: claim.key, equals: claim.value }] : [])],
+    ...EMPTY_LOG
   });
-  if (!put.ok) return false;
+  if (!put.ok) {
+    if (put.refused !== SEED_MARK && put.refused !== claim?.key) held?.();
+    return false;
+  }
   // A collection that could not write the mark in the commit has it found from the seed's own changes (`seedState`).
   await seedState(SEEDED).catch(() => null);
   // The fold's snapshot is written after the seed, so every later page of the example reads it rather than the seed's

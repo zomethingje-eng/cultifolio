@@ -7,9 +7,13 @@ import { ownPages } from './helpers/r63v-own';
 import { textSize, textSizeHeld } from './helpers/text-size';
 import { openDisclosure } from './helpers/disclosure';
 import { allowWrites, writeWait, WEBKIT_MS_PER_REQUEST } from './helpers/pace';
+import { traceSave, markSave, attachSaveTrace } from './helpers/save-trace';
 
 // The grower's own pages, empty, rather than the example collection an empty device opens on them (round sixty-three, V2).
 test.beforeEach(async ({ context }) => { await context.addInitScript(ownPages); });
+// The two tests that trace their Save attach the record when they fail or retry, and only then (round seventy; triage-69
+// P1, IND-8: helpers/save-trace.ts). A test that does not trace attaches nothing.
+test.afterEach(async ({}, testInfo) => { await attachSaveTrace(testInfo); });
 
 /** The plant page's id card keeps one primary action; Edit, Label and Propagate are behind "More" (improvements, 7). */
 /** Click Add on the add-plant form. A name the reference does not hold (the name service is not reachable here) is asked about once, and the second Add keeps it as typed (round twenty-three, 4). */
@@ -889,6 +893,8 @@ test('five new vaults a day from one address: the sixth is refused with a 429 th
   const B32 = 'ABCDEFGHJKMNPQRSTVWXYZ23456789';
   const vault = () => { const token = createHash('sha256').update(`limit ${Math.random()} ${Date.now()}`).digest('hex'); const d = createHash('sha256').update('id:' + token).digest(); let id = ''; for (let i = 0; i < 26; i++) id += B32[d[i] % B32.length]; return { id, token }; };
   const make = (ip: string, v: { id: string; token: string }) => request.post('/api/sync/vault', { headers: { 'cf-connecting-ip': ip }, data: { ...v, create: true } });
+  // A /48 of its own for each attempt (round seventy; triage-69 W5, S-E5, R47-19): `limitAddress` mixes in the retry
+  // and the repeat, so a retry is not handed the address whose five the first attempt spent.
   const ip = limitAddress();
   const first = vault();
   for (const v of [first, vault(), vault(), vault(), vault()]) {
@@ -2143,13 +2149,17 @@ test('two tabs adding at once get two numbers, and each tab sees the other\'s pl
   await other.close();
 });
 
-test('editing a plant to another species replaces its habitat figures and links its species page only when the reference has one (round seven, 4 and 9)', async ({ page }) => {
+test('editing a plant to another species replaces its habitat figures and links its species page only when the reference has one (round seven, 4 and 9)', async ({ page }, testInfo) => {
+  // Flaky in WebKit on the owner's PC (IND-8): this Save left the form open for ten seconds. The Save is recorded, and
+  // the record attached if the test fails (helpers/save-trace.ts); r70p-save-moves.spec.ts holds the cause found here.
+  await traceSave(page, testInfo);
   await page.goto('/plants/new?species=Copiapoa%20cinerea&key=5384013'); await ready(page);
   await page.getByRole('button', { name: /^Add/ }).click();
   await expect(page.locator('.card', { hasText: 'Habitat rain season' })).toContainText('No rainy season');
   await more(page, 'Edit');
   await page.fill('#ed-name', 'Welwitschia mirabilis');
   await page.locator('#ed-name').blur();
+  await markSave(page, 'click Save');
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.locator('h1.sci')).toContainText('Welwitschia mirabilis');
   await expect(page.locator('.card', { hasText: 'Habitat rain season' })).not.toContainText('No rainy season to read72 mm'); // the old species' figures are gone, not kept under the new name
@@ -2540,7 +2550,10 @@ test('round twenty-eight: a batch edit saves its medium and container, keeps the
   await expect(page.locator('.pill', { hasText: 'done' }).first()).toBeVisible();
 });
 
-test('round twenty-eight: a backup of four hundred plants with long notes is written and read under the site\'s CSP, and a plant whose stored date is in the future can still be edited', async ({ page }) => {
+test('round twenty-eight: a backup of four hundred plants with long notes is written and read under the site\'s CSP, and a plant whose stored date is in the future can still be edited', async ({ page }, testInfo) => {
+  // Flaky in WebKit on the owner's PC (IND-8): the price edit's Save at the end left the form open for ten seconds. The
+  // Save is recorded, and the record attached if the test fails (helpers/save-trace.ts).
+  await traceSave(page, testInfo);
   // Four hundred plants with a kilobyte of notes each: changes.json past the sizes at which fflate's asynchronous
   // writer (160 kB) and reader (512 kB) hand the work to a blob: worker, which worker-src 'self' refuses (round twenty-eight, 0).
   const wall = Date.now() - 3_600_000;
@@ -2593,6 +2606,7 @@ test('round twenty-eight: a backup of four hundred plants with long notes is wri
   await page.goto('/plants/2025-0400');
   await more(page, 'Edit');
   await page.fill('#ed-price', '12');
+  await markSave(page, 'click Save');
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.locator('#ed-date-bad')).toHaveCount(0);
   await expect(page.locator('.editform')).toHaveCount(0);

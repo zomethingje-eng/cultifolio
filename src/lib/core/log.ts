@@ -51,9 +51,12 @@ export const key = (kind: Kind, id: string) => `${kind}:${id}`;
  * them, as a peer's are (the engine learns it from the listing); a park judged by the clock alone is a reading, not
  * stored, and the snapshot carries it in its inventory to be judged again at the next load (round sixty-one). 7: a
  * stored park of a marked stamp (one an older build stored) is not read, so the change folds (round sixty-two; the clock
- * review's 8).
+ * review's 8). 8: a snapshot is read only by a clock that holds nothing it folded (its `reach`), so a load that waits for a reading
+ * no longer reads one folded with a large correction in force, and dropping it never changes the collection (round
+ * seventy; triage-69 R1, IND-5); and a removal made here is stamped past the held edits to every field of its record, an
+ * edit past a held removal (`stampPast`; triage-69 R2, the self-review's D2).
  */
-export const FOLD_RULES = 7;
+export const FOLD_RULES = 8;
 
 /** Field names the record itself owns, plus the fold's own bookkeeping names; a change may never set them. */
 export const RESERVED_FIELDS = new Set(['id', 'kind', '_t', '_deleted=', '*']);
@@ -111,7 +114,7 @@ export const FIELD_ENUMS: Partial<Record<Kind, Record<string, readonly string[]>
   location: { type: ['room', 'shelf', 'bench', 'tray', 'windowsill', 'greenhouse', 'coldframe', 'garden', 'outdoor', 'other'] }
 };
 export const FIELD_TYPES: Record<Kind, Record<string, ValueType>> = {
-  accession: { ...strings('acc', 'taxonName', 'nameAsReceived', 'cultivar', 'nameKind', 'parentage', 'fieldNumber', 'provenance', 'status', 'locationId', 'acquired', 'sourceFrom', 'sourceRef', 'sourceForm', 'price', 'notes', 'notesBase', 'sowingId', 'cover', 'importKey'), taxonKey: 'number', waterDays: 'number' },
+  accession: { ...strings('acc', 'taxonName', 'nameAsReceived', 'cultivar', 'nameKind', 'parentage', 'fieldNumber', 'provenance', 'status', 'locationId', 'acquired', 'sourceFrom', 'sourceRef', 'sourceForm', 'price', 'notes', 'notesBase', 'sowingId', 'cover', 'importKey', 'importKeyBare'), taxonKey: 'number', waterDays: 'number' },
   sowing: { ...strings('no', 'taxonName', 'cultivar', 'nameKind', 'parentage', 'method', 'parentAcc', 'sown', 'sourceFrom', 'sourceRef', 'fieldNumber', 'provenance', 'medium', 'container', 'treatment', 'locationId', 'status', 'notes', 'notesBase'), taxonKey: 'number', count: 'number', bottomHeatC: 'number', covered: 'boolean' },
   location: { ...strings('name', 'parentId', 'type', 'notes'), indoor: 'boolean', floorC: 'number', floorHeld: 'boolean', ppfd: 'number', lightHours: 'number', lat: 'number', lon: 'number', altM: 'number', sort: 'number', waterDays: 'number', dryMonths: 'array' },
   event: { ...strings('acc', 'd', 't', 'note', 'cause', 'used'), followUp: 'number', n: 'number', measures: 'figures', auto: 'boolean', plants: 'array' },

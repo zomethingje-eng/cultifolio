@@ -8,6 +8,7 @@ import { buildBackup, readBackup, previewMerge, summarise, photosWithoutPixels, 
 import { replaceThroughStaging } from './replace';
 import { backupName } from './format';
 import { readDeviceSettings, applyDeviceSettings, previewDeviceSettings } from './device';
+import { changeError } from '$core/log';
 
 export interface PreparedBackup {
   name: string;
@@ -81,13 +82,19 @@ export interface Opened {
   onlyHere: string[];
   /** Records the file holds that have changes here it lacks: what Replace also loses (round fifty-two, 4). */
   changedHere: number;
+  /**
+   * The changes on this device its fold cannot read, each named (`changeError`'s shape): a backup carries them apart, but
+   * a replacement is the file and nothing else, so Replace is refused while there are any (round seventy; triage-69 R4,
+   * the self-review's D5).
+   */
+  unreadableHere: string[];
 }
 
 /** Read and size up a backup without changing anything. */
 export async function openBackup(f: File): Promise<Opened> {
   const file = await readBackup(new Uint8Array(await f.arrayBuffer()));
   const counts = summarise(file.changes);
-  const current = await collection.exportChanges();
+  const { changes: current, unreadable } = await collection.exportLog();
   const merge = previewMerge(current, file.changes);
   const have = new Set(await photoBlobIds());
   const newPhotos = file.photoIds.filter((id) => !have.has(id)).length;
@@ -98,7 +105,33 @@ export async function openBackup(f: File): Promise<Opened> {
   const stamps = new Set(file.changes.map((c) => c.t));
   const changedHere = new Set<string>();
   for (const c of current) if (!stamps.has(c.t) && inFile.has(`${c.kind}:${c.id}`)) changedHere.add(`${c.kind}:${c.id}`);
-  return { file, counts, merge, newPhotos, missingPixels, settings: previewDeviceSettings(file.settings), onlyHere, changedHere: changedHere.size };
+  return { file, counts, merge, newPhotos, missingPixels, settings: previewDeviceSettings(file.settings), onlyHere, changedHere: changedHere.size, unreadableHere: unreadableNamed(notInFile(unreadable, file)) };
+}
+
+/**
+ * The device's unreadable rows the file does not keep (round seventy; triage-69 R6): a row the file carries as it is,
+ * under the same stamp, is put back by the replacement (`replacementKept`), so it is not lost.
+ */
+function notInFile(rows: unknown[], file: ReadBackup): unknown[] {
+  const stamp = (r: unknown) => (r && typeof r === 'object' ? (r as { t?: unknown }).t : undefined);
+  const kept = new Set(file.skipped.map(stamp));
+  return rows.filter((r) => typeof stamp(r) !== 'string' || !kept.has(stamp(r)));
+}
+/** The device's unreadable rows, each named by what its fold cannot read in it. */
+function unreadableNamed(rows: unknown[]): string[] {
+  return rows.map((r) => changeError(r, true) ?? 'a change this version cannot read');
+}
+
+/**
+ * Replace is refused while this device holds changes its fold cannot read (round seventy; triage-69 R4, the
+ * self-review's D5), in the words round sixty-nine's R3 uses for a file that holds them: the preview counted only what
+ * the fold reads, said "every plant here is in the file too", and the replacement cleared the log, those changes with
+ * it, for good. A Merge keeps them, and a backup made here carries them apart (`unreadable.json`).
+ */
+export function unreadableHereRefusal(named: string[]): string | null {
+  if (!named.length) return null;
+  const one = named.length === 1;
+  return `${named.length} ${one ? 'change' : 'changes'} on this device cannot be read by this version (${named[0]}), and a replacement would lose ${one ? 'it' : 'them'} for good. Merge instead, which keeps ${one ? 'it' : 'them'} here; this device is unchanged.`;
 }
 
 export interface RestoreReport {
@@ -153,6 +186,9 @@ export async function restoreBackup(o: Opened, mode: 'merge' | 'replace', onProg
     const toPark = changes.filter((c) => parked.has(c.t));
     if (toPark.length) await collection.markParked(toPark);
     await collection.ingest(changes);
+    // The file's rows this version cannot read, kept as they are in the log, which the fold skips: a restore loses
+    // nothing, and a later version reads them (round seventy; triage-69 R6, R47-15).
+    await collection.keepUnreadable(o.file.skipped);
   } catch (e) {
     // Only the pixels whose records did not land: the ingest is not one write (the changes, then the import-day stamps),
     // so a failure after the records are stored must leave their pixels in place (round thirty, R2-2).
@@ -175,6 +211,10 @@ const SAMPLE_REFUSAL = 'Restoring a backup is off in the example collection: it 
 
 /** The replace path: stage, verify, turn sync off, switch (see replace.ts and vault.ts). */
 async function replaceFromBackup(o: Opened, onProgress?: (done: number, total: number) => void): Promise<RestoreReport> {
+  // Read again at the replace, not only at the preview: another tab may have stored such a change since the file was
+  // opened. A file holding one is refused first, in its own words (replace.ts), as round sixty-nine says it.
+  const refused = o.file.leftOut.length ? null : unreadableHereRefusal(unreadableNamed(notInFile((await collection.exportLog()).unreadable, o.file)));
+  if (refused) throw new Error(refused);
   // A file of an older build is staged with no parks (`fileParks`): replace.ts stages the manifest's list as it is.
   const parks = fileParks(o.file.manifest);
   const file = parks === o.file.manifest.parked ? o.file : { ...o.file, manifest: { ...o.file.manifest, parked: parks } };

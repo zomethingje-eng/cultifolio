@@ -46,6 +46,7 @@ function wikidata(orHits: string[], p846 = '3959669'): JsonFetcher {
     [`re:srsearch=haswbstatement%3AP846%3D11098779`]: { query: { search: [] } },
     [`re:srsearch=haswbstatement%3AP846%3D3944752%7CP846%3D3959669`]: { query: { search: orHits.map((title) => ({ title })) } },
     [`${W}?action=wbsearchentities`]: { search: [{ id: 'Q999', label: 'Bisnaga hamatacantha' }] },
+    're:datasetKey=f382f0ce': { results: [] }, // round seventy: Kew's IPNI asked of GBIF's copy of WCVP when no item is found; none
     [`${W}?action=wbgetentities`]: { entities: { Q310510: { claims: { P846: [{ mainsnak: { datavalue: { value: p846 } } }], P3151: [{ mainsnak: { datavalue: { value: '274273' } } }] }, sitelinks: { enwiki: { title: 'Ferocactus glaucescens' } } } } }
   });
 }

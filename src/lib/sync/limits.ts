@@ -1,6 +1,12 @@
 /** Wire limits, shared by the Worker and the client so a device never makes something the server will refuse. */
 export const MAX_BATCH_BYTES = 16 * 1024 * 1024;
 export const MAX_PHOTO_BYTES = 12 * 1024 * 1024;
+/**
+ * A log batch this size or smaller (sealed) is not counted against its address's and network's day totals (round
+ * sixty-seven; S9): the Worker reads it to count, and the engine to keep sending a record's small batches while the day's
+ * upload allowance is spent (round seventy; triage-69 W2). Here since round seventy, so both ends read one figure.
+ */
+export const SMALL_BATCH_BYTES = 16 * 1024;
 /** Sealed-blob overhead: version, IV, GCM tag, and the photo pack's length word. */
 export const SEAL_OVERHEAD = 1 + 12 + 16 + 4;
 

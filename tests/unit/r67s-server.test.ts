@@ -240,7 +240,9 @@ describe('S5: new vault places per network, and the half-ceiling record (S-D3; D
 });
 
 describe('S6: a per-vault budget on whole-log listings (S-D4; D2)', () => {
-  it('a vault of 49,000 batches is listed until its hour\'s pages are spent, then refused 503 with Retry-After to the hour', async () => {
+  // Round seventy (triage-69 W4, S-E7): the hour is any sixty minutes, so the wait runs until the minute of the listings
+  // leaves the count (61 minutes on), not to the clock hour's turn, which let a second hour's pages start at once.
+  it('a vault of 49,000 batches is listed until its hour\'s pages are spent, then refused 503 with Retry-After until they leave the count', async () => {
     const r2 = fakeR2();
     const keys: string[] = [];
     for (let i = 0; i < 49_000; i++) keys.push(`vault/${ID}/log/${String(1_700_000_000_000 + i * 3600_000).padStart(13, '0')}-0000-dev-${i.toString(16).padStart(12, '0')}.bin`);
@@ -259,14 +261,16 @@ describe('S6: a per-vault budget on whole-log listings (S-D4; D2)', () => {
     expect(refused).toBeInstanceOf(sync.ListingsSpent);
     const res = sync.refusal(refused)!;
     expect(res.status).toBe(503);
-    expect(Number(res.headers.get('retry-after'))).toBe(45 * 60);
+    expect(Number(res.headers.get('retry-after'))).toBe(61 * 60);
     // The hour's pages written out, not read from the constant, so raising it fails here (round sixty-nine; R46-31).
     expect(lists).toBeLessThanOrEqual(1200 + 50);
-    // A refused pull costs no list call; the next hour lists again.
+    // A refused pull costs no list call; once they have left the count it lists again, and not at the clock hour's turn.
     const before = lists;
     await listBatches(r2 as never, ID, Date.now(), 500, null, q(ns, now + 1000)).catch(() => null);
     expect(lists).toBe(before);
-    await listBatches(r2 as never, ID, Date.now(), 500, null, q(ns, now + 3600_000));
+    await listBatches(r2 as never, ID, Date.now(), 500, null, q(ns, now + 45 * 60_000)).catch(() => null);
+    expect(lists).toBe(before);
+    await listBatches(r2 as never, ID, Date.now(), 500, null, q(ns, now + 61 * 60_000));
     expect(lists).toBe(before + 49);
   });
   it('a counter object that cannot be asked lets the listing go (receiving is never refused for the counter\'s fault)', async () => {

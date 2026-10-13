@@ -17,7 +17,9 @@
 import type { JsonFetcher, FetchResult, FetchOptions } from './fetch';
 import { licenceTag, isOpen } from '$core/licence';
 import type { GbifDistribution, GbifOccurrence, OccPage, GbifSpecies, KewDescription } from './sources/gbif';
-import { synonyms as readSynonyms } from './sources/gbif';
+import { synonyms as readSynonyms, isWcvpRow } from './sources/gbif';
+import { authorKey, authorsAgree, sameNameAuthor } from './authors';
+import { spellingKey } from './epithet';
 
 /* ------------------------------------------------------------------ WCVP */
 
@@ -68,19 +70,8 @@ export const parseWcvpDist = (h: string[], line: string): WcvpDist => {
  */
 export const wcvpKey = (name: string) => name.toLowerCase().replace(/×\s*/g, '').replace(/\s+/g, ' ').trim();
 
-/** Authorship, loosely: letters only, lower-cased, so "(Phil.) Britton & Rose" and "(Phil.)Britton&Rose" agree. */
-const authorKey = (a?: string) => (a ?? '').toLowerCase().replace(/[^a-z]/g, '');
-/** An author citation without its ex-authors, which a citation may leave out (ICN Art. 46.4): "Lippold ex Otto & Dietr." is "Otto & Dietr.". */
-const withoutEx = (a: string) => a.replace(/\(([^)]*\bex\s+)?([^)]*)\)/, '($2)').replace(/^(\([^)]*\)\s*)?.*?\bex\s+/, '$1');
-/**
- * Whether an older name's author and a WCVP row's agree: both stated, and the same once read loosely, with or without
- * ex-authors. A name stated by neither, or by one only, does not agree: "Lantana mutabilis" by Lippold is not Kew's
- * "Lantana mutabilis Salisb.", whatever the number of rows (round sixty-nine; triage-68 M2).
- */
-export function authorsAgree(a?: string, b?: string): boolean {
-  if (!authorKey(a) || !authorKey(b)) return false;
-  return authorKey(a) === authorKey(b) || authorKey(withoutEx(a!)) === authorKey(withoutEx(b!));
-}
+/** The author rules, in `./authors.ts` since round seventy: `authorsAgree` for older names, `sameNameAuthor` for the species' own. */
+export { authorsAgree, sameNameAuthor } from './authors';
 
 /** Kew's range for one accepted entry: rows in the shape gbif.distributions() reads (none when Kew states none), its descriptions, and the entry. */
 export type WcvpRange = { rows: GbifDistribution[]; kew: KewDescription; entry: WcvpName };
@@ -126,6 +117,9 @@ export class WcvpIndex {
     const k = wcvpKey(name);
     const rows = this.byName.get(k);
     if (rows?.length) return rows;
+    return this.acceptedNames().get(k);
+  }
+  private acceptedNames(): Map<string, WcvpName[]> {
     if (!this.acceptedByName) {
       this.acceptedByName = new Map();
       for (const n of this.byId.values()) {
@@ -135,35 +129,106 @@ export class WcvpIndex {
         this.acceptedByName.set(kk, arr);
       }
     }
-    return this.acceptedByName.get(k);
+    return this.acceptedByName;
   }
-  /** Whether Kew holds any row at all under this name: only when it holds none is the name looked up under older names. */
-  holds(name: string): boolean {
-    return !!this.rowsOf(name)?.length;
+  private bySpelling: Map<string, WcvpName[]> | null = null; // genus + `spellingKey` of the epithet → rows, built on first use
+  /**
+   * The rows of a binomial's other spellings: the same genus, the epithet in another gender or spelling of the one rule
+   * (`spellingKey`; round seventy, triage-69 B4, S-B5). GBIF's Cyphostemma congoensis is Kew's Cyphostemma congoense.
+   */
+  private otherSpellings(name: string): WcvpName[] {
+    const key = (n: string) => { const w = wcvpKey(n).split(' '); return w.length === 2 ? `${w[0]} ${spellingKey(w[1])}` : null; };
+    const k = key(name);
+    if (!k) return [];
+    if (!this.bySpelling) {
+      this.bySpelling = new Map();
+      const seen = new Set<WcvpName>();
+      for (const rows of [...this.byName.values(), ...this.acceptedNames().values()]) for (const r of rows) {
+        const rk = key(r.name);
+        if (!rk || seen.has(r)) continue;
+        seen.add(r);
+        this.bySpelling.set(rk, [...(this.bySpelling.get(rk) ?? []), r]);
+      }
+    }
+    return (this.bySpelling.get(k) ?? []).filter((r) => wcvpKey(r.name) !== wcvpKey(name));
+  }
+  /**
+   * Kew's rows of the species' own name (round seventy; triage-69 B4, S-B4, S-B5), in this order:
+   *   - the rows of its words whose publishing author is the backbone's (`sameNameAuthor`);
+   *   - else the rows of another spelling of its epithet by that author: GBIF's Cyphostemma congoensis (Hort.) Desc. is
+   *     Kew's Cyphostemma congoense (Anon.) Desc.;
+   *   - else the one entry Kew accepts under its words, whatever its author: Kew and GBIF cite one name's author
+   *     differently for about one species in twenty ("(N.E.Br.) Walther" and "(N.E.Br.) E.Walther", "Hochst." and
+   *     "Hochst. ex C.Krauss": 7 of 150 sampled on 2026-10-12, each the same plant), and the only plant Kew accepts by the
+   *     name is the backbone's accepted one.
+   * A row of the words by another author that Kew does not accept is another name: Ceropegia macrocarpa (Sprenger)
+   * Bruyns is not Kew's unplaced "Ceropegia macrocarpa J.N.Haage & E.Schmidt", and that row's lack of a range is not
+   * Kew's answer for this species. A misapplied name is never the species'. `others` are the rows of its words not
+   * taken, for the record. With no author from the backbone, nothing can be compared: every row under the words is
+   * read, as before.
+   */
+  ownRows(name: string, authorship?: string): { rows: WcvpName[]; others: WcvpName[] } {
+    const exact = this.rowsOf(name) ?? [];
+    if (!authorKey(authorship)) return { rows: exact, others: [] };
+    const usable = (rs: WcvpName[]) => rs.filter((r) => !/misapplied/i.test(r.status));
+    const byAuthor = (rs: WcvpName[]) => usable(rs).filter((r) => sameNameAuthor(authorship, r.authors));
+    const accepted = usable(exact).filter((r) => r.status === 'Accepted');
+    const own = byAuthor(exact);
+    const rows = own.length ? own : (() => { const v = byAuthor(this.otherSpellings(name)); return v.length ? v : accepted.length === 1 ? accepted : []; })();
+    return { rows, others: exact.filter((r) => !rows.includes(r)) };
+  }
+  /** Whether Kew holds the species' own name (`ownRows`): only when it does not are the older names looked up. */
+  holds(name: string, authorship?: string): boolean {
+    return this.ownRows(name, authorship).rows.length > 0;
   }
   /**
    * Resolve a name (as GBIF gives it, canonical) to its accepted WCVP record.
-   * A name WCVP holds twice (homonyms) is resolved by authorship when the caller
-   * gives it; otherwise it is ambiguous and nothing is returned, so no range is
-   * attached to the wrong plant. An accepted name outside the wanted genera (the
-   * target of a synonym the backbone followed) is found among the accepted rows.
+   *
+   * With the backbone's authorship, only the rows that are the species' own name count (`ownRows`; round seventy,
+   * triage-69 B4): one accepted entry is the answer, two are `ambiguous`. Before, a row by another author stood in when
+   * authorship matched nothing, or when it was the only row: Ceropegia macrocarpa took the range, or the absence of one,
+   * of another author's name.
+   *
+   * Without authorship (an offline re-derivation of a dossier that kept none), a name WCVP holds twice is ambiguous
+   * unless one row is accepted, as before. An accepted name outside the wanted genera (the target of a synonym the
+   * backbone followed) is found among the accepted rows.
    */
   accepted(name: string, authorship?: string): WcvpName | 'ambiguous' | undefined {
+    const entryOf = (n: WcvpName) => (n.status === 'Accepted' ? n : (this.byId.get(n.acceptedId) ?? n));
+    if (authorKey(authorship)) {
+      const { rows } = this.ownRows(name, authorship);
+      const ends = new Map(rows.map((r) => [entryOf(r).id, entryOf(r)]));
+      if (ends.size > 1) return 'ambiguous';
+      return ends.size ? [...ends.values()][0] : undefined;
+    }
     const rows = this.rowsOf(name);
     if (!rows?.length) return undefined;
-    // Among homonyms the backbone's authorship decides first: Aloe alba X (accepted) and Aloe alba Y (a synonym of another
-    // species) are two plants, and a caller asking for Y must not be given X's range because X is the accepted one.
-    // Only when authorship matches nothing, or was not given, does the accepted row stand in.
+    let pick = rows.length === 1 ? rows : rows.filter((r) => r.status === 'Accepted');
+    if (pick.length !== 1) {
+      const distinct = new Set(rows.map((r) => r.acceptedId));
+      if (distinct.size > 1) return 'ambiguous';
+      pick = [rows[0]];
+    }
+    return entryOf(pick[0]);
+  }
+  /**
+   * The entry round sixty-nine's rule resolved a name to, for `--list-rebuild` alone (round seventy; triage-69 B4): the only
+   * row whatever its author, or among homonyms the one whose authorship is the backbone's to the letter, else the one
+   * accepted row. A species whose entry differs under `accepted` read Kew's rows of another author or missed another
+   * spelling, and is rebuilt.
+   */
+  legacyAccepted(name: string, authorship?: string): WcvpName | 'ambiguous' | undefined {
+    const rows = this.rowsOf(name);
+    if (!rows?.length) return undefined;
     let pick = rows.length === 1 ? rows : [];
     if (rows.length > 1 && authorship) {
-      const a = authorKey(authorship);
-      const byAuthor = rows.filter((r) => authorKey(r.authors) === a);
+      const loose = (a?: string) => (a ?? '').toLowerCase().replace(/[^a-z]/g, '');
+      const byAuthor = rows.filter((r) => loose(r.authors) === loose(authorship));
       if (byAuthor.length === 1) pick = byAuthor;
     }
     if (pick.length !== 1) pick = rows.filter((r) => r.status === 'Accepted');
     if (pick.length !== 1) {
-      const distinct = new Set(rows.map((r) => r.acceptedId));
-      if (distinct.size > 1) return 'ambiguous';
+      if (new Set(rows.map((r) => r.acceptedId)).size > 1) return 'ambiguous';
       pick = [rows[0]];
     }
     const n = pick[0];
@@ -519,9 +584,14 @@ export function bulkFetcher(base: JsonFetcher, src: BulkSources, stats = { wcvp:
       }
       const got = sp ? src.wcvp.distributions(sp.name, sp.authorship) : null;
       if (got === 'ambiguous') {
-        // WCVP holds this name twice and neither authorship matches the backbone's: no range, and the dossier says why.
+        // WCVP holds this name twice, under two entries, and the backbone's authorship does not tell them apart (round
+        // seventy: by the publishing author, `ownRows`): no range, and the dossier says why.
         stats.wcvp++;
-        return { status: 'ok', data: { results: [], ambiguous: `WCVP lists ${sp!.name} more than once and the backbone's authorship (${sp!.authorship ?? 'none given'}) matches neither` } as unknown as T };
+        // Said as it is (round seventy, second pass; triage-69 B8, R47-10): "matches neither" was written where the author
+        // matched both.
+        const n = sp!.authorship ? src.wcvp.ownRows(sp!.name, sp!.authorship).rows.length : 0;
+        const how = !sp!.authorship ? 'the backbone gives no author to tell them apart' : n > 1 ? `the backbone's authorship (${sp!.authorship}) matches ${n} of them, under different entries` : `the backbone's authorship (${sp!.authorship}) matches neither`;
+        return { status: 'ok', data: { results: [], ambiguous: `WCVP lists ${sp!.name} more than once, and ${how}` } as unknown as T };
       }
       if (got) {
         stats.wcvp++;
@@ -529,18 +599,29 @@ export function bulkFetcher(base: JsonFetcher, src: BulkSources, stats = { wcvp:
         if (!got.rows.length) return { status: 'ok', data: { results: [], held: entryLabel(got.entry), kew: got.kew } as unknown as T };
         return { status: 'ok', data: { results: got.rows, kew: got.kew } as unknown as T };
       }
-      // No row at all under the backbone's name: one of its older names may be Kew's (round sixty-eight), read from the
-      // builder's own paged list; a list refused, failed or cut short is no answer, and nothing is taken (triage-68 M4).
-      if (sp && !src.wcvp.holds(sp.name)) {
+      // No row of the species' own name (`ownRows`: none under its words by its author, or under another spelling): one of
+      // its older names may be Kew's (round sixty-eight), read from the builder's own paged list; a list refused, failed or
+      // cut short is no answer, and nothing is taken (triage-68 M4). Rows of its words by another author are another
+      // name, said in the record, never Kew's answer for this species (round seventy; triage-69 B4, S-B4).
+      if (sp && !src.wcvp.holds(sp.name, sp.authorship)) {
+        const others = src.wcvp.ownRows(sp.name, sp.authorship).others;
+        const otherAuthor = others.length ? `Kew holds ${sp.name} only under another author (${others.map(entryLabel).join('; ')}), which is another name` : undefined;
         const syn = await readSynonyms(f, key);
         const via = syn.status === 'ok' && !syn.truncated ? src.wcvp.viaOlderNames(syn.rows ?? []) : null;
         if (via && 'ambiguous' in via) {
           stats.wcvp++;
-          return { status: 'ok', data: { results: [], olderAmbiguous: via.ambiguous } as unknown as T };
+          return { status: 'ok', data: { results: [], olderAmbiguous: via.ambiguous, ...(otherAuthor ? { otherAuthor } : {}) } as unknown as T };
         }
         if (via) {
           stats.wcvp++;
-          return { status: 'ok', data: { results: via.rows, kew: via.kew, entry: entryLabel(via.entry), via: via.via } as unknown as T };
+          return { status: 'ok', data: { results: via.rows, kew: via.kew, entry: entryLabel(via.entry), via: via.via, ...(otherAuthor ? { otherAuthor } : {}) } as unknown as T };
+        }
+        if (otherAuthor) {
+          // Nothing of Kew's is this species': GBIF's own answer is asked for the national checklists, without the WCVP rows
+          // GBIF may have attached to the key from the other author's name, and the record says why.
+          stats.through++;
+          const r = await base<{ results?: GbifDistribution[] }>(url, opts);
+          return (r.status === 'ok' ? { status: 'ok', data: { ...r.data, results: (r.data.results ?? []).filter((d) => !isWcvpRow(d)), otherAuthor } } : r) as unknown as FetchResult<T>;
         }
       }
     } else if (src.media && (m = RE_MEDIA.exec(url)) && !src.apiPath?.has(Number(m[1]))) {

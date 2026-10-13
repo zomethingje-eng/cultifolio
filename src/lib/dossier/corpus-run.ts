@@ -10,6 +10,7 @@ import { mwWait, MAXLAG_TRIES, lagSpell } from './sources/wikimedia';
 import { fillOpenGbif, askedOpen } from './open-gbif-fill';
 import { fillCommons, askedCommons, wantsCommons } from './commons-fill';
 import type { BuildOptions } from './build';
+import type { HeldNames } from './photo-kind';
 
 /**
  * The start of a corpus run: Wikidata's maxlag is waited out, as MediaWiki asks of a batch client (round sixty-eight),
@@ -85,13 +86,14 @@ export async function fillOpenGbifAll(store: DossierStore, f: JsonFetcher, progr
  * `--fill commons` over every dossier (round sixty-eight, fourth part): those with fewer than six photographs not asked
  * before; one an earlier fill asked is passed by.
  */
-export async function fillCommonsAll(store: DossierStore, f: JsonFetcher, progress?: (c: FillCounts) => void): Promise<FillCounts> {
+export async function fillCommonsAll(store: DossierStore, f: JsonFetcher, progress?: (c: FillCounts) => void, held?: HeldNames | null): Promise<FillCounts> {
   const c: FillCounts = { asked: 0, filled: 0, photos: 0, none: 0, failed: 0, before: 0 };
   for (const file of store.files()) {
     const d = store.read<Pick<Dossier, 'key' | 'photos' | 'upstream'> & { name: { scientific: string } }>(file);
     if (!wantsCommons(d)) { if (askedCommons(d) && !d.photos?.length) c.before++; continue; }
     c.asked++;
-    const r = await fillCommons(d, f);
+    // The reference's names, so an uploader's slip is the species' as the Worker reads it (round seventy, a suggestion of C; C1).
+    const r = await fillCommons(d, f, undefined, held);
     if ('failed' in r) { c.failed++; continue; }
     if ('none' in r) c.none++;
     else if (r.added) { c.filled++; c.photos += r.added; }

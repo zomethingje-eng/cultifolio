@@ -1,6 +1,7 @@
 import type { JsonFetcher, FetchResult, SourceResult } from '../fetch';
 import { licenceTag, isOpen } from '$core/licence';
 import type { Photo } from '../schema';
+import type { Reference } from '../reference';
 
 export const INAT = 'https://api.inaturalist.org/v1';
 
@@ -58,9 +59,11 @@ export async function taxon(f: JsonFetcher, name: string, heldElsewhere?: HeldEl
  * pulchra's basionym, finds iNaturalist's Weingartia canigueralii, which has its own page here. The answer names the older
  * name it came under and the taxon iNaturalist files it as; two taxa are `ambiguous` (triage-68 M8, S-A6).
  */
-export async function taxonByOlderNames(f: JsonFetcher, names: readonly string[], rule: { accepted?: string; heldElsewhere?: HeldElsewhere } = {}): Promise<SourceResult<InatTaxon>> {
+export async function taxonByOlderNames(f: JsonFetcher, names: readonly string[], rule: { accepted?: string; heldElsewhere?: HeldElsewhere; own?: ReadonlySet<string> } = {}): Promise<SourceResult<InatTaxon>> {
   const asked = [...new Set(names)].slice(0, 5);
-  const own = new Set([rule.accepted ?? '', ...names].map((n) => n.toLowerCase()).filter(Boolean));
+  // The species' own names (`ownNames`; round seventy, second pass, triage-69 B7): with them, a taxon iNaturalist files
+  // under a replaced name GBIF holds under this species is its own (Ceropegia mixta's Orbea variegata).
+  const own = new Set([rule.accepted ?? '', ...names, ...(rule.own ?? [])].map((n) => n.toLowerCase()).filter(Boolean));
   const found = new Map<number, { t: InatTaxon; name: string }>();
   const refusedHere: string[] = [];
   for (const name of asked) {
@@ -68,7 +71,16 @@ export async function taxonByOlderNames(f: JsonFetcher, names: readonly string[]
     if (r.status === 'refused' || r.status === 'error' || r.status === 'skipped') return r;
     if (r.status === 'ambiguous') return r;
     if (r.status !== 'ok') continue;
-    const t = r.data;
+    let t = r.data;
+    // iNaturalist files the name under a variety of a species that is one of this species' own names (round seventy,
+    // second pass; triage-69 B7): "Stapelia pulvinata", Ceropegia pulvinata's basionym, finds Stapelia hirsuta var.
+    // hirsuta, and Stapelia hirsuta L. is the name Bruyns replaced. The species is asked for by its name and taken.
+    const binomial = t.name.split(' ').slice(0, 2).join(' ');
+    if (t.rank !== 'species' && !own.has(t.name.toLowerCase()) && own.has(binomial.toLowerCase())) {
+      const s = await taxon(f, binomial);
+      if (s.status === 'refused' || s.status === 'error' || s.status === 'skipped') return s;
+      if (s.status === 'ok' && s.data.name.toLowerCase() === binomial.toLowerCase()) t = s.data;
+    }
     if (!own.has(t.name.toLowerCase())) refusedHere.push(`${name} finds ${t.name}, which is neither this species' name nor one of its same-type names`);
     else if (rule.heldElsewhere?.(t.name)) refusedHere.push(`${name} finds ${t.name}, another species of this reference`);
     else if (!found.has(t.id)) found.set(t.id, { t, name });
@@ -76,7 +88,7 @@ export async function taxonByOlderNames(f: JsonFetcher, names: readonly string[]
   if (found.size > 1) return { status: 'ambiguous', detail: `not taken: two taxa answered (${[...found.values()].map(({ t, name }) => `${t.name}, ${t.id}, under ${name}`).join('; ')})` };
   if (!found.size) return refusedHere.length ? { status: 'none', detail: `not taken: ${refusedHere.join('; ')}` } : { status: 'none' };
   const [{ t, name }] = found.values();
-  return { status: 'ok', data: t, detail: `found under ${name}, an older name with the same type${t.name.toLowerCase() !== name.toLowerCase() ? `; filed by iNaturalist as ${t.name}` : ''}` };
+  return { status: 'ok', data: t, detail: `found under ${name}, an older name with the same type${t.name.toLowerCase() !== name.toLowerCase() ? `; filed by iNaturalist as ${t.name}${names.some((n) => n.toLowerCase() === t.name.toLowerCase()) || t.name.toLowerCase() === (rule.accepted ?? '').toLowerCase() ? '' : ', a name GBIF holds under this species'}` : ''}` };
 }
 
 /** What iNaturalist says of one taxon id: active, followed to the one current taxon it names, or inactive with no single successor (or unknown). */
@@ -86,8 +98,9 @@ export type IdCheck = { active: true; name?: string } | { active: false; name?: 
  * iNaturalist's own word on taxon ids, `IDS_PER_ASK` a request (round sixty-nine; triage-68 M5, R46-13). An id from
  * Wikidata or carried from the previous build can be one iNaturalist has since made inactive: six live dossiers asked
  * for photographs of a taxon that has none (Dypsis lutescens 133599, now Chrysalidocarpus lutescens 276548; Erythrina
- * caffra 119671, now 1588191). An inactive id is followed when `current_synonymous_taxon_ids` names one taxon; an id
- * iNaturalist does not return is unknown, and taken as inactive with no successor. A refusal of any request is the answer.
+ * caffra 119671, now 1588191). An inactive id names its successor when `current_synonymous_taxon_ids` names one taxon;
+ * an id iNaturalist does not return is unknown, and taken as inactive with no successor. A refusal of any request is the
+ * answer. Whether the successor is taken is `successorRefused`'s to say.
  */
 export async function checkIds(f: JsonFetcher, ids: readonly number[]): Promise<FetchResult<Map<number, IdCheck>>> {
   const out = new Map<number, IdCheck>();
@@ -104,6 +117,30 @@ export async function checkIds(f: JsonFetcher, ids: readonly number[]): Promise<
     for (const id of part) if (!out.has(id)) out.set(id, { active: false });
   }
   return { status: 'ok', data: out };
+}
+
+/**
+ * The species a followed taxon is judged against: its accepted name, its same-type older names, its other own names
+ * (`ownNames`, round seventy's second pass: a replaced name GBIF holds under it), and the reference's other species.
+ */
+export type FollowRule = { accepted: string; sameType?: readonly string[]; own?: ReadonlySet<string>; heldElsewhere?: HeldElsewhere };
+
+/**
+ * Why the current taxon an inactive id names is not taken for this species, or null when it is (round seventy;
+ * triage-69 B1, S-B1). It is taken only on `taxonByOlderNames`' rule: its name is the species' accepted name or one of
+ * its same-type older names, and no other species of the reference holds that name. iNaturalist's 506182, Pinguicula
+ * chilensis, names 816267, Pinguicula antarctica, which this reference holds as a species of its own; 207131, Mammillaria
+ * karwinskiana, names Mammillaria geminata, a lump on another type; Tricyrtis formosana's variety names another variety.
+ * Each brought its photographs to the wrong page. Dypsis lutescens 133599 names Chrysalidocarpus lutescens, its basionym,
+ * and is followed.
+ */
+export function successorRefused(current: IdCheck | undefined, rule: FollowRule): string | null {
+  if (!current?.name) return 'not known to iNaturalist';
+  if (!current.active) return 'itself inactive';
+  if (rule.heldElsewhere?.(current.name)) return 'another species of this reference';
+  const own = new Set([rule.accepted, ...(rule.sameType ?? []), ...(rule.own ?? [])].map((n) => n.toLowerCase()));
+  if (!own.has(current.name.toLowerCase())) return rule.own ? "not one of this species' names" : "neither this species' name nor one of its same-type names";
+  return null;
 }
 
 interface ObsPhoto {
@@ -159,4 +196,71 @@ export async function photos(f: JsonFetcher, taxonId: number, wild: boolean, per
     }
   }
   return out.length ? { status: 'ok', data: out } : { status: 'none' };
+}
+
+/**
+ * Whether GBIF holds iNaturalist's name for a taxon as another species of this reference (round seventy, second pass;
+ * triage-69 B5, R47-1): the reason when it does, null when it does not or cannot say. Asked of every taxon whose name is
+ * not one of this species' own (`ownNames`), however the id came: carried from an earlier build, given by Wikidata, or
+ * "filed by iNaturalist as" another name. iNaturalist's lumps look exactly like renames, and its names are another
+ * checklist's: Ceropegia monteiroae carried 430812, Ceropegia sandersonii; Cotyledon flanaganii 598425, Cotyledon
+ * orbiculata var. orbiculata; Drimia oliverorum was followed to Drimia physodes, which GBIF holds as Fusifilum physodes.
+ * Each of those is a page of its own here. The name is matched to GBIF's backbone (one request), and GBIF's species is read
+ * through its synonymy and up from a rank below species.
+ *
+ * GBIF holds some of iNaturalist's genera nowhere near the reference's (Echinofossulocactus, to GBIF a synonym of
+ * Echinocactus and of Ferocactus, is Stenocactus to iNaturalist and to Kew). So when GBIF's answer is not a species of
+ * this reference, and the reference holds no species of iNaturalist's genus, the name is read as the one species of this
+ * family that has its epithet, in any spelling or gender: Stenocactus boedekerianus was given "Echinofossulocactus
+ * ochoterenanus", which is Stenocactus ochoterenanus, a page of its own. Two such species, or none, decide nothing.
+ */
+export async function heldAtGbifElsewhere(f: JsonFetcher, inatName: string, self: { key: number; family?: string }, ref: Reference): Promise<FetchResult<string | null>> {
+  const m = await f<{ usageKey?: number; matchType?: string; rank?: string; speciesKey?: number; species?: string; scientificName?: string }>(`https://api.gbif.org/v1/species/match?strict=true&kingdom=Plantae&name=${encodeURIComponent(inatName)}`);
+  if (m.status !== 'ok' && m.status !== 'none') return m;
+  const d = m.status === 'ok' ? m.data : {};
+  const species = d.usageKey && d.matchType !== 'NONE' && d.matchType !== 'HIGHERRANK' ? d.speciesKey : undefined;
+  if (species === self.key) return { status: 'ok', data: null };
+  if (species && ref.isSpecies(species)) return { status: 'ok', data: `GBIF holds iNaturalist's ${inatName} as ${d.species ?? `species ${species}`}, another species of this reference` };
+  const [genus, epithet] = inatName.split(' ');
+  if (!epithet || ref.hasGenus(genus)) return { status: 'ok', data: null };
+  const same = ref.byEpithet(epithet, self.family);
+  if (same.length === 1 && same[0].key !== self.key) return { status: 'ok', data: `iNaturalist's ${inatName}, in a genus this reference does not hold, is ${same[0].name}, another species of this reference` };
+  return { status: 'ok', data: null };
+}
+
+/** A species as `taxonFor` asks iNaturalist for it. */
+export interface InatAsk {
+  scientific: string;
+  key: number;
+  family?: string;
+  /** Its own names (`ownNames`): the accepted, the same-type and the replaced names. */
+  own: { own: ReadonlySet<string> };
+  sameType: readonly string[];
+  heldElsewhere?: HeldElsewhere;
+  reference?: Reference;
+  /** Taxa refused already (one an inactive id named, one GBIF holds as another species): never taken by the search. */
+  refused?: Set<number>;
+}
+
+/**
+ * iNaturalist's taxon for a species asked by name, the one way the build, `--fill inat-ids` and `--fill inat` ask it
+ * (round seventy, second pass; triage-69 B1, B5, B7): the name search (`taxon`); a taxon already refused is not taken; a
+ * taxon of another name that GBIF holds as another species of this reference is not taken (`heldAtGbifElsewhere`), and
+ * is added to `refused`; then the older names with the same type, five at most, each answer taken only when its name is
+ * one of the species' own (`taxonByOlderNames`). A refusal is the answer.
+ */
+export async function taxonFor(f: JsonFetcher, a: InatAsk): Promise<SourceResult<InatTaxon>> {
+  const refused = a.refused ?? new Set<number>();
+  let t: SourceResult<InatTaxon> = await taxon(f, a.scientific, a.heldElsewhere);
+  if (t.status === 'ok' && refused.has(t.data.id)) t = { status: 'none', detail: `not taken: iNaturalist files ${a.scientific} as ${t.data.name}, the taxon refused above` };
+  if (t.status === 'ok' && a.reference && !a.own.own.has(t.data.name.toLowerCase())) {
+    const g = await heldAtGbifElsewhere(f, t.data.name, { key: a.key, family: a.family }, a.reference);
+    if (g.status !== 'ok') return g.status === 'none' ? { status: 'none' } : { ...g, detail: `iNaturalist files ${a.scientific} as ${t.data.name}, not checked with GBIF: ${g.detail}` };
+    if (g.data) { refused.add(t.data.id); t = { status: 'none', detail: `not taken: ${g.data}` }; }
+  }
+  if (t.status !== 'none' || !a.sameType.length) return t;
+  const o = await taxonByOlderNames(f, a.sameType, { accepted: a.scientific, heldElsewhere: a.heldElsewhere, own: a.own.own });
+  if (o.status === 'ok' && refused.has(o.data.id)) return t;
+  if (o.status !== 'none') return o;
+  return o.detail && t.detail ? { status: 'none', detail: `${t.detail}; ${o.detail}` } : t.detail ? t : o;
 }

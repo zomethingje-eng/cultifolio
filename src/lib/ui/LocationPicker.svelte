@@ -6,12 +6,19 @@
   // `lastUsed`: the place the form pre-filled from the last one used; while it is still the one picked, the field says so (round fifty-eight; the grower review).
   // `typed`: the new place's name while "New…" is open, for the form's test of what leaving would lose; `start`: a new
   // place to open "New…" with, carried from the example by "Keep it as my own" (round sixty-nine; triage-68 X2, X3).
-  let { value = $bindable<string | null>(null), id = 'loc', label = 'Location', lastUsed = null, typed = $bindable(null), start = null }: { value?: string | null; id?: string; label?: string; lastUsed?: string | null; typed?: { name: string; kind: string } | null; start?: { name: string; kind?: string | null } | null } = $props();
+  // Both with the place it goes inside (round seventy; triage-69 X2; S-D7a, IND-7): `typed` names it, for Keep to carry;
+  // `start` opens inside the grower's own place of that name (`parentId`), or, when they have none, says where it was
+  // (`insideNamed`). A new place made inside "Greenhouse" in the example opened at the top level.
+  type Inside = { name: string; kind: string | null } | null;
+  let { value = $bindable<string | null>(null), id = 'loc', label = 'Location', lastUsed = null, typed = $bindable(null), start = null }: { value?: string | null; id?: string; label?: string; lastUsed?: string | null; typed?: { name: string; kind: string; inside: Inside } | null; start?: { name: string; kind?: string | null; parentId?: string | null; insideNamed?: string | null } | null } = $props();
   let adding = $state(false);
   let newName = $state('');
   let newKind = $state<LocationKind>('shelf');
   let newParent = $state<string | null>(null);
-  $effect(() => { typed = adding && newName.trim() ? { name: newName.trim(), kind: newKind } : null; });
+  /** The containing place a carried place had in the example, when the grower has none of that name: said under "Inside which place". */
+  let wasInside = $state<string | null>(null);
+  const insideOf = (p: string | null): Inside => { const l = p ? collection.location(p) : undefined; return l ? { name: l.name, kind: l.type ?? null } : null; };
+  $effect(() => { typed = adding && newName.trim() ? { name: newName.trim(), kind: newKind, inside: insideOf(newParent) } : null; });
   let started = false;
   $effect(() => {
     if (started || !start?.name?.trim()) return;
@@ -19,7 +26,8 @@
     newName = start.name.trim();
     const k = LOCATION_KINDS.find((x) => x.k === start.kind);
     if (k) newKind = k.k;
-    newParent = null;
+    newParent = start.parentId && collection.location(start.parentId) ? start.parentId : null;
+    wasInside = newParent ? null : (start.insideNamed?.trim() || null);
     adding = true;
   });
 
@@ -85,6 +93,7 @@
         <option value={null}>Top level</option>
         {#each flat as f}<option value={f.id}>{f.label}</option>{/each}
       </select></label>
+      {#if wasInside && !newParent}<p class="small muted" id="{id}-was-inside">In the example it was inside {wasInside}, which is not one of your places, so it goes at the top level unless you choose one.</p>{/if}
       <p class="small muted path">{newParent ? `${collection.locationName(newParent)} › ` : ''}{newName.trim() || '…'}</p>
       {#if err}<p class="small bad" role="alert" id="{id}-err">The place was not made. {err}</p>{/if}
       <div class="row"><button class="btn small" type="button" onclick={() => { adding = false; err = ''; }}>Cancel</button><button class="btn small pri" type="button" onclick={() => void create().catch(() => {})} disabled={!newName.trim()}>Add place</button></div>

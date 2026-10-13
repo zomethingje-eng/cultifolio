@@ -46,13 +46,14 @@ export const COMMONS_READ = 50;
  * by `commonsKind`; without them the category's name stands for the species. A file is taken only as JPEG or WebP, under
  * a licence Commons names strictly (`commonsLicence`), with the author its `Artist` field names (never `Credit`, which is
  * the file's source and says "Own work"; S-B3), and when neither its title nor its categories mark it as a map, a
- * herbarium sheet, a plate, a stamp, seeds, an unidentified plant, a hybrid or another species. Titles holding the
- * species' epithet are taken first (round sixty-nine; triage-68 K1, K2, K3).
+ * herbarium sheet, a plate, a stamp, seeds, an unidentified plant, a hybrid or another species, nor its description
+ * strikes out a name. Titles holding the species' epithet are taken first (round sixty-nine; triage-68 K1, K2, K3).
+ * `names.held`, the reference's names, lets an uploader's slip be the species' (round seventy; REVIEW-TRIAGE-69 C1).
  */
 export async function commonsPhotos(f: JsonFetcher, category: string, max = 12, names?: KindNames): Promise<FetchResult<Photo[]>> {
   const r = await mwGet<{ query?: { pages?: Record<string, { title: string; imageinfo?: ImageInfo[] }> } }>(f, 
     `https://commons.wikimedia.org/w/api.php?action=query&format=json&generator=categorymembers&gcmtitle=${encodeURIComponent('Category:' + category)}&gcmtype=file&gcmlimit=${COMMONS_READ}` +
-      `&prop=imageinfo&iiprop=url|size|extmetadata&iiurlwidth=${COMMONS_SHOWN}&iiextmetadatafilter=LicenseShortName|Artist|LicenseUrl|Categories&maxlag=5`
+      `&prop=imageinfo&iiprop=url|size|extmetadata&iiurlwidth=${COMMONS_SHOWN}&iiextmetadatafilter=LicenseShortName|Artist|LicenseUrl|Categories|ImageDescription&maxlag=5`
   );
   if (r.status !== 'ok') return r;
   const err = mwError(r.data);
@@ -74,8 +75,8 @@ function commonsPhoto(title: string, ii: ImageInfo | undefined, names: KindNames
   const original = commonsUrl(ii.url);
   if (!/\.(jpe?g|webp)$/i.test(new URL(original).pathname)) return null;
   const meta = ii.extmetadata ?? {};
-  const categories = (meta.Categories?.value ?? '').split('|').map((c) => c.trim()).filter(Boolean);
-  if (commonsKind(title, names, categories)) return null;
+  const categories = commonsCategories(meta.Categories?.value);
+  if (commonsKind(title, names, { categories, struck: strikesOut(meta.ImageDescription?.value), credit: meta.Artist?.value })) return null;
   const lic = (meta.LicenseShortName?.value ?? '').trim();
   const tag = commonsLicence(lic);
   if (!tag) return null;
@@ -86,5 +87,12 @@ function commonsPhoto(title: string, ii: ImageInfo | undefined, names: KindNames
   const shown = ii.thumburl ? commonsUrl(ii.thumburl) : original;
   const isThumb = /\/thumb\/.+\/\d+px-[^/]+$/.test(new URL(shown).pathname);
   const tile = isThumb && (ii.width ?? 0) > COMMONS_TILE ? shown.replace(/\/\d+px-([^/]+)$/, `/${COMMONS_TILE}px-$1`) : mendCommonsThumb(shown, ii.width);
-  return { src: 'commons', id: title, url: shown, thumb: tile, width: ii.width ?? undefined, height: ii.height ?? undefined, licence: tag, attribution: commonsCredit(artist, lic), page: ii.descriptionurl ?? undefined };
+  // The categories are kept with the photograph, so a rule read later applies to it as to a new answer (round seventy; REVIEW-TRIAGE-69 C2).
+  return { src: 'commons', id: title, url: shown, thumb: tile, width: ii.width ?? undefined, height: ii.height ?? undefined, licence: tag, attribution: commonsCredit(artist, lic), page: ii.descriptionurl ?? undefined, categories };
 }
+
+/** Commons' `Categories` (extmetadata), "A|B|C", as a list. */
+export const commonsCategories = (value: string | null | undefined): string[] => (value ?? '').split('|').map((c) => c.trim()).filter(Boolean);
+
+/** Whether a Commons description strikes out a name: `<s>`, `<del>`, `<strike>` or a line-through ("Centaurea sp. ~~C. nuttallii~~"; S-C3). */
+export const strikesOut = (html: string | null | undefined): boolean => /<(?:s|del|strike)\b|line-through/i.test(html ?? '');

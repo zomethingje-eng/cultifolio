@@ -4,6 +4,11 @@
  * no one species (rule 3), and `ambiguousSynonym` names every holder for the 404. The search puts the species that
  * keeps the older name's epithet first, then one that shows it. The four live cases, as the live index holds them.
  * Each case FAILED on the base unless it says "guard".
+ *
+ * Round seventy (triage-69 F1, S-F1): a name two species hold never redirects, whichever of them shows it, so the first
+ * block's shared names are now 404s that name both, and `ambiguousSynonym` gives the holders in the search's order (the
+ * species that keeps the epithet first, then one that shows it). The cases are changed so, and say what round
+ * sixty-nine expected.
  */
 import { describe, it, expect } from 'vitest';
 import { indexMaps, ambiguousSynonym, type IndexEntry, type Loaded } from '$lib/server/dossiers';
@@ -31,16 +36,18 @@ const idx: IndexEntry[] = [
 const held = { idx } as unknown as Loaded;
 const at = (slug: string) => synonymInIndex(undefined, fetch, slug, held);
 
-describe('N1: an address under an older name goes to the species that shows it', () => {
-  it('Aloe variegata is Gonialoe variegata, which shows it, not Aloe vera, which holds it for the search', async () => {
-    expect((await at('aloe-variegata'))?.slug).toBe('gonialoe-variegata');
-    expect(ambiguousSynonym(idx, 'Aloe variegata')).toBeNull();
+describe('N1: an address under an older name of one species goes there; of two, to neither (round seventy, F1)', () => {
+  // Round sixty-nine sent each of these to the species that shows it; round seventy names both holders instead.
+  it('Aloe variegata, shown by Gonialoe variegata and held for the search by Aloe vera, answers neither', async () => {
+    expect(await at('aloe-variegata')).toBeNull();
+    expect(ambiguousSynonym(idx, 'Aloe variegata')?.map((e) => e.name)).toEqual(['Gonialoe variegata', 'Aloe vera']);
   });
-  it('Cereus undulatus is Selenicereus undatus, the dragon fruit, not Acanthocereus tetragonus', async () => {
-    expect((await at('cereus-undulatus'))?.slug).toBe('selenicereus-undatus');
+  it('Cereus undulatus answers neither Selenicereus undatus nor Acanthocereus tetragonus', async () => {
+    expect(await at('cereus-undulatus')).toBeNull();
+    expect(ambiguousSynonym(idx, 'Cereus undulatus')?.map((e) => e.name)).toEqual(['Selenicereus undatus', 'Acanthocereus tetragonus']);
   });
-  it('guard: Murraya exotica is Aglaia odorata, which shows it (first in the index too)', async () => {
-    expect((await at('murraya-exotica'))?.slug).toBe('aglaia-odorata');
+  it('Murraya exotica answers neither Aglaia odorata, which shows it, nor Murraya paniculata', async () => {
+    expect(await at('murraya-exotica')).toBeNull();
   });
   it('guard: a name one species holds for the search alone still redirects', async () => {
     expect((await at('ferocactus-glaucescens'))?.slug).toBe('bisnaga-glaucescens');
@@ -50,12 +57,13 @@ describe('N1: an address under an older name goes to the species that shows it',
 describe('N1: a name two species show, or two hold only for the search, does not redirect', () => {
   it('Cotyledon mammillaris, shown by two Adromischus, answers neither, and names both', async () => {
     expect(await at('cotyledon-mammillaris')).toBeNull();
-    expect(ambiguousSynonym(idx, 'Cotyledon mammillaris')?.map((e) => e.name)).toEqual(['Adromischus filicaulis', 'Adromischus mammillaris']);
+    // The search's order (round seventy): the species that keeps the epithet first.
+    expect(ambiguousSynonym(idx, 'Cotyledon mammillaris')?.map((e) => e.name)).toEqual(['Adromischus mammillaris', 'Adromischus filicaulis']);
     expect(indexMaps(idx).bySynonym.has('cotyledon mammillaris')).toBe(false);
   });
   it('Mammillaria sulcata, held by two for the search alone, answers neither, and names both', async () => {
     expect(await at('mammillaria-sulcata')).toBeNull();
-    expect(ambiguousSynonym(idx, 'mammillaria  sulcata')?.map((e) => e.name)).toEqual(['Ariocarpus kotschoubeyanus', 'Coryphantha sulcata']);
+    expect(ambiguousSynonym(idx, 'mammillaria  sulcata')?.map((e) => e.name)).toEqual(['Coryphantha sulcata', 'Ariocarpus kotschoubeyanus']);
   });
   it('names the species that show it first, then those that hold it for the search', () => {
     const three = [entry(1, 'Aa one', [], ['Xx yy']), entry(2, 'Bb two', ['Xx yy']), entry(3, 'Cc three', ['Xx yy'])];

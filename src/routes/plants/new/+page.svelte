@@ -21,7 +21,7 @@
   import { readSetting, writeSetting } from '$lib/ui/stored';
   import ExampleAddLine from '$lib/ui/grow/ExampleAddLine.svelte';
   import { CLOSED_WORDS } from '$lib/db/demo';
-  import { takeDraft, withoutKept, ownPlaceNamed, str, num, bool, oneOf, type Draft, type CarriedPlace } from '$lib/ui/grow/keep-draft';
+  import { takeDraft, withoutKept, ownPlaceNamed, carriedPlace, startPlace as startFrom, str, num, bool, oneOf, type Draft, type StartPlace } from '$lib/ui/grow/keep-draft';
   /** The reference's key for a species-rank name when the reference answers; otherwise the key as given (the plant page repairs it later). */
   async function checkedKey(sp: string | null, k: number): Promise<number> {
     if (!sp || speciesOf(sp) !== sp) return k;
@@ -62,8 +62,8 @@
   const KINDS = ['species', 'cultivar', 'hybrid'] as const;
   /** The form as it stands, for "Keep it as my own" (round sixty-nine; triage-68 X3): every field, and the place by name. */
   function draftOf(): Omit<Draft, 'form'> {
-    const at = locationId ? collection.location(locationId) : undefined;
-    const place: CarriedPlace | null = placeTyped ?? (at ? { name: at.name, kind: at.type ?? null } : null);
+    // With the place it sits inside, by name and kind (round seventy; triage-69 X2; S-D7a, IND-7).
+    const place = carriedPlace(placeTyped ?? (locationId ? collection.location(locationId) : undefined), (id) => collection.location(id));
     return { place, fields: { name, taxonKey, cultivar, kind, parentage, nameAsReceived, pickReceived, fieldNumber, provenance, acquired, sourceFrom, price, sourceForm, notes, lastWatered, count, useOwnNumber, ownNumber, moreOpen } };
   }
   /** A draft carried from the example, field by field, each only as the type it holds; its place is the grower's own of that name, or a new one to make. */
@@ -75,15 +75,15 @@
     sourceFrom = str(f.sourceFrom, ''); price = str(f.price, ''); sourceForm = oneOf(f.sourceForm, FORMS, 'plant'); notes = str(f.notes, '');
     lastWatered = str(f.lastWatered, ''); count = num(f.count, 1); useOwnNumber = bool(f.useOwnNumber, false); ownNumber = str(f.ownNumber, ''); moreOpen = bool(f.moreOpen, false);
     const own = ownPlaceNamed(d.place, collection.locations);
-    if (own) locationId = own; else startPlace = d.place;
+    if (own) locationId = own; else startPlace = startFrom(d.place, collection.locations);
     setTimeout(() => { try { replaceState(withoutKept(location.href), page.state); } catch { /* the router not up yet: the address keeps it, and the draft is gone */ } }, 0);
     const k = num(f.taxonKey, null);
     if (k && name) keyCheck = checkedKey(name, k).then((checked) => { if (name === str(f.name, '')) taxonKey = checked; });
   }
   /** The new place named in the picker and not yet added: typed, so leaving would lose it (round sixty-nine; triage-68 X2). */
-  let placeTyped = $state<{ name: string; kind: string } | null>(null);
+  let placeTyped = $state<{ name: string; kind: string; inside: { name: string; kind: string | null } | null } | null>(null);
   /** A place carried from the example that the grower does not have: the picker opens "New…" with it. */
-  let startPlace = $state<CarriedPlace | null>(null);
+  let startPlace = $state<StartPlace | null>(null);
   $effect(() => {
     setCrumb([{ label: 'My plants', href: '/plants' }, { label: 'Add a plant' }]);
     return () => setCrumb([]);

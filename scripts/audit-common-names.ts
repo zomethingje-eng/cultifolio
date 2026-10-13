@@ -126,7 +126,8 @@ function causeOf(before: string | undefined, after: string | undefined, sci: str
   const o = before ?? '';
   if (!before) return 'a headline where there was none';
   if (!after) return 'no headline now';
-  if (nameKey(o) === nameKey(after)) return o.toLowerCase() === after.toLowerCase() ? 'capitals (N6)' : words(after) > words(o) ? 'the open spelling on a tie (triage-68 N2)' : 'spelling of the same name (N5, N6)';
+  // A closed spelling that wins a tie is the botanical or the commoner one: round sixty-nine's open-on-tie rule comes after both (round seventy; triage-69 N4).
+  if (nameKey(o) === nameKey(after)) return o.toLowerCase() === after.toLowerCase() ? 'capitals (N6)' : words(after) > words(o) ? 'the open spelling on a tie (triage-68 N2)' : words(after) < words(o) ? 'the botanical or commoner spelling on a tie (triage-69 N4)' : 'spelling of the same name (N5, N6)';
   if (N2_NOUNS.has(lastWord(after))) return 'a genus English uses as a noun (triage-68 N2)';
   if (genericNoun(o)) return 'a generic noun set back (N3)';
   if (nameKey(o) === nameKey(sci.split(' ').slice(0, 2).join(' '))) return 'the species\' own binomial set back (N3)';

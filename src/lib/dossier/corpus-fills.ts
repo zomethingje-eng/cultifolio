@@ -1,18 +1,26 @@
 /**
- * Round sixty-nine's corpus passes (REVIEW-TRIAGE-68 section 7), each over the dossiers on disk through a `DossierStore`,
- * each said in what it changed, and each tested with dossiers held in memory:
+ * Round sixty-nine's corpus passes (REVIEW-TRIAGE-68 section 7) and round seventy's (REVIEW-TRIAGE-69 section 6), each
+ * over the dossiers on disk through a `DossierStore`, each said in what it changed, and each tested with dossiers held in
+ * memory:
  *   - `--fill gbif-licence` (M1): GBIF photographs that took their record's licence;
- *   - `--fill inat-ids` (M5): iNaturalist ids that iNaturalist has made inactive;
+ *   - `--fill inat-ids` (M5; round seventy, B1): iNaturalist ids that iNaturalist has made inactive, and the follows of
+ *     earlier runs, read again by the build's rule;
+ *   - `--fill wikidata` (round seventy, B2): the Wikidata items taken without the species' own GBIF key, proved again;
  *   - `--fill summaries` (M3): Wikipedia summaries a redirect brought from another title;
- *   - `--list-rebuild` (M2, M4): the species to rebuild with `--keys`.
+ *   - `--list-rebuild` (M2, M4; round seventy, B4 with `--bulk`): the species to rebuild with `--keys`.
  */
-import type { JsonFetcher } from './fetch';
+import type { JsonFetcher, SourceResult } from './fetch';
 import type { Dossier } from './schema';
 import type { DossierStore } from './corpus-run';
+import type { WcvpIndex } from './bulk';
+import { crossIds, mwGet, mwError } from './sources/wikimedia';
 import * as gbif from './sources/gbif';
 import { licenceTag, isOpen } from '$core/licence';
-import { checkIds } from './sources/inat';
-import { mwGet, mwError, summaryTitleFits, redirected, redirectIsThisSpecies, summary as wikiSummary } from './sources/wikimedia';
+import { checkIds, successorRefused, taxonFor, heldAtGbifElsewhere, type FollowRule, type InatTaxon } from './sources/inat';
+import { ownNames } from './own-names';
+import { referenceOf } from './reference';
+import { heldElsewhereIn } from './corpus-run';
+import { keptIds, ipniPowoDisagree } from './drops';
 
 type Up = Record<string, { status: string; at?: string; detail?: string }>;
 const day = (now: string) => now.slice(0, 10);
@@ -78,135 +86,315 @@ export async function fillGbifLicenceAll(store: DossierStore, f: JsonFetcher, pr
 
 /* ---------------------------------------------------------------- --fill inat-ids */
 
-export type InatIdCounts = { checked: number; followed: number; dropped: number; failed?: string };
-type IdDossier = Pick<Dossier, 'ids' | 'links' | 'upstream'>;
+export type InatIdCounts = {
+  checked: number;
+  followed: number;
+  dropped: number;
+  /** Inactive ids whose current taxon the rule refused, and earlier follows read again and refused (round seventy). */
+  refused: number;
+  /** Ids an earlier run followed with no check of the taxon, read again and kept. */
+  kept: number;
+  /** One line a dossier changed, for the run's report. */
+  lines: string[];
+  failed?: string;
+};
+type IdDossier = Pick<Dossier, 'key' | 'ids' | 'links' | 'upstream' | 'photos'> & { name: { scientific: string; family?: string; synonyms?: string[] } };
+
+/** The words of a follow made before round seventy, which read nothing of the taxon it went to: read again. */
+const EARLIER_FOLLOW = /followed to its current taxon (\d+)$/;
 
 /**
- * Every dossier's iNaturalist id checked with iNaturalist, thirty a request (round sixty-nine; triage-68 M5, R46-13). An
- * inactive id is followed to the one current taxon it names; one with no single successor is dropped, to be asked by
- * name. Either way the photograph sets are opened again, so `--fill inat` takes the photographs of the current taxon.
+ * Every dossier's iNaturalist id checked with iNaturalist, thirty a request (round sixty-nine; triage-68 M5, R46-13).
+ *
+ * Round seventy (triage-69 B1, S-B1, S-B7): an inactive id is followed to the one current taxon it names only by the
+ * build's rule (`successorRefused`: the species' name or a same-type name, from GBIF, held by no other species of the
+ * reference), and every id an earlier run followed without that rule is read again by it (Pinguicula chilensis to
+ * Pinguicula antarctica, Mammillaria karwinskiana to Mammillaria geminata, Tricyrtis formosana to a variety). A taxon
+ * refused loses the id, its link and the iNaturalist photographs it gave, and the name is searched here, never taking the
+ * refused taxon: `--fill inat` would find it again by iNaturalist's synonymy. With no taxon found, the photograph rows
+ * say so and are settled, so `--fill inat` does not ask by name again. An inactive id with no single successor is
+ * dropped, to be asked by name by `--fill inat`. A followed taxon that is taken opens the photograph sets for `--fill
+ * inat`. Each change is a line of the report.
+ *
+ * A refusal of iNaturalist or GBIF stops the fill; what was written stands, and a dossier is written only once all its
+ * asks have answered, so the next run takes up where this one stopped.
  */
 export async function fillInatIds(store: DossierStore, f: JsonFetcher, now = () => new Date().toISOString()): Promise<InatIdCounts> {
-  const c: InatIdCounts = { checked: 0, followed: 0, dropped: 0 };
-  const held = store.files().flatMap((file) => { const d = store.read<IdDossier>(file); return d.ids?.inat ? [{ file, id: d.ids.inat }] : []; });
+  const c: InatIdCounts = { checked: 0, followed: 0, dropped: 0, refused: 0, kept: 0, lines: [] };
+  const byName = new Map<string, number>();
+  const entries: Array<{ key: number; name: string; family?: string }> = [];
+  const held: Array<{ file: string; id: number; earlier: boolean }> = [];
+  for (const file of store.files()) {
+    const d = store.read<IdDossier>(file);
+    if (d.name?.scientific) { byName.set(d.name.scientific.toLowerCase(), d.key); entries.push({ key: d.key, name: d.name.scientific, family: d.name.family }); }
+    if (!d.ids?.inat) continue;
+    const m = EARLIER_FOLLOW.exec(d.upstream?.['inat.taxon']?.detail ?? '');
+    held.push({ file, id: d.ids.inat, earlier: !!m && Number(m[1]) === d.ids.inat });
+  }
+  const reference = referenceOf(entries);
+  const stop = (r: { status: string; detail?: string } | { failed: string }) => ({ ...c, failed: 'failed' in r ? r.failed : (r.detail ?? r.status) });
   for (let i = 0; i < held.length; i += 300) {
     const part = held.slice(i, i + 300);
     const r = await checkIds(f, part.map((h) => h.id));
-    if (r.status !== 'ok') return { ...c, failed: 'detail' in r ? r.detail : r.status };
-    for (const { file, id } of part) {
+    if (r.status !== 'ok') return stop(r);
+    // The current taxa the inactive ids name, read in one pass too: their names decide.
+    const next = [...new Set(part.flatMap((h) => { const g = r.data.get(h.id); return g && !g.active && g.current ? [g.current] : []; }))];
+    const cur = next.length ? await checkIds(f, next) : ({ status: 'ok', data: new Map() } as const);
+    if (cur.status !== 'ok') return stop(cur);
+    for (const { file, id, earlier } of part) {
       c.checked++;
       const got = r.data.get(id);
-      if (!got || got.active) continue;
+      if (!got) continue;
       const d = store.read<IdDossier>(file);
-      const was = `iNaturalist's taxon ${id}${got.name ? ` (${got.name})` : ''} is inactive`;
+      const name = d.name.scientific;
+      const heldElsewhere = heldElsewhereIn(byName, d.key);
+      // An active id of another name, from Wikidata or carried, is read by B5's rule; one of the species' own names by
+      // what the dossier holds (`ownNames` over its stored synonyms) asks nothing (round seventy, second pass).
+      const carried = got.active && !earlier;
+      if (carried && (!got.name || ownNames({ scientific: name, synonyms: d.name.synonyms ?? [], heldElsewhere }).own.has(got.name.toLowerCase()))) continue;
       const reopen = { status: 'skipped' as const, at: now(), detail: `the iNaturalist taxon changed (${day(now())}); ask again (--fill inat)` };
-      if (got.current) {
-        d.ids.inat = got.current;
-        d.links.inat = `https://www.inaturalist.org/taxa/${got.current}`;
-        d.upstream['inat.taxon'] = { status: 'ok', at: now(), detail: `${was}; followed to its current taxon ${got.current}` };
-        c.followed++;
-      } else {
+      if (!got.active && !got.current) {
         delete d.ids.inat;
         delete d.links.inat;
-        d.upstream['inat.taxon'] = { status: 'skipped', at: now(), detail: `${was}, with no single current taxon; to be asked by name (--fill inat)` };
+        d.upstream['inat.taxon'] = { status: 'skipped', at: now(), detail: `iNaturalist's taxon ${id}${got.name ? ` (${got.name})` : ''} is inactive, with no single current taxon; to be asked by name (--fill inat)` };
+        d.upstream['inat.photos.wild'] = { ...reopen };
+        d.upstream['inat.photos.cultivated'] = { ...reopen };
+        store.write(file, d);
         c.dropped++;
+        c.lines.push(`${name} [${d.key}]: ${id} inactive with no single current taxon; dropped, to be asked by name`);
+        continue;
       }
-      d.upstream['inat.photos.wild'] = { ...reopen };
-      d.upstream['inat.photos.cultivated'] = { ...reopen };
+      // The taxon to judge: the current taxon an inactive id names, or the active one (followed earlier, or carried).
+      const to = got.active ? id : got.current!;
+      const target = got.active ? got : cur.data.get(to);
+      const st = await sameTypeOfRows(f, d.key);
+      if ('failed' in st) return stop(st);
+      const sameType = st.rows.map((x) => x.name);
+      const owned = ownNames({ scientific: name, sameType, synonyms: st.all, heldElsewhere });
+      const rule: FollowRule = { accepted: name, sameType, own: owned.own, heldElsewhere };
+      let why: string | null;
+      if (carried) {
+        if (owned.own.has(got.name!.toLowerCase())) continue;
+        const g = await heldAtGbifElsewhere(f, got.name!, { key: d.key, family: d.name.family }, reference);
+        if (g.status !== 'ok') return stop(g);
+        if (!g.data) continue;
+        why = g.data;
+      } else why = successorRefused(target, rule);
+      const named = `${to}${target?.name ? ` (${target.name})` : ''}`;
+      const before = d.upstream['inat.taxon']?.detail ?? '';
+      const head = carried ? `iNaturalist's taxon ${named}, kept from an earlier build, is not this species: ${why}` : `${earlier ? `${before}; read again ${day(now())}: ${named}` : `iNaturalist's taxon ${id}${got.name ? ` (${got.name})` : ''} is inactive; its current taxon ${named}`} is ${why}`;
+      if (!why) {
+        if (earlier) {
+          d.upstream['inat.taxon'] = { ...d.upstream['inat.taxon'], detail: `${before}${target?.name ? ` (${target.name})` : ''}; read again ${day(now())}: one of this species' names` };
+          c.kept++;
+        } else {
+          d.ids.inat = to;
+          d.links.inat = `https://www.inaturalist.org/taxa/${to}`;
+          d.upstream['inat.taxon'] = { status: 'ok', at: now(), detail: `iNaturalist's taxon ${id}${got.name ? ` (${got.name})` : ''} is inactive; followed to its current taxon ${named}` };
+          d.upstream['inat.photos.wild'] = { ...reopen };
+          d.upstream['inat.photos.cultivated'] = { ...reopen };
+          c.followed++;
+          c.lines.push(`${name} [${d.key}]: ${id} inactive; followed to ${named}`);
+        }
+        store.write(file, d);
+        continue;
+      }
+      // Refused: the id, its link and the photographs it gave go, and the name is asked as the build asks it, never
+      // taking the refused taxon (`taxonFor`).
+      const t = await taxonFor(f, { scientific: name, key: d.key, family: d.name.family, own: owned, sameType, heldElsewhere, reference, refused: new Set([to]) });
+      if (t.status === 'refused' || t.status === 'error' || t.status === 'skipped') return stop(t);
+      const gone = (d.photos ?? []).filter((p) => p.src === 'inat').length;
+      d.photos = (d.photos ?? []).filter((p) => p.src !== 'inat');
+      delete d.ids.inat;
+      delete d.links.inat;
+      const refusedWords = `${head}: not taken${gone ? `, and its ${gone} photograph${gone === 1 ? '' : 's'} removed` : ''} (${day(now())})`;
+      if (t.status === 'ok') {
+        d.ids.inat = t.data.id;
+        d.links.inat = `https://www.inaturalist.org/taxa/${t.data.id}`;
+        d.upstream['inat.taxon'] = { status: 'ok', at: now(), detail: `${refusedWords}; asked by name: ${t.detail ?? `${t.data.name}, ${t.data.id}`}` };
+        d.upstream['inat.photos.wild'] = { ...reopen };
+        d.upstream['inat.photos.cultivated'] = { ...reopen };
+      } else {
+        d.upstream['inat.taxon'] = { status: t.status, at: now(), detail: `${refusedWords}; asked by name: ${'detail' in t && t.detail ? t.detail : 'no iNaturalist taxon of this name'}` };
+        const none = { status: 'none' as const, at: now(), detail: `no iNaturalist taxon is taken for this species (${day(now())}); see its taxon row` };
+        d.upstream['inat.photos.wild'] = { ...none };
+        d.upstream['inat.photos.cultivated'] = { ...none };
+      }
       store.write(file, d);
+      c.refused++;
+      c.lines.push(`${name} [${d.key}]: ${carried ? `${named}, carried,` : earlier ? `an earlier follow to ${named}` : `${id} inactive; ${named}`} refused, ${why}${gone ? `; ${gone} iNaturalist photographs removed` : ''}; by name: ${t.status === 'ok' ? `${t.data.name}, ${t.data.id}` : t.status}`);
     }
   }
   return c;
 }
-
-/* ---------------------------------------------------------------- --fill summaries */
-
-type SumDossier = Pick<Dossier, 'ids' | 'links' | 'upstream' | 'summary'> & { name: { scientific: string; synonyms: string[] } };
-export type SummaryCounts = { kept: number; dropped: number; confirmed: number; unchecked: number; lines: string[]; byLead: number; restored: number; restoredLines: string[] };
 
 /**
- * Stored summaries whose title is not this species' article (round sixty-nine; triage-68 M3, R46-12): Weingartia pulchra
- * quoted Weingartia canigueralii's article, and Kopsia fruticosa the genus's. Read offline: a title that is the name or an
- * older name stands. The dossier does not keep the item's sitelink, so a title that is neither ("Saguaro") is checked
- * against the item's own English sitelink, fifty items a Wikidata request, and dropped only when it is not that; with no
- * item it is dropped. A request Wikidata does not answer, or a run with no fetcher (`--offline`), leaves those summaries
- * as they are, counted as not checked.
+ * The iNaturalist taxon row `--fill inat` writes after its name search (round seventy; triage-69 S-B7): what `--fill
+ * inat-ids` said of an id it dropped stays in front of the search's answer. Nepenthes putaiguneung's row was left "none"
+ * with no detail, and the history of its inactive id lost.
  */
-export async function checkSummaries(store: DossierStore, f: JsonFetcher | null, now = () => new Date().toISOString()): Promise<SummaryCounts> {
-  const c: SummaryCounts = { kept: 0, dropped: 0, confirmed: 0, unchecked: 0, lines: [], byLead: 0, restored: 0, restoredLines: [] };
-  const toConfirm: Array<{ file: string; q: string }> = [];
-  const toRestore: Array<{ file: string; asked: string }> = [];
+export function inatTaxonRow(was: { status: string; detail?: string } | undefined, t: SourceResult<InatTaxon>, at: string): { status: string; at: string; detail?: string } {
+  const dropped = was?.status === 'skipped' && /is inactive/.test(was.detail ?? '') ? was.detail!.replace(/; to be asked by name \(--fill inat\)$/, '') : undefined;
+  const said = 'detail' in t && t.detail ? t.detail : undefined;
+  const answer = said ?? (t.status === 'ok' ? `${t.data.name}, ${t.data.id}` : t.status === 'none' ? 'no iNaturalist taxon of this name' : t.status);
+  const detail = dropped ? `${dropped}; asked by name: ${answer}` : said;
+  return { status: t.status, at, ...(detail ? { detail } : {}) };
+}
+
+/* ---------------------------------------------------------------- --fill wikidata */
+
+export type WikidataCounts = {
+  /** Items read from Wikidata, fifty a request, to see whether they carry the species' own GBIF key. */
+  read: number;
+  /** Of those, items that carry it: found by the key, and left as they are. */
+  byKey: number;
+  /** Items proved again by the round-seventy rule, the record now saying how. */
+  stands: number;
+  /** Species whose item the rule now refuses, replaces or finds: left as they are, and listed for a rebuild. */
+  changed: number;
+  /** Dossiers re-proved by an earlier run, passed by. */
+  before: number;
+  lines: string[];
+  /** "<key> <name>\t<why>" a line, for `--keys`. */
+  rebuild: string[];
+  /** Every dossier whose IPNI identifier is not the number in its POWO one (`ipniPowoDisagree`; triage-69 B6, R47-5). */
+  disagree: string[];
+  failed?: string;
+};
+/** The words the fill leaves on the Wikidata row of an item it proved again, so a stopped fill resumes. */
+export const REPROVED = 're-proved by --fill wikidata';
+type WdDossier = Pick<Dossier, 'key' | 'ids' | 'links' | 'upstream'> & { name: { scientific: string; authorship?: string } };
+/** A Wikidata row that recorded an item refused by an earlier label rule: the item is asked for again. */
+const REFUSED_BY_LABEL = /not taken: (the item labelled|two items answered to the label)/;
+
+/**
+ * Step 4 of triage-69 section 6 (round seventy; B2, S-B2, S-B3): the Wikidata items a build took without the species'
+ * own GBIF key, read again by the round-seventy rule (`crossIds`: IPNI first, a contradicting GBIF record refuses, a key
+ * GBIF no longer serves is no key). Which species it touches:
+ *   - every dossier whose item does not carry its own GBIF key (P846), read from Wikidata fifty items a request: those
+ *     found by label, by another GBIF key, or carried from a build under round sixty-eight's rules, which took the
+ *     first exact label (about 620 of 8,947 species, S-B's count);
+ *   - every dossier whose Wikidata row records an item refused by the label rule (Catalpa speciosa, Mammillaria
+ *     grusonii, Myrica cerifera, Drosera magnifica).
+ * An item the rule proves again stands: its record says how it was proved, and its POWO, IPNI and WFO identifiers are
+ * read from it again. An item the rule now refuses, replaces with another or finds where there was none is not patched
+ * here, because the item also gives the species' iNaturalist id, Commons category and Wikipedia title, which a build
+ * derives with it: the dossier is left as it is, the change is a line of the report, and the species goes to the list
+ * for `--keys`. A refusal or failure of Wikidata or GBIF stops the fill; what was written stands, and a rerun passes by
+ * the dossiers already re-proved.
+ */
+export async function fillWikidata(store: DossierStore, f: JsonFetcher, now = () => new Date().toISOString()): Promise<WikidataCounts> {
+  const c: WikidataCounts = { read: 0, byKey: 0, stands: 0, changed: 0, before: 0, lines: [], rebuild: [], disagree: [] };
+  const withItem: Array<{ file: string; q: string; key: number }> = [];
+  const reprove: string[] = [];
   for (const file of store.files()) {
-    const d = store.read<SumDossier>(file);
-    if (!d.summary) {
-      // Set aside by this fill's first rule, the title alone (round sixty-nine): asked again, and taken if its lead is this species'.
-      const was = /^Wikipedia redirects (.+) to (.+)$/.exec(d.upstream?.wikipedia?.status === 'none' ? (d.upstream.wikipedia.detail ?? '') : '');
-      if (was && f) toRestore.push({ file, asked: was[1] });
+    let d: WdDossier;
+    try { d = store.read<WdDossier>(file); } catch { continue; }
+    const row = d.upstream?.wikidata;
+    const disagree = ipniPowoDisagree(d.ids);
+    if (disagree) c.disagree.push(`${d.name.scientific} [${d.key}]: ${disagree}`);
+    if ((row?.detail ?? '').includes(REPROVED)) { c.before++; continue; }
+    if (d.ids?.wikidata && row?.status === 'ok') withItem.push({ file, q: d.ids.wikidata, key: d.key });
+    else if (!d.ids?.wikidata && REFUSED_BY_LABEL.test(row?.detail ?? '')) reprove.push(file);
+  }
+  for (let i = 0; i < withItem.length; i += 50) {
+    const part = withItem.slice(i, i + 50);
+    const r = await mwGet<{ entities?: Record<string, { claims?: Record<string, Array<{ mainsnak: { datavalue?: { value: unknown } } }>> }>; error?: unknown }>(f, `https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&ids=${[...new Set(part.map((p) => p.q))].join('|')}&props=claims&maxlag=5`);
+    if (r.status !== 'ok') return { ...c, failed: 'detail' in r ? r.detail : r.status };
+    const err = mwError(r.data);
+    if (err) return { ...c, failed: `wikidata ${err}` };
+    for (const p of part) {
+      c.read++;
+      const keys = (r.data.entities?.[p.q]?.claims?.P846 ?? []).map((x) => Number(x.mainsnak?.datavalue?.value));
+      if (keys.includes(p.key)) c.byKey++;
+      else reprove.push(p.file);
+    }
+  }
+  for (const file of reprove) {
+    const d = store.read<WdDossier>(file);
+    const st = await sameTypeOfRows(f, d.key);
+    if ('failed' in st) return { ...c, failed: st.failed };
+    const x = await crossIds(f, d.name.scientific, d.key, st.rows, { authorship: d.name.authorship });
+    if (x.status === 'refused' || x.status === 'error' || x.status === 'skipped') return { ...c, failed: `${x.by === 'gbif' ? 'GBIF, checking an item' : 'Wikidata'}: ${x.detail}` };
+    const was = d.ids.wikidata;
+    const got = x.status === 'ok' ? x.data.wikidata : undefined;
+    if (x.status === 'ok' && x.data.wikidata === was) {
+      d.ids.powo = x.data.powo; d.ids.ipni = x.data.ipni; d.ids.wfo = x.data.wfo;
+      for (const [k, v, url] of [['powo', x.data.powo, 'https://powo.science.kew.org/taxon/'], ['ipni', x.data.ipni, 'https://www.ipni.org/n/'], ['wfo', x.data.wfo, 'https://www.worldfloraonline.org/taxon/']] as const) {
+        if (v) d.links[k] = `${url}${v}`;
+        else delete d.links[k];
+      }
+      d.upstream.wikidata = { status: 'ok', at: now(), detail: `${x.detail ?? 'found by its GBIF key'}; ${REPROVED} ${day(now())}` };
+      store.write(file, d);
+      c.stands++;
       continue;
     }
-    if (summaryTitleFits(d.summary.title, d.name.scientific, d.name.synonyms ?? [])) { c.kept++; continue; }
-    // With an item, the title may be its sitelink: asked of Wikidata first. Otherwise, or offline, the lead decides
-    // (`redirectIsThisSpecies`); offline, a lead that does not settle it leaves the summary unchecked.
-    if (d.ids?.wikidata && f) { toConfirm.push({ file, q: d.ids.wikidata }); continue; }
-    if (byLead(d)) { c.byLead++; continue; }
-    if (d.ids?.wikidata) c.unchecked++;
-    else drop(file, d, d.name.scientific);
-  }
-  for (let i = 0; i < toConfirm.length; i += 50) {
-    const part = toConfirm.slice(i, i + 50);
-    const r = await mwGet<{ entities?: Record<string, { sitelinks?: Record<string, { title: string }> }> }>(f!, `https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&ids=${[...new Set(part.map((p) => p.q))].join('|')}&props=sitelinks&sitefilter=enwiki&maxlag=5`);
-    if (r.status !== 'ok' || mwError(r.data)) { c.unchecked += part.length; continue; }
-    for (const { file, q } of part) {
-      const d = store.read<SumDossier>(file);
-      const link = r.data.entities?.[q]?.sitelinks?.enwiki?.title;
-      if (link && summaryTitleFits(d.summary!.title, d.name.scientific, d.name.synonyms ?? [], link)) { c.confirmed++; continue; }
-      if (byLead(d)) { c.byLead++; continue; }
-      drop(file, d, link ?? d.name.scientific);
-    }
-  }
-  for (const { file, asked } of toRestore) {
-    const d = store.read<SumDossier>(file);
-    const r = await wikiSummary(f!, asked, [asked], { name: d.name.scientific, synonyms: d.name.synonyms ?? [] });
-    if (r.status !== 'ok') { if (r.status !== 'none') c.unchecked++; continue; }
-    d.summary = { text: r.data.text, source: 'wikipedia', url: r.data.url, licence: 'CC BY-SA 4.0', title: r.data.title };
-    d.ids.wikipedia = r.data.title;
-    d.links.wikipedia = r.data.url;
-    d.upstream.wikipedia = { status: 'ok', at: now(), detail: r.detail };
-    store.write(file, d);
-    c.restored++;
-    c.restoredLines.push(`${d.name.scientific}: ${r.detail ?? r.data.title}`);
+    if (!got && !was) continue; // still no item: nothing changed
+    c.changed++;
+    const now_ = got ? `${got} (${x.detail ?? 'found by its GBIF key'})` : `no item (${x.status}${'detail' in x && x.detail ? `: ${x.detail}` : ''})`;
+    c.lines.push(`${d.name.scientific} [${d.key}]: ${was ?? 'no item'} → ${now_}`);
+    c.rebuild.push(`${d.key} ${d.name.scientific}\tWikidata item ${was ?? 'none'} → ${got ?? 'none'}`);
   }
   return c;
-  function byLead(d: SumDossier): boolean {
-    return redirectIsThisSpecies(d.summary!.title, d.summary!.text ?? '', d.name.scientific, d.name.synonyms ?? []);
-  }
-  function drop(file: string, d: SumDossier, asked: string) {
-    const why = redirected(asked, d.summary!.title);
-    c.lines.push(`${d.name.scientific}: ${why}`);
-    d.summary = undefined;
-    delete d.ids.wikipedia;
-    delete d.links.wikipedia;
-    d.upstream.wikipedia = { status: 'none', at: now(), detail: why };
-    store.write(file, d);
-    c.dropped++;
-  }
 }
+
+/** The same-type older names of a species from GBIF, as the build passes them to `crossIds`, and all its synonyms (`ownNames`). */
+async function sameTypeOfRows(f: JsonFetcher, key: number): Promise<{ rows: Array<{ key: number; name: string }>; all: gbif.SynonymRow[] } | { failed: string }> {
+  const sp = await gbif.species(f, key);
+  if (sp.status !== 'ok' && sp.status !== 'none') return { failed: `GBIF: ${sp.detail}` };
+  const syn = await gbif.synonyms(f, key);
+  if (syn.status !== 'ok' && syn.status !== 'none') return { failed: `GBIF: ${syn.detail}` };
+  if (syn.status !== 'ok' || syn.truncated) return { rows: [], all: [] };
+  const all = syn.rows ?? [];
+  return { rows: gbif.sameTypeNames({ key, basionymKey: sp.status === 'ok' ? sp.data.basionymKey : undefined }, all).map((r) => ({ key: r.key, name: r.name })), all };
+}
+
+/* ---------------------------------------------------------------- --list-rebuild --bulk: Kew's rows by author */
+
+/**
+ * The species whose Kew entry the round-seventy rule reads differently (triage-69 B4, S-B4, S-B5, step 4), from Kew's own
+ * files: a row of the species' words by another author was taken (Ceropegia macrocarpa (Sprenger) Bruyns took "Ceropegia
+ * macrocarpa J.N.Haage & E.Schmidt", and its lack of a range), or Kew holds the species under another spelling of its
+ * epithet (Cyphostemma congoensis as C. congoense). A range feeds the records tested against it and the habitat
+ * climate, which only a build reads again with the climate grid, so these species are rebuilt, never patched.
+ */
+export function kewRebuildList(store: DossierStore, wcvp: Pick<WcvpIndex, 'accepted' | 'legacyAccepted'>): string[] {
+  const out: string[] = [];
+  const id = (e: ReturnType<WcvpIndex['accepted']>) => (e === 'ambiguous' ? 'ambiguous' : e ? `${e.name} ${e.authors ?? ''}`.trim() : 'none');
+  for (const file of store.files()) {
+    let d: Pick<Dossier, 'key'> & { name: { scientific: string; authorship?: string } };
+    try { d = store.read(file); } catch { continue; }
+    if (!d.name?.authorship) continue;
+    const before = id(wcvp.legacyAccepted(d.name.scientific, d.name.authorship));
+    const after = id(wcvp.accepted(d.name.scientific, d.name.authorship));
+    if (before !== after) out.push(`${d.key} ${d.name.scientific}\tKew's entry for ${d.name.scientific} ${d.name.authorship} was ${before}, is now ${after}`);
+  }
+  return out;
+}
+
+/* ---------------------------------------------------------------- --fill summaries: `./summary-fill.ts` (round seventy, moved) */
+export * from './summary-fill';
 
 /* ---------------------------------------------------------------- --list-rebuild */
 
 /**
  * The species to rebuild online with `--keys` (REVIEW-TRIAGE-68 section 7, step 5), one "<key> <name>" a line with the
- * reason after a tab: each range taken under an older name (M2: the rule is now narrower), and each species whose stored
- * synonyms number exactly 50, GBIF's old single page (M4: the list was cut there).
+ * reason after a tab: each range taken under an older name (M2: the rule is now narrower), each species whose stored
+ * synonyms number exactly 50, GBIF's old single page (M4: the list was cut there), and (round seventy, S-B7) each whose
+ * kept identifiers name no build. With Kew's files, `kewRebuildList` adds those whose Kew entry the author rule reads
+ * differently.
  */
 export function rebuildList(store: DossierStore): string[] {
   const out: string[] = [];
   for (const file of store.files()) {
-    let d: Pick<Dossier, 'key' | 'distribution'> & { name: { scientific: string; synonyms?: string[] } };
+    let d: Pick<Dossier, 'key' | 'distribution'> & { name: { scientific: string; synonyms?: string[] }; upstream?: Record<string, { status?: string; detail?: string }> };
     try { d = store.read(file); } catch { continue; }
     const why: string[] = [];
     if (/under the name |, reached by /.test(d.distribution?.source ?? '')) why.push('range taken under an older name');
     if ((d.name.synonyms?.length ?? 0) === 50) why.push('50 synonyms stored, the old single page');
+    // Identifiers kept through a Wikidata that did not answer, in round sixty-eight's words, which name no build: the
+    // next build cannot tell their age, so it carries nothing (round seventy; triage-69 S-B7, Mammillaria gigantea).
+    if (keptIds(d.upstream?.wikidata) && !/identifiers of the build of \d{4}-\d{2}-\d{2} are kept/.test(d.upstream?.wikidata?.detail ?? '')) why.push('identifiers kept from a build the record does not name');
     if (why.length) out.push(`${d.key} ${d.name.scientific}\t${why.join('; ')}`);
   }
   return out;

@@ -1,101 +1,143 @@
 /**
  * Round sixty-nine, the owner's `--fill summaries`: 108 stored summaries were dropped because Wikipedia gave them under
- * another title, and about nine in ten of those were the species' own article (a genus of one species, a crop's common
- * name, the species placed in another genus, another spelling). The rule now reads the lead as well as the title
- * (`redirectIsThisSpecies`), in the build and in the fill, and the fill asks again for those it set aside. The leads
- * below are Wikipedia's, in part, as the corpus held them on 2026-10-11. Each "kept" case FAILED on the deployed round
- * sixty-nine (dropped by title alone); each "dropped" case is a guard: the rule's first purpose (triage-68 M3, R46-12).
+ * another title, and about nine in ten were the species' own article (a genus of one species, a crop's common name, the
+ * species placed in another genus, another spelling). Round sixty-nine took them back by reading the lead
+ * (`redirectIsThisSpecies`). Round seventy (REVIEW-TRIAGE-69 A1) reads no lead: a title is taken only on a positive
+ * proof from structured data (`summary-proof.ts`). This file held round sixty-nine's cases; each is read here by the new
+ * rule, with Wikidata's facts and Kew's counts (WCVP through GBIF) as they stood on 2026-10-12, and the guards are kept.
  */
 import { describe, it, expect } from 'vitest';
-import { redirectIsThisSpecies, summary } from '$dossier/sources/wikimedia';
+import { summary } from '$dossier/sources/wikimedia';
 import { checkSummaries } from '$dossier/corpus-fills';
-import type { JsonFetcher } from '$dossier/fetch';
+import { titleProof, proofByItem } from '$dossier/summary-proof';
+import { world, GENUS, SPECIES, type World } from './r70a-summary-world';
 
-const LEAD = {
-  Welwitschia: 'Welwitschia is a monotypic genus of gnetophytes containing only the species Welwitschia mirabilis. It is named after the Austrian botanist Friedrich Welwitsch.',
-  Apple: 'An apple is the round, edible fruit of an apple tree. Fruit trees of the orchard or domestic apple, the most widely grown in the genus, are cultivated worldwide.',
-  'Huernia zebrina': 'Huernia zebrina, the little owl or lifesaver cactus, is a species of flowering plant in the family Apocynaceae, native to Namibia.',
-  'Ariocarpus scaphirostris': 'Ariocarpus scaphirostris is a species of plant in the family Cactaceae. It was originally called Ariocarpus scapharostrus in the 1930s.',
-  'Date palm': 'Phoenix dactylifera, commonly known as the date palm, is a flowering-plant species in the palm family Arecaceae.',
-  Serissa: 'Serissa japonica is a species of flowering plants in the family Rubiaceae. It is the sole species in genus Serissa.',
-  Kopsia: 'Kopsia is a genus of plants in the family Apocynaceae. It was first described as a genus in 1823.',
-  Crassula: 'Crassula is a genus of succulent plants containing about 200 accepted species, including the popular jade plant.',
-  Jeffersonia: 'Jeffersonia, also known as twinleaf or rheumatism root, is a small genus of herbaceous perennial plants in the family Berberidaceae.',
-  'Mammillaria standleyi': 'Mammillaria standleyi is a species of the family Cactaceae native to the Sierra Madre Occidental of Sinaloa, Chihuahua and Sonora.',
-  'Weingartia canigueralii': 'Weingartia canigueralii is a species of cactus native to Bolivia.'
+/** Wikidata and Kew for the cases below, 2026-10-12. */
+export const W69: World = {
+  items: {
+    // Welwitschia mirabilis: its item's sitelink is a redirect to the genus's article; Kew holds one species in the genus.
+    Q156926: { sitelink: 'Welwitschia mirabilis', P171: ['Q15044266'], P105: [SPECIES], P225: ['Welwitschia mirabilis'] },
+    Q15044266: { sitelink: 'Welwitschia', P171: ['Q10780833'], P105: [GENUS], P225: ['Welwitschia'] },
+    // Malus domestica, and Apple (Q89), "natural product of taxon" Malus and Malus domestica.
+    Q18674606: { sitelink: 'Malus domestica', P171: ['Q104819'], P566: ['Q65671564'], P1672: ['Q89', 'Q103534317', 'Q62474609', 'Q4781286', 'Q100353572', 'Q97162246'], P105: [SPECIES], P225: ['Malus domestica'] },
+    Q89: { sitelink: 'Apple', P1582: ['Q104819', 'Q18674606'] },
+    // Ceropegia zebrina: its item names Huernia zebrina's as its basionym; GBIF's record lists no such synonym.
+    Q42560681: { P171: ['Q1411307'], P566: ['Q1633949'], P105: [SPECIES], P225: ['Ceropegia zebrina'] },
+    Q1633949: { sitelink: 'Huernia zebrina', P171: ['Q141945'], P105: [SPECIES], P225: ['Huernia zebrina'] },
+    // Genera of many species at Kew, each the species' parent in Wikidata.
+    Q15232794: { P171: ['Q309613'], P566: ['Q38451909'], P105: [SPECIES], P225: ['Kopsia fruticosa'] },
+    Q309613: { sitelink: 'Kopsia', P171: ['Q18983478'], P105: [GENUS], P225: ['Kopsia'] },
+    Q15481151: { P171: ['Q158253'], P105: [SPECIES], P225: ['Crassula deltoidea'] },
+    Q158253: { sitelink: 'Crassula', P105: [GENUS], P225: ['Crassula'] },
+    Q134845: { P171: ['Q8184911'], P566: ['Q12318810'], P105: [SPECIES], P225: ['Strombocactus disciformis'] },
+    Q8184911: { sitelink: 'Strombocactus', P171: ['Q136359'], P105: [GENUS], P225: ['Strombocactus'] },
+    // Weingartia pulchra and Mammillaria sonorensis, which Wikipedia lumps into another species with an item of its own.
+    Q109406541: { P171: ['Q7702591'], P105: [SPECIES], P225: ['Weingartia pulchra'] },
+    Q109382143: { sitelink: 'Weingartia canigueralii', P171: ['Q7702591'], P566: ['Q15008124'], P105: [SPECIES], P225: ['Weingartia canigueralii'] },
+    Q1797305: { P171: ['Q311120'], P105: [SPECIES], P225: ['Mammillaria sonorensis'] },
+    Q1888371: { sitelink: 'Mammillaria standleyi', P171: ['Q311120'], P566: ['Q14955617'], P105: [SPECIES], P225: ['Mammillaria standleyi'] }
+  },
+  genera: { Welwitschia: ['Welwitschia mirabilis'], Kopsia: 25, Crassula: 237, Strombocactus: ['Strombocactus corregidorae', 'Strombocactus disciformis'] }
 };
 
-describe('a lead Wikipedia gave under another title', () => {
-  it('kept: the genus of one species, when its lead names the species', () => {
-    expect(redirectIsThisSpecies('Welwitschia', LEAD.Welwitschia, 'Welwitschia mirabilis', [])).toBe(true);
+const who = (name: string, item?: string, synonyms: string[] = []) => ({ name, synonyms, item });
+
+describe('a title Wikipedia gave under another title, taken on a proof', () => {
+  it('the genus of one species at Kew, this species\' parent: Welwitschia', async () => {
+    expect(await titleProof(world(W69).f, 'Welwitschia', who('Welwitschia mirabilis', 'Q156926'))).toMatchObject({ status: 'ok', proof: 'monotypic-genus' });
   });
-  it('kept: a crop by its common name, whose lead is no genus\'s', () => {
-    expect(redirectIsThisSpecies('Apple', LEAD.Apple, 'Malus domestica', ['Malus anetica Poit. & Turpin'])).toBe(true);
+  it('a crop by its common name, a product of this species: Apple', async () => {
+    expect(await titleProof(world(W69).f, 'Apple', who('Malus domestica', 'Q18674606', ['Malus anetica Poit. & Turpin']))).toMatchObject({ status: 'ok', proof: 'product' });
   });
-  it('kept: the species placed in another genus, the same epithet', () => {
-    expect(redirectIsThisSpecies('Huernia zebrina', LEAD['Huernia zebrina'], 'Ceropegia zebrina', ['Huernia magniflora E.Phillips'])).toBe(true);
+  it('the species placed in another genus, its basionym in Wikidata: Huernia zebrina', async () => {
+    expect(await titleProof(world(W69).f, 'Huernia zebrina', who('Ceropegia zebrina', 'Q42560681', ['Huernia magniflora E.Phillips']))).toMatchObject({ status: 'ok', proof: 'older-name' });
   });
-  it('kept: another spelling of the epithet in the same genus', () => {
-    expect(redirectIsThisSpecies('Ariocarpus scaphirostris', LEAD['Ariocarpus scaphirostris'], 'Ariocarpus scaphirostrus', [])).toBe(true);
-  });
-  it('kept: a two-word common name whose lead names the species', () => {
-    expect(redirectIsThisSpecies('Date palm', LEAD['Date palm'], 'Phoenix dactylifera', [])).toBe(true);
-  });
-  it('kept: a genus page whose lead names an older name of this species', () => {
-    expect(redirectIsThisSpecies('Serissa', LEAD.Serissa, 'Buchozia japonica', ['Serissa japonica (Thunb.) Thunb.'])).toBe(true);
-  });
-  it('dropped (guard): a genus of many species whose lead does not name this one', () => {
-    expect(redirectIsThisSpecies('Kopsia', LEAD.Kopsia, 'Kopsia fruticosa', [])).toBe(false);
-    expect(redirectIsThisSpecies('Crassula', LEAD.Crassula, 'Crassula deltoidea', [])).toBe(false);
-    expect(redirectIsThisSpecies('Jeffersonia', LEAD.Jeffersonia, 'Jeffersonia diphylla', [])).toBe(false);
-  });
-  it('dropped (guard): another epithet in this species\' genus is another species, or this one lumped into it', () => {
-    expect(redirectIsThisSpecies('Weingartia canigueralii', LEAD['Weingartia canigueralii'], 'Weingartia pulchra', ['Rebutia pulchra Cárdenas'])).toBe(false);
-    expect(redirectIsThisSpecies('Mammillaria standleyi', LEAD['Mammillaria standleyi'], 'Mammillaria sonorensis', [])).toBe(false);
-  });
-  it('dropped (guard): no lead to read', () => {
-    expect(redirectIsThisSpecies('Welwitschia', '', 'Welwitschia mirabilis', [])).toBe(false);
+  it('another spelling of the epithet in the same genus, read offline: Ariocarpus scaphirostris', async () => {
+    expect(await titleProof(null, 'Ariocarpus scaphirostris', who('Ariocarpus scaphirostrus'))).toMatchObject({ status: 'ok', proof: 'name' });
   });
 });
 
-/** Wikipedia's summary endpoint as it answers a title that redirects: the final title, and the lead. */
-const wiki = (answers: Record<string, { title: string; extract: string }>) =>
-  (async (url: string) => {
-    const asked = decodeURIComponent(url.split('/page/summary/')[1] ?? '').replace(/_/g, ' ');
-    const a = answers[asked];
-    return a ? { status: 'ok', data: { ...a, type: 'standard', content_urls: { desktop: { page: `https://en.wikipedia.org/wiki/${a.title.replace(/ /g, '_')}` } } } } : { status: 'none' };
-  }) as unknown as JsonFetcher;
+describe('guards: kept out as in round sixty-nine', () => {
+  it('a genus of many species at Kew, though it is this species\' parent: Kopsia, Crassula, Strombocactus', async () => {
+    const { f } = world(W69);
+    expect(await titleProof(f, 'Kopsia', who('Kopsia fruticosa', 'Q15232794'))).toEqual({ status: 'none' });
+    expect(await titleProof(f, 'Crassula', who('Crassula deltoidea', 'Q15481151'))).toEqual({ status: 'none' });
+    // The type species' own article, filed under the genus: Kew holds two species, so it is not proved (S-A1).
+    expect(await titleProof(f, 'Strombocactus', who('Strombocactus disciformis', 'Q134845'))).toEqual({ status: 'none' });
+  });
+  it('Jeffersonia follows Kew\'s count: one accepted species on 2026-10-12 (J. dubia is Plagiorhegma dubium at Kew), so taken', async () => {
+    // Round sixty-nine kept Jeffersonia out because its lead speaks of a genus of two species. The decision of round
+    // seventy reads Kew's count, not the lead; were Kew to hold two again, it would be out (the second case).
+    const jeff = (n: number | string[]): World => ({
+      items: { Q15344873: { P171: ['Q2562522'], P566: ['Q21876370'], P105: [SPECIES], P225: ['Jeffersonia diphylla'] }, Q2562522: { sitelink: 'Jeffersonia', P171: ['Q15621812'], P105: [GENUS], P225: ['Jeffersonia'] } },
+      genera: { Jeffersonia: n }
+    });
+    expect(await titleProof(world(jeff(['Jeffersonia diphylla'])).f, 'Jeffersonia', who('Jeffersonia diphylla', 'Q15344873'))).toMatchObject({ status: 'ok', proof: 'monotypic-genus' });
+    expect(await titleProof(world(jeff(['Jeffersonia diphylla', 'Jeffersonia dubia'])).f, 'Jeffersonia', who('Jeffersonia diphylla', 'Q15344873'))).toEqual({ status: 'none' });
+  });
+  it('another epithet in this species\' genus is another species, or this one lumped into it', async () => {
+    const { f } = world(W69);
+    expect(await titleProof(f, 'Weingartia canigueralii', who('Weingartia pulchra', 'Q109406541', ['Rebutia pulchra Cárdenas', 'Rebutia canigueralii subsp. pulchra (Cárdenas) Donald']))).toEqual({ status: 'none' });
+    expect(await titleProof(f, 'Mammillaria standleyi', who('Mammillaria sonorensis', 'Q1797305'))).toEqual({ status: 'none' });
+  });
+  it('no item: the title\'s own item still proves it, or nothing does', async () => {
+    const { f } = world(W69);
+    // Kew's one species of Welwitschia is this species, by name (round seventy: no item needed for that).
+    expect(await titleProof(f, 'Welwitschia', who('Welwitschia mirabilis'))).toMatchObject({ status: 'ok', proof: 'monotypic-genus' });
+    expect(await titleProof(f, 'Kopsia', who('Kopsia fruticosa'))).toEqual({ status: 'none' });
+    expect(await titleProof(f, 'Sundews in cultivation', who('Drosera capensis'))).toEqual({ status: 'none' });
+  });
+  it('an empty lead is no summary', async () => {
+    const { f } = world({ ...W69, wiki: { 'Welwitschia mirabilis': { title: 'Welwitschia', extract: '' } } });
+    expect((await summary(f, 'Welwitschia mirabilis', ['Welwitschia mirabilis'], who('Welwitschia mirabilis', 'Q156926'))).status).toBe('none');
+  });
+});
 
-describe('the build takes such a lead, and says it came under another title', () => {
+describe('the build takes such a title, and names the proof', () => {
   it('Welwitschia mirabilis is given the genus\'s article', async () => {
-    const r = await summary(wiki({ 'Welwitschia mirabilis': { title: 'Welwitschia', extract: LEAD.Welwitschia } }), 'Welwitschia mirabilis', ['Welwitschia mirabilis'], { name: 'Welwitschia mirabilis', synonyms: [] });
-    expect(r).toMatchObject({ status: 'ok', detail: "Wikipedia redirects Welwitschia mirabilis to Welwitschia, whose lead is this species'", data: { title: 'Welwitschia' } }); // base: none
+    const { f } = world({ ...W69, wiki: { 'Welwitschia mirabilis': { title: 'Welwitschia' } } });
+    const r = await summary(f, 'Welwitschia mirabilis', ['Welwitschia mirabilis'], who('Welwitschia mirabilis', 'Q156926'));
+    expect(r).toMatchObject({ status: 'ok', detail: "Wikipedia redirects Welwitschia mirabilis to Welwitschia, this species' genus (Q15044266), which holds one accepted species in Kew's WCVP", data: { title: 'Welwitschia' } });
   });
   it('Kopsia fruticosa is still not given the genus\'s (guard)', async () => {
-    const r = await summary(wiki({ 'Kopsia fruticosa': { title: 'Kopsia', extract: LEAD.Kopsia } }), 'Kopsia fruticosa', ['Kopsia fruticosa'], { name: 'Kopsia fruticosa', synonyms: [] });
-    expect(r).toEqual({ status: 'none', detail: 'Wikipedia redirects Kopsia fruticosa to Kopsia' });
+    const { f } = world({ ...W69, wiki: { 'Kopsia fruticosa': { title: 'Kopsia' } } });
+    expect(await summary(f, 'Kopsia fruticosa', ['Kopsia fruticosa'], who('Kopsia fruticosa', 'Q15232794'))).toEqual({ status: 'none', detail: 'Wikipedia redirects Kopsia fruticosa to Kopsia' });
   });
 });
 
-describe('--fill summaries asks again for what its first run set aside', () => {
-  const setAside = (name: string, to: string) => ({ name: { scientific: name, synonyms: [] as string[] }, ids: { gbif: 1 } as Record<string, unknown>, links: {} as Record<string, unknown>, upstream: { wikipedia: { status: 'none', at: '2026-10-12T00:00:00Z', detail: `Wikipedia redirects ${name} to ${to}` } } as Record<string, { status: string; at: string; detail?: string }>, summary: undefined as unknown });
-  const store = (docs: Record<string, unknown>) => ({ files: () => Object.keys(docs), read: <T,>(f: string) => docs[f] as T, write: (f: string, d: unknown) => { docs[f] = d; } });
-  it('takes back Welwitschia\'s, leaves Kopsia\'s aside, and records which', async () => {
-    const docs: Record<string, unknown> = { 'w.json': setAside('Welwitschia mirabilis', 'Welwitschia'), 'k.json': setAside('Kopsia fruticosa', 'Kopsia') };
-    const f = wiki({ 'Welwitschia mirabilis': { title: 'Welwitschia', extract: LEAD.Welwitschia }, 'Kopsia fruticosa': { title: 'Kopsia', extract: LEAD.Kopsia } });
+describe('--fill summaries asks again for what was set aside', () => {
+  const setAside = (name: string, to: string, item: string) => ({
+    name: { scientific: name, synonyms: [] as string[] },
+    ids: { gbif: 1, wikidata: item } as Record<string, unknown>,
+    links: {} as Record<string, unknown>,
+    upstream: { wikipedia: { status: 'none', at: '2026-10-12T00:00:00Z', detail: `Wikipedia redirects ${name} to ${to}` } } as Record<string, { status: string; at: string; detail?: string }>,
+    summary: undefined as unknown
+  });
+  const store = (docs: Record<string, unknown>) => ({ files: () => Object.keys(docs), read: <T,>(f: string) => structuredClone(docs[f]) as T, write: (f: string, d: unknown) => { docs[f] = d; } });
+  it('takes back Welwitschia\'s, leaves Kopsia\'s aside, and records the proof', async () => {
+    const docs: Record<string, unknown> = { 'w.json': setAside('Welwitschia mirabilis', 'Welwitschia', 'Q156926'), 'k.json': setAside('Kopsia fruticosa', 'Kopsia', 'Q15232794') };
+    const { f } = world({ ...W69, wiki: { 'Welwitschia mirabilis': { title: 'Welwitschia' }, 'Kopsia fruticosa': { title: 'Kopsia' } } });
     const c = await checkSummaries(store(docs) as never, f, () => '2026-10-13T00:00:00Z');
-    expect(c).toMatchObject({ restored: 1, dropped: 0 }); // base: no second look
+    expect(c).toMatchObject({ restored: 1, dropped: 0 });
     const w = docs['w.json'] as ReturnType<typeof setAside>;
     expect(w.summary).toMatchObject({ title: 'Welwitschia', source: 'wikipedia', licence: 'CC BY-SA 4.0' });
     expect(w.ids.wikipedia).toBe('Welwitschia');
     expect(w.links.wikipedia).toBe('https://en.wikipedia.org/wiki/Welwitschia');
-    expect(w.upstream.wikipedia).toEqual({ status: 'ok', at: '2026-10-13T00:00:00Z', detail: "Wikipedia redirects Welwitschia mirabilis to Welwitschia, whose lead is this species'" });
+    expect(w.upstream.wikipedia).toEqual({ status: 'ok', at: '2026-10-13T00:00:00Z', detail: "Wikipedia redirects Welwitschia mirabilis to Welwitschia, this species' genus (Q15044266), which holds one accepted species in Kew's WCVP" });
     expect((docs['k.json'] as ReturnType<typeof setAside>).summary).toBeUndefined();
   });
   it('offline it asks nothing and changes nothing (guard)', async () => {
-    const docs: Record<string, unknown> = { 'w.json': setAside('Welwitschia mirabilis', 'Welwitschia') };
+    const docs: Record<string, unknown> = { 'w.json': setAside('Welwitschia mirabilis', 'Welwitschia', 'Q156926') };
     const c = await checkSummaries(store(docs) as never, null);
     expect(c.restored).toBe(0);
     expect((docs['w.json'] as ReturnType<typeof setAside>).summary).toBeUndefined();
+  });
+});
+
+describe('the pure rule (guards)', () => {
+  it('Kew\'s count proves only a genus: a family of one genus, given a count, is no proof', () => {
+    const facts = { species: { id: 'Q156926', parents: ['Q10780833'], basionyms: [], sourceOf: [] }, title: { id: 'Q10780833', productOf: [], taxonNames: ['Welwitschia'], ranks: ['Q35409'], basionyms: [] }, genus: { name: 'Welwitschia', accepted: 1, only: 'Welwitschia mirabilis' } };
+    expect(proofByItem('Welwitschiaceae', who('Welwitschia mirabilis', 'Q156926'), facts)).toBeNull();
+    expect(proofByItem('Welwitschiaceae', who('Welwitschia mirabilis', 'Q156926'), { ...facts, title: { ...facts.title, ranks: [GENUS] } })).toMatchObject({ proof: 'monotypic-genus' });
   });
 });

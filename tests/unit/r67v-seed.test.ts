@@ -123,7 +123,8 @@ describe('the commit (C1) and the browser without Web Locks', () => {
     const { SEED_MARK } = await import('$lib/db/demo');
     expect(await seedDemo()).toBe(true);
     expect(calls).toHaveLength(1);
-    expect(calls[0][5]).toEqual({ meta: { [SEEDED]: true }, markLast: SEED_MARK, requireMeta: [{ key: SEED_MARK, absent: true }] }); // base: no sixth argument; the mark and stamp were two later writes; the condition, round sixty-nine (triage-68 X6, in R's `requireMeta` form at the merge: with Web Locks there is no claim to check)
+    // And the log empty, in the same transaction (round seventy; triage-69 X3): the numbers ledger now, the vault's own `requireEmpty` once R has it.
+    expect(calls[0][5]).toEqual({ meta: { [SEEDED]: true }, markLast: SEED_MARK, requireMeta: [{ key: SEED_MARK, absent: true }, { key: 'issued:accession', absent: true }, { key: 'issued:sowing', absent: true }], requireEmpty: true }); // base: no sixth argument; the mark and stamp were two later writes; the condition, round sixty-nine (triage-68 X6, in R's `requireMeta` form at the merge: with Web Locks there is no claim to check)
     expect(rebuilt.n).toBe(1); // base: no snapshot after the seed (S-E1)
   });
   it('without Web Locks a seed whose commit fails leaves nothing marked, and the next load sets it out', async () => {

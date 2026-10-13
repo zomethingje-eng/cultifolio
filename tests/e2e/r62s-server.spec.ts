@@ -17,11 +17,15 @@ const STRANGER = 'a'.repeat(64);
 test('a removed photograph: its receipt refuses a stranger, its owner stores it again as a new generation, read through the pointer (round sixty-two; decision 7, A23)', async ({ request }) => {
   const token = createHash('sha256').update(`r62s ${Date.now()} ${Math.random()}`).digest('hex');
   const id = vaultIdFor(token);
-  const auth = { authorization: `Bearer ${token}` };
   // From a documentation address of its own (wrangler dev takes the header as the client's address), so this spec does not
   // spend the smoke tests' five new vaults a day from 127.0.0.1 (round sixty-two, at the merge); the helper's, not a fixed
   // one, so a reused server does not refuse it on the next run (round sixty-seven; triage-66 H9, IND-9).
-  expect((await request.post('/api/sync/vault', { headers: { 'cf-connecting-ip': docAddress() }, data: { id, token, create: true } })).status()).toBe(200);
+  // Every request from one documentation address, the first upload's too (round seventy; triage-69 W5, S-E4): the vault's
+  // place is taken at its first stored object and counted to the uploader's network, and an upload with no address came
+  // from 127.0.0.1, whose /24 places ten vaults a day; the eleventh run of these two specs on one server was refused 503.
+  const from = { 'cf-connecting-ip': docAddress() };
+  const auth = { ...from, authorization: `Bearer ${token}` };
+  expect((await request.post('/api/sync/vault', { headers: from, data: { id, token, create: true } })).status()).toBe(200);
   const url = `/api/sync/photo/p000r62s?vault=${id}`;
   const put = (drop: string, bytes: number[]) => request.put(url, { headers: { ...auth, 'x-photo-drop': drop, 'content-type': 'application/octet-stream' }, data: Buffer.from(bytes) });
   const get = async () => { const r = await request.get(url, { headers: auth }); return r.status() === 200 ? [...(await r.body())] : r.status(); };
@@ -92,8 +96,9 @@ test.describe('without the service worker', () => {
     await expect(page.locator('.notice')).toContainText('were not asked');
     const first = asked;
     held = false;
-    // two seconds on, unprompted: asked again, and the forecast shown
-    await expect(page.locator('.notice')).toContainText('All clear.', { timeout: 10_000 });
+    // two seconds on, unprompted: asked again, and the forecast shown. London reads no alerts service, so the forecast is
+    // "Forecast clear.", never "All clear." (round seventy, P4; R47-12).
+    await expect(page.locator('.notice')).toContainText('Forecast clear.', { timeout: 10_000 });
     expect(asked).toBeGreaterThan(first);
   });
 });

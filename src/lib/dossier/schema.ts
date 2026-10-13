@@ -6,7 +6,7 @@
  */
 import { mendGbifThumb, mendCommonsThumb } from './md5';
 import { dedupePhotos } from './dedupe';
-import { shownPhotos } from './photo-kind';
+import { shownPhotos, type HeldNames } from './photo-kind';
 import * as v from 'valibot';
 
 /** v2 (September 2026): the habitat climate is an envelope across every in-range record's cell, not one point. */
@@ -216,7 +216,17 @@ export const Photo = v.object({
   page: v.optional(v.string()),
   captive: v.optional(v.boolean()),
   observedOn: v.optional(v.string()),
-  place: v.optional(v.string())
+  place: v.optional(v.string()),
+  /**
+   * A Commons file's categories as Commons gave them, kept since round seventy (REVIEW-TRIAGE-69 C2) by the build and by
+   * `--fill commons-kind`, so the read applies the category rules (`commonsKind`) to a stored file as to a new answer.
+   * Absent in a file not yet read again; present and empty for a file Commons files under none.
+   */
+  categories: v.optional(v.array(v.string())),
+  /** True when Commons' description of the file strikes out a name ("Centaurea sp. ~~C. nuttallii~~"; S-C3), kept with the categories. */
+  struck: v.optional(v.boolean()),
+  /** True for GBIF media of a preserved specimen (the record's basisOfRecord), which ranks below Commons as a lead (round seventy, second pass; C7, R47-10). */
+  specimen: v.optional(v.boolean())
 });
 
 export const Paper = v.object({
@@ -280,8 +290,12 @@ export function unchain(detail: string | undefined): string | undefined {
   return reason == null ? origin : `${origin}${sep}${reason}`;
 }
 
-/** Every address in a dossier that a page turns into a link, scrubbed to web addresses; a photograph whose own address is not one is dropped. */
-export function safeUrls(d: Dossier): Dossier {
+/**
+ * Every address in a dossier that a page turns into a link, scrubbed to web addresses; a photograph whose own address is
+ * not one is dropped. `held` is the reference's names (`heldNamesOf` of the index), which the photograph rules read to
+ * tell an uploader's slip from another species (round seventy; REVIEW-TRIAGE-69 C1); without it no slip is the species'.
+ */
+export function safeUrls(d: Dossier, held?: HeldNames | null): Dossier {
   // Extremes read at a POWER cell that is mostly sea are set aside (round thirty-five, R1-11): the cold floor then comes
   // from the range's coldest mean night, and the page says what the sea cell gave.
   const climate = d.climate.status === 'ok' && d.climate.extremes && d.climate.landFraction != null && d.climate.landFraction < 0.5 ? { ...d.climate, extremes: undefined, extremesSea: d.climate.extremes, extremesStatus: 'sea' as const } : d.climate;
@@ -291,7 +305,7 @@ export function safeUrls(d: Dossier): Dossier {
     summary: d.summary ? { ...d.summary, url: webUrl(d.summary.url) ?? '' } : d.summary,
     // A Commons file that is not a photograph of the species, or whose licence or author the rules do not read, is left
     // out here, and the rest have Commons' credit cleaned, so the deploy corrects every page (round sixty-nine; triage-68 K1-K3).
-    photos: shownPhotos(dedupePhotos(d.photos.filter((p) => webUrl(p.url) && webUrl(p.thumb)).map((p) => ({ ...p, thumb: mendCommonsThumb(mendGbifThumb(p.thumb, p.id, p.url), p.width), page: webUrl(p.page) }))), d.name),
+    photos: shownPhotos(dedupePhotos(d.photos.filter((p) => webUrl(p.url) && webUrl(p.thumb)).map((p) => ({ ...p, thumb: mendCommonsThumb(mendGbifThumb(p.thumb, p.id, p.url), p.width), page: webUrl(p.page) }))), d.name ? { scientific: d.name.scientific, synonyms: d.name.synonyms, key: d.key, held } : null),
     // A specimen record under DiSSCo's DOI prefix is not a paper (round thirty-one, 6): dropped here as well as at the build, so dossiers built before the rule show none.
     literature: d.literature.filter((p) => !/^(https?:\/\/doi\.org\/)?10\.3535\//i.test(p.doi ?? '')).map((p) => ({ ...p, url: webUrl(p.url) })),
     links: Object.fromEntries(Object.entries(d.links).filter(([, u]) => webUrl(u))),
@@ -299,8 +313,8 @@ export function safeUrls(d: Dossier): Dossier {
   };
 }
 
-export function parseDossier(json: unknown): Dossier {
-  return safeUrls(v.parse(Dossier, json));
+export function parseDossier(json: unknown, held?: HeldNames | null): Dossier {
+  return safeUrls(v.parse(Dossier, json), held);
 }
 
 export function dossierPath(key: number): string {

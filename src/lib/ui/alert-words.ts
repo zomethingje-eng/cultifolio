@@ -20,3 +20,16 @@ export function alertsWhy(status: string | null | undefined): string {
   if (status === 'unanswered') return 'the National Weather Service did not answer';
   return '';
 }
+
+/**
+ * Whether the alerts were read: the National Weather Service answered for the point, with alerts or with none. Only then
+ * may a clear forecast be "All clear." (round seventy; triage-69 P4, R47-12): a place outside the NWS's area, or one it
+ * was not asked for (`n/a`, or a forecast from before the status was kept), read "All clear." and "frost: clear" with no
+ * alerts service asked, which is a statement that no alert is in force that nothing made.
+ */
+export function alertsRead(status: string | null | undefined): boolean {
+  return status === 'ok' || status === 'none';
+}
+
+/** Said of a place whose alerts no service read (not refused, not unanswered: none was asked), as a whole sentence. */
+export const NO_ALERTS_SERVICE = 'No weather alerts are read for this place: this site reads them only from the US National Weather Service, which does not cover it.';

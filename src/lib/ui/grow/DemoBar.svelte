@@ -28,6 +28,8 @@
   let hasOwn = $state<boolean | null>(false);
   /** The example was closed under this page by another tab (round sixty-seven; triage-66 V3): said here, with the way home. */
   let closedHere = $state(false);
+  /** The example was not set out, because it already held records of the visitor's (round seventy; triage-69 X3). */
+  let unseeded = $state(false);
   onMount(() => {
     if (!on) {
       delete document.documentElement.dataset.demo;
@@ -54,7 +56,8 @@
     // Shared with the pages, which say "Setting out the example collection" rather than draw their empty state under it (round sixty-three, V2).
     example.seeding = true;
     // The seed is loaded only in the sample: a visitor's page carries none of it (round sixty-one; the accessibility review, 3).
-    void import('./demo-seed').then((m) => m.seedDemo()).catch(() => false).finally(() => (example.seeding = false));
+    // Not set out over records of the visitor's already in it, and said (round seventy; triage-69 X3; S-D6).
+    void import('./demo-seed').then((m) => m.seedDemo(() => (unseeded = true))).catch(() => false).finally(() => (example.seeding = false));
     return () => { stop(); unclosed(); };
   });
   const locked = $derived(/^\/(sync|backup|settings)(\/|$)/.test(page.url.pathname));
@@ -91,7 +94,7 @@
     <!-- To `/`: the tab's note takes it out of the example; an address that marked a delete deleted an example opened afterwards in another tab (round sixty-nine; triage-68 X1, S-C1). -->
     <span class="demoacts"><a class="btn small pri" href="/" id="demo-home" data-sveltekit-reload>Go to my own collection</a></span>
   {:else}
-    <span><b>An example collection,</b> so you can see what this page does. Nothing added here is kept: leaving deletes it.{hasOwn ? ' Your own collection is kept apart, as you left it.' : ''} <span class="sr" role="status">{example.seeding ? 'Setting it out…' : ''}</span></span>
+    <span><b>An example collection,</b> so you can see what this page does. Nothing added here is kept: leaving deletes it.{hasOwn ? ' Your own collection is kept apart, as you left it.' : ''}{#if unseeded}{' '}<span role="status" id="demo-unseeded">Its own plants and places were not set out, because something had already been added to it.</span>{/if} <span class="sr" role="status">{example.seeding ? 'Setting it out…' : ''}</span></span>
     <span class="demoacts">
       {#if hasOwn === false}<button class="btn small pri" type="button" id="demo-add" onclick={() => leaveExample('/plants/new')} disabled={example.leaving}>Add your first plant</button>{/if}
       <button class="btn small" type="button" id="demo-leave" onclick={() => leaveExample('/')} disabled={example.leaving}>{example.leaving ? 'Leaving…' : 'Leave the example'}</button>

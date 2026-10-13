@@ -113,6 +113,9 @@ function bigVault() {
   return { r2, calls };
 }
 
+/** The pages the last sixty minutes' count holds (round seventy: `l` keeps them by minute). */
+const pagesIn = (v: unknown) => ((v as { m: Array<[number, number]> }).m ?? []).reduce((a, [, n]) => a + n, 0);
+
 describe('W2: the listing budget holds for walks in flight (S-E2, IND-10, R46-22)', () => {
   // The hour's budget, written out: a test that read the constant stayed green when it was raised (R46-31).
   const BUDGET = 1200, WALK = 50;
@@ -127,8 +130,8 @@ describe('W2: the listing budget holds for walks in flight (S-E2, IND-10, R46-22
     for (let i = 0; i < 30; i++) asks.push(await c.listAsk(BUDGET, now, WALK));
     expect(asks.filter((a) => a.ok)).toHaveLength(1);
     // Every walk that passed uses its whole reservation.
-    for (const a of asks) if (a.ok) await c.listed(WALK, now, a.reserved, a.hour);
-    expect((s.m.get('l') as { n: number }).n).toBeLessThan(BUDGET + WALK);
+    for (const a of asks) if (a.ok) await c.listed(WALK, now, a.reserved, a.minute);
+    expect(pagesIn(s.m.get('l'))).toBeLessThan(BUDGET + WALK);
   });
   it('100 pulls at once on a vault of 49,000 batches make at most the hour\'s pages and one walk more, and the rest are refused', async () => {
     const { r2, calls } = bigVault();
@@ -143,17 +146,21 @@ describe('W2: the listing budget holds for walks in flight (S-E2, IND-10, R46-22
     const ns = countersNs();
     const now = Date.UTC(2026, 9, 10, 12, 15);
     for (let i = 0; i < 1000; i++) await listBatches(r2 as never, ID, null, 500, null, q(ns, now));
-    expect((ns.raw(`bytes:${ID}`).m.get('l') as { n: number }).n).toBe(1000);
+    expect(pagesIn(ns.raw(`bytes:${ID}`).m.get('l'))).toBe(1000);
   });
-  it('a walk that ends in the next hour settles nothing there, and its reservation is not taken off the new hour', async () => {
+  // Round seventy (triage-69 W4, S-E7): the count is the last sixty minutes', not the clock hour's, so a walk asked in an
+  // hour's last second is settled in the next hour's first, where it is still counted (this test read the clock hour's
+  // count, which the turn of the hour emptied).
+  it('a walk that ends in the next hour is settled where it was asked, and the next hour\'s first ask is counted beside it', async () => {
     const s = pagedStorage();
     const c = new Counters({ storage: s } as never, {} as never);
     const now = Date.UTC(2026, 9, 10, 12, 59, 59);
     const a = await c.listAsk(BUDGET, now, WALK);
     if (!a.ok) throw new Error('refused');
-    await c.listAsk(BUDGET, now + 2000, WALK); // the next hour's first ask
-    await c.listed(3, now + 2000, a.reserved, a.hour);
-    expect(s.m.get('l')).toEqual({ h: Math.floor((now + 2000) / 3_600_000), n: WALK });
+    const b = await c.listAsk(BUDGET, now + 2000, WALK); // the next hour's first ask
+    if (!b.ok) throw new Error('refused');
+    await c.listed(3, now + 2000, a.reserved, a.minute);
+    expect(s.m.get('l')).toEqual({ m: [[a.minute, 3]], r: [[b.id, now + 2000, WALK, b.minute]] }); // b's walk still open (round seventy: reservations are held apart)
   });
 });
 
