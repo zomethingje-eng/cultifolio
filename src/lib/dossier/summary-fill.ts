@@ -6,7 +6,11 @@ import type { JsonFetcher } from './fetch';
 import type { Dossier } from './schema';
 import type { DossierStore } from './corpus-run';
 import { summary as wikiSummary, summaryTitleFits } from './sources/wikipedia';
-import { redirected, proofByName, speciesItems, titleKey, foreignBinomial, type Proof, type Who } from './summary-proof';
+import { mwWait } from './sources/wikimedia';
+import { redirected, proofByName, speciesItems, titleKey, binomialNotOurs, type Proof, type Who, type SpeciesItem } from './summary-proof';
+
+/** The waits before a summary a source did not answer is asked again in a corpus run (ten minutes, the fetch layer's cooling, twice); a test makes them instant. */
+export const fillRounds = { waits: [600_000, 600_000] as number[], sleep: (ms: number) => new Promise<void>((r) => setTimeout(r, ms)) };
 
 type SumDossier = Pick<Dossier, 'ids' | 'links' | 'upstream' | 'summary'> & { name: { scientific: string; synonyms: string[] } };
 export type SummaryCounts = {
@@ -50,9 +54,11 @@ const NOT_OURS = /^Wikipedia's article (.+?)(?: is under a name that is neither|
  *     summary as Wikipedia now gives it with the proof in its record, or "none: Wikipedia redirects X to Y", dropped.
  *     So the build and the fill decide alike on the same answers (S-A5). A summary set aside ("none" with a redirect
  *     recorded, or not checked) is asked the same way, and taken back on a proof.
- * A request Wikipedia, Wikidata or GBIF (for Kew's WCVP) does not answer leaves the summary as it is, counted as not
- * checked. With no fetcher (`--offline`) only the name is read: a title it does not settle is not checked, and nothing
- * set aside is asked again.
+ * A request Wikipedia, Wikidata or GBIF (for Kew's WCVP) does not answer, after `mwGet`'s waits on maxlag and the
+ * fetch layer's on 429, is asked again after ten minutes, twice (`fillRounds`); only then is the summary left as it
+ * is, counted as not checked. A batch of species' items that fails leaves only its own fifty unanswered. With no
+ * fetcher (`--offline`) only the name is read: a title it does not settle is not checked, and nothing set aside is
+ * asked again.
  */
 export async function checkSummaries(store: DossierStore, f: JsonFetcher | null, now = () => new Date().toISOString()): Promise<SummaryCounts> {
   const c: SummaryCounts = { kept: 0, confirmed: 0, proofs: {}, dropped: 0, unchecked: 0, lines: [], changed: 0, changedLines: [], restored: 0, restoredLines: [] };
@@ -76,22 +82,40 @@ export async function checkSummaries(store: DossierStore, f: JsonFetcher | null,
     ask.push({ file, asked: redirect?.[1] });
   }
   if (!f || !ask.length) return c;
-  const items = [...new Set(ask.map((a) => store.read<SumDossier>(a.file).ids?.wikidata).filter((q): q is string => !!q))];
-  const sp = items.length ? await speciesItems(f, items) : ({ status: 'ok', data: new Map() } as const);
-  for (const a of ask) {
-    const d = store.read<SumDossier>(a.file);
-    const who = whoOf(d);
-    if (who.item && sp.status !== 'ok') { c.unchecked++; continue; }
-    const species = who.item && sp.status === 'ok' ? (sp.data.get(who.item) ?? null) : undefined;
-    // A stored title that is the item's English sitelink stands without asking Wikipedia ("Saguaro").
-    if (d.summary && species?.sitelink && titleKey(species.sitelink) === titleKey(d.summary.title) && !foreignBinomial(d.summary.title, who)) { proved(a.file, d, 'item', `the English article of this species' Wikidata item (${who.item})`); continue; }
-    const asked = species?.sitelink ?? a.asked ?? d.name.scientific;
-    const r = await wikiSummary(f, asked, [asked], who, species === undefined ? {} : { species });
-    if (r.status === 'ok') take(a.file, d, r);
-    else if (r.status === 'none' && d.summary) drop(a.file, d, r.detail ?? `Wikipedia has no article ${asked}`);
-    else if (r.status !== 'none') c.unchecked++;
+  // What a source did not answer is asked again after a wait, twice, before it is counted not checked (round seventy-b):
+  // the fetch layer cools a host that refuses for ten minutes, and Wikidata's lag can outlast `mwGet`'s five asks.
+  let todo = ask;
+  for (let round = 0; todo.length; round++) {
+    const again = await pass(todo);
+    if (!again.length) break;
+    // Only a corpus run waits (`startCorpusRun` sets `mwWait.tries`), as only it waits on maxlag.
+    const waits = mwWait.tries > 1 ? fillRounds.waits : [];
+    if (round >= waits.length) { c.unchecked += again.length; break; }
+    await fillRounds.sleep(waits[round]);
+    todo = again;
   }
   return c;
+
+  /** One pass over the summaries to ask: the species' items fifty a request, then each title as the build reads it. Returns those not answered. */
+  async function pass(todo: typeof ask): Promise<typeof ask> {
+    const again: typeof ask = [];
+    const items = [...new Set(todo.map((a) => store.read<SumDossier>(a.file).ids?.wikidata).filter((q): q is string => !!q))];
+    const sp = items.length ? await speciesItems(f!, items) : { status: 'ok' as const, data: new Map<string, SpeciesItem | null>() };
+    for (const a of todo) {
+      const d = store.read<SumDossier>(a.file);
+      const who = whoOf(d);
+      if (who.item && sp.unanswered?.has(who.item)) { again.push(a); continue; }
+      const species = who.item ? (sp.data.get(who.item) ?? null) : undefined;
+      // A stored title that is the item's English sitelink, and no binomial of another name, stands without asking Wikipedia ("Saguaro").
+      if (d.summary && species?.sitelink && titleKey(species.sitelink) === titleKey(d.summary.title) && !binomialNotOurs(d.summary.title, who)) { proved(a.file, d, 'item', `the English article of this species' Wikidata item (${who.item})`); continue; }
+      const asked = species?.sitelink ?? a.asked ?? d.name.scientific;
+      const r = await wikiSummary(f!, asked, [asked], who, species === undefined ? {} : { species });
+      if (r.status === 'ok') take(a.file, d, r);
+      else if (r.status === 'none' && d.summary) drop(a.file, d, r.detail ?? `Wikipedia has no article ${asked}`);
+      else if (r.status !== 'none') again.push(a);
+    }
+    return again;
+  }
 
   /** A proof found for the stored summary: counted; a recorded redirect is rewritten to name it, and reported, when it named another (S-A6). */
   function proved(file: string, d: SumDossier, p: Proof, words: string) {

@@ -20,9 +20,16 @@ const GENDER = /(?:rum|ra|er|us|um|os|on|is|a|e)$/;
 
 export function spellingKey(epithet: string): string {
   let e = epithet.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\s-]+/g, '');
+  // Round seventy-b (agent A's need): a genitive of a name ending in -a, written -ai after a consonant (kanehirai,
+  // shimadai), is the -ae the Code asks for (Rec. 60C.1); and "caffr-" is the "afr-" the 2024 Madrid congress put in its
+  // place (Erythrina caffra, afra). Neither joins two accepted species of the reference. A vowel or "h" before -ai is no
+  // such genitive (Heliconia bihai).
+  e = e.replace(/^caffr/, 'afr').replace(/([^aeiouyh])ai$/, '$1ae');
   e = e.replace(/ae/g, 'e').replace(/oe/g, 'e');
   e = e.replace(/ii$/, 'i');
-  const end = GENDER.exec(e)?.[0] ?? '';
+  // A comparative's genitive (-ioris) is another word than the comparative (-ior), not its gender: Ceropegia ciliatior and
+  // Ceropegia ciliatioris are two species of the reference (round seventy-b, the merge).
+  const end = /oris$/.test(e) ? '' : (GENDER.exec(e)?.[0] ?? '');
   let bare = e.slice(0, e.length - end.length);
   if ((end === 'ra' || end === 'rum') && bare.endsWith('e')) bare = bare.slice(0, -1);
   return bare.length >= 3 ? bare : e;

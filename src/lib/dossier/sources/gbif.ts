@@ -1,6 +1,6 @@
 import type { JsonFetcher, FetchResult, SourceResult } from '../fetch';
 import { licenceTag, isOpen, type LicenceTag } from '$core/licence';
-import { sameNameAuthor } from '../authors';
+import { ownByAuthor, plainlyAnother } from '../authors';
 
 export const GBIF = 'https://api.gbif.org/v1';
 
@@ -243,12 +243,13 @@ export const WCVP_DATASET = 'f382f0ce-323a-4091-bb9f-add557f3a9a2';
  * variegata Jacobi"); `ids` is empty when Kew holds the words only under other authors and accepts none of them, or not
  * at all, and then nothing can be checked against Kew. A refusal is the answer.
  */
-export async function kewIpni(f: JsonFetcher, name: string, authorship?: string): Promise<FetchResult<{ ids: string[]; label?: string; others?: Array<{ id: string; label: string }> }>> {
-  const r = await f<{ results?: Array<{ key: number; scientificName: string; canonicalName?: string; authorship?: string; taxonomicStatus?: string; references?: string }> }>(`${GBIF}/species?datasetKey=${WCVP_DATASET}&name=${encodeURIComponent(name)}&limit=50`);
+export async function kewIpni(f: JsonFetcher, name: string, authorship?: string): Promise<FetchResult<{ ids: string[]; label?: string; others?: Array<{ id: string; label: string }>; acceptedKeys?: number[] }>> {
+  const r = await f<{ results?: Array<{ key: number; scientificName: string; canonicalName?: string; authorship?: string; taxonomicStatus?: string; references?: string; acceptedKey?: number }> }>(`${GBIF}/species?datasetKey=${WCVP_DATASET}&name=${encodeURIComponent(name)}&limit=50`);
   if (r.status === 'none') return { status: 'ok', data: { ids: [] } };
   if (r.status !== 'ok') return r;
   const words = (r.data.results ?? []).filter((x) => (x.canonicalName ?? '').toLowerCase() === name.toLowerCase() && !/misapplied/i.test(x.taxonomicStatus ?? ''));
-  const own = words.filter((x) => sameNameAuthor(authorship, x.authorship));
+  // The backbone's author read as the bulk path reads it (`ownByAuthor`; round seventy, the owner's run).
+  const own = ownByAuthor(words, authorship, (x) => x.authorship);
   // With no row by the backbone's author, the one entry Kew accepts under the words, as the bulk path reads Kew's files.
   const accepted = words.filter((x) => /^accepted$/i.test(x.taxonomicStatus ?? ''));
   const rows = own.length ? own : authorship?.trim() && accepted.length === 1 ? accepted : [];
@@ -256,8 +257,26 @@ export async function kewIpni(f: JsonFetcher, name: string, authorship?: string)
   const ids = [...new Set(rows.flatMap((x) => ipni(x) ?? []))];
   // The words' other rows, another author's names (round seventy, second pass; triage-69 B6, R47-5): an item that carries
   // one of their identifiers is that homonym's item (Albuca longifolia's 527398-1 is Baker's).
-  const others = words.filter((x) => !rows.includes(x)).flatMap((x) => { const id = ipni(x); return id && !ids.includes(id) ? [{ id, label: x.scientificName }] : []; });
-  return { status: 'ok', data: { ids, ...(rows.length ? { label: rows[0].scientificName } : {}), ...(others.length ? { others } : {}) } };
+  // Only a row plainly by another author counts (`plainlyAnother`): Kew's "Welw. ex Hiern" for GBIF's "Welw. ex Ficalho"
+  // is one manuscript name, not a homonym (Hibiscus acetosella; round seventy, the owner's run).
+  const others = words.filter((x) => !rows.includes(x) && plainlyAnother(authorship, x.authorship)).flatMap((x) => { const id = ipni(x); return id && !ids.includes(id) ? [{ id, label: x.scientificName }] : []; });
+  // The entries Kew accepts where it holds the name as a synonym: their identifiers tell two items apart (round seventy,
+  // the owner's run: Parrycactus flavovirens is Kew's synonym of Ferocactus flavovirens; `kewEntryIpni`).
+  const acceptedKeys = [...new Set(rows.flatMap((x) => (/synonym/i.test(x.taxonomicStatus ?? '') && x.acceptedKey ? [x.acceptedKey] : [])))];
+  return { status: 'ok', data: { ids, ...(rows.length ? { label: rows[0].scientificName } : {}), ...(others.length ? { others } : {}), ...(acceptedKeys.length ? { acceptedKeys } : {}) } };
+}
+
+/** The IPNI identifiers of Kew's entries by their keys in GBIF's copy of WCVP, one request each; a refusal is the answer. */
+export async function kewEntryIpni(f: JsonFetcher, keys: readonly number[]): Promise<FetchResult<Array<{ id: string; label: string }>>> {
+  const out: Array<{ id: string; label: string }> = [];
+  for (const k of keys) {
+    const r = await f<{ scientificName?: string; references?: string }>(`${GBIF}/species/${k}`);
+    if (r.status === 'none') continue;
+    if (r.status !== 'ok') return r;
+    const id = /urn:lsid:ipni\.org:names:([\w-]+)$/.exec(r.data.references ?? '')?.[1];
+    if (id) out.push({ id, label: r.data.scientificName ?? '' });
+  }
+  return { status: 'ok', data: out };
 }
 
 export interface GbifOccurrence {

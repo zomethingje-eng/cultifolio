@@ -177,10 +177,10 @@ async function readKeys(f: JsonFetcher, keys: readonly number[], name: string, g
  *         kingdom stated, and never a record GBIF files under another species;
  *       - carrying no GBIF key GBIF still serves, by its taxon name (P225) alone, which is taken only when no other item
  *         is proved: a homonym's item carries the name too;
+ *   - by IPNI: with no item proved by key or label, the item that carries Kew's IPNI identifier for this name and
+ *     author (`haswbstatement:P961=`), reading one hit more than Kew has identifiers for it;
  *   - by the GBIF records of the older names with the same type, in one search (round sixty-eight, third part), asking
- *     for one more item than there are keys, so a search that could hold more is never read as holding all (R46-16);
- *   - by IPNI: with no item proved by key, label or older name, the item that carries Kew's IPNI identifier for this
- *     name and author (`haswbstatement:P961=`), reading one hit more than Kew has identifiers for it.
+ *     for one more item than there are keys, so a search that could hold more is never read as holding all (R46-16).
  * Two items left standing is `ambiguous`, "not taken: two items answered", never "none"; an answer by an older name
  * names it (triage-68 M8, R46-15). A GBIF that does not answer while an item is checked is the step's answer, marked as
  * GBIF's (`by`), so the previous identifiers are kept and the record says which source did not answer.
@@ -191,7 +191,7 @@ export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?:
   const mw = <T,>(url: string) => mwGet<T & { error?: unknown }>(f, url);
   const failed = (data: unknown) => { const err = mwError(data); return err ? ({ status: 'error', detail: `wikidata ${err}` } as const) : null; };
   // Kew's identifiers for this name and author, asked of GBIF once, when an item carries an IPNI identifier or none is found.
-  type Kew = { ids: string[]; label?: string; others?: Array<{ id: string; label: string }> };
+  type Kew = { ids: string[]; label?: string; others?: Array<{ id: string; label: string }>; acceptedKeys?: number[] };
   let kew: Kew | undefined;
   const kewOf = async (): Promise<FetchResult<Kew>> => {
     if (kew) return { status: 'ok', data: kew };
@@ -267,10 +267,33 @@ export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?:
     // An item with two IPNI identifiers links the one that proved it.
     else if (left.length === 1) return { status: 'ok', ...(left[0].detail ? { detail: left[0].detail } : {}), data: { ...crossOf(left[0].id, left[0].e), ...(left[0].ipni ? { ipni: left[0].ipni } : {}) } };
   }
+  // Found by IPNI (round seventy; triage-69 B2): the item that carries Kew's identifier for this name and author, asked
+  // when no item was proved by key or label, and before the older names (round seventy, the owner's run: Scilla siberica's
+  // item Q158944, labelled "Siberian squill", carries Kew's 927545-1, and the older names' search gave Othocallis
+  // siberica's item, the item of another combination).
+  if (!two && gbifKey) {
+    const k = await kewOf();
+    if (k.status !== 'ok' && k.status !== 'none') return gbifs(k);
+    if (k.status === 'ok' && k.data.ids.length) {
+      const q = await mw<{ query?: { search?: Array<{ title: string }> } }>(`https://www.wikidata.org/w/api.php?action=query&format=json&list=search&srlimit=${k.data.ids.length + 1}&srsearch=${encodeURIComponent(`haswbstatement:${k.data.ids.map((i) => `P961=${i}`).join('|')}`)}&maxlag=5`);
+      if (q.status !== 'ok') return q;
+      const bad = failed(q.data);
+      if (bad) return bad;
+      const ids = [...new Set((q.data.query?.search ?? []).map((h) => h.title))];
+      if (ids.length > 1) two = `not taken: two items carry Kew's IPNI identifier for ${k.data.label} (${ids.join(', ')})`;
+      else if (ids.length === 1) {
+        const e = await entityOf(f, ids[0]);
+        if (e.status !== 'ok') return e;
+        const hit = e.data ? strings(e.data, P.ipni).find((i) => k.data.ids.includes(i)) : undefined;
+        if (e.data && hit) return { status: 'ok', detail: `found by its IPNI identifier ${hit}, Kew's for ${k.data.label}`, data: { ...crossOf(ids[0], e.data), ipni: hit } };
+      }
+    }
+  }
   // Wikidata files the species under an older name with the same type (Q310510, Ferocactus glaucescens, for Bisnaga
   // glaucescens): found by the GBIF record of that name, in one search, and taken only when one item answers (round
   // sixty-eight, third part). Two items that are not one the other's basionym is no answer.
   if (older.length) {
+    let kewPick: string | undefined;
     const q = await mw<{ query?: { search?: Array<{ title: string }> } }>(`https://www.wikidata.org/w/api.php?action=query&format=json&list=search&srlimit=${older.length + 1}&srsearch=${encodeURIComponent(`haswbstatement:${olderKeys.map((k) => `P846=${k}`).join('|')}`)}&maxlag=5`);
     if (q.status !== 'ok') return q;
     const bad = failed(q.data);
@@ -289,6 +312,20 @@ export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?:
       // Two items on one basionym are one plant (Ceropegia sociarum; R47-5).
       const one = oneByBasionym(ids.map((q) => ({ id: q, e: b.data.entities?.[q] ?? {} })));
       if (one) ids = [one];
+      // Still two: the one that carries the IPNI identifier of the entry Kew accepts for this species is the one (round
+      // seventy, the owner's run: Parrycactus flavovirens, Kew's synonym of Ferocactus flavovirens, found Q309595,
+      // Ferocactus flavovirens, carrying Kew's 103628-2, and Q109398281, Bisnaga flavovirens, with no basionym stated).
+      if (ids.length > 1 && gbifKey) {
+        const k = await kewOf();
+        if (k.status !== 'ok' && k.status !== 'none') return gbifs(k);
+        if (k.status === 'ok' && k.data.acceptedKeys?.length) {
+          const acc = await gbif.kewEntryIpni(f, k.data.acceptedKeys);
+          if (acc.status === 'refused' || acc.status === 'error' || acc.status === 'skipped') return gbifs(acc);
+          const held = acc.status === 'ok' ? acc.data : [];
+          const hit = ids.filter((q) => strings(b.data.entities?.[q] ?? {}, P.ipni).some((i) => held.some((a) => a.id === i)));
+          if (hit.length === 1) { ids = hit; kewPick = held.find((a) => strings(b.data.entities?.[hit[0]] ?? {}, P.ipni).includes(a.id))?.label; }
+        }
+      }
     }
     if (ids.length > 1) return { status: 'ambiguous', detail: `not taken: two items answered to the older names' GBIF records (${ids.join(', ')})` };
     if (ids.length === 1) {
@@ -300,29 +337,9 @@ export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?:
         const by = older.find((o) => keys.includes(o.key));
         if (by || !keys.length || keys.includes(gbifKey ?? NaN)) {
           const named = by?.name ? `the GBIF record of ${by.name}, an older name with the same type` : 'the GBIF record of an older name with the same type';
-          return { status: 'ok', detail: `found by ${named}`, data: crossOf(ids[0], e.data) };
+          return { status: 'ok', detail: `found by ${named}${kewPick ? `, the item of ${kewPick}, the name Kew accepts for it` : ''}`, data: crossOf(ids[0], e.data) };
         }
         notes.push(`not taken: ${ids[0]}, found by an older name's GBIF record, carries GBIF key ${keys.join(', ')}`);
-      }
-    }
-  }
-  // Found by IPNI (round seventy; triage-69 B2): the item that carries Kew's identifier for this name and author, asked
-  // when no item was proved by key, label or older name. Peperomia monticola Miq.'s label item is Hooker's homonym's.
-  if (!two && gbifKey) {
-    const k = await kewOf();
-    if (k.status !== 'ok') return k.status === 'none' ? { status: 'none' } : gbifs(k);
-    if (k.data.ids.length) {
-      const q = await mw<{ query?: { search?: Array<{ title: string }> } }>(`https://www.wikidata.org/w/api.php?action=query&format=json&list=search&srlimit=${k.data.ids.length + 1}&srsearch=${encodeURIComponent(`haswbstatement:${k.data.ids.map((i) => `P961=${i}`).join('|')}`)}&maxlag=5`);
-      if (q.status !== 'ok') return q;
-      const bad = failed(q.data);
-      if (bad) return bad;
-      const ids = [...new Set((q.data.query?.search ?? []).map((h) => h.title))];
-      if (ids.length > 1) two = `not taken: two items carry Kew's IPNI identifier for ${k.data.label} (${ids.join(', ')})`;
-      else if (ids.length === 1) {
-        const e = await entityOf(f, ids[0]);
-        if (e.status !== 'ok') return e;
-        const hit = e.data ? strings(e.data, P.ipni).find((i) => k.data.ids.includes(i)) : undefined;
-        if (e.data && hit) return { status: 'ok', detail: `found by its IPNI identifier ${hit}, Kew's for ${k.data.label}`, data: { ...crossOf(ids[0], e.data), ipni: hit } };
       }
     }
   }

@@ -1,5 +1,5 @@
 import type { JsonFetcher, SourceResult } from '../fetch';
-import { titleProof, redirected, notChecked, notOurs, titled, foreignBinomial, titleKey, type Who, type Facts, type Proof } from '../summary-proof';
+import { titleProof, redirected, notChecked, notOurs, titled, binomialNotOurs, titleKey, type Who, type Facts, type Proof } from '../summary-proof';
 
 /* ---------- Wikipedia (CC BY-SA): the lead paragraph, kept segregated ---------- */
 
@@ -31,10 +31,11 @@ export async function summary(f: JsonFetcher, title: string, accept?: readonly s
   const got = (r.data.title ?? title).replace(/_/g, ' ');
   let detail: string | undefined;
   let proof: Proof | undefined;
-  // Under another title, or under the title asked when that is another species' name (the item's sitelink or a title
-  // carried from the last build, round seventy A2, R47-4: "Drosera tomentosa" for Drosera montana), a proof is needed.
+  // Under another title, or under the title asked when that is a binomial not this species' name (the item's sitelink or
+  // a title carried from the last build, round seventy A2, R47-4: "Drosera tomentosa" for Drosera montana), a proof is
+  // needed; GBIF says whether such a binomial is another species (round seventy-b).
   const moved = titleKey(got) !== titleKey(title.replace(/_/g, ' '));
-  if (accept && (moved || (who && foreignBinomial(got, who)))) {
+  if (accept && (moved || (who && binomialNotOurs(got, who)))) {
     if (who) {
       const v = await titleProof(f, got, who, pre);
       if (v.status === 'none') return { status: 'none', detail: moved ? redirected(title, got) : notOurs(got) };

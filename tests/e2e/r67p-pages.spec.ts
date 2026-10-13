@@ -11,11 +11,20 @@ const plant = (id: string, no: string, name: string, place?: string): Row[] => [
   ['accession', id, 'acc', no], ['accession', id, 'taxonName', name], ['accession', id, 'status', 'growing'], ['accession', id, 'nameKind', 'species'], ...(place ? [['accession', id, 'locationId', place] as Row] : [])
 ];
 
-/** Firefox's persist(): it asks the person, and a dismissed question never answers. Each ask is logged. */
+/**
+ * Firefox's persist(): it asks the person, and a dismissed question never answers. Each ask is logged.
+ *
+ * On the prototype, not on `navigator.storage` itself (round seventy-b; the owner's all-engines run: 0 asks over six
+ * loads in WebKit, on both attempts, while r60 14, which replaces the prototype's method, passed there). A property set
+ * on the object `navigator.storage` returns is an expando on a DOM wrapper, and Safari's engine keeps such a wrapper only
+ * while something holds it: collected between the init script and the collection's ask, it came back without the
+ * property, so the browser's own persist() answered, nothing was logged, and the count read 0. The prototype is never
+ * collected, in any engine.
+ */
 function firefoxPersist(): void {
-  const st = navigator.storage as StorageManager & { persist: () => Promise<boolean>; persisted: () => Promise<boolean> };
-  st.persist = () => { try { localStorage.setItem('__asks', `${localStorage.getItem('__asks') ?? ''}${location.pathname};`); } catch { /* none */ } return new Promise<boolean>(() => {}); };
-  st.persisted = () => Promise.resolve(false);
+  const proto = (typeof StorageManager !== 'undefined' ? StorageManager.prototype : Object.getPrototypeOf(navigator.storage)) as StorageManager;
+  proto.persist = () => { try { localStorage.setItem('__asks', `${localStorage.getItem('__asks') ?? ''}${location.pathname};`); } catch { /* none */ } return new Promise<boolean>(() => {}); };
+  proto.persisted = () => Promise.resolve(false);
 }
 
 test('r67p P1: a "keep data" question never answered is put once over six page loads, not on every load (S-E4, R45-6, IND-2)', async ({ browser }) => {
@@ -41,8 +50,11 @@ test('r67p P1: a "keep data" question never answered is put once over six page l
     await page.locator('html[data-collection="open"]').waitFor({ state: 'attached', timeout: 30_000 });
   }
   const asks = (await page.evaluate(() => localStorage.getItem('__asks') ?? '')).split(';').filter(Boolean);
-  expect(asks.length, asks.join(' ')).toBe(1); // the base asked on every load: 7
-  expect(await page.evaluate(() => localStorage.getItem('cultifolio.persistAskedAt'))).not.toBeNull();
+  const askedAt = await page.evaluate(() => localStorage.getItem('cultifolio.persistAskedAt'));
+  // The two together say which failure it is: an ask the site made with the browser's own persist() answering (the
+  // time written, nothing logged) is the test's stand-in lost; no time at all is no ask.
+  expect(asks.length, `asks: ${asks.join(' ') || 'none'}; persistAskedAt: ${askedAt ?? 'none'}`).toBe(1); // the base asked on every load: 7
+  expect(askedAt).not.toBeNull();
   await ctx.close();
 });
 

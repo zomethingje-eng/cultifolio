@@ -13,6 +13,10 @@ export type World = {
   items?: Record<string, Item>;
   /** Kew's WCVP through GBIF: a genus → its accepted species, named or counted (absent: Kew holds no accepted genus of the name). */
   genera?: Record<string, number | string[]>;
+  /** GBIF's backbone, `species/match`: a binomial → the species it is held under, as synonym or accepted, and the name below species it is held under, if any. */
+  gbif?: Record<string, { species: string; status: 'ACCEPTED' | 'SYNONYM'; below?: string }>;
+  /** Kew's WCVP through GBIF: a species' name → its rows. */
+  kew?: Record<string, Array<{ authorship: string; taxonomicStatus: string; accepted?: string }>>;
   /** A URL matching this is refused, as a 429 is after the fetch layer's retries. */
   refuse?: RegExp;
 };
@@ -54,8 +58,23 @@ export function world(w: World): { f: JsonFetcher; asked: string[] } {
       }
       return { status: 'ok', data: { entities } };
     }
+    const match = /api\.gbif\.org\/v1\/species\/match\?strict=true&kingdom=Plantae&name=(.+)$/.exec(url);
+    if (match) {
+      const g = w.gbif?.[decodeURIComponent(match[1])];
+      if (!g) return { status: 'ok', data: { matchType: 'NONE' } };
+      return { status: 'ok', data: { usageKey: 1, matchType: 'EXACT', status: g.status, species: g.species, speciesKey: 2, acceptedUsageKey: g.status === 'SYNONYM' ? (g.below ? 3 : 2) : undefined, ...(g.status === 'ACCEPTED' ? { usageKey: g.below ? 3 : 2 } : {}) } };
+    }
+    // The usage below species a synonym is held under (key 3), named by `below`.
+    if (/api\.gbif\.org\/v1\/species\/3$/.test(url)) {
+      const g = Object.values(w.gbif ?? {}).find((x) => x.below);
+      return g ? { status: 'ok', data: { canonicalName: g.below } } : { status: 'none' };
+    }
     const names = Object.keys(w.genera ?? {});
     const row = /api\.gbif\.org\/v1\/species\?datasetKey=f382f0ce-323a-4091-bb9f-add557f3a9a2&name=([^&]+)/.exec(url);
+    if (row && w.kew?.[decodeURIComponent(row[1])]) {
+      const n = decodeURIComponent(row[1]);
+      return { status: 'ok', data: { results: w.kew[n].map((r) => ({ canonicalName: n, rank: 'SPECIES', ...r })) } };
+    }
     if (row) {
       const g = decodeURIComponent(row[1]);
       return { status: 'ok', data: { results: g in (w.genera ?? {}) ? [{ key: 900000 + names.indexOf(g), canonicalName: g, rank: 'GENUS', taxonomicStatus: 'ACCEPTED' }] : [] } };

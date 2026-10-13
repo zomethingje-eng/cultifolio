@@ -61,6 +61,7 @@ describe('Wikidata\'s item filed under an older name with the same type', () => 
       [`re:srsearch=haswbstatement%3AP846%3D11098779`]: { query: { search: [] } },
       [`re:srsearch=haswbstatement%3AP846%3D3944752%7CP846%3D3959669`]: { query: { search: [{ title: 'Q310510' }, { title: 'Q14943671' }] } },
       [`${W}?action=wbsearchentities`]: { search: [] },
+      're:datasetKey=f382f0ce': { results: [] }, // round seventy, the owner's run: Kew's IPNI is asked before the older names; none
       [`${W}?action=wbgetentities&format=json&ids=Q310510|Q14943671&props=claims`]: { entities: { Q310510: { claims: { P566: [{ mainsnak: { datavalue: { value: { id: 'Q14943671' } } } }] } }, Q14943671: { claims: {} } } },
       [`${W}?action=wbgetentities&format=json&ids=Q310510&`]: { entities: { Q310510: { claims: { P846: [{ mainsnak: { datavalue: { value: '3959669' } } }], P3151: [{ mainsnak: { datavalue: { value: '274273' } } }] }, sitelinks: { enwiki: { title: 'Ferocactus glaucescens' } } } } }
     });
@@ -72,6 +73,7 @@ describe('Wikidata\'s item filed under an older name with the same type', () => 
       [`re:srsearch=haswbstatement%3AP846%3D11098779`]: { query: { search: [] } },
       [`re:srsearch=haswbstatement%3AP846%3D3944752%7CP846%3D3959669`]: { query: { search: [{ title: 'Q310510' }, { title: 'Q5000' }] } },
       [`${W}?action=wbsearchentities`]: { search: [] },
+      're:datasetKey=f382f0ce': { results: [] }, // round seventy, the owner's run: Kew's IPNI is asked before the older names; none
       [`${W}?action=wbgetentities&format=json&ids=Q310510|Q5000&props=claims`]: { entities: { Q310510: { claims: {} }, Q5000: { claims: {} } } }
     });
     expect((await crossIds(f, 'Bisnaga glaucescens', 11098779, [3944752, 3959669])).status).toBe('ambiguous'); // round sixty-nine: said as two answers (triage-68 M8)
@@ -105,6 +107,7 @@ describe('the build: a species Wikidata files under its basionym keeps its photo
       [`re:srsearch=haswbstatement%3AP846%3D111`]: { query: { search: [{ title: 'Q5168360' }] } },
       [`re:srsearch=haswbstatement%3AP846%3D${key}`]: { query: { search: [] } },
       [`${W}?action=wbsearchentities`]: { search: [] },
+      're:datasetKey=f382f0ce': { results: [] }, // round seventy, the owner's run: Kew's IPNI is asked before the older names; none
       [`${W}?action=wbgetentities`]: { entities: { Q5168360: { claims: { P846: [{ mainsnak: { datavalue: { value: '111' } } }], P3151: [{ mainsnak: { datavalue: { value: '135254' } } }] }, sitelinks: { enwiki: { title: 'Copiapoa cinerea' } } } } }
     };
     const base = copiapoa() as Record<string, unknown>;

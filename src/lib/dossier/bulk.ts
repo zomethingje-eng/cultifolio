@@ -18,7 +18,7 @@ import type { JsonFetcher, FetchResult, FetchOptions } from './fetch';
 import { licenceTag, isOpen } from '$core/licence';
 import type { GbifDistribution, GbifOccurrence, OccPage, GbifSpecies, KewDescription } from './sources/gbif';
 import { synonyms as readSynonyms, isWcvpRow } from './sources/gbif';
-import { authorKey, authorsAgree, sameNameAuthor } from './authors';
+import { authorKey, authorsAgree, ownByAuthor } from './authors';
 import { spellingKey } from './epithet';
 
 /* ------------------------------------------------------------------ WCVP */
@@ -154,7 +154,8 @@ export class WcvpIndex {
   }
   /**
    * Kew's rows of the species' own name (round seventy; triage-69 B4, S-B4, S-B5), in this order:
-   *   - the rows of its words whose publishing author is the backbone's (`sameNameAuthor`);
+   *   - the rows of its words by the backbone's author, read by `ownByAuthor` (the whole citation, then the publishing
+   *     author, then without initials, then the basionym's author);
    *   - else the rows of another spelling of its epithet by that author: GBIF's Cyphostemma congoensis (Hort.) Desc. is
    *     Kew's Cyphostemma congoense (Anon.) Desc.;
    *   - else the one entry Kew accepts under its words, whatever its author: Kew and GBIF cite one name's author
@@ -171,7 +172,9 @@ export class WcvpIndex {
     const exact = this.rowsOf(name) ?? [];
     if (!authorKey(authorship)) return { rows: exact, others: [] };
     const usable = (rs: WcvpName[]) => rs.filter((r) => !/misapplied/i.test(r.status));
-    const byAuthor = (rs: WcvpName[]) => usable(rs).filter((r) => sameNameAuthor(authorship, r.authors));
+    // By the readings of `ownByAuthor`, closest first (round seventy, the owner's run: the publishing author alone made
+    // Drimia nana's two Kew rows one, and "W.Heering" another author than "Heering").
+    const byAuthor = (rs: WcvpName[]) => ownByAuthor(usable(rs), authorship, (r) => r.authors);
     const accepted = usable(exact).filter((r) => r.status === 'Accepted');
     const own = byAuthor(exact);
     const rows = own.length ? own : (() => { const v = byAuthor(this.otherSpellings(name)); return v.length ? v : accepted.length === 1 ? accepted : []; })();
@@ -198,7 +201,13 @@ export class WcvpIndex {
     if (authorKey(authorship)) {
       const { rows } = this.ownRows(name, authorship);
       const ends = new Map(rows.map((r) => [entryOf(r).id, entryOf(r)]));
-      if (ends.size > 1) return 'ambiguous';
+      // One name by one author under two entries: Kew accepts it and also cites it under another species (a pro parte or
+      // misapplied use). The entry Kew accepts it as is its own (round seventy, the owner's run: Datura metel L., Romulea
+      // corsica, Scilla laxiflora and six more lost their ranges as "homonyms, unresolved").
+      if (ends.size > 1) {
+        const acc = rows.filter((r) => r.status === 'Accepted');
+        return acc.length === 1 ? acc[0] : 'ambiguous';
+      }
       return ends.size ? [...ends.values()][0] : undefined;
     }
     const rows = this.rowsOf(name);
@@ -412,7 +421,12 @@ export class OccIndex {
     // A record identified to a subspecies belongs to its species' page, so the owner of its photographs is the species
     // key, unless that species is not wanted and the subspecies (taxonKey) is: then the subspecies' page gets them.
     const owner = o.speciesKey && this.isWanted(o.speciesKey) ? o.speciesKey : (o.taxonKey ?? o.speciesKey);
-    if (owner && this.isWanted(owner) && /still/i.test(o.mediaType ?? '') && o.basisOfRecord === 'HUMAN_OBSERVATION') this.admitMedia(owner, o.key, h);
+    // Records under an open licence first, as the API path asks for them (`license=CC0_1_0&license=CC_BY_4_0`), and the
+    // others only where there are fewer than forty open ones (an NC record may carry an open photograph): forty drawn
+    // whatever their licence left a few open photographs where the API gives twenty-four (round seventy, the owner's run:
+    // Anisocampium niponicum 24 to 8; 177 of its 949 photographed records are open).
+    const rank = !o.license || isOpen(licenceTag(o.license)) ? h : 1 + h;
+    if (owner && this.isWanted(owner) && /still/i.test(o.mediaType ?? '') && o.basisOfRecord === 'HUMAN_OBSERVATION') this.admitMedia(owner, o.key, rank);
     for (const k of new Set([o.speciesKey, o.taxonKey])) {
       if (!k) continue;
       if (!this.isWanted(k)) continue;
@@ -546,6 +560,13 @@ export interface BulkSources {
    * 120 such species lost every photograph to an offline re-derivation that read "none" from the files).
    */
   apiPath?: ReadonlySet<number>;
+  /**
+   * The species the download was asked for (bulk/keys.json's keys), when known. A species outside it has no record in the
+   * files because none was asked, so its media requests go through as well (round seventy, the owner's run: a rebuild of
+   * 118 species with a download made for 33 of them read "no photograph" for the other 85, and Heliotropium velutinum,
+   * Talinella grevei and eight more lost their GBIF photographs).
+   */
+  covered?: ReadonlySet<number>;
 }
 
 /**
@@ -624,7 +645,7 @@ export function bulkFetcher(base: JsonFetcher, src: BulkSources, stats = { wcvp:
           return (r.status === 'ok' ? { status: 'ok', data: { ...r.data, results: (r.data.results ?? []).filter((d) => !isWcvpRow(d)), otherAuthor } } : r) as unknown as FetchResult<T>;
         }
       }
-    } else if (src.media && (m = RE_MEDIA.exec(url)) && !src.apiPath?.has(Number(m[1]))) {
+    } else if (src.media && (m = RE_MEDIA.exec(url)) && !src.apiPath?.has(Number(m[1])) && (!src.covered || src.covered.has(Number(m[1])))) {
       const key = Number(m[1]);
       const page = src.media.page(key);
       if (page) {

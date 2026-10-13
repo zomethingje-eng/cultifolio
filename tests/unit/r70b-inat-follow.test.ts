@@ -8,7 +8,9 @@
  */
 import { describe, it, expect } from 'vitest';
 import { buildDossier, CARRY_DAYS } from '$dossier/build';
-import { checkIds, taxon, successorRefused } from '$dossier/sources/inat';
+import { checkIds, taxon, judgeTaxon } from '$dossier/sources/inat';
+import { referenceOf } from '$dossier/reference';
+import { ownNames } from '$dossier/own-names';
 import { sameTypeNames } from '$dossier/sources/gbif';
 import { fillInatIds, inatTaxonRow } from '$dossier/corpus-fills';
 import { readFileSync } from 'node:fs';
@@ -46,6 +48,11 @@ const SPECIES: Record<number, { name: string; authorship: string; basionymKey?: 
 /** The reference's species by name: Pinguicula antarctica (5667863) is one of its own. */
 const REFERENCE = new Map([['pinguicula antarctica', 5667863], ...Object.entries(SPECIES).map(([k, s]) => [s.name.toLowerCase(), Number(k)] as [string, number])]);
 const heldElsewhere = (key: number) => (name: string) => { const k = REFERENCE.get(name.toLowerCase()); return k != null && k !== key; };
+const reference = referenceOf([...REFERENCE].map(([name, key]) => ({ key, name: name[0].toUpperCase() + name.slice(1) })));
+/** GBIF's backbone match (verbose) of iNaturalist's names, 2026-10-13: Mammillaria geminata is its synonym of M. karwinskiana. */
+const MATCH: Record<string, unknown> = {
+  'Mammillaria geminata': { usageKey: 5620205, matchType: 'EXACT', rank: 'SPECIES', status: 'SYNONYM', speciesKey: 7279748, species: 'Mammillaria karwinskiana' }
+};
 
 /** The world of these species: GBIF, Wikidata giving `inat` as the item's iNaturalist id, iNaturalist. Every URL asked is kept. */
 function world(key: number, inat: number, asked: string[] = [], refuse?: RegExp): JsonFetcher {
@@ -58,6 +65,7 @@ function world(key: number, inat: number, asked: string[] = [], refuse?: RegExp)
     if ((m = /\/v1\/taxa\/([\d,]+)/.exec(url))) return ok({ results: m[1].split(',').map(Number).flatMap((id) => (TAXA[id] ? [TAXA[id]] : [])) });
     if ((m = /\/v1\/taxa\?q=([^&]+)/.exec(url))) return ok({ results: SEARCH[decodeURIComponent(m[1])] ?? [] });
     if (url.startsWith(`${INAT}/observations`)) return ok({ results: [] });
+    if ((m = /\/v1\/species\/match\?[^]*?name=([^&]+)/.exec(url))) return ok(MATCH[decodeURIComponent(m[1])] ?? { matchType: 'NONE' });
     if ((m = /\/v1\/species\/(\d+)\/synonyms/.exec(url))) return ok({ results: SPECIES[Number(m[1])]?.synonyms ?? [], endOfRecords: true });
     if ((m = /\/v1\/species\/(\d+)$/.exec(url))) { const s = SPECIES[Number(m[1])]; return s ? ok({ key: Number(m[1]), scientificName: `${s.name} ${s.authorship}`, canonicalName: s.name, authorship: s.authorship, rank: 'SPECIES', taxonomicStatus: 'ACCEPTED', kingdom: 'Plantae', basionymKey: s.basionymKey }) : { status: 'none' }; }
     if (url.startsWith(`${GBIF}/species/`) || url.startsWith(`${GBIF}/occurrence/`)) return ok({ results: [], endOfRecords: true });
@@ -67,7 +75,7 @@ function world(key: number, inat: number, asked: string[] = [], refuse?: RegExp)
   }) as unknown as JsonFetcher;
 }
 const build = (key: number, inat: number, asked?: string[], extra: Record<string, unknown> = {}) =>
-  buildDossier(key, { fetcher: world(key, inat, asked, extra.refuse as RegExp | undefined), builtBy: 'node', now: () => new Date('2026-10-12T12:00:00Z'), skip: ['commons', 'openalex', 'wikipedia'], heldElsewhere: heldElsewhere(key), ...extra });
+  buildDossier(key, { fetcher: world(key, inat, asked, extra.refuse as RegExp | undefined), builtBy: 'node', now: () => new Date('2026-10-12T12:00:00Z'), skip: ['commons', 'openalex', 'wikipedia'], heldElsewhere: heldElsewhere(key), reference, ...extra });
 
 describe('the build follows an inactive id only to this species', () => {
   it('Pinguicula chilensis is not given Pinguicula antarctica, another species of this reference', async () => {
@@ -76,14 +84,17 @@ describe('the build follows an inactive id only to this species', () => {
     if (!r.ok) throw new Error('no dossier');
     expect(r.dossier.ids.inat).toBeUndefined(); // base: 816267
     expect(asked.some((u) => u.includes('observations?taxon_id=816267'))).toBe(false);
-    expect(r.dossier.upstream['inat.taxon']).toMatchObject({ status: 'none', detail: "iNaturalist's taxon 506182 (Pinguicula chilensis) is inactive; its current taxon 816267 (Pinguicula antarctica) is another species of this reference: not taken; asked by name; not taken: iNaturalist files Pinguicula chilensis as Pinguicula antarctica, another species of this reference" });
+    expect(r.dossier.upstream['inat.taxon']).toMatchObject({ status: 'none', detail: "iNaturalist's taxon 506182 (Pinguicula chilensis) is inactive; its current taxon 816267 (Pinguicula antarctica) is not this species: Pinguicula antarctica is another species of this reference; asked by name; not taken: iNaturalist files Pinguicula chilensis as Pinguicula antarctica, another species of this reference" }); // round seventy, the owner's run: the reason given
   });
-  it('Mammillaria karwinskiana is not given Mammillaria geminata, a lump on another type, by the follow or by the name search', async () => {
+  it('Mammillaria karwinskiana keeps Mammillaria geminata, which GBIF holds as its synonym (round seventy, the owner\'s run)', async () => {
     const r = await build(7279748, 207131);
     if (!r.ok) throw new Error('no dossier');
-    expect(r.dossier.ids.inat).toBeUndefined(); // base: 1555516
-    expect(r.dossier.links.inat).toBeUndefined();
-    expect(r.dossier.upstream['inat.taxon'].detail).toBe("iNaturalist's taxon 207131 (Mammillaria karwinskiana) is inactive; its current taxon 1555516 (Mammillaria geminata) is not one of this species' names: not taken; asked by name; not taken: iNaturalist files Mammillaria karwinskiana as Mammillaria geminata, the taxon refused above");
+    expect(r.dossier.ids.inat).toBe(1555516); // m70: none, "not one of this species' names"
+    expect(r.dossier.upstream['inat.taxon'].detail).toBe("iNaturalist's taxon 207131 (Mammillaria karwinskiana) is inactive; followed to its current taxon 1555516 (Mammillaria geminata): GBIF holds Mammillaria geminata as this species");
+  });
+  it('with no reference to read GBIF against, a name not the species\' own is not taken (guard)', async () => {
+    const r = await build(7279748, 207131, [], { reference: undefined });
+    expect(r.ok && r.dossier.ids.inat).toBeUndefined();
   });
   it('Tricyrtis formosana is not given a variety\'s taxon, and finds its own by name', async () => {
     const r = await build(2752120, 452312);
@@ -112,13 +123,11 @@ describe('the build follows an inactive id only to this species', () => {
 });
 
 describe('the rule and its parts', () => {
-  it('a successor is refused when it is another name, a held name, inactive or unknown', () => {
-    const rule = { accepted: 'Pinguicula chilensis', sameType: [], heldElsewhere: heldElsewhere(5667820) };
-    expect(successorRefused({ active: true, name: 'Pinguicula antarctica' }, rule)).toBe('another species of this reference');
-    expect(successorRefused({ active: true, name: 'Mammillaria geminata' }, rule)).toBe("neither this species' name nor one of its same-type names");
-    expect(successorRefused({ active: false, name: 'Pinguicula chilensis' }, rule)).toBe('itself inactive');
-    expect(successorRefused(undefined, rule)).toBe('not known to iNaturalist');
-    expect(successorRefused({ active: true, name: 'Pinguicula chilensis' }, rule)).toBeNull();
+  it('a taxon is refused when the reference holds it as another species, and taken when GBIF holds it as this one', async () => {
+    const own = ownNames({ scientific: 'Mammillaria karwinskiana', synonyms: [] });
+    const f = world(7279748, 0);
+    expect(await judgeTaxon(f, 'Pinguicula antarctica', { key: 5667820, scientific: 'Pinguicula chilensis', own: ownNames({ scientific: 'Pinguicula chilensis' }), heldElsewhere: heldElsewhere(5667820), reference })).toEqual({ status: 'ok', data: { take: false, why: 'Pinguicula antarctica is another species of this reference' } });
+    expect(await judgeTaxon(f, 'Mammillaria geminata', { key: 7279748, scientific: 'Mammillaria karwinskiana', own, reference })).toEqual({ status: 'ok', data: { take: true, why: 'GBIF holds Mammillaria geminata as this species' } }); // m70: no judgeTaxon; refused
   });
   it('an id answered with no is_active is active, and a batch iNaturalist does not serve is inactive with no successor (guard; mutations I2, I8)', async () => {
     const one = (async () => ({ status: 'ok', data: { results: [{ id: 5, name: 'Aus bus' }] } })) as unknown as JsonFetcher;
@@ -160,39 +169,40 @@ describe('--fill inat-ids reads the follows of earlier runs again', () => {
   type D = ReturnType<typeof followed>;
   /** The whole fill's world: every species' GBIF answers, iNaturalist's taxa and search. */
   const all = (asked: string[] = [], refuse?: RegExp): JsonFetcher => world(0, 0, asked, refuse);
-  it('drops the three wrong follows, their links and photographs, finds Tricyrtis formosana by name, and reports each', async () => {
+  it('drops the wrong follow, keeps the right ones, gives Tricyrtis formosana its own taxon, and reports each', async () => {
     const docs: Record<string, unknown> = {
       '5667820.json': followed(5667820, 506182, 'Pinguicula chilensis', 816267, 33),
-      '7279748.json': followed(7279748, 207131, 'Mammillaria karwinskiana', 1555516),
+      '7279748.json': followed(7279748, 207131, 'Mammillaria karwinskiana', 1555516, 2),
       '2752120.json': followed(2752120, 452312, 'Tricyrtis formosana grandiflora', 452310, 4),
       '2735935.json': followed(2735935, 133599, 'Dypsis lutescens', 276548, 5),
       // Pinguicula antarctica's own page holds 816267 by its own name: left alone.
       '5667863.json': { key: 5667863, name: { scientific: 'Pinguicula antarctica' }, ids: { gbif: 5667863, inat: 816267 }, links: { inat: 'https://www.inaturalist.org/taxa/816267' }, photos: inatPhotos(33), upstream: {} }
     };
     const c = await fillInatIds(store(docs), all(), () => '2026-10-13T00:00:00Z');
-    expect(c).toMatchObject({ checked: 5, refused: 3, kept: 1, followed: 0, dropped: 0 }); // base: { checked: 5, followed: 0, dropped: 0 }, nothing changed
+    expect(c).toMatchObject({ checked: 5, refused: 1, kept: 2, followed: 1, dropped: 0 }); // m70: refused 3 (Mammillaria geminata and the variety too), kept 1
     const ping = docs['5667820.json'] as D;
     expect(ping.ids.inat).toBeUndefined();
     expect(ping.links.inat).toBeUndefined();
     expect(ping.photos.map((p) => p.src)).toEqual(['gbif']); // the 33 of P. antarctica gone, GBIF's own kept
     expect(ping.upstream['inat.photos.wild']).toMatchObject({ status: 'none' }); // settled, so --fill inat does not search again
-    expect(ping.upstream['inat.taxon'].detail).toBe("iNaturalist's taxon 506182 (Pinguicula chilensis) is inactive; followed to its current taxon 816267; read again 2026-10-13: 816267 (Pinguicula antarctica) is another species of this reference: not taken, and its 33 photographs removed (2026-10-13); asked by name: not taken: iNaturalist files Pinguicula chilensis as Pinguicula antarctica, another species of this reference");
+    expect(ping.upstream['inat.taxon'].detail).toBe("iNaturalist's taxon 506182 (Pinguicula chilensis) is inactive; followed to its current taxon 816267; read again 2026-10-13: 816267 (Pinguicula antarctica) is not this species: Pinguicula antarctica is another species of this reference: not taken, and its 33 photographs removed (2026-10-13); asked by name: not taken: iNaturalist files Pinguicula chilensis as Pinguicula antarctica, another species of this reference");
     const mam = docs['7279748.json'] as D;
-    expect(mam.ids.inat).toBeUndefined(); // the name search's Mammillaria geminata is the taxon refused
-    expect(mam.upstream['inat.taxon'].detail).toMatch(/asked by name: not taken: iNaturalist files Mammillaria karwinskiana as Mammillaria geminata, the taxon refused above$/);
+    expect(mam.ids.inat).toBe(1555516); // m70: none; GBIF holds Mammillaria geminata as a synonym of M. karwinskiana
+    expect(mam.photos).toHaveLength(3);
+    expect(mam.upstream['inat.taxon'].detail).toBe("iNaturalist's taxon 207131 (Mammillaria karwinskiana) is inactive; followed to its current taxon 1555516 (Mammillaria geminata); read again 2026-10-13: GBIF holds Mammillaria geminata as this species");
     const tri = docs['2752120.json'] as D;
     expect(tri.ids.inat).toBe(452309);
     expect(tri.links.inat).toBe('https://www.inaturalist.org/taxa/452309');
+    expect(tri.photos.map((p) => p.src)).toEqual(['gbif']); // the variety's four go; the species' are asked for
     expect(tri.upstream['inat.photos.wild'].status).toBe('skipped'); // opened for --fill inat
     const dyp = docs['2735935.json'] as D;
     expect(dyp.ids.inat).toBe(276548);
     expect(dyp.photos).toHaveLength(6);
-    expect(dyp.upstream['inat.taxon'].detail).toBe("iNaturalist's taxon 133599 (Dypsis lutescens) is inactive; followed to its current taxon 276548 (Chrysalidocarpus lutescens); read again 2026-10-13: one of this species' names");
+    expect(dyp.upstream['inat.taxon'].detail).toBe("iNaturalist's taxon 133599 (Dypsis lutescens) is inactive; followed to its current taxon 276548 (Chrysalidocarpus lutescens); read again 2026-10-13: Chrysalidocarpus lutescens is one of this species' names");
     expect((docs['5667863.json'] as D).ids.inat).toBe(816267);
     expect(c.lines).toEqual([
-      'Pinguicula chilensis [5667820]: an earlier follow to 816267 (Pinguicula antarctica) refused, another species of this reference; 33 iNaturalist photographs removed; by name: none',
-      'Mammillaria karwinskiana [7279748]: an earlier follow to 1555516 (Mammillaria geminata) refused, not one of this species\' names; by name: none',
-      'Tricyrtis formosana [2752120]: an earlier follow to 452310 (Tricyrtis formosana formosana) refused, not one of this species\' names; 4 iNaturalist photographs removed; by name: Tricyrtis formosana, 452309'
+      'Pinguicula chilensis [5667820]: an earlier follow to 816267 (Pinguicula antarctica) refused, Pinguicula antarctica is another species of this reference; 33 iNaturalist photographs removed; by name: none',
+      "Tricyrtis formosana [2752120]: an earlier follow to 452310 (Tricyrtis formosana formosana) taken as 452309 (Tricyrtis formosana): Tricyrtis formosana formosana is Tricyrtis formosana itself, at a lower rank; iNaturalist's own taxon of the species, 452309, taken for its variety's"
     ]);
   });
   it('a newly inactive id is followed only by the rule', async () => {

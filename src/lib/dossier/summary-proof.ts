@@ -48,7 +48,15 @@ export interface TitleItem { id: string; productOf: string[]; taxonNames: string
 /** Kew's WCVP on a genus: how many accepted species it holds (0 when Kew holds no one accepted genus of the name), and the one, when one. */
 export interface GenusCount { name: string; accepted: number; only?: string }
 
-export interface Facts { species?: SpeciesItem | null; title?: TitleItem | null; genus?: GenusCount | null }
+/**
+ * GBIF's backbone on a binomial title (round seventy-b, A2): the species it holds the name under (its accepted species,
+ * for a synonym), and whether the accepted usage is below species (a synonym of a variety). Null: GBIF holds no such name.
+ */
+export interface GbifName { species?: string; below: boolean; synonym: boolean }
+/** Kew's WCVP on this species' name: its rows, each with its author and the accepted name it is held under. */
+export interface KewRows { rows: Array<{ authorship?: string; status?: string; accepted?: string }> }
+
+export interface Facts { species?: SpeciesItem | null; title?: TitleItem | null; genus?: GenusCount | null; gbif?: GbifName | null; kew?: KewRows | null }
 
 /** Wikidata's item for the rank "genus". */
 export const GENUS_RANK = 'Q34740';
@@ -93,20 +101,21 @@ export function nameMatch(n: string, who: Pick<Who, 'name' | 'synonyms'>): NameM
   }
   return null;
 }
+/** A binomial title that is neither this species' name nor an older name, by the stored names: GBIF is asked about it. */
+export const binomialNotOurs = (title: string, who: Pick<Who, 'name' | 'synonyms'>): boolean => !!binomial(title) && !nameMatch(title, who);
 /**
- * A title that is another species' name: a binomial in this species' genus or the genus of one of its older names,
- * which is not its name or an older name. Round seventy, A2 (R47-4): Drosera montana's Wikidata item (Q5308558) has
- * "Drosera tomentosa" as its English sitelink, another species' article, and its taxon name is Drosera montana, so
- * neither the sitelink nor the item's taxon name proves such a title. Only a shared type (Wikidata's basionym
- * statements) can: "Huernia zebrina" for Ceropegia zebrina. The genus is what tells a name from a two-word common name
- * of the same shape ("Venus flytrap", "Date palm"), which the item's sitelink still proves; a binomial in a genus the
- * species has never been placed in is not read as a name here.
+ * A title that is another species' name (round seventy, A2, R47-4; narrowed in round seventy-b): a binomial that is not
+ * this species' name or an older name, which GBIF's backbone holds as another species, or under a variety or
+ * subspecies of this one. Drosera montana's item (Q5308558) has "Drosera tomentosa" as its English sitelink, and GBIF
+ * holds Drosera tomentosa under Drosera montana var. tomentosa: neither the sitelink nor the item's taxon name proves
+ * it. A binomial GBIF does not hold at all ("Erythrina afra", the 2024 replacement of "caffra"; "Zephyranthes
+ * formosissima") is not another species, and the other proofs read it; nor is a two-word common name ("Venus
+ * flytrap"), which GBIF does not hold either. Round seventy's first rule refused any binomial in one of the species'
+ * genera, and so took Erythrina caffra's and Rhododendron kanehirae's sitelinks from them.
  */
-export function foreignBinomial(title: string, who: Pick<Who, 'name' | 'synonyms'>): boolean {
-  const t = binomial(title);
-  if (!t || nameMatch(title, who)) return false;
-  const genera = new Set([who.name, ...who.synonyms].map((n) => genusOf(n)));
-  return genera.has(t.genus);
+export function foreignBinomial(title: string, who: Pick<Who, 'name' | 'synonyms'>, gbif: GbifName | null | undefined): boolean {
+  if (!binomialNotOurs(title, who) || !gbif) return false;
+  return gbif.below || !gbif.species || !nameMatch(gbif.species, who);
 }
 const nameWords = (m: NameMatch) => (m.proof === 'name' ? (m.spelt ? "another spelling of this species' name" : "this species' name") : `${m.spelt ? 'another spelling of ' : ''}an older name of this species (${m.as})`);
 
@@ -138,9 +147,13 @@ export function proofByItem(title: string, who: Who, facts: Facts): { proof: Pro
   const q = who.item;
   const sp = q && facts.species?.id === q ? facts.species : null;
   const ti = facts.title ?? null;
-  const foreign = foreignBinomial(title, who);
+  const foreign = foreignBinomial(title, who, facts.gbif);
   if (!foreign && sp?.sitelink && titleKey(sp.sitelink) === titleKey(title)) return { proof: 'item', words: `the English article of this species' Wikidata item (${q})` };
-  if (!ti) return null;
+  const g0 = facts.gbif;
+  // GBIF holds the title as this species: a synonym of it, as GBIF's backbone has it now (the stored list may be older).
+  if (!foreign && binomialNotOurs(title, who) && g0?.species && !g0.below && nameMatch(g0.species, who)) return { proof: 'older-name', words: `a name GBIF holds as ${g0.synonym ? 'a synonym of ' : ''}this species` };
+  const kew = !foreign && binomialNotOurs(title, who) ? sameTypeAtKew(title, who, facts.kew) : null;
+  if (!ti) return kew;
   // A title that is another species' name is not proved by the name its item carries (R47-4: Q5308558, titled "Drosera
   // tomentosa", carries the name Drosera montana); only a shared type can prove it.
   for (const n of foreign ? [] : ti.taxonNames) {
@@ -161,7 +174,28 @@ export function proofByItem(title: string, who: Who, facts: Facts): { proof: Pro
     const m = g.only ? nameMatch(g.only, who) : null;
     if (m) return { proof: 'monotypic-genus', words: `the genus ${g.name} (${ti.id}), whose one accepted species in Kew's WCVP is ${m.proof === 'name' && !m.spelt ? 'this species' : `${g.only}, ${nameWords(m)}`}` };
   }
-  return null;
+  return kew;
+}
+
+/** The author of a combination's basionym: the bracketed author at the head of its authorship, "(L.) Herb." → "L.". */
+const basionymAuthor = (authorship: string | undefined) => /^\(([^)]+)\)/.exec((authorship ?? '').trim())?.[1]?.replace(/\s+/g, '');
+/**
+ * The same type by Kew's names (round seventy-b, A2): Kew's WCVP holds this species' name, in every row it has, as a
+ * synonym of the title, and the two are combinations of one basionym: the same epithet (by `spellingKey`) and the same
+ * bracketed author. Kew holds Sprekelia formosissima (L.) Herb. under Zephyranthes formosissima (L.) Z.H.Feng, both
+ * from Amaryllis formosissima L.; Wikidata's item for the latter states no basionym, and Wikipedia's article is
+ * sitelinked to the genus Sprekelia's item. A synonym by Kew alone, with another type, is a lump, and proves nothing
+ * (Agave vivipara Arruda is Furcraea hexapetala at Kew).
+ */
+function sameTypeAtKew(title: string, who: Who, kew: KewRows | null | undefined): { proof: Proof; words: string } | null {
+  const t = binomial(title);
+  const own = binomial(who.name);
+  if (!t || !own || !kew?.rows.length || spellingKey(t.epithet) !== spellingKey(own.epithet)) return null;
+  const heads = kew.rows.map((r) => ({ r, acc: r.accepted ?? '' }));
+  if (!heads.every(({ r, acc }) => r.status === 'SYNONYM' && acc.startsWith(`${title} `))) return null;
+  const a = basionymAuthor(heads[0].r.authorship);
+  if (!a || !heads.every(({ r, acc }) => basionymAuthor(r.authorship) === a && basionymAuthor(acc.slice(title.length + 1)) === a)) return null;
+  return { proof: 'older-name', words: `a name of this species with the same type: Kew's WCVP holds ${who.name} ${heads[0].r.authorship} under ${heads[0].acc}, both from a basionym by ${a}` };
 }
 
 /** Whether a title's genus count is wanted: its item is a genus with a taxon name. */
@@ -177,21 +211,28 @@ const strs = (e: Entity, p: string) => (e.claims?.[p] ?? []).map((c) => c.mainsn
 const WD = 'https://www.wikidata.org/w/api.php?action=wbgetentities&format=json';
 
 /** Species items, fifty a request: sitelink, P171, P566, P1672. A request Wikidata did not answer is returned as it came. */
-export async function speciesItems(f: JsonFetcher, ids: readonly string[]): Promise<SourceResult<Map<string, SpeciesItem | null>>> {
+export async function speciesItems(f: JsonFetcher, ids: readonly string[]): Promise<{ status: 'ok'; data: Map<string, SpeciesItem | null>; unanswered?: Set<string>; failure?: Unanswered }> {
   const out = new Map<string, SpeciesItem | null>();
   const all = [...new Set(ids)];
+  // A batch Wikidata does not answer (after `mwGet`'s waits on maxlag and the fetch layer's on 429) leaves its own ids
+  // unanswered, not the others' (round seventy-b: one lagged batch left 234 summaries of the owner's run not checked).
+  const unanswered = new Set<string>();
+  let failure: Unanswered | undefined;
   for (let i = 0; i < all.length; i += 50) {
     const part = all.slice(i, i + 50);
     const r = await mwGet<{ entities?: Record<string, Entity> }>(f, `${WD}&ids=${part.join('|')}&props=claims|sitelinks&sitefilter=enwiki&maxlag=5`);
-    if (r.status !== 'ok') return r.status === 'none' ? { status: 'error', detail: 'wikidata: no answer' } : r;
-    const err = mwError(r.data);
-    if (err) return { status: 'error', detail: `wikidata ${err}` };
+    const err = r.status === 'ok' ? mwError(r.data) : r.status === 'none' ? 'no answer' : r.detail;
+    if (r.status !== 'ok' || err) {
+      for (const q of part) unanswered.add(q);
+      failure = r.status === 'refused' ? { status: 'refused', detail: r.detail, source: 'Wikidata' } : { status: 'error', detail: `wikidata ${r.status === 'ok' ? err : r.status === 'none' ? 'no answer' : r.detail}`, source: 'Wikidata' };
+      continue;
+    }
     for (const q of part) {
       const e = r.data.entities?.[q];
       out.set(q, !e || 'missing' in e ? null : { id: q, sitelink: e.sitelinks?.enwiki?.title, parents: itemIds(e, 'P171'), basionyms: itemIds(e, 'P566'), sourceOf: itemIds(e, 'P1672') });
     }
   }
-  return { status: 'ok', data: out };
+  return { status: 'ok', data: out, ...(unanswered.size ? { unanswered, failure } : {}) };
 }
 
 /**
@@ -234,8 +275,38 @@ export async function genusCount(f: JsonFetcher, genus: string): Promise<SourceR
   return { status: 'ok', data: { name: genus, accepted: r.data.count, ...(only ? { only } : {}) } };
 }
 
+/** GBIF's backbone on a binomial (`species/match`, strict, plants): the URL B's `heldAtGbifElsewhere` asks too. */
+export async function gbifName(f: JsonFetcher, name: string): Promise<SourceResult<GbifName | null>> {
+  const r = await f<{ usageKey?: number; matchType?: string; status?: string; species?: string; speciesKey?: number; acceptedUsageKey?: number }>(`https://api.gbif.org/v1/species/match?strict=true&kingdom=Plantae&name=${encodeURIComponent(name)}`);
+  if (r.status === 'none') return { status: 'ok', data: null };
+  if (r.status !== 'ok') return r;
+  const d = r.data;
+  if (!d.usageKey || d.matchType === 'NONE' || d.matchType === 'HIGHERRANK') return { status: 'ok', data: null };
+  const synonym = /SYNONYM/.test(d.status ?? '');
+  const accepted = synonym ? d.acceptedUsageKey : d.usageKey;
+  let below = !!d.speciesKey && !!accepted && accepted !== d.speciesKey;
+  if (below) {
+    // Under a subspecies or variety: the autonym (Ceropegia zebrina subsp. zebrina, under which GBIF holds Huernia
+    // zebrina) is the species' own type, so is the species; another (Drosera montana var. tomentosa) is part of it.
+    const u = await f<{ canonicalName?: string }>(`https://api.gbif.org/v1/species/${accepted}`);
+    if (u.status !== 'ok' && u.status !== 'none') return u;
+    const w = (u.status === 'ok' ? u.data.canonicalName ?? '' : '').split(/\s+/);
+    if (w.length >= 3 && w[w.length - 1] === w[1]) below = false;
+  }
+  return { status: 'ok', data: { species: d.species, below, synonym } };
+}
+
+/** Kew's WCVP, through GBIF: the rows of this species' name at species rank. */
+export async function kewRows(f: JsonFetcher, name: string): Promise<SourceResult<KewRows>> {
+  const r = await f<{ results?: Array<{ canonicalName?: string; rank?: string; authorship?: string; taxonomicStatus?: string; accepted?: string }> }>(`https://api.gbif.org/v1/species?datasetKey=${WCVP_DATASET}&name=${encodeURIComponent(name)}&limit=20`);
+  if (r.status === 'none') return { status: 'ok', data: { rows: [] } };
+  if (r.status !== 'ok') return r;
+  const rows = (r.data.results ?? []).filter((x) => x.canonicalName === name && (x.rank ?? 'SPECIES') === 'SPECIES').map((x) => ({ authorship: x.authorship, status: x.taxonomicStatus, accepted: x.accepted }));
+  return { status: 'ok', data: { rows } };
+}
+
 /** A source that did not answer while a proof was read: which, and what it said. */
-export type Unanswered = { status: 'refused' | 'error' | 'skipped'; detail: string; source: 'Wikidata' | "GBIF (Kew's WCVP)" };
+export type Unanswered = { status: 'refused' | 'error' | 'skipped'; detail: string; source: 'Wikidata' | 'GBIF' | "GBIF (Kew's WCVP)" };
 
 /**
  * The facts for one title, asked only as far as they are needed: the species' item (unless `pre` has it), then the
@@ -243,12 +314,18 @@ export type Unanswered = { status: 'refused' | 'error' | 'skipped'; detail: stri
  */
 export async function gatherFacts(f: JsonFetcher, title: string, who: Who, pre: Facts = {}): Promise<{ facts: Facts } | Unanswered> {
   const facts: Facts = { ...pre };
+  // A binomial that is not the species' name is asked of GBIF first: another species' name is refused whatever else holds.
+  if (facts.gbif === undefined && binomialNotOurs(title, who)) {
+    const g = await gbifName(f, title);
+    if (g.status !== 'ok') return unanswered(g, 'GBIF');
+    facts.gbif = g.data;
+  }
   if (who.item && facts.species === undefined) {
     const s = await speciesItems(f, [who.item]);
-    if (s.status !== 'ok') return unanswered(s, 'Wikidata');
+    if (s.unanswered?.size) return s.failure ?? { status: 'error', detail: 'wikidata: no answer', source: 'Wikidata' };
     facts.species = s.data.get(who.item) ?? null;
   }
-  if (facts.species?.sitelink && titleKey(facts.species.sitelink) === titleKey(title) && !foreignBinomial(title, who)) return { facts };
+  if (proofByItem(title, who, { ...facts, title: null, kew: null })) return { facts };
   if (facts.title === undefined) {
     const t = await titleItems(f, [title]);
     if (t.status !== 'ok') return unanswered(t, 'Wikidata');
@@ -258,6 +335,11 @@ export async function gatherFacts(f: JsonFetcher, title: string, who: Who, pre: 
     const c = await genusCount(f, facts.title.taxonNames[0]);
     if (c.status !== 'ok') return unanswered(c, "GBIF (Kew's WCVP)");
     facts.genus = c.data;
+  }
+  if (facts.kew === undefined && binomialNotOurs(title, who) && !foreignBinomial(title, who, facts.gbif) && !proofByItem(title, who, { ...facts, kew: null })) {
+    const k = await kewRows(f, who.name);
+    if (k.status !== 'ok') return unanswered(k, "GBIF (Kew's WCVP)");
+    facts.kew = k.data;
   }
   return { facts };
 }

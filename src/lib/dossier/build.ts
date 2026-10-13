@@ -20,7 +20,7 @@ import { tdwgCode, tdwgLabel, TDWG3 } from './tdwg';
 import { licenceTag, isOpen, licenceLabel } from '$core/licence';
 import { slugify, parseName } from '$core/names';
 import { habitatCluster, habitatCentre, haversineKm, inBox, type Box } from '$core/geo';
-import { ownNames } from './own-names';
+import { ownNames, isOwnName } from './own-names';
 import type { Reference } from './reference';
 import { DOSSIER_V, parseDossier, type Dossier, type OccPoint, type Photo, type Climate, type Upstream } from './schema';
 import type { HeldNames } from './photo-kind';
@@ -457,9 +457,8 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   // This species' own names (`ownNames`; round seventy, second pass, triage-69 B7): the accepted name, the same-type
   // names, and the other synonyms GBIF holds under it that no species of this reference holds.
   const owned = ownNames({ scientific, sameType: sameType.map((r) => r.name), synonyms: synRows ?? [], heldElsewhere: o.heldElsewhere });
-  const isOwn = (name: string) => owned.own.has(name.toLowerCase());
-  /** Why a taxon not of this species' own names is another species of the reference, by GBIF (triage-69 B5); null when it is not. */
-  const elsewhere = (name: string) => (isOwn(name) || !o.reference ? Promise.resolve({ status: 'ok', data: null } as const) : inat.heldAtGbifElsewhere(f, name, { key, family: u(s.family) }, o.reference));
+  // A taxon of another name is judged at GBIF (`judgeIdTaxon`; round seventy, the owner's run, R47's rule).
+  const judgeFor: inat.JudgeFor = { key, scientific, family: u(s.family), own: owned, heldElsewhere: o.heldElsewhere, reference: o.reference };
   if (inatId && !skip('inat')) inatId = await checkedInatId(inatId);
   if (!inatId && !skip('inat')) {
     let t: SourceResult<inat.InatTaxon> = await inat.taxonFor(f, { scientific, key, family: u(s.family), own: owned, sameType: sameType.map((r) => r.name), heldElsewhere: o.heldElsewhere, reference: o.reference, refused });
@@ -470,10 +469,12 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   /**
    * An iNaturalist id from Wikidata or carried from the previous build, checked with iNaturalist itself (round sixty-nine;
    * triage-68 M5, R46-13). An active id is recorded as checked (round seventy; triage-69 S-B7). An inactive id is followed
-   * to the one current taxon it names only when `successorRefused` allows it: its name is the species' or a same-type
-   * name, held by no other species of the reference (round seventy; triage-69 B1, S-B1: Pinguicula chilensis took
-   * Pinguicula antarctica's 33 photographs). Otherwise it is dropped, saying which taxon it named, and the name is
-   * searched. A check refused or failed keeps the id, and says it was not checked.
+   * to the one current taxon it names, and an active id of another name is kept, only when `judgeIdTaxon` takes it: one
+   * of the species' own names in any spelling, or a name GBIF or Kew holds as this species, or this species' epithet in
+   * a genus outside the reference; never another species of the reference (round seventy; triage-69 B1, S-B1: Pinguicula
+   * chilensis took Pinguicula antarctica's 33 photographs; the owner's run: Zephyranthes formosissima is Sprekelia
+   * formosissima). Otherwise it is dropped, saying which taxon it named and why, and the name is searched. A check
+   * refused or failed keeps the id, and says it was not checked.
    */
   async function checkedInatId(id: number): Promise<number | undefined> {
     const notChecked = (c: { status: Upstream['status']; detail?: string } | { status: 'none' }, what: string) => {
@@ -486,32 +487,38 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     const got = c.data.get(id);
     if (got?.active) {
       const named = `iNaturalist's taxon ${id}${got.name ? ` (${got.name})` : ''}, ${inatFrom},`;
-      // A taxon of another name is matched to GBIF, and dropped when it is another species of this reference (triage-69 B5).
-      const g = got.name ? await elsewhere(got.name) : ({ status: 'ok', data: null } as const);
+      if (!got.name || isOwnName(owned, got.name)) {
+        upstream['inat.taxon'] = { status: 'ok', at: now(), detail: `${named} is active` };
+        return id;
+      }
+      // A taxon of another name, judged at GBIF (round seventy; triage-69 B5 as the owner's run revised it).
+      const g = await inat.judgeIdTaxon(f, id, got, judgeFor);
       if (g.status !== 'ok') return notChecked(g, `${named} is active; its name was`);
-      if (g.data) {
+      if (!g.data.take) {
         refused.add(id);
-        upstream['inat.taxon'] = { status: 'none', at: now(), detail: `${named} is not this species: ${g.data}; asked by name` };
+        upstream['inat.taxon'] = { status: 'none', at: now(), detail: `${named} is not this species: ${g.data.why}; asked by name` };
         ids.inat = undefined;
         return undefined;
       }
-      upstream['inat.taxon'] = { status: 'ok', at: now(), detail: `${named} is active` };
-      return id;
+      upstream['inat.taxon'] = { status: 'ok', at: now(), detail: `${named} is active: ${g.data.why}` };
+      ids.inat = g.data.to;
+      return g.data.to;
     }
     const was = `iNaturalist's taxon ${id}${got?.name ? ` (${got.name})` : ''} is inactive`;
     if (got?.current) {
       const n = await inat.checkIds(f, [got.current]);
       if (n.status !== 'ok') return notChecked(n, `${was}; its current taxon ${got.current}`);
       const cur = n.data.get(got.current);
-      const why = inat.successorRefused(cur, { accepted: scientific, sameType: sameType.map((r) => r.name), own: owned.own, heldElsewhere: o.heldElsewhere });
       const named = `its current taxon ${got.current}${cur?.name ? ` (${cur.name})` : ''}`;
-      if (!why) {
-        upstream['inat.taxon'] = { status: 'ok', at: now(), detail: `${was}; followed to ${named}` };
-        ids.inat = got.current;
-        return got.current;
+      const g = cur?.name && cur.active && isOwnName(owned, cur.name) ? ({ status: 'ok', data: { take: true, why: '', to: got.current } } as const) : await inat.judgeIdTaxon(f, got.current, cur, judgeFor);
+      if (g.status !== 'ok') return notChecked(g, `${was}; ${named}`);
+      if (g.data.take) {
+        upstream['inat.taxon'] = { status: 'ok', at: now(), detail: `${was}; followed to ${named}${g.data.why ? `: ${g.data.why}` : ''}` };
+        ids.inat = g.data.to;
+        return g.data.to;
       }
       refused.add(got.current);
-      upstream['inat.taxon'] = { status: 'none', at: now(), detail: `${was}; ${named} is ${why}: not taken; asked by name` };
+      upstream['inat.taxon'] = { status: 'none', at: now(), detail: `${was}; ${named} is not this species: ${g.data.why}; asked by name` };
       ids.inat = undefined;
       return undefined;
     }

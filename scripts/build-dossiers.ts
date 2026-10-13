@@ -113,7 +113,7 @@ import { referenceOf } from '../src/lib/dossier/reference';
 import { ownNames } from '../src/lib/dossier/own-names';
 import { offlineFetcher, carryRederivedRows } from '../src/lib/dossier/rederive';
 import { startCorpusRun, prevIdsFor, heldElsewhereIn, fillOpenGbifAll, fillCommonsAll, type DossierStore } from '../src/lib/dossier/corpus-run';
-import { fillGbifLicenceAll, fillInatIds, fillWikidata, inatTaxonRow, checkSummaries, rebuildList, kewRebuildList } from '../src/lib/dossier/corpus-fills';
+import { fillGbifLicenceAll, fillInatIds, fillWikidata, inatTaxonRow, checkSummaries, rebuildList, kewRebuildList, keysMissing } from '../src/lib/dossier/corpus-fills';
 // The corpus script waits out Wikidata's maxlag, as MediaWiki asks of a batch client (round sixty-eight), and after a lag
 // spell stops waiting until Wikidata answers again (round sixty-nine; triage-68 M10): `lag.after` is told each species' row.
 const lag = startCorpusRun();
@@ -157,6 +157,17 @@ function readPrev(key: number): Dossier | null {
 }
 
 /** The keys bulk/api-path.txt lists ("<key>\t<records>" a line): the species the download left to the API path. */
+/** The species keys the GBIF download was asked for (bulk/keys.json, written by bulk-fetch), or undefined with no such file. */
+function downloadKeys(dir: string): Set<number> | undefined {
+  const p = `${dir}/keys.json`;
+  if (!existsSync(p)) return undefined;
+  try {
+    return new Set(Object.values(JSON.parse(readFileSync(p, 'utf8')) as Record<string, number | null>).filter((k): k is number => typeof k === 'number'));
+  } catch {
+    return undefined;
+  }
+}
+
 function readApiPath(dir: string): Set<number> {
   const p = `${dir}/api-path.txt`;
   if (!existsSync(p)) return new Set();
@@ -634,7 +645,7 @@ async function fillGbifLicencePhotos(): Promise<void> {
 async function fillInatIdsStep(): Promise<void> {
   console.log('Checking every stored iNaturalist taxon id with iNaturalist…');
   const c = await fillInatIds(diskStore(), makeFetcher());
-  console.log(`  ${c.checked} ids checked: ${c.followed} inactive ids followed to their current taxon, ${c.refused} whose taxon is not this species' (the id, its link and its photographs dropped, the name asked), ${c.kept} earlier follows read again and kept, ${c.dropped} inactive with no single current taxon dropped (asked by name next)${c.lines.length ? `:\n${c.lines.map((l) => `    ${l}`).join('\n')}` : '.'}\n  Now run --fill inat.`);
+  console.log(`  ${c.checked} ids checked: ${c.followed} taxa taken (inactive ids followed to their current taxon, and taxa the first rule of round seventy refused given back), ${c.refused} whose taxon is not this species' (the id, its link and its photographs dropped, the name asked), ${c.kept} earlier follows read again and kept, ${c.dropped} inactive with no single current taxon dropped (asked by name next)${c.lines.length ? `:\n${c.lines.map((l) => `    ${l}`).join('\n')}` : '.'}\n  Now run --fill inat.`);
   if (c.failed) console.log(`  iNaturalist or GBIF did not answer (${c.failed}); run --fill inat-ids again: what was changed stands, and it takes up the rest.`);
   writeIndexFromDisk();
 }
@@ -645,18 +656,27 @@ async function fillInatIdsStep(): Promise<void> {
  */
 async function fillWikidataStep(): Promise<void> {
   console.log('Reading every Wikidata item of the corpus for its GBIF key, and proving again those that do not carry their species\' own…');
-  const c = await fillWikidata(diskStore(), makeFetcher());
+  // A run Wikidata's lag stopped resumes from what it read (round seventy, the owner's run), kept beside the corpus.
+  const PROGRESS = 'fill-wikidata-progress.json';
+  let had: { read?: string[]; changed?: Record<string, { line: string; rebuild: string }> } = {};
+  try { if (existsSync(PROGRESS)) had = JSON.parse(readFileSync(PROGRESS, 'utf8')); } catch { had = {}; }
+  if (had.read?.length || Object.keys(had.changed ?? {}).length) console.log(`  resuming: ${had.read?.length ?? 0} items read by the run that stopped are passed by`);
+  const c = await fillWikidata(diskStore(), makeFetcher(), undefined, {
+    ...had,
+    save: (p) => writeFileSync(PROGRESS, JSON.stringify(p)),
+    clear: () => { if (existsSync(PROGRESS)) unlinkSync(PROGRESS); }
+  });
   console.log(`  ${c.read} items read: ${c.byKey} carry their species' GBIF key; ${c.stands} proved again by the rule; ${c.changed} changed by it, left as they are and listed${c.before ? `; ${c.before} proved again by an earlier run, passed by` : ''}${c.lines.length ? `:\n${c.lines.map((l) => `    ${l}`).join('\n')}` : '.'}`);
   // An IPNI identifier that is not POWO's number: one of the two is another name's (triage-69 B6, R47-5), to be read by hand.
   if (c.disagree.length) {
     writeFileSync('ipni-powo.txt', c.disagree.join('\n') + '\n');
     console.log(`  ${c.disagree.length} dossiers whose IPNI identifier is not the number in their POWO one → ipni-powo.txt`);
   }
-  if (c.rebuild.length) {
+  if (c.rebuild.length && !c.failed) {
     writeFileSync('rebuild-wd.txt', c.rebuild.join('\n') + '\n');
     console.log(`  ${c.rebuild.length} species → rebuild-wd.txt; run --keys rebuild-wd.txt --grid climate --bulk bulk, and read drops.txt`);
   }
-  if (c.failed) console.log(`  ${c.failed}: run --fill wikidata again; what was proved stands, and rebuild-wd.txt is written again in full by the run that ends.`);
+  if (c.failed) console.log(`  ${c.failed}: Wikidata was waited for and did not answer; run --fill wikidata again later: what was read and proved stands, the next run takes up the rest, and rebuild-wd.txt is written in full by the run that ends.`);
   writeIndexFromDisk();
 }
 
@@ -912,7 +932,13 @@ async function main() {
     jobs.push({ name: 'Refusia testii', fetcher: fixtureFetcher(refused()) });
   } else {
     const file = keysFile ?? args.find((a) => !a.startsWith('--'));
-    if (!file || !existsSync(file)) {
+    if (file && !existsSync(file)) {
+      // Said as it is (round seventy, the owner's run: `--keys rebuild-wd.txt`, which a stopped `--fill wikidata` had not
+      // written, printed the usage line).
+      console.error(keysMissing(file));
+      process.exit(2);
+    }
+    if (!file) {
       console.error('usage: tsx scripts/build-dossiers.ts <names.txt> [--upload] [--quick]');
       process.exit(2);
     }
@@ -958,11 +984,17 @@ async function main() {
       // The genera of each species' older names too, so a range Kew files under another name can be found (round
       // sixty-eight: Bisnaga glaucescens is Ferocactus glaucescens at Kew, Aeonium tabulaeforme is spelt tabuliforme).
       const olderGenera = unique.flatMap((p) => (p.key ? readPrev(p.key)?.name.synonyms ?? [] : []).map((x) => x.split(' ').slice(0, 2).join(' ')));
-      const [wcvp, loaded] = await Promise.all([loadWcvp(bulkDir, [...names, ...olderGenera]), loadOccurrences(bulkDir, 2000, wantedKeys(bulkDir, names))]);
+      // The species the download was asked for (bulk/keys.json): one built here under a name the download did not use is
+      // still in the files by its key, and one outside them is asked of GBIF, never read as having no photograph (round
+      // seventy, the owner's run: 85 of 118 species rebuilt lost their GBIF photographs).
+      const covered = downloadKeys(bulkDir);
+      const byName = wantedKeys(bulkDir, names);
+      const wanted = byName && covered ? new Set([...byName, ...unique.flatMap((p) => (p.key && covered.has(p.key) ? [p.key] : []))]) : byName;
+      const [wcvp, loaded] = await Promise.all([loadWcvp(bulkDir, [...names, ...olderGenera]), loadOccurrences(bulkDir, 2000, wanted)]);
       if (!wcvp) console.log('  no WCVP files: distributions will come from the API');
       if (!loaded && !existsSync(`${bulkDir}/occurrence.zip`) && !existsSync(`${bulkDir}/occurrence.csv`)) console.log('  no occurrence.zip: occurrences will come from the API');
       const apiPath = readApiPath(bulkDir);
-      const bf = bulkFetcher(f, { wcvp: wcvp ?? undefined, occ: loaded?.occ, media: loaded?.media ?? undefined, apiPath });
+      const bf = bulkFetcher(f, { wcvp: wcvp ?? undefined, occ: loaded?.occ, media: loaded?.media ?? undefined, apiPath, covered });
       mediaFromFiles = !!loaded?.media;
       // The download's photographs are files, not a network extra: a re-derivation reads them and merges them in.
       if (mediaFromFiles) skip.splice(0, skip.length, ...skip.filter((x) => x !== 'gbif.media'));

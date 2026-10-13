@@ -291,7 +291,8 @@ describe('guards on each part of the proofs (each fails when that part of the ru
   it('a genus of one species at Kew that is neither this species\' parent nor holds it by name (guard)', async () => {
     const w: World = {
       items: { Q128784530: { sitelink: 'Harpephyllum afrum', P171: ['Q1'], P105: [SPECIES], P225: ['Harpephyllum afrum'] }, Q9002134: { sitelink: 'Harpephyllum', P105: [GENUS], P225: ['Harpephyllum'] } },
-      genera: { Harpephyllum: ['Harpephyllum afrum'] }
+      // A made Kew: its one species another name (round seventy-b: with "afrum" now "caffrum" spelt anew, the real one is this species).
+      genera: { Harpephyllum: ['Harpephyllum pubescens'] }
     };
     expect((await summary(redirect('Harpephyllum caffrum', 'Harpephyllum', w).f, 'Harpephyllum caffrum', ['Harpephyllum caffrum'], who('Harpephyllum caffrum', 'Q128784530'))).status).toBe('none');
   });
@@ -304,6 +305,8 @@ describe('A2 (R47-4): a sitelink or a carried title that is another species\' na
   // no Drosera montana article; the live page quoted Drosera tomentosa's.
   const w: World = {
     items: { Q5308558: { sitelink: 'Drosera tomentosa', P171: ['Q266'], P105: [SPECIES], P225: ['Drosera montana'] } },
+    // GBIF, 2026-10-13: Drosera tomentosa a synonym of Drosera montana var. tomentosa (round seventy-b reads this).
+    gbif: { 'Drosera tomentosa': { species: 'Drosera montana', status: 'SYNONYM', below: 'Drosera montana tomentosa' } },
     wiki: { 'Drosera tomentosa': { title: 'Drosera tomentosa', extract: 'Drosera tomentosa is a species of sundew. In 1906, Ludwig Diels reduced the species to a variety of D. montana.' } }
   };
   const detail = "Wikipedia's article Drosera tomentosa is under a name that is neither this species' nor one of its older names";

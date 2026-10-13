@@ -15,7 +15,7 @@
  * Depicts statements (P180) are not used as a gate: they catch 16 of the 40 bad leads and are missing from 55% of good files.
  */
 import { readCommonsPhoto } from './photo-credit';
-import { heroOf, oneCopyEach } from './dedupe';
+import { heroOf, oneCopyEach, inatPhotoId } from './dedupe';
 import { spellingKey } from './epithet';
 import { commonsTileOf } from './photo-size';
 import { ownNames as ownNamesRule } from './own-names';
@@ -143,16 +143,38 @@ const CREDIT_KINDS: Array<[string, RegExp]> = [
  * would drop good photographs, and it files gardens' living plants as "Specimens in the Lyman Plant House" (S-C10), so
  * "specimens" is read only as a museum's or a herbarium's.
  */
-const CATEGORY_KINDS = /media from gbif|herbari|holotyp|isotyp|\b(?:preserved|pressed|dried|type|museum) specimens?\b|museum of natural history|natural history museum|distribution maps|range maps|locator maps|maps of the (?:range|distribution)|illustrations\b|drawings|engravings|lithographs|botanical magazine|curtis|biodiversity heritage library|popular science monthly|\bplates\b|postage stamps|stamps of|plants on stamps|\bseeds\b|\bresins?\b|\bbooks\b|unidentified|hybrids\b/i;
+const CATEGORY_KINDS = /herbari|holotyp|isotyp|\b(?:preserved|pressed|dried|type|museum) specimens?\b|museum of natural history|natural history museum|distribution maps|range maps|locator maps|maps of the (?:range|distribution)|illustrations\b|drawings|engravings|lithographs|botanical magazine|curtis|biodiversity heritage library|popular science monthly|\bplates\b|postage stamps|stamps of|plants on stamps|\bseeds\b|\bresins?\b|\bbooks\b|hybrids\b/i;
 
-/** An animal's category: a file under one is a photograph of the animal (the nymphs on Centaurea americana; S-C3). */
+/**
+ * Round 70b (the owner's `--fill commons-kind`, 140 files left out): "Media from GBIF" says where a file came from, not
+ * what it shows, and hid living plants Commons imported from GBIF's observations ("Melocactus paucispinus 1",
+ * "Granite bloodlily (Haemanthus graniticus) 3"), often a page's only photographs; it is no longer a kind, and a
+ * herbarium's import is caught by its specimen categories and its title. "Unidentified" is read only of a plant: a
+ * plant group, plants, or a genus the species or the reference holds ("Unidentified Euphorbia", "Unidentified Liliales
+ * in Armenia", "Unidentified plants in the Brooklyn Botanic Garden"), never of an animal ("Unidentified Formicidae", an
+ * ant on Franklinia's flower) or of anything else ("Unidentified year in Donetsk").
+ */
+const PLANT_GROUPS = /^(?:plants?|flowers?|succulents?|cact(?:i|us)|trees?|shrubs?|bulbs?|angiosperms|monocots|eudicots|dicots|spermatophyta|magnoliophyta|magnoliopsida|liliopsida|tracheophyta|[a-z]+(?:ales|aceae|oideae|opsida|phyta))$/i;
+function unidentifiedPlant(c: string, n: KindNames, own: readonly Name[]): boolean {
+  const w = /^unidentified\s+([A-Za-z]+)/i.exec(c.trim())?.[1];
+  if (!w) return false;
+  return PLANT_GROUPS.test(w) || (/^[A-Z][a-z]+$/.test(w) && (own.some((b) => b.genus === w) || !!n.held?.hasGenus(w)));
+}
+
+/**
+ * An animal's category: a file under one is a photograph of the animal (the nymphs on Centaurea americana; S-C3), an
+ * animal family read by its zoological ending ("Formicidae", "Tabanidae", "Papilionidae"). Round 70b: a flower with an
+ * insect on it is still the plant where the title names the species ("Nepenthes inermis6", "Butterfly on Ixora casei
+ * 01", "Franklin Tree Franklinia alatamaha Flower"), so an animal's category hides a file only when its title does not.
+ */
+const ZOO_FAMILY = /\b[A-Z][a-z]+idae\b/;
 const ANIMAL_CATEGORIES = /\binsects?\b|\bnymphs?\b|\blarvae\b|\bcaterpillars\b|\bbeetles\b|\bbutterflies\b|\bmoths\b|\bbees\b|\bwasps\b|\baphids\b|\bants\b|\bspiders\b|\bbirds\b|\bhemiptera\b|\bheteroptera\b|\bcoreidae\b|\bcoleoptera\b|\blepidoptera\b|\bhymenoptera\b|\bdiptera\b|\borthoptera\b|\baraneae\b|\bfauna of\b|\banimals\b/i;
 
 /**
  * The words after a genus that are not an epithet: "Crassula in flower" names no other species, nor do "Wollemia
  * cones", "Lithops before Repotting" and "Ceropegia trap2" (the misreadings queued from round sixty-nine).
  */
-const NOT_EPITHET = new Set(['sp', 'spp', 'ssp', 'subsp', 'var', 'species', 'hybrid', 'hybrids', 'cultivar', 'cv', 'flower', 'flowers', 'flowering', 'plant', 'plants', 'in', 'at', 'on', 'and', 'or', 'with', 'from', 'the', 'of', 'by', 'near', 'under', 'over', 'before', 'after', 'during', 'leaf', 'leaves', 'fruit', 'fruits', 'berry', 'berries', 'pod', 'pods', 'seedpod', 'cone', 'cones', 'seedling', 'seedlings', 'habit', 'habitat', 'detail', 'close', 'closeup', 'macro', 'view', 'group', 'clump', 'colony', 'collection', 'garden', 'gardens', 'park', 'house', 'greenhouse', 'nursery', 'show', 'bloom', 'blooms', 'blossom', 'inflorescence', 'stem', 'stems', 'trunk', 'bark', 'root', 'roots', 'caudex', 'tuber', 'tubers', 'bulb', 'bulbs', 'corm', 'corms', 'spine', 'spines', 'bud', 'buds', 'trap', 'traps', 'pitcher', 'pitchers', 'upper', 'lower', 'rosette', 'rosettes', 'offset', 'offsets', 'tree', 'trees', 'shrub', 'pot', 'potted', 'cultivated', 'wild', 'young', 'old', 'new', 'white', 'red', 'yellow', 'pink', 'blue', 'green', 'purple', 'orange', 'img', 'dsc', 'photo', 'image', 'specimen', 'specimens', 'cactus', 'cacti', 'succulent', 'succulents', 'form', 'forma', 'type', 'aff', 'cf', 'x', 'et', 'nov', 'indet', 'spec']);
+const NOT_EPITHET = new Set(['sp', 'spp', 'ssp', 'subsp', 'var', 'species', 'hybrid', 'hybrids', 'cultivar', 'cv', 'flower', 'flowers', 'flowering', 'plant', 'plants', 'in', 'at', 'on', 'and', 'or', 'with', 'from', 'the', 'of', 'by', 'near', 'under', 'over', 'before', 'after', 'during', 'leaf', 'leaves', 'fruit', 'fruits', 'berry', 'berries', 'pod', 'pods', 'seedpod', 'cone', 'cones', 'seedling', 'seedlings', 'habit', 'habitat', 'detail', 'close', 'closeup', 'macro', 'view', 'group', 'clump', 'colony', 'collection', 'garden', 'gardens', 'park', 'house', 'greenhouse', 'nursery', 'show', 'bloom', 'blooms', 'blossom', 'inflorescence', 'stem', 'stems', 'trunk', 'bark', 'root', 'roots', 'caudex', 'tuber', 'tubers', 'bulb', 'bulbs', 'corm', 'corms', 'spine', 'spines', 'bud', 'buds', 'trap', 'traps', 'pitcher', 'pitchers', 'upper', 'lower', 'rosette', 'rosettes', 'offset', 'offsets', 'tree', 'trees', 'shrub', 'pot', 'potted', 'cultivated', 'wild', 'young', 'old', 'new', 'white', 'red', 'yellow', 'pink', 'blue', 'green', 'purple', 'orange', 'img', 'dsc', 'photo', 'image', 'bonsai', 'specimen', 'specimens', 'cactus', 'cacti', 'succulent', 'succulents', 'form', 'forma', 'type', 'aff', 'cf', 'x', 'et', 'nov', 'indet', 'spec']);
 
 /** The ends of English words, never of an epithet the reference holds with a Latin ending ("budding", "growing"). */
 const ENGLISH = /(?:ing|ings|ness|ment|ments|tion|tions)$/;
@@ -359,22 +381,27 @@ function isHybrid(title: string, names: readonly Name[]): boolean {
 }
 
 /**
- * A species category ("Parodia comarapana", "Echinocereus scheeri subsp. gentryi") as one identity a species: "self" for
- * the species under any of its names, another species by the one key the reference files the name under, else by the
- * name. Its genus must be the species' own or one the reference holds, so "Flowering plants" is no species.
+ * A species category ("Parodia comarapana", "Lithops schwantesii subsp. schwantesii var. marthae") as one identity a
+ * species, with the epithet it is named by: "self" for the species under any of its own names (`ownNames`, B's rule,
+ * compared by `spellingKey`), and for a variety or subspecies of it; another species of the reference by the one key
+ * the reference files the name under; else, a name the reference does not hold and that is not the species' own, by
+ * the name. A variety of another species counts as that species. Its genus must be the species' own or one the
+ * reference holds, so "Flowering plants" is no species, and "Cyphostemma bonsai" names no species (round 70b).
  */
-function categorySpecies(c: string, n: KindNames, own: readonly Name[]): string | null {
-  const t = c.trim();
-  if (!/^[A-Z][a-z]+(?:-[a-z]+)? (?:× ?)?[a-z][a-z-]+(?: (?:var|subsp|ssp|f|fo|forma)\.? [a-z][a-z-]+)?$/.test(t)) return null;
-  const b = nameOf(t);
-  if (!b || NOT_EPITHET.has(lower(b.epithet)) || ENGLISH.test(lower(b.epithet))) return null;
-  const g = lower(b.genus);
-  if (!own.some((x) => lower(x.genus) === g) && !n.held?.hasGenus(b.genus)) return null;
-  const self = own.some((x) => lower(x.genus) === g && spellingKey(x.epithet) === spellingKey(b.epithet) && (!x.infra || (!!b.infra && spellingKey(b.infra) === spellingKey(x.infra))));
-  if (self) return 'self';
-  const ks = n.held?.holders(b.genus, b.epithet) ?? [];
-  if (n.key != null && ks.length === 1 && ks[0] === n.key) return 'self';
-  return ks.length === 1 ? `key ${ks[0]}` : `${g} ${spellingKey(b.epithet)}`;
+function categorySpecies(c: string, n: KindNames, own: readonly Name[]): { id: string; epithet: string } | null {
+  const m = /^([A-Z][a-z]+(?:-[a-z]+)?) (?:× ?)?([a-z][a-z-]+)((?: (?:var|subsp|ssp|f|fo|forma)\.? [a-z][a-z-]+){0,2})$/.exec(c.trim());
+  if (!m) return null;
+  const [genus, epithet] = [m[1], m[2]];
+  const infras = [...m[3].matchAll(/ (?:var|subsp|ssp|f|fo|forma)\.? ([a-z][a-z-]+)/g)].map((x) => spellingKey(x[1]));
+  if (NOT_EPITHET.has(lower(epithet)) || ENGLISH.test(lower(epithet))) return null;
+  const g = lower(genus);
+  if (!own.some((x) => lower(x.genus) === g) && !n.held?.hasGenus(genus)) return null;
+  const k = spellingKey(epithet);
+  const self = own.some((x) => lower(x.genus) === g && spellingKey(x.epithet) === k && (!x.infra || infras.includes(spellingKey(x.infra))));
+  if (self) return { id: 'self', epithet };
+  const ks = n.held?.holders(genus, epithet) ?? [];
+  if (n.key != null && ks.includes(n.key) && olderNameIsOwn(n, { genus, epithet })) return { id: 'self', epithet };
+  return { id: ks.length === 1 ? `key ${ks[0]}` : `${g} ${k}`, epithet };
 }
 
 /** What Commons says of a file beyond its title: its categories, and whether its description strikes out a name (`struck`). */
@@ -397,15 +424,29 @@ export function commonsKind(id: string, names?: KindNames | null, meta?: readonl
   if (isHybrid(title, own)) return 'a hybrid';
   if (readings(title, n).includes('another')) return 'named as another species';
   const cats = m.categories ?? [];
-  const cat = cats.find((c) => CATEGORY_KINDS.test(c) || ANIMAL_CATEGORIES.test(c));
+  const cat = cats.find((c) => CATEGORY_KINDS.test(c) || unidentifiedPlant(c, n, own));
   if (cat) return `filed under "${cat}"`;
+  const animal = cats.find((c) => ANIMAL_CATEGORIES.test(c) || ZOO_FAMILY.test(c));
+  if (animal && !namesThisSpecies(id, title, n)) return `filed under "${animal}"`;
   // A file Commons files under two or more species is a group photograph, and is shown on neither ("Parodia Liberec 1"; S-C3).
-  const species = new Set(cats.map((c) => categorySpecies(c, n, own)).filter((s): s is string => !!s));
-  if (species.size >= 2) return `filed under ${species.size} species: a group`;
+  // Round 70b: unless its title names this species and none of the others, when the others are plants beside it
+  // ("Aztekium hintonii 5", filed under Selaginella gypsophila too); "Haworthias blackburniae y wittebergensis" names two.
+  const found = cats.map((c) => categorySpecies(c, n, own)).filter((x): x is { id: string; epithet: string } => !!x);
+  const species = new Set(found.map((x) => x.id));
+  if (species.size >= 2) {
+    const t = lower(title);
+    // An epithet the species' own names hold is not another's ("Epithelantha micromeris unguispina" is E. spinosior's own name).
+    const mine = new Set(own.map((x) => spellingKey(x.epithet)));
+    const others = found.filter((x) => x.id !== 'self' && !mine.has(spellingKey(x.epithet)) && new RegExp(`(?:^|[^a-z])${esc(stem(x.epithet))}`).test(t));
+    if (!namesThisSpecies(id, title, n) || others.length) return `filed under ${species.size} species: a group`;
+  }
   // "Centaurea sp. ~~C. nuttallii~~": the describer struck the name out (S-C3).
   if (m.struck) return 'its description strikes out a name';
   return null;
 }
+
+/** Whether a title names the species under one of its own names: a binomial read as its own, or its epithet after its genus or a start of it. */
+const namesThisSpecies = (id: string, title: string, n: KindNames): boolean => readings(title, n).includes('own') || epithetRank(id, n) < 2;
 
 /** 0 when the title holds the species' own epithet, 1 an older name's, 2 neither (a camera's name, "DSC_1234"). */
 export function epithetRank(id: string, names?: KindNames | null): number {
@@ -452,8 +493,11 @@ const web = (u: string | undefined) => !!u && /^https?:\/\//i.test(u);
  */
 export function shownPhotos<P extends PhotoLike>(photos: readonly P[], names?: KindNames | null): P[] {
   const out: P[] = [];
-  for (const p of oneCopyEach(photos.filter((p) => web(p.url) && web(p.thumb)))) {
+  const kept = oneCopyEach(photos.filter((p) => web(p.url) && web(p.thumb)));
+  const inat = new Set(kept.map((p) => inatPhotoId(p.url)).filter((x): x is string => !!x));
+  for (const p of kept) {
     if (p.src !== 'commons') out.push(p);
+    else if (inat.has(commonsInatCopy(p.id) ?? '')) continue;
     else if (!commonsKind(p.id, names, { categories: p.categories, struck: p.struck, credit: p.attribution })) {
       const r = readCommonsPhoto(p);
       // An original upload's tile at Commons' largest width below its own, so no smaller slot loads the whole file (C7, R47-9).
@@ -462,6 +506,14 @@ export function shownPhotos<P extends PhotoLike>(photos: readonly P[], names?: K
   }
   return commonsFirstByEpithet(out, names);
 }
+
+/**
+ * The iNaturalist photograph a Commons file is a copy of, by the number iNaturalist2Commons and GBIF's imports end its
+ * name with ("Agave multifilifera 328057104.jpg", "Euryops abrotanifolius 160732946.jpg"): where the dossier holds that
+ * photograph from iNaturalist or GBIF, the Commons copy is the same photograph, shown and counted once (round 70b). A
+ * Flickr number is in brackets and is not read.
+ */
+export const commonsInatCopy = (id: string): string | null => /[\s_](\d{6,9})\.(?:jpe?g|webp)$/i.exec(id)?.[1] ?? null;
 
 /** The lead photograph of what is shown: the page's hero and the index's tile, by one rule (`heroOf`'s order of sources). */
 export const leadOf = <P extends PhotoLike>(photos: readonly P[], names?: KindNames | null): P | undefined => heroOf(shownPhotos(photos, names));

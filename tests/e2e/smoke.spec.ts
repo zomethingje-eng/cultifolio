@@ -815,7 +815,11 @@ test('sync: an offline edit uploaded late is still discovered, and a backup merg
   await b.click('#sync-have-key');
   await b.fill('#sync-key', key);
   await b.click('#sync-join');
-  await expect(b.locator('.card', { hasText: 'Status' })).toContainText('Synced');
+  // A join stores and folds the vault's changes: in Safari's engine on the owner's PC every IndexedDB request is ~16 ms,
+  // and the second join below was still "Receiving 4 of 4…" when 10 s ran out, every step on screen in turn, nothing held
+  // (round seventy-b; the owner's all-engines run). Counted in Chromium: a first join of this vault 93 requests, a rejoin
+  // 139 with 22 changes; this test's rejoin carries about 60, so it is given 600 at WebKit's pace (helpers/pace.ts).
+  await expect(b.locator('.card', { hasText: 'Status' })).toContainText('Synced', { timeout: writeWait(10_000, 600) });
 
   // B goes offline and records an event (an older HLC); A then records one and syncs, moving its cursor past B's time.
   await b.goto(`/plants/${acc}`);
@@ -874,7 +878,7 @@ test('sync: an offline edit uploaded late is still discovered, and a backup merg
   await b.click('#sync-have-key');
   await b.fill('#sync-key', key);
   await b.click('#sync-join');
-  await expect(b.locator('.card', { hasText: 'Status' })).toContainText('Synced');
+  await expect(b.locator('.card', { hasText: 'Status' })).toContainText('Synced', { timeout: writeWait(10_000, 600) }); // the rejoin, as above
   // offline, the status says so and that the changes are kept, rather than "Failed to fetch" (round twenty-four, 9)
   await B.setOffline(true);
   await b.locator('#sync-now').click();
@@ -1397,17 +1401,30 @@ test('the species field is a combobox: arrows and Enter pick a suggestion; Enter
   await expect(page).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
   await expect(page.locator('h1')).toContainText('Copiapoa cinerea');
 
-  // a partial name: Enter asks, and nothing is filed under "Welwit"
+  // A partial name: Enter asks, and nothing is filed under "Welwit". The catalogue's search reads "Welwit" as the start of
+  // a genus and offers Welwitschia mirabilis, so once the field's check has answered, the line offers it by name (`nearest`)
+  // rather than saying "Pick a name from the list". That line showed only for the moment between Enter and the check's
+  // answer, which a Chromium run caught and a loaded WebKit run did not (round seventy-b; the owner's all-engines run,
+  // flaky, 23 polls of "Did you mean Welwitschia mirabilis?"). Both answers are waited for before Enter, and the line is
+  // read once the check has spoken: one outcome, the one the field settles on (round sixty; the harness review, 14).
   await page.goto('/plants/new');
   await ready(page);
-  const welwit = page.waitForResponse((r) => r.url().includes('/api/names?q=Welwit'));
+  const welwit = Promise.all([page.waitForResponse((r) => r.url().includes('/api/names?q=Welwit')), page.waitForResponse((r) => r.url().includes('/api/search?q=Welwit'))]);
   await input.fill('Welwit');
-  // The suggestion debounce: a genus fragment matches nothing local, so nothing appears; what the debounce ends in is the
-  // name service's request, so the test waits for its answer, not a fixed 400 ms (round sixty-one; docs/review-60/harness.md
-  // 18, review B). The outcome is one, not either: with no suggestion there is no nearest name to offer (round sixty; the
-  // harness review, 14: the assertion took both).
   await welwit;
+  await expect(page.locator('.picker [role=option]', { hasText: 'Welwitschia mirabilis' })).toBeVisible();
   await input.press('Enter');
+  await expect(page.locator('.picker .pill.warn')).toBeVisible(); // the check has answered: "not reached" or "not in the backbone"
+  await expect(page.locator('.picker .hint:not(.svc)')).toContainText('Not a reference name. Did you mean Welwitschia mirabilis?');
+  await expect(page).toHaveURL(/\/plants\/new$/);
+  // With no reference name near what was typed, Enter's line is the one that asks: pick from the list, or Add keeps it.
+  await page.goto('/plants/new');
+  await ready(page);
+  const qz = Promise.all([page.waitForResponse((r) => r.url().includes('/api/names?q=Qzxwv')), page.waitForResponse((r) => r.url().includes('/api/search?q=Qzxwv'))]);
+  await input.fill('Qzxwv');
+  await qz;
+  await input.press('Enter');
+  await expect(page.locator('.picker .pill.warn')).toBeVisible();
   await expect(page.locator('.picker .hint:not(.svc)')).toContainText('Pick a name from the list');
   await expect(page).toHaveURL(/\/plants\/new$/);
   await page.goto('/plants');

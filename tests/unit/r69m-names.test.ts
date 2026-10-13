@@ -240,6 +240,7 @@ describe('Wikidata by name: one exact label, and proof it is this plant (M7)', (
       [`re:srsearch=haswbstatement%3AP846%3D111`]: { query: { search: [{ title: 'Q5' }, { title: 'Q6' }] } },
       [`re:srsearch=haswbstatement%3AP846%3D${key}`]: { query: { search: [] } },
       [`${W}?action=wbsearchentities`]: { search: [] },
+      're:datasetKey=f382f0ce': { results: [] }, // round seventy, the owner's run: Kew's IPNI is asked before the older names; none
       [`${W}?action=wbgetentities`]: { entities: { Q5: { claims: {} }, Q6: { claims: {} } } }
     });
     const sp = table[`${GBIF}/species/${key}`] as Record<string, unknown>;

@@ -38,7 +38,8 @@ const INDEX = [
   { key: 2766653, name: 'Agave cocui', syn: ['Agave cocui var. cucutensis', 'Agave cocui var. laguayrensis'] },
   { key: 7172987, name: 'Crassula perfoliata' },
   { key: 7642067, name: 'Crassula perforata', syn: ['Crassula anthurus'] },
-  { key: 10871976, name: 'Agave pax' }
+  { key: 10871976, name: 'Agave pax' },
+  { key: 3067157, name: 'Euphorbia milii' }
 ];
 const HELD = heldNamesOf(INDEX);
 const KEY = new Map(INDEX.map((e) => [e.name, e.key]));
@@ -174,7 +175,9 @@ describe('C1, group and non-plant files', () => {
   it('an animal on the plant, by title and by category (S-C3)', async () => {
     const syn = ['Centaurea americana Nutt.'];
     expect(shows('Plectocephalus americanus', 'File:Leaf-footed Bug nymphs (Coreidae, Leptoglossus) on Centaurea americana (27334442305).jpg', syn)).toBe(false);
-    expect(await takes('Plectocephalus americanus', 'File:Centaurea americana 5.jpg', 'Leptoglossus|Insects on flowers', '', syn)).toBe(false);
+    expect(await takes('Plectocephalus americanus', 'File:Leptoglossus 5.jpg', 'Leptoglossus|Insects on flowers', '', syn)).toBe(false);
+    // Round 70b: a flower with an insect on it is the plant where the title names the species.
+    expect(await takes('Plectocephalus americanus', 'File:Centaurea americana 5.jpg', 'Leptoglossus|Insects on flowers', '', syn)).toBe(true);
   });
   it('a file whose description strikes out the name, on a new answer and stored (S-C3)', async () => {
     const syn = ['Centaurea nuttallii Spreng.'];

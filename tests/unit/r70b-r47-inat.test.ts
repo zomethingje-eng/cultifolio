@@ -49,6 +49,10 @@ const MATCH: Record<string, unknown> = {
   'Drimia physodes': { usageKey: 2773852, matchType: 'EXACT', rank: 'SPECIES', status: 'SYNONYM', speciesKey: 2773846, species: 'Fusifilum physodes' },
   'Cotyledon orbiculata orbiculata': { usageKey: 7219274, matchType: 'EXACT', rank: 'VARIETY', speciesKey: 5361969, species: 'Cotyledon orbiculata' }
 };
+/** Kew's rows (GBIF's copy of WCVP), 2026-10-13: asked where the backbone does not place a name in this reference. */
+const KEW: Record<string, unknown[]> = {
+  'Echinofossulocactus ochoterenanus': [{ canonicalName: 'Echinofossulocactus ochoterenanus', taxonomicStatus: 'SYNONYM', accepted: 'Stenocactus ochoterenanus Tiegel' }]
+};
 /** iNaturalist's name search (plants), as it answered. */
 const SEARCH: Record<string, unknown[]> = {
   'Stenocactus boedekerianus': [{ id: 870796, name: 'Echinofossulocactus ochoterenanus', rank: 'species', matched_term: 'Stenocactus boedekerianus' }],
@@ -78,7 +82,8 @@ function world(o: { wikidataInat?: number; key?: number; refuse?: RegExp } = {},
     if ((m = /\/v1\/taxa\/([\d,]+)/.exec(url))) return ok({ results: m[1].split(',').map(Number).flatMap((id) => (TAXA[id] ? [TAXA[id]] : [])) });
     if ((m = /\/v1\/taxa\?q=([^&]+)/.exec(url))) return ok({ results: SEARCH[decodeURIComponent(m[1])] ?? [] });
     if (url.includes('api.inaturalist.org')) return ok({ results: [] });
-    if ((m = /\/species\/match\?strict=true&kingdom=Plantae&name=([^&]+)/.exec(url))) return ok(MATCH[decodeURIComponent(m[1])] ?? { matchType: 'NONE' });
+    if ((m = /\/species\/match\?[^]*?name=([^&]+)/.exec(url))) return ok(MATCH[decodeURIComponent(m[1])] ?? { matchType: 'NONE' });
+    if ((m = /\/v1\/species\?datasetKey=[^&]+&name=([^&]+)/.exec(url))) return ok({ results: KEW[decodeURIComponent(m[1])] ?? [] });
     if ((m = /\/v1\/species\/(\d+)\/synonyms/.exec(url))) return ok({ results: SPECIES[Number(m[1])]?.synonyms ?? [], endOfRecords: true });
     if ((m = /\/v1\/species\/(\d+)$/.exec(url))) { const k = Number(m[1]); const s = SPECIES[k]; const e = INDEX.find((x) => x.key === k); return ok({ key: k, canonicalName: s?.name ?? e?.name, scientificName: s?.name ?? e?.name, rank: 'SPECIES', taxonomicStatus: 'ACCEPTED', kingdom: 'Plantae', family: s?.family ?? e?.family, basionymKey: s?.basionymKey }); }
     if (url.includes('api.gbif.org')) return ok({ results: [], endOfRecords: true });
@@ -114,9 +119,10 @@ describe('--fill inat-ids drops R47-1\'s seven taxa, however each id came', () =
       expect(d.ids.inat, String(k)).toBeUndefined();
       expect(d.photos, String(k)).toEqual([]);
     }
-    expect(c.lines.find((l) => l.startsWith('Stenocactus boedekerianus'))).toBe("Stenocactus boedekerianus [3941409]: 870796 (Echinofossulocactus ochoterenanus), carried, refused, iNaturalist's Echinofossulocactus ochoterenanus, in a genus this reference does not hold, is Stenocactus ochoterenanus, another species of this reference; 39 iNaturalist photographs removed; by name: none");
-    expect(c.lines.find((l) => l.startsWith('Cotyledon flanaganii'))).toBe("Cotyledon flanaganii [5689714]: 598425 (Cotyledon orbiculata orbiculata), carried, refused, GBIF holds iNaturalist's Cotyledon orbiculata orbiculata as Cotyledon orbiculata, another species of this reference; 50 iNaturalist photographs removed; by name: none");
-    expect(c.lines.find((l) => l.startsWith('Ceropegia monteiroae'))).toMatch(/GBIF holds iNaturalist's Ceropegia sandersonii as Ceropegia sandersonii, another species of this reference/);
+    // Round seventy, the owner's run: each line says which answer refused it.
+    expect(c.lines.find((l) => l.startsWith('Stenocactus boedekerianus'))).toBe('Stenocactus boedekerianus [3941409]: 870796 (Echinofossulocactus ochoterenanus), carried, refused, Kew holds Echinofossulocactus ochoterenanus as a synonym of Stenocactus ochoterenanus, another species of this reference; 39 iNaturalist photographs removed; by name: none');
+    expect(c.lines.find((l) => l.startsWith('Cotyledon flanaganii'))).toBe('Cotyledon flanaganii [5689714]: 598425 (Cotyledon orbiculata orbiculata), carried, refused, GBIF holds Cotyledon orbiculata orbiculata as Cotyledon orbiculata, another species of this reference; 50 iNaturalist photographs removed; by name: none');
+    expect(c.lines.find((l) => l.startsWith('Ceropegia monteiroae'))).toMatch(/refused, Ceropegia sandersonii is another species of this reference/);
   });
   it('a taxon of the species\' own name asks GBIF nothing (guard)', async () => {
     const asked: string[] = [];
@@ -128,7 +134,7 @@ describe('--fill inat-ids drops R47-1\'s seven taxa, however each id came', () =
     expect((docs.a as D).ids.inat).toBe(431387);
   });
   it('GBIF refusing stops the fill and leaves the dossier as it was (fails safe)', async () => {
-    const docs: Record<string, unknown> = { '7588224.json': dossier(7588224, 430812, 'carried', 1), '7837855.json': { key: 7837855, name: { scientific: 'Ceropegia sandersonii', family: 'Apocynaceae' }, ids: {}, links: {}, photos: [], upstream: {} } };
+    const docs: Record<string, unknown> = { '5689714.json': dossier(5689714, 598425, 'carried', 50), '5361969.json': { key: 5361969, name: { scientific: 'Cotyledon orbiculata', family: 'Crassulaceae' }, ids: {}, links: {}, photos: [], upstream: {} } };
     const before = structuredClone(docs);
     const c = await fillInatIds(store(docs), world({ refuse: /species\/match/ }), () => '2026-10-13T00:00:00Z');
     expect(c.failed).toBe('api.gbif.org 429'); // base: no failure, nothing asked
@@ -151,7 +157,7 @@ describe('the build reads the same rule', () => {
     const r = await build(7588224, { wikidataInat: 430812 });
     if (!r.ok) throw new Error('no dossier');
     expect(r.dossier.ids.inat).toBeUndefined(); // base: 430812
-    expect(r.dossier.upstream['inat.taxon'].detail).toMatch(/^iNaturalist's taxon 430812 \(Ceropegia sandersonii\), as Wikidata gives it, is not this species: GBIF holds iNaturalist's Ceropegia sandersonii as Ceropegia sandersonii, another species of this reference; asked by name/);
+    expect(r.dossier.upstream['inat.taxon'].detail).toMatch(/^iNaturalist's taxon 430812 \(Ceropegia sandersonii\), as Wikidata gives it, is not this species: Ceropegia sandersonii is another species of this reference; asked by name/);
   });
   it('Stenocactus boedekerianus: "filed by iNaturalist as" Echinofossulocactus ochoterenanus, which is Stenocactus ochoterenanus', async () => {
     const r = await build(3941409);

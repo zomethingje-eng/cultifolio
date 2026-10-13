@@ -17,6 +17,8 @@
  * hirsuta hirsuta" is GBIF's canonical "Stapelia hirsuta hirsuta" (var. hirsuta).
  */
 
+import { spellingKey } from './epithet';
+
 /** A synonym as the build reads it from GBIF (`SynonymRow`), or as a dossier stores it (its scientific name). */
 export type SynonymLike = string | { name: string; key?: number; rank?: string; status?: string; basionymKey?: number };
 
@@ -41,7 +43,23 @@ export function canonicalOf(scientificName: string): string | null {
 export interface OwnNames {
   /** Every name that is the species' own, canonical and in lower case. */
   own: Set<string>;
+  /** The same names as `nameKey` reads them: genus, then each epithet by `epithetKey`. */
+  keys: Set<string>;
 }
+
+/**
+ * An epithet as one name's spellings read it: `spellingKey` (gender, "ae", "ii", hyphens), with the ICN's 2024 correction
+ * of epithets in "caffr-" to "afr-" (Erythrina caffra is Erythrina afra; Harpephyllum caffrum, Harpephyllum afrum)
+ * (round seventy, the owner's run).
+ */
+export const epithetKey = (e: string) => spellingKey(e.toLowerCase().replace(/^caffr/, 'afr'));
+/** A name as own names are compared (round seventy, the owner's run): the genus, then each epithet by `epithetKey`. */
+export function nameKey(name: string): string {
+  const w = (canonicalOf(name) ?? name).toLowerCase().split(/\s+/);
+  return [w[0], ...w.slice(1).map(epithetKey)].join(' ');
+}
+/** Whether a name is one of the species' own, in any of its spellings: Othonna lineariifolia's "linearifolia" is not, Parodia erinacea's "erinaceus" is. */
+export const isOwnName = (o: OwnNames, name: string) => o.own.has(name.toLowerCase()) || o.keys.has(nameKey(name));
 
 /** The species' own names by the rule above. `heldElsewhere` says whether a species of this reference other than this one holds a name as its accepted name. */
 export function ownNames(o: { scientific: string; sameType?: readonly string[]; synonyms?: readonly SynonymLike[]; heldElsewhere?: (name: string) => boolean }): OwnNames {
@@ -52,5 +70,5 @@ export function ownNames(o: { scientific: string; sameType?: readonly string[]; 
     if (o.heldElsewhere?.(name)) continue;
     own.add(name.toLowerCase());
   }
-  return { own };
+  return { own, keys: new Set([...own].map(nameKey)) };
 }

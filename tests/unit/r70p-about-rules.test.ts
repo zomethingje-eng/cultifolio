@@ -98,10 +98,13 @@ describe('the summary under another title (/about/how)', () => {
     expect(proofByItem('Welwitschia', w, facts(1))?.proof).toBe('monotypic-genus');
     expect(proofByItem('Welwitschia', w, facts(2))).toBeNull();
   });
-  it('the species\' own sitelink, "but not when that title is another species\' name" (Drosera tomentosa on Drosera montana)', () => {
-    expect(s.text).toMatch(/but not when that title is another species' name: a binomial in the species' genus/);
+  it('the species\' own sitelink, but not a binomial GBIF holds as another species (Drosera tomentosa on Drosera montana)', () => {
+    expect(s.text).toMatch(/but not when that title is a binomial, neither its name nor an older name, that GBIF holds as another species or under a variety or subspecies of this one/);
     const montana = { name: 'Drosera montana', synonyms: [], item: 'Q100' };
-    expect(proofByItem('Drosera tomentosa', montana, { species: sp({ sitelink: 'Drosera tomentosa' }), title: ti({ taxonNames: ['Drosera montana'] }) })).toBeNull();
+    // GBIF's answer for the title, as A's round-seventy-b rule reads it (round seventy-b; A's need): the facts are typed by
+    // `proofByItem` itself, so the field is the rule's wherever the merge puts it.
+    const tomentosa = { species: sp({ sitelink: 'Drosera tomentosa' }), title: ti({ taxonNames: ['Drosera montana'] }), gbif: { species: 'Drosera montana', below: true, synonym: true } } as Parameters<typeof proofByItem>[2];
+    expect(proofByItem('Drosera tomentosa', montana, tomentosa)).toBeNull();
     expect(proofByItem('Venus flytrap', { name: 'Dionaea muscipula', synonyms: [], item: 'Q100' }, { species: sp({ sitelink: 'Venus flytrap' }), title: null })?.proof).toBe('item');
   });
   it('"What the article\'s opening says is never taken as proof": the proof reads no text', () => {

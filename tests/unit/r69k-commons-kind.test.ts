@@ -77,7 +77,8 @@ describe('a Commons answer: only photographs of the species are taken', () => {
   it('reads Commons\' categories, which the same request now returns, and not "Pages with maps", which every geotagged file is under', async () => {
     expect(await ask([{ title: 'File:Agave spicata 01.jpg', cats: "Agave spicata|Curtis's Botanical Magazine|Pages with maps" }], 'Agave spicata')).toEqual([]);
     expect(await ask([{ title: 'File:Gasteria glomerata 2.jpg', cats: 'Herbarium specimens of Gasteria' }], 'Gasteria glomerata')).toEqual([]);
-    expect(await ask([{ title: 'File:Gasteria glomerata 3.jpg', cats: 'Media from GBIF' }], 'Gasteria glomerata')).toEqual([]);
+    // Round 70b: "Media from GBIF" says where a file came from, not what it shows, and is no longer a kind.
+    expect(await ask([{ title: 'File:Gasteria glomerata 3.jpg', cats: 'Media from GBIF' }], 'Gasteria glomerata')).toEqual(['File:Gasteria glomerata 3.jpg']);
     expect(await ask([{ title: 'File:Agave spicata 02.jpg', cats: 'Agave spicata|Pages with maps|Taken with Canon EOS 5D' }], 'Agave spicata')).toEqual(['File:Agave spicata 02.jpg']); // guard
   });
   it('puts titles holding the species\' epithet first, so a camera\'s name does not lead, and reads fifty files to keep twelve', async () => {

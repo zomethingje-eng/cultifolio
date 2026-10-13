@@ -93,7 +93,7 @@ describe('--fill wikidata', () => {
   it('the script runs it as --fill wikidata and writes rebuild-wd.txt', () => {
     const script = readFileSync('scripts/build-dossiers.ts', 'utf8');
     expect(script).toMatch(/if \(fill === 'wikidata'\) return fillWikidataStep\(\);/);
-    expect(script).toMatch(/const c = await fillWikidata\(diskStore\(\), makeFetcher\(\)\);/);
+    expect(script).toMatch(/const c = await fillWikidata\(diskStore\(\), makeFetcher\(\), undefined, \{/); // round seventy, the owner's run: with what a stopped run read
     expect(script).toMatch(/writeFileSync\('rebuild-wd\.txt', c\.rebuild\.join/);
   });
 });
