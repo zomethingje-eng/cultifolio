@@ -13,7 +13,7 @@ import type { JsonFetcher, SourceResult } from './fetch';
 import type { Dossier } from './schema';
 import type { DossierStore } from './corpus-run';
 import type { WcvpIndex } from './bulk';
-import { crossIds, mwGet, mwError, mwWait, LAG_SPELL } from './sources/wikimedia';
+import { crossIds, mwGet, mwError, patiently, isLagged, NO_ITEM } from './sources/wikimedia';
 import * as gbif from './sources/gbif';
 import { licenceTag, isOpen } from '$core/licence';
 import { checkIds, taxonFor, judgeIdTaxon, type InatTaxon } from './sources/inat';
@@ -102,8 +102,14 @@ type IdDossier = Pick<Dossier, 'key' | 'ids' | 'links' | 'upstream' | 'photos'> 
 
 /** The words of a follow made before round seventy, which read nothing of the taxon it went to: read again. */
 const EARLIER_FOLLOW = /followed to its current taxon (\d+)$/;
-/** The words of round seventy's first rule refusing a taxon only for its name (the owner's run, 2026-10-13). */
-const FIRST_RULE = /(\d+) \([^)]*\) is not one of this species' names: not taken/;
+/**
+ * The words of a taxon refused by an earlier rule of round seventy: the first rule's "is not one of this species' names"
+ * (the owner's first run), and the second's "is not this species: <why>" (the owner's second run: Echinocereus
+ * chisoensis's 438545, Echinocereus chisosensis, and Othonna cakilefolia's 591068, Othonna cakilifolia, refused for a
+ * letter). The last such refusal in the record is judged again.
+ */
+const EARLIER_REFUSAL = /(\d+) \([^)]*\)(?:, kept from an earlier build,)? is (?:not one of this species' names|not this species: [^]*?): not taken/g;
+const lastRefusal = (detail: string) => [...detail.matchAll(EARLIER_REFUSAL)].pop();
 
 /**
  * Every dossier's iNaturalist id checked with iNaturalist, thirty a request (round sixty-nine; triage-68 M5, R46-13).
@@ -112,8 +118,8 @@ const FIRST_RULE = /(\d+) \([^)]*\) is not one of this species' names: not taken
  * build's rule (`judgeIdTaxon`: one of the species' own names, or a name GBIF or Kew holds as this species, or this
  * species' epithet in a genus outside the reference; never another species of the reference), and every id an earlier
  * run followed without that rule is read again by it (Pinguicula chilensis to Pinguicula antarctica, refused; Tricyrtis
- * formosana's variety, given up for the species' own taxon). A taxon round seventy's first rule refused only for its
- * name is judged again, and its id given back when now taken (the owner's run: 35 of 42). A taxon
+ * formosana's variety, given up for the species' own taxon). A taxon an earlier rule of round seventy refused is judged
+ * again, and its id given back when now taken (the owner's runs: 35 of 42, then two spelt a letter otherwise). A taxon
  * refused loses the id, its link and the iNaturalist photographs it gave, and the name is searched here, never taking the
  * refused taxon: `--fill inat` would find it again by iNaturalist's synonymy. With no taxon found, the photograph rows
  * say so and are settled, so `--fill inat` does not ask by name again. An inactive id with no single successor is
@@ -131,9 +137,9 @@ export async function fillInatIds(store: DossierStore, f: JsonFetcher, now = () 
   for (const file of store.files()) {
     const d = store.read<IdDossier>(file);
     if (d.name?.scientific) { byName.set(d.name.scientific.toLowerCase(), d.key); entries.push({ key: d.key, name: d.name.scientific, family: d.name.family }); }
-    // A taxon round seventy's first rule refused as "not one of this species' names" is judged again, and its id given
-    // back when the rule now takes it (the owner's run: Sprekelia formosissima's Zephyranthes formosissima and 34 more).
-    const refusedBefore = !d.ids?.inat ? FIRST_RULE.exec(d.upstream?.['inat.taxon']?.detail ?? '') : null;
+    // A taxon an earlier rule of round seventy refused is judged again, and its id given back when the rule now takes it
+    // (the owner's runs: Sprekelia formosissima's Zephyranthes formosissima and 34 more; Echinocereus chisosensis).
+    const refusedBefore = !d.ids?.inat ? lastRefusal(d.upstream?.['inat.taxon']?.detail ?? '') : undefined;
     if (refusedBefore) { held.push({ file, id: Number(refusedBefore[1]), earlier: false, restore: true }); continue; }
     if (!d.ids?.inat) continue;
     const m = EARLIER_FOLLOW.exec(d.upstream?.['inat.taxon']?.detail ?? '');
@@ -204,7 +210,7 @@ export async function fillInatIds(store: DossierStore, f: JsonFetcher, now = () 
           d.upstream['inat.photos.wild'] = { ...reopen };
           d.upstream['inat.photos.cultivated'] = { ...reopen };
           c.followed++;
-          c.lines.push(`${name} [${d.key}]: ${restore ? `${named}, refused by round seventy's first rule,` : carried ? `${named}, carried,` : earlier ? `an earlier follow to ${named}` : `${id} inactive; ${named}`} taken${restore ? ' back' : moved ? ` as ${g.data.to} (${g.data.name})` : ''}: ${why}`);
+          c.lines.push(`${name} [${d.key}]: ${restore ? `${named}, refused by an earlier rule,` : carried ? `${named}, carried,` : earlier ? `an earlier follow to ${named}` : `${id} inactive; ${named}`} taken${restore ? ' back' : moved ? ` as ${g.data.to} (${g.data.name})` : ''}: ${why}`);
         }
         store.write(file, d);
         continue;
@@ -274,7 +280,7 @@ export type WikidataCounts = {
 };
 /** The words the fill leaves on the Wikidata row of an item it proved again, so a stopped fill resumes. */
 export const REPROVED = 're-proved by --fill wikidata';
-type WdDossier = Pick<Dossier, 'key' | 'ids' | 'links' | 'upstream'> & { name: { scientific: string; authorship?: string } };
+type WdDossier = Pick<Dossier, 'key' | 'ids' | 'links' | 'upstream'> & { name: { scientific: string; authorship?: string; family?: string } };
 /** A Wikidata row that recorded an item refused by an earlier label rule: the item is asked for again. */
 const REFUSED_BY_LABEL = /not taken: (the item labelled|two items answered to the label)/;
 
@@ -320,7 +326,7 @@ export async function fillWikidata(store: DossierStore, f: JsonFetcher, now = ()
   for (let i = 0; i < withItem.length; i += 50) {
     const part = withItem.slice(i, i + 50);
     const url = `https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&ids=${[...new Set(part.map((p) => p.q))].join('|')}&props=claims&maxlag=5`;
-    const r = await patiently(() => mwGet<{ entities?: Record<string, { claims?: Record<string, Array<{ mainsnak: { datavalue?: { value: unknown } } }>> }>; error?: unknown }>(f, url), (x) => x.status === 'ok' && lagged(mwError(x.data)));
+    const r = await patiently(() => mwGet<{ entities?: Record<string, { claims?: Record<string, Array<{ mainsnak: { datavalue?: { value: unknown } } }>> }>; error?: unknown }>(f, url), (x) => x.status === 'ok' && isLagged(mwError(x.data)));
     if (r.status !== 'ok') return stopped({ ...c, failed: 'detail' in r ? r.detail : r.status });
     const err = mwError(r.data);
     if (err) return stopped({ ...c, failed: `wikidata ${err}` });
@@ -335,7 +341,7 @@ export async function fillWikidata(store: DossierStore, f: JsonFetcher, now = ()
     const d = store.read<WdDossier>(file);
     const st = await sameTypeOfRows(f, d.key);
     if ('failed' in st) return stopped({ ...c, failed: st.failed });
-    const x = await patiently(() => crossIds(f, d.name.scientific, d.key, st.rows, { authorship: d.name.authorship }), (y) => y.status === 'error' && y.by !== 'gbif' && lagged(y.detail));
+    const x = await patiently(() => crossIds(f, d.name.scientific, d.key, st.rows, { authorship: d.name.authorship, family: d.name.family }), (y) => y.status === 'error' && y.by !== 'gbif' && isLagged(y.detail));
     if (x.status === 'refused' || x.status === 'error' || x.status === 'skipped') return stopped({ ...c, failed: `${x.by === 'gbif' ? 'GBIF, checking an item' : 'Wikidata'}: ${x.detail}` });
     const was = d.ids.wikidata;
     const got = x.status === 'ok' ? x.data.wikidata : undefined;
@@ -352,7 +358,7 @@ export async function fillWikidata(store: DossierStore, f: JsonFetcher, now = ()
     }
     if (!got && !was) continue; // still no item: nothing changed
     c.changed++;
-    const now_ = got ? `${got} (${x.detail ?? 'found by its GBIF key'})` : `no item (${x.status}${'detail' in x && x.detail ? `: ${x.detail}` : ''})`;
+    const now_ = got ? `${got} (${x.detail ?? 'found by its GBIF key'})` : `no item (${x.status}: ${'detail' in x && x.detail ? x.detail : NO_ITEM})`;
     const line = `${d.name.scientific} [${d.key}]: ${was ?? 'no item'} → ${now_}`;
     const rebuild = `${d.key} ${d.name.scientific}\tWikidata item ${was ?? 'none'} → ${got ?? 'none'}`;
     c.lines.push(line);
@@ -377,23 +383,6 @@ export interface WikidataProgress {
   clear(): void;
 }
 
-const lagged = (detail?: string | null) => /maxlag|seconds? lagged/i.test(detail ?? '');
-/** Pauses between rounds of asks while Wikidata lags, in seconds: a minute, then two, then five, as long as a lag spell. */
-export const LAG_PAUSES = [60, 120, 300, 300, 300, 300, 300, 300, 300];
-
-/**
- * An ask of Wikidata repeated while it answers maxlag (round seventy, the owner's run: `--fill wikidata` stopped at the
- * first lagged batch and read nothing). Each round is `mwGet`'s own asks, the lag it names waited out; between rounds the
- * fill pauses (`LAG_PAUSES`), for as many rounds as make the builder's lag spell (`LAG_SPELL`), and then gives up, keeping
- * what it read for the next run.
- */
-async function patiently<R>(ask: () => Promise<R>, isLagged: (r: R) => boolean): Promise<R> {
-  for (let i = 0; ; i++) {
-    const r = await ask();
-    if (!isLagged(r) || i >= Math.min(LAG_SPELL, LAG_PAUSES.length + 1) - 1) return r;
-    await mwWait.sleep(LAG_PAUSES[i]);
-  }
-}
 
 /**
  * What the script says when the names file it is given is not there (round seventy, the owner's run): rebuild-wd.txt is
@@ -428,11 +417,11 @@ export function kewRebuildList(store: DossierStore, wcvp: Pick<WcvpIndex, 'accep
   const out: string[] = [];
   const id = (e: ReturnType<WcvpIndex['accepted']>) => (e === 'ambiguous' ? 'ambiguous' : e ? `${e.name} ${e.authors ?? ''}`.trim() : 'none');
   for (const file of store.files()) {
-    let d: Pick<Dossier, 'key'> & { name: { scientific: string; authorship?: string } };
+    let d: Pick<Dossier, 'key'> & { name: { scientific: string; authorship?: string; family?: string } };
     try { d = store.read(file); } catch { continue; }
     if (!d.name?.authorship) continue;
     const before = id(wcvp.legacyAccepted(d.name.scientific, d.name.authorship));
-    const after = id(wcvp.accepted(d.name.scientific, d.name.authorship));
+    const after = id(wcvp.accepted(d.name.scientific, d.name.authorship, d.name.family));
     if (before !== after) out.push(`${d.key} ${d.name.scientific}\tKew's entry for ${d.name.scientific} ${d.name.authorship} was ${before}, is now ${after}`);
   }
   return out;

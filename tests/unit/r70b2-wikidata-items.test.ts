@@ -35,7 +35,8 @@ async function item(key: number) {
 describe('the items the rebuild changed wrongly, found again', () => {
   it('Scilla siberica Andrews: Q158944, by Kew\'s IPNI identifier, before the older names', async () => {
     const r = await item(8080743);
-    expect(r).toMatchObject({ status: 'ok', detail: "found by its IPNI identifier 927545-1, Kew's for Scilla siberica Andrews", data: { wikidata: 'Q158944', ipni: '927545-1', inat: 862704 } }); // m70: Q80686427, Othocallis siberica
+    // Round seventy, the owner's second run: Q158944 gives the name as an alias, and is proved there by Kew's identifier.
+    expect(r).toMatchObject({ status: 'ok', detail: "found by its alias; its IPNI identifier 927545-1 is Kew's for Scilla siberica Andrews", data: { wikidata: 'Q158944', ipni: '927545-1', inat: 862704 } }); // m70: Q80686427, Othocallis siberica
   });
   it('Hibiscus acetosella Welw. ex Ficalho: Q5750828, whose IPNI is Kew\'s "Welw. ex Hiern", the one name', async () => {
     const r = await item(7802717);
@@ -43,7 +44,16 @@ describe('the items the rebuild changed wrongly, found again', () => {
   });
   it('Parrycactus flavovirens: Q309595, the item of Ferocactus flavovirens, the name Kew accepts for it', async () => {
     const r = await item(3946677);
-    expect(r).toMatchObject({ status: 'ok', detail: 'found by the GBIF record of Ferocactus flavovirens, an older name with the same type, the item of Ferocactus flavovirens (Scheidw.) Britton & Rose, the name Kew accepts for it', data: { wikidata: 'Q309595' } }); // m70: ambiguous, Q309595 and Q109398281
+    expect(r).toMatchObject({ status: 'ok', data: { wikidata: 'Q309595' } }); // m70: ambiguous, Q309595 and Q109398281
+  });
+  it('Parrycactus flavovirens, by the older names alone: Kew\'s accepted entry tells the two items apart', async () => {
+    const g = (async (u: string) => (u.includes('action=wbsearchentities') ? { status: 'ok', data: { search: [] } } : f(u))) as unknown as JsonFetcher;
+    const sp = await gbif.species(g, 3946677);
+    const syn = await gbif.synonyms(g, 3946677);
+    if (sp.status !== 'ok' || syn.status !== 'ok') throw new Error('no GBIF answer');
+    const older = gbif.sameTypeNames({ key: 3946677, basionymKey: sp.data.basionymKey }, syn.rows ?? []).map((x) => ({ key: x.key, name: x.name }));
+    const r = await crossIds(g, 'Parrycactus flavovirens', 3946677, older, { authorship: sp.data.authorship });
+    expect(r).toMatchObject({ status: 'ok', detail: 'found by the GBIF record of Ferocactus flavovirens, an older name with the same type, the item of Ferocactus flavovirens (Scheidw.) Britton & Rose, the name Kew accepts for it', data: { wikidata: 'Q309595' } });
   });
 });
 
@@ -53,7 +63,7 @@ describe('the reading under them (guards)', () => {
     expect(k.status === 'ok' && k.data.ids).toEqual(['1014461-1']);
   });
   it('two items left by the older names and neither Kew\'s accepted entry\'s are still no answer', async () => {
-    const strip = (u: string) => (u.includes('ids=Q14943408|Q309595|Q109398281&props=claims') ? { status: 'ok', data: { entities: { Q14943408: { claims: {} }, Q309595: { claims: {} }, Q109398281: { claims: {} } } } } : ANSWERS[u] ?? { status: 'refused', detail: 'no fixture' });
+    const strip = (u: string) => (u.includes('action=wbsearchentities') ? { status: 'ok', data: { search: [] } } : u.includes('ids=Q14943408|Q309595|Q109398281&props=claims') ? { status: 'ok', data: { entities: { Q14943408: { claims: {} }, Q309595: { claims: {} }, Q109398281: { claims: {} } } } } : ANSWERS[u] ?? { status: 'refused', detail: 'no fixture' });
     const g = (async (u: string) => strip(u)) as unknown as JsonFetcher;
     const sp = await gbif.species(g, 3946677);
     const syn = await gbif.synonyms(g, 3946677);

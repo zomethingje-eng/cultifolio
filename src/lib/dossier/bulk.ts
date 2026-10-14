@@ -18,7 +18,7 @@ import type { JsonFetcher, FetchResult, FetchOptions } from './fetch';
 import { licenceTag, isOpen } from '$core/licence';
 import type { GbifDistribution, GbifOccurrence, OccPage, GbifSpecies, KewDescription } from './sources/gbif';
 import { synonyms as readSynonyms, isWcvpRow } from './sources/gbif';
-import { authorKey, authorsAgree, ownByAuthor } from './authors';
+import { authorKey, authorsAgree, ownByAuthor, inFamily } from './authors';
 import { spellingKey } from './epithet';
 
 /* ------------------------------------------------------------------ WCVP */
@@ -31,6 +31,8 @@ export interface WcvpName {
   rank: string;
   /** taxon_authors, used to tell homonyms apart against the backbone's authorship. */
   authors?: string;
+  /** The family Kew files the row under (a synonym's, its accepted entry's). */
+  family?: string;
   lifeform?: string;
   climate?: string;
 }
@@ -52,10 +54,13 @@ export function wcvpRow(header: string[], line: string): Record<string, string> 
   return out;
 }
 
+const families = new Map<string, string>();
+const family = (f?: string) => { if (!f) return undefined; let v = families.get(f); if (!v) families.set(f, (v = f)); return v; };
 export const parseWcvpName = (h: string[], line: string): WcvpName => {
   const r = wcvpRow(h, line);
-  return { id: r.plant_name_id, name: r.taxon_name, status: r.taxon_status, acceptedId: r.accepted_plant_name_id || r.plant_name_id, rank: r.taxon_rank, authors: r.taxon_authors || undefined, lifeform: r.lifeform_description || undefined, climate: r.climate_description || undefined };
+  return { id: r.plant_name_id, name: r.taxon_name, status: r.taxon_status, acceptedId: r.accepted_plant_name_id || r.plant_name_id, rank: r.taxon_rank, authors: r.taxon_authors || undefined, family: family(r.family), lifeform: r.lifeform_description || undefined, climate: r.climate_description || undefined };
 };
+
 
 export const parseWcvpDist = (h: string[], line: string): WcvpDist => {
   const r = wcvpRow(h, line);
@@ -168,7 +173,7 @@ export class WcvpIndex {
    * taken, for the record. With no author from the backbone, nothing can be compared: every row under the words is
    * read, as before.
    */
-  ownRows(name: string, authorship?: string): { rows: WcvpName[]; others: WcvpName[] } {
+  ownRows(name: string, authorship?: string, family?: string): { rows: WcvpName[]; others: WcvpName[] } {
     const exact = this.rowsOf(name) ?? [];
     if (!authorKey(authorship)) return { rows: exact, others: [] };
     const usable = (rs: WcvpName[]) => rs.filter((r) => !/misapplied/i.test(r.status));
@@ -177,12 +182,13 @@ export class WcvpIndex {
     const byAuthor = (rs: WcvpName[]) => ownByAuthor(usable(rs), authorship, (r) => r.authors);
     const accepted = usable(exact).filter((r) => r.status === 'Accepted');
     const own = byAuthor(exact);
-    const rows = own.length ? own : (() => { const v = byAuthor(this.otherSpellings(name)); return v.length ? v : accepted.length === 1 ? accepted : []; })();
+    const found = own.length ? own : (() => { const v = byAuthor(this.otherSpellings(name)); return v.length ? v : accepted.length === 1 ? accepted : []; })();
+    const rows = inFamily(found, usable(exact), family);
     return { rows, others: exact.filter((r) => !rows.includes(r)) };
   }
   /** Whether Kew holds the species' own name (`ownRows`): only when it does not are the older names looked up. */
-  holds(name: string, authorship?: string): boolean {
-    return this.ownRows(name, authorship).rows.length > 0;
+  holds(name: string, authorship?: string, family?: string): boolean {
+    return this.ownRows(name, authorship, family).rows.length > 0;
   }
   /**
    * Resolve a name (as GBIF gives it, canonical) to its accepted WCVP record.
@@ -196,10 +202,10 @@ export class WcvpIndex {
    * unless one row is accepted, as before. An accepted name outside the wanted genera (the target of a synonym the
    * backbone followed) is found among the accepted rows.
    */
-  accepted(name: string, authorship?: string): WcvpName | 'ambiguous' | undefined {
+  accepted(name: string, authorship?: string, family?: string): WcvpName | 'ambiguous' | undefined {
     const entryOf = (n: WcvpName) => (n.status === 'Accepted' ? n : (this.byId.get(n.acceptedId) ?? n));
     if (authorKey(authorship)) {
-      const { rows } = this.ownRows(name, authorship);
+      const { rows } = this.ownRows(name, authorship, family);
       const ends = new Map(rows.map((r) => [entryOf(r).id, entryOf(r)]));
       // One name by one author under two entries: Kew accepts it and also cites it under another species (a pro parte or
       // misapplied use). The entry Kew accepts it as is its own (round seventy, the owner's run: Datura metel L., Romulea
@@ -258,8 +264,8 @@ export class WcvpIndex {
    * unknown or its entry's range was not read, 'ambiguous' for unresolved homonyms, and rows (none when Kew holds the
    * entry with no range: Lantana × strigocamara, a garden hybrid; round sixty-nine, triage-68 M2) otherwise.
    */
-  distributions(name: string, authorship?: string): WcvpRange | 'ambiguous' | null {
-    const a = this.accepted(name, authorship);
+  distributions(name: string, authorship?: string, family?: string): WcvpRange | 'ambiguous' | null {
+    const a = this.accepted(name, authorship, family);
     if (!a) return null;
     if (a === 'ambiguous') return 'ambiguous';
     return this.rangeOf(a);
@@ -579,7 +585,7 @@ export function bulkFetcher(base: JsonFetcher, src: BulkSources, stats = { wcvp:
   // fetcher cannot prove to the type checker that a distributions URL is answered with a distributions page. The regexes
   // below decide that, so each answer is built in the shape the matching adapter asks for and cast `as unknown as T` at
   // this one boundary; the adapters' tests, run through this fetcher, are what keep the shapes honest.
-  const names = new Map<number, { name: string; authorship?: string }>(); // key → canonical name and authorship, learned from /species/{key} on the way past
+  const names = new Map<number, { name: string; authorship?: string; family?: string }>(); // key → canonical name and authorship, learned from /species/{key} on the way past
   // The builder's own reading of GBIF's synonyms, page by page as it asked them, for the species being built (one at a
   // time): the older-name fallback reads the same list, through the same function, and asks GBIF nothing again (round
   // sixty-nine; triage-68 M4, S-A3: the two asks could have disagreed, one refused and one answered).
@@ -601,16 +607,16 @@ export function bulkFetcher(base: JsonFetcher, src: BulkSources, stats = { wcvp:
       let sp = names.get(key);
       if (!sp) {
         const r = await base<GbifSpecies>(url.replace(/\/distributions.*$/, ''));
-        if (r.status === 'ok') names.set(key, (sp = { name: r.data.canonicalName ?? r.data.scientificName, authorship: r.data.authorship }));
+        if (r.status === 'ok') names.set(key, (sp = { name: r.data.canonicalName ?? r.data.scientificName, authorship: r.data.authorship, family: r.data.family }));
       }
-      const got = sp ? src.wcvp.distributions(sp.name, sp.authorship) : null;
+      const got = sp ? src.wcvp.distributions(sp.name, sp.authorship, sp.family) : null;
       if (got === 'ambiguous') {
         // WCVP holds this name twice, under two entries, and the backbone's authorship does not tell them apart (round
         // seventy: by the publishing author, `ownRows`): no range, and the dossier says why.
         stats.wcvp++;
         // Said as it is (round seventy, second pass; triage-69 B8, R47-10): "matches neither" was written where the author
         // matched both.
-        const n = sp!.authorship ? src.wcvp.ownRows(sp!.name, sp!.authorship).rows.length : 0;
+        const n = sp!.authorship ? src.wcvp.ownRows(sp!.name, sp!.authorship, sp!.family).rows.length : 0;
         const how = !sp!.authorship ? 'the backbone gives no author to tell them apart' : n > 1 ? `the backbone's authorship (${sp!.authorship}) matches ${n} of them, under different entries` : `the backbone's authorship (${sp!.authorship}) matches neither`;
         return { status: 'ok', data: { results: [], ambiguous: `WCVP lists ${sp!.name} more than once, and ${how}` } as unknown as T };
       }
@@ -624,8 +630,8 @@ export function bulkFetcher(base: JsonFetcher, src: BulkSources, stats = { wcvp:
       // its older names may be Kew's (round sixty-eight), read from the builder's own paged list; a list refused, failed or
       // cut short is no answer, and nothing is taken (triage-68 M4). Rows of its words by another author are another
       // name, said in the record, never Kew's answer for this species (round seventy; triage-69 B4, S-B4).
-      if (sp && !src.wcvp.holds(sp.name, sp.authorship)) {
-        const others = src.wcvp.ownRows(sp.name, sp.authorship).others;
+      if (sp && !src.wcvp.holds(sp.name, sp.authorship, sp.family)) {
+        const others = src.wcvp.ownRows(sp.name, sp.authorship, sp.family).others;
         const otherAuthor = others.length ? `Kew holds ${sp.name} only under another author (${others.map(entryLabel).join('; ')}), which is another name` : undefined;
         const syn = await readSynonyms(f, key);
         const via = syn.status === 'ok' && !syn.truncated ? src.wcvp.viaOlderNames(syn.rows ?? []) : null;
@@ -672,7 +678,7 @@ export function bulkFetcher(base: JsonFetcher, src: BulkSources, stats = { wcvp:
     const r = await base<T>(url, opts);
     if ((m = RE_SPECIES.exec(url)) && r.status === 'ok') {
       const sp = r.data as unknown as GbifSpecies;
-      if (sp?.canonicalName) names.set(Number(m[1]), { name: sp.canonicalName, authorship: sp.authorship });
+      if (sp?.canonicalName) names.set(Number(m[1]), { name: sp.canonicalName, authorship: sp.authorship, family: sp.family });
     }
     return r;
   };

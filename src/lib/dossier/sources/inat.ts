@@ -3,6 +3,7 @@ import { licenceTag, isOpen } from '$core/licence';
 import type { Photo } from '../schema';
 import type { Reference } from '../reference';
 import { isOwnName, epithetKey, type OwnNames } from '../own-names';
+import { slip } from '../photo-kind';
 
 export const INAT = 'https://api.inaturalist.org/v1';
 
@@ -190,13 +191,8 @@ export interface JudgeFor {
 /** A judgement of a taxon for a species: taken or not, and why, in words for the record. */
 export type Verdict = { take: boolean; why: string };
 
-/** Two epithets that are one: by `epithetKey`, or one a personal name's stem and the other its adjective ("selloa", "selloana"). */
-export function epithetsAgree(a: string, b: string): boolean {
-  if (epithetKey(a) === epithetKey(b)) return true;
-  const stem = (e: string) => e.toLowerCase().replace(/(?:ianus|ianum|iana|anus|anum|ana|iae|ii|ae|us|um|a|i)$/, '');
-  const x = stem(a), y = stem(b);
-  return x.length >= 4 && x === y;
-}
+export { epithetsAgree } from '../own-names';
+import { epithetsAgree } from '../own-names';
 
 type GbifMatch = { usageKey?: number; matchType?: string; rank?: string; status?: string; speciesKey?: number; species?: string; canonicalName?: string; alternatives?: GbifMatch[] };
 
@@ -258,7 +254,16 @@ export async function judgeTaxon(f: JsonFetcher, name: string, s: JudgeFor, leni
   const ep = name.split(' ')[1] ?? '';
   const ours = s.scientific.split(' ')[1] ?? '';
   const where = exact ? `GBIF holds ${name} as ${m.species ?? 'a species'}, not of this reference` : `GBIF has no record of ${name}`;
-  if (!epithetsAgree(ep, ours)) return ok(false, `${where}, and its epithet is not this species'`);
+  // An uploader's slip of this species' epithet (C's `slip`: one letter added, dropped, changed or moved, five letters or
+  // more) is this species' too, where no species of the reference holds the name (round seventy, the owner's run:
+  // Echinocereus chisosensis for E. chisoensis, Othonna cakilifolia for O. cakilefolia).
+  const slipped = !epithetsAgree(ep, ours) && slip(ep, ours) && s.reference.keyOf(name) === undefined && !s.heldElsewhere?.(name);
+  if (!epithetsAgree(ep, ours) && !slipped) return ok(false, `${where}, and its epithet is not this species'`);
+  if (slipped) {
+    const near = s.reference.byEpithet(ep, s.family).filter((e) => e.key !== s.key);
+    if (near.length) return ok(false, `${where}, and ${near.map((e) => e.name).join(', ')} here ${near.length === 1 ? 'has' : 'have'} its epithet`);
+    return ok(true, `${where}: this species' epithet, spelt one letter otherwise`);
+  }
   const others = s.reference.byEpithet(ep, s.family).filter((e) => e.key !== s.key);
   if (others.length) return ok(false, `${where}, and ${others.map((e) => e.name).join(', ')} here ${others.length === 1 ? 'has' : 'have'} its epithet too`);
   return ok(true, `${where}: this species' epithet in another genus or spelling`);

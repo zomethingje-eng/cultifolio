@@ -66,7 +66,7 @@ export function sameNameAuthor(a?: string, b?: string): boolean {
 }
 
 /** A citation without a person's initials: "W.Heering" is "Heering", "(N.E.Br.) E.Walther" is "(N.E.Br.) Walther"; "L.f." keeps its L. */
-export const withoutInitials = (a: string) => a.replace(/\b[A-Z][a-z]?\.\s*(?=[A-Z][a-z])/g, '');
+export const withoutInitials = (a: string) => a.replace(/\b(?:[A-Z][a-z]?\.\s*)+(?=[A-Z][a-z])/g, '');
 /** The basionym's author, inside the parentheses, without its ex-author: "(Engelm.) Lem." is "engelm". */
 export const parentheticalAuthor = (a?: string) => authorKey((/^\s*\(([^)]*)\)/.exec(a ?? '')?.[1] ?? '').replace(/^.*\bex\s+/, ''));
 /** The ex-author of the combination, outside the parentheses: "Welw. ex Hiern" is "welw". */
@@ -113,5 +113,32 @@ export function ownByAuthor<T>(rows: readonly T[], authorship: string | undefine
  */
 export function plainlyAnother(authorship: string | undefined, b: string | undefined): boolean {
   if (!authorKey(authorship) || !authorKey(b)) return false;
-  return !ownByAuthor([b], authorship, (x) => x).length && !same(exAuthor(authorship), exAuthor(b));
+  if (ownByAuthor([b], authorship, (x) => x).length || same(exAuthor(authorship), exAuthor(b))) return false;
+  // "A ex B" cited by its manuscript author alone, "A", is the one name (Mammillaria pennispinosa Krainz ex Shurly, GBIF's
+  // "Krainz"; round seventy, the owner's second run).
+  const whole = (x?: string) => publishingAuthor(x?.replace(/^.*\bex\s+/, '') ?? '');
+  if (same(exAuthor(authorship), whole(b)) || same(exAuthor(b), whole(authorship))) return false;
+  // A person of the one citation outside its brackets is among the other's: one name cited two ways (Castanospermum
+  // australe "A.Cunn. ex Mudie" and "A.Cunn. & C.Fraser"). A person does not publish one name twice.
+  const people = (x?: string) => new Set((x ?? '').replace(/^\s*\([^)]*\)\s*/, '').split(/\s*(?:&|,|\bex\b|\bet\b)\s*/).map((p) => authorKey(withoutInitials(p.trim()))).filter((p) => p.length > 2 && !/^(?:hort|anon|auct|hortorum)$/.test(p)));
+  const pa = people(authorship);
+  return ![...people(b)].some((p) => pa.has(p));
+}
+
+/**
+ * The rows of a species' words that are its own, read in its family too (round seventy, the owner's run): GBIF's backbone
+ * cites Ixora coccinea, the Rubiaceae, as "Comm. ex Lam.", a name Kew holds as a synonym of Embothrium coccineum, a
+ * Proteaceae, and the page showed Embothrium's range in Chile; Kew's Ixora coccinea L., accepted in the Rubiaceae, is
+ * the plant. Where own rows lie in another family and a row of the words lies in the species', the rows in its family
+ * are its own, or else the one of them Kew accepts. Read only where both families are known, and only where Kew has a
+ * row of the words in the species' family, so a family named otherwise by the two sources changes nothing.
+ */
+export function inFamily<T extends { family?: string; status?: string; taxonomicStatus?: string }>(own: T[], all: T[], family?: string): T[] {
+  if (!family || !own.some((r) => r.family && r.family !== family)) return own;
+  const here = all.filter((r) => r.family === family && !/misapplied/i.test(r.status ?? r.taxonomicStatus ?? ''));
+  if (!here.length) return own;
+  const kept = own.filter((r) => !r.family || r.family === family);
+  if (kept.length) return kept;
+  const acc = here.filter((r) => /^accepted$/i.test(r.status ?? r.taxonomicStatus ?? ''));
+  return acc.length === 1 ? acc : [];
 }

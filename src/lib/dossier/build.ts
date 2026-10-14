@@ -397,7 +397,9 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   const skipped = (k: string) => (upstream[k] = { status: 'skipped', at: now() });
   // The older names with the same type, by which Wikidata and iNaturalist may file the species (round sixty-eight, third part).
   const sameType = synRows ? gbif.sameTypeNames({ key, basionymKey: s.basionymKey }, synRows) : [];
-  const x: wm.CrossResult = skip('wikidata') ? { status: 'skipped', detail: '' } : await wm.crossIds(f, scientific, key, sameType.map((r) => ({ key: r.key, name: r.name })), { authorship: u(s.authorship) });
+  // Wikidata's lag is waited out in rounds by a corpus run, as the fills wait it (round seventy, the owner's run).
+  const askWd = () => wm.crossIds(f, scientific, key, sameType.map((r) => ({ key: r.key, name: r.name })), { authorship: u(s.authorship), family: u(s.family) });
+  const x: wm.CrossResult = skip('wikidata') ? { status: 'skipped', detail: '' } : wm.mwWait.patient ? await wm.patiently(askWd, (y) => y.status === 'error' && y.by !== 'gbif' && wm.isLagged(y.detail)) : await askWd();
   if (x.status === 'skipped') skipped('wikidata');
   // GBIF not answering while it checks the item Wikidata gave is recorded as GBIF's, after Wikidata's answer (round
   // seventy; triage-69 B2, S-B6: the row read "Wikidata · refused" for a source that had answered).
@@ -418,13 +420,15 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   }
   /**
    * Wikidata did not answer: the identifiers of the build that last read them stand, and the record names that build;
-   * past `CARRY_DAYS`, or with no day known, they are not carried (round sixty-eight; round sixty-nine, triage-68 M5, M8).
+   * past `CARRY_DAYS` they are not carried (round sixty-eight; round sixty-nine, triage-68 M5, M8). With no day known they
+   * are kept, and the record says so: a lag is not an answer, and dropping them took Pleiospilos simulans', Dorstenia
+   * conceptionis', Avonia dinteri's and Hibiscus acetosella's item, POWO, IPNI and WFO (round seventy, the owner's run).
    */
   function keepPrevIds(p: NonNullable<BuildOptions['prevIds']>) {
     if (!p.wikidata && !p.inat) return;
     const age = daysSince(o.prevIdsOn, now());
-    if (!(age <= CARRY_DAYS)) {
-      upstream.wikidata = { ...upstream.wikidata, detail: `${upstream.wikidata.detail ?? ''}; the previous identifiers are not kept: ${o.prevIdsOn ? `read by the build of ${o.prevIdsOn}, more than ${CARRY_DAYS} days ago` : 'the build that read them is not known'}`.replace(/^; /, '') };
+    if (o.prevIdsOn && !(age <= CARRY_DAYS)) {
+      upstream.wikidata = { ...upstream.wikidata, detail: `${upstream.wikidata.detail ?? ''}; the previous identifiers are not kept: read by the build of ${o.prevIdsOn}, more than ${CARRY_DAYS} days ago`.replace(/^; /, '') };
       return;
     }
     Object.assign(ids, { wikidata: p.wikidata, powo: p.powo, ipni: p.ipni, inat: p.inat, wfo: p.wfo });
@@ -433,7 +437,7 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     if (p.wfo) links.wfo = `https://www.worldfloraonline.org/taxon/${p.wfo}`;
     if (p.wikidata) links.wikidata = `https://www.wikidata.org/wiki/${p.wikidata}`;
     if (p.wikipedia) enTitle = p.wikipedia;
-    upstream.wikidata = { ...upstream.wikidata, detail: `${upstream.wikidata.detail ?? ''}; the identifiers of the build of ${o.prevIdsOn} are kept`.replace(/^; /, '') };
+    upstream.wikidata = { ...upstream.wikidata, detail: `${upstream.wikidata.detail ?? ''}; ${o.prevIdsOn ? `the identifiers of the build of ${o.prevIdsOn} are kept` : 'the identifiers of an earlier build, of a day not known, are kept'}`.replace(/^; /, '') };
   }
   let summary: Dossier['summary'];
   // The proofs read the species' Wikidata item and its older names as stored, as `--fill summaries` reads them (round seventy, A1; S-A5).
@@ -450,7 +454,7 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   const photos: Photo[] = [];
   let inatId = ids.inat;
   // Where the id came from, for the record: Wikidata's item, or the identifiers of an earlier build kept.
-  const inatFrom = x.status === 'ok' && x.data.inat === inatId ? 'as Wikidata gives it' : `kept from the build of ${o.prevIdsOn ?? '?'}`;
+  const inatFrom = x.status === 'ok' && x.data.inat === inatId ? 'as Wikidata gives it' : o.prevIdsOn ? `kept from the build of ${o.prevIdsOn}` : 'kept from an earlier build';
   // The taxon an inactive id named and the rule refused: never taken by the name search either, which finds it by
   // iNaturalist's own synonymy (Mammillaria karwinskiana's search answers Mammillaria geminata; round seventy, triage-69 B1).
   const refused = new Set<number>();

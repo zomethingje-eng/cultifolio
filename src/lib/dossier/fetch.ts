@@ -45,6 +45,8 @@ const MIN_GAP_MS: Record<string, number> = {
   'www.wikidata.org': 250,
   'commons.wikimedia.org': 250,
   'api.openalex.org': 1100,
+  // IPNI's own records, asked by the Wikidata proof (round seventy-c; `ipniNames` in sources/wikimedia.ts): at most once a second.
+  'www.ipni.org': 1100,
   'power.larc.nasa.gov': 2100,
   'nominatim.openstreetmap.org': 1100
 };

@@ -103,13 +103,15 @@ describe('the previous build\'s identifiers carry the day they were read (M5, M8
     expect(r.dossier.ids).toMatchObject({ wikidata: 'Q5168360', inat: 135254 });
     expect(r.dossier.upstream.wikidata.detail).toMatch(/; the identifiers of the build of 2026-08-01 are kept$/); // base: "the previous build's identifiers are kept"
   });
-  it(`past ${CARRY_DAYS} days, or with no day known, they are not`, async () => {
+  it(`past ${CARRY_DAYS} days they are not; with no day known they are, and the record says so (round seventy, the owner's run)`, async () => {
     const old = await buildDossier('Copiapoa cinerea', opts(fixtureFetcher(table()), { prevIds, prevIdsOn: '2026-07-01' }));
     if (!old.ok) throw new Error('no dossier');
     expect(old.dossier.ids.wikidata).toBeUndefined(); // base: carried
     expect(old.dossier.upstream.wikidata.detail).toMatch(/the previous identifiers are not kept: read by the build of 2026-07-01, more than 90 days ago$/);
     const unknown = await buildDossier('Copiapoa cinerea', opts(fixtureFetcher(table()), { prevIds }));
-    expect(unknown.ok && unknown.dossier.ids.wikidata).toBeUndefined();
+    if (!unknown.ok) throw new Error('no dossier');
+    expect(unknown.dossier.ids.wikidata).toBe('Q5168360'); // a lag is not an answer: kept, where round sixty-nine dropped them
+    expect(unknown.dossier.upstream.wikidata.detail).toMatch(/the identifiers of an earlier build, of a day not known, are kept$/);
   });
   it('a carried iNaturalist id is checked too', async () => {
     const base = fixtureFetcher(table());

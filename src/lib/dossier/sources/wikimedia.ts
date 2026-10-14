@@ -1,6 +1,9 @@
 import type { JsonFetcher, FetchResult, SourceResult } from '../fetch';
 import * as gbif from './gbif';
 import { spellingKey } from '../epithet';
+import { epithetsAgree } from '../own-names';
+import { slip } from '../photo-kind';
+import { plainlyAnother, authorKey } from '../authors';
 
 /* ---------- Wikidata (CC0): cross-identifiers ---------- */
 
@@ -33,7 +36,10 @@ export const mwWait = {
   sleep: (s: number) => new Promise<void>((r) => setTimeout(r, s * 1000)),
   /** Asks of one call: one unless the corpus script sets `MAXLAG_TRIES` (`startCorpusRun`). No Worker route builds a
    *  dossier, so one ask only governs tests and a lag spell (round sixty-nine; triage-68 M10, S-A7). */
-  tries: 1
+  tries: 1,
+  /** Whether a call still lagged after its asks is asked again in rounds (`patiently`): set by the corpus script's
+   *  `lagSpell` while Wikidata last answered, so the first lagged species waits the lag out and a spell does not. */
+  patient: false
 };
 /** The corpus script's asks of one call: the first and four more, each after the lag it names and a second, 5 to 30 s. */
 export const MAXLAG_TRIES = 5;
@@ -57,17 +63,40 @@ export async function mwGet<T>(f: JsonFetcher, url: string): Promise<FetchResult
 export const LAG_SPELL = 10;
 export function lagSpell(tries = MAXLAG_TRIES) {
   let run = 0;
+  mwWait.patient = true;
   return {
     /** Called after each species with its Wikidata row; a species that did not ask Wikidata leaves the count as it was. */
     after(row?: { status?: string; detail?: string }): void {
       if (!row || row.status === 'skipped') return;
       run = row.status === 'error' && /maxlag/.test(row.detail ?? '') ? run + 1 : 0;
       mwWait.tries = run >= LAG_SPELL ? 1 : tries;
+      // Waited out in rounds once: a species after one that stayed lagged through them asks as before (round seventy,
+      // the owner's run: four species dropped their identifiers to a lag a minute's wait did not outlast).
+      mwWait.patient = run === 0;
     },
     get run() {
       return run;
     }
   };
+}
+
+/** Whether an answer is Wikidata's lag: maxlag, as `mwGet` or a crossIds record says it. */
+export const isLagged = (detail?: string | null) => /maxlag|seconds? lagged/i.test(detail ?? '');
+/** Pauses between rounds of asks while Wikidata lags, in seconds: a minute, then two, then five, up to a lag spell. */
+export const LAG_PAUSES = [60, 120, 300, 300, 300, 300, 300, 300, 300];
+
+/**
+ * An ask of Wikidata repeated while it answers maxlag (round seventy, the owner's run: `--fill wikidata` stopped at the
+ * first lagged batch and read nothing; the build dropped four species' identifiers). Each round is `mwGet`'s own asks,
+ * the lag it names waited out; between rounds a pause (`LAG_PAUSES`), for as many rounds as make a lag spell
+ * (`LAG_SPELL`), about forty minutes; then the lagged answer is the answer.
+ */
+export async function patiently<R>(ask: () => Promise<R>, lagged: (r: R) => boolean): Promise<R> {
+  for (let i = 0; ; i++) {
+    const r = await ask();
+    if (!lagged(r) || i >= Math.min(LAG_SPELL, LAG_PAUSES.length + 1) - 1) return r;
+    await mwWait.sleep(LAG_PAUSES[i]);
+  }
 }
 
 type Claims = Record<string, Array<{ mainsnak: { datavalue?: { value: unknown } } }>>;
@@ -108,8 +137,28 @@ async function entityOf(f: JsonFetcher, id: string): Promise<FetchResult<Entity 
   return { status: 'ok', data: e.data.entities?.[id] ?? null };
 }
 
+/**
+ * IPNI's own records of identifiers (`/api/1/n/<id>`), the name and its authors; one IPNI does not serve, or does not
+ * answer, is left out, and is then no evidence (round seventy, the owner's second run).
+ */
+async function ipniNames(f: JsonFetcher, ids: readonly string[]): Promise<Array<{ id: string; name: string; authors: string; isonymOf: string[] }>> {
+  const out: Array<{ id: string; name: string; authors: string; isonymOf: string[] }> = [];
+  for (const id of ids) {
+    const r = await f<{ name?: string; authors?: string; isonymOf?: Array<{ id?: string }> }>(`https://www.ipni.org/api/1/n/${encodeURIComponent(id)}`);
+    if (r.status === 'ok' && r.data.name) out.push({ id, name: r.data.name, authors: r.data.authors ?? '', isonymOf: (r.data.isonymOf ?? []).flatMap((x) => (x.id ? [x.id] : [])) });
+  }
+  return out;
+}
+
+/**
+ * An IPNI identifier as Kew writes it: some items write it as an address (Matucana gigantea's
+ * "https://www.ipni.org/n/77300504-1", round seventy, the owner's run), which is the identifier once read.
+ */
+export const ipniId = (v: string) => v.trim().replace(/^(?:https?:\/\/(?:www\.)?ipni\.org\/n\/|urn:lsid:ipni\.org:names:)/i, '');
+const ipnisOf = (ent: Entity) => strings(ent, P.ipni).map(ipniId);
+
 function crossOf(id: string, ent: Entity): CrossIds {
-  const str = (p: string) => strings(ent, p)[0];
+  const str = (p: string) => (p === P.ipni ? ipnisOf(ent)[0] : strings(ent, p)[0]);
   const inatS = str(P.inat);
   const gbifS = str(P.gbif);
   return { wikidata: id, powo: str(P.powo), ipni: str(P.ipni), wfo: str(P.wfo), inat: inatS ? Number(inatS) : undefined, gbif: gbifS ? Number(gbifS) : undefined, commonsCategory: str(P.commonsCat), enTitle: ent.sitelinks?.enwiki?.title };
@@ -130,7 +179,8 @@ const gbifs = <T,>(r: Exclude<FetchResult<T>, { status: 'ok' } | { status: 'none
 /** Two binomials are one name when the genus is the same and the epithet one spelling of the other (`spellingKey`). */
 function sameName(a: string, b: string): boolean {
   const x = a.trim().split(/\s+/), y = b.trim().split(/\s+/);
-  return x.length === 2 && y.length === 2 && x[0].toLowerCase() === y[0].toLowerCase() && spellingKey(x[1]) === spellingKey(y[1]);
+  // A personal epithet's other ending too ("burbidgei", "burbidgeae"; `epithetsAgree`; round seventy, the owner's second run).
+  return x.length === 2 && y.length === 2 && x[0].toLowerCase() === y[0].toLowerCase() && (spellingKey(x[1]) === spellingKey(y[1]) || epithetsAgree(x[1], y[1]));
 }
 
 type KeyReading = { proof?: string; against?: string; why: string[]; served: number };
@@ -144,10 +194,10 @@ type KeyReading = { proof?: string; against?: string; why: string[]; served: num
  * plant than Agave variegata Jacobi. A key GBIF no longer serves is no key (`served` counts those it does): Catalpa
  * speciosa's 317261. A GBIF that does not answer is the answer, so the step is asked again, never decided without it.
  */
-async function readKeys(f: JsonFetcher, keys: readonly number[], name: string, gbifKey?: number): Promise<FetchResult<KeyReading>> {
+async function readKeys(f: JsonFetcher, keys: readonly number[], name: string, gbifKey?: number, authorship?: string): Promise<FetchResult<KeyReading>> {
   const out: KeyReading = { why: [], served: 0 };
   for (const k of keys.slice(0, LABEL_KEYS)) {
-    const r = await f<{ canonicalName?: string; scientificName?: string; kingdom?: string; rank?: string; acceptedKey?: number; accepted?: string; speciesKey?: number }>(`https://api.gbif.org/v1/species/${k}`);
+    const r = await f<{ canonicalName?: string; scientificName?: string; authorship?: string; kingdom?: string; rank?: string; acceptedKey?: number; accepted?: string; speciesKey?: number }>(`https://api.gbif.org/v1/species/${k}`);
     if (r.status === 'none') { out.why.push(`${k}, which GBIF no longer serves`); continue; }
     if (r.status !== 'ok') return r;
     out.served++;
@@ -155,7 +205,16 @@ async function readKeys(f: JsonFetcher, keys: readonly number[], name: string, g
     const sci = d.scientificName ?? d.canonicalName ?? 'a record';
     if (gbifKey && r.data.acceptedKey === gbifKey) { out.proof ??= `${k} is GBIF's record of ${sci}, a synonym of this species`; continue; }
     if (!sameName(d.canonicalName ?? '', name)) { out.why.push(`${k}, GBIF's record of another name`); continue; }
+    // Filed under this species' epithet in another genus, a genus transfer GBIF follows and this reference does not, it
+    // is this plant's record (round seventy, the owner's second run: Philodendron bipinnatifidum's item carries GBIF's
+    // Schott ex Endl. record, filed under Thaumatophyllum bipinnatifidum).
+    const [ag, ae] = (d.accepted ?? '').split(/\s+/);
+    if (d.acceptedKey != null && d.acceptedKey !== gbifKey && d.speciesKey !== gbifKey && ae && ag !== name.split(' ')[0] && spellingKey(ae) === spellingKey(name.split(' ')[1] ?? '')) { out.proof ??= `${k} is GBIF's record of ${sci}, which GBIF files under ${d.accepted}, this species' epithet in another genus`; continue; }
     if (d.acceptedKey != null && d.acceptedKey !== gbifKey && d.speciesKey !== gbifKey) { out.against ??= `${k}, GBIF's record of ${sci}, which GBIF files under ${d.accepted ?? 'another species'}`; out.why.push(out.against); continue; }
+    // GBIF's record of these words by plainly another author is the homonym's record, and its item the homonym's (round
+    // seventy, the owner's second run: with an IPNI Kew does not hold no longer read either way, Raphionacme linearis
+    // K.Schum.'s label item, carrying N.E.Brown's 100799-1 and GBIF's record of N.E.Brown's name, would have been taken).
+    if (d.speciesKey !== gbifKey && plainlyAnother(authorship, d.authorship ?? (d.scientificName && d.canonicalName && d.scientificName.startsWith(d.canonicalName) ? d.scientificName.slice(d.canonicalName.length) : undefined))) { out.against ??= `${k}, GBIF's record of ${sci}, another author's name`; out.why.push(out.against); continue; }
     if (d.kingdom !== 'Plantae') { out.why.push(`${k}, GBIF's record of ${sci}, not stated to be a plant`); continue; }
     if ((d.rank ?? 'SPECIES').toUpperCase() !== 'SPECIES') { out.why.push(`${k}, GBIF's record of ${sci}, at ${d.rank!.toLowerCase()} rank`); continue; }
     out.proof ??= `${k} is GBIF's record of ${sci}, the same name`;
@@ -171,8 +230,9 @@ async function readKeys(f: JsonFetcher, keys: readonly number[], name: string, g
  *     triage-68 M7):
  *       - by carrying the species' GBIF key or a same-type older name's;
  *       - IPNI first: an item that carries an IPNI identifier (P961) is taken when it is Kew's for this name and author
- *         (`gbif.kewIpni`), and refused when Kew holds the name by this author under another identifier: Agave variegata
- *         Jacobi's label item carries 62332-1, "Agave variegata hort. ex Steud.", where Kew's is 62333-1;
+ *         (`gbif.kewIpni`), and refused only when it is Kew's for another author's name of these words: Agave
+ *         variegata Jacobi's label item carries 62332-1, Kew's "Agave variegata hort. ex Steud."; any other identifier
+ *         is no evidence either way (IPNI holds duplicate records of one name), and the GBIF keys decide;
  *       - otherwise by its GBIF keys (`readKeys`): a synonym of this species, or this name at species rank in the plant
  *         kingdom stated, and never a record GBIF files under another species;
  *       - carrying no GBIF key GBIF still serves, by its taxon name (P225) alone, which is taken only when no other item
@@ -185,7 +245,14 @@ async function readKeys(f: JsonFetcher, keys: readonly number[], name: string, g
  * names it (triage-68 M8, R46-15). A GBIF that does not answer while an item is checked is the step's answer, marked as
  * GBIF's (`by`), so the previous identifiers are kept and the record says which source did not answer.
  */
-export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?: number, olderNames: ReadonlyArray<number | { key: number; name: string }> = [], opts: { authorship?: string } = {}): Promise<CrossResult> {
+/**
+ * What a bare "none" from `crossIds` means, for a record that names a reason (round seventy, the owner's second run:
+ * about twenty species went to "no item (none)" with none given; the items their earlier builds took were papers
+ * describing them, Q110694306 for Cyphostemma calcarium).
+ */
+export const NO_ITEM = "no taxon item carries its GBIF key or Kew's IPNI identifier for it, or the name as its label or an alias";
+
+export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?: number, olderNames: ReadonlyArray<number | { key: number; name: string }> = [], opts: { authorship?: string; family?: string } = {}): Promise<CrossResult> {
   const older = olderNames.slice(0, 10).map((o) => (typeof o === 'number' ? { key: o, name: '' } : o));
   const olderKeys = older.map((o) => o.key);
   const mw = <T,>(url: string) => mwGet<T & { error?: unknown }>(f, url);
@@ -195,7 +262,7 @@ export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?:
   let kew: Kew | undefined;
   const kewOf = async (): Promise<FetchResult<Kew>> => {
     if (kew) return { status: 'ok', data: kew };
-    const r = await gbif.kewIpni(f, scientificName, opts.authorship);
+    const r = await gbif.kewIpni(f, scientificName, opts.authorship, opts.family);
     if (r.status === 'ok') kew = r.data;
     return r;
   };
@@ -215,43 +282,68 @@ export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?:
   const notes: string[] = [];
   let two: string | undefined;
   {
-    const s = await mw<{ search?: Array<{ id: string; label: string }> }>(`https://www.wikidata.org/w/api.php?action=wbsearchentities&format=json&language=en&type=item&limit=5&search=${encodeURIComponent(scientificName)}&maxlag=5`);
+    const s = await mw<{ search?: Array<{ id: string; label: string; match?: { type?: string; text?: string } }> }>(`https://www.wikidata.org/w/api.php?action=wbsearchentities&format=json&language=en&type=item&limit=5&search=${encodeURIComponent(scientificName)}&maxlag=5`);
     if (s.status !== 'ok') return s;
     const bad = failed(s.data);
     if (bad) return bad;
-    const exact = [...new Set((s.data.search ?? []).filter((x) => x.label.toLowerCase() === scientificName.toLowerCase()).map((x) => x.id))];
+    const same = (t?: string) => (t ?? '').toLowerCase() === scientificName.toLowerCase();
+    // The label, or an alias: many items are labelled by an English name and give the scientific name as an alias
+    // (Q978247, "Virginia strawberry", for Fragaria virginiana; Q158944, "Siberian squill"). Either is only a candidate,
+    // proved as below (round seventy, the owner's second run).
+    // Another spelling of the epithet too (Q4912319, "Nepenthes burbidgeae", for Nepenthes burbidgei), proved as any other.
+    const spelt2 = (label: string) => { const [g, e, more] = label.trim().split(/\s+/); const [g2, e2] = scientificName.split(' '); return !more && !!e && g.toLowerCase() === g2.toLowerCase() && epithetsAgree(e, e2 ?? ''); };
+    const hits = (s.data.search ?? []).filter((x) => same(x.label) || spelt2(x.label) || (x.match?.type === 'alias' && same(x.match.text)));
+    const exact = [...new Set(hits.map((x) => x.id))];
+    const byAlias = new Set(hits.filter((x) => !same(x.label) && !spelt2(x.label)).map((x) => x.id));
+    const spelt = new Set(hits.filter((x) => !same(x.label) && spelt2(x.label)).map((x) => x.id));
+    const how = (id: string) => (byAlias.has(id) ? 'found by its alias' : spelt.has(id) ? 'found by its label, the epithet spelt otherwise' : 'found by its label');
     // Each item with the label is read, and only a taxon's counts (a print or a painting of the plant carries its label
     // too: Q52515621 for Oxalis corniculata). Of the taxa, the ones whose identity is shown are taken, and only one; an
     // item shown by its taxon name alone (`byName`) only when no other is.
     const proven: Array<{ id: string; e: Entity; detail?: string; byName?: true; ipni?: string }> = [];
-    const unlike = (id: string, why: string) => notes.push(`not taken: the item labelled ${scientificName}, ${id}, ${why}`);
+    const unlike = (id: string, why: string) => notes.push(`not taken: the item ${byAlias.has(id) ? 'that gives' : 'labelled'} ${scientificName}${byAlias.has(id) ? ' as an alias' : ''}, ${id}, ${why}`);
     for (const id of exact) {
       const e = await entityOf(f, id);
       if (e.status !== 'ok') return e;
       if (!e.data) continue;
       const names = strings(e.data, P.taxonName);
       const keys = strings(e.data, P.gbif).map(Number);
-      const ipnis = strings(e.data, P.ipni);
+      const ipnis = ipnisOf(e.data);
       if (!isTaxonItem(e.data)) continue;
       if (keys.some((k) => k === gbifKey || olderKeys.includes(k))) { proven.push({ id, e: e.data }); continue; }
       if (ipnis.length) {
         const k = await kewOf();
         if (k.status !== 'ok') return k.status === 'none' ? { status: 'none' } : gbifs(k);
         const hit = ipnis.find((i) => k.data.ids.includes(i));
-        if (hit) { proven.push({ id, e: e.data, ipni: hit, detail: `found by its label; its IPNI identifier ${hit} is Kew's for ${k.data.label}` }); continue; }
+        if (hit) { proven.push({ id, e: e.data, ipni: hit, detail: `${how(id)}; its IPNI identifier ${hit} is Kew's for ${k.data.label}` }); continue; }
         // Kew's identifier for this name by another author: the homonym's item (round seventy, second pass; R47-5).
         const other = k.data.others?.find((o) => ipnis.includes(o.id));
         if (other) { unlike(id, `carries IPNI ${other.id}, Kew's for ${other.label}, another author's name`); continue; }
-        if (k.data.ids.length) { unlike(id, `carries IPNI ${ipnis.join(', ')}, where Kew's for ${k.data.label} is ${k.data.ids.join(' or ')}`); continue; }
-        // Kew holds this name by this author under no identifier (or not at all): GBIF's records decide, as for an item with none.
+        // Any other identifier is read at IPNI itself (round seventy, the owner's second run): IPNI holds duplicate records
+        // of one name (R47-5: 19 of 40 disagreements), and Fragaria chiloensis, Daphne odora and some eighty more were
+        // refused their own items for one. IPNI's record of these words by this author proves the item (Ipomoea lobata
+        // (Cerv.) Thell.'s item carries 269217-1, IPNI's other record of "Ipomoea lobata Thell."), and so does IPNI's isonym
+        // of Kew's record. Any other is no evidence either way, as the decision has it (an item's IPNI is often wrong: Tulipa
+        // clusiana's carries Orph. ex Nyman's), and GBIF's records decide, as for an item with none; a GBIF record of
+        // another author's name refuses (Raphionacme linearis's is N.E.Brown's).
+        const read = await ipniNames(f, ipnis.filter((i) => !k.data.ids.includes(i)).slice(0, 2));
+        // Read against the backbone's author and against Kew's own row for the species: IPNI's "Gymnocalycium hossei
+        // A.Berger" is Kew's "(F.Haage) A.Berger", where the backbone writes "(F.Haage ex A.Berger) A.W.Hill".
+        const kewAuthors = k.data.label?.toLowerCase().startsWith(scientificName.toLowerCase()) ? k.data.label.slice(scientificName.length).trim() : undefined;
+        const agrees = (a: string) => !plainlyAnother(opts.authorship, a) || (!!kewAuthors && !plainlyAnother(kewAuthors, a));
+        // IPNI's isonym of Kew's own record is the one name (Agave applanata "Lem. ex Jacobi", an isonym of K.Koch's).
+        // A record of the name spelt one letter otherwise by the same author is the name (IPNI's "Begonia grandes Dryand."; C's `slip`).
+        const named = (n: string) => sameName(n, scientificName) || (n.split(' ')[0] === scientificName.split(' ')[0] && slip(n.split(' ')[1] ?? '', scientificName.split(' ')[1] ?? ''));
+        const mine = read.find((r) => r.isonymOf.some((i) => k.data.ids.includes(i))) ?? read.find((r) => named(r.name) && authorKey(r.authors) && agrees(r.authors));
+        if (mine) { proven.push({ id, e: e.data, ipni: mine.id, detail: `${how(id)}; its IPNI identifier ${mine.id} is IPNI's record of ${mine.name} ${mine.authors}, ${mine.isonymOf.some((i) => k.data.ids.includes(i)) ? `an isonym of Kew's ${k.data.label}` : 'the same name'}` }); continue; }
       }
-      const g: FetchResult<KeyReading> = keys.length ? await readKeys(f, keys, scientificName, gbifKey) : { status: 'ok', data: { why: [], served: 0 } };
+      const g: FetchResult<KeyReading> = keys.length ? await readKeys(f, keys, scientificName, gbifKey, opts.authorship) : { status: 'ok', data: { why: [], served: 0 } };
       if (g.status !== 'ok') return g.status === 'none' ? { status: 'none' } : gbifs(g);
       if (g.data.against) { unlike(id, `carries GBIF key ${g.data.why.join('; GBIF key ')}`); continue; }
-      if (g.data.proof) { proven.push({ id, e: e.data, detail: `found by its label; its GBIF key ${g.data.proof}` }); continue; }
+      if (g.data.proof) { proven.push({ id, e: e.data, detail: `${how(id)}; its GBIF key ${g.data.proof}` }); continue; }
       if (!g.data.served) {
         const gone = keys.length ? `its GBIF key ${g.data.why.join('; ')}, ` : '';
-        if (names.some((n) => n === scientificName)) proven.push({ id, e: e.data, byName: true, ...(gone ? { detail: `found by its label; ${gone}and its taxon name is this name` } : {}) });
+        if (names.some((n) => n === scientificName)) proven.push({ id, e: e.data, byName: true, ...(gone || byAlias.has(id) ? { detail: `${how(id)}; ${gone}${gone ? 'and ' : ''}its taxon name is this name` } : {}) });
         else unlike(id, keys.length ? `carries GBIF key ${g.data.why.join('; GBIF key ')}, and its taxon name is not this one` : 'carries no GBIF key, and its taxon name is not this one');
         continue;
       }
@@ -284,7 +376,7 @@ export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?:
       else if (ids.length === 1) {
         const e = await entityOf(f, ids[0]);
         if (e.status !== 'ok') return e;
-        const hit = e.data ? strings(e.data, P.ipni).find((i) => k.data.ids.includes(i)) : undefined;
+        const hit = e.data ? ipnisOf(e.data).find((i) => k.data.ids.includes(i)) : undefined;
         if (e.data && hit) return { status: 'ok', detail: `found by its IPNI identifier ${hit}, Kew's for ${k.data.label}`, data: { ...crossOf(ids[0], e.data), ipni: hit } };
       }
     }
@@ -322,8 +414,8 @@ export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?:
           const acc = await gbif.kewEntryIpni(f, k.data.acceptedKeys);
           if (acc.status === 'refused' || acc.status === 'error' || acc.status === 'skipped') return gbifs(acc);
           const held = acc.status === 'ok' ? acc.data : [];
-          const hit = ids.filter((q) => strings(b.data.entities?.[q] ?? {}, P.ipni).some((i) => held.some((a) => a.id === i)));
-          if (hit.length === 1) { ids = hit; kewPick = held.find((a) => strings(b.data.entities?.[hit[0]] ?? {}, P.ipni).includes(a.id))?.label; }
+          const hit = ids.filter((q) => ipnisOf(b.data.entities?.[q] ?? {}).some((i) => held.some((a) => a.id === i)));
+          if (hit.length === 1) { ids = hit; kewPick = held.find((a) => ipnisOf(b.data.entities?.[hit[0]] ?? {}).includes(a.id))?.label; }
         }
       }
     }

@@ -59,7 +59,13 @@ describe('Wikidata\'s label rule (/about/how, "What comes from where")', () => {
     expect(isTaxonItem(item('Peperomia monticola', [], [], 'Q11060274') as never)).toBe(false); // a print, with the plant's taxon name
   });
   it('"an IPNI identifier that is Kew\'s for another author\'s name of these words refuses it": Peperomia monticola Miq.', async () => {
-    expect(s.text).toMatch(/while an IPNI identifier that is Kew's for another author's name of these words refuses it/);
+    expect(s.text).toMatch(/an IPNI identifier that is Kew's for another author's name of these words refuses it/);
+    // Round seventy-c: the GBIF key of another author's name refuses too, which keeps the six whose own IPNI and GBIF
+    // record name another author refused (Raphionacme linearis: B's r70c-wikidata-86), and IPNI is asked itself.
+    expect(s.text).toMatch(/as does a GBIF key of another author's name, and any other identifier proves nothing either way/);
+    expect(claim(s, /the build asks IPNI itself, (www\.ipni\.org), for the record of an identifier Kew does not hold, at most once a second/)).toBe('www.ipni.org');
+    expect(raw('src/lib/dossier/fetch.ts')).toMatch(/'www\.ipni\.org': 1100,/);
+    expect(raw('src/lib/dossier/sources/wikimedia.ts')).toMatch(/https:\/\/www\.ipni\.org\/api\/1\/n\//);
     const f = fixtureFetcher({
       're:srsearch=haswbstatement%3AP846%3D7555524&': { query: { search: [] } },
       [`${W}?action=wbsearchentities`]: { search: [{ id: 'Q15605262', label: 'Peperomia monticola' }] },

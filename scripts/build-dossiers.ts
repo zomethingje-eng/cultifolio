@@ -645,7 +645,7 @@ async function fillGbifLicencePhotos(): Promise<void> {
 async function fillInatIdsStep(): Promise<void> {
   console.log('Checking every stored iNaturalist taxon id with iNaturalist…');
   const c = await fillInatIds(diskStore(), makeFetcher());
-  console.log(`  ${c.checked} ids checked: ${c.followed} taxa taken (inactive ids followed to their current taxon, and taxa the first rule of round seventy refused given back), ${c.refused} whose taxon is not this species' (the id, its link and its photographs dropped, the name asked), ${c.kept} earlier follows read again and kept, ${c.dropped} inactive with no single current taxon dropped (asked by name next)${c.lines.length ? `:\n${c.lines.map((l) => `    ${l}`).join('\n')}` : '.'}\n  Now run --fill inat.`);
+  console.log(`  ${c.checked} ids checked: ${c.followed} taxa taken (inactive ids followed to their current taxon, and taxa an earlier rule refused given back), ${c.refused} whose taxon is not this species' (the id, its link and its photographs dropped, the name asked), ${c.kept} earlier follows read again and kept, ${c.dropped} inactive with no single current taxon dropped (asked by name next)${c.lines.length ? `:\n${c.lines.map((l) => `    ${l}`).join('\n')}` : '.'}\n  Now run --fill inat.`);
   if (c.failed) console.log(`  iNaturalist or GBIF did not answer (${c.failed}); run --fill inat-ids again: what was changed stands, and it takes up the rest.`);
   writeIndexFromDisk();
 }

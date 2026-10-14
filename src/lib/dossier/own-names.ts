@@ -72,3 +72,11 @@ export function ownNames(o: { scientific: string; sameType?: readonly string[]; 
   }
   return { own, keys: new Set([...own].map(nameKey)) };
 }
+
+/** Two epithets that are one: by `epithetKey`, or one a personal name's stem and the other its adjective ("selloa", "selloana"). */
+export function epithetsAgree(a: string, b: string): boolean {
+  if (epithetKey(a) === epithetKey(b)) return true;
+  const stem = (e: string) => e.toLowerCase().replace(/(?:ianus|ianum|iana|anus|anum|ana|iae|ii|ae|us|um|a|i)$/, '');
+  const x = stem(a), y = stem(b);
+  return x.length >= 4 && x === y;
+}
