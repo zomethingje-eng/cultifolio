@@ -23,7 +23,10 @@ async function ready(p: import('@playwright/test').Page) {
 }
 async function addPlant(p: import('@playwright/test').Page) {
   await p.getByRole('button', { name: /^Add/ }).click();
-  const asked = p.locator('.picker .hint', { hasText: 'press Add to keep exactly what you typed' });
+  // Either wording of the asked state: Add pressed before the name check answered ("press Add to keep exactly what you
+  // typed"), or the check answered first ("Otherwise Add keeps exactly what you typed"). WebKit under load meets the
+  // second, which the race did not know, and waited out the test (round seventy-one, the owner's run).
+  const asked = p.locator('.picker .hint', { hasText: /(?:press Add to keep|Add keeps) exactly what you typed/ });
   await Promise.race([p.waitForURL(/\/plants\/\d{4}-\d{4}$/), asked.waitFor()]);
   if (await asked.isVisible()) await p.getByRole('button', { name: /^Add/ }).click();
   await expect(p).toHaveURL(/\/plants\/\d{4}-\d{4}$/);
@@ -1118,6 +1121,7 @@ test('an unreachable reference is "not reached", never "not in the reference"', 
 
 test('the species page carries the envelope: median with its span, the cells it rests on, the marker named as a marker', async ({ page }) => {
   await page.goto('/species/copiapoa-cinerea');
+  await ready(page); // a disclosure opened before hydration is closed again by it (WebKit, round seventy-one, the owner's run)
   // every table cell is "median / p10–p90" where the span differs
   await expect(page.locator('table.wx tbody tr').first().locator('td').nth(1)).toHaveText('22 / 20–24');
   await expect(page.locator('table.wx tbody tr').nth(2).locator('td').nth(1)).toHaveText('4'); // rain: no spread in the fixture, so the median alone
