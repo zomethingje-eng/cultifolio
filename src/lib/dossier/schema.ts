@@ -225,8 +225,25 @@ export const Photo = v.object({
   categories: v.optional(v.array(v.string())),
   /** True when Commons' description of the file strikes out a name ("Centaurea sp. ~~C. nuttallii~~"; S-C3), kept with the categories. */
   struck: v.optional(v.boolean()),
-  /** True for GBIF media of a preserved specimen (the record's basisOfRecord), which ranks below Commons as a lead (round seventy, second pass; C7, R47-10). */
-  specimen: v.optional(v.boolean())
+  /**
+   * True for GBIF media whose record is not an observation of the living plant (its basisOfRecord is not
+   * HUMAN_OBSERVATION or OBSERVATION: a herbarium sheet, a museum's drawing, a micrograph), set by the build and by B's
+   * fill of the basis of record. Not shown (self-review 70, S-C4; REVIEW-TRIAGE-70); before round seventy-one it only
+   * ranked below Commons as a lead.
+   */
+  specimen: v.optional(v.boolean()),
+  /**
+   * For a Commons file: the slips of the species' epithet in its title ("mammillaria mabudae", lower case) that Kew and
+   * GBIF were asked of and accept as no species, so the title is the species' (`slipStanding`; self-review 70, S-C9). A
+   * slip not listed here is read as another plant. Kept by the build and `--fill commons-kind`.
+   */
+  slips: v.optional(v.array(v.string())),
+  /** For a Commons file: the iNaturalist photograph its source names, when it is a copy of one, so a page holding the original shows it once (S-C5). */
+  inat: v.optional(v.string()),
+  /** For a Commons file: what its source or description says it is when that is not a photograph of the living plant ("a herbarium sheet (by its source)"; `sourceKind`, S-C2). The read leaves it out. */
+  kind: v.optional(v.string()),
+  /** For a Commons file: true once `--fill commons-kind` has read its source and slips (round seventy-one), so a rerun passes it by. */
+  sourceRead: v.optional(v.boolean())
 });
 
 export const Paper = v.object({

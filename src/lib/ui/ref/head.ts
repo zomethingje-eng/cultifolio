@@ -8,6 +8,7 @@
  * self-review's 14, the round forty-two review A5, product 6).
  */
 import { clip } from '$core/text';
+import { aLabel } from '$core/arch';
 import { licenceLabel, licenceTag, type LicenceTag } from '$core/licence';
 import { splitCommonsCredit } from '$dossier/photo-credit';
 import { temp, rain, METRIC, type Units } from '$core/units';
@@ -154,6 +155,9 @@ export function tileCreditOf(p: { attribution: string; licence?: LicenceTag | nu
   const c = creditParts(p);
   if (!c.lic || c.disagree || c.lic === 'restricted' || c.lic === 'licence not stated') return null;
   // A Commons line is split where its licence reads strictly, since a version list ("CC BY-SA 2.5,2.0,1.0") holds commas (round sixty-nine).
+  // iNaturalist's CC0 line names no one ("no rights reserved"): the licence alone is the credit, as the species page gives
+  // it (round seventy-one; S-F6: 807 tiles, Geissorhiza aspera's on the front page, said "Photo: iNaturalist").
+  if (p.licence === 'cc0' && /^no rights reserved$/i.test(c.who.trim())) return c.lic;
   const cm = splitCommonsCredit(c.who);
   const m = cm ? [c.who, cm.author, cm.short] : INAT_LINE.exec(c.who) ?? VIA_LINE.exec(c.who);
   // The licence the line names must be the source's own; "author not stated" is said as that, under CC0 or public domain only (the build drops it otherwise).
@@ -162,4 +166,34 @@ export function tileCreditOf(p: { attribution: string; licence?: LicenceTag | nu
   if (!who) return null;
   if (who.length > TILE_AUTHOR_MAX) who = `${who.slice(0, TILE_AUTHOR_MAX).replace(/[\s,;]+\S*$/, '')}…`;
   return `${c.lic}, ${who}`;
+}
+
+/**
+ * The header's group, said as the archetype table's listing it is (round seventy-one; S-F7): "· cactus or succulent"
+ * under Euphorbia peplus, a weedy annual, and Pseudobombax calcicola, which Kew calls a tree, read as what the plant is.
+ * The tier says how it was listed: by name, by its genus or by its family.
+ */
+export function groupLine(arch: { arch: { lab: string }; tier: 'species' | 'genus' | 'family' }): string {
+  return `listed ${arch.tier === 'species' ? 'by name' : `by its ${arch.tier}`} as ${aLabel(arch.arch.lab)}`;
+}
+
+/**
+ * The evidence line when no georeferenced record lies inside the stated range (round seventy-one; S-F4): with records
+ * outside it, the count and that the range and the records disagree. Ixora coccinea's 1,749 records and Ceropegia
+ * penduliflora's 49 read "No georeferenced records inside the stated native range." and nothing more.
+ */
+export function noneInRange(outside: number | null | undefined): { tone: 'warn' | 'muted'; text: string } {
+  return outside
+    ? { tone: 'warn', text: `No georeferenced record lies inside the stated native range, and ${outside === 1 ? 'the one georeferenced record read lies' : `all ${outside} georeferenced records read lie`} outside it: the range and the records disagree. They are not used, and no map marker or climate is derived from them.` }
+    : { tone: 'muted', text: 'No georeferenced records inside the stated native range.' };
+}
+
+/**
+ * Why the name's author is not GBIF's, for a species on a homonym key (round seventy-one; agent B's need, S-B2): the
+ * record of the backbone row says the name is cited as Kew accepts it, and the page says so under the name. Null otherwise.
+ */
+export function kewCitedNote(upstream: Record<string, { detail?: string } | undefined>): string | null {
+  const d = upstream['gbif.species']?.detail?.trim();
+  if (!d || !/is cited as Kew accepts it/.test(d)) return null;
+  return /[.!?]$/.test(d) ? d : `${d}.`;
 }

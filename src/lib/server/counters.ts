@@ -92,18 +92,22 @@ export class Counters extends DurableObject {
    * the caller gives back with `release`. An address's object keeps one total per UTC day (`d:<day>`) and sweeps the
    * others at midnight, as the creation counts are swept.
    *
-   * A vault's take also counts the object against the vault's hour of writes (`w`, the hour and its count; round
-   * sixty-nine, triage-68 W5): past `writes`, nothing is taken and the answer is `spent`, with the seconds to the next hour.
+   * A vault's take also counts the object against the vault's hour of writes (`w`; round sixty-nine, triage-68 W5): past
+   * `writes`, nothing is taken and the answer is `spent`, with the seconds until enough of the oldest have left the count.
+   * Since round seventy-one (self-review E3) the hour is any sixty minutes, counted by the minute, as listings are: no
+   * sixty minutes hold more than `writes` of a kind.
    * Photographs and log batches are counted apart (`wp` and `w`; round seventy, triage-69 W6, R47-18): one count let a
    * device's first push of 3,600 photographs refuse every device's records for the rest of the hour.
    */
   async take(kind: 'vault' | 'address', n: number, limit: number, day: string, base: number | null = null, now = Date.now(), gen: number | null = null, writes = VAULT_WRITES_PER_HOUR, of: 'log' | 'photo' = 'log'): Promise<{ ok: boolean; before: number; lease?: string } | { recount: true } | { spent: true; retryAfter: number }> {
     if (kind === 'vault') {
-      const hour = Math.floor(now / HOUR_MS);
       const wk = of === 'photo' ? 'wp' : 'w';
-      const w = (await this.ctx.storage.get<Hourly>([wk])).get(wk);
-      const wrote = w && w.h === hour ? w.n : 0;
-      if (wrote >= writes) return { spent: true, retryAfter: toNextHour(now) };
+      // Counted over any sixty minutes, by the minute each upload is taken, as listings are (round seventy-one; triage-70,
+      // self-review E3): the clock hour's count started again at its turn, so 3,600 of a kind in the last minute of one
+      // hour and 3,600 in the first of the next were all taken.
+      const w = writeState((await this.ctx.storage.get<unknown>([wk])).get(wk), now);
+      const wrote = w.m.reduce((t, [, k]) => t + k, 0);
+      if (wrote >= writes) return { spent: true, retryAfter: untilUnder(w.m, writes, now) };
       // The leases first: one that lapsed marks the row stale, and the row is read after (round sixty-one; B14).
       const leases = await this.leases(now);
       const got = await this.ctx.storage.get<unknown>(['v', 'gen']);
@@ -124,7 +128,7 @@ export class Counters extends DurableObject {
       // The reservation is counted in the total at once and held as a lease of its own until the upload lands or fails,
       // or ten minutes pass: a listing made meanwhile cannot see it, and a recount adds the live leases to what it lists.
       const lease = `${now.toString(36)}-${crypto.randomUUID()}`;
-      await this.ctx.storage.put({ v: { bytes: before + n, day, rc } satisfies Row, [`p:${lease}`]: { n, at: now } satisfies Lease, [wk]: { h: hour, n: wrote + 1 } satisfies Hourly });
+      await this.ctx.storage.put({ v: { bytes: before + n, day, rc } satisfies Row, [`p:${lease}`]: { n, at: now } satisfies Lease, [wk]: counted(w, now) satisfies Minutes });
       await this.wake(now);
       return { ok: true, before, lease };
     }
@@ -835,8 +839,44 @@ async function markStale(s: Store): Promise<void> {
   const row = (await s.get<Row>(['v'])).get('v');
   if (row && row.day !== STALE_DAY) await s.put({ v: { ...row, day: STALE_DAY } satisfies Row });
 }
-/** An hour's count (`w`, a vault's log batches stored; `wp`, its photographs): the hour (ms / 3,600,000) and the count in it. */
+/** The clock hour's count kept by rounds sixty-nine and seventy (`w`, `wp`, and `l` before round seventy): the hour (ms / 3,600,000) and the count in it. */
 type Hourly = { h: number; n: number };
+/** A vault's writes of one kind (`w`, log batches; `wp`, photographs): for each minute (ms / 60,000) of the last `LIST_SPAN`, the uploads taken in it, oldest first (round seventy-one; self-review E3). */
+type Minutes = { m: Array<[number, number]> };
+/**
+ * The writes still counted at `now`, from `w` or `wp` as stored: each minute of the last `LIST_SPAN`. The clock hour's
+ * count of rounds sixty-nine and seventy is read as taken in the latest minute of its hour not past `now`, so uploads
+ * counted before this build stay counted for at least as long as they were.
+ */
+function writeState(v: unknown, now: number): Minutes {
+  const minute = Math.floor(now / MINUTE_MS);
+  const keep = (m: unknown, n: unknown) => Number.isInteger(m) && (m as number) > minute - LIST_SPAN && (m as number) <= minute && typeof n === 'number' && n > 0;
+  if (v && typeof v === 'object' && Array.isArray((v as Minutes).m)) {
+    return { m: (v as Minutes).m.filter((e) => Array.isArray(e) && keep(e[0], e[1])).map(([a, n]) => [a, n] as [number, number]).sort((a, b) => a[0] - b[0]) };
+  }
+  const old = v as Hourly | undefined;
+  if (old && typeof old.h === 'number' && typeof old.n === 'number') {
+    const m = Math.min(minute, (old.h + 1) * 60 - 1);
+    return { m: keep(m, old.n) ? [[m, old.n]] : [] };
+  }
+  return { m: [] };
+}
+/** `w` with one more upload taken in `now`'s minute. */
+function counted(w: Minutes, now: number): Minutes {
+  const minute = Math.floor(now / MINUTE_MS);
+  const m = w.m.map(([a, n]) => [a, n] as [number, number]);
+  const at = m.findIndex(([a]) => a === minute);
+  if (at >= 0) m[at][1] += 1;
+  else m.push([minute, 1]);
+  return { m };
+}
+/** Seconds from `now` until enough of the oldest minutes have left the count for it to fall under `limit`, at least one. */
+function untilUnder(m: Array<[number, number]>, limit: number, now: number): number {
+  let left = m.reduce((t, [, n]) => t + n, 0);
+  let at = now + MINUTE_MS;
+  for (const [a, n] of m) { left -= n; at = (a + LIST_SPAN) * MINUTE_MS; if (left < limit) break; }
+  return Math.max(1, Math.ceil((at - now) / 1000));
+}
 /** A vault's listed pages (`l`): for each minute (ms / 60,000) of the last `LIST_SPAN`, the pages asked in it, oldest first (round seventy; triage-69 W4). */
 type Listed = { m: Array<[number, number]>; /** walks asked and not yet settled: id, when (ms), pages reserved, minute asked (round seventy; triage-69 W6) */ r: Array<[string, number, number, number]> };
 /** How long a walk's reservation counts if it is never settled (round seventy; triage-69 W6, R47-18). */
@@ -865,9 +905,6 @@ function listState(v: unknown, now: number): Listed {
   }
   return { m: [], r: [] };
 }
-const HOUR_MS = 3_600_000;
-/** Seconds from `now` to the next whole hour, at least one. */
-const toNextHour = (now: number) => Math.max(1, Math.ceil(((Math.floor(now / HOUR_MS) + 1) * HOUR_MS - now) / 1000));
 /** A vault's running total: its bytes, the UTC day it was last put right from a listing, and when (ms; absent on a row from before round sixty). */
 type Row = { bytes: number; day: string; rc?: number };
 /** An upload in flight: its bytes and when it was taken. */

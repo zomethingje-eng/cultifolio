@@ -111,7 +111,7 @@ describe('the previous build\'s identifiers carry the day they were read (M5, M8
     const unknown = await buildDossier('Copiapoa cinerea', opts(fixtureFetcher(table()), { prevIds }));
     if (!unknown.ok) throw new Error('no dossier');
     expect(unknown.dossier.ids.wikidata).toBe('Q5168360'); // a lag is not an answer: kept, where round sixty-nine dropped them
-    expect(unknown.dossier.upstream.wikidata.detail).toMatch(/the identifiers of an earlier build, of a day not known, are kept$/);
+    expect(unknown.dossier.upstream.wikidata.detail).toMatch(/the identifiers of an earlier build, of a day not known, are kept since \d{4}-\d{2}-\d{2}$/); // r71: since the day first kept (S-B9)
   });
   it('a carried iNaturalist id is checked too', async () => {
     const base = fixtureFetcher(table());

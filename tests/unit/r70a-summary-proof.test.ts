@@ -161,9 +161,9 @@ describe('S-A6: the fill names the proof in the record', () => {
     expect(c).toMatchObject({ confirmed: 1, changed: 1, proofs: { 'monotypic-genus': 1 } });
   });
   it('another spelling, read offline, names itself', async () => {
-    const docs = { 'a.json': stored('Ariocarpus scaphirostrus', 'Ariocarpus scaphirostris', undefined, LEAD69('Ariocarpus scaphirostrus', 'Ariocarpus scaphirostris')) };
+    const docs = { 'a.json': stored('Dudleya cespitosa', 'Dudleya caespitosa', undefined, LEAD69('Dudleya cespitosa', 'Dudleya caespitosa')) };
     await checkSummaries(store(docs) as never, null);
-    expect(docs['a.json'].upstream.wikipedia.detail).toBe("Wikipedia redirects Ariocarpus scaphirostrus to Ariocarpus scaphirostris, another spelling of this species' name"); // base: the lead's words kept
+    expect(docs['a.json'].upstream.wikipedia.detail).toBe("Wikipedia redirects Dudleya cespitosa to Dudleya caespitosa, another spelling of this species' name"); // base: the lead's words kept
   });
   it('a summary the lead kept and no proof keeps is dropped and reported: Strombocactus disciformis', async () => {
     const docs = { 's.json': stored('Strombocactus disciformis', 'Strombocactus', 'Q134845', LEAD69('Strombocactus disciformis', 'Strombocactus')) };
@@ -204,7 +204,7 @@ describe('S-A5: the build and the fill decide alike, and a summary no longer fli
       const build = await summary(f, name, [name], who(name, item));
       const setAside: Record<string, Doc> = { x: { ...stored(name, title, item), summary: undefined, upstream: { wikipedia: { status: 'none', at: 'x', detail: `Wikipedia redirects ${name} to ${title}` } } } };
       const kept: Record<string, Doc> = { x: stored(name, title, item, LEAD69(name, title)) };
-      await checkSummaries(store(setAside) as never, f);
+      await checkSummaries(store(setAside) as never, f, undefined, { again: true }); // round seventy-one: a set-aside title is asked again when the rule changes
       await checkSummaries(store(kept) as never, f);
       expect([name, !!setAside.x.summary, !!kept.x.summary]).toEqual([name, build.status === 'ok', build.status === 'ok']); // base: Examplea rara, the build ok and the fill dropping it
       if (build.status === 'ok') expect(kept.x.upstream.wikipedia.detail).toBe(build.detail);
@@ -307,6 +307,8 @@ describe('A2 (R47-4): a sitelink or a carried title that is another species\' na
     items: { Q5308558: { sitelink: 'Drosera tomentosa', P171: ['Q266'], P105: [SPECIES], P225: ['Drosera montana'] } },
     // GBIF, 2026-10-13: Drosera tomentosa a synonym of Drosera montana var. tomentosa (round seventy-b reads this).
     gbif: { 'Drosera tomentosa': { species: 'Drosera montana', status: 'SYNONYM', below: 'Drosera montana tomentosa' } },
+    // Kew's WCVP through GBIF, 2026-10-15: Drosera tomentosa A.St.-Hil., accepted (round seventy-one: GBIF and Kew both).
+    kew: { 'Drosera tomentosa': [{ authorship: 'A.St.-Hil.', taxonomicStatus: 'ACCEPTED' }] },
     wiki: { 'Drosera tomentosa': { title: 'Drosera tomentosa', extract: 'Drosera tomentosa is a species of sundew. In 1906, Ludwig Diels reduced the species to a variety of D. montana.' } }
   };
   const detail = "Wikipedia's article Drosera tomentosa is under a name that is neither this species' nor one of its older names";
@@ -326,9 +328,9 @@ describe('A2 (R47-4): a sitelink or a carried title that is another species\' na
   it('a sitelink that is a common name, or this species\' name, stands (guard)', async () => {
     const v = { items: { Q155825: { sitelink: 'Venus flytrap', P105: [SPECIES], P225: ['Dionaea muscipula'] } }, wiki: { 'Venus flytrap': { title: 'Venus flytrap', extract: LEAD['Venus flytrap'] } } };
     expect(await summary(world(v).f, 'Venus flytrap', ['Venus flytrap', 'Dionaea muscipula'], who('Dionaea muscipula', 'Q155825'))).toMatchObject({ status: 'ok', data: { title: 'Venus flytrap' } });
-    const a = { wiki: { 'Ariocarpus scaphirostris': { title: 'Ariocarpus scaphirostris', extract: 'x' } } };
-    const r = await summary(world(a).f, 'Ariocarpus scaphirostris', ['Ariocarpus scaphirostris'], who('Ariocarpus scaphirostrus'));
-    expect(r).toMatchObject({ status: 'ok', data: { title: 'Ariocarpus scaphirostris' } });
+    const a = { wiki: { 'Dudleya caespitosa': { title: 'Dudleya caespitosa', extract: 'x' } } };
+    const r = await summary(world(a).f, 'Dudleya caespitosa', ['Dudleya caespitosa'], who('Dudleya cespitosa'));
+    expect(r).toMatchObject({ status: 'ok', data: { title: 'Dudleya caespitosa' } });
     // A two-word name of another genus the species was never placed in is not read as a name: "Date palm" stays the item's.
     expect(await summary(world({ items: { Q25292: { sitelink: 'Date palm', P105: [SPECIES], P225: ['Phoenix dactylifera'] } }, wiki: { 'Date palm': { title: 'Date palm', extract: 'x' } } }).f, 'Date palm', ['Date palm'], who('Phoenix dactylifera', 'Q25292'))).toMatchObject({ status: 'ok' });
   });

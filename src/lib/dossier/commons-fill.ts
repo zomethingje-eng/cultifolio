@@ -8,9 +8,10 @@
 import type { JsonFetcher } from './fetch';
 import type { Dossier, Photo } from './schema';
 import type { DossierStore } from './corpus-run';
-import { commonsPhotos, commonsCategories, strikesOut } from './sources/commons';
+import { commonsPhotos, commonsCategories, strikesOut, inatSource } from './sources/commons';
 import { mwGet, mwError } from './sources/wikimedia';
-import { commonsKind, type HeldNames, type KindNames } from './photo-kind';
+import { commonsKind, slipsToAsk, askSlip, sourceKind, type HeldNames, type KindNames } from './photo-kind';
+import { commonsAuthor, commonsCredit, splitCommonsCredit } from './photo-credit';
 
 export type CommonsFill = { added: number } | { none: true } | { failed: string };
 
@@ -64,7 +65,7 @@ export async function fillCommons(d: Pick<Dossier, 'key' | 'photos' | 'upstream'
 export const KIND_BATCH = 50;
 /** Commons' own limit on an address is about 8,000 characters: a request holds fifty titles or fewer, so a long title does not overrun it. */
 const KIND_URL_MAX = 6000;
-const KIND_URL = 'https://commons.wikimedia.org/w/api.php?action=query&format=json&prop=imageinfo&iiprop=extmetadata&iiextmetadatafilter=Categories|ImageDescription&maxlag=5&titles=';
+const KIND_URL = 'https://commons.wikimedia.org/w/api.php?action=query&format=json&prop=imageinfo&iiprop=extmetadata&iiextmetadatafilter=Categories|ImageDescription|Credit|Artist&maxlag=5&titles=';
 
 export type KindCounts = {
   /** Stored Commons photographs read. */
@@ -86,14 +87,28 @@ export type KindCounts = {
   hidden: number;
   /** One line a photograph now left out, or no longer on Commons: key, name, reason, file. */
   lines: string[];
+  /** Round 71 (self-review 70): slips asked of Kew and GBIF, and of those the species'; refusals or errors leave a slip unasked. */
+  slipsAsked: number;
+  slipsOwn: number;
+  slipsUnchecked: number;
+  /** Commons copies of an iNaturalist photograph found by their source, and credits read again (derivative works). */
+  copies: number;
+  credits: number;
+  /** Photographs the read left out before this fill and shows now (a slip Kew and GBIF accept as no species). */
+  shownAgain: number;
 };
 
-type KindAnswer = { categories: string[]; struck: boolean } | 'missing';
-type Stored = Pick<Dossier, 'key'> & { name: { scientific: string; synonyms?: string[] }; photos?: Photo[] };
-const needsKind = (p: Photo) => p.src === 'commons' && !Array.isArray(p.categories);
+type KindAnswer = { categories: string[]; struck: boolean; inat: string | null; artist: string | null; kind: string | null } | 'missing';
+type Stored = Pick<Dossier, 'key'> & { name: { scientific: string; synonyms?: string[]; authorship?: string }; photos?: Photo[] };
+/**
+ * A Commons photograph the fill asks for: one without its categories, or (round seventy-one; self-review 70, S-C5, S-C9,
+ * S-C11) one whose source, slips and credit have not been read since; `sourceRead` marks it done, so a rerun resumes.
+ */
+const needsKind = (p: Photo) => p.src === 'commons' && (!Array.isArray(p.categories) || !p.sourceRead);
 
 export async function fillCommonsKindAll(store: DossierStore, f: JsonFetcher, held?: HeldNames | null, progress?: (c: KindCounts) => void): Promise<KindCounts> {
-  const c: KindCounts = { files: 0, before: 0, requests: 0, asked: 0, read: 0, missing: 0, unchecked: 0, dossiers: 0, hidden: 0, lines: [] };
+  const c: KindCounts = { files: 0, before: 0, requests: 0, asked: 0, read: 0, missing: 0, unchecked: 0, dossiers: 0, hidden: 0, lines: [], slipsAsked: 0, slipsOwn: 0, slipsUnchecked: 0, copies: 0, credits: 0, shownAgain: 0 };
+  const slipAnswers = new Map<string, boolean | null>();
   const wanted = new Map<string, string[]>();
   for (const file of store.files()) {
     const d = store.read<Stored>(file);
@@ -131,20 +146,45 @@ export async function fillCommonsKindAll(store: DossierStore, f: JsonFetcher, he
   const files = new Set(titles.filter((t) => answers.has(t)).flatMap((t) => wanted.get(t)!));
   for (const file of files) {
     const d = store.read<Stored>(file);
-    const names: KindNames = { scientific: d.name.scientific, synonyms: d.name.synonyms ?? [], key: d.key, held };
+    const names: KindNames = { scientific: d.name.scientific, synonyms: d.name.synonyms ?? [], key: d.key, held, authorship: d.name.authorship };
     let changed = false;
     for (const p of d.photos ?? []) {
       if (!needsKind(p)) continue;
       const a = answers.get(p.id);
       if (!a) continue;
       if (a === 'missing') { c.lines.push(`${d.key}\t${d.name.scientific}\tno longer on Commons (left as it is)\t${p.id}`); continue; }
-      const was = commonsKind(p.id, names, { struck: p.struck });
+      // What the read decided before, with every rule it reads (the credit's and the slips' too: S-C12).
+      const was = commonsKind(p.id, names, { categories: p.categories, struck: p.struck, credit: p.attribution, slips: p.slips, kind: p.kind });
       p.categories = a.categories;
       if (a.struck) p.struck = true;
       else delete p.struck;
+      if (a.inat) { if (p.inat !== a.inat) c.copies++; p.inat = a.inat; }
+      if (a.kind) p.kind = a.kind;
+      else delete p.kind;
+      // The credit read again by today's rule (a derivative work's two authors; S-C11), only where it names someone.
+      const parts = splitCommonsCredit(p.attribution);
+      const author = commonsAuthor(a.artist);
+      if (parts && author && commonsCredit(author, parts.short) !== p.attribution) { p.attribution = commonsCredit(author, parts.short); c.credits++; }
+      // Each slip in the title asked of Kew and GBIF once a fill (S-C9); a source that does not answer leaves it unasked and the file out.
+      let unchecked = false;
+      for (const name of held ? slipsToAsk(p.id, names, p.slips) : []) {
+        if (!slipAnswers.has(name)) {
+          const r = await askSlip(f, name, { scientific: d.name.scientific, authorship: d.name.authorship, key: d.key, synonyms: d.name.synonyms ?? [] });
+          slipAnswers.set(name, r.status === 'ok' ? r.data.own : null);
+          c.slipsAsked++;
+          if (r.status === 'ok' && r.data.own) c.slipsOwn++;
+          if (r.status !== 'ok') c.slipsUnchecked++;
+          if (r.status === 'ok') c.lines.push(`${d.key}\t${d.name.scientific}\tslip ${name}: ${r.data.why}\t${p.id}`);
+        }
+        const v = slipAnswers.get(name);
+        if (v === true) p.slips = [...(p.slips ?? []), name];
+        if (v == null) unchecked = true;
+      }
+      if (!unchecked) p.sourceRead = true;
       changed = true;
-      const why = commonsKind(p.id, names, { categories: p.categories, struck: p.struck });
+      const why = commonsKind(p.id, names, { categories: p.categories, struck: p.struck, credit: p.attribution, slips: p.slips, kind: p.kind });
       if (why && !was) { c.hidden++; c.lines.push(`${d.key}\t${d.name.scientific}\t${why}\t${p.id}`); }
+      if (!why && was) { c.shownAgain++; c.lines.push(`${d.key}\t${d.name.scientific}\tnow shown (was: ${was})\t${p.id}`); }
     }
     if (changed) { store.write(file, d); c.dossiers++; }
   }
@@ -163,7 +203,7 @@ export function readKindReply(data: KindReply, asked: readonly string[]): Map<st
     if (p.missing != null && !p.imageinfo) { out.set(t, 'missing'); continue; }
     const meta = p.imageinfo?.[0]?.extmetadata;
     if (!meta) continue;
-    out.set(t, { categories: commonsCategories(meta.Categories?.value), struck: strikesOut(meta.ImageDescription?.value) });
+    out.set(t, { categories: commonsCategories(meta.Categories?.value), struck: strikesOut(meta.ImageDescription?.value), inat: inatSource(meta.Credit?.value, meta.ImageDescription?.value), artist: meta.Artist?.value ?? null, kind: sourceKind(meta.Credit?.value, meta.ImageDescription?.value) });
   }
   return out;
 }

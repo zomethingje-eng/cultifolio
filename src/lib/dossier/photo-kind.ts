@@ -15,10 +15,13 @@
  * Depicts statements (P180) are not used as a gate: they catch 16 of the 40 bad leads and are missing from 55% of good files.
  */
 import { readCommonsPhoto } from './photo-credit';
-import { heroOf, oneCopyEach, inatPhotoId } from './dedupe';
+import { heroOf, oneCopyEach, inatPhotoId, isSpecimenMedia } from './dedupe';
 import { spellingKey } from './epithet';
 import { commonsTileOf } from './photo-size';
 import { ownNames as ownNamesRule } from './own-names';
+import { authorsAgree } from './authors';
+import { splitCommonsCredit } from './photo-credit';
+import type { JsonFetcher, FetchResult } from './fetch';
 
 /**
  * The names the reference holds, accepted and older, by genus (round seventy; REVIEW-TRIAGE-69 C1, S-C5, IND-4): what
@@ -44,7 +47,16 @@ export interface KindNames {
   synonyms?: readonly string[] | null;
   key?: number;
   held?: HeldNames | null;
+  /** The species' author, which tells GBIF's second spelling of this name from another species (`slipStanding`). */
+  authorship?: string | null;
 }
+
+/**
+ * What the read knows of one file's slips (self-review 70, S-C9): the names, in lower case, that the build or the fill
+ * asked of Kew and GBIF and found to be this species' slips (`slips`, kept with the photograph). A slip not asked is not
+ * the species': the Worker cannot ask Kew or GBIF when it reads a page, so the read is safe and the fill decides.
+ */
+type ReadCtx = { slips?: readonly string[] | null; asked?: string[] };
 
 /** What `heldNamesOf` reads of an index entry: the accepted name and the older names the index carries (`syn`, `older`). */
 export type HeldSource = { key: number; name: string; syn?: readonly string[] | null; older?: readonly string[] | null };
@@ -94,15 +106,19 @@ const TYPE = /\.(?:jpe?g|webp)$/i;
 const LIVING = /\bcultivat|\bliving\b|\bgardens?\b|\bgarten\b|\bjard[ií]n|\bgreenhouse|\bglasshouse|\bconservatory|\bnursery|\bplant house\b|\bin habitat\b|\bin situ\b/i;
 const PRESSED = /\b(?:pressed|mounted|dried|preserved|type)\b/i;
 
+/** Words for a map or a range, in the languages Commons' uploaders use (self-review 70, S-C1). */
+const MAP_WORDS = /\bdistribution\b|distribuzione|distribuci[oó]n|distribui[çc][ãa]o|verbreitung|\brange (?:of|map)\b|\bmaps?\b|\bmapa\b|\bcarte\b|\bkarte\b|\bkaart\b|\bkarta\b|\bareale?\b|\bareali\b|\bareaal\b|ареал|карта|verspreiding|rozšíření|rozmieszczenie|utbredning|levinneisyys/i;
+
 /** Each kind of file that is not a photograph of the plant, by the words its title uses. Word-bounded, so "brewbooks" is not a book. */
 const TITLE_KINDS: Array<[string, (t: string) => boolean]> = [
-  ['a map', (t) => /\bdistribution\b|distribuzione|distribuci[oó]n|verbreitung|\brange (?:of|map)\b|\bmaps?\b|\bkarte\b|\bareal\b/i.test(t)],
+  // A map in any of the languages Commons' uploaders name ranges in: "Areale Boswellia papyrifera" (Italian) led its page
+  // (self-review 70, S-C1); "mapa", "carte", "kaart", "karta", "ареал", "verspreiding", "rozšíření".
+  ['a map', (t) => MAP_WORDS.test(t)],
   // The Smithsonian's sheets are named "<name>-NMNH-<barcode>" (Cyphostemma camerounense, Zanha golungensis; S-C3).
   ['a herbarium sheet', (t) => /herbari|holotyp|isotyp|lectotyp|syntyp|paratyp|neotyp|exsiccat|\(GBIF \d+\)|^COI\d|\bNMNH\b/i.test(t)],
   ['a herbarium sheet', (t) => /specimen/i.test(t) && (PRESSED.test(t) || !LIVING.test(t))],
   // A printed illustration: Popular Science Monthly's are named "PSM V<volume> D<page>" (Agave polyacantha; IND-1), and a
   // paper's figure is one too ("Phylogeny-of-the-plant-genus-Pachypodium-…-peerj-01-70-g001", which would lead Pachypodium windsorii).
-  ['a plate or drawing', oldYear],
   ['a plate or drawing', (t) => /phylogen|cladogram|\bdiagrams?\b|\bpeerj\b|curtis|botanical (?:magazine|register)|\btab\.\s*\d|\bplate\b|\bpl\.\s*\d|illustrat|drawing|engraving|lithograph|zeichnung|watercolou?r|\bpainting\b|biodiversity heritage library|\bPSM V\d|popular science monthly/i.test(t)],
   // A pod or a fruit on the plant is the plant; loose seed is not ("Tecomanthe Speciosa Seed Pod"; REVIEW-TRIAGE-69 C1).
   ['not the plant', (t) => /\bseeds?\b(?![\s-]*pods?\b)|\bsemillas?\b|\bsamen\b|\bresin\b|\bstamps?\b|\bpostage\b|\bbooks?\b|\blabel\b/i.test(t)],
@@ -116,12 +132,26 @@ const TITLE_KINDS: Array<[string, (t: string) => boolean]> = [
 ];
 
 /**
- * A year from 1500 to 1899 in a title is a printed work's ("Dasylirion graminifolium Zuccarini 1843"; R47-3, C7), unless
- * it is a camera's or a catalogue's number ("IMG 1834", "DSC_1765", "No. 1612") or part of a longer number.
+ * A year from 1500 to 1899 in a title ("Dasylirion graminifolium Zuccarini 1843"; R47-3, C7), unless it is a camera's or a
+ * catalogue's number ("IMG 1834", "DSC_1765", "No. 1612"), part of a longer number, or a citation's year after its page
+ * ("… Ecklon- 19 (1827)", Motohiro Sunouchi's photographs of living bulbs). Since the self-review of round seventy (S-C8)
+ * a year alone hides nothing: it marks a printed work only with other print evidence (`PRINT_HINT`), since a name's
+ * protologue is cited by year in the titles of photographs of living plants.
  */
 const OLD_YEAR = /(?<![\dA-Za-z.,:#-])(1[5-8]\d\d)(?![\d-])/;
 /** What a number in a title follows when it is not a year: a camera's prefix, "No.", another number, or a collector's code of up to four letters ("VG 1815", "STO 1612"). */
-const NUMBERED = /(?:\b(?:img|dsc[nf]?|pict?|cimg|sam|dcp|p|pb|pc|imag|photo|foto|no|nr|num|n°)|#|\d|\b[A-Z][A-Za-z]{0,3})[\s_.-]*$/i;
+const NUMBERED = /(?:\b(?:img|dsc[nf]?|pict?|cimg|sam|dcp|p|pb|pc|imag|photo|foto|no|nr|num|n°)|#|\d|\b[A-Z][A-Za-z]{0,3})[\s_.-]*$|\d[\s_:-]*\($/i;
+/**
+ * What else says a file is a printed work, beside a year (S-C8): words of a book or a plate in its title, a category of
+ * scans or old works, or a licence Commons gives old works ("PD-old", "PD-Art", "PD-1923"). Any of these with a year
+ * from 1500 to 1899 hides the file; a year alone does not.
+ */
+const PRINT_TITLE = /\b(?:fig|figs|figure|tab|tafel|taf|pl|plate|planche|icon|icones|flora|florae|hortus|scan|scanned|print|engraved|book|journal|magazine|vol|volume|page|seite|p\.\s*\d|bot\.\s*mag|bot\.\s*reg)\b/i;
+const PRINT_CATEGORY = /\bscans?\b|scanned|historical images|old (?:books|prints|photographs)|\b1[5-8]\d\ds?\b|PD[- ]old|PD[- ]Art|PD[- ]1923|PD[- ]US[- ]expired|\bjournals?\b|\bbooks? (?:of|by|about)\b|herbals?\b/i;
+const PRINT_LICENCE = /^PD-(?:old|Art|1923|US-expired|US-no-notice|scan)/i;
+function printEvidence(title: string, cats: readonly string[], short: string): boolean {
+  return PRINT_TITLE.test(title.replace(/\b1[5-8]\d\d\b/g, ' ')) || cats.some((c) => PRINT_CATEGORY.test(c)) || PRINT_LICENCE.test(short);
+}
 function oldYear(t: string): boolean {
   for (const m of t.matchAll(new RegExp(OLD_YEAR.source, 'g'))) if (!NUMBERED.test(t.slice(0, m.index))) return true;
   return false;
@@ -174,6 +204,9 @@ const ANIMAL_CATEGORIES = /\binsects?\b|\bnymphs?\b|\blarvae\b|\bcaterpillars\b|
  * The words after a genus that are not an epithet: "Crassula in flower" names no other species, nor do "Wollemia
  * cones", "Lithops before Repotting" and "Ceropegia trap2" (the misreadings queued from round sixty-nine).
  */
+/** Capitalised words that begin a title and are no genus. */
+const NOT_GENUS = new Set(['Comparison', 'Flowers', 'Flower', 'Plant', 'Plants', 'The', 'A', 'An', 'Detail', 'Close', 'View']);
+
 const NOT_EPITHET = new Set(['sp', 'spp', 'ssp', 'subsp', 'var', 'species', 'hybrid', 'hybrids', 'cultivar', 'cv', 'flower', 'flowers', 'flowering', 'plant', 'plants', 'in', 'at', 'on', 'and', 'or', 'with', 'from', 'the', 'of', 'by', 'near', 'under', 'over', 'before', 'after', 'during', 'leaf', 'leaves', 'fruit', 'fruits', 'berry', 'berries', 'pod', 'pods', 'seedpod', 'cone', 'cones', 'seedling', 'seedlings', 'habit', 'habitat', 'detail', 'close', 'closeup', 'macro', 'view', 'group', 'clump', 'colony', 'collection', 'garden', 'gardens', 'park', 'house', 'greenhouse', 'nursery', 'show', 'bloom', 'blooms', 'blossom', 'inflorescence', 'stem', 'stems', 'trunk', 'bark', 'root', 'roots', 'caudex', 'tuber', 'tubers', 'bulb', 'bulbs', 'corm', 'corms', 'spine', 'spines', 'bud', 'buds', 'trap', 'traps', 'pitcher', 'pitchers', 'upper', 'lower', 'rosette', 'rosettes', 'offset', 'offsets', 'tree', 'trees', 'shrub', 'pot', 'potted', 'cultivated', 'wild', 'young', 'old', 'new', 'white', 'red', 'yellow', 'pink', 'blue', 'green', 'purple', 'orange', 'img', 'dsc', 'photo', 'image', 'bonsai', 'specimen', 'specimens', 'cactus', 'cacti', 'succulent', 'succulents', 'form', 'forma', 'type', 'aff', 'cf', 'x', 'et', 'nov', 'indet', 'spec']);
 
 /** The ends of English words, never of an epithet the reference holds with a Latin ending ("budding", "growing"). */
@@ -275,7 +308,7 @@ const BARE_GENUS = true;
  *   the epithet). A word that is no epithet (an English word, or one with no Latin ending that the reference does not
  *   hold in that genus) is no name: null.
  */
-function readBinomial(genus: string, words: readonly string[], n: KindNames, own: readonly Name[]): Verdict {
+function readBinomial(genus: string, words: readonly string[], n: KindNames, own: readonly Name[], ctx: ReadCtx = {}): Verdict {
   const e = lower(words[0] ?? '').replace(/-+$/, '');
   const mine = own.filter((b) => lower(b.genus) === lower(genus));
   if (!e || (e.length < 3 && !mine.some((b) => lower(b.epithet) === e))) return null;
@@ -298,7 +331,13 @@ function readBinomial(genus: string, words: readonly string[], n: KindNames, own
     if (e.includes('-') && spellingKey(e.split('-')[0]) === kb && !heldElsewhere(n, genus, e)) return 'own';
     const run = lower(b.epithet);
     if (e.length > run.length && e.startsWith(run) && NOT_EPITHET.has(e.slice(run.length)) && !heldElsewhere(n, genus, e)) return 'own';
-    if (n.held && slip(e, b.epithet) && !heldElsewhere(n, genus, e)) return 'own';
+    // An uploader's slip is this species' only where the reference holds no such name and Kew and GBIF were asked and
+    // accept no species of it (self-review 70, S-C9; `slipStanding`), as the build or the fill recorded. Until then, another plant.
+    if (n.held && slip(e, b.epithet) && !heldElsewhere(n, genus, e)) {
+      const name = `${lower(genus)} ${e}`;
+      if (ctx.slips?.includes(name)) return 'own';
+      if (ctx.asked && !ctx.asked.includes(name)) ctx.asked.push(name);
+    }
   }
   return 'another';
 }
@@ -310,11 +349,13 @@ function readBinomial(genus: string, words: readonly string[], n: KindNames, own
  * monticola; S-C7; "Agavecocui" is Agave cocui's); an own genus's initial with a full stop ("C.americana"), or run on
  * into an epithet the reference holds in that genus as another species' ("Nlamii2rosette").
  */
-function readings(raw: string, n: KindNames): Verdict[] {
+function readings(raw: string, n: KindNames, ctx: ReadCtx = {}): Verdict[] {
   const own = ownNames(n);
   // A genus written in brackets after another, "Neoporteria(eriosyce) villosa" (R47-3, C7), is read as both names.
   const title = raw.replace(/\b([A-Z][a-z]+)\s?\(([a-z]{3,})\)\s*([a-z][a-z-]+)/g, (_, G: string, g: string, e: string) => `${G} ${e}, ${g[0].toUpperCase()}${g.slice(1)} ${e}`);
   const genera = new Map(own.map((b) => [lower(b.genus), b.genus]));
+  const ownKeys = new Set(own.map((b) => spellingKey(b.epithet)));
+  const heldIn = (genus: string, e: string) => /^[A-Z][a-z]+$/.test(genus) && !!n.held?.epithets(genus).includes(e);
   const tokens = [...title.matchAll(/[A-Za-z]+(?:-[a-z]+)*|×/g)].map((m) => ({ w: m[0], at: m.index!, end: m.index! + m[0].length }));
   const gap = (j: number) => title.slice(tokens[j - 1].end, tokens[j].at);
   /** The lower-case words that follow token i, through spaces, underscores and full stops: an epithet and what may follow it. */
@@ -323,6 +364,9 @@ function readings(raw: string, n: KindNames): Verdict[] {
     for (let j = i + 1; j < tokens.length && out.length < 3; j++) {
       if (!/^[\s_.]*$/.test(gap(j)) || (j === i + 1 && !gap(j))) break;
       if (out.length === 0 && (tokens[j].w === '×' || tokens[j].w === 'x')) continue;
+      // An epithet written with a capital, the species' own ("Aizoaceae Gibbaeum Dispar", "Haworthia Semiviva"; S-C6) or
+      // one the reference holds in this genus ("Lithops Karasmontana"), is read as written small.
+      if (out.length === 0 && /^[A-Z][a-z-]+$/.test(tokens[j].w) && (ownKeys.has(spellingKey(lower(tokens[j].w))) || heldIn(tokens[i].w, lower(tokens[j].w)))) { out.push(lower(tokens[j].w)); continue; }
       if (!/^[a-z][a-z-]*$/.test(tokens[j].w)) break;
       out.push(tokens[j].w);
     }
@@ -336,12 +380,18 @@ function readings(raw: string, n: KindNames): Verdict[] {
     const isRef = !isOwn && /^[A-Z][a-z]+$/.test(w) && !!n.held?.hasGenus(w);
     if (isOwn || isRef) {
       const next = after(i);
-      const v = readBinomial(genera.get(g) ?? w, next, n, own);
+      const v = readBinomial(genera.get(g) ?? w, next, n, own, ctx);
       if (v) out.push(v);
       // Another genus of the reference named alone is another plant in the picture ("… and Yucca"; R47-3, C7).
       // A word that is also the species' own epithet is the species named by its epithet ("Pachyphytum 120221" on Dudleya pachyphytum).
       else if (isRef && !next.length && BARE_GENUS && !own.some((b) => spellingKey(b.epithet) === spellingKey(w))) out.push('another');
       continue;
+    }
+    // A name with a rank in a genus neither the species' nor the reference's ("… and Osteomeles anthyllidifolia var.
+    // subrotunda", Zanthoxylum beecheyanum's lead; self-review 70, S-C3) is another plant: a rank word makes it a name.
+    if (/^[A-Z][a-z]{2,}$/.test(w) && !NOT_GENUS.has(w)) {
+      const next = after(i);
+      if (next.length >= 3 && LATIN_END.test(next[0]) && !NOT_EPITHET.has(next[0]) && RANK.test(next[1]) && LATIN_END.test(next[2])) { out.push('another'); continue; }
     }
     // An own genus run on into the rest of the word: the species' own epithet, or another plant. A family ("Crassulaceae") is neither.
     const runG = /^[A-Za-z][a-z]+$/.test(w) ? [...genera.values()].find((G) => w.length >= G.length + 3 && g.startsWith(lower(G))) : undefined;
@@ -356,7 +406,7 @@ function readings(raw: string, n: KindNames): Verdict[] {
     // epithet in that genus (R47-3, C7), so "A pair of…" is not read.
     const bare = n.held && /^[A-Z]$/.test(w) && i + 1 < tokens.length && /^\s+$/.test(gap(i + 1)) && [...genera.values()].some((x) => x[0] === w && (n.held!.epithets(x).includes(lower(tokens[i + 1].w)) || own.some((b) => b.genus === x && lower(b.epithet) === lower(tokens[i + 1].w))));
     if (/^[A-Z]$/.test(w) && i + 1 < tokens.length && (/^\.\s*$/.test(gap(i + 1)) || bare)) {
-      const v = [...genera.values()].filter((x) => x[0] === w).map((x) => readBinomial(x, after(i), n, own));
+      const v = [...genera.values()].filter((x) => x[0] === w).map((x) => readBinomial(x, after(i), n, own, ctx));
       if (v.includes('own')) out.push('own');
       else if (v.includes('another')) out.push('another');
       continue;
@@ -388,7 +438,10 @@ function isHybrid(title: string, names: readonly Name[]): boolean {
  * the name. A variety of another species counts as that species. Its genus must be the species' own or one the
  * reference holds, so "Flowering plants" is no species, and "Cyphostemma bonsai" names no species (round 70b).
  */
-function categorySpecies(c: string, n: KindNames, own: readonly Name[]): { id: string; epithet: string } | null {
+function categorySpecies(raw: string, n: KindNames, own: readonly Name[]): { id: string; epithet: string } | null {
+  // Commons' diffused forms name the species too (self-review 70, S-C7): "Lithops karasmontana in cultivation", "… in
+  // Spain", "… (flowers)", "Flowers of Lithops karasmontana", "Lithops karasmontana - fruits".
+  const c = raw.trim().replace(/^(?:flowers|fruits?|leaves|seeds|seedlings|inflorescences?|habit|plants|specimens|cones|bark|stems?|roots?) of /i, '').replace(/\s+\([^)]*\)$/, '').replace(/\s+-\s+[a-z][a-z ]*$/, '').replace(/ (?:in|at|from|on) [A-Z0-9].*$| in (?:cultivation|habitat|the wild|gardens?|pots?)$/, '');
   const m = /^([A-Z][a-z]+(?:-[a-z]+)?) (?:× ?)?([a-z][a-z-]+)((?: (?:var|subsp|ssp|f|fo|forma)\.? [a-z][a-z-]+){0,2})$/.exec(c.trim());
   if (!m) return null;
   const [genus, epithet] = [m[1], m[2]];
@@ -405,7 +458,18 @@ function categorySpecies(c: string, n: KindNames, own: readonly Name[]): { id: s
 }
 
 /** What Commons says of a file beyond its title: its categories, and whether its description strikes out a name (`struck`). */
-export type CommonsMeta = { categories?: readonly string[] | null; struck?: boolean | null; credit?: string | null };
+export type CommonsMeta = {
+  categories?: readonly string[] | null;
+  struck?: boolean | null;
+  /** The stored credit line ("X, CC BY-SA 3.0, via Wikimedia Commons") or a new answer's Artist field. */
+  credit?: string | null;
+  /** Commons' short licence name, for a new answer (a stored file's is in its credit line). */
+  licence?: string | null;
+  /** The slips of this species' epithet the build or the fill found to be this species' (`Photo.slips`; S-C9). */
+  slips?: readonly string[] | null;
+  /** What the file's source or description says it is (`sourceKind`, kept as `Photo.kind`; S-C2). */
+  kind?: string | null;
+};
 
 /**
  * Why a Commons file is not a photograph of the species, or null when it is. `id` is the stored title ("File:…");
@@ -419,15 +483,20 @@ export function commonsKind(id: string, names?: KindNames | null, meta?: readonl
   const m: CommonsMeta = Array.isArray(meta) ? { categories: meta as readonly string[] } : ((meta ?? {}) as CommonsMeta);
   const credit = (m.credit ?? '').replace(/<[^>]+>/g, ' ');
   for (const [why, re] of CREDIT_KINDS) if (re.test(credit)) return why;
+  if (m.kind) return m.kind;
   const n: KindNames = names ?? { scientific: '' };
   const own = ownNames(n);
   if (isHybrid(title, own)) return 'a hybrid';
-  if (readings(title, n).includes('another')) return 'named as another species';
+  const read = readings(title, n, { slips: m.slips });
+  if (read.includes('another')) return 'named as another species';
   const cats = m.categories ?? [];
   const cat = cats.find((c) => CATEGORY_KINDS.test(c) || unidentifiedPlant(c, n, own));
   if (cat) return `filed under "${cat}"`;
+  // A year from 1500 to 1899 marks a printed work only with other print evidence (S-C8).
+  if (oldYear(title) && printEvidence(title, cats, m.licence ?? splitCommonsCredit(m.credit ?? '')?.short ?? '')) return 'a plate or drawing';
+  const names_ = read.includes('own') || epithetRank(id, n) < 2;
   const animal = cats.find((c) => ANIMAL_CATEGORIES.test(c) || ZOO_FAMILY.test(c));
-  if (animal && !namesThisSpecies(id, title, n)) return `filed under "${animal}"`;
+  if (animal && !names_) return `filed under "${animal}"`;
   // A file Commons files under two or more species is a group photograph, and is shown on neither ("Parodia Liberec 1"; S-C3).
   // Round 70b: unless its title names this species and none of the others, when the others are plants beside it
   // ("Aztekium hintonii 5", filed under Selaginella gypsophila too); "Haworthias blackburniae y wittebergensis" names two.
@@ -438,15 +507,15 @@ export function commonsKind(id: string, names?: KindNames | null, meta?: readonl
     // An epithet the species' own names hold is not another's ("Epithelantha micromeris unguispina" is E. spinosior's own name).
     const mine = new Set(own.map((x) => spellingKey(x.epithet)));
     const others = found.filter((x) => x.id !== 'self' && !mine.has(spellingKey(x.epithet)) && new RegExp(`(?:^|[^a-z])${esc(stem(x.epithet))}`).test(t));
-    if (!namesThisSpecies(id, title, n) || others.length) return `filed under ${species.size} species: a group`;
+    // The title must name the species as a name (a binomial read as its own), not hold its epithet's first letters at the
+    // start of any word ("Vertical garden" on Aloe vera; self-review 70, S-C6).
+    if (!read.includes('own') || others.length) return `filed under ${species.size} species: a group`;
   }
   // "Centaurea sp. ~~C. nuttallii~~": the describer struck the name out (S-C3).
   if (m.struck) return 'its description strikes out a name';
   return null;
 }
 
-/** Whether a title names the species under one of its own names: a binomial read as its own, or its epithet after its genus or a start of it. */
-const namesThisSpecies = (id: string, title: string, n: KindNames): boolean => readings(title, n).includes('own') || epithetRank(id, n) < 2;
 
 /** 0 when the title holds the species' own epithet, 1 an older name's, 2 neither (a camera's name, "DSC_1234"). */
 export function epithetRank(id: string, names?: KindNames | null): number {
@@ -454,10 +523,17 @@ export function epithetRank(id: string, names?: KindNames | null): number {
   const b = ownNames(names);
   // An older name below species is held by its last epithet (S-C6).
   // A name run together ("Nepenthesdubia1", "Nepspectabilis") holds its epithet too: after the genus or a start of it (R47-2, C6).
+  // A word holds the epithet when it is the epithet in another spelling, begins with it whole, or, for an epithet of five
+  // letters' stem or more, begins with its stem and adds at most three letters: "Vertical" does not hold Aloe vera's
+  // "ver", nor "Milk" Euphorbia milii's "mil" (self-review 70, S-C6).
+  const words = t.split(/[^a-z-]+/).map((w) => w.replace(/^-+|-+$/g, '')).filter(Boolean);
   const holds = (x: Name) => {
     const g = x.genus.toLowerCase();
-    const starts = Array.from({ length: g.length }, (_, k) => esc(g.slice(0, k + 1))).join('|');
-    return new RegExp(`(?:^|[^a-z]|(?:^|[^a-z])(?:${starts}))${esc(stem(x.infra ?? x.epithet))}`).test(t);
+    const e = lower(x.infra ?? x.epithet);
+    const k = spellingKey(e);
+    const st = stem(e);
+    const is = (w: string) => !!w && (spellingKey(w) === k || w.startsWith(e) || (st.length >= 5 && w.startsWith(st) && w.length <= e.length + 3));
+    return words.some((w) => is(w) || Array.from({ length: g.length - 2 }, (_, j) => g.slice(0, j + 3)).some((pre) => w.startsWith(pre) && is(w.slice(pre.length))));
   };
   if (b[0] && holds(b[0])) return 0;
   return b.slice(1).some(holds) ? 1 : 2;
@@ -480,7 +556,7 @@ export function commonsFirstByEpithet<P extends { src?: string; id: string; widt
   return out;
 }
 
-type PhotoLike = { src?: string; id: string; url: string; thumb?: string; captive?: boolean; licence?: string; attribution: string; width?: number | null; categories?: readonly string[] | null; struck?: boolean | null };
+type PhotoLike = { src?: string; id: string; url: string; thumb?: string; captive?: boolean; licence?: string; attribution: string; width?: number | null; categories?: readonly string[] | null; struck?: boolean | null; slips?: readonly string[] | null; inat?: string | null; specimen?: boolean; kind?: string | null };
 const web = (u: string | undefined) => !!u && /^https?:\/\//i.test(u);
 
 /**
@@ -493,12 +569,16 @@ const web = (u: string | undefined) => !!u && /^https?:\/\//i.test(u);
  */
 export function shownPhotos<P extends PhotoLike>(photos: readonly P[], names?: KindNames | null): P[] {
   const out: P[] = [];
-  const kept = oneCopyEach(photos.filter((p) => web(p.url) && web(p.thumb)));
+  // GBIF media of a herbarium sheet, a museum's drawing or a micrograph (a record that is not an observation of the living
+  // plant, `specimen`, or an image on a herbarium's own host) is not shown (self-review 70, S-C4; REVIEW-TRIAGE-70).
+  const kept = oneCopyEach(photos.filter((p) => web(p.url) && web(p.thumb) && !isSpecimenMedia(p)));
   const inat = new Set(kept.map((p) => inatPhotoId(p.url)).filter((x): x is string => !!x));
   for (const p of kept) {
     if (p.src !== 'commons') out.push(p);
-    else if (inat.has(commonsInatCopy(p.id) ?? '')) continue;
-    else if (!commonsKind(p.id, names, { categories: p.categories, struck: p.struck, credit: p.attribution })) {
+    // A Commons copy of an iNaturalist photograph the page holds: by the number its name ends with, or by the photograph
+    // its source names (`inat`, kept by the build and the fill; self-review 70, S-C5).
+    else if (inat.has(commonsInatCopy(p.id) ?? '') || (p.inat && inat.has(p.inat))) continue;
+    else if (!commonsKind(p.id, names, { categories: p.categories, struck: p.struck, credit: p.attribution, slips: p.slips, kind: p.kind })) {
       const r = readCommonsPhoto(p);
       // An original upload's tile at Commons' largest width below its own, so no smaller slot loads the whole file (C7, R47-9).
       if (r) out.push(r.thumb ? { ...r, thumb: commonsTileOf(r.thumb, r.width) } : r);
@@ -511,9 +591,119 @@ export function shownPhotos<P extends PhotoLike>(photos: readonly P[], names?: K
  * The iNaturalist photograph a Commons file is a copy of, by the number iNaturalist2Commons and GBIF's imports end its
  * name with ("Agave multifilifera 328057104.jpg", "Euryops abrotanifolius 160732946.jpg"): where the dossier holds that
  * photograph from iNaturalist or GBIF, the Commons copy is the same photograph, shown and counted once (round 70b). A
- * Flickr number is in brackets and is not read.
+ * Flickr number is in brackets and is not read. A crop keeps its number ("Othonna cakilifolia 23242119 (cropped)"), and a
+ * camera's time is no number ("…20220416_120706"; self-review 70, S-C5).
  */
-export const commonsInatCopy = (id: string): string | null => /[\s_](\d{6,9})\.(?:jpe?g|webp)$/i.exec(id)?.[1] ?? null;
+export const commonsInatCopy = (id: string): string | null => /(?<![\d_])[\s_](\d{6,9})(?:[\s_]*\((?:cropped|crop|edited|rotated)\))?\.(?:jpe?g|webp)$/i.exec(id)?.[1] ?? null;
 
 /** The lead photograph of what is shown: the page's hero and the index's tile, by one rule (`heroOf`'s order of sources). */
 export const leadOf = <P extends PhotoLike>(photos: readonly P[], names?: KindNames | null): P | undefined => heroOf(shownPhotos(photos, names));
+
+/**
+ * What a Commons file's source (`Credit`) and description say it is, when that is not a photograph of the living plant
+ * (self-review 70, S-C2): a file whose source is a herbarium's or a museum's specimen record ("Commiphora myrrha.jpg",
+ * whose source is the Smithsonian's botany collection and whose description reads "Commiphora myrrha specimen from the
+ * Smithsonian National Museum of Natural History"), or whose description calls it a herbarium or pressed specimen. Read
+ * where Commons answers (the build, `--fill commons-kind`) and kept with the photograph as `kind`, which the read obeys.
+ */
+const SPECIMEN_SOURCE = /collections\.nmnh\.si\.edu\/search\/botany|sweetgum\.nybg\.org|specimens\.kew\.org|plants\.jstor\.org|oxalis\.br\.fgov\.be|mediaphoto\.mnhn\.fr|herbarium|herbier|herbar|data\.rbge\.org\.uk\/herb|\/specimens?\//i;
+const SPECIMEN_WORDS = /\b(?:herbarium|pressed|mounted|dried|type|voucher)\s+(?:specimens?|sheets?)\b|\bspecimens?\s+(?:from|in|of)\s+(?:the\s+)?[^.]{0,80}?\b(?:museum|herbarium|herbier|herbarium)\b|\bherbarium sheet\b/i;
+export function sourceKind(credit?: string | null, description?: string | null): string | null {
+  if (SPECIMEN_SOURCE.test(credit ?? '')) return 'a herbarium sheet (by its source)';
+  if (SPECIMEN_WORDS.test((description ?? '').replace(/<[^>]+>/g, ' '))) return 'a herbarium sheet (by its description)';
+  return null;
+}
+
+/* ---------- The slip guard, shared with iNaturalist (self-review 70, S-B7, S-C9, S-F13) ---------- */
+
+/**
+ * The names of a title that are this species' only as an uploader's slip of its epithet, and so wait for Kew's and
+ * GBIF's word (`slipStanding`) before the file is shown: "mammillaria mabudae" for Mammillaria matudae. The build and
+ * `--fill commons-kind` ask for each and keep the ones that stand as `Photo.slips`.
+ */
+export function slipsToAsk(id: string, names: KindNames, slips?: readonly string[] | null): string[] {
+  const asked: string[] = [];
+  readings(commonsTitle(id), names, { slips, asked });
+  return asked.filter((x) => !(slips ?? []).includes(x));
+}
+
+/** A row of Kew's WCVP as GBIF serves its copy (dataset f382f0ce-…), as far as the guard reads it. */
+export type KewNameRow = { canonicalName?: string; scientificName?: string; authorship?: string; taxonomicStatus?: string; rank?: string; accepted?: string };
+/** GBIF's backbone match of a name (`/species/match`), as far as the guard reads it. */
+export type GbifNameMatch = { matchType?: string; status?: string; rank?: string; usageKey?: number; speciesKey?: number; acceptedUsageKey?: number; canonicalName?: string; scientificName?: string; authorship?: string };
+/** The species a slip is read against: its accepted name and author, its GBIF key, and its own names. */
+export type SlipOwn = { scientific: string; authorship?: string | null; key?: number; synonyms?: readonly string[] | null };
+
+const bin = (x?: string) => (x ?? '').trim().split(/\s+/).slice(0, 2).join(' ').toLowerCase();
+const authorOf = (m: { scientificName?: string; canonicalName?: string; authorship?: string }) => m.authorship ?? (m.scientificName && m.canonicalName && m.scientificName.startsWith(m.canonicalName) ? m.scientificName.slice(m.canonicalName.length).trim() : '');
+
+/**
+ * Whether a name one slip from this species' epithet is this species', by what Kew and GBIF say of it (self-review 70;
+ * REVIEW-TRIAGE-70, "Slips and sisters"). A name Kew or GBIF accepts as a species is another plant, never a slip:
+ *   - Kew accepts it as a species, or holds it as a synonym of a name not this species': another plant (Ceropegia
+ *     mariae, Kew's synonym of Echidnopsis scutellata, is not Ceropegia maritae; Salvia aurea is not Salvia azurea);
+ *   - Kew holds it as a synonym of this species: this species';
+ *   - GBIF matches it exactly: this species' when GBIF files it under this species' key, or when GBIF's record is the same
+ *     name by the same author written another way (GBIF keeps "Othonna cakilifolia DC." and "Echinocereus chisosensis
+ *     W.T.Marshall" as accepted beside the right spellings, the same names by the same authors: one name, ICN Art. 61);
+ *     another species otherwise, accepted or not (Conophytum auctum Rawé);
+ *   - neither holds it: a slip, this species'.
+ * Pure: the caller asks the sources (`askSlip` does). `own.authorship` must be stated for GBIF's second spelling to count.
+ */
+export function slipStanding(name: string, own: SlipOwn, kew: readonly KewNameRow[], gbif: GbifNameMatch | null): { own: boolean; why: string } {
+  const n = bin(name);
+  const ownNames = new Set([own.scientific, ...(own.synonyms ?? [])].map(bin));
+  const rows = kew.filter((r) => bin(r.canonicalName ?? r.scientificName) === n && !/misapplied/i.test(r.taxonomicStatus ?? ''));
+  const acc = rows.find((r) => /^accepted$/i.test(r.taxonomicStatus ?? '') && (!r.rank || /^species$/i.test(r.rank)));
+  if (acc) return { own: false, why: `Kew accepts ${acc.scientificName ?? name} as a species` };
+  const elsewhere = rows.find((r) => r.accepted && !ownNames.has(bin(r.accepted)));
+  if (elsewhere) return { own: false, why: `Kew holds ${elsewhere.scientificName ?? name} as a synonym of ${elsewhere.accepted}` };
+  if (rows.some((r) => r.accepted && ownNames.has(bin(r.accepted)))) return { own: true, why: `Kew holds ${name} as a synonym of this species` };
+  if (gbif && gbif.matchType === 'EXACT' && bin(gbif.canonicalName) === n) {
+    if (own.key != null && (gbif.speciesKey === own.key || gbif.acceptedUsageKey === own.key || gbif.usageKey === own.key)) return { own: true, why: `GBIF holds ${name} as this species` };
+    const theirs = authorOf(gbif);
+    if (/^accepted$/i.test(gbif.status ?? '') && /^species$/i.test(gbif.rank ?? '') && authorsAgree(theirs, own.authorship ?? undefined)) return { own: true, why: `GBIF's ${gbif.scientificName ?? name} is this species' name by its own author, spelt otherwise` };
+    return { own: false, why: `GBIF holds ${gbif.scientificName ?? name} as ${/^accepted$/i.test(gbif.status ?? '') ? 'a species' : `${(gbif.status ?? 'a name').toLowerCase()} of another species`}` };
+  }
+  return { own: true, why: `neither Kew nor GBIF holds ${name}: a slip of this species' epithet` };
+}
+
+const WCVP_DATASET = 'f382f0ce-323a-4091-bb9f-add557f3a9a2';
+/**
+ * `slipStanding`, asked of the sources: GBIF's backbone (strict, so a slip is not matched to the name it slips from) and
+ * GBIF's copy of Kew's WCVP, two requests. For the build and `--fill commons-kind`, and for `sources/inat.ts`'s follow
+ * step, which calls it with the name iNaturalist gives (B's need). A refusal or an error is returned as it is: nothing
+ * is taken on a source that did not answer.
+ */
+export async function askSlip(f: JsonFetcher, name: string, own: SlipOwn): Promise<FetchResult<{ own: boolean; why: string }>> {
+  const k = await f<{ results?: KewNameRow[] }>(`https://api.gbif.org/v1/species?datasetKey=${WCVP_DATASET}&name=${encodeURIComponent(name)}&limit=50`);
+  if (k.status !== 'ok' && k.status !== 'none') return k;
+  const g = await f<GbifNameMatch>(`https://api.gbif.org/v1/species/match?strict=true&kingdom=Plantae&name=${encodeURIComponent(name)}`);
+  if (g.status !== 'ok' && g.status !== 'none') return g;
+  return { status: 'ok', data: slipStanding(name, own, k.status === 'ok' ? (k.data.results ?? []) : [], g.status === 'ok' ? g.data : null) };
+}
+
+/**
+ * What Kew and GBIF say of a name as a species of its own (round seventy-one, B; triage-70 S-B7, S-C9, S-F13; moved here
+ * from `sources/inat.ts` by the round's merge, which re-exports them). `transferTaken` reads it for iNaturalist's genus
+ * transfers. The slip rule itself is `slipStanding`, above, for iNaturalist and Commons alike.
+ */
+export type NameWord = { kew?: 'accepted' | 'held' | 'none'; gbif?: 'accepted' | 'other' | 'none'; kewOurs?: 'accepted' | 'held' | 'none' };
+/**
+ * B's word-level reading of the slip rule, from `NameWord` alone: never when Kew accepts the name as a species (Salvia
+ * aurea L., one letter from Salvia azurea), nor when GBIF does, unless Kew holds no row of it and accepts the species' own
+ * name (Othonna cakilifolia DC., which Kew spells cakilefolia). Since the round-71 merge the build and the fills decide a
+ * slip by `slipStanding`, which reads the rows and the author themselves (GBIF's accepted name is the species' only when
+ * GBIF files it under the species or it is the same name by the same author); this summary is no longer called by them
+ * and stays only as B's pinned statement (`r71b-inat-sister`); on the sources' real answers for its cases (Salvia aurea,
+ * Othonna cakilifolia DC., Echinocereus chisosensis) `slipStanding` gives the same verdicts.
+ */
+export function slipTaken(candidate: string, ours: string, w: NameWord): boolean {
+  const e = candidate.split(/\s+/)[1] ?? '', o = ours.split(/\s+/)[1] ?? '';
+  if (!slip(e, o)) return false;
+  if (w.kew === 'accepted') return false;
+  if (w.gbif === 'accepted' && !(w.kew === 'none' && w.kewOurs === 'accepted')) return false;
+  return true;
+}
+/** Whether a name with the species' epithet in another genus may be its genus transfer: never when Kew accepts both. */
+export const transferTaken = (w: NameWord) => !(w.kew === 'accepted' && w.kewOurs === 'accepted');

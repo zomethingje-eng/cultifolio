@@ -12,7 +12,7 @@
   import { sync } from '$lib/sync/engine.svelte';
   import { newVaultKey, parseVaultKey, pairingUrl } from '$lib/sync/crypto';
   import { setCrumb } from '$lib/ui/crumb.svelte';
-  import { syncWords } from '$lib/ui/sync-words';
+  import { syncWords, refusalKept, checkAgainWords } from '$lib/ui/sync-words';
   import { heldWords } from '$lib/ui/held-words';
   import { PAGE_IN_DEMO } from '$lib/db/demo';
 
@@ -182,7 +182,7 @@
 {#if sync.configured}
   <div class="secrule"><h2>This device</h2><div class="line"></div><span class="n">vault {sync.vaultId.slice(0, 6)}…</span></div>
   <div class="cards">
-    <div class="card" data-runs={sync.runs}><div class="lab">Status</div><div class="val" style="font-family: var(--ui); font-size: var(--fs-lg); font-weight: 700">{sync.busy ?? (sync.offline ? (sync.unreached === 'server' ? 'Server not reached' : 'Offline') : sync.lastError ? 'Not synced' : sync.vaultFull ? 'Vault full' : sync.runs ? 'Synced' : 'Not checked yet')}</div><div class="sub">{sync.busy ? '' : sync.offline ? (sync.pending ? `${changes(sync.pending)} kept here, sent ${sync.unreached === 'server' ? 'when the server answers again' : 'when you are back online'}` : `nothing waiting; it will check ${sync.unreached === 'server' ? 'again in a minute' : 'when you are back online'}`) : errWords ? errWords.text : sync.runs ? (sync.lastSync ? `everything on the server ${ago(sync.lastSync)} is here` : 'not yet') : (sync.lastSync ? `last synced ${ago(sync.lastSync)}; checking now` : 'checking now')}</div></div>
+    <div class="card" data-runs={sync.runs}><div class="lab">Status</div><div class="val" style="font-family: var(--ui); font-size: var(--fs-lg); font-weight: 700">{sync.busy ?? (sync.offline ? (sync.unreached === 'server' ? 'Server not reached' : 'Offline') : sync.lastError ? 'Not synced' : sync.vaultFull ? 'Vault full' : sync.runs ? 'Synced' : 'Not checked yet')}</div><div class="sub">{sync.busy ? '' : sync.offline ? (sync.pending ? `${changes(sync.pending)} kept here, sent ${sync.unreached === 'server' ? 'when the server answers again' : 'when you are back online'}` : `nothing waiting; it will check ${sync.unreached === 'server' ? checkAgainWords(sync.retryAt) : 'when you are back online'}`) : errWords ? errWords.text : sync.runs ? (sync.lastSync ? `everything on the server ${ago(sync.lastSync)} is here` : 'not yet') : (sync.lastSync ? `last synced ${ago(sync.lastSync)}; checking now` : 'checking now')}</div></div>
     <div class="card"><div class="lab">Waiting to send</div><div class="val">{sync.pending}</div><div class="sub">{sync.pending === 1 ? 'change' : 'changes'} made here and not yet sent (a watering or a note is one; a new plant is a few)</div></div>
     {#if aheadWords}<p class="small muted" id="clock-ahead">{aheadWords.text}{#if aheadWords.detail}{' '}<details class="tech inline"><summary>Details</summary><span class="mono">{aheadWords.detail}</span></details>{/if}</p>{/if}
     {#if sync.quarantined.length || sync.refused.length || collection.incomplete}
@@ -195,8 +195,8 @@
   {#if errWords?.detail}<details class="tech" id="sync-error-detail"><summary>What the sync reported</summary><p class="mono small">{errWords.detail}</p></details>{/if}
   <!-- The server's own sentence when it refuses this vault's uploads, and when this device asks again; receiving carries on (round sixty; three reviews). -->
   {#if sync.refusal}
-    <!-- When the server said to, or within the hour: the device never waits longer (round sixty-one; decision 6). The refusal is kept with the sync record, so a reload or another tab waits too. The day's upload allowance is waited out to the server's time, at most a day (round seventy; triage-69 W2), so "within the hour" is not said of it. -->
-    <p class="notice warn" id="sync-refusal" role="status">{sentence(sync.refusal.text)} This device asks again {when(sync.refusal.until)}, {sync.refusal.day ? 'when the server said to' : 'when the server said to or within the hour'}. Your changes are kept here meanwhile, and changes from your other devices still come in.</p>
+    <!-- When the server said to, or within the hour: the device never waits longer (round sixty-one; decision 6). The refusal is kept with the sync record, so a reload or another tab waits too. The day's upload allowance is waited out to the server's time, at most a day (round seventy; triage-69 W2), so "within the hour" is not said of it. What is kept here is said by the refusal's kind (round seventy-one; E6). -->
+    <p class="notice warn" id="sync-refusal" role="status">{sentence(sync.refusal.text)} This device asks again {when(sync.refusal.until)}, {sync.refusal.day ? 'when the server said to' : 'when the server said to or within the hour'}. {refusalKept(sync.refusal)}</p>
   {/if}
   {#if sync.vaultFull}
     <p class="notice bad" id="vault-full">Your vault is full ({mb(sync.vaultFull.bytes)} of {mb(sync.vaultFull.limit)} MB). Removing photographs frees only their own bytes, once the removal is ten minutes old; the sync bundles of changes stay for good, since the log is the collection. Back up, then set up a new vault for the collection to carry on syncing. Changes made here are kept on this device and sent once there is room; receiving carries on.</p>

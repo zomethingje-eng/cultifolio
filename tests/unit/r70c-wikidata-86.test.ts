@@ -24,15 +24,15 @@ async function item(key: number) {
 
 describe('the species\' own items, kept', () => {
   it.each([
-    [10719858, 'Gymnocalycium hossei', 'Q1341344', /IPNI's record of Gymnocalycium hossei A\.Berger, the same name/], // Kew's "(F.Haage) A.Berger"; the backbone "(F.Haage ex A.Berger) A.W.Hill"
-    [10485981, 'Dudleya gnoma', 'Q5312056', /Dudleya gnoma S\.McCabe, the same name/], // "S.Mc Cabe" and "S.W.McCabe": initials in a row
-    [10852101, 'Mammillaria pennispinosa', 'Q290325', /Mammillaria pennispinosa Krainz, the same name/], // "Krainz ex Shurly" cited as "Krainz"
-    [11065948, 'Ipomoea lobata', 'Q159207', /269217-1 is IPNI's record of Ipomoea lobata Thell\., the same name/], // IPNI's duplicate of Kew's 129456-2
+    [10719858, 'Gymnocalycium hossei', 'Q1341344', /its POWO identifier \S+ is Kew's for/], // Kew's "(F.Haage) A.Berger"; the backbone "(F.Haage ex A.Berger) A.W.Hill"
+    [10485981, 'Dudleya gnoma', 'Q5312056', /its POWO identifier \S+ is Kew's for/], // "S.Mc Cabe" and "S.W.McCabe": initials in a row
+    [10852101, 'Mammillaria pennispinosa', 'Q290325', /its POWO identifier \S+ is Kew's for/], // "Krainz ex Shurly" cited as "Krainz"
+    [11065948, 'Ipomoea lobata', 'Q159207', /its POWO identifier \S+ is Kew's for/], // IPNI's duplicate of Kew's 129456-2
     [7537473, 'Agave applanata', 'Q391637', /an isonym of Kew's Agave applanata K\.Koch/], // "Lem. ex Jacobi", IPNI's isonym
-    [8414451, 'Begonia grandis', 'Q1037925', /Begonia grandes Dryand\., the same name/], // IPNI spells it "grandes"
+    [8414451, 'Begonia grandis', 'Q1037925', /its POWO identifier \S+ is Kew's for/], // IPNI spells it "grandes"
     [7579806, 'Castanospermum australe', 'Q783001', /found by its label/], // "A.Cunn. ex Mudie" and "A.Cunn. & C.Fraser": one person
     [3702155, 'Nepenthes burbidgei', 'Q4912319', /the epithet spelt otherwise/], // labelled "Nepenthes burbidgeae"
-    [7344766, 'Rudbeckia fulgida', 'Q450250', /the same name/] // m70b moved it to Q109610929
+    [7344766, 'Rudbeckia fulgida', 'Q450250', /its POWO identifier \S+ is Kew's for/] // m70b moved it to Q109610929
   ])('%s %s: %s', async (key, _name, q, detail) => {
     const r = await item(key);
     expect(r).toMatchObject({ status: 'ok', data: { wikidata: q } }); // m70b: none, or another item
@@ -48,9 +48,9 @@ describe('the species\' own items, kept', () => {
 });
 
 describe('what stays refused', () => {
-  it('Raphionacme linearis K.Schum.: its item\'s GBIF record is N.E.Brown\'s name', async () => {
+  it('Raphionacme linearis K.Schum.: its item carries N.E.Brown\'s IPNI and GBIF record, and Kew\'s POWO for K.Schum.\'s name (self-review 70: taken)', async () => {
     const r = await item(7438714);
-    expect(r).toMatchObject({ status: 'none', detail: expect.stringMatching(/GBIF's record of Raphionacme linearis N\.E\.Br\., 1902, another author's name/) });
+    expect(r).toMatchObject({ status: 'ok', data: { wikidata: 'Q15374020', ipni: '100771-1' }, detail: expect.stringMatching(/its POWO identifier 100771-1 is Kew's for Raphionacme linearis K\.Schum\./) });
   });
   it('Cyphostemma calcarium: the earlier item was the paper describing it; no taxon item exists (guard)', async () => {
     expect((await item(11120031)).status).toBe('none');

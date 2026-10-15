@@ -555,8 +555,9 @@ export class ListingsSpent extends Error {
 
 /**
  * A vault past its hour of writes (round sixty-nine; triage-68 W5, R46-24): `VAULT_WRITES_PER_HOUR` photographs, or as many log batches, stored in the
- * hour, counted in the vault's counter object as their bytes are taken. 503 with Retry-After to the next hour and a
- * sentence that says it is a refusal; the device keeps every change and asks again then (it reads a wait of a minute or
+ * hour, counted in the vault's counter object as their bytes are taken, over any sixty minutes since round seventy-one
+ * (self-review E3; it was the clock hour). 503 with Retry-After to when the oldest of them leave the count (61 minutes at
+ * most) and a sentence that says it is a refusal; the device keeps every change and asks again then (it reads a wait of a minute or
  * more as the vault's uploads refused for that long, and shows the sentence).
  */
 export class WritesSpent extends Error {
@@ -590,8 +591,9 @@ export async function listBatches(r2: R2Bucket, id: string, sinceMs: number | nu
   // is asked, and what it did not use is given back after it (round sixty-nine; triage-68 W2: charged only after the
   // walk, every pull asked while walks were in flight passed). A counter that cannot be asked lets the listing go:
   // receiving is never refused for the counter's fault, and the request windows still bound it per address. A settle
-  // that fails, or never runs (a pull cancelled mid-walk), leaves the reservation counted for a minute, then it lapses
-  // (round seventy; triage-69 W6, R47-18: it was counted for the hour).
+  // that fails, or never runs (a Worker stopped mid-walk), leaves the reservation counted for a minute, then it lapses
+  // (round seventy; triage-69 W6, R47-18: it was counted for the hour). The route hands the listing to `waitUntil`, so
+  // a client that leaves mid-walk no longer stops it before its settle (round seventy-one; self-review E2).
   const ns = quota?.counters;
   const o = ns ? ns.get(ns.idFromName(`bytes:${id}`)) : null;
   const now = quota?.now ?? Date.now();

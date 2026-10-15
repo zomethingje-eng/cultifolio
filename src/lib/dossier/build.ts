@@ -9,9 +9,9 @@
 import { gbifThumb } from './md5';
 import { dedupePhotos } from './dedupe';
 export { dedupePhotos, inatPhotoId } from './dedupe';
-import type { JsonFetcher, SourceResult } from './fetch';
+import type { JsonFetcher, SourceResult, FetchResult } from './fetch';
 import * as gbif from './sources/gbif';
-import { CULTIVATED_RE, type OccMedia } from './sources/gbif';
+import { CULTIVATED_RE, synonymOfWords, type OccMedia } from './sources/gbif';
 import * as inat from './sources/inat';
 import * as wm from './sources/wikimedia';
 import * as commons from './sources/commons';
@@ -20,7 +20,8 @@ import { tdwgCode, tdwgLabel, TDWG3 } from './tdwg';
 import { licenceTag, isOpen, licenceLabel } from '$core/licence';
 import { slugify, parseName } from '$core/names';
 import { habitatCluster, habitatCentre, haversineKm, inBox, type Box } from '$core/geo';
-import { ownNames, isOwnName } from './own-names';
+import { ownNames, isOwnName, canonicalOf } from './own-names';
+import { plainlyAnother, ownByAuthor } from './authors';
 import type { Reference } from './reference';
 import { DOSSIER_V, parseDossier, type Dossier, type OccPoint, type Photo, type Climate, type Upstream } from './schema';
 import type { HeldNames } from './photo-kind';
@@ -51,7 +52,7 @@ export interface BuildOptions {
    * synonyms and vernaculars are carried, and the upstream records say so. Only honoured when the build is by key
    * and the key matches; a build by name always asks the backbone.
    */
-  taxon?: { key: number; name: Dossier['name']; accepted?: Upstream; builtOn?: string };
+  taxon?: { key: number; name: Dossier['name']; accepted?: Upstream; builtOn?: string; species?: Upstream };
   /**
    * The previous build's identifiers for this key. When Wikidata does not answer (its maxlag, a failure), the build keeps
    * them, above all iNaturalist's taxon id, which the photographs are asked by: a Wikidata outage had cost 113 species
@@ -63,6 +64,12 @@ export interface BuildOptions {
    * `CARRY_DAYS` are not carried (round sixty-nine; triage-68 M5, M8, S-A6, R46-13). Without it nothing is carried.
    */
   prevIdsOn?: string;
+  /**
+   * `prevIds` were themselves kept by a build that did not know their day, and `prevIdsOn` is the day that build first
+   * kept them (round seventy-one; self-review 70 S-B9): the limit runs from there, and the record keeps saying the day
+   * they were read is not known. Before, an unknown day was kept again by every lagged build, past any limit.
+   */
+  prevIdsDayUnknown?: boolean;
   /**
    * Whether the reference holds a name as another of its species (the previous index, by name): iNaturalist's taxon of
    * that name is never taken for this one (round sixty-nine; triage-68 M6, R46-14).
@@ -142,6 +149,7 @@ export function rangeSource(dist: SourceResult<gbif.DistributionAnswer>): string
   if (dist.data.ambiguous) return 'WCVP (Govaerts, RBG Kew): homonyms, unresolved';
   if (dist.data.held) return `WCVP (Govaerts, RBG Kew): Kew holds ${dist.data.held}, with no native range`;
   if (!dist.data.wcvp) return 'national checklists via GBIF (presence reported, native status not stated; no WCVP entry for this name)';
+  if (dist.data.synonymOf) return `WCVP (Govaerts, RBG Kew): ${synonymOfWords(dist.data.synonymOf)}`;
   return dist.data.via ? `WCVP (Govaerts, RBG Kew): Kew's entry ${dist.data.entry}, reached by ${dist.data.via}` : 'WCVP (Govaerts, RBG Kew) via GBIF';
 }
 
@@ -218,8 +226,13 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   const scientific = s.canonicalName ?? s.scientificName;
   const status = /accepted/i.test(s.taxonomicStatus ?? '') ? 'accepted' : /synonym/i.test(s.taxonomicStatus ?? '') ? 'synonym' : /doubtful/i.test(s.taxonomicStatus ?? '') ? 'doubtful' : 'unknown';
 
+  // Kew's identifiers for the name and author: the species on a homonym key (S-B2), and the IPNI and POWO links (S-B5).
+  const kewAsk: { r?: Awaited<ReturnType<typeof gbif.kewIpni>> } = {};
+  let name: KewName | null = null;
   let syn: Awaited<ReturnType<typeof gbif.synonyms>>, vern: Awaited<ReturnType<typeof gbif.vernacular>>;
   if (carried) {
+    // A re-derivation keeps what the build before it said of a homonym key.
+    if (o.taxon?.species?.detail && KEW_NAME.test(o.taxon.species.detail)) upstream['gbif.species'] = { ...upstream['gbif.species'], detail: `${upstream['gbif.species'].detail}; that build: ${o.taxon.species.detail.replace(/^carried from build of [^;]*; that build: /, '')}` };
     syn = { status: 'ok', data: carried.name.synonyms };
     vern = { status: 'ok', data: carried.name.vernacular };
     upstream['gbif.synonyms'] = { status: 'ok', at: now(), detail: carriedFrom };
@@ -228,10 +241,31 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     [syn, vern] = await Promise.all([gbif.synonyms(f, key), gbif.vernacular(f, key)]);
     mark('gbif.synonyms', syn);
     mark('gbif.vernacular', vern);
+    // A key that is an orphan usage of the words, whose author is plainly not Kew's accepted entry for them, while GBIF holds
+    // the words by Kew's author under another key (round seventy-one; self-review 70 S-B2): GBIF matched the bare name to
+    // "Rubus parviflorus Kük.", with no synonym and no common name, while the thimbleberry is GBIF's "Rubus parviflorus
+    // Nutt.", filed under Rubus nutkanus. The page cites Kew's author, reads synonyms and common names from GBIF's usage by
+    // it (and the taxon GBIF files it under, unless that is another species of this reference), and says so.
+    const orphan = (syn.status === 'ok' && !syn.data.length) || syn.status === 'none';
+    name = orphan ? await kewName(f, { key, scientific, authorship: u(s.authorship), family: u(s.family), reference: o.reference }, kewAsk) : null;
+    if (name?.note) upstream['gbif.species'] = { ...upstream['gbif.species'], detail: [upstream['gbif.species']?.detail, name.note].filter(Boolean).join('; ') };
+    if (name?.borrow && syn.status === 'ok' && (vern.status === 'ok' || vern.status === 'none')) {
+      if (vern.status === 'none') vern = { status: 'ok', data: [] };
+      const b = await borrowNames(f, name.borrow, scientific);
+      if (b.status === 'ok') {
+        const s0 = syn, v0 = vern;
+        syn = { ...s0, data: [...s0.data, ...b.data.synonyms.filter((x) => !s0.data.includes(x))], rows: [...(s0.rows ?? []), ...b.data.rows.filter((r) => !(s0.rows ?? []).some((x) => x.key === r.key))] };
+        vern = { ...v0, data: [...v0.data, ...b.data.vernacular.filter((v) => !v0.data.some((x) => x.name === v.name && x.lang === v.lang))] };
+        const from = `read from GBIF's ${name.borrow.label}`;
+        upstream['gbif.synonyms'] = { ...upstream['gbif.synonyms'], detail: [upstream['gbif.synonyms'].detail, `${b.data.rows.length} ${from}`].filter(Boolean).join('; ') };
+        upstream['gbif.vernacular'] = { ...upstream['gbif.vernacular'], ...(b.data.vernacular.length ? { status: 'ok' } : {}), detail: [upstream['gbif.vernacular'].detail, `${b.data.vernacular.length} ${from}`].filter(Boolean).join('; ') };
+      } else upstream['gbif.synonyms'] = { ...upstream['gbif.synonyms'], detail: [upstream['gbif.synonyms'].detail, `GBIF's ${name.borrow.label} not read: ${b.status}`].filter(Boolean).join('; ') };
+    }
     // A list GBIF pages past the build's limit is kept as far as it was read, and said (round sixty-two; agent Q, corpus 7).
     if (vern.status === 'ok' && vern.truncated) upstream['gbif.vernacular'] = { status: 'ok', at: now(), detail: `truncated: the first ${vern.truncated} rows only` };
     if (syn.status === 'ok' && syn.truncated) upstream['gbif.synonyms'] = { status: 'ok', at: now(), detail: `truncated: the first ${syn.truncated} rows only` };
   }
+  const authorship = name?.authorship ?? u(s.authorship);
   // The older names the fallbacks may ask under: none when GBIF's list was refused, failed or cut short, and the records
   // say the older names were not asked rather than "nothing to report" (round sixty-nine; triage-68 M4, M8, S-A6).
   const synRows = syn.status === 'ok' && !syn.truncated && 'rows' in syn ? (syn.rows ?? []) : null;
@@ -245,6 +279,7 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   // Kew's rows of the species' words by another author are another name, and the record says so (round seventy; triage-69 B4, S-B4).
   const otherAuthor = dist.status === 'ok' && dist.data.otherAuthor ? `; ${dist.data.otherAuthor}` : '';
   if (dist.status === 'ok' && dist.data.via) upstream['wcvp.distribution'].detail = `Kew's entry ${dist.data.entry}, reached by ${dist.data.via}${otherAuthor}`;
+  else if (dist.status === 'ok' && dist.data.synonymOf) upstream['wcvp.distribution'].detail = `${synonymOfWords(dist.data.synonymOf)}${dist.data.held ? ', with no native range' : ''}`;
   else if (dist.status === 'ok' && dist.data.held) upstream['wcvp.distribution'].detail = `Kew holds this name (${dist.data.held}), with no native range`;
   else if (otherAuthor) upstream['wcvp.distribution'].detail = otherAuthor.slice(2);
   const native: Dossier['distribution']['native'] = [];
@@ -398,7 +433,7 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   // The older names with the same type, by which Wikidata and iNaturalist may file the species (round sixty-eight, third part).
   const sameType = synRows ? gbif.sameTypeNames({ key, basionymKey: s.basionymKey }, synRows) : [];
   // Wikidata's lag is waited out in rounds by a corpus run, as the fills wait it (round seventy, the owner's run).
-  const askWd = () => wm.crossIds(f, scientific, key, sameType.map((r) => ({ key: r.key, name: r.name })), { authorship: u(s.authorship), family: u(s.family) });
+  const askWd = () => wm.crossIds(f, scientific, key, sameType.map((r) => ({ key: r.key, name: r.name })), { authorship, family: u(s.family), kew: kewAsk });
   const x: wm.CrossResult = skip('wikidata') ? { status: 'skipped', detail: '' } : wm.mwWait.patient ? await wm.patiently(askWd, (y) => y.status === 'error' && y.by !== 'gbif' && wm.isLagged(y.detail)) : await askWd();
   if (x.status === 'skipped') skipped('wikidata');
   // GBIF not answering while it checks the item Wikidata gave is recorded as GBIF's, after Wikidata's answer (round
@@ -411,6 +446,14 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   const titles = [scientific, ...(synRows ?? []).filter((r) => (r.rank ?? 'SPECIES').toUpperCase() === 'SPECIES').map((r) => r.name)];
   if ((x.status === 'error' || x.status === 'refused') && o.prevIds) keepPrevIds(o.prevIds);
   if (x.status === 'ok') {
+    // IPNI and POWO by Kew's number for the name and author (S-B5): never an item's number Kew holds for another author.
+    if (!kewAsk.r && (x.data.ipni || x.data.powo)) kewAsk.r = await gbif.kewIpni(f, scientific, authorship, u(s.family));
+    if (kewAsk.r?.status === 'ok') {
+      const k = gbif.kewLinks(x.data, kewAsk.r.data);
+      if (k.changed) upstream.wikidata = { ...upstream.wikidata, detail: [upstream.wikidata.detail, `IPNI and POWO linked by Kew's number${kewAsk.r.data.label ? ` for ${kewAsk.r.data.label}` : ''}${k.ipni ? '' : ', none'} (the item's: IPNI ${x.data.ipni ?? 'none'}, POWO ${x.data.powo?.replace(/^urn:lsid:ipni\.org:names:/, '') ?? 'none'})`].filter(Boolean).join('; ') };
+      x.data.ipni = k.ipni;
+      x.data.powo = k.powo;
+    }
     Object.assign(ids, { wikidata: x.data.wikidata, powo: x.data.powo, ipni: x.data.ipni, inat: x.data.inat, wfo: x.data.wfo });
     if (x.data.enTitle) enTitle = x.data.enTitle;
     if (x.data.powo) links.powo = `https://powo.science.kew.org/taxon/${x.data.powo}`;
@@ -428,7 +471,8 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     if (!p.wikidata && !p.inat) return;
     const age = daysSince(o.prevIdsOn, now());
     if (o.prevIdsOn && !(age <= CARRY_DAYS)) {
-      upstream.wikidata = { ...upstream.wikidata, detail: `${upstream.wikidata.detail ?? ''}; the previous identifiers are not kept: read by the build of ${o.prevIdsOn}, more than ${CARRY_DAYS} days ago`.replace(/^; /, '') };
+      const was = o.prevIdsDayUnknown ? `kept since ${o.prevIdsOn}, of a day not known` : `read by the build of ${o.prevIdsOn}`;
+      upstream.wikidata = { ...upstream.wikidata, detail: `${upstream.wikidata.detail ?? ''}; the previous identifiers are not kept: ${was}, more than ${CARRY_DAYS} days ago`.replace(/^; /, '') };
       return;
     }
     Object.assign(ids, { wikidata: p.wikidata, powo: p.powo, ipni: p.ipni, inat: p.inat, wfo: p.wfo });
@@ -437,11 +481,12 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     if (p.wfo) links.wfo = `https://www.worldfloraonline.org/taxon/${p.wfo}`;
     if (p.wikidata) links.wikidata = `https://www.wikidata.org/wiki/${p.wikidata}`;
     if (p.wikipedia) enTitle = p.wikipedia;
-    upstream.wikidata = { ...upstream.wikidata, detail: `${upstream.wikidata.detail ?? ''}; ${o.prevIdsOn ? `the identifiers of the build of ${o.prevIdsOn} are kept` : 'the identifiers of an earlier build, of a day not known, are kept'}`.replace(/^; /, '') };
+    upstream.wikidata = { ...upstream.wikidata, detail: `${upstream.wikidata.detail ?? ''}; ${o.prevIdsOn && !o.prevIdsDayUnknown ? `the identifiers of the build of ${o.prevIdsOn} are kept` : `the identifiers of an earlier build, of a day not known, are kept since ${o.prevIdsOn ?? now().slice(0, 10)}`}`.replace(/^; /, '') };
   }
   let summary: Dossier['summary'];
-  // The proofs read the species' Wikidata item and its older names as stored, as `--fill summaries` reads them (round seventy, A1; S-A5).
-  const w = skip('wikipedia') ? ({ status: 'skipped' } as const) : await wm.summary(f, enTitle, [enTitle, ...titles], { name: scientific, synonyms: syn.status === 'ok' ? syn.data : [], item: ids.wikidata });
+  // The proofs read the species' Wikidata item and its older names as stored, as `--fill summaries` reads them (round seventy, A1; S-A5),
+  // and its IPNI identifier and cited author, for the IPNI proof (round seventy-one, A8: the fill's `whoOf` reads the same).
+  const w = skip('wikipedia') ? ({ status: 'skipped' } as const) : await wm.summary(f, enTitle, [enTitle, ...titles], { name: scientific, synonyms: syn.status === 'ok' ? syn.data : [], item: ids.wikidata, ipni: ids.ipni, authorship });
   if (w.status === 'skipped') skipped('wikipedia');
   else mark('wikipedia', w);
   if (w.status === 'ok') {
@@ -454,7 +499,7 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   const photos: Photo[] = [];
   let inatId = ids.inat;
   // Where the id came from, for the record: Wikidata's item, or the identifiers of an earlier build kept.
-  const inatFrom = x.status === 'ok' && x.data.inat === inatId ? 'as Wikidata gives it' : o.prevIdsOn ? `kept from the build of ${o.prevIdsOn}` : 'kept from an earlier build';
+  const inatFrom = x.status === 'ok' && x.data.inat === inatId ? 'as Wikidata gives it' : o.prevIdsOn && !o.prevIdsDayUnknown ? `kept from the build of ${o.prevIdsOn}` : 'kept from an earlier build';
   // The taxon an inactive id named and the rule refused: never taken by the name search either, which finds it by
   // iNaturalist's own synonymy (Mammillaria karwinskiana's search answers Mammillaria geminata; round seventy, triage-69 B1).
   const refused = new Set<number>();
@@ -462,7 +507,7 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   // names, and the other synonyms GBIF holds under it that no species of this reference holds.
   const owned = ownNames({ scientific, sameType: sameType.map((r) => r.name), synonyms: synRows ?? [], heldElsewhere: o.heldElsewhere });
   // A taxon of another name is judged at GBIF (`judgeIdTaxon`; round seventy, the owner's run, R47's rule).
-  const judgeFor: inat.JudgeFor = { key, scientific, family: u(s.family), own: owned, heldElsewhere: o.heldElsewhere, reference: o.reference };
+  const judgeFor: inat.JudgeFor = { key, scientific, authorship, family: u(s.family), own: owned, heldElsewhere: o.heldElsewhere, reference: o.reference };
   if (inatId && !skip('inat')) inatId = await checkedInatId(inatId);
   if (!inatId && !skip('inat')) {
     let t: SourceResult<inat.InatTaxon> = await inat.taxonFor(f, { scientific, key, family: u(s.family), own: owned, sameType: sameType.map((r) => r.name), heldElsewhere: o.heldElsewhere, reference: o.reference, refused });
@@ -556,7 +601,7 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   else if (!o.quick && photos.length < 12) {
     const cat = x.status === 'ok' && x.data.commonsCategory ? x.data.commonsCategory : scientific;
     // The species' own and older names, by which a file named as another species is left out (triage-68 K1).
-    const c = await commons.commonsPhotos(f, cat, 12, { scientific, synonyms: syn.status === 'ok' ? syn.data : [], key, held: o.held });
+    const c = await commons.commonsPhotos(f, cat, 12, { scientific, synonyms: syn.status === 'ok' ? syn.data : [], key, held: o.held, authorship });
     mark('commons', c);
     if (c.status === 'ok') photos.push(...c.data);
   }
@@ -583,7 +628,7 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     builtBy: o.builtBy,
     name: {
       scientific,
-      authorship: u(s.authorship),
+      authorship,
       rank: u(s.rank),
       status,
       acceptedKey: u(s.acceptedKey),
@@ -618,4 +663,72 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   };
   // Never publish something the schema will refuse to serve.
   return { ok: true, dossier: parseDossier(dossier, o.held) };
+}
+
+/** The words a record of a species on a homonym key carries (`kewName`), by which a re-derivation keeps them. */
+export const KEW_NAME = /is cited as Kew accepts it/;
+
+/** What `kewName` decides: Kew's author for the page, the usage to borrow names from, and the record's words. */
+export type KewName = { authorship: string; note: string; borrow?: { usage: number; target: number; label: string } };
+
+/**
+ * A species on a homonym key (round seventy-one; self-review 70 S-B2): the key is an orphan usage (the caller asks only
+ * for a key with no synonym at GBIF), its author is plainly another than the one entry Kew accepts under the words, and
+ * GBIF holds the words by Kew's author once, under another key. The name is cited as Kew cites it; GBIF's one usage of the words by Kew's author
+ * is where GBIF keeps the plant's synonyms and common names, and the taxon it files that usage under (when it is a
+ * synonym) is read too, unless it is another species of this reference (Adenia gummifera's "(Harv.) Harms" is GBIF's
+ * synonym of Adenia cissampeloides, a page here). Null when Kew agrees, or did not answer (nothing then changes).
+ */
+export async function kewName(f: JsonFetcher, sp: { key: number; scientific: string; authorship?: string; family?: string; reference?: Reference }, ask: { r?: Awaited<ReturnType<typeof gbif.kewIpni>> } = {}): Promise<KewName | null> {
+  if (!sp.authorship) return null;
+  ask.r ??= await gbif.kewIpni(f, sp.scientific, sp.authorship, sp.family);
+  const k = ask.r;
+  if (k.status !== 'ok' || !k.data.label?.toLowerCase().startsWith(`${sp.scientific.toLowerCase()} `)) return null;
+  const kewAuthor = k.data.label.slice(sp.scientific.length).trim();
+  if (!plainlyAnother(sp.authorship, kewAuthor)) return null;
+  const first = ask.r;
+  const base = `GBIF's key ${sp.key} is ${sp.scientific} ${sp.authorship}; Kew accepts ${k.data.label}, and the name is cited as Kew accepts it`;
+  const us = await gbif.usages(f, sp.scientific);
+  if (us.status !== 'ok') return null;
+  const by = ownByAuthor(us.data.filter((x) => x.key !== sp.key), kewAuthor, (x) => x.authorship);
+  // No one usage by Kew's author elsewhere, or one GBIF files under this very key: not a homonym key, but Kew citing the
+  // author otherwise ("St.Hil." and "A.St.-Hil."), and nothing changes.
+  if (by.length !== 1) { ask.r = first; return null; }
+  const usage = by[0];
+  const target = /synonym/i.test(usage.taxonomicStatus ?? '') && usage.acceptedKey ? usage.acceptedKey : usage.key;
+  if (target === sp.key) { ask.r = first; return null; }
+  const label = `${usage.scientificName} (${usage.key})${target !== usage.key ? `, which GBIF files under ${usage.accepted ?? `key ${target}`} (${target})` : ''}`;
+  // Kew's identifiers are now those of its author's name, for the links and the item's proof.
+  ask.r = await gbif.kewIpni(f, sp.scientific, kewAuthor, sp.family);
+  if (target !== usage.key && sp.reference?.isSpecies(target)) return { authorship: kewAuthor, note: `${base}; GBIF files ${usage.scientificName} under ${usage.accepted ?? `key ${target}`}, another species of this reference, so nothing is read from it` };
+  return { authorship: kewAuthor, note: `${base}; its synonyms and common names are read from GBIF's ${label} too`, borrow: { usage: usage.key, target, label } };
+}
+
+/**
+ * The synonyms and common names of GBIF's usage by Kew's author and of the taxon it is filed under (`kewName`): the
+ * taxon's own name joins the synonyms (Rubus nutkanus for Rubus parviflorus), and a row of the species' own words does not.
+ */
+export async function borrowNames(f: JsonFetcher, b: { usage: number; target: number }, scientific: string): Promise<FetchResult<{ synonyms: string[]; rows: gbif.SynonymRow[]; vernacular: gbif.VernacularRow[] }>> {
+  const keys = [...new Set([b.target, b.usage])];
+  const rows: gbif.SynonymRow[] = [];
+  const names: string[] = [];
+  const vernacular: gbif.VernacularRow[] = [];
+  for (const k of keys) {
+    const v = await gbif.vernacular(f, k);
+    if (v.status !== 'ok' && v.status !== 'none') return v;
+    if (v.status === 'ok') vernacular.push(...v.data.filter((x) => !vernacular.some((y) => y.name === x.name && y.lang === x.lang)));
+  }
+  if (b.target !== b.usage) {
+    const t = await gbif.species(f, b.target);
+    if (t.status !== 'ok' && t.status !== 'none') return t;
+    if (t.status === 'ok' && t.data.canonicalName) { rows.push({ key: b.target, name: t.data.canonicalName, rank: t.data.rank, ...(t.data.authorship ? { authorship: t.data.authorship } : {}), status: 'ACCEPTED' }); names.push(t.data.scientificName ?? t.data.canonicalName); }
+  }
+  const sy = await gbif.synonyms(f, b.target);
+  if (sy.status !== 'ok' && sy.status !== 'none') return sy;
+  if (sy.status === 'ok') {
+    const own = (n: string) => n.toLowerCase() === scientific.toLowerCase();
+    for (const r of sy.rows ?? []) if (!own(r.name) && !rows.some((x) => x.key === r.key)) rows.push(r);
+    for (const n of sy.data) if (!own(canonicalOf(n) ?? n) && !names.includes(n)) names.push(n);
+  }
+  return { status: 'ok', data: { synonyms: names, rows, vernacular } };
 }

@@ -35,7 +35,7 @@ let askedHere = false;
  * again for the first plant once the plant's page is drawn, and is handed this same answer rather than null, so an ask
  * made from the plant's commit is still said (round seventy; triage-69 P3, R47-20). Nothing is asked twice.
  */
-let firstAsk: Promise<boolean> | null = null;
+let firstAsk: Promise<boolean> | null = null; // since round seventy-one, the load's ask too (self-review E9)
 
 /** For tests: forget this page's ask. */
 export function forgetPageAsk(): void {
@@ -55,20 +55,34 @@ function due(now: number): boolean {
   }
 }
 
+/** Whether a page of this device has asked before (the stored time is there). */
+function askedBefore(): boolean {
+  try { return Number(localStorage.getItem(PERSIST_ASKED) ?? 0) > 0; } catch { return false; }
+}
+
 /**
  * Ask the browser to keep this site's storage, if an ask is due. Resolves to the browser's answer, or to null at once
- * when nothing was asked (the month not over, asked already on this page, the example, no `persist()`).
+ * when nothing was asked (the month not over, asked already on this page, the example, no `persist()`). For the first
+ * plant within the month of an earlier page's ask, the browser's standing answer (`persisted()`, no question put).
  * `reason` says who asks: the collection's load ('load') or the first plant ('first'); both obey the same month.
  */
 export function askToKeep(reason: 'load' | 'first'): Promise<boolean | null> {
-  // One rule for both: the reason is no second gate. A second ask for the first plant on a page that has asked for it
-  // already is answered with that ask's answer, and asks nothing.
+  // One rule for both: the reason is no second gate. A second ask for the first plant on a page that has asked already,
+  // for either reason, is answered with that ask's answer, and asks nothing (round seventy-one; self-review E9: the
+  // load's ask, made because a place was recorded, left the first plant's answered null, and it was never said).
   if (askedHere) return reason === 'first' && firstAsk ? firstAsk : Promise.resolve(null);
   if (PAGE_IN_DEMO) return Promise.resolve(null);
   const st = typeof navigator !== 'undefined' ? navigator.storage : undefined;
   if (!st?.persist) return Promise.resolve(null);
   const now = Date.now();
-  if (!due(now)) return Promise.resolve(null);
+  if (!due(now)) {
+    // Asked on an earlier page this month and not said (GrowLayer asks only while no answer has been said here): the
+    // answer is read from the browser's own record, `persisted()`, which puts no question, so it is said once now.
+    if (reason === 'first' && askedBefore() && st.persisted) {
+      try { return st.persisted().then((ok) => !!ok, () => null); } catch { return Promise.resolve(null); }
+    }
+    return Promise.resolve(null);
+  }
   askedHere = true;
   // Written before the browser is called: the call may never return (round sixty-seven; triage-66 P1).
   try { localStorage.setItem(PERSIST_ASKED, String(now)); } catch { /* the page's own flag still holds it to one ask */ }
@@ -78,7 +92,7 @@ export function askToKeep(reason: 'load' | 'first'): Promise<boolean | null> {
   } catch {
     answer = Promise.resolve(false);
   }
-  if (reason === 'first') firstAsk = answer;
+  firstAsk = answer; // whichever reason asked, the first plant's ask on this page is handed this answer
   return answer;
 }
 

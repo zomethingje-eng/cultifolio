@@ -73,6 +73,18 @@ export function ownNames(o: { scientific: string; sameType?: readonly string[]; 
   return { own, keys: new Set([...own].map(nameKey)) };
 }
 
+/**
+ * A personal epithet's genitive in another gender or number ("burbidgei", "burbidgeae"), and nothing else (round
+ * seventy-one; self-review 70 S-B12): the adjective in -ana, -anus or -anum is another name ("Parodia ritteri", "Parodia
+ * ritteriana", two species Kew accepts; "Syzygium formosum", "Syzygium formosanum"), so a Wikidata label or GBIF record
+ * spelt so is not this name. `epithetsAgree` keeps the adjective for iNaturalist, where Kew decides (`transferTaken`).
+ */
+export function genitivesAgree(a: string, b: string): boolean {
+  if (epithetKey(a) === epithetKey(b)) return true;
+  const stem = (e: string) => e.toLowerCase().replace(/(?:iae|ii|ae|i)$/, '');
+  const x = stem(a), y = stem(b);
+  return x.length >= 4 && x === y;
+}
 /** Two epithets that are one: by `epithetKey`, or one a personal name's stem and the other its adjective ("selloa", "selloana"). */
 export function epithetsAgree(a: string, b: string): boolean {
   if (epithetKey(a) === epithetKey(b)) return true;

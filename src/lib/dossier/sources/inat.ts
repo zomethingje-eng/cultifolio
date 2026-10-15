@@ -3,7 +3,9 @@ import { licenceTag, isOpen } from '$core/licence';
 import type { Photo } from '../schema';
 import type { Reference } from '../reference';
 import { isOwnName, epithetKey, type OwnNames } from '../own-names';
-import { slip } from '../photo-kind';
+import { slip, slipStanding, transferTaken, type NameWord, type GbifNameMatch } from '../photo-kind';
+// The slip rule is one rule, in `photo-kind.ts`, for iNaturalist and Commons alike (REVIEW-TRIAGE-70, S-B7, S-C9, S-F13).
+export { slipTaken, transferTaken, type NameWord } from '../photo-kind';
 
 export const INAT = 'https://api.inaturalist.org/v1';
 
@@ -183,6 +185,8 @@ export async function photos(f: JsonFetcher, taxonId: number, wild: boolean, per
 export interface JudgeFor {
   key: number;
   scientific: string;
+  /** The species' cited author: GBIF's same name by the same author spelt otherwise is this species' (`slipStanding`). */
+  authorship?: string | null;
   family?: string;
   own: OwnNames;
   heldElsewhere?: HeldElsewhere;
@@ -250,26 +254,35 @@ export async function judgeTaxon(f: JsonFetcher, name: string, s: JudgeFor, leni
   // citrina and Sabdariffa gossypiifolia, iNaturalist's taxa for them.
   const k = await kewSays(f, name, s);
   if (k.status !== 'ok') return k;
-  if (k.data) return ok(k.data.take, k.data.why);
+  if (k.data.verdict) return ok(k.data.verdict.take, k.data.verdict.why);
+  // What Kew says of the name and of this species (round seventy-one; triage-70 S-B7, S-C9, S-F13): Lupinus longifolius
+  // is not Acacia longifolia in another genus (`transferTaken`); Salvia aurea L. is not Salvia azurea spelt otherwise
+  // (`slipStanding`, below).
+  const word: NameWord = k.data.word;
   const ep = name.split(' ')[1] ?? '';
   const ours = s.scientific.split(' ')[1] ?? '';
   const where = exact ? `GBIF holds ${name} as ${m.species ?? 'a species'}, not of this reference` : `GBIF has no record of ${name}`;
   // An uploader's slip of this species' epithet (C's `slip`: one letter added, dropped, changed or moved, five letters or
   // more) is this species' too, where no species of the reference holds the name (round seventy, the owner's run:
-  // Echinocereus chisosensis for E. chisoensis, Othonna cakilifolia for O. cakilefolia).
-  const slipped = !epithetsAgree(ep, ours) && slip(ep, ours) && s.reference.keyOf(name) === undefined && !s.heldElsewhere?.(name);
+  // Echinocereus chisosensis for E. chisoensis, Othonna cakilifolia for O. cakilefolia), and Kew and GBIF hold it as no
+  // species of its own (`slipStanding`, the Commons rule; round seventy-one merge: Kew's rows and GBIF's exact match are
+  // the ones read above, so nothing more is asked).
+  const slipped = !epithetsAgree(ep, ours) && slip(ep, ours);
+  if (slipped && (s.reference.keyOf(name) !== undefined || s.heldElsewhere?.(name))) return ok(false, `${name} is another species of this reference`);
   if (!epithetsAgree(ep, ours) && !slipped) return ok(false, `${where}, and its epithet is not this species'`);
   if (slipped) {
     const near = s.reference.byEpithet(ep, s.family).filter((e) => e.key !== s.key);
     if (near.length) return ok(false, `${where}, and ${near.map((e) => e.name).join(', ')} here ${near.length === 1 ? 'has' : 'have'} its epithet`);
-    return ok(true, `${where}: this species' epithet, spelt one letter otherwise`);
+    const a = slipStanding(name, { scientific: s.scientific, authorship: s.authorship, key: s.key, synonyms: [...s.own.own] }, k.data.rows, m.matchType === 'EXACT' ? (m as GbifNameMatch) : null);
+    return ok(a.own, a.own ? `${where} (${a.why}): this species' epithet, spelt one letter otherwise` : `${a.why}: not taken`);
   }
+  if (!transferTaken(word)) return ok(false, `Kew accepts ${name} and ${s.scientific} as two species`);
   const others = s.reference.byEpithet(ep, s.family).filter((e) => e.key !== s.key);
   if (others.length) return ok(false, `${where}, and ${others.map((e) => e.name).join(', ')} here ${others.length === 1 ? 'has' : 'have'} its epithet too`);
   return ok(true, `${where}: this species' epithet in another genus or spelling`);
 }
 
-type KewRow = { canonicalName?: string; taxonomicStatus?: string; accepted?: string };
+type KewRow = { canonicalName?: string; scientificName?: string; authorship?: string; taxonomicStatus?: string; rank?: string; accepted?: string };
 const WCVP = 'f382f0ce-323a-4091-bb9f-add557f3a9a2';
 const binomialOf = (n: string) => n.split(/\s+/).slice(0, 2).join(' ');
 
@@ -280,27 +293,32 @@ const binomialOf = (n: string) => n.split(/\s+/).slice(0, 2).join(' ');
  *     is refused, and so is a name Kew reads both ways;
  *   - otherwise, when Kew holds this species' name as a synonym of the name, the name is taken: Kew accepts what
  *     iNaturalist accepts.
- * Misapplied names are not read. One request, two when Kew holds the name but not as a synonym of anything here.
+ * Misapplied names are not read. One request, two when Kew accepts the name. With the verdict, what Kew holds of the
+ * name and (when asked) of this species (`NameWord`), which the slip and genus-transfer rules read (round seventy-one).
  */
-async function kewSays(f: JsonFetcher, name: string, s: JudgeFor): Promise<FetchResult<Verdict | null>> {
+async function kewSays(f: JsonFetcher, name: string, s: JudgeFor): Promise<FetchResult<{ verdict?: Verdict; word: NameWord; rows: KewRow[] }>> {
   const rows = async (n: string) => {
     const r = await f<{ results?: KewRow[] }>(`https://api.gbif.org/v1/species?datasetKey=${WCVP}&name=${encodeURIComponent(n)}&limit=50`);
     if (r.status === 'none') return { status: 'ok' as const, data: [] as KewRow[] };
     if (r.status !== 'ok') return r;
     return { status: 'ok' as const, data: (r.data.results ?? []).filter((x) => (x.canonicalName ?? '').toLowerCase() === n.toLowerCase() && !/misapplied/i.test(x.taxonomicStatus ?? '')) };
   };
+  const held = (xs: KewRow[]): NameWord['kew'] => (xs.some((x) => /^accepted$/i.test(x.taxonomicStatus ?? '')) ? 'accepted' : xs.length ? 'held' : 'none');
   const mine = await rows(name);
   if (mine.status !== 'ok') return mine;
   const under = [...new Set(mine.data.filter((x) => /synonym/i.test(x.taxonomicStatus ?? '') && x.accepted).map((x) => binomialOf(x.accepted!)))];
   const ours = under.filter((a) => isOwnName(s.own, a) || a.toLowerCase() === s.scientific.toLowerCase());
   const theirs = under.filter((a) => !ours.includes(a) && (s.heldElsewhere?.(a) || (s.reference?.keyOf(a) ?? s.key) !== s.key));
-  if (theirs.length) return { status: 'ok', data: { take: false, why: `Kew holds ${name} as a synonym of ${theirs.join(' and ')}, ${ours.length ? 'and of this species: read two ways' : 'another species of this reference'}` } };
-  if (ours.length) return { status: 'ok', data: { take: true, why: `Kew holds ${name} as a synonym of ${ours[0]}` } };
-  if (!mine.data.some((x) => /^accepted$/i.test(x.taxonomicStatus ?? ''))) return { status: 'ok', data: null };
+  const word: NameWord = { kew: held(mine.data) };
+  if (theirs.length) return { status: 'ok', data: { word, rows: mine.data, verdict: { take: false, why: `Kew holds ${name} as a synonym of ${theirs.join(' and ')}, ${ours.length ? 'and of this species: read two ways' : 'another species of this reference'}` } } };
+  if (ours.length) return { status: 'ok', data: { word, rows: mine.data, verdict: { take: true, why: `Kew holds ${name} as a synonym of ${ours[0]}` } } };
+  if (word.kew !== 'accepted') return { status: 'ok', data: { word, rows: mine.data } };
   const back = await rows(s.scientific);
   if (back.status !== 'ok') return back;
+  word.kewOurs = held(back.data);
   const to = back.data.find((x) => /synonym/i.test(x.taxonomicStatus ?? '') && x.accepted && binomialOf(x.accepted).toLowerCase() === binomialOf(name).toLowerCase());
-  return { status: 'ok', data: to ? { take: true, why: `Kew holds ${s.scientific} as a synonym of ${to.accepted}` } : null };
+  if (to) return { status: 'ok', data: { word, rows: mine.data, verdict: { take: true, why: `Kew holds ${s.scientific} as a synonym of ${to.accepted}` } } };
+  return { status: 'ok', data: { word, rows: mine.data } };
 }
 
 /**

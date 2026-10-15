@@ -1,0 +1,292 @@
+{
+ "https://api.gbif.org/v1/species?datasetKey=f382f0ce-323a-4091-bb9f-add557f3a9a2&name=Rubus%20parviflorus&limit=50": {
+  "results": [
+   {
+    "key": 207710028,
+    "scientificName": "Rubus parviflorus Weston",
+    "canonicalName": "Rubus parviflorus",
+    "authorship": "Weston",
+    "taxonomicStatus": "SYNONYM",
+    "acceptedKey": 207709980,
+    "accepted": "Rubus creticus Tourn. ex L.",
+    "family": "Rosaceae",
+    "rank": "SPECIES",
+    "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:30006007-2"
+   },
+   {
+    "key": 207720526,
+    "scientificName": "Rubus parviflorus Figert ex Sprib.",
+    "canonicalName": "Rubus parviflorus",
+    "authorship": "Figert ex Sprib.",
+    "taxonomicStatus": "SYNONYM",
+    "acceptedKey": 207715499,
+    "accepted": "Rubus schmidelyanus var. parviflorus Sudre",
+    "family": "Rosaceae",
+    "rank": "SPECIES",
+    "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:738960-1"
+   },
+   {
+    "key": 207720528,
+    "scientificName": "Rubus \u00d7parviflorus Sudre",
+    "canonicalName": "Rubus parviflorus",
+    "authorship": "Sudre",
+    "taxonomicStatus": "SYNONYM",
+    "acceptedKey": 207735124,
+    "accepted": "Rubus \u00d7celatus Sudre",
+    "family": "Rosaceae",
+    "rank": "SPECIES",
+    "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:738961-1"
+   },
+   {
+    "key": 207720534,
+    "scientificName": "Rubus parviflorus Hegetschw.",
+    "canonicalName": "Rubus parviflorus",
+    "authorship": "Hegetschw.",
+    "taxonomicStatus": "DOUBTFUL",
+    "family": "Rosaceae",
+    "rank": "SPECIES",
+    "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:738962-1"
+   },
+   {
+    "key": 207721703,
+    "scientificName": "Rubus parviflorus Nutt.",
+    "canonicalName": "Rubus parviflorus",
+    "authorship": "Nutt.",
+    "taxonomicStatus": "ACCEPTED",
+    "family": "Rosaceae",
+    "rank": "SPECIES",
+    "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:298093-2"
+   }
+  ]
+ },
+ "https://api.gbif.org/v1/species?datasetKey=d7dddbf4-2cf0-4f39-9b2a-bb099caae36c&name=Rubus%20parviflorus&limit=50": {
+  "results": [
+   {
+    "key": 2989557,
+    "scientificName": "Rubus parviflorus Nutt.",
+    "canonicalName": "Rubus parviflorus",
+    "authorship": "Nutt.",
+    "taxonomicStatus": "HETEROTYPIC_SYNONYM",
+    "acceptedKey": 2994229,
+    "accepted": "Rubus nutkanus Moc. ex Ser.",
+    "family": "Rosaceae",
+    "rank": "SPECIES"
+   },
+   {
+    "key": 7463552,
+    "scientificName": "Rubus \u00d7parviflorus Sudre",
+    "canonicalName": "Rubus parviflorus",
+    "authorship": "Sudre",
+    "taxonomicStatus": "DOUBTFUL",
+    "family": "Rosaceae",
+    "rank": "SPECIES"
+   },
+   {
+    "key": 7872219,
+    "scientificName": "Rubus parviflorus K\u00fck.",
+    "canonicalName": "Rubus parviflorus",
+    "authorship": "K\u00fck.",
+    "taxonomicStatus": "ACCEPTED",
+    "family": "Rosaceae",
+    "rank": "SPECIES"
+   },
+   {
+    "key": 7947252,
+    "scientificName": "Rubus parviflorus H.Walter",
+    "canonicalName": "Rubus parviflorus",
+    "authorship": "H.Walter",
+    "taxonomicStatus": "SYNONYM",
+    "acceptedKey": 2996841,
+    "accepted": "Rubus cuneifolius Pursh",
+    "family": "Rosaceae",
+    "rank": "SPECIES"
+   },
+   {
+    "key": 8103041,
+    "scientificName": "Rubus parviflorus Hegetschw.",
+    "canonicalName": "Rubus parviflorus",
+    "authorship": "Hegetschw.",
+    "taxonomicStatus": "DOUBTFUL",
+    "family": "Rosaceae",
+    "rank": "SPECIES"
+   },
+   {
+    "key": 8333722,
+    "scientificName": "Rubus parviflorus Figert ex Sprib.",
+    "canonicalName": "Rubus parviflorus",
+    "authorship": "Figert ex Sprib.",
+    "taxonomicStatus": "DOUBTFUL",
+    "family": "Rosaceae",
+    "rank": "SPECIES"
+   },
+   {
+    "key": 8370775,
+    "scientificName": "Rubus parviflorus Christm.",
+    "canonicalName": "Rubus parviflorus",
+    "authorship": "Christm.",
+    "taxonomicStatus": "SYNONYM",
+    "acceptedKey": 2991373,
+    "accepted": "Rubus parvifolius L.",
+    "family": "Rosaceae",
+    "rank": "SPECIES"
+   },
+   {
+    "key": 8544703,
+    "scientificName": "Rubus parviflorus Figert",
+    "canonicalName": "Rubus parviflorus",
+    "authorship": "Figert",
+    "taxonomicStatus": "HOMOTYPIC_SYNONYM",
+    "acceptedKey": 8333722,
+    "accepted": "Rubus parviflorus Figert ex Sprib.",
+    "family": "Rosaceae",
+    "rank": "SPECIES"
+   },
+   {
+    "key": 11013314,
+    "scientificName": "Rubus parviflorus Weston",
+    "canonicalName": "Rubus parviflorus",
+    "authorship": "Weston",
+    "taxonomicStatus": "SYNONYM",
+    "acceptedKey": 7923692,
+    "accepted": "Rubus sanctus Schreb.",
+    "family": "Rosaceae",
+    "rank": "SPECIES"
+   },
+   {
+    "key": 12147739,
+    "scientificName": "Rubus parviflorus L.",
+    "canonicalName": "Rubus parviflorus",
+    "authorship": "L.",
+    "taxonomicStatus": "DOUBTFUL",
+    "family": "Rosaceae",
+    "rank": "SPECIES"
+   }
+  ]
+ },
+ "https://api.gbif.org/v1/species?datasetKey=f382f0ce-323a-4091-bb9f-add557f3a9a2&name=Ranunculus%20ficaria&limit=50": {
+  "results": [
+   {
+    "key": 207648020,
+    "scientificName": "Ranunculus ficaria Walter",
+    "canonicalName": "Ranunculus ficaria",
+    "authorship": "Walter",
+    "taxonomicStatus": "MISAPPLIED",
+    "acceptedKey": 207647721,
+    "accepted": "Caltha palustris var. palustris",
+    "family": "Ranunculaceae",
+    "rank": "SPECIES",
+    "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:712704-1"
+   },
+   {
+    "key": 207676381,
+    "scientificName": "Ranunculus ficaria L.",
+    "canonicalName": "Ranunculus ficaria",
+    "authorship": "L.",
+    "taxonomicStatus": "ACCEPTED",
+    "family": "Ranunculaceae",
+    "rank": "SPECIES",
+    "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:712703-1"
+   }
+  ]
+ },
+ "https://api.gbif.org/v1/species?datasetKey=d7dddbf4-2cf0-4f39-9b2a-bb099caae36c&name=Ranunculus%20ficaria&limit=50": {
+  "results": [
+   {
+    "key": 3033351,
+    "scientificName": "Ranunculus ficaria L.",
+    "canonicalName": "Ranunculus ficaria",
+    "authorship": "L.",
+    "taxonomicStatus": "SYNONYM",
+    "acceptedKey": 7277276,
+    "accepted": "Ficaria verna subsp. verna",
+    "family": "Ranunculaceae",
+    "rank": "SPECIES"
+   },
+   {
+    "key": 8397184,
+    "scientificName": "Ranunculus ficaria Walter, 1788",
+    "canonicalName": "Ranunculus ficaria",
+    "authorship": "Walter, 1788",
+    "taxonomicStatus": "ACCEPTED",
+    "family": "Ranunculaceae",
+    "rank": "SPECIES"
+   }
+  ]
+ },
+ "https://api.gbif.org/v1/species?datasetKey=f382f0ce-323a-4091-bb9f-add557f3a9a2&name=Myrica%20cerifera&limit=50": {
+  "results": [
+   {
+    "key": 207316303,
+    "scientificName": "Myrica cerifera L.",
+    "canonicalName": "Myrica cerifera",
+    "authorship": "L.",
+    "taxonomicStatus": "ACCEPTED",
+    "family": "Myricaceae",
+    "rank": "SPECIES",
+    "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:166220-2"
+   }
+  ]
+ },
+ "https://api.gbif.org/v1/species?datasetKey=d7dddbf4-2cf0-4f39-9b2a-bb099caae36c&name=Myrica%20cerifera&limit=50": {
+  "results": [
+   {
+    "key": 5414216,
+    "scientificName": "Myrica cerifera L.",
+    "canonicalName": "Myrica cerifera",
+    "authorship": "L.",
+    "taxonomicStatus": "SYNONYM",
+    "acceptedKey": 3168995,
+    "accepted": "Morella cerifera (L.) Small",
+    "family": "Myricaceae",
+    "rank": "SPECIES"
+   },
+   {
+    "key": 8038589,
+    "scientificName": "Myrica cerifera Bigelow",
+    "canonicalName": "Myrica cerifera",
+    "authorship": "Bigelow",
+    "taxonomicStatus": "ACCEPTED",
+    "family": "Myricaceae",
+    "rank": "SPECIES"
+   }
+  ]
+ },
+ "https://api.gbif.org/v1/species?datasetKey=f382f0ce-323a-4091-bb9f-add557f3a9a2&name=Adenia%20gummifera&limit=50": {
+  "results": [
+   {
+    "key": 207466674,
+    "scientificName": "Adenia gummifera (Harv.) Harms",
+    "canonicalName": "Adenia gummifera",
+    "authorship": "(Harv.) Harms",
+    "taxonomicStatus": "ACCEPTED",
+    "family": "Passifloraceae",
+    "rank": "SPECIES",
+    "references": "https://powo.science.kew.org/taxon/urn:lsid:ipni.org:names:674091-1"
+   }
+  ]
+ },
+ "https://api.gbif.org/v1/species?datasetKey=d7dddbf4-2cf0-4f39-9b2a-bb099caae36c&name=Adenia%20gummifera&limit=50": {
+  "results": [
+   {
+    "key": 7313476,
+    "scientificName": "Adenia gummifera (Harv.) Harms",
+    "canonicalName": "Adenia gummifera",
+    "authorship": "(Harv.) Harms",
+    "taxonomicStatus": "SYNONYM",
+    "acceptedKey": 5527841,
+    "accepted": "Adenia cissampeloides (Planch. ex Hook.) Harms",
+    "family": "Passifloraceae",
+    "rank": "SPECIES"
+   },
+   {
+    "key": 8357296,
+    "scientificName": "Adenia gummifera BurttDavy",
+    "canonicalName": "Adenia gummifera",
+    "authorship": "BurttDavy",
+    "taxonomicStatus": "ACCEPTED",
+    "family": "Passifloraceae",
+    "rank": "SPECIES"
+   }
+  ]
+ }
+}

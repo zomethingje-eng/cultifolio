@@ -153,13 +153,16 @@ export function reduceNws(res: { features?: Array<{ properties?: Record<string, 
  * Virgin Islands, Guam and the Northern Mariana Islands, American Samoa, and the Aleutians west of 170° W, across the
  * antimeridian to Attu: the NWS answers alerts for each (checked 2026-10-12: San Juan, Charlotte Amalie, Hagåtña, Saipan,
  * Pago Pago, Amchitka at 173.2° E and Atka at 173.2° W all 200), and a place there was told "All clear." with nothing asked.
+ * Round seventy-one (self-review E1): the Alaska box runs to the antimeridian, so St Lawrence Island (Gambell, Savoonga)
+ * and St Paul in the Pribilofs, west of 170° W and north of the Aleutians' box, are asked too (each 200, checked
+ * 2026-10-15); Chukotka east of 180° falls inside it and is answered "out of bounds" (checked: 65.5, -175).
  * A box is wider than the land it holds: Toronto and Monterrey are inside the first. The NWS answers such a point 400
  * "out of bounds", which the route reads as no alerts service for the point, not as one that did not answer (`nwsOutOfBounds`).
  */
 export const isUS = (lat: number, lon: number) =>
   (lat > 24 && lat < 50 && lon > -125 && lon < -66) || // the contiguous states
-  (lat > 51 && lat < 72 && lon > -170 && lon < -130) || // Alaska
-  (lat > 51 && lat < 55.5 && (lon <= -170 || lon >= 172)) || // the Aleutians west of 170° W, across the antimeridian to Attu
+  (lat > 51 && lat < 72 && lon > -180 && lon < -129.9) || // Alaska, to the antimeridian: St Lawrence Island and the Pribilofs
+  (lat > 51 && lat < 55.5 && lon >= 172) || // the Aleutians across the antimeridian to Attu
   (lat > 18 && lat < 23 && lon > -161 && lon < -154) || // Hawaii
   (lat > 17.5 && lat < 18.8 && lon > -68 && lon < -64.4) || // Puerto Rico and the US Virgin Islands
   (lat > 13 && lat < 21 && lon > 144.4 && lon < 146.2) || // Guam and the Northern Mariana Islands

@@ -61,7 +61,17 @@ const UNFILLED = /^\(?\s*(?:my ?name|mi ?nombre|tu ?nombre|your ?(?:real |user ?
 export function commonsAuthor(raw: string | null | undefined): string | null {
   const html = String(raw ?? '').replace(/<(sup|small)\b[^>]*>[\s\S]*?<\/\1>/gi, ' ');
   const text = decodeEntities(html.replace(/<br\s*\/?>|<\/(?:p|div|li|tr)>/gi, '\n').replace(/<[^>]+>/g, ' '));
-  let s = text.split(/\r?\n/).map((x) => x.replace(/\s+/g, ' ').replace(/\(\s+/g, '(').replace(/\s+([),.;])/g, '$1').trim()).find(Boolean) ?? '';
+  const lines = text.split(/\r?\n/).map((x) => x.replace(/\s+/g, ' ').replace(/\(\s+/g, '(').replace(/\s+([),.;:])/g, '$1').trim()).filter(Boolean);
+  let s = lines[0] ?? '';
+  // A derivative work's Artist names the original's file and author, then the maker of the derivative ("N._andamana2.jpg:
+  // Marcello Catalano", "derivative work: Mgiganteus (talk)"): both are its authors, and the file's name is neither
+  // (self-review 70, S-C11). A stored credit keeps only the first line, whose file name is taken off here too.
+  const original = DERIVED_FROM.exec(s);
+  if (original) {
+    const maker = lines.slice(1).map((x) => /^derivative work:\s*(.+)$/i.exec(x)?.[1]).find(Boolean);
+    const who = maker ? commonsAuthor(maker) : null;
+    s = who ? `${original[1]}; derivative work: ${who}` : original[1];
+  }
   const assumed = /^No machine-readable author provided\.\s*(.+?)\s+assumed\b/i.exec(s);
   if (assumed) s = assumed[1];
   else if (/^No machine-readable author/i.test(s)) return null;
@@ -74,6 +84,9 @@ export function commonsAuthor(raw: string | null | undefined): string | null {
   if (UNFILLED.test(s)) return null;
   return NOT_AUTHOR.test(s) ? null : s;
 }
+
+/** The original's file named before its author in a derivative work's credit: "N._andamana2.jpg: Marcello Catalano". */
+const DERIVED_FROM = /^(?:File:)?[^:]{1,200}?\.(?:jpe?g|png|tiff?|webp|gif|svg)\s*:\s*(.+)$/i;
 
 const VIA = /,\s*via Wikimedia Commons$/;
 /**

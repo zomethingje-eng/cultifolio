@@ -21,7 +21,7 @@ import { said, claim, part, numberWord, spanWords } from '../about-pages';
 import { crossIds, isTaxonItem, LABEL_KEYS } from '$dossier/sources/wikimedia';
 import { fixtureFetcher, type JsonFetcher } from '$dossier/fetch';
 import { proofByItem, GENUS_RANK, SPECIES_RANK } from '$dossier/summary-proof';
-import { heldNamesOf, commonsKind } from '$dossier/photo-kind';
+import { heldNamesOf, commonsKind, slipStanding } from '$dossier/photo-kind';
 import { photoAt, shownAt, commonsTileOf } from '$dossier/photo-size';
 import { ownNames } from '$dossier/own-names';
 import { englishNames } from '$dossier/index-entry';
@@ -62,8 +62,8 @@ describe('Wikidata\'s label rule (/about/how, "What comes from where")', () => {
     expect(s.text).toMatch(/an IPNI identifier that is Kew's for another author's name of these words refuses it/);
     // Round seventy-c: the GBIF key of another author's name refuses too, which keeps the six whose own IPNI and GBIF
     // record name another author refused (Raphionacme linearis: B's r70c-wikidata-86), and IPNI is asked itself.
-    expect(s.text).toMatch(/as does a GBIF key of another author's name, and any other identifier proves nothing either way/);
-    expect(claim(s, /the build asks IPNI itself, (www\.ipni\.org), for the record of an identifier Kew does not hold, at most once a second/)).toBe('www.ipni.org');
+    expect(s.text).toMatch(/as does a GBIF key of another author's name, unless its POWO identifier proves it, and any other identifier proves nothing either way/); // round seventy-one: B's POWO proof
+    expect(claim(s, /the build asks IPNI itself, (www\.ipni\.org), for the record of an identifier Kew does not hold, and of the identifiers a Wikipedia title's Wikidata item carries, at most once a second/)).toBe('www.ipni.org');
     expect(raw('src/lib/dossier/fetch.ts')).toMatch(/'www\.ipni\.org': 1100,/);
     expect(raw('src/lib/dossier/sources/wikimedia.ts')).toMatch(/https:\/\/www\.ipni\.org\/api\/1\/n\//);
     const f = fixtureFetcher({
@@ -81,7 +81,7 @@ describe('Wikidata\'s label rule (/about/how, "What comes from where")', () => {
 
 /* ---- Summaries (A1, A2) ---- */
 describe('the summary under another title (/about/how)', () => {
-  const s = said('how', 'An article Wikipedia reaches through a redirect is quoted only when');
+  const s = said('how', "A summary under any title but the species' name");
   const who = { name: 'Ceropegia zebrina', synonyms: ['Huernia zebrina'], item: 'Q100' };
   const sp = (o: Partial<{ sitelink: string; parents: string[]; basionyms: string[]; sourceOf: string[] }> = {}) => ({ id: 'Q100', parents: [], basionyms: [], sourceOf: [], ...o });
   const ti = (o: Partial<{ id: string; productOf: string[]; taxonNames: string[]; ranks: string[]; basionyms: string[] }> = {}) => ({ id: 'Q200', productOf: [], taxonNames: [], ranks: [], basionyms: [], ...o });
@@ -92,7 +92,7 @@ describe('the summary under another title (/about/how)', () => {
     expect(proofByItem(title, w, { species: sp(), title: ti({ ranks: [SPECIES_RANK] }) })).toBeNull(); // no shared type, no proof
   });
   it('a product "naming no other plant but its genus" ("Apple"), and not one naming another plant', () => {
-    expect(s.text).toMatch(/the title's item is a product of this species, naming no other plant but its genus \("Apple"\)/);
+    expect(s.text).toMatch(/the title's item names this species as the plant it is a product of, and no other plant but its genus \("Apple"\)/); // round seventy-one, A's sentence
     const malus = { name: 'Malus domestica', synonyms: [], item: 'Q100' };
     expect(proofByItem('Apple', malus, { species: sp({ parents: ['Q300'] }), title: ti({ productOf: ['Q100', 'Q300'] }) })?.proof).toBe('product');
     expect(proofByItem('Plum', malus, { species: sp({ parents: ['Q300'] }), title: ti({ productOf: ['Q100', 'Q400'] }) })).toBeNull();
@@ -134,12 +134,25 @@ describe('the Commons file rules (/about/how)', () => {
     { key: 3, name: 'Babiana stricta' }
   ]);
   const shown = (file: string, scientific: string, key: number, synonyms: string[] = []) => commonsKind(`File:${file}.jpg`, { scientific, synonyms, key, held: HELD }) === null;
-  it('an uploader\'s slip is the species\' where the reference holds no such name: the sentence\'s own two cases', () => {
+  // Round seventy-one (C's S-C9, the merge's one rule): a slip is shown only once Kew and GBIF were asked of it and hold it
+  // as no species (`Photo.slips`); until then the file is not shown. Kew's synonym of another plant is no slip, and GBIF's
+  // second spelling of the same name by the same author is one name.
+  it('an uploader\'s slip is the species\' only once Kew and GBIF were asked of it: the sentence\'s own cases', () => {
     const [slipped, species] = [claim(s, /"(Mammillaria \w+)" is Mammillaria \w+;/), claim(s, /"Mammillaria \w+" is (Mammillaria \w+);/)];
-    expect(shown(slipped, species, 7284127), s.where).toBe(true);
+    const shownWith = (slips: string[]) => commonsKind(`File:${slipped}.jpg`, { scientific: species, key: 7284127, held: HELD }, { slips: slips.map((x) => x.toLowerCase()) }) === null;
+    expect(s.text, s.where).toMatch(/until then the file is not shown/);
+    expect(shownWith([]), s.where).toBe(false); // not yet asked
+    expect(shownWith([slipped])).toBe(true); // asked, and held as no species
     const own = claim(s, /"(Echinocereus \w+)" is a species of its own/);
-    expect(shown(own, 'Echinocereus scheeri', 7283175)).toBe(false);
+    expect(commonsKind(`File:${own}.jpg`, { scientific: 'Echinocereus scheeri', key: 7283175, held: HELD }, { slips: [own.toLowerCase()] })).not.toBeNull();
     expect(numberWord(claim(s, /an uploader's slip of (\w+) letters or more/))).toBe(5);
+    const [mariae, scut] = [claim(s, /"(Ceropegia mariae)" Kew's synonym of/), claim(s, /"Ceropegia mariae" Kew's synonym of (Echidnopsis scutellata)/)];
+    expect(slipStanding(mariae, { scientific: 'Ceropegia maritae' }, [{ canonicalName: mariae, scientificName: `${mariae} Lavranos`, taxonomicStatus: 'SYNONYM', accepted: `${scut} (Deflers) A.Berger` }], null).own).toBe(false);
+    expect(s.text).toMatch(/the same name by the same author spelt otherwise is one name/);
+    const gbif = (author: string) => ({ matchType: 'EXACT', status: 'ACCEPTED', rank: 'SPECIES', canonicalName: 'Othonna cakilifolia', scientificName: `Othonna cakilifolia ${author}`, authorship: author, usageKey: 1 });
+    expect(slipStanding('Othonna cakilifolia', { scientific: 'Othonna cakilefolia', authorship: 'DC.', key: 2 }, [], gbif('DC.')).own).toBe(true);
+    expect(slipStanding('Othonna cakilifolia', { scientific: 'Othonna cakilefolia', authorship: 'DC.', key: 2 }, [], gbif('Harv.')).own).toBe(false);
+    expect(slipStanding('Othonna cakilifolia', { scientific: 'Othonna cakilefolia', authorship: 'DC.', key: 2 }, [], null).own).toBe(true); // neither holds it
   });
   it('an older name below species counts only whole', () => {
     const whole = claim(b, /\("(Babiana stricta var\. purpurea)" is Babiana purpurea's/);
@@ -147,10 +160,19 @@ describe('the Commons file rules (/about/how)', () => {
     expect(shown(whole, 'Babiana purpurea', 2, ['Babiana stricta var. purpurea (Jacq.) Ker Gawl.']), b.where).toBe(true);
     expect(shown(cut, 'Babiana purpurea', 2, ['Babiana stricta var. purpurea (Jacq.) Ker Gawl.'])).toBe(false);
   });
-  it('a year from 1500 to 1899 in the name marks a printed work; a hybrid by the word', () => {
+  // Round seventy-one (C's S-C8): a year marks a printed work only with other print evidence, and a citation's year is no year.
+  it('a year from 1500 to 1899 in the name marks a printed work with other print evidence; a citation\'s year is no year; a hybrid by the word', () => {
     const [from, to] = [Number(claim(y, /a year from (\d{4}) to \d{4}/)), Number(claim(y, /a year from \d{4} to (\d{4})/))];
-    expect(shown(`Dasylirion graminifolium Zuccarini ${from + 343}`, 'Dasylirion graminifolium', 9)).toBe(false);
-    expect(shown(`Dasylirion graminifolium ${to + 101}`, 'Dasylirion graminifolium', 9)).toBe(true);
+    const year = from + 343;
+    expect(y.text, y.where).toMatch(/with other print evidence \(a plate's or a book's words in the name, a category of scans, a licence for old works\)/);
+    expect(shown(`Dasylirion graminifolium Zuccarini ${year}`, 'Dasylirion graminifolium', 9)).toBe(true); // a year alone
+    // A book's word in the name ("vol"), with the year and without it, and the citation's year with it.
+    expect(shown(`Dasylirion graminifolium Zuccarini ${year} vol 2`, 'Dasylirion graminifolium', 9)).toBe(false);
+    expect(shown(`Dasylirion graminifolium Zuccarini ${to + 101} vol 2`, 'Dasylirion graminifolium', 9)).toBe(true);
+    const cited = claim(y, /a year cited after a page \("([^"]+)"\) is no year/);
+    expect(shown(`Dasylirion graminifolium Ecklon${cited} vol 2`, 'Dasylirion graminifolium', 9)).toBe(true);
+    // A licence for old works is evidence too.
+    expect(commonsKind(`File:Dasylirion graminifolium Zuccarini ${year}.jpg`, { scientific: 'Dasylirion graminifolium', key: 9, held: HELD }, { credit: 'Zuccarini, PD-old, via Wikimedia Commons' })).not.toBeNull();
     expect(shown('Mammillaria matudae hybrid', 'Mammillaria matudae', 7284127)).toBe(false);
   });
 });
@@ -222,22 +244,28 @@ describe('every copy the Worker keeps is under a key naming the build (/about/ho
 
 /* ---- The hour of uploads (W6; R47-13) ---- */
 describe('the hour of uploads (/about/formats)', () => {
-  const s = said('formats', 'A vault may take 3,600 log batches and 3,600 photographs in an hour');
+  const s = said('formats', 'A vault may take 3,600 log batches and 3,600 photographs in any sixty minutes');
   it('each kind is counted apart, when the upload is taken, an upload that then fails included', async () => {
-    const [batches, photos] = [Number(claim(s, /take ([\d,]+) log batches/).replace(/,/g, '')), Number(claim(s, /and ([\d,]+) photographs in an hour/).replace(/,/g, ''))];
+    const [batches, photos] = [Number(claim(s, /take ([\d,]+) log batches/).replace(/,/g, '')), Number(claim(s, /and ([\d,]+) photographs in any sixty minutes/).replace(/,/g, ''))];
     expect(VAULT_WRITES_PER_HOUR, s.where).toBe(batches);
     expect(VAULT_WRITES_PER_HOUR).toBe(photos);
-    expect(s.text).toMatch(/each counted apart in its counter object as the upload is taken \(an upload that then fails still counts\)/);
+    expect(s.text).toMatch(/each counted apart in its counter object by the minute the upload is taken \(an upload that then fails still counts\)/); // round seventy-one (E's need 3)
     const store = pagedStorage();
     const c = new Counters({ storage: store } as never, {} as never);
     const now = Date.UTC(2026, 9, 13, 12, 10);
     const hour = Math.floor(now / 3_600_000);
     const t = await c.take('vault', 10, 1_000_000, '2026-10-13', 0, now, null, VAULT_WRITES_PER_HOUR, 'photo');
     expect(t).toMatchObject({ ok: true });
-    expect(store.m.get('wp')).toEqual({ h: hour, n: 1 }); // counted at the take, before any lease is settled
+    // Round seventy-one (merge, E's need 1; S-E3): counted by the minute the upload is taken, over any sixty minutes.
+    expect(store.m.get('wp')).toEqual({ m: [[Math.floor(now / 60_000), 1]] }); // counted at the take, before any lease is settled
     expect(store.m.get('w')).toBeUndefined(); // and apart from the log batches
     store.m.set('wp', { h: hour, n: photos });
-    expect(await c.take('vault', 10, 1_000_000, '2026-10-13', 10, now, null, VAULT_WRITES_PER_HOUR, 'photo')).toMatchObject({ spent: true });
+    const spent = await c.take('vault', 10, 1_000_000, '2026-10-13', 10, now, null, VAULT_WRITES_PER_HOUR, 'photo');
+    expect(spent).toMatchObject({ spent: true });
+    // "Retry-After to when enough of the oldest have left the count, 61 minutes at most" (round seventy-one, E's need 3).
+    const most = Number(claim(said('formats', 'Past either, the next upload of that kind is answered 503'), /(\d+) minutes at most/));
+    expect('retryAfter' in spent && spent.retryAfter).toBeGreaterThan(0);
+    expect('retryAfter' in spent && spent.retryAfter).toBeLessThanOrEqual(most * 60);
     expect(await c.take('vault', 10, 1_000_000, '2026-10-13', 10, now, null, VAULT_WRITES_PER_HOUR, 'log')).toMatchObject({ ok: true });
   });
 });

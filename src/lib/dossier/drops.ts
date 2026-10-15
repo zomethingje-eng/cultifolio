@@ -28,7 +28,7 @@ const IDS = ['wikidata', 'powo', 'ipni', 'wfo', 'inat', 'wikipedia'] as const;
 /** The sources whose "ok" turning to nothing is flagged: each carries what the page links or quotes. */
 const SETTLED = ['wikidata', 'wikipedia', 'inat.taxon', 'wcvp.distribution'] as const;
 /** A Wikidata row that kept the previous build's identifiers, in round sixty-eight's words or sixty-nine's. */
-export const keptIds = (u: Row) => !!u && u.status !== 'ok' && /identifiers of the build of .* are kept|previous build's identifiers are kept/.test(u.detail ?? '');
+export const keptIds = (u: Row) => !!u && u.status !== 'ok' && /identifiers of the build of .* are kept|identifiers of an earlier build, of a day not known, are kept|previous build's identifiers are kept/.test(u.detail ?? '');
 
 function photoDrops(had: number, has: number): string[] {
   if (had > 0 && has === 0) return [`photographs dropped to none (${had} before)`];

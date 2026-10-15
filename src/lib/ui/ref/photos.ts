@@ -29,7 +29,10 @@ type Up = Record<string, { status: string; detail?: string } | undefined>;
  * said to have "did not answer", which is untrue of a source that was never asked (round sixty-two; outside review A35).
  */
 export function photoSourceGaps(upstream: Up, photos: number): { names: string[]; clause: string; allSkipped: boolean; allUncredited: boolean } | null {
-  const keys = PHOTO_SOURCES.filter((k) => { const st = upstream[k]?.status ?? ''; return st === 'refused' || st === 'error' || (st === 'skipped' && !photos); });
+  // iNaturalist's photograph rows answered (by a fill, or a build carried over) settle iNaturalist: a taxon row carried as
+  // "not asked" does not make the photographs "not asked" (round seventy-one; S-F5: 8 of 32 live pages sampled said so).
+  const inatAnswered = ['inat.photos.wild', 'inat.photos.cultivated'].some((k) => ['ok', 'none'].includes(upstream[k]?.status ?? ''));
+  const keys = PHOTO_SOURCES.filter((k) => { if (k === 'inat.taxon' && inatAnswered) return false; const st = upstream[k]?.status ?? ''; return st === 'refused' || st === 'error' || (st === 'skipped' && !photos); });
   if (!keys.length) return null;
   // One word per source name: iNaturalist has three keys, and the strongest of them is said (a refusal over a skip).
   const rank = { refused: 3, error: 2, skipped: 1 } as Record<string, number>;

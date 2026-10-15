@@ -71,6 +71,15 @@ const STAGING_PENDING = 'staging-pending';
  * (`arrivalsAfter`) still reads them: for it any order of a whole log is a right one.
  */
 const ORDER_FROM = 'orderFrom';
+/**
+ * The stamps of changes this device should send but whose shape this version cannot read (round seventy-one; the
+ * self-review's D3): a change a backup carried apart, appended by a Merge or a Replace, or one the log held when sync was
+ * set up. Pushed, such a change set aside the batch it rode in on every peer (round sixty-nine), so none goes in the
+ * outbox; and appended as from the server (round seventy), or left out of the first push, it was never sent, by this
+ * version or by a later one that reads it, and no other device ever had it. Each is put in the outbox at the first load
+ * that reads it (`queueReadable`).
+ */
+const UNSENT = 'unsentUnreadable';
 
 let dbp: Promise<IDBPDatabase<VaultDB>> | null = null;
 
@@ -540,7 +549,12 @@ async function storeIn(tx: Tx, changes: Change[], fromServer: boolean, extra: Pa
   }
   const order = tx.objectStore('order');
   const rows = arrived.map((c) => order.add({ t: c.t }));
-  const puts: Promise<unknown>[] = [...kept.map((c) => (strict ? ch.add(c) : ch.put(c))), ...(fromServer || NO_OUTBOX ? [] : kept.map((c) => ob.put({ t: c.t }))), ...rows];
+  // A change this version cannot read waits apart for a version that reads it, never in the outbox (`UNSENT`; round
+  // seventy-one, the self-review's D3).
+  const toSend = fromServer || NO_OUTBOX ? [] : kept.filter((c) => !changeError(c, true));
+  const unsent = fromServer || NO_OUTBOX ? [] : kept.filter((c) => !!changeError(c, true)).map((c) => c.t);
+  const puts: Promise<unknown>[] = [...kept.map((c) => (strict ? ch.add(c) : ch.put(c))), ...toSend.map((c) => ob.put({ t: c.t })), ...rows];
+  if (unsent.length) puts.push(noteUnsent(meta, unsent));
   // Contract C1 (round sixty-seven): the caller's meta records, and the arrival number of this write's last change, in
   // this same transaction, so the example's seed and its marks land together or not at all (triage-66 V5).
   for (const [k, v] of Object.entries(opts.meta ?? {})) puts.push(meta.put(v, k));
@@ -674,14 +688,57 @@ export async function outboxAck(ts: string[], key?: string): Promise<void> {
 export async function outboxFill(): Promise<number> {
   return writing(async () => {
     const db = await openVault();
-    const tx = db.transaction(['changes', 'outbox'], 'readwrite');
+    const tx = db.transaction(['changes', 'outbox', 'meta'], 'readwrite');
     // A change this build cannot fold (`changeError`'s shape: a newer build's kind, a reserved field, a broken stamp) stays
     // in the log and out of the outbox: pushed, it set aside the batch it rode in, with up to 2,000 good changes, on every
     // peer, for good (round sixty-nine; triage-68 R3, the self-review's D3, R46-18). A backup carries it (`unreadable.json`).
-    const ts = (await tx.objectStore('changes').getAll()).filter((c) => !changeError(c, true)).map((c) => c.t);
+    // It waits apart, and goes in the outbox once a version reads it (`UNSENT`; round seventy-one, the self-review's D3).
+    const all = await tx.objectStore('changes').getAll();
+    const ts = all.filter((c) => !changeError(c, true)).map((c) => c.t);
+    const later = all.filter((c) => !!changeError(c, true) && typeof c.t === 'string').map((c) => c.t);
     const ob = tx.objectStore('outbox');
-    await Promise.all([...ts.map((t) => ob.put({ t })), tx.done]);
+    await Promise.all([...ts.map((t) => ob.put({ t })), ...(later.length ? [noteUnsent(tx.objectStore('meta'), later)] : []), tx.done]);
     return ts.length;
+  });
+}
+/** Add stamps to the changes waiting apart for a version that reads them (`UNSENT`), inside the caller's transaction. */
+async function noteUnsent(meta: MetaStore, ts: string[]): Promise<void> {
+  const had = (await meta.get(UNSENT)) as unknown;
+  const set = new Set(Array.isArray(had) ? (had as unknown[]).filter((x): x is string => typeof x === 'string') : []);
+  const n = set.size;
+  for (const t of ts) set.add(t);
+  if (set.size !== n) await meta.put([...set], UNSENT);
+}
+/**
+ * The changes waiting apart (`UNSENT`) that this version reads, put in the outbox, and returned, so sync sends them
+ * (round seventy-one; the self-review's D3: a change restored from a backup made by a newer version reached no other
+ * device, even once this one was updated to read it). One no longer in the log is forgotten; one still unreadable waits.
+ * Nothing in the example, which sends nothing, nor while a replacement is being finished.
+ */
+export async function queueReadable(): Promise<Change[]> {
+  if (NO_OUTBOX) return [];
+  return writing(async () => {
+    const db = await openVault();
+    const tx = db.transaction(['changes', 'outbox', 'meta'], 'readwrite');
+    tx.done.catch(() => {});
+    const meta = tx.objectStore('meta');
+    const had = (await meta.get(UNSENT)) as unknown;
+    if (!Array.isArray(had) || !had.length || (await meta.get(STAGING_PENDING))) { await tx.done.catch(() => {}); return []; }
+    const ch = tx.objectStore('changes'), ob = tx.objectStore('outbox');
+    const queued: Change[] = [];
+    const wait: string[] = [];
+    for (const t of had) {
+      if (typeof t !== 'string') continue;
+      const c = (await ch.get(t)) as Change | undefined;
+      if (!c) continue;
+      if (changeError(c, true)) { wait.push(t); continue; }
+      queued.push(c);
+    }
+    if (queued.length || wait.length !== had.length) {
+      await Promise.all([...queued.map((c) => ob.put({ t: c.t })), wait.length ? meta.put(wait, UNSENT) : meta.delete(UNSENT)]);
+    }
+    await tx.done;
+    return queued;
   });
 }
 export async function outboxClear(): Promise<void> {

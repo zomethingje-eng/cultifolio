@@ -14,7 +14,7 @@ import { readFileSync } from 'node:fs';
 import { OccIndex, MediaIndex, bulkFetcher } from '$dossier/bulk';
 import type { JsonFetcher } from '$dossier/fetch';
 
-const MEDIA = (key: number) => `https://api.gbif.org/v1/occurrence/search?taxonKey=${key}&mediaType=StillImage&license=CC0_1_0&license=CC_BY_4_0&basisOfRecord=HUMAN_OBSERVATION&basisOfRecord=OBSERVATION&basisOfRecord=MACHINE_OBSERVATION&limit=100`;
+const MEDIA = (key: number) => `https://api.gbif.org/v1/occurrence/search?taxonKey=${key}&mediaType=StillImage&license=CC0_1_0&license=CC_BY_4_0&basisOfRecord=HUMAN_OBSERVATION&limit=100`; // r71: human observations only (C4)
 const api = (asked: string[]): JsonFetcher => (async (url: string) => {
   asked.push(url);
   return { status: 'ok', data: { results: [{ key: 1, basisOfRecord: 'HUMAN_OBSERVATION', media: [{ type: 'StillImage', identifier: 'https://example.org/1.jpg', license: 'http://creativecommons.org/licenses/by/4.0/' }] }], endOfRecords: true, count: 1 } };

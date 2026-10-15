@@ -402,12 +402,13 @@ export async function getGenus(platform: Platform, fetch: Fetch, slug: string, h
  * two species or more hold, with every species that holds it, under both keys too; `sharedName`, the name as an entry
  * writes it, under both (round sixty-nine; triage-68 N1; round seventy; triage-69 F1, N3).
  */
-type IndexMaps = { byKey: Map<number, IndexEntry>; byGenus: Map<string, IndexEntry[]>; bySynonym: Map<string, { entry: IndexEntry; matched: string }>; ambiguous: Map<string, IndexEntry[]>; sharedName: Map<string, string> };
+type IndexMaps = { byKey: Map<number, IndexEntry>; byName: Map<string, IndexEntry>; byGenus: Map<string, IndexEntry[]>; bySynonym: Map<string, { entry: IndexEntry; matched: string }>; ambiguous: Map<string, IndexEntry[]>; sharedName: Map<string, string> };
 const maps = new WeakMap<IndexEntry[], IndexMaps>();
 export function indexMaps(index: IndexEntry[]): IndexMaps {
   let m = maps.get(index);
   if (m) return m;
   const byKey = new Map<number, IndexEntry>();
+  const byName = new Map<string, IndexEntry>(); // each accepted name in lower case (round seventy-one; S-F3)
   const byGenus = new Map<string, IndexEntry[]>();
   // Each older name's holders, under its name in lower case and under its slug: "Arbutus uva-ursi" is
   // `arbutus-uva-ursi` at an address, which `nameFromSlug` reads as "Arbutus uva ursi", a name no species holds (round
@@ -421,6 +422,7 @@ export function indexMaps(index: IndexEntry[]): IndexMaps {
   };
   for (const e of index) {
     byKey.set(e.key, e);
+    byName.set(e.name.toLowerCase(), e);
     const g = genusOf(e.name);
     const xs = byGenus.get(g);
     if (xs) xs.push(e); else byGenus.set(g, [e]);
@@ -434,7 +436,7 @@ export function indexMaps(index: IndexEntry[]): IndexMaps {
   }
   const { bySynonym, ambiguous, sharedName } = synonymMaps(held);
   for (const xs of byGenus.values()) xs.sort((a, b) => a.name.localeCompare(b.name));
-  maps.set(index, (m = { byKey, byGenus, bySynonym, ambiguous, sharedName }));
+  maps.set(index, (m = { byKey, byName, byGenus, bySynonym, ambiguous, sharedName }));
   return m;
 }
 /**

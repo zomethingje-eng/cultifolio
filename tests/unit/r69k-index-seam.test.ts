@@ -20,6 +20,7 @@ describe('the corpus builder uses the photograph rules of the read', () => {
   it('the build asks GBIF before Commons, and passes Commons the species\' names', () => {
     const b = readFileSync('src/lib/dossier/build.ts', 'utf8');
     expect(b.indexOf('const m = await gbif.media(f, key);')).toBeLessThan(b.indexOf('await commons.commonsPhotos('));
-    expect(b).toContain("commons.commonsPhotos(f, cat, 12, { scientific, synonyms: syn.status === 'ok' ? syn.data : [], key, held: o.held })");
+    // Round seventy-one (merge, C's need): and the species' cited author, by which GBIF's same name spelt otherwise is its slip.
+    expect(b).toContain("commons.commonsPhotos(f, cat, 12, { scientific, synonyms: syn.status === 'ok' ? syn.data : [], key, held: o.held, authorship })");
   });
 });

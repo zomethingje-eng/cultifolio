@@ -57,7 +57,7 @@ describe('when Wikidata still does not answer, the identifiers stand', () => {
     if (!r.ok) throw new Error('no dossier');
     expect(r.dossier.ids).toMatchObject({ wikidata: 'Q5168360', ipni: '1', wfo: 'wfo-1' }); // m70b: all four dropped
     expect(r.dossier.links.wikidata).toBe('https://www.wikidata.org/wiki/Q5168360');
-    expect(r.dossier.upstream.wikidata.detail).toMatch(/the identifiers of an earlier build, of a day not known, are kept$/);
+    expect(r.dossier.upstream.wikidata.detail).toMatch(/the identifiers of an earlier build, of a day not known, are kept since 2026-10-14$/); // r71: the day first kept (S-B9)
   });
   it('Conophytum tomasii\'s case, a day known within the limit, is as before (guard)', async () => {
     mwWait.tries = 1;

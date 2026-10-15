@@ -1,6 +1,6 @@
 import { error, redirect } from '@sveltejs/kit';
 import { getDossier, resolveSlug, corpusNow, getGenus, indexMaps, searchAnswer, ambiguousSynonym, sharedOlderName } from '$lib/server/dossiers';
-import { synonymAsk, synonymInIndex, nameFromSlug, authorsOf, sharedNameMessage } from '$lib/server/synonyms';
+import { synonymAsk, synonymInIndex, nameFromSlug, authorsOf, sharedNameMessage, cachedMatch } from '$lib/server/synonyms';
 import generaList from '../../../../scripts/specialist-genera.txt?raw';
 /** The genera the species list takes whole (the file the derivation reads), for the 404 to say so. */
 const WHOLE_GENERA = new Set(generaList.split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#')));
@@ -157,8 +157,26 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
   // F1, S-F1): of a name other species of the reference hold too, GBIF accepts no one species as it, and the line names
   // the others instead. No redirect sends a shared name here; a link written by hand, or a redirect a browser kept from
   // before, can. The name itself is looked up: a variety GBIF places under this species is GBIF's answer for that variety.
-  const shownWas = was && /^[\p{L}\p{M} .'\-×]{3,80}$/u.test(was) && (ownNames.has(wasPlain) || asVariety || ofOlder) ? was : null;
-  const sharedWith = shownWas ? (ambiguousSynonym(index, shownWas) ?? []).filter((e) => e.key !== key).map((e) => ({ slug: e.slug, name: e.name })) : [];
+  const wellFormed = !!was && /^[\p{L}\p{M} .'\-×]{3,80}$/u.test(was);
+  // A name the record does not list, which the backbone files under a subspecies or variety of this species: the
+  // redirect put GBIF's answer in the Worker's cache, and only that answer, never the link, says so (round seventy-one;
+  // S-F8: `/species/echinopsis-pachanoi` landed on Trichocereus macrogonus with no word why).
+  const listedHere = ownNames.has(wasPlain) || asVariety || ofOlder;
+  const m = wellFormed && !listedHere ? await cachedMatch(platform, was!) : null;
+  const wasBelow = !!m && m.status === 'SYNONYM' && m.matchType === 'EXACT' && m.speciesKey === key && m.acceptedUsageKey !== key;
+  const shownWas = wellFormed && (listedHere || wasBelow) ? was : null;
+  // A name another species here is accepted under names no one species here, as a shared older name does (round
+  // seventy-one; S-F3: `?was=Annona%20muricata` on Annona montana, which holds Vellozo's homonym, said the backbone
+  // accepted this species as Annona muricata, the soursop's name).
+  const acceptedElsewhere = shownWas ? [indexMaps(index).byName.get(wasPlain)].filter((e): e is NonNullable<typeof e> => !!e && e.key !== key).map((e) => ({ slug: e.slug, name: e.name })) : [];
+  const sharedWith = shownWas ? (ambiguousSynonym(index, shownWas) ?? []).filter((e) => e.key !== key && !acceptedElsewhere.some((a) => a.slug === e.slug)).map((e) => ({ slug: e.slug, name: e.name })) : [];
+  // The record's older names that are another species' accepted name here: shown with the record's author, and said not
+  // to be that species (round seventy-one; S-F3: 169 pages, "Also known as … Annona muricata" on Annona montana).
+  const { byName } = indexMaps(index);
+  const namedElsewhere = [...new Set((d.name.synonyms ?? []).map((x) => canonicalSynonym(x)).filter((x): x is string => !!x && x !== d.name.scientific))].flatMap((n) => {
+    const e = byName.get(plain(n));
+    return e && e.key !== key ? [{ name: n, slug: e.slug, authors: authorsOf(n, d.name.synonyms ?? []) }] : [];
+  });
   return {
     /** English common names, the index's choice first (round sixty-one; decision 7). */
     commonNames: [names.common, ...(names.commons ?? [])].filter((x): x is string => !!x).slice(0, 4),
@@ -166,6 +184,12 @@ export const load: PageServerLoad = async ({ params, platform, fetch, setHeaders
     was: shownWas,
     /** The other species of the reference that hold the old name too: the line then says so, and never that GBIF accepts this species as it (round seventy; triage-69 F1). */
     wasShared: sharedWith,
+    /** Species of the reference accepted under the old name: the line names them, and never says the backbone accepts this species as it. */
+    wasAcceptedBy: acceptedElsewhere,
+    /** The old name is one the backbone files under a subspecies or variety of this species, by its cached answer. */
+    wasBelow,
+    /** The record's older names that are another species' accepted name here, with the record's authors. */
+    namedElsewhere,
     /** The old name is the binomial of a variety the backbone places under this species, not of the species itself. */
     wasVariety: asVariety,
     /** The old name is a variety of a binomial the record lists as an older name of this species. */

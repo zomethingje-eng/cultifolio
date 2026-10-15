@@ -71,7 +71,10 @@ function dateKey(cell: string, read: string | null, today: string): { key: strin
   // day-first 01/05/2024 is not taken for a plant of 2024-01-05. The "~" form, under which an unanswered run filed its
   // plant, is tried only for a plant whose date is that day or none (`either`, checked in `keyCellsOf`).
   const twoWays = asked.ambiguous || (asked.yearLast?.length ?? 0) > 1;
-  if (twoWays && read && /^\d{4}-\d{2}-\d{2}$/.test(read)) {
+  // A short date the sheet's choice read year first (round seventy-one; the self-review's D4) is keyed by that day too:
+  // keyed by its readings with the year last, a plant of 15 April 2010 would be found by a line of 10 April 2015.
+  const yearFirst = !!asked.yearLast && !!read && !asked.yearLast.includes(read);
+  if ((twoWays || yearFirst) && read && /^\d{4}-\d{2}-\d{2}$/.test(read)) {
     const [y, mo, da] = read.split('-');
     return { key: read, others: asked.yearLast ? [cell.trim()] : [], ambiguous: false, swaps: true, yearLast: !!asked.yearLast, either: sorted(y, mo, da) };
   }
@@ -144,7 +147,7 @@ const orNull = (s: string | undefined) => (s && s.trim() ? s.trim() : null);
 
 /** What the grower chose for the whole sheet before "Check names" (round sixty-one; the grower review, 3 and 4). */
 export interface SheetOpts {
-  /** Dates like 09/03/2024: day first, month first, or left as written (null, the default: asking, never guessing). */
+  /** Dates like 09/03/2024: day first, month first, or left as written (null, the default: asking, never guessing); or year first, for short dates like 10-04-15 (round seventy-one). */
   dateOrder?: DateOrder;
   /** Columns no field takes, added to each plant's notes as "Column: value": all of them unless the grower says otherwise (`unmappedColumns`; [] for none). */
   extra?: Array<{ i: number; name: string }>;

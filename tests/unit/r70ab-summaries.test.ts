@@ -31,12 +31,12 @@ describe('A2 narrowed: a binomial is refused only when GBIF holds it as another 
     if (r.status === 'ok' && r.detail) expect(r.detail).toBe("Wikipedia's article Erythrina afra, the English article of this species' Wikidata item (Q1955238)");
   });
   it('Drosera montana still does not take "Drosera tomentosa", which GBIF holds under a variety of it (guard)', async () => {
-    const w: World = { items: { Q5308558: { sitelink: 'Drosera tomentosa', P171: ['Q266'], P105: [SPECIES], P225: ['Drosera montana'] } }, gbif: { 'Drosera tomentosa': { species: 'Drosera montana', status: 'SYNONYM', below: 'Drosera montana tomentosa' } }, wiki: { 'Drosera tomentosa': { title: 'Drosera tomentosa' } } };
+    const w: World = { items: { Q5308558: { sitelink: 'Drosera tomentosa', P171: ['Q266'], P105: [SPECIES], P225: ['Drosera montana'] } }, gbif: { 'Drosera tomentosa': { species: 'Drosera montana', status: 'SYNONYM', below: 'Drosera montana tomentosa' } }, kew: { 'Drosera tomentosa': [{ authorship: 'A.St.-Hil.', taxonomicStatus: 'ACCEPTED' }] }, wiki: { 'Drosera tomentosa': { title: 'Drosera tomentosa' } } };
     expect((await summary(world(w).f, 'Drosera tomentosa', ['Drosera tomentosa'], who('Drosera montana', 'Q5308558'))).status).toBe('none');
   });
   it('a binomial GBIF holds as another species is refused, though it is the item\'s sitelink (guard)', async () => {
     // A made item: Acer saccharinum's, sitelinked to "Acer saccharum", which GBIF holds as an accepted species of its own.
-    const w: World = { items: { Q900020: { sitelink: 'Acer saccharum', P171: ['Q42292'], P105: [SPECIES], P225: ['Acer saccharinum'] } }, gbif: { 'Acer saccharum': { species: 'Acer saccharum', status: 'ACCEPTED' } }, wiki: { 'Acer saccharum': { title: 'Acer saccharum' } } };
+    const w: World = { items: { Q900020: { sitelink: 'Acer saccharum', P171: ['Q42292'], P105: [SPECIES], P225: ['Acer saccharinum'] } }, gbif: { 'Acer saccharum': { species: 'Acer saccharum', status: 'ACCEPTED' } }, kew: { 'Acer saccharum': [{ authorship: 'Marshall', taxonomicStatus: 'ACCEPTED' }] }, wiki: { 'Acer saccharum': { title: 'Acer saccharum' } } };
     expect(await summary(world(w).f, 'Acer saccharum', ['Acer saccharum'], who('Acer saccharinum', 'Q900020'))).toEqual({ status: 'none', detail: "Wikipedia's article Acer saccharum is under a name that is neither this species' nor one of its older names" });
   });
   it('Rhododendron kanehirae keeps "Rhododendron kanehirai", its genitive spelt the other way (passes once C\'s spelling need is applied)', async () => {

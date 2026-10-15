@@ -148,7 +148,7 @@ describe('dates a spreadsheet writes on its own are said for what they are (tria
 describe('what the sheet\'s other dates show of its order (triage-self N10)', () => {
   const amb = (cells: string[]) => { const s = parseCsv(`species,acquired\n${cells.map((c) => `Aloe vera,${c}`).join('\n')}\n`); return ambiguousDates(s, guessMapping(s, true), true, TODAY); };
   it('a date over 12 first can only be day first', () => {
-    expect(amb(['09/03/2024', '17/11/2007', '22/10/2023'])).toEqual({ n: 1, first: '09/03/2024', dayFirst: { n: 2, first: '17/11/2007' }, monthFirst: { n: 0, first: null } }); // base: no evidence
+    expect(amb(['09/03/2024', '17/11/2007', '22/10/2023'])).toEqual({ n: 1, first: '09/03/2024', dayFirst: { n: 2, first: '17/11/2007' }, monthFirst: { n: 0, first: null }, yearFirst: { n: 0, first: null } }); // base: no evidence
   });
   it('a date over 12 second can only be month first; both can be in one sheet', () => {
     expect(amb(['09/03/2024', '11/17/2007'])).toMatchObject({ monthFirst: { n: 1, first: '11/17/2007' }, dayFirst: { n: 0 } });

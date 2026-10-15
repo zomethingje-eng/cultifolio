@@ -6,7 +6,7 @@
  */
 import type { JsonFetcher } from '$dossier/fetch';
 
-export type Item = { sitelink?: string; P171?: string[]; P566?: string[]; P1672?: string[]; P1582?: string[]; P225?: string[]; P105?: string[] };
+export type Item = { sitelink?: string; P171?: string[]; P566?: string[]; P1672?: string[]; P1582?: string[]; P225?: string[]; P105?: string[]; P961?: string[] };
 export type World = {
   /** Wikipedia's REST summary: the title asked → the title it lands on, and the lead. */
   wiki?: Record<string, { title: string; extract?: string }>;
@@ -19,6 +19,8 @@ export type World = {
   kew?: Record<string, Array<{ authorship: string; taxonomicStatus: string; accepted?: string }>>;
   /** A URL matching this is refused, as a 429 is after the fetch layer's retries. */
   refuse?: RegExp;
+  /** IPNI's own records (`www.ipni.org/api/1/n/<id>`), round seventy-one. */
+  ipni?: Record<string, { name: string; authors: string }>;
 };
 
 const claim = (v: unknown) => ({ mainsnak: { datavalue: { value: v } } });
@@ -26,6 +28,7 @@ function entity(id: string, it: Item) {
   const claims: Record<string, unknown[]> = {};
   for (const p of ['P171', 'P566', 'P1672', 'P1582', 'P105'] as const) if (it[p]?.length) claims[p] = it[p]!.map((q) => claim({ 'entity-type': 'item', id: q }));
   if (it.P225?.length) claims.P225 = it.P225.map((n) => claim(n));
+  if (it.P961?.length) claims.P961 = it.P961.map((n) => claim(n));
   return { type: 'item', id, claims, sitelinks: it.sitelink ? { enwiki: { site: 'enwiki', title: it.sitelink } } : {} };
 }
 
@@ -37,6 +40,8 @@ export function world(w: World): { f: JsonFetcher; asked: string[] } {
   const f = (async (url: string) => {
     asked.push(url);
     if (w.refuse?.test(url)) return { status: 'refused', detail: 'HTTP 429' };
+    const ip = /www\.ipni\.org\/api\/1\/n\/(.+)$/.exec(url);
+    if (ip) { const r = w.ipni?.[decodeURIComponent(ip[1])]; return r ? { status: 'ok', data: r } : { status: 'none' }; }
     if (url.includes('/page/summary/')) {
       const t = decodeURIComponent(url.split('/page/summary/')[1] ?? '').replace(/_/g, ' ');
       const a = w.wiki?.[t];

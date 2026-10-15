@@ -91,10 +91,15 @@ describe('/about/how says where the alerts are read (H229)', () => {
     const named = /in the US and its territories \(([^)]*)\)/.exec(s.text);
     expect(named, s.where).not.toBeNull();
     const AT: Record<string, [number, number]> = { 'Puerto Rico': [18.47, -66.11], 'the US Virgin Islands': [18.34, -64.93], Guam: [13.47, 144.75], 'the Northern Mariana Islands': [15.18, 145.75], 'American Samoa': [-14.28, -170.7] };
-    const places = named![1].replace(/, the Aleutians included$/, '').split(/, | and /);
+    // Round seventy-one (E's S-E1): "and all of Alaska, the Aleutians, St Lawrence Island and the Pribilofs included".
+    const ALASKA: Record<string, [number, number]> = { Alaska: [61.22, -149.9], 'the Aleutians': [52.9, 173.2], 'St Lawrence Island': [63.78, -171.74], 'the Pribilofs': [57.13, -170.28] };
+    const [territories, north] = named![1].split(/, and all of /);
+    const places = territories.split(/, | and /);
     expect(places.sort()).toEqual(Object.keys(AT).sort());
     for (const p of places) expect(isUS(...AT[p]), p).toBe(true);
-    expect(named![1]).toMatch(/the Aleutians included/);
+    const far = north.replace(/ included$/, '').split(/, | and /);
+    expect(far.sort(), s.where).toEqual(Object.keys(ALASKA).sort());
+    for (const p of far) expect(isUS(...ALASKA[p]), p).toBe(true);
     expect(isUS(52.9, 173.2)).toBe(true);
     expect(s.text).toMatch(/a place it does not cover says its forecast is clear, never "All clear\."/);
   });

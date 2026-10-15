@@ -25,23 +25,35 @@ type Prev = Pick<Dossier, 'ids' | 'upstream' | 'built'>;
 
 /**
  * The day of the build that read a dossier's identifiers from Wikidata: the build that asked it, read from its Wikidata
- * row ("carried from build of …" when a re-derivation carried it), or, when that build kept older identifiers, the day it
- * names. Undefined when no day can be read (round sixty-eight's "the previous build's identifiers are kept" named none),
- * and then nothing is carried (round sixty-nine; triage-68 M5, M8).
+ * row, or, when that build kept older identifiers, the day it names. Undefined when no day can be read (round
+ * sixty-eight's "the previous build's identifiers are kept" named none), and then nothing is carried (round sixty-nine;
+ * triage-68 M5, M8).
+ *   - A row carried by a re-derivation says "carried from build of D", where D was the carrying build's day, one to three
+ *     days after the read (round seventy-one; self-review 70 S-B10: 214 of 214 sampled rows): the earlier of D and the
+ *     row's own time is the read.
+ *   - Identifiers kept "of a day not known" (round seventy-c) are kept since the day that build first kept them, which
+ *     `idsDayUnknown` says, so the limit runs from there (S-B9).
  */
 export function idsReadOn(prev: Prev): string | undefined {
   const u = prev.upstream?.wikidata;
   if (!u) return undefined;
   const day = (re: RegExp) => re.exec(u.detail ?? '')?.[1];
-  if (u.status === 'error' || u.status === 'refused') return day(/identifiers of the build of (\d{4}-\d{2}-\d{2}) are kept/);
+  if (u.status === 'error' || u.status === 'refused') return day(/identifiers of the build of (\d{4}-\d{2}-\d{2}) are kept/) ?? day(/of a day not known, are kept since (\d{4}-\d{2}-\d{2})/) ?? (idsDayUnknown(prev) ? (u.at ?? prev.built)?.slice(0, 10) : undefined);
   if (u.status === 'skipped') return undefined;
-  return day(/carried from build of (\d{4}-\d{2}-\d{2})/) ?? u.at?.slice(0, 10) ?? prev.built?.slice(0, 10);
+  const days = [day(/carried from build of (\d{4}-\d{2}-\d{2})/), u.at?.slice(0, 10)].filter((x): x is string => !!x && /^\d{4}-\d{2}-\d{2}$/.test(x)).sort();
+  return days[0] ?? prev.built?.slice(0, 10);
+}
+
+/** Whether the identifiers a dossier holds were kept by a build that did not know the day they were read (S-B9). */
+export function idsDayUnknown(prev: Prev): boolean {
+  const u = prev.upstream?.wikidata;
+  return !!u && (u.status === 'error' || u.status === 'refused') && /identifiers of an earlier build, of a day not known, are kept/.test(u.detail ?? '');
 }
 
 /** What a species' build is given from the previous build of its key: its identifiers and the day they were read. */
-export function prevIdsFor(prev: Prev | null | undefined): Pick<BuildOptions, 'prevIds' | 'prevIdsOn'> {
+export function prevIdsFor(prev: Prev | null | undefined): Pick<BuildOptions, 'prevIds' | 'prevIdsOn' | 'prevIdsDayUnknown'> {
   if (!prev?.ids) return {};
-  return { prevIds: prev.ids, prevIdsOn: idsReadOn(prev) };
+  return { prevIds: prev.ids, prevIdsOn: idsReadOn(prev), ...(idsDayUnknown(prev) ? { prevIdsDayUnknown: true } : {}) };
 }
 
 /** Whether the index holds a name as another of its species than `key` (triage-68 M6): from the index's names and keys. */

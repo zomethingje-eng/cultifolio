@@ -158,7 +158,18 @@ export function keyLines(lines: Array<{ cells: string[]; qty: number }>, v = 'i'
 export function keySheet(lines: Array<{ cells: string[]; qty: number; alts: AltCells[]; bare?: string[] }>): Array<{ keys: string[]; alts: KeyAlt[]; bare?: string[] }> {
   const keys = keyLines(lines, 'j');
   // Each plant's key without the columns no field takes, numbered among the lines that share it as `keyLines` numbers.
-  const bareKeys = keyLines(lines.map((l) => ({ cells: l.bare ?? l.cells, qty: l.qty })), 'j');
+  // Numbered after the plants of the lines without such columns, whose own key is the same key: numbered among all the
+  // lines, a plain line's own key and another line's bare key were one string for two plants.
+  const plain = new Map<string, number>();
+  for (const l of lines) if (!l.bare) { const h = lineHash(l.cells, 'j'); plain.set(h, (plain.get(h) ?? 0) + l.qty); }
+  const counted = new Map<string, number>();
+  const bareKeys = lines.map((l) => {
+    if (!l.bare) return [];
+    const h = lineHash(l.bare, 'j');
+    const from = (plain.get(h) ?? 0) + (counted.get(h) ?? 0);
+    counted.set(h, (counted.get(h) ?? 0) + l.qty);
+    return Array.from({ length: l.qty }, (_, i) => `${h}#${from + i + 1}`);
+  });
   const own = lines.map((l) => lineHash(l.cells, 'j'));
   const hashed = lines.map((l) => l.alts.map((a) => ({ a, hash: lineHash(a.cells, a.v67 ? 'i' : 'j') })));
   // The lines (by their own key) that have each key, as their own or as another.
@@ -212,9 +223,25 @@ export function markImported(rows: ImportRow[], has: HasKey, isHere: (recordId: 
     }
     return ks;
   };
+  // The plants each shared key still has to give, and the plants the sheet's lines not found whole still need from it
+  // (round seventy-one; the self-review's D5): two plants filed from two like lines, and a column added that tells the
+  // lines apart, are two lines and two plants, each line taking one; one plant and two such lines are still neither's.
+  const need = new Map<string, number>();
+  const before = new Set(taken);
+  for (const r of rows) {
+    const missing = (r.importKeys ?? []).filter((k) => !taken.has(k)).length;
+    if (!missing) continue;
+    const hs = new Set<string>([r.importKeys![0].replace(/#\d+$/, ''), ...(r.keyAlts ?? []).filter((a) => a.others).map((a) => a.hash)]);
+    for (const h of hs) need.set(h, (need.get(h) ?? 0) + missing);
+  }
+  const free = new Map<string, number>();
+  const enough = (h: string): boolean => {
+    if (!free.has(h)) free.set(h, filedUnder(h).filter((k) => !before.has(k)).length);
+    return free.get(h)! >= (need.get(h) ?? 0);
+  };
   const other = (alts: KeyAlt[]): string | null => {
     for (const a of alts) {
-      if (a.others && !a.others.every((o) => whole.has(o))) continue;
+      if (a.others && !a.others.every((o) => whole.has(o)) && !enough(a.hash)) continue;
       for (const k of filedUnder(a.hash)) if (!taken.has(k) && fits(a, has(k))) { taken.add(k); return k; }
     }
     return null;
@@ -452,7 +479,10 @@ export function markSheet(rows: ImportRow[], here: { has: HasKey; isHere?: (reco
   // A plant is found by the key it was filed under without the columns no field takes too (`importKeyBare`): a run of the
   // sheet that has lost such a column keys its line so (round seventy; triage-69 R7, R47-16).
   const bare = new Map<string, (typeof here.plants)[number]>();
-  for (const a of here.plants) if (typeof a.importKeyBare === 'string') bare.set(a.importKeyBare, a);
+  // Not a plant this sheet still finds by its own key: its line, column and all, is here, and the bare key would give it
+  // to a second line too (a new plain line beside it).
+  const own = new Set(rows.flatMap((r) => r.importKeys ?? []));
+  for (const a of here.plants) if (typeof a.importKeyBare === 'string' && !(a.importKey && own.has(a.importKey))) bare.set(a.importKeyBare, a);
   const has: HasKey = bare.size ? (k) => here.has(k) || (bare.get(k) as ReturnType<HasKey>) : here.has;
   const imported = markDroppedBefore(markImported(rows, has, here.isHere), here.dropped);
   const sheetKeys = new Set([...rows.flatMap((r) => r.importKeys ?? []), ...imported.flatMap((r) => r.matchedKeys ?? [])]);

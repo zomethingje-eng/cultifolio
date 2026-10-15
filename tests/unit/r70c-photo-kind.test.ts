@@ -44,8 +44,8 @@ const INDEX = [
 const HELD = heldNamesOf(INDEX);
 const KEY = new Map(INDEX.map((e) => [e.name, e.key]));
 
-type Stored = { title: string; categories?: string[]; struck?: boolean; width?: number; attribution?: string; licence?: string };
-const photo = (x: Stored) => ({ src: 'commons', id: x.title, url: `https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/x.jpg/960px-${encodeURIComponent(x.title)}`, thumb: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/x.jpg/500px-x.jpg', width: x.width ?? 3000, height: 2000, licence: x.licence ?? 'by-sa', attribution: x.attribution ?? 'A. Grower, CC BY-SA 4.0, via Wikimedia Commons', ...(x.categories ? { categories: x.categories } : {}), ...(x.struck ? { struck: true } : {}) });
+type Stored = { title: string; categories?: string[]; struck?: boolean; width?: number; attribution?: string; licence?: string; slips?: string[] };
+const photo = (x: Stored) => ({ src: 'commons', id: x.title, url: `https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/x.jpg/960px-${encodeURIComponent(x.title)}`, thumb: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/x.jpg/500px-x.jpg', width: x.width ?? 3000, height: 2000, licence: x.licence ?? 'by-sa', attribution: x.attribution ?? 'A. Grower, CC BY-SA 4.0, via Wikimedia Commons', ...(x.categories ? { categories: x.categories } : {}), ...(x.struck ? { struck: true } : {}), ...(x.slips ? { slips: x.slips } : {}) });
 /** A dossier as stored, read as the Worker reads it, with the reference's names (`held`) or without. */
 const read = (scientific: string, files: Array<string | Stored>, synonyms: string[] = [], held: HeldNames | null = HELD) =>
   safeUrls({ key: KEY.get(scientific) ?? 1, name: { scientific, synonyms, vernacular: [], status: 'accepted' }, climate: { status: 'none' }, literature: [], links: {}, upstream: {}, photos: files.map((f) => photo(typeof f === 'string' ? { title: f } : f)) } as never, held).photos.map((p) => p.id);
@@ -87,11 +87,13 @@ describe('C1, names as pairs: every binomial of a title, of any genus the refere
 });
 
 describe('C1, misspellings: a slip is the species\' only where the reference holds no such name (S-C5, S-C11, IND-4)', () => {
-  it('shows the uploaders\' slips the reference holds no name for', () => {
-    expect(shows('Mammillaria matudae', 'File:Mammillaria mabudae, ve zkumavce (001).jpg')).toBe(true);
-    expect(shows('Mammillaria matudae', 'File:Mammillaria matuadae, ve zkumavce (002).jpg')).toBe(true);
-    expect(shows('Aeonium dodrantale', 'File:Aeonium dodantrale (Sukkulentensammlung).jpg', ['Sempervivum dodrantale Willd.'])).toBe(true);
-    expect(shows('Cyphostemma juttae', 'File:Cyphostemma jutae fruit.jpg', ['Cissus juttae Dinter & Gilg'])).toBe(true);
+  it('shows the uploaders\' slips the reference holds no name for, once Kew and GBIF were asked (round 71: S-C9)', () => {
+    expect(shows('Mammillaria matudae', { title: 'File:Mammillaria mabudae, ve zkumavce (001).jpg', slips: ['mammillaria mabudae'] })).toBe(true);
+    expect(shows('Mammillaria matudae', { title: 'File:Mammillaria matuadae, ve zkumavce (002).jpg', slips: ['mammillaria matuadae'] })).toBe(true);
+    expect(shows('Aeonium dodrantale', { title: 'File:Aeonium dodantrale (Sukkulentensammlung).jpg', slips: ['aeonium dodantrale'] }, ['Sempervivum dodrantale Willd.'])).toBe(true);
+    expect(shows('Cyphostemma juttae', { title: 'File:Cyphostemma jutae fruit.jpg', slips: ['cyphostemma jutae'] }, ['Cissus juttae Dinter & Gilg'])).toBe(true);
+    // Not asked yet: the read cannot ask Kew or GBIF, so it waits for the fill (round 71).
+    expect(shows('Mammillaria matudae', 'File:Mammillaria mabudae, ve zkumavce (001).jpg')).toBe(false);
   });
   it('another species the reference holds one letter away is another species', () => {
     expect(shows('Echinocereus scheeri', 'File:Echinocereus schereri.jpg')).toBe(false);
@@ -106,7 +108,7 @@ describe('C1, misspellings: a slip is the species\' only where the reference hol
   it('another spelling of the species\' own name needs no reference: gender, "ii", "oe", hyphens (S-C13: hyphens read)', () => {
     expect(shows('Lachenalia purpureocaerulea', 'File:Lachenalia purpureo-coerulea 3.jpg', [], null)).toBe(true);
     expect(shows('Titanopsis hugo-schlechteri', 'File:Titanopsis hugo schlechterii 6.jpg', [], null)).toBe(true);
-    expect(shows('Lachenalia purpureocaerulea', 'File:Lachenalia purpureo-caeruela.jpg')).toBe(true); // a hyphen and a slip
+    expect(shows('Lachenalia purpureocaerulea', { title: 'File:Lachenalia purpureo-caeruela.jpg', slips: ['lachenalia purpureo-caeruela'] })).toBe(true); // a hyphen and a slip, asked
   });
   it('the floor is five letters, and two letters apart is another name (S-C13: the floor, the gap, a shared start)', () => {
     expect(slip('jutae', 'juttae')).toBe(true);
@@ -183,7 +185,7 @@ describe('C1, group and non-plant files', () => {
     const syn = ['Centaurea nuttallii Spreng.'];
     expect(await takes('Plectocephalus americanus', 'File:Centaurea nutallii.jpg', '', '<i>Centaurea</i> sp. <s><i>C. nuttallii</i></s>', syn)).toBe(false);
     expect(shows('Plectocephalus americanus', { title: 'File:Centaurea nutallii.jpg', struck: true }, syn)).toBe(false);
-    expect(shows('Plectocephalus americanus', 'File:Centaurea nutallii.jpg', syn)).toBe(true); // guard: a slip of an older name, the reference holding no such name
+    expect(shows('Plectocephalus americanus', { title: 'File:Centaurea nutallii.jpg', slips: ['centaurea nutallii'] }, syn)).toBe(true); // guard: a slip of an older name, the reference holding no such name, asked
   });
 });
 

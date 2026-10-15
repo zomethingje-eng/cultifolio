@@ -688,5 +688,12 @@ function collect<T>(prepared: Prepared<T>[], qs: string[], match: (q: string, w:
     const g = group(p, qs, r, match);
     hits.push({ p, g, d: near ? farness(p, qs) : 0, o: g === Group.Older ? olderOrder(p, qs, match) : 0, c: closeness(p, qs, g), t: g === Group.Common ? commonTie(p, qs, typed) : [0, 0, 0] });
   }
+  // An older name typed whole, held exactly, comes before a name reached only by its genus's start (round seventy-one;
+  // S-F12: "Tecoma speciosa", Campsis radicans' older name, answered Tecomanthe speciosa first, "tecoma" being the start of
+  // "tecomanthe"). A genus typed whole keeps its place: "Nepenthes mira" is Nepenthes mirabilis, a name still being typed;
+  // and so do words typed in another order ("Stramonium datura" is Datura stramonium, round seventy's decision).
+  if (!near && qs.length > 1 && hits.some((h) => h.g === Group.Older && h.o < 4)) {
+    for (const h of hits) if (h.g === Group.Name && h.p.nameWords[0] !== qs[0] && h.p.nameWords[0].startsWith(qs[0])) h.g = Group.Older + 0.5;
+  }
   return hits.sort((a, b) => a.g - b.g || a.d - b.d || a.o - b.o || a.c - b.c || a.t[0] - b.t[0] || a.t[1] - b.t[1] || a.t[2] - b.t[2] || (a.p.sortKey < b.p.sortKey ? -1 : a.p.sortKey > b.p.sortKey ? 1 : 0));
 }

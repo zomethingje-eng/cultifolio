@@ -16,7 +16,7 @@
  */
 import type { JsonFetcher, FetchResult, FetchOptions } from './fetch';
 import { licenceTag, isOpen } from '$core/licence';
-import type { GbifDistribution, GbifOccurrence, OccPage, GbifSpecies, KewDescription } from './sources/gbif';
+import type { GbifDistribution, GbifOccurrence, OccPage, GbifSpecies, KewDescription, SynonymOf } from './sources/gbif';
 import { synonyms as readSynonyms, isWcvpRow } from './sources/gbif';
 import { authorKey, authorsAgree, ownByAuthor, inFamily } from './authors';
 import { spellingKey } from './epithet';
@@ -79,7 +79,8 @@ export const wcvpKey = (name: string) => name.toLowerCase().replace(/×\s*/g, ''
 export { authorsAgree, sameNameAuthor } from './authors';
 
 /** Kew's range for one accepted entry: rows in the shape gbif.distributions() reads (none when Kew states none), its descriptions, and the entry. */
-export type WcvpRange = { rows: GbifDistribution[]; kew: KewDescription; entry: WcvpName };
+export type WcvpRange = { rows: GbifDistribution[]; kew: KewDescription; entry: WcvpName; synonymOf?: SynonymOf };
+
 /** An entry's name as the record cites it, with its authors: "Erythrina afra Thunb.". */
 export const entryLabel = (n: WcvpName) => `${n.name}${n.authors ? ` ${n.authors}` : ''}`;
 
@@ -183,7 +184,7 @@ export class WcvpIndex {
     const accepted = usable(exact).filter((r) => r.status === 'Accepted');
     const own = byAuthor(exact);
     const found = own.length ? own : (() => { const v = byAuthor(this.otherSpellings(name)); return v.length ? v : accepted.length === 1 ? accepted : []; })();
-    const rows = inFamily(found, usable(exact), family);
+    const rows = inFamily(found, usable(exact), family, (r) => (r.status === 'Accepted' ? r : (this.byId.get(r.acceptedId) ?? r)).family);
     return { rows, others: exact.filter((r) => !rows.includes(r)) };
   }
   /** Whether Kew holds the species' own name (`ownRows`): only when it does not are the older names looked up. */
@@ -214,7 +215,15 @@ export class WcvpIndex {
         const acc = rows.filter((r) => r.status === 'Accepted');
         return acc.length === 1 ? acc[0] : 'ambiguous';
       }
-      return ends.size ? [...ends.values()][0] : undefined;
+      const e = ends.size ? [...ends.values()][0] : undefined;
+      // An own row filed under an infraspecific entry of these very words (Kew holds Fragaria virginiana Duchesne under F.
+      // virginiana subsp. virginiana): the species is the one entry Kew accepts by the words at species rank, so the page
+      // shows the species' range, not one subspecies' (self-review 70).
+      if (e && !/^species$/i.test(e.rank) && wcvpKey(e.name).split(' ').slice(0, 2).join(' ') === wcvpKey(name)) {
+        const sp = (this.acceptedNames().get(wcvpKey(name)) ?? []).filter((r) => /^species$/i.test(r.rank) && (!family || r.family === family));
+        if (sp.length === 1) return sp[0];
+      }
+      return e;
     }
     const rows = this.rowsOf(name);
     if (!rows?.length) return undefined;
@@ -268,7 +277,11 @@ export class WcvpIndex {
     const a = this.accepted(name, authorship, family);
     if (!a) return null;
     if (a === 'ambiguous') return 'ambiguous';
-    return this.rangeOf(a);
+    const range = this.rangeOf(a);
+    if (!range || !authorKey(authorship) || wcvpKey(a.name) === wcvpKey(name)) return range;
+    // The own row the entry was reached by, when it is another name's entry: said (S-B4).
+    const own = this.ownRows(name, authorship, family).rows.find((r) => r.status !== 'Accepted' && r.acceptedId === a.id);
+    return own ? { ...range, synonymOf: { row: entryLabel(own), status: own.status, entry: entryLabel(a), entryName: a.name } } : range;
   }
   /**
    * When Kew holds no row at all under the backbone's name, its range under one of the species' older names (round
@@ -623,8 +636,9 @@ export function bulkFetcher(base: JsonFetcher, src: BulkSources, stats = { wcvp:
       if (got) {
         stats.wcvp++;
         // Kew holds the name and states no range for it: that is the answer, never a reason to look under older names (round sixty-nine; triage-68 M2).
-        if (!got.rows.length) return { status: 'ok', data: { results: [], held: entryLabel(got.entry), kew: got.kew } as unknown as T };
-        return { status: 'ok', data: { results: got.rows, kew: got.kew } as unknown as T };
+        const syn = got.synonymOf ? { synonymOf: got.synonymOf } : {};
+        if (!got.rows.length) return { status: 'ok', data: { results: [], held: entryLabel(got.entry), kew: got.kew, ...syn } as unknown as T };
+        return { status: 'ok', data: { results: got.rows, kew: got.kew, ...syn } as unknown as T };
       }
       // No row of the species' own name (`ownRows`: none under its words by its author, or under another spelling): one of
       // its older names may be Kew's (round sixty-eight), read from the builder's own paged list; a list refused, failed or

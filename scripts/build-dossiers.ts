@@ -60,6 +60,11 @@
  *                                                                # item refused by the label rule, proved again (IPNI first; GBIF for the rest): an item that stands
  *                                                                # says how; one refused, replaced or newly found is left as it is and listed in rebuild-wd.txt for --keys
  *   npx tsx scripts/build-dossiers.ts --fill summaries          # every stored summary under another title proved again, or dropped; those set aside asked again
+ *                                                                # (a record that names its proof, or a title set aside, is settled and not asked: add --again after a rule changes)
+ *   npx tsx scripts/build-dossiers.ts --fill gbif-basis         # every stored GBIF photograph not on iNaturalist's hosts read again from its record; one not from a
+ *                                                                # human observation (a herbarium scan, a drawing, a micrograph) is dropped; resumable; then the index
+ *   npx tsx scripts/build-dossiers.ts --fill range-source --bulk bulk # a range Kew gives through a synonym row says whose entry it is; offline; then the index
+ *   npx tsx scripts/build-dossiers.ts --fill kew-links          # every stored IPNI and POWO link set to Kew's number for the name and author; resumable; then the index
  *   npx tsx scripts/build-dossiers.ts --fill commons-kind       # Commons' categories for every stored Commons photograph, fifty files a request, kept with it; then the index
  *   npx tsx scripts/build-dossiers.ts --list-rebuild            # rebuild-keys.txt: the species to rebuild with --keys (ranges under an older name; 50 synonyms stored)
  *   npx tsx scripts/build-dossiers.ts --list-rebuild --bulk bulk # and, from Kew's files, the species whose Kew entry was another author's name or is held under
@@ -111,9 +116,10 @@ import { tileCreditOf } from '../src/lib/ui/ref/head';
 import { dropsBetween } from '../src/lib/dossier/drops';
 import { referenceOf } from '../src/lib/dossier/reference';
 import { ownNames } from '../src/lib/dossier/own-names';
-import { offlineFetcher, carryRederivedRows } from '../src/lib/dossier/rederive';
+import { offlineFetcher, carryRederivedRows, carriedOrigin } from '../src/lib/dossier/rederive';
 import { startCorpusRun, prevIdsFor, heldElsewhereIn, fillOpenGbifAll, fillCommonsAll, type DossierStore } from '../src/lib/dossier/corpus-run';
-import { fillGbifLicenceAll, fillInatIds, fillWikidata, inatTaxonRow, checkSummaries, rebuildList, kewRebuildList, keysMissing } from '../src/lib/dossier/corpus-fills';
+import { fillGbifLicenceAll, fillGbifBasisAll, fillRangeSource, fillKewLinks, fillInatIds, fillWikidata, inatTaxonRow, checkSummaries, recordedProof, rebuildList, kewRebuildList, keysMissing } from '../src/lib/dossier/corpus-fills';
+import { proofByName } from '../src/lib/dossier/summary-proof';
 // The corpus script waits out Wikidata's maxlag, as MediaWiki asks of a batch client (round sixty-eight), and after a lag
 // spell stops waiting until Wikidata answers again (round sixty-nine; triage-68 M10): `lag.after` is told each species' row.
 const lag = startCorpusRun();
@@ -609,6 +615,8 @@ function indexHeld(): HeldNames | null {
 async function fillCommonsKindStep(): Promise<void> {
   const c = await fillCommonsKindAll(diskStore(), makeFetcher(), indexHeld(), (n) => process.stdout.write(`\r  ${n.requests} requests, ${n.read} files read…   `));
   console.log(`\r  ${c.files} Commons photographs: ${c.before} had their categories; ${c.asked} asked in ${c.requests} requests, ${c.read} answered${c.missing ? ` (${c.missing} no longer on Commons)` : ''}; ${c.dossiers} dossiers written; ${c.hidden} photographs now left out${c.lines.length ? `:\n${c.lines.map((l) => `    ${l}`).join('\n')}` : '.'}`);
+  // Round seventy-one (C's need): the slips asked of Kew and GBIF, the Commons copies of iNaturalist photographs, the credits read again.
+  console.log(`  ${c.slipsAsked} slips asked of Kew and GBIF, ${c.slipsOwn} the species'${c.slipsUnchecked ? `, ${c.slipsUnchecked} not answered (run again)` : ''}; ${c.copies} Commons copies of iNaturalist photographs found by their source; ${c.credits} credits read again; ${c.shownAgain} photographs shown again.`);
   if (c.unchecked) console.log(`  ${c.unchecked} not checked${c.refused ? ` (Commons refused: ${c.refused})` : ''}; run --fill commons-kind again: it picks up where it stopped.`);
   writeIndexFromDisk();
 }
@@ -634,6 +642,50 @@ async function fillGbifLicencePhotos(): Promise<void> {
   const c = await fillGbifLicenceAll(diskStore(), makeFetcher(), (n) => { if (n.dossiers % 50 === 0) process.stdout.write(`\r  ${n.dossiers} dossiers read, ${n.dropped} photographs dropped…   `); });
   console.log(`\r  ${c.dossiers} dossiers read: ${c.kept} photographs carry an open licence of their own, ${c.dropped} did not and were dropped${c.emptied ? ` (${c.emptied} dossiers left with none: run --fill gbif-open)` : ''}${c.before ? `; ${c.before} read by an earlier run, passed by` : ''}.`);
   if (c.failed) console.log(`  GBIF did not answer (${c.failed}); run --fill gbif-licence again: it picks up where it stopped.`);
+  writeIndexFromDisk();
+}
+
+/**
+ * `--fill gbif-basis` (round seventy-one; self-review 70 C4): each stored GBIF photograph not on iNaturalist's hosts read
+ * again from its occurrence record, and dropped unless the record is a human observation, as builds now ask. Resumable;
+ * then the index.
+ */
+async function fillGbifBasisStep(): Promise<void> {
+  console.log('Reading each stored GBIF photograph\'s record for its basis…');
+  const c = await fillGbifBasisAll(diskStore(), makeFetcher(), undefined, (n) => { if (n.dossiers % 50 === 0) process.stdout.write(`\r  ${n.dossiers} dossiers read, ${n.dropped} photographs dropped…   `); });
+  console.log(`\r  ${c.dossiers} dossiers read: ${c.kept} photographs from human observations kept, ${c.dropped} from other records dropped${c.emptied ? ` (${c.emptied} dossiers left with none: run --fill gbif-open, then --fill commons)` : ''}${c.before ? `; ${c.before} read by an earlier run, passed by` : ''}${c.lines.length ? `:\n${c.lines.map((l) => `    ${l}`).join('\n')}` : '.'}`);
+  if (c.failed) console.log(`  GBIF did not answer (${c.failed}); run --fill gbif-basis again: it picks up where it stopped.`);
+  writeIndexFromDisk();
+}
+
+/**
+ * `--fill range-source --bulk <dir>` (round seventy-one; self-review 70 S-B4): a range Kew gives through the species'
+ * own row filed under another name's entry says so, where the stored range is Kew's; one that is not is listed to rebuild.
+ * Offline. Then the index.
+ */
+async function fillRangeSourceStep(): Promise<void> {
+  if (!bulkDir) { console.error('--fill range-source needs --bulk <dir> with wcvp_names.csv and wcvp_distribution.csv'); process.exit(2); }
+  const store = diskStore();
+  const names = store.files().flatMap((file) => { try { const d = store.read<Dossier>(file); return [d.name.scientific, ...(d.name.synonyms ?? []).map((x) => x.split(' ').slice(0, 2).join(' '))]; } catch { return []; } });
+  const wcvp = await loadWcvp(bulkDir, names);
+  if (!wcvp) { console.error(`  no WCVP files in ${bulkDir}: nothing done`); process.exit(2); }
+  const c = fillRangeSource(store, wcvp);
+  console.log(`  ${c.said} ranges now say whose entry they are (Kew holds the name as a synonym of another)${c.before ? `; ${c.before} said so already` : ''}${c.differs.length ? `; ${c.differs.length} whose stored range is not Kew's now, left for a rebuild (--list-rebuild --bulk lists them):\n${c.differs.map((l) => `    ${l}`).join('\n')}` : '.'}`);
+  writeIndexFromDisk();
+}
+
+/**
+ * `--fill kew-links` (round seventy-one; self-review 70 S-B5): every stored IPNI and POWO link read against Kew's number
+ * for the name and author (one GBIF request a dossier); each change printed. Resumable; then the index.
+ */
+async function fillKewLinksStep(): Promise<void> {
+  console.log('Reading every stored IPNI and POWO link against Kew\'s number for the name and author…');
+  const PROGRESS = 'fill-kew-links-progress.json';
+  let read: string[] = [];
+  try { if (existsSync(PROGRESS)) read = JSON.parse(readFileSync(PROGRESS, 'utf8')); } catch { read = []; }
+  const c = await fillKewLinks(diskStore(), makeFetcher(), undefined, { read, save: (r) => writeFileSync(PROGRESS, JSON.stringify(r)), clear: () => { if (existsSync(PROGRESS)) unlinkSync(PROGRESS); } });
+  console.log(`  ${c.read} dossiers read: ${c.changed} linked by Kew's number${c.before ? `; ${c.before} read by an earlier run, passed by` : ''}${c.lines.length ? `:\n${c.lines.map((l) => `    ${l}`).join('\n')}` : '.'}`);
+  if (c.failed) console.log(`  GBIF did not answer (${c.failed}); run --fill kew-links again: it picks up where it stopped.`);
   writeIndexFromDisk();
 }
 
@@ -682,11 +734,16 @@ async function fillWikidataStep(): Promise<void> {
 
 /** `--fill summaries` (round sixty-nine; triage-68 M3, R46-12; round seventy, triage-69 A1): every stored summary under another title proved again by `summary-proof.ts`, or dropped; those set aside asked again; then the index. */
 async function fillSummaries(): Promise<void> {
-  const c = await checkSummaries(diskStore(), args.includes('--offline') ? null : makeFetcher());
+  // `--again` asks every summary under another title and every title set aside, as a change of the rule needs (round seventy-one, A4).
+  const c = await checkSummaries(diskStore(), args.includes('--offline') ? null : makeFetcher(), undefined, { again: args.includes('--again') });
+  if (c.settled) console.log(`  ${c.settled} settled, not asked again${args.includes('--again') ? '' : ' (--again asks them)'}`);
   console.log(`  ${c.kept + c.confirmed} summaries are this species' article (${c.kept} by name, with no redirect; ${c.confirmed} proved under another title: ${Object.entries(c.proofs).map(([k, n]) => `${n} ${k}`).join(', ') || 'none'}); ${c.dropped} dropped${c.unchecked ? `; ${c.unchecked} not checked, Wikipedia, Wikidata or GBIF not answering (run again)` : ''}${c.lines.length ? `:\n${c.lines.map((l) => `    ${l}`).join('\n')}` : '.'}`);
   // Round seventy (A1): the lead proves nothing; each record names its proof, and each record changed is listed.
   if (c.changed) console.log(`  ${c.changed} records now name another proof:\n${c.changedLines.map((l) => `    ${l}`).join('\n')}`);
   if (c.restored) console.log(`  ${c.restored} set aside earlier taken back on a proof:\n${c.restoredLines.map((l) => `    ${l}`).join('\n')}`);
+  // Round seventy-one (A4, A5): each species left not checked, with the source that did not answer, and the summaries taken off until read.
+  if (c.uncheckedLines.length) console.log(`  not checked (run again):\n${c.uncheckedLines.map((l) => `    ${l}`).join('\n')}`);
+  if (c.withdrawn) console.log(`  ${c.withdrawn} taken off until read`);
   writeIndexFromDisk();
 }
 
@@ -903,7 +960,10 @@ async function main() {
   if (fill === 'summaries') return fillSummaries();
   if (fill === 'commons-kind') return fillCommonsKindStep();
   if (fill === 'genus') return fillGenera();
-  if (fill) throw new Error(`--fill ${fill}: openalex, inat, inat-ids, wikidata, gbif, gbif-open, gbif-licence, commons, commons-kind, summaries or genus`);
+  if (fill === 'gbif-basis') return fillGbifBasisStep();
+  if (fill === 'range-source') return fillRangeSourceStep();
+  if (fill === 'kew-links') return fillKewLinksStep();
+  if (fill) throw new Error(`--fill ${fill}: openalex, inat, inat-ids, wikidata, gbif, gbif-open, gbif-licence, gbif-basis, commons, commons-kind, summaries, range-source, kew-links or genus`);
   if (args.includes('--list-rebuild')) return listRebuild();
   if (args.includes('--names')) return fillNames();
   let climate: ClimateProvider | undefined;
@@ -1045,7 +1105,7 @@ async function main() {
         climate,
         skip,
         mediaFirst: mediaFromFiles,
-        taxon: prevTaxon ? { key: prevTaxon.key, name: prevTaxon.name, accepted: prevTaxon.upstream?.['gbif.accepted'], builtOn: prevTaxon.built } : undefined,
+        taxon: prevTaxon ? { key: prevTaxon.key, name: prevTaxon.name, accepted: prevTaxon.upstream?.['gbif.accepted'], species: prevTaxon.upstream?.['gbif.species'], builtOn: prevTaxon.built } : undefined,
         // Kept when Wikidata does not answer, with the day they were read (round sixty-eight; round sixty-nine, triage-68 M5).
         ...prevIdsFor(prevOf(j.key)),
         heldElsewhere: heldElsewhereIn(existing, j.key ?? existing.get(j.name.toLowerCase())),
@@ -1089,12 +1149,20 @@ async function main() {
         // Skipped this build (a --skip source) counts the same as refused: what the last build had is kept.
         if ((now === 'refused' || now === 'error' || now === 'skipped') && (before === 'ok' || before === 'none') && copy()) {
           // A row already carried keeps the build that asked (round thirty-five, R1-10).
-          const origin = prev.upstream[src].detail?.startsWith('carried from build of') ? unchain(prev.upstream[src].detail)!.replace(/;.*$/, '') : `carried from build of ${prev.built?.slice(0, 10) ?? '?'}`;
+          const origin = prev.upstream[src].detail?.startsWith('carried from build of') ? unchain(prev.upstream[src].detail)!.replace(/;.*$/, '') : carriedOrigin(prev.upstream[src], prev.built);
           d.upstream[src] = { ...prev.upstream[src], detail: `${origin}; this build: ${d.upstream[src].detail ?? now}` };
         }
       };
       carry('openalex', () => ((d.literature = prev.literature), true));
-      carry('wikipedia', () => ((d.summary = prev.summary), true));
+      // A carried summary under a title other than the name or an older name is carried only when its record names the
+      // proof read for it; one whose proof was not read is not checked, and is not carried (round seventy-one, A5;
+      // REVIEW-TRIAGE-70: "the carried one goes with it"). This build's own record of the refusal stands.
+      carry('wikipedia', () => {
+        const t = prev.summary?.title;
+        if (t && !proofByName(t, { name: prev.name.scientific, synonyms: prev.name.synonyms ?? [] }) && !recordedProof(prev.upstream?.wikipedia)) return false;
+        d.summary = prev.summary;
+        return true;
+      });
       // Photographs are carried per source: a refused iNat does not discard this build's Commons photographs, nor the reverse.
       const photoSrc: Record<string, (p: { src: string; captive?: boolean }) => boolean> = {
         'inat.photos.wild': (p) => p.src === 'inat' && !p.captive,
@@ -1136,12 +1204,12 @@ async function main() {
 
       // A re-derivation asked no network extra at all: every one of those sections is the previous build's, and says so.
       if (rederive) {
-        const from = `carried from build of ${prev.built?.slice(0, 10) ?? '?'} (rederive)`;
+        const from = (u: { at?: string }) => carriedOrigin(u, prev.built, ' (rederive)');
         // A carried refusal keeps its reason: "carried from build of …; that build: <why it refused>", not a bare "carried".
         // A row carried through several rederives names the build that asked, not the chain of builds that carried it:
         // "carried from build of 2026-09-29 (rederive); that build: carried from build of …" nested nine deep (round thirty-five, R1-10).
         // A chain already in the file is cut to the build that asked and its reason (round thirty-seven, R1-6).
-        const carried = (u: { detail?: string }) => (u.detail?.startsWith('carried from build of') ? unchain(u.detail) : u.detail ? `${from}; that build: ${u.detail}` : from);
+        const carried = (u: { detail?: string; at?: string }) => (u.detail?.startsWith('carried from build of') ? unchain(u.detail) : u.detail ? `${from(u)}; that build: ${u.detail}` : from(u));
         // Photographs carry over; a GBIF set read from the download this build replaces the previous GBIF set, and a
         // download that covers the species and has no observation photographs for it replaces the set with nothing
         // (an older build's herbarium sheets would otherwise stay for good: round thirty-two, 3).

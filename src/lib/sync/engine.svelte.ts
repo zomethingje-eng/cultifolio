@@ -114,7 +114,7 @@ async function syncFetch(url: string, init: RequestInit = {}, ms = 30_000): Prom
     headers.set(SYNC_HEADER, '1');
     return await fetch(url, { ...init, headers, signal: AbortSignal.timeout(ms) });
   } catch (e) {
-    if (e instanceof DOMException && (e.name === 'TimeoutError' || e.name === 'AbortError')) throw new TypeError(`the server did not answer within ${Math.round(ms / 1000)} seconds`);
+    if (e instanceof DOMException && (e.name === 'TimeoutError' || e.name === 'AbortError')) throw Object.assign(new TypeError(`the server did not answer within ${Math.round(ms / 1000)} seconds`), { timedOut: true });
     throw e;
   }
 }
@@ -126,6 +126,8 @@ const REFUSAL_MS = 3600_000;
 const REFUSAL_DAY_MS = 86_400_000;
 /** When a run that did not reach the server is tried again: the minute the sync page's card names (round seventy; triage-69 W6, R47-11). */
 const NOT_REACHED_MS = 60_000;
+/** Whether this page is in view (always, outside a browser). */
+const pageVisible = () => typeof document === 'undefined' || document.visibilityState !== 'hidden';
 /**
  * The server's reason for a 429, as it words it ("too many requests from this address", "the upload allowance for this
  * address is used up for today"), without its "wait and try again", which the page says in its own words; empty when it
@@ -207,6 +209,10 @@ class Sync {
   offline = $state(false);
   /** With `offline`: the browser says it has no network ('offline'), or it has one and the server did not answer at all ('server'); the page words them apart (round twenty-five, 15). */
   unreached = $state<'offline' | 'server' | null>(null);
+  /** When a run that did not reach the server is tried again (ms), while one is scheduled for it; the sync page's card says it (round seventy-one; E8). */
+  retryAt = $state<number | null>(null);
+  /** Photographs in a row that did not finish within `PHOTO_MS`: each doubles the wait before the next try, to sixteen minutes (round seventy-one; E8). */
+  private photoTimeouts = 0;
   /** The vault this device was in before it stopped syncing, if any, with when it stopped. */
   wasIn = $state<{ vaultId: string; at: string; why: 'stopped' | 'replaced' } | null>(null);
   /** Runs that finished on this page, well or badly: the sync page shows it, so a test (or a person) can tell a new "Synced" from the one that was already there (round thirteen, B2). */
@@ -660,6 +666,7 @@ class Sync {
       this.warnClock(collection.ownLatest()); // judged again after what the run folded
       this.offline = false;
       this.unreached = null;
+      this.retryAt = null;
       await this.save(m); // refuses, and throws, if this run is stale: the sync time below is then never shown for a vault this device has left (round twenty-one, 4)
       this.lastSync = m.lastSync;
       // Said only when something did arrive (round sixteen, design note).
@@ -676,7 +683,17 @@ class Sync {
         // The server not reached: the card says "it will check again in a minute", and now it does (round seventy;
         // triage-69 W6, R47-11: nothing was scheduled, and nothing was asked for 90 s and more). Offline, the browser's
         // `online` event asks instead.
-        else if (this.unreached === 'server') this.schedule(NOT_REACHED_MS);
+        // Only while the page is in view, as the five-minute tick (round seventy-one; self-review E8): a hidden tab asked
+        // every minute for as long as the server was away, and coming back into view asks at once. And a photograph that
+        // did not finish within its three minutes is not sent again a minute on, every minute: the wait doubles with each
+        // such photograph, to sixteen minutes, and the card says when (on a slow link a 12 MB photograph was otherwise
+        // about 180 MB an hour of mobile data).
+        else if (this.unreached === 'server') {
+          if ((e as { photoTimedOut?: boolean })?.photoTimedOut) this.photoTimeouts++;
+          const ms = NOT_REACHED_MS * 2 ** Math.min(this.photoTimeouts, 4);
+          if (pageVisible()) { this.retryAt = Date.now() + ms; this.schedule(ms); }
+          else this.retryAt = null;
+        }
       }
       throw e;
     } finally {
@@ -701,7 +718,7 @@ class Sync {
     // A wait of a minute or more is the vault refused for a while: kept in the sync record, so a reload or another tab
     // asks no sooner (round sixty-one; decision 6: it lived in one tab's memory). A shorter one (a photograph held by
     // another device a moment, a recount that crossed a landing) is no refusal: the run is simply tried again then.
-    if (secs >= 60) {
+    if (secs >= 60 && !this.dayStands(m, secs)) {
       // The vault's hour of photographs spent holds photographs alone; its records still go (round seventy; triage-69 W6, R47-18).
       this.refusal = { text: text || 'The sync server is not taking uploads from this vault just now.', until: Date.now() + secs * 1000, ...(photos ? { photos: true as const } : {}) };
       if (this.meta === m) { m.refusal = { ...this.refusal }; await this.save(m).catch(() => {}); }
@@ -727,8 +744,10 @@ class Sync {
     const secs = Math.max(5, Math.min((day ? REFUSAL_DAY_MS : REFUSAL_MS) / 1000, Number(r.headers.get('retry-after')) || 60));
     if (secs < 60) return this.limited(r, why);
     const text = `The server refused uploads from this device for now${why ? `: ${why}` : ''}.`;
-    this.refusal = { text, until: Date.now() + secs * 1000, ...(day ? { day: true as const } : {}) };
-    if (this.meta === m) { m.refusal = { ...this.refusal }; await this.save(m).catch(() => {}); }
+    if (day || !this.dayStands(m, secs)) {
+      this.refusal = { text, until: Date.now() + secs * 1000, ...(day ? { day: true as const } : {}) };
+      if (this.meta === m) { m.refusal = { ...this.refusal }; await this.save(m).catch(() => {}); }
+    }
     const e = new Error(text);
     (e as Error & { retryAfterMs?: number }).retryAfterMs = secs * 1000;
     throw e;
@@ -746,6 +765,16 @@ class Sync {
       // again and uploads waited a day and an hour (round sixty-two; the server review's 5).
       if (r.until > this.refusal.until) r.until = this.refusal.until;
     } else { this.refusal = null; if (r) delete m.refusal; }
+  }
+  /**
+   * Whether the day's upload allowance is refused for longer than a shorter refusal now met (`secs`): then it is kept
+   * (round seventy-one; self-review E7). A small batch, which still goes under the day's refusal, answered 503 or a
+   * request window's 429 replaced it with an hour's refusal at most, and once that lapsed a whole photograph was sent to
+   * be refused for the day again: one an hour, all day. The shorter wait still stops this run.
+   */
+  private dayStands(m: SyncMeta, secs: number): boolean {
+    const r = m.refusal ?? this.refusal;
+    return !!r?.day && r.until > Date.now() + secs * 1000;
   }
   /** The refusal is over: an upload was taken. */
   private clearRefusal(m: SyncMeta): void {
@@ -865,7 +894,9 @@ class Sync {
       }
       const packed = packPhoto(new Uint8Array(await b.blob.arrayBuffer()), new Uint8Array(await b.thumb.arrayBuffer()));
       // The upload leaves the proof its removal must repeat: a token-holder without the key can add, never destroy (round fifty-one, 2).
-      const r = await syncFetch(`${this.base}/api/sync/photo/${id}?vault=${this.k(m).id}`, { method: 'PUT', headers: { ...this.h(m), [PHOTO_DROP_HEADER]: await dropProof(this.k(m), id) }, body: (await seal(this.k(m), 'photo', packed, id)) as BodyInit }, PHOTO_MS);
+      const r = await syncFetch(`${this.base}/api/sync/photo/${id}?vault=${this.k(m).id}`, { method: 'PUT', headers: { ...this.h(m), [PHOTO_DROP_HEADER]: await dropProof(this.k(m), id) }, body: (await seal(this.k(m), 'photo', packed, id)) as BodyInit }, PHOTO_MS)
+        .catch((e: unknown) => { if (e instanceof TypeError && (e as { timedOut?: boolean }).timedOut) (e as { photoTimedOut?: boolean }).photoTimedOut = true; throw e; });
+      this.photoTimeouts = 0; // answered, whatever the answer: the link carries a photograph
       const full = await this.fullFrom(r);
       if (full) {
         this.setFull(m, full);

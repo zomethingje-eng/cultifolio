@@ -40,3 +40,25 @@ export function syncWords(raw: string | null | undefined): SyncWords | null {
   if (/^[A-Z]/.test(s) && /[.!?]$/.test(s)) return { text: s, detail: null };
   return { text: `Sync stopped on something it could not finish. Your changes are kept here and ${NEXT}.`, detail: s };
 }
+
+/**
+ * What the sync page says is kept on this device while the server's refusal stands (round seventy-one; self-review E6).
+ * It said "Your changes are kept here meanwhile" of every refusal, after the server's own sentence for the vault's hour
+ * of photographs ("…changes to your records still go"): under that refusal, and under the day's upload allowance, a
+ * record's changes still go (the day's, those in sync bundles of 16 KB or less).
+ */
+export function refusalKept(r: { day?: boolean; photos?: boolean }): string {
+  if (r.photos) return 'Photographs are kept here meanwhile; changes to your records still go, and changes from your other devices still come in.';
+  if (r.day) return 'Photographs, and sync bundles of changes over 16 KB, are kept here meanwhile; smaller bundles of changes still go, and changes from your other devices still come in.';
+  return 'Your changes are kept here meanwhile, and changes from your other devices still come in.';
+}
+
+/**
+ * When a device that did not reach the server checks again, as the status card says it: a minute on, or longer after a
+ * photograph that did not finish (round seventy-one; self-review E8: the engine's wait doubles with each, and the card
+ * said "in a minute" whatever it was).
+ */
+export function checkAgainWords(retryAt: number | null | undefined, now = Date.now()): string {
+  const mins = retryAt == null ? 1 : Math.max(1, Math.round((retryAt - now) / 60_000));
+  return mins <= 1 ? 'again in a minute' : `again in about ${mins} minutes`;
+}

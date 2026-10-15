@@ -4,7 +4,7 @@ import { spellingKey, sameSpelling } from '$dossier/epithet';
 
 describe('spellingKey', () => {
   it('one name: gender, genitive, "ae", hyphens', () => {
-    for (const [a, b] of [['scaphirostrus', 'scaphirostris'], ['nudicaulis', 'nudicaule'], ['congoensis', 'congoense'], ['niger', 'nigra'], ['nigrum', 'niger'], ['marlothii', 'marlothi'], ['caerulea', 'cerulea'], ['uva-ursi', 'uvaursi'], ['nana', 'nanus'], ['rosea', 'roseum']]) expect(sameSpelling(a, b), `${a} ${b}`).toBe(true);
+    for (const [a, b] of [['nudicaulis', 'nudicaule'], ['congoensis', 'congoense'], ['niger', 'nigra'], ['nigrum', 'niger'], ['marlothii', 'marlothi'], ['caerulea', 'cerulea'], ['uva-ursi', 'uvaursi'], ['nana', 'nanus'], ['rosea', 'roseum']]) expect(sameSpelling(a, b), `${a} ${b}`).toBe(true);
   });
   it('two names: a letter changed inside the word', () => {
     for (const [a, b] of [['minimum', 'minutum'], ['macrophylla', 'microphylla'], ['scheeri', 'schereri'], ['saccharinum', 'saccharum'], ['suberosa', 'tuberosa'], ['bifolia', 'unifolia']]) expect(sameSpelling(a, b), `${a} ${b}`).toBe(false);

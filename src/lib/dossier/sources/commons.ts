@@ -5,7 +5,7 @@
 import type { JsonFetcher, FetchResult } from '../fetch';
 import type { Photo } from '../schema';
 import { mendCommonsThumb } from '../md5';
-import { commonsKind, commonsFirstByEpithet, type KindNames } from '../photo-kind';
+import { commonsKind, commonsFirstByEpithet, slipsToAsk, askSlip, sourceKind, type KindNames } from '../photo-kind';
 import { commonsLicence, commonsAuthor, commonsCredit } from '../photo-credit';
 import { mwGet, mwError } from './wikimedia';
 
@@ -53,7 +53,7 @@ export const COMMONS_READ = 50;
 export async function commonsPhotos(f: JsonFetcher, category: string, max = 12, names?: KindNames): Promise<FetchResult<Photo[]>> {
   const r = await mwGet<{ query?: { pages?: Record<string, { title: string; imageinfo?: ImageInfo[] }> } }>(f, 
     `https://commons.wikimedia.org/w/api.php?action=query&format=json&generator=categorymembers&gcmtitle=${encodeURIComponent('Category:' + category)}&gcmtype=file&gcmlimit=${COMMONS_READ}` +
-      `&prop=imageinfo&iiprop=url|size|extmetadata&iiurlwidth=${COMMONS_SHOWN}&iiextmetadatafilter=LicenseShortName|Artist|LicenseUrl|Categories|ImageDescription&maxlag=5`
+      `&prop=imageinfo&iiprop=url|size|extmetadata&iiurlwidth=${COMMONS_SHOWN}&iiextmetadatafilter=LicenseShortName|Artist|LicenseUrl|Categories|ImageDescription|Credit&maxlag=5`
   );
   if (r.status !== 'ok') return r;
   const err = mwError(r.data);
@@ -61,8 +61,21 @@ export async function commonsPhotos(f: JsonFetcher, category: string, max = 12, 
   const who = names ?? { scientific: category };
   const pages = Object.values(r.data.query?.pages ?? {});
   const out: Photo[] = [];
+  const asked = new Map<string, boolean>();
   for (const p of pages) {
-    const photo = commonsPhoto(p.title, p.imageinfo?.[0], who);
+    // A title that is the species' only as an uploader's slip is asked of Kew and GBIF (self-review 70, S-C9), each
+    // name once a build; one they accept as a species, or a source that does not answer, leaves the file out.
+    const slips: string[] = [];
+    if (who.held && p.imageinfo?.[0]) {
+      for (const name of slipsToAsk(p.title, who)) {
+        if (!asked.has(name)) {
+          const a = await askSlip(f, name, { scientific: who.scientific, authorship: who.authorship, key: who.key, synonyms: who.synonyms });
+          asked.set(name, a.status === 'ok' && a.data.own);
+        }
+        if (asked.get(name)) slips.push(name);
+      }
+    }
+    const photo = commonsPhoto(p.title, p.imageinfo?.[0], who, slips);
     if (photo) out.push(photo);
   }
   const ordered = commonsFirstByEpithet(out, who).slice(0, max);
@@ -70,14 +83,14 @@ export async function commonsPhotos(f: JsonFetcher, category: string, max = 12, 
 }
 
 /** One file of Commons' answer as a dossier photograph, or null when the rules above leave it out. */
-function commonsPhoto(title: string, ii: ImageInfo | undefined, names: KindNames): Photo | null {
+function commonsPhoto(title: string, ii: ImageInfo | undefined, names: KindNames, slips: string[] = []): Photo | null {
   if (!ii) return null;
   const original = commonsUrl(ii.url);
   if (!/\.(jpe?g|webp)$/i.test(new URL(original).pathname)) return null;
   const meta = ii.extmetadata ?? {};
   const categories = commonsCategories(meta.Categories?.value);
-  if (commonsKind(title, names, { categories, struck: strikesOut(meta.ImageDescription?.value), credit: meta.Artist?.value })) return null;
   const lic = (meta.LicenseShortName?.value ?? '').trim();
+  if (commonsKind(title, names, { categories, struck: strikesOut(meta.ImageDescription?.value), credit: meta.Artist?.value, licence: lic, slips, kind: sourceKind(meta.Credit?.value, meta.ImageDescription?.value) })) return null;
   const tag = commonsLicence(lic);
   if (!tag) return null;
   const artist = commonsAuthor(meta.Artist?.value);
@@ -88,7 +101,8 @@ function commonsPhoto(title: string, ii: ImageInfo | undefined, names: KindNames
   const isThumb = /\/thumb\/.+\/\d+px-[^/]+$/.test(new URL(shown).pathname);
   const tile = isThumb && (ii.width ?? 0) > COMMONS_TILE ? shown.replace(/\/\d+px-([^/]+)$/, `/${COMMONS_TILE}px-$1`) : mendCommonsThumb(shown, ii.width);
   // The categories are kept with the photograph, so a rule read later applies to it as to a new answer (round seventy; REVIEW-TRIAGE-69 C2).
-  return { src: 'commons', id: title, url: shown, thumb: tile, width: ii.width ?? undefined, height: ii.height ?? undefined, licence: tag, attribution: commonsCredit(artist, lic), page: ii.descriptionurl ?? undefined, categories };
+  const inat = inatSource(meta.Credit?.value, meta.ImageDescription?.value);
+  return { src: 'commons', id: title, url: shown, thumb: tile, width: ii.width ?? undefined, height: ii.height ?? undefined, licence: tag, attribution: commonsCredit(artist, lic), page: ii.descriptionurl ?? undefined, categories, ...(slips.length ? { slips } : {}), ...(inat ? { inat } : {}), sourceRead: true };
 }
 
 /** Commons' `Categories` (extmetadata), "A|B|C", as a list. */
@@ -96,3 +110,14 @@ export const commonsCategories = (value: string | null | undefined): string[] =>
 
 /** Whether a Commons description strikes out a name: `<s>`, `<del>`, `<strike>` or a line-through ("Centaurea sp. ~~C. nuttallii~~"; S-C3). */
 export const strikesOut = (html: string | null | undefined): boolean => /<(?:s|del|strike)\b|line-through/i.test(html ?? '');
+
+/**
+ * The iNaturalist photograph a Commons file is a copy of, from its source (`Credit`) or description: an address of the
+ * photograph on iNaturalist or its image host (self-review 70, S-C5: "Echinocereus adustus schwarzii 1.jpg" is iNaturalist's
+ * 34674713, and its name carries no number). Null when the source names none, or names more than one.
+ */
+export function inatSource(...fields: Array<string | null | undefined>): string | null {
+  const ids = new Set<string>();
+  for (const f of fields) for (const m of (f ?? '').matchAll(/(?:inaturalist\.org\/photos\/|(?:inaturalist-open-data\.s3\.amazonaws\.com|static\.inaturalist\.org)\/photos\/)(\d+)/gi)) ids.add(m[1]);
+  return ids.size === 1 ? [...ids][0] : null;
+}

@@ -190,6 +190,15 @@ export interface KewDescription {
 export const CULTIVATED_RE = /introduced|naturali[sz]ed|cultivated|invasive|managed/i;
 
 /** What the distribution step read: the rows, whether they are Kew's, and what the record says of how Kew's entry was found. */
+/**
+ * The species' own row Kew files under an entry of another name, whose range the page shows (round seventy-one;
+ * self-review 70 S-B4): "Kew holds Ceropegia mixta (Masson) Bruyns as a synonym of Orbea variegata (L.) Haw.". About 480
+ * pages showed such a range with no word of it, five of them another reference species' (Ceropegia melanops, C. nigra's).
+ */
+export type SynonymOf = { row: string; status: string; entry: string; entryName: string };
+/** The words a page's range source says for a `SynonymOf`: "Kew holds X as a synonym of Y; the range is Y's". */
+export const synonymOfWords = (s: SynonymOf) => `Kew holds ${s.row} ${/^synonym$/i.test(s.status) ? 'as a synonym of' : `(${s.status.toLowerCase()}) under`} ${s.entry}; the range is ${s.entryName}'s`;
+
 export interface DistributionAnswer {
   rows: GbifDistribution[];
   wcvp: boolean;
@@ -203,6 +212,8 @@ export interface DistributionAnswer {
   held?: string;
   /** Kew holds the species' words only under another author, which is another name (round seventy; triage-69 B4). */
   otherAuthor?: string;
+  /** Kew files the species' own row under an entry of another name, whose range this is (round seventy-one; S-B4). */
+  synonymOf?: SynonymOf;
 }
 
 /**
@@ -211,15 +222,16 @@ export interface DistributionAnswer {
  * holding the name with no range is Kew's answer, with no rows; older names that lead to two Kew entries are `ambiguous`.
  */
 export async function distributions(f: JsonFetcher, key: number): Promise<SourceResult<DistributionAnswer>> {
-  const r = await f<{ results: GbifDistribution[]; kew?: KewDescription; ambiguous?: string; entry?: string; via?: string; held?: string; olderAmbiguous?: string; otherAuthor?: string }>(`${GBIF}/species/${key}/distributions?limit=200`);
+  const r = await f<{ results: GbifDistribution[]; kew?: KewDescription; ambiguous?: string; entry?: string; via?: string; held?: string; olderAmbiguous?: string; otherAuthor?: string; synonymOf?: DistributionAnswer['synonymOf'] }>(`${GBIF}/species/${key}/distributions?limit=200`);
   if (r.status !== 'ok') return r;
   // Kew's rows of the species' words by another author, which are another name (round seventy; triage-69 B4): said in the record.
   const other = r.data.otherAuthor ? { otherAuthor: r.data.otherAuthor } : {};
   if (r.data.ambiguous) return { status: 'ok', data: { rows: [], wcvp: false, ambiguous: r.data.ambiguous } };
   if (r.data.olderAmbiguous) return { status: 'ambiguous', detail: `${r.data.otherAuthor ? `${r.data.otherAuthor}; ` : 'Kew holds no entry under this name, and '}${r.data.olderAmbiguous}: not taken` };
-  if (r.data.held) return { status: 'ok', data: { rows: [], wcvp: true, kew: r.data.kew, held: r.data.held } };
+  const syn = r.data.synonymOf ? { synonymOf: r.data.synonymOf } : {};
+  if (r.data.held) return { status: 'ok', data: { rows: [], wcvp: true, kew: r.data.kew, held: r.data.held, ...syn } };
   const wcvp = (r.data.results ?? []).filter(isWcvpRow);
-  if (wcvp.length) return { status: 'ok', data: { rows: wcvp, wcvp: true, kew: r.data.kew, ...(r.data.via ? { entry: r.data.entry, via: r.data.via } : {}), ...other } };
+  if (wcvp.length) return { status: 'ok', data: { rows: wcvp, wcvp: true, kew: r.data.kew, ...(r.data.via ? { entry: r.data.entry, via: r.data.via } : {}), ...syn, ...other } };
   // No WCVP entry: fall back to whatever national checklists GBIF holds, one row per country and status.
   const seen = new Map<string, GbifDistribution>();
   for (const d of r.data.results ?? []) {
@@ -243,7 +255,7 @@ export const WCVP_DATASET = 'f382f0ce-323a-4091-bb9f-add557f3a9a2';
  * variegata Jacobi"); `ids` is empty when Kew holds the words only under other authors and accepts none of them, or not
  * at all, and then nothing can be checked against Kew. A refusal is the answer.
  */
-export async function kewIpni(f: JsonFetcher, name: string, authorship?: string, family?: string): Promise<FetchResult<{ ids: string[]; label?: string; others?: Array<{ id: string; label: string }>; acceptedKeys?: number[] }>> {
+export async function kewIpni(f: JsonFetcher, name: string, authorship?: string, family?: string): Promise<FetchResult<KewIds>> {
   const r = await f<{ results?: Array<{ key: number; scientificName: string; canonicalName?: string; authorship?: string; taxonomicStatus?: string; references?: string; acceptedKey?: number; accepted?: string; family?: string }> }>(`${GBIF}/species?datasetKey=${WCVP_DATASET}&name=${encodeURIComponent(name)}&limit=50`);
   if (r.status === 'none') return { status: 'ok', data: { ids: [] } };
   if (r.status !== 'ok') return r;
@@ -271,7 +283,40 @@ export async function kewIpni(f: JsonFetcher, name: string, authorship?: string,
   // The entries Kew accepts where it holds the name as a synonym: their identifiers tell two items apart (round seventy,
   // the owner's run: Parrycactus flavovirens is Kew's synonym of Ferocactus flavovirens; `kewEntryIpni`).
   const acceptedKeys = [...new Set(rows.flatMap((x) => (/synonym/i.test(x.taxonomicStatus ?? '') && x.acceptedKey ? [x.acceptedKey] : [])))];
-  return { status: 'ok', data: { ids, ...(rows.length ? { label: rows[0].scientificName } : {}), ...(others.length ? { others } : {}), ...(acceptedKeys.length ? { acceptedKeys } : {}) } };
+  const acceptedId = plant.filter((x) => /^accepted$/i.test(x.taxonomicStatus ?? '')).flatMap((x) => ipni(x) ?? [])[0];
+  return { status: 'ok', data: { ids, ...(rows.length ? { label: rows[0].scientificName } : {}), ...(others.length ? { others } : {}), ...(acceptedKeys.length ? { acceptedKeys } : {}), ...(acceptedId ? { acceptedId } : {}) } };
+}
+
+/** Kew's identifiers for a name and author, as `kewIpni` answers. */
+export type KewIds = { ids: string[]; label?: string; others?: Array<{ id: string; label: string }>; acceptedKeys?: number[]; acceptedId?: string };
+
+/**
+ * The IPNI and POWO numbers a page links (round seventy-one; self-review 70 S-B5, triage-70): Kew's number for the name
+ * and author, which a POWO address is too, never an item's number Kew holds for another author's name. Of Kew's numbers,
+ * the item's when it carries one, else the entry Kew accepts, else the first. Where Kew holds no number for the name and
+ * author, the item's stand unless Kew holds them for another author. 568 of the 594 dossiers whose two numbers disagreed
+ * linked an IPNI duplicate; Colchicum neapolitanum, Lachenalia pusilla, Ceropegia spiralis, Talinum lineare and
+ * Mammillaria schiedeana linked another author's invalid or illegitimate name, and Mammillaria magnifica's POWO Sencke's.
+ */
+export function kewLinks(item: { ipni?: string; powo?: string }, k: KewIds): { ipni?: string; powo?: string; changed: boolean } {
+  const powoNum = item.powo?.replace(/^urn:lsid:ipni\.org:names:/, '');
+  const pick = (k.ids.length ? [item.ipni, powoNum, k.acceptedId, k.ids[0]].find((n) => !!n && k.ids.includes(n)) : undefined);
+  const other = new Set((k.others ?? []).map((o) => o.id));
+  const ipni = pick ?? (item.ipni && !other.has(item.ipni) ? item.ipni : undefined);
+  const powo = pick ? `urn:lsid:ipni.org:names:${pick}` : powoNum && !other.has(powoNum) ? item.powo : undefined;
+  return { ipni, powo, changed: ipni !== item.ipni || powo !== item.powo };
+}
+
+/** GBIF's backbone, whose usages of a name `usages` reads. */
+export const BACKBONE = 'd7dddbf4-2cf0-4f39-9b2a-bb099caae36c';
+/** A usage of a name in GBIF's backbone: one name by one author, accepted, a synonym of another, or doubtful. */
+export type Usage = { key: number; scientificName: string; authorship?: string; taxonomicStatus?: string; acceptedKey?: number; accepted?: string; rank?: string };
+/** Every usage of a binomial in GBIF's backbone at species rank, by its words (one request); homonyms are several. */
+export async function usages(f: JsonFetcher, name: string): Promise<FetchResult<Usage[]>> {
+  const r = await f<{ results?: Array<Usage & { canonicalName?: string }> }>(`${GBIF}/species?datasetKey=${BACKBONE}&name=${encodeURIComponent(name)}&limit=50`);
+  if (r.status === 'none') return { status: 'ok', data: [] };
+  if (r.status !== 'ok') return r;
+  return { status: 'ok', data: (r.data.results ?? []).filter((x) => (x.canonicalName ?? '').toLowerCase() === name.toLowerCase() && (x.rank ?? 'SPECIES').toUpperCase() === 'SPECIES').map(({ key, scientificName, authorship, taxonomicStatus, acceptedKey, accepted, rank }) => ({ key, scientificName, authorship, taxonomicStatus, acceptedKey, accepted, rank })) };
 }
 
 /** The IPNI identifiers of Kew's entries by their keys in GBIF's copy of WCVP, one request each; a refusal is the answer. */
@@ -347,20 +392,23 @@ export interface OccMedia {
   rightsHolder?: string;
   page?: string;
   datasetKey?: string;
-  /** The record is a preserved specimen (its basisOfRecord): a herbarium sheet or a museum's fruit, which ranks below Commons as a lead (round seventy, a need of C; REVIEW-TRIAGE-69 C7, R47-10). */
+  /** The record is not a human observation (its basisOfRecord): a herbarium sheet, a museum's fruit or a machine's scan, which ranks below Commons as a lead (round seventy, a need of C; REVIEW-TRIAGE-69 C7, R47-10; round seventy-one, C4: set whenever GBIF answers a record of another basis). */
   specimen?: boolean;
 }
 
 /** Still images attached to occurrences, already filtered to open licences. */
 export async function media(f: JsonFetcher, key: number): Promise<FetchResult<OccMedia[]>> {
   // Not preserved specimens: a herbarium sheet's scan is not a photograph of the plant growing (round thirty, R2-12); the bulk path already leaves them out.
+  // Human observations only, as the bulk path reads the download (round seventy-one; self-review 70 C4): MACHINE_OBSERVATION
+  // brought Meise's herbarium scans (18 of 100 GBIF-led tiles), an NMNH line drawing (Adenia lobata's lead) and pollen
+  // micrographs (Talinella grevei's only two), and OBSERVATION is no one's photograph of the plant either.
   // Only records under an open licence (GBIF's CC0 and CC BY; it files CC BY-SA under CC BY): most observation photographs
   // are CC BY-NC, and the first 100 records with an image, read whatever their licence, held no open photograph for 104
   // of the species round sixty-seven's rebuild left without one, Sprekelia formosissima among them (round sixty-eight).
   // Each photograph's own licence is still read below: a record's licence is not its photograph's, and a photograph that
   // states none is not published under its record's (round sixty-nine; triage-68 M1, S-B6: an ALA sighting's photograph
   // went out as "Michael Sim, CC BY, via GBIF" on the record's licence). The download path reads the same way (bulk.ts).
-  const r = await f<OccPage>(`${GBIF}/occurrence/search?taxonKey=${key}&mediaType=StillImage&license=CC0_1_0&license=CC_BY_4_0&basisOfRecord=HUMAN_OBSERVATION&basisOfRecord=OBSERVATION&basisOfRecord=MACHINE_OBSERVATION&limit=100`);
+  const r = await f<OccPage>(`${GBIF}/occurrence/search?taxonKey=${key}&mediaType=StillImage&license=CC0_1_0&license=CC_BY_4_0&basisOfRecord=HUMAN_OBSERVATION&limit=100`);
   if (r.status !== 'ok') return r;
   const out: OccMedia[] = [];
   for (const o of r.data.results) {
@@ -369,7 +417,7 @@ export async function media(f: JsonFetcher, key: number): Promise<FetchResult<Oc
       if (!m.identifier || (m.type && !/still/i.test(m.type))) continue;
       const tag = licenceTag(m.license);
       if (!isOpen(tag)) continue;
-      out.push({ id: `${o.key}:${out.length}`, url: m.identifier, licence: tag!, creator: m.creator, rightsHolder: m.rightsHolder, page: m.references ?? `https://www.gbif.org/occurrence/${o.key}`, datasetKey: o.datasetKey, ...(o.basisOfRecord === 'PRESERVED_SPECIMEN' ? { specimen: true } : {}) });
+      out.push({ id: `${o.key}:${out.length}`, url: m.identifier, licence: tag!, creator: m.creator, rightsHolder: m.rightsHolder, page: m.references ?? `https://www.gbif.org/occurrence/${o.key}`, datasetKey: o.datasetKey, ...(o.basisOfRecord && o.basisOfRecord !== 'HUMAN_OBSERVATION' ? { specimen: true } : {}) });
     }
   }
   return out.length ? { status: 'ok', data: out } : { status: 'none' };

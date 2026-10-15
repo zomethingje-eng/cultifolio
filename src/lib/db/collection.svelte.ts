@@ -317,6 +317,10 @@ class Collection {
         this.ready = true;
         this.checkClock();
         void changes;
+        // Changes kept apart because an older version could not read them, now read: put in the outbox for sync to send
+        // (round seventy-one; the self-review's D3). The outbox only: the log is not written.
+        // Read through the module, not a named import: a test's stand-in for the vault that lacks it then queues nothing.
+        void import('./vault').then((v) => v.queueReadable()).then((q) => { if (q.length) for (const fn of this.listeners) fn(q); }, () => {});
         // A plant or batch of the oldest shape has its number as its id and no `acc`/`no` field; `accNo`/`sowNo` read either,
         // which they must for files in flight. A load wrote the number as a field (round forty-one, R4); a reading of the log
         // does not write to it (round fifty-six, 3), and the reading rule is the one every page already used.
@@ -1991,8 +1995,10 @@ class Collection {
   /**
    * Rows of a backup this version cannot read, appended to the log as they are (round seventy; triage-69 R6, R47-15):
    * the fold skips and counts them, as it does the device's own (`malformed`), a backup carries them apart, and a version
-   * that reads them folds them. Only rows with a stamp to be stored under; none goes in the outbox, as the push leaves
-   * such a change out, and none under a stamp the log already holds, which it would displace. Returns how many it wrote.
+   * that reads them folds them. Only rows with a stamp to be stored under, and none under a stamp the log already holds,
+   * which it would displace. None goes in the outbox, which would send it to peers that set its batch aside; each waits
+   * apart for a version that reads it, which sends it (`queueReadable`; round seventy-one, the self-review's D3: stored
+   * as from the server, it reached no other device, even once this one read it). Returns how many it wrote.
    */
   async keepUnreadable(rows: unknown[]): Promise<number> {
     let keep = rows.filter((r) => !!r && typeof r === 'object' && typeof (r as { t?: unknown }).t === 'string' && (r as { t: string }).t.length > 0 && !!changeError(r, true)) as Change[];
@@ -2000,7 +2006,7 @@ class Collection {
     const here = new Set((await changesByKeys(keep.map((c) => c.t))).map((c) => c.t));
     keep = keep.filter((c) => !here.has(c.t));
     if (!keep.length) return 0;
-    const stored = await appendChanges(keep, true);
+    const stored = await appendChanges(keep, false);
     if (stored.replaced.length) await this.rebuild();
     else { this.applyHere(stored.kept); this.advanceOver(stored); }
     return stored.kept.length;

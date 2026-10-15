@@ -65,7 +65,9 @@ describe('askToKeep: one gate for every ask', () => {
     for (let i = 0; i < 5; i++) {
       const again = await load();
       expect(await again.askToKeep('load')).toBeNull();
-      expect(await again.askToKeep('first')).toBeNull();
+      // The first plant reads the browser's standing answer, `persisted()`, which puts no question (round seventy-one;
+      // self-review E9: it was null, and the answer was never said).
+      expect(await again.askToKeep('first')).toBe(false);
     }
     expect(calls.length).toBe(1);
   });
@@ -74,7 +76,7 @@ describe('askToKeep: one gate for every ask', () => {
     answer = false;
     expect(await (await load()).askToKeep('load')).toBe(false);
     vi.setSystemTime(T0 + 29 * DAY + 23 * 3_600_000);
-    expect(await (await load()).askToKeep('first')).toBeNull();
+    expect(await (await load()).askToKeep('first')).toBe(false); // the standing answer, read without asking (round seventy-one; E9)
     expect(calls.length).toBe(1);
     vi.setSystemTime(T0 + 30 * DAY);
     expect(await (await load()).askToKeep('first')).toBe(false);
@@ -86,15 +88,16 @@ describe('askToKeep: one gate for every ask', () => {
     answer = true;
     const k = await load();
     expect(await k.askToKeep('load')).toBe(true);
-    expect(await k.askToKeep('first')).toBeNull();
+    expect(await k.askToKeep('first')).toBe(true); // handed the load's answer, asking nothing (round seventy-one; E9)
     expect(calls.length).toBe(1);
   });
 
   it('where storage refuses the time, a page still asks only once', async () => {
     storageThrows = true;
     const k = await load();
-    void k.askToKeep('load');
-    expect(await k.askToKeep('first')).toBeNull();
+    const first = k.askToKeep('load');
+    // The first plant is handed the load's answer, still standing (round seventy-one; E9), and nothing more is asked.
+    expect(k.askToKeep('first')).toBe(first);
     expect(calls).toEqual([null]);
   });
 

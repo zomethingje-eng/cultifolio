@@ -133,11 +133,13 @@ export function plainlyAnother(authorship: string | undefined, b: string | undef
  * are its own, or else the one of them Kew accepts. Read only where both families are known, and only where Kew has a
  * row of the words in the species' family, so a family named otherwise by the two sources changes nothing.
  */
-export function inFamily<T extends { family?: string; status?: string; taxonomicStatus?: string }>(own: T[], all: T[], family?: string): T[] {
-  if (!family || !own.some((r) => r.family && r.family !== family)) return own;
-  const here = all.filter((r) => r.family === family && !/misapplied/i.test(r.status ?? r.taxonomicStatus ?? ''));
+export function inFamily<T extends { family?: string; status?: string; taxonomicStatus?: string }>(own: T[], all: T[], family?: string, familyOf: (r: T) => string | undefined = (r) => r.family): T[] {
+  // `familyOf` is the family of the entry a row is filed under: Kew's own file gives a synonym or invalid name the family
+  // of its genus (Ixora coccinea Comm. ex Lam., Rubiaceae, filed under Embothrium coccineum), GBIF's copy the entry's.
+  if (!family || !own.some((r) => familyOf(r) && familyOf(r) !== family)) return own;
+  const here = all.filter((r) => familyOf(r) === family && !/misapplied/i.test(r.status ?? r.taxonomicStatus ?? ''));
   if (!here.length) return own;
-  const kept = own.filter((r) => !r.family || r.family === family);
+  const kept = own.filter((r) => !familyOf(r) || familyOf(r) === family);
   if (kept.length) return kept;
   const acc = here.filter((r) => /^accepted$/i.test(r.status ?? r.taxonomicStatus ?? ''));
   return acc.length === 1 ? acc : [];

@@ -242,22 +242,23 @@ describe('W5: a vault\'s writes an hour (R46-24)', () => {
     const r2 = fakeR2(); const ns = countersNs();
     await writeMeta(r2 as never, ID, { tokenHash: 'h', created: 'c', entitlement: 'open', bytes: 0, filled: true });
     const now = Date.UTC(2026, 9, 10, 12, 20);
-    const hour = Math.floor(now / 3_600_000);
     for (let i = 0; i < 3; i++) expect(await storeCounted(r2 as never, ID, await meta(r2), batch(i), new Uint8Array(10), undefined, {}, q(ns, now), true)).toBe(true);
-    expect(ns.raw(`bytes:${ID}`).m.get('w')).toEqual({ h: hour, n: 3 });
-    ns.raw(`bytes:${ID}`).m.set('w', { h: hour, n: 3599 });
+    // By the minute since round seventy-one (self-review E3): any sixty minutes, not the clock hour.
+    const minute = Math.floor(now / 60_000);
+    expect(ns.raw(`bytes:${ID}`).m.get('w')).toEqual({ m: [[minute, 3]] });
+    ns.raw(`bytes:${ID}`).m.set('w', { m: [[minute, 3599]] });
     const ip = '198.51.100.20';
     expect(await storeCounted(r2 as never, ID, await meta(r2), batch(10), new Uint8Array(20_000), undefined, {}, q(ns, now, ip), true)).toBe(true);
     const e = await storeCounted(r2 as never, ID, await meta(r2), batch(11), new Uint8Array(20_000), undefined, {}, q(ns, now, ip), true).catch((x) => x);
     expect(e).toBeInstanceOf(sync.WritesSpent);
     const res = sync.refusal(e)!;
     expect(res.status).toBe(503);
-    expect(res.headers.get('retry-after')).toBe(String(40 * 60));
+    expect(res.headers.get('retry-after')).toBe(String(61 * 60)); // when 12:20's uploads leave the sixty minutes (round seventy-one; E3), not to 13:00
     expect(((await res.json()) as { error: string }).error).toMatch(/^Uploading is refused for now: .*3,600.*within the hour\.$/);
     expect(r2.objs.has(batch(11))).toBe(false);
     // The address's bytes taken for the refused upload went back.
     expect(ns.raw(`ipbytes:${ip}`).m.get('d:2026-10-10')).toBe(20_000);
-    expect(await storeCounted(r2 as never, ID, await meta(r2), batch(11), new Uint8Array(20_000), undefined, {}, q(ns, now + 3_600_000, ip), true)).toBe(true);
+    expect(await storeCounted(r2 as never, ID, await meta(r2), batch(11), new Uint8Array(20_000), undefined, {}, q(ns, now + 61 * 60_000, ip), true)).toBe(true);
   });
 });
 

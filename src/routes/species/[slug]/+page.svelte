@@ -7,7 +7,7 @@
   import { page } from '$app/state';
   import { motion } from '$lib/ui/focus';
   import { failedBeforeHydration } from '$lib/ui/ref/failed';
-  import { speciesTitle, speciesDescription, tileCredit, detailSentence, creditParts, OG_ALT } from '$lib/ui/ref/head';
+  import { speciesTitle, speciesDescription, tileCredit, detailSentence, creditParts, groupLine, noneInRange, kewCitedNote, OG_ALT } from '$lib/ui/ref/head';
   import { plantHref } from '$lib/db/links';
   import NotChecked from '$lib/ui/NotChecked.svelte';
   import SpeciesName from '$lib/ui/SpeciesName.svelte';
@@ -50,7 +50,11 @@
   const heroSrc = $derived(hero ? shownAt(hero) : undefined);
   const heroCredit = $derived(hero ? creditParts(hero) : { lic: '', who: '', named: false, disagree: false });
   // Synonyms as names, not as the backbone's strings: authorship dropped, and a malformed entry ("? glabra Salm-Dyck") left out (round thirty-one, 3).
-  const synonyms = $derived([...new Set(d.name.synonyms.map(canonicalSynonym).filter((x): x is string => !!x && x !== d.name.scientific))]);
+  // A name another species of the reference is accepted under is not listed among them: it is said apart, with the
+  // record's author (round seventy-one; S-F3).
+  const wasAuthors = $derived((data.namedElsewhere ?? []).find((x) => x.name.toLowerCase() === (data.was ?? '').toLowerCase())?.authors ?? []);
+  const elsewhere = $derived(new Set((data.namedElsewhere ?? []).map((x) => x.name)));
+  const synonyms = $derived([...new Set(d.name.synonyms.map(canonicalSynonym).filter((x): x is string => !!x && x !== d.name.scientific))].filter((x) => !elsewhere.has(x)));
   /*
    * The head says what only this page has: with a climate, the title names it and the description is the page's own
    * figures with their sources; without one, the name alone and a line naming only what the page holds. Never the
@@ -95,7 +99,9 @@
       const all = o.nOpenInRange + o.nRestrictedInRange;
       return { tone: 'warn', text: `No verified native range for this name: WCVP has no entry with native status, and a checklist that only reports presence cannot tell a wild record from a garden one. The map shows ${o.nOpenInRange} openly licensed record${o.nOpenInRange === 1 ? '' : 's'}${all > o.nOpenInRange ? ` of ${all}` : ''} untested against any range; no map marker or climate is derived from them, and no sheet is built from them.` };
     }
-    if (!o.nOpenInRange && !o.nRestrictedInRange) return { tone: 'muted', text: 'No georeferenced records inside the stated native range.' };
+    // Every record outside the range: said, with the count, since a range and records that disagree are the page's to say
+    // (round seventy-one; S-F4: Ixora coccinea's 1,749 records and Ceropegia penduliflora's 49 read "none in range").
+    if (!o.nOpenInRange && !o.nRestrictedInRange) return noneInRange(o.nOutsideRange);
     const all = o.nOpenInRange + o.nRestrictedInRange;
     const where = o.rangeTested === false ? 'not tested against the range (stated at country level only)' : 'inside the native range';
     if (o.rangeTested === false) return { tone: 'muted', text: `${all} georeferenced record${all === 1 ? '' : 's'}, ${where}; no map marker or climate across the range is derived without a range to test them against. ${o.nOpenInRange ? `The map shows the ${o.nOpenInRange} openly licensed one${o.nOpenInRange === 1 ? '' : 's'}.` : 'None carries a licence permitting republication, so the map shows no points.'}` };
@@ -348,12 +354,21 @@
 <svelte:window onbeforeunload={guardUnload} />
 
 <article class="species">
-  {#if data.was && data.wasShared?.length}
+  {#if data.was && data.wasAcceptedBy?.length}
+    <!-- A name another species of the reference is accepted under is that species' name here, never this species' (round
+         seventy-one; S-F3: ?was=Annona%20muricata on Annona montana). -->
+    <p class="notice" id="was-synonym"><b>{data.was}</b> is the name of another species of the reference, {#each data.wasAcceptedBy as o, i (o.slug)}{i ? ', ' : ''}<a href="/species/{o.slug}"><i>{o.name}</i></a>{/each}; this species' GBIF record holds it only as an older name{wasAuthors.length ? ` (${wasAuthors.map((a) => `${data.was} ${a}`).join(', ')})` : ''}, so it is not this species' name.</p>
+  {:else if data.was && data.wasShared?.length}
     <!-- A name other species of the reference hold too is no one species' name: the line names them, and never says the
          backbone accepts this species as it (round seventy; triage-69 F1, S-F1). -->
     <p class="notice" id="was-synonym"><b>{data.was}</b> is {data.wasVariety ? 'an older name of a variety of this species' : data.wasOfOlder ? 'a variety under an older name of this species' : 'an older name of this species'}, and the reference holds it for {data.wasShared.length === 1 ? 'another species' : `${data.wasShared.length} other species`} too, {#each data.wasShared as o, i (o.slug)}{i ? (i === data.wasShared.length - 1 ? ' and ' : ', ') : ''}<a href="/species/{o.slug}"><i>{o.name}</i></a>{/each}, so it names no one species here.</p>
   {:else if data.was}
+    {#if data.wasBelow}
+      <!-- Said from GBIF's cached answer, never from the link (round seventy-one; S-F8). -->
+      <p class="notice" id="was-synonym"><b>{data.was}</b> is, in the GBIF backbone, a synonym of a subspecies or variety of <i>{d.name.scientific}</i>; the reference files species, so it is shown here.</p>
+    {:else}
     <p class="notice" id="was-synonym"><b>{data.was}</b> is {data.wasVariety ? 'an older name of a variety of this species' : data.wasOfOlder ? 'a variety under an older name of this species' : 'a synonym'}: the GBIF backbone accepts {data.wasVariety || data.wasOfOlder ? 'it under' : 'this species as'} <i>{d.name.scientific}</i>, and the reference files it under that name.</p>
+    {/if}
   {/if}
   <div class="top" class:withhero={!!hero}>
   {#if hero && heroFailed}
@@ -383,7 +398,10 @@
         {#if common.length}{common.join('; ')}{/if}<!-- semicolons, so a name that is itself a comma list stays whole (round sixty-two; outside review A33) -->
         {#if d.name.status === 'synonym' && d.name.acceptedName}· <span class="pill w">synonym of {d.name.acceptedName}</span>{:else if d.name.status !== 'accepted'}· <span class="pill">{d.name.status}</span>{/if}
       </p>
-      <p class="vern meta">{[d.name.family, d.distribution.native.length ? d.distribution.native.slice(0, 2).map((r) => unitName(r.name)).join(', ') + (d.distribution.native.length > 2 ? ` +${d.distribution.native.length - 2}` : '') : null, sheet.arch ? sheet.arch.arch.lab.toLowerCase() : null].filter(Boolean).join(' · ')}</p>
+      <!-- The group is the archetype table's listing of the genus, said as that, never as what the plant is (round
+           seventy-one; S-F7: Euphorbia peplus, a weedy annual, read "· cactus or succulent"). -->
+      <p class="vern meta">{[d.name.family, d.distribution.native.length ? d.distribution.native.slice(0, 2).map((r) => unitName(r.name)).join(', ') + (d.distribution.native.length > 2 ? ` +${d.distribution.native.length - 2}` : '') : null].filter(Boolean).join(' · ')}{#if sheet.arch}{' · '}<a class="grouped" id="group-chip" href="#s-cultivation">{groupLine(sheet.arch)}</a>{/if}</p>
+      {#if kewCitedNote(d.upstream)}<p class="small muted" id="kew-cited">{kewCitedNote(d.upstream)}</p>{/if}
       <!-- Pills say a state that is not the usual one; what is known is shown, not announced. Counts and groupings are plain text (improvements, 7). -->
       {#if d.climate.status !== 'ok' || (!photos.length && photoGaps)}
         <div class="pills">
@@ -668,6 +686,9 @@
   {#if synonyms.length}
     <p class="small muted names"><b>Also known as</b> {synonyms.slice(0, 5).join('; ')}{synonyms.length > 5 ? ` and ${synonyms.length - 5} more` : ''}{synonyms.slice(0, 5).join('; ').endsWith('.') && synonyms.length <= 5 ? '' : '.'} <span class="faint">(GBIF Backbone)</span></p>
   {/if}
+  {#if data.namedElsewhere?.length}
+    <p class="small muted names" id="named-elsewhere"><b>Under another author</b> {#each data.namedElsewhere as o, i (o.name)}{i ? '; ' : ''}{o.authors.length ? o.authors.map((a) => `${o.name} ${a}`).join(' and ') : `${o.name}, with no author in the record,`} is an older name of this species, not <a href="/species/{o.slug}"><i>{o.name}</i></a>, a species of the reference{/each}. <span class="faint">(GBIF Backbone)</span></p>
+  {/if}
   <div class="links">
     {#each Object.entries(d.links) as [k, url]}
       <a href={url} rel="noopener">{k === 'gbif' ? 'GBIF' : k === 'powo' ? 'POWO' : k === 'ipni' ? 'IPNI' : k === 'wfo' ? 'WFO' : k === 'wikidata' ? 'Wikidata' : k === 'wikipedia' ? 'Wikipedia' : k === 'inat' ? 'iNaturalist' : k.toUpperCase()}</a>
@@ -682,7 +703,7 @@
     <div class="fact"><div class="lab">Described by</div><div class="v">{d.name.authorship ?? 'authorship not stated by the backbone'}</div></div>
     <div class="fact"><div class="lab">Native to</div><div class="v">{#if d.distribution.native.length}{d.distribution.native.slice(0, 3).map((r) => unitName(r.name)).join(', ')}{d.distribution.native.length > 3 ? ` +${d.distribution.native.length - 3}` : ''}{:else}<span class="muted">not verified</span>{/if}</div></div>
     <!-- "Wild" only of records the rule tested against a native range (round sixty; words 20). -->
-    <div class="fact"><div class="lab">{d.occurrences.rangeTested === false || !d.distribution.native.length ? 'Records' : 'Wild records'}</div><div class="v">{#if d.occurrences.nOpenInRange || d.occurrences.nRestrictedInRange}{d.occurrences.nOpenInRange + d.occurrences.nRestrictedInRange} {d.occurrences.rangeTested === false ? 'georeferenced' : 'in range'}<span class="small muted">{' · '}{d.occurrences.nOpenInRange} open{d.occurrences.rangeTested === false ? ' · range not tested' : ''}</span>{:else if ['refused', 'error'].includes(d.upstream['gbif.occurrences']?.status ?? '')}<span class="muted">not checked</span>{:else if d.occurrences.rangeTested === false}<span class="muted">no georeferenced records · range not tested</span>{:else}<span class="muted">none in range</span>{/if}</div></div>
+    <div class="fact"><div class="lab">{d.occurrences.rangeTested === false || !d.distribution.native.length ? 'Records' : 'Wild records'}</div><div class="v">{#if d.occurrences.nOpenInRange || d.occurrences.nRestrictedInRange}{d.occurrences.nOpenInRange + d.occurrences.nRestrictedInRange} {d.occurrences.rangeTested === false ? 'georeferenced' : 'in range'}<span class="small muted">{' · '}{d.occurrences.nOpenInRange} open{d.occurrences.rangeTested === false ? ' · range not tested' : ''}</span>{:else if ['refused', 'error'].includes(d.upstream['gbif.occurrences']?.status ?? '')}<span class="muted">not checked</span>{:else if d.occurrences.rangeTested === false}<span class="muted">no georeferenced records · range not tested</span>{:else}<span class="muted">none in range{d.occurrences.nOutsideRange ? ` · ${d.occurrences.nOutsideRange} outside it` : ''}</span>{/if}</div></div>
   </div>
   <p class="small muted derived">Every figure here is derived from public data by a stated rule and names its source; nothing about this species is written for its page by a person or by AI, apart from the marked, credited quotations. <a href="/about/how#written">How&nbsp;→</a></p>
   <Provenance dossier={d} />

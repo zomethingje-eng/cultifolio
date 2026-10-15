@@ -26,12 +26,31 @@
  * the fill alike: Kew's own API (powo.science.kew.org/api) answers a script with a Cloudflare challenge (tried
  * 2026-10-12), and the WCVP files are read only by a build that has them, never by the fill. GBIF's backbone is not
  * used for it: it holds three accepted species of Strombocactus (one a misspelling), where Kew holds two.
+ *
+ * Round seventy-one (the self-review of round seventy, A2 to A8; REVIEW-TRIAGE-70):
+ *   - the basionym proof needs another item: the species' own item, its sitelink refused as another species' name, had
+ *     passed as its own basionym ("Wikidata gives Q15031906 as the basionym of Q1135881 and Q1135881" kept "Pelecyphora
+ *     macromeris", another species of the reference, on Coryphantha macromeris);
+ *   - a binomial is another species only when GBIF holds it so and Kew's WCVP holds a row of it as well: GBIF's backbone
+ *     keeps two spellings of one plant as two species (Echinocereus ferreirianus and ferreiranus, Nepenthes burbidgeae and
+ *     burbidgei, Stenocactus ochoterenianus and ochoterenanus, Tetragonia tetragonioides, Ariocarpus agavoides), where Kew
+ *     holds one; Drosera tomentosa, which Kew accepts, stays another species;
+ *   - a product must name this species (P1582); a product naming no plant, or only the genus (Wikidata's Mezcal, Pulque,
+ *     Nopal), is the genus's;
+ *   - a genus is this species' article by its item's parent only when Kew's one species in it is this one;
+ *   - the title's item may prove it by IPNI (`ipni`): it carries this species' IPNI identifier, or an IPNI identifier
+ *     whose IPNI record is these words by an author not plainly another's (Rosa luciae: "Rosa lucieae" is Q17246292,
+ *     which carries 60464116-2, IPNI's record of Rosa luciae Franch. & Rochebr. ex Crép.). It is B's rule for an item
+ *     (`crossIds`), read for a title;
+ *   - Wikidata's entities are read without `maxlag`: the parameter asks an editing bot to wait for the query service,
+ *     which a read does not use, and it left most of a fill not checked (round seventy-c's 232).
  */
 import type { JsonFetcher, SourceResult } from './fetch';
 import { mwGet, mwError } from './sources/wikimedia';
 import { spellingKey } from './epithet';
+import { plainlyAnother, authorKey } from './authors';
 
-export type Proof = 'name' | 'older-name' | 'item' | 'product' | 'monotypic-genus';
+export type Proof = 'name' | 'older-name' | 'item' | 'product' | 'monotypic-genus' | 'ipni';
 
 /** The species a title is read against: its name, its stored older names, and its Wikidata item. */
 export interface Who {
@@ -39,12 +58,15 @@ export interface Who {
   synonyms: readonly string[];
   /** The species' Wikidata item (`ids.wikidata`). */
   item?: string;
+  /** The species' IPNI identifier (`ids.ipni`, Kew's for the name), and the backbone's author: the IPNI proof's (round seventy-one). */
+  ipni?: string;
+  authorship?: string;
 }
 
 /** What Wikidata says of the species' item: its English sitelink, parent taxa (P171), basionyms (P566), what it is a source of (P1672). */
 export interface SpeciesItem { id: string; sitelink?: string; parents: string[]; basionyms: string[]; sourceOf: string[] }
 /** What Wikidata says of the item an English title belongs to: products of (P1582), taxon names (P225), ranks (P105), basionyms (P566). */
-export interface TitleItem { id: string; productOf: string[]; taxonNames: string[]; ranks: string[]; basionyms: string[] }
+export interface TitleItem { id: string; productOf: string[]; taxonNames: string[]; ranks: string[]; basionyms: string[]; ipnis?: string[] }
 /** Kew's WCVP on a genus: how many accepted species it holds (0 when Kew holds no one accepted genus of the name), and the one, when one. */
 export interface GenusCount { name: string; accepted: number; only?: string }
 
@@ -56,7 +78,18 @@ export interface GbifName { species?: string; below: boolean; synonym: boolean }
 /** Kew's WCVP on this species' name: its rows, each with its author and the accepted name it is held under. */
 export interface KewRows { rows: Array<{ authorship?: string; status?: string; accepted?: string }> }
 
-export interface Facts { species?: SpeciesItem | null; title?: TitleItem | null; genus?: GenusCount | null; gbif?: GbifName | null; kew?: KewRows | null }
+/** IPNI's own records of identifiers the title's item carries: the name and its authors (round seventy-one). */
+export type IpniRecord = { id: string; name: string; authors: string };
+export interface Facts {
+  species?: SpeciesItem | null;
+  title?: TitleItem | null;
+  genus?: GenusCount | null;
+  gbif?: GbifName | null;
+  kew?: KewRows | null;
+  /** Kew's rows of the title, asked when GBIF holds it as another species (round seventy-one). */
+  kewTitle?: KewRows | null;
+  ipni?: IpniRecord[] | null;
+}
 
 /** Wikidata's item for the rank "genus". */
 export const GENUS_RANK = 'Q34740';
@@ -113,7 +146,14 @@ export const binomialNotOurs = (title: string, who: Pick<Who, 'name' | 'synonyms
  * flytrap"), which GBIF does not hold either. Round seventy's first rule refused any binomial in one of the species'
  * genera, and so took Erythrina caffra's and Rhododendron kanehirae's sitelinks from them.
  */
-export function foreignBinomial(title: string, who: Pick<Who, 'name' | 'synonyms'>, gbif: GbifName | null | undefined): boolean {
+export function foreignBinomial(title: string, who: Pick<Who, 'name' | 'synonyms'>, gbif: GbifName | null | undefined, kewTitle?: KewRows | null): boolean {
+  if (!gbifForeign(title, who, gbif)) return false;
+  // Round seventy-one: and Kew's WCVP holds a row of it, other than as a synonym of this species. Kew not yet asked
+  // (`undefined`) leaves GBIF's answer standing.
+  return kewTitle === undefined || kewTitle === null || kewTitle.rows.some((r) => !(r.status === 'SYNONYM' && (r.accepted ?? '').startsWith(`${who.name} `)));
+}
+/** GBIF's half of `foreignBinomial`: a binomial not this species' name or older name that GBIF holds as another species, or under a variety of this one. */
+export function gbifForeign(title: string, who: Pick<Who, 'name' | 'synonyms'>, gbif: GbifName | null | undefined): boolean {
   if (!binomialNotOurs(title, who) || !gbif) return false;
   return gbif.below || !gbif.species || !nameMatch(gbif.species, who);
 }
@@ -147,7 +187,7 @@ export function proofByItem(title: string, who: Who, facts: Facts): { proof: Pro
   const q = who.item;
   const sp = q && facts.species?.id === q ? facts.species : null;
   const ti = facts.title ?? null;
-  const foreign = foreignBinomial(title, who, facts.gbif);
+  const foreign = foreignBinomial(title, who, facts.gbif, facts.kewTitle);
   if (!foreign && sp?.sitelink && titleKey(sp.sitelink) === titleKey(title)) return { proof: 'item', words: `the English article of this species' Wikidata item (${q})` };
   const g0 = facts.gbif;
   // GBIF holds the title as this species: a synonym of it, as GBIF's backbone has it now (the stored list may be older).
@@ -160,21 +200,43 @@ export function proofByItem(title: string, who: Who, facts: Facts): { proof: Pro
     const m = nameMatch(n, who);
     if (m) return { proof: m.proof, words: `whose Wikidata item (${ti.id}) is the taxon ${n}, ${nameWords(m)}` };
   }
-  if (sp && ti.ranks.includes(SPECIES_RANK)) {
+  const ip = foreign ? null : ipniProof(ti, who, facts.ipni);
+  if (ip) return ip;
+  // The species' own item is the item proof, refused above when its sitelink is another species' name: its own basionym
+  // statements are no second proof (round seventy-one).
+  if (sp && ti.id !== sp.id && ti.ranks.includes(SPECIES_RANK)) {
     const shared = sp.basionyms.includes(ti.id) ? ti.id : ti.basionyms.includes(sp.id) ? sp.id : sp.basionyms.find((b) => ti.basionyms.includes(b));
     if (shared) return { proof: 'older-name', words: `a name of this species with the same type: Wikidata gives ${shared} as the basionym of ${shared === ti.id ? sp.id : shared === sp.id ? ti.id : `${sp.id} and ${ti.id}`}` };
   }
   if (q) {
+    // The product names this species; its genus is passed over only beside it (round seventy-one).
     const others = ti.productOf.filter((p) => p !== q && !sp?.parents.includes(p));
-    if (!others.length && (ti.productOf.includes(q) || !!sp?.sourceOf.includes(ti.id))) return { proof: 'product', words: `whose Wikidata item (${ti.id}) is a product of this species' item (${q})` };
+    if (!others.length && ti.productOf.includes(q)) return { proof: 'product', words: `whose Wikidata item (${ti.id}) is a product of this species' item (${q})` };
   }
   const g = facts.genus;
   if (g && ti.ranks.includes(GENUS_RANK) && ti.taxonNames.includes(g.name) && g.accepted === 1) {
-    if (sp?.parents.includes(ti.id) && g.name === genusOf(who.name)) return { proof: 'monotypic-genus', words: `this species' genus (${ti.id}), which holds one accepted species in Kew's WCVP` };
     const m = g.only ? nameMatch(g.only, who) : null;
+    // By the item's parent only where Kew's one species is this one (round seventy-one).
+    if (m && sp?.parents.includes(ti.id) && g.name === genusOf(who.name)) return { proof: 'monotypic-genus', words: `this species' genus (${ti.id}), which holds one accepted species in Kew's WCVP` };
     if (m) return { proof: 'monotypic-genus', words: `the genus ${g.name} (${ti.id}), whose one accepted species in Kew's WCVP is ${m.proof === 'name' && !m.spelt ? 'this species' : `${g.only}, ${nameWords(m)}`}` };
   }
   return kew;
+}
+
+/** An IPNI identifier as an item writes it, an address or a number (B's `ipniId`). */
+const ipniNumber = (v: string) => v.trim().replace(/^(?:https?:\/\/(?:www\.)?ipni\.org\/n\/|urn:lsid:ipni\.org:names:)/i, '');
+/**
+ * The IPNI proof (round seventy-one): the title's item carries this species' IPNI identifier, or one whose IPNI record is
+ * these words (the hybrid sign aside) by an author not plainly another's (`plainlyAnother`, B's reading for an item's
+ * IPNI). A record of the words by another author is a homonym, and proves nothing.
+ */
+function ipniProof(ti: TitleItem, who: Who, records: IpniRecord[] | null | undefined): { proof: Proof; words: string } | null {
+  const ids = (ti.ipnis ?? []).map(ipniNumber);
+  if (who.ipni && ids.includes(ipniNumber(who.ipni))) return { proof: 'ipni', words: `whose Wikidata item (${ti.id}) carries this species' IPNI identifier (${ipniNumber(who.ipni)})` };
+  if (!authorKey(who.authorship)) return null;
+  const words = (n: string) => titleKey(n.replace(/×\s*/g, ''));
+  const r = (records ?? []).find((x) => ids.includes(x.id) && words(x.name) === words(who.name) && authorKey(x.authors) && !plainlyAnother(who.authorship, x.authors));
+  return r ? { proof: 'ipni', words: `whose Wikidata item (${ti.id}) carries IPNI ${r.id}, IPNI's record of ${r.name} ${r.authors}, this species' name` } : null;
 }
 
 /** The author of a combination's basionym: the bracketed author at the head of its authorship, "(L.) Herb." → "L.". */
@@ -220,7 +282,7 @@ export async function speciesItems(f: JsonFetcher, ids: readonly string[]): Prom
   let failure: Unanswered | undefined;
   for (let i = 0; i < all.length; i += 50) {
     const part = all.slice(i, i + 50);
-    const r = await mwGet<{ entities?: Record<string, Entity> }>(f, `${WD}&ids=${part.join('|')}&props=claims|sitelinks&sitefilter=enwiki&maxlag=5`);
+    const r = await mwGet<{ entities?: Record<string, Entity> }>(f, `${WD}&ids=${part.join('|')}&props=claims|sitelinks&sitefilter=enwiki`);
     const err = r.status === 'ok' ? mwError(r.data) : r.status === 'none' ? 'no answer' : r.detail;
     if (r.status !== 'ok' || err) {
       for (const q of part) unanswered.add(q);
@@ -244,7 +306,7 @@ export async function titleItems(f: JsonFetcher, titles: readonly string[]): Pro
   const all = [...new Set(titles)];
   for (let i = 0; i < all.length; i += 50) {
     const part = all.slice(i, i + 50);
-    const r = await mwGet<{ entities?: Record<string, Entity> }>(f, `${WD}&sites=enwiki&titles=${part.map((t) => encodeURIComponent(t)).join('|')}&props=claims|sitelinks&sitefilter=enwiki&maxlag=5`);
+    const r = await mwGet<{ entities?: Record<string, Entity> }>(f, `${WD}&sites=enwiki&titles=${part.map((t) => encodeURIComponent(t)).join('|')}&props=claims|sitelinks&sitefilter=enwiki`);
     if (r.status !== 'ok') return r.status === 'none' ? { status: 'error', detail: 'wikidata: no answer' } : r;
     const err = mwError(r.data);
     if (err) return { status: 'error', detail: `wikidata ${err}` };
@@ -252,7 +314,7 @@ export async function titleItems(f: JsonFetcher, titles: readonly string[]): Pro
     for (const [id, e] of Object.entries(r.data.entities ?? {})) {
       const t = e.sitelinks?.enwiki?.title;
       if (!t || 'missing' in e || !/^Q\d+$/.test(id)) continue;
-      byTitle.set(titleKey(t), { id, productOf: itemIds(e, 'P1582'), taxonNames: strs(e, 'P225'), ranks: itemIds(e, 'P105'), basionyms: itemIds(e, 'P566') });
+      byTitle.set(titleKey(t), { id, productOf: itemIds(e, 'P1582'), taxonNames: strs(e, 'P225'), ranks: itemIds(e, 'P105'), basionyms: itemIds(e, 'P566'), ipnis: strs(e, 'P961') });
     }
     for (const t of part) out.set(t, byTitle.get(titleKey(t)) ?? null);
   }
@@ -306,7 +368,7 @@ export async function kewRows(f: JsonFetcher, name: string): Promise<SourceResul
 }
 
 /** A source that did not answer while a proof was read: which, and what it said. */
-export type Unanswered = { status: 'refused' | 'error' | 'skipped'; detail: string; source: 'Wikidata' | 'GBIF' | "GBIF (Kew's WCVP)" };
+export type Unanswered = { status: 'refused' | 'error' | 'skipped'; detail: string; source: 'Wikidata' | 'Wikipedia' | 'GBIF' | "GBIF (Kew's WCVP)" | 'IPNI' };
 
 /**
  * The facts for one title, asked only as far as they are needed: the species' item (unless `pre` has it), then the
@@ -319,6 +381,12 @@ export async function gatherFacts(f: JsonFetcher, title: string, who: Who, pre: 
     const g = await gbifName(f, title);
     if (g.status !== 'ok') return unanswered(g, 'GBIF');
     facts.gbif = g.data;
+  }
+  // GBIF's other species is another species only if Kew holds it too (round seventy-one): Kew's rows of the title.
+  if (facts.kewTitle === undefined && gbifForeign(title, who, facts.gbif)) {
+    const k = await kewRows(f, title);
+    if (k.status !== 'ok') return unanswered(k, "GBIF (Kew's WCVP)");
+    facts.kewTitle = k.data;
   }
   if (who.item && facts.species === undefined) {
     const s = await speciesItems(f, [who.item]);
@@ -336,10 +404,22 @@ export async function gatherFacts(f: JsonFetcher, title: string, who: Who, pre: 
     if (c.status !== 'ok') return unanswered(c, "GBIF (Kew's WCVP)");
     facts.genus = c.data;
   }
-  if (facts.kew === undefined && binomialNotOurs(title, who) && !foreignBinomial(title, who, facts.gbif) && !proofByItem(title, who, { ...facts, kew: null })) {
+  if (facts.kew === undefined && binomialNotOurs(title, who) && !foreignBinomial(title, who, facts.gbif, facts.kewTitle) && !proofByItem(title, who, { ...facts, kew: null })) {
     const k = await kewRows(f, who.name);
     if (k.status !== 'ok') return unanswered(k, "GBIF (Kew's WCVP)");
     facts.kew = k.data;
+  }
+  // IPNI's own records of the identifiers the title's item carries, last, when nothing else has proved it (round seventy-one).
+  const ids = (facts.title?.ipnis ?? []).map(ipniNumber).filter((i) => i !== (who.ipni && ipniNumber(who.ipni)));
+  if (facts.ipni === undefined && ids.length && authorKey(who.authorship) && !foreignBinomial(title, who, facts.gbif, facts.kewTitle) && !proofByItem(title, who, { ...facts, ipni: null })) {
+    const recs: IpniRecord[] = [];
+    for (const id of ids.slice(0, 2)) {
+      const r = await f<{ name?: string; authors?: string }>(`https://www.ipni.org/api/1/n/${encodeURIComponent(id)}`);
+      if (r.status === 'none') continue;
+      if (r.status !== 'ok') return unanswered(r, 'IPNI');
+      if (r.data.name) recs.push({ id, name: r.data.name, authors: r.data.authors ?? '' });
+    }
+    facts.ipni = recs;
   }
   return { facts };
 }

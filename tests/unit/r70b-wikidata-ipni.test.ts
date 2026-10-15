@@ -198,7 +198,7 @@ describe('Kew\'s identifiers for a name and author', () => {
     const asked: string[] = [];
     const f = (async (url: string) => { asked.push(url); return { status: 'ok', data: kew('Spiraea japonica', [['Spiraea japonica Raf.', 'Raf.', 'SYNONYM', '742321-1'], ['Spiraea japonica Cambess.', 'Cambess.', 'DOUBTFUL', '2993235-4'], ['Spiraea japonica L.f.', 'L.f.', 'ACCEPTED', '742319-1'], ['Spiraea japonica Siebold ex Blume', 'Siebold ex Blume', 'MISAPPLIED', '742320-1']]) }; }) as unknown as JsonFetcher;
     const { kewIpni } = gbif;
-    expect(await kewIpni(f, 'Spiraea japonica', 'L.fil.')).toEqual({ status: 'ok', data: { ids: ['742319-1'], label: 'Spiraea japonica L.f.', others: [{ id: '742321-1', label: 'Spiraea japonica Raf.' }, { id: '2993235-4', label: 'Spiraea japonica Cambess.' }] } });
+    expect(await kewIpni(f, 'Spiraea japonica', 'L.fil.')).toEqual({ status: 'ok', data: { ids: ['742319-1'], label: 'Spiraea japonica L.f.', others: [{ id: '742321-1', label: 'Spiraea japonica Raf.' }, { id: '2993235-4', label: 'Spiraea japonica Cambess.' }], acceptedId: '742319-1' } }); // r71: acceptedId (S-B5)
     expect(asked).toEqual([`https://api.gbif.org/v1/species?datasetKey=${WCVP_DATASET}&name=Spiraea%20japonica&limit=50`]);
     // A misapplied name is never the species': with no row by the backbone's author, Kew's one accepted entry stands in.
     expect(await kewIpni(f, 'Spiraea japonica', 'Blume')).toMatchObject({ status: 'ok', data: { ids: ['742319-1'], label: 'Spiraea japonica L.f.' } });

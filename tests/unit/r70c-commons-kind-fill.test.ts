@@ -48,10 +48,10 @@ describe('--fill commons-kind', () => {
       'File:Plants of Artavaz 016.jpg': 'Unidentified Liliales in Armenia|Artavaz'
     }, calls));
     expect(calls).toHaveLength(1);
-    expect(calls[0]).toMatch(/^https:\/\/commons\.wikimedia\.org\/w\/api\.php\?action=query&format=json&prop=imageinfo&iiprop=extmetadata&iiextmetadatafilter=Categories\|ImageDescription&maxlag=5&titles=/);
-    expect(c).toMatchObject({ files: 4, before: 0, requests: 1, asked: 4, read: 4, missing: 0, unchecked: 0, dossiers: 3, hidden: 3 });
+    expect(calls[0]).toMatch(/^https:\/\/commons\.wikimedia\.org\/w\/api\.php\?action=query&format=json&prop=imageinfo&iiprop=extmetadata&iiextmetadatafilter=Categories\|ImageDescription\|Credit\|Artist&maxlag=5&titles=/);
+    // Round 71 (S-C12): the stamp was already left out by its credit ("почта"), so the fill no longer counts it as new.
+    expect(c).toMatchObject({ files: 4, before: 0, requests: 1, asked: 4, read: 4, missing: 0, unchecked: 0, dossiers: 3, hidden: 2 });
     expect(c.lines).toEqual([
-      '2740003\tColchicum macedonicum\tfiled under "Plants on stamps of North Macedonia"\tFile:Colchicum macedonicum.jpg',
       '4053092\tCyphostemma adenopodum\tfiled under "Curtis\'s Botanical Magazine, Volume 135"\tFile:Cissus adenopodus 135-8278.jpg',
       '2739906\tColchicum raddeanum\tfiled under "Unidentified Liliales in Armenia"\tFile:Plants of Artavaz 016.jpg'
     ]);
@@ -96,7 +96,7 @@ describe('--fill commons-kind', () => {
   });
 
   it('a file Commons no longer has is left as it is and listed; a dossier with nothing answered is not written', async () => {
-    const store = memory([dossier(2, 'Aloe ferox', [photo('File:Aloe ferox gone.jpg')]), dossier(3, 'Aloe vera', [{ ...photo('File:Aloe vera 1.jpg'), categories: ['Aloe vera'] }])]);
+    const store = memory([dossier(2, 'Aloe ferox', [photo('File:Aloe ferox gone.jpg')]), dossier(3, 'Aloe vera', [{ ...photo('File:Aloe vera 1.jpg'), categories: ['Aloe vera'], sourceRead: true }])]);
     const c = await fill.fillCommonsKindAll(store, commons({ 'File:Aloe ferox gone.jpg': 'missing' }, []));
     expect(c).toMatchObject({ files: 2, before: 1, read: 1, missing: 1, dossiers: 0 });
     expect(c.lines).toEqual(['2\tAloe ferox\tno longer on Commons (left as it is)\tFile:Aloe ferox gone.jpg']);
@@ -106,6 +106,6 @@ describe('--fill commons-kind', () => {
 
   it('reads a title Commons normalised back to the title asked', () => {
     const r = fill.readKindReply({ query: { normalized: [{ from: 'File:Aloe_vera_1.jpg', to: 'File:Aloe vera 1.jpg' }], pages: { '5': { title: 'File:Aloe vera 1.jpg', imageinfo: [{ extmetadata: { Categories: { value: 'Aloe vera|Hybrids of Aloe' } } }] } } } }, ['File:Aloe_vera_1.jpg']);
-    expect(r.get('File:Aloe_vera_1.jpg')).toEqual({ categories: ['Aloe vera', 'Hybrids of Aloe'], struck: false });
+    expect(r.get('File:Aloe_vera_1.jpg')).toEqual({ categories: ['Aloe vera', 'Hybrids of Aloe'], struck: false, inat: null, artist: null, kind: null }); // round 71: the source, the Artist and what the source says
   });
 });

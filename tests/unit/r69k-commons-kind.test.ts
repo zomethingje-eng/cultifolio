@@ -25,8 +25,8 @@ const ask = async (files: Array<{ title: string; cats?: string }>, scientific: s
   return r.status === 'ok' ? r.data.map((p) => p.id) : [];
 };
 /** A dossier as stored, read as the Worker reads it. */
-const read = (scientific: string, ids: string[], synonyms: string[] = [], held?: HeldNames) =>
-  safeUrls({ name: { scientific, synonyms, vernacular: [], status: 'accepted' }, climate: { status: 'none' }, literature: [], links: {}, upstream: {}, photos: ids.map((id) => ({ src: 'commons', id, url: `https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/x.jpg/960px-${encodeURIComponent(id)}`, thumb: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/x.jpg/500px-x.jpg', width: 3000, height: 2000, licence: 'by-sa', attribution: 'A. Grower, CC BY-SA 4.0, via Wikimedia Commons' })) } as never, held).photos.map((p) => p.id);
+const read = (scientific: string, ids: string[], synonyms: string[] = [], held?: HeldNames, slips?: string[]) =>
+  safeUrls({ name: { scientific, synonyms, vernacular: [], status: 'accepted' }, climate: { status: 'none' }, literature: [], links: {}, upstream: {}, photos: ids.map((id) => ({ src: 'commons', id, ...(slips ? { slips } : {}), url: `https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/x.jpg/960px-${encodeURIComponent(id)}`, thumb: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/x.jpg/500px-x.jpg', width: 3000, height: 2000, licence: 'by-sa', attribution: 'A. Grower, CC BY-SA 4.0, via Wikimedia Commons' })) } as never, held).photos.map((p) => p.id);
 
 /** Each case: the species, its older names, the title. */
 const BAD: Array<[string, string, string[]?]> = [
@@ -124,7 +124,9 @@ describe('a misspelt epithet is the species\' own', () => {
     ['Eriosyce andreaeana', 'File:Eriosyce andreana.jpg'],
     ['Schwantesia ruedebuschii', 'File:Schwantesia nuedebuschii 0zz.jpg']
   ];
-  for (const [sp, title] of SHOWN) it(`shows ${title} under ${sp}`, () => expect(read(sp, [title], [], heldNamesOf([{ key: 1, name: sp }]))).toEqual([title]));
+  // Round 71 (S-C9): a slip is shown once Kew and GBIF were asked of it and the build or the fill kept it (`slips`).
+  const slipOf = (sp: string, title: string) => `${sp.split(' ')[0].toLowerCase()} ${/^File:\S+ ([a-z-]+)/.exec(title)![1]}`;
+  for (const [sp, title] of SHOWN) it(`shows ${title} under ${sp}`, () => expect(read(sp, [title], [], heldNamesOf([{ key: 1, name: sp }]), [slipOf(sp, title)])).toEqual([title]));
   const LEFT: Array<[string, string]> = [
     ['Nepenthes robcantleyi', 'File:Nepenthes truncata 2011 Chelsea Flower Show.jpg'],
     ['Colchicum raddeanum', 'File:Aragats, colchicum bifolium - panoramio.jpg'],

@@ -51,3 +51,13 @@ export function carryRederivedRows(prev: { upstream?: Record<string, Upstream> }
     d.upstream[k] = { ...was, detail: carried(was) };
   }
 }
+
+/**
+ * The build a carried row names: the one that asked the source, which is the row's own time, not the day of the build it
+ * is carried from when that build was itself a re-derivation (round seventy-one; self-review 70 S-B10: 214 of 214 sampled
+ * Wikidata rows read "carried from build of" a day one to three days after the read, and the 90-day limit ran late).
+ */
+export function carriedOrigin(u: { at?: string }, prevBuilt: string | undefined, note = ''): string {
+  const days = [u.at, prevBuilt].map((x) => x?.slice(0, 10)).filter((x): x is string => !!x && /^\d{4}-\d{2}-\d{2}$/.test(x)).sort();
+  return `carried from build of ${days[0] ?? '?'}${note}`;
+}

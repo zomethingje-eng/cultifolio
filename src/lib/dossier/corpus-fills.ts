@@ -21,6 +21,7 @@ import { ownNames, isOwnName } from './own-names';
 import { referenceOf } from './reference';
 import { heldElsewhereIn } from './corpus-run';
 import { keptIds, ipniPowoDisagree } from './drops';
+import { plainlyAnother } from './authors';
 
 type Up = Record<string, { status: string; at?: string; detail?: string }>;
 const day = (now: string) => now.slice(0, 10);
@@ -84,6 +85,91 @@ export async function fillGbifLicenceAll(store: DossierStore, f: JsonFetcher, pr
   return c;
 }
 
+/* ---------------------------------------------------------------- --fill gbif-basis */
+
+/** The words the fill leaves on the GBIF media row of a dossier it has read, so a stopped fill resumes. */
+export const BASIS_CHECKED = "each photograph's record read for its basis";
+export const basisChecked = (d: { upstream?: Up }) => (d.upstream?.['gbif.media']?.detail ?? '').includes(BASIS_CHECKED);
+export type BasisCounts = { dossiers: number; kept: number; dropped: number; emptied: number; before: number; lines: string[]; failed?: string };
+
+/**
+ * `--fill gbif-basis` (round seventy-one; self-review 70 C4): each stored GBIF photograph not on iNaturalist's hosts read
+ * again from its occurrence record (one request a record), and dropped unless the record is a human observation, as the
+ * build now asks GBIF and as the download path always read (`bulk.ts`). The API path had asked for machine observations
+ * too: Meise's herbarium scans led 18 of 100 GBIF-led tiles, an NMNH line drawing led Adenia lobata's, and two pollen
+ * micrographs were Talinella grevei's only photographs. A record GBIF no longer serves is left as it is (`--fill
+ * gbif-licence` reads that). A refusal stops the fill; a later run passes by the dossiers already read.
+ */
+export async function fillGbifBasisAll(store: DossierStore, f: JsonFetcher, now = () => new Date().toISOString(), progress?: (c: BasisCounts) => void): Promise<BasisCounts> {
+  const c: BasisCounts = { dossiers: 0, kept: 0, dropped: 0, emptied: 0, before: 0, lines: [] };
+  for (const file of store.files()) {
+    const d = store.read<Pick<Dossier, 'key' | 'photos' | 'upstream'> & { name?: { scientific?: string } }>(file);
+    const asked = licenceCandidates(d);
+    if (!asked.length) continue;
+    if (basisChecked(d)) { c.before++; continue; }
+    const basis = new Map<string, string | undefined>();
+    for (const k of new Set(asked.map((p) => p.id.split(':')[0]))) {
+      const r = await gbif.occurrence(f, Number(k));
+      if (r.status !== 'ok' && r.status !== 'none') return { ...c, failed: r.detail };
+      basis.set(k, r.status === 'ok' ? (r.data.basisOfRecord ?? 'not stated') : undefined);
+    }
+    const drop = asked.filter((p) => { const b = basis.get(p.id.split(':')[0]); return b !== undefined && b !== 'HUMAN_OBSERVATION'; });
+    d.photos = (d.photos ?? []).filter((p) => !drop.includes(p));
+    const kinds = [...new Set(drop.map((p) => basis.get(p.id.split(':')[0])))].join(', ');
+    const row = d.upstream['gbif.media'];
+    const note = `${BASIS_CHECKED} ${day(now())}${drop.length ? `: ${drop.length} from records not human observations (${kinds}) dropped` : ''}`;
+    d.upstream['gbif.media'] = row ? { ...row, detail: [row.detail, note].filter(Boolean).join('; ') } : { status: 'ok', at: now(), detail: note };
+    store.write(file, d);
+    c.dossiers++; c.kept += asked.length - drop.length; c.dropped += drop.length;
+    if (drop.length) c.lines.push(`${d.name?.scientific ?? file} [${d.key}]: ${drop.length} dropped (${kinds})`);
+    if (!d.photos.length) c.emptied++;
+    progress?.(c);
+  }
+  return c;
+}
+
+/* ---------------------------------------------------------------- --fill kew-links */
+
+export type KewLinkCounts = { read: number; changed: number; before: number; lines: string[]; failed?: string };
+type LinkDossier = Pick<Dossier, 'key' | 'ids' | 'links' | 'upstream'> & { name: { scientific: string; authorship?: string; family?: string } };
+
+/**
+ * `--fill kew-links` (round seventy-one; self-review 70 S-B5, triage-70): every stored IPNI and POWO link read against
+ * Kew's number for the name and author (GBIF's copy of WCVP, one request a dossier, `gbif.kewLinks`), as a build now
+ * links them. Of the 594 dossiers whose two numbers disagreed, 568 linked an IPNI duplicate; five linked another
+ * author's invalid or illegitimate name (Colchicum neapolitanum, Lachenalia pusilla, Ceropegia spiralis, Talinum lineare,
+ * Mammillaria schiedeana) and Mammillaria magnifica's POWO was Sencke's. Each change is listed. A refusal stops the fill
+ * and what it read is kept in `progress`, so a later run takes up the rest.
+ */
+export async function fillKewLinks(store: DossierStore, f: JsonFetcher, now = () => new Date().toISOString(), progress?: { read?: string[]; save(read: string[]): void; clear(): void }): Promise<KewLinkCounts> {
+  const c: KewLinkCounts = { read: 0, changed: 0, before: 0, lines: [] };
+  const done = new Set(progress?.read ?? []);
+  for (const file of store.files()) {
+    let d: LinkDossier;
+    try { d = store.read<LinkDossier>(file); } catch { continue; }
+    if (!d.ids?.ipni && !d.ids?.powo) continue;
+    if (done.has(String(d.key))) { c.before++; continue; }
+    const k = await gbif.kewIpni(f, d.name.scientific, d.name.authorship ?? undefined, d.name.family ?? undefined);
+    if (k.status !== 'ok') { progress?.save([...done]); return { ...c, failed: k.status === 'none' ? 'none' : k.detail }; }
+    c.read++;
+    done.add(String(d.key));
+    const l = gbif.kewLinks({ ipni: d.ids.ipni ?? undefined, powo: d.ids.powo ?? undefined }, k.data);
+    if (!l.changed) continue;
+    const was = `IPNI ${d.ids.ipni ?? 'none'}, POWO ${d.ids.powo?.replace(/^urn:lsid:ipni\.org:names:/, '') ?? 'none'}`;
+    d.ids.ipni = l.ipni; d.ids.powo = l.powo;
+    if (l.ipni) d.links.ipni = `https://www.ipni.org/n/${l.ipni}`; else delete d.links.ipni;
+    if (l.powo) d.links.powo = `https://powo.science.kew.org/taxon/${l.powo}`; else delete d.links.powo;
+    const row = d.upstream.wikidata;
+    const note = `IPNI and POWO linked by Kew's number${k.data.label ? ` for ${k.data.label}` : ''}${l.ipni ? '' : ', none'} (the item's: ${was}; ${day(now())})`;
+    d.upstream.wikidata = row ? { ...row, detail: [row.detail, note].filter(Boolean).join('; ') } : { status: 'ok', at: now(), detail: note };
+    store.write(file, d);
+    c.changed++;
+    c.lines.push(`${d.name.scientific} [${d.key}]: ${was} → IPNI ${l.ipni ?? 'none'}, POWO ${l.powo?.replace(/^urn:lsid:ipni\.org:names:/, '') ?? 'none'}`);
+  }
+  progress?.clear();
+  return c;
+}
+
 /* ---------------------------------------------------------------- --fill inat-ids */
 
 export type InatIdCounts = {
@@ -98,7 +184,7 @@ export type InatIdCounts = {
   lines: string[];
   failed?: string;
 };
-type IdDossier = Pick<Dossier, 'key' | 'ids' | 'links' | 'upstream' | 'photos'> & { name: { scientific: string; family?: string; synonyms?: string[] } };
+type IdDossier = Pick<Dossier, 'key' | 'ids' | 'links' | 'upstream' | 'photos'> & { name: { scientific: string; family?: string; synonyms?: string[]; authorship?: string } };
 
 /** The words of a follow made before round seventy, which read nothing of the taxon it went to: read again. */
 const EARLIER_FOLLOW = /followed to its current taxon (\d+)$/;
@@ -165,7 +251,15 @@ export async function fillInatIds(store: DossierStore, f: JsonFetcher, now = () 
       // An active id of another name, from Wikidata or carried, is read by B5's rule; one of the species' own names by
       // what the dossier holds (`ownNames` over its stored synonyms) asks nothing (round seventy, second pass).
       const carried = got.active && !earlier && !restore;
-      if (carried && (!got.name || ownNames({ scientific: name, synonyms: d.name.synonyms ?? [], heldElsewhere }).own.has(got.name.toLowerCase()))) continue;
+      // A carried id checked and kept is recorded, where the record does not already say an answer (round seventy-one, F's
+      // need; S-F5): 25 of 32 live pages said "iNaturalist taxon: not asked" of an id this fill had checked. A row the
+      // build wrote ('ok') is left as it is, so a rerun rewrites nothing.
+      const checkedKept = (what: string) => {
+        if (d.upstream['inat.taxon']?.status === 'ok') return;
+        d.upstream['inat.taxon'] = { status: 'ok', at: now(), detail: `iNaturalist's taxon ${id}${got.name ? ` (${got.name})` : ''}, kept from an earlier build, checked ${day(now())}: ${what}` };
+        store.write(file, d);
+      };
+      if (carried && (!got.name || ownNames({ scientific: name, synonyms: d.name.synonyms ?? [], heldElsewhere }).own.has(got.name.toLowerCase()))) { checkedKept(got.name ? "active and this species' own" : 'active'); continue; }
       const reopen = { status: 'skipped' as const, at: now(), detail: `the iNaturalist taxon changed (${day(now())}); ask again (--fill inat)` };
       if (!got.active && !got.current) {
         delete d.ids.inat;
@@ -191,14 +285,14 @@ export async function fillInatIds(store: DossierStore, f: JsonFetcher, now = () 
       // any spelling, or a name GBIF holds as this species, or this species' epithet moved to a genus outside this
       // reference, is taken; GBIF's other species of this reference is not.
       const own = target?.name && target.active !== false && isOwnName(owned, target.name);
-      if (carried && own) continue;
-      const g = own ? ({ status: 'ok', data: { take: true, why: `${target!.name} is one of this species' names`, to, name: target!.name } } as const) : await judgeIdTaxon(f, to, target, { key: d.key, scientific: name, family: d.name.family, own: owned, heldElsewhere, reference });
+      if (carried && own) { checkedKept("active and this species' own"); continue; }
+      const g = own ? ({ status: 'ok', data: { take: true, why: `${target!.name} is one of this species' names`, to, name: target!.name } } as const) : await judgeIdTaxon(f, to, target, { key: d.key, scientific: name, authorship: d.name.authorship ?? st.authorship, family: d.name.family, own: owned, heldElsewhere, reference });
       if (g.status !== 'ok') return stop(g);
       const why = g.data.why;
       const head = carried ? `iNaturalist's taxon ${named}, kept from an earlier build, is not this species: ${why}` : `${earlier ? `${before}; read again ${day(now())}: ${named}` : `iNaturalist's taxon ${id}${got.name ? ` (${got.name})` : ''} is inactive; its current taxon ${named}`} is not this species: ${why}`;
       if (g.data.take) {
         const moved = g.data.to !== to || !!restore;
-        if (carried && !moved) continue;
+        if (carried && !moved) { checkedKept(`active, and taken: ${why}`); continue; }
         if (earlier && !moved) {
           d.upstream['inat.taxon'] = { ...d.upstream['inat.taxon'], detail: `${before}${target?.name ? ` (${target.name})` : ''}; read again ${day(now())}: ${why}` };
           c.kept++;
@@ -394,14 +488,16 @@ export function keysMissing(file: string): string {
 }
 
 /** The same-type older names of a species from GBIF, as the build passes them to `crossIds`, and all its synonyms (`ownNames`). */
-async function sameTypeOfRows(f: JsonFetcher, key: number): Promise<{ rows: Array<{ key: number; name: string }>; all: gbif.SynonymRow[] } | { failed: string }> {
+async function sameTypeOfRows(f: JsonFetcher, key: number): Promise<{ rows: Array<{ key: number; name: string }>; all: gbif.SynonymRow[]; authorship?: string } | { failed: string }> {
   const sp = await gbif.species(f, key);
   if (sp.status !== 'ok' && sp.status !== 'none') return { failed: `GBIF: ${sp.detail}` };
   const syn = await gbif.synonyms(f, key);
   if (syn.status !== 'ok' && syn.status !== 'none') return { failed: `GBIF: ${syn.detail}` };
-  if (syn.status !== 'ok' || syn.truncated) return { rows: [], all: [] };
+  // The backbone's author too, for the slip rule (`slipStanding`: GBIF's same name by the same author spelt otherwise is this species'; round seventy-one merge).
+  const authorship = sp.status === 'ok' ? (sp.data.authorship ?? undefined) : undefined;
+  if (syn.status !== 'ok' || syn.truncated) return { rows: [], all: [], authorship };
   const all = syn.rows ?? [];
-  return { rows: gbif.sameTypeNames({ key, basionymKey: sp.status === 'ok' ? sp.data.basionymKey : undefined }, all).map((r) => ({ key: r.key, name: r.name })), all };
+  return { rows: gbif.sameTypeNames({ key, basionymKey: sp.status === 'ok' ? sp.data.basionymKey : undefined }, all).map((r) => ({ key: r.key, name: r.name })), all, authorship };
 }
 
 /* ---------------------------------------------------------------- --list-rebuild --bulk: Kew's rows by author */
@@ -413,18 +509,66 @@ async function sameTypeOfRows(f: JsonFetcher, key: number): Promise<{ rows: Arra
  * epithet (Cyphostemma congoensis as C. congoense). A range feeds the records tested against it and the habitat
  * climate, which only a build reads again with the climate grid, so these species are rebuilt, never patched.
  */
-export function kewRebuildList(store: DossierStore, wcvp: Pick<WcvpIndex, 'accepted' | 'legacyAccepted'>): string[] {
+export function kewRebuildList(store: DossierStore, wcvp: Pick<WcvpIndex, 'accepted' | 'legacyAccepted'> & Partial<Pick<WcvpIndex, 'distributions' | 'ownRows'>>): string[] {
   const out: string[] = [];
   const id = (e: ReturnType<WcvpIndex['accepted']>) => (e === 'ambiguous' ? 'ambiguous' : e ? `${e.name} ${e.authors ?? ''}`.trim() : 'none');
   for (const file of store.files()) {
-    let d: Pick<Dossier, 'key'> & { name: { scientific: string; authorship?: string; family?: string } };
+    let d: RangeDossier;
     try { d = store.read(file); } catch { continue; }
     if (!d.name?.authorship) continue;
     const before = id(wcvp.legacyAccepted(d.name.scientific, d.name.authorship));
     const after = id(wcvp.accepted(d.name.scientific, d.name.authorship, d.name.family));
-    if (before !== after) out.push(`${d.key} ${d.name.scientific}\tKew's entry for ${d.name.scientific} ${d.name.authorship} was ${before}, is now ${after}`);
+    if (before !== after) { out.push(`${d.key} ${d.name.scientific}\tKew's entry for ${d.name.scientific} ${d.name.authorship} was ${before}, is now ${after}`); continue; }
+    // A species on a homonym key (round seventy-one; S-B2): an orphan key (no synonym stored) whose author is plainly not
+    // Kew's one accepted entry for the words; a rebuild asks GBIF whether it holds the words by Kew's author elsewhere,
+    // and if so cites Kew's author and reads GBIF's names by it (`kewName`). Some listed are Kew citing an author
+    // otherwise ("St.Hil.", "A.St.-Hil."), which the rebuild leaves as they are.
+    const own = wcvp.ownRows?.(d.name.scientific, d.name.authorship, d.name.family).rows ?? [];
+    if (!d.name.synonyms?.length && own.length === 1 && own[0].status === 'Accepted' && plainlyAnother(d.name.authorship, own[0].authors)) { out.push(`${d.key} ${d.name.scientific}\ton a homonym key: the backbone's ${d.name.authorship} is not Kew's ${own[0].authors}`); continue; }
+    // The page as stored against the rule as it reads Kew's files now (round seventy-one; S-B8: Ixora coccinea was read
+    // the same way by both rules, wrongly, and its page was never listed). Only a range Kew's files answer is compared.
+    if (!d.distribution) continue;
+    const got = wcvp.distributions?.(d.name.scientific, d.name.authorship, d.name.family);
+    if (!got || got === 'ambiguous') continue;
+    const now = nativeCodes(got.rows), stored = storedCodes(d);
+    if (now !== stored) out.push(`${d.key} ${d.name.scientific}\tthe stored native range is not Kew's for ${after} (${stored || 'none'} stored, ${now || 'none'} now)`);
   }
   return out;
+}
+
+type RangeDossier = Pick<Dossier, 'key'> & { name: { scientific: string; authorship?: string; family?: string; synonyms?: string[] }; distribution?: { native?: Array<{ code?: string }>; source?: string }; upstream?: Up };
+/** The native regions of Kew's rows, as codes in order: what a build would store. */
+const nativeCodes = (rows: ReadonlyArray<{ locationId?: string; establishmentMeans?: string }>) => [...new Set(rows.filter((r) => r.establishmentMeans === 'NATIVE').map((r) => /([A-Z]{3})$/.exec(r.locationId ?? '')?.[1] ?? '?'))].sort().join(',');
+/** The native regions a dossier stores, as codes in order. */
+const storedCodes = (d: RangeDossier) => [...new Set((d.distribution?.native ?? []).map((x) => x.code ?? '?'))].sort().join(',');
+
+export type RangeSourceCounts = { said: number; before: number; differs: string[] };
+
+/**
+ * `--fill range-source --bulk <dir>` (round seventy-one; self-review 70 S-B4, triage-70): a range Kew gives through the
+ * species' own row filed under an entry of another name now says so ("Kew holds Ceropegia mixta (Masson) Bruyns as a
+ * synonym of Orbea variegata (L.) Haw.; the range is Orbea variegata's"), where the stored range is the one Kew's files
+ * give, so no rebuild is needed: about 480 pages, five of them showing another reference species' range. A stored range
+ * that is not Kew's now is left and listed (`--list-rebuild` lists it too). Offline: Kew's files only.
+ */
+export function fillRangeSource(store: DossierStore, wcvp: Pick<WcvpIndex, 'distributions'>): RangeSourceCounts {
+  const c: RangeSourceCounts = { said: 0, before: 0, differs: [] };
+  for (const file of store.files()) {
+    let d: RangeDossier;
+    try { d = store.read(file); } catch { continue; }
+    if (!d.name?.authorship || !d.distribution) continue;
+    const got = wcvp.distributions(d.name.scientific, d.name.authorship, d.name.family);
+    if (!got || got === 'ambiguous' || !got.synonymOf) continue;
+    const source = `WCVP (Govaerts, RBG Kew): ${gbif.synonymOfWords(got.synonymOf)}`;
+    if (d.distribution.source === source) { c.before++; continue; }
+    if (nativeCodes(got.rows) !== storedCodes(d)) { c.differs.push(`${d.key} ${d.name.scientific}\tits stored native range is not that of Kew's ${got.synonymOf.entry}: rebuild`); continue; }
+    d.distribution.source = source;
+    const row = d.upstream?.['wcvp.distribution'];
+    if (row) d.upstream!['wcvp.distribution'] = { ...row, detail: `${gbif.synonymOfWords(got.synonymOf)}${got.rows.length ? '' : ', with no native range'}` };
+    store.write(file, d);
+    c.said++;
+  }
+  return c;
 }
 
 /* ---------------------------------------------------------------- --fill summaries: `./summary-fill.ts` (round seventy, moved) */

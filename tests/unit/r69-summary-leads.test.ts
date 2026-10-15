@@ -52,8 +52,9 @@ describe('a title Wikipedia gave under another title, taken on a proof', () => {
   it('the species placed in another genus, its basionym in Wikidata: Huernia zebrina', async () => {
     expect(await titleProof(world(W69).f, 'Huernia zebrina', who('Ceropegia zebrina', 'Q42560681', ['Huernia magniflora E.Phillips']))).toMatchObject({ status: 'ok', proof: 'older-name' });
   });
-  it('another spelling of the epithet in the same genus, read offline: Ariocarpus scaphirostris', async () => {
-    expect(await titleProof(null, 'Ariocarpus scaphirostris', who('Ariocarpus scaphirostrus'))).toMatchObject({ status: 'ok', proof: 'name' });
+  // Round seventy-one: scaphirostris and scaphirostrus are two declensions, no longer one key (r71a-spelling).
+  it('another spelling of the epithet in the same genus, read offline: Dudleya caespitosa', async () => {
+    expect(await titleProof(null, 'Dudleya caespitosa', who('Dudleya cespitosa'))).toMatchObject({ status: 'ok', proof: 'name' });
   });
 });
 
@@ -117,7 +118,8 @@ describe('--fill summaries asks again for what was set aside', () => {
   it('takes back Welwitschia\'s, leaves Kopsia\'s aside, and records the proof', async () => {
     const docs: Record<string, unknown> = { 'w.json': setAside('Welwitschia mirabilis', 'Welwitschia', 'Q156926'), 'k.json': setAside('Kopsia fruticosa', 'Kopsia', 'Q15232794') };
     const { f } = world({ ...W69, wiki: { 'Welwitschia mirabilis': { title: 'Welwitschia' }, 'Kopsia fruticosa': { title: 'Kopsia' } } });
-    const c = await checkSummaries(store(docs) as never, f, () => '2026-10-13T00:00:00Z');
+    // Round seventy-one: a title set aside is settled, and asked again only when the rule changes (`again`).
+    const c = await checkSummaries(store(docs) as never, f, () => '2026-10-13T00:00:00Z', { again: true });
     expect(c).toMatchObject({ restored: 1, dropped: 0 });
     const w = docs['w.json'] as ReturnType<typeof setAside>;
     expect(w.summary).toMatchObject({ title: 'Welwitschia', source: 'wikipedia', licence: 'CC BY-SA 4.0' });

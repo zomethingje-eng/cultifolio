@@ -52,8 +52,9 @@ const photos = [
   // iNaturalist: the large and the medium of its fixed sizes.
   { src: 'inat', id: '900', url: 'https://inaturalist-open-data.s3.amazonaws.com/photos/900/large.jpg', thumb: 'https://inaturalist-open-data.s3.amazonaws.com/photos/900/medium.jpg', width: 2048, licence: 'by', attribution: '(c) grower0, some rights reserved (CC BY)' },
   { src: 'inat', id: '901', url: 'https://static.inaturalist.org/photos/901/large.jpeg', thumb: 'https://static.inaturalist.org/photos/901/medium.jpeg', width: 1024, licence: 'cc0', attribution: 'grower1, no rights reserved (CC0)' },
-  // GBIF from another dataset: that dataset's own address, shown from GBIF's image cache.
-  { src: 'gbif', id: '1234:0', url: 'https://images.example-herbarium.org/full/abc.jpg', thumb: 'https://api.gbif.org/v1/image/cache/fit-in/500x/occurrence/1234/media/0123456789abcdef0123456789abcdef', width: 1600, licence: 'by', attribution: 'A. Collector' },
+  // GBIF from another dataset: that dataset's own address, shown from GBIF's image cache. (Round seventy-one, merge, C's
+  // need: the host is not a herbarium's, since a GBIF photograph on a herbarium's host is no longer shown, S-C4.)
+  { src: 'gbif', id: '1234:0', url: 'https://images.example-dataset.org/full/abc.jpg', thumb: 'https://api.gbif.org/v1/image/cache/fit-in/500x/occurrence/1234/media/0123456789abcdef0123456789abcdef', width: 1600, licence: 'by', attribution: 'A. Collector' },
   // Commons: a wide file at its 960-pixel thumbnail and its 500-pixel tile, and a narrow one at its own size.
   // Each in the form the build writes (its file title as the id, "<author>, <short licence>, via Wikimedia Commons"): since
   // the merge of round sixty-nine the read checks a Commons file's title and credit (triage-68 K1, K2), and drops one in no
@@ -82,7 +83,7 @@ describe('the photographs a page loads are on the image policy (R46-31)', () => 
   });
   it("another dataset's own address is never what a page loads", () => {
     const g = read.photos.find((p) => p.src === 'gbif')!;
-    expect(addresses(g).some((u) => u.includes('example-herbarium'))).toBe(false);
+    expect(addresses(g).some((u) => u.includes('example-dataset'))).toBe(false);
   });
 });
 

@@ -1,7 +1,7 @@
 import type { JsonFetcher, FetchResult, SourceResult } from '../fetch';
 import * as gbif from './gbif';
 import { spellingKey } from '../epithet';
-import { epithetsAgree } from '../own-names';
+import { genitivesAgree } from '../own-names';
 import { slip } from '../photo-kind';
 import { plainlyAnother, authorKey } from '../authors';
 
@@ -179,8 +179,9 @@ const gbifs = <T,>(r: Exclude<FetchResult<T>, { status: 'ok' } | { status: 'none
 /** Two binomials are one name when the genus is the same and the epithet one spelling of the other (`spellingKey`). */
 function sameName(a: string, b: string): boolean {
   const x = a.trim().split(/\s+/), y = b.trim().split(/\s+/);
-  // A personal epithet's other ending too ("burbidgei", "burbidgeae"; `epithetsAgree`; round seventy, the owner's second run).
-  return x.length === 2 && y.length === 2 && x[0].toLowerCase() === y[0].toLowerCase() && (spellingKey(x[1]) === spellingKey(y[1]) || epithetsAgree(x[1], y[1]));
+  // A personal epithet's other genitive ending too ("burbidgei", "burbidgeae"; round seventy, the owner's second run), but
+  // never its adjective: Parodia ritteriana is not Parodia ritteri (`genitivesAgree`; round seventy-one, S-B12).
+  return x.length === 2 && y.length === 2 && x[0].toLowerCase() === y[0].toLowerCase() && (spellingKey(x[1]) === spellingKey(y[1]) || genitivesAgree(x[1], y[1]));
 }
 
 type KeyReading = { proof?: string; against?: string; why: string[]; served: number };
@@ -252,18 +253,20 @@ async function readKeys(f: JsonFetcher, keys: readonly number[], name: string, g
  */
 export const NO_ITEM = "no taxon item carries its GBIF key or Kew's IPNI identifier for it, or the name as its label or an alias";
 
-export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?: number, olderNames: ReadonlyArray<number | { key: number; name: string }> = [], opts: { authorship?: string; family?: string } = {}): Promise<CrossResult> {
+export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?: number, olderNames: ReadonlyArray<number | { key: number; name: string }> = [], opts: { authorship?: string; family?: string; kew?: { r?: FetchResult<gbif.KewIds> } } = {}): Promise<CrossResult> {
   const older = olderNames.slice(0, 10).map((o) => (typeof o === 'number' ? { key: o, name: '' } : o));
   const olderKeys = older.map((o) => o.key);
   const mw = <T,>(url: string) => mwGet<T & { error?: unknown }>(f, url);
   const failed = (data: unknown) => { const err = mwError(data); return err ? ({ status: 'error', detail: `wikidata ${err}` } as const) : null; };
   // Kew's identifiers for this name and author, asked of GBIF once, when an item carries an IPNI identifier or none is found.
-  type Kew = { ids: string[]; label?: string; others?: Array<{ id: string; label: string }>; acceptedKeys?: number[] };
-  let kew: Kew | undefined;
+  // Shared with the caller (`opts.kew`), which links Kew's numbers (S-B5) and need not ask again.
+  type Kew = gbif.KewIds;
+  let kew: Kew | undefined = opts.kew?.r?.status === 'ok' ? opts.kew.r.data : undefined;
   const kewOf = async (): Promise<FetchResult<Kew>> => {
     if (kew) return { status: 'ok', data: kew };
     const r = await gbif.kewIpni(f, scientificName, opts.authorship, opts.family);
     if (r.status === 'ok') kew = r.data;
+    if (opts.kew) opts.kew.r = r;
     return r;
   };
   if (gbifKey) {
@@ -291,7 +294,7 @@ export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?:
     // (Q978247, "Virginia strawberry", for Fragaria virginiana; Q158944, "Siberian squill"). Either is only a candidate,
     // proved as below (round seventy, the owner's second run).
     // Another spelling of the epithet too (Q4912319, "Nepenthes burbidgeae", for Nepenthes burbidgei), proved as any other.
-    const spelt2 = (label: string) => { const [g, e, more] = label.trim().split(/\s+/); const [g2, e2] = scientificName.split(' '); return !more && !!e && g.toLowerCase() === g2.toLowerCase() && epithetsAgree(e, e2 ?? ''); };
+    const spelt2 = (label: string) => { const [g, e, more] = label.trim().split(/\s+/); const [g2, e2] = scientificName.split(' '); return !more && !!e && g.toLowerCase() === g2.toLowerCase() && genitivesAgree(e, e2 ?? ''); };
     const hits = (s.data.search ?? []).filter((x) => same(x.label) || spelt2(x.label) || (x.match?.type === 'alias' && same(x.match.text)));
     const exact = [...new Set(hits.map((x) => x.id))];
     const byAlias = new Set(hits.filter((x) => !same(x.label) && !spelt2(x.label)).map((x) => x.id));
@@ -316,6 +319,20 @@ export async function crossIds(f: JsonFetcher, scientificName: string, gbifKey?:
         if (k.status !== 'ok') return k.status === 'none' ? { status: 'none' } : gbifs(k);
         const hit = ipnis.find((i) => k.data.ids.includes(i));
         if (hit) { proven.push({ id, e: e.data, ipni: hit, detail: `${how(id)}; its IPNI identifier ${hit} is Kew's for ${k.data.label}` }); continue; }
+      }
+      // Its POWO identifier Kew's own for this name and author (self-review 70): Kew's entry, not a stray record, says which
+      // plant the item is, and the page links Kew's number. Gunnera manicata's Q1634712 carries Delchevalerie's IPNI and
+      // GBIF record, and POWO 324610-2, Kew's Gunnera manicata Linden ex André.
+      const powos = strings(e.data, P.powo).map((x) => x.replace(/^urn:lsid:ipni\.org:names:/, ''));
+      if (powos.length) {
+        const k = await kewOf();
+        if (k.status !== 'ok') return k.status === 'none' ? { status: 'none' } : gbifs(k);
+        const hit = powos.find((i) => k.data.ids.includes(i));
+        if (hit) { proven.push({ id, e: e.data, ipni: hit, detail: `${how(id)}; its POWO identifier ${hit} is Kew's for ${k.data.label}` }); continue; }
+      }
+      if (ipnis.length) {
+        const k = await kewOf();
+        if (k.status !== 'ok') return k.status === 'none' ? { status: 'none' } : gbifs(k);
         // Kew's identifier for this name by another author: the homonym's item (round seventy, second pass; R47-5).
         const other = k.data.others?.find((o) => ipnis.includes(o.id));
         if (other) { unlike(id, `carries IPNI ${other.id}, Kew's for ${other.label}, another author's name`); continue; }

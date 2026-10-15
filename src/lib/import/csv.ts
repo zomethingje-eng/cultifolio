@@ -188,8 +188,13 @@ export function unmappedColumns(rows: string[][], m: Mapping, header: boolean): 
   return { extra, own };
 }
 
-/** How a date like 09/03/2024 is read, one choice for the whole sheet: day first, month first, or left as written (round sixty-one; the grower review, 4). */
-export type DateOrder = 'dmy' | 'mdy' | null;
+/**
+ * How a date like 09/03/2024 is read, one choice for the whole sheet: day first, month first, or left as written (round
+ * sixty-one; the grower review, 4). Or year first, for a sheet of short dates written with a two-digit year first
+ * (10-04-15, 15 April 2010; round seventy-one, the self-review's D4): offered only when such a cell could be read so, and
+ * read only of those cells.
+ */
+export type DateOrder = 'dmy' | 'mdy' | 'ymd' | null;
 
 const MONTHS: Record<string, number> = { jan: 1, january: 1, feb: 2, february: 2, mar: 3, march: 3, apr: 4, april: 4, may: 5, jun: 6, june: 6, jul: 7, july: 7, aug: 8, august: 8, sep: 9, sept: 9, september: 9, oct: 10, october: 10, nov: 11, november: 11, dec: 12, december: 12 };
 const MONTH_NAME = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -225,7 +230,7 @@ export interface ReadDate {
  *   a year too ("24-03-09", "24/03/09", "24.03.09"), it could be written year first, so it is left unless the sheet's
  *   choice says its dates are written day first or month first, both of which put the year last: LibreOffice saves a
  *   date as 05/01/24 or 01/05/24 by its language, and a sheet saved again by it read none of its dates (round seventy;
- *   triage-69 R3, the self-review's D3);
+ *   triage-69 R3, the self-review's D3), or year first, which reads it with the year first (round seventy-one; D4);
  * - a time after a date ("09/03/2024 10:15", as a spreadsheet writes a date and time) is not part of the date;
  * - a 0 day or month is no date, and "2019.5" is a number, not May 2019.
  * A date in the future or before 1900 is not read. What is not read is said, and the sheet's text goes to the notes.
@@ -287,7 +292,10 @@ export function readDate(cell: string, today: string, order: DateOrder = null): 
       // and month after it) could be written year first, with any separator, so it is left, as dashes always were.
       const yf = m[1].length === 2 ? twoDigit(m[1]) : null;
       const asYearFirst = yf !== null && b <= 12 && +m[4] >= 1 && +m[4] <= 31 && full(yf, b, +m[4]).d !== null;
-      if ((m[2] === '-' || asYearFirst) && !order) {
+      // Year first, when the sheet's choice says so (round seventy-one; the self-review's D4: a sheet of 10-04-15, asked
+      // only day first or month first, was read a year wrong whichever was answered).
+      if (asYearFirst && order === 'ymd') return full(yf!, b, +m[4]);
+      if ((m[2] === '-' || asYearFirst) && order !== 'dmy' && order !== 'mdy') {
         const yl = twoDigit(m[4]);
         const last = yl === null || a === 0 || b === 0 ? [] : [...new Set([full(yl, b, a).d, full(yl, a, b).d].filter((x): x is string => !!x))];
         return not(`"${t}" could be written year first or year last, so it was not read`, last.length ? { yearLast: last } : {});
@@ -311,10 +319,13 @@ export function readDate(cell: string, today: string, order: DateOrder = null): 
  * self-review's grower 11): a date whose first number is over 12 can only be day first ("17/11/2007"), one whose second
  * is, only month first. Said beside the question as evidence; nothing is chosen for the grower.
  */
-export function ambiguousDates(rows: string[][], m: Mapping, header: boolean, today: string): { n: number; first: string | null; dayFirst: { n: number; first: string | null }; monthFirst: { n: number; first: string | null } } {
+export function ambiguousDates(rows: string[][], m: Mapping, header: boolean, today: string): { n: number; first: string | null; dayFirst: { n: number; first: string | null }; monthFirst: { n: number; first: string | null }; yearFirst: { n: number; first: string | null } } {
   const dayFirst = { n: 0, first: null as string | null }, monthFirst = { n: 0, first: null as string | null };
+  // The cells that could as well be written with a two-digit year first (round seventy-one; the self-review's D4): the
+  // choice then offers year first too, and says which day each answer reads.
+  const yearFirst = { n: 0, first: null as string | null };
   const i = m.acquired;
-  if (i === undefined) return { n: 0, first: null, dayFirst, monthFirst };
+  if (i === undefined) return { n: 0, first: null, dayFirst, monthFirst, yearFirst };
   let n = 0;
   let first: string | null = null;
   rows.forEach((r, k) => {
@@ -322,6 +333,7 @@ export function ambiguousDates(rows: string[][], m: Mapping, header: boolean, to
     const c = cellText(r[i]);
     if (!c) return;
     const d = readDate(c, today);
+    if (/^\d{2}[-/.]\d{1,2}[-/.]\d{2}(?:\s|$)/.test(c.trim()) && readDate(c, today, 'ymd').d) { yearFirst.n++; yearFirst.first ??= c; }
     // A short date whose year could be first or last, and whose day and month read either way with it last (round
     // seventy; triage-69 R3): the choice reads it, so it is asked about as 09/03/2024 is.
     if (d.ambiguous || (d.yearLast?.length ?? 0) > 1) { n++; first ??= c; return; }
@@ -330,5 +342,5 @@ export function ambiguousDates(rows: string[][], m: Mapping, header: boolean, to
     const by = +x[1] > 12 ? dayFirst : +x[2] > 12 ? monthFirst : null;
     if (by) { by.n++; by.first ??= c; }
   });
-  return { n, first, dayFirst, monthFirst };
+  return { n, first, dayFirst, monthFirst, yearFirst };
 }

@@ -119,6 +119,21 @@ export async function synonymAsk(platform: Platform, fetch: Fetch, slug: string,
 }
 
 /**
+ * The backbone's cached answer for a name, read from the Worker's cache only, never asked (round seventy-one; S-F8): the
+ * redirect from `/species/echinopsis-pachanoi` put GBIF's answer there a moment before, so the page it lands on can say
+ * why it was sent, without trusting `?was=` (anyone can write it) and without a request of its own. Null on any miss.
+ */
+export async function cachedMatch(platform: Platform, name: string): Promise<{ status?: string; matchType?: string; acceptedUsageKey?: number; speciesKey?: number } | null> {
+  const cache = platform?.caches?.default;
+  if (!cache || !/^[A-Z][a-z]+ [a-z]/.test(name)) return null;
+  const hit = await cache.match(workerKey('match', { name: name.toLowerCase() })).catch(() => undefined);
+  if (!hit) return null;
+  const body = (await hit.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!body || typeof body !== 'object') return null;
+  return { status: typeof body.status === 'string' ? body.status : body.synonym === true ? 'SYNONYM' : undefined, matchType: typeof body.matchType === 'string' ? body.matchType : undefined, acceptedUsageKey: typeof body.acceptedUsageKey === 'number' ? body.acceptedUsageKey : undefined, speciesKey: typeof body.speciesKey === 'number' ? body.speciesKey : undefined };
+}
+
+/**
  * The authors under which a species' stored synonyms (the dossier's `name.synonyms`, GBIF's with their authorship) hold
  * an older name (round seventy; triage-69 F1): "Echeveria farinosa Lindl." gives "Lindl." for "Echeveria farinosa". Each
  * author once, in the record's order; empty where the record holds the name with no author, or not at all. Nothing is
@@ -148,5 +163,14 @@ export function authorsOf(name: string, synonyms: readonly string[]): string[] {
 export function sharedNameMessage(name: string, holders: ReadonlyArray<{ name: string; authors: readonly string[] }>): string {
   const count = ['two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'][holders.length - 2] ?? String(holders.length);
   const each = holders.map((h) => `${h.authors.length ? h.authors.map((a) => `${name} ${a}`).join(' and ') : name}, now ${h.name}`);
-  return `${name} is an older name of ${count} species of the reference, so this address leads to ${holders.length === 2 ? 'neither' : 'none of them'}: ${each.join('; ')}`;
+  // One author under two holders or more is one name GBIF files under each (a pro parte use), not two names (round
+  // seventy-one; S-F11: "Vernonia praealta (L.) Michx., now V. gigantea; Vernonia praealta (L.) Michx., now V. noveboracensis").
+  const key = (a: string) => a.replace(/\s+/g, '').toLowerCase();
+  const seen = new Map<string, string[]>();
+  holders.forEach((h) => { for (const a of h.authors) { const k = key(a); seen.set(k, [...(seen.get(k) ?? []), h.name]); } });
+  const both = [...seen.entries()].filter(([, hs]) => hs.length > 1).map(([k, hs]) => {
+    const shown = holders.flatMap((h) => h.authors).find((a) => key(a) === k)!;
+    return `GBIF files ${name} ${shown} under ${hs.length === 2 ? `both ${hs[0]} and ${hs[1]}` : `each of ${hs.slice(0, -1).join(', ')} and ${hs[hs.length - 1]}`}: one name, not ${hs.length === 2 ? 'two' : 'several'}`;
+  });
+  return [`${name} is an older name of ${count} species of the reference, so this address leads to ${holders.length === 2 ? 'neither' : 'none of them'}: ${each.join('; ')}`, ...both].join('. ');
 }

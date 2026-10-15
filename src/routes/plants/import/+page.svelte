@@ -21,7 +21,7 @@
   import { parseName } from '$core/names';
   import { entriesFor, searchCatalogue } from '$lib/ui/index.svelte';
   import { parsePaste } from '$lib/import/paste';
-  import { parseCsv, detectHeader, guessMapping, unmappedColumns, ambiguousDates, FIELDS, FIELD_LABEL, type Mapping, type Field } from '$lib/import/csv';
+  import { parseCsv, detectHeader, guessMapping, unmappedColumns, ambiguousDates, readDate, FIELDS, FIELD_LABEL, type Mapping, type Field } from '$lib/import/csv';
   import { rowsFromPaste, rowsFromSheet } from '$lib/import/rows';
   import { checkNames, checkKey, nameVerdict, type NameCheck, type Lookup } from '$lib/import/check';
   import { planNumbers, placesToMake, resolvePlace, splitPath, markSheet, numberKey, passOf, loosePaths, asPath, useSpecies, type ImportRow, type NumberPlan } from '$lib/import/plan';
@@ -50,7 +50,7 @@
   let sheetMsg = $state('');
   let csvText = $state('');
   /** Dates like 09/03/2024: one choice for the whole sheet, "leave them" until the grower says otherwise (round sixty-one; the grower review, 4). */
-  let dateOrder = $state<'leave' | 'dmy' | 'mdy'>('leave');
+  let dateOrder = $state<'leave' | 'dmy' | 'mdy' | 'ymd'>('leave');
   /** The columns no field takes go into each plant's notes unless the grower says not (round sixty-one; the grower review, 3). */
   let extraToNotes = $state(true);
   function readPastedSheet() {
@@ -85,7 +85,7 @@
   const colName = (i: number) => (sheet && header ? sheet[0][i]?.trim() || `Column ${i + 1}` : `Column ${i + 1}`);
   const preview = $derived(sheet ? sheet.slice(header ? 1 : 0, (header ? 1 : 0) + 3) : []);
   const unmapped = $derived(sheet ? unmappedColumns(sheet, mapping, header) : { extra: [], own: [] });
-  const amb = $derived(sheet ? ambiguousDates(sheet, mapping, header, localDate()) : { n: 0, first: null, dayFirst: { n: 0, first: null }, monthFirst: { n: 0, first: null } });
+  const amb = $derived(sheet ? ambiguousDates(sheet, mapping, header, localDate()) : { n: 0, first: null, dayFirst: { n: 0, first: null }, monthFirst: { n: 0, first: null }, yearFirst: { n: 0, first: null } });
   /**
    * What the sheet's other dates show of its order, said beside the question and never chosen for the grower (round
    * sixty-two, second pass; triage-self N10): a sheet with 17/11/2007 asked about 09/03/2024 with no hint.
@@ -98,12 +98,20 @@
     if (m.n) return `This sheet also has ${m.first}${more(m.n)}, which can only be month first, so its dates seem to be written month first.`;
     return 'Nothing else in this sheet shows which way round its dates are written.';
   });
-  /** The two readings of the sheet's first ambiguous date, for the choice's own words. */
+  /**
+   * The readings of the sheet's first ambiguous date, for the choice's own words, each with its year (round seventy-one;
+   * the self-review's D4: "Day first (10 April)" for 10-04-15 hid that it would be read as 2015), and year first's when
+   * a cell could be written so ("10-04-15 is 15 April 2010").
+   */
   const ambWords = $derived.by(() => {
-    const m = amb.first ? /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$/.exec(amb.first.trim()) : null;
-    if (!m) return null;
+    if (!amb.first) return null;
     const mon = (n: number) => ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][n - 1];
-    return { text: amb.first, dmy: `${+m[1]} ${mon(+m[2])}`, mdy: `${+m[2]} ${mon(+m[1])}` };
+    const said = (d: string | null) => (d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? `${+d.slice(8)} ${mon(+d.slice(5, 7))} ${d.slice(0, 4)}` : null);
+    const today = localDate();
+    const dmy = said(readDate(amb.first, today, 'dmy').d), mdy = said(readDate(amb.first, today, 'mdy').d);
+    if (!dmy || !mdy) return null;
+    const yf = amb.yearFirst.first ? said(readDate(amb.yearFirst.first, today, 'ymd').d) : null;
+    return { text: amb.first, dmy, mdy, ymd: yf ? (amb.yearFirst.first === amb.first ? yf : `${amb.yearFirst.first} is ${yf}`) : null };
   });
   function setMap(f: Field, v: string) {
     const next: Mapping = { ...mapping };
@@ -428,10 +436,11 @@
       {/if}
       {#if amb.n}
         <fieldset class="full dates" id="imp-dates">
-          <legend class="small">{amb.n === 1 ? 'One date' : `${amb.n} dates`} in this sheet, like {ambWords?.text ?? amb.first}, could be read day first or month first. How are they written?</legend>
+          <legend class="small">{amb.n === 1 ? 'One date' : `${amb.n} dates`} in this sheet, like {ambWords?.text ?? amb.first}, could be read day first or month first{amb.yearFirst.n ? ', or with the year first' : ''}. How are they written?</legend>
           <p class="small" id="imp-dates-hint">{ambHint}</p>
           <label class="check"><input type="radio" name="imp-date-order" value="dmy" bind:group={dateOrder} /> Day first{ambWords ? ` (${ambWords.dmy})` : ''}</label>
           <label class="check"><input type="radio" name="imp-date-order" value="mdy" bind:group={dateOrder} /> Month first{ambWords ? ` (${ambWords.mdy})` : ''}</label>
+          {#if amb.yearFirst.n}<label class="check"><input type="radio" name="imp-date-order" value="ymd" bind:group={dateOrder} id="imp-date-ymd" /> Year first, with two digits{ambWords?.ymd ? ` (${ambWords.ymd})` : ''}</label>{/if}
           <label class="check"><input type="radio" name="imp-date-order" value="leave" bind:group={dateOrder} /> Leave them: the text goes into the notes, and the plant is numbered for the year written</label>
         </fieldset>
       {/if}

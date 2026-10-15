@@ -36,9 +36,9 @@ const INDEX = [
 const HELD = heldNamesOf(INDEX);
 const KEY = new Map(INDEX.map((e) => [e.name, e.key]));
 
-type Stored = { title: string; attribution?: string; licence?: string; width?: number; url?: string; thumb?: string };
+type Stored = { title: string; attribution?: string; licence?: string; width?: number; url?: string; thumb?: string; categories?: string[] };
 const C = 'https://upload.wikimedia.org/wikipedia/commons';
-const photo = (x: Stored) => ({ src: 'commons', id: x.title, url: x.url ?? `${C}/thumb/a/ab/x.jpg/960px-${encodeURIComponent(x.title)}`, thumb: x.thumb ?? `${C}/thumb/a/ab/x.jpg/500px-x.jpg`, width: x.width ?? 3000, height: 2000, licence: x.licence ?? 'by-sa', attribution: x.attribution ?? 'A. Grower, CC BY-SA 4.0, via Wikimedia Commons' });
+const photo = (x: Stored) => ({ src: 'commons', id: x.title, url: x.url ?? `${C}/thumb/a/ab/x.jpg/960px-${encodeURIComponent(x.title)}`, thumb: x.thumb ?? `${C}/thumb/a/ab/x.jpg/500px-x.jpg`, width: x.width ?? 3000, height: 2000, licence: x.licence ?? 'by-sa', attribution: x.attribution ?? 'A. Grower, CC BY-SA 4.0, via Wikimedia Commons', ...(x.categories ? { categories: x.categories } : {}) });
 const read = (scientific: string, files: Array<string | Stored>, synonyms: string[] = [], held: HeldNames | null = HELD) =>
   safeUrls({ key: KEY.get(scientific) ?? 1, name: { scientific, synonyms, vernacular: [], status: 'accepted' }, climate: { status: 'none' }, literature: [], links: {}, upstream: {}, photos: files.map((f) => photo(typeof f === 'string' ? { title: f } : f)) } as never, held).photos;
 const shows = (scientific: string, f: string | Stored, synonyms: string[] = [], held: HeldNames | null = HELD) => read(scientific, [f], synonyms, held).length === 1;
@@ -69,9 +69,12 @@ describe('C7: more kinds (R47-3)', () => {
     expect(shows('Cyphostemma adenopodum', { title: 'File:Cissus adenopodus 135-8278.jpg', licence: 'pd', attribution: 'M.S. del., J.N.Fitch lith., Public domain, via Wikimedia Commons' }, ['Cissus adenopoda Sprague'])).toBe(false);
     expect(shows('Colchicum macedonicum', { title: 'File:Colchicum macedonicum.jpg', licence: 'pd', width: 189, attribution: 'Македонская почта, Public domain, via Wikimedia Commons' })).toBe(false);
   });
-  it('a year before 1900 in a title is a printed work; a camera\'s, a catalogue\'s or a collector\'s number is not', () => {
-    expect(shows('Dasylirion graminifolium', 'File:Dasylirion graminifolium Zuccarini 1843.jpg', ['Yucca graminifolia Zucc.'])).toBe(false);
-    expect(shows('Nepenthes bongso', 'File:Nepenthes bongso Korthals 1839.JPG')).toBe(false);
+  it('a year before 1900 in a title is a printed work with other print evidence; a camera\'s, a catalogue\'s or a collector\'s number is not', () => {
+    // Round 71 (S-C8): a year marks a printed work only with other print evidence: a licence for old works, a category of scans, a plate's words.
+    expect(shows('Dasylirion graminifolium', { title: 'File:Dasylirion graminifolium Zuccarini 1843.jpg', attribution: 'Joseph Gerhard Zuccarini, PD-old-100, via Wikimedia Commons', licence: 'pd' }, ['Yucca graminifolia Zucc.'])).toBe(false);
+    expect(shows('Nepenthes bongso', { title: 'File:Nepenthes bongso Korthals 1839.JPG', categories: ['Nepenthes bongso', 'Scans of Korthals 1839'] })).toBe(false);
+    expect(shows('Nepenthes bongso', 'File:Nepenthes bongso Korthals 1839 pl. 3.JPG')).toBe(false);
+    expect(shows('Nepenthes bongso', 'File:Nepenthes bongso Korthals 1839.JPG')).toBe(true); // a year alone: round 71
     for (const t of ['File:Gymnocalycium victorii VG 1815.jpg', 'File:Gymnocalycium victorii VoS1791 30439.JPG', 'File:Gymnocalycium victorii IMG 1834.jpg', 'File:Gymnocalycium victorii (5729340449).jpg']) expect(shows('Gymnocalycium victorii', t), t).toBe(true); // guards
   });
   it('an abbreviated genus with no full stop, "N rajah", where the reference holds the epithet', () => {
@@ -91,7 +94,7 @@ describe('C7: more kinds (R47-3)', () => {
 describe('C7: a Commons original is not loaded whole into a smaller slot (R47-9)', () => {
   const ORIG = `${C}/4/45/Ceropegia_stapelliformis.jpg`;
   it('a stored original of 400 pixels gets the 250 as its tile, so a row asks for the 120', () => {
-    const [p] = read('Ceropegia stapeliiformis', [{ title: 'File:Ceropegia stapelliformis.jpg', url: ORIG, thumb: ORIG, width: 400, licence: 'pd', attribution: 'MidgleyDJ, Public domain, via Wikimedia Commons' }]);
+    const [p] = read('Ceropegia stapeliiformis', [{ title: 'File:Ceropegia stapeliiformis.jpg', url: ORIG, thumb: ORIG, width: 400, licence: 'pd', attribution: 'MidgleyDJ, Public domain, via Wikimedia Commons' }]);
     expect(p.thumb).toBe(`${C}/thumb/4/45/Ceropegia_stapelliformis.jpg/250px-Ceropegia_stapelliformis.jpg`);
     expect(photoAt(p.thumb, 'square')).toBe(`${C}/thumb/4/45/Ceropegia_stapelliformis.jpg/120px-Ceropegia_stapelliformis.jpg`);
   });

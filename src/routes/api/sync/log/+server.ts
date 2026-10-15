@@ -20,7 +20,12 @@ export const GET: RequestHandler = async ({ request, url, platform, getClientAdd
   const after = parseAfter(url.searchParams.get('after'));
   try {
     // Counted against the vault's hour of listings (round sixty-seven; triage-66 S6): past it, 503 with Retry-After.
-    return json(await listBatches(r2, id, since == null || since === '' ? null : Number(since), 500, after, quotaOf(platform, getClientAddress)), { headers: { 'cache-control': 'no-store' } });
+    // The walk and its settle outlive a client that goes away mid-walk (round seventy-one; self-review E2): a request the
+    // client left could end with the Worker's invocation before `listed`, and its pages were then counted only for the
+    // reservation's minute (72,000 pages an hour, by asking once a second and leaving).
+    const listing = listBatches(r2, id, since == null || since === '' ? null : Number(since), 500, after, quotaOf(platform, getClientAddress));
+    platform?.context?.waitUntil(listing.then(() => {}, () => {}));
+    return json(await listing, { headers: { 'cache-control': 'no-store' } });
   } catch (e) {
     const answer = refusal(e);
     if (answer) return answer;
