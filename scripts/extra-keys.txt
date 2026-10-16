@@ -1,0 +1,335 @@
+# The other GBIF keys each page reads records and photographs from (round seventy-three; src/lib/dossier/extra-keys.ts says the rule).
+# Made 2026-10-16 by --list-extra-keys from Kew's file of 2026-06-04 and GBIF's backbone export (simple.txt.gz): 332 keys on 305 of 8945 pages.
+# page key, key, GBIF's name, GBIF's status, Kew's row (plant_name_id), Kew's reading, how, the old address of a page merged here (or -), the keys under it not read (or -)
+10071055	10797341	×Tormariosorbus intermedia (Ehrh.) J.M.H.Shaw, 2015	ACCEPTED	3010591	× Tormariosorbus intermedia (Ehrh.) Mezhenskyj (synonym under Hedlundia intermedia (Ehrh.) Mosyakin, Fedor. & McNeill)	filed	-	-
+10485981	2985897	Dudleya gnoma S.W.McCabe	DOUBTFUL	2778956	Dudleya gnoma S.W.McCabe (accepted)	entry	-	-
+10506800	3575368	Ceropegia evansii McCann	DOUBTFUL	502689	Ceropegia evansii McCann (accepted)	entry	-	-
+10767533	10952209	Drimia raogibikei (Hemadri) Pull., 2018	DOUBTFUL	529314	Drimia raogibikei (Hemadri) Hemadri (accepted)	entry	-	-
+10806578	7283037	Gymnocalycium gibbosum (Haw.) Pfeiff., 1845	DOUBTFUL	2835626	Gymnocalycium gibbosum (Haw.) Pfeiff. ex Mittler (accepted)	entry	-	-
+10806578	8237800	Gymnocalycium gibbosum (Haw.) Pfeiff. ex Mittler	DOUBTFUL	2835626	Gymnocalycium gibbosum (Haw.) Pfeiff. ex Mittler (accepted)	entry	-	7388728,7422205
+10917185	5646652	Avonia mallei G.Will.	ACCEPTED	500449	Avonia mallei G.Will. (synonym under Anacampseros mallei (G.Will.) G.Will.)	filed	-	-
+10925365	7705269	Echinocereus rigidissimus (Engelm.) Haage	DOUBTFUL	2782811	Echinocereus rigidissimus (Engelm.) Hirscht (accepted)	entry	-	-
+10965694	9689104	Thaumatophyllum bipinnatifidum (Schott ex Endl.) Sakur., Calazans & Mayo	ACCEPTED	531721	Thaumatophyllum bipinnatifidum (Schott ex Endl.) Sakur., Calazans & Mayo (synonym under Philodendron bipinnatifidum Schott ex Endl.)	filed	-	2870782,2870783,2870784,7598750,8108241
+10972091	7284003	Echinocereus cinerascens (DC.) Lem.	DOUBTFUL	2782548	Echinocereus cinerascens (DC.) Haage (accepted)	entry	-	7425147
+10972091	7472528	Echinocereus cinerascens (DC.) H.P.Kelsey & Dayton	DOUBTFUL	2782548	Echinocereus cinerascens (DC.) Haage (accepted)	entry	-	-
+11168843	7967428	Calesiam asplenifolium Kuntze	SYNONYM	2691779	Calesiam asplenifolium (Balf.f.) Kuntze (synonym under Boswellia asplenifolia (Balf.f.) Thulin)	filed	-	-
+11798439	3084426	Coryphantha macromeris (Engelm.) Lem.	ACCEPTED	2739666	Coryphantha macromeris (Engelm.) Britton & Rose (synonym under Pelecyphora macromeris (Engelm.) D.Aquino & Dan.Sánchez)	filed	coryphantha-macromeris	-
+11869920	3176197	Eucalyptus camaldulensis Dehn.	DOUBTFUL	72616	Eucalyptus camaldulensis Dehnh. (accepted)	abbreviation	-	-
+12190776	3004659	Rosa bracteata J.C.Wendl.	DOUBTFUL	2965976	Rosa bracteata J.C.Wendl. (accepted)	entry	-	12324799
+12221398	3951521	Rebutia famatinensis Speg. ex Hosseus	DOUBTFUL	3311254	Rebutia famatinensis (Speg.) Hosseus (synonym under Reicheocactus famatinensis (Speg.) Schlumpb.)	filed	-	-
+12221398	10996250	Reicheocactus famatinensis (Speg.) Schlumpb.	ACCEPTED	2914906	Reicheocactus famatinensis (Speg.) Schlumpb. (accepted)	entry	-	12270522,12284686,12319422,12340139,12341024,12361952,12376318
+12251984	4189296	Peperomia argyreia (Miq.) É.Morren	ACCEPTED	2556939	Peperomia argyreia (Hook.f.) É.Morren (illegitimate under Peperomia argyraea W.Bull)	filed	-	4188476
+2650829	8656764	Cyrtomium falcatum (L.f.) K.Presl	DOUBTFUL	3151696	Cyrtomium falcatum (L.f.) C.Presl (accepted)	entry	-	-
+2684996	7942204	Araucaria cunninghamii Mudie	DOUBTFUL	14352	Araucaria cunninghamii Mudie (accepted)	entry	-	-
+2693788	7974826	Billbergia nutans H.Wendl.	DOUBTFUL	221638	Billbergia nutans H.Wendl. (accepted)	entry	-	-
+2739661	11279160	Colchicum bulbocodium KerGawl.	DOUBTFUL	302792	Colchicum bulbocodium Ker Gawl. (accepted)	entry	-	11272975,11349905
+2743404	11258647	Geissorhiza setacea (Thunb.) KerGawl.	DOUBTFUL	327653	Geissorhiza setacea (Thunb.) Ker Gawl. (accepted)	entry	-	-
+2743474	11334541	Geissorhiza humilis (Thunb.) KerGawl.	DOUBTFUL	327573	Geissorhiza humilis (Thunb.) Ker Gawl. (accepted)	entry	-	-
+2743651	11247260	Romulea albomarginata M.P.deVos	DOUBTFUL	324546	Romulea albomarginata M.P.de Vos (accepted)	entry	-	-
+2743652	11301646	Romulea vlokii M.P.deVos	DOUBTFUL	323983	Romulea vlokii M.P.de Vos (accepted)	entry	-	-
+2743668	11243512	Romulea syringodeoflora M.P.deVos	DOUBTFUL	324452	Romulea syringodeoflora M.P.de Vos (accepted)	entry	-	-
+2743773	11326332	Romulea toximontana M.P.deVos	DOUBTFUL	324477	Romulea toximontana M.P.de Vos (accepted)	entry	-	-
+2743776	11336794	Romulea sphaerocarpa M.P.deVos	DOUBTFUL	324463	Romulea sphaerocarpa M.P.de Vos (accepted)	entry	-	-
+2743777	11255652	Romulea elliptica M.P.deVos	DOUBTFUL	324579	Romulea elliptica M.P.de Vos (accepted)	entry	-	-
+2743778	11332756	Romulea cedarbergensis M.P.deVos	DOUBTFUL	323948	Romulea cedarbergensis M.P.de Vos (accepted)	entry	-	-
+2743779	11265524	Romulea membranacea M.P.deVos	DOUBTFUL	324388	Romulea membranacea M.P.de Vos (accepted)	entry	-	-
+2743780	11319820	Romulea vinacea M.P.deVos	DOUBTFUL	324563	Romulea vinacea M.P.de Vos (accepted)	entry	-	-
+2743782	11316024	Romulea barkerae M.P.deVos	DOUBTFUL	324611	Romulea barkerae M.P.de Vos (accepted)	entry	-	-
+2743789	11313411	Romulea multisulcata M.P.deVos	DOUBTFUL	324407	Romulea multisulcata M.P.de Vos (accepted)	entry	-	-
+2743794	11241136	Romulea saldanhensis M.P.deVos	DOUBTFUL	324509	Romulea saldanhensis M.P.de Vos (accepted)	entry	-	-
+2743796	11311951	Romulea sanguinalis M.P.deVos	DOUBTFUL	324499	Romulea sanguinalis M.P.de Vos (accepted)	entry	-	-
+2743797	11351483	Romulea kamisensis M.P.deVos	DOUBTFUL	324428	Romulea kamisensis M.P.de Vos (accepted)	entry	-	-
+2743831	11260736	Romulea namaquensis M.P.deVos	DOUBTFUL	324406	Romulea namaquensis M.P.de Vos (accepted)	entry	-	11363110
+2743833	11359037	Romulea hallii M.P.deVos	DOUBTFUL	324461	Romulea hallii M.P.de Vos (accepted)	entry	-	-
+2743840	11238865	Romulea komsbergensis M.P.deVos	DOUBTFUL	324439	Romulea komsbergensis M.P.de Vos (accepted)	entry	-	-
+2743841	11291751	Romulea pearsonii M.P.deVos	DOUBTFUL	324497	Romulea pearsonii M.P.de Vos (accepted)	entry	-	-
+2743843	11271550	Romulea jugicola M.P.deVos	DOUBTFUL	324427	Romulea jugicola M.P.de Vos (accepted)	entry	-	-
+2743844	11339449	Romulea sladenii M.P.deVos	DOUBTFUL	324474	Romulea sladenii M.P.de Vos (accepted)	entry	-	-
+2743846	11309357	Romulea saxatilis M.P.deVos	DOUBTFUL	324507	Romulea saxatilis M.P.de Vos (accepted)	entry	-	-
+2743874	11285452	Romulea stellata M.P.deVos	DOUBTFUL	324449	Romulea stellata M.P.de Vos (accepted)	entry	-	-
+2743879	11286832	Romulea malaniae M.P.deVos	DOUBTFUL	324384	Romulea malaniae M.P.de Vos (accepted)	entry	-	-
+2743884	11244838	Romulea monticola M.P.deVos	DOUBTFUL	324402	Romulea monticola M.P.de Vos (accepted)	entry	-	-
+2743900	11368620	Romulea eximia M.P.deVos	DOUBTFUL	324609	Romulea eximia M.P.de Vos (accepted)	entry	-	-
+2743926	11235116	Romulea pratensis M.P.deVos	DOUBTFUL	324493	Romulea pratensis M.P.de Vos (accepted)	entry	-	-
+2743927	11324870	Romulea fibrosa M.P.deVos	DOUBTFUL	324608	Romulea fibrosa M.P.de Vos (accepted)	entry	-	-
+2743933	11266859	Romulea subfistulosa M.P.deVos	DOUBTFUL	324458	Romulea subfistulosa M.P.de Vos (accepted)	entry	-	11356530
+2743974	11299167	Romulea tetragona M.P.deVos	DOUBTFUL	324480	Romulea tetragona M.P.de Vos (accepted)	entry	-	-
+2743981	11233803	Romulea viridibracteata M.P.deVos	DOUBTFUL	323977	Romulea viridibracteata M.P.de Vos (accepted)	entry	-	-
+2743987	11296852	Romulea diversiformis M.P.deVos	DOUBTFUL	324582	Romulea diversiformis M.P.de Vos (accepted)	entry	-	-
+2743990	11308001	Romulea multifida M.P.deVos	DOUBTFUL	324392	Romulea multifida M.P.de Vos (accepted)	entry	-	-
+2744017	11227727	Romulea sinispinosensis M.P.deVos	DOUBTFUL	324501	Romulea sinispinosensis M.P.de Vos (accepted)	entry	-	-
+2744066	11341919	Romulea luteiflora (M.P.deVos) M.P.deVos	DOUBTFUL	324431	Romulea luteiflora (M.P.de Vos) M.P.de Vos (accepted)	entry	-	-
+2744070	11253327	Romulea unifolia M.P.deVos	DOUBTFUL	323984	Romulea unifolia M.P.de Vos (accepted)	entry	-	-
+2745794	11277729	Sparaxis fragrans (Jacq.) KerGawl.	DOUBTFUL	324646	Sparaxis fragrans (Jacq.) Ker Gawl. (accepted)	entry	-	-
+2745856	11232794	Sparaxis galeata KerGawl.	DOUBTFUL	324647	Sparaxis galeata Ker Gawl. (accepted)	entry	-	-
+2746164	11251436	Babiana tubulosa (Burm.f.) KerGawl.	DOUBTFUL	326808	Babiana tubulosa (Burm.f.) Ker Gawl. (accepted)	entry	-	-
+2746204	11345427	Babiana spathacea (L.f.) KerGawl.	DOUBTFUL	326779	Babiana spathacea (L.f.) Ker Gawl. (accepted)	entry	-	-
+2750406	11252540	Gladiolus dalenii VanGeel	DOUBTFUL	328355	Gladiolus dalenii Van Geel (accepted)	entry	-	11226979,11257756,11338583,11366315
+2758700	12309070	Hedychium gardnerianum Sheppard ex KerGawl.	DOUBTFUL	248143	Hedychium gardnerianum Sheph. ex Ker Gawl. (accepted)	entry	-	-
+2767304	11283605	Scilla achtenii DeWild.	DOUBTFUL	287027	Scilla achtenii De Wild. (accepted)	entry	-	-
+2767400	11350609	Scilla verdickii DeWild.	DOUBTFUL	288851	Scilla verdickii De Wild. (accepted)	entry	-	-
+2767413	11251523	Scilla katendensis DeWild.	DOUBTFUL	288606	Scilla katendensis De Wild. (accepted)	entry	-	-
+2767414	11272356	Scilla werneri DeWild.	DOUBTFUL	288367	Scilla werneri De Wild. (accepted)	entry	-	-
+2767729	11241770	Resnova maxima VanDerMerwe	DOUBTFUL	286712	Resnova maxima van der Merwe (accepted)	entry	-	-
+2767745	11225979	Resnova pilosa VanDerMerwe	DOUBTFUL	286714	Resnova pilosa van der Merwe (accepted)	entry	-	-
+2767747	11328249	Resnova minor VanDerMerwe	DOUBTFUL	286713	Resnova minor van der Merwe (accepted)	entry	-	-
+2772333	11307888	Albuca thermarum VanJaarsv.	DOUBTFUL	294645	Albuca thermarum van Jaarsv. (accepted)	entry	-	-
+2772338	11223914	Albuca scabromarginata DeWild.	DOUBTFUL	294624	Albuca scabromarginata De Wild. (accepted)	entry	-	-
+2772353	11307083	Albuca vittata KerGawl.	DOUBTFUL	294656	Albuca vittata Ker Gawl. (accepted)	entry	-	-
+2772508	11238944	Albuca variegata DeWild.	DOUBTFUL	294651	Albuca variegata De Wild. (accepted)	entry	-	-
+2772532	11270705	Albuca kundelungensis DeWild.	DOUBTFUL	294570	Albuca kundelungensis De Wild. (accepted)	entry	-	-
+2772539	11239749	Albuca gentilii DeWild.	DOUBTFUL	294548	Albuca gentilii De Wild. (accepted)	entry	-	-
+2772570	11296954	Albuca homblei DeWild.	DOUBTFUL	294557	Albuca homblei De Wild. (accepted)	entry	-	-
+2772578	11229152	Albuca katangensis DeWild.	DOUBTFUL	294568	Albuca katangensis De Wild. (accepted)	entry	-	-
+2773366	11291132	Ornithogalum sardienii VanJaarsv.	DOUBTFUL	283591	Ornithogalum sardienii van Jaarsv. (accepted)	entry	-	-
+2774158	11254424	Ophiopogon japonicus (Thunb.) KerGawl.	DOUBTFUL	279475	Ophiopogon japonicus (Thunb.) Ker Gawl. (accepted)	entry	-	-
+2775351	9532688	Lachenalia aloides (L.f.) hort.	DOUBTFUL	280351	Lachenalia aloides (L.f.) Engl. (accepted)	entry	-	-
+2775410	8077354	Lachenalia bulbifera (Cirillo) Asch. & Graebn., 1905	DOUBTFUL	280349	Lachenalia bulbifera (Cirillo) Engl. (accepted)	entry	-	-
+2775421	11298641	Lachenalia nervosa KerGawl.	DOUBTFUL	280398	Lachenalia nervosa Ker Gawl. (accepted)	entry	-	-
+2775606	9069246	Yucca queretaroensis PiñaLuján	DOUBTFUL	291627	Yucca queretaroensis Piña Luján (accepted)	entry	-	-
+2776693	8322591	Ornithogalum fragrans (Jacq.) J.C.Manning & Goldblatt, 2004	ACCEPTED	282942	Ornithogalum fragrans (Jacq.) Kunth (synonym under Drimia fragrans (Jacq.) J.C.Manning & Goldblatt)	filed	-	-
+2776704	11232897	Drimia mzimvubuensis VanJaarsv.	DOUBTFUL	346751	Drimia mzimvubuensis van Jaarsv. (accepted)	entry	-	-
+2776819	11235986	Drimia hockii DeWild.	DOUBTFUL	304995	Drimia hockii De Wild. (accepted)	entry	-	-
+2776894	7546983	Drimia congesta (Wight) Ansari & Sundararagh., 1980	DOUBTFUL	304967	Drimia congesta (Wight) Stearn (illegitimate under Drimia wightii Lakshmin.)	filed	-	-
+2778566	11223811	Gasteria glomerata VanJaarsv.	DOUBTFUL	307721	Gasteria glomerata van Jaarsv. (accepted)	entry	-	-
+2778662	11330564	Gasteria ellaphieae VanJaarsv.	DOUBTFUL	307710	Gasteria ellaphieae van Jaarsv. (accepted)	entry	-	-
+2778664	11280789	Gasteria vlokii VanJaarsv.	DOUBTFUL	307801	Gasteria vlokii van Jaarsv. (accepted)	entry	-	-
+2778765	11335131	Gasteria glauca VanJaarsv.	DOUBTFUL	307720	Gasteria glauca van Jaarsv. (accepted)	entry	-	-
+2778769	11324639	Gasteria tukhelensis VanJaarsv.	DOUBTFUL	346952	Gasteria tukhelensis van Jaarsv. (accepted)	entry	-	-
+2778770	11351726	Gasteria polita VanJaarsv.	DOUBTFUL	307773	Gasteria polita van Jaarsv. (accepted)	entry	-	-
+2855120	12380256	Haemanthus carneus KerGawl.	DOUBTFUL	276798	Haemanthus carneus Ker Gawl. (accepted)	entry	-	-
+2858739	11234780	Narcissus papyraceus KerGawl.	DOUBTFUL	281955	Narcissus papyraceus Ker Gawl. (accepted)	entry	-	-
+2859794	11274046	Strumaria gemmata KerGawl.	DOUBTFUL	288020	Strumaria gemmata Ker Gawl. (accepted)	entry	-	-
+2888626	9450324	Viburnum odoratissimum KerGawl.	DOUBTFUL	2458550	Viburnum odoratissimum Ker Gawl. (accepted)	entry	-	-
+2925348	8139093	Clerodendrum japonicum (Thunb.) Makino, 1903	DOUBTFUL	42717	Clerodendrum japonicum (Thunb.) Sweet (accepted)	entry	-	-
+2927230	12091386	Stachys byzantina C.Koch	DOUBTFUL	194896	Stachys byzantina K.Koch (accepted)	entry	-	-
+2927280	7777194	Stachys officinalis (L.) Franch., 1885	ACCEPTED	195388	Stachys officinalis (L.) Trevis. (synonym under Betonica officinalis L.)	filed	-	-
+2944215	3752339	Hyperanthera dioica (L.) Vahl	SYNONYM	2857547	Hyperanthera dioica (L.) Vahl (synonym under Gymnocladus dioicus (L.) K.Koch)	filed	-	-
+2979775	11241539	Acacia mearnsii DeWild.	DOUBTFUL	2612952	Acacia mearnsii De Wild. (accepted)	entry	-	-
+2985918	7334191	Cotyledon cespitosa Haw., 1803	ACCEPTED	2740071	Cotyledon cespitosa Haw. (synonym under Dudleya cespitosa (Haw.) Britton & Rose)	filed	-	-
+2986285	8563830	Pittosporum crassifolium Banks & Sol.	DOUBTFUL	2570918	Pittosporum crassifolium Banks & Sol. (accepted)	entry	-	-
+2991466	12356043	Rubus costatus var. tomentosus (Borkh.) Dumort.	DOUBTFUL	2978910	Rubus costatus var. tomentosus Dumort. (synonym under Rubus occidentalis L.)	filed	-	-
+2994134	12355696	Rubus rolfei J.E.Vidal	DOUBTFUL	2987018	Rubus rolfei S.Vidal (accepted)	entry	-	-
+3001362	7650844	Malus baccata (L.) Moench	DOUBTFUL	2950425	Malus baccata (L.) Borkh. (accepted)	entry	-	-
+3014233	3031835	Mespilus mexicana (Sessé & Moc. ex DC.) D.Don	SYNONYM	2951384	Mespilus mexicana (Moc. & Sessé ex DC.) K.Koch (synonym under Crataegus mexicana Moc. & Sessé ex DC.)	filed	-	-
+3020838	7876881	Cerasus tomentosa (Thunb.) Wall. ex T.T.Yu & C.L.Li	SYNONYM	3008969	Cerasus tomentosa (Thunb.) Loisel. (synonym under Prunus tomentosa Thunb.)	filed	-	-
+3020838	10939731	Cerasus tomentosa (Thunb.) Masam. & S.Suzuki, 1936	DOUBTFUL	3008969	Cerasus tomentosa (Thunb.) Loisel. (synonym under Prunus tomentosa Thunb.)	filed	-	-
+3026585	7787813	Spiraea alba DuRoi	DOUBTFUL	2992604	Spiraea alba Du Roi (accepted)	entry	-	-
+3032984	7973323	Diospyros kaki Thunb.	DOUBTFUL	384241	Diospyros kaki Thunb. (accepted)	entry	-	-
+3036075	12273822	Hedera algeriensis Rantonnet ex C.Morren	DOUBTFUL	96567	Hedera algeriensis Rantonnet ex C.Morren (accepted)	entry	-	-
+3067157	9523421	Euphorbia milii DesMoul.	DOUBTFUL	80891	Euphorbia milii Des Moul. (accepted)	entry	-	-
+3084111	11024631	Echinocereus engelmannii (Parry ex Engelm.) F.Seitz, 1870	DOUBTFUL	2782588	Echinocereus engelmannii (Parry ex Engelm.) Lem. (accepted)	entry	-	-
+3084842	7475472	Carpobrotus edulis (L.) L.Bolus, 1927	DOUBTFUL	2701245	Carpobrotus edulis (L.) N.E.Br. (accepted)	entry	-	-
+3092946	8203151	Callistephus chinensis (L.) Benth.	DOUBTFUL	3100089	Callistephus chinensis (L.) Nees (accepted)	entry	-	-
+3094448	11311216	Othonna armiana VanJaarsv.	DOUBTFUL	3085889	Othonna armiana van Jaarsv. (accepted)	entry	-	-
+3112364	9527533	Cynara scolymus subsp. cardunculus (L.) Bonnier & Layens	SYNONYM	3248843	Cynara scolymus subsp. cardunculus (L.) Bonnier & Layens (synonym under Cynara cardunculus L.)	filed	-	-
+3114043	8365920	Packera aurea (L.) Ã	DOUBTFUL	3079595	Packera aurea (L.) Á.Löve & D.Löve (accepted)	entry	-	-
+3114225	8386417	Centrocarpha hirta (L.) D.Don ex G.Don, 1839	ACCEPTED	3123590	Centrocarpha hirta (L.) Sweet (synonym under Rudbeckia hirta L.)	filed	-	-
+3120060	3120092	Achillea dentifera DC.	HETEROTYPIC_SYNONYM	2909347	Achillea dentifera DC. (illegitimate under Achillea millefolium L.)	filed	-	-
+3146888	11271460	Erigeron glaucus KerGawl.	DOUBTFUL	3105578	Erigeron glaucus Ker Gawl. (accepted)	entry	-	-
+3152226	4073642	Bombax quinatum Jacq.	HETEROTYPIC_SYNONYM	2679217	Bombax quinatum Jacq. (illegitimate under Bombax ceiba L.)	filed	-	-
+3152226	4073865	Bombacopsis quinata (Jacq.) Dugand	SYNONYM	2679035	Bombacopsis quinata Dugand (illegitimate under Bombax ceiba L.)	filed	-	-
+3152230	7502854	Durio zibethinus L.	DOUBTFUL	2779470	Durio zibethinus L. (accepted)	entry	-	-
+3170294	3581446	Anantherix viridis (Elliott) Nutt.	SYNONYM	219762	Anantherix viridis (Walter) Nutt. (synonym under Asclepias viridis Walter)	filed	-	-
+3172118	11967720	Veronica longifolia var. oppositifolia Klett & Richt.	SYNONYM	2931284	Veronica longifolia var. oppositifolia Klett & Richt. (invalid under Veronica longifolia L.)	filed	-	-
+3172612	7568973	Catalpa speciosa Teas	DOUBTFUL	320410	Catalpa speciosa Warder ex Teas (accepted)	entry	-	7932511
+3173353	7743676	Callistemon viminalis (Sol. ex Gaertn.) Cheel	DOUBTFUL	31513	Callistemon viminalis (Sol. ex Gaertn.) G.Don (synonym under Melaleuca viminalis (Sol. ex Gaertn.) Byrnes)	filed	-	-
+3173353	7993356	Callistemon viminalis (Sol. ex Gaertn.) G.Don ex Loudon	DOUBTFUL	31513	Callistemon viminalis (Sol. ex Gaertn.) G.Don (synonym under Melaleuca viminalis (Sol. ex Gaertn.) Byrnes)	filed	-	-
+3173453	3173413	Callistemon citrinus (Curtis) Skeels	ACCEPTED	31419	Callistemon citrinus (Curtis) Skeels (synonym under Melaleuca citrina (Curtis) Dum.Cours.)	filed	-	3173414,3173416,3173465,3173469,3173473,3717180
+3190002	7395348	Nephelium chinense (Sonn.) M.R.Almeida, 1996	ACCEPTED	2382686	Nephelium chinense (Sonn.) Druce (synonym under Litchi chinensis Sonn.)	filed	-	-
+3190134	11223830	Casimiroa edulis LaLlave	DOUBTFUL	2702485	Casimiroa edulis La Llave (accepted)	entry	-	-
+3190757	7559456	Drosera collinsiae N.E.Br.	DOUBTFUL	64304	Drosera collinsiae N.E.Br. (accepted)	entry	-	-
+3190953	8011305	Drosera glabripes (Harv.) T.M.Salter	DOUBTFUL	64362	Drosera glabripes (Harv. ex Planch.) Stein (accepted)	entry	-	-
+3191147	8237847	Drosera marchantii DeBuhr	DOUBTFUL	64435	Drosera marchantii DeBuhr (accepted)	entry	-	-
+3571410	11014227	Huernia engleri N.Terracc.	DOUBTFUL	507326	Huernia engleri A.Terracc. (accepted)	entry	-	-
+3572879	11254088	Ceropegia vanderystii DeWild.	DOUBTFUL	503071	Ceropegia vanderystii De Wild. (accepted)	entry	-	-
+3573198	7591882	Ceropegia stenoloba Hochst. ex Chiov.	DOUBTFUL	503021	Ceropegia stenoloba Hochst. ex Chiov. (accepted)	entry	-	-
+3573267	11327295	Raphionacme michelii DeWild.	DOUBTFUL	510838	Raphionacme michelii De Wild. (accepted)	entry	-	-
+3573625	11350661	Ceropegia ringoetii DeWild.	DOUBTFUL	502956	Ceropegia ringoetii De Wild. (accepted)	entry	-	-
+3574019	9224073	Ceropegia odorata Nimmo ex Hook.f.	DOUBTFUL	502890	Ceropegia odorata Nimmo ex Hook.f. (accepted)	entry	-	3576222
+3575970	7588743	Brachystelma sinuatum G.Mey.	DOUBTFUL	502019	Brachystelma sinuatum E.Mey. (synonym under Fockea sinuata (E.Mey.) Druce)	filed	-	-
+3625921	11241615	Momordica cissoides Planch. ex Cogn.	DOUBTFUL	2372846	Momordica cissoides Planch. ex Cogn. (accepted)	entry	-	-
+3647605	4072128	Stellarioides canaliculata Medik.	DOUBTFUL	287578	Stellarioides canaliculata Medik. (synonym under Albuca canaliculata (Medik.) S.S.Ying)	filed	-	-
+3705492	11348089	Argyroderma theartii VanJaarsv.	DOUBTFUL	2650714	Argyroderma theartii van Jaarsv. (accepted)	entry	-	-
+3705747	8238490	Tanquana archeri (L.Bolus) L.Bolus	DOUBTFUL	2436929	Tanquana archeri (L.Bolus) H.E.K.Hartmann & Liede (accepted)	entry	-	-
+3706000	8059445	Dinteranthus inexpectatus (Dinter) Schwantes	DOUBTFUL	2768792	Dinteranthus inexpectatus (Dinter) Schwantes (accepted)	entry	-	-
+3762609	11350118	Dorstenia yambuyaensis DeWild.	DOUBTFUL	2775951	Dorstenia yambuyaensis De Wild. (accepted)	entry	-	11272793
+3766022	11276930	Dorstenia astyanactis AkéAssi	DOUBTFUL	2775538	Dorstenia astyanactis Aké Assi (accepted)	entry	-	-
+3778854	3779049	Sanchezia hirsuta Pers.	SYNONYM	2478000	Sanchezia hirsuta Pers. (illegitimate under Sanchezia oblonga Ruiz & Pav.)	filed	-	-
+3817957	8670701	Martynia hirsuta (Lindl.) Desf.	HOMOTYPIC_SYNONYM	2502441	Martynia hirsuta (Lindl.) Desf. ex Steud. (synonym under Sinningia hirsuta (Lindl.) G.Nicholson)	filed	-	-
+3817957	12378374	Martynia hirsuta (Lindl.) Desf. ex Steud.	HETEROTYPIC_SYNONYM	2502441	Martynia hirsuta (Lindl.) Desf. ex Steud. (synonym under Sinningia hirsuta (Lindl.) G.Nicholson)	filed	-	-
+3825228	3585410	Martynia speciosa (G.Lodd. ex Ker Gawl.) Loisel.	SYNONYM	2502435	Martynia speciosa (G.Lodd. ex Ker Gawl.) Loisel. (synonym under Sinningia speciosa (G.Lodd. ex Ker Gawl.) Hiern)	filed	-	-
+3827463	11053470	Monsonia praemorsa E.Mey. ex R.Knuth	DOUBTFUL	2372037	Monsonia praemorsa E.Mey. ex R.Knuth (accepted)	entry	-	-
+3925307	7438061	Anemone ×hybrida var. japonica (Thunb.) Ohwi	SYNONYM	2638302	Anemone × hybrida var. japonica (Thunb.) Ohwi (synonym under Eriocapitella japonica (Thunb.) Nakai)	filed	-	-
+3941347	8078621	Stenocactus crispatus (DC.) Hill	DOUBTFUL	2486728	Stenocactus crispatus (DC.) A.Berger (accepted)	entry	-	7799795,8260420
+3947272	10975491	Parodia stockingeri (Prestlé) Rogoz. & P.J.Braun	DOUBTFUL	2414686	Parodia stockingeri (Prestlé) Hofacker & P.J.Braun (accepted)	entry	-	-
+3957627	7479452	Frailea phaeodisca (Speg.) Speg.	DOUBTFUL	2813926	Frailea phaeodisca (Speg.) Backeb. & F.M.Knuth (accepted)	entry	-	-
+3957627	7642649	Frailea phaeodisca (Speg.) Spreg.	DOUBTFUL	2813926	Frailea phaeodisca (Speg.) Backeb. & F.M.Knuth (accepted)	entry	-	-
+3960847	7691190	Stenocactus obvallatus (DC.) Hill	DOUBTFUL	2486738	Stenocactus obvallatus (DC.) A.Berger (accepted)	entry	-	-
+3993157	7790236	Commiphora staphyleifolia Chiov.	DOUBTFUL	2733693	Commiphora staphyleifolia Chiov. (accepted)	entry	-	-
+3993419	8021195	Commiphora cyclophylla Chiov.	DOUBTFUL	2733464	Commiphora cyclophylla Chiov. (accepted)	entry	-	-
+3993989	7533875	Commiphora oddurensis Chiov.	DOUBTFUL	2733606	Commiphora oddurensis Chiov. (accepted)	entry	-	-
+4013911	7835366	Brunsvigia josephinae (Delile) KerGawl.	DOUBTFUL	301188	Brunsvigia josephinae (Redouté) Ker Gawl. (accepted)	entry	-	-
+4023266	11268734	Portulacaria armiana VanJaarsv.	DOUBTFUL	337507	Portulacaria armiana van Jaarsv. (accepted)	entry	-	-
+4052431	7293698	Cyphostemma cyphopetalum (Fresen.) Desc. ex Wild & R.B.Drumm.	DOUBTFUL	2752703	Cyphostemma cyphopetalum (Fresen.) Desc. ex Wild & R.B.Drumm. (accepted)	entry	-	-
+4052690	7457538	Cyphostemma cirrhosum (Thunb.) Desc.	DOUBTFUL	2752682	Cyphostemma cirrhosum (Thunb.) Desc. ex Wild & R.B.Drumm. (accepted)	entry	-	-
+4200936	11263403	Tylecodon tribblei VanJaarsv.	DOUBTFUL	2434692	Tylecodon tribblei van Jaarsv. (accepted)	entry	-	-
+4201090	11221891	Tylecodon peculiaris VanJaarsv.	DOUBTFUL	2434521	Tylecodon peculiaris van Jaarsv. (accepted)	entry	-	-
+4201182	11343681	Tylecodon kritzingeri VanJaarsv.	DOUBTFUL	2434509	Tylecodon kritzingeri van Jaarsv. (accepted)	entry	-	-
+4201254	11339138	Tylecodon ellaphieae VanJaarsv.	DOUBTFUL	2434533	Tylecodon ellaphieae van Jaarsv. (accepted)	entry	-	-
+4201323	11295219	Tylecodon bodleyae VanJaarsv.	DOUBTFUL	2434525	Tylecodon bodleyae van Jaarsv. (accepted)	entry	-	-
+4201344	11326621	Tylecodon bayeri VanJaarsv.	DOUBTFUL	2434482	Tylecodon bayeri van Jaarsv. (accepted)	entry	-	-
+4926336	7816733	Anaphalis margaritacea (L.) A.Gray, 1873	DOUBTFUL	2922417	Anaphalis margaritacea (L.) Benth. & Hook.f. (accepted)	entry	-	-
+5275012	5532480	Filix aquilina (L.) Woyn.	HETEROTYPIC_SYNONYM	2931283	Filix aquilina (L.) Woyn. (synonym under Pteridium aquilinum (L.) Kuhn)	filed	-	-
+5275044	7600294	Athyrium filix-femina (L.) Roth ex Mert.	DOUBTFUL	3149492	Athyrium filix-femina (L.) Roth (accepted)	entry	-	-
+5275132	7346055	Aspidium filix-mas (L.) Schrad., 1801	DOUBTFUL	2929966	Aspidium filix-mas (L.) Sw. (synonym under Dryopteris filix-mas (L.) Schott)	filed	-	-
+5284418	7509058	Agathis robusta (C.Moore ex F.Muell.) F.Muell.	DOUBTFUL	4541	Agathis robusta (C.Moore ex F.Muell.) F.M.Bailey (accepted)	entry	-	-
+5286163	7641927	Dacrydium cupressinum Sol. ex Lamb.	DOUBTFUL	383505	Dacrydium cupressinum Sol. ex Lamb. (accepted)	entry	-	-
+5294589	11315355	Washingtonia filifera (Linden ex André) H.Wendl. ex DeBary	DOUBTFUL	214250	Washingtonia filifera (T.Moore & Mast.) H.Wendl. ex de Bary (accepted)	entry	-	-
+5304838	11345206	Bulbine ramosa VanJaarsv.	DOUBTFUL	301368	Bulbine ramosa van Jaarsv. (accepted)	entry	-	-
+5304885	11362308	Bulbine cremnophila VanJaarsv.	DOUBTFUL	301284	Bulbine cremnophila van Jaarsv. (accepted)	entry	-	-
+5304897	11274576	Bulbine thomasiae VanJaarsv.	DOUBTFUL	301388	Bulbine thomasiae van Jaarsv. (accepted)	entry	-	-
+5304935	11303815	Bulbine meiringii VanJaarsv.	DOUBTFUL	301342	Bulbine meiringii van Jaarsv. (accepted)	entry	-	-
+5326026	11225031	Cyrtanthus odorus KerGawl.	DOUBTFUL	303846	Cyrtanthus odorus Ker Gawl. (accepted)	entry	-	-
+5326052	11326774	Cyrtanthus collinus KerGawl.	DOUBTFUL	303811	Cyrtanthus collinus Ker Gawl. (accepted)	entry	-	-
+5326069	11301959	Cyrtanthus spiralis Burchard ex KerGawl.	DOUBTFUL	303870	Cyrtanthus spiralis Burch. ex Ker Gawl. (accepted)	entry	-	-
+5326072	10947004	Cyrtanthus obliquus (L.f.) L.f., 1789	DOUBTFUL	303843	Cyrtanthus obliquus (L.f.) Aiton (accepted)	entry	-	-
+5334998	2924392	Genipa capensis (R.Br.) Baill.	SYNONYM	89097	Genipa capensis Baill. (illegitimate under Gardenia thunbergia Thunb.)	filed	-	-
+5341242	8476280	Mertensia virginica (L.) Pers.	DOUBTFUL	2357629	Mertensia virginica (L.) Pers. ex Link (accepted)	entry	-	-
+5341394	3899676	Pogostemon perilloides (L.) Mansf.	SYNONYM	162166	Pogostemon perilloides Mansf. (synonym under Perilla frutescens (L.) Britton)	filed	-	-
+5341394	9071302	Mentha perilloides L.	HETEROTYPIC_SYNONYM	125170	Mentha perilloides L. (illegitimate under Perilla frutescens (L.) Britton)	filed	-	-
+5341754	3802467	Atropa physaloides (L.) L.	SYNONYM	2665976	Atropa physaloides L. (orthographic under Nicandra physalodes (L.) Gaertn.)	filed	-	-
+5355395	10881369	Genista juncea (L.) Medik., 1787	ACCEPTED	2819323	Genista juncea (L.) Scop. (synonym under Spartium junceum L.)	filed	-	-
+5356517	7619401	Lathyrus sylvestris subsp. latifolius (L.) Ponert	ACCEPTED	3003852	Lathyrus sylvestris subsp. latifolius (L.) Arcang. (synonym under Lathyrus latifolius L.)	filed	-	-
+5363629	7649666	Aronia arbutifolia (L.) Medik., 1789	DOUBTFUL	2942281	Aronia arbutifolia (L.) Pers. (accepted)	entry	-	-
+5371542	11237736	Rhaphiolepis indica (L.) Lindl. ex Ker	DOUBTFUL	2964464	Rhaphiolepis indica (L.) Lindl. (accepted)	entry	-	-
+5384050	7900240	Nopalea coccifera Lem.	DOUBTFUL	3316803	Nopalea coccifera Lem. (illegitimate under Opuntia cochenillifera (L.) Mill.)	filed	-	-
+5384795	10950768	Melandrium dioicum (L.) D.Löve, 1944	DOUBTFUL	2370553	Melandrium dioicum (L.) Coss. & Germ. (synonym under Silene dioica (L.) Clairv.)	filed	-	-
+5421178	5597557	Melia elegans Seem.	HETEROTYPIC_SYNONYM	2505043	Melia elegans Seem. (synonym under Koelreuteria elegans (Seem.) A.C.Sm.)	filed	-	-
+5421178	12384507	Azedarach elegans (Seem.) Kuntze	HETEROTYPIC_SYNONYM	2667360	Azedarach elegans (Seem.) Kuntze (synonym under Koelreuteria elegans (Seem.) A.C.Sm.)	filed	-	-
+5421354	7829358	Boswellia serrata Roxb.	DOUBTFUL	2680580	Boswellia serrata Roxb. (accepted)	entry	-	5593565,8532044
+5527635	11292356	Adenia racemosa W.J.deWilde	DOUBTFUL	2621577	Adenia racemosa W.J.de Wilde (accepted)	entry	-	-
+5527669	11340198	Adenia pachyphylla W.J.deWilde	DOUBTFUL	2621545	Adenia pachyphylla W.J.de Wilde (accepted)	entry	-	-
+5527671	11228417	Adenia ovata W.J.deWilde	DOUBTFUL	2621544	Adenia ovata W.J.de Wilde (accepted)	entry	-	-
+5527684	11308626	Adenia natalensis W.J.deWilde	DOUBTFUL	2621536	Adenia natalensis W.J.de Wilde (accepted)	entry	-	-
+5527690	11312721	Adenia mossambicensis W.J.deWilde	DOUBTFUL	2621533	Adenia mossambicensis W.J.de Wilde (accepted)	entry	-	-
+5527699	11244228	Adenia metriosiphon W.J.deWilde	DOUBTFUL	2621529	Adenia metriosiphon W.J.de Wilde (accepted)	entry	-	-
+5527746	11251692	Adenia latipetala W.J.deWilde	DOUBTFUL	2621505	Adenia latipetala W.J.de Wilde (accepted)	entry	-	-
+5527758	11284609	Adenia kinabaluensis W.J.deWilde	DOUBTFUL	2621498	Adenia kinabaluensis W.J.de Wilde (accepted)	entry	-	-
+5527765	11293843	Adenia karibaensis W.J.deWilde	DOUBTFUL	2621496	Adenia karibaensis W.J.de Wilde (accepted)	entry	-	-
+5527767	11337682	Adenia inermis (W.J.deWilde) W.J.deWilde	DOUBTFUL	2621494	Adenia inermis (W.J.de Wilde) W.J.de Wilde (accepted)	entry	-	-
+5527802	11271383	Adenia gedoensis W.J.deWilde	DOUBTFUL	2621469	Adenia gedoensis W.J.de Wilde (accepted)	entry	-	-
+5527811	11254844	Adenia fasciculata W.J.deWilde	DOUBTFUL	2621461	Adenia fasciculata W.J.de Wilde (accepted)	entry	-	-
+5527812	11368799	Adenia erecta W.J.deWilde	DOUBTFUL	2621460	Adenia erecta W.J.de Wilde (accepted)	entry	-	-
+5527817	11229798	Adenia ecirrosa W.J.deWilde	DOUBTFUL	2621455	Adenia ecirrosa W.J.de Wilde (accepted)	entry	-	-
+5527850	11248784	Adenia boivinii W.J.deWilde	DOUBTFUL	2621431	Adenia boivinii W.J.de Wilde (accepted)	entry	-	-
+5527873	11362270	Adenia acuta W.J.deWilde	DOUBTFUL	2621415	Adenia acuta W.J.de Wilde (accepted)	entry	-	-
+5527894	11250167	Adenia tricostata W.J.deWilde	DOUBTFUL	2621610	Adenia tricostata W.J.de Wilde (accepted)	entry	-	-
+5688043	7604983	Crassula minutissima Skottsb.	DOUBTFUL	2445555	Crassula minutissima Skottsb. (accepted)	entry	-	-
+5688414	11278244	Cotyledon eliseae VanJaarsv.	DOUBTFUL	2740120	Cotyledon eliseae van Jaarsv. (accepted)	entry	-	-
+5688658	11324802	Crassula foveata VanJaarsv.	DOUBTFUL	2741733	Crassula foveata van Jaarsv. (accepted)	entry	-	-
+5689526	11333738	Crassula badspoortensis VanJaarsv.	DOUBTFUL	2741526	Crassula badspoortensis van Jaarsv. (accepted)	entry	-	-
+5690745	11354940	Cotyledon pendens VanJaarsv.	DOUBTFUL	2740277	Cotyledon pendens van Jaarsv. (accepted)	entry	-	-
+6109608	8153622	Coccothrinax radiata (Lodd.) León	ACCEPTED	44453	Coccothrinax radiata (Lodd. ex Schult. & Schult.f.) Sarg. ex K.Schum. (synonym under Thrinax radiata Lodd. ex Schult. & Schult.f.)	filed	-	-
+6358362	12381825	Scaevola sericea var. taccada (Gaertn.) Makino	HETEROTYPIC_SYNONYM	2884111	Scaevola sericea var. taccada (Gaertn.) Makino (synonym under Scaevola taccada (Gaertn.) Roxb.)	filed	-	-
+6359825	10807042	Ruellia infundibuliformis (L.) Roxb., 1832	ACCEPTED	2420156	Ruellia infundibuliformis (L.) Andrews (synonym under Crossandra infundibuliformis (L.) Nees)	filed	-	-
+6366858	9270028	Eustoma russellianum (Hook.) Griseb.	HOMOTYPIC_SYNONYM	2805333	Eustoma russellianum (Hook.) G.Don (accepted)	entry	-	-
+6366858	11316524	Eustoma russellianum (Hook.) Griseb. ex DC.	SYNONYM	2805333	Eustoma russellianum (Hook.) G.Don (accepted)	entry	-	-
+7221817	11356585	Ceropegia achtenii DeWild.	DOUBTFUL	502475	Ceropegia achtenii De Wild. (accepted)	entry	-	-
+7262550	11270808	Dorstenia lujae DeWild.	DOUBTFUL	2775743	Dorstenia lujae De Wild. (accepted)	entry	-	-
+7262659	11287058	Dorstenia convexa DeWild.	DOUBTFUL	2775613	Dorstenia convexa De Wild. (accepted)	entry	-	-
+7280271	3954818	Pyrrhocactus curvispinus (Bertero ex Colla) Backeb., 1936	DOUBTFUL	2413821	Pyrrhocactus curvispinus (Bertero ex Colla) A.Berger (synonym under Eriosyce curvispina (Bertero ex Colla) Katt.)	filed	-	-
+7280309	7649466	Arequipa clavata (Söhrens) Borg	HETEROTYPIC_SYNONYM	2650378	Arequipa clavata (Söhrens ex K.Schum.) Borg (synonym under Eriosyce clavata (Söhrens ex K.Schum.) Helmut Walter)	filed	-	-
+7280615	3943279	Echinocactus lemarii Monv. ex Lem.	ACCEPTED	2781972	Echinocactus lemarii Monv. ex Lem. (synonym under Melocactus lemarii (Monv. ex Lem.) Miq. ex Lem.)	filed	-	-
+7281301	7906297	Rebutia fidana (Backeb.) D.R.Hunt	ACCEPTED	2417022	Rebutia fidana (Backeb.) D.R.Hunt (synonym under Weingartia fidana (Backeb.) Werderm.)	filed	rebutia-fidana	7477746
+7281482	3945615	Hildewintera aureispina (F.Ritter) F.Ritter, 1966	DOUBTFUL	2850895	Hildewintera aureispina (F.Ritter) F.Ritter ex G.D.Rowley (synonym under Cleistocactus winteri D.R.Hunt)	filed	-	-
+7282012	3957108	Lobivia minuscula (K.Schum.) H.P.Kelsey & Dayton	DOUBTFUL	2355525	Lobivia minuscula (K.Schum.) H.P.Kelsey & Dayton (synonym under Rebutia minuscula K.Schum.)	filed	-	-
+7282386	11044051	Gymnocalycium rhodantherum (Boed.) Backeb.	DOUBTFUL	2835809	Gymnocalycium rhodantherum (Boed.) H.Till (accepted)	entry	-	-
+7282391	7348961	Gymnocalycium reductum (Link) Pfeiff. & Otto	DOUBTFUL	2835804	Gymnocalycium reductum (Link) Pfeiff. ex Mittler (accepted)	entry	-	-
+7282416	3956539	Tephrocactus ovatus (Pfeiff.) F.Ritter, 1980	ACCEPTED	2432802	Tephrocactus ovatus (Pfeiff.) Backeb. (synonym under Maihueniopsis ovata (Pfeiff.) F.Ritter)	filed	-	-
+7283147	7406215	Echinocereus sciurus (Brandegee) Dams	DOUBTFUL	2782851	Echinocereus sciurus (Brandegee) Dams (accepted)	entry	-	-
+7283282	3951782	Echinonyctanthus leucanthus (Pfeiff.) Lem.	SYNONYM	2783155	Echinonyctanthus leucanthus (Zucc. ex Pfeiff.) Lem. (synonym under Thelocactus leucacanthus (Zucc. ex Pfeiff.) Britton & Rose)	filed	-	-
+7283328	3945693	Echinocactus drageanus Moerder	DOUBTFUL	2781746	Echinocactus drageanus Moerder (orthographic under Thelocactus hexaedrophorus (Lem.) Britton & Rose)	filed	-	-
+7284084	7521483	Echinocereus brandegeei (J.M.Coult.) K.Schum.	DOUBTFUL	2782523	Echinocereus brandegeei (J.M.Coult.) Schelle (accepted)	entry	-	-
+7284444	7971037	Echinocactus latispinus (Haw.) C.F.Först., 1846	ACCEPTED	2781967	Echinocactus latispinus (Haw.) Hemsl. (synonym under Ferocactus latispinus (Haw.) Britton & Rose)	filed	-	-
+7297208	7775299	Aloysia virgata (Ruiz & Pav.) Pers.	DOUBTFUL	6956	Aloysia virgata (Ruiz & Pav.) Pers. (accepted)	entry	-	-
+7328114	11269335	Rhododendron arboreum W.W.Sm.	DOUBTFUL	2418887	Rhododendron arboreum Sm. (accepted)	entry	-	-
+7329173	11234333	Conophytum smorenskaduense DeBoer	DOUBTFUL	2735232	Conophytum smorenskaduense de Boer (accepted)	entry	-	-
+7329235	11269177	Lithops hallii DeBoer	DOUBTFUL	2342390	Lithops hallii de Boer (accepted)	entry	-	11339360
+7465040	7280645	Mammillaria dixanthocentron Backeb. ex Mottram	DOUBTFUL	2361316	Mammillaria dixanthocentron Backeb. ex Mottram (accepted)	entry	-	-
+7505206	3575567	Ceropegia denticulata K.Schum.	DOUBTFUL	502649	Ceropegia denticulata K.Schum. (accepted)	entry	-	-
+7513007	9466560	Ceropegia punctata (Masson) Bruyns	ACCEPTED	524495	Ceropegia punctata (Masson) Bruyns (synonym under Piaranthus punctatus (Masson) Schult.)	filed	-	3575808,3575962,9301836
+7557934	4200952	Purgosea rupestris (L.f.) G.Don	SYNONYM	2410925	Purgosea rupestris (Thunb.) G.Don (synonym under Crassula rupestris Thunb.)	filed	-	-
+7622204	2747444	Crocus neapolitanus (KerGawl.) Ten.	SYNONYM	464493	Crocus neapolitanus (Ker Gawl.) Loisel. (accepted)	entry	-	-
+7622204	11253097	Crocus vernus var. neapolitanus KerGawl.	SYNONYM	341832	Crocus vernus var. neapolitanus Ker Gawl. (synonym under Crocus neapolitanus (Ker Gawl.) Loisel.)	filed	-	-
+7649247	7281822	Disocactus ackermannii (Haw.) Barthlott	DOUBTFUL	2773063	Disocactus ackermannii (Haw.) Ralf Bauer (accepted)	entry	-	-
+7649247	7578699	Phyllocactus ackermannii (Haw.) Lindl.	SYNONYM	2413500	Phyllocactus ackermannii (Haw.) Salm-Dyck (synonym under Disocactus ackermannii (Haw.) Ralf Bauer)	filed	-	-
+7649247	11348084	Disocactus ackermannii (Haw.) RalfBauer	DOUBTFUL	2773063	Disocactus ackermannii (Haw.) Ralf Bauer (accepted)	entry	-	-
+7767802	5688791	Cotyledon barbeyi Schweinf. ex Baker	DOUBTFUL	2740060	Cotyledon barbeyi Schweinf. ex Baker (accepted)	entry	-	-
+7802717	3152551	Hibiscus acetosella Welw. ex Hiern	DOUBTFUL	2849457	Hibiscus acetosella Welw. ex Hiern (synonym under Sabdariffa acetosella (Welw. ex Hiern) M.M.Hanes & R.L.Barrett)	filed	-	-
+7872219	2989557	Rubus parviflorus Nutt.	HETEROTYPIC_SYNONYM	2985176	Rubus parviflorus Nutt. (accepted)	entry	-	-
+7872219	2989574	Rubus parviflorus var. genuinus Fernald	SYNONYM	2985188	Rubus parviflorus var. genuinus Fernald (invalid under Rubus parviflorus Nutt.)	filed	-	-
+7872219	2994225	Rubus nutkanus var. parviflorus (Rydb.) Focke	SYNONYM	2984598	Rubus nutkanus var. parviflorus (Rydb.) Focke (synonym under Rubus parviflorus Nutt.)	filed	-	-
+7872219	2994226	Rubacer parviflorum Rydb.	SYNONYM	2976312	Rubacer parviflorum Rydb. (synonym under Rubus parviflorus Nutt.)	filed	-	-
+7872219	2994227	Bossekia parviflora (Rydb.) Greene	SYNONYM	2942565	Bossekia parviflora (Rydb.) Greene (synonym under Rubus parviflorus Nutt.)	filed	-	-
+7889313	7281757	Bisnaga haematacantha (Monv. ex Salm-Dyck) Doweld	ACCEPTED	2676732	Bisnaga haematacantha (Monv. ex Salm-Dyck) Orcutt (synonym under Ferocactus haematacanthus (Monv. ex Salm-Dyck) Bravo ex Backeb. & F.M.Knuth)	filed	-	3945245,3959074,7425283,7765905
+7894533	2883051	Rhododendron macrophyllum D.Don	DOUBTFUL	2418031	Rhododendron macrophyllum D.Don ex G.Don (accepted)	entry	-	-
+7937401	9324162	Helianthus mollis Buc'hoz	DOUBTFUL	3120971	Helianthus mollis Buc'hoz (accepted)	entry	-	-
+7939246	8549825	Echinocereus reichenbachii (Terscheck) Haage	DOUBTFUL	2782795	Echinocereus reichenbachii (Terscheck) Haage (accepted)	entry	-	-
+7956185	9470399	Ceropegia gordonii (Masson) Bruyns	ACCEPTED	524402	Ceropegia gordonii (Masson) Bruyns (synonym under Hoodia gordonii (Masson) Sweet ex Decne.)	filed	-	5525628,5525658,5525660,7221777,7221779,7221780,7221781,7535742,7653088,8366900
+7968832	9438978	Ceropegia grandiflora (Masson) Bruyns	ACCEPTED	524321	Ceropegia grandiflora (Masson) Bruyns (synonym under Stapelia grandiflora Masson)	filed	-	3574536,3574609,3575321,3575691,3576170,3576362,3576541,3576708,3577237,3579884,3579891,3580013,3580019,3580028,3580034,3580043,3580047,3580054,3580063,3580070,7312100,7312477,7404183,7480445,7620663,7730942,7879145,7925388,8082022,8210435,8284538,8383253,9328611
+7999386	7740059	Ipomoea pes-caprae (L.) Sweet	DOUBTFUL	481903	Ipomoea pes-caprae (L.) R.Br. (accepted)	entry	-	-
+8023236	7676418	Pandanus tectorius Parkinson	DOUBTFUL	285436	Pandanus tectorius Parkinson (accepted)	entry	-	-
+8038589	3168995	Morella cerifera (L.) Small	ACCEPTED	2501792	Morella cerifera (L.) Small (synonym under Myrica cerifera L.)	filed	-	3169000,3744963,4196204,4196205,5414214,5414215,5565298,5565304,5565309,5565321,5565324,5565371,5565379,5565381,5565415,5565416,5565417,5565424,5565433,5565435,5565456,5565458,5565463,5565464,5565471,7335112,7335119,8338424,9608718,10998680,12382078
+8060423	12281377	Cercidiphyllum japonicum Siebold & Zucc. ex J.J.Hoffm. & J.H.Schult.bis	DOUBTFUL	37218	Cercidiphyllum japonicum Siebold & Zucc. ex J.J.Hoffm. & J.H.Schult.bis (accepted)	entry	-	8065127
+8078925	7879732	Gunnera manicata Linden ex André	DOUBTFUL	370419	Gunnera manicata Linden ex André (accepted)	entry	-	-
+8079009	5297439	Tigridia pavonia (L.f.) DC.	DOUBTFUL	325553	Tigridia pavonia (L.f.) Redouté (accepted)	entry	-	-
+8079009	7614038	Tigridia pavonia (L.f.) Ker Gawl., 1804	DOUBTFUL	325553	Tigridia pavonia (L.f.) Redouté (accepted)	entry	-	-
+8079009	7728034	Moraea pavonia (L.f.) Ker Gawl., 1804	DOUBTFUL	323396	Moraea pavonia (L.f.) Thunb. (synonym under Tigridia pavonia (L.f.) Redouté)	filed	-	-
+8085320	3084142	Echinocereus fendleri (Engelm.) F.Seitz	DOUBTFUL	2782616	Echinocereus fendleri (Engelm.) Sencke ex Haage (accepted)	entry	-	-
+8085320	7649335	Echinocereus fendleri (Engelm.) Rümpler	DOUBTFUL	2782616	Echinocereus fendleri (Engelm.) Sencke ex Haage (accepted)	entry	-	-
+8085320	7824059	Echinocereus fendleri (Engelm.) Small, 1903	DOUBTFUL	2782616	Echinocereus fendleri (Engelm.) Sencke ex Haage (accepted)	entry	-	-
+8119595	7162091	Brachychiton acerifolius (A.Cunn. ex G.Don) Macarthur & C.Moore	DOUBTFUL	2681178	Brachychiton acerifolius (A.Cunn. ex G.Don) F.Muell. (accepted)	entry	-	-
+8127764	8121938	Melocactus zehntneri (Britton & Rose) Leutzelb.	DOUBTFUL	2370259	Melocactus zehntneri (Britton & Rose) Luetzelb. (accepted)	entry	-	-
+8130309	8248795	Caesalpinia gilliesii (Wall. ex Hook.) Benth.	SYNONYM	2689880	Caesalpinia gilliesii (Hook.) D.Dietr. (synonym under Erythrostemon gilliesii (Hook.) Klotzsch)	filed	-	-
+8144360	3996394	Sirmuellera serratifolia (Salisb.) Kuntze	SYNONYM	2600999	Sirmuellera serratifolia Kuntze (illegitimate under Banksia serrata L.f.)	filed	-	-
+8168485	3023905	Amelanchier alnifolia (Nutt.) Nutt. ex M.Roem.	DOUBTFUL	2941208	Amelanchier alnifolia (Nutt.) Nutt. ex M.Roem. (accepted)	entry	-	-
+8171268	7283697	Opuntia robusta H.L.Wendl. ex Pfeiff.	DOUBTFUL	2392350	Opuntia robusta H.L.Wendl. ex Pfeiff. (accepted)	entry	-	-
+8179261	2767960	Veltheimia capensis (L.) DC.	DOUBTFUL	291342	Veltheimia capensis (L.) Redouté (accepted)	entry	-	-
+8190990	5387165	Dahlia imperialis Roezl ex Ortgies	DOUBTFUL	3117626	Dahlia imperialis Roezl ex Ortgies (accepted)	entry	-	-
+8216229	3745136	Morella rubra Lour.	ACCEPTED	2501811	Morella rubra Lour. (synonym under Myrica rubra (Lour.) Siebold & Zucc.)	filed	-	7488572,8016334,8068467,12349819
+8217929	3093582	Osteospermum fruticosum (L.) Norl.	ACCEPTED	3087108	Osteospermum fruticosum (L.) Norl. (synonym under Dimorphotheca fruticosa (L.) DC.)	filed	-	3093585,3093586,5387300
+8232922	11260897	Heliamphora parva (Maguire) S.McPherson et al.	DOUBTFUL	2904371	Heliamphora parva (Maguire) S.McPherson, A.Fleischm., Wistuba & Nerz (accepted)	entry	-	-
+8243203	3084125	Echinocereus pentalophus (DC.) Lem.	DOUBTFUL	2782751	Echinocereus pentalophus (DC.) Engelm. ex Haage (accepted)	entry	-	-
+8243203	7375953	Echinocereus pentalophus (DC.) H.P.Kelsey & Dayton, 1942	DOUBTFUL	2782751	Echinocereus pentalophus (DC.) Engelm. ex Haage (accepted)	entry	-	-
+8270983	3703683	Conophytum ratum S.N.Hammer, 1991	DOUBTFUL	2735181	Conophytum ratum S.A.Hammer (accepted)	entry	-	-
+8366940	11325595	Adenia longistipulata W.J.deWilde	DOUBTFUL	2621520	Adenia longistipulata W.J.de Wilde (accepted)	entry	-	-
+8380381	3191107	Drosera fimbriata DeBuhr	DOUBTFUL	64350	Drosera fimbriata DeBuhr (accepted)	entry	-	-
+8383830	3955364	Anhalonium leuchtenbergii A.Dietr.	DOUBTFUL	2639658	Anhalonium leuchtenbergii A.Dietr. (illegitimate under Leuchtenbergia principis Fisch. ex Hook.)	filed	-	-
+8397184	9094061	Ficaria verna Huds.	ACCEPTED	2809356	Ficaria verna Huds. (synonym under Ranunculus ficaria L.)	filed	-	3929304,3929332,3929336,5531782,5616086,5616087,5616088,5616091,5616092,5616099,5616105,5616120,5616123,5616125,5616247,6376029,7382972,7544886,7572556,7604042,8405262,11991551,12147031,12308637
+8423065	7303407	Begonia masoniana Irmsch. ex Ziesenh.	DOUBTFUL	362302	Begonia masoniana Irmsch. ex Ziesenh. (accepted)	entry	-	-
+8497175	11273863	Cotyledon gloeophylla VanJaarsv.	DOUBTFUL	3001838	Cotyledon gloeophylla van Jaarsv. (accepted)	entry	-	-
+8530611	4055183	Cissus masukuensis Gilg & M.Brandt	SYNONYM	2722634	Cissus masukuensis (Baker) Gilg & M.Brandt (synonym under Cyphostemma masukuense (Baker) Desc. ex Wild & R.B.Drumm.)	filed	-	-
+8530611	5658635	Vitis masukuensis Baker	SYNONYM	2456231	Vitis masukuensis Baker (synonym under Cyphostemma masukuense (Baker) Desc. ex Wild & R.B.Drumm.)	filed	-	-
+8530611	7293837	Cyphostemma masukuense (Baker) Desc. ex Wild & R.B.Drumm.	SYNONYM	2752808	Cyphostemma masukuense (Baker) Desc. ex Wild & R.B.Drumm. (accepted)	entry	-	-
+8544520	11242066	Cotyledon petiolaris VanJaarsv.	DOUBTFUL	3001811	Cotyledon petiolaris van Jaarsv. (accepted)	entry	-	-
+8652576	7432166	Eugenia cordata M.A.Lawson, 1871	DOUBTFUL	74859	Eugenia cordata (Hochst. ex C.Krauss) G.Lawson (illegitimate under Syzygium cordatum Hochst. ex C.Krauss)	filed	-	-
+8675910	3574879	Ceropegia hookeri C.B.Clarke ex Hook.f.	DOUBTFUL	502747	Ceropegia hookeri C.B.Clarke ex Hook.f. (accepted)	entry	-	-
+8733331	9622648	Ceropegia gettliffei (Pott) Bruyns	ACCEPTED	524304	Ceropegia gettliffei (R.Pott) Bruyns (synonym under Stapelia gettliffei R.Pott)	filed	-	-
+8793122	2905493	Ixora coccinea L.	DOUBTFUL	103356	Ixora coccinea L. (accepted)	entry	-	2905349,2905601,2905604,2905605,2905606,2905607,2905608,2905610,2905611,2905612,2905613,2905614,2905615,2905617,2905618,2905619,2905620,2905621,2905622,2905623,2905624,2905625,2905626,2924708,3846033,6288722,7429843,7463698,8078300,8165259,8535940,9281276,11059692,11235118,11276741,11346026
+9088557	3923257	Delphinium ×barlowii Lindl.	DOUBTFUL	2759463	Delphinium × barlowii Lindl. (artificial hybrid)	entry	-	-
+9257450	11233031	Bulbine spongiosa VanJaarsv.	DOUBTFUL	496308	Bulbine spongiosa van Jaarsv. (accepted)	entry	-	-
+9290497	11248698	Albuca deaconii VanJaarsv.	DOUBTFUL	487811	Albuca deaconii van Jaarsv. (accepted)	entry	-	-
+9296315	5327986	Pandanus amaryllifolius Roxb.	DOUBTFUL	285639	Pandanus amaryllifolius Roxb. (accepted)	entry	-	-
+9332094	11247908	Astroloba cremnophila VanJaarsv.	DOUBTFUL	496162	Astroloba cremnophila van Jaarsv. (accepted)	entry	-	-
+9358442	11355746	Gasteria barbae VanJaarsv.	DOUBTFUL	490704	Gasteria barbae van Jaarsv. (accepted)	entry	-	-
+9374435	9395611	Haworthiopsis viscosa (L.) G.D.Rowley	DOUBTFUL	520725	Haworthiopsis viscosa (L.) Gildenh. & Klopper (accepted)	entry	-	-
+9374435	11109538	Haworthiopsis viscosa (L.) Breuer	DOUBTFUL	520725	Haworthiopsis viscosa (L.) Gildenh. & Klopper (accepted)	entry	-	11302311
+9417492	11354239	Tylecodon florentii VanJaarsv.	DOUBTFUL	3010593	Tylecodon florentii van Jaarsv. (accepted)	entry	-	-
+9482657	5326277	Clivia miniata (Lindl.) Bosse	DOUBTFUL	302703	Clivia miniata (Lindl.) Verschaff. (accepted)	entry	-	2858157,7806528,11264985
+9496583	11358803	Gasteria loedolffiae VanJaarsv.	DOUBTFUL	490700	Gasteria loedolffiae van Jaarsv. (accepted)	entry	-	-
+9578200	11331309	Albuca gildenhuysii (VanJaarsv.) VanJaarsv.	DOUBTFUL	519709	Albuca gildenhuysii (van Jaarsv.) J.C.Manning & Goldblatt (accepted)	entry	-	-
+9586541	11236588	Cotyledon egglii VanJaarsv.	DOUBTFUL	3014466	Cotyledon egglii van Jaarsv. (accepted)	entry	-	-
+9588190	3580594	Brachystelma dinteri (Schltr.) Phillips	HETEROTYPIC_SYNONYM	501888	Brachystelma dinteri (Schltr.) Phillips (illegitimate under Ceropegia blepharanthera (Hans Huber) Bruyns)	filed	-	-
+9588190	3582434	Blepharanthera dinteri Schltr.	SYNONYM	501703	Blepharanthera dinteri Schltr. (synonym under Ceropegia blepharanthera (Hans Huber) Bruyns)	filed	-	-
+9611708	9279854	Kumara plicatilis (L.) Klopper & Gideon F.Sm.	DOUBTFUL	491064	Kumara plicatilis (L.) G.D.Rowley (accepted)	entry	-	-

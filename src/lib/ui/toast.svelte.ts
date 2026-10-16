@@ -128,9 +128,22 @@ class Toast {
     this.cap = null;
     back?.focus();
   }
-  /** A toast belongs to the page it was raised for: one shown just before a navigation rides along, an older one is put away. */
+  /** When the navigation under way began (`beforeNavigate`); 0 when none has begun since the last one landed. */
+  private navBegan = 0;
+  /** A navigation begins: the toast's age is judged against this moment, not against when the next page is drawn. */
+  navigating() {
+    this.navBegan = Date.now();
+  }
+  /**
+   * A toast belongs to the page it was raised for: one raised less than 600 ms before the navigation began, or with it or
+   * after it, rides along; an older one is put away. Judged by when the navigation began, not when it landed (round
+   * seventy-three; H's evidence): the removals and the single add raise their toast as their own navigation begins, and
+   * on a phone that took more than 0.6 s to draw the next page "2026-0001 removed. Undo" was put away unseen.
+   */
   onNavigate() {
-    if (this.text && Date.now() - this.shownAt > 600) this.hide();
+    const began = this.navBegan || Date.now();
+    this.navBegan = 0;
+    if (this.text && began - this.shownAt > 600) this.hide();
   }
 }
 export const toast = new Toast();

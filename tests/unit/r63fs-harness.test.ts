@@ -64,7 +64,7 @@ describe('R3 5: the 200%-text tests check the size on every page they measure', 
   const MEASURES = /scrollWidth|sideways\(|boundingBox\(/;
   for (const [file, title] of [
     ['r61a-a11y.spec.ts', 'r61a a11y-perf 7:'],
-    ['smoke.spec.ts', "round sixty: at 320 px with the browser\\'s text at 200%"],
+    ['smoke-4.spec.ts', "round sixty: at 320 px with the browser\\'s text at 200%"],
     ['r61w-pages.spec.ts', 'at 320 px with 200% text, the refusal pills wrap']
   ] as const) {
     it(`${file}: every page measured after a navigation has the size checked first`, () => {

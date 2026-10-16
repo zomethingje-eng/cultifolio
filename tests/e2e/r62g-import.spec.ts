@@ -70,6 +70,11 @@ test('r62g 2: a choice changed after "Check names" reads the sheet again at once
 });
 
 test('r62g 3: a sheet of 2,003 lines whose first 2,000 look already here offers the last three (the records review, 5)', async ({ page }) => {
+  // The 6,000 changes are 12,000 IndexedDB requests (a put and an arrival row each), which Safari's engine answers at its
+  // own pace (helpers/pace.ts): on the owner's PC the test took 192 s of its 240 in WebKit, within a fifth of its time, and
+  // the write alone is most of it (round seventy-three; the owner's --tier=app run of round seventy-two). So in WebKit the
+  // test is given the write's own time on top, as the other tests that write in bulk are; elsewhere nothing changes.
+  allowWrites(12_000 * WEBKIT_MS_PER_REQUEST);
   await page.goto('/plants'); await ready(page);
   const rows: Array<[string, string, string, string]> = [];
   for (let i = 1; i <= 2000; i++) { const id = `r-${i}`; rows.push(['accession', id, 'acc', `2026-${String(i).padStart(4, '0')}`], ['accession', id, 'taxonName', 'Copiapoa cinerea'], ['accession', id, 'status', 'growing']); }

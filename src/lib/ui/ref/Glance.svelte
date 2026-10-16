@@ -104,11 +104,15 @@
   {#if season && year && strip}
     <div class="card season">
       <div class="lab" role="heading" aria-level="3">The year in {strip.calendar}</div>
-      <!-- Twelve cells, January first, in the reader's months: the rule's months shaded, the months under 5 mm marked. -->
+      <!-- Twelve cells, January first, in the reader's months: the rule's months shaded, the months under 5 mm marked.
+           What the shading is, is said once, in the list's name; each shaded month says "shaded", not the whole phrase
+           again: a frozen wet season read "the rainy season (no growing season read: nights below freezing)" after every
+           wet month, five and six times over (round seventy-three; REVIEW-ROUND-72 §6). The key is the same words drawn
+           as a legend, so a screen reader is not read them a third time. -->
       <ol class="strip" aria-label="Months, January to December{strip.shadeIs ? `; shaded: ${strip.shadeIs}` : ''}">
-        {#each strip.cells as c (c.m)}<li class:on={c.on} class:dry={c.dry}><span class="mo">{MON3[c.m - 1][0]}<span class="rest">{MON3[c.m - 1].slice(1)}</span></span><span class="visually-hidden">{c.on && strip.shadeIs ? `, ${strip.shadeIs}` : ''}{c.dry ? `, under ${ruleRain(5, u)} of rain` : ''}</span></li>{/each}
+        {#each strip.cells as c (c.m)}<li class:on={c.on} class:dry={c.dry}><span class="mo">{MON3[c.m - 1][0]}<span class="rest">{MON3[c.m - 1].slice(1)}</span></span><span class="visually-hidden">{c.on && strip.shadeIs ? ', shaded' : ''}{c.dry ? `, under ${ruleRain(5, u)} of rain` : ''}</span></li>{/each}
       </ol>
-      <div class="sub key">{#if strip.shadeIs}<span><i class="sw on"></i>{strip.shadeIs}</span>{/if}{#if strip.cells.some((c) => c.dry)}<span><i class="sw dry"></i>under {ruleRain(5, u)} of rain</span>{/if}</div>
+      <div class="sub key" aria-hidden="true">{#if strip.shadeIs}<span><i class="sw on"></i>{strip.shadeIs}</span>{/if}{#if strip.cells.some((c) => c.dry)}<span><i class="sw dry"></i>under {ruleRain(5, u)} of rain</span>{/if}</div>
       {#if seasonLead}<div class="sub lead">{seasonLead} <span class="src">{seasonRule}</span></div>{/if}
       <div class="sub hemi">{#if !year.shiftable}Not shifted: the shift rule does not apply to this habitat.{:else if readerFrom === 'site'}Your hemisphere from your site.{:else if readerFrom === 'places'}Your hemisphere from your places.{:else}Northern hemisphere unless you <a href="/settings#site">set your site</a>.{/if}{#if chartHref}{' '}<a href={chartHref}>The chart</a> is in the habitat's months.{/if}</div>
     </div>

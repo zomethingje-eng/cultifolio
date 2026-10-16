@@ -61,11 +61,11 @@ That runs `svelte-check`, the unit tests, the build, `wrangler deploy` and then 
 "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Counters"] }]
 ```
 
-New vaults are also bounded: 5 per address a day and 20 per IPv6 /48 (a 429), 200 a day for everyone and 2,000 in all (a 503 whose sentence the sync page shows: "Sync has taken all the new vaults it can today…" for the day, "Sync is not taking new vaults for now…" for the total, and "Sync could not count new vaults just now…" when the counter object cannot be reached); the last two can be raised without a deploy by setting `SYNC_VAULTS_PER_DAY` and `SYNC_VAULTS_MAX` on the Worker (dashboard → Settings → Variables; `wrangler.jsonc` has `keep_vars: true` so the next deploy does not wipe them), and the running totals live in the counter object (`Counters.totals(day)`; the KV keys `vaults:all:<day>` and `vaults:all` are the counts from before round twenty-one, and `vaults:all` seeds the object's total once). The object drops address keys older than two days by a daily alarm, and sleeps once nothing it sweeps is left (since round sixty-one the places are swept too, so the `vaults` object wakes every midnight while any vault holds one). Addresses are counted as an IPv4 address or an IPv6 /64.
+New vaults are also bounded: 5 per address a day and 20 per IPv6 /48 (a 429), and for everyone by a day's ceiling and a ceiling in all, 200 a day and 2,000 in all by default (a 503 whose sentence the sync page shows: "Sync has taken all the new vaults it can today…" for the day, "Sync is not taking new vaults for now…" for the total, and "Sync could not count new vaults just now…" when the counter object cannot be reached); the last two can be raised without a deploy by setting `SYNC_VAULTS_PER_DAY` and `SYNC_VAULTS_MAX` on the Worker (dashboard → Settings → Variables; `wrangler.jsonc` has `keep_vars: true` so the next deploy does not wipe them; a value that is not a whole number is ignored and the default holds). The launch's are 1,000 a day and 20,000 in all (round seventy-three, the owner's decision): set both before the announcement, and read them back on the dashboard. Every sentence on /about/formats that states one names the default and says the deployment may set more, so the about page stays true whatever the variables say, and the running totals live in the counter object (`Counters.totals(day)`; the KV keys `vaults:all:<day>` and `vaults:all` are the counts from before round twenty-one, and `vaults:all` seeds the object's total once). The object drops address keys older than two days by a daily alarm, and sleeps once nothing it sweeps is left (since round sixty-one the places are swept too, so the `vaults` object wakes every midnight while any vault holds one). Addresses are counted as an IPv4 address or an IPv6 /64.
 
-Since round sixty the day's 200 and the 2,000 in all are both taken at a vault's first stored batch or photograph, not at its creation, so empty vaults made by a script spend neither. Past either, a vault that holds nothing yet has its first upload refused (503, with Retry-After to UTC midnight for the day's, a day for the total's). A counter object that does not answer refuses that first upload too ("The site could not count this vault just now; try again in a minute.", Retry-After 60): nothing is stored uncounted. A vault whose first upload was counted and then did not land gives its place back, unless another upload of it is still landing. Since round sixty-one a vault's meta says `filled` only once an object has landed, so a Worker stopped between the count and the write leaves a vault whose next upload is checked again.
+Since round sixty the day's places and the places in all (`SYNC_VAULTS_PER_DAY` and `SYNC_VAULTS_MAX`, 200 and 2,000 by default) are both taken at a vault's first stored batch or photograph, not at its creation, so empty vaults made by a script spend neither. Past either, a vault that holds nothing yet has its first upload refused (503, with Retry-After to UTC midnight for the day's, a day for the total's). A counter object that does not answer refuses that first upload too ("The site could not count this vault just now; try again in a minute.", Retry-After 60): nothing is stored uncounted. A vault whose first upload was counted and then did not land gives its place back, unless another upload of it is still landing. Since round sixty-one a vault's meta says `filled` only once an object has landed, so a Worker stopped between the count and the write leaves a vault whose next upload is checked again.
 
-Since round sixty-one a place is also reclaimed: a vault with no upload for 90 days gives its place back at the counter object's midnight sweep (the object keeps the day of each vault's last upload in `f:<vault>`), and its next upload takes a place again, under the 2,000 but not under the day's 200 (it is not a new vault). Nothing the vault holds is touched; reading it needs no place. If the places are full when it comes back, that upload is refused with "Sync is full for now. This vault had no upload for 90 days, so its place was given back…" (503, Retry-After an hour) until one is free or `SYNC_VAULTS_MAX` is raised. Since round sixty-two a place is given back only on evidence: the sweep writes `reclaimedAt` into the vault's `meta.json` (a conditional write; a vault whose meta cannot be written keeps its place until the next sweep), then, in one storage transaction per page of a thousand keys, deletes `f:<vault>`, writes `r:<vault>` and lowers `all`, so a sweep cut short loses no place. The transaction reads each judged place again and keeps any an upload touched while the metas were being marked; that vault's meta keeps `reclaimedAt` until its next write, which then asks the counter object and clears it. The `r:<vault>` notes are kept until the vault takes a place again, and never swept. A vault with no place entry and neither mark (counted at its creation before round fifty-eight, or first filled under round fifty-eight) is adopted at its next upload and not counted again, and a meta from before round fifty-eight is written `filled: true`. A write to a vault whose meta says `reclaimedAt` needs a checked place: a counter that throws or cannot answer refuses it (503, Retry-After 60); reads never need one. Places recorded before round sixty-one start their 90 days at the first midnight after the deploy. The KV fallback (no counter object) counts each vault once by its own key (`vaultplace:<id>`, kept for good, given back with the day's count when its first upload fails) and does not reclaim places. When the 2,000 run short, raise `SYNC_VAULTS_MAX`.
+Since round sixty-one a place is also reclaimed: a vault with no upload for 90 days gives its place back at the counter object's midnight sweep (the object keeps the day of each vault's last upload in `f:<vault>`), and its next upload takes a place again, under the ceiling in all but not under the day's (it is not a new vault). Nothing the vault holds is touched; reading it needs no place. If the places are full when it comes back, that upload is refused with "Sync is full for now. This vault had no upload for 90 days, so its place was given back…" (503, Retry-After an hour) until one is free or `SYNC_VAULTS_MAX` is raised. Since round sixty-two a place is given back only on evidence: the sweep writes `reclaimedAt` into the vault's `meta.json` (a conditional write; a vault whose meta cannot be written keeps its place until the next sweep), then, in one storage transaction per page of a thousand keys, deletes `f:<vault>`, writes `r:<vault>` and lowers `all`, so a sweep cut short loses no place. The transaction reads each judged place again and keeps any an upload touched while the metas were being marked; that vault's meta keeps `reclaimedAt` until its next write, which then asks the counter object and clears it. The `r:<vault>` notes are kept until the vault takes a place again, and never swept. A vault with no place entry and neither mark (counted at its creation before round fifty-eight, or first filled under round fifty-eight) is adopted at its next upload and not counted again, and a meta from before round fifty-eight is written `filled: true`. A write to a vault whose meta says `reclaimedAt` needs a checked place: a counter that throws or cannot answer refuses it (503, Retry-After 60); reads never need one. Places recorded before round sixty-one start their 90 days at the first midnight after the deploy. The KV fallback (no counter object) counts each vault once by its own key (`vaultplace:<id>`, kept for good, given back with the day's count when its first upload fails) and does not reclaim places. When the 2,000 run short, raise `SYNC_VAULTS_MAX`.
 
 Each vault's counter object also holds what is being uploaded as leases of ten minutes (`p:<id>`), so an upload whose Worker died is not counted for good; a log line "an upload's lease was not released" is that case and needs nothing done. A removal and an upload of the same photograph wait for each other through the same object (since round sixty-two always a 503 with Retry-After 10, which the device retries without stopping the vault's other uploads). A removal holds a lease of no bytes (`p:rm:<receipt>`) from just before its R2 delete until its give-back, and a listing is not written while any lease is live, and is not made either (`generation()` says `busy`), so a request that would have listed while another upload is in flight asks `take` again without a listing, or is answered 503; a recount can neither count an upload twice nor take a removal off twice. The site's own calls to other services are capped in the counter object named `upstream` (round sixty-one): MET Norway, the NWS and GBIF each have a share of 600 calls a minute for every address together, and one address (an IPv4 address or an IPv6 /64) may take at most a tenth of a share in a minute, an IPv6 /48 four tenths. A US forecast takes from both MET's share and the NWS's, both or neither, so a refusal always names MET. A forecast whose NWS alerts were refused is kept at the edge and on the device for five minutes, not the hour. The cap constants live in `src/lib/server/caps.ts`. The count is kept in that object's memory for the current minute, so a restart of the object (a deploy) forgets at most one minute. A call held back is answered 503 "not asked: this site's calls are used up for this minute" (429 when one address has used its part), with Retry-After to the next minute; the frost watch then says the site held the call back, never that the source did not answer. Without the binding, or while the object does not answer (a log line says so), each isolate counts in its own memory and shares the count through KV once a second (`rl:upstream:<service>:<minute>` and `rl:upstream:<service>:<address>:<minute>`): exact for one isolate, rough for the site, since isolates that open the same minute each pass a share before they see one another's counts.
 
@@ -90,9 +90,9 @@ npx wrangler kv key get --binding QUEUE "ops:faults:2026-10-10" --remote
 
 ### New vault places: the attack and the remedy (round sixty-seven)
 
-The day's 200 new-vault places and the 2,000 in all are what bound spend, and they are also a switch anyone can throw: a place costs one vault creation and one stored object of a few bytes. Before this round forty IPv4 addresses (one /26) or ten IPv6 /48s spent the whole day by noon, every new grower that day was refused ("Sync has taken all the new vaults it can today…"), ten days of it filled the 2,000, and one tiny upload per vault every 89 days keeps the places for good.
+The day's new-vault places and the places in all (200 and 2,000 by default; the launch sets 1,000 and 20,000) are what bound spend, and they are also a switch anyone can throw: a place costs one vault creation and one stored object of a few bytes. Before this round forty IPv4 addresses (one /26) or ten IPv6 /48s spent the whole day by noon, every new grower that day was refused ("Sync has taken all the new vaults it can today…"), ten days of it filled the 2,000 then in all, and one tiny upload per vault every 89 days keeps the places for good.
 
-Since this round each network (an IPv4 /24 or an IPv6 /48 around the uploading address) may take 10 of the day's places (`MAX_NEW_VAULTS_PER_NETWORK_PER_DAY` in `src/lib/server/sync.ts`); past that its first uploads are refused until midnight UTC with "Sync has taken all the new vaults it takes from this network today…". It now takes twenty networks to spend a day. And when half the day's places are taken, the counter object records it once, with the networks that took the most (`o:<day>`, kept to the end of the next day as the address keys are), mirrored to KV:
+Since this round each network (an IPv4 /24 or an IPv6 /48 around the uploading address) may take 10 of the day's places (`MAX_NEW_VAULTS_PER_NETWORK_PER_DAY` in `src/lib/server/sync.ts`); past that its first uploads are refused until midnight UTC with "Sync has taken all the new vaults it takes from this network today…". It now takes twenty networks to spend a day of the default 200 (a hundred at the launch's 1,000). And when half the day's places are taken, the counter object records it once, with the networks that took the most (`o:<day>`, kept to the end of the next day as the address keys are), mirrored to KV:
 
 ```
 npx wrangler kv key get --binding QUEUE "ops:vaults:2026-10-10" --remote
@@ -102,7 +102,7 @@ npx wrangler kv key get --binding QUEUE "ops:vaults:2026-10-10" --remote
 
 1. Read it. Networks near 10 places each, many of them new that day, and `wrangler tail` showing uploads of a few hundred bytes, are the attack; a spread of networks at one or two places each is real growers, and the answer is to raise `SYNC_VAULTS_PER_DAY` (dashboard → Workers → cultifolio → Settings → Variables; no deploy needed).
 2. Block the attacking networks for `/api/sync/*` with a WAF custom rule (Security → WAF → Custom rules: `ip.src in { 203.0.113.0/24 2001:db8:7::/48 }` and `starts_with(http.request.uri.path, "/api/sync/")`, action Block). A rate-limiting rule on `/api/sync/vault` (POST, per IP, a few an hour) slows a spread-out attack.
-3. Before the 2,000 fill, raise `SYNC_VAULTS_MAX`; it costs only storage, which the per-vault 2 GB still bounds. Places held by attack vaults go back 90 days after their last upload; a vault kept alive by tiny uploads keeps its place. Nothing in the site removes a place by hand, by design; if an attack goes on past the blocks and the raised ceiling, it needs a change in code (a minimum of stored bytes before a vault holds a place against the 2,000 is the next step the review of round sixty-six named).
+3. Before the places in all fill (`SYNC_VAULTS_MAX`, 2,000 by default), raise it; it costs only storage, which the per-vault 2 GB still bounds (20,000 vaults could hold 40 TB at most, so the R2 spend alert of section 1 is what tells you first). Places held by attack vaults go back 90 days after their last upload; a vault kept alive by tiny uploads keeps its place. Nothing in the site removes a place by hand, by design; if an attack goes on past the blocks and the raised ceiling, it needs a change in code (a minimum of stored bytes before a vault holds a place against the ceiling in all is the next step the review of round sixty-six named).
 
 Keep Cloudflare's "Pseudo IPv4" setting (Network) off: it replaces `CF-Connecting-IP` for IPv6 visitors with an IPv4 address of class E, which destroys the /64 and /48 grouping every count here relies on.
 
@@ -114,6 +114,24 @@ A /48's twenty new vaults a day are refused as "too many new vaults from this ne
 
 The adapter's own cache at the edge answers a repeated public GET by its full URL before the Worker runs. The client names its build in those URLs (`v=<version>`), and an answer is kept only under the build that made it (`src/lib/server/build.ts`), so a deploy is not answered from the old build's copies. What the edge keeps, by URL: a search, a name lookup, an entries or sheets bucket, a window of catalogue rows, the sitemaps and `robots.txt` for a day; a forecast for an hour (five minutes when the NWS refused or did not answer for its alerts); `/api/index` for five minutes; the world maps for a day; the build's own files for a year. Besides those, the Worker's own copies: the name lookups and old-name checks by query for a day, the sheets by bucket for a day, a forecast by rounded site for the hour, a search by query for a day, the front page and species pages as rendered for a minute.
 
+### A cold start's CPU (round seventy-three)
+
+The first request a fresh copy of the Worker answers reads the species index from R2 (5.8 MB) and builds its name maps; every later request in that copy uses them as built. On the developer's machine that first request cost about 0.4 s of CPU in node; on Cloudflare it has not been measured. Measure it once after a deploy, and again after any round that changes the index or the name maps.
+
+1. Deploy with `npm run deploy`. A deploy starts fresh copies, so the next requests are cold ones.
+2. Open a second cmd window in the project folder and type `npx wrangler tail cultifolio --format json > tail.json`. It prints nothing; it writes every request to `tail.json`. Leave it running.
+3. In a private browser window open `https://cultifolio.com/species/copiapoa-cinerea`, then the same page again, then `https://cultifolio.com/`.
+4. Wait ten seconds, go back to the second window and press Ctrl-C (answer `Y` if it asks to end the batch job).
+5. Type `findstr /C:"cpuTime" /C:"outcome" tail.json`. For each request it lists how it ended and its CPU time in milliseconds.
+
+The first request of a fresh copy has by far the largest `cpuTime`; the second visit to the same page takes a few milliseconds. Requests can reach more than one copy, so there may be more than one large figure. When to act:
+
+- Any `"outcome"` other than `"ok"`, and in particular `"exceededCpu"` (the browser shows "Error 1102"): act now. Note the address and tell the developer.
+- On the Workers Free plan, a request may use 10 ms of CPU, which a cold start cannot meet. Move to Workers Paid before the launch: Cloudflare dashboard → Workers & Pages → Plans.
+- On Workers Paid, a request may use 30 s of CPU by default. A cold `cpuTime` under 1,000 ms needs nothing. Over 1,000 ms, more than twice what was measured here, write it in the round's notes: the corpus build should then write the synonym maps and the held names as files, so that a cold start reads them rather than builds them.
+
+If `tail.json` has no `"cpuTime"` lines (an older wrangler), the dashboard shows the same: Workers & Pages → cultifolio → Metrics → CPU time, whose highest percentile is the cold starts.
+
 ## 4. After the first deploy, once, by hand
 
 Open the site in a private window and walk it: a species you know (the climate, the marker caption, the photographs and their credits), search for a species, add a plant, follow another, `/` shows your list, export a backup, `/about/how`. Then on a phone: the same species page, the climograph legible, no horizontal scroll. Then sync: create a vault on one device, join from the other with the key, edit on both, watch them agree. Then check `npx wrangler tail` for a minute while doing it; the only errors should be the ones you caused.
@@ -122,11 +140,13 @@ Then the three things the code cannot do for you: confirm in the dashboard that 
 
 ## 5. Refreshing the corpus later
 
-**The corpus step is one command (round seventy-two).** `node scripts/corpus-step.mjs` runs the round's plan (`scripts/corpus-plan.txt`) in order: a backup, the fills, the rebuilds, `--index`, the upload and the live check. Everything it prints also goes to `corpus-step.log` in the project folder, and each finished step is recorded in `corpus-step.json`, so the same command carries on where it stopped. It stops with one sentence and the command to type next. The day's answers of GBIF, Wikidata, Kew and the rest are kept in `cache\upstream\` for that day only, so running it again the same day asks only what did not answer; the folder can be deleted at any time. Type it with `node`, not `npm run`: under `npm run`, Ctrl-C asks "Terminate batch job (Y/N)?" (either answer is safe). The steps below are round seventy-two's; the next section's two rclone lines and `--keep-list` are what the command runs, kept for reference.
+**The corpus step is one command (round seventy-two).** `node scripts/corpus-step.mjs` runs the round's plan (`scripts/corpus-plan.txt`) in order: a backup, the fills, the rebuilds, `--index`, the upload and the live check. Everything it prints also goes to `corpus-step.log` in the project folder, and each finished step is recorded in `corpus-step.json`, so the same command carries on where it stopped. It stops with one sentence and the command to type next. The day's answers of GBIF, Wikidata, Kew and the rest are kept in `cache\upstream\` for that day only, so running it again the same day asks only what did not answer; the folder can be deleted at any time. Type it with `node`, not `npm run`: under `npm run`, Ctrl-C asks "Terminate batch job (Y/N)?" (either answer is safe). The steps below are round seventy-three's; the next section's two rclone lines and `--keep-list` are what the command runs, kept for reference.
 
-### Round seventy-two's corpus step, after `npm run deploy`
+### Round seventy-three's corpus step, after `npm run deploy`
 
-It takes a few hours, most of it waiting politely on GBIF and iNaturalist. Keep the PC from sleeping while it runs; if it sleeps, run the same command again.
+This round re-derives about 305 pages with the records and photographs of the other GBIF keys GBIF files their plant under, and merges two pairs of pages that are one plant. It takes about an hour: reading `occurrence.zip` once, then about 1,000 requests to GBIF's search API, made one after another. Keep the PC from sleeping while it runs; if it sleeps, run the same command again.
+
+**What changes, and why.** GBIF files some plants' records under more than one backbone key. Myrica cerifera's page reads GBIF's key for "Myrica cerifera Bigelow" (292 records), while GBIF files the wax myrtle under Morella cerifera (L.) Small (18,590 records with coordinates). A page now also reads another key's records and photographs when, and only when, Kew's file holds that key's name and author as the page's own name or as a name of the same type (an orthographic variant, a synonym Kew marks homotypic, or an autonym of one), GBIF does not already file the key under the page's key, and the key is not another page's (or filed under one). Heterotypic synonyms, such as Lonicera pileata on Lonicera ligustrina, are not read: that is a taxonomic decision not made yet, and `extra-keys-refused.txt` lists them with "the owner's decision". `scripts/extra-keys.txt` lists every such key: 332 keys on 305 pages, made from Kew's file of 2026-06-04 and GBIF's backbone export. Each page says in its record which keys its records come from and why (`occurrences.keys`). Coryphantha macromeris joins Pelecyphora macromeris, and Rebutia fidana joins Weingartia fidaiana (`scripts/merged-pages.txt`): each kept page reads the other's key, the old name answers there as an older name, the old address and a grower's plant under the old name find the kept page, and the old dossier is deleted. The index then holds 8,945 species, two fewer, on purpose.
 
 **Step 1. Open cmd in the project folder.** The quotes are needed because the folder's path has a space in it.
 
@@ -140,7 +160,7 @@ cd /d "C:\path\to\AI Work\cultifolio"
 node scripts/corpus-step.mjs
 ```
 
-It first runs `svelte-kit sync`, then copies `static\s\v2` to `backups\v2-<the corpus id>` (`backups\v2-4c784c5dc7ca2448` for round seventy-one's corpus; a minute or two), then runs the fills one after another. Each step starts with a line like `=== 2026-10-16 09:12:03  step 3 of 19: dossier --fill kew-links`.
+It first runs `svelte-kit sync`, then copies `static\s\v2` to `backups\v2-<the corpus id>` (`backups\v2-d60525499b8c8c20` for round seventy-two's corpus; a minute or two), then runs the steps one after another. Each step starts with a line like `=== 2026-10-17 09:12:03  step 2 of 12: dossier --list-extra-keys`.
 
 **Whenever it stops, read its last sentence.** There are four kinds of stop:
 
@@ -151,63 +171,69 @@ It first runs `svelte-kit sync`, then copies `static\s\v2` to `backups\v2-<the c
 
 `node scripts/corpus-step.mjs --status` lists the steps and which are done, and changes nothing.
 
-**Step 3. Review: the species to rebuild.** The command stops after `--list-rebuild`. Open both lists:
+**Step 3. Review: the pages to re-derive.** The command stops after `--list-extra-keys`. Open the list:
 
 ```
-notepad rebuild-wd.txt
-notepad rebuild-keys.txt
+notepad rebuild-extra.txt
 ```
 
-Good looks like this:
-
-- `rebuild-wd.txt` holds about sixteen lines:
-  - the nine Wikidata changes round seventy-one could not make: Raphionacme linearis, Peperomia monticola, Tulipa clusiana, Othonna rosea, Convolvulus cneorum, Gunnera manicata, Salvia azurea and Agave ghiesbreghtii ("Wikidata item none → Q…"), and Agave variegata ("Q15523250 → Q391952");
-  - seven pages whose Wikidata row had said "not answered" since earlier rounds: Reicheocactus famatimensis, Vera-duthiea zebrina, Manfreda arceliensis, Othonna divaricata, Urginea grandiflora, Cissus wilmsii and Agave wendtii (each "none → Q…").
-- `rebuild-keys.txt` holds about five: Reicheocactus famatimensis, Melocactus lemairei, Weingartia fidaiana, Ceropegia hadramautica and Delphinium cultorum.
-
-If either list has dozens of lines, stop and paste it back. Otherwise go on:
+Good looks like this: about 305 lines, each a key and a name, among them `11798439 Pelecyphora macromeris`, `7281301 Weingartia fidaiana`, `8038589 Myrica cerifera`, `8793122 Ixora coccinea` and `11869920 Eucalyptus camaldulensis`. Coryphantha macromeris and Rebutia fidana are not in it. If it holds a few dozen lines, or several thousand, stop and paste the first lines back. Otherwise go on:
 
 ```
 node scripts/corpus-step.mjs --go-on
 ```
 
-**Step 4. Review: drops, if the rebuild stops for them.** A rebuild that loses something the page had before writes `drops.txt` and stops.
+The re-derivation reads the download for each page's own key and asks GBIF for the other keys' records and photographs (none of the 332 is in `occurrence.zip`, which was made for the reference's own keys). Its lines read like `✓ Myrica cerifera [8038589] 49 photos, 412 open/…`.
+
+**Step 4. Review: drops, if the re-derivation stops for them.** A rebuild that loses something the page had before writes `drops.txt` and stops.
 
 ```
 notepad drops.txt
 ```
 
-Good: every line names one of the species just rebuilt, and the loss is the change the round meant. Agave variegata may lose iNaturalist photographs that came from Manfreda variegata's taxon; a Wikidata identifier changing to the new item is expected. Not good: a species losing all its photographs, its range or its summary for no reason you can see. Paste those lines back and do not go on. If every line is expected:
+Good: every line names one of the pages just re-derived, and the change is the round's: a climate or a marker that moved because more records are read. Not good: a page losing all its photographs, its range or its records for no reason you can see. Paste those lines back and do not go on. If every line is expected:
 
 ```
 node scripts/corpus-step.mjs --go-on
 ```
 
-**Step 5. Review: before the upload.** After `--index` it stops with a sentence like "corpus on disk 1a2b…, was 4c784c5dc7ca2448; 8947 species; 8940 dossiers differ from the backup …; drops.txt not there".
+**Step 5. The merged pages and the check (no review).** `--prune-followed` deletes the dossiers of Coryphantha macromeris (3084426) and Rebutia fidana (7906297), and says "2 dossiers of pages merged into another deleted (3084426, 7906297)". It deletes one only when the page it joined records its key, so a re-derivation that stopped short leaves it, and says which. The second `--list-extra-keys` must say "0 pages to rebuild with their other keys"; if it names pages, the re-derivation did not finish them, and at the next review paste that line back rather than uploading.
+
+**Step 5b. iNaturalist (no review).** `--fill inat --bulk bulk` asks iNaturalist again about some sixty pages once (Kew's names below species now read more exactly) and a few of them get new photograph sets; it takes a few minutes and says how many. Then `--fill commons-kind` reads the description of the few Commons files a new title rule would hide, so a file whose description names the species stays.
+
+**Step 6. Review: before the upload.** After `--index` it stops with a sentence like "corpus on disk 1a2b…, was d60525499b8c8c20; 8945 species; about 370 dossiers differ from the backup …; drops.txt not there".
 
 Good looks like this:
 
-- 8947 species, or the same number as before the step. The command itself stops if the index shrank.
-- Most dossiers differ from the backup this round, because Kew's names and the range sources are written into nearly every page.
+- 8945 species: the 8947 before, less the two merged pages. The step said so after `--prune-followed` ("2 pages merged into another left the index on purpose: 8945 species expected from here on"); any other shrink still stops it.
+- The `--index` lines in `corpus-step.log` include "2 old addresses of pages merged into another answered by the kept page: coryphantha-macromeris, rebutia-fidana".
 - No line in `corpus-step.log` says "could not be read".
 - `drops.txt` is not there, or holds only lines you read in step 4.
 
-Look over the lines each fill printed in `corpus-step.log` (`notepad corpus-step.log`): each says how many pages it changed. Then upload:
+Then upload:
 
 ```
 node scripts/corpus-step.mjs --go-on
 ```
 
-**Step 6. Upload and live check (no review).** The command does the rest:
+**To make the list of other keys again** (only when Kew's file or GBIF's backbone changes; it is offline and takes about five minutes): download GBIF's backbone export once, `simple.txt.gz` (466 MB) from https://hosted-datasets.gbif.org/datasets/backbone/current/, into a folder `backbone`, then
+
+```
+npm run dossier -- --list-extra-keys --bulk bulk --backbone backbone\simple.txt.gz
+```
+
+It rewrites `scripts\extra-keys.txt`, lists the keys the rule did not take, and why, in `extra-keys-refused.txt`, and writes `rebuild-extra.txt`.
+
+**Step 7. Upload and live check (no review).** The command does the rest:
 
 1. It copies everything but the manifest.
 2. It checks with `rclone check` that the bucket holds every file as it is on disk, and only then copies the manifest.
 3. It lists the bucket's dossiers the index does not list into `bucket-unlisted.txt`. This is a report only: nothing is deleted.
 4. It runs the live check, and then waits until the site serves the corpus on disk.
 
-It ends with "the site serves corpus …, the one on disk" and "every step is done". A handful of keys in `bucket-unlisted.txt` (pages followed to another name in earlier rounds) is expected. If the check fails, the manifest was not uploaded and the site still serves the corpus before; paste the end of the log back.
+It ends with "the site serves corpus …, the one on disk" and "every step is done". A handful of keys in `bucket-unlisted.txt` (pages followed to another name in earlier rounds, and this round 3084426 and 7906297, the two merged pages) is expected: the site answers a key the index does not list with a 404 whatever the bucket holds. If the check fails, the manifest was not uploaded and the site still serves the corpus before; paste the end of the log back.
 
-**Step 7. A day or more later: the prune.**
+**Step 8. A day or more later: the prune.**
 
 ```
 node scripts/corpus-step.mjs --prune
@@ -225,7 +251,7 @@ node scripts/corpus-step.mjs --prune --go-on
 
 ```
 rmdir /s /q static\s\v2
-xcopy /e /i /q backups\v2-4c784c5dc7ca2448 static\s\v2
+xcopy /e /i /q backups\v2-d60525499b8c8c20 static\s\v2
 ```
 
 Then upload it with the two rclone lines under "The upload" below, and check it with `npm run live-check`.

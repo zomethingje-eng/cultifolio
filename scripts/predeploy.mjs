@@ -81,8 +81,8 @@ if (missing.length) {
 }
 // Four workers for Chromium unless told otherwise (round seventy-two; the harness review). What bounds the count is not the
 // PC's sixteen threads but three things: the one wrangler dev every test shares (a single workerd process renders every
-// page; eight workers timed page loads out in round sixty-two), smoke.spec.ts, whose 119 tests run in order in one worker
-// and are a quarter of the suite (past four workers the run waits on it, not on the rest), and Safari's engine, whose
+// page; eight workers timed page loads out in round sixty-two), the smoke tests, 119 run in order and a quarter of the suite
+// (four files since round seventy-three, smoke-1 to smoke-4, each in order in a worker of its own), and Safari's engine, whose
 // IndexedDB answers about one request in 16 ms: playwright.config.ts holds WebKit to two workers of its own
 // (PW_WEBKIT_WORKERS). The launch run keeps the two every earlier deploy passed at.
 const workers = extra.some((a) => a.startsWith('--workers') || a === '-j') ? [] : [`--workers=${process.env.PW_WORKERS || (tier === 'launch' ? 2 : 4)}`];

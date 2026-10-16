@@ -94,6 +94,12 @@ interface SyncMeta {
    * review's 10, A5: the hour lived in one tab's memory, and each reload asked again).
    */
   asked409?: Record<string, number>;
+  /**
+   * The vault's hour of listings spent (a 503 on a listing, with the server's sentence and when to ask again): kept here,
+   * so the five-minute tick, a focus, an edit, a reload or another tab lists no sooner (round seventy-three; self-E 5).
+   * Never more than an hour ahead; gone once a listing is answered.
+   */
+  listingWait?: { text: string; until: number };
   /** When this device first saw each removed photograph whose removal's stamp is marked (its wall says nothing of when it was made; round sixty-two, the clock review's 15). */
   removedSeen?: Record<string, number>;
 }
@@ -664,7 +670,13 @@ class Sync {
         else throw e;
       }
       if (this.meta !== m) throw stopped(); // the 429 was caught above; a stop or a new vault during the push still ends the run here
-      const got = await this.pull(m);
+      // The vault's hour of listings, while it stands, is waited out by every run, in every tab and after a reload: the
+      // run's own timer was all that held it, and the tick listed again every five minutes into it (round seventy-three;
+      // self-E 5). The push above still went; receiving waits.
+      const held = this.listingHeld(m);
+      if (held) throw wait && (wait as Error & { retryAfterMs: number }).retryAfterMs < held.retryAfterMs ? wait : held;
+      const got = await this.pull(m).catch(async (e) => { await this.keepListingWait(m, e); throw e; });
+      if (m.listingWait) delete m.listingWait; // a listing answered: the hour is over
       // A removal folded by this pull may have revived under an edit made here, with the pixels here: the photographs
       // noted by the pull are checked and sent in the same run, not the next (round fifty-two, 2).
       // Not after a refusal or a wait the push met: nothing is sent to be refused again (round seventy; triage-69 W2).
@@ -835,8 +847,28 @@ class Sync {
     try { const body = (await r.clone().json()) as { error?: string; message?: string }; text = body.error || body.message || ''; } catch { /* the platform's own 503 */ }
     const secs = Math.max(5, Math.min(3600, Number(r.headers.get('retry-after')) || 300));
     const e = new Error(text || `pull failed: ${r.status}`);
-    (e as Error & { retryAfterMs?: number }).retryAfterMs = secs * 1000;
+    (e as Error & { retryAfterMs?: number; listing?: true }).retryAfterMs = secs * 1000;
+    (e as Error & { listing?: true }).listing = true;
     throw e;
+  }
+  /**
+   * A listing's wait of a minute or more kept in the sync record, as the refusals are (round seventy-three; self-E 5): a
+   * shorter one is the run's alone, as before. Only for the run's own vault.
+   */
+  private async keepListingWait(m: SyncMeta, e: unknown): Promise<void> {
+    const ms = (e as { listing?: true; retryAfterMs?: number })?.listing ? (e as { retryAfterMs: number }).retryAfterMs : 0;
+    if (ms < 60_000 || this.meta !== m) return;
+    m.listingWait = { text: (e as Error).message, until: Date.now() + Math.min(ms, REFUSAL_MS) };
+    await this.save(m).catch(() => {});
+  }
+  /** The kept listing wait as the run's error, while it stands (never more than an hour ahead of this clock); null, and forgotten, once it has ended. */
+  private listingHeld(m: SyncMeta): (Error & { retryAfterMs: number }) | null {
+    const w = m.listingWait;
+    if (!w || typeof w.until !== 'number' || w.until <= Date.now()) { if (w) delete m.listingWait; return null; }
+    const until = Math.min(w.until, Date.now() + REFUSAL_MS);
+    const e = new Error(String(w.text ?? '') || 'the sync server asked this device to wait before listing again') as Error & { retryAfterMs: number };
+    e.retryAfterMs = until - Date.now();
+    return e;
   }
 
   /**

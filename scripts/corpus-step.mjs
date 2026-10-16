@@ -68,6 +68,15 @@ export function classify({ code, output, dropsWritten, speciesBefore }) {
   return { status: 'done' };
 }
 
+/**
+ * The pages a step took out of the reference on purpose (round seventy-three): `--prune-followed` says "N dossiers of pages
+ * merged into another deleted", each listed in scripts/merged-pages.txt by the owner's decision. The index may hold that
+ * many fewer species; any other shrink still blocks.
+ */
+export const MERGED_AWAY = /^ {2}(\d+) dossiers? of pages merged into another deleted\b/gm;
+/** @param {string} output */
+export const mergedAway = (output) => [...output.matchAll(MERGED_AWAY)].reduce((n, m) => n + Number(m[1]), 0);
+
 /** The sentence a stop prints, and the command to type next. */
 export function stopSentence(step, result, cmd = 'node scripts/corpus-step.mjs') {
   switch (result.status) {
@@ -183,6 +192,9 @@ export async function run({ root = process.cwd(), argv = [], exec = spawnExec, f
         const code = await exec(process.execPath, ['--max-old-space-size=8192', '--import', 'tsx', 'scripts/build-dossiers.ts', ...step.args], (s) => { output += s; quietSince = Date.now(); say(s); }, { cwd: root, env: { ...process.env, CORPUS_STEP: '1' } }).finally(() => clearInterval(beat));
         if (interrupted) break;
         const dropsWritten = existsSync(at('drops.txt')) && statSync(at('drops.txt')).mtimeMs > dropsBefore && statSync(at('drops.txt')).mtimeMs >= t0 - 1000;
+        // Pages merged away leave the index on purpose: the species before are counted without them from here on (round 73).
+        const gone = mergedAway(output);
+        if (gone && state.speciesBefore) { state.speciesBefore -= gone; say(`  ${gone} page${gone === 1 ? '' : 's'} merged into another left the index on purpose: ${state.speciesBefore} species expected from here on.\n`); save(); }
         result = classify({ code, output, dropsWritten, speciesBefore: state.speciesBefore });
       } else if (step.kind === 'upload') {
         result = { status: 'done' };

@@ -5,7 +5,7 @@
 import type { JsonFetcher, FetchResult } from '../fetch';
 import type { Photo } from '../schema';
 import { mendCommonsThumb } from '../md5';
-import { commonsKind, commonsFirstByEpithet, slipsToAsk, askSlip, sourceKind, type KindNames } from '../photo-kind';
+import { commonsKind, commonsFirstByEpithet, slipsToAsk, askSlip, sourceKind, sisterEpithetTitle, describesSpecies, type KindNames } from '../photo-kind';
 import { commonsLicence, commonsAuthor, commonsCredit } from '../photo-credit';
 import { mwGet, mwError } from './wikimedia';
 
@@ -90,7 +90,9 @@ function commonsPhoto(title: string, ii: ImageInfo | undefined, names: KindNames
   const meta = ii.extmetadata ?? {};
   const categories = commonsCategories(meta.Categories?.value);
   const lic = (meta.LicenseShortName?.value ?? '').trim();
-  if (commonsKind(title, names, { categories, struck: strikesOut(meta.ImageDescription?.value), credit: meta.Artist?.value, licence: lic, slips, kind: sourceKind(meta.Credit?.value, meta.ImageDescription?.value) })) return null;
+  // A title naming only a sister species' epithet is the species' when its description names the species (round seventy-three).
+  const described = sisterEpithetTitle(title, names) ? describesSpecies(meta.ImageDescription?.value, names) : undefined;
+  if (commonsKind(title, names, { categories, struck: strikesOut(meta.ImageDescription?.value), credit: meta.Artist?.value, licence: lic, slips, kind: sourceKind(meta.Credit?.value, meta.ImageDescription?.value), described })) return null;
   const tag = commonsLicence(lic);
   if (!tag) return null;
   const artist = commonsAuthor(meta.Artist?.value);
@@ -102,7 +104,7 @@ function commonsPhoto(title: string, ii: ImageInfo | undefined, names: KindNames
   const tile = isThumb && (ii.width ?? 0) > COMMONS_TILE ? shown.replace(/\/\d+px-([^/]+)$/, `/${COMMONS_TILE}px-$1`) : mendCommonsThumb(shown, ii.width);
   // The categories are kept with the photograph, so a rule read later applies to it as to a new answer (round seventy; REVIEW-TRIAGE-69 C2).
   const inat = inatSource(meta.Credit?.value, meta.ImageDescription?.value);
-  return { src: 'commons', id: title, url: shown, thumb: tile, width: ii.width ?? undefined, height: ii.height ?? undefined, licence: tag, attribution: commonsCredit(artist, lic), page: ii.descriptionurl ?? undefined, categories, ...(slips.length ? { slips } : {}), ...(inat ? { inat } : {}), sourceRead: true };
+  return { src: 'commons', id: title, url: shown, thumb: tile, width: ii.width ?? undefined, height: ii.height ?? undefined, licence: tag, attribution: commonsCredit(artist, lic), page: ii.descriptionurl ?? undefined, categories, ...(slips.length ? { slips } : {}), ...(inat ? { inat } : {}), ...(described ? { described } : {}), sourceRead: true };
 }
 
 /** Commons' `Categories` (extmetadata), "A|B|C", as a list. */

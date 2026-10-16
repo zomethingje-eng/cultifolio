@@ -37,6 +37,7 @@
   import { keepOnFirstPlant } from '$lib/ui/keep-ask';
   import { readSetting } from '$lib/ui/stored';
   import { syncWords } from '$lib/ui/sync-words';
+  import { countView, registerNow } from '$lib/ui/worker-gate';
   let { children } = $props();
   // Seed before anything renders. A server-rendered page carries the reader's units in its data (from the cookie or the
   // language); a client-rendered page has no server data and the store reads the cookie itself. So the first paint is in
@@ -233,45 +234,80 @@
     for (const id of ['topbar', 'tabbar']) { const el = document.getElementById(id); if (el) ro.observe(el); }
     return () => ro.disconnect();
   });
+  /**
+   * The app shell offline, registered after load so it never competes with the page's own requests, and only on a device
+   * that keeps something or comes back: already registered, a page of the collection, a collection held, or a second page
+   * (round seventy-three; self-F 10: the install's precache was half of a first visit, spent on a reader of one species
+   * page). The rule is `registerNow`'s; once registered it behaves as before.
+   */
+  let workerOn = false;
+  /** Whether a worker served this page as it loaded: read once, before any registration, for the takeover's rule. */
+  const servedAtLoad = browser && 'serviceWorker' in navigator && !!navigator.serviceWorker.controller;
+  /** Pages this session has viewed: the first load and each move to another address. */
+  let sessionViews = 0;
+  let viewedPath: string | null = null;
+  /** The worker registered when `registerNow` says so for this page and this device. */
+  function considerWorker(path: string) {
+    if (workerOn || !browser || !('serviceWorker' in navigator) || import.meta.env.DEV) return;
+    if (registerNow({ registered: false, views: sessionViews, path, records: collection.ready ? collection.recordCount : null, syncing: sync.configured })) registerWorker();
+  }
+  afterNavigate((nav) => {
+    if (!browser) return;
+    const path = nav.to?.url.pathname ?? location.pathname;
+    if (path !== viewedPath) { viewedPath = path; sessionViews = countView(sessionViews); }
+    considerWorker(path);
+  });
+  // A collection held (a plant added, a species followed, an import or a restore merged, the example) or sync set up, on
+  // whatever page: registered then, so the grower's next visit can be offline.
+  $effect(() => {
+    if (!collection.ready) return;
+    if (collection.recordCount > 0 || sync.configured) considerWorker(page.url.pathname);
+  });
+  function registerWorker() {
+    if (workerOn || !('serviceWorker' in navigator) || import.meta.env.DEV) return;
+    workerOn = true;
+    document.documentElement.dataset.worker = 'on';
+    // A new build's worker waits until every tab of the old one has closed, which an installed app never does. So a
+    // waiting worker is told to take over on every load (a returning visitor's first page after a deploy is the common
+    // case, and the version poll never fires for it), and again when the poll sees a deploy mid-session. The worker keeps
+    // the previous build's cache for one generation and reads it for a build file it does not have, so a tab still on
+    // the old build finds its chunks (round sixty-seven; triage-66 P2).
+    navigator.serviceWorker.register('/service-worker.js', { type: 'module' }).then((reg) => {
+      if (reg.waiting) skipTo(reg.waiting);
+      // One conditional GET of the script: the browser's own check after a navigation is not guaranteed on every load. Only
+      // with a worker in charge and none installing: on a first install it can only make a second copy of the same build,
+      // which the next page takes over (round sixty-four; the Firefox run, where the second page reloaded itself).
+      if (reg.active && !reg.installing) reg.update().catch(() => {});
+      reg.addEventListener('updatefound', () => { const w = reg.installing; w?.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) skipTo(w); }); });
+    }).catch((e) => console.warn('service worker not registered; offline use is off', e));
+    // The reload under the new worker happens at once only in the first seconds of a page, with nothing typed and no
+    // write in flight; otherwise it waits for the next navigation, so a half-filled form or an audit in progress is never thrown away.
+    // A worker of the build this page already runs changes nothing on it, and is not reloaded for, and neither is a page
+    // no worker served (a first visit came from the server and is this build already; the first worker's `clients.claim()`
+    // changes its controller too). In the first all-engines run, first visits in Safari's engine and the second page of a
+    // first visit in Firefox reloaded within their first seconds, losing a plant, a place or a note just typed (round
+    // sixty-four).
+    // Round sixty-seven (triage-66 P2; R45-5, S-E6): the early reload waits for nothing typed and no vault write in
+    // flight, or it threw away a name typed in the first seconds after a deploy; a tab that did not send `skip` itself (a
+    // second tab) now moves to the new build at its next navigation instead of running the old one for good; and a
+    // worker that does not say its build is not taken for another build. The rule is `onTakeOver`'s.
+    const servedByOld = servedAtLoad;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!servedByOld) return;
+      void buildOf(navigator.serviceWorker.controller).then((v) => {
+        const what = onTakeOver({ servedByOld, askedSkip: takingOver, build: v, version, sinceStart: performance.now(), typed: typedHere || typing(document.activeElement), writing: vaultWritesInFlight() });
+        if (what === 'reload') location.reload();
+        else if (what === 'next') reloadOnNext = true;
+      });
+    });
+  }
   onMount(async () => {
     today.start();
     prefs.load(); // whether private pages may fetch the reference's photographs: off until switched on
-    // The app shell offline: registered after load so it never competes with the page's own requests.
-    if ('serviceWorker' in navigator && !import.meta.env.DEV) {
-      // A new build's worker waits until every tab of the old one has closed, which an installed app never does. So a
-      // waiting worker is told to take over on every load (a returning visitor's first page after a deploy is the common
-      // case, and the version poll never fires for it), and again when the poll sees a deploy mid-session. The worker keeps
-      // the previous build's cache for one generation and reads it for a build file it does not have, so a tab still on
-      // the old build finds its chunks (round sixty-seven; triage-66 P2).
-      navigator.serviceWorker.register('/service-worker.js', { type: 'module' }).then((reg) => {
-        if (reg.waiting) skipTo(reg.waiting);
-        // One conditional GET of the script: the browser's own check after a navigation is not guaranteed on every load. Only
-        // with a worker in charge and none installing: on a first install it can only make a second copy of the same build,
-        // which the next page takes over (round sixty-four; the Firefox run, where the second page reloaded itself).
-        if (reg.active && !reg.installing) reg.update().catch(() => {});
-        reg.addEventListener('updatefound', () => { const w = reg.installing; w?.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) skipTo(w); }); });
-      }).catch((e) => console.warn('service worker not registered; offline use is off', e));
-      // The reload under the new worker happens at once only in the first seconds of a page, with nothing typed and no
-      // write in flight; otherwise it waits for the next navigation, so a half-filled form or an audit in progress is never thrown away.
-      // A worker of the build this page already runs changes nothing on it, and is not reloaded for, and neither is a page
-      // no worker served (a first visit came from the server and is this build already; the first worker's `clients.claim()`
-      // changes its controller too). In the first all-engines run, first visits in Safari's engine and the second page of a
-      // first visit in Firefox reloaded within their first seconds, losing a plant, a place or a note just typed (round
-      // sixty-four).
-      // Round sixty-seven (triage-66 P2; R45-5, S-E6): the early reload waits for nothing typed and no vault write in
-      // flight, or it threw away a name typed in the first seconds after a deploy; a tab that did not send `skip` itself (a
-      // second tab) now moves to the new build at its next navigation instead of running the old one for good; and a
-      // worker that does not say its build is not taken for another build. The rule is `onTakeOver`'s.
-      const servedByOld = !!navigator.serviceWorker.controller;
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (!servedByOld) return;
-        void buildOf(navigator.serviceWorker.controller).then((v) => {
-          const what = onTakeOver({ servedByOld, askedSkip: takingOver, build: v, version, sinceStart: performance.now(), typed: typedHere || typing(document.activeElement), writing: vaultWritesInFlight() });
-          if (what === 'reload') location.reload();
-          else if (what === 'next') reloadOnNext = true;
-        });
-      });
-    }
+    // A device that already has a worker keeps it, as before: registered (and its update checked) on every load.
+    const known = 'serviceWorker' in navigator && !import.meta.env.DEV
+      ? (navigator.serviceWorker.controller ? Promise.resolve(registerWorker()) : navigator.serviceWorker.getRegistration().then((r) => { if (r) registerWorker(); }, () => {}))
+      : Promise.resolve();
     onVaultNotice((t) => (vaultNote = t));
     await collection.load();
     // The frost watch for every tab (round fifty-three, 3): read once, and again on every navigation and every return to
@@ -282,6 +318,9 @@
     // The example decides only once sync's key is read too: a device with sync set up is a grower's (the fix pass; R1, 2).
     try { await sync.init(); } finally { example.settled = true; }
     if (sync.configured) sync.schedule(1500);
+    // Said for the end-to-end tests, as `data-ready` is: the page has decided, and no worker was registered for it.
+    await known;
+    if (!workerOn) document.documentElement.dataset.worker = 'deferred';
   });
   /**
    * The phone's tabs: the same five for everyone, with or without a collection, in or out of the example (round

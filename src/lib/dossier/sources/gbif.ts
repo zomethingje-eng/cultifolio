@@ -359,6 +359,8 @@ export async function kewEntryIpni(f: JsonFetcher, keys: readonly number[]): Pro
 
 export interface GbifOccurrence {
   key: number;
+  /** The backbone key of the name the record is identified as (a synonym's own key): what a page's other keys' exceptions are read against (round seventy-three). */
+  taxonKey?: number;
   decimalLatitude?: number;
   decimalLongitude?: number;
   year?: number;
@@ -419,6 +421,8 @@ export interface OccMedia {
   rightsHolder?: string;
   page?: string;
   datasetKey?: string;
+  /** The backbone key of the name the record is identified as (round seventy-three: a page's other keys leave some names out). */
+  taxonKey?: number;
   /** The record is not a human observation (its basisOfRecord): a herbarium sheet, a museum's fruit or a machine's scan, which ranks below Commons as a lead (round seventy, a need of C; REVIEW-TRIAGE-69 C7, R47-10; round seventy-one, C4: set whenever GBIF answers a record of another basis). */
   specimen?: boolean;
 }
@@ -444,7 +448,7 @@ export async function media(f: JsonFetcher, key: number): Promise<FetchResult<Oc
       if (!m.identifier || (m.type && !/still/i.test(m.type))) continue;
       const tag = licenceTag(m.license);
       if (!isOpen(tag)) continue;
-      out.push({ id: `${o.key}:${out.length}`, url: m.identifier, licence: tag!, creator: m.creator, rightsHolder: m.rightsHolder, page: m.references ?? `https://www.gbif.org/occurrence/${o.key}`, datasetKey: o.datasetKey, ...(o.basisOfRecord && o.basisOfRecord !== 'HUMAN_OBSERVATION' ? { specimen: true } : {}) });
+      out.push({ id: `${o.key}:${out.length}`, url: m.identifier, licence: tag!, creator: m.creator, rightsHolder: m.rightsHolder, page: m.references ?? `https://www.gbif.org/occurrence/${o.key}`, datasetKey: o.datasetKey, ...(o.taxonKey ? { taxonKey: o.taxonKey } : {}), ...(o.basisOfRecord && o.basisOfRecord !== 'HUMAN_OBSERVATION' ? { specimen: true } : {}) });
     }
   }
   return out.length ? { status: 'ok', data: out } : { status: 'none' };

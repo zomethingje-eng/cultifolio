@@ -44,9 +44,9 @@ describe('every e2e test that makes a vault sends an address of its own (round s
   });
 
   it('only the limit\'s own test spends an address\'s five, and it takes the address kept for it', () => {
-    const smoke = readFileSync(join(dir, 'smoke.spec.ts'), 'utf8');
+    const smoke = readFileSync(join(dir, 'smoke-1.spec.ts'), 'utf8'); // smoke.spec.ts's first part since round seventy-two
     const users = specs.filter((f) => /limitAddress\(/.test(readFileSync(join(dir, f), 'utf8')));
-    expect(users).toEqual(['smoke.spec.ts']);
+    expect(users).toEqual(['smoke-1.spec.ts']);
     const limit = blocks(smoke).filter((b) => /limitAddress\(/.test(b.body));
     expect(limit.map((b) => b.title)).toHaveLength(1);
     expect(limit[0].body).toContain('toBe(429)');

@@ -36,8 +36,13 @@ export class KewInfra {
   private infra = new Map<string, string[]>(); // infraKey → the accepted ids its rows point at
   private byIpni = new Map<string, string>(); // IPNI id → accepted plant_name_id
   private byBin = new Map<string, Set<string>>(); // binKey → the infraKeys under it
+  private acceptedSpecies = new Map<string, Set<string>>(); // binKey of a species Kew accepts → its plant_name_ids
   add(r: KewInfraRow): void {
-    if (/^accepted$/i.test(r.status)) this.accepted.set(r.id, r.name);
+    if (/^accepted$/i.test(r.status)) {
+      this.accepted.set(r.id, r.name);
+      const b = binKey(r.name);
+      if (b && !infraKey(r.name)) (this.acceptedSpecies.get(b) ?? this.acceptedSpecies.set(b, new Set()).get(b)!).add(r.id);
+    }
     if (r.ipni) this.byIpni.set(r.ipni, r.acceptedId || r.id);
     if (/misapplied/i.test(r.status)) return;
     const k = infraKey(r.name);
@@ -53,9 +58,22 @@ export class KewInfra {
    * iNaturalist taxon may take in another species' observations, and so the only ones `--fill inat` asks iNaturalist about.
    */
   hasElsewhereUnder(own: KewOwn): boolean {
-    const mine = this.mine(own);
-    for (const b of mine) for (const k of this.byBin.get(b) ?? []) if (this.elsewhere(k, mine)) return true;
-    return false;
+    return this.elsewhereUnder(own).length > 0;
+  }
+  /**
+   * Whether round seventy-three's reading (Kew's accepted species over GBIF's older names of the same words, `mine`)
+   * finds a name below species placed elsewhere that the reading before it did not: the pages `--fill inat` read before
+   * under the older reading and must ask again (55 of the live corpus's pages, Crassula exilis among them).
+   */
+  widened(own: KewOwn): boolean {
+    const before = new Set(this.elsewhereUnder(own, true));
+    return this.elsewhereUnder(own).some((k) => !before.has(k));
+  }
+  private elsewhereUnder(own: KewOwn, gbifOlderAsOwn = false): string[] {
+    const mine = this.mine(own, gbifOlderAsOwn);
+    const out: string[] = [];
+    for (const b of mine) for (const k of this.byBin.get(b) ?? []) if (this.elsewhere(k, mine)) out.push(k);
+    return out;
   }
   get size(): number {
     return this.infra.size;
@@ -76,13 +94,23 @@ export class KewInfra {
    * make its first two words the page's), less the older names Kew accepts as species of their own (GBIF lists "Crassula
    * cooperi Schönl." among Crassula exilis's names; Kew accepts Crassula cooperi), and Kew's entry itself (by the Kew
    * fill's entry, else by the page's IPNI number).
+   *
+   * Round seventy-three: where Kew's entry for the page is known, an older name from GBIF whose two words Kew accepts as
+   * another species, by whatever author, is not the page's either. GBIF lists "Crassula cooperi Schönl." among Crassula
+   * exilis's names, a later name of the same words as Kew's Crassula cooperi Regel, so the Kew fill does not list it apart
+   * (its authors differ); read as Crassula exilis's own, it kept iNaturalist's "Crassula exilis cooperi" (Kew's Crassula
+   * cooperi) on Crassula exilis, and all seven photographs of Crassula cooperi's page were shown on neither page (C5).
    */
-  private mine(own: KewOwn): Set<string> {
+  private mine(own: KewOwn, gbifOlderAsOwn = false): Set<string> {
     const apart = new Set((own.acceptedElsewhere ?? []).map(binKey).filter((x): x is string => !!x));
-    const mine = new Set([own.scientific, ...(own.synonyms ?? []), ...(own.kewSynonyms ?? [])].filter((n) => !n.split(/\s+/).slice(2).some((w) => RANK.test(w))).map(binKey).filter((x): x is string => !!x && !apart.has(x)));
     const entry = own.kewEntry || (own.ipni ? this.byIpni.get(own.ipni) : undefined);
     const entryName = entry ? this.accepted.get(entry) : undefined;
-    if (entryName) { const b = binKey(entryName); if (b) mine.add(b); }
+    const entryBin = entryName ? binKey(entryName) : null;
+    const kewSyn = new Set((own.kewSynonyms ?? []).map(binKey).filter((x): x is string => !!x));
+    const anotherSpecies = (b: string) => !gbifOlderAsOwn && !!entryBin && b !== entryBin && !kewSyn.has(b) && [...(this.acceptedSpecies.get(b) ?? [])].some((id) => id !== entry);
+    const older = (own.synonyms ?? []).filter((n) => !n.split(/\s+/).slice(2).some((w) => RANK.test(w))).map(binKey).filter((x): x is string => !!x && !anotherSpecies(x));
+    const mine = new Set([binKey(own.scientific), ...older, ...kewSyn].filter((x): x is string => !!x && !apart.has(x)));
+    if (entryBin) mine.add(entryBin);
     return mine;
   }
   private elsewhere(k: string, mine: ReadonlySet<string>): string | null {

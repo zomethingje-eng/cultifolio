@@ -1,7 +1,9 @@
 <script lang="ts">
   import { toast } from '$lib/ui/toast.svelte';
-  import { afterNavigate } from '$app/navigation';
+  import { afterNavigate, beforeNavigate } from '$app/navigation';
   import { onMount, tick } from 'svelte';
+  // The toast's age is judged at the navigation's start, so a slow page to draw does not put away a toast raised with it (round seventy-three).
+  beforeNavigate(() => toast.navigating());
   afterNavigate(() => toast.onNavigate());
   let undoBtn = $state<HTMLButtonElement | null>(null);
   /** The toast whose action the keyboard has already been taken to once: the next Tab from where it was raised goes on as usual. */

@@ -28,6 +28,7 @@ import type { Reference } from './reference';
 import type { KewInfra } from './kew-infra';
 import { DOSSIER_V, parseDossier, type Dossier, type OccPoint, type Photo, type Climate, type Upstream } from './schema';
 import type { HeldNames } from './photo-kind';
+import { extraWhy, type ExtraKey } from './extra-keys';
 
 export interface ClimateProvider {
   /** The envelope across every in-range record's grid cell: what a species page carries. */
@@ -91,6 +92,12 @@ export interface BuildOptions {
   held?: HeldNames | null;
   /** Kew's names below species (`--bulk`; round seventy-two, C1): an iNaturalist observation of a taxon Kew places under another species is not taken. */
   kewInfra?: KewInfra;
+  /**
+   * The other GBIF keys whose records and photographs this page reads (`scripts/extra-keys.txt`, round seventy-three;
+   * `extra-keys.ts` says the rule): each key's name and author is one Kew's file holds as this page's plant, and none is
+   * another page's. A key with `merged` was another page here, merged into this one: its names join this page's too.
+   */
+  extraKeys?: readonly ExtraKey[];
 }
 /** How long the previous build's identifiers may be carried through Wikidata not answering, in days (triage-68 M5). */
 export const CARRY_DAYS = 90;
@@ -231,6 +238,8 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   }
   const s = sp.data;
   const scientific = s.canonicalName ?? s.scientificName;
+  // The other keys listed for the key this build ends on (a name followed to another key reads that key's list, if any).
+  const extraList = (o.extraKeys ?? []).filter((x) => x.page === key);
   const status = /accepted/i.test(s.taxonomicStatus ?? '') ? 'accepted' : /synonym/i.test(s.taxonomicStatus ?? '') ? 'synonym' : /doubtful/i.test(s.taxonomicStatus ?? '') ? 'doubtful' : 'unknown';
 
   // Kew's identifiers for the name and author: the species on a homonym key (S-B2), and the IPNI and POWO links (S-B5).
@@ -274,6 +283,9 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
     if (vern.status === 'ok' && vern.truncated) upstream['gbif.vernacular'] = { status: 'ok', at: now(), detail: `truncated: the first ${vern.truncated} rows only` };
     if (syn.status === 'ok' && syn.truncated) upstream['gbif.synonyms'] = { status: 'ok', at: now(), detail: `truncated: the first ${syn.truncated} rows only` };
   }
+  // A page merged here (round seventy-three): its name, its synonyms and its common names join this page's, so they still
+  // find the plant. A carried name block has them already.
+  if (extraList.length && !carried) [syn, vern] = await extraNames(f, extraList, scientific, syn, vern, upstream);
   const authorship = name?.authorship ?? u(s.authorship);
   // A common name that is another species' name in this reference ("Babiana odorata" on Babiana villosula) is not a common
   // name (round seventy-two, A8); `--fill kew-names` drops those Kew holds too.
@@ -337,15 +349,22 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   const kew = dist.status === 'ok' && dist.data.kew && (dist.data.kew.lifeform || dist.data.kew.climate) ? dist.data.kew : undefined;
 
   /* ---- 3. Occurrences, licence-filtered, corroborated against the range ---- */
-  const occ = await gbif.occurrences(f, key);
+  const own = await gbif.occurrences(f, key);
+  // The other keys' records with the page key's (round seventy-three), one record once; any key not answering is the
+  // occurrence source not answering, and the build before's records stand (`gbif.occurrences` refused).
+  const extra = await extraOccurrences(f, own, extraList);
+  const occ = extra.occ;
   mark('gbif.occurrences', occ);
   // Records from a GBIF download are cited by its DOI; records from the search API by the API.
-  if (occ.status === 'ok') {
-    const doi = occ.data.find((r) => r.downloadDoi)?.downloadDoi;
+  if (occ.status === 'ok' || (occ.status === 'none' && extra.keys.length)) {
+    const rows = own.status === 'ok' ? own.data : [];
+    const doi = rows.find((r) => r.downloadDoi)?.downloadDoi;
     // The download's day, not the build's (round seventy-two, B1): the records are as GBIF held them when it made the download.
-    const day = occ.data.find((r) => r.downloadDay)?.downloadDay;
-    upstream['gbif.occurrences'].detail = doi ? `GBIF occurrence download https://doi.org/${doi}${day ? `, of ${day}` : ''}` : 'GBIF occurrence search API';
-    if (doi && day) upstream['gbif.occurrences'].asOf = day;
+    const day = rows.find((r) => r.downloadDay)?.downloadDay;
+    const base = own.status !== 'ok' ? `no record under GBIF's key ${key}` : doi ? `GBIF occurrence download https://doi.org/${doi}${day ? `, of ${day}` : ''}` : 'GBIF occurrence search API';
+    upstream['gbif.occurrences'].detail = [base, ...extra.keys.map(extraKeyWords)].join('; ');
+    // A file's day only where every record set came from it.
+    if (doi && day && extra.keys.every((k) => k.from === 'download')) upstream['gbif.occurrences'].asOf = day;
   }
   const open: OccPoint[] = [];
   const restrictedInRange: Array<[number, number]> = [];
@@ -645,7 +664,7 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
   // sixty-nine; triage-68 K5, S-B2, R46-16).
   if (skip('gbif.media')) skipped('gbif.media');
   else if (!o.quick && (o.mediaFirst || photos.length < 6)) {
-    const m = await gbif.media(f, key);
+    const m = await extraMedia(f, await gbif.media(f, key), extraList);
     mark('gbif.media', m);
     if (m.status === 'ok') photos.push(...photosFromMedia(m.data));
   }
@@ -707,7 +726,8 @@ export async function buildDossier(nameOrKey: string | number, o: BuildOptions):
       rangeTested: boxes.length > 0,
       restrictedShiftKm,
       thin: allPts.length < 12,
-      datasets: [...datasets.entries()].map(([k, d]) => ({ key: k, title: u(d.title), licence: d.licence, n: d.n }))
+      datasets: [...datasets.entries()].map(([k, d]) => ({ key: k, title: u(d.title), licence: d.licence, n: d.n })),
+      ...(extra.keys.length ? { keys: extra.keys } : {})
     },
     centroid,
     climate,
@@ -788,4 +808,73 @@ export async function borrowNames(f: JsonFetcher, b: { usage: number; target: nu
     for (const n of sy.data) if (!own(canonicalOf(n) ?? n) && !names.includes(n)) names.push(n);
   }
   return { status: 'ok', data: { synonyms: names, rows, vernacular } };
+}
+
+/** One other key's part in a page's records (`occurrences.keys`, round seventy-three). */
+export type ExtraKeyRead = NonNullable<Dossier['occurrences']['keys']>[number];
+
+/**
+ * Whether a record (or a photograph's record) under another key is read: not one GBIF identifies as a name the key's
+ * exceptions leave out, and, where it has exceptions, only one whose name is known (round seventy-three).
+ */
+const read = (x: ExtraKey, taxonKey?: number) => !x.except?.length || (taxonKey != null && !x.except.includes(taxonKey));
+
+/** The record's words for one other key the page's records come from. */
+export const extraKeyWords = (k: ExtraKeyRead) => `${k.n} record${k.n === 1 ? '' : 's'} of GBIF's key ${k.key}, ${k.name} (${k.kew}): ${k.from === 'download' ? 'the GBIF download' : 'GBIF occurrence search API'}`;
+
+/**
+ * The records of the page's other keys (round seventy-three), joined to its own key's, one record once (a key GBIF files
+ * under another the page reads gives some records twice). Any key that did not answer makes the whole answer that
+ * key's refusal, failure or skip: the sample is not the one asked for.
+ */
+export async function extraOccurrences(f: JsonFetcher, own: FetchResult<gbif.GbifOccurrence[]>, list: readonly ExtraKey[]): Promise<{ occ: FetchResult<gbif.GbifOccurrence[]>; keys: ExtraKeyRead[] }> {
+  if (!list.length || (own.status !== 'ok' && own.status !== 'none')) return { occ: own, keys: [] };
+  const rows = own.status === 'ok' ? [...own.data] : [];
+  const seen = new Set(rows.map((r) => r.key));
+  const keys: ExtraKeyRead[] = [];
+  for (const x of list) {
+    const r = await gbif.occurrences(f, x.key);
+    if (r.status !== 'ok' && r.status !== 'none') return { occ: { status: r.status, detail: `GBIF's key ${x.key} (${x.label}), whose records this page reads too: ${r.detail}` }, keys: [] };
+    const got = r.status === 'ok' ? r.data.filter((g) => !seen.has(g.key) && read(x, g.taxonKey)) : [];
+    for (const g of got) { seen.add(g.key); rows.push(g); }
+    keys.push({ key: x.key, name: x.label, kew: extraWhy(x), n: got.length, from: r.status === 'ok' && r.data.some((g) => g.downloadDoi) ? 'download' : 'api', ...(x.merged ? { slug: x.merged } : {}) });
+  }
+  return { occ: rows.length ? { status: 'ok', data: rows } : { status: 'none' }, keys };
+}
+
+/** The photographs of the page's other keys after its own key's (round seventy-three); a key not answering is said, as the records are. */
+export async function extraMedia(f: JsonFetcher, own: FetchResult<OccMedia[]>, list: readonly ExtraKey[]): Promise<FetchResult<OccMedia[]>> {
+  if (!list.length || (own.status !== 'ok' && own.status !== 'none')) return own;
+  const rows = own.status === 'ok' ? [...own.data] : [];
+  const from: string[] = [];
+  for (const x of list) {
+    const r = await gbif.media(f, x.key);
+    if (r.status !== 'ok' && r.status !== 'none') return { status: r.status, detail: `GBIF's key ${x.key} (${x.label}), whose photographs this page reads too: ${r.detail}` };
+    if (r.status === 'ok') { const ids = new Set(rows.map((m) => m.url)); const add = r.data.filter((m) => !ids.has(m.url) && read(x, m.taxonKey)); rows.push(...add); if (add.length) from.push(`${add.length} from GBIF's key ${x.key}`); }
+  }
+  return rows.length ? { status: 'ok', data: rows, ...(from.length ? { detail: `read from the page's key and its other keys: ${from.join(', ')}` } : {}) } : { status: 'none' };
+}
+
+/**
+ * The names of a page merged here (round seventy-three; `ExtraKey.merged`): its own name joins the page's older names (Kew
+ * holds it as this plant), and its synonyms and common names too (`borrowNames`), so its name and the names it answered
+ * to still find the plant, and its old address redirects as an older name's does. Another key's name is not added: Kew's
+ * names for the plant are `name.kew` already.
+ */
+export async function extraNames(f: JsonFetcher, list: readonly ExtraKey[], scientific: string, syn: Awaited<ReturnType<typeof gbif.synonyms>>, vern: Awaited<ReturnType<typeof gbif.vernacular>>, upstream: Record<string, Upstream>): Promise<[Awaited<ReturnType<typeof gbif.synonyms>>, Awaited<ReturnType<typeof gbif.vernacular>>]> {
+  if (syn.status !== 'ok') return [syn, vern];
+  const canon = (n: string) => (canonicalOf(n) ?? n).toLowerCase();
+  const names = [...syn.data];
+  const added: string[] = [];
+  let vrows = vern.status === 'ok' ? [...vern.data] : null;
+  for (const x of list) {
+    if (!x.merged) continue;
+    if (canon(x.label) !== scientific.toLowerCase() && !names.some((n) => canon(n) === canon(x.label))) { names.push(x.label); added.push(x.label); }
+    const b = await borrowNames(f, { usage: x.key, target: x.key }, scientific);
+    if (b.status !== 'ok') { upstream['gbif.synonyms'] = { ...upstream['gbif.synonyms'], detail: [upstream['gbif.synonyms']?.detail, `the names of GBIF's key ${x.key} (${x.label}), merged here, not read: ${b.status}`].filter(Boolean).join('; ') }; continue; }
+    for (const n of b.data.synonyms) if (canon(n) !== scientific.toLowerCase() && !names.some((m) => canon(m) === canon(n))) { names.push(n); added.push(n); }
+    if (vrows) { const before = vrows.length; for (const v of b.data.vernacular) if (!vrows.some((y) => y.name === v.name && y.lang === v.lang)) vrows.push(v); if (vrows.length > before) upstream['gbif.vernacular'] = { ...upstream['gbif.vernacular'], detail: [upstream['gbif.vernacular']?.detail, `${vrows.length - before} read from GBIF's key ${x.key} (${x.label}), merged here`].filter(Boolean).join('; ') }; }
+  }
+  if (added.length) upstream['gbif.synonyms'] = { ...upstream['gbif.synonyms'], detail: [upstream['gbif.synonyms']?.detail, `${added.length} read from GBIF's ${list.filter((x) => x.merged).map((x) => `key ${x.key} (${x.label})`).join(', ')}, a page merged here`].filter(Boolean).join('; ') };
+  return [{ ...syn, data: names }, vrows ? { ...vern, data: vrows } as typeof vern : vern];
 }

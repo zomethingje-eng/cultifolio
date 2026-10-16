@@ -131,7 +131,13 @@ export const Occurrences = v.object({
   /** How far the centre would have moved had restricted records been used. */
   restrictedShiftKm: v.nullable(v.number()),
   thin: v.boolean(),
-  datasets: v.array(v.object({ key: v.string(), title: v.optional(v.string()), licence: v.string(), n: v.number() }))
+  datasets: v.array(v.object({ key: v.string(), title: v.optional(v.string()), licence: v.string(), n: v.number() })),
+  /**
+   * The other GBIF keys the records come from, beside the page's own (round seventy-three; `extra-keys.ts`): each key, GBIF's
+   * name for it, how Kew's file holds it as this plant, the records it added, whether they came from the download or the
+   * search API, and, for a page merged into this one, its old address. Absent: the page's own key alone.
+   */
+  keys: v.optional(v.array(v.object({ key: v.number(), name: v.string(), kew: v.string(), n: v.number(), from: v.picklist(['download', 'api']), slug: v.optional(v.string()) })))
 });
 
 /** The map marker: where the records are densest. It is not where the climate is read (that is the envelope). */
@@ -258,6 +264,12 @@ export const Photo = v.object({
   kind: v.optional(v.string()),
   /** For a Commons file: true once `--fill commons-kind` has read its source and slips (round seventy-one), so a rerun passes it by. */
   sourceRead: v.optional(v.boolean()),
+  /**
+   * For a Commons file whose title names only a sister species' epithet (round seventy-three): whether its description
+   * names the species under one of its own names ("Heliamphora heterodoxa 'Ptari Tepui' (now known as Heliamphora
+   * purpurascens)"), read by the build and `--fill commons-kind`. True keeps the file; absent until read, false after.
+   */
+  described: v.optional(v.boolean()),
   /** The keys of the other species' pages that hold this same photograph, written by `--index` (round seventy-two, C5): no page shows it. */
   shared: v.optional(v.array(v.number()))
 });

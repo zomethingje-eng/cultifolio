@@ -23,7 +23,7 @@ describe("the webServer's inspector port", () => {
 
 describe('the engine fixes of P4 (IND-12, IND-13, R46-30)', () => {
   it('the offline specs wait for the worker to control the page before going offline', () => {
-    expect(raw('tests/e2e/smoke.spec.ts')).toMatch(/await page\.goto\('\/plants'\); \/\/ lets the service worker install and precache the shells\n\s*await controlledBy\(page\);/);
+    expect(raw('tests/e2e/smoke-3.spec.ts')).toMatch(/await page\.goto\('\/plants'\); \/\/ lets the service worker install and precache the shells\n\s*await controlledBy\(page\);/);
     expect(raw('tests/e2e/r67h-offline.spec.ts')).toMatch(/async function workerInControl\(page: Page\) \{\n\s*await controlledBy\(page\);/);
     const helper = raw('tests/e2e/helpers/controlled.ts');
     expect(helper).toMatch(/await page\.evaluate\(\(\) => navigator\.serviceWorker\.ready\);/);

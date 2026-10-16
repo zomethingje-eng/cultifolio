@@ -122,7 +122,9 @@ test('r67h places 3: Start batch with a new place named and not added starts the
   await nameNew(page, 's-loc', 'Seed tray shelf');
   await page.getByRole('button', { name: 'Start batch' }).click();
   await expect(page).toHaveURL(/\/propagation\/S\d{4}-\d{3}$/);
-  await page.waitForTimeout(500);
+  // Waited for in the vault, not paused for: the batch's write may still be landing when its page opens, and 500 ms was
+  // a fast machine's time (round seventy-three; the races in the harness). Reverted, no batch is ever at the new place.
+  await expect.poll(async () => { const v = await vault(page); return Object.entries(v.latest).some(([k, val]) => /^sowing:.*:locationId$/.test(k) && (v.places['Seed tray shelf'] ?? []).includes(val as string)); }, { timeout: 10_000 }).toBe(true);
   const v = await vault(page);
   expect(v.places['Seed tray shelf']).toHaveLength(1);
   const id = v.places['Seed tray shelf'][0];
@@ -154,7 +156,8 @@ test("r67h places 5: the batch's Save with a new place named and not added moves
   await nameNew(page, 'se-loc', 'Heat mat');
   await page.locator('.editform button[type=submit]', { hasText: 'Save' }).click();
   await expect(page.locator('.editform')).toHaveCount(0);
-  await page.waitForTimeout(500);
+  // Waited for in the vault, not paused for (round seventy-three; the races in the harness): reverted, the batch never moves.
+  await expect.poll(async () => { const v = await vault(page); return (v.places['Heat mat'] ?? []).includes(v.latest['sowing:sBa:locationId'] as string); }, { timeout: 10_000 }).toBe(true);
   const v = await vault(page);
   expect(v.places['Heat mat']).toHaveLength(1);
   expect(v.latest['sowing:sBa:locationId']).toBe(v.places['Heat mat'][0]); // reverted: no place made, the batch at none

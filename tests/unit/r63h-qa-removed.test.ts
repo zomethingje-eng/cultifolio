@@ -13,9 +13,11 @@ const root = resolve(__dirname, '../..');
 const SWITCH = ['QA', 'PROBES'].join('_'); // spelt apart, so this file does not name what it looks for
 const FOLDER = ['tests', 'qa'].join('/');
 
+// The corpus step's own folders (round seventy-two: backups/ holds a whole corpus, cache/ the day's answers) are data, not
+// code, and walking them took the owner's PC past the test's time (round seventy-three).
 function files(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {
-    if (['node_modules', '.svelte-kit', '.wrangler', 'docs', 'test-results', 'playwright-report', '.git', 'static', 'fixtures', 'corpus', 'climate', 'bulk', 'dist', '__pycache__'].includes(name) || name.startsWith('.r6')) continue;
+    if (['node_modules', '.svelte-kit', '.wrangler', 'docs', 'test-results', 'playwright-report', '.git', 'static', 'fixtures', 'corpus', 'climate', 'bulk', 'dist', '__pycache__', 'backups', 'cache', 'backbone'].includes(name) || name.startsWith('.r6')) continue;
     const p = join(dir, name);
     const st = statSync(p);
     if (st.isDirectory()) files(p, out);

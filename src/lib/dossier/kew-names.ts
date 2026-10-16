@@ -30,6 +30,8 @@ export interface KewRow {
   accepted: string; // accepted_plant_name_id ('' for an unplaced name)
   parent: string; // parent_plant_name_id
   powo: string; // powo_id: the IPNI number where IPNI holds the name, else Kew's own "-4"
+  /** homotypic_synonym: Kew marks the name as of the same type as the entry it is filed under (round seventy-three). */
+  homotypic?: boolean;
 }
 
 /** `name.kew`: Kew's names for the page's plant (the shape of FIX-BRIEF-72). */

@@ -336,9 +336,10 @@ test('r62a A38: a sentence said twice is announced twice (the live region emptie
   await page.locator('#sel-water').click();
   await expect(page.locator('.toast [role=status]')).toHaveText('Already recorded as watered today.');
   await page.locator('#sel-water').click();
-  await page.waitForTimeout(300);
-  const said = await page.evaluate(() => (window as unknown as { __said: string[] }).__said);
-  expect(said.filter((t) => t === 'Already recorded as watered today.').length).toBe(2);
+  // Waited for, not paused for: the second saying comes after the press's read of the log and a frame, which a loaded
+  // machine took past the 300 ms this paused (round seventy-three; the races in the harness).
+  const said = () => page.evaluate(() => (window as unknown as { __said: string[] }).__said.filter((t) => t === 'Already recorded as watered today.').length);
+  await expect.poll(said).toBe(2);
   await expect(page.locator('.toast [role=status]')).toHaveText('Already recorded as watered today.');
 });
 
@@ -350,6 +351,10 @@ test('r62a A40: in forced colours the toast is drawn whole from its first frame 
   await page.locator('#select-toggle').click();
   await page.locator('.selrow input').first().check();
   await page.locator('#sel-water').click();
+  // The toast's line is in the page before it says anything (folded, with no animation of its own): read straight after the
+  // press, a write slower than the read measured that folded line and passed whatever the raised toast does. Its words
+  // first (round seventy-three; the races in the harness).
+  await expect(page.locator('.toast:not(.quiet) [role=status]')).toContainText('1 watered.');
   const s = await page.evaluate(() => { const t = getComputedStyle(document.querySelector('.toast')!); return { anim: t.animationName, opacity: t.opacity }; });
   expect(s.anim).toBe('none');
   expect(s.opacity).toBe('1');

@@ -22,7 +22,29 @@ export interface Products {
   files: Map<string, string>;
 }
 
-export function buildProducts(index: IndexEntry[], indexText: string, sheetsOf: (count: number) => Map<string, Sheet[]>, built = new Date().toISOString()): Products {
+/** A page merged into another by the owner's decision (round seventy-three): its old address, and the key of the page it joined. */
+export type Alias = { slug: string; key: number };
+
+/**
+ * The old addresses the products answer for (round seventy-three): each alias whose page the index lists and whose slug no
+ * entry holds, with that page's entry. A grower's plant, label or followed species under the old name finds the species
+ * by its slug's bucket (the device asks by slug, never by key), and the entry or sheet it gets carries the old slug, so
+ * the device's own lookup matches; a link to it is the old address, which the species route redirects as an older name.
+ * Never in the index: the reference is its pages, and `/api/dossier/<old key>` answers 404.
+ */
+export function aliasesOf(index: readonly IndexEntry[], aliases: readonly Alias[]): Array<{ slug: string; entry: IndexEntry }> {
+  const bySlug = new Set(index.map((e) => e.slug));
+  const byKey = new Map(index.map((e) => [e.key, e]));
+  const out: Array<{ slug: string; entry: IndexEntry }> = [];
+  for (const a of aliases) {
+    const e = byKey.get(a.key);
+    if (!e || bySlug.has(a.slug) || out.some((x) => x.slug === a.slug)) continue;
+    out.push({ slug: a.slug, entry: e });
+  }
+  return out;
+}
+
+export function buildProducts(index: IndexEntry[], indexText: string, sheetsOf: (count: number) => Map<string, Sheet[]>, built = new Date().toISOString(), aliases: readonly Alias[] = []): Products {
   const files = new Map<string, string>();
   const hashes: Record<string, string> = {};
   const put = (name: string, body: string) => { files.set(name, body); hashes[name] = md5(body); };
@@ -30,6 +52,7 @@ export function buildProducts(index: IndexEntry[], indexText: string, sheetsOf: 
   const buckets = bucketsFor(index.length);
   const entries = new Map<string, IndexEntry[]>();
   for (const e of index) { const b = bucketOf(e.slug, buckets); (entries.get(b) ?? entries.set(b, []).get(b)!).push(e); }
+  for (const { slug, entry } of aliasesOf(index, aliases)) { const b = bucketOf(slug, buckets); (entries.get(b) ?? entries.set(b, []).get(b)!).push({ ...entry, slug }); }
   for (const b of bucketNames(buckets)) put(`entries/${b}.json`, JSON.stringify(entries.get(b) ?? []));
   const sheets = sheetsOf(buckets);
   for (const b of bucketNames(buckets)) put(`sheets/${b}.json`, JSON.stringify(sheets.get(b) ?? []));

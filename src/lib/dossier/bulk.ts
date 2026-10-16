@@ -431,7 +431,7 @@ export function occHeader(line: string): string[] {
   return line.replace(/\r$/, '').split('\t');
 }
 
-export function parseOccRow(h: string[], line: string): GbifOccurrence & { speciesKey?: number; taxonKey?: number } | null {
+export function parseOccRow(h: string[], line: string): GbifOccurrence & { speciesKey?: number; taxonKey?: number; acceptedTaxonKey?: number } | null {
   const c = line.replace(/\r$/, '').split('\t');
   if (c.length < h.length - 2) return null;
   const g: Record<string, string> = {};
@@ -460,7 +460,10 @@ export function parseOccRow(h: string[], line: string): GbifOccurrence & { speci
     coordinateUncertaintyInMeters: Number.isFinite(unc) && unc > 0 ? unc : undefined,
     mediaType: g.mediaType || undefined,
     speciesKey: g.speciesKey ? Number(g.speciesKey) : undefined,
-    taxonKey: g.taxonKey ? Number(g.taxonKey) : undefined
+    taxonKey: g.taxonKey ? Number(g.taxonKey) : undefined,
+    // The accepted taxon of a record identified as a synonym (round seventy-three): a page's other key below species is
+    // asked for by it, as GBIF's taxonKey search answers for the subspecies with its synonyms' records.
+    ...(g.acceptedTaxonKey ? { acceptedTaxonKey: Number(g.acceptedTaxonKey) } : {})
   };
 }
 
@@ -495,7 +498,7 @@ export function idHash(id: number): number {
  * only species in `wanted` (when given) are kept at all, and a kept row is a
  * flat array with its strings interned, about a tenth of an object per row.
  */
-type Row = [h: number, key: number, lat: number, lon: number, year: number, cc: string, basis: string, lic: string, ds: string, est: string, unc: number, dec: number, prec: number];
+type Row = [h: number, key: number, lat: number, lon: number, year: number, cc: string, basis: string, lic: string, ds: string, est: string, unc: number, dec: number, prec: number, taxon: number];
 
 export class OccIndex {
   private by = new Map<number, Row[]>();
@@ -539,7 +542,7 @@ export class OccIndex {
     if (full) this.withMedia.delete(arr.pop()![1]);
     this.mediaBy.set(owner, arr);
   }
-  add(o: GbifOccurrence & { speciesKey?: number; taxonKey?: number }): void {
+  add(o: GbifOccurrence & { speciesKey?: number; taxonKey?: number; acceptedTaxonKey?: number }): void {
     const h = idHash(o.key);
     // A record identified to a subspecies belongs to its species' page, so the owner of its photographs is the species
     // key, unless that species is not wanted and the subspecies (taxonKey) is: then the subspecies' page gets them.
@@ -550,12 +553,12 @@ export class OccIndex {
     // Anisocampium niponicum 24 to 8; 177 of its 949 photographed records are open).
     const rank = !o.license || isOpen(licenceTag(o.license)) ? h : 1 + h;
     if (owner && this.isWanted(owner) && /still/i.test(o.mediaType ?? '') && o.basisOfRecord === 'HUMAN_OBSERVATION') this.admitMedia(owner, o.key, rank);
-    for (const k of new Set([o.speciesKey, o.taxonKey])) {
+    for (const k of new Set([o.speciesKey, o.taxonKey, o.acceptedTaxonKey])) {
       if (!k) continue;
       if (!this.isWanted(k)) continue;
       if (h >= (this.worst.get(k) ?? Infinity)) continue;
       const arr = this.by.get(k) ?? [];
-      arr.push([h, o.key, o.decimalLatitude ?? NaN, o.decimalLongitude ?? NaN, o.year ?? 0, this.intern(o.countryCode), this.intern(o.basisOfRecord), this.intern(o.license), this.intern(o.datasetKey), this.intern(o.establishmentMeans), o.coordinateUncertaintyInMeters ?? 0, o.coordDecimals ?? -1, o.coordinatePrecision ?? 0]);
+      arr.push([h, o.key, o.decimalLatitude ?? NaN, o.decimalLongitude ?? NaN, o.year ?? 0, this.intern(o.countryCode), this.intern(o.basisOfRecord), this.intern(o.license), this.intern(o.datasetKey), this.intern(o.establishmentMeans), o.coordinateUncertaintyInMeters ?? 0, o.coordDecimals ?? -1, o.coordinatePrecision ?? 0, o.taxonKey ?? 0]);
       if (arr.length > this.cap * 1.25) this.trim(k, arr);
       this.by.set(k, arr);
     }
@@ -589,6 +592,8 @@ export class OccIndex {
       coordinateUncertaintyInMeters: r[10] || undefined,
       coordDecimals: r[11] >= 0 ? r[11] : undefined,
       coordinatePrecision: r[12] || undefined,
+      // The name the record is identified as (round seventy-three): a page's other keys leave some out by it.
+      ...(r[13] ? { taxonKey: r[13] } : {}),
       downloadDoi: this.doi,
       ...(this.day ? { downloadDay: this.day } : {})
     }));

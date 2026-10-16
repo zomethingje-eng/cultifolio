@@ -498,6 +498,32 @@
   const ITEMS = 240;
   const partHref = (id: string, part: number) => `?by=${data.by}${chip !== 'all' ? `&chip=${chip}` : ''}&open=${id}${part > 0 ? `&part=${part}` : ''}`;
   const rowHref = (id: string) => `?by=${data.by}${chip !== 'all' ? `&chip=${chip}` : ''}${id === data.open ? '' : `&open=${id}`}`;
+  /*
+   * The collector genera (round seventy-three; self-F 11, the owner's decision): a phone opened the catalogue on Abelia,
+   * Abelmoschus and Abutilon. On a phone the page whose address names no grouping and no chip shows the genera the
+   * species list takes whole (scripts/specialist-genera.txt) and hides the rest, which are one chip away ("All", the
+   * genus grouping named). A desktop is drawn as before: the server cannot tell the two apart without guessing from the
+   * browser's name, and the page is held at the edge by its address, so the view is chosen by the screen's width, in CSS,
+   * from the same HTML. A row or a part opened on a phone keeps the view (`/?open=`); a desktop's links are as they were.
+   */
+  const cgIds = $derived(new Set(data.collector?.ids ?? []));
+  const cgLetters = $derived(new Set(data.collector?.letters ?? []));
+  const cgMode = $derived(!!data.collector?.on);
+  const PHONE = '(max-width: 700px)';
+  /** A link followed on a phone in the collector view goes to the same view's address; a desktop's, or one opened in a new tab, goes where it says. */
+  function keepCollector(e: MouseEvent, to: string) {
+    if (!cgMode || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || !window.matchMedia(PHONE).matches) return;
+    e.preventDefault();
+    void goto(to, { noScroll: true });
+  }
+  const cgRowHref = (id: string) => (id === data.open ? '/' : `/?open=${id}`);
+  const cgPartHref = (id: string, part: number) => `/?open=${id}${part > 0 ? `&part=${part}` : ''}`;
+  /** Where the phone's strip follows the first rows: after the third row shown, which in the collector view is the third collector row (or the opened one). */
+  const phoneAfter = $derived.by(() => {
+    if (!cgMode) return Math.min(FEATURE_AFTER, visibleRows.length) - 1;
+    const shown = visibleRows.map((r, i) => (cgIds.has(r.id) || r.id === data.open ? i : -1)).filter((i) => i >= 0);
+    return shown.length ? shown[Math.min(FEATURE_AFTER, shown.length) - 1] : Math.min(FEATURE_AFTER, visibleRows.length) - 1;
+  });
   /* ---- your species ---- */
   // A tile's data: a catalogue entry, or, until the index is here, the name alone. `missing`: the index is here and has no such species.
   type Tile = { slug: string; key?: number; name: string; family?: string; common?: string; thumb?: string; /** the photograph's credit, licence first, as the catalogue's tiles say it (round sixty-three, the fix pass; R1, 6b) */ credit?: string; alt?: string; open?: number; climate?: string; missing?: boolean; /** the reference has a photograph, and the grower has it switched off for their own tiles */ thumbOff?: boolean };
@@ -786,7 +812,14 @@
         </nav>
         <!-- Links between addresses, so the current one is the page, not "true" (round fifty-eight; the accessibility review). -->
         <nav class="chiprow" aria-label="Filter by climate">
-          <a class="chipbtn" class:on={chip === 'all'} aria-current={chip === 'all' ? 'page' : undefined} href="?by={data.by}" data-sveltekit-noscroll>All<span class="sep0">{', '}</span><span class="n">{fmtN(data.total)}</span></a>
+          <!-- The phone's collector view and its "All" (round seventy-three; self-F 11), drawn on a phone only; a desktop
+               keeps its own "All", which is on whenever no climate chip is. One of the two "All"s is drawn at each width,
+               and the phone's are marked on by a class of their own, so `.on` is still one chip at any width. -->
+          {#if data.collector}
+            <a class="chipbtn phoneonly" class:phon={cgMode} aria-current={cgMode ? 'page' : undefined} href="/" data-sveltekit-noscroll>Collector genera<span class="sep0">{', '}</span><span class="n">{fmtN(data.collector.species)}</span></a>
+            <a class="chipbtn phoneonly" class:phon={chip === 'all' && !cgMode} aria-current={chip === 'all' && !cgMode ? 'page' : undefined} href="?by={data.by}" data-sveltekit-noscroll>All<span class="sep0">{', '}</span><span class="n">{fmtN(data.total)}</span></a>
+          {/if}
+          <a class="chipbtn" class:wideonly={!!data.collector} class:on={chip === 'all'} aria-current={chip === 'all' ? 'page' : undefined} href="?by={data.by}" data-sveltekit-noscroll>All<span class="sep0">{', '}</span><span class="n">{fmtN(data.total)}</span></a>
           <a class="chipbtn" class:on={chip === 'climate'} aria-current={chip === 'climate' ? 'page' : undefined} href="?by={data.by}&chip=climate" data-sveltekit-noscroll>Climate known<span class="sep0">{', '}</span><span class="n">{fmtN(data.withClimate)}</span></a>
           <a class="chipbtn" class:on={chip === 'noclimate'} aria-current={chip === 'noclimate' ? 'page' : undefined} href="?by={data.by}&chip=noclimate" data-sveltekit-noscroll>Without climate<span class="sep0">{', '}</span><span class="n">{fmtN(data.total - data.withClimate)}</span></a>
         </nav>
@@ -801,8 +834,8 @@
 
   {#if !searchMode && data.letters.length > 1}
   <div class="filters" bind:this={filtersEl}>
-    <nav class="letters" aria-label="Jump to a letter" bind:this={lettersEl}>
-      {#each data.letters as l (l)}<a href="?by={data.by}{chip !== 'all' ? `&chip=${chip}` : ''}&from={l}#l-{l}" onclick={(e) => { e.preventDefault(); jumpToLetter(l); }}>{l}</a>{/each}
+    <nav class="letters" class:cgonly={cgMode} aria-label="Jump to a letter" bind:this={lettersEl}>
+      {#each data.letters as l (l)}<a class:cg={cgLetters.has(l)} href="?by={data.by}{chip !== 'all' ? `&chip=${chip}` : ''}&from={l}#l-{l}" onclick={(e) => { e.preventDefault(); jumpToLetter(l); }}>{l}</a>{/each}
     </nav>
   </div>
   {/if}
@@ -823,11 +856,11 @@
       </div>
     {/if}
   {:else}
-    <div class="rows" class:withletters={data.letters.length > 1} style:padding-bottom={tailPad ? `${tailPad}px` : undefined}>
+    <div class="rows" class:withletters={data.letters.length > 1} class:cgonly={cgMode} style:padding-bottom={tailPad ? `${tailPad}px` : undefined}>
       {#if start > 0}<div class="more before" bind:this={topSentinel}><a class="btn small" href="?by={data.by}{chip !== 'all' ? `&chip=${chip}` : ''}&at={Math.max(0, start - 60)}" onclick={async (e) => { e.preventDefault(); if (!(await growBefore())) location.href = (e.currentTarget as HTMLAnchorElement).href; }}>Earlier {data.by === 'genus' ? 'genera' : data.by === 'family' ? 'families' : 'regions'}</a></div>{/if}
       {#each visibleRows as r, i (r.id)}
-        {#if r.letter && (i === 0 || rows[i - 1].letter !== r.letter)}<h2 class="letter" id="l-{r.letter}">{r.letter}</h2>{/if}
-        <a class="grow" class:open={r.id === data.open} id="g-{r.id}" href={rowHref(r.id)} data-sveltekit-noscroll aria-expanded={r.id === data.open}>
+        {#if r.letter && (i === 0 || rows[i - 1].letter !== r.letter)}<h2 class="letter" class:cg={cgLetters.has(r.letter)} id="l-{r.letter}">{r.letter}</h2>{/if}
+        <a class="grow" class:open={r.id === data.open} class:cg={cgIds.has(r.id)} id="g-{r.id}" href={rowHref(r.id)} onclick={(e) => keepCollector(e, cgRowHref(r.id))} data-sveltekit-noscroll aria-expanded={r.id === data.open}>
           {#if r.map}<div class="gmap">{@html r.map}</div>{:else if r.thumb}<div class="gthumb"><img src={photoAt(r.thumb, 'square')} width="56" height="56" alt="" loading="lazy" use:failedBeforeHydration={(im) => im.remove()} /></div>{:else}<div class="gthumb mono" aria-hidden="true">{r.label[0] ?? ''}</div>{/if}
           <div class="gtx">
             <span class="gname" class:sci={data.by === 'genus'}>{r.label}</span>
@@ -844,17 +877,18 @@
             {@const at = r.itemsAt ?? 0}
             <nav class="parts" aria-label="More of {r.label}">
               <span>{fmtN(at + 1)} to {fmtN(at + r.items.length)} of {fmtN(r.itemsCount ?? 0)}</span>
-              {#if at > 0}<a class="btn small" href={partHref(r.id, at - ITEMS)} data-sveltekit-noscroll>Previous {ITEMS}</a>{/if}
-              {#if at + r.items.length < (r.itemsCount ?? 0)}<a class="btn small" href={partHref(r.id, at + ITEMS)} data-sveltekit-noscroll>Next {Math.min(ITEMS, (r.itemsCount ?? 0) - at - r.items.length)}</a>{/if}
+              {#if at > 0}<a class="btn small" href={partHref(r.id, at - ITEMS)} onclick={(e) => keepCollector(e, cgPartHref(r.id, at - ITEMS))} data-sveltekit-noscroll>Previous {ITEMS}</a>{/if}
+              {#if at + r.items.length < (r.itemsCount ?? 0)}<a class="btn small" href={partHref(r.id, at + ITEMS)} onclick={(e) => keepCollector(e, cgPartHref(r.id, at + ITEMS))} data-sveltekit-noscroll>Next {Math.min(ITEMS, (r.itemsCount ?? 0) - at - r.items.length)}</a>{/if}
             </nav>
           {/if}
         {/if}
         {#if visitor && feature && start === 0 && i === Math.min(FEATURE_AFTER, visibleRows.length) - 1}{@render featureBlock(feature)}{/if}
-        {#if visitor && data.featured.length && start === 0 && i === Math.min(FEATURE_AFTER, visibleRows.length) - 1}{@render featured(false, 'phone')}{/if}
+        {#if visitor && data.featured.length && start === 0 && i === phoneAfter}{@render featured(false, 'phone')}{/if}
       {/each}
       {#if end < data.rowCount}<div class="more" bind:this={sentinel}><a class="btn small" href="?by={data.by}{chip !== 'all' ? `&chip=${chip}` : ''}&at={end}" onclick={async (e) => { e.preventDefault(); if (!(await growOnce())) location.href = (e.currentTarget as HTMLAnchorElement).href; }}>More of the {fmtN(data.rowCount)} {rowWord(data.rowCount)}</a></div>{/if}
     </div>
-    <p class="seccount" style="margin-top: 14px">{fmtN(data.rowCount)} {rowWord(data.rowCount)} · {fmtN(chipSpecies)} species{chip === 'climate' ? ' with habitat climate' : chip === 'noclimate' ? ' without habitat climate' : ''}</p>
+    <p class="seccount" class:wideonly={cgMode} style="margin-top: 14px">{fmtN(data.rowCount)} {rowWord(data.rowCount)} · {fmtN(chipSpecies)} species{chip === 'climate' ? ' with habitat climate' : chip === 'noclimate' ? ' without habitat climate' : ''}</p>
+    {#if cgMode && data.collector}<p class="seccount phoneonly" style="margin-top: 14px">{fmtN(data.collector.ids.length)} collector genera · {fmtN(data.collector.species)} species · <a href="?by=genus">all {fmtN(data.rowCount)} genera</a></p>{/if}
   {/if}
 {/if}
 
@@ -970,6 +1004,14 @@
   .stickyhead .toolrow { position: sticky; top: 44px; z-index: 40; background: var(--bg); margin: 10px 0 0; padding: 4px 0 8px; border-bottom: 1px solid var(--rule); }
   @media (max-height: 30em) { .stickyhead .toolrow { position: static; } } /* in em: 960 px at 200% text (round sixty-two; the accessibility review, 1) */
   .rows { overflow-anchor: none; }
+  /* The phone's collector view (round seventy-three; self-F 11): the other genera, their letters and their letter headings
+     are not drawn; an opened row always is. A desktop draws every row. */
+  @media (max-width: 700px) {
+    .rows.cgonly .grow:not(.cg):not(.open), .rows.cgonly h2.letter:not(.cg), .letters.cgonly a:not(.cg) { display: none; }
+    .chipbtn.wideonly, .seccount.wideonly { display: none; }
+  }
+  @media (min-width: 701px) { .chipbtn.phoneonly, .seccount.phoneonly { display: none; } }
+  .chipbtn.phon { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
   .azbtn { display: inline-flex; margin-left: auto; }
   .cancelsearch { margin-left: auto; }
   .filters { margin: 6px 0 0; }

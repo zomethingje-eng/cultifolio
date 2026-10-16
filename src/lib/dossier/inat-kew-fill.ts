@@ -20,15 +20,24 @@ export type InatKewResult =
   | { done: 'asked again'; placed: Array<[string, string]>; was: number; now: number };
 
 export const kewMark = (day: string) => `descendants read against Kew's file of ${day}`;
+/**
+ * Round seventy-three: the mark of a page read with Kew's accepted species over GBIF's older names of the same words
+ * (`KewInfra.widened`). A page read before under the older reading, whose reading this widens, is asked again once.
+ */
+export const KEW_OVER_GBIF = "Kew's accepted species read over GBIF's older names";
 
 export async function inatKewFill(d: InatKewDossier, f: JsonFetcher, kew: KewInfra, day: string, now = () => new Date().toISOString()): Promise<InatKewResult> {
   const id = d.ids.inat;
   const own: KewOwn = { scientific: d.name.scientific, synonyms: d.name.synonyms ?? [], kewSynonyms: d.name.kew?.synonyms ?? [], acceptedElsewhere: d.name.kew?.acceptedElsewhere ?? [], kewEntry: d.name.kew?.entry || null, ipni: d.ids.ipni ?? null };
   if (!id || !kew.hasElsewhereUnder(own)) return { done: 'not a candidate' };
-  const mark = kewMark(day);
+  const widened = kew.widened(own);
+  const mark = widened ? `${kewMark(day)}; ${KEW_OVER_GBIF}` : kewMark(day);
   const row = d.upstream['inat.photos.wild'];
-  if ((row?.detail ?? '').includes(mark)) return { done: 'read before' };
-  const stamp = (u: Row | undefined): Row => ({ status: u?.status ?? 'none', at: u?.at ?? now(), detail: [u?.detail, mark].filter(Boolean).join('; ') });
+  const had = row?.detail ?? '';
+  if (had.includes(kewMark(day)) && (!widened || had.includes(KEW_OVER_GBIF))) return { done: 'read before' };
+  // A mark of the reading before is replaced, not repeated.
+  const without = (x?: string) => (x ?? '').split('; ').filter((w) => w && w !== kewMark(day) && w !== KEW_OVER_GBIF).join('; ') || undefined;
+  const stamp = (u: Row | undefined): Row => ({ status: u?.status ?? 'none', at: u?.at ?? now(), detail: [without(u?.detail), mark].filter(Boolean).join('; ') });
   const hadWild = d.photos.some((p) => p.src === 'inat' && !p.captive), hadCult = d.photos.some((p) => p.src === 'inat' && p.captive);
   if (!hadWild && !hadCult) { d.upstream['inat.photos.wild'] = stamp(row); return { done: 'marked', asked: false }; }
   const ch = await f<{ results?: Array<{ id: number; name: string }> }>(`${inat.INAT}/taxa?parent_id=${id}&per_page=200&is_active=true`);

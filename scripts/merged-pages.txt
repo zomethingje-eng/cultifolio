@@ -1,0 +1,9 @@
+# Pages merged into another by the owner's decision (round seventy-three; REVIEW-TRIAGE-71 A7, REVIEW-ROUND-72 section 7):
+# two pages that are one plant, homotypic, where Kew holds the one page's name as a synonym of the other's entry. The
+# page that leaves the reference reads into the one it joins: its GBIF key's records and photographs are read there as
+# an extra key (scripts/extra-keys.txt), its name answers there as an older name, and its old address and a grower's
+# plant under it find the kept page (the index's aliases). `--prune-followed` deletes its dossier once the kept page
+# records the merge.
+# A line: <key that leaves>	<key it joins>	<name that leaves>
+3084426	11798439	Coryphantha macromeris
+7906297	7281301	Rebutia fidana

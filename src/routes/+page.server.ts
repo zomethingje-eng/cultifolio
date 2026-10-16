@@ -2,6 +2,7 @@ import { corpusNow, getDossier } from '$lib/server/dossiers';
 import { genusOf } from '$core/names';
 import { unitsFor } from '$lib/server/units';
 import { catalogueRows, catalogueItems, rowItems, byOf, chipOf, homeWindow, HOME_ITEMS, type Item } from '$lib/server/catalogue';
+import { collectorRows } from '$lib/ui/ref/collector';
 import type { PageServerLoad } from './$types';
 
 /** Rows in the first window: a phone shows about ten; the rest come from /api/rows as the reader nears the end (round forty-seven, 1). */
@@ -50,6 +51,12 @@ export const load: PageServerLoad = async ({ platform, fetch, setHeaders, url, c
   });
   // What a stranger sees first: twelve photographed species with a derived climate, one from each of the largest
   // genera, chosen by rule (the most-recorded species of the genus) and rotated by the day so the strip is not editorial.
+  // The collector genera (round seventy-three; self-F 11, the owner's decision): a phone opens the catalogue on them, the
+  // rest one chip away. A page whose address names no grouping and no chip is that view; on a desktop it is drawn as
+  // before. Which rows are collector genera is sent with every genus page, so rows the page fetches later are marked too.
+  // The ids are of the whole genus catalogue, whatever chip is on.
+  const genusAll = by === 'genus' ? (chip === 'all' ? cat : (await catalogueRows(platform, fetch, 'genus', 'all', c)).cat) : null;
+  const collector = genusAll ? { on: byParam == null && chip === 'all', ...collectorRows(genusAll.rows) } : null;
   const pool = featuredPool(index, list);
   const day = Math.floor(Date.now() / 86_400_000);
   const featured = pool.length ? Array.from({ length: Math.min(12, pool.length) }, (_, i) => pool[(day * 12 + i) % pool.length]).map((c) => ({ slug: c.slug, name: c.name, thumb: c.thumb!, credit: c.credit, common: c.common, family: c.family })) : [];
@@ -81,6 +88,7 @@ export const load: PageServerLoad = async ({ platform, fetch, setHeaders, url, c
     letterAt: cat.letterAt,
     start,
     total: cat.total,
-    withClimate: cat.withClimate
+    withClimate: cat.withClimate,
+    collector
   };
 };

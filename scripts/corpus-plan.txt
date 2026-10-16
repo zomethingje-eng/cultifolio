@@ -1,4 +1,4 @@
-# Round seventy-two's corpus step, run in order by `node scripts/corpus-step.mjs` (docs/DEPLOY.md section 5 says how).
+# Round seventy-three's corpus step, run in order by `node scripts/corpus-step.mjs` (docs/DEPLOY.md section 5 says how).
 # One step a line:
 #   backup                       static/s/v2 copied to backups/v2-<corpus id> (once a corpus)
 #   dossier <arguments>          the builder: npm run dossier -- <arguments>
@@ -11,29 +11,28 @@
 # picks up where it stopped. The day's answers are kept in cache/upstream/, so a rerun the same day asks again only
 # what did not answer.
 backup
-# Wikidata, without the query service's lag (D): lists round 71's nine changes and seven rows long "not answered"
-# in rebuild-wd.txt (16 on the dry run).
-dossier --fill wikidata
-# Kew's numbers for the name and author (8,795 GBIF requests, about 40 minutes; resumable).
-dossier --fill kew-links
-# A's Kew fill, offline: name.kew and name.cited. After --fill kew-links, since a page cites the name whose number it
-# links (and kew-links takes Cochemiea matehualensis's POWO link back first).
-dossier --fill kew-names --bulk bulk
-# B's list compares each page with the rule (about 5 species).
-dossier --list-rebuild --bulk bulk
-review rebuild-wd.txt and rebuild-keys.txt in the project folder list the species the next two steps rebuild online (about 16 and 5).
-if-exists rebuild-wd.txt dossier --keys rebuild-wd.txt --grid climate --bulk bulk
-if-exists rebuild-keys.txt dossier --keys rebuild-keys.txt --grid climate --bulk bulk
-# B's range sources, offline: distribution.via and Kew's file day.
-dossier --fill range-source --bulk bulk
-# C's iNaturalist sets against Kew's rows below species (about 1,500 requests, 35 minutes).
+# K: the other GBIF keys each page reads records and photographs from (the owner's rule; src/lib/dossier/extra-keys.ts),
+# and the two pairs of pages merged (scripts/merged-pages.txt). scripts/extra-keys.txt lists 332 keys on 305 pages,
+# made offline from Kew's file of 2026-06-04 and GBIF's backbone export; this step compares every page with it and
+# writes rebuild-extra.txt (305 pages on the dry run). Offline, a minute.
+dossier --list-extra-keys
+review rebuild-extra.txt in the project folder lists the pages the next step re-derives with their other keys: about 305 lines, among them 11798439 Pelecyphora macromeris, 7281301 Weingartia fidaiana, 8038589 Myrica cerifera, 8793122 Ixora coccinea and 11869920 Eucalyptus camaldulensis. None of the 332 keys is in occurrence.zip (it was made for the reference's own keys), so their records and photographs are asked of GBIF's search API: about 1,000 requests besides reading the download.
+# The range, records, marker and climate re-derived with the other keys' records (the download for the page's own key,
+# the API for the others), and the other keys' photographs; the name block asked of GBIF again (each other key's name
+# joins the older names; a merged page's synonyms and common names join too); Kew's names read again after it.
+if-exists rebuild-extra.txt dossier --keys rebuild-extra.txt --rederive --grid climate --bulk bulk
+# The two merged pages' dossiers deleted (Coryphantha macromeris 3084426, Rebutia fidana 7906297), each only once the page
+# it joined records its key with its old address.
+dossier --prune-followed
+# L's iNaturalist reading against Kew's names below species (round seventy-three): about 60 pages asked once, a few
+# asked again; --index then writes the shared-photograph marks.
 dossier --fill inat --bulk bulk
-dossier --fill gbif-basis
-dossier --fill gbif-open
-dossier --fill commons
+# L's Commons rules (round seventy-three): a file the sister-epithet rule would hide has its description read once.
 dossier --fill commons-kind
-dossier --fill summaries
+# A check: every page now reads the keys the list gives it ("0 pages to rebuild").
+dossier --list-extra-keys
+# The index: 8,945 species, the two old addresses answered by the kept pages.
 dossier --index
-review Read drops.txt if it is there, and in corpus-step.log the lines each step printed of what it changed.
+review Read drops.txt if it is there, and in corpus-step.log the lines each step printed of what it changed. The index holds 8,945 species: the two merged pages are gone on purpose. The --index output must say "2 old addresses of pages merged into another answered by the kept page: coryphantha-macromeris, rebutia-fidana".
 upload
 live-check

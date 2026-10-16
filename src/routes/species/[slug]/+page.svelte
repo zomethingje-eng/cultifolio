@@ -187,7 +187,21 @@
     return () => removeEventListener('scroll', onScroll);
   });
   // Yours: by the name's slug, or by the reference key, so a suffixed homonym's page lists its own plants (round eighteen, 6).
-  const joined = $derived(collection.ready ? collection.accessions.filter((a) => speciesSlug(a.taxonName) === d.slug || (a.taxonKey != null && a.taxonKey === d.key)) : []);
+  /**
+   * The other GBIF keys this page's records come from (round seventy-three; K's `occurrences.keys`, optional in the schema):
+   * each key, GBIF's name for it, how Kew's file holds it as this plant, the records it added, where they came from, and,
+   * for a page merged into this one, its old address. None on a dossier built before.
+   */
+  type OtherKey = { key: number; name: string; kew: string; n: number; from: 'download' | 'api'; slug?: string };
+  const otherKeys = $derived(((d.occurrences as { keys?: OtherKey[] }).keys ?? []) as OtherKey[]);
+  const otherKeySet = $derived(new Set(otherKeys.map((k) => k.key)));
+  const otherSlugs = $derived(new Set(otherKeys.map((k) => k.slug).filter((s): s is string => !!s)));
+  // Yours: by the name's slug, or by the reference key, so a suffixed homonym's page lists its own plants (round eighteen, 6);
+  // and by any other key the page reads, or a merged page's old address, so a plant recorded under the old name is listed (round seventy-three).
+  const joined = $derived(collection.ready ? collection.accessions.filter((a) => { const s = speciesSlug(a.taxonName); return s === d.slug || otherSlugs.has(s) || (a.taxonKey != null && (a.taxonKey === d.key || otherKeySet.has(a.taxonKey))); }) : []);
+  /** Notes and follow kept under a merged page's old address: shown here, under the old name (round seventy-three). */
+  const oldTaxa = $derived(collection.ready ? otherKeys.filter((k) => k.slug).map((k) => ({ k, t: collection.taxon(k.slug!) })).filter((x) => x.t && (x.t.myNotes || x.t.followed)) : []);
+  const fromWords = (f: OtherKey['from']) => (f === 'download' ? "GBIF's download" : "GBIF's search API on the day of the build");
   // A "cf." or "aff." plant is compared with this species, not one of it: listed apart, never among yours, and its
   // photographs are not this species' (round sixty-two; outside review A21).
   const isCompared = (a: { taxonName: string }) => { const q = parseName(a.taxonName).qualifier; return q === 'cf.' || q === 'aff.'; };
@@ -513,9 +527,17 @@
         <div class="body">{myTaxon.myNotes}</div><div class="foot"><button class="linkish" onclick={() => openMy(myTaxon?.myNotes ?? '')}>Edit</button></div>
         <ReplacedNotes kind="taxon" id={d.slug} />
       </div>
-    {:else if collection.ready}
+    {:else if collection.ready && !oldTaxa.some((x) => x.t?.myNotes)}
       <p class="small muted notesline">Your notes: none yet. <button class="linkish" onclick={() => openMy('')}>Write what you know</button> · yours alone, on this device.</p>
     {/if}
+    {#each oldTaxa as { k, t: old } (k.key)}
+      <!-- What the grower kept under a page merged into this one, under its old name (round seventy-three). -->
+      <div class="cult oldtaxon" id="old-taxon-{k.slug}">
+        <div class="sum">Under the old name <i>{k.name}</i> <span class="hint">yours alone, on this device; kept under that name's address, /species/{k.slug}</span></div>
+        {#if old?.myNotes}<div class="body">{old.myNotes}</div>{/if}
+        {#if old?.followed}<p class="small muted">You follow it under that name.</p>{/if}
+      </div>
+    {/each}
     {#if sheet.arch}
       <!-- The group and, apart from every habitat figure, its convention, said as one with no source: it never raises or
            replaces the cold floor (round sixty; self-review 3, words 1). -->
@@ -620,6 +642,8 @@
     {#if d.distribution.ambiguous}<div class="wide"><b>Name not resolved</b>{d.distribution.ambiguous}<span class="small muted"> · WCVP lists this name more than once and authorship did not decide, so no range is attached and nothing is derived from records</span></div>{/if}
     <div class="wide"><b>Evidence used</b>{evidence.text}{#if d.occurrences.nVague}{' '}{d.occurrences.nVague} in-range record{d.occurrences.nVague === 1 ? ' is' : 's are'} placed to worse than 10 km, or with no stated accuracy (admitted only as a person's observation to three decimals), and stay{d.occurrences.nVague === 1 ? 's' : ''} on the map but off the climate.{/if}</div>
     {#if d.distribution.native.length && !d.distribution.boxes.length}<div><b>Range source</b>{d.distribution.source}: country level only, so records are not tested against it.</div>{/if}
+    <!-- The other GBIF keys the records come from, each named with its Kew reading and its source (round seventy-three; K). -->
+    {#if otherKeys.length}<div class="wide" id="other-keys"><b>Other GBIF keys</b>{#each otherKeys as k (k.key)}<span class="otherkey">Records also from GBIF's key <a href="https://www.gbif.org/species/{k.key}" rel="noopener">{k.key}</a> ({k.name}): {k.kew}; {k.n.toLocaleString('en-US')} record{k.n === 1 ? '' : 's'}, from {fromWords(k.from)}.</span>{/each}</div>{/if}
   </div>
   {#if d.centroid}
     <details class="why">
@@ -833,4 +857,5 @@
 
   /* The failed-photograph line takes the photograph's own box on a phone, not a 200px one of its own: the page below did not move when it failed (round forty-nine, 3; S2). */
   @media (max-width: 640px) { .hero { margin-top: 0; } .hero.photo { height: 150px; } .hero.photo img { height: 100%; max-height: none; } }
+  .otherkey { display: block; }
 </style>

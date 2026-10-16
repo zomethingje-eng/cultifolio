@@ -10,7 +10,7 @@ import type { Dossier, Photo } from './schema';
 import type { DossierStore } from './corpus-run';
 import { commonsPhotos, commonsCategories, strikesOut, inatSource } from './sources/commons';
 import { mwGet, mwError } from './sources/wikimedia';
-import { commonsKind, slipsToAsk, askSlip, sourceKind, kindNamesOf, type HeldNames, type KindNames } from './photo-kind';
+import { commonsKind, slipsToAsk, askSlip, sourceKind, kindNamesOf, sisterEpithetTitle, describesSpecies, type HeldNames, type KindNames } from './photo-kind';
 import { commonsAuthor, commonsCredit, splitCommonsCredit } from './photo-credit';
 
 export type CommonsFill = { added: number } | { none: true } | { failed: string };
@@ -98,7 +98,7 @@ export type KindCounts = {
   shownAgain: number;
 };
 
-type KindAnswer = { categories: string[]; struck: boolean; inat: string | null; artist: string | null; kind: string | null } | 'missing';
+type KindAnswer = { categories: string[]; struck: boolean; inat: string | null; artist: string | null; kind: string | null; description?: string | null } | 'missing';
 type Stored = Pick<Dossier, 'key'> & { name: { scientific: string; synonyms?: string[]; authorship?: string; kew?: KindNames['kew'] }; photos?: Photo[] };
 /**
  * A Commons photograph the fill asks for: one without its categories, or (round seventy-one; self-review 70, S-C5, S-C9,
@@ -110,7 +110,13 @@ const needsKind = (p: Photo) => p.src === 'commons' && (!Array.isArray(p.categor
  * rule read again (`slipStanding`, GBIF's second spelling by the same author) reaches the files an earlier fill left out:
  * Parodia lenninghausii's five and Ceropegia barberae's one. A handful of files, a few requests each, every run.
  */
-const needsAsking = (p: Photo, names: KindNames, held?: HeldNames | null) => needsKind(p) || (p.src === 'commons' && !!held && slipsToAsk(p.id, names, p.slips).length > 0) || kindToReadAgain(p, names);
+const needsAsking = (p: Photo, names: KindNames, held?: HeldNames | null) => needsKind(p) || (p.src === 'commons' && !!held && slipsToAsk(p.id, names, p.slips).length > 0) || kindToReadAgain(p, names) || descriptionToRead(p, names);
+/**
+ * Round seventy-three: a file whose title names only a sister species' bare epithet ("Heterodoxa pt12" on Heliamphora
+ * purpurascens) has its description read once, since a description naming the species outweighs the title
+ * (`Photo.described`). Only such files are asked: one in the live corpus.
+ */
+const descriptionToRead = (p: Photo, names: KindNames) => p.src === 'commons' && p.described == null && sisterEpithetTitle(p.id, names);
 /**
  * Round seventy-two (C8): a file left out only by what its description said is read again, so the narrower museum rule
  * (`sourceKind`) reaches the files read before it: Agave titanota's "specimen in the Food and Agriculture Museum". A file
@@ -171,13 +177,14 @@ export async function fillCommonsKindAll(store: DossierStore, f: JsonFetcher, he
       if (!a) continue;
       if (a === 'missing') { c.lines.push(`${d.key}\t${d.name.scientific}\tno longer on Commons (left as it is)\t${p.id}`); continue; }
       // What the read decided before, with every rule it reads (the credit's and the slips' too: S-C12).
-      const was = commonsKind(p.id, names, { categories: p.categories, struck: p.struck, credit: p.attribution, slips: p.slips, kind: p.kind });
+      const was = commonsKind(p.id, names, { categories: p.categories, struck: p.struck, credit: p.attribution, slips: p.slips, kind: p.kind, described: p.described });
       p.categories = a.categories;
       if (a.struck) p.struck = true;
       else delete p.struck;
       if (a.inat) { if (p.inat !== a.inat) c.copies++; p.inat = a.inat; }
       if (a.kind) p.kind = a.kind;
       else delete p.kind;
+      if (descriptionToRead(p, names)) p.described = describesSpecies(a.description, names);
       // The credit read again by today's rule (a derivative work's two authors; S-C11), only where it names someone.
       const parts = splitCommonsCredit(p.attribution);
       const author = commonsAuthor(a.artist);
@@ -199,7 +206,7 @@ export async function fillCommonsKindAll(store: DossierStore, f: JsonFetcher, he
       }
       if (!unchecked) p.sourceRead = true;
       changed = true;
-      const why = commonsKind(p.id, names, { categories: p.categories, struck: p.struck, credit: p.attribution, slips: p.slips, kind: p.kind });
+      const why = commonsKind(p.id, names, { categories: p.categories, struck: p.struck, credit: p.attribution, slips: p.slips, kind: p.kind, described: p.described });
       if (why && !was) { c.hidden++; c.lines.push(`${d.key}\t${d.name.scientific}\t${why}\t${p.id}`); }
       if (!why && was) { c.shownAgain++; c.lines.push(`${d.key}\t${d.name.scientific}\tnow shown (was: ${was})\t${p.id}`); }
     }
@@ -220,7 +227,7 @@ export function readKindReply(data: KindReply, asked: readonly string[]): Map<st
     if (p.missing != null && !p.imageinfo) { out.set(t, 'missing'); continue; }
     const meta = p.imageinfo?.[0]?.extmetadata;
     if (!meta) continue;
-    out.set(t, { categories: commonsCategories(meta.Categories?.value), struck: strikesOut(meta.ImageDescription?.value), inat: inatSource(meta.Credit?.value, meta.ImageDescription?.value), artist: meta.Artist?.value ?? null, kind: sourceKind(meta.Credit?.value, meta.ImageDescription?.value) });
+    out.set(t, { categories: commonsCategories(meta.Categories?.value), struck: strikesOut(meta.ImageDescription?.value), inat: inatSource(meta.Credit?.value, meta.ImageDescription?.value), artist: meta.Artist?.value ?? null, kind: sourceKind(meta.Credit?.value, meta.ImageDescription?.value), ...(meta.ImageDescription?.value ? { description: meta.ImageDescription.value } : {}) });
   }
   return out;
 }

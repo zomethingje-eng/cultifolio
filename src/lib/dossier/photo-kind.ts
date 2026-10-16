@@ -151,7 +151,8 @@ const TITLE_KINDS: Array<[string, (t: string) => boolean]> = [
   // paper's figure is one too ("Phylogeny-of-the-plant-genus-Pachypodium-…-peerj-01-70-g001", which would lead Pachypodium windsorii).
   ['a plate or drawing', (t) => /phylogen|cladogram|\bdiagrams?\b|\bpeerj\b|curtis|botanical (?:magazine|register)|\btab\.\s*\d|\bplate\b|\bpl\.\s*\d|illustrat|drawing|engraving|lithograph|zeichnung|watercolou?r|\bpainting\b|biodiversity heritage library|\bPSM V\d|popular science monthly/i.test(t)],
   // A pod or a fruit on the plant is the plant; loose seed is not ("Tecomanthe Speciosa Seed Pod"; REVIEW-TRIAGE-69 C1).
-  ['not the plant', (t) => /\bseeds?\b(?![\s-]*pods?\b)|\bsemillas?\b|\bsamen\b|\bresin\b|\bstamps?\b|\bpostage\b|\bbooks?\b|\blabel\b/i.test(t)],
+  // An information board is no photograph of the plant ("Information board of Ernest Henry Wilson…" on Rhododendron kanehirae; round seventy-three).
+  ['not the plant', (t) => /\bseeds?\b(?![\s-]*pods?\b)|\bsemillas?\b|\bsamen\b|\bresin\b|\bstamps?\b|\bpostage\b|\bbooks?\b|\blabel\b|\binformation boards?\b/i.test(t)],
   // An animal on the plant is a photograph of the animal ("Leaf-footed Bug nymphs … on Centaurea americana"; S-C3).
   // Singular words that also name plants ("bee balm", "butterfly bush", "moth orchid", "spider plant") are not read.
   ['an animal', (t) => /\bnymphs?\b|\blarvae?\b|\bcaterpillars?\b|\binsects?\b|\bbugs?\b|\bbeetles?\b|\bbutterflies\b|\bmoths\b|\bbees\b|\bwasps?\b|\baphids?\b|\bants\b|\bhoverfl(?:y|ies)\b|\bsnails?\b|\bspiders\b/i.test(t)],
@@ -198,12 +199,21 @@ const CREDIT_KINDS: Array<[string, RegExp]> = [
 ];
 
 /**
+ * Commons' classes of places (round seventy-three): Boswellia papyrifera's only photograph and lead, "Giba near Gabat
+ * outlet", is a river valley filed under "Rivers of Ethiopia"; Commiphora myrrha's, "Mirra nos Olivais de Quelemem", is
+ * filed under "Plantations in Brazil" and shows a flowering shrub of another genus. Read only of a title that names no
+ * plant (no binomial, none of the species' epithets): "HK Plants Shatin Shing Mun River White Flowers" is a photograph
+ * of the flowers, and "Melocactus braunii Esteves type habitat" of the plant.
+ */
+const PLACE_CATEGORIES = /^(?:rivers|streams|valleys|canyons|gorges|mountains|lakes|waterfalls|landscapes|plantations)\s+(?:of|in)\b/i;
+/**
  * Categories that say the same, for a new answer (`Categories` in `iiextmetadatafilter`) and for a stored file whose
  * categories were kept. Named narrowly: Commons files every geotagged photograph under "Pages with maps", so "maps" alone
  * would drop good photographs, and it files gardens' living plants as "Specimens in the Lyman Plant House" (S-C10), so
- * "specimens" is read only as a museum's or a herbarium's.
+ * "specimens" is read only as a museum's or a herbarium's. A map of a place is a map ("Maps of Shiding District, New
+ * Taipei", the category of "烏來杜鵑分布圖", a distribution map shown on Rhododendron kanehirae; round seventy-three).
  */
-const CATEGORY_KINDS = /herbari|holotyp|isotyp|\b(?:preserved|pressed|dried|type|museum) specimens?\b|museum of natural history|natural history museum|distribution maps|range maps|locator maps|maps of the (?:range|distribution)|illustrations\b|drawings|engravings|lithographs|botanical magazine|curtis|biodiversity heritage library|popular science monthly|\bplates\b|postage stamps|stamps of|plants on stamps|\bseeds\b|\bresins?\b|\bbooks\b|hybrids\b/i;
+const CATEGORY_KINDS = /herbari|holotyp|isotyp|\b(?:preserved|pressed|dried|type|museum) specimens?\b|museum of natural history|natural history museum|distribution maps|range maps|locator maps|maps of the (?:range|distribution)|^maps of\b|illustrations\b|drawings|engravings|lithographs|botanical magazine|curtis|biodiversity heritage library|popular science monthly|\bplates\b|postage stamps|stamps of|plants on stamps|\bseeds\b|\bresins?\b|\bbooks\b|hybrids\b/i;
 
 /**
  * Round 70b (the owner's `--fill commons-kind`, 140 files left out): "Media from GBIF" says where a file came from, not
@@ -520,6 +530,8 @@ export type CommonsMeta = {
   slips?: readonly string[] | null;
   /** What the file's source or description says it is (`sourceKind`, kept as `Photo.kind`; S-C2). */
   kind?: string | null;
+  /** Whether its description names the species under one of its own names (`describesSpecies`, kept as `Photo.described`; round seventy-three). */
+  described?: boolean | null;
 };
 
 /**
@@ -540,9 +552,15 @@ export function commonsKind(id: string, names?: KindNames | null, meta?: readonl
   if (isHybrid(title, own)) return 'a hybrid';
   const read = readings(title, n, { slips: m.slips });
   if (read.includes('another')) return 'named as another species';
+  // Unless its description names the species itself, which outweighs a bare epithet ("Heterodoxa pt12", described as
+  // "Heliamphora heterodoxa 'Ptari Tepui' (now known as Heliamphora purpurascens)"). Until the description is read, left out.
+  if (!read.length && m.described !== true && sisterEpithetOnly(title, n, own)) return 'named as another species';
   const cats = m.categories ?? [];
   const cat = cats.find((c) => CATEGORY_KINDS.test(c) || unidentifiedPlant(c, n, own));
   if (cat) return `filed under "${cat}"`;
+  // A title that names no plant, filed by Commons as a place, is a photograph of the place (round seventy-three).
+  const place = !read.length && titleRank(title, own) === 2 ? cats.find((c) => PLACE_CATEGORIES.test(c)) : undefined;
+  if (place) return `filed under "${place}"`;
   // A year from 1500 to 1899 marks a printed work only with other print evidence (S-C8).
   if (oldYear(title) && printEvidence(title, cats, m.licence ?? splitCommonsCredit(m.credit ?? '')?.short ?? '')) return 'a plate or drawing';
   const names_ = read.includes('own') || epithetRank(id, n) < 2;
@@ -568,10 +586,51 @@ export function commonsKind(id: string, names?: KindNames | null, meta?: readonl
 }
 
 
+/**
+ * Whether a title that names no binomial holds, as a word of its own, the epithet of another species the reference
+ * accepts in one of the species' own genera, and none of the species' own epithets (round seventy-three): "Heterodoxa
+ * pt12", filed under Heliamphora purpurascens, names Heliamphora heterodoxa, another page of the reference, and was
+ * purpurascens' only photograph and its lead. Such a title is read as that species, as a binomial naming it would be.
+ * "Benstonei domei" on Nepenthes domei holds the species' own epithet, and is not read; a word that is a genus, an
+ * English word, or one of the words that follow a genus without naming a species never counts.
+ */
+function sisterEpithetOnly(title: string, n: KindNames, own: readonly Name[]): boolean {
+  const held = n.held;
+  if (!held || n.key == null || titleRank(title, own) < 2) return false;
+  const genera = [...new Set(own.map((b) => b.genus))];
+  const mine = new Set(own.map((b) => spellingKey(lower(b.epithet))));
+  for (const m of title.matchAll(/[A-Za-z]+/g)) {
+    const w = m[0];
+    if (w.length < 4 || !/^[A-Za-z][a-z]+$/.test(w)) continue;
+    const e = lower(w);
+    if (NOT_EPITHET.has(e) || ENGLISH.test(e) || mine.has(spellingKey(e)) || held.hasGenus(`${e[0].toUpperCase()}${e.slice(1)}`)) continue;
+    if (genera.some((G) => { const k = held.accepted(G, e); return k != null && k !== n.key; })) return true;
+  }
+  return false;
+}
+
+/**
+ * Whether a file's title is left out only for naming a sister species' bare epithet (`sisterEpithetOnly`), so its
+ * description is worth reading (round seventy-three): the build and `--fill commons-kind` read it for these files alone.
+ */
+export function sisterEpithetTitle(id: string, names?: KindNames | null): boolean {
+  if (!names) return false;
+  const title = commonsTitle(id);
+  return !readings(title, names).length && sisterEpithetOnly(title, names, ownNames(names));
+}
+/** Whether a Commons description names the species under one of its own names, read by the title rules (`readings`). */
+export function describesSpecies(description: string | null | undefined, names?: KindNames | null): boolean {
+  if (!names || !description) return false;
+  const text = description.replace(/<[^>]+>/g, ' ').replace(/&[a-z]+;|&#\d+;/gi, ' ');
+  return readings(text, names).includes('own');
+}
+
 /** 0 when the title holds the species' own epithet, 1 an older name's, 2 neither (a camera's name, "DSC_1234"). */
 export function epithetRank(id: string, names?: KindNames | null): number {
-  const t = commonsTitle(id).toLowerCase();
-  const b = ownNames(names);
+  return titleRank(commonsTitle(id), ownNames(names));
+}
+function titleRank(title: string, b: readonly Name[]): number {
+  const t = title.toLowerCase();
   // An older name below species is held by its last epithet (S-C6).
   // A name run together ("Nepenthesdubia1", "Nepspectabilis") holds its epithet too: after the genus or a start of it (R47-2, C6).
   // A word holds the epithet when it is the epithet in another spelling, begins with it whole, or, for an epithet of five
@@ -607,7 +666,7 @@ export function commonsFirstByEpithet<P extends { src?: string; id: string; widt
   return out;
 }
 
-type PhotoLike = { src?: string; id: string; url: string; thumb?: string; captive?: boolean; licence?: string; attribution: string; width?: number | null; categories?: readonly string[] | null; struck?: boolean | null; slips?: readonly string[] | null; inat?: string | null; specimen?: boolean; kind?: string | null; shared?: readonly number[] | null };
+type PhotoLike = { src?: string; id: string; url: string; thumb?: string; captive?: boolean; licence?: string; attribution: string; width?: number | null; categories?: readonly string[] | null; struck?: boolean | null; slips?: readonly string[] | null; inat?: string | null; specimen?: boolean; kind?: string | null; shared?: readonly number[] | null; described?: boolean | null };
 const web = (u: string | undefined) => !!u && /^https?:\/\//i.test(u);
 /**
  * iNaturalist's stand-in for a photograph it has not processed (`/attachment_defaults/local_photos/large.png`): a grey
@@ -645,14 +704,41 @@ export const photoIdentity = (p: { src?: string; id: string; url: string }): str
  * a council filed under the occurrences of three species. Written by `--index` as `shared` (the other pages' keys) on
  * each such photograph, which no page then shows. `shown` is each dossier's photographs as the page reads them without
  * the mark. Returns, by key, the identities to mark with the other keys.
+ *
+ * Round seventy-three: one iNaturalist observation that one page holds from iNaturalist and another only through GBIF,
+ * where GBIF's backbone filed it under the second page by one of its older names that Kew accepts as the first page's
+ * species (`name.kew.acceptedElsewhere`), is the first page's: it is marked, and hidden, on the second page only. Seven
+ * photographs of Adenia gummifera (iNaturalist's "Adenia gummifera gummifera", Kew's A. gummifera var. gummifera) reached
+ * Adenia cissampeloides through GBIF, which holds "Adenia gummifera (Harv.) Harms" as its synonym; Kew accepts it apart.
  */
-export function sharedPhotos(shown: ReadonlyArray<{ key: number; photos: ReadonlyArray<{ src?: string; id: string; url: string }> }>): Map<number, Map<string, number[]>> {
+type SharedPage = { key: number; name?: { scientific: string; kew?: { acceptedElsewhere?: readonly string[] | null } | null } | null; photos: ReadonlyArray<{ src?: string; id: string; url: string }> };
+export function sharedPhotos(shown: ReadonlyArray<SharedPage>): Map<number, Map<string, number[]>> {
   const holders = new Map<string, Set<number>>();
-  for (const d of shown) for (const p of d.photos) { const k = photoIdentity(p); (holders.get(k) ?? holders.set(k, new Set()).get(k)!).add(d.key); }
+  const via = new Map<string, string>(); // `${key} ${identity}` → the sources the page holds it from
+  for (const d of shown) for (const p of d.photos) {
+    const k = photoIdentity(p);
+    (holders.get(k) ?? holders.set(k, new Set()).get(k)!).add(d.key);
+    via.set(`${d.key} ${k}`, `${via.get(`${d.key} ${k}`) ?? ''} ${p.src ?? ''}`);
+  }
+  const page = new Map(shown.map((d) => [d.key, d]));
+  const binOf = (n: string) => { const b = nameOf(n); return b && !b.infra ? `${lower(b.genus)} ${spellingKey(b.epithet)}` : null; };
+  /** Whether page `b`, holding the photograph only through GBIF, holds it by an older name Kew accepts as page `a`'s species, which holds it from iNaturalist. */
+  const filedUnder = (id: string, a: number, b: number) => {
+    const pa = page.get(a), pb = page.get(b);
+    if (!pa?.name || !pb?.name || !id.startsWith('inat:')) return false;
+    const fromA = (via.get(`${a} ${id}`) ?? '').split(' '), fromB = (via.get(`${b} ${id}`) ?? '').split(' ').filter(Boolean);
+    const mine = binOf(pa.name.scientific);
+    return fromA.includes('inat') && fromB.every((s) => s === 'gbif') && !!mine && (pb.name.kew?.acceptedElsewhere ?? []).some((x) => binOf(x) === mine);
+  };
   const out = new Map<number, Map<string, number[]>>();
   for (const [id, keys] of holders) {
     if (keys.size < 2) continue;
-    for (const k of keys) (out.get(k) ?? out.set(k, new Map()).get(k)!).set(id, [...keys].filter((x) => x !== k).sort((a, b) => a - b));
+    const ks = [...keys];
+    const owner = ks.length === 2 ? ks.find((a) => filedUnder(id, a, ks.find((b) => b !== a)!)) : undefined;
+    for (const k of keys) {
+      if (k === owner) continue;
+      (out.get(k) ?? out.set(k, new Map()).get(k)!).set(id, ks.filter((x) => x !== k).sort((a, b) => a - b));
+    }
   }
   return out;
 }
@@ -694,7 +780,7 @@ export function shownPhotos<P extends PhotoLike>(photos: readonly P[], names?: K
     // A Commons copy of an iNaturalist photograph the page holds: by the number its name ends with, or by the photograph
     // its source names (`inat`, kept by the build and the fill; self-review 70, S-C5).
     else if (inat.has(commonsInatCopy(p.id) ?? '') || (p.inat && inat.has(p.inat))) continue;
-    else if (!commonsKind(p.id, names, { categories: p.categories, struck: p.struck, credit: p.attribution, slips: p.slips, kind: p.kind })) {
+    else if (!commonsKind(p.id, names, { categories: p.categories, struck: p.struck, credit: p.attribution, slips: p.slips, kind: p.kind, described: p.described })) {
       const r = readCommonsPhoto(p);
       // An original upload's tile at Commons' largest width below its own, so no smaller slot loads the whole file (C7, R47-9).
       if (r) out.push(r.thumb ? { ...r, thumb: commonsTileOf(r.thumb, r.width) } : r);

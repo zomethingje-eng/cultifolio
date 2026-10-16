@@ -146,7 +146,9 @@ describe('round 71: survivors of the second mutation run', () => {
     expect(shows('Aloe vera', 'File:Aloe xyzq 1.jpg')).toBe(false);
   });
   it('an own genus is read as written or capitalised, not in capitals (rd-owncase); a run-on tail that is a word or too short is nothing (rd-run-ne, rd-run-len)', () => {
-    expect(shows('Aloe vera', 'File:ALOE arborescens.jpg')).toBe(true);
+    // Round seventy-three: "arborescens" alone now names Aloe arborescens, a sister species (L1), so the case is read with an epithet the reference does not hold.
+    expect(shows('Aloe vera', 'File:ALOE ferox.jpg')).toBe(true);
+    expect(shows('Aloe vera', 'File:ALOE arborescens.jpg')).toBe(false);
     expect(shows('Aloe vera', 'File:Aloeflowers 1.jpg')).toBe(true);
     expect(shows('Aloe vera', 'File:Aloexy.jpg')).toBe(true);
   });

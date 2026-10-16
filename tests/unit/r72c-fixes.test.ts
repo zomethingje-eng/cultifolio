@@ -54,7 +54,10 @@ describe('C1: an iNaturalist taxon below the species that Kew places under anoth
     ].forEach((r) => k.add(r));
     expect(k.hasElsewhereUnder({ scientific: 'Yucca filamentosa', synonyms: ['Yucca filamentosa f. bicolor Trel.'] })).toBe(true);
     const exilis = { scientific: 'Crassula exilis', synonyms: ['Crassula cooperi Schönl.', 'Crassula bolusii Schönl.'], kewEntry: '2741705' };
-    expect(k.placedElsewhere('Crassula exilis cooperi', exilis)).toBeNull(); // guard: without the Kew fill, GBIF's older name is read as the page's
+    // Round seventy-three: with Kew's entry known, GBIF's "Crassula cooperi Schönl." (a later name of the same words as
+    // Kew's Crassula cooperi Regel) is not read as the page's own, so the subspecies goes to Kew's Crassula cooperi.
+    expect(k.placedElsewhere('Crassula exilis cooperi', exilis)).toBe('Crassula cooperi');
+    expect(k.placedElsewhere('Crassula exilis cooperi', { scientific: 'Crassula exilis', synonyms: exilis.synonyms })).toBeNull(); // guard: without Kew's entry, GBIF's older name is read as the page's
     expect(k.placedElsewhere('Crassula exilis cooperi', { ...exilis, acceptedElsewhere: ['Crassula cooperi Schönl.'] })).toBe('Crassula cooperi');
   });
   it('guard: a subspecies Kew accepts under the species, an autonym, a species, a name Kew does not hold', () => {

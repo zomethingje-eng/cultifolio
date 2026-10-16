@@ -9,13 +9,14 @@ import { createReadStream, statSync, existsSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { KewNamesIndex, words, splitName, BINOMIAL, type KewRow } from '../src/lib/dossier/kew-names';
 
-async function scan(csv: string, keep: (r: KewRow) => boolean, out: (r: KewRow) => void): Promise<void> {
+/** Every row of Kew's names file that `keep` takes, streamed (also read by `--list-extra-keys`, round seventy-three). */
+export async function scan(csv: string, keep: (r: KewRow) => boolean, out: (r: KewRow) => void): Promise<void> {
   const rl = createInterface({ input: createReadStream(csv, { encoding: 'utf8' }), crlfDelay: Infinity });
   let h: Record<string, number> | null = null;
   for await (const line of rl) {
     const c = line.split('|');
     if (!h) { h = Object.fromEntries(c.map((k, i) => [k, i])); continue; }
-    const r: KewRow = { id: c[h.plant_name_id], name: c[h.taxon_name], authors: c[h.taxon_authors] ?? '', status: c[h.taxon_status], rank: c[h.taxon_rank], accepted: c[h.accepted_plant_name_id] ?? '', parent: c[h.parent_plant_name_id] ?? '', powo: c[h.powo_id] ?? '' };
+    const r: KewRow = { id: c[h.plant_name_id], name: c[h.taxon_name], authors: c[h.taxon_authors] ?? '', status: c[h.taxon_status], rank: c[h.taxon_rank], accepted: c[h.accepted_plant_name_id] ?? '', parent: c[h.parent_plant_name_id] ?? '', powo: c[h.powo_id] ?? '', ...(c[h.homotypic_synonym] === 'T' ? { homotypic: true } : {}) };
     if (keep(r)) out(r);
   }
 }
